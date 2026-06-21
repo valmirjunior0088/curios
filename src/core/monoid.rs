@@ -1,11 +1,17 @@
-//! The free-monoid eliminator seam. `Bin` and `Arr` are the native primitives
-//! that are free monoids on their generators (bytes, elements); their structural
-//! eliminator (`Cases::Inductive`) reduces by a one-step decode — peel the empty
-//! identity or a single leading generator off the scrutinee. `uncons` is that
-//! decode, one method per carrier; the catamorphism driver in `reduce` consumes
-//! the `Layer` it returns and never inspects the carrier's representation again.
-//! This is the eliminator-side analogue of `spine::peel_prim`: a new free-monoid
-//! carrier is one `uncons` implementation and nothing else.
+//! The free-monoid destructors. `Bin` and `Arr` are the native primitives that are
+//! free monoids on their generators (bytes, elements). Their structural eliminator
+//! (`Cases::Inductive`) reduces by a one-step decode — peel the empty identity or a
+//! single leading generator off the scrutinee — and that decode is `uncons`, one
+//! method per carrier; the catamorphism driver in `reduce` consumes the `Layer` it
+//! returns and never inspects the carrier's representation again. The eliminator-side
+//! analogue of `spine::peel_prim`: a new free-monoid carrier is one `uncons` and
+//! nothing else.
+//!
+//! For `Bin`, the same front decode also feeds the operation level: `Bin/get` and
+//! `Bin/slice` peel one byte at a time along a codepoint walk via `peel_first_byte`.
+//! Both destructors share one structural traversal, `peel_front`, differing only in
+//! how they reflect the peeled head — a `Nat` byte for the eliminator, a one-byte
+//! `Bin` chunk for the operations.
 
 use super::{Nat, Prim, Subterm, Term};
 
@@ -40,38 +46,12 @@ pub struct Arr;
 
 impl FreeMonoid for Bin {
     fn uncons(scrutinee: Subterm) -> Layer {
-        match scrutinee {
-            // The identity: the empty bytestring.
-            Subterm::Prim(Prim::Bin(bytes)) if bytes.is_empty() => Layer::Empty,
-            // A literal run: peel the leading byte, reflected as a `Nat` generator.
-            Subterm::Prim(Prim::Bin(mut bytes)) => {
-                let head_byte = bytes.remove(0);
-                let head: Term = Subterm::Prim(Prim::Nat(Nat::new(head_byte as usize))).into();
-                let tail: Term = Subterm::Prim(Prim::Bin(bytes)).into();
-                Layer::Cons { head, tail }
-            }
-            // A symbolic cons `cons(c, \\) = append(\\, c)`: the byte stays symbolic.
-            Subterm::Prim(Prim::BinAppend(base, c)) if is_empty_bin(&base) => {
-                let tail: Term = Subterm::Prim(Prim::Bin(vec![])).into();
-                Layer::Cons { head: c, tail }
-            }
-            // A symbolic cons `cons(c, t) = concat(append(\\, c), t)`: decode `c`
-            // off the leading single-byte append; the rest rides on the tail.
-            Subterm::Prim(Prim::BinConcat(mut segments))
-                if segments.first().is_some_and(is_single_byte_append) =>
-            {
-                let c = match Term::unwrap_or_clone(segments.remove(0)) {
-                    Subterm::Prim(Prim::BinAppend(_, c)) => c,
-                    _ => unreachable!("guard checked a leading single-byte append"),
-                };
-                let tail: Term = match segments.len() {
-                    0 => Subterm::Prim(Prim::Bin(vec![])).into(),
-                    1 => segments.into_iter().next().unwrap(),
-                    _ => Subterm::Prim(Prim::BinConcat(segments)).into(),
-                };
-                Layer::Cons { head: c, tail }
-            }
-            stuck => Layer::Stuck(stuck),
+        let term: Term = scrutinee.into();
+        match peel_front(&term) {
+            Front::Empty => Layer::Empty,
+            // The peeled byte is the eliminator's `Nat`-typed head generator.
+            Front::Cons { head, tail } => Layer::Cons { head: head.into_nat(), tail },
+            Front::Opaque => Layer::Stuck(Term::unwrap_or_clone(term)),
         }
     }
 }
@@ -113,14 +93,114 @@ impl FreeMonoid for Arr {
     }
 }
 
-// `cons` injects a byte at the front as `append(\\, c)` (a one-byte `Bin`); these
-// recognize that encoding so the `Bin` eliminator can decode a symbolic cons.
-fn is_empty_bin(term: &Term) -> bool {
-    matches!(&**term, Subterm::Prim(Prim::Bin(bytes)) if bytes.is_empty())
+/// A leading generator peeled off a `Bin` value: a concrete byte (`Literal`) or the
+/// symbolic byte of a `Utf8` cons `append(\\, c)` (`Symbolic`). Kept abstract so
+/// each destructor reflects it into the shape its consumer wants — the eliminator
+/// into a `Nat`, `Bin/get`/`Bin/slice` into a one-byte `Bin` chunk.
+enum Head {
+    Literal(u8),
+    Symbolic(Term),
 }
 
-fn is_single_byte_append(term: &Term) -> bool {
-    matches!(&**term, Subterm::Prim(Prim::BinAppend(base, _)) if is_empty_bin(base))
+impl Head {
+    /// Reflect into the eliminator's element type: a `Bin` generator IS a `Nat` byte.
+    fn into_nat(self) -> Term {
+        match self {
+            Head::Literal(byte) => Subterm::Prim(Prim::Nat(Nat::new(byte as usize))).into(),
+            Head::Symbolic(byte) => byte,
+        }
+    }
+
+    /// Reflect into a length-1 `Bin` chunk — the cons head `Bin/get`/`Bin/slice`
+    /// rebuild as `head ++ tail` (`get(head, 0)` is the byte; a `Utf8` cons head
+    /// stays the symbolic `append(\\, c)`).
+    fn into_chunk(self) -> Term {
+        match self {
+            Head::Literal(byte) => Subterm::Prim(Prim::Bin(vec![byte])).into(),
+            Head::Symbolic(byte) => {
+                Term::prim(Prim::bin_append(Subterm::Prim(Prim::Bin(Vec::new())), byte))
+            }
+        }
+    }
+}
+
+/// One step of the `Bin` front decode. `Empty` is the identity (`\\`); `Cons` peels
+/// a leading generator and the residual tail; `Opaque` is a value exposing no
+/// leading generator (a variable, a slice, a non-`\\`-based append).
+enum Front {
+    Empty,
+    Cons { head: Head, tail: Term },
+    Opaque,
+}
+
+/// The structural traversal shared by both `Bin` destructors ([`FreeMonoid::uncons`]
+/// for the eliminator, [`peel_first_byte`] for `Bin/get`/`Bin/slice`): peel the
+/// leading generator off an already-reduced value. A literal run yields its first
+/// byte; a `Utf8` cons `append(\\, c)` yields its symbolic byte; a concatenation
+/// recurses into its first operand so a literal- or cons-led `BinConcat` decodes
+/// too, the residual first-operand tail rejoining the rest — normalised (an empty
+/// first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes
+/// to the same tail the bare cons would. The empty bytestring is `Empty`; anything
+/// else (a variable, a slice, a non-`\\`-based append) is `Opaque`.
+fn peel_front(bin: &Term) -> Front {
+    match &**bin {
+        Subterm::Prim(Prim::Bin(bytes)) => match bytes.split_first() {
+            None => Front::Empty,
+            Some((&byte, rest)) => Front::Cons {
+                head: Head::Literal(byte),
+                tail: Subterm::Prim(Prim::Bin(rest.to_vec())).into(),
+            },
+        },
+        // `append(\\, c)`: a single (symbolic) byte — the `Utf8` cons head.
+        Subterm::Prim(Prim::BinAppend(base, c)) if is_empty_bin(base) => Front::Cons {
+            head: Head::Symbolic(c.clone()),
+            tail: Subterm::Prim(Prim::Bin(Vec::new())).into(),
+        },
+        // A concatenation: peel the leading generator off its first operand; the
+        // residual first-operand tail rejoins the rest.
+        Subterm::Prim(Prim::BinConcat(operands)) => match operands.split_first() {
+            Some((first, rest)) => match peel_front(first) {
+                Front::Cons { head, tail: first_tail } => {
+                    let mut segments = Vec::with_capacity(operands.len());
+                    if !is_empty_bin(&first_tail) {
+                        segments.push(first_tail);
+                    }
+                    segments.extend(rest.iter().cloned());
+                    let tail = match segments.len() {
+                        0 => Subterm::Prim(Prim::Bin(Vec::new())).into(),
+                        1 => segments.into_iter().next().unwrap(),
+                        _ => Subterm::Prim(Prim::BinConcat(segments)).into(),
+                    };
+                    Front::Cons { head, tail }
+                }
+                // A reduced `BinConcat` has no empty operands, so a first operand
+                // that exposes no byte is opaque (a leading variable/slice).
+                Front::Empty | Front::Opaque => Front::Opaque,
+            },
+            None => Front::Empty,
+        },
+        _ => Front::Opaque,
+    }
+}
+
+/// Split the first byte off a reduced `Bin` value, returning a length-1 head chunk
+/// and the residual tail. Where `peel_bin` (`core::spine`) strips a common prefix of
+/// *two* values, this decomposes *one* — the operation-level destructor `Bin/get`
+/// and `Bin/slice` walk a codepoint at a time, exposing the cons structure the
+/// `Utf8` relation builds (`concat(append(\\, h), t)`) along with literal runs and
+/// concatenations. `None` for the empty bytestring or an opaque symbolic value,
+/// where no first byte is statically exposed.
+pub fn peel_first_byte(bin: &Term) -> Option<(Term, Term)> {
+    match peel_front(bin) {
+        Front::Cons { head, tail } => Some((head.into_chunk(), tail)),
+        Front::Empty | Front::Opaque => None,
+    }
+}
+
+// `cons` injects a byte at the front as `append(\\, c)` (a one-byte `Bin`);
+// `peel_front` recognises that encoding to decode a symbolic cons head.
+fn is_empty_bin(term: &Term) -> bool {
+    matches!(&**term, Subterm::Prim(Prim::Bin(bytes)) if bytes.is_empty())
 }
 
 // `cons` injects an element at the front as the singleton literal `[h]`; the `Arr`

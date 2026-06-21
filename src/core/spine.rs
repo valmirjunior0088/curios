@@ -280,41 +280,6 @@ pub fn peel_arr(left: &Prim, right: &Prim) -> Option<Peel> {
     })
 }
 
-fn is_empty_bin(term: &Term) -> bool {
-    matches!(&**term, Subterm::Prim(Prim::Bin(bytes)) if bytes.is_empty())
-}
-
-/// Split the first byte off a reduced `Bin` value, returning a length-1 head chunk
-/// and the residual tail. Where `peel_bin` strips a common prefix of *two* values,
-/// this decomposes *one*: it exposes the cons structure the `Utf8` relation builds
-/// (`concat(append(\\, h), t)`), plus literal runs and longer concatenations, so a
-/// `BinSlice` can compute one byte at a time along a codepoint walk. `None` for the
-/// empty bytestring or an opaque symbolic value, where no first byte is statically
-/// exposed. The operand is assumed already reduced, so a `BinConcat`'s operands are
-/// non-empty and merged.
-pub fn peel_first_byte(bin: &Term) -> Option<(Term, Term)> {
-    match &**bin {
-        Subterm::Prim(Prim::Bin(bytes)) if !bytes.is_empty() => Some((
-            Subterm::Prim(Prim::Bin(vec![bytes[0]])).into(),
-            Subterm::Prim(Prim::Bin(bytes[1..].to_vec())).into(),
-        )),
-        // `append(\\, h)`: a single (symbolic) byte — the `Utf8` cons head.
-        Subterm::Prim(Prim::BinAppend(base, _)) if is_empty_bin(base) => {
-            Some((bin.clone(), Subterm::Prim(Prim::Bin(Vec::new())).into()))
-        }
-        // A concatenation: peel its first operand, the rest rides on the tail.
-        Subterm::Prim(Prim::BinConcat(operands)) => {
-            let (first, rest) = operands.split_first()?;
-            let (head, first_tail) = peel_first_byte(first)?;
-            let tail = std::iter::once(first_tail)
-                .chain(rest.iter().cloned())
-                .collect::<Vec<_>>();
-            Some((head, Subterm::Prim(Prim::bin_concat(tail)).into()))
-        }
-        _ => None,
-    }
-}
-
 /// The `Bin`-valued primitives `peel_bin` decomposes. `Bin` and `BinConcat` carry
 /// the monoid's literals and juxtaposition; `BinSlice` rides in as a measured
 /// `Window` (a length-`hi - lo` chunk whose contents are symbolic), so adjacent
