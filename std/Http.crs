@@ -81,15 +81,7 @@ let until(target : Nat) -> (Nat) -> Bln =
         end;
 
 let header_lookup(headers : Lst({Str, Str}), name : Str) -> Option(Str) =
-    Lst/fold(headers, Option/none(), (pair, acc) =>
-        match acc : Option(Str)
-        | some(found) => Option/some(found)
-        | none() =>
-            match Str/eql_ci(pair.0, name)
-            | true => Option/some(pair.1)
-            | false => Option/none()
-            end
-        end);
+    Option/map((pair) => pair.1, Lst/find(headers, (pair) => Str/eql_ci(pair.0, name)));
 
 let render_header(pair : {Str, Str}) -> Str =
     Str/flatten([pair.0, ": ", pair.1, "\r\n"]);

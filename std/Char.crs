@@ -3,30 +3,17 @@ use /std/{Nat, Bln, Bin, Option};
 pub let is_whitespace(c : Nat) -> Bln =
     match Nat/eql(c, ' ')
     | true => true
-    | false =>
-        match Nat/gte(c, '\t')
-        | true => Nat/lte(c, '\r')
-        | false => false
-        end
+    | false => Nat/in_range(c, '\t', '\r')
     end;
 
 pub let is_digit(c : Nat) -> Bln =
-    match Nat/lte('0', c)
-    | true => Nat/lte(c, '9')
-    | false => false
-    end;
+    Nat/in_range(c, '0', '9');
 
 pub let is_lower(c : Nat) -> Bln =
-    match Nat/lte('a', c)
-    | true => Nat/lte(c, 'z')
-    | false => false
-    end;
+    Nat/in_range(c, 'a', 'z');
 
 pub let is_upper(c : Nat) -> Bln =
-    match Nat/lte('A', c)
-    | true => Nat/lte(c, 'Z')
-    | false => false
-    end;
+    Nat/in_range(c, 'A', 'Z');
 
 pub let is_alpha(c : Nat) -> Bln =
     match is_lower(c)

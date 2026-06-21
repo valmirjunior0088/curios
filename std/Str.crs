@@ -230,18 +230,21 @@ pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
 pub let len(s : Str) -> Nat =
     fold(s, 0, (cp, acc) => Nat/add(acc, 1));
 
-pub let find(s : Str, target : Nat) -> Option(Nat) =
+pub let find_index(s : Str, pred : (Nat) -> Bln) -> Option(Nat) =
     let r : {Nat, Option(Nat)} =
         fold(s, (0, Option/none()), (cp, acc) =>
             match acc.1
             | some(_) => acc
             | none() =>
-                match Nat/eql(cp, target)
+                match pred(cp)
                 | true => (Nat/add(acc.0, 1), Option/some(acc.0))
                 | false => (Nat/add(acc.0, 1), Option/none())
                 end
             end);
     r.1;
+
+pub let find(s : Str, target : Nat) -> Option(Nat) =
+    find_index(s, (cp) => Nat/eql(cp, target));
 
 pub let get(s : Str, i : Nat) -> Nat =
     let b = to_bin(s);

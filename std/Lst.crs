@@ -1,6 +1,6 @@
 pub use /syn/{Lst};
 pub use /syn/Lst/*;
-use /std/{Arr, Nat};
+use /std/{Arr, Nat, Bln, Option};
 
 pub let len(@A : Type, l : Lst(A)) -> Nat =
     rec go(rest : Lst(A), acc : Nat) -> Nat =
@@ -31,6 +31,18 @@ pub let fold(@A : Type, @B : Type, l : Lst(A), init : B, f : (A, B) -> B) -> B =
         | cons(x, tail) => go(tail, f(x, acc))
         end;
     go(l, init);
+
+pub let find(@A : Type, l : Lst(A), pred : (A) -> Bln) -> Option(A) =
+    rec go(rest : Lst(A)) -> Option(A) =
+        match rest
+        | nil() => Option/none()
+        | cons(x, tail) =>
+            match pred(x)
+            | true => Option/some(x)
+            | false => go(tail)
+            end
+        end;
+    go(l);
 
 pub let to_arr(@A : Type, l : Lst(A)) -> Arr(A) =
     rec go(rest : Lst(A), n : Nat) -> {Arr(A), Lst(A)} =

@@ -20,22 +20,9 @@ pub let bind(@A : Type, @B : Type) -> (Reader(A), (A) -> Reader(B)) -> Reader(B)
 pub let run(@A : Type, m : Reader(A), h : Io) -> A =
     m(buffer(h)).1;
 
-let find_newline(buf : Bin) -> Option(Nat) =
-    let (_, result) : {Nat, Option(Nat)} =
-        Bin/fold(buf, (0, Option/none()), (byte, acc) =>
-            match acc.1
-            | some(_) => acc
-            | none() =>
-                match Nat/eql(byte, '\n')
-                | true => (acc.0, Option/some(acc.0))
-                | false => (Nat/add(acc.0, 1), Option/none())
-                end
-            end);
-    result;
-
 pub rec read_line : Reader(Option(Bin)) =
     (b) =>
-        match find_newline(b.1) : {Buffer, Option(Bin)}
+        match Bin/find_index(b.1, (byte) => Nat/eql(byte, '\n')) : {Buffer, Option(Bin)}
         | some(i) =>
             let stop = Nat/add(i, 1);
             let line = Bin/slice(b.1, 0, stop);

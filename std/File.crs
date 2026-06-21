@@ -32,14 +32,7 @@ pub let with(@A : Type, path : Str, mode : Io/Mode, body : (File) -> Task(A)) ->
         end);
 
 let drain(f : File) -> Task(Bin) =
-    rec go(acc : Bin) -> Task(Bin) =
-        Task/bind(read(f, 4096), (r) =>
-            match r : Task(Bin)
-            | chunk(bytes) => go(Bin/concat(acc, bytes))
-            | eof() => Task/pure(acc)
-            | error(_) => Task/pure(acc)
-            end);
-    go(\\);
+    Task/drain((n) => read(f, n));
 
 pub let read_all(path : Str) -> Task(Result(Bin, Io/Error)) =
     with(path, Io/Mode/read(), (f) => drain(f));

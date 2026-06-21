@@ -116,6 +116,16 @@ pub rec accept(l : Io) -> Task(Result(Io, Io/Error)) =
             end
         end);
 
+pub let drain(read : (Nat) -> Task(Io/Read)) -> Task(Bin) =
+    rec go(acc : Bin) -> Task(Bin) =
+        bind(read(4096), (r) =>
+            match r : Task(Bin)
+            | chunk(bytes) => go(Bin/concat(acc, bytes))
+            | eof() => pure(acc)
+            | error(_) => pure(acc)
+            end);
+    go(\\);
+
 pub union Fut(A : Type)
 | pending(Lst(Waker))
 | ready(A)

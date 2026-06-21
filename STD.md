@@ -137,6 +137,7 @@ Raw byte sequences. `fold` and `join` are library helpers; the rest are `/sys` p
 | `concat(a, b)`      | `(Bin, Bin) -> Bin`                       | Concatenate two sequences                  |
 | `flatten(parts)`    | `(Arr(Bin)) -> Bin`                       | Concatenate every part in one allocation   |
 | `fold(b, init, f)`  | `(@A : Type, Bin, A, (Nat, A) -> A) -> A` | Left fold over the bytes                   |
+| `find_index(b, p)`  | `(Bin, (Nat) -> Bln) -> Option(Nat)`      | Index of the first byte satisfying `p`, or `none` |
 | `join(sep, parts)`  | `(Bin, Arr(Bin)) -> Bin`                  | Concatenate with a separator between parts |
 
 ### `/std/Arr`
@@ -179,6 +180,8 @@ Byte classifiers over ASCII code points (`(Nat) -> Bln`): `is_whitespace`, `is_d
 | `eql_ci(a, b)`      | `(Str, Str) -> Bln`      | Equality after ASCII case folding                             |
 | `len(s)`            | `(Str) -> Nat`           | Codepoint count (Unicode scalar values, _not_ bytes/graphemes) |
 | `get(s, i)`         | `(Str, Nat) -> Nat`      | Codepoint at index `i` (traps if out of bounds)                |
+| `find(s, c)`        | `(Str, Nat) -> Option(Nat)` | Codepoint index of the first occurrence of `c`, or `none`  |
+| `find_index(s, p)`  | `(Str, (Nat) -> Bln) -> Option(Nat)` | Codepoint index of the first codepoint satisfying `p` |
 | `slice(s, x, y)`    | `(Str, Nat, Nat) -> Str` | Codepoints `[x, y)` (traps if out of range)                    |
 | `fold(s, init, f)`  | `(@A : Type, Str, A, (Nat, A) -> A) -> A` | Left fold over the codepoints                  |
 | `trim(s)`           | `(Str) -> Str`           | Strip leading and trailing ASCII whitespace                    |
@@ -277,6 +280,7 @@ The surface is two tiers. The **application API** is what programs use — the m
 | `race(tasks)` | `(@A, Lst(() -> Task(A))) -> Task(A)` | `select`'s winning value, dropping the index |
 | `cancel(t)` | `(Token) -> {}` | Flag a token cancelled; its fiber is reaped at its next step, finalizers running |
 | `using(h, release, body)` | `(@A, Io, Finalizer, Task(A)) -> Task(A)` | Bracket `h`: register `release`, run `body`, release exactly once — on completion or on cancel/drop |
+| `drain(read)` | `((Nat) -> Task(Io/Read)) -> Task(Bin)` | Pull from `read` until `eof`/`error`, accumulating all bytes |
 | `run(main)` | `(Task({})) -> {}` | Drive `main` as the program root (`block_on` at the unit result) |
 | `block_on(t)` | `(@A : Type, Task(A)) -> A` | Drive `t` to its value, multiplexing every fiber over one `Io/poll` |
 | `Handle(A)` | `Type` (`= {result : Future(A), token : Token}`) | A spawned fiber's result future paired with its cancellation token |
@@ -485,6 +489,7 @@ The cons list, `nil()` / `cons(A, Lst(A))` — the general-purpose sequence and 
 | `rev(l)`           | `(@A : Type, Lst(A)) -> Lst(A)`                      | Reversal                    |
 | `map(f, l)`        | `(@A : Type, @B : Type, (A) -> B, Lst(A)) -> Lst(B)` | Elementwise map             |
 | `fold(l, init, f)` | `(@A : Type, @B : Type, Lst(A), B, (A, B) -> B) -> B`| Left fold over the elements |
+| `find(l, p)`       | `(@A : Type, Lst(A), (A) -> Bln) -> Option(A)`       | First element satisfying `p`, or `none` |
 | `to_arr(l)`        | `(@A : Type, Lst(A)) -> Arr(A)`                      | Conversion to a flat array  |
 
 ### `/std/Order`
