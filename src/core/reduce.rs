@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Carrier, Cases, Context, Field, Func, Let, Match, Metavar, Nat, Prim, Proj, Rec,
-        ReduceError, Struct, Subterm, Term, Tuple, Var, reduce_prim,
+        Apply, Arr, Bin, Carrier, Cases, Context, Field, FreeMonoid, Func, Layer, Let, Match,
+        Metavar, Nat, Prim, Proj, Rec, ReduceError, Struct, Subterm, Term, Tuple, Var, reduce_prim,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,
@@ -269,181 +269,52 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             }))))
         }
 
-        // Structural induction on a native free-monoid primitive. The reduce
-        // rule is the one-step decode: an identity-form value (empty literal)
-        // takes the empty arm; a cons-form value (a non-empty literal) peels its
-        // head generator and recurses symbolically for the induction hypothesis,
-        // exactly as `Cases::Nat` peels one successor. A symbolic value (a
-        // concatenation with a non-literal lead, a variable) is stuck: rebuild.
+        // Structural induction on a native free-monoid primitive (`Bin`/`Arr`).
+        // The carrier-specific one-step decode lives in `FreeMonoid::uncons` (the
+        // eliminator-side analogue of `spine::peel_prim`); this driver is the
+        // shared catamorphism over it. An identity `Layer` takes the empty arm; a
+        // cons `Layer` peels the head generator and recurses symbolically for the
+        // induction hypothesis (the dual of `Cases::Nat`'s successor peel); a stuck
+        // scrutinee rebuilds.
         Cases::Inductive {
-            carrier: Carrier::Arr(elem),
+            carrier,
             empty_case,
             cons_case,
-        } => match Term::unwrap_or_clone(reduce_forced(context, head)?) {
-            Subterm::Prim(Prim::Arr(elems)) if elems.is_empty() => {
-                Ok(Reduce::Continue(empty_case))
-            }
-            Subterm::Prim(Prim::Arr(mut elems)) => {
-                let head_elem = elems.remove(0);
-                let tail: Term = Subterm::Prim(Prim::Arr(elems)).into();
+        } => {
+            let scrutinee = Term::unwrap_or_clone(reduce_forced(context, head)?);
+            let layer = match &carrier {
+                Carrier::Bin => Bin::uncons(scrutinee),
+                Carrier::Arr(_) => Arr::uncons(scrutinee),
+            };
 
-                let ih: Term = Subterm::Match(Match {
-                    head: tail.clone(),
-                    motive: motive.clone(),
-                    cases: Cases::Inductive {
-                        carrier: Carrier::Arr(elem.clone()),
-                        empty_case: empty_case.clone(),
-                        cons_case: cons_case.clone(),
-                    },
-                })
-                .into();
+            match layer {
+                Layer::Empty => Ok(Reduce::Continue(empty_case)),
+                Layer::Cons { head, tail } => {
+                    let ih: Term = Subterm::Match(Match {
+                        head: tail.clone(),
+                        motive: motive.clone(),
+                        cases: Cases::Inductive {
+                            carrier: carrier.clone(),
+                            empty_case: empty_case.clone(),
+                            cons_case: cons_case.clone(),
+                        },
+                    })
+                    .into();
 
-                Ok(Reduce::Continue(cons_case.open(&[&head_elem, &tail, &ih])))
-            }
-            // A *symbolic* cons `cons(h, t) = concat([h], t)` peels the head off
-            // the leading singleton literal and recurses symbolically — mirroring
-            // the `Bin` eliminator's symbolic-cons rule, so `Arr` structural
-            // recursions (e.g. `to_bins` feeding `flatten_closed`) fire on
-            // symbolic input, not only on array literals.
-            Subterm::Prim(Prim::ArrConcat(concat_elem, mut segments))
-                if segments.first().is_some_and(is_nonempty_arr_literal) =>
-            {
-                let mut lead = match Term::unwrap_or_clone(segments.remove(0)) {
-                    Subterm::Prim(Prim::Arr(elems)) => elems,
-                    _ => unreachable!("guard checked a non-empty `Arr` literal lead segment"),
-                };
-                let head_elem = lead.remove(0);
-                // The lead segment's remaining elements stay ahead of the rest;
-                // collapse to a literal/lone operand exactly as `ArrConcat` does.
-                if !lead.is_empty() {
-                    segments.insert(0, Subterm::Prim(Prim::Arr(lead)).into());
+                    Ok(Reduce::Continue(cons_case.open(&[&head, &tail, &ih])))
                 }
-                let tail: Term = match segments.len() {
-                    0 => Subterm::Prim(Prim::Arr(vec![])).into(),
-                    1 => segments.into_iter().next().unwrap(),
-                    _ => Subterm::Prim(Prim::ArrConcat(concat_elem, segments)).into(),
-                };
-                let ih: Term = Subterm::Match(Match {
-                    head: tail.clone(),
-                    motive: motive.clone(),
+                Layer::Stuck(scrutinee) => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
+                    head: scrutinee.into(),
+                    motive,
                     cases: Cases::Inductive {
-                        carrier: Carrier::Arr(elem.clone()),
-                        empty_case: empty_case.clone(),
-                        cons_case: cons_case.clone(),
+                        carrier,
+                        empty_case,
+                        cons_case,
                     },
-                })
-                .into();
-                Ok(Reduce::Continue(cons_case.open(&[&head_elem, &tail, &ih])))
+                })))),
             }
-            head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
-                head: head.into(),
-                motive,
-                cases: Cases::Inductive {
-                    carrier: Carrier::Arr(elem),
-                    empty_case,
-                    cons_case,
-                },
-            })))),
-        },
-
-        Cases::Inductive {
-            carrier: Carrier::Bin,
-            empty_case,
-            cons_case,
-        } => match Term::unwrap_or_clone(reduce_forced(context, head)?) {
-            Subterm::Prim(Prim::Bin(bytes)) if bytes.is_empty() => {
-                Ok(Reduce::Continue(empty_case))
-            }
-            Subterm::Prim(Prim::Bin(mut bytes)) => {
-                // The generator is the leading byte, reflected back as a `Nat`.
-                let head_byte = bytes.remove(0);
-                let head_elem: Term =
-                    Subterm::Prim(Prim::Nat(Nat::new(head_byte as usize))).into();
-                let tail: Term = Subterm::Prim(Prim::Bin(bytes)).into();
-
-                let ih: Term = Subterm::Match(Match {
-                    head: tail.clone(),
-                    motive: motive.clone(),
-                    cases: Cases::Inductive {
-                        carrier: Carrier::Bin,
-                        empty_case: empty_case.clone(),
-                        cons_case: cons_case.clone(),
-                    },
-                })
-                .into();
-
-                Ok(Reduce::Continue(cons_case.open(&[&head_elem, &tail, &ih])))
-            }
-            // A *symbolic* cons `cons(c, t) = concat(append(\\, c), t)` reduces to
-            // either `append(\\, c)` (empty tail) or `concat([append(\\, c)], rest)`.
-            // Decode its leading byte `c` so the eliminator fires on symbolic input,
-            // not only on byte literals — the one-step decode structural `Bin` proofs
-            // (e.g. `slice_closed`) rely on to reduce in lockstep with the derivation.
-            Subterm::Prim(Prim::BinAppend(base, c)) if is_empty_bin(&base) => {
-                let tail: Term = Subterm::Prim(Prim::Bin(vec![])).into();
-                let ih: Term = Subterm::Match(Match {
-                    head: tail.clone(),
-                    motive: motive.clone(),
-                    cases: Cases::Inductive {
-                        carrier: Carrier::Bin,
-                        empty_case: empty_case.clone(),
-                        cons_case: cons_case.clone(),
-                    },
-                })
-                .into();
-                Ok(Reduce::Continue(cons_case.open(&[&c, &tail, &ih])))
-            }
-            Subterm::Prim(Prim::BinConcat(mut segments))
-                if segments.first().is_some_and(is_single_byte_append) =>
-            {
-                let c = match Term::unwrap_or_clone(segments.remove(0)) {
-                    Subterm::Prim(Prim::BinAppend(_, c)) => c,
-                    _ => unreachable!("guard checked a leading single-byte append"),
-                };
-                let tail: Term = match segments.len() {
-                    0 => Subterm::Prim(Prim::Bin(vec![])).into(),
-                    1 => segments.into_iter().next().unwrap(),
-                    _ => Subterm::Prim(Prim::BinConcat(segments)).into(),
-                };
-                let ih: Term = Subterm::Match(Match {
-                    head: tail.clone(),
-                    motive: motive.clone(),
-                    cases: Cases::Inductive {
-                        carrier: Carrier::Bin,
-                        empty_case: empty_case.clone(),
-                        cons_case: cons_case.clone(),
-                    },
-                })
-                .into();
-                Ok(Reduce::Continue(cons_case.open(&[&c, &tail, &ih])))
-            }
-            head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
-                head: head.into(),
-                motive,
-                cases: Cases::Inductive {
-                    carrier: Carrier::Bin,
-                    empty_case,
-                    cons_case,
-                },
-            })))),
-        },
+        }
     }
-}
-
-// `cons` injects a byte at the front as `append(\\, c)` (a one-byte `Bin`); these
-// recognize that encoding so the `Bin` eliminator can decode a symbolic cons.
-fn is_empty_bin(term: &Term) -> bool {
-    matches!(&**term, Subterm::Prim(Prim::Bin(bytes)) if bytes.is_empty())
-}
-
-fn is_single_byte_append(term: &Term) -> bool {
-    matches!(&**term, Subterm::Prim(Prim::BinAppend(base, _)) if is_empty_bin(base))
-}
-
-// `cons` injects an element at the front as the singleton literal `[h]`; the `Arr`
-// eliminator recognizes a non-empty literal lead segment to decode a symbolic cons.
-fn is_nonempty_arr_literal(term: &Term) -> bool {
-    matches!(&**term, Subterm::Prim(Prim::Arr(elems)) if !elems.is_empty())
 }
 
 fn reduce_let(let_: Let) -> Reduce {

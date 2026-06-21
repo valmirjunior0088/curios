@@ -16,6 +16,9 @@ pub use prim::*;
 mod spine;
 pub use spine::*;
 
+mod monoid;
+use monoid::*;
+
 mod names;
 pub use names::*;
 
