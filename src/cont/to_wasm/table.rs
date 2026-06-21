@@ -221,7 +221,6 @@ pub struct Table<'a> {
     bin_type: wasm::TypeName,
     arr_type: wasm::TypeName,
     cell_type: wasm::TypeName,
-    flt_to_le_bin: OnceCell<wasm::FuncName>,
     io_read: OnceCell<wasm::FuncName>,
     io_write: OnceCell<wasm::FuncName>,
     io_open: OnceCell<wasm::FuncName>,
@@ -292,7 +291,6 @@ impl<'a> Table<'a> {
             bin_type: wasm::TypeName::from("bin"),
             arr_type: wasm::TypeName::from("arr"),
             cell_type: wasm::TypeName::from("cell"),
-            flt_to_le_bin: OnceCell::new(),
             io_read: OnceCell::new(),
             io_write: OnceCell::new(),
             io_open: OnceCell::new(),
@@ -420,15 +418,6 @@ impl<'a> Table<'a> {
 
     pub fn cell_type(&self) -> wasm::TypeName {
         self.cell_type.clone()
-    }
-
-    pub fn flt_to_le_bin_func(&self) -> &wasm::FuncName {
-        self.flt_to_le_bin
-            .get_or_init(|| wasm::FuncName::from("flt_to_le_bin"))
-    }
-
-    pub fn flt_to_le_bin_used(&self) -> bool {
-        self.flt_to_le_bin.get().is_some()
     }
 
     pub fn io_read_func(&self) -> &wasm::FuncName {

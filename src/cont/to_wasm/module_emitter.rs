@@ -64,23 +64,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    fn emit_flt_to_le_bin_import(&mut self) {
-        if self.table.flt_to_le_bin_used() {
-            let bin_ref = wasm::ValType::Ref(wasm::RefType {
-                is_nullable: false,
-                heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
-            });
-            let f32 = wasm::ValType::Num(wasm::NumType::F32);
-            self.add_host_import(
-                "flt_to_le_bin",
-                wasm::TypeName::from("flt_to_le_bin_type"),
-                self.table.flt_to_le_bin_func().clone(),
-                wasm::ResultType::from([f32]),
-                wasm::ResultType::from([bin_ref]),
-            );
-        }
-    }
-
     fn emit_sys_imports(&mut self) {
         let i32_val = wasm::ValType::Num(wasm::NumType::I32);
         let bin_ref = wasm::ValType::Ref(wasm::RefType {
@@ -780,7 +763,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 .add_export(func_name.as_string(), wasm::Export::Func(func_name));
         }
 
-        self.emit_flt_to_le_bin_import();
         self.emit_sys_imports();
 
         let start_type_name = wasm::TypeName::from("start");

@@ -9,12 +9,6 @@ use {
     },
 };
 
-/// Exposes a float's raw IEEE-754 bytes to the guest (the `flt_to_le_bin`
-/// import); `/std/Flt/to_str` renders them to decimal in Curios.
-pub fn flt_to_le_bin(value: f32) -> Vec<u8> {
-    value.to_le_bytes().to_vec()
-}
-
 /// A handle the guest shuttles across the IO boundary: one of the three standard
 /// streams, or a host-minted token for an open file or socket. Mirrors the
 /// guest's `/std/Io` handles; lifts from / lowers to its `Bin` wire token (the

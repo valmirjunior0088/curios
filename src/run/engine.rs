@@ -92,7 +92,6 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
     let bin_array_type = ArrayType::new(engine, FieldType::new(Mutability::Var, StorageType::I8));
     let bin_ref = ValType::Ref(RefType::new(false, HeapType::ConcreteArray(bin_array_type)));
     let i31_ref = ValType::Ref(RefType::new(false, HeapType::I31));
-    let f32_to_bin_type = FuncType::new(engine, [ValType::F32], [bin_ref.clone()]);
     let io_clock_wall_type = FuncType::new(
         engine,
         std::iter::empty::<ValType>(),
@@ -184,10 +183,6 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
 
     let mut linker = Linker::new(engine);
     let host = Arc::new(host);
-
-    define_import(&mut linker, "flt_to_le_bin", f32_to_bin_type, {
-        move |value| super::flt_to_le_bin(value)
-    })?;
 
     define_import(&mut linker, "io_read", io_read_type, {
         let host = host.clone();

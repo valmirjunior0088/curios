@@ -1054,9 +1054,29 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 WrapAs::Flt,
             ),
             cont::Code::FltToLeBin(operand) => {
+                // Reinterpret the f32 as its IEEE-754 bit pattern and split it into
+                // the four little-endian bytes. The `bin` array is `i8`-packed, so
+                // `array.new_fixed` truncates each shifted i32 to its low byte --
+                // byte-for-byte `f32::to_le_bytes`, with no host round-trip.
+                let bits_local = self
+                    .context
+                    .push_local("flt_bits", wasm::ValType::Num(wasm::NumType::I32));
+                let bin_type = self.context.table().bin_type();
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
-                self.emit_instr(wasm::Instr::Call {
-                    func_name: self.context.table().flt_to_le_bin_func().clone(),
+                self.emit_instr(wasm::Instr::I32ReinterpretF32);
+                self.emit_instr(wasm::Instr::LocalTee {
+                    local_name: bits_local.clone(),
+                });
+                for shift in [8, 16, 24] {
+                    self.emit_instr(wasm::Instr::LocalGet {
+                        local_name: bits_local.clone(),
+                    });
+                    self.emit_instr(wasm::Instr::I32Const { value: shift });
+                    self.emit_instr(wasm::Instr::I32ShrU);
+                }
+                self.emit_instr(wasm::Instr::ArrayNewFixed {
+                    type_name: bin_type,
+                    length: 4,
                 });
                 self.emit_instr(wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
