@@ -37,6 +37,9 @@
 //!   captures, finishing type erasure.
 //! - [`dead_code_elimination`] — drops unused bindings and unreachable
 //!   functions, closures, and consts.
+//! - [`map_simplification`] — collapses an `Arr.map` by the identity closure to
+//!   an alias of its source, letting copy propagation and dead-code elimination
+//!   see through the otherwise-opaque map primitive.
 
 mod mangle;
 
@@ -94,6 +97,9 @@ pub use dead_argument_elimination::*;
 mod dead_code_elimination;
 pub use dead_code_elimination::*;
 
+mod map_simplification;
+pub use map_simplification::*;
+
 use super::cont::*;
 
 /// Run the optimization pipeline and return the rewritten module.
@@ -136,8 +142,12 @@ use super::cont::*;
 ///    loop with a single caller for the next step. Then a second inlining
 ///    round: the single-site rule fuses those loops, and the size-bounded
 ///    multi-site rule splices the tiny primitive wrappers called from several
-///    specialized closures at every site. A settle round follows, and a second
-///    known-tag threading round catches the joins the new splices exposed.
+///    specialized closures at every site. A settle round follows, and only then
+///    does map simplification run: by here a field-projection closure like the
+///    newtype `to_bin` has been forwarded down to the bare identity, so an
+///    `Arr.map` by it collapses to an alias its consumers see through (fusing
+///    `Bin.flatten(Arr.map(to_bin, xs))` to `Bin.flatten(xs)`). A second
+///    known-tag threading round then catches the joins the new splices exposed.
 /// 7. **Hoist constants.** Every bytestring and closed aggregate becomes a
 ///    shared module const, built once at startup instead of per execution.
 /// 8. **Final cleanup.** Folding's decided matches and forwarded projections
@@ -181,6 +191,7 @@ pub fn optimize(mut module: Module) -> Module {
     inline_calls(&mut module);
     propagate_copies(&mut module);
     fold_constants(&mut module);
+    simplify_maps(&mut module);
     thread_known_tags(&mut module);
     thread_jumps(&mut module);
     propagate_copies(&mut module);
