@@ -1,6 +1,7 @@
-use /std/{Char, Nat, Bin, Bln, Arr, Lst, Option};
+pub use /syn/{Str};
 use /syn/Str/{Scan, Utf8, let step, let Valid};
-pub use /syn/Str/{let Str};
+use /std/{Char, Nat, Bin, Bln, Arr, Lst, Option};
+
 
 rec seq(@s : Scan, @a : Bin, @b : Bin, va : Utf8(s, a), vb : Valid(b))
     -> Utf8(s, Bin/concat(a, b)) =

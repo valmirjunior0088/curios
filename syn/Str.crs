@@ -58,8 +58,3 @@ pub union Utf8 : (s : Scan, b : Bin)
 end
 
 pub let Valid(b : Bin) -> Type = Utf8(Scan/lead(), b);
-
-pub struct Str pub {
-    bytes : Bin,
-    valid : @Valid(bytes)
-}

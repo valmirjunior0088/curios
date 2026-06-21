@@ -1,5 +1,11 @@
+use /std/{Bin};
+
 pub mod Str;
-pub use Str/{let Str};
+
+pub struct Str pub {
+    bytes : Bin,
+    valid : @Str/Valid(bytes)
+}
 
 pub union Lst(A : Type)
 | nil()

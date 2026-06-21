@@ -150,7 +150,7 @@ impl<'a, 'b> Lower<'a, 'b> {
     // exactly what a `Bin` literal did.
     fn str_literal(&self, bytes: &[u8]) -> core::Term {
         core::Term::struct_named(
-            "/syn/Str/Str",
+            "/syn/Str",
             Vec::<core::Term>::new(),
             [
                 (None, core::Term::prim(core::Prim::Bin(bytes.to_vec()))),
