@@ -76,7 +76,7 @@ Signed integers — unbounded at the type level (a signed i31 at runtime). `of_s
 
 ### `/std/Flt`
 
-Floating-point numbers. `of_str` is a library helper; the rest are `/sys` primitives.
+Floating-point numbers (`f32`). `of_str` and `to_str` are library helpers; the rest are `/sys` primitives. `to_str` is a full shortest-round-trip renderer (Dragon4 over [`/std/BigNat`](#stdbignat), since the wide arithmetic overflows `Nat`): it emits the shortest decimal that parses back to the same `f32`, laid out as fixed-point with a forced sign, byte-for-byte matching Rust's `{:+}` formatting — `±0`, `±inf`, and sign-stripped `NaN` included. Because it assembles its result from `Str` literals and `Nat/to_str` digits via `Str/concat`, the UTF-8 validity proof rides `concat_closed` rather than re-validating raw bytes.
 
 | Binding        | Type                | Description                                                       |
 | -------------- | ------------------- | ----------------------------------------------------------------- |
@@ -102,7 +102,7 @@ Floating-point numbers. `of_str` is a library helper; the rest are `/sys` primit
 | `to_nat(a)`    | `(Flt) -> Nat`      | Convert to `Nat`                                                  |
 | `to_int(a)`    | `(Flt) -> Int`      | Convert to `Int`                                                  |
 | `to_le_bin(a)` | `(Flt) -> Bin`      | Little-endian byte encoding                                       |
-| `to_str(a)`    | `(Flt) -> Str`      | Decimal text                                                      |
+| `to_str(a)`    | `(Flt) -> Str`      | Shortest round-trip decimal text (signed fixed-point, matches Rust `{:+}`) |
 | `of_str(s)`    | `(Str) -> Option(Flt)` | Parse a `digits.digits` numeral with optional sign and `e`/`E` exponent; `none` on invalid input |
 
 ### `/std/Bln`
@@ -485,6 +485,10 @@ pub struct BigNat pub { limbs : Lst(Nat) }
 | `of_nat(n)`         | `(Nat) -> BigNat`             | Lift a 31-bit `Nat` to a `BigNat`                                |
 | `is_zero(x)`        | `(BigNat) -> Bln`             | Test against the canonical zero                                  |
 | `compare(a, b)`     | `(BigNat, BigNat) -> Order`   | Total magnitude comparison                                       |
+| `lt(a, b)`          | `(BigNat, BigNat) -> Bln`     | `compare` as `<`                                                 |
+| `lte(a, b)`         | `(BigNat, BigNat) -> Bln`     | `compare` as `≤`                                                 |
+| `gt(a, b)`          | `(BigNat, BigNat) -> Bln`     | `compare` as `>`                                                 |
+| `gte(a, b)`         | `(BigNat, BigNat) -> Bln`     | `compare` as `≥`                                                 |
 | `add(a, b)`         | `(BigNat, BigNat) -> BigNat`  | Addition                                                         |
 | `sub(a, b)`         | `(BigNat, BigNat) -> BigNat`  | Truncated subtraction; assumes `a ≥ b` (otherwise saturates low) |
 | `mul_small(a, c)`   | `(BigNat, Nat) -> BigNat`     | Multiply by a small scalar (`c < 100000`)                        |

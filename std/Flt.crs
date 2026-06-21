@@ -1,11 +1,204 @@
 pub use /sys/{Flt};
 pub use /sys/Flt/*;
-use /std/{Nat, Int, Str, Bln, Option};
+use /std/{Nat, Int, Str, Bln, Option, Bin, Lst, Order, BigNat};
+
+let pow2(k : Nat) -> BigNat =
+    BigNat/mul_pow2(BigNat/of_nat(1), k);
+
+rec divmod(r : BigNat, s : BigNat, d : Nat) -> {Nat, BigNat} =
+    match BigNat/compare(r, s)
+    | lt() => (d, r)
+    | eq() => divmod(BigNat/sub(r, s), s, Nat/add(d, 1))
+    | gt() => divmod(BigNat/sub(r, s), s, Nat/add(d, 1))
+    end;
+
+rec scale_up(rpm : BigNat, s : BigNat, k : Int) -> {BigNat, Int} =
+    match BigNat/gt(rpm, s)
+    | true => scale_up(rpm, BigNat/mul_small(s, 10), Int/add(k, +1))
+    | false => (s, k)
+    end;
+
+rec scale_down(r : BigNat, mp : BigNat, mm : BigNat, s : BigNat, k : Int) -> {BigNat, BigNat, BigNat, Int} =
+    match BigNat/lte(BigNat/mul_small(BigNat/add(r, mp), 10), s)
+    | true =>
+        scale_down(
+            BigNat/mul_small(r, 10),
+            BigNat/mul_small(mp, 10),
+            BigNat/mul_small(mm, 10),
+            s,
+            Int/sub(k, +1))
+    | false => (r, mp, mm, k)
+    end;
+
+rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bln) -> Lst(Nat) =
+    let r10 = BigNat/mul_small(r, 10);
+    let mp10 = BigNat/mul_small(mp, 10);
+    let mm10 = BigNat/mul_small(mm, 10);
+    let dr = divmod(r10, s, 0);
+    let d = dr.0;
+    let rem = dr.1;
+    let low =
+        match even
+        | true => BigNat/lte(rem, mm10)
+        | false => BigNat/lt(rem, mm10)
+        end;
+    let high =
+        match even
+        | true => BigNat/gte(BigNat/add(rem, mp10), s)
+        | false => BigNat/gt(BigNat/add(rem, mp10), s)
+        end;
+    match Bln/or(low, high)
+    | false => Lst/cons(d, generate(rem, s, mp10, mm10, even))
+    | true =>
+        let last =
+            match low
+            | false => Nat/add(d, 1)
+            | true =>
+                match high
+                | false => d
+                | true =>
+                    match BigNat/lt(BigNat/mul_small(rem, 2), s)
+                    | true => d
+                    | false => Nat/add(d, 1)
+                    end
+                end
+            end;
+        Lst/cons(last, Lst/nil())
+    end;
+
+rec digits_to_str(ds : Lst(Nat)) -> Str =
+    match ds
+    | nil() => ""
+    | cons(h, t) => Str/concat(Nat/to_str(h), digits_to_str(t))
+    end;
+
+rec repeat_zeros(n : Nat) -> Str =
+    match Nat/eql(n, 0)
+    | true => ""
+    | false => Str/concat("0", repeat_zeros(Nat/sub(n, 1)))
+    end;
+
+rec normalize(ds : Lst(Nat)) -> {Lst(Nat), Bln} =
+    match ds
+    | nil() => (Lst/nil(), false)
+    | cons(h, t) =>
+        match t
+        | nil() =>
+            match Nat/eql(h, 10)
+            | true => (Lst/cons(0, Lst/nil()), true)
+            | false => (Lst/cons(h, Lst/nil()), false)
+            end
+        | cons(_, _) =>
+            let rest = normalize(t);
+            match rest.1
+            | false => (Lst/cons(h, rest.0), false)
+            | true =>
+                match Nat/eql(h, 9)
+                | true => (Lst/cons(0, rest.0), true)
+                | false => (Lst/cons(Nat/add(h, 1), rest.0), false)
+                end
+            end
+        end
+    end;
+
+let setup(f_mant : Nat, exp_field : Nat) -> {BigNat, BigNat, BigNat, BigNat} =
+    match Nat/gte(exp_field, 150)
+    | true =>
+        let ep = Nat/sub(exp_field, 150);
+        match Nat/eql(f_mant, 8388608)
+        | false =>
+            (BigNat/mul_pow2(BigNat/of_nat(f_mant), Nat/add(ep, 1)),
+             BigNat/of_nat(2),
+             pow2(ep),
+             pow2(ep))
+        | true =>
+            (BigNat/mul_pow2(BigNat/of_nat(f_mant), Nat/add(ep, 2)),
+             BigNat/of_nat(4),
+             pow2(Nat/add(ep, 1)),
+             pow2(ep))
+        end
+    | false =>
+        let abs_e = Nat/sub(150, Nat/max(exp_field, 1));
+        match Bln/or(Nat/lt(exp_field, 2), Bln/not(Nat/eql(f_mant, 8388608)))
+        | true =>
+            (BigNat/mul_small(BigNat/of_nat(f_mant), 2),
+             pow2(Nat/add(abs_e, 1)),
+             BigNat/of_nat(1),
+             BigNat/of_nat(1))
+        | false =>
+            (BigNat/mul_small(BigNat/of_nat(f_mant), 4),
+             pow2(Nat/add(abs_e, 2)),
+             BigNat/of_nat(2),
+             BigNat/of_nat(1))
+        end
+    end;
+
+let layout(digits_str : Str, k : Int) -> Str =
+    let len = Str/len(digits_str);
+    match Int/lte(k, +0)
+    | true => Str/concat(Str/concat("0.", repeat_zeros(Int/abs(k))), digits_str)
+    | false =>
+        let kn = Int/to_nat(k);
+        match Nat/lt(kn, len)
+        | true =>
+            Str/concat(
+                Str/concat(Str/slice(digits_str, 0, kn), "."),
+                Str/slice(digits_str, kn, len))
+        | false => Str/concat(digits_str, repeat_zeros(Nat/sub(kn, len)))
+        end
+    end;
+
+let render(f_mant : Nat, exp_field : Nat, even : Bln) -> Str =
+    let init = setup(f_mant, exp_field);
+    let r0 = init.0;
+    let s0 = init.1;
+    let mp0 = init.2;
+    let mm0 = init.3;
+    let up = scale_up(BigNat/add(r0, mp0), s0, +0);
+    let s1 = up.0;
+    let k1 = up.1;
+    let down = scale_down(r0, mp0, mm0, s1, k1);
+    let digits = generate(down.0, s1, down.1, down.2, even);
+    let norm = normalize(digits);
+    match norm.1
+    | true => layout(digits_to_str(Lst/cons(1, norm.0)), Int/add(down.3, +1))
+    | false => layout(digits_to_str(norm.0), down.3)
+    end;
 
 pub let to_str(f : Flt) -> Str =
-    match Str/of_bin(to_str_bin(f))
-    | some(s) => s
-    | none() => ""
+    let b = Flt/to_le_bin(f);
+    let b0 = Bin/get(b, 0);
+    let b1 = Bin/get(b, 1);
+    let b2 = Bin/get(b, 2);
+    let b3 = Bin/get(b, 3);
+    let exp_field = Nat/add(Nat/mul(Nat/rem(b3, 128), 2), Nat/div(b2, 128));
+    let mant_field =
+        Nat/add(
+            Nat/add(Nat/mul(Nat/rem(b2, 128), 65536), Nat/mul(b1, 256)),
+            b0);
+    let sign =
+        match Nat/gte(b3, 128)
+        | true => "-"
+        | false => "+"
+        end;
+    match Nat/eql(exp_field, 255)
+    | true =>
+        match Nat/eql(mant_field, 0)
+        | true => Str/concat(sign, "inf")
+        | false => "NaN"
+        end
+    | false =>
+        match Bln/and(Nat/eql(exp_field, 0), Nat/eql(mant_field, 0))
+        | true => Str/concat(sign, "0")
+        | false =>
+            let f_mant =
+                match Nat/eql(exp_field, 0)
+                | true => mant_field
+                | false => Nat/add(mant_field, 8388608)
+                end;
+            let even = Nat/eql(Nat/rem(f_mant, 2), 0);
+            Str/concat(sign, render(f_mant, exp_field, even))
+        end
     end;
 
 let pow10(n : Nat) -> Flt =

@@ -56,6 +56,34 @@ rec cmp(xs : Lst(Nat), ys : Lst(Nat)) -> Order =
 pub let compare(a : BigNat, b : BigNat) -> Order =
     cmp(a.limbs, b.limbs);
 
+pub let lt(a : BigNat, b : BigNat) -> Bln =
+    match compare(a, b)
+    | lt() => true
+    | eq() => false
+    | gt() => false
+    end;
+
+pub let lte(a : BigNat, b : BigNat) -> Bln =
+    match compare(a, b)
+    | lt() => true
+    | eq() => true
+    | gt() => false
+    end;
+
+pub let gt(a : BigNat, b : BigNat) -> Bln =
+    match compare(a, b)
+    | lt() => false
+    | eq() => false
+    | gt() => true
+    end;
+
+pub let gte(a : BigNat, b : BigNat) -> Bln =
+    match compare(a, b)
+    | lt() => false
+    | eq() => true
+    | gt() => true
+    end;
+
 rec add_c(xs : Lst(Nat), ys : Lst(Nat), carry : Nat) -> Lst(Nat) =
     match xs
     | nil() =>

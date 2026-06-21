@@ -260,6 +260,58 @@ fn bignat_zero_renders_and_roundtrips() {
 }
 
 #[test]
+fn flt_to_str_matches_rust_shortest_format() {
+    // Stage 2: `Flt/to_str` is a real Dragon4 shortest-float renderer (BigNat-backed),
+    // matching `format!("{:+}", f32)` byte-for-byte — no longer the `of_bin` shim. The
+    // result is assembled from `Str` literals + `Nat/to_str` digits via `Str/concat`, so
+    // it carries the UTF-8 proof through `concat_closed` (closing the Stage 3 gap too).
+    // Expectations come straight from Rust's own `{:+}` so the test cannot drift from the
+    // oracle the host renderer used to call.
+    let cases: &[(&str, f32)] = &[
+        ("+1.0", 1.0),
+        ("Flt/neg(+1.0)", -1.0),
+        ("+0.0", 0.0),
+        ("Flt/neg(+0.0)", -0.0),
+        ("+0.5", 0.5),
+        ("+1.5", 1.5),
+        ("+0.25", 0.25),
+        ("+0.125", 0.125),
+        ("+0.1", 0.1),
+        ("+3.14", 3.14),
+        ("+2.5", 2.5),
+        ("+100.0", 100.0),
+        ("+1234.5", 1234.5),
+        ("+1000000.0", 1000000.0),
+        ("+8388608.0", 8388608.0),
+        ("+12345678.0", 12345678.0),
+        ("+16777216.0", 16777216.0),
+        ("+123456790000000.0", 123456790000000.0),
+        ("Flt/div(+1.0, +1000000.0)", 1.0 / 1000000.0),
+        ("Flt/div(+1.0, +8388608.0)", 1.0 / 8388608.0),
+        ("Flt/div(+1.0, +0.0)", f32::INFINITY),
+        ("Flt/div(Flt/neg(+1.0), +0.0)", f32::NEG_INFINITY),
+        ("Flt/div(+0.0, +0.0)", f32::NAN),
+    ];
+    let array = cases
+        .iter()
+        .map(|(expr, _)| format!("Flt/to_str({expr})"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let source = format!(
+        r#"
+        use /std/{{Io, Str, Flt, Arr}};
+        Io/print(Str/join("|", [{array}]))
+        "#
+    );
+    let expected = cases
+        .iter()
+        .map(|(_, value)| format!("{value:+}"))
+        .collect::<Vec<_>>()
+        .join("|");
+    assert_eq!(run(&source), expected.into_bytes());
+}
+
+#[test]
 fn arr_map_fills_every_slot() {
     // `Arr/map` erases to a single O(n) fill loop (`emit_map`): size the result
     // from `src.len`, allocate once, then write `f(src[i])` into slot `i` via an
