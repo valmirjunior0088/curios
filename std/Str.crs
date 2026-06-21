@@ -157,13 +157,13 @@ pub let eql(a : Str, b : Str) -> Bln =
     Bin/eql(to_bin(a), to_bin(b));
 
 let codepoint_width(lead : Nat) -> Nat =
-    match Nat/lt(lead, 128)
+    match Nat/lt(lead, 0x80)
     | true => 1
     | false =>
-        match Nat/lt(lead, 224)
+        match Nat/lt(lead, 0xE0)
         | true => 2
         | false =>
-            match Nat/lt(lead, 240)
+            match Nat/lt(lead, 0xF0)
             | true => 3
             | false => 4
             end
@@ -172,30 +172,30 @@ let codepoint_width(lead : Nat) -> Nat =
 
 let decode_at(b : Bin, off : Nat) -> Nat =
     let lead = Bin/get(b, off);
-    match Nat/lt(lead, 128)
+    match Nat/lt(lead, 0x80)
     | true => lead
     | false =>
-        match Nat/lt(lead, 224)
+        match Nat/lt(lead, 0xE0)
         | true =>
             Nat/add(
-                Nat/mul(Nat/sub(lead, 192), 64),
-                Nat/sub(Bin/get(b, Nat/add(off, 1)), 128))
+                Nat/mul(Nat/sub(lead, 0xC0), 0x40),
+                Nat/sub(Bin/get(b, Nat/add(off, 1)), 0x80))
         | false =>
-            match Nat/lt(lead, 240)
+            match Nat/lt(lead, 0xF0)
             | true =>
                 Nat/add(
                     Nat/add(
-                        Nat/mul(Nat/sub(lead, 224), 4096),
-                        Nat/mul(Nat/sub(Bin/get(b, Nat/add(off, 1)), 128), 64)),
-                    Nat/sub(Bin/get(b, Nat/add(off, 2)), 128))
+                        Nat/mul(Nat/sub(lead, 0xE0), 0x1000),
+                        Nat/mul(Nat/sub(Bin/get(b, Nat/add(off, 1)), 0x80), 0x40)),
+                    Nat/sub(Bin/get(b, Nat/add(off, 2)), 0x80))
             | false =>
                 Nat/add(
                     Nat/add(
                         Nat/add(
-                            Nat/mul(Nat/sub(lead, 240), 262144),
-                            Nat/mul(Nat/sub(Bin/get(b, Nat/add(off, 1)), 128), 4096)),
-                        Nat/mul(Nat/sub(Bin/get(b, Nat/add(off, 2)), 128), 64)),
-                    Nat/sub(Bin/get(b, Nat/add(off, 3)), 128))
+                            Nat/mul(Nat/sub(lead, 0xF0), 0x40000),
+                            Nat/mul(Nat/sub(Bin/get(b, Nat/add(off, 1)), 0x80), 0x1000)),
+                        Nat/mul(Nat/sub(Bin/get(b, Nat/add(off, 2)), 0x80), 0x40)),
+                    Nat/sub(Bin/get(b, Nat/add(off, 3)), 0x80))
             end
         end
     end;

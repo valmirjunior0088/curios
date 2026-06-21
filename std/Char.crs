@@ -1,11 +1,11 @@
 use /std/{Nat, Bln};
 
 pub let is_whitespace(c : Nat) -> Bln =
-    match Nat/eql(c, 32)
+    match Nat/eql(c, ' ')
     | true => true
     | false =>
-        match Nat/gte(c, 9)
-        | true => Nat/lte(c, 13)
+        match Nat/gte(c, '\t')
+        | true => Nat/lte(c, '\r')
         | false => false
         end
     end;
@@ -42,12 +42,12 @@ pub let is_alphanumeric(c : Nat) -> Bln =
 
 pub let to_lower(c : Nat) -> Nat =
     match is_upper(c)
-    | true => Nat/add(c, 32)
+    | true => Nat/add(c, 0x20)
     | false => c
     end;
 
 pub let to_upper(c : Nat) -> Nat =
     match is_lower(c)
-    | true => Nat/sub(c, 32)
+    | true => Nat/sub(c, 0x20)
     | false => c
     end;

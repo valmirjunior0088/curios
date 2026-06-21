@@ -105,7 +105,7 @@ let setup(f_mant : Nat, exp_field : Nat) -> {BigNat, BigNat, BigNat, BigNat} =
     match Nat/gte(exp_field, 150)
     | true =>
         let ep = Nat/sub(exp_field, 150);
-        match Nat/eql(f_mant, 8388608)
+        match Nat/eql(f_mant, 0x800000)
         | false =>
             (BigNat/mul_pow2(BigNat/of_nat(f_mant), Nat/add(ep, 1)),
              BigNat/of_nat(2),
@@ -119,7 +119,7 @@ let setup(f_mant : Nat, exp_field : Nat) -> {BigNat, BigNat, BigNat, BigNat} =
         end
     | false =>
         let abs_e = Nat/sub(150, Nat/max(exp_field, 1));
-        match Bln/or(Nat/lt(exp_field, 2), Bln/not(Nat/eql(f_mant, 8388608)))
+        match Bln/or(Nat/lt(exp_field, 2), Bln/not(Nat/eql(f_mant, 0x800000)))
         | true =>
             (BigNat/mul_small(BigNat/of_nat(f_mant), 2),
              pow2(Nat/add(abs_e, 1)),
@@ -171,17 +171,17 @@ pub let to_str(f : Flt) -> Str =
     let b1 = Bin/get(b, 1);
     let b2 = Bin/get(b, 2);
     let b3 = Bin/get(b, 3);
-    let exp_field = Nat/add(Nat/mul(Nat/rem(b3, 128), 2), Nat/div(b2, 128));
+    let exp_field = Nat/add(Nat/mul(Nat/rem(b3, 0x80), 2), Nat/div(b2, 0x80));
     let mant_field =
         Nat/add(
-            Nat/add(Nat/mul(Nat/rem(b2, 128), 65536), Nat/mul(b1, 256)),
+            Nat/add(Nat/mul(Nat/rem(b2, 0x80), 0x10000), Nat/mul(b1, 0x100)),
             b0);
     let sign =
-        match Nat/gte(b3, 128)
+        match Nat/gte(b3, 0x80)
         | true => "-"
         | false => "+"
         end;
-    match Nat/eql(exp_field, 255)
+    match Nat/eql(exp_field, 0xFF)
     | true =>
         match Nat/eql(mant_field, 0)
         | true => Str/concat(sign, "inf")
@@ -194,7 +194,7 @@ pub let to_str(f : Flt) -> Str =
             let f_mant =
                 match Nat/eql(exp_field, 0)
                 | true => mant_field
-                | false => Nat/add(mant_field, 8388608)
+                | false => Nat/add(mant_field, 0x800000)
                 end;
             let even = Nat/eql(Nat/rem(f_mant, 2), 0);
             Str/concat(sign, render(f_mant, exp_field, even))

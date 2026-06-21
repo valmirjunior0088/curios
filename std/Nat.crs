@@ -10,17 +10,17 @@ let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
     Utf8/more(c, Scan/lead(), \\, r);
 
 let digit(d : Nat) -> { c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()) } =
-    match Nat/eql(d, 0) | true => (48, Eq/refl()) | false =>
-    match Nat/eql(d, 1) | true => (49, Eq/refl()) | false =>
-    match Nat/eql(d, 2) | true => (50, Eq/refl()) | false =>
-    match Nat/eql(d, 3) | true => (51, Eq/refl()) | false =>
-    match Nat/eql(d, 4) | true => (52, Eq/refl()) | false =>
-    match Nat/eql(d, 5) | true => (53, Eq/refl()) | false =>
-    match Nat/eql(d, 6) | true => (54, Eq/refl()) | false =>
-    match Nat/eql(d, 7) | true => (55, Eq/refl()) | false =>
-    match Nat/eql(d, 8) | true => (56, Eq/refl()) | false =>
-    match Nat/eql(d, 9) | true => (57, Eq/refl()) | false =>
-    (48, Eq/refl())
+    match Nat/eql(d, 0) | true => ('0', Eq/refl()) | false =>
+    match Nat/eql(d, 1) | true => ('1', Eq/refl()) | false =>
+    match Nat/eql(d, 2) | true => ('2', Eq/refl()) | false =>
+    match Nat/eql(d, 3) | true => ('3', Eq/refl()) | false =>
+    match Nat/eql(d, 4) | true => ('4', Eq/refl()) | false =>
+    match Nat/eql(d, 5) | true => ('5', Eq/refl()) | false =>
+    match Nat/eql(d, 6) | true => ('6', Eq/refl()) | false =>
+    match Nat/eql(d, 7) | true => ('7', Eq/refl()) | false =>
+    match Nat/eql(d, 8) | true => ('8', Eq/refl()) | false =>
+    match Nat/eql(d, 9) | true => ('9', Eq/refl()) | false =>
+    ('0', Eq/refl())
     end end end end end end end end end end;
 
 let single_digit(d : Nat) -> Str =
@@ -41,7 +41,7 @@ pub let of_str(s : Str) -> Option(Nat) =
             let ! = Option/bind;
             let n = acc!;
             match Char/is_digit(cp)
-            | true => Option/some(Nat/add(Nat/mul(n, 10), Nat/sub(cp, 48)))
+            | true => Option/some(Nat/add(Nat/mul(n, 10), Nat/sub(cp, '0')))
             | false => Option/none()
             end)
     end;

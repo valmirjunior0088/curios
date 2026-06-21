@@ -13,22 +13,22 @@ pub union Scan
 end
 
 let classify(c : Nat) -> Scan =
-    match in_range(c, 0, 127)
+    match in_range(c, 0x00, 0x7F)
     | true => Scan/lead()
     | false =>
-        match in_range(c, 194, 223)
-        | true => Scan/cont(1, 128, 191)
+        match in_range(c, 0xC2, 0xDF)
+        | true => Scan/cont(1, 0x80, 0xBF)
         | false =>
-            match in_range(c, 224, 239)
+            match in_range(c, 0xE0, 0xEF)
             | true =>
-                let lo = match Nat/eql(c, 224) | true => 160 | false => 128 end;
-                let hi = match Nat/eql(c, 237) | true => 159 | false => 191 end;
+                let lo = match Nat/eql(c, 0xE0) | true => 0xA0 | false => 0x80 end;
+                let hi = match Nat/eql(c, 0xED) | true => 0x9F | false => 0xBF end;
                 Scan/cont(2, lo, hi)
             | false =>
-                match in_range(c, 240, 244)
+                match in_range(c, 0xF0, 0xF4)
                 | true =>
-                    let lo = match Nat/eql(c, 240) | true => 144 | false => 128 end;
-                    let hi = match Nat/eql(c, 244) | true => 143 | false => 191 end;
+                    let lo = match Nat/eql(c, 0xF0) | true => 0x90 | false => 0x80 end;
+                    let hi = match Nat/eql(c, 0xF4) | true => 0x8F | false => 0xBF end;
                     Scan/cont(3, lo, hi)
                 | false => Scan/bad()
                 end
@@ -45,7 +45,7 @@ pub let step(c : Nat, s : Scan) -> Scan =
         | true =>
             match Nat/eql(rem, 1)
             | true => Scan/lead()
-            | false => Scan/cont(Nat/sub(rem, 1), 128, 191)
+            | false => Scan/cont(Nat/sub(rem, 1), 0x80, 0xBF)
             end
         end
     | lead() => classify(c)
