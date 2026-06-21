@@ -128,3 +128,40 @@ fn is_single_byte_append(term: &Term) -> bool {
 fn is_nonempty_arr_literal(term: &Term) -> bool {
     matches!(&**term, Subterm::Prim(Prim::Arr(elems)) if !elems.is_empty())
 }
+
+/// The free monoid's normalising *product* — the constructor dual of
+/// [`FreeMonoid::uncons`] (the destructor) — shared verbatim by `BinConcat` and
+/// `ArrConcat` reduction. Collapse a concatenation's already-reduced `operands` to
+/// a normal form under the unit and associativity laws: drop the empty identity
+/// (`\\`, `[]`), merge adjacent literal runs into one literal, and collapse a lone
+/// surviving operand to itself (an `n`-ary concat of one *is* that one). `literal`
+/// borrows an operand's run when it is a literal (`None` for a symbolic chunk);
+/// `into_literal`/`into_concat` rebuild the result in the carrier's primitives.
+///
+/// Window fusion (adjacent `Bin/slice`s of one base) is deliberately NOT done here:
+/// that is the spine peel's job when *deciding equality* (`spine::push`); reduction
+/// only needs a normal form, and conversion closes any residual gap.
+pub fn normalize_concat<E: Clone>(
+    operands: Vec<Term>,
+    literal: fn(&Term) -> Option<&[E]>,
+    into_literal: impl FnOnce(Vec<E>) -> Subterm,
+    into_concat: impl FnOnce(Vec<Term>) -> Subterm,
+) -> Subterm {
+    let mut kept: Vec<Term> = operands
+        .into_iter()
+        .filter(|operand| !matches!(literal(operand), Some(run) if run.is_empty()))
+        .collect();
+
+    // Every surviving operand literal ⇒ one merged literal; the first symbolic chunk
+    // stops the fold, leaving the concatenation (a lone operand collapses to itself).
+    let merged = kept.iter().try_fold(Vec::new(), |mut run, operand| {
+        run.extend(literal(operand)?.iter().cloned());
+        Some(run)
+    });
+
+    match merged {
+        Some(run) => into_literal(run),
+        None if kept.len() == 1 => Term::unwrap_or_clone(kept.pop().unwrap()),
+        None => into_concat(kept),
+    }
+}

@@ -1,6 +1,8 @@
 use {
     super::reduce,
-    crate::core::{Context, Flt, Int, Nat, Prim, ReduceError, Subterm, Term, peel_first_byte},
+    crate::core::{
+        Context, Flt, Int, Nat, Prim, ReduceError, Subterm, Term, normalize_concat, peel_first_byte,
+    },
     num_traits::{ToPrimitive, Zero},
 };
 
@@ -916,30 +918,23 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 .iter()
                 .map(|e| reduce(context, e.clone()))
                 .collect::<Result<_, _>>()?;
-            // Drop the empty-bytestring identity from the concatenation, so
-            // `concat(\\, a)`/`concat(a, \\)` collapse to `a` — the monoid unit
-            // law, the definitional partner of `peel_bin`'s `\\`-handling
-            // (`core::spine`), without which a symbolic identity stays a stuck
-            // `BinConcat` distinct from its bare operand.
-            let mut kept = reduced
-                .into_iter()
-                .filter(|t| !matches!(&**t, Subterm::Prim(Prim::Bin(b)) if b.is_empty()))
-                .collect::<Vec<_>>();
-            let merged = kept.iter().try_fold(Vec::new(), |mut acc, t| {
-                if let Subterm::Prim(Prim::Bin(b)) = &**t {
-                    acc.extend(b);
-                    Some(acc)
-                } else {
-                    None
+            // Normalise by the monoid unit/associativity laws — drop the empty
+            // bytestring (so `concat(\\, a)`/`concat(a, \\)` collapse to `a`), merge
+            // adjacent literal runs, collapse a lone operand. The definitional
+            // partner of `peel_bin`'s `\\`-handling (`core::spine`); see
+            // `normalize_concat`.
+            fn literal(operand: &Term) -> Option<&[u8]> {
+                match &**operand {
+                    Subterm::Prim(Prim::Bin(bytes)) => Some(bytes.as_slice()),
+                    _ => None,
                 }
-            });
-            Ok(match merged {
-                // All operands literal (or all dropped) — one byte literal.
-                Some(bytes) => Subterm::Prim(Prim::Bin(bytes)),
-                // A lone surviving operand is the concatenation itself.
-                None if kept.len() == 1 => Term::unwrap_or_clone(kept.pop().unwrap()),
-                None => Subterm::Prim(Prim::BinConcat(kept)),
-            })
+            }
+            Ok(normalize_concat(
+                reduced,
+                literal,
+                |bytes| Subterm::Prim(Prim::Bin(bytes)),
+                |kept| Subterm::Prim(Prim::BinConcat(kept)),
+            ))
         }
         Prim::BinFlatten(operand) => {
             let operand = reduce(context, operand.clone())?;
@@ -1057,28 +1052,22 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 .iter()
                 .map(|e| reduce(context, e.clone()))
                 .collect::<Result<_, _>>()?;
-            // Drop the empty-array identity, so `concat([], a)`/`concat(a, [])`
-            // collapse to `a` — the monoid unit law, the definitional partner of
-            // `peel_arr`'s `[]`-handling (`core::spine`), as for `BinConcat`.
-            let mut kept = reduced
-                .into_iter()
-                .filter(|t| !matches!(&**t, Subterm::Prim(Prim::Arr(elems)) if elems.is_empty()))
-                .collect::<Vec<_>>();
-            let merged = kept.iter().try_fold(Vec::new(), |mut acc, t| {
-                if let Subterm::Prim(Prim::Arr(elems)) = &**t {
-                    acc.extend(elems.iter().cloned());
-                    Some(acc)
-                } else {
-                    None
+            // The `Arr` twin of `BinConcat` normalisation: drop the empty array (so
+            // `concat([], a)`/`concat(a, [])` collapse to `a`), merge adjacent literal
+            // runs, collapse a lone operand — the definitional partner of `peel_arr`'s
+            // `[]`-handling (`core::spine`); see `normalize_concat`.
+            fn literal(operand: &Term) -> Option<&[Term]> {
+                match &**operand {
+                    Subterm::Prim(Prim::Arr(elems)) => Some(elems.as_slice()),
+                    _ => None,
                 }
-            });
-            Ok(match merged {
-                // All operands literal (or all dropped) — one array literal.
-                Some(elems) => Subterm::Prim(Prim::Arr(elems)),
-                // A lone surviving operand is the concatenation itself.
-                None if kept.len() == 1 => Term::unwrap_or_clone(kept.pop().unwrap()),
-                None => Subterm::Prim(Prim::arr_concat(type_, kept)),
-            })
+            }
+            Ok(normalize_concat(
+                reduced,
+                literal,
+                |elems| Subterm::Prim(Prim::Arr(elems)),
+                |kept| Subterm::Prim(Prim::arr_concat(type_, kept)),
+            ))
         }
         Prim::ArrFlatten(type_, operand) => {
             let type_ = reduce(context, type_.clone())?;
