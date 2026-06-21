@@ -1,9 +1,37 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/*;
-use /std/{Str, Option, Char};
+use /std/{Str, Option, Char, Bin, Eq};
+use /syn/Str/{Scan, Utf8, let step, let Valid};
 
-pub let to_str(n : Nat) -> Str =
-    Str/of_nat(n);
+let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
+    -> Valid(Bin/append(\\, c)) =
+    let r : Utf8(step(c, Scan/lead()), \\) =
+        Eq/subst((sc) => Utf8(sc, \\), Eq/sym(ok), Utf8/stop());
+    Utf8/more(c, Scan/lead(), \\, r);
+
+let digit(d : Nat) -> { c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()) } =
+    match Nat/eql(d, 0) | true => (48, Eq/refl()) | false =>
+    match Nat/eql(d, 1) | true => (49, Eq/refl()) | false =>
+    match Nat/eql(d, 2) | true => (50, Eq/refl()) | false =>
+    match Nat/eql(d, 3) | true => (51, Eq/refl()) | false =>
+    match Nat/eql(d, 4) | true => (52, Eq/refl()) | false =>
+    match Nat/eql(d, 5) | true => (53, Eq/refl()) | false =>
+    match Nat/eql(d, 6) | true => (54, Eq/refl()) | false =>
+    match Nat/eql(d, 7) | true => (55, Eq/refl()) | false =>
+    match Nat/eql(d, 8) | true => (56, Eq/refl()) | false =>
+    match Nat/eql(d, 9) | true => (57, Eq/refl()) | false =>
+    (48, Eq/refl())
+    end end end end end end end end end end;
+
+let single_digit(d : Nat) -> Str =
+    let g = digit(d);
+    Str { bytes = Bin/append(\\, g.c), valid = single(g.c, g.ok) };
+
+pub rec to_str(n : Nat) -> Str =
+    match Nat/lt(n, 10)
+    | true => single_digit(n)
+    | false => Str/concat(to_str(Nat/div(n, 10)), single_digit(Nat/rem(n, 10)))
+    end;
 
 pub let of_str(s : Str) -> Option(Nat) =
     match Nat/eql(Str/len(s), 0)

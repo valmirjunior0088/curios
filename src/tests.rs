@@ -1250,8 +1250,8 @@ fn printf_partial_evaluation_reduces_residual() {
     // collapse the post-§1 residue (≈14 funcs) down to a handful — the assert pins
     // a comfortable upper bound while leaving headroom for legitimate std/Fmt drift.
     // Proof-carrying `Str` routes both runtime paths through recursive, unfoldable
-    // validators: the `%d` (`Nat/to_str`) path through the `of_nat` decimal producer
-    // (digit/single_digit/concat), and the `%s` (`Str/trim`) path through the
+    // validators: the `%d` (`Nat/to_str`) path through its decimal digit producer
+    // (digit/single_digit/Str/concat), and the `%s` (`Str/trim`) path through the
     // codepoint-peeling proof-carrying `slice` (drop_n/take_n/drop1/take1/tl_proof).
     // Both carry their UTF-8 proof and can't be folded even for a constant, so a
     // handful of extra residual funcs over the pre-`/syn/Str` baseline are expected.
