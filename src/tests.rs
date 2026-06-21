@@ -442,6 +442,29 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
 }
 
 #[test]
+fn bin_slice_reduces_across_a_cons_spine() {
+    // Stage B foundation: `Bin/slice` reduces over a cons spine
+    // (`concat(append(\\, h), t)`, the shape the `Utf8` relation builds) one byte
+    // per `0`/`succ` boundary, and a nested slice reassociates. All provable by
+    // `refl` for SYMBOLIC head/tail, which `reduce` peels via `peel_first_byte`
+    // (`core::spine`). `take` keeps the head and recurses into the tail; `drop`
+    // discards it and shifts both bounds; `nested` flattens `slice(slice(..))`.
+    let source = r#"
+        use /std/{Io, Str, Eq, Bin, Nat};
+        let take(h : Nat, t : Bin)
+            -> Eq(Bin/slice(Bin/concat(Bin/append(\\, h), t), 0, 2),
+                  Bin/concat(Bin/append(\\, h), Bin/slice(t, 0, 1))) = Eq/refl();
+        let drop(h : Nat, t : Bin)
+            -> Eq(Bin/slice(Bin/concat(Bin/append(\\, h), t), 1, 3), Bin/slice(t, 0, 2)) =
+            Eq/refl();
+        let nested(b : Bin)
+            -> Eq(Bin/slice(Bin/slice(b, 2, 10), 1, 3), Bin/slice(b, 3, 5)) = Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
 fn arr_concat_is_a_free_monoid() {
     // `peel_arr` (core::spine) makes `Arr` a free monoid on its elements, the twin
     // of `bin_concat_is_a_free_monoid`: `concat` associates, the empty array `[]`

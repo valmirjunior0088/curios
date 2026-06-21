@@ -1,6 +1,6 @@
 use {
     super::reduce,
-    crate::core::{Context, Flt, Int, Nat, Prim, ReduceError, Subterm, Term},
+    crate::core::{Context, Flt, Int, Nat, Prim, ReduceError, Subterm, Term, peel_first_byte},
     num_traits::{ToPrimitive, Zero},
 };
 
@@ -732,26 +732,66 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             {
                 return Ok(Term::unwrap_or_clone(bin));
             }
+            // A nested slice reassociates: `slice(slice(b, p, q), i, j) =
+            // slice(b, p + i, p + j)`. Sound for the in-range bounds real call
+            // sites produce; reassociating the window lets a codepoint walk
+            // collapse a `slice(drop1(b), ..)` back onto `b`.
+            if let Subterm::Prim(Prim::BinSlice(inner, p, _q)) = &*bin {
+                let lo = Term::prim(Prim::nat_add(p.clone(), start_reduced.clone()));
+                let hi = Term::prim(Prim::nat_add(p.clone(), end_reduced.clone()));
+                let flattened = Term::prim(Prim::bin_slice(inner.clone(), lo, hi));
+                return reduce(context, flattened).map(Term::unwrap_or_clone);
+            }
             let s = start_reduced
                 .as_nat()
                 .and_then(|n| n.to_big_uint()?.to_usize());
             let e = end_reduced
                 .as_nat()
                 .and_then(|n| n.to_big_uint()?.to_usize());
-            Ok(match (Term::unwrap_or_clone(bin), s, e) {
-                (Subterm::Prim(Prim::Bin(bytes)), Some(s), Some(e)) => match bytes.get(s..e) {
-                    Some(slice) => Subterm::Prim(Prim::Bin(slice.to_vec())),
-                    None => {
-                        return Err(ReduceError::BinSliceOutOfRange {
-                            len: bytes.len(),
-                            start: s,
-                            end: e,
-                            span: start.span().or_else(|| end.span()),
-                        });
+            // A concrete slice of a literal run.
+            if let (Subterm::Prim(Prim::Bin(bytes)), Some(s), Some(e)) = (&*bin, s, e) {
+                return match bytes.get(s..e) {
+                    Some(slice) => Ok(Subterm::Prim(Prim::Bin(slice.to_vec()))),
+                    None => Err(ReduceError::BinSliceOutOfRange {
+                        len: bytes.len(),
+                        start: s,
+                        end: e,
+                        span: start.span().or_else(|| end.span()),
+                    }),
+                };
+            }
+            // A slice over a cons spine peels one byte per `0`/`succ` boundary
+            // step — the reduction partner of the `Utf8` cons the validity proofs
+            // walk:  `slice(cons(h, t), 0, succ e) = h ++ slice(t, 0, e)`  and
+            // `slice(cons(h, t), succ s, e) = slice(t, s, e - 1)`.
+            if let Some((head, tail)) = peel_first_byte(&bin) {
+                let dec = |n: &Term| {
+                    let one = Term::prim(Prim::Nat(Nat::new(1usize)));
+                    Term::prim(Prim::nat_sub(n.clone(), one))
+                };
+                match (&*start_reduced, &*end_reduced) {
+                    (
+                        Subterm::Prim(Prim::Nat(Nat::Zero)),
+                        Subterm::Prim(Prim::Nat(Nat::Succ(..))),
+                    ) => {
+                        let zero = Term::prim(Prim::Nat(Nat::Zero));
+                        let rest = Term::prim(Prim::bin_slice(tail, zero, dec(&end_reduced)));
+                        let consed = Term::prim(Prim::bin_concat([head, rest]));
+                        return reduce(context, consed).map(Term::unwrap_or_clone);
                     }
-                },
-                (bin, _, _) => Subterm::Prim(Prim::bin_slice(bin, start_reduced, end_reduced)),
-            })
+                    (Subterm::Prim(Prim::Nat(Nat::Succ(..))), _) => {
+                        let sliced =
+                            Term::prim(Prim::bin_slice(tail, dec(&start_reduced), dec(&end_reduced)));
+                        return reduce(context, sliced).map(Term::unwrap_or_clone);
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Subterm::Prim(Prim::bin_slice(
+                bin,
+                start_reduced,
+                end_reduced,
+            )))
         }
         Prim::BinAppend(bin, byte) => {
             let bin = reduce(context, bin.clone())?;
