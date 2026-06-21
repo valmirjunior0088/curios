@@ -1,4 +1,4 @@
-use /std/{Bin, Str, Nat, Bln, Char, Arr, Parse, Result, Option, Net, Io, Task};
+use /std/{Bin, Str, Nat, Bln, Char, Arr, Parse, Result, Option, Tcp, Io, Task};
 
 pub union Method
 | get()
@@ -23,7 +23,7 @@ pub struct Request pub {
     path : Str,
     headers : Arr({Str, Str}),
     body : Bin,
-    settings : Net/Settings
+    settings : Tcp/Settings
 }
 
 pub let get(host : Str, port : Nat, path : Str) -> Request =
@@ -34,7 +34,7 @@ pub let get(host : Str, port : Nat, path : Str) -> Request =
         path = path,
         headers = [],
         body = \\,
-        settings = Net/default
+        settings = Tcp/default
     };
 
 pub let post(host : Str, port : Nat, path : Str, body : Bin) -> Request =
@@ -45,11 +45,11 @@ pub let post(host : Str, port : Nat, path : Str, body : Bin) -> Request =
         path = path,
         headers = [],
         body = body,
-        settings = Net/default
+        settings = Tcp/default
     };
 
-let with_tls(s : Net/Settings) -> Net/Settings =
-    Net/Settings {
+let with_tls(s : Tcp/Settings) -> Tcp/Settings =
+    Tcp/Settings {
         connect_timeout = s.connect_timeout,
         read_timeout = s.read_timeout,
         write_timeout = s.write_timeout,
@@ -204,7 +204,7 @@ pub let header(resp : Response, name : Str) -> Option(Str) =
     header_lookup(resp.headers, name);
 
 pub let perform(request : Request) -> Task(Result(Response, Error)) =
-    Task/bind(Net/call(request.settings, request.host, request.port, render(request)), (r) =>
+    Task/bind(Tcp/call(request.settings, request.host, request.port, render(request)), (r) =>
         match r : Task(Result(Response, Error))
         | success(bytes) =>
             match Parse/run(decode, bytes) : Task(Result(Response, Error))

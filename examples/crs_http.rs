@@ -6,7 +6,7 @@ use {
 // A network-gated manual check of the cleartext HTTP client path: a real
 // `http://` GET against a public host through the real `OsHost`. It drives a
 // live connect / GET / response-parse round trip through `/std/Http` +
-// `/std/Net` + `/std/Parse`, end to end through codegen. The TLS sibling is
+// `/std/Tcp` + `/std/Parse`, end to end through codegen. The TLS sibling is
 // `crs_https`.
 //
 // Deliberately not a `#[test]`: it depends on outbound network and a live

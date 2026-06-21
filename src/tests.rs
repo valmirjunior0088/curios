@@ -2839,12 +2839,12 @@ fn match_arm_tuple_destructures() {
 }
 
 // Client network IO (Phase A): `connect` rides the `Hdl` byte stream, so
-// `Net/call` writes a request and drains the scripted response to EOF.
+// `Tcp/call` writes a request and drains the scripted response to EOF.
 #[test]
 fn net_call_round_trips_a_scripted_endpoint() {
     let source = r#"
-        use /std/{Net, Io, Str, Task};
-        match Task/block_on(Net/call(Net/default, "example.com", 80, Str/to_bin("GET /\r\n\r\n")))
+        use /std/{Tcp, Io, Str, Task};
+        match Task/block_on(Tcp/call(Tcp/default, "example.com", 80, Str/to_bin("GET /\r\n\r\n")))
         | success(response) => Io/write(Io/stdout, response)
         | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
         end
@@ -2861,12 +2861,12 @@ fn net_call_round_trips_a_scripted_endpoint() {
 }
 
 // Connecting to an endpoint that was never scripted is refused, and the status
-// decodes to `Net/refused`.
+// decodes to `Tcp/refused`.
 #[test]
 fn net_call_to_an_unscripted_endpoint_is_refused() {
     let source = r#"
-        use /std/{Net, Io, Task};
-        match Task/block_on(Net/call(Net/default, "example.com", 80, /std/Str/to_bin("ping")))
+        use /std/{Tcp, Io, Task};
+        match Task/block_on(Tcp/call(Tcp/default, "example.com", 80, /std/Str/to_bin("ping")))
         | success(_) => Io/print("connected")
         | failure(e) =>
             match e : {}
@@ -2889,19 +2889,19 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
 }
 
 // A custom `Config` with an optional `Duration` timeout flows through the
-// bracket; `Net/read` pulls bytes from the socket the body is handed.
+// bracket; `Tcp/read` pulls bytes from the socket the body is handed.
 #[test]
 fn net_with_custom_timeout_config_reads_response() {
     let source = r#"
-        use /std/{Net, Io, Str, Bin, Option, Time, Task};
-        let settings = Net/Settings {
+        use /std/{Tcp, Io, Str, Bin, Option, Time, Task};
+        let settings = Tcp/Settings {
             connect_timeout = Option/some(Time/of_millis(500)),
             read_timeout = Option/none(),
             write_timeout = Option/none(),
             tls = false
         };
-        match Task/block_on(Net/with(settings, "db.internal", 5432, (s) =>
-            Task/bind(Net/read(s, 64), (r) =>
+        match Task/block_on(Tcp/with(settings, "db.internal", 5432, (s) =>
+            Task/bind(Tcp/read(s, 64), (r) =>
                 match r : Task(Bin)
                 | chunk(b) => Task/pure(b)
                 | eof() => Task/pure(\\)
@@ -2928,12 +2928,12 @@ fn net_with_custom_timeout_config_reads_response() {
 #[test]
 fn net_serve_handles_a_scripted_inbound_connection() {
     let source = r#"
-        use /std/{Net, Io, Str, Bin, Task};
-        match Task/block_on(Net/serve("0.0.0.0", 8080, (c) =>
-            Task/bind(Net/read(c, 64), (r) =>
+        use /std/{Tcp, Io, Str, Bin, Task};
+        match Task/block_on(Tcp/serve("0.0.0.0", 8080, (c) =>
+            Task/bind(Tcp/read(c, 64), (r) =>
                 match r : Task({})
                 | chunk(bytes) =>
-                    Task/bind(Net/write(c, Bin/concat(Str/to_bin("echo: "), bytes)), (wrote) => Task/pure(()))
+                    Task/bind(Tcp/write(c, Bin/concat(Str/to_bin("echo: "), bytes)), (wrote) => Task/pure(()))
                 | eof() => Task/pure(())
                 | error(_) => Task/pure(())
                 end))) : {}
@@ -2947,7 +2947,7 @@ fn net_serve_handles_a_scripted_inbound_connection() {
     assert_eq!(io.captures(), vec![b"echo: ping".to_vec()]);
 }
 
-// TLS client (Stage A): `Net/with` with `tls = true` upgrades the connected
+// TLS client (Stage A): `Tcp/with` with `tls = true` upgrades the connected
 // socket via `start_tls` before the body runs. The mock host serves the
 // scripted endpoint cleartext (no real handshake under test), so the upgrade is
 // a no-op identity and the round-trip still succeeds — exercising the wiring,
@@ -2955,15 +2955,15 @@ fn net_serve_handles_a_scripted_inbound_connection() {
 #[test]
 fn net_with_tls_upgrades_and_reads() {
     let source = r#"
-        use /std/{Net, Io, Str, Bin, Option, Task};
-        let settings = Net/Settings {
+        use /std/{Tcp, Io, Str, Bin, Option, Task};
+        let settings = Tcp/Settings {
             connect_timeout = Option/none(),
             read_timeout = Option/none(),
             write_timeout = Option/none(),
             tls = true
         };
-        match Task/block_on(Net/with(settings, "secure.example", 443, (s) =>
-            Task/bind(Net/read(s, 64), (r) =>
+        match Task/block_on(Tcp/with(settings, "secure.example", 443, (s) =>
+            Task/bind(Tcp/read(s, 64), (r) =>
                 match r : Task(Bin)
                 | chunk(b) => Task/pure(b)
                 | eof() => Task/pure(\\)
@@ -2988,12 +2988,12 @@ fn net_with_tls_upgrades_and_reads() {
 #[test]
 fn net_serve_tls_handles_a_scripted_inbound_connection() {
     let source = r#"
-        use /std/{Net, Io, Str, Bin, Task};
-        match Task/block_on(Net/serve_tls("0.0.0.0", 8443, Str/to_bin("CERT"), Str/to_bin("KEY"), (c) =>
-            Task/bind(Net/read(c, 64), (r) =>
+        use /std/{Tcp, Io, Str, Bin, Task};
+        match Task/block_on(Tcp/serve_tls("0.0.0.0", 8443, Str/to_bin("CERT"), Str/to_bin("KEY"), (c) =>
+            Task/bind(Tcp/read(c, 64), (r) =>
                 match r : Task({})
                 | chunk(bytes) =>
-                    Task/bind(Net/write(c, Bin/concat(Str/to_bin("tls: "), bytes)), (wrote) => Task/pure(()))
+                    Task/bind(Tcp/write(c, Bin/concat(Str/to_bin("tls: "), bytes)), (wrote) => Task/pure(()))
                 | eof() => Task/pure(())
                 | error(_) => Task/pure(())
                 end))) : {}
@@ -3008,7 +3008,7 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
 }
 
 // HTTP client (Phase B): `Http/perform` renders a `Request`, sends it through
-// `/std/Net`, and runs the `/std/Parse`-based response parser over the reply —
+// `/std/Tcp`, and runs the `/std/Parse`-based response parser over the reply —
 // exercising the byte-scanning parser end to end through codegen.
 #[test]
 fn http_perform_parses_a_scripted_response() {

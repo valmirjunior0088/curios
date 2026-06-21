@@ -8,7 +8,7 @@ This file is the canonical reference for the `/std` public surface and lists eve
 
 - [Scalars](#scalars) — `Nat`, `Int`, `Flt`, `Bln`
 - [Bytes and arrays](#bytes-and-arrays) — `Bin`, `Arr`, `Char`, `Str`
-- [IO and system](#io) — `Io`, `File`, `Net`, `Http`, `Time`, `Rand`, `Proc`
+- [IO and system](#io) — `Io`, `File`, `Tcp`, `Http`, `Time`, `Rand`, `Proc`
 - [Data types](#data-types) — `Option`, `Result`, `Lst`, `Vec`
 - [Proofs](#proofs) — `Eq`, `Void`
 - [Parsing and formatting](#parsing-and-formatting) — `Parse`, `Json`, `Fmt`
@@ -178,9 +178,9 @@ Byte classifiers over ASCII code points (`(Nat) -> Bln`): `is_whitespace`, `is_d
 
 ## IO
 
-The handle-based IO primitives (`read`/`write`/`open`/`connect`/`close`) and the ambient host services (clocks, randomness, process environment) all live in `/sys/Io`, but `/std/Io` re-exports only the byte-stream operations on the standard handles. The rest surface through dedicated modules: file handles through [`/std/File`](#stdfile), sockets through [`/std/Net`](#stdnet), time through [`/std/Time`](#stdtime), randomness through [`/std/Rand`](#stdrand), and process access through [`/std/Proc`](#stdproc).
+The handle-based IO primitives (`read`/`write`/`open`/`connect`/`close`) and the ambient host services (clocks, randomness, process environment) all live in `/sys/Io`, but `/std/Io` re-exports only the byte-stream operations on the standard handles. The rest surface through dedicated modules: file handles through [`/std/File`](#stdfile), sockets through [`/std/Tcp`](#stdtcp), time through [`/std/Time`](#stdtime), randomness through [`/std/Rand`](#stdrand), and process access through [`/std/Proc`](#stdproc).
 
-Asynchronous, non-blocking IO and concurrency are layered on top by [`/std/Task`](#stdtask) — a free-monad scheduler with fire-and-forget fibers, awaitable futures, and a finalizer guarantee. The `File` and `Net` operations are `Task`s built on its non-blocking `read`/`write`/`accept` leaves, so they multiplex over a single poll and are driven by `Task/block_on`.
+Asynchronous, non-blocking IO and concurrency are layered on top by [`/std/Task`](#stdtask) — a free-monad scheduler with fire-and-forget fibers, awaitable futures, and a finalizer guarantee. The `File` and `Tcp` operations are `Task`s built on its non-blocking `read`/`write`/`accept` leaves, so they multiplex over a single poll and are driven by `Task/block_on`.
 
 ### `/std/Io`
 
@@ -212,7 +212,7 @@ Failable operations report through a status code — errors are data; traps stay
 
 Codes are the host's `Status` discriminants; any code without a typed form decodes to `other(status)`.
 
-`/std/Io` also defines the typed forms every IO operation returns in place of raw status codes — the blocking `read`/`write` above, and the [`/std/Task`](#stdtask)/`/std/File`/`/std/Net` layer:
+`/std/Io` also defines the typed forms every IO operation returns in place of raw status codes — the blocking `read`/`write` above, and the [`/std/Task`](#stdtask)/`/std/File`/`/std/Tcp` layer:
 
 ```
 union Error | not_found() | permission_denied() | exists() | refused() | tls() | other(Nat) end
@@ -242,7 +242,7 @@ A buffered, line-oriented reader layered over [`/std/Io`](#stdio): a small state
 
 The asynchronous effect and concurrency layer. A `Task(A)` is a **free monad**: building one performs nothing — every effect is reified as data and fires only when a scheduler (`run` or `block_on`) interprets it — so a task is a first-class, inert description of work, composed with `bind`/`map` and handed to a runner. Internally it is a two-constructor type (a finished value, or a suspended effect the scheduler steps), but those constructors are private: `Task` is an **opaque** type, built only through the combinators below.
 
-The surface is two tiers. The **application API** is what programs use — the monad, spawning and awaiting, cancellation, the resource bracket, and the runners. The **SPI** is the seam for building *new* effects and resources on the engine — the leaf IO primitives, the effect and blocking constructors, the unbalanced finalizer pair, and the promise primitive; both [`/std/File`](#stdfile) and [`/std/Net`](#stdnet) are built entirely on it.
+The surface is two tiers. The **application API** is what programs use — the monad, spawning and awaiting, cancellation, the resource bracket, and the runners. The **SPI** is the seam for building *new* effects and resources on the engine — the leaf IO primitives, the effect and blocking constructors, the unbalanced finalizer pair, and the promise primitive; both [`/std/File`](#stdfile) and [`/std/Tcp`](#stdtcp) are built entirely on it.
 
 **Application API:**
 
@@ -286,11 +286,11 @@ The surface is two tiers. The **application API** is what programs use — the m
 
 **Inert construction.** Evaluation is strict, so a leaf like `read(h, n)` built eagerly would fire its syscall the instant it is *constructed*, not when it is served. Every leaf and resource-allocating combinator is therefore wrapped in `defer`, which reifies its body as a suspended step the scheduler forces only on arrival. Building a task tree — even one you never run — thus performs no IO and allocates no scheduler state.
 
-**Resource brackets and the finalizer guarantee.** Finalizers are **handle-keyed**: `acquire(h, fin)` registers `fin` against handle `h` on the running fiber, and `release(h)` runs and drops the one keyed to `h` (LIFO among that fiber's guards). The guarantee is **exactly-once** — a finalizer runs on the fiber's normal completion, on an explicit `release`, on cancellation, or, for a fiber still parked when the program ends, when `block_on` drains it at shutdown. So a handle acquired this way is released on every path and never twice. `using(h, release, body)` is that bracket as a single combinator; `File/open` and `Net/connect` register their `close` as a finalizer the instant they hand back the handle, so even a flat open/close pair is leak-safe.
+**Resource brackets and the finalizer guarantee.** Finalizers are **handle-keyed**: `acquire(h, fin)` registers `fin` against handle `h` on the running fiber, and `release(h)` runs and drops the one keyed to `h` (LIFO among that fiber's guards). The guarantee is **exactly-once** — a finalizer runs on the fiber's normal completion, on an explicit `release`, on cancellation, or, for a fiber still parked when the program ends, when `block_on` drains it at shutdown. So a handle acquired this way is released on every path and never twice. `using(h, release, body)` is that bracket as a single combinator; `File/open` and `Tcp/connect` register their `close` as a finalizer the instant they hand back the handle, so even a flat open/close pair is leak-safe.
 
 **Spawning, futures, cancellation.** `go` launches a fire-and-forget fiber — nothing to await, nothing to cancel. `spawn` launches one and hands back a `Handle`: its result `Future` and a cancellation `Token`, so `await(h.result)` collects the value and `cancel(h.token)` stops it. A `Future` is a one-shot cell (`new_future` / `fulfill` / `await`); awaiting one parks the fiber until something fulfills it. Cancellation is **cooperative** — `cancel` sets the token and the scheduler reaps the fiber at its next step, running its finalizers, rather than interrupting it mid-step. `join_all` spawns every task and awaits all of them (positional results); `select` runs them and lets the first finisher win, cancelling the losers; `race` is `select` without the index.
 
-**Running.** `block_on(t)` is the scheduler loop: it drives the root `t` while multiplexing every fiber's IO waits over a single `/sys/Io/poll`, waking fibers as their handles become ready and resuming fibers parked on futures as those fulfill. When the root produces its value, every still-outstanding fiber is drained and its finalizers run — a stuck background fiber can never leak a resource or hang shutdown. If the program reaches a state where nothing is runnable and nothing is waiting on IO (a genuine deadlock — the root can never finish), `block_on` runs all outstanding finalizers and then terminates the process with a non-zero exit. `run` is `block_on` at the unit result, the normal program entry. The leaf actions `read`/`write`/`accept` are the non-blocking primitives every higher layer (`/std/File`, `/std/Net`) builds on: each yields on would-block and resumes when the handle is ready, surfacing a typed `Io/Read` or `Result(_, Io/Error)` rather than a raw status.
+**Running.** `block_on(t)` is the scheduler loop: it drives the root `t` while multiplexing every fiber's IO waits over a single `/sys/Io/poll`, waking fibers as their handles become ready and resuming fibers parked on futures as those fulfill. When the root produces its value, every still-outstanding fiber is drained and its finalizers run — a stuck background fiber can never leak a resource or hang shutdown. If the program reaches a state where nothing is runnable and nothing is waiting on IO (a genuine deadlock — the root can never finish), `block_on` runs all outstanding finalizers and then terminates the process with a non-zero exit. `run` is `block_on` at the unit result, the normal program entry. The leaf actions `read`/`write`/`accept` are the non-blocking primitives every higher layer (`/std/File`, `/std/Tcp`) builds on: each yields on would-block and resumes when the handle is ready, surfacing a typed `Io/Read` or `Result(_, Io/Error)` rather than a raw status.
 
 ### `/std/File`
 
@@ -307,7 +307,7 @@ File/write(f, b)               -- (File, Bin) -> Task(Result({}, Io/Error))
 
 `open` hands back a `File` with its `close` already registered as a finalizer; `close` runs and drops it. `with` is the sugar that pairs them around `body` — open, run `body`, close — returning the body's value or the open failure. Because the close is a scheduler-tracked finalizer, it runs whether `body` completes or its fiber is dropped first, so a flat `open`/`close` is as leak-safe as `with`. Inside the body, `read`/`write` are the operations on that handle. The handle must not outlive its `close` — an effect delayed past it, such as a `body` result that is itself a closure performing IO, would touch a closed handle. Failures are typed [`Io/Error`](#stdio); a read yields [`Io/Read`](#stdio) (`chunk`/`eof`/`error`). Programs run with the invoking user's filesystem access — there is no sandbox.
 
-### `/std/Net`
+### `/std/Tcp`
 
 A TCP client and a concurrent TCP server, in cleartext or over TLS. Every operation is an asynchronous [`Task`](#stdtask). `Socket` is an **abstract handle** — like `/std/File`, a zero-cost newtype over `Io`, kept distinct so a socket is never confused with stdin/stdout or a file. `connect` and `close` are public and flat: `connect` registers the close as a handle-keyed finalizer when it hands back the `Socket`, so a connection dropped or cancelled before its `close` is still closed (and never twice); `with`/`call`/`serve`/`serve_tls` are the bracketed forms over that pair. It builds on the `/sys/Io/connect`, `/sys/Io/listen`, and `/sys/Io/accept` primitives, with TLS layered on the conduit-upgrade primitives `/sys/Io/start_tls` (client) and `/sys/Io/tls_server_config` + `/sys/Io/start_tls_server` (server): the socket connects (or is accepted) in cleartext, then the handshake upgrades it in place to an encrypted stream the same `read`/`write` serve. The client trusts a bundled root set with verification on; the SNI is taken from `host`. Custom roots and client certificates are future work.
 
@@ -340,11 +340,11 @@ As with `File`, the `Socket` must not outlive the `with` or `handler` body — a
 
 ### `/std/Http`
 
-An HTTP/1.1 client layered on `/std/Net`, over cleartext (`http://`) or TLS (`https://`): a request is just bytes written to a socket and a response is bytes read back, so the module is request formatting plus a `/std/Parse` parser over the reply. TLS is handled entirely by `/std/Net` through the request's `settings.tls` flag — there is no HTTP-specific crypto machinery. The surface is value-centric — build a `Request`, hand it to `perform`, get back a `Result(Response, Error)`. `secure` flips a request to TLS; `get_tls`/`post_tls` are the shorthands.
+An HTTP/1.1 client layered on `/std/Tcp`, over cleartext (`http://`) or TLS (`https://`): a request is just bytes written to a socket and a response is bytes read back, so the module is request formatting plus a `/std/Parse` parser over the reply. TLS is handled entirely by `/std/Tcp` through the request's `settings.tls` flag — there is no HTTP-specific crypto machinery. The surface is value-centric — build a `Request`, hand it to `perform`, get back a `Result(Response, Error)`. `secure` flips a request to TLS; `get_tls`/`post_tls` are the shorthands.
 
 ```
 union Method | get() | post() end
-union Error  | net(Net/Error) | malformed(Str) end
+union Error  | net(Io/Error) | malformed(Str) end
 
 struct Request pub {
     method : Method,
@@ -353,14 +353,14 @@ struct Request pub {
     path : Str,
     headers : Arr({Str, Str}),
     body : Bin,
-    settings : Net/Settings
+    settings : Tcp/Settings
 }
 
 struct Status pub   { version : Str, code : Nat, reason : Str }
 struct Response pub { status : Status, headers : Arr({Str, Str}), body : Bin }
 ```
 
-`Request`, `Status`, and `Response` all have public representations. In a `Request`, `headers` are sent verbatim and in order after the automatic `Host`/`Connection: close`/`Content-Length` lines; `body` is sent as-is (its `Content-Length` is added automatically when non-empty). A failed round trip is `Error/net` (a transport failure surfaced by `/std/Net`) or `Error/malformed` (a response that did not parse).
+`Request`, `Status`, and `Response` all have public representations. In a `Request`, `headers` are sent verbatim and in order after the automatic `Host`/`Connection: close`/`Content-Length` lines; `body` is sent as-is (its `Content-Length` is added automatically when non-empty). A failed round trip is `Error/net` (a transport failure surfaced by `/std/Tcp`) or `Error/malformed` (a response that did not parse).
 
 | Binding                 | Type                                   | Description                                                                          |
 | ----------------------- | -------------------------------------- | ------------------------------------------------------------------------------------ |
@@ -368,7 +368,7 @@ struct Response pub { status : Status, headers : Arr({Str, Str}), body : Bin }
 | `secure(request)`       | `(Request) -> Request`                 | Flip a request to TLS (`settings.tls = true`); `perform` then speaks `https://`       |
 | `get_tls(host, port, path)` | `(Str, Nat, Str) -> Request`       | `secure(get(...))` — a GET over TLS (use port 443)                                    |
 | `post_tls(host, port, path, body)` | `(Str, Nat, Str, Bin) -> Request` | `secure(post(...))` — a POST over TLS (use port 443)                              |
-| `perform(request)`      | `(Request) -> Result(Response, Error)` | Drive one request end to end: render, send through `/std/Net`, parse the reply       |
+| `perform(request)`      | `(Request) -> Result(Response, Error)` | Drive one request end to end: render, send through `/std/Tcp`, parse the reply       |
 | `render(request)`       | `(Request) -> Bin`                     | Serialize a request to the raw bytes written on the wire (pure; testable on its own) |
 | `header(resp, name)`    | `(Response, Str) -> Option(Str)`       | The first header whose name matches `name`, case-insensitively                       |
 | `status_line`           | `Parse(Status)`                        | Parse one status line (`HTTP/1.1 200 OK\r\n`) and its terminating CRLF               |

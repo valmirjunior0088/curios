@@ -25,7 +25,7 @@ pub use Reader/{let Reader};
 pub mod File;
 pub use File/{let File};
 
-pub mod Net;
+pub mod Tcp;
 
 pub mod Task;
 pub use Task/{let Task};
