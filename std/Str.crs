@@ -72,6 +72,67 @@ rec tl_tail(s : Scan, b : Bin) -> Bin =
         end
     end;
 
+rec codepoint_width(s : Scan, b : Bin) -> Nat =
+    match s
+    | lead() => 0
+    | cont(rem, lo, hi) =>
+        match b
+        | \\ => 0
+        | (h, t), ih => Nat/add(1, codepoint_width(step(h, Scan/cont(rem, lo, hi)), t))
+        end
+    | bad() =>
+        match b
+        | \\ => 0
+        | (h, t), ih => Nat/add(1, codepoint_width(step(h, Scan/bad()), t))
+        end
+    end;
+
+rec tl_tail_eq(s : Scan, b : Bin)
+    -> /std/Eq/Eq(@Bin, tl_tail(s, b), Bin/slice(b, codepoint_width(s, b), Bin/len(b))) =
+    match s : (s) => /std/Eq/Eq(@Bin, tl_tail(s, b), Bin/slice(b, codepoint_width(s, b), Bin/len(b)))
+    | lead() => /std/Eq/refl()
+    | cont(rem, lo, hi) =>
+        match b : (b) => /std/Eq/Eq(@Bin, tl_tail(Scan/cont(rem, lo, hi), b),
+            Bin/slice(b, codepoint_width(Scan/cont(rem, lo, hi), b), Bin/len(b)))
+        | \\ => /std/Eq/refl()
+        | (h, t), ih => tl_tail_eq(step(h, Scan/cont(rem, lo, hi)), t)
+        end
+    | bad() =>
+        match b : (b) => /std/Eq/Eq(@Bin, tl_tail(Scan/bad(), b),
+            Bin/slice(b, codepoint_width(Scan/bad(), b), Bin/len(b)))
+        | \\ => /std/Eq/refl()
+        | (h, t), ih => tl_tail_eq(step(h, Scan/bad()), t)
+        end
+    end;
+
+rec tl_mid_eq(s : Scan, b : Bin)
+    -> /std/Eq/Eq(@Bin, tl_mid(s, b), Bin/slice(b, 0, codepoint_width(s, b))) =
+    match s : (s) => /std/Eq/Eq(@Bin, tl_mid(s, b), Bin/slice(b, 0, codepoint_width(s, b)))
+    | lead() => /std/Eq/refl()
+    | cont(rem, lo, hi) =>
+        match b : (b) => /std/Eq/Eq(@Bin, tl_mid(Scan/cont(rem, lo, hi), b),
+            Bin/slice(b, 0, codepoint_width(Scan/cont(rem, lo, hi), b)))
+        | \\ => /std/Eq/refl()
+        | (h, t), ih =>
+            /std/Eq/cong(@Bin, @Bin,
+                @tl_mid(step(h, Scan/cont(rem, lo, hi)), t),
+                @Bin/slice(t, 0, codepoint_width(step(h, Scan/cont(rem, lo, hi)), t)),
+                (x) => Bin/concat(Bin/append(\\, h), x),
+                tl_mid_eq(step(h, Scan/cont(rem, lo, hi)), t))
+        end
+    | bad() =>
+        match b : (b) => /std/Eq/Eq(@Bin, tl_mid(Scan/bad(), b),
+            Bin/slice(b, 0, codepoint_width(Scan/bad(), b)))
+        | \\ => /std/Eq/refl()
+        | (h, t), ih =>
+            /std/Eq/cong(@Bin, @Bin,
+                @tl_mid(step(h, Scan/bad()), t),
+                @Bin/slice(t, 0, codepoint_width(step(h, Scan/bad()), t)),
+                (x) => Bin/concat(Bin/append(\\, h), x),
+                tl_mid_eq(step(h, Scan/bad()), t))
+        end
+    end;
+
 rec tl_proof(s : Scan, b : Bin, d : Utf8(s, b))
     -> { midd : Utf8(s, tl_mid(s, b)), tv : Valid(tl_tail(s, b)) } =
     let go =
@@ -93,24 +154,24 @@ rec tl_proof(s : Scan, b : Bin, d : Utf8(s, b))
         end;
     go(d);
 
-let drop1_bytes(b : Bin) -> Bin =
+let first_codepoint_width(b : Bin) -> Nat =
     match b
-    | \\ => \\
-    | (h, t), ih => tl_tail(step(h, Scan/lead()), t)
+    | \\ => 0
+    | (h, t), ih => Nat/add(1, codepoint_width(step(h, Scan/lead()), t))
     end;
 
+let drop1_bytes(b : Bin) -> Bin =
+    Bin/slice(b, first_codepoint_width(b), Bin/len(b));
+
 let take1_bytes(b : Bin) -> Bin =
-    match b
-    | \\ => \\
-    | (h, t), ih => Bin/concat(Bin/append(\\, h), tl_mid(step(h, Scan/lead()), t))
-    end;
+    Bin/slice(b, 0, first_codepoint_width(b));
 
 let drop1_proof(@b : Bin, d : Valid(b)) -> Valid(drop1_bytes(b)) =
     match d : (w : Utf8(q, x)) => Valid(drop1_bytes(x))
     | stop() => Utf8/stop()
     | more(c, st, t, rest) =>
         let w = tl_proof(step(c, st), t, rest);
-        w.tv
+        /std/Eq/subst((z) => Valid(z), tl_tail_eq(step(c, st), t), w.tv)
     end;
 
 let take1_proof(@b : Bin, d : Valid(b)) -> Valid(take1_bytes(b)) =
@@ -118,7 +179,8 @@ let take1_proof(@b : Bin, d : Valid(b)) -> Valid(take1_bytes(b)) =
     | stop() => Utf8/stop()
     | more(c, st, t, rest) =>
         let w = tl_proof(step(c, st), t, rest);
-        Utf8/more(c, st, tl_mid(step(c, st), t), w.midd)
+        let mid = /std/Eq/subst((z) => Utf8(step(c, st), z), tl_mid_eq(step(c, st), t), w.midd);
+        Utf8/more(c, st, Bin/slice(t, 0, codepoint_width(step(c, st), t)), mid)
     end;
 
 let drop1(s : Str) -> Str =
