@@ -111,6 +111,35 @@ fn parse_char_literal_escape() {
 }
 
 #[test]
+fn parse_hex_literal_is_nat() {
+    assert_eq!(
+        "0xC2".parse::<Term>().unwrap(),
+        Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
+            NatLiteral::Number(194usize.into(), Radix::Hex),
+            Subterm::Prim(Prim::Nat(Nat::Zero)).into()
+        ))))
+    );
+}
+
+#[test]
+fn parse_bin_literal_is_nat() {
+    assert_eq!(
+        "0b1010".parse::<Term>().unwrap(),
+        Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
+            NatLiteral::Number(10usize.into(), Radix::Bin),
+            Subterm::Prim(Prim::Nat(Nat::Zero)).into()
+        ))))
+    );
+}
+
+#[test]
+fn nat_radix_round_trips_through_the_printer() {
+    for source in ["0xC2", "0xF4", "0b1010", "127"] {
+        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+    }
+}
+
+#[test]
 fn parse_string_literal_is_str() {
     assert_eq!(
         "\"a\"".parse::<Term>().unwrap(),

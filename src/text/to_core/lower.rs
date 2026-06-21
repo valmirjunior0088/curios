@@ -1575,7 +1575,7 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::BlnXor(left, right) => core::Prim::BlnXor(self.term(left)?, self.term(right)?),
             Prim::NatType => core::Prim::NatType,
             Prim::Nat(Nat::Zero) => core::Prim::Nat(core::Nat::Zero),
-            Prim::Nat(Nat::Succ(NatLiteral::Number(spine), inner)) => {
+            Prim::Nat(Nat::Succ(NatLiteral::Number(spine, _), inner)) => {
                 core::Prim::Nat(core::Nat::Succ(spine.clone(), self.term(inner)?))
             }
             Prim::Nat(Nat::Succ(NatLiteral::Char(c), inner)) => core::Prim::Nat(core::Nat::Succ(

@@ -2,11 +2,12 @@ use {
     super::{
         Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
         LetBang, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Pattern, PatternLit,
-        Plicity, Prim, Proj, Quantity,
+        Plicity, Prim, Proj, Quantity, Radix,
         Rec, StructLit, Subterm, Syn, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopUnion,
         TopUse, Tuple, TupleType, TupleTypeParam, UnionMatch, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    num_bigint::BigUint,
     num_traits::One,
     std::fmt::{Display, Formatter, Result},
 };
@@ -131,6 +132,14 @@ fn print_field(param: TupleTypeParam) -> Printer<'static> {
     }
 }
 
+fn format_radix(n: &BigUint, radix: Radix) -> String {
+    match radix {
+        Radix::Dec => format!("{n}"),
+        Radix::Hex => format!("0x{n:X}"),
+        Radix::Bin => format!("0b{n:b}"),
+    }
+}
+
 fn print_prim_call(name: &'static str, args: Vec<Term>) -> Printer<'static> {
     flat([
         pure(name),
@@ -153,7 +162,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::Nat(Nat::Succ(nat, inner)) => {
             if matches!(inner.as_subterm(), Subterm::Prim(Prim::Nat(Nat::Zero))) {
                 match nat {
-                    NatLiteral::Number(n) => pure(format!("{n}")),
+                    NatLiteral::Number(n, radix) => pure(format_radix(&n, radix)),
                     NatLiteral::Char(c) => {
                         let escaped = match c {
                             '\'' => "\\'".to_string(),
@@ -168,11 +177,11 @@ fn print_prim(prim: Prim) -> Printer<'static> {
                 }
             } else {
                 match nat {
-                    NatLiteral::Number(n) if n.is_one() => {
+                    NatLiteral::Number(n, _) if n.is_one() => {
                         flat([pure("Nat.succ("), print_term(inner), pure(")")])
                     }
-                    NatLiteral::Number(n) => flat([
-                        pure(format!("Nat.succ({n}, ")),
+                    NatLiteral::Number(n, radix) => flat([
+                        pure(format!("Nat.succ({}, ", format_radix(&n, radix))),
                         print_term(inner),
                         pure(")"),
                     ]),

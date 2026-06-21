@@ -3,7 +3,8 @@ use {
         Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, Entrypoint, Field, Func,
         FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Let, LetBang, LetSignature, LoadError,
         Match, Module, Motive, Name, Nat,
-        NatLiteral, NatMatch, Pattern, PatternLit, Plicity, Prim, Proj, Qualifier, Quantity, Rec,
+        NatLiteral, NatMatch, Pattern, PatternLit, Plicity, Prim, Proj, Qualifier, Quantity, Radix,
+        Rec,
         RecItem, StructLit, Subterm, Syn, Term, TupleTypeParam,
         TopCase, TopItem,
         TopLet, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType, UnionMatch, UseGroup,
@@ -130,12 +131,26 @@ fn parse_usize<'a>() -> Parser<'a, usize> {
         .and_drop(parse_whitespace())
 }
 
-fn parse_nat_digits<'a>() -> Parser<'a, BigUint> {
-    take_while(|char: char| char.is_ascii_digit())
-        .flat_map(|digits| match digits.parse::<BigUint>() {
-            Ok(value) => pure(value),
-            Err(_) => fail("expected nat"),
-        })
+fn parse_radix<'a>(prefix: &'static str, radix: u32, tag: Radix) -> Parser<'a, NatLiteral> {
+    take_exact(prefix).and_keep(
+        take_while(move |char: char| char.is_digit(radix)).flat_map(move |digits| {
+            match BigUint::parse_bytes(digits.as_bytes(), radix) {
+                Some(value) => pure(NatLiteral::Number(value, tag)),
+                None => fail(format!("expected base-{radix} digits after '{prefix}'")),
+            }
+        }),
+    )
+}
+
+fn parse_nat_digits<'a>() -> Parser<'a, NatLiteral> {
+    catch(parse_radix("0x", 16, Radix::Hex))
+        .or(catch(parse_radix("0b", 2, Radix::Bin)))
+        .or(take_while(|char: char| char.is_ascii_digit()).flat_map(|digits| {
+            match digits.parse::<BigUint>() {
+                Ok(value) => pure(NatLiteral::Number(value, Radix::Dec)),
+                Err(_) => fail("expected nat"),
+            }
+        }))
         .and_drop(parse_whitespace())
 }
 
@@ -147,13 +162,13 @@ fn parse_nat<'a>() -> Parser<'a, NatLiteral> {
             .and_drop(parse_whitespace()),
     )
     .map(NatLiteral::Char)
-    .or(catch(parse_nat_digits()).map(NatLiteral::number))
+    .or(catch(parse_nat_digits()))
 }
 
 fn parse_nat_value<'a>() -> Parser<'a, Term> {
     parse_nat()
         .map(|nat| match nat {
-            NatLiteral::Number(n) if n.is_zero() => Subterm::Prim(Prim::Nat(Nat::Zero)),
+            NatLiteral::Number(n, _) if n.is_zero() => Subterm::Prim(Prim::Nat(Nat::Zero)),
             nat => Subterm::Prim(Prim::Nat(Nat::Succ(
                 nat,
                 Subterm::Prim(Prim::Nat(Nat::Zero)).into(),
@@ -162,21 +177,10 @@ fn parse_nat_value<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_nat_literal<'a>() -> Parser<'a, NatLiteral> {
-    catch(
-        take_exact("'")
-            .and_keep(parse_char_value())
-            .and_drop(take_exact("'"))
-            .and_drop(parse_whitespace()),
-    )
-    .map(NatLiteral::Char)
-    .or(catch(parse_nat_digits()).map(NatLiteral::number))
-}
-
 fn parse_nat_literal_u32<'a>() -> Parser<'a, u32> {
-    parse_nat_literal().flat_map(|lit| {
+    parse_nat().flat_map(|lit| {
         let n = match lit {
-            NatLiteral::Number(n) => n,
+            NatLiteral::Number(n, _) => n,
             NatLiteral::Char(c) => BigUint::from(c as u32),
         };
         match n.to_u32() {
@@ -671,9 +675,9 @@ fn parse_nat_match<'a>() -> Parser<'a, Term> {
         .and(
             catch(
                 parse_literal("|")
-                    .and_keep(parse_nat_literal())
+                    .and_keep(parse_nat())
                     .flat_map(|lit| match lit {
-                        NatLiteral::Number(n) if n.is_zero() => pure(()),
+                        NatLiteral::Number(n, _) if n.is_zero() => pure(()),
                         _ => fail("expected 0 as NatFold zero case"),
                     })
                     .and_drop(parse_literal("=>"))
