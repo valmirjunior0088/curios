@@ -787,12 +787,17 @@ impl<L: Loader> Loader for StdLoader<L> {
 }
 
 // The `syn` library: modules the compiler's desugaring targets, kept alongside the
-// compiler (`syn/*.crs`) and embedded in the binary. Like `sys` it is internal —
-// walled from user code (see `to_core::INTERNAL_ROOTS`) and reached through `std`
-// re-exports. Well-formedness is a compiler invariant, so a parse failure is a `panic!`.
+// compiler (`syn/*.crs`) and embedded in the binary. Unlike `sys`, `syn` is *not*
+// internal (it is absent from `to_core::INTERNAL_ROOTS`): desugaring emits absolute
+// `/syn/…` references, so the names must be resolvable like any ordinary library —
+// they are not walled from user code. `syn` is privileged
+// (`to_core::PRIVILEGED_ROOTS`) so it may reach the `/sys` primitives, and in
+// practice it is consumed through `/std` re-exports. Well-formedness is a compiler
+// invariant, so a parse failure is a `panic!`.
 const SYN: &[(&[&str], &str)] = &[
     (&["syn"], include_str!("../../syn.crs")),
     (&["syn", "Str"], include_str!("../../syn/Str.crs")),
+    (&["syn", "Lst"], include_str!("../../syn/Lst.crs")),
 ];
 
 // Serves the embedded `syn` modules, delegating everything else to `inner`.

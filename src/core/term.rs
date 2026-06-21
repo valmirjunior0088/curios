@@ -1107,7 +1107,7 @@ impl Subterm {
     /// `Var`s (they live in the registry, not the variable graph), so they do not
     /// appear in `free_vars`; the reachability prune (`order_flat_items`) needs
     /// them as edges so a definition that *builds* a `Struct`/`Variant` (e.g. the
-    /// string-literal meta-emitter's `/syn/Str`) keeps the backing type-former
+    /// string-literal meta-emitter's `/syn/Str/Str`) keeps the backing type-former
     /// and field-type definitions alive even when no `Var` mentions them.
     pub fn construction_names(&self) -> BTreeSet<String> {
         let mut names = BTreeSet::new();

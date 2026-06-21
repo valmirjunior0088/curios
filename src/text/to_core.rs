@@ -813,7 +813,7 @@ fn flat_item_free_vars(item: &FlatItem) -> HashSet<String> {
         .flat_map(|let_| {
             // Construction head names (`Struct`/`Variant`/type-former normal forms)
             // are reachability edges too — a body that *builds* a struct (the
-            // string-literal meta-emitter's `/syn/Str`) must keep its backing
+            // string-literal meta-emitter's `/syn/Str/Str`) must keep its backing
             // type-former and field-type definitions alive even though no `Var`
             // names them. See `Subterm::construction_names`.
             let_.type_

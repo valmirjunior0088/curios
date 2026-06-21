@@ -1,13 +1,3 @@
-use /std/{Bin};
-
 pub mod Str;
 
-pub struct Str pub {
-    bytes : Bin,
-    valid : @Str/Valid(bytes)
-}
-
-pub union Lst(A : Type)
-| nil()
-| cons(A, Lst(A))
-end
+pub mod Lst;

@@ -1,0 +1,4 @@
+pub union Lst(A : Type)
+| nil()
+| cons(A, Lst(A))
+end

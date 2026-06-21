@@ -125,12 +125,13 @@ Booleans. The values are the literals `true`/`false`, eliminated with [`match`](
 
 ### `/std/Bin`
 
-Raw byte sequences. `fold` and `join` are library helpers; the rest are `/sys` primitives.
+Raw byte sequences. `cons`, `fold`, and `join` are library helpers; the rest are `/sys` primitives.
 
 | Binding             | Type                                      | Description                                |
 | ------------------- | ----------------------------------------- | ------------------------------------------ |
 | `len(b)`            | `(Bin) -> Nat`                            | Byte length                                |
 | `eql(a, b)`         | `(Bin, Bin) -> Bln`                       | Equality                                   |
+| `cons(head, tail)`  | `(Nat, Bin) -> Bin`                       | Prepend a single byte (`concat(append(\\, head), tail)`) |
 | `get(b, i)`         | `(Bin, Nat) -> Nat`                       | Byte at index `i` (traps if out of bounds) |
 | `slice(b, s, e)`    | `(Bin, Nat, Nat) -> Bin`                  | Subsequence from `s` to `e` (traps if out of range) |
 | `append(b, x)`      | `(Bin, Nat) -> Bin`                       | Append a single byte (`x` taken mod 256)   |

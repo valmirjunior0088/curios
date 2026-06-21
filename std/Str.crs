@@ -1,4 +1,4 @@
-pub use /syn/{Str};
+pub use /syn/Str/{let Str};
 use /syn/Str/{Scan, Utf8, let step, let Valid};
 use /std/{Char, Nat, Bin, Bln, Arr, Lst, Option};
 
@@ -23,7 +23,7 @@ let check(b : Bin) -> ((s : Scan) -> Option(Utf8(s, b))) =
         | bad() => Option/none()
         end
     | (h, t), ih => (s) =>
-        match ih(step(h, s)) : Option(Utf8(s, Bin/concat(Bin/append(\\, h), t)))
+        match ih(step(h, s)) : Option(Utf8(s, Bin/cons(h, t)))
         | some(rest) => Option/some(Utf8/more(h, s, t, rest))
         | none() => Option/none()
         end
@@ -66,9 +66,9 @@ rec drop_valid(n : Nat, s : Scan, @b : Bin, d : Utf8(s, b))
             match p : (w : Utf8(q, x)) => Valid(Bin/slice(x, drop_width(n, q, x), Bin/len(x)))
             | stop() => Utf8/stop()
             | more(c, st, t, rest) =>
-                match n : (n) => Valid(Bin/slice(Bin/concat(Bin/append(\\, c), t),
-                    drop_width(n, Scan/lead(), Bin/concat(Bin/append(\\, c), t)),
-                    Bin/len(Bin/concat(Bin/append(\\, c), t))))
+                match n : (n) => Valid(Bin/slice(Bin/cons(c, t),
+                    drop_width(n, Scan/lead(), Bin/cons(c, t)),
+                    Bin/len(Bin/cons(c, t))))
                 | 0 => Utf8/more(c, Scan/lead(), t, rest)
                 | pred + 1, ih => drop_valid(pred, step(c, Scan/lead()), @t, rest)
                 end
@@ -93,8 +93,8 @@ rec take_valid(n : Nat, s : Scan, @b : Bin, d : Utf8(s, b))
             match p : (w : Utf8(q, x)) => Utf8(q, Bin/slice(x, 0, drop_width(n, q, x)))
             | stop() => Utf8/stop()
             | more(c, st, t, rest) =>
-                match n : (n) => Utf8(Scan/lead(), Bin/slice(Bin/concat(Bin/append(\\, c), t), 0,
-                    drop_width(n, Scan/lead(), Bin/concat(Bin/append(\\, c), t))))
+                match n : (n) => Utf8(Scan/lead(), Bin/slice(Bin/cons(c, t), 0,
+                    drop_width(n, Scan/lead(), Bin/cons(c, t))))
                 | 0 => Utf8/stop()
                 | pred + 1, ih =>
                     Utf8/more(c, Scan/lead(), Bin/slice(t, 0, drop_width(pred, step(c, Scan/lead()), t)),
