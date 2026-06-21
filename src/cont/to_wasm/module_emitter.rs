@@ -184,8 +184,21 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
+        if self.table.io_lookup_used() {
+            // `(host, port) -> (status, handle)` — starts the async name lookup,
+            // handing back a poll-readable handle (same result shape as
+            // `io_socket`).
+            self.add_host_import(
+                "io_lookup",
+                wasm::TypeName::from("io_lookup"),
+                self.table.io_lookup_func().clone(),
+                wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
+                wasm::ResultType::from([status_ref.clone(), bin_ref.clone()]),
+            );
+        }
+
         if self.table.io_resolve_used() {
-            // `(host, port) -> (status, addresses)`; addresses is the module's
+            // `(handle) -> (status, addresses)`; addresses is the module's
             // uniform `Arr(Bin)`, each element a `bin_ref` (like `io_args`).
             let arr_ref = wasm::ValType::Ref(wasm::RefType {
                 is_nullable: false,
@@ -195,7 +208,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 "io_resolve",
                 wasm::TypeName::from("io_resolve"),
                 self.table.io_resolve_func().clone(),
-                wasm::ResultType::from([bin_ref.clone(), i32_val.clone()]),
+                wasm::ResultType::from([bin_ref.clone()]),
                 wasm::ResultType::from([status_ref.clone(), arr_ref]),
             );
         }

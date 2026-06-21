@@ -924,6 +924,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
             | exists() => Io/print("exists")
             | refused() => Io/print("refused")
             | tls() => Io/print("tls")
+            | would_block() => Io/print("would block")
             | other(_) => Io/print("other")
             end
         end
@@ -3015,6 +3016,7 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
             | not_found() => Io/print("not found")
             | permission_denied() => Io/print("denied")
             | exists() => Io/print("exists")
+            | would_block() => Io/print("would block")
             | other(_) => Io/print("other")
             end
         end

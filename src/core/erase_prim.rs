@@ -290,10 +290,15 @@ pub fn erase_prim(
             erase(context, path, &bin_type())?,
             erase(context, mode, &nat_type())?,
         ))),
-        Prim::IoResolve(host_, port) => Ok(host(ersd::HostPrim::IoResolve(
+        Prim::IoLookup(host_, port) => Ok(host(ersd::HostPrim::IoLookup(
             erase(context, host_, &bin_type())?,
             erase(context, port, &nat_type())?,
         ))),
+        Prim::IoResolve(handle) => Ok(host(ersd::HostPrim::IoResolve(erase(
+            context,
+            handle,
+            &prim_type(Prim::IoType),
+        )?))),
         Prim::IoSocket(addr) => Ok(host(ersd::HostPrim::IoSocket(erase(
             context,
             addr,

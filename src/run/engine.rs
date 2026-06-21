@@ -137,11 +137,13 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         FuncType::new(engine, [bin_ref.clone(), bin_ref.clone()], [i31_ref.clone()]);
     let io_listen_type = FuncType::new(engine, [bin_ref.clone(), ValType::I32], [i31_ref.clone()]);
     let io_accept_type = FuncType::new(engine, [bin_ref.clone()], [i31_ref.clone(), bin_ref.clone()]);
-    let io_resolve_type = FuncType::new(
+    let io_lookup_type = FuncType::new(
         engine,
         [bin_ref.clone(), ValType::I32],
-        [i31_ref.clone(), arr_ref.clone()],
+        [i31_ref.clone(), bin_ref.clone()],
     );
+    let io_resolve_type =
+        FuncType::new(engine, [bin_ref.clone()], [i31_ref.clone(), arr_ref.clone()]);
     let io_socket_type = FuncType::new(
         engine,
         [bin_ref.clone()],
@@ -248,10 +250,16 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         move |io: Io| host.accept(io)
     })?;
 
+    define_import(&mut linker, "io_lookup", io_lookup_type, {
+        let host = host.clone();
+
+        move |(name, port): (Vec<u8>, u32)| host.lookup(&name, port)
+    })?;
+
     define_import(&mut linker, "io_resolve", io_resolve_type, {
         let host = host.clone();
 
-        move |(name, port): (Vec<u8>, u32)| host.resolve(&name, port)
+        move |handle: Io| host.resolve(handle)
     })?;
 
     define_import(&mut linker, "io_socket", io_socket_type, {

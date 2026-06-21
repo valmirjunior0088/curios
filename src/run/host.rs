@@ -315,11 +315,20 @@ pub trait Host {
     /// meaningful only when the status is `Status::Ok`.
     fn open(&self, path: &[u8], mode: Mode) -> (Status, Io);
 
-    /// Resolve `host`:`port` to a list of opaque address blobs the socket
-    /// lifecycle consumes. Returns `(status, addresses)`; each blob is the host's
-    /// private encoding (canonical address string here) the guest only shuttles
-    /// back into `socket`/`bind`/`connect`. On `Status::Ok` the list is non-empty.
-    fn resolve(&self, host: &[u8], port: u32) -> (Status, Vec<Vec<u8>>);
+    /// Start an asynchronous lookup of `host`:`port`. Returns `(status, handle)`;
+    /// on `Status::Ok` the handle is poll-readable and becomes ready for `READ`
+    /// once the lookup completes, at which point `resolve` forces the address
+    /// list off it. The blocking name resolution runs off the calling thread, so
+    /// a single-threaded scheduler can poll the handle instead of blocking.
+    fn lookup(&self, host: &[u8], port: u32) -> (Status, Io);
+
+    /// Force a finished lookup `handle` to its list of opaque address blobs the
+    /// socket lifecycle consumes, consuming the handle. Returns
+    /// `(status, addresses)`; each blob is the host's private encoding (canonical
+    /// address string here) the guest only shuttles back into
+    /// `socket`/`bind`/`connect`. On `Status::Ok` the list is non-empty. Called
+    /// before readiness, it reports `WouldBlock`.
+    fn resolve(&self, handle: Io) -> (Status, Vec<Vec<u8>>);
 
     /// Create an unconnected socket for the address family encoded in `addr`.
     /// Returns `(status, io)` like `open`; the handle is configured via the

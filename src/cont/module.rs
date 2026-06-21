@@ -174,12 +174,19 @@ pub enum HostTarget {
         mode: ValueName,
         resume: BlockName,
     },
-    /// Resolve `host`:`port` (a `Bin` and an i32) to a list of opaque address
-    /// blobs. Returns (status, addresses : Arr(Bin)); `resume` takes two block
-    /// parameters.
-    IoResolve {
+    /// Start an asynchronous lookup of `host`:`port` (a `Bin` and an i32).
+    /// Returns (status, handle); the handle is poll-readable and becomes ready
+    /// when the lookup finishes. `resume` takes two block parameters.
+    IoLookup {
         host: ValueName,
         port: ValueName,
+        resume: BlockName,
+    },
+    /// Force the finished lookup `handle` to its list of opaque address blobs.
+    /// Returns (status, addresses : Arr(Bin)); `resume` takes two block
+    /// parameters.
+    IoResolve {
+        handle: ValueName,
         resume: BlockName,
     },
     /// Create an unconnected socket for the address blob `addr`. Returns
@@ -309,6 +316,7 @@ impl HostTarget {
             HostTarget::IoRead { resume, .. }
             | HostTarget::IoWrite { resume, .. }
             | HostTarget::IoOpen { resume, .. }
+            | HostTarget::IoLookup { resume, .. }
             | HostTarget::IoResolve { resume, .. }
             | HostTarget::IoSocket { resume, .. }
             | HostTarget::IoBind { resume, .. }
@@ -338,6 +346,7 @@ impl HostTarget {
             HostTarget::IoRead { resume, .. }
             | HostTarget::IoWrite { resume, .. }
             | HostTarget::IoOpen { resume, .. }
+            | HostTarget::IoLookup { resume, .. }
             | HostTarget::IoResolve { resume, .. }
             | HostTarget::IoSocket { resume, .. }
             | HostTarget::IoBind { resume, .. }
@@ -368,7 +377,8 @@ impl HostTarget {
             HostTarget::IoRead { handle, count, .. } => vec![handle, count],
             HostTarget::IoWrite { handle, bytes, .. } => vec![handle, bytes],
             HostTarget::IoOpen { path, mode, .. } => vec![path, mode],
-            HostTarget::IoResolve { host, port, .. } => vec![host, port],
+            HostTarget::IoLookup { host, port, .. } => vec![host, port],
+            HostTarget::IoResolve { handle, .. } => vec![handle],
             HostTarget::IoSocket { addr, .. } => vec![addr],
             HostTarget::IoBind { handle, addr, .. } => vec![handle, addr],
             HostTarget::IoConnect { handle, addr, .. } => vec![handle, addr],
@@ -406,7 +416,8 @@ impl HostTarget {
             HostTarget::IoRead { handle, count, .. } => vec![handle, count],
             HostTarget::IoWrite { handle, bytes, .. } => vec![handle, bytes],
             HostTarget::IoOpen { path, mode, .. } => vec![path, mode],
-            HostTarget::IoResolve { host, port, .. } => vec![host, port],
+            HostTarget::IoLookup { host, port, .. } => vec![host, port],
+            HostTarget::IoResolve { handle, .. } => vec![handle],
             HostTarget::IoSocket { addr, .. } => vec![addr],
             HostTarget::IoBind { handle, addr, .. } => vec![handle, addr],
             HostTarget::IoConnect { handle, addr, .. } => vec![handle, addr],

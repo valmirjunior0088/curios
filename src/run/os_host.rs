@@ -1,5 +1,8 @@
 use {
-    super::host::*,
+    super::{
+        host::*,
+        os_resolver::{OsResolver, Slot},
+    },
     rustix::event::{PollFd, Timespec, poll},
     rustls::{ClientConnection, StreamOwned},
     socket2::{Domain, SockAddr, Socket, Type},
@@ -7,9 +10,9 @@ use {
         env,
         fs::{File, OpenOptions},
         io::{Read, Write, stderr, stdin, stdout},
-        net::{SocketAddr, ToSocketAddrs},
-        os::fd::AsFd,
-        sync::{Arc, LazyLock, Mutex},
+        net::SocketAddr,
+        os::fd::{AsFd, OwnedFd},
+        sync::{Arc, LazyLock, Mutex, OnceLock},
         time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     },
 };
@@ -43,6 +46,15 @@ static CLIENT_CONFIG: LazyLock<Arc<rustls::ClientConfig>> = LazyLock::new(|| {
 /// (all are `Read + Write`); `close` drops any kind, releasing its descriptor.
 enum OsResource {
     File(File),
+    /// An in-flight asynchronous name lookup minted by `lookup`. `done` is the
+    /// read end of a pipe a worker thread writes one byte to once it has filled
+    /// `slot` with the `getaddrinfo` result; that write makes `done` poll-`READ`
+    /// readable, waking the scheduler. `resolve` then drains `slot` and drops the
+    /// handle (closing `done`). `poll` watches `done` like any other fd.
+    Resolving {
+        done: OwnedFd,
+        slot: Slot,
+    },
     Connected(Socket),
     Unconnected(Socket),
     /// A listening socket, held behind an `Arc` so `accept` can share it out and
@@ -70,6 +82,9 @@ pub struct OsHost {
     start: Instant,
     /// The process arguments served by `args` (argv[0] is the program name).
     args: Vec<Vec<u8>>,
+    /// The blocking-DNS worker pool, started on the first `lookup` so programs
+    /// that never resolve a name pay for no threads.
+    resolver: OnceLock<OsResolver>,
 }
 
 impl OsHost {
@@ -84,6 +99,7 @@ impl OsHost {
             table: Mutex::new(Table::new()),
             start: Instant::now(),
             args,
+            resolver: OnceLock::new(),
         }
     }
 
@@ -159,8 +175,11 @@ impl OsHost {
                 Ok(()) => Status::Ok,
                 Err(error) => Status::from(error),
             },
-            // A file and a config token have no socket options: record nothing.
-            Some(OsResource::File(_) | OsResource::TlsConfig(_)) => Status::Ok,
+            // A file, a config token, and an in-flight lookup have no socket
+            // options: record nothing.
+            Some(OsResource::File(_) | OsResource::TlsConfig(_) | OsResource::Resolving { .. }) => {
+                Status::Ok
+            }
             None => Status::NotFound,
         }
     }
@@ -190,28 +209,45 @@ impl Host for OsHost {
         }
     }
 
-    fn resolve(&self, host: &[u8], port: u32) -> (Status, Vec<Vec<u8>>) {
+    fn lookup(&self, host: &[u8], port: u32) -> (Status, Io) {
         let host = String::from_utf8_lossy(host).into_owned();
         let address = format!("{host}:{port}");
 
-        match address.to_socket_addrs() {
-            Ok(addresses) => {
-                // Each blob is the canonical "ip:port" string — debuggable, and
-                // `socket` recovers the address family from it.
-                let addresses: Vec<Vec<u8>> = addresses
-                    .map(|addr| addr.to_string().into_bytes())
-                    .collect();
+        // Start the lookup on the pool (booted on first use). A saturated pool
+        // sheds the load as a retriable `WouldBlock`; on success the read end and
+        // result slot become a `Resolving` handle the scheduler polls.
+        match self.resolver.get_or_init(OsResolver::new).start(address) {
+            Ok(Some(pending)) => {
+                let handle = self.mint(OsResource::Resolving {
+                    done: pending.ready,
+                    slot: pending.slot,
+                });
 
-                if addresses.is_empty() {
-                    (Status::NotFound, vec![])
-                } else {
-                    (Status::Ok, addresses)
-                }
+                (Status::Ok, handle)
             }
-            // Any resolution failure is honestly `NotFound`: the host:port named
-            // nothing. The generic conversion can no longer claim this — it now
-            // reports errno-less errors as the unclassifiable `other(0)`.
-            Err(_) => (Status::NotFound, vec![]),
+            Ok(None) => (Status::WouldBlock, Io::Other(Vec::new())),
+            Err(status) => (status, Io::Other(Vec::new())),
+        }
+    }
+
+    fn resolve(&self, handle: Io) -> (Status, Vec<Vec<u8>>) {
+        // Drain the finished lookup. Reached only after `poll` reports the handle
+        // ready, so the slot is filled; a stray early call leaves the handle
+        // intact and honestly reports `WouldBlock` so the caller can retry.
+        let mut table = self.table.lock().unwrap();
+
+        let ready = match table.get(&handle) {
+            Some(OsResource::Resolving { slot, .. }) => slot.lock().unwrap().take(),
+            _ => return (Status::NotFound, vec![]),
+        };
+
+        match ready {
+            // Drop the handle (closing the pipe read end) only once drained.
+            Some(result) => {
+                table.remove(&handle);
+                result
+            }
+            None => (Status::WouldBlock, vec![]),
         }
     }
 
@@ -451,6 +487,9 @@ impl Host for OsHost {
                     }
                     // `&Arc<Socket>` deref-coerces for the `as_fd` method call.
                     OsResource::Listener(socket) => Some(socket.as_fd()),
+                    // The lookup's pipe read end: `READ`-ready once the worker
+                    // has written its wakeup byte, which is the completion signal.
+                    OsResource::Resolving { done, .. } => Some(done.as_fd()),
                     // TLS record readiness is not socket readiness (rustls
                     // buffers records, and an app read can require a socket
                     // write), so a TLS stream is not polled at the socket layer

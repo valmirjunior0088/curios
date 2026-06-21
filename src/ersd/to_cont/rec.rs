@@ -115,6 +115,7 @@ fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
             vec![]
         }
         ersd::HostPrim::IoAccept(a)
+        | ersd::HostPrim::IoResolve(a)
         | ersd::HostPrim::IoSocket(a)
         | ersd::HostPrim::IoClose(a)
         | ersd::HostPrim::IoRandom(a)
@@ -123,7 +124,7 @@ fn free_names_host_prim(prim: &ersd::HostPrim) -> BTreeSet<String> {
         ersd::HostPrim::IoRead(a, b)
         | ersd::HostPrim::IoWrite(a, b)
         | ersd::HostPrim::IoOpen(a, b)
-        | ersd::HostPrim::IoResolve(a, b)
+        | ersd::HostPrim::IoLookup(a, b)
         | ersd::HostPrim::IoBind(a, b)
         | ersd::HostPrim::IoConnect(a, b)
         | ersd::HostPrim::IoStartTls(a, b)

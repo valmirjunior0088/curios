@@ -316,11 +316,17 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                 pure(" "),
                 print_block_name(resume),
             ]),
-            HostTarget::IoResolve { host, port, resume } => flat([
-                pure("Io.resolve "),
+            HostTarget::IoLookup { host, port, resume } => flat([
+                pure("Io.lookup "),
                 print_value_name(host),
                 pure(" "),
                 print_value_name(port),
+                pure(" "),
+                print_block_name(resume),
+            ]),
+            HostTarget::IoResolve { handle, resume } => flat([
+                pure("Io.resolve "),
+                print_value_name(handle),
                 pure(" "),
                 print_block_name(resume),
             ]),

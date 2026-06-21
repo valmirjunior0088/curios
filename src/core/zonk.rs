@@ -525,9 +525,10 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::IoRead(a, b) => Prim::IoRead(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoWrite(a, b) => Prim::IoWrite(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoOpen(a, b) => Prim::IoOpen(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoResolve(a, b) => {
-            Prim::IoResolve(zonk_term(context, a)?, zonk_term(context, b)?)
+        Prim::IoLookup(a, b) => {
+            Prim::IoLookup(zonk_term(context, a)?, zonk_term(context, b)?)
         }
+        Prim::IoResolve(a) => Prim::IoResolve(zonk_term(context, a)?),
         Prim::IoSocket(a) => Prim::IoSocket(zonk_term(context, a)?),
         Prim::IoBind(a, b) => Prim::IoBind(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoConnect(a, b) => Prim::IoConnect(zonk_term(context, a)?, zonk_term(context, b)?),

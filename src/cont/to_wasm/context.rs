@@ -639,9 +639,18 @@ impl<'a, 'b> Context<'a, 'b> {
 
                 self.host_multi_resume(&mut output, resume, 2);
             }
-            cont::HostTarget::IoResolve { host, port, resume } => {
+            cont::HostTarget::IoLookup { host, port, resume } => {
                 output.extend(self.load_value_instrs(host, LoadAs::Bin));
                 output.extend(self.load_value_instrs(port, LoadAs::Nat));
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().io_lookup_func().clone(),
+                });
+
+                // Two-result: resume defines the `{ status, handle }` record.
+                self.host_multi_resume(&mut output, resume, 2);
+            }
+            cont::HostTarget::IoResolve { handle, resume } => {
+                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
                 output.push(wasm::Instr::Call {
                     func_name: self.table().io_resolve_func().clone(),
                 });

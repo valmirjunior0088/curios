@@ -1724,6 +1724,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::BinFlatten(t)
         | Prim::ArrType(t)
         | Prim::IoClose(t)
+        | Prim::IoResolve(t)
         | Prim::IoSocket(t)
         | Prim::IoAccept(t)
         | Prim::IoRandom(t)
@@ -1785,7 +1786,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
         | Prim::IoOpen(a, b)
-        | Prim::IoResolve(a, b)
+        | Prim::IoLookup(a, b)
         | Prim::IoBind(a, b)
         | Prim::IoConnect(a, b)
         | Prim::IoListen(a, b)
@@ -1854,6 +1855,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::BinFlatten(t)
         | Prim::ArrType(t)
         | Prim::IoClose(t)
+        | Prim::IoResolve(t)
         | Prim::IoSocket(t)
         | Prim::IoAccept(t)
         | Prim::IoRandom(t)
@@ -1915,7 +1917,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
         | Prim::IoOpen(a, b)
-        | Prim::IoResolve(a, b)
+        | Prim::IoLookup(a, b)
         | Prim::IoBind(a, b)
         | Prim::IoConnect(a, b)
         | Prim::IoListen(a, b)
@@ -2009,6 +2011,7 @@ fn prim_construction_names(prim: &Prim, names: &mut BTreeSet<String>) {
         | Prim::BinFlatten(t)
         | Prim::ArrType(t)
         | Prim::IoClose(t)
+        | Prim::IoResolve(t)
         | Prim::IoSocket(t)
         | Prim::IoAccept(t)
         | Prim::IoRandom(t)
@@ -2070,7 +2073,7 @@ fn prim_construction_names(prim: &Prim, names: &mut BTreeSet<String>) {
         | Prim::IoRead(a, b)
         | Prim::IoWrite(a, b)
         | Prim::IoOpen(a, b)
-        | Prim::IoResolve(a, b)
+        | Prim::IoLookup(a, b)
         | Prim::IoBind(a, b)
         | Prim::IoConnect(a, b)
         | Prim::IoListen(a, b)
@@ -2269,7 +2272,8 @@ where
         Prim::IoRead(handle, count) => traverse_binary(handle, count, visit, Prim::IoRead),
         Prim::IoWrite(handle, bytes) => traverse_binary(handle, bytes, visit, Prim::IoWrite),
         Prim::IoOpen(path, mode) => traverse_binary(path, mode, visit, Prim::IoOpen),
-        Prim::IoResolve(host, port) => traverse_binary(host, port, visit, Prim::IoResolve),
+        Prim::IoLookup(host, port) => traverse_binary(host, port, visit, Prim::IoLookup),
+        Prim::IoResolve(handle) => Prim::IoResolve(visit.visit_subterm(handle)),
         Prim::IoSocket(addr) => Prim::IoSocket(visit.visit_subterm(addr)),
         Prim::IoBind(handle, addr) => traverse_binary(handle, addr, visit, Prim::IoBind),
         Prim::IoListen(handle, backlog) => {

@@ -8,6 +8,7 @@ pub union Error
 | exists()
 | refused()
 | tls()
+| would_block()
 | other(Nat)
 end
 
@@ -17,7 +18,8 @@ let errors : Lst({Nat, Error}) =
         (/sys/Io/Status/permission_denied, Error/permission_denied()),
         (/sys/Io/Status/exists, Error/exists()),
         (/sys/Io/Status/refused, Error/refused()),
-        (/sys/Io/Status/tls, Error/tls())
+        (/sys/Io/Status/tls, Error/tls()),
+        (/sys/Io/Status/would_block, Error/would_block())
     ];
 
 pub let error_of(status : Nat) -> Error =

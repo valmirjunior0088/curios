@@ -100,11 +100,16 @@ pub enum Prim {
     IoRead(Term, Term),
     IoWrite(Term, Term),
     IoOpen(Term, Term),
-    // (host, port) -> { status, addresses }: resolve a host:port to a list of
-    // opaque address blobs the socket lifecycle consumes. The blobs are the
-    // host's private encoding (it derives the address family from them); the
+    // (host, port) -> { status, handle }: start an asynchronous host:port name
+    // lookup. Returns a poll-readable handle that becomes ready when the lookup
+    // completes; `resolve` then forces the address list off it. The blocking
+    // `getaddrinfo` runs on a host worker thread, off the scheduler.
+    IoLookup(Term, Term),
+    // (handle) -> { status, addresses }: force the finished lookup `handle` to a
+    // list of opaque address blobs the socket lifecycle consumes. The blobs are
+    // the host's private encoding (it derives the address family from them); the
     // guest only shuttles them back into `socket`/`bind`/`connect`.
-    IoResolve(Term, Term),
+    IoResolve(Term),
     // (addr) -> { status, handle }: create an unconnected socket for the address
     // family encoded in `addr`. The handle is a bare `Io`, configured via the
     // setters before `bind`/`connect`/`listen` transition it.

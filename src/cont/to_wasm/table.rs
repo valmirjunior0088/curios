@@ -224,6 +224,7 @@ pub struct Table<'a> {
     io_read: OnceCell<wasm::FuncName>,
     io_write: OnceCell<wasm::FuncName>,
     io_open: OnceCell<wasm::FuncName>,
+    io_lookup: OnceCell<wasm::FuncName>,
     io_resolve: OnceCell<wasm::FuncName>,
     io_socket: OnceCell<wasm::FuncName>,
     io_bind: OnceCell<wasm::FuncName>,
@@ -294,6 +295,7 @@ impl<'a> Table<'a> {
             io_read: OnceCell::new(),
             io_write: OnceCell::new(),
             io_open: OnceCell::new(),
+            io_lookup: OnceCell::new(),
             io_resolve: OnceCell::new(),
             io_socket: OnceCell::new(),
             io_bind: OnceCell::new(),
@@ -497,6 +499,15 @@ impl<'a> Table<'a> {
 
     pub fn io_start_tls_server_used(&self) -> bool {
         self.io_start_tls_server.get().is_some()
+    }
+
+    pub fn io_lookup_func(&self) -> &wasm::FuncName {
+        self.io_lookup
+            .get_or_init(|| wasm::FuncName::from("io_lookup"))
+    }
+
+    pub fn io_lookup_used(&self) -> bool {
+        self.io_lookup.get().is_some()
     }
 
     pub fn io_resolve_func(&self) -> &wasm::FuncName {

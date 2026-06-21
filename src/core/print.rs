@@ -621,12 +621,13 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(mode, depth),
         ]),
-        Prim::IoResolve(host, port) => flat([
-            pure("Io.resolve "),
+        Prim::IoLookup(host, port) => flat([
+            pure("Io.lookup "),
             print_term(host, depth),
             pure(" "),
             print_term(port, depth),
         ]),
+        Prim::IoResolve(handle) => flat([pure("Io.resolve "), print_term(handle, depth)]),
         Prim::IoSocket(addr) => flat([pure("Io.socket "), print_term(addr, depth)]),
         Prim::IoBind(handle, addr) => flat([
             pure("Io.bind "),

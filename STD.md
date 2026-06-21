@@ -225,12 +225,12 @@ Codes are the host's `Status` discriminants; any code without a typed form decod
 `/std/Io` also defines the typed forms every IO operation returns in place of raw status codes — the blocking `read`/`write` above, and the [`/std/Task`](#stdtask)/`/std/File`/`/std/Tcp` layer:
 
 ```
-union Error | not_found() | permission_denied() | exists() | refused() | tls() | other(Nat) end
+union Error | not_found() | permission_denied() | exists() | refused() | tls() | would_block() | other(Nat) end
 union Read  | chunk(Bin) | eof() | error(Error) end
 union Mode  | read() | write() | append() end
 ```
 
-`error_of(status) : (Nat) -> Error` maps a raw status to a typed `Error` (status 2 → `not_found`, 3 → `permission_denied`, 4 → `exists`, 5 → `refused`, 7 → `tls`, else `other`). `Read` is the result of a read: a `chunk` of bytes, the distinct `eof`, or an `error`. `Mode` is the open mode (`read`/`write`/`append`); `of_mode(mode) : (Mode) -> Nat` is the wire tag `/std/File/open` marshals.
+`error_of(status) : (Nat) -> Error` maps a raw status to a typed `Error` (status 2 → `not_found`, 3 → `permission_denied`, 4 → `exists`, 5 → `refused`, 7 → `tls`, 6 → `would_block`, else `other`). `would_block` is a transient backpressure signal rather than a terminal failure: the `read`/`write`/`accept` layer intercepts status 6 and parks/retries before it ever reaches `error_of`, so it surfaces as an `Error` only where there is no handle to wait on — a `Tcp` lookup shed by the host's saturated resolver pool, which the caller may retry. `Read` is the result of a read: a `chunk` of bytes, the distinct `eof`, or an `error`. `Mode` is the open mode (`read`/`write`/`append`); `of_mode(mode) : (Mode) -> Nat` is the wire tag `/std/File/open` marshals.
 
 ### `/std/Reader`
 
@@ -331,7 +331,7 @@ File/write(f, b)               -- (File, Bin) -> Task(Result({}, Io/Error))
 
 ### `/std/Tcp`
 
-A TCP client and a concurrent TCP server, in cleartext or over TLS. Every operation is an asynchronous [`Task`](#stdtask). `Socket` is an **abstract handle** — like `/std/File`, a zero-cost newtype over `Io`, kept distinct so a socket is never confused with stdin/stdout or a file. `connect` and `close` are public and flat: `connect` registers the close as a handle-keyed finalizer when it hands back the `Socket`, so a connection dropped or cancelled before its `close` is still closed (and never twice); `with`/`call`/`serve`/`serve_tls` are the bracketed forms over that pair. It builds on the `/sys/Io/connect`, `/sys/Io/listen`, and `/sys/Io/accept` primitives, with TLS layered on the conduit-upgrade primitives `/sys/Io/start_tls` (client) and `/sys/Io/tls_server_config` + `/sys/Io/start_tls_server` (server): the socket connects (or is accepted) in cleartext, then the handshake upgrades it in place to an encrypted stream the same `read`/`write` serve. The client trusts a bundled root set with verification on; the SNI is taken from `host`. Custom roots and client certificates are future work.
+A TCP client and a concurrent TCP server, in cleartext or over TLS. Every operation is an asynchronous [`Task`](#stdtask). `Socket` is an **abstract handle** — like `/std/File`, a zero-cost newtype over `Io`, kept distinct so a socket is never confused with stdin/stdout or a file. `connect` and `close` are public and flat: `connect` registers the close as a handle-keyed finalizer when it hands back the `Socket`, so a connection dropped or cancelled before its `close` is still closed (and never twice); `with`/`call`/`serve`/`serve_tls` are the bracketed forms over that pair. It builds on the `/sys/Io/lookup` + `/sys/Io/resolve` name-resolution pair (`lookup` starts an asynchronous `host`:`port` lookup and hands back a poll-readable handle; once it is ready, `resolve` forces the address list off it — the blocking `getaddrinfo` runs on a host worker thread, so a `connect`/`serve` suspends only its own fiber on the lookup rather than blocking the scheduler) and the `/sys/Io/connect`, `/sys/Io/listen`, and `/sys/Io/accept` primitives, with TLS layered on the conduit-upgrade primitives `/sys/Io/start_tls` (client) and `/sys/Io/tls_server_config` + `/sys/Io/start_tls_server` (server): the socket connects (or is accepted) in cleartext, then the handshake upgrades it in place to an encrypted stream the same `read`/`write` serve. The client trusts a bundled root set with verification on; the SNI is taken from `host`. Custom roots and client certificates are future work.
 
 ```
 struct Settings pub {

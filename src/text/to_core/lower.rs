@@ -1649,9 +1649,10 @@ impl<'a, 'b> Lower<'a, 'b> {
                 core::Prim::io_write(self.term(handle)?, self.term(bytes)?)
             }
             Prim::IoOpen(path, mode) => core::Prim::IoOpen(self.term(path)?, self.term(mode)?),
-            Prim::IoResolve(host, port) => {
-                core::Prim::IoResolve(self.term(host)?, self.term(port)?)
+            Prim::IoLookup(host, port) => {
+                core::Prim::IoLookup(self.term(host)?, self.term(port)?)
             }
+            Prim::IoResolve(handle) => core::Prim::IoResolve(self.term(handle)?),
             Prim::IoSocket(addr) => core::Prim::IoSocket(self.term(addr)?),
             Prim::IoBind(handle, addr) => {
                 core::Prim::IoBind(self.term(handle)?, self.term(addr)?)

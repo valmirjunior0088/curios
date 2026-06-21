@@ -91,6 +91,10 @@ struct MockServer {
 /// `Inbound` streams from; `open` files a `File`. `close` drops any kind.
 enum MockResource {
     File(MockFile),
+    /// A finished name lookup minted by `lookup`, holding the resolved address
+    /// blobs `resolve` drains. The scripted host resolves synchronously, so the
+    /// handle is ready the moment it is minted.
+    Resolved(Vec<Vec<u8>>),
     Outbound(MockClient),
     Inbound(MockServer),
     Socket,
@@ -191,12 +195,21 @@ impl Host for MockHost {
         )
     }
 
-    fn resolve(&self, host: &[u8], port: u32) -> (Status, Vec<Vec<u8>>) {
+    fn lookup(&self, host: &[u8], port: u32) -> (Status, Io) {
         // One synthetic address blob: the `host:port` key `net` uses, so
-        // `connect` can recover the scripted endpoint from the blob.
+        // `connect` can recover the scripted endpoint from the blob. Stashed
+        // behind a handle `poll` reports ready and `resolve` drains, mirroring
+        // the async OS path without a real pipe.
         let endpoint = format!("{}:{port}", String::from_utf8_lossy(host)).into_bytes();
 
-        (Status::Ok, vec![endpoint])
+        (Status::Ok, self.mint(MockResource::Resolved(vec![endpoint])))
+    }
+
+    fn resolve(&self, handle: Io) -> (Status, Vec<Vec<u8>>) {
+        match self.table.lock().unwrap().remove(&handle) {
+            Some(MockResource::Resolved(addresses)) => (Status::Ok, addresses),
+            _ => (Status::NotFound, vec![]),
+        }
     }
 
     fn socket(&self, _addr: &[u8]) -> (Status, Io) {

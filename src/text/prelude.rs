@@ -455,10 +455,16 @@ fn io_ops() -> Vec<TopItem> {
             prim(Prim::IoOpen(name("path"), name("mode"))),
         ),
         pub_fn(
-            "resolve",
+            "lookup",
             vec![("host", bin()), ("port", nat())],
+            record(vec![("status", nat()), ("handle", io())]),
+            prim(Prim::IoLookup(name("host"), name("port"))),
+        ),
+        pub_fn(
+            "resolve",
+            vec![("handle", io())],
             record(vec![("status", nat()), ("addresses", arr_of(bin()))]),
-            prim(Prim::IoResolve(name("host"), name("port"))),
+            prim(Prim::IoResolve(name("handle"))),
         ),
         pub_fn(
             "socket",

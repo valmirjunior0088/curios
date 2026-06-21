@@ -1143,9 +1143,13 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             kind: "IoOpen",
             span: path.span(),
         }),
-        Prim::IoResolve(host, _) => Err(ReduceError::IoAtTypeLevel {
-            kind: "IoResolve",
+        Prim::IoLookup(host, _) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoLookup",
             span: host.span(),
+        }),
+        Prim::IoResolve(handle) => Err(ReduceError::IoAtTypeLevel {
+            kind: "IoResolve",
+            span: handle.span(),
         }),
         Prim::IoSocket(addr) => Err(ReduceError::IoAtTypeLevel {
             kind: "IoSocket",

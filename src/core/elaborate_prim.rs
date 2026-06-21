@@ -308,11 +308,18 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 Term::tuple_type([("status", nat_type), ("handle", io_type)]),
             )
         }
-        Prim::IoResolve(host, port) => {
-            let host = elaborate(context, host, Mode::Check(bin_type.clone()))?.0;
+        Prim::IoLookup(host, port) => {
+            let host = elaborate(context, host, Mode::Check(bin_type))?.0;
             let port = elaborate(context, port, Mode::Check(nat_type.clone()))?.0;
             (
-                Prim::IoResolve(host, port),
+                Prim::IoLookup(host, port),
+                Term::tuple_type([("status", nat_type), ("handle", io_type)]),
+            )
+        }
+        Prim::IoResolve(handle) => {
+            let handle = elaborate(context, handle, Mode::Check(io_type))?.0;
+            (
+                Prim::IoResolve(handle),
                 Term::tuple_type([
                     ("status", nat_type.clone()),
                     ("addresses", Subterm::Prim(Prim::ArrType(bin_type)).into()),

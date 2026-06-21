@@ -529,7 +529,7 @@ pub fn lower_value_prim<'b>(
                 )
             }),
         ),
-        ersd::Prim::Host(ersd::HostPrim::IoResolve(host, port)) => work.lower_value_name(
+        ersd::Prim::Host(ersd::HostPrim::IoLookup(host, port)) => work.lower_value_name(
             host,
             frame,
             Cont::new(move |work, host| {
@@ -537,13 +537,24 @@ pub fn lower_value_prim<'b>(
                     port,
                     frame,
                     Cont::new(move |work, port| {
-                        // (status, addresses) packs into `{ status, addresses }`,
-                        // the second field an `Arr(Bin)` (still one anyref slot).
+                        // (status, handle) packs into `{ status, handle }`, like
+                        // `IoSocket`: the lookup hands back a poll-readable handle.
                         let resume = record_resume(work, 2, cont);
 
-                        cont::Tail::Host(cont::HostTarget::IoResolve { host, port, resume })
+                        cont::Tail::Host(cont::HostTarget::IoLookup { host, port, resume })
                     }),
                 )
+            }),
+        ),
+        ersd::Prim::Host(ersd::HostPrim::IoResolve(handle)) => work.lower_value_name(
+            handle,
+            frame,
+            Cont::new(move |work, handle| {
+                // (status, addresses) packs into `{ status, addresses }`, the
+                // second field an `Arr(Bin)` (still one anyref slot).
+                let resume = record_resume(work, 2, cont);
+
+                cont::Tail::Host(cont::HostTarget::IoResolve { handle, resume })
             }),
         ),
         ersd::Prim::Host(ersd::HostPrim::IoSocket(addr)) => work.lower_value_name(
