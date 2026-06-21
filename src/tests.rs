@@ -2412,6 +2412,25 @@ fn str_slice_cuts_on_codepoint_boundaries() {
     assert_eq!(io.output(), [0xe2, 0x82, 0xac]);
 }
 
+// An interior `Str/slice` over a mixed-width string exercises the single-pass
+// O(n) cut: `drop_n` skips the leading `a` (1 byte) and `take_n` keeps the next
+// three scalars (`é€😀`, of widths 2, 3, 4) as one window — never splitting a
+// sequence. `aé€😀b` sliced `[1, 4)` yields `é€😀`.
+#[test]
+fn str_slice_spans_every_codepoint_width() {
+    let source = r#"
+        use /std/{Str, Io};
+        match Str/of_bin(\61\c3\a9\e2\82\ac\f0\9f\98\80\62) : {}
+        | some(s) => Io/print(Str/slice(s, 1, 4))
+        | none() => Io/print("bad")
+        end
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(io.output(), [0xc3, 0xa9, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80]);
+}
+
 // `Str/trim` is string-typed and strips only the leading/trailing ASCII
 // whitespace, leaving the interior multibyte scalar (`café`, with a 2-byte `é`)
 // intact.

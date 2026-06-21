@@ -42,164 +42,89 @@ pub let concat(a : Str, b : Str) -> Str =
     Str { bytes = Bin/concat(a.bytes, b.bytes),
           valid = concat_closed(@a.bytes, @b.bytes, a.valid, b.valid) };
 
-rec tl_mid(s : Scan, b : Bin) -> Bin =
-    match s
-    | lead() => \\
-    | cont(rem, lo, hi) =>
-        match b
-        | \\ => \\
-        | (h, t), ih => Bin/concat(Bin/append(\\, h), tl_mid(step(h, Scan/cont(rem, lo, hi)), t))
-        end
-    | bad() =>
-        match b
-        | \\ => \\
-        | (h, t), ih => Bin/concat(Bin/append(\\, h), tl_mid(step(h, Scan/bad()), t))
-        end
-    end;
-
-rec tl_tail(s : Scan, b : Bin) -> Bin =
-    match s
-    | lead() => b
-    | cont(rem, lo, hi) =>
-        match b
-        | \\ => \\
-        | (h, t), ih => tl_tail(step(h, Scan/cont(rem, lo, hi)), t)
-        end
-    | bad() =>
-        match b
-        | \\ => \\
-        | (h, t), ih => tl_tail(step(h, Scan/bad()), t)
+rec drop_width(n : Nat, s : Scan, b : Bin) -> Nat =
+    match b
+    | \\ => 0
+    | (h, t), ih =>
+        match s
+        | lead() =>
+            match n
+            | 0 => 0
+            | pred + 1, ih2 => Nat/add(1, drop_width(pred, step(h, Scan/lead()), t))
+            end
+        | cont(rem, lo, hi) => Nat/add(1, drop_width(n, step(h, Scan/cont(rem, lo, hi)), t))
+        | bad() => Nat/add(1, drop_width(n, step(h, Scan/bad()), t))
         end
     end;
 
-rec codepoint_width(s : Scan, b : Bin) -> Nat =
-    match s
-    | lead() => 0
-    | cont(rem, lo, hi) =>
-        match b
-        | \\ => 0
-        | (h, t), ih => Nat/add(1, codepoint_width(step(h, Scan/cont(rem, lo, hi)), t))
-        end
-    | bad() =>
-        match b
-        | \\ => 0
-        | (h, t), ih => Nat/add(1, codepoint_width(step(h, Scan/bad()), t))
-        end
-    end;
-
-rec tl_tail_eq(s : Scan, b : Bin)
-    -> /std/Eq/Eq(@Bin, tl_tail(s, b), Bin/slice(b, codepoint_width(s, b), Bin/len(b))) =
-    match s : (s) => /std/Eq/Eq(@Bin, tl_tail(s, b), Bin/slice(b, codepoint_width(s, b), Bin/len(b)))
-    | lead() => /std/Eq/refl()
-    | cont(rem, lo, hi) =>
-        match b : (b) => /std/Eq/Eq(@Bin, tl_tail(Scan/cont(rem, lo, hi), b),
-            Bin/slice(b, codepoint_width(Scan/cont(rem, lo, hi), b), Bin/len(b)))
-        | \\ => /std/Eq/refl()
-        | (h, t), ih => tl_tail_eq(step(h, Scan/cont(rem, lo, hi)), t)
-        end
-    | bad() =>
-        match b : (b) => /std/Eq/Eq(@Bin, tl_tail(Scan/bad(), b),
-            Bin/slice(b, codepoint_width(Scan/bad(), b), Bin/len(b)))
-        | \\ => /std/Eq/refl()
-        | (h, t), ih => tl_tail_eq(step(h, Scan/bad()), t)
-        end
-    end;
-
-rec tl_mid_eq(s : Scan, b : Bin)
-    -> /std/Eq/Eq(@Bin, tl_mid(s, b), Bin/slice(b, 0, codepoint_width(s, b))) =
-    match s : (s) => /std/Eq/Eq(@Bin, tl_mid(s, b), Bin/slice(b, 0, codepoint_width(s, b)))
-    | lead() => /std/Eq/refl()
-    | cont(rem, lo, hi) =>
-        match b : (b) => /std/Eq/Eq(@Bin, tl_mid(Scan/cont(rem, lo, hi), b),
-            Bin/slice(b, 0, codepoint_width(Scan/cont(rem, lo, hi), b)))
-        | \\ => /std/Eq/refl()
-        | (h, t), ih =>
-            /std/Eq/cong(@Bin, @Bin,
-                @tl_mid(step(h, Scan/cont(rem, lo, hi)), t),
-                @Bin/slice(t, 0, codepoint_width(step(h, Scan/cont(rem, lo, hi)), t)),
-                (x) => Bin/concat(Bin/append(\\, h), x),
-                tl_mid_eq(step(h, Scan/cont(rem, lo, hi)), t))
-        end
-    | bad() =>
-        match b : (b) => /std/Eq/Eq(@Bin, tl_mid(Scan/bad(), b),
-            Bin/slice(b, 0, codepoint_width(Scan/bad(), b)))
-        | \\ => /std/Eq/refl()
-        | (h, t), ih =>
-            /std/Eq/cong(@Bin, @Bin,
-                @tl_mid(step(h, Scan/bad()), t),
-                @Bin/slice(t, 0, codepoint_width(step(h, Scan/bad()), t)),
-                (x) => Bin/concat(Bin/append(\\, h), x),
-                tl_mid_eq(step(h, Scan/bad()), t))
-        end
-    end;
-
-rec tl_proof(s : Scan, b : Bin, d : Utf8(s, b))
-    -> { midd : Utf8(s, tl_mid(s, b)), tv : Valid(tl_tail(s, b)) } =
+rec drop_valid(n : Nat, s : Scan, @b : Bin, d : Utf8(s, b))
+    -> Valid(Bin/slice(b, drop_width(n, s, b), Bin/len(b))) =
     let go =
         match s : (s) => (p : Utf8(s, b))
-            -> { midd : Utf8(s, tl_mid(s, b)), tv : Valid(tl_tail(s, b)) }
-        | lead() => (p) => (Utf8/stop(), p)
-        | cont(rem, lo, hi) => (p) =>
-            match p : (w : Utf8(q, x)) => { midd : Utf8(q, tl_mid(q, x)), tv : Valid(tl_tail(q, x)) }
+            -> Valid(Bin/slice(b, drop_width(n, s, b), Bin/len(b)))
+        | lead() => (p) =>
+            match p : (w : Utf8(q, x)) => Valid(Bin/slice(x, drop_width(n, q, x), Bin/len(x)))
+            | stop() => Utf8/stop()
             | more(c, st, t, rest) =>
-                let w = tl_proof(step(c, st), t, rest);
-                (Utf8/more(c, st, tl_mid(step(c, st), t), w.midd), w.tv)
+                match n : (n) => Valid(Bin/slice(Bin/concat(Bin/append(\\, c), t),
+                    drop_width(n, Scan/lead(), Bin/concat(Bin/append(\\, c), t)),
+                    Bin/len(Bin/concat(Bin/append(\\, c), t))))
+                | 0 => Utf8/more(c, Scan/lead(), t, rest)
+                | pred + 1, ih => drop_valid(pred, step(c, Scan/lead()), @t, rest)
+                end
+            end
+        | cont(rem, lo, hi) => (p) =>
+            match p : (w : Utf8(q, x)) => Valid(Bin/slice(x, drop_width(n, q, x), Bin/len(x)))
+            | more(c, st, t, rest) => drop_valid(n, step(c, Scan/cont(rem, lo, hi)), @t, rest)
             end
         | bad() => (p) =>
-            match p : (w : Utf8(q, x)) => { midd : Utf8(q, tl_mid(q, x)), tv : Valid(tl_tail(q, x)) }
-            | more(c, st, t, rest) =>
-                let w = tl_proof(step(c, st), t, rest);
-                (Utf8/more(c, st, tl_mid(step(c, st), t), w.midd), w.tv)
+            match p : (w : Utf8(q, x)) => Valid(Bin/slice(x, drop_width(n, q, x), Bin/len(x)))
+            | more(c, st, t, rest) => drop_valid(n, step(c, Scan/bad()), @t, rest)
             end
         end;
     go(d);
 
-let first_codepoint_width(b : Bin) -> Nat =
-    match b
-    | \\ => 0
-    | (h, t), ih => Nat/add(1, codepoint_width(step(h, Scan/lead()), t))
-    end;
+rec take_valid(n : Nat, s : Scan, @b : Bin, d : Utf8(s, b))
+    -> Utf8(s, Bin/slice(b, 0, drop_width(n, s, b))) =
+    let go =
+        match s : (s) => (p : Utf8(s, b))
+            -> Utf8(s, Bin/slice(b, 0, drop_width(n, s, b)))
+        | lead() => (p) =>
+            match p : (w : Utf8(q, x)) => Utf8(q, Bin/slice(x, 0, drop_width(n, q, x)))
+            | stop() => Utf8/stop()
+            | more(c, st, t, rest) =>
+                match n : (n) => Utf8(Scan/lead(), Bin/slice(Bin/concat(Bin/append(\\, c), t), 0,
+                    drop_width(n, Scan/lead(), Bin/concat(Bin/append(\\, c), t))))
+                | 0 => Utf8/stop()
+                | pred + 1, ih =>
+                    Utf8/more(c, Scan/lead(), Bin/slice(t, 0, drop_width(pred, step(c, Scan/lead()), t)),
+                        take_valid(pred, step(c, Scan/lead()), @t, rest))
+                end
+            end
+        | cont(rem, lo, hi) => (p) =>
+            match p : (w : Utf8(q, x)) => Utf8(q, Bin/slice(x, 0, drop_width(n, q, x)))
+            | more(c, st, t, rest) =>
+                Utf8/more(c, Scan/cont(rem, lo, hi),
+                    Bin/slice(t, 0, drop_width(n, step(c, Scan/cont(rem, lo, hi)), t)),
+                    take_valid(n, step(c, Scan/cont(rem, lo, hi)), @t, rest))
+            end
+        | bad() => (p) =>
+            match p : (w : Utf8(q, x)) => Utf8(q, Bin/slice(x, 0, drop_width(n, q, x)))
+            | more(c, st, t, rest) =>
+                Utf8/more(c, Scan/bad(),
+                    Bin/slice(t, 0, drop_width(n, step(c, Scan/bad()), t)),
+                    take_valid(n, step(c, Scan/bad()), @t, rest))
+            end
+        end;
+    go(d);
 
-let drop1_bytes(b : Bin) -> Bin =
-    Bin/slice(b, first_codepoint_width(b), Bin/len(b));
+let drop_n(n : Nat, s : Str) -> Str =
+    Str { bytes = Bin/slice(s.bytes, drop_width(n, Scan/lead(), s.bytes), Bin/len(s.bytes)),
+          valid = drop_valid(n, Scan/lead(), @s.bytes, s.valid) };
 
-let take1_bytes(b : Bin) -> Bin =
-    Bin/slice(b, 0, first_codepoint_width(b));
-
-let drop1_proof(@b : Bin, d : Valid(b)) -> Valid(drop1_bytes(b)) =
-    match d : (w : Utf8(q, x)) => Valid(drop1_bytes(x))
-    | stop() => Utf8/stop()
-    | more(c, st, t, rest) =>
-        let w = tl_proof(step(c, st), t, rest);
-        /std/Eq/subst((z) => Valid(z), tl_tail_eq(step(c, st), t), w.tv)
-    end;
-
-let take1_proof(@b : Bin, d : Valid(b)) -> Valid(take1_bytes(b)) =
-    match d : (w : Utf8(q, x)) => Valid(take1_bytes(x))
-    | stop() => Utf8/stop()
-    | more(c, st, t, rest) =>
-        let w = tl_proof(step(c, st), t, rest);
-        let mid = /std/Eq/subst((z) => Utf8(step(c, st), z), tl_mid_eq(step(c, st), t), w.midd);
-        Utf8/more(c, st, Bin/slice(t, 0, codepoint_width(step(c, st), t)), mid)
-    end;
-
-let drop1(s : Str) -> Str =
-    Str { bytes = drop1_bytes(s.bytes), valid = drop1_proof(@s.bytes, s.valid) };
-
-let take1(s : Str) -> Str =
-    Str { bytes = take1_bytes(s.bytes), valid = take1_proof(@s.bytes, s.valid) };
-
-rec drop_n(n : Nat, s : Str) -> Str =
-    match Nat/eql(n, 0)
-    | true => s
-    | false => drop_n(Nat/sub(n, 1), drop1(s))
-    end;
-
-rec take_n(n : Nat, s : Str) -> Str =
-    match Nat/eql(n, 0)
-    | true => ""
-    | false => concat(take1(s), take_n(Nat/sub(n, 1), drop1(s)))
-    end;
+let take_n(n : Nat, s : Str) -> Str =
+    Str { bytes = Bin/slice(s.bytes, 0, drop_width(n, Scan/lead(), s.bytes)),
+          valid = take_valid(n, Scan/lead(), @s.bytes, s.valid) };
 
 pub let slice(s : Str, x : Nat, y : Nat) -> Str =
     take_n(Nat/sub(y, x), drop_n(x, s));

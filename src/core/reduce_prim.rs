@@ -824,6 +824,14 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             {
                 return Ok(Term::unwrap_or_clone(bin));
             }
+            // The empty slice is empty: `slice(b, i, i) = \\`. The dual of the
+            // full-window identity and equally sound — an empty range yields no
+            // bytes regardless of `b`, and never equates two distinct literals.
+            // It lets a codepoint take collapse its zero-width base (`take 0`) to
+            // the empty string even over a symbolic cons.
+            if start_reduced == end_reduced {
+                return Ok(Subterm::Prim(Prim::Bin(Vec::new())));
+            }
             // A nested slice reassociates: `slice(slice(b, p, q), i, j) =
             // slice(b, p + i, p + j)`. Sound for the in-range bounds real call
             // sites produce; reassociating the window lets a codepoint walk
