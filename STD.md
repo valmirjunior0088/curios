@@ -8,8 +8,8 @@ This file is the canonical reference for the `/std` public surface and lists eve
 
 - [Scalars](#scalars) — `Nat`, `Int`, `Flt`, `Bln`
 - [Bytes and arrays](#bytes-and-arrays) — `Bin`, `Arr`, `Char`, `Str`
-- [IO and system](#io) — `Io`, `File`, `Tcp`, `Http`, `Time`, `Rand`, `Proc`
-- [Data types](#data-types) — `Option`, `Result`, `Lst`, `Vec`
+- [IO and system](#io) — `Io`, `Reader`, `Task`, `Cell`, `File`, `Tcp`, `Http`, `Time`, `Rand`, `Proc`
+- [Data types](#data-types) — `Option`, `Result`, `Lst`, `Order`, `BigNat`, `Vec`
 - [Proofs](#proofs) — `Eq`, `Void`
 - [Parsing and formatting](#parsing-and-formatting) — `Parse`, `Json`, `Fmt`
 
@@ -240,6 +240,17 @@ A buffered, line-oriented reader layered over [`/std/Io`](#stdio): a small state
 | `read_line` | `Reader(Option(Bin))`                               | The next line, including its trailing `\n`; `none` means end of input    |
 
 `read_line` delivers a final unterminated line before EOF as `some`; any non-ok refill (EOF or an IO error) ends the stream — an error-propagating reader is future work.
+
+### `/std/Cell`
+
+A mutable reference cell: a single heap slot holding a `T` that `set` overwrites in place and `get` reads back. Unlike the rest of this section the operations are **not** threaded through any effect monad — `get` returns a bare `T` and `set` returns `{}` — so mutation is directly observable and using a cell forfeits referential transparency. It is the low-level imperative escape hatch the [`/std/Task`](#stdtask) scheduler builds on (its `Future` and `Token` are cells); prefer the `Task` combinators in ordinary code and reach for `Cell` only when implementing an effect on the engine.
+
+| Binding    | Type                              | Description                                       |
+| ---------- | --------------------------------- | ------------------------------------------------- |
+| `Cell(T)`  | `(Type) -> Type`                  | A mutable reference cell holding a `T`            |
+| `new(x)`   | `(@T : Type, T) -> Cell(T)`       | Allocate a fresh cell initialized to `x`          |
+| `get(c)`   | `(@T : Type, Cell(T)) -> T`       | Read the cell's current value                     |
+| `set(c, v)`| `(@T : Type, Cell(T), T) -> {}`   | Overwrite the cell in place, returning unit       |
 
 ### `/std/Task`
 

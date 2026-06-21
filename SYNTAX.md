@@ -541,11 +541,13 @@ Raw bytes written as consecutive hex pairs, each prefixed with `\`:
 
 Has type `/std/Bin`. This is the escape hatch for raw or non-UTF-8 bytes — unlike a `"..."` string literal, a `\hex` sequence is a `Bin`, not a `Str`. The empty byte sequence is the literal `\\`.
 
-### Arrays
+### Lists
 
 ```
 [1, 2, 3]
 ```
+
+A list literal. Its type is `/std/Lst(T)` — the cons-list workhorse — with the element type `T` inferred from the elements or the expected type. There is no array literal: build an `/std/Arr` explicitly via `Arr/nil`/`Arr/single`/`Arr/cons`.
 
 ### Booleans
 
