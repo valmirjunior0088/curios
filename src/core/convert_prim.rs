@@ -26,7 +26,6 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::IntType, Prim::IntType)
         | (Prim::FltType, Prim::FltType)
         | (Prim::BinType, Prim::BinType)
-        | (Prim::StrType, Prim::StrType)
         | (Prim::IoType, Prim::IoType) => Ok(true),
         (Prim::Io(this), Prim::Io(that)) => Ok(this == that),
         // Two `Nat`s are the free monoid on one generator: peel the shared
@@ -42,7 +41,6 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
         (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
         (Prim::Bin(this), Prim::Bin(that)) => Ok(this == that),
-        (Prim::Str(this), Prim::Str(that)) => Ok(this == that),
         (Prim::ArrType(this), Prim::ArrType(that)) => {
             cmp.enqueue(Term::type_(), this, that);
 
@@ -119,9 +117,7 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::FltToNat(this), Prim::FltToNat(that))
         | (Prim::FltToInt(this), Prim::FltToInt(that))
         | (Prim::BinLen(this), Prim::BinLen(that))
-        | (Prim::BinFlatten(this), Prim::BinFlatten(that))
-        | (Prim::StrToBin(this), Prim::StrToBin(that))
-        | (Prim::StrOfBin(this), Prim::StrOfBin(that)) => {
+        | (Prim::BinFlatten(this), Prim::BinFlatten(that)) => {
             cmp.enqueue(Term::type_(), this, that);
 
             Ok(true)

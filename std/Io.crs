@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{let stdin, let stdout, let stderr};
-use /std/{Bin, Str, Nat, Option, Result, Arr};
+use /std/{Bin, Str, Nat, Option, Result, Lst};
 
 pub union Error
 | not_found()
@@ -11,7 +11,7 @@ pub union Error
 | other(Nat)
 end
 
-let errors : Arr({Nat, Error}) =
+let errors : Lst({Nat, Error}) =
     [
         (/sys/Io/Status/not_found, Error/not_found()),
         (/sys/Io/Status/permission_denied, Error/permission_denied()),
@@ -21,7 +21,7 @@ let errors : Arr({Nat, Error}) =
     ];
 
 pub let error_of(status : Nat) -> Error =
-    Arr/fold(errors, Error/other(status), (entry, acc) =>
+    Lst/fold(errors, Error/other(status), (entry, acc) =>
         match Nat/eql(status, entry.0) : Error
         | true => entry.1
         | false => acc

@@ -1,11 +1,5 @@
+pub use /syn/Lst/*;
 use /std/{Arr, Nat};
-
-pub union Lst(A : Type)
-| nil()
-| cons(A, Lst(A))
-end
-
-pub use Lst/*;
 
 pub let len(@A : Type, l : Lst(A)) -> Nat =
     rec go(rest : Lst(A), acc : Nat) -> Nat =
@@ -29,16 +23,24 @@ pub rec map(@A : Type, @B : Type, f : (A) -> B, l : Lst(A)) -> Lst(B) =
     | cons(x, tail) => Lst/cons(f(x), map(f, tail))
     end;
 
+pub let fold(@A : Type, @B : Type, l : Lst(A), init : B, f : (A, B) -> B) -> B =
+    rec go(rest : Lst(A), acc : B) -> B =
+        match rest
+        | nil() => acc
+        | cons(x, tail) => go(tail, f(x, acc))
+        end;
+    go(l, init);
+
 pub let to_arr(@A : Type, l : Lst(A)) -> Arr(A) =
     rec go(rest : Lst(A), n : Nat) -> {Arr(A), Lst(A)} =
         match Nat/lt(n, 2)
         | true =>
             match rest
-            | nil() => ([], rest)
+            | nil() => (Arr/nil(), rest)
             | cons(x, tail) =>
                 match Nat/eql(n, 0)
-                | true => ([], rest)
-                | false => ([x], tail)
+                | true => (Arr/nil(), rest)
+                | false => (Arr/single(x), tail)
                 end
             end
         | false =>

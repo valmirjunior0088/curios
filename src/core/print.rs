@@ -546,10 +546,6 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             ),
         ]),
         Prim::BinFlatten(operand) => print_unary("Bin.flatten ", operand, depth),
-        Prim::StrType => pure("Str"),
-        Prim::Str(bytes) => pure(format!("{:?}", String::from_utf8_lossy(bytes.as_slice()))),
-        Prim::StrToBin(s) => print_unary("Str.to_bin ", s, depth),
-        Prim::StrOfBin(b) => print_unary("Str.of_bin ", b, depth),
         Prim::ArrType(elem) => print_unary("Arr ", elem, depth),
         Prim::Arr(elems) => flat([
             pure("["),

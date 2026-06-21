@@ -39,7 +39,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
     let flt_type: Term = Subterm::Prim(Prim::FltType).into();
     let bln_type: Term = Subterm::Prim(Prim::BlnType).into();
     let bin_type: Term = Subterm::Prim(Prim::BinType).into();
-    let str_type: Term = Subterm::Prim(Prim::StrType).into();
     let io_type: Term = Subterm::Prim(Prim::IoType).into();
 
     Ok(match prim {
@@ -216,20 +215,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let outer_type: Term = Subterm::Prim(Prim::ArrType(bin_type.clone())).into();
             let operand = elaborate(context, operand, Mode::Check(outer_type))?.0;
             (Prim::BinFlatten(operand), bin_type)
-        }
-        Prim::StrType => (prim.clone(), Term::type_()),
-        Prim::Str(_) => (prim.clone(), str_type),
-        // `Str/to_bin` reveals the underlying UTF-8 carrier; total and safe.
-        Prim::StrToBin(str) => {
-            let str = elaborate(context, str, Mode::Check(str_type))?.0;
-            (Prim::StrToBin(str), bin_type)
-        }
-        // The trusted `Bin -> Str` coercion — the /sys substrate beneath the
-        // checked `/std/Str/of_bin`. Not part of the /std API; its only caller is
-        // `of_bin`, which gates it behind an `is_utf8` check.
-        Prim::StrOfBin(bin) => {
-            let bin = elaborate(context, bin, Mode::Check(bin_type))?.0;
-            (Prim::StrOfBin(bin), str_type)
         }
         Prim::ArrType(elem) => {
             let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;

@@ -370,6 +370,25 @@ fn arr_ops() -> Vec<TopItem> {
             arr_of(name("B")),
             prim(Prim::ArrMap(name("A"), name("B"), name("f"), name("a"))),
         ),
+        // The empty array and the singleton — the literal-free constructor floor
+        // for `Arr` (the `[...]` literal now builds `Lst`). Both back the `Arr/nil`
+        // / `Arr/cons` API in `/std/Arr`; written as core array literals so they
+        // reduce to the same normal forms the old `[]` / `[x]` literals did.
+        pub_fn_marked(
+            "nil",
+            vec![(Plicity::Implicit, "T", type_())],
+            arr_of(name("T")),
+            prim(Prim::Arr(vec![])),
+        ),
+        pub_fn_marked(
+            "single",
+            vec![
+                (Plicity::Implicit, "T", type_()),
+                (Plicity::Explicit, "x", name("T")),
+            ],
+            arr_of(name("T")),
+            prim(Prim::Arr(vec![name("x")])),
+        ),
     ]
 }
 
@@ -774,6 +793,7 @@ impl<L: Loader> Loader for StdLoader<L> {
 const SYN: &[(&[&str], &str)] = &[
     (&["syn"], include_str!("../../syn.crs")),
     (&["syn", "Str"], include_str!("../../syn/Str.crs")),
+    (&["syn", "Lst"], include_str!("../../syn/Lst.crs")),
 ];
 
 // Serves the embedded `syn` modules, delegating everything else to `inner`.

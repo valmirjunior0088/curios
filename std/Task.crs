@@ -351,29 +351,31 @@ let cancel_all(ts : Lst(Token)) -> {} =
         end;
     each(ts);
 
-pub let join_all(@A : Type, tasks : Arr(() -> Task(A))) -> Task(Arr(A)) =
+pub let join_all(@A : Type, tasks : Lst(() -> Task(A))) -> Task(Arr(A)) =
+    let ta = Lst/to_arr(tasks);
     rec go(i : Nat) -> Task(Lst(A)) =
         let ! = bind;
-        match Nat/lt(i, Arr/len(tasks)) : Task(Lst(A))
+        match Nat/lt(i, Arr/len(ta)) : Task(Lst(A))
         | false => pure(Lst/nil(@A))
         | true =>
-            let h = spawn(Arr/get(tasks, i))!;
+            let h = spawn(Arr/get(ta, i))!;
             let rest = go(Nat/succ(i))!;
             let a = await(h.result)!;
             pure(Lst/cons(a, rest))
         end;
     bind(go(0), (xs) => pure(Lst/to_arr(xs)));
 
-pub let select(@A : Type, tasks : Arr(() -> Task(A))) -> Task({Nat, A}) =
+pub let select(@A : Type, tasks : Lst(() -> Task(A))) -> Task({Nat, A}) =
     defer(() =>
+        let ta = Lst/to_arr(tasks);
         let winner : Future({Nat, A}) = new_future(@{Nat, A});
         rec arm(i : Nat) -> Task(Lst(Token)) =
             let ! = bind;
-            match Nat/lt(i, Arr/len(tasks)) : Task(Lst(Token))
+            match Nat/lt(i, Arr/len(ta)) : Task(Lst(Token))
             | false => pure(Lst/nil(@Token))
             | true =>
                 let t : Token = Cell/new(false);
-                let _ = fork_with(() => bind((Arr/get(tasks, i))(), (a) => let _ = fulfill(winner, (i, a)); pure(())), t)!;
+                let _ = fork_with(() => bind((Arr/get(ta, i))(), (a) => let _ = fulfill(winner, (i, a)); pure(())), t)!;
                 let rest = arm(Nat/succ(i))!;
                 pure(Lst/cons(t, rest))
             end;
@@ -383,5 +385,5 @@ pub let select(@A : Type, tasks : Arr(() -> Task(A))) -> Task({Nat, A}) =
         let _ = cancel_all(tokens);
         pure(w));
 
-pub let race(@A : Type, tasks : Arr(() -> Task(A))) -> Task(A) =
+pub let race(@A : Type, tasks : Lst(() -> Task(A))) -> Task(A) =
     bind(select(tasks), (w) => pure(w.1));

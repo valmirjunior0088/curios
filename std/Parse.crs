@@ -1,4 +1,4 @@
-use /std/{Result, Nat, Bin, Str, Bln, Arr, Lst};
+use /std/{Result, Nat, Bin, Str, Bln, Lst};
 
 pub let Parse(A : Type) -> Type =
     (Bin, Nat) -> Result({Nat, A}, Str);
@@ -93,33 +93,33 @@ pub let take_while(pred : (Nat) -> Bln) -> Parse(Bin) =
             end;
         Result/success((r.0, r.1));
 
-pub let many0(@A : Type, p : Parse(A)) -> Parse(Arr(A)) =
+pub let many0(@A : Type, p : Parse(A)) -> Parse(Lst(A)) =
     (input, pos) =>
-        rec go(acc : Lst(A), cur : Nat) -> Result({Nat, Arr(A)}, Str) =
+        rec go(acc : Lst(A), cur : Nat) -> Result({Nat, Lst(A)}, Str) =
             match p(input, cur)
-            | failure(_) => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
+            | failure(_) => Result/success((cur, Lst/rev(acc)))
             | success(pair) =>
                 match Nat/eql(pair.0, cur)
-                | true => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
+                | true => Result/success((cur, Lst/rev(acc)))
                 | false => go(Lst/cons(pair.1, acc), pair.0)
                 end
             end;
         go(Lst/nil(), pos);
 
-pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(Arr(A)) =
+pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(Lst(A)) =
     (input, pos) =>
         match elem(input, pos)
         | failure(_) => Result/success((pos, []))
         | success(rp) =>
-            rec go(acc : Lst(A), cur : Nat) -> Result({Nat, Arr(A)}, Str) =
+            rec go(acc : Lst(A), cur : Nat) -> Result({Nat, Lst(A)}, Str) =
                 match sep(input, cur)
-                | failure(_) => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
+                | failure(_) => Result/success((cur, Lst/rev(acc)))
                 | success(sp) =>
                     match elem(input, sp.0)
-                    | failure(_) => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
+                    | failure(_) => Result/success((cur, Lst/rev(acc)))
                     | success(tp) =>
                         match Nat/eql(tp.0, cur)
-                        | true => Result/success((cur, Lst/to_arr(Lst/rev(acc))))
+                        | true => Result/success((cur, Lst/rev(acc)))
                         | false => go(Lst/cons(tp.1, acc), tp.0)
                         end
                     end

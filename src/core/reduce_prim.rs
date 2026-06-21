@@ -818,26 +818,6 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 operand => Ok(Subterm::Prim(Prim::bin_flatten(operand))),
             }
         }
-        Prim::StrType => Ok(Subterm::Prim(Prim::StrType)),
-        Prim::Str(bytes) => Ok(Subterm::Prim(Prim::Str(bytes.clone()))),
-        Prim::StrToBin(str) => {
-            let str = reduce(context, str.clone())?;
-            Ok(match Term::unwrap_or_clone(str) {
-                // A literal's carrier bytes compute; `Str/to_bin ∘ of_bin` cancels.
-                Subterm::Prim(Prim::Str(bytes)) => Subterm::Prim(Prim::Bin(bytes)),
-                Subterm::Prim(Prim::StrOfBin(bin)) => Term::unwrap_or_clone(bin),
-                str => Subterm::Prim(Prim::str_to_bin(str)),
-            })
-        }
-        Prim::StrOfBin(bin) => {
-            let bin = reduce(context, bin.clone())?;
-            Ok(match Term::unwrap_or_clone(bin) {
-                // A reduced byte literal becomes a `Str` literal; `of_bin ∘ to_bin` cancels.
-                Subterm::Prim(Prim::Bin(bytes)) => Subterm::Prim(Prim::Str(bytes)),
-                Subterm::Prim(Prim::StrToBin(str)) => Term::unwrap_or_clone(str),
-                bin => Subterm::Prim(Prim::str_of_bin(bin)),
-            })
-        }
         Prim::ArrType(elem) => {
             let elem = reduce(context, elem.clone())?;
             Ok(Subterm::Prim(Prim::arr_type(elem)))

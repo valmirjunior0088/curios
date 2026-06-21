@@ -114,7 +114,7 @@ fn parse_char_literal_escape() {
 fn parse_string_literal_is_str() {
     assert_eq!(
         "\"a\"".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Str("a".to_string())))
+        Term::from(Subterm::Syn(Syn::Str("a".to_string())))
     );
 }
 
@@ -644,7 +644,7 @@ fn parse_union_match_nullary_and_unary() {
                         tag: "null".to_string(),
                         args: vec![],
                     },
-                    Subterm::Prim(Prim::Str("null".to_string())).into(),
+                    Subterm::Syn(Syn::Str("null".to_string())).into(),
                 ),
                 (
                     Pattern::Variant {

@@ -4,7 +4,7 @@ use {
         core,
         text::{
             ArrMatch, BinMatch, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch,
-            Pattern, PatternLit, Prim, Subterm, Term,
+            Pattern, PatternLit, Prim, Subterm, Syn, Term,
         },
     },
     num_bigint::BigUint,
@@ -198,13 +198,34 @@ impl<'a, 'b> Lower<'a, 'b> {
         }
     }
 
+    // A list literal `[e0, e1, …]` desugars to a `/syn/Lst` cons-spine
+    // `cons(e0, cons(e1, … nil()))`. The element type is an implicit the literal
+    // can't name; elaboration inserts it (a metavar) and solves it from the
+    // elements or the expected type — exactly as a hand-written `Lst/cons` would.
+    fn lst_literal(&self, elems: &[Term]) -> Result<core::Term, Error> {
+        let mut spine = Self::syn_call("/syn/Lst/Lst/nil", []);
+        for elem in elems.iter().rev() {
+            spine = Self::syn_call("/syn/Lst/Lst/cons", [self.term(elem)?, spine]);
+        }
+        Ok(spine)
+    }
+
+    // A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter
+    // rather than lowered to a core primitive.
+    fn syn_literal(&self, syn: &Syn) -> Result<core::Term, Error> {
+        match syn {
+            Syn::Str(string) => Ok(self.str_literal(string.as_bytes())),
+            Syn::Lst(elems) => self.lst_literal(elems),
+        }
+    }
+
     fn subterm(&self, term: &Subterm) -> Result<core::Term, Error> {
         Ok(match term {
             Subterm::Type => core::Term::type_(),
             Subterm::Hole => core::Term::metavar(self.context.fresh_metavar()),
-            // A string literal desugars to a proof-carrying `/syn/Str` construction
-            // (the meta-emitter — see `str_literal`); `Str` is no longer a core primitive.
-            Subterm::Prim(Prim::Str(string)) => self.str_literal(string.as_bytes()),
+            // A `/syn` literal (string or list) desugars via the meta-emitter to a
+            // `/syn` construction (see `syn_literal`), never a core primitive.
+            Subterm::Syn(syn) => self.syn_literal(syn)?,
             Subterm::Prim(prim) => core::Term::prim(self.prim(prim)?),
             Subterm::Name(name) => core::Term::var(core::Var::free(self.resolve_name(name)?)),
             // Each parameter type sees the *preceding* parameters' binders, and
@@ -1683,11 +1704,6 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::BinType => core::Prim::BinType,
             // `\hex` is a raw byte sequence.
             Prim::Bin(bytes) => core::Prim::Bin(bytes.clone()),
-            Prim::StrType => core::Prim::StrType,
-            // `"..."` is a `Str` (UTF-8 by construction, since source text is UTF-8).
-            Prim::Str(string) => core::Prim::Str(string.as_bytes().to_vec()),
-            Prim::StrToBin(inner) => core::Prim::str_to_bin(self.term(inner)?),
-            Prim::StrOfBin(inner) => core::Prim::str_of_bin(self.term(inner)?),
             Prim::BinLen(inner) => core::Prim::bin_len(self.term(inner)?),
             Prim::BinEql(left, right) => core::Prim::bin_eql(self.term(left)?, self.term(right)?),
             Prim::BinGet(bin, index) => core::Prim::bin_get(self.term(bin)?, self.term(index)?),

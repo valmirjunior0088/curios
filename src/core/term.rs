@@ -1698,8 +1698,6 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::Flt(_)
         | Prim::BinType
         | Prim::Bin(_)
-        | Prim::StrType
-        | Prim::Str(_)
         | Prim::IoType
         | Prim::Io(_)
         | Prim::IoClockWall
@@ -1724,8 +1722,6 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::FltNearest(t)
         | Prim::BinLen(t)
         | Prim::BinFlatten(t)
-        | Prim::StrToBin(t)
-        | Prim::StrOfBin(t)
         | Prim::ArrType(t)
         | Prim::IoClose(t)
         | Prim::IoSocket(t)
@@ -1832,8 +1828,6 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::Flt(_)
         | Prim::BinType
         | Prim::Bin(_)
-        | Prim::StrType
-        | Prim::Str(_)
         | Prim::IoType
         | Prim::Io(_)
         | Prim::IoClockWall
@@ -1858,8 +1852,6 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::FltNearest(t)
         | Prim::BinLen(t)
         | Prim::BinFlatten(t)
-        | Prim::StrToBin(t)
-        | Prim::StrOfBin(t)
         | Prim::ArrType(t)
         | Prim::IoClose(t)
         | Prim::IoSocket(t)
@@ -1991,8 +1983,6 @@ fn prim_construction_names(prim: &Prim, names: &mut BTreeSet<String>) {
         | Prim::Flt(_)
         | Prim::BinType
         | Prim::Bin(_)
-        | Prim::StrType
-        | Prim::Str(_)
         | Prim::IoType
         | Prim::Io(_)
         | Prim::IoClockWall
@@ -2017,8 +2007,6 @@ fn prim_construction_names(prim: &Prim, names: &mut BTreeSet<String>) {
         | Prim::FltNearest(t)
         | Prim::BinLen(t)
         | Prim::BinFlatten(t)
-        | Prim::StrToBin(t)
-        | Prim::StrOfBin(t)
         | Prim::ArrType(t)
         | Prim::IoClose(t)
         | Prim::IoSocket(t)
@@ -2246,10 +2234,6 @@ where
             Prim::BinConcat(operands.iter().map(|e| visit.visit_subterm(e)).collect())
         }
         Prim::BinFlatten(operand) => Prim::BinFlatten(visit.visit_subterm(operand)),
-        Prim::StrType => Prim::StrType,
-        Prim::Str(bytes) => Prim::Str(bytes.clone()),
-        Prim::StrToBin(str) => Prim::StrToBin(visit.visit_subterm(str)),
-        Prim::StrOfBin(bin) => Prim::StrOfBin(visit.visit_subterm(bin)),
         Prim::ArrType(elem) => Prim::ArrType(visit.visit_subterm(elem)),
         Prim::Arr(elems) => Prim::Arr(elems.iter().map(|e| visit.visit_subterm(e)).collect()),
         Prim::ArrLen(ty, list) => traverse_binary(ty, list, visit, Prim::ArrLen),

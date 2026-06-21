@@ -2,6 +2,9 @@ pub use /sys/{Arr};
 pub use /sys/Arr/*;
 use /std/{Nat};
 
+pub let cons(@A : Type, x : A, xs : Arr(A)) -> Arr(A) =
+    concat(single(x), xs);
+
 pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
     match len(arr)
     | 0 => init

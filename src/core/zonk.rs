@@ -400,8 +400,6 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         | Prim::Flt(_)
         | Prim::BinType
         | Prim::Bin(_)
-        | Prim::StrType
-        | Prim::Str(_)
         | Prim::IoType
         | Prim::Io(_)
         | Prim::IoClockWall
@@ -491,9 +489,6 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         ),
         Prim::BinConcat(terms) => Prim::BinConcat(zonk_terms(context, terms)?),
         Prim::BinFlatten(t) => Prim::BinFlatten(zonk_term(context, t)?),
-
-        Prim::StrToBin(t) => Prim::StrToBin(zonk_term(context, t)?),
-        Prim::StrOfBin(t) => Prim::StrOfBin(zonk_term(context, t)?),
 
         Prim::ArrType(t) => Prim::ArrType(zonk_term(context, t)?),
         Prim::Arr(elems) => Prim::Arr(zonk_terms(context, elems)?),

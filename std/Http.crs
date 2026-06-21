@@ -1,4 +1,4 @@
-use /std/{Bin, Str, Nat, Bln, Char, Arr, Parse, Result, Option, Tcp, Io, Task};
+use /std/{Bin, Str, Nat, Bln, Char, Lst, Parse, Result, Option, Tcp, Io, Task};
 
 pub union Method
 | get()
@@ -21,7 +21,7 @@ pub struct Request pub {
     host : Str,
     port : Nat,
     path : Str,
-    headers : Arr({Str, Str}),
+    headers : Lst({Str, Str}),
     body : Bin,
     settings : Tcp/Settings
 }
@@ -86,8 +86,8 @@ let lower(b : Bin) -> Bin =
 let eql_ci(a : Str, b : Str) -> Bln =
     Bin/eql(lower(Str/to_bin(a)), lower(Str/to_bin(b)));
 
-let header_lookup(headers : Arr({Str, Str}), name : Str) -> Option(Str) =
-    Arr/fold(headers, Option/none(), (pair, acc) =>
+let header_lookup(headers : Lst({Str, Str}), name : Str) -> Option(Str) =
+    Lst/fold(headers, Option/none(), (pair, acc) =>
         match acc : Option(Str)
         | some(found) => Option/some(found)
         | none() =>
@@ -113,7 +113,7 @@ pub let render(request : Request) -> Bin =
             "Host: ", request.host, "\r\n",
             "Connection: close\r\n",
             content_length(request.body),
-            Str/flatten(Arr/map(render_header, request.headers)),
+            Str/flatten(Lst/map(render_header, request.headers)),
             "\r\n"
         ])),
         request.body);
@@ -141,7 +141,7 @@ pub let status_line : Parse(Status) =
 
 pub struct Response pub {
     status : Status,
-    headers : Arr({Str, Str}),
+    headers : Lst({Str, Str}),
     body : Bin
 }
 
@@ -175,13 +175,13 @@ let take_n(n : Nat) -> Parse(Bin) =
         let stop = Nat/min(Nat/add(pos, n), Bin/len(input));
         Result/success((stop, Bin/slice(input, pos, stop)));
 
-let content_length_of(headers : Arr({Str, Str})) -> Option(Nat) =
+let content_length_of(headers : Lst({Str, Str})) -> Option(Nat) =
     match header_lookup(headers, "Content-Length") : Option(Nat)
     | some(value) => Nat/of_str(value)
     | none() => Option/none()
     end;
 
-let body_parser(headers : Arr({Str, Str})) -> Parse(Bin) =
+let body_parser(headers : Lst({Str, Str})) -> Parse(Bin) =
     match content_length_of(headers) : Parse(Bin)
     | some(n) => take_n(n)
     | none() => rest

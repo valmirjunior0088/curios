@@ -449,4 +449,18 @@ pub enum Subterm {
     /// A surface hole `?`: a placeholder elaborated to a fresh metavariable.
     /// Carries no payload — its span rides on the wrapping [`Term`].
     Hole,
+    /// A literal whose value is synthesized from `/syn` rather than lowered to a
+    /// core primitive (see [`Syn`]). The lowerer runs a meta-emitter on it
+    /// instead of `prim()`.
+    Syn(Syn),
+}
+
+/// The literals the lowerer desugars to a `/syn` construction: a string becomes
+/// a proof-carrying `/syn/Str` value, a list a `/syn/Lst` cons-spine. Held as a
+/// dedicated [`Subterm`] variant (not a `Prim`) because the result is a core
+/// term, never a core primitive.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Syn {
+    Str(String),
+    Lst(Vec<Term>),
 }

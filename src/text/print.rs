@@ -3,7 +3,7 @@ use {
         Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
         LetBang, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Pattern, PatternLit,
         Plicity, Prim, Proj, Quantity,
-        Rec, StructLit, Subterm, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopUnion,
+        Rec, StructLit, Subterm, Syn, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopUnion,
         TopUse, Tuple, TupleType, TupleTypeParam, UnionMatch, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
@@ -260,23 +260,6 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::BinAppend(bin, byte) => print_prim_call("Bin.append", vec![bin, byte]),
         Prim::BinConcat(left, right) => print_prim_call("Bin.concat", vec![left, right]),
         Prim::BinFlatten(operand) => print_prim_call("Bin.flatten", vec![operand]),
-        Prim::StrType => pure("Str"),
-        Prim::Str(content) => pure(format!(
-            "\"{}\"",
-            content
-                .chars()
-                .map(|character| match character {
-                    '"' => "\\\"".to_string(),
-                    '\\' => "\\\\".to_string(),
-                    '\n' => "\\n".to_string(),
-                    '\t' => "\\t".to_string(),
-                    '\r' => "\\r".to_string(),
-                    _ => character.to_string(),
-                })
-                .collect::<String>()
-        )),
-        Prim::StrToBin(operand) => print_prim_call("Str.to_bin", vec![operand]),
-        Prim::StrOfBin(operand) => print_prim_call("Str.of_bin", vec![operand]),
         Prim::ArrType(elem) => print_prim_call("Arr", vec![elem]),
         Prim::Arr(elems) => flat([
             pure("["),
@@ -348,6 +331,27 @@ fn print_term(term: Term) -> Printer<'static> {
         Subterm::Prim(prim) => print_prim(prim),
         Subterm::Name(name) => pure(name.join()),
         Subterm::Hole => pure("?"),
+        Subterm::Syn(Syn::Str(content)) => pure(format!(
+            "\"{}\"",
+            content
+                .chars()
+                .map(|character| match character {
+                    '"' => "\\\"".to_string(),
+                    '\\' => "\\\\".to_string(),
+                    '\n' => "\\n".to_string(),
+                    '\t' => "\\t".to_string(),
+                    '\r' => "\\r".to_string(),
+                    _ => character.to_string(),
+                })
+                .collect::<String>()
+        )),
+        Subterm::Syn(Syn::Lst(elems)) => flat([
+            pure("["),
+            sep_flat(elems.into_iter().map(|operand| print_term(operand)), || {
+                pure(", ")
+            }),
+            pure("]"),
+        ]),
         Subterm::FuncType(FuncType { params, output }) => flat([
             pure("("),
             sep_flat(

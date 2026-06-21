@@ -969,19 +969,19 @@ mod tests {
             let pick(@A : Type, fallback : A, combine : (A, A) -> A) -> A =
                 combine(fallback, fallback);
             let go : Arr(Nat) =
-                pick([], Arr/concat);
+                pick(Arr/nil(), Arr/concat);
             go
         "#;
 
         assert!(typecheck(source).is_ok());
 
         // With no sibling to ground the element type and no result type to pin it,
-        // the postponed `[]` re-checks against a bare metavar and is rejected —
+        // the postponed `Arr/nil()` re-checks against a bare metavar and is rejected —
         // graceful degradation, no new acceptance.
         let unpinned = r#"
             use /std/{Arr};
             let id(@A : Type, x : A) -> A = x;
-            let bad = id([]);
+            let bad = id(Arr/nil());
             bad
         "#;
 
@@ -1035,7 +1035,7 @@ mod tests {
         let source = r#"
             use /std/{Arr};
             use /std/{Nat};
-            Arr/map(@{ Nat, Nat }, @Nat, (pair) => pair.0, [])
+            Arr/map(@{ Nat, Nat }, @Nat, (pair) => pair.0, Arr/nil())
         "#;
 
         assert!(compile(source, None).is_ok());
@@ -1054,7 +1054,7 @@ mod tests {
             use /std/{Nat};
             let pairwise(f : (Arr(Nat), Arr(Nat)) -> Arr(Nat), a : Arr(Nat)) -> Arr(Nat) =
                 f(a, a);
-            pairwise(Arr/concat, [1])
+            pairwise(Arr/concat, Arr/single(1))
         "#;
 
         assert!(compile(source, None).is_ok());
@@ -1071,7 +1071,7 @@ mod tests {
             use /std/{Arr};
             use /std/{Nat};
             let g : (@T : Type, Arr(T), Arr(T)) -> Arr(T) = Arr/concat;
-            g(@Nat, [1], [2])
+            g(@Nat, Arr/single(1), Arr/single(2))
         "#;
 
         assert!(compile(source, None).is_ok());
@@ -1319,11 +1319,12 @@ mod tests {
         // expensive) `std/Json`, `std/Parse`, `std/Fmt`, … into the typechecked core.
         // `std/Str` is *not* in the unused set: `Nat/to_str` renders via `Str/concat`
         // and `Io/print` ends in `Str/to_bin`, so the string library is a genuine
-        // transitive dependency here (DCE still drops the Str ops `Nat/to_str` cannot
-        // reach — `slice`, `trim`, `flatten`, `of_bin`, … stay pruned).
+        // transitive dependency here. Neither is `std/Lst`: `Io/write` maps a failing
+        // status through a `Lst` error table (`Lst/fold`). DCE still drops the Str ops
+        // `Nat/to_str` cannot reach — `slice`, `trim`, `flatten`, `of_bin`, … stay pruned.
         let names = core_item_names("use /std/{Io, Nat};\n/std/Io/print(/std/Nat/to_str(0))");
 
-        for unused in ["/std/Json", "/std/Parse", "/std/Fmt", "/std/Lst"] {
+        for unused in ["/std/Json", "/std/Parse", "/std/Fmt"] {
             assert!(
                 !names.iter().any(|name| name.starts_with(unused)),
                 "expected `{unused}` to be pruned, but it survived in {names:?}"

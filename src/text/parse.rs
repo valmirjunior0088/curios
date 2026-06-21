@@ -4,7 +4,7 @@ use {
         FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Let, LetBang, LetSignature, LoadError,
         Match, Module, Motive, Name, Nat,
         NatLiteral, NatMatch, Pattern, PatternLit, Plicity, Prim, Proj, Qualifier, Quantity, Rec,
-        RecItem, StructLit, Subterm, Term, TupleTypeParam,
+        RecItem, StructLit, Subterm, Syn, Term, TupleTypeParam,
         TopCase, TopItem,
         TopLet, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType, UnionMatch, UseGroup,
     },
@@ -275,7 +275,7 @@ fn parse_string_literal<'a>() -> Parser<'a, Term> {
         .and_keep(many0(parse_string_chunk))
         .and_drop(take_exact("\""))
         .and_drop(parse_whitespace())
-        .map(|chunks| Subterm::Prim(Prim::Str(chunks.concat())))
+        .map(|chunks| Subterm::Syn(Syn::Str(chunks.concat())))
         .map(Into::into)
 }
 
@@ -288,11 +288,11 @@ fn parse_bin_literal<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_arr_literal<'a>() -> Parser<'a, Term> {
+fn parse_list_literal<'a>() -> Parser<'a, Term> {
     catch(parse_literal("["))
         .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
         .and_drop(parse_literal("]"))
-        .map(|elems| Subterm::Prim(Prim::Arr(elems.into_iter().collect())))
+        .map(|elems| Subterm::Syn(Syn::Lst(elems.into_iter().collect())))
         .map(Into::into)
 }
 
@@ -313,7 +313,7 @@ fn parse_prim<'a>() -> Parser<'a, Term> {
         .or(parse_nat_value())
         .or(parse_string_literal())
         .or(parse_bin_literal())
-        .or(parse_arr_literal())
+        .or(parse_list_literal())
 }
 
 fn parse_parens<'a>() -> Parser<'a, Term> {

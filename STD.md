@@ -139,10 +139,13 @@ Raw byte sequences. `fold` and `join` are library helpers; the rest are `/sys` p
 
 ### `/std/Arr`
 
-Homogeneous arrays, written with literal syntax `[a, b, c]`. `fold` and `balanced` are library helpers; the rest are `/sys` primitives. `map` is a primitive with an eliminator reduction (it distributes over the `[]`/`++`/`append` spine, so it reduces symbolically in proofs the way a structural `foldr` would) and erases to a single O(n) fill loop.
+Homogeneous, contiguously-backed arrays. The `[a, b, c]` literal builds a [`Lst`](#stdlst) (the cons-list workhorse); an `Arr` is the contiguous sequence you reach for explicitly, constructed through `nil`/`single`/`cons` (or `append`/`concat`). `fold`, `balanced`, and `cons` are library helpers; the rest are `/sys` primitives. `map` is a primitive with an eliminator reduction (it distributes over the array spine — empty / `concat` / `append` — so it reduces symbolically in proofs the way a structural `foldr` would) and erases to a single O(n) fill loop.
 
 | Binding              | Type                                                  | Description                 |
 | -------------------- | ----------------------------------------------------- | --------------------------- |
+| `nil()`              | `(@A : Type) -> Arr(A)`                               | The empty array             |
+| `single(x)`          | `(@A : Type, A) -> Arr(A)`                            | A one-element array         |
+| `cons(x, xs)`        | `(@A : Type, A, Arr(A)) -> Arr(A)`                    | Prepend an element          |
 | `len(a)`             | `(@T : Type, Arr(T)) -> Nat`                          | Element count               |
 | `get(a, i)`          | `(@T : Type, Arr(T), Nat) -> T`                       | Element at index `i`        |
 | `slice(a, s, e)`     | `(@T : Type, Arr(T), Nat, Nat) -> Arr(T)`             | Subarray from `s` to `e`    |
@@ -167,8 +170,8 @@ Byte classifiers over ASCII code points (`(Nat) -> Bln`): `is_whitespace`, `is_d
 | `of_bin(b)`         | `(Bin) -> Option(Str)`   | Checked construction: `some` iff `b` is well-formed UTF-8      |
 | `is_utf8(b)`        | `(Bin) -> Bln`           | Whether `b` is well-formed UTF-8                               |
 | `concat(a, b)`      | `(Str, Str) -> Str`      | Concatenate two strings                                        |
-| `flatten(parts)`    | `(Arr(Str)) -> Str`      | Concatenate every part                                         |
-| `join(sep, parts)`  | `(Str, Arr(Str)) -> Str` | Concatenate with a separator between parts                     |
+| `flatten(parts)`    | `(Lst(Str)) -> Str`      | Concatenate every part                                         |
+| `join(sep, parts)`  | `(Str, Lst(Str)) -> Str` | Concatenate with a separator between parts                     |
 | `eql(a, b)`         | `(Str, Str) -> Bln`      | String equality (byte equality; UTF-8 is canonical)            |
 | `len(s)`            | `(Str) -> Nat`           | Codepoint count (Unicode scalar values, _not_ bytes/graphemes) |
 | `get(s, i)`         | `(Str, Nat) -> Nat`      | Codepoint at index `i` (traps if out of bounds)                |
@@ -254,9 +257,9 @@ The surface is two tiers. The **application API** is what programs use — the m
 | `go(body)` | `(Fiber) -> Task({})` | Spawn `body` as a fire-and-forget fiber — no handle, not cancelable |
 | `spawn(body)` | `(@A : Type, () -> Task(A)) -> Task(Handle(A))` | Spawn `body` as a fiber, returning a `Handle` to await or cancel it |
 | `await(f)` | `(@A : Type, Future(A)) -> Task(A)` | Park until `f` is fulfilled, then yield its value |
-| `join_all(tasks)` | `(@A, Arr(() -> Task(A))) -> Task(Arr(A))` | Spawn every task, await them all, collect results positionally |
-| `select(tasks)` | `(@A, Arr(() -> Task(A))) -> Task({Nat, A})` | Run all; the first to finish wins (its index and value); the losers are cancelled |
-| `race(tasks)` | `(@A, Arr(() -> Task(A))) -> Task(A)` | `select`'s winning value, dropping the index |
+| `join_all(tasks)` | `(@A, Lst(() -> Task(A))) -> Task(Arr(A))` | Spawn every task, await them all, collect results positionally |
+| `select(tasks)` | `(@A, Lst(() -> Task(A))) -> Task({Nat, A})` | Run all; the first to finish wins (its index and value); the losers are cancelled |
+| `race(tasks)` | `(@A, Lst(() -> Task(A))) -> Task(A)` | `select`'s winning value, dropping the index |
 | `cancel(t)` | `(Token) -> {}` | Flag a token cancelled; its fiber is reaped at its next step, finalizers running |
 | `using(h, release, body)` | `(@A, Io, Finalizer, Task(A)) -> Task(A)` | Bracket `h`: register `release`, run `body`, release exactly once — on completion or on cancel/drop |
 | `run(main)` | `(Task({})) -> {}` | Drive `main` as the program root (`block_on` at the unit result) |
@@ -351,13 +354,13 @@ struct Request pub {
     host : Str,
     port : Nat,
     path : Str,
-    headers : Arr({Str, Str}),
+    headers : Lst({Str, Str}),
     body : Bin,
     settings : Tcp/Settings
 }
 
 struct Status pub   { version : Str, code : Nat, reason : Str }
-struct Response pub { status : Status, headers : Arr({Str, Str}), body : Bin }
+struct Response pub { status : Status, headers : Lst({Str, Str}), body : Bin }
 ```
 
 `Request`, `Status`, and `Response` all have public representations. In a `Request`, `headers` are sent verbatim and in order after the automatic `Host`/`Connection: close`/`Content-Length` lines; `body` is sent as-is (its `Content-Length` is added automatically when non-empty). A failed round trip is `Error/net` (a transport failure surfaced by `/std/Tcp`) or `Error/malformed` (a response that did not parse).
@@ -459,13 +462,15 @@ end
 
 ### `/std/Lst`
 
-The linked list, `nil()` / `cons(A, Lst(A))`, with:
+The cons list, `nil()` / `cons(A, Lst(A))` — the general-purpose sequence and the type of the `[a, b, c]` literal (which lowers to a `cons`-spine). The type itself lives in the compiler-internal `/syn/Lst` and is re-exported here. With:
 
-| Binding     | Type                            | Description                |
-| ----------- | ------------------------------- | -------------------------- |
-| `len(l)`    | `(@A : Type, Lst(A)) -> Nat`    | Length                     |
-| `rev(l)`    | `(@A : Type, Lst(A)) -> Lst(A)` | Reversal                   |
-| `to_arr(l)` | `(@A : Type, Lst(A)) -> Arr(A)` | Conversion to a flat array |
+| Binding            | Type                                                 | Description                 |
+| ------------------ | ---------------------------------------------------- | --------------------------- |
+| `len(l)`           | `(@A : Type, Lst(A)) -> Nat`                         | Length                      |
+| `rev(l)`           | `(@A : Type, Lst(A)) -> Lst(A)`                      | Reversal                    |
+| `map(f, l)`        | `(@A : Type, @B : Type, (A) -> B, Lst(A)) -> Lst(B)` | Elementwise map             |
+| `fold(l, init, f)` | `(@A : Type, @B : Type, Lst(A), B, (A, B) -> B) -> B`| Left fold over the elements |
+| `to_arr(l)`        | `(@A : Type, Lst(A)) -> Arr(A)`                      | Conversion to a flat array  |
 
 ### `/std/Order`
 
@@ -571,7 +576,7 @@ Parse(A) = (Bin, Nat) -> Result({Nat, A}, Str)
 | `any_byte` / `peek_byte`            | Next byte, consuming / not consuming                |
 | `take_byte(expected)`               | Exactly the given byte                              |
 | `take_while(pred)`                  | Longest run of bytes satisfying `pred`              |
-| `many0(p)`                          | Zero or more `p`, collected in an `Arr`             |
+| `many0(p)`                          | Zero or more `p`, collected in a `Lst`              |
 | `sep_by0(elem, sep)`                | Zero or more `elem` separated by `sep`              |
 
 ### `/std/Json`
@@ -581,7 +586,7 @@ A JSON tree and a byte-level codec:
 ```
 pub union Json
 | null() | bln(Bln) | num(Flt) | str(Str)
-| arr(Arr(Json)) | obj(Arr({Str, Json}))
+| arr(Lst(Json)) | obj(Lst({Str, Json}))
 end
 ```
 

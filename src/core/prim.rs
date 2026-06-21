@@ -80,10 +80,6 @@ pub enum Prim {
     BinAppend(Term, Term),
     BinConcat(Vec<Term>),
     BinFlatten(Term),
-    StrType,
-    Str(Vec<u8>),
-    StrToBin(Term),
-    StrOfBin(Term),
     ArrType(Term),
     Arr(Vec<Term>),
     ArrLen(Term, Term),
@@ -601,20 +597,6 @@ impl Prim {
         A: Into<Term>,
     {
         Self::BinFlatten(array.into())
-    }
-
-    pub fn str_to_bin<S>(str: S) -> Self
-    where
-        S: Into<Term>,
-    {
-        Self::StrToBin(str.into())
-    }
-
-    pub fn str_of_bin<B>(bin: B) -> Self
-    where
-        B: Into<Term>,
-    {
-        Self::StrOfBin(bin.into())
     }
 
     pub fn arr<I, A>(items: I) -> Self

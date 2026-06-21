@@ -41,10 +41,6 @@ fn bin_type() -> Term {
     prim_type(Prim::BinType)
 }
 
-fn str_type() -> Term {
-    prim_type(Prim::StrType)
-}
-
 fn bln_type() -> Term {
     prim_type(Prim::BlnType)
 }
@@ -217,12 +213,6 @@ pub fn erase_prim(
             let operand = erase(context, operand, &outer_type)?;
             Ok(pure(ersd::PurePrim::BinFlatten(operand)))
         }
-        // `Str` shares `Bin`'s runtime representation (a UTF-8 byte buffer), so the
-        // type erases like `Bin` and the two conversions are runtime no-ops.
-        Prim::StrType => Ok(ersd::Subterm::Erased.into()),
-        Prim::Str(bytes) => Ok(pure(ersd::PurePrim::Bin(bytes.clone()))),
-        Prim::StrToBin(str) => erase(context, str, &str_type()),
-        Prim::StrOfBin(bin) => erase(context, bin, &bin_type()),
         Prim::ArrType(_) => Ok(ersd::Subterm::Erased.into()),
         Prim::Arr(elems) => {
             // Elaborate already checked this literal against an array type (§9);

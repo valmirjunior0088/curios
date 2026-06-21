@@ -1,4 +1,4 @@
-use /std/{Char, Nat, Bin, Bln, Arr, Option};
+use /std/{Char, Nat, Bin, Bln, Arr, Lst, Option};
 use /syn/Str/{Scan, Utf8, let step, let Valid};
 pub use /syn/Str/{let Str};
 
@@ -141,11 +141,12 @@ rec take_n(n : Nat, s : Str) -> Str =
 pub let slice(s : Str, x : Nat, y : Nat) -> Str =
     take_n(Nat/sub(y, x), drop_n(x, s));
 
-pub let flatten(parts : Arr(Str)) -> Str =
+pub let flatten(parts : Lst(Str)) -> Str =
+    let pa = Lst/to_arr(parts);
     Str {
-        bytes = Bin/flatten(Arr/map(to_bin, parts)),
+        bytes = Bin/flatten(Arr/map(to_bin, pa)),
         valid =
-            match parts : (p) => Valid(Bin/flatten(Arr/map(to_bin, p)))
+            match pa : (p) => Valid(Bin/flatten(Arr/map(to_bin, p)))
             | [] => Utf8/stop()
             | (h, t), ih => concat_closed(@to_bin(h), @Bin/flatten(Arr/map(to_bin, t)), h.valid, ih)
             end
@@ -233,8 +234,9 @@ pub let get(s : Str, i : Nat) -> Nat =
     let b = to_bin(s);
     decode_at(b, byte_offset(b, i));
 
-pub let join(sep : Str, parts : Arr(Str)) -> Str =
-    Arr/balanced(Arr/len(parts), "", (i) => Arr/get(parts, i),
+pub let join(sep : Str, parts : Lst(Str)) -> Str =
+    let pa = Lst/to_arr(parts);
+    Arr/balanced(Arr/len(pa), "", (i) => Arr/get(pa, i),
         (l, r) => concat(concat(l, sep), r));
 
 let trim_bounds(s : Str) -> {Nat, Nat} =
