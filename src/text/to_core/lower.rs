@@ -203,9 +203,9 @@ impl<'a, 'b> Lower<'a, 'b> {
     // can't name; elaboration inserts it (a metavar) and solves it from the
     // elements or the expected type — exactly as a hand-written `Lst/cons` would.
     fn lst_literal(&self, elems: &[Term]) -> Result<core::Term, Error> {
-        let mut spine = Self::syn_call("/syn/Lst/Lst/nil", []);
+        let mut spine = Self::syn_call("/syn/Lst/nil", []);
         for elem in elems.iter().rev() {
-            spine = Self::syn_call("/syn/Lst/Lst/cons", [self.term(elem)?, spine]);
+            spine = Self::syn_call("/syn/Lst/cons", [self.term(elem)?, spine]);
         }
         Ok(spine)
     }

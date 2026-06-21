@@ -1,3 +1,4 @@
+pub use /syn/{Lst};
 pub use /syn/Lst/*;
 use /std/{Arr, Nat};
 
@@ -13,14 +14,14 @@ pub let rev(@A : Type, l : Lst(A)) -> Lst(A) =
     rec go(rest : Lst(A), acc : Lst(A)) -> Lst(A) =
         match rest
         | nil() => acc
-        | cons(x, tail) => go(tail, Lst/cons(x, acc))
+        | cons(x, tail) => go(tail, cons(x, acc))
         end;
-    go(l, Lst/nil());
+    go(l, nil());
 
 pub rec map(@A : Type, @B : Type, f : (A) -> B, l : Lst(A)) -> Lst(B) =
     match l : Lst(B)
-    | nil() => Lst/nil()
-    | cons(x, tail) => Lst/cons(f(x), map(f, tail))
+    | nil() => nil()
+    | cons(x, tail) => cons(f(x), map(f, tail))
     end;
 
 pub let fold(@A : Type, @B : Type, l : Lst(A), init : B, f : (A, B) -> B) -> B =
