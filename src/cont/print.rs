@@ -186,6 +186,7 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             flat([pure("Arr.concat"), pure(" "), print_value_names(operands)])
         }
         Code::ArrFlatten(operand) => print_unary("Arr.flatten", operand),
+        Code::ArrMap(src, f) => print_binary("Arr.map", src, f),
         Code::TplGet(tuple, index) => flat([
             pure("Tpl.get "),
             print_value_name(tuple),

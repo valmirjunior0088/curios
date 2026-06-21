@@ -1810,7 +1810,9 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::ArrAppend(a, b, c)
         | Prim::IoPoll(a, b, c) => a.reach().max(b.reach()).max(c.reach()),
 
-        Prim::ArrSlice(a, b, c, d) => a.reach().max(b.reach()).max(c.reach()).max(d.reach()),
+        Prim::ArrSlice(a, b, c, d) | Prim::ArrMap(a, b, c, d) => {
+            a.reach().max(b.reach()).max(c.reach()).max(d.reach())
+        }
 
         Prim::BinConcat(terms) | Prim::Arr(terms) => max_reach(terms),
         Prim::ArrConcat(ty, terms) => ty.reach().max(max_reach(terms)),
@@ -1952,7 +1954,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
             c.collect_metavars(ids);
         }
 
-        Prim::ArrSlice(a, b, c, d) => {
+        Prim::ArrSlice(a, b, c, d) | Prim::ArrMap(a, b, c, d) => {
             a.collect_metavars(ids);
             b.collect_metavars(ids);
             c.collect_metavars(ids);
@@ -2114,7 +2116,7 @@ fn prim_construction_names(prim: &Prim, names: &mut BTreeSet<String>) {
             c.collect_construction_names(names);
         }
 
-        Prim::ArrSlice(a, b, c, d) => {
+        Prim::ArrSlice(a, b, c, d) | Prim::ArrMap(a, b, c, d) => {
             a.collect_construction_names(names);
             b.collect_construction_names(names);
             c.collect_construction_names(names);
@@ -2284,6 +2286,12 @@ where
             operands.iter().map(|e| visit.visit_subterm(e)).collect(),
         ),
         Prim::ArrFlatten(ty, operand) => traverse_binary(ty, operand, visit, Prim::ArrFlatten),
+        Prim::ArrMap(a, b, f, arr) => Prim::ArrMap(
+            visit.visit_subterm(a),
+            visit.visit_subterm(b),
+            visit.visit_subterm(f),
+            visit.visit_subterm(arr),
+        ),
         Prim::IoType => Prim::IoType,
         Prim::Io(token) => Prim::Io(*token),
         Prim::IoRead(handle, count) => traverse_binary(handle, count, visit, Prim::IoRead),

@@ -95,6 +95,10 @@ pub enum Prim {
     ArrAppend(Term, Term, Term),
     ArrConcat(Term, Vec<Term>),
     ArrFlatten(Term, Term),
+    // (@A, @B, f : (A) -> B, arr : Arr(A)) -> Arr(B): a structural map. Opaque
+    // under reduction (a stuck chunk like `ArrFlatten`), so it never unfolds a
+    // literal spine during type-checking. Erases to a single O(n) fill loop.
+    ArrMap(Term, Term, Term, Term),
     IoType,
     Io(u32),
     // (a, b) -> Bln: identity of two handles. The one pure operation on `Io` --
@@ -706,6 +710,16 @@ impl Prim {
         A: Into<Term>,
     {
         Self::ArrFlatten(type_.into(), array.into())
+    }
+
+    pub fn arr_map<A, B, F, R>(a: A, b: B, f: F, arr: R) -> Self
+    where
+        A: Into<Term>,
+        B: Into<Term>,
+        F: Into<Term>,
+        R: Into<Term>,
+    {
+        Self::ArrMap(a.into(), b.into(), f.into(), arr.into())
     }
 
     pub fn io_read<H, N>(handle: H, count: N) -> Self

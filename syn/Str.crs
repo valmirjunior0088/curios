@@ -233,18 +233,12 @@ rec take_n(n : Nat, s : Str) -> Str =
 pub let slice(s : Str, x : Nat, y : Nat) -> Str =
     take_n(Nat/sub(y, x), drop_n(x, s));
 
-let to_bins(parts : Arr(Str)) -> Arr(Bin) =
-    match parts
-    | [] => []
-    | (h, t), ih => Arr/concat([to_bin(h)], ih)
-    end;
-
 pub let flatten(parts : Arr(Str)) -> Str =
     Str {
-        bytes = Bin/flatten(to_bins(parts)),
+        bytes = Bin/flatten(Arr/map(to_bin, parts)),
         valid =
-            match parts : (p) => Valid(Bin/flatten(to_bins(p)))
+            match parts : (p) => Valid(Bin/flatten(Arr/map(to_bin, p)))
             | [] => Utf8/stop()
-            | (h, t), ih => concat_closed(@to_bin(h), @Bin/flatten(to_bins(t)), h.valid, ih)
+            | (h, t), ih => concat_closed(@to_bin(h), @Bin/flatten(Arr/map(to_bin, t)), h.valid, ih)
             end
     };

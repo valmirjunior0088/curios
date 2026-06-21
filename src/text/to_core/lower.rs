@@ -1728,6 +1728,12 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::ArrFlatten(ty, operand) => {
                 core::Prim::arr_flatten(self.term(ty)?, self.term(operand)?)
             }
+            Prim::ArrMap(a, b, f, arr) => core::Prim::arr_map(
+                self.term(a)?,
+                self.term(b)?,
+                self.term(f)?,
+                self.term(arr)?,
+            ),
             Prim::CellType(inner) => core::Prim::cell_type(self.term(inner)?),
             Prim::Cell(type_, init) => core::Prim::cell_new(self.term(type_)?, self.term(init)?),
             Prim::CellSet(type_, cell, value) => {

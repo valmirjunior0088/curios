@@ -1,8 +1,8 @@
 use {
     super::{
-        Error, FuncSugarParam, LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern,
-        Plicity, Prim, Qualifier, Quantity, Subterm, Term, TopItem, TopLet, TopMod, TupleType,
-        TupleTypeParam,
+        Error, FuncSugarParam, FuncType, FuncTypeParam, LetSignature, Loader, Module, Name, Nat,
+        NatLiteral, Pattern, Plicity, Prim, Qualifier, Quantity, Subterm, Term, TopItem, TopLet,
+        TopMod, TupleType, TupleTypeParam,
     },
     crate::wire,
 };
@@ -78,6 +78,21 @@ fn record(fields: Vec<(&str, Term)>) -> Term {
 
 fn arr_of(elem: Term) -> Term {
     prim(Prim::ArrType(elem))
+}
+
+// A single-argument function type `(domain) -> output`, for higher-order
+// primitives (the `f` of `Arr/map`).
+fn fn_of(domain: Term, output: Term) -> Term {
+    Subterm::FuncType(FuncType {
+        params: vec![FuncTypeParam {
+            plicity: Plicity::Explicit,
+            quantity: Quantity::Omega,
+            label: None,
+            type_: domain,
+        }],
+        output,
+    })
+    .into()
 }
 
 fn cell_of(elem: Term) -> Term {
@@ -354,6 +369,17 @@ fn arr_ops() -> Vec<TopItem> {
             ],
             arr_of(name("T")),
             prim(Prim::ArrFlatten(name("T"), name("a"))),
+        ),
+        pub_fn_marked(
+            "map",
+            vec![
+                (Plicity::Implicit, "A", type_()),
+                (Plicity::Implicit, "B", type_()),
+                (Plicity::Explicit, "f", fn_of(name("A"), name("B"))),
+                (Plicity::Explicit, "a", arr_of(name("A"))),
+            ],
+            arr_of(name("B")),
+            prim(Prim::ArrMap(name("A"), name("B"), name("f"), name("a"))),
         ),
     ]
 }

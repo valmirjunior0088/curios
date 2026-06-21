@@ -523,6 +523,12 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::ArrFlatten(ty, operand) => {
             Prim::ArrFlatten(zonk_term(context, ty)?, zonk_term(context, operand)?)
         }
+        Prim::ArrMap(a, b, f, arr) => Prim::ArrMap(
+            zonk_term(context, a)?,
+            zonk_term(context, b)?,
+            zonk_term(context, f)?,
+            zonk_term(context, arr)?,
+        ),
 
         Prim::IoRead(a, b) => Prim::IoRead(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoWrite(a, b) => Prim::IoWrite(zonk_term(context, a)?, zonk_term(context, b)?),

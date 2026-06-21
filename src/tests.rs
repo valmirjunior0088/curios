@@ -179,6 +179,38 @@ fn arr_match_is_a_foldr() {
 }
 
 #[test]
+fn arr_map_fills_every_slot() {
+    // `Arr/map` erases to a single O(n) fill loop (`emit_map`): size the result
+    // from `src.len`, allocate once, then write `f(src[i])` into slot `i` via an
+    // inline closure `call_ref`. A non-identity `f` (`+1`) over `[10, 20, 30]` must
+    // fill *every* slot, not just one: `get(_, 0) + get(_, 2)` = 11 + 31 = 42.
+    let source = r#"
+        use /std/{Io, Str, Nat, Arr};
+        let xs : Arr(Nat) = Arr/map((n) => Nat/add(n, 1), [10, 20, 30]);
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Arr/get(xs, 0), Arr/get(xs, 2)))))
+        "#;
+    assert_eq!(run(source), b"42");
+}
+
+#[test]
+fn arr_map_distributes_over_cons() {
+    // The eliminator rule that lets `Arr/map` stand in for a structural `foldr` in
+    // proofs (`to_bins = Arr/map(to_bin)` feeding `/syn/Str/flatten`): for a
+    // SYMBOLIC tail `t`, `map f (x :: t) ≡ f x :: map f t` *definitionally*. `refl`
+    // checks only because `reduce` distributes the map over the `concat` spine and
+    // maps the singleton literal — the same peel the native `Arr` eliminator does,
+    // so it reduces under induction without unfolding a symbolic array.
+    let source = r#"
+        use /std/{Io, Str, Eq, Nat, Arr};
+        let step(f : (Nat) -> Nat, x : Nat, t : Arr(Nat))
+            -> Eq(Arr/map(f, Arr/concat([x], t)), Arr/concat([f(x)], Arr/map(f, t))) =
+            Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
 fn bin_match_is_a_foldr() {
     // Native `Bin` induction (slice 2): the `| \\ | (h, t), ih` eliminator, erased
     // exactly like `Arr` — `Nat`-induction on the byte length, reusing the loop.

@@ -294,6 +294,16 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let operand = elaborate(context, operand, Mode::Check(outer_type))?.0;
             (Prim::ArrFlatten(type_, operand), list_type)
         }
+        Prim::ArrMap(a, b, f, arr) => {
+            let a = elaborate(context, a, Mode::Check(Term::type_()))?.0;
+            let b = elaborate(context, b, Mode::Check(Term::type_()))?.0;
+            let f_type = Term::func_type([("x", a.clone())], b.clone());
+            let f = elaborate(context, f, Mode::Check(f_type))?.0;
+            let arr_a: Term = Subterm::Prim(Prim::ArrType(a.clone())).into();
+            let arr = elaborate(context, arr, Mode::Check(arr_a))?.0;
+            let arr_b: Term = Subterm::Prim(Prim::ArrType(b.clone())).into();
+            (Prim::ArrMap(a, b, f, arr), arr_b)
+        }
         Prim::IoType => (prim.clone(), Term::type_()),
         Prim::Io(_) => (prim.clone(), io_type),
         Prim::IoRead(handle, count) => {

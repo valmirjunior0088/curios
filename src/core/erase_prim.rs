@@ -282,6 +282,13 @@ pub fn erase_prim(
             let operand = erase(context, operand, &outer_type)?;
             Ok(pure(ersd::PurePrim::ArrFlatten(operand)))
         }
+        Prim::ArrMap(a, b, f, arr) => {
+            let f_type = Term::func_type([("x", a.clone())], b.clone());
+            let f_erased = erase(context, f, &f_type)?;
+            let arr_type: Term = Subterm::Prim(Prim::ArrType(a.clone())).into();
+            let arr_erased = erase(context, arr, &arr_type)?;
+            Ok(pure(ersd::PurePrim::ArrMap(arr_erased, f_erased)))
+        }
         Prim::IoType => Ok(ersd::Subterm::Erased.into()),
         &Prim::Io(token) => Ok(pure(ersd::PurePrim::Io(token))),
         Prim::IoRead(handle, count) => Ok(host(ersd::HostPrim::IoRead(

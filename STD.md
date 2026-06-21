@@ -139,7 +139,7 @@ Raw byte sequences. `fold` and `join` are library helpers; the rest are `/sys` p
 
 ### `/std/Arr`
 
-Homogeneous arrays, written with literal syntax `[a, b, c]`. `fold`, `map`, and `balanced` are library helpers; the rest are `/sys` primitives.
+Homogeneous arrays, written with literal syntax `[a, b, c]`. `fold` and `balanced` are library helpers; the rest are `/sys` primitives. `map` is a primitive with an eliminator reduction (it distributes over the `[]`/`++`/`append` spine, so it reduces symbolically in proofs the way a structural `foldr` would) and erases to a single O(n) fill loop.
 
 | Binding              | Type                                                  | Description                 |
 | -------------------- | ----------------------------------------------------- | --------------------------- |

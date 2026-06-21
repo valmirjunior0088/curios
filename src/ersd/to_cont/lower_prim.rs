@@ -460,6 +460,9 @@ pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) ->
         ersd::PurePrim::ArrFlatten(operand) => {
             lower_pure_unary_code(work, operand, frame, cont::Code::ArrFlatten)
         }
+        ersd::PurePrim::ArrMap(src, f) => {
+            lower_pure_binary_code(work, src, f, frame, cont::Code::ArrMap)
+        }
         // A handle erases to its host token bytes: the LE encoding of the token
         // integer, the same `BigUint::to_bytes_le` the runtime mints and keys on.
         // This is the lone spot in the pipeline that knows a handle is bytes.
@@ -1133,6 +1136,9 @@ fn lower_value_pure_prim<'b>(
         }
         ersd::PurePrim::ArrFlatten(operand) => {
             lower_unary_code(work, operand, frame, cont, cont::Code::ArrFlatten)
+        }
+        ersd::PurePrim::ArrMap(src, f) => {
+            lower_binary_code(work, src, f, frame, cont, cont::Code::ArrMap)
         }
     }
 }

@@ -207,7 +207,8 @@ macro_rules! walk_code_operands {
             | BinGet(a, b)
             | BinAppend(a, b)
             | ArrGet(a, b)
-            | ArrAppend(a, b) => {
+            | ArrAppend(a, b)
+            | ArrMap(a, b) => {
                 $sink.value_use(a);
                 $sink.value_use(b);
             }

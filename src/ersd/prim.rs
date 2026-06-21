@@ -81,6 +81,9 @@ pub enum PurePrim {
     ArrAppend(Term, Term),
     ArrConcat(Vec<Term>),
     ArrFlatten(Term),
+    // `ArrMap(src, f)`: map closure `f` over `src`, an O(n) fill. `f` is a
+    // closure value; codegen emits one alloc + a fill loop applying `f` per slot.
+    ArrMap(Term, Term),
     Io(u32),
     IoEql(Term, Term),
 }

@@ -991,6 +991,45 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 None => Subterm::Prim(Prim::arr_flatten(type_, operand)),
             })
         }
+        // The eliminator rule, mirroring the native `Arr` `match`: distribute the
+        // map over the free-monoid spine so it reduces to the *same* normal form a
+        // structural `foldr (::) []` would. `Arr/map(f) = foldr (\x ih. f x :: ih)
+        // []` definitionally, so `to_bins = Arr/map(to_bin)` and the `/syn/Str`
+        // `flatten` proof reduces identically (`concat([f h], Arr/map(f, t))`). A
+        // symbolic array stays stuck after one peel — no O(n) unfold of a variable.
+        Prim::ArrMap(a, b, f, arr) => {
+            let a = reduce(context, a.clone())?;
+            let b = reduce(context, b.clone())?;
+            let f = reduce(context, f.clone())?;
+            let arr = reduce(context, arr.clone())?;
+
+            Ok(match &*arr {
+                // Empty and literal arrays map elementwise; the literal case folds
+                // to a literal so concrete maps collapse (bounded by the literal).
+                Subterm::Prim(Prim::Arr(elems)) => Subterm::Prim(Prim::Arr(
+                    elems
+                        .iter()
+                        .map(|x| Term::apply(f.clone(), [x.clone()]))
+                        .collect(),
+                )),
+                // Distribute over the monoid generators so a symbolic cons
+                // (`concat([h], t)`) peels: `concat(map f [h], map f t)` — the same
+                // normal form the native `Arr` eliminator produces.
+                Subterm::Prim(Prim::ArrConcat(_elem, segments)) => Subterm::Prim(Prim::ArrConcat(
+                    b.clone(),
+                    segments
+                        .iter()
+                        .map(|s| Term::prim(Prim::arr_map(a.clone(), b.clone(), f.clone(), s.clone())))
+                        .collect(),
+                )),
+                Subterm::Prim(Prim::ArrAppend(_elem, base, x)) => Subterm::Prim(Prim::ArrAppend(
+                    b.clone(),
+                    Term::prim(Prim::arr_map(a.clone(), b.clone(), f.clone(), base.clone())),
+                    Term::apply(f.clone(), [x.clone()]),
+                )),
+                _ => Subterm::Prim(Prim::arr_map(a, b, f, arr)),
+            })
+        }
         // The handle type and handle tokens are inert values, like `Nat`/`Nat(_)`.
         Prim::IoType => Ok(Subterm::Prim(Prim::IoType)),
         Prim::Io(token) => Ok(Subterm::Prim(Prim::Io(*token))),

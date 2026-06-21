@@ -95,6 +95,7 @@ pub enum Prim {
     ArrAppend(Term, Term, Term),
     ArrConcat(Term, Term, Term),
     ArrFlatten(Term, Term),
+    ArrMap(Term, Term, Term, Term),
     IoType,
     Io(u32),
     IoEql(Term, Term),

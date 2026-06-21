@@ -200,7 +200,8 @@ fn free_names_pure_prim(prim: &ersd::PurePrim) -> BTreeSet<String> {
         | BinGet(a, b)
         | BinAppend(a, b)
         | ArrGet(a, b)
-        | ArrAppend(a, b) => vec![a, b],
+        | ArrAppend(a, b)
+        | ArrMap(a, b) => vec![a, b],
         BinSlice(a, b, c) | ArrSlice(a, b, c) => vec![a, b, c],
         BinConcat(operands) | ArrConcat(operands) | Arr(operands) => operands.iter().collect(),
     };

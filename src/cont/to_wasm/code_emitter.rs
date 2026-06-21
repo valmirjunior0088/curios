@@ -369,6 +369,137 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
+    /// Map closure `f` over array `src` into a fresh array of the same length in
+    /// a single allocation. One pass: size the result from `src.len`, then fill
+    /// slot `idx` with `f(src[idx])` — the closure invoked inline by `call_ref`
+    /// (its result is left on the stack, exactly as a non-tail closure call). The
+    /// scratch buffer never escapes this helper, so the map stays a pure value at
+    /// the IR level (no linearity reasoning) while lowering to a mutating fill.
+    fn emit_map(
+        &mut self,
+        result_local: &wasm::LocalName,
+        src: &'a cont::ValueName,
+        f: &'a cont::ValueName,
+    ) {
+        let arr_type = self.context.table().arr_type();
+        let arr_ref = wasm::RefType {
+            is_nullable: false,
+            heap_type: wasm::HeapType::Concrete(arr_type.clone()),
+        };
+        // `f` is a unary closure `(A) -> B`; reuse the arity-1 closure calling
+        // convention (env as the self argument, the funcref in its special field).
+        let envr_type = self.context.table().find_envr_type(1);
+        let clsr_type = self.context.table().find_clsr_type(1);
+        let special_field = self.context.table().special_field();
+
+        let count_local = self
+            .context
+            .push_local("count", wasm::ValType::Num(wasm::NumType::I32));
+        let idx_local = self
+            .context
+            .push_local("idx", wasm::ValType::Num(wasm::NumType::I32));
+
+        let map_loop = wasm::LabelName::from(format!("{}_map_loop", result_local));
+        let map_step = wasm::LabelName::from(format!("{}_map_step", result_local));
+
+        // count = src.len
+        self.emit_instrs(self.context.load_value_instrs(src, LoadAs::Arr));
+        self.emit_instr(wasm::Instr::ArrayLen);
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: count_local.clone(),
+        });
+
+        // result = new array sized `count` (default-filled, overwritten below)
+        self.emit_instr(wasm::Instr::LocalGet {
+            local_name: count_local.clone(),
+        });
+        self.emit_instr(wasm::Instr::ArrayNewDefault {
+            type_name: arr_type.clone(),
+        });
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: result_local.clone(),
+        });
+
+        // idx = 0
+        self.emit_instr(wasm::Instr::I32Const { value: 0 });
+        self.emit_instr(wasm::Instr::LocalSet {
+            local_name: idx_local.clone(),
+        });
+
+        // step: result[idx] = f(src[idx]); idx += 1; continue
+        let mut step_body = vec![
+            wasm::Instr::LocalGet {
+                local_name: result_local.clone(),
+            },
+            wasm::Instr::RefCast {
+                ref_type: arr_ref.clone(),
+            },
+            wasm::Instr::LocalGet {
+                local_name: idx_local.clone(),
+            },
+        ];
+        // value = f(src[idx]) — the closure as its own self/env argument first,
+        // then the element, then the funcref pulled from the env struct.
+        step_body.extend(self.context.load_value_instrs(f, LoadAs::NonNull));
+        step_body.extend(self.context.load_value_instrs(src, LoadAs::Arr));
+        step_body.push(wasm::Instr::LocalGet {
+            local_name: idx_local.clone(),
+        });
+        step_body.push(wasm::Instr::ArrayGet {
+            type_name: arr_type.clone(),
+        });
+        step_body.push(wasm::Instr::RefAsNonNull);
+        step_body.extend(
+            self.context
+                .load_value_instrs(f, LoadAs::Concrete(envr_type.clone())),
+        );
+        step_body.push(wasm::Instr::StructGet {
+            type_name: envr_type,
+            field_name: special_field,
+        });
+        step_body.push(wasm::Instr::RefAsNonNull);
+        step_body.push(wasm::Instr::CallRef {
+            type_name: clsr_type,
+        });
+        step_body.push(wasm::Instr::ArraySet {
+            type_name: arr_type,
+        });
+        // idx += 1; continue
+        step_body.extend([
+            wasm::Instr::LocalGet {
+                local_name: idx_local.clone(),
+            },
+            wasm::Instr::I32Const { value: 1 },
+            wasm::Instr::I32Add,
+            wasm::Instr::LocalSet {
+                local_name: idx_local.clone(),
+            },
+            wasm::Instr::Br {
+                label_name: map_loop.clone(),
+            },
+        ]);
+
+        self.emit_instr(wasm::Instr::Loop {
+            label_name: map_loop,
+            block_type: wasm::BlockType::Empty,
+            instructions: vec![
+                wasm::Instr::LocalGet {
+                    local_name: idx_local,
+                },
+                wasm::Instr::LocalGet {
+                    local_name: count_local,
+                },
+                wasm::Instr::I32LtU,
+                wasm::Instr::If {
+                    label_name: map_step,
+                    block_type: wasm::BlockType::Empty,
+                    then_instructions: step_body,
+                    else_instructions: vec![],
+                },
+            ],
+        });
+    }
+
     pub fn emit(&mut self, value_name: &'a cont::ValueName, op: &'a cont::Code) {
         let result_local = self
             .context
@@ -1486,6 +1617,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 let arr_type = self.context.table().arr_type();
                 self.emit_flatten(&result_local, value_name, operand, arr_type, LoadAs::Arr);
             }
+            cont::Code::ArrMap(src, f) => self.emit_map(&result_local, src, f),
             cont::Code::TplGet(tuple, index) => {
                 let tpl_n_type = self.context.table().find_tpl_type(*index + 1);
                 let field_name = self.context.table().tpl_field(*index);

@@ -598,6 +598,16 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             ),
         ]),
         Prim::ArrFlatten(ty, operand) => print_binary("Arr.flatten ", ty, operand, depth),
+        Prim::ArrMap(a, b, f, arr) => flat([
+            pure("Arr.map "),
+            print_term(a, depth),
+            pure(" "),
+            print_term(b, depth),
+            pure(" "),
+            print_term(f, depth),
+            pure(" "),
+            print_term(arr, depth),
+        ]),
         Prim::IoType => pure("Io"),
         Prim::Io(token) => pure(format!("Io({token})")),
         Prim::IoRead(handle, count) => flat([
