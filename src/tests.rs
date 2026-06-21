@@ -402,6 +402,46 @@ fn bin_concat_leading_byte_clash_is_rejected() {
 }
 
 #[test]
+fn bin_slice_is_a_monoid_citizen() {
+    // `Bin/slice` rides the free-monoid spine (`core::spine`) as a measured
+    // `Window` — a length-`hi - lo` chunk whose contents are symbolic — so the
+    // slice algebra holds up to *definitional* equality, provable by `refl` for
+    // SYMBOLIC operands that `reduce` cannot fold. `split` fuses two adjacent
+    // windows of one base across their shared seam; `empty` drops a zero-width
+    // window (the monoid identity); `full` collapses `slice(b, 0, len b)` to its
+    // base (the `reduce` partner of the spine's window-collapse). Each declared
+    // type forces `convert` to peel the windows to a common normal form; without
+    // the peel these are stuck, distinct terms and `refl` would not check.
+    let source = r#"
+        use /std/{Io, Str, Eq, Bin, Nat};
+        let split(b : Bin, s : Nat, m : Nat, e : Nat)
+            -> Eq(Bin/concat(Bin/slice(b, s, m), Bin/slice(b, m, e)), Bin/slice(b, s, e)) =
+            Eq/refl();
+        let empty(b : Bin, i : Nat) -> Eq(Bin/slice(b, i, i), \\) = Eq/refl();
+        let full(b : Bin) -> Eq(Bin/slice(b, 0, Bin/len(b)), b) = Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
+fn bin_slice_window_seam_mismatch_is_rejected() {
+    // The dual: two windows whose seam does not meet — `slice(b, s, m)` then
+    // `slice(b, n, e)` with `m` and `n` distinct — must NOT fuse, so the concat is
+    // not convertible to `slice(b, s, e)` and the `refl` is rejected. Guards the
+    // fusion's seam check against gluing non-adjacent slices of one base.
+    let source = r#"
+        use /std/{Io, Str, Eq, Bin, Nat};
+        let bad(b : Bin, s : Nat, m : Nat, n : Nat, e : Nat)
+            -> Eq(Bin/concat(Bin/slice(b, s, m), Bin/slice(b, n, e)), Bin/slice(b, s, e)) =
+            Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}
+
+#[test]
 fn arr_concat_is_a_free_monoid() {
     // `peel_arr` (core::spine) makes `Arr` a free monoid on its elements, the twin
     // of `bin_concat_is_a_free_monoid`: `concat` associates, the empty array `[]`

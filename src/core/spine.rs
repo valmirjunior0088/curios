@@ -79,16 +79,20 @@ pub fn peel_nat(actual: &Nat, target: &Nat) -> Peel {
     }
 }
 
-/// One segment of a flattened free-monoid value: either a run of consecutive
-/// literal elements — concrete bytes (`Bin`) or terms (`Arr`) — or an opaque
-/// symbolic chunk (a variable, an append, a slice: anything whose contents and
-/// length are not statically known). A value is a sequence of these, and the
-/// concatenation primitive is their juxtaposition; flattening normalises the
-/// monoid laws (associativity, the empty identity, re-segmented literal runs) so
-/// two definitionally equal values decompose to the same list.
+/// One segment of a flattened free-monoid value: a run of consecutive literal
+/// elements — concrete bytes (`Bin`) or terms (`Arr`) — a `Window` into a base
+/// value (a `Bin/slice(base, lo, hi)`: contents symbolic, but length `hi - lo`
+/// statically known as a `Nat` term), or an opaque symbolic chunk (a variable, an
+/// append: anything whose contents *and* length are unknown). A value is a
+/// sequence of these, and the concatenation primitive is their juxtaposition;
+/// flattening normalises the monoid laws — associativity, the empty identity,
+/// re-segmented literal runs, and fused adjacent windows of one base
+/// (`slice(b, s, m) ++ slice(b, m, e) = slice(b, s, e)`) — so two definitionally
+/// equal values decompose to the same list.
 enum Atom<E> {
-    Lit(Vec<E>),
-    Sym(Term),
+    Literal(Vec<E>),
+    Window { base: Term, lo: Term, hi: Term },
+    Symbolic(Term),
 }
 
 /// The one free-monoid step `peel_bin` and `peel_arr` share: strip the longest
@@ -103,7 +107,7 @@ fn peel_prefix<E: PartialEq>(left: &mut VecDeque<Atom<E>>, right: &mut VecDeque<
 
     loop {
         match (left.front(), right.front()) {
-            (Some(Atom::Lit(a)), Some(Atom::Lit(b))) => {
+            (Some(Atom::Literal(a)), Some(Atom::Literal(b))) => {
                 let common = a.iter().zip(b).take_while(|(x, y)| x == y).count();
                 if common == 0 {
                     break;
@@ -112,7 +116,19 @@ fn peel_prefix<E: PartialEq>(left: &mut VecDeque<Atom<E>>, right: &mut VecDeque<
                 consume(left, common);
                 consume(right, common);
             }
-            (Some(Atom::Sym(x)), Some(Atom::Sym(y))) if x == y => {
+            (Some(Atom::Symbolic(x)), Some(Atom::Symbolic(y))) if x == y => {
+                peeled = true;
+                left.pop_front();
+                right.pop_front();
+            }
+            // Two windows into the same base over the same span are equal whole.
+            // A shared base/`lo` with differing `hi` (one window extends past the
+            // other) could peel too, but that needs ordering the symbolic bounds,
+            // so it is left to defer rather than decided here.
+            (
+                Some(Atom::Window { base: b1, lo: l1, hi: h1 }),
+                Some(Atom::Window { base: b2, lo: l2, hi: h2 }),
+            ) if b1 == b2 && l1 == l2 && h1 == h2 => {
                 peeled = true;
                 left.pop_front();
                 right.pop_front();
@@ -128,52 +144,79 @@ fn peel_prefix<E: PartialEq>(left: &mut VecDeque<Atom<E>>, right: &mut VecDeque<
 /// it is exactly consumed. `count` never exceeds the run's length.
 fn consume<E>(atoms: &mut VecDeque<Atom<E>>, count: usize) {
     match atoms.front_mut() {
-        Some(Atom::Lit(run)) if run.len() == count => {
+        Some(Atom::Literal(run)) if run.len() == count => {
             atoms.pop_front();
         }
-        Some(Atom::Lit(run)) => {
+        Some(Atom::Literal(run)) => {
             run.drain(0..count);
         }
         _ => unreachable!("consume called on a non-literal head"),
     }
 }
 
-/// Append an atom, keeping the list normalised: empty runs vanish (the identity)
-/// and a run abutting another run merges into it (so no two `Lit`s are adjacent).
+/// Append an atom, keeping the list normalised: empty runs vanish (the identity),
+/// a run abutting another run merges into it (so no two literal runs are
+/// adjacent), an empty window (`slice(b, i, i)`) vanishes like an empty run, and a
+/// window abutting another window of the same base across a shared seam fuses into
+/// one (`slice(b, s, m) ++ slice(b, m, e) = slice(b, s, e)`) — the monoid law that
+/// makes `Bin/slice` a first-class spine citizen rather than an opaque chunk.
 fn push<E>(out: &mut Vec<Atom<E>>, atom: Atom<E>) {
     match atom {
-        Atom::Lit(run) if run.is_empty() => {}
-        Atom::Lit(run) => match out.last_mut() {
-            Some(Atom::Lit(head)) => head.extend(run),
-            _ => out.push(Atom::Lit(run)),
+        Atom::Literal(run) if run.is_empty() => {}
+        Atom::Literal(run) => match out.last_mut() {
+            Some(Atom::Literal(head)) => head.extend(run),
+            _ => out.push(Atom::Literal(run)),
         },
-        Atom::Sym(term) => out.push(Atom::Sym(term)),
+        // An empty window is the identity: equal bounds slice nothing.
+        Atom::Window { lo, hi, .. } if lo == hi => {}
+        Atom::Window { base, lo, hi } => {
+            // Fuse with a preceding window of the same base whose `hi` meets this
+            // window's `lo` at a shared seam; the fused span carries through, so a
+            // run of touching windows collapses left-to-right to one.
+            let fuses = matches!(
+                out.last(),
+                Some(Atom::Window { base: prev, hi: seam, .. }) if *prev == base && *seam == lo,
+            );
+            match fuses {
+                true => {
+                    if let Some(Atom::Window { hi: seam, .. }) = out.last_mut() {
+                        *seam = hi;
+                    }
+                }
+                false => out.push(Atom::Window { base, lo, hi }),
+            }
+        }
+        Atom::Symbolic(term) => out.push(Atom::Symbolic(term)),
     }
 }
 
 /// One side peeled down to the empty identity while the other did not: a leftover
 /// literal run is a definite length mismatch (`Clash`); a leftover symbolic chunk
-/// might itself be empty, so its emptiness is undecidable (`Stuck`).
+/// or window might itself be empty (its length is a symbolic `hi - lo`), so its
+/// emptiness is undecidable (`Stuck`).
 fn against_identity<E>(atom: &Atom<E>) -> Peel {
     match atom {
-        Atom::Lit(_) => Peel::Clash,
-        Atom::Sym(_) => Peel::Stuck,
+        Atom::Literal(_) => Peel::Clash,
+        Atom::Window { .. } | Atom::Symbolic(_) => Peel::Stuck,
     }
 }
 
 /// `Bin` is the free monoid on its bytes. Two values reduce by stripping their
-/// longest common prefix — concrete bytes byte-for-byte, and identical symbolic
-/// chunks whole — and the residual tails ride back on `Continue` (so the inverter
-/// can solve a flex binder forced to equal a leftover suffix, and conversion can
-/// enqueue the rest). A definite byte disagreement, or a positive run meeting the
-/// empty bytestring, is a `Clash`; a symbolic chunk facing an unlike chunk or the
-/// identity is `Stuck` (its length is unknown, so peeling cannot decide). `None`
-/// means the pair is not two `Bin` values, so the caller keeps its own handling.
+/// longest common prefix — concrete bytes byte-for-byte, identical symbolic
+/// chunks whole, and equal slice windows whole (after `bin_atoms` has fused
+/// adjacent windows of one base) — and the residual tails ride back on `Continue`
+/// (so the inverter can solve a flex binder forced to equal a leftover suffix, and
+/// conversion can enqueue the rest). A definite byte disagreement, or a positive
+/// run meeting the empty bytestring, is a `Clash`; a symbolic chunk or window
+/// facing an unlike one or the identity is `Stuck` (its length is unknown, so
+/// peeling cannot decide). `None` means the pair is not two `Bin` values, so the
+/// caller keeps its own handling.
 ///
 /// Prefix-only, mirroring `peel_nat`: a common *suffix* (`x ++ \01 ~ y ++ \01`)
-/// is sound to cancel but not yet attempted. Symbolic chunks are matched by
-/// syntactic equality, so two convertible-but-unequal chunks (`append(\\, h1)`
-/// vs `append(\\, h2)`) are left to the caller's structural comparison rather
+/// is sound to cancel but not yet attempted. Symbolic chunks and windows are
+/// matched by syntactic equality, so two convertible-but-unequal chunks
+/// (`append(\\, h1)` vs `append(\\, h2)`) — or two windows whose bounds differ
+/// only up to arithmetic — are left to the caller's structural comparison rather
 /// than decided here.
 pub fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
     if !bin_valued(left) || !bin_valued(right) {
@@ -189,7 +232,7 @@ pub fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
         (None, Some(atom)) | (Some(atom), None) => against_identity(atom),
         // Both still lead with a concrete run: the loop only stops here once their
         // first bytes disagree, and bytes are decided — so the values are unequal.
-        (Some(Atom::Lit(_)), Some(Atom::Lit(_))) => Peel::Clash,
+        (Some(Atom::Literal(_)), Some(Atom::Literal(_))) => Peel::Clash,
         // A literal facing a symbolic chunk, or two unlike symbolic chunks. If a
         // common prefix was peeled the residual tails go back to the caller;
         // otherwise nothing here is decidable by peeling.
@@ -238,11 +281,13 @@ pub fn peel_arr(left: &Prim, right: &Prim) -> Option<Peel> {
 }
 
 /// The `Bin`-valued primitives `peel_bin` decomposes. `Bin` and `BinConcat` carry
-/// the monoid structure; the rest (`BinAppend`, `BinSlice`, `BinFlatten`) only
-/// ever appear as opaque symbolic chunks, so they are left to the caller's own
-/// (structural) comparison rather than routed through the peel.
+/// the monoid's literals and juxtaposition; `BinSlice` rides in as a measured
+/// `Window` (a length-`hi - lo` chunk whose contents are symbolic), so adjacent
+/// slices of one base fuse and equal slices cancel. The rest (`BinAppend`,
+/// `BinFlatten`) still appear as opaque symbolic chunks left to the caller's own
+/// (structural) comparison.
 fn bin_valued(prim: &Prim) -> bool {
-    matches!(prim, Prim::Bin(_) | Prim::BinConcat(_))
+    matches!(prim, Prim::Bin(_) | Prim::BinConcat(_) | Prim::BinSlice(..))
 }
 
 /// The `Arr` analogue of [`bin_valued`]: only `Arr` and `ArrConcat` carry the
@@ -270,16 +315,20 @@ fn bin_atoms(prim: &Prim) -> VecDeque<Atom<u8>> {
 
 fn bin_collect_prim(prim: &Prim, out: &mut Vec<Atom<u8>>) {
     match prim {
-        Prim::Bin(bytes) => push(out, Atom::Lit(bytes.clone())),
+        Prim::Bin(bytes) => push(out, Atom::Literal(bytes.clone())),
         Prim::BinConcat(operands) => operands.iter().for_each(|op| bin_collect_term(op, out)),
-        other => push(out, Atom::Sym(Term::prim(other.clone()))),
+        Prim::BinSlice(base, lo, hi) => push(
+            out,
+            Atom::Window { base: base.clone(), lo: lo.clone(), hi: hi.clone() },
+        ),
+        other => push(out, Atom::Symbolic(Term::prim(other.clone()))),
     }
 }
 
 fn bin_collect_term(term: &Term, out: &mut Vec<Atom<u8>>) {
     match &**term {
         Subterm::Prim(prim) => bin_collect_prim(prim, out),
-        _ => push(out, Atom::Sym(term.clone())),
+        _ => push(out, Atom::Symbolic(term.clone())),
     }
 }
 
@@ -293,26 +342,28 @@ fn arr_atoms(prim: &Prim) -> VecDeque<Atom<Term>> {
 
 fn arr_collect_prim(prim: &Prim, out: &mut Vec<Atom<Term>>) {
     match prim {
-        Prim::Arr(elems) => push(out, Atom::Lit(elems.clone())),
+        Prim::Arr(elems) => push(out, Atom::Literal(elems.clone())),
         Prim::ArrConcat(_, operands) => operands.iter().for_each(|op| arr_collect_term(op, out)),
-        other => push(out, Atom::Sym(Term::prim(other.clone()))),
+        other => push(out, Atom::Symbolic(Term::prim(other.clone()))),
     }
 }
 
 fn arr_collect_term(term: &Term, out: &mut Vec<Atom<Term>>) {
     match &**term {
         Subterm::Prim(prim) => arr_collect_prim(prim, out),
-        _ => push(out, Atom::Sym(term.clone())),
+        _ => push(out, Atom::Symbolic(term.clone())),
     }
 }
 
 /// Rebuild a `Bin` term from a residual segment list: a lone run is a `Bin`
-/// literal, a lone symbolic chunk is itself (so the inverter sees the bare binder
-/// it must solve), and a mixture is their `BinConcat`.
+/// literal, a window is its `BinSlice`, a lone symbolic chunk is itself (so the
+/// inverter sees the bare binder it must solve), and a mixture is their
+/// `BinConcat`.
 fn reassemble_bin(atoms: VecDeque<Atom<u8>>) -> Term {
     let into_term = |atom| match atom {
-        Atom::Lit(bytes) => Term::prim(Prim::Bin(bytes)),
-        Atom::Sym(term) => term,
+        Atom::Literal(bytes) => Term::prim(Prim::Bin(bytes)),
+        Atom::Window { base, lo, hi } => Term::prim(Prim::bin_slice(base, lo, hi)),
+        Atom::Symbolic(term) => term,
     };
 
     match atoms.len() {
@@ -327,8 +378,11 @@ fn reassemble_bin(atoms: VecDeque<Atom<u8>>) -> Term {
 /// residual can only come from an input `ArrConcat`).
 fn reassemble_arr(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
     let into_term = |atom| match atom {
-        Atom::Lit(elems) => Term::prim(Prim::Arr(elems)),
-        Atom::Sym(term) => term,
+        Atom::Literal(elems) => Term::prim(Prim::Arr(elems)),
+        // `arr_collect_prim` leaves `ArrSlice` opaque (a `Symbolic`), so the `Arr` spine
+        // never produces a window — only `Bin/slice` is a first-class citizen today.
+        Atom::Window { .. } => unreachable!("the Arr spine produces no slice windows"),
+        Atom::Symbolic(term) => term,
     };
 
     match atoms.len() {

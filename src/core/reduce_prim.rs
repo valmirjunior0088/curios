@@ -722,6 +722,16 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             let bin = reduce(context, bin.clone())?;
             let start_reduced = reduce(context, start.clone())?;
             let end_reduced = reduce(context, end.clone())?;
+            // The full slice is the identity: `slice(b, 0, len b) = b`. Sound even
+            // for a symbolic `b` — `0..len` is always in range, never trapping —
+            // and the runtime partner of `core::spine`'s window-collapse: it lets a
+            // bare full-window `BinSlice` reduce to its base, so a `Bin/slice` over
+            // the whole value costs no copy and converts against the base directly.
+            if matches!(&*start_reduced, Subterm::Prim(Prim::Nat(Nat::Zero)))
+                && matches!(&*end_reduced, Subterm::Prim(Prim::BinLen(whole)) if *whole == bin)
+            {
+                return Ok(Term::unwrap_or_clone(bin));
+            }
             let s = start_reduced
                 .as_nat()
                 .and_then(|n| n.to_big_uint()?.to_usize());
