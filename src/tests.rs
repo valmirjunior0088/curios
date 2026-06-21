@@ -465,6 +465,24 @@ fn bin_slice_reduces_across_a_cons_spine() {
 }
 
 #[test]
+fn bin_get_reduces_across_a_cons_spine() {
+    // The `Bin/get` partner of the slice cons-reduction: a get over a cons spine
+    // peels one byte per `0`/`succ` index — `get(cons(h, t), 0) = h` (the cons
+    // head, via the `get(append(\\, h), 0) = h` base case) and
+    // `get(cons(h, t), 1) = get(t, 0)`. Provable by `refl` for SYMBOLIC head/tail.
+    // This lets `advance_codepoint` walk a symbolic Bin through `Bin/get`.
+    let source = r#"
+        use /std/{Io, Str, Eq, Bin, Nat};
+        let head(h : Nat, t : Bin)
+            -> Eq(Bin/get(Bin/concat(Bin/append(\\, h), t), 0), h) = Eq/refl();
+        let tail(h : Nat, t : Bin)
+            -> Eq(Bin/get(Bin/concat(Bin/append(\\, h), t), 1), Bin/get(t, 0)) = Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
 fn arr_concat_is_a_free_monoid() {
     // `peel_arr` (core::spine) makes `Arr` a free monoid on its elements, the twin
     // of `bin_concat_is_a_free_monoid`: `concat` associates, the empty array `[]`

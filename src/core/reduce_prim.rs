@@ -704,19 +704,45 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             let i = index_reduced
                 .as_nat()
                 .and_then(|n| n.to_big_uint()?.to_usize());
-            Ok(match (Term::unwrap_or_clone(bin), i) {
-                (Subterm::Prim(Prim::Bin(bytes)), Some(i)) => match bytes.get(i).copied() {
-                    Some(byte) => Subterm::Prim(Prim::Nat(Nat::new(byte))),
-                    None => {
-                        return Err(ReduceError::BinGetOutOfBounds {
-                            len: bytes.len(),
-                            index: i,
-                            span: index.span(),
-                        });
+            // A concrete index into a literal run.
+            if let (Subterm::Prim(Prim::Bin(bytes)), Some(i)) = (&*bin, i) {
+                return match bytes.get(i).copied() {
+                    Some(byte) => Ok(Subterm::Prim(Prim::Nat(Nat::new(byte)))),
+                    None => Err(ReduceError::BinGetOutOfBounds {
+                        len: bytes.len(),
+                        index: i,
+                        span: index.span(),
+                    }),
+                };
+            }
+            // The cons head's byte: `get(append(\\, byte), 0) = byte` — the base
+            // case of the cons-peel below, and the partner of `BinSlice`'s rules.
+            if let Subterm::Prim(Prim::BinAppend(base, byte)) = &*bin {
+                if matches!(&**base, Subterm::Prim(Prim::Bin(b)) if b.is_empty())
+                    && matches!(&*index_reduced, Subterm::Prim(Prim::Nat(Nat::Zero)))
+                {
+                    return reduce(context, byte.clone()).map(Term::unwrap_or_clone);
+                }
+            }
+            // A get over a cons spine peels one byte per `0`/`succ` index step:
+            //   `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
+            if let Some((head, tail)) = peel_first_byte(&bin) {
+                match &*index_reduced {
+                    Subterm::Prim(Prim::Nat(Nat::Zero)) => {
+                        let zero = Term::prim(Prim::Nat(Nat::Zero));
+                        return reduce(context, Term::prim(Prim::bin_get(head, zero)))
+                            .map(Term::unwrap_or_clone);
                     }
-                },
-                (bin, _) => Subterm::Prim(Prim::bin_get(bin, index_reduced)),
-            })
+                    Subterm::Prim(Prim::Nat(Nat::Succ(..))) => {
+                        let one = Term::prim(Prim::Nat(Nat::new(1usize)));
+                        let prev = Term::prim(Prim::nat_sub(index_reduced.clone(), one));
+                        return reduce(context, Term::prim(Prim::bin_get(tail, prev)))
+                            .map(Term::unwrap_or_clone);
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Subterm::Prim(Prim::bin_get(bin, index_reduced)))
         }
         Prim::BinSlice(bin, start, end) => {
             let bin = reduce(context, bin.clone())?;
