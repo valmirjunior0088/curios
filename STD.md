@@ -17,7 +17,7 @@ This file is the canonical reference for the `/std` public surface and lists eve
 
 ### `/std/Nat`
 
-The natural numbers — unbounded at the type level (an unsigned i31 at runtime). Literals are decimal digits (`0`, `42`); structural induction and sparse dispatch are written with [`match`](SYNTAX.md#match). `of_str` and `min` are library helpers; the rest are `/sys` primitives re-exported by `pub use /sys/Nat/*`. The bitwise ops are total and never trap: `and`/`or`/`xor`/`shr` are the usual operations on the binary digits, while `shl` is the unbounded `a * 2^b` — a `Nat` has no top, so no bits are shifted off. There is no `not`: complement has no meaning on an unbounded `Nat` (it would name the runtime word width), so use `Int/not` or `xor` against an explicit mask.
+The natural numbers — unbounded at the type level (an unsigned i31 at runtime). Literals are decimal digits (`0`, `42`); structural induction and sparse dispatch are written with [`match`](SYNTAX.md#match). `of_str`, `min`, `in_range`, and `compare` are library helpers; the rest are `/sys` primitives re-exported by `pub use /sys/Nat/*`. The bitwise ops are total and never trap: `and`/`or`/`xor`/`shr` are the usual operations on the binary digits, while `shl` is the unbounded `a * 2^b` — a `Nat` has no top, so no bits are shifted off. There is no `not`: complement has no meaning on an unbounded `Nat` (it would name the runtime word width), so use `Int/not` or `xor` against an explicit mask.
 
 | Binding       | Type                | Description                          |
 | ------------- | ------------------- | ------------------------------------ |
@@ -44,6 +44,8 @@ The natural numbers — unbounded at the type level (an unsigned i31 at runtime)
 | `of_str(s)`   | `(Str) -> Option(Nat)` | Parse a decimal numeral; `none` unless every character is a digit |
 | `min(a, b)`   | `(Nat, Nat) -> Nat` | Minimum                              |
 | `max(a, b)`   | `(Nat, Nat) -> Nat` | Maximum                              |
+| `in_range(c, lo, hi)` | `(Nat, Nat, Nat) -> Bln` | Whether `lo ≤ c ≤ hi`            |
+| `compare(a, b)` | `(Nat, Nat) -> Order` | Three-way comparison (`lt`/`eq`/`gt`) |
 
 ### `/std/Int`
 
@@ -158,7 +160,7 @@ Homogeneous, contiguously-backed arrays. The `[a, b, c]` literal builds a [`Lst`
 
 ### `/std/Char`
 
-Byte classifiers over ASCII code points (`(Nat) -> Bln`): `is_whitespace`, `is_digit`, `is_lower`, `is_upper`, `is_alpha`, `is_alphanumeric`. Plus the case mappers `to_lower` and `to_upper` (`(Nat) -> Nat`), which shift ASCII letters and pass every other byte through unchanged.
+Byte classifiers over ASCII code points (`(Nat) -> Bln`): `is_whitespace`, `is_digit`, `is_lower`, `is_upper`, `is_alpha`, `is_alphanumeric`. Plus the case mappers `to_lower` and `to_upper` (`(Nat) -> Nat`), which shift ASCII letters and pass every other byte through unchanged. `hex_digit(nibble)` (`(Nat) -> Nat`) renders a nibble `0–15` as its lowercase hex character, and `of_hex_digit(c)` (`(Nat) -> Option(Nat)`) is its partial inverse — the value of a hex digit, or `none`. `to_utf8(cp)` (`(Nat) -> Bin`) encodes a code point as its UTF-8 bytes.
 
 ### `/std/Str`
 
@@ -172,7 +174,9 @@ Byte classifiers over ASCII code points (`(Nat) -> Bln`): `is_whitespace`, `is_d
 | `concat(a, b)`      | `(Str, Str) -> Str`      | Concatenate two strings                                        |
 | `flatten(parts)`    | `(Lst(Str)) -> Str`      | Concatenate every part                                         |
 | `join(sep, parts)`  | `(Str, Lst(Str)) -> Str` | Concatenate with a separator between parts                     |
+| `repeat(s, n)`      | `(Str, Nat) -> Str`      | `s` concatenated with itself `n` times (`""` when `n = 0`)     |
 | `eql(a, b)`         | `(Str, Str) -> Bln`      | String equality (byte equality; UTF-8 is canonical)            |
+| `eql_ci(a, b)`      | `(Str, Str) -> Bln`      | Equality after ASCII case folding                             |
 | `len(s)`            | `(Str) -> Nat`           | Codepoint count (Unicode scalar values, _not_ bytes/graphemes) |
 | `get(s, i)`         | `(Str, Nat) -> Nat`      | Codepoint at index `i` (traps if out of bounds)                |
 | `slice(s, x, y)`    | `(Str, Nat, Nat) -> Str` | Codepoints `[x, y)` (traps if out of range)                    |
@@ -485,7 +489,7 @@ The cons list, `nil()` / `cons(A, Lst(A))` — the general-purpose sequence and 
 
 ### `/std/Order`
 
-The three-way comparison result, `lt()` / `eq()` / `gt()` — the shape returned by total comparisons such as `BigNat/compare`.
+The three-way comparison result, `lt()` / `eq()` / `gt()` — the shape returned by total comparisons such as `Nat/compare` and `BigNat/compare`.
 
 ### `/std/BigNat`
 

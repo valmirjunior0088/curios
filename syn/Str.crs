@@ -1,10 +1,4 @@
-use /std/{Nat, Bin, Bln};
-
-let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
-    match Nat/gte(c, lo)
-    | true => Nat/lte(c, hi)
-    | false => false
-    end;
+use /std/{Nat, Bin};
 
 pub union Scan
 | lead()
@@ -13,19 +7,19 @@ pub union Scan
 end
 
 let classify(c : Nat) -> Scan =
-    match in_range(c, 0x00, 0x7F)
+    match Nat/in_range(c, 0x00, 0x7F)
     | true => Scan/lead()
     | false =>
-        match in_range(c, 0xC2, 0xDF)
+        match Nat/in_range(c, 0xC2, 0xDF)
         | true => Scan/cont(1, 0x80, 0xBF)
         | false =>
-            match in_range(c, 0xE0, 0xEF)
+            match Nat/in_range(c, 0xE0, 0xEF)
             | true =>
                 let lo = match Nat/eql(c, 0xE0) | true => 0xA0 | false => 0x80 end;
                 let hi = match Nat/eql(c, 0xED) | true => 0x9F | false => 0xBF end;
                 Scan/cont(2, lo, hi)
             | false =>
-                match in_range(c, 0xF0, 0xF4)
+                match Nat/in_range(c, 0xF0, 0xF4)
                 | true =>
                     let lo = match Nat/eql(c, 0xF0) | true => 0x90 | false => 0x80 end;
                     let hi = match Nat/eql(c, 0xF4) | true => 0x8F | false => 0xBF end;
@@ -40,7 +34,7 @@ pub let step(c : Nat, s : Scan) -> Scan =
     match s
     | bad() => Scan/bad()
     | cont(rem, lo, hi) =>
-        match in_range(c, lo, hi)
+        match Nat/in_range(c, lo, hi)
         | false => Scan/bad()
         | true =>
             match Nat/eql(rem, 1)

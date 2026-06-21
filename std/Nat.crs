@@ -1,6 +1,6 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/*;
-use /std/{Str, Option, Char, Bin, Eq};
+use /std/{Str, Option, Char, Bin, Bln, Eq, Order};
 use /syn/Str/{Scan, Utf8, let step, let Valid};
 
 let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
@@ -56,4 +56,20 @@ pub let max(a : Nat, b : Nat) -> Nat =
     match lt(a, b)
     | true => b
     | false => a
+    end;
+
+pub let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+    match gte(c, lo)
+    | true => lte(c, hi)
+    | false => false
+    end;
+
+pub let compare(x : Nat, y : Nat) -> Order =
+    match lt(x, y)
+    | true => Order/lt()
+    | false =>
+        match eql(x, y)
+        | true => Order/eq()
+        | false => Order/gt()
+        end
     end;

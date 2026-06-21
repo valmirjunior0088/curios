@@ -80,18 +80,12 @@ let until(target : Nat) -> (Nat) -> Bln =
         | false => true
         end;
 
-let lower(b : Bin) -> Bin =
-    Bin/fold(b, \\, (byte, acc) => Bin/append(acc, Char/to_lower(byte)));
-
-let eql_ci(a : Str, b : Str) -> Bln =
-    Bin/eql(lower(Str/to_bin(a)), lower(Str/to_bin(b)));
-
 let header_lookup(headers : Lst({Str, Str}), name : Str) -> Option(Str) =
     Lst/fold(headers, Option/none(), (pair, acc) =>
         match acc : Option(Str)
         | some(found) => Option/some(found)
         | none() =>
-            match eql_ci(pair.0, name)
+            match Str/eql_ci(pair.0, name)
             | true => Option/some(pair.1)
             | false => Option/none()
             end

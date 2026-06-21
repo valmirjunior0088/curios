@@ -22,6 +22,7 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
     // checked function type's telescope (whose `Done` is the output type),
     // generating a fresh name per parameter and recording the candidate flag
     // from each expected domain. The lambda's own domains are erased away.
+    #[allow(clippy::too_many_arguments)]
     fn walk(
         context: &mut Context,
         body: Telescope<Term>,

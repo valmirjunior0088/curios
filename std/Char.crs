@@ -1,4 +1,4 @@
-use /std/{Nat, Bln};
+use /std/{Nat, Bln, Bin, Option};
 
 pub let is_whitespace(c : Nat) -> Bln =
     match Nat/eql(c, ' ')
@@ -50,4 +50,53 @@ pub let to_upper(c : Nat) -> Nat =
     match is_lower(c)
     | true => Nat/sub(c, 0x20)
     | false => c
+    end;
+
+pub let hex_digit(nibble : Nat) -> Nat =
+    match Nat/lt(nibble, 10)
+    | true => Nat/add(nibble, '0')
+    | false => Nat/add(Nat/sub(nibble, 10), 'a')
+    end;
+
+pub let of_hex_digit(c : Nat) -> Option(Nat) =
+    match is_digit(c)
+    | true => Option/some(Nat/sub(c, '0'))
+    | false =>
+        match Nat/in_range(c, 'a', 'f')
+        | true => Option/some(Nat/add(Nat/sub(c, 'a'), 10))
+        | false =>
+            match Nat/in_range(c, 'A', 'F')
+            | true => Option/some(Nat/add(Nat/sub(c, 'A'), 10))
+            | false => Option/none()
+            end
+        end
+    end;
+
+pub let to_utf8(cp : Nat) -> Bin =
+    match Nat/lt(cp, 0x80)
+    | true => Bin/append(\\, cp)
+    | false =>
+        match Nat/lt(cp, 0x800)
+        | true =>
+            Bin/append(
+                Bin/append(\\, Nat/add(0xC0, Nat/div(cp, 0x40))),
+                Nat/add(0x80, Nat/rem(cp, 0x40)))
+        | false =>
+            match Nat/lt(cp, 0x10000)
+            | true =>
+                Bin/append(
+                    Bin/append(
+                        Bin/append(\\, Nat/add(0xE0, Nat/div(cp, 0x1000))),
+                        Nat/add(0x80, Nat/rem(Nat/div(cp, 0x40), 0x40))),
+                    Nat/add(0x80, Nat/rem(cp, 0x40)))
+            | false =>
+                Bin/append(
+                    Bin/append(
+                        Bin/append(
+                            Bin/append(\\, Nat/add(0xF0, Nat/div(cp, 0x40000))),
+                            Nat/add(0x80, Nat/rem(Nat/div(cp, 0x1000), 0x40))),
+                        Nat/add(0x80, Nat/rem(Nat/div(cp, 0x40), 0x40))),
+                    Nat/add(0x80, Nat/rem(cp, 0x40)))
+            end
+        end
     end;

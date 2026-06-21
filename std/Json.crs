@@ -18,12 +18,6 @@ let encode_num(n : Flt) -> Str =
     | false => raw
     end;
 
-let hex_char(nibble : Nat) -> Nat =
-    match Nat/lt(nibble, 10)
-    | true => Nat/add(nibble, '0')
-    | false => Nat/add(Nat/sub(nibble, 10), 'a')
-    end;
-
 let escape_byte(byte : Nat) -> Bin =
     match byte
     | '"' => Str/to_bin("\\\"")
@@ -37,8 +31,8 @@ let escape_byte(byte : Nat) -> Bin =
         match Nat/lt(byte, 0x20)
         | true =>
             Bin/append(
-                Bin/append(Str/to_bin("\\u00"), hex_char(Nat/div(byte, 0x10))),
-                hex_char(Nat/rem(byte, 0x10)))
+                Bin/append(Str/to_bin("\\u00"), Char/hex_digit(Nat/div(byte, 0x10))),
+                Char/hex_digit(Nat/rem(byte, 0x10)))
         | false => Bin/append(\\, byte)
         end
     end;
@@ -133,30 +127,10 @@ let is_not_string_special(byte : Nat) -> Bln =
     | _ => true
     end;
 
-let between(c : Nat, lo : Nat, hi : Nat) -> Bln =
-    match Nat/lte(lo, c)
-    | true => Nat/lte(c, hi)
-    | false => false
-    end;
-
-let hex_val(byte : Nat) -> Option(Nat) =
-    match Char/is_digit(byte)
-    | true => Option/some(Nat/sub(byte, '0'))
-    | false =>
-        match between(byte, 'a', 'f')
-        | true => Option/some(Nat/add(Nat/sub(byte, 'a'), 10))
-        | false =>
-            match between(byte, 'A', 'F')
-            | true => Option/some(Nat/add(Nat/sub(byte, 'A'), 10))
-            | false => Option/none()
-            end
-        end
-    end;
-
 let hex_digit : Parse(Nat) =
     let ! = Parse/bind;
     let byte = Parse/any_byte!;
-    match hex_val(byte) : Parse(Nat)
+    match Char/of_hex_digit(byte) : Parse(Nat)
     | some(v) => Parse/pure(v)
     | none() => Parse/fail("invalid hex digit")
     end;
@@ -172,35 +146,6 @@ let hex4 : Parse(Nat) =
             Nat/add(Nat/add(Nat/mul(a, 0x1000), Nat/mul(b, 0x100)), Nat/mul(c, 0x10)),
             d));
 
-let utf8_encode(cp : Nat) -> Bin =
-    match Nat/lt(cp, 0x80)
-    | true => Bin/append(\\, cp)
-    | false =>
-        match Nat/lt(cp, 0x800)
-        | true =>
-            Bin/append(
-                Bin/append(\\, Nat/add(0xC0, Nat/div(cp, 0x40))),
-                Nat/add(0x80, Nat/rem(cp, 0x40)))
-        | false =>
-            match Nat/lt(cp, 0x10000)
-            | true =>
-                Bin/append(
-                    Bin/append(
-                        Bin/append(\\, Nat/add(0xE0, Nat/div(cp, 0x1000))),
-                        Nat/add(0x80, Nat/rem(Nat/div(cp, 0x40), 0x40))),
-                    Nat/add(0x80, Nat/rem(cp, 0x40)))
-            | false =>
-                Bin/append(
-                    Bin/append(
-                        Bin/append(
-                            Bin/append(\\, Nat/add(0xF0, Nat/div(cp, 0x40000))),
-                            Nat/add(0x80, Nat/rem(Nat/div(cp, 0x1000), 0x40))),
-                        Nat/add(0x80, Nat/rem(Nat/div(cp, 0x40), 0x40))),
-                    Nat/add(0x80, Nat/rem(cp, 0x40)))
-            end
-        end
-    end;
-
 let parse_unicode : Parse(Bin) =
     let ! = Parse/bind;
     let hi = hex4!;
@@ -209,11 +154,11 @@ let parse_unicode : Parse(Bin) =
         let _ = Parse/take_byte('\\')!;
         let _ = Parse/take_byte('u')!;
         let lo = hex4!;
-        Parse/pure(utf8_encode(
+        Parse/pure(Char/to_utf8(
             Nat/add(
                 0x10000,
                 Nat/add(Nat/mul(Nat/sub(hi, 0xD800), 0x400), Nat/sub(lo, 0xDC00)))))
-    | false => Parse/pure(utf8_encode(hi))
+    | false => Parse/pure(Char/to_utf8(hi))
     end;
 
 let parse_str_escape : Parse(Bin) =

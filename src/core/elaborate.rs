@@ -2576,12 +2576,13 @@ pub fn elaborate(context: &mut Context, term: &Term, mode: Mode) -> Result<(Term
     // referenced here (in an index, a domain, a motive). This single chokepoint
     // covers every `check(.., Term::type_())` and `Mode::Check(Term::type_())`
     // site; the `current_quantity` guard keeps the recursion one level deep.
-    if let Mode::Check(expected) = &mode {
-        if matches!(&**expected, Subterm::Type) && context.current_quantity() != Quantity::Zero {
-            return context.with_quantity(Quantity::Zero, |context| {
-                elaborate(context, term, mode.clone())
-            });
-        }
+    if let Mode::Check(expected) = &mode
+        && matches!(&**expected, Subterm::Type)
+        && context.current_quantity() != Quantity::Zero
+    {
+        return context.with_quantity(Quantity::Zero, |context| {
+            elaborate(context, term, mode.clone())
+        });
     }
 
     let result = elaborate_subterm(context, term, mode);

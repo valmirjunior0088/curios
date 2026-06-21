@@ -91,10 +91,10 @@ fn simplify_in_tree(
 
 fn collect_local_clsrs(region: &Region, clsrs: &mut HashMap<ValueName, ClsrName>) {
     for (name, value) in &region.values {
-        if let Value::Pure(Data::Clsr(clsr, captures)) = value {
-            if captures.is_empty() {
-                clsrs.insert(name.clone(), clsr.clone());
-            }
+        if let Value::Pure(Data::Clsr(clsr, captures)) = value
+            && captures.is_empty()
+        {
+            clsrs.insert(name.clone(), clsr.clone());
         }
     }
 

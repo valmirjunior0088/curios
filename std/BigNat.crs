@@ -24,16 +24,6 @@ pub let is_zero(x : BigNat) -> Bln =
     | cons(_, _) => false
     end;
 
-let nat_cmp(x : Nat, y : Nat) -> Order =
-    match Nat/lt(x, y)
-    | true => Order/lt()
-    | false =>
-        match Nat/eql(x, y)
-        | true => Order/eq()
-        | false => Order/gt()
-        end
-    end;
-
 rec cmp(xs : Lst(Nat), ys : Lst(Nat)) -> Order =
     match xs
     | nil() =>
@@ -46,7 +36,7 @@ rec cmp(xs : Lst(Nat), ys : Lst(Nat)) -> Order =
         | nil() => Order/gt()
         | cons(y, yt) =>
             match cmp(xt, yt)
-            | eq() => nat_cmp(x, y)
+            | eq() => Nat/compare(x, y)
             | lt() => Order/lt()
             | gt() => Order/gt()
             end

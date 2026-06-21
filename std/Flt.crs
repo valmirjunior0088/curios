@@ -72,12 +72,6 @@ rec digits_to_str(ds : Lst(Nat)) -> Str =
     | cons(h, t) => Str/concat(Nat/to_str(h), digits_to_str(t))
     end;
 
-rec repeat_zeros(n : Nat) -> Str =
-    match Nat/eql(n, 0)
-    | true => ""
-    | false => Str/concat("0", repeat_zeros(Nat/sub(n, 1)))
-    end;
-
 rec normalize(ds : Lst(Nat)) -> {Lst(Nat), Bln} =
     match ds
     | nil() => (Lst/nil(), false)
@@ -136,7 +130,7 @@ let setup(f_mant : Nat, exp_field : Nat) -> {BigNat, BigNat, BigNat, BigNat} =
 let layout(digits_str : Str, k : Int) -> Str =
     let len = Str/len(digits_str);
     match Int/lte(k, +0)
-    | true => Str/concat(Str/concat("0.", repeat_zeros(Int/abs(k))), digits_str)
+    | true => Str/concat(Str/concat("0.", Str/repeat("0", Int/abs(k))), digits_str)
     | false =>
         let kn = Int/to_nat(k);
         match Nat/lt(kn, len)
@@ -144,7 +138,7 @@ let layout(digits_str : Str, k : Int) -> Str =
             Str/concat(
                 Str/concat(Str/slice(digits_str, 0, kn), "."),
                 Str/slice(digits_str, kn, len))
-        | false => Str/concat(digits_str, repeat_zeros(Nat/sub(kn, len)))
+        | false => Str/concat(digits_str, Str/repeat("0", Nat/sub(kn, len)))
         end
     end;
 

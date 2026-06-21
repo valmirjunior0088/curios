@@ -156,6 +156,18 @@ pub let flatten(parts : Lst(Str)) -> Str =
 pub let eql(a : Str, b : Str) -> Bln =
     Bin/eql(to_bin(a), to_bin(b));
 
+let lower_bytes(b : Bin) -> Bin =
+    Bin/fold(b, \\, (byte, acc) => Bin/append(acc, Char/to_lower(byte)));
+
+pub let eql_ci(a : Str, b : Str) -> Bln =
+    Bin/eql(lower_bytes(to_bin(a)), lower_bytes(to_bin(b)));
+
+pub rec repeat(s : Str, n : Nat) -> Str =
+    match Nat/eql(n, 0)
+    | true => ""
+    | false => concat(s, repeat(s, Nat/sub(n, 1)))
+    end;
+
 let codepoint_width(lead : Nat) -> Nat =
     match Nat/lt(lead, 0x80)
     | true => 1

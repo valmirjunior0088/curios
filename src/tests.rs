@@ -260,6 +260,7 @@ fn bignat_zero_renders_and_roundtrips() {
 }
 
 #[test]
+#[allow(clippy::approx_constant)] // "+3.14" is a parse-and-render test vector, not π
 fn flt_to_str_matches_rust_shortest_format() {
     // Stage 2: `Flt/to_str` is a real Dragon4 shortest-float renderer (BigNat-backed),
     // matching `format!("{:+}", f32)` byte-for-byte — no longer the `of_bin` shim. The
