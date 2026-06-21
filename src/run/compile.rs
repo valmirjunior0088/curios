@@ -1317,9 +1317,13 @@ mod tests {
     fn prune_drops_unreachable_library_modules() {
         // A program touching only `Io`/`Nat` must not drag the unrelated (and
         // expensive) `std/Json`, `std/Parse`, `std/Fmt`, … into the typechecked core.
+        // `std/Str` is *not* in the unused set: `Nat/to_str` is `Str/of_nat` and
+        // `Io/print` ends in `Str/to_bin`, so the string library is a genuine
+        // transitive dependency here (DCE still drops the Str ops `of_nat` cannot
+        // reach — `slice`, `trim`, `flatten`, `of_bin`, … stay pruned).
         let names = core_item_names("use /std/{Io, Nat};\n/std/Io/print(/std/Nat/to_str(0))");
 
-        for unused in ["/std/Json", "/std/Parse", "/std/Fmt", "/std/Lst", "/std/Str"] {
+        for unused in ["/std/Json", "/std/Parse", "/std/Fmt", "/std/Lst"] {
             assert!(
                 !names.iter().any(|name| name.starts_with(unused)),
                 "expected `{unused}` to be pruned, but it survived in {names:?}"
