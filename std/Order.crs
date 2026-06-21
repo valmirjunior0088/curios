@@ -1,0 +1,7 @@
+pub union Order
+| lt()
+| eq()
+| gt()
+end
+
+pub use Order/*;

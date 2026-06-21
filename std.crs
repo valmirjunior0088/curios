@@ -43,6 +43,12 @@ pub use Option/{let Option};
 pub mod Lst;
 pub use Lst/{let Lst};
 
+pub mod Order;
+pub use Order/{let Order};
+
+pub mod BigNat;
+pub use BigNat/{let BigNat};
+
 pub mod Vec;
 pub use Vec/{let Vec};
 

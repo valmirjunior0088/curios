@@ -467,6 +467,30 @@ The linked list, `nil()` / `cons(A, Lst(A))`, with:
 | `rev(l)`    | `(@A : Type, Lst(A)) -> Lst(A)` | Reversal                   |
 | `to_arr(l)` | `(@A : Type, Lst(A)) -> Arr(A)` | Conversion to a flat array |
 
+### `/std/Order`
+
+The three-way comparison result, `lt()` / `eq()` / `gt()` — the shape returned by total comparisons such as `BigNat/compare`.
+
+### `/std/BigNat`
+
+Arbitrary-precision non-negative integers, needed because the runtime `Nat` is a 31-bit carrier that traps on overflow. A `BigNat` is a list of base-10⁴ limbs held least-significant-first, kept canonical (no high zero limbs; zero is the empty list), so the supported algorithm — shortest-round-trip float rendering (`Flt/to_str`) — can do the wide arithmetic it needs without ever exceeding `Nat`.
+
+```
+pub struct BigNat pub { limbs : Lst(Nat) }
+```
+
+| Binding             | Type                          | Description                                                       |
+| ------------------- | ----------------------------- | ---------------------------------------------------------------- |
+| `zero`              | `BigNat`                      | The canonical zero (empty limb list)                             |
+| `of_nat(n)`         | `(Nat) -> BigNat`             | Lift a 31-bit `Nat` to a `BigNat`                                |
+| `is_zero(x)`        | `(BigNat) -> Bln`             | Test against the canonical zero                                  |
+| `compare(a, b)`     | `(BigNat, BigNat) -> Order`   | Total magnitude comparison                                       |
+| `add(a, b)`         | `(BigNat, BigNat) -> BigNat`  | Addition                                                         |
+| `sub(a, b)`         | `(BigNat, BigNat) -> BigNat`  | Truncated subtraction; assumes `a ≥ b` (otherwise saturates low) |
+| `mul_small(a, c)`   | `(BigNat, Nat) -> BigNat`     | Multiply by a small scalar (`c < 100000`)                        |
+| `mul_pow2(a, k)`    | `(BigNat, Nat) -> BigNat`     | Multiply by `2^k`                                                |
+| `to_str(a)`         | `(BigNat) -> Str`             | Decimal rendering                                                |
+
 ### `/std/Vec`
 
 The length-indexed vector — the canonical indexed union (see SYNTAX.md's Indices section):

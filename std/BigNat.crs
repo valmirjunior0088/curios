@@ -1,0 +1,173 @@
+use /std/{Nat, Bln, Lst, Str, Order};
+
+pub struct BigNat pub {
+    limbs : Lst(Nat)
+}
+
+let base : Nat = 10000;
+
+rec limbs_of_nat(n : Nat) -> Lst(Nat) =
+    match Nat/eql(n, 0)
+    | true => Lst/nil()
+    | false => Lst/cons(Nat/rem(n, base), limbs_of_nat(Nat/div(n, base)))
+    end;
+
+pub let zero : BigNat =
+    BigNat { limbs = Lst/nil() };
+
+pub let of_nat(n : Nat) -> BigNat =
+    BigNat { limbs = limbs_of_nat(n) };
+
+pub let is_zero(x : BigNat) -> Bln =
+    match x.limbs
+    | nil() => true
+    | cons(_, _) => false
+    end;
+
+let nat_cmp(x : Nat, y : Nat) -> Order =
+    match Nat/lt(x, y)
+    | true => Order/lt()
+    | false =>
+        match Nat/eql(x, y)
+        | true => Order/eq()
+        | false => Order/gt()
+        end
+    end;
+
+rec cmp(xs : Lst(Nat), ys : Lst(Nat)) -> Order =
+    match xs
+    | nil() =>
+        match ys
+        | nil() => Order/eq()
+        | cons(_, _) => Order/lt()
+        end
+    | cons(x, xt) =>
+        match ys
+        | nil() => Order/gt()
+        | cons(y, yt) =>
+            match cmp(xt, yt)
+            | eq() => nat_cmp(x, y)
+            | lt() => Order/lt()
+            | gt() => Order/gt()
+            end
+        end
+    end;
+
+pub let compare(a : BigNat, b : BigNat) -> Order =
+    cmp(a.limbs, b.limbs);
+
+rec add_c(xs : Lst(Nat), ys : Lst(Nat), carry : Nat) -> Lst(Nat) =
+    match xs
+    | nil() =>
+        match ys
+        | nil() =>
+            match Nat/eql(carry, 0)
+            | true => Lst/nil()
+            | false => Lst/cons(carry, Lst/nil())
+            end
+        | cons(y, yt) =>
+            let s = Nat/add(y, carry);
+            Lst/cons(Nat/rem(s, base), add_c(Lst/nil(), yt, Nat/div(s, base)))
+        end
+    | cons(x, xt) =>
+        match ys
+        | nil() =>
+            let s = Nat/add(x, carry);
+            Lst/cons(Nat/rem(s, base), add_c(xt, Lst/nil(), Nat/div(s, base)))
+        | cons(y, yt) =>
+            let s = Nat/add(Nat/add(x, y), carry);
+            Lst/cons(Nat/rem(s, base), add_c(xt, yt, Nat/div(s, base)))
+        end
+    end;
+
+pub let add(a : BigNat, b : BigNat) -> BigNat =
+    BigNat { limbs = add_c(a.limbs, b.limbs, 0) };
+
+rec sub_b(xs : Lst(Nat), ys : Lst(Nat), borrow : Nat) -> Lst(Nat) =
+    match xs
+    | nil() => Lst/nil()
+    | cons(x, xt) =>
+        match ys
+        | nil() =>
+            match Nat/lt(x, borrow)
+            | true => Lst/cons(Nat/sub(Nat/add(x, base), borrow), sub_b(xt, Lst/nil(), 1))
+            | false => Lst/cons(Nat/sub(x, borrow), sub_b(xt, Lst/nil(), 0))
+            end
+        | cons(y, yt) =>
+            let need = Nat/add(y, borrow);
+            match Nat/lt(x, need)
+            | true => Lst/cons(Nat/sub(Nat/add(x, base), need), sub_b(xt, yt, 1))
+            | false => Lst/cons(Nat/sub(x, need), sub_b(xt, yt, 0))
+            end
+        end
+    end;
+
+rec trim(xs : Lst(Nat)) -> Lst(Nat) =
+    match xs
+    | nil() => Lst/nil()
+    | cons(x, xt) =>
+        match trim(xt)
+        | nil() =>
+            match Nat/eql(x, 0)
+            | true => Lst/nil()
+            | false => Lst/cons(x, Lst/nil())
+            end
+        | cons(h, t) => Lst/cons(x, Lst/cons(h, t))
+        end
+    end;
+
+pub let sub(a : BigNat, b : BigNat) -> BigNat =
+    BigNat { limbs = trim(sub_b(a.limbs, b.limbs, 0)) };
+
+rec mul_c(xs : Lst(Nat), c : Nat, carry : Nat) -> Lst(Nat) =
+    match xs
+    | nil() =>
+        match Nat/eql(carry, 0)
+        | true => Lst/nil()
+        | false => limbs_of_nat(carry)
+        end
+    | cons(x, xt) =>
+        let p = Nat/add(Nat/mul(x, c), carry);
+        Lst/cons(Nat/rem(p, base), mul_c(xt, c, Nat/div(p, base)))
+    end;
+
+pub let mul_small(a : BigNat, c : Nat) -> BigNat =
+    match Nat/eql(c, 0)
+    | true => zero
+    | false => BigNat { limbs = mul_c(a.limbs, c, 0) }
+    end;
+
+pub rec mul_pow2(a : BigNat, k : Nat) -> BigNat =
+    match Nat/eql(k, 0)
+    | true => a
+    | false => mul_pow2(mul_small(a, 2), Nat/sub(k, 1))
+    end;
+
+let pad4(n : Nat) -> Str =
+    match Nat/lt(n, 10)
+    | true => Str/concat("000", Nat/to_str(n))
+    | false =>
+        match Nat/lt(n, 100)
+        | true => Str/concat("00", Nat/to_str(n))
+        | false =>
+            match Nat/lt(n, 1000)
+            | true => Str/concat("0", Nat/to_str(n))
+            | false => Nat/to_str(n)
+            end
+        end
+    end;
+
+rec pad_limbs(ls : Lst(Nat)) -> Str =
+    match ls
+    | nil() => ""
+    | cons(l, t) => Str/concat(pad4(l), pad_limbs(t))
+    end;
+
+let show(xs : Lst(Nat)) -> Str =
+    match Lst/rev(xs)
+    | nil() => "0"
+    | cons(hi, rest) => Str/concat(Nat/to_str(hi), pad_limbs(rest))
+    end;
+
+pub let to_str(a : BigNat) -> Str =
+    show(a.limbs);

@@ -179,6 +179,87 @@ fn arr_match_is_a_foldr() {
 }
 
 #[test]
+fn bignat_add_carries_across_limbs() {
+    // `add` propagates carry across base-10^4 limbs: 99_999_999 (= [9999, 9999])
+    // plus 1 ripples a carry through both limbs and grows a new top limb,
+    // yielding [0, 0, 1] = 100_000_000.
+    let source = r#"
+        use /std/{Io, Str, BigNat};
+        Io/print(BigNat/to_str(BigNat/add(BigNat/of_nat(99999999), BigNat/of_nat(1))))
+        "#;
+    assert_eq!(run(source), b"100000000");
+}
+
+#[test]
+fn bignat_sub_borrows_and_trims() {
+    // `sub` borrows across limbs and then trims the high zero limbs the borrow
+    // leaves behind: 100_000_000 (= [0, 0, 1]) minus 1 borrows twice to [9999,
+    // 9999, 0], which must trim back to the canonical [9999, 9999] = 99_999_999.
+    let source = r#"
+        use /std/{Io, Str, BigNat};
+        Io/print(BigNat/to_str(BigNat/sub(BigNat/of_nat(100000000), BigNat/of_nat(1))))
+        "#;
+    assert_eq!(run(source), b"99999999");
+}
+
+#[test]
+fn bignat_mul_small_propagates_carry() {
+    // `mul_small` carries a value that itself exceeds the base: 9999 * 99999 =
+    // 999_890_001, whose final carry (99_989) must be split into multiple limbs
+    // rather than dropped into one.
+    let source = r#"
+        use /std/{Io, Str, BigNat};
+        Io/print(BigNat/to_str(BigNat/mul_small(BigNat/of_nat(9999), 99999)))
+        "#;
+    assert_eq!(run(source), b"999890001");
+}
+
+#[test]
+fn bignat_mul_pow2_builds_large_powers() {
+    // `mul_pow2` doubles past every fixed-width integer: 2^40 = 1_099_511_627_776
+    // far exceeds the 31-bit `Nat` carrier, so a correct result proves the value
+    // is held across limbs, not in a single trapping `Nat`.
+    let source = r#"
+        use /std/{Io, Str, BigNat};
+        Io/print(BigNat/to_str(BigNat/mul_pow2(BigNat/of_nat(1), 40)))
+        "#;
+    assert_eq!(run(source), b"1099511627776");
+}
+
+#[test]
+fn bignat_compare_orders_by_magnitude() {
+    // `compare` decides by the most-significant limb first (recursing to the top
+    // of the little-endian list), so two values differing only in the lowest limb
+    // still order correctly: 12345678 < 12345679, equal to itself, and the
+    // reverse is greater.
+    let source = r#"
+        use /std/{Io, Str, BigNat, Order};
+        let show(o : Order) -> Str =
+            match o : Str
+            | lt() => "lt"
+            | eq() => "eq"
+            | gt() => "gt"
+            end;
+        let a = BigNat/of_nat(12345678);
+        let b = BigNat/of_nat(12345679);
+        Io/print(Str/concat(Str/concat(show(BigNat/compare(a, b)), show(BigNat/compare(a, a))), show(BigNat/compare(b, a))))
+        "#;
+    assert_eq!(run(source), b"lteqgt");
+}
+
+#[test]
+fn bignat_zero_renders_and_roundtrips() {
+    // The canonical zero is the empty limb list, which `to_str` renders as "0"
+    // (not the empty string), and a value whose lowest limb is zero round-trips
+    // through `of_nat`/`to_str` with the high limb un-padded and the rest padded.
+    let source = r#"
+        use /std/{Io, Str, BigNat};
+        Io/print(Str/concat(Str/concat(BigNat/to_str(BigNat/zero), "/"), BigNat/to_str(BigNat/of_nat(70000))))
+        "#;
+    assert_eq!(run(source), b"0/70000");
+}
+
+#[test]
 fn arr_map_fills_every_slot() {
     // `Arr/map` erases to a single O(n) fill loop (`emit_map`): size the result
     // from `src.len`, allocate once, then write `f(src[i])` into slot `i` via an
