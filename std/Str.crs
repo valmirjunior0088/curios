@@ -168,18 +168,21 @@ pub rec repeat(s : Str, n : Nat) -> Str =
     | false => concat(s, repeat(s, Nat/sub(n, 1)))
     end;
 
-let codepoint_width(lead : Nat) -> Nat =
-    match Nat/lt(lead, 0x80)
-    | true => 1
-    | false =>
-        match Nat/lt(lead, 0xE0)
-        | true => 2
-        | false =>
-            match Nat/lt(lead, 0xF0)
-            | true => 3
-            | false => 4
-            end
+rec scan_to_boundary(b : Bin, pos : Nat, st : Scan) -> Nat =
+    match st
+    | lead() => pos
+    | bad() => pos
+    | cont(rem, lo, hi) =>
+        match Nat/lt(pos, Bin/len(b))
+        | false => pos
+        | true => scan_to_boundary(b, Nat/add(pos, 1), step(Bin/get(b, pos), st))
         end
+    end;
+
+let advance_codepoint(b : Bin, off : Nat) -> Nat =
+    match Nat/lt(off, Bin/len(b))
+    | false => off
+    | true => scan_to_boundary(b, Nat/add(off, 1), step(Bin/get(b, off), Scan/lead()))
     end;
 
 let decode_at(b : Bin, off : Nat) -> Nat =
@@ -215,7 +218,7 @@ let decode_at(b : Bin, off : Nat) -> Nat =
 let byte_offset(b : Bin, i : Nat) -> Nat =
     match i : Nat
     | 0 => 0
-    | pred + 1, ih => Nat/add(ih, codepoint_width(Bin/get(b, ih)))
+    | pred + 1, ih => advance_codepoint(b, ih)
     end;
 
 pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
@@ -223,7 +226,7 @@ pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
     rec go(off : Nat, acc : A) -> A =
         match Nat/lt(off, Bin/len(b))
         | false => acc
-        | true => go(Nat/add(off, codepoint_width(Bin/get(b, off))), f(decode_at(b, off), acc))
+        | true => go(advance_codepoint(b, off), f(decode_at(b, off), acc))
         end;
     go(0, init);
 
