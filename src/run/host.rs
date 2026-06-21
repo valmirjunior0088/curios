@@ -9,22 +9,8 @@ use {
     },
 };
 
-/// Number → string conversions used by both the wasm runtime (via the
-/// `nat_to_str`/`int_to_str`/`flt_to_str` imports) and the `scalar_eval`
-/// compile-time folder. Free functions, not trait methods, so the
-/// compile-time and runtime conversions cannot diverge.
-pub fn nat_to_str(value: u32) -> Vec<u8> {
-    format!("{value}").into_bytes()
-}
-
-pub fn int_to_str(value: i32) -> Vec<u8> {
-    format!("{value:+}").into_bytes()
-}
-
-pub fn flt_to_str(value: f32) -> Vec<u8> {
-    format!("{value:+}").into_bytes()
-}
-
+/// Exposes a float's raw IEEE-754 bytes to the guest (the `flt_to_le_bin`
+/// import); `/std/Flt/to_str` renders them to decimal in Curios.
 pub fn flt_to_le_bin(value: f32) -> Vec<u8> {
     value.to_le_bytes().to_vec()
 }

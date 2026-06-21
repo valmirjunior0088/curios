@@ -616,27 +616,6 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             |flt| Prim::Flt(flt.nearest()),
             Prim::FltNearest,
         ),
-        Prim::NatToStr(inner) => reduce_nat_unary(
-            context,
-            inner,
-            |v| {
-                v.to_big_uint()
-                    .map(|b| Prim::Bin(format!("{b}").into_bytes()))
-            },
-            Prim::NatToStr,
-        ),
-        Prim::IntToStr(inner) => reduce_int_unary(
-            context,
-            inner,
-            |v| Some(Prim::Bin(format!("{v}").into_bytes())),
-            Prim::IntToStr,
-        ),
-        Prim::FltToStr(inner) => reduce_flt_unary(
-            context,
-            inner,
-            |v| Prim::Bin(format!("{v}").into_bytes()),
-            Prim::FltToStr,
-        ),
         Prim::FltToLeBin(inner) => reduce_flt_unary(
             context,
             inner,

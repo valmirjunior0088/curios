@@ -221,9 +221,6 @@ pub struct Table<'a> {
     bin_type: wasm::TypeName,
     arr_type: wasm::TypeName,
     cell_type: wasm::TypeName,
-    nat_to_str: OnceCell<wasm::FuncName>,
-    int_to_str: OnceCell<wasm::FuncName>,
-    flt_to_str: OnceCell<wasm::FuncName>,
     flt_to_le_bin: OnceCell<wasm::FuncName>,
     io_read: OnceCell<wasm::FuncName>,
     io_write: OnceCell<wasm::FuncName>,
@@ -295,9 +292,6 @@ impl<'a> Table<'a> {
             bin_type: wasm::TypeName::from("bin"),
             arr_type: wasm::TypeName::from("arr"),
             cell_type: wasm::TypeName::from("cell"),
-            nat_to_str: OnceCell::new(),
-            int_to_str: OnceCell::new(),
-            flt_to_str: OnceCell::new(),
             flt_to_le_bin: OnceCell::new(),
             io_read: OnceCell::new(),
             io_write: OnceCell::new(),
@@ -428,36 +422,9 @@ impl<'a> Table<'a> {
         self.cell_type.clone()
     }
 
-    pub fn nat_to_str_func(&self) -> &wasm::FuncName {
-        self.nat_to_str
-            .get_or_init(|| wasm::FuncName::from("nat_to_str"))
-    }
-
-    pub fn int_to_str_func(&self) -> &wasm::FuncName {
-        self.int_to_str
-            .get_or_init(|| wasm::FuncName::from("int_to_str"))
-    }
-
-    pub fn flt_to_str_func(&self) -> &wasm::FuncName {
-        self.flt_to_str
-            .get_or_init(|| wasm::FuncName::from("flt_to_str"))
-    }
-
     pub fn flt_to_le_bin_func(&self) -> &wasm::FuncName {
         self.flt_to_le_bin
             .get_or_init(|| wasm::FuncName::from("flt_to_le_bin"))
-    }
-
-    pub fn nat_to_str_used(&self) -> bool {
-        self.nat_to_str.get().is_some()
-    }
-
-    pub fn int_to_str_used(&self) -> bool {
-        self.int_to_str.get().is_some()
-    }
-
-    pub fn flt_to_str_used(&self) -> bool {
-        self.flt_to_str.get().is_some()
     }
 
     pub fn flt_to_le_bin_used(&self) -> bool {

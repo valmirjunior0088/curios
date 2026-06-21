@@ -260,10 +260,10 @@ mod tests {
     }
 
     #[test]
-    fn pure_to_str_code_is_pure() {
-        // `Code::NatToStr` is deterministic and folded by `scalar_eval`. A
-        // body that only does conversions is now classified pure — the
-        // interpreter materialises the converted string at compile time.
+    fn pure_conversion_code_is_pure() {
+        // `Code::NatToInt` is deterministic and folded by `scalar_eval`. A
+        // body that only does conversions is classified pure — the interpreter
+        // materialises the converted value at compile time.
         let mut module = Module::new();
         module.add_func(
             FuncName::from("f"),
@@ -271,7 +271,7 @@ mod tests {
                 vec![v("p")],
                 "r",
                 region(
-                    vec![(v("v0"), Value::Eval(Code::NatToStr(v("p"))))],
+                    vec![(v("v0"), Value::Eval(Code::NatToInt(v("p"))))],
                     jump("r", vec![v("v0")]),
                 ),
             ),

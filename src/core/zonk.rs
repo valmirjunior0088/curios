@@ -472,9 +472,6 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::FltTrunc(t) => Prim::FltTrunc(zonk_term(context, t)?),
         Prim::FltNearest(t) => Prim::FltNearest(zonk_term(context, t)?),
 
-        Prim::NatToStr(t) => Prim::NatToStr(zonk_term(context, t)?),
-        Prim::IntToStr(t) => Prim::IntToStr(zonk_term(context, t)?),
-        Prim::FltToStr(t) => Prim::FltToStr(zonk_term(context, t)?),
         Prim::FltToLeBin(t) => Prim::FltToLeBin(zonk_term(context, t)?),
         Prim::NatToInt(t) => Prim::NatToInt(zonk_term(context, t)?),
         Prim::NatToFlt(t) => Prim::NatToFlt(zonk_term(context, t)?),

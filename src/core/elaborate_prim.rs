@@ -106,21 +106,8 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::FltGt(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltGt)?,
         Prim::FltLte(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltLte)?,
         Prim::FltGte(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltGte)?,
-        // The text-rendering prims emit raw UTF-8 *bytes* (`Bin`). `Str` is no
-        // longer a core primitive — `/std/{Nat,Int,Flt}/to_str` wrap these with the
-        // checked `Str/of_bin` to reach the proof-carrying `/syn/Str`.
-        Prim::NatToStr(inner) => {
-            let inner = elaborate(context, inner, Mode::Check(nat_type))?.0;
-            (Prim::NatToStr(inner), bin_type.clone())
-        }
-        Prim::IntToStr(inner) => {
-            let inner = elaborate(context, inner, Mode::Check(int_type))?.0;
-            (Prim::IntToStr(inner), bin_type.clone())
-        }
-        Prim::FltToStr(inner) => {
-            let inner = elaborate(context, inner, Mode::Check(flt_type))?.0;
-            (Prim::FltToStr(inner), bin_type.clone())
-        }
+        // `Flt/to_le_bin` exposes the IEEE-754 bytes (`Bin`); `/std/Flt/to_str`
+        // renders them to the proof-carrying `/syn/Str` in Curios (Dragon4).
         Prim::FltToLeBin(inner) => {
             let inner = elaborate(context, inner, Mode::Check(flt_type))?.0;
             (Prim::FltToLeBin(inner), bin_type)

@@ -674,19 +674,19 @@ mod tests {
     }
 
     #[test]
-    fn folds_to_str_call_at_compile_time() {
-        // f(n) = Nat::to_str(n) — now pure under the new classification (see
-        // `pure_to_str_code_is_pure`). With a literal argument, partial eval
-        // folds the call to a `Pure(Data::Bin("7"))` plus a jump to the
-        // original resume; the runtime conversion disappears.
-        let mut module = module_with_main_calling("f", vec![(v("a"), Data::Nat(7))]);
+    fn folds_conversion_call_at_compile_time() {
+        // f(n) = Flt::to_le_bin(n) — pure under the classification (see
+        // `pure_conversion_code_is_pure`). With a literal argument, partial eval
+        // folds the call to a `Pure(Data::Bin(..))` plus a jump to the original
+        // resume; the runtime conversion disappears.
+        let mut module = module_with_main_calling("f", vec![(v("a"), Data::Flt(7.0))]);
         module.add_func(
             FuncName::from("f"),
             func(
                 vec![v("n")],
                 "rf",
                 region(
-                    vec![(v("s"), Value::Eval(Code::NatToStr(v("n"))))],
+                    vec![(v("s"), Value::Eval(Code::FltToLeBin(v("n"))))],
                     jump("rf", vec![v("s")]),
                 ),
             ),
@@ -700,12 +700,13 @@ mod tests {
             "expected the Direct call to fold to a Jump, got {:?}",
             region.tail,
         );
+        let expected = 7.0f32.to_le_bytes();
         assert!(
             region
                 .values
                 .iter()
-                .any(|(_, v)| matches!(v, Value::Pure(Data::Bin(b)) if b == b"7")),
-            "expected a Pure(Bin(\"7\")) binding from the folded NatToStr, got {:?}",
+                .any(|(_, v)| matches!(v, Value::Pure(Data::Bin(b)) if b.as_slice() == expected.as_slice())),
+            "expected a Pure(Bin) binding from the folded FltToLeBin, got {:?}",
             region.values,
         );
     }

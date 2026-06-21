@@ -290,12 +290,6 @@ fn eval_scalar<E: EvalEnv>(code: &Code, env: &E) -> Option<Scalar> {
         FltToNat(a) => Scalar::flt_to_nat(env.flt(a)?),
         FltToInt(a) => Scalar::flt_to_int(env.flt(a)?),
 
-        // Number → string. Deterministic — every value formats. The output must
-        // match `src/run/host.rs`'s free functions byte-for-byte so compile-time
-        // folding and runtime conversion agree.
-        NatToStr(a) => Some(Scalar::Bin(format!("{}", env.nat(a)?).into_bytes())),
-        IntToStr(a) => Some(Scalar::Bin(format!("{:+}", env.int(a)?).into_bytes())),
-        FltToStr(a) => Some(Scalar::Bin(format!("{:+}", env.flt(a)?).into_bytes())),
         FltToLeBin(a) => Some(Scalar::Bin(env.flt(a)?.to_le_bytes().to_vec())),
 
         // Bytewise equality — total whenever both operands are known.

@@ -25,7 +25,6 @@ pub enum Prim {
     NatXor(Term, Term),
     NatShl(Term, Term),
     NatShr(Term, Term),
-    NatToStr(Term),
     IntType,
     Int(Int),
     IntEql(Term, Term),
@@ -44,7 +43,6 @@ pub enum Prim {
     IntXor(Term, Term),
     IntShl(Term, Term),
     IntShr(Term, Term),
-    IntToStr(Term),
     FltType,
     Flt(Flt),
     FltAdd(Term, Term),
@@ -66,7 +64,6 @@ pub enum Prim {
     FltCeil(Term),
     FltTrunc(Term),
     FltNearest(Term),
-    FltToStr(Term),
     NatToInt(Term),
     NatToFlt(Term),
     IntToNat(Term),
@@ -509,13 +506,6 @@ impl Prim {
         Self::NatToInt(inner.into())
     }
 
-    pub fn nat_to_str<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::NatToStr(inner.into())
-    }
-
     pub fn int_to_nat<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -528,13 +518,6 @@ impl Prim {
         T: Into<Term>,
     {
         Self::IntToFlt(inner.into())
-    }
-
-    pub fn int_to_str<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::IntToStr(inner.into())
     }
 
     pub fn nat_to_flt<T>(inner: T) -> Self
@@ -556,13 +539,6 @@ impl Prim {
         T: Into<Term>,
     {
         Self::FltToNat(inner.into())
-    }
-
-    pub fn flt_to_str<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltToStr(inner.into())
     }
 
     pub fn flt_to_le_bin<T>(inner: T) -> Self

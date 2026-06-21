@@ -173,14 +173,6 @@ fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> Prim) -> TopI
     pub_fn(label, vec![("a", input)], output, prim(ctor(name("a"))))
 }
 
-// A text-rendering conversion to the raw UTF-8 *bytes*. The primitive emits
-// decimal/ASCII text — UTF-8 by its (trusted) contract, the same inherent
-// primitive trust as `Bin/len` returning the right length — so `/std/{Nat,Int,Flt}`
-// wrap it with the checked `Str/of_bin` to land in the proof-carrying `Str`.
-fn to_str_bin(input: Term, ctor: fn(Term) -> Prim) -> TopItem {
-    pub_fn("to_str_bin", vec![("a", input)], bin(), prim(ctor(name("a"))))
-}
-
 fn nat_succ() -> TopItem {
     pub_fn(
         "succ",
@@ -211,7 +203,6 @@ fn nat_ops() -> Vec<TopItem> {
         binary("shr", nat(), nat(), Prim::NatShr),
         unary("to_int", nat(), int(), Prim::NatToInt),
         unary("to_flt", nat(), flt(), Prim::NatToFlt),
-        to_str_bin(nat(), Prim::NatToStr),
     ]
 }
 
@@ -250,7 +241,6 @@ fn int_ops() -> Vec<TopItem> {
         binary("shr", int(), int(), Prim::IntShr),
         unary("to_nat", int(), nat(), Prim::IntToNat),
         unary("to_flt", int(), flt(), Prim::IntToFlt),
-        to_str_bin(int(), Prim::IntToStr),
     ]
 }
 
@@ -277,7 +267,6 @@ fn flt_ops() -> Vec<TopItem> {
         unary("nearest", flt(), flt(), Prim::FltNearest),
         unary("to_nat", flt(), nat(), Prim::FltToNat),
         unary("to_int", flt(), int(), Prim::FltToInt),
-        to_str_bin(flt(), Prim::FltToStr),
         unary("to_le_bin", flt(), bin(), Prim::FltToLeBin),
     ]
 }

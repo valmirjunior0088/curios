@@ -381,15 +381,6 @@ pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) ->
         ersd::PurePrim::FltNearest(operand) => {
             lower_pure_unary_code(work, operand, frame, cont::Code::FltNearest)
         }
-        ersd::PurePrim::NatToStr(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::NatToStr)
-        }
-        ersd::PurePrim::IntToStr(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::IntToStr)
-        }
-        ersd::PurePrim::FltToStr(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::FltToStr)
-        }
         ersd::PurePrim::FltToLeBin(operand) => {
             lower_pure_unary_code(work, operand, frame, cont::Code::FltToLeBin)
         }
@@ -1061,15 +1052,6 @@ fn lower_value_pure_prim<'b>(
         }
         ersd::PurePrim::FltNearest(operand) => {
             lower_unary_code(work, operand, frame, cont, cont::Code::FltNearest)
-        }
-        ersd::PurePrim::NatToStr(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::NatToStr)
-        }
-        ersd::PurePrim::IntToStr(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::IntToStr)
-        }
-        ersd::PurePrim::FltToStr(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::FltToStr)
         }
         ersd::PurePrim::FltToLeBin(operand) => {
             lower_unary_code(work, operand, frame, cont, cont::Code::FltToLeBin)

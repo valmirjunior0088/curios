@@ -1025,15 +1025,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 wasm::Instr::F32Copysign,
                 WrapAs::Flt,
             ),
-            cont::Code::NatToStr(operand) => {
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Nat));
-                self.emit_instr(wasm::Instr::Call {
-                    func_name: self.context.table().nat_to_str_func().clone(),
-                });
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
             cont::Code::NatToInt(operand) => {
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Nat));
                 self.emit_instr(wasm::Instr::RefI31);
@@ -1048,15 +1039,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 wasm::Instr::F32ConvertI32U,
                 WrapAs::Flt,
             ),
-            cont::Code::IntToStr(operand) => {
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
-                self.emit_instr(wasm::Instr::Call {
-                    func_name: self.context.table().int_to_str_func().clone(),
-                });
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
             cont::Code::IntToNat(operand) => {
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
                 self.emit_instr(wasm::Instr::RefI31);
@@ -1071,15 +1053,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 wasm::Instr::F32ConvertI32S,
                 WrapAs::Flt,
             ),
-            cont::Code::FltToStr(operand) => {
-                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
-                self.emit_instr(wasm::Instr::Call {
-                    func_name: self.context.table().flt_to_str_func().clone(),
-                });
-                self.emit_instr(wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
             cont::Code::FltToLeBin(operand) => {
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
                 self.emit_instr(wasm::Instr::Call {

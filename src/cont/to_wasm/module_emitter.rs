@@ -64,45 +64,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    fn emit_to_str_imports(&mut self) {
-        let bin_ref = wasm::ValType::Ref(wasm::RefType {
-            is_nullable: false,
-            heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
-        });
-        let i32 = wasm::ValType::Num(wasm::NumType::I32);
-        let f32 = wasm::ValType::Num(wasm::NumType::F32);
-
-        if self.table.nat_to_str_used() {
-            self.add_host_import(
-                "nat_to_str",
-                wasm::TypeName::from("nat_to_str_type"),
-                self.table.nat_to_str_func().clone(),
-                wasm::ResultType::from([i32.clone()]),
-                wasm::ResultType::from([bin_ref.clone()]),
-            );
-        }
-
-        if self.table.int_to_str_used() {
-            self.add_host_import(
-                "int_to_str",
-                wasm::TypeName::from("int_to_str_type"),
-                self.table.int_to_str_func().clone(),
-                wasm::ResultType::from([i32.clone()]),
-                wasm::ResultType::from([bin_ref.clone()]),
-            );
-        }
-
-        if self.table.flt_to_str_used() {
-            self.add_host_import(
-                "flt_to_str",
-                wasm::TypeName::from("flt_to_str_type"),
-                self.table.flt_to_str_func().clone(),
-                wasm::ResultType::from([f32.clone()]),
-                wasm::ResultType::from([bin_ref.clone()]),
-            );
-        }
-
+    fn emit_flt_to_le_bin_import(&mut self) {
         if self.table.flt_to_le_bin_used() {
+            let bin_ref = wasm::ValType::Ref(wasm::RefType {
+                is_nullable: false,
+                heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
+            });
+            let f32 = wasm::ValType::Num(wasm::NumType::F32);
             self.add_host_import(
                 "flt_to_le_bin",
                 wasm::TypeName::from("flt_to_le_bin_type"),
@@ -812,7 +780,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 .add_export(func_name.as_string(), wasm::Export::Func(func_name));
         }
 
-        self.emit_to_str_imports();
+        self.emit_flt_to_le_bin_import();
         self.emit_sys_imports();
 
         let start_type_name = wasm::TypeName::from("start");
