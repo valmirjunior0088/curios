@@ -302,13 +302,35 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             |l, r| l.checked_mul(r).map(Prim::Nat),
             Prim::NatMul,
         ),
-        Prim::NatLt(left, right) => reduce_nat_binary(
-            context,
-            left,
-            right,
-            |l, r| l.lt(&r).map(Prim::Bln),
-            Prim::NatLt,
-        ),
+        Prim::NatLt(left, right) => {
+            let left = reduce(context, left.clone())?;
+            let right = reduce(context, right.clone())?;
+            // Both literal: fold exactly.
+            if let (Some(l), Some(r)) = (left.as_nat(), right.as_nat())
+                && let Some(folded) = l.lt(&r)
+            {
+                return Ok(Subterm::Prim(Prim::Bln(folded)));
+            }
+            // `lt(a, s + inner) = true` when the literal `a` is below the
+            // successor floor `s` (`inner ≥ 0`, so the right side is at least
+            // `s > a`). The partner of `Bin/len`'s cons rule: it discharges the
+            // `lt(0, succ(len t))` guard a codepoint walk raises on a cons.
+            if let Some(a) = left.as_nat().and_then(|n| n.to_big_uint())
+                && let Subterm::Prim(Prim::Nat(Nat::Succ(floor, _))) = &*right
+                && a < *floor
+            {
+                return Ok(Subterm::Prim(Prim::Bln(true)));
+            }
+            // `lt(s + inner, b) = false` when the literal `b` is at or below the
+            // successor floor `s` (the left side is at least `s ≥ b`).
+            if let Some(b) = right.as_nat().and_then(|n| n.to_big_uint())
+                && let Subterm::Prim(Prim::Nat(Nat::Succ(floor, _))) = &*left
+                && *floor >= b
+            {
+                return Ok(Subterm::Prim(Prim::Bln(false)));
+            }
+            Ok(Subterm::Prim(Prim::nat_lt(left, right)))
+        }
         Prim::NatDiv(left, right) => reduce_nat_division(
             context,
             left,
@@ -680,10 +702,34 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::Bin(bytes) => Ok(Subterm::Prim(Prim::Bin(bytes.clone()))),
         Prim::BinLen(bin) => {
             let bin = reduce(context, bin.clone())?;
-            Ok(match Term::unwrap_or_clone(bin) {
-                Subterm::Prim(Prim::Bin(bytes)) => Subterm::Prim(Prim::Nat(Nat::new(bytes.len()))),
-                bin => Subterm::Prim(Prim::bin_len(bin)),
-            })
+            match &*bin {
+                // A literal run: its byte count.
+                Subterm::Prim(Prim::Bin(bytes)) => {
+                    Ok(Subterm::Prim(Prim::Nat(Nat::new(bytes.len()))))
+                }
+                // `len` distributes over concatenation: `len(concat(a, b, ..)) =
+                // len(a) + len(b) + ..` — the monoid partner of the `BinConcat`
+                // rules, letting a symbolic cons reduce its length to a `succ`
+                // spine (`NatAdd`'s successor peeling carries the `1` outward).
+                Subterm::Prim(Prim::BinConcat(operands)) => {
+                    let sum = operands.iter().rev().fold(
+                        Term::prim(Prim::Nat(Nat::Zero)),
+                        |acc, operand| {
+                            let len = Term::prim(Prim::bin_len(operand.clone()));
+                            Term::prim(Prim::nat_add(len, acc))
+                        },
+                    );
+                    reduce(context, sum).map(Term::unwrap_or_clone)
+                }
+                // `len(append(base, _)) = succ(len base)` — one byte longer, the
+                // base case the cons head (`append(\\, h)`) bottoms out on.
+                Subterm::Prim(Prim::BinAppend(base, _)) => {
+                    let one = Term::prim(Prim::Nat(Nat::new(1usize)));
+                    let len = Term::prim(Prim::bin_len(base.clone()));
+                    reduce(context, Term::prim(Prim::nat_add(one, len))).map(Term::unwrap_or_clone)
+                }
+                _ => Ok(Subterm::Prim(Prim::bin_len(Term::unwrap_or_clone(bin)))),
+            }
         }
         Prim::BinEql(left, right) => {
             let left = reduce(context, left.clone())?;

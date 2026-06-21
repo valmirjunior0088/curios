@@ -483,6 +483,28 @@ fn bin_get_reduces_across_a_cons_spine() {
 }
 
 #[test]
+fn bin_len_reduces_across_a_cons_spine() {
+    // The `Bin/len` partner of the slice/get cons-reduction: length distributes
+    // over concatenation and an `append` is one byte longer, so a cons spine's
+    // length reduces to a `succ` over the tail's — `len(cons(h, t)) = succ(len t)`.
+    // `Nat/lt` then discharges the codepoint walk's bounds guard on that spine:
+    // `lt(0, succ _) = true` (the left literal is below the successor floor) and
+    // `lt(succ _, 0) = false` (the left is at least the floor). All by `refl` for
+    // a SYMBOLIC tail, the pair that lets `advance_codepoint` step a symbolic cons.
+    let source = r#"
+        use /std/{Io, Str, Eq, Bin, Nat};
+        let len(h : Nat, t : Bin)
+            -> Eq(Bin/len(Bin/concat(Bin/append(\\, h), t)), Nat/add(1, Bin/len(t))) = Eq/refl();
+        let guard(h : Nat, t : Bin)
+            -> Eq(Nat/lt(0, Bin/len(Bin/concat(Bin/append(\\, h), t))), true) = Eq/refl();
+        let floor(h : Nat, t : Bin)
+            -> Eq(Nat/lt(Bin/len(Bin/concat(Bin/append(\\, h), t)), 0), false) = Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
 fn arr_concat_is_a_free_monoid() {
     // `peel_arr` (core::spine) makes `Arr` a free monoid on its elements, the twin
     // of `bin_concat_is_a_free_monoid`: `concat` associates, the empty array `[]`
