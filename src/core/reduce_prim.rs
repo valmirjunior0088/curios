@@ -288,13 +288,33 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
 
             Ok(Subterm::Prim(Prim::nat_add(left, right)))
         }
-        Prim::NatSub(left, right) => reduce_nat_binary(
-            context,
-            left,
-            right,
-            |l, r| l.checked_sub(r).map(Prim::Nat),
-            Prim::NatSub,
-        ),
+        Prim::NatSub(left, right) => {
+            let left = reduce(context, left.clone())?;
+            let right = reduce(context, right.clone())?;
+            // Both literal: fold with truncating ℕ subtraction.
+            if let (Some(l), Some(r)) = (left.as_nat(), right.as_nat())
+                && let Some(diff) = l.checked_sub(r)
+            {
+                return Ok(Subterm::Prim(Prim::Nat(diff)));
+            }
+            // `(s + inner) - k = (s - k) + inner` when the literal `k` is at or
+            // below the successor floor `s` (truncated ℕ, `inner ≥ 0`, so no
+            // borrow reaches `inner`). The subtraction twin of `NatAdd`'s
+            // successor peeling: it turns the `succ e - 1` bounds the cons slice
+            // rule produces back into `e`, so a slice over a symbolic cons keeps
+            // reducing instead of stalling on a stuck `Nat/sub`.
+            if let Some(k) = right.as_nat().and_then(|n| n.to_big_uint())
+                && let Subterm::Prim(Prim::Nat(Nat::Succ(floor, inner))) = &*left
+                && *floor >= k
+            {
+                let diff = floor - &k;
+                if diff.is_zero() {
+                    return reduce(context, inner.clone()).map(Term::unwrap_or_clone);
+                }
+                return Ok(Subterm::Prim(Prim::Nat(Nat::Succ(diff, inner.clone()))));
+            }
+            Ok(Subterm::Prim(Prim::nat_sub(left, right)))
+        }
         Prim::NatMul(left, right) => reduce_nat_binary(
             context,
             left,

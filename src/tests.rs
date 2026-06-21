@@ -505,6 +505,23 @@ fn bin_len_reduces_across_a_cons_spine() {
 }
 
 #[test]
+fn nat_sub_peels_a_successor_spine() {
+    // The subtraction twin of `NatAdd`'s successor peeling: `(s + inner) - k`
+    // reduces to `(s - k) + inner` when the literal `k` is within the successor
+    // floor `s`, even for a SYMBOLIC `inner` that `reduce` cannot fold. This is
+    // what turns the `succ e - 1` bounds the cons slice rule emits back into `e`,
+    // so a slice over a symbolic cons keeps reducing. `peel` thins the floor;
+    // `to_zero` exhausts it, leaving the bare tail.
+    let source = r#"
+        use /std/{Io, Str, Eq, Nat};
+        let peel(n : Nat) -> Eq(Nat/sub(Nat/add(3, n), 1), Nat/add(2, n)) = Eq/refl();
+        let to_zero(n : Nat) -> Eq(Nat/sub(Nat/add(1, n), 1), n) = Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
 fn arr_concat_is_a_free_monoid() {
     // `peel_arr` (core::spine) makes `Arr` a free monoid on its elements, the twin
     // of `bin_concat_is_a_free_monoid`: `concat` associates, the empty array `[]`
