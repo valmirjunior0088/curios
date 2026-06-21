@@ -5,7 +5,7 @@ use {
         MotivePattern,
         MotiveSlot, Nat, ParkedWork, Plicity, Prim, Proj, Quantity, Rec, Scope, Struct, StructType,
         Structure,
-        Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
+        Subterm, Telescope, Term, Tuple, TupleType, UnionType, Var, Variant,
         case_target_indices,
         check, check_motive, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
         reduce_with, refine_head,
@@ -462,7 +462,7 @@ fn elaborate_nat_match(
     head: &Term,
     motive: &Scope<Many>,
     zero_case: &Term,
-    succ_case: &Scope<Two>,
+    succ_case: &Scope<Many>,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
@@ -505,15 +505,19 @@ fn elaborate_nat_match(
         )
     })?;
 
-    let succ_elaborated = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
+    let succ_elaborated =
+        Scope::close(Many(2), &[pred_label.as_str(), ih_label.as_str()], succ_body);
 
     let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive,
-        cases: Cases::Nat {
-            zero_case: zero_elaborated,
-            succ_case: succ_elaborated,
+        // `Nat` is the free monoid on one payload-less generator: its cons arm binds
+        // just (predecessor, ih), so the carrier is `Nat` and the head is absent.
+        cases: Cases::Inductive {
+            carrier: Carrier::Nat,
+            empty_case: zero_elaborated,
+            cons_case: succ_elaborated,
         },
     })
     .into();
@@ -526,7 +530,7 @@ fn elaborate_arr_match(
     head: &Term,
     motive: &Scope<Many>,
     empty_case: &Term,
-    cons_case: &Scope<Three>,
+    cons_case: &Scope<Many>,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
@@ -583,7 +587,7 @@ fn elaborate_arr_match(
     })?;
 
     let cons_elaborated = Scope::close(
-        Three,
+        Many(3),
         &[
             head_label.as_str(),
             tail_label.as_str(),
@@ -612,7 +616,7 @@ fn elaborate_bin_match(
     head: &Term,
     motive: &Scope<Many>,
     empty_case: &Term,
-    cons_case: &Scope<Three>,
+    cons_case: &Scope<Many>,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
@@ -668,7 +672,7 @@ fn elaborate_bin_match(
     })?;
 
     let cons_elaborated = Scope::close(
-        Three,
+        Many(3),
         &[
             head_label.as_str(),
             tail_label.as_str(),
@@ -758,16 +762,17 @@ fn elaborate_match(
             false_case,
             true_case,
         } => elaborate_bln_match(context, head, motive, false_case, true_case, term, mode),
-        Cases::Nat {
-            zero_case,
-            succ_case,
-        } => elaborate_nat_match(context, head, motive, zero_case, succ_case, term, mode),
         Cases::Switch { cases, default } => {
             elaborate_switch(context, head, motive, cases, default, term, mode)
         }
         Cases::Union { cases, pattern } => {
             elaborate_union_match(context, head, motive, cases, pattern.as_ref(), term, mode)
         }
+        Cases::Inductive {
+            carrier: Carrier::Nat,
+            empty_case,
+            cons_case,
+        } => elaborate_nat_match(context, head, motive, empty_case, cons_case, term, mode),
         Cases::Inductive {
             carrier: Carrier::Arr(_),
             empty_case,

@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Bound, Flt, Int, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit},
+    super::{Atom, Bound, Flt, Int, Many, Nat, One, Prim, Scope, Telescope, Var, Visit},
     crate::Span,
     std::{
         cell::OnceCell,
@@ -518,10 +518,11 @@ impl Term {
                 Some(l) => Scope::close(Many(1), &[l], motive.into()),
                 None => Scope::constant(Many(1), motive.into()),
             },
-            cases: Cases::Nat {
-                zero_case: zero_case.into(),
-                succ_case: Scope::close(
-                    Two,
+            cases: Cases::Inductive {
+                carrier: Carrier::Nat,
+                empty_case: zero_case.into(),
+                cons_case: Scope::close(
+                    Many(2),
                     &[pred_label.as_str(), ih_label.as_str()],
                     succ_case.into(),
                 ),
@@ -565,7 +566,7 @@ impl Term {
                 carrier: Carrier::Arr(elem.into()),
                 empty_case: empty_case.into(),
                 cons_case: Scope::close(
-                    Three,
+                    Many(3),
                     &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
                     cons_case.into(),
                 ),
@@ -607,7 +608,7 @@ impl Term {
                 carrier: Carrier::Bin,
                 empty_case: empty_case.into(),
                 cons_case: Scope::close(
-                    Three,
+                    Many(3),
                     &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
                     cons_case.into(),
                 ),
@@ -948,12 +949,6 @@ pub enum MotiveSlot {
 pub enum Cases {
     /// Dependent elimination of `Bln`: a false arm and a true arm.
     Bln { false_case: Term, true_case: Term },
-    /// Structural induction on `Nat`: a zero arm plus a successor arm binding
-    /// the predecessor and the induction hypothesis.
-    Nat {
-        zero_case: Term,
-        succ_case: Scope<Two>,
-    },
     /// Sparse dispatch on specific `Nat` values with a default arm.
     Switch {
         cases: BTreeMap<u32, Term>,
@@ -966,22 +961,26 @@ pub enum Cases {
         cases: BTreeMap<Atom, Scope<Many>>,
         pattern: Option<MotivePattern>,
     },
-    /// Structural induction on a native free-monoid primitive (`Arr`/`Bin`/`Str`):
-    /// an identity arm plus a cons arm binding the head generator, the tail, and
-    /// the induction hypothesis at the tail. The `carrier` selects the primitive
-    /// and carries its parameters (`Arr`'s element type). The dual of `Cases::Nat`
-    /// where the generator carries a payload.
+    /// Structural induction on a native free-monoid primitive (`Nat`/`Arr`/`Bin`/
+    /// `Str`): an identity arm plus a cons arm binding the head generator (absent
+    /// for `Nat`, whose unary generator carries no payload), the tail, and the
+    /// induction hypothesis at the tail. The `carrier` selects the primitive and
+    /// carries its parameters (`Arr`'s element type). The cons arm's arity is thus
+    /// payload-dependent — 2 for `Nat` (predecessor, ih), 3 for `Bin`/`Arr` (head,
+    /// tail, ih) — hence `Scope<Many>` rather than a fixed arity.
     Inductive {
         carrier: Carrier,
         empty_case: Term,
-        cons_case: Scope<Three>,
+        cons_case: Scope<Many>,
     },
 }
 
 /// The native free-monoid primitive a `Cases::Inductive` eliminates, with its
-/// type parameters. `Bin`/`Str` carry none; `Arr` carries its element type.
+/// type parameters. `Nat` is the free monoid on one (payload-less) generator;
+/// `Bin`/`Str` carry none; `Arr` carries its element type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Carrier {
+    Nat,
     Arr(Term),
     Bin,
 }
@@ -1187,13 +1186,6 @@ impl Subterm {
                         false_case.collect_construction_names(names);
                         true_case.collect_construction_names(names);
                     }
-                    Cases::Nat {
-                        zero_case,
-                        succ_case,
-                    } => {
-                        zero_case.collect_construction_names(names);
-                        succ_case.body().collect_construction_names(names);
-                    }
                     Cases::Switch { cases, default } => {
                         cases.values().for_each(|b| b.collect_construction_names(names));
                         default.collect_construction_names(names);
@@ -1288,13 +1280,6 @@ impl Subterm {
                     } => {
                         false_case.collect_metavars(ids);
                         true_case.collect_metavars(ids);
-                    }
-                    Cases::Nat {
-                        zero_case,
-                        succ_case,
-                    } => {
-                        zero_case.collect_metavars(ids);
-                        succ_case.body().collect_metavars(ids);
                     }
                     Cases::Switch { cases, default } => {
                         cases.values().for_each(|b| b.collect_metavars(ids));
@@ -1504,13 +1489,6 @@ impl Bound for Subterm {
                         false_case: visit.visit_subterm(false_case),
                         true_case: visit.visit_subterm(true_case),
                     },
-                    Cases::Nat {
-                        zero_case,
-                        succ_case,
-                    } => Cases::Nat {
-                        zero_case: visit.visit_subterm(zero_case),
-                        succ_case: visit.visit_scope(succ_case),
-                    },
                     Cases::Switch { cases, default } => Cases::Switch {
                         cases: cases
                             .iter()
@@ -1543,6 +1521,7 @@ impl Bound for Subterm {
                         cons_case,
                     } => Cases::Inductive {
                         carrier: match carrier {
+                            Carrier::Nat => Carrier::Nat,
                             Carrier::Arr(elem) => Carrier::Arr(visit.visit_subterm(elem)),
                             Carrier::Bin => Carrier::Bin,
                         },
@@ -1637,10 +1616,6 @@ impl Bound for Subterm {
                     false_case,
                     true_case,
                 } => false_case.reach().max(true_case.reach()),
-                Cases::Nat {
-                    zero_case,
-                    succ_case,
-                } => zero_case.reach().max(succ_case.reach()),
                 Cases::Switch { cases, default } => max_reach(cases.values()).max(default.reach()),
                 Cases::Union { cases, pattern } => {
                     cases.values().map(|s| s.reach()).max().unwrap_or(0).max(
@@ -1659,6 +1634,7 @@ impl Bound for Subterm {
                     cons_case,
                 } => {
                     let carrier_reach = match carrier {
+                        Carrier::Nat => 0,
                         Carrier::Arr(elem) => elem.reach(),
                         Carrier::Bin => 0,
                     };

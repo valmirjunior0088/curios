@@ -1,11 +1,11 @@
-//! The free-monoid destructors. `Bin` and `Arr` are the native primitives that are
-//! free monoids on their generators (bytes, elements). Their structural eliminator
-//! (`Cases::Inductive`) reduces by a one-step decode — peel the empty identity or a
-//! single leading generator off the scrutinee — and that decode is `uncons`, one
-//! method per carrier; the catamorphism driver in `reduce` consumes the `Layer` it
-//! returns and never inspects the carrier's representation again. The eliminator-side
-//! analogue of `spine::peel_prim`: a new free-monoid carrier is one `uncons` and
-//! nothing else.
+//! The free-monoid destructors. `Nat`, `Bin`, and `Arr` are the native primitives
+//! that are free monoids on their generators (the unary unit, bytes, elements).
+//! Their structural eliminator (`Cases::Inductive`) reduces by a one-step decode —
+//! peel the empty identity or a single leading generator off the scrutinee — and
+//! that decode is `uncons`, one method per carrier; the catamorphism driver in
+//! `reduce` consumes the `Layer` it returns and never inspects the carrier's
+//! representation again. The eliminator-side analogue of `spine::peel_prim`: a new
+//! free-monoid carrier is one `uncons` and nothing else.
 //!
 //! For `Bin`, the same front decode also feeds the operation level: `Bin/get` and
 //! `Bin/slice` peel one byte at a time along a codepoint walk via `peel_first_byte`.
@@ -13,29 +13,37 @@
 //! how they reflect the peeled head — a `Nat` byte for the eliminator, a one-byte
 //! `Bin` chunk for the operations.
 
-use super::{Nat, Prim, Subterm, Term};
+use {
+    super::{Nat, Prim, Subterm, Term},
+    num_bigint::BigUint,
+};
 
 /// The one-step decode of a free-monoid scrutinee — a carrier's signature functor
-/// made concrete. `Empty` is the identity form (`\\`, `[]`); `Cons` is a peeled
-/// head generator (already reflected into its element type — a `Nat` byte for
-/// `Bin`, the element term itself for `Arr`) over the symbolic tail the induction
-/// hypothesis recurses on; `Stuck` is a scrutinee exposing neither form (a
-/// variable, a non-cons symbolic concatenation), where the eliminator rebuilds.
+/// made concrete. `Empty` is the identity form (`\\`, `[]`, `0`); `Cons` peels a
+/// generator: its `head` is the payload reflected into the element type — a `Nat`
+/// byte for `Bin`, the element term itself for `Arr`, and `None` for `Nat`, whose
+/// unary successor carries no payload — over the symbolic tail the induction
+/// hypothesis recurses on; `Stuck` is a scrutinee exposing neither form (a variable,
+/// a non-cons symbolic concatenation), where the eliminator rebuilds.
 pub enum Layer {
     Empty,
-    Cons { head: Term, tail: Term },
+    Cons { head: Option<Term>, tail: Term },
     Stuck(Subterm),
 }
 
-/// A native primitive that is the free monoid on a generator set: `Bin` on its
-/// bytes, `Arr` on its elements. Implemented by witness types — the values live
-/// as `Subterm`s, so the method is static. `uncons` is the only seam the
+/// A native primitive that is the free monoid on a generator set: `Nat` on the unit,
+/// `Bin` on its bytes, `Arr` on its elements. Implemented by witness types — the
+/// values live as `Subterm`s, so the method is static. `uncons` is the only seam the
 /// structural eliminator needs; the recursion scheme around it is carrier-generic
 /// and lives in `reduce`.
 pub trait FreeMonoid {
     /// Decode one constructor layer off an already-reduced scrutinee.
     fn uncons(scrutinee: Subterm) -> Layer;
 }
+
+/// The free monoid on one payload-less generator: the unary naturals. `succ` peels
+/// to its predecessor with no head.
+pub struct Unary;
 
 /// The free monoid on bytes. Its generator is a byte, reflected back into the
 /// eliminator as a `Nat`.
@@ -44,13 +52,34 @@ pub struct Bin;
 /// The free monoid on its elements. Its generator is the element term itself.
 pub struct Arr;
 
+impl FreeMonoid for Unary {
+    fn uncons(scrutinee: Subterm) -> Layer {
+        match scrutinee {
+            // The identity: zero.
+            Subterm::Prim(Prim::Nat(Nat::Zero)) => Layer::Empty,
+            // Peel one successor off the spine; the predecessor is the tail, and the
+            // unary generator carries no head. A spine count `> 1` keeps the rest as
+            // a shorter `Succ`, exactly as the old bespoke `Nat` eliminator did.
+            Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => {
+                let one = BigUint::from(1usize);
+                let tail = match spine == one {
+                    true => inner,
+                    false => Term::prim(Prim::Nat(Nat::Succ(spine - one, inner))),
+                };
+                Layer::Cons { head: None, tail }
+            }
+            stuck => Layer::Stuck(stuck),
+        }
+    }
+}
+
 impl FreeMonoid for Bin {
     fn uncons(scrutinee: Subterm) -> Layer {
         let term: Term = scrutinee.into();
         match peel_front(&term) {
             Front::Empty => Layer::Empty,
             // The peeled byte is the eliminator's `Nat`-typed head generator.
-            Front::Cons { head, tail } => Layer::Cons { head: head.into_nat(), tail },
+            Front::Cons { head, tail } => Layer::Cons { head: Some(head.into_nat()), tail },
             Front::Opaque => Layer::Stuck(Term::unwrap_or_clone(term)),
         }
     }
@@ -65,7 +94,7 @@ impl FreeMonoid for Arr {
             Subterm::Prim(Prim::Arr(mut elems)) => {
                 let head = elems.remove(0);
                 let tail: Term = Subterm::Prim(Prim::Arr(elems)).into();
-                Layer::Cons { head, tail }
+                Layer::Cons { head: Some(head), tail }
             }
             // A symbolic cons `cons(x, xs) = concat([x], xs)`: decode `x` off the
             // leading non-empty literal segment; its remaining elements stay ahead
@@ -86,7 +115,7 @@ impl FreeMonoid for Arr {
                     1 => segments.into_iter().next().unwrap(),
                     _ => Subterm::Prim(Prim::ArrConcat(concat_elem, segments)).into(),
                 };
-                Layer::Cons { head, tail }
+                Layer::Cons { head: Some(head), tail }
             }
             stuck => Layer::Stuck(stuck),
         }

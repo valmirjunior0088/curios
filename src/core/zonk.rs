@@ -305,19 +305,13 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                     false_case: zonk_term(context, false_case)?,
                     true_case: zonk_term(context, true_case)?,
                 },
-                Cases::Nat {
-                    zero_case,
-                    succ_case,
-                } => Cases::Nat {
-                    zero_case: zonk_term(context, zero_case)?,
-                    succ_case: enter_scope(succ_case, |b| zonk_term(context, b))?,
-                },
                 Cases::Inductive {
                     carrier,
                     empty_case,
                     cons_case,
                 } => Cases::Inductive {
                     carrier: match carrier {
+                        Carrier::Nat => Carrier::Nat,
                         Carrier::Arr(elem) => Carrier::Arr(zonk_term(context, elem)?),
                         Carrier::Bin => Carrier::Bin,
                     },

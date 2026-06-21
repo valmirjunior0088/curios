@@ -1,9 +1,9 @@
 use {
     super::{
         Apply, Arr, Bin, Carrier, Cases, Context, Field, FreeMonoid, Func, Layer, Let, Match,
-        Metavar, Nat, Prim, Proj, Rec, ReduceError, Struct, Subterm, Term, Tuple, Var, reduce_prim,
+        Metavar, Nat, Prim, Proj, Rec, ReduceError, Struct, Subterm, Term, Tuple, Unary, Var,
+        reduce_prim,
     },
-    num_bigint::BigUint,
     num_traits::ToPrimitive,
     std::time::Instant,
 };
@@ -180,42 +180,6 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             })))),
         },
 
-        Cases::Nat {
-            zero_case,
-            succ_case,
-        } => match Term::unwrap_or_clone(reduce_forced(context, head)?) {
-            Subterm::Prim(Prim::Nat(Nat::Zero)) => Ok(Reduce::Continue(zero_case)),
-            Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => {
-                let one = BigUint::from(1usize);
-
-                let pred = if spine == one {
-                    inner
-                } else {
-                    Term::prim(Prim::Nat(Nat::Succ(spine - one, inner)))
-                };
-
-                let ih: Term = Subterm::Match(Match {
-                    head: pred.clone(),
-                    motive: motive.clone(),
-                    cases: Cases::Nat {
-                        zero_case: zero_case.clone(),
-                        succ_case: succ_case.clone(),
-                    },
-                })
-                .into();
-
-                Ok(Reduce::Continue(succ_case.open(&[&pred, &ih])))
-            }
-            head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
-                head: head.into(),
-                motive,
-                cases: Cases::Nat {
-                    zero_case,
-                    succ_case,
-                },
-            })))),
-        },
-
         Cases::Switch { cases, default } => {
             match Term::unwrap_or_clone(reduce_forced(context, head)?) {
                 Subterm::Prim(Prim::Nat(Nat::Zero)) => match cases.get(&0) {
@@ -269,13 +233,13 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             }))))
         }
 
-        // Structural induction on a native free-monoid primitive (`Bin`/`Arr`).
+        // Structural induction on a native free-monoid primitive (`Nat`/`Bin`/`Arr`).
         // The carrier-specific one-step decode lives in `FreeMonoid::uncons` (the
-        // eliminator-side analogue of `spine::peel_prim`); this driver is the
-        // shared catamorphism over it. An identity `Layer` takes the empty arm; a
-        // cons `Layer` peels the head generator and recurses symbolically for the
-        // induction hypothesis (the dual of `Cases::Nat`'s successor peel); a stuck
-        // scrutinee rebuilds.
+        // eliminator-side analogue of `spine::peel_prim`); this driver is the shared
+        // catamorphism over it. An identity `Layer` takes the empty arm; a cons
+        // `Layer` peels a generator (its head absent for the unary `Nat`) and
+        // recurses symbolically for the induction hypothesis; a stuck scrutinee
+        // rebuilds.
         Cases::Inductive {
             carrier,
             empty_case,
@@ -283,6 +247,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         } => {
             let scrutinee = Term::unwrap_or_clone(reduce_forced(context, head)?);
             let layer = match &carrier {
+                Carrier::Nat => Unary::uncons(scrutinee),
                 Carrier::Bin => Bin::uncons(scrutinee),
                 Carrier::Arr(_) => Arr::uncons(scrutinee),
             };
@@ -301,7 +266,13 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                     })
                     .into();
 
-                    Ok(Reduce::Continue(cons_case.open(&[&head, &tail, &ih])))
+                    // The cons arm binds the generator's payload (a head, absent for
+                    // the unary `Nat`), then the tail and the induction hypothesis.
+                    let mut binders: Vec<&Term> = Vec::with_capacity(3);
+                    binders.extend(head.as_ref());
+                    binders.push(&tail);
+                    binders.push(&ih);
+                    Ok(Reduce::Continue(cons_case.open(binders.as_slice())))
                 }
                 Layer::Stuck(scrutinee) => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
                     head: scrutinee.into(),

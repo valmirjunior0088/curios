@@ -508,29 +508,6 @@ impl Convert {
             }
 
             (
-                Cases::Nat {
-                    zero_case: this_zero,
-                    succ_case: this_succ,
-                },
-                Cases::Nat {
-                    zero_case: that_zero,
-                    succ_case: that_succ,
-                },
-            ) => {
-                self.enqueue(Term::type_(), this_zero, that_zero);
-
-                let pred_label: Term = Term::var(Var::free(context.fresh(None)));
-                let ih_label: Term = Term::var(Var::free(context.fresh(None)));
-                self.enqueue(
-                    Term::type_(),
-                    this_succ.open(&[&pred_label, &ih_label]),
-                    that_succ.open(&[&pred_label, &ih_label]),
-                );
-
-                Ok(true)
-            }
-
-            (
                 Cases::Switch {
                     cases: this_cases,
                     default: this_default,
@@ -604,6 +581,7 @@ impl Convert {
                 },
             ) => {
                 match (this_carrier, that_carrier) {
+                    (Carrier::Nat, Carrier::Nat) => {}
                     (Carrier::Arr(this_elem), Carrier::Arr(that_elem)) => {
                         self.enqueue(Term::type_(), this_elem, that_elem);
                     }
@@ -613,13 +591,16 @@ impl Convert {
                 }
                 self.enqueue(Term::type_(), this_empty, that_empty);
 
-                let head_label: Term = Term::var(Var::free(context.fresh(None)));
-                let tail_label: Term = Term::var(Var::free(context.fresh(None)));
-                let ih_label: Term = Term::var(Var::free(context.fresh(None)));
+                // The cons arm's arity is carrier-dependent (2 for `Nat`, 3 for
+                // `Bin`/`Arr`); matched carriers share it, so open both generically.
+                let binders = (0..this_cons.arity())
+                    .map(|_| Term::var(Var::free(context.fresh(None))))
+                    .collect::<Vec<_>>();
+                let binder_refs = binders.iter().collect::<Vec<_>>();
                 self.enqueue(
                     Term::type_(),
-                    this_cons.open(&[&head_label, &tail_label, &ih_label]),
-                    that_cons.open(&[&head_label, &tail_label, &ih_label]),
+                    this_cons.open(&binder_refs),
+                    that_cons.open(&binder_refs),
                 );
 
                 Ok(true)

@@ -3,7 +3,7 @@ use {
         Apply, Arity, Atom, Carrier, Cases, Definition, Field, Flt, Func, FuncType, Item, Let,
         Match, Module, Nat, One, Plicity, Prim, Proj, Quantity, Rec, Scope, Struct, StructType,
         Subterm,
-        Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
+        Many, Telescope, Term, Tuple, TupleType, UnionType, Var, Variant,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::{
@@ -194,13 +194,6 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
                     collect_labels(false_case, out);
                     collect_labels(true_case, out);
                 }
-                Cases::Nat {
-                    zero_case,
-                    succ_case,
-                } => {
-                    collect_labels(zero_case, out);
-                    scope(out, succ_case);
-                }
                 Cases::Switch { cases, default } => {
                     cases.iter().for_each(|(_, body)| collect_labels(body, out));
                     collect_labels(default, out);
@@ -350,7 +343,7 @@ fn open_telescope(telescope: Telescope<Term>, depth: usize) -> (Vec<String>, Ter
     (labels, body)
 }
 
-fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
+fn open_scope_two(scope: Scope<Many>, depth: usize) -> ((String, String), Term) {
     let fst = scope
         .first_label()
         .map(str::to_string)
@@ -364,7 +357,7 @@ fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
     ((fst, snd), body)
 }
 
-fn open_scope_three(scope: Scope<Three>, depth: usize) -> ((String, String, String), Term) {
+fn open_scope_three(scope: Scope<Many>, depth: usize) -> ((String, String, String), Term) {
     let fst = scope
         .first_label()
         .map(str::to_string)
@@ -997,10 +990,10 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             // and arm bodies depend on the case kind.
             let keyword = match &cases {
                 Cases::Bln { .. } => "Bln.match ",
-                Cases::Nat { .. } => "Nat.fold ",
                 Cases::Switch { .. } => "Nat.match ",
                 Cases::Union { .. } => "match ",
                 Cases::Inductive { carrier, .. } => match carrier {
+                    Carrier::Nat => "Nat.fold ",
                     Carrier::Arr(_) => "Arr.fold ",
                     Carrier::Bin => "Bin.fold ",
                 },
@@ -1026,22 +1019,6 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                     pure("\n| true =>\n"),
                     indent(flat([print_term(true_case, depth), pure(";")])),
                 ]),
-                Cases::Nat {
-                    zero_case,
-                    succ_case,
-                } => {
-                    let ((pred_label, ih_label), succ_case) = open_scope_two(succ_case, depth);
-                    flat([
-                        pure("\n| 0n =>\n"),
-                        indent(flat([print_term(zero_case, depth), pure(";")])),
-                        pure("\n| "),
-                        pure(display_label(&pred_label)),
-                        pure(" "),
-                        pure(display_label(&ih_label)),
-                        pure(" =>\n"),
-                        indent(flat([print_term(succ_case, depth), pure(";")])),
-                    ])
-                }
                 Cases::Switch { cases, default } => {
                     let case_printers = flat(
                         cases
@@ -1103,24 +1080,46 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                     empty_case,
                     cons_case,
                 } => {
-                    // Only the identity arm's literal distinguishes the carriers.
-                    let empty_arm = match carrier {
+                    // The identity arm's literal is per carrier.
+                    let empty_arm = match &carrier {
+                        Carrier::Nat => "\n| 0n =>\n",
                         Carrier::Arr(_) => "\n| [] =>\n",
                         Carrier::Bin => "\n| \\\\ =>\n",
                     };
-                    let ((head_label, tail_label, ih_label), cons_case) =
-                        open_scope_three(cons_case, depth);
+                    // The cons arm binds `(predecessor, ih)` for the head-less unary
+                    // `Nat`, and `(head, tail), ih` for `Bin`/`Arr`.
+                    let cons_arm = match &carrier {
+                        Carrier::Nat => {
+                            let ((pred_label, ih_label), cons_case) =
+                                open_scope_two(cons_case, depth);
+                            flat([
+                                pure("\n| "),
+                                pure(display_label(&pred_label)),
+                                pure(" "),
+                                pure(display_label(&ih_label)),
+                                pure(" =>\n"),
+                                indent(flat([print_term(cons_case, depth), pure(";")])),
+                            ])
+                        }
+                        Carrier::Arr(_) | Carrier::Bin => {
+                            let ((head_label, tail_label, ih_label), cons_case) =
+                                open_scope_three(cons_case, depth);
+                            flat([
+                                pure("\n| ("),
+                                pure(display_label(&head_label)),
+                                pure(", "),
+                                pure(display_label(&tail_label)),
+                                pure("), "),
+                                pure(display_label(&ih_label)),
+                                pure(" =>\n"),
+                                indent(flat([print_term(cons_case, depth), pure(";")])),
+                            ])
+                        }
+                    };
                     flat([
                         pure(empty_arm),
                         indent(flat([print_term(empty_case, depth), pure(";")])),
-                        pure("\n| ("),
-                        pure(display_label(&head_label)),
-                        pure(", "),
-                        pure(display_label(&tail_label)),
-                        pure("), "),
-                        pure(display_label(&ih_label)),
-                        pure(" =>\n"),
-                        indent(flat([print_term(cons_case, depth), pure(";")])),
+                        cons_arm,
                     ])
                 }
             };
