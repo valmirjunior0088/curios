@@ -2426,6 +2426,26 @@ fn utf8_decode_lemmas_type_check() {
     assert_eq!(io.output(), b"ok");
 }
 
+// Regression: an `Eq/subst` whose motive contains `Eq(_, _)` — whose `@A` is
+// implicit — must insert that implicit when the motive is instantiated. It used
+// to drop it, leaving `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which
+// panicked `reduce_apply` with "telescope arity mismatch".
+#[test]
+fn subst_motive_inserts_implicit_in_eq() {
+    let source = r#"
+        use /std/{Eq, Nat, Io};
+        let g(n : Nat) -> Nat = n;
+        let lemma(@a : Nat, @b : Nat, p : Eq(a, b)) -> Eq(g(a), g(b)) =
+            Eq/subst((x) => Eq(g(a), g(x)), p, Eq/refl());
+        let _ = lemma;
+        Io/print("ok")
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(io.output(), b"ok");
+}
+
 // `Str/len` and `Str/get` count and index by codepoint, not byte. The string is
 // `a€😀` — a 1-byte, a 3-byte, and a 4-byte scalar — so its length is 3 and the
 // codepoints decode to U+0061 (97), U+20AC (8364), and U+1F600 (128512).

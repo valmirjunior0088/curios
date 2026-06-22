@@ -229,7 +229,7 @@ fn elaborate_apply(
     // postponed (see `blocked_on_metavar`) so its body is checked only after that
     // unification refines the codomain. Opening over the raw args is pure substitution
     // (no birth/solve), so this is just an early read of the result type.
-    let arg_refs: Vec<&Term> = params.iter().collect();
+    let arg_refs = params.iter().collect::<Vec<&Term>>();
     let result_metavars = ft.telescope.clone().open(&arg_refs).metavars();
 
     // Whether the expected type is fully ground. The codomain postponement is only a
@@ -252,28 +252,92 @@ fn elaborate_apply(
     // bare node past its rebuild (and a lowered term toward the reducer).
     // A postponed intro form stays lowered for now; its holes are unbirthed,
     // and its rebuilt form lands after the output `expect` pins its metas.
-    let mut postponed = Vec::new();
     // An argument to an erased (`Zero`) parameter sits in an erased position, so
     // it is checked at ρ scaled by the binder's quantity — this is what lets an
     // erased variable be *passed* to an erased parameter (category c).
     let quantities = ft.quantities.clone();
-    let (mut elaborated, output) = ft.telescope.clone().walk_map(params, |index, arg, ty| {
-        let quantity = quantities.get(index).copied().unwrap_or(Quantity::Omega);
 
-        if checking && blocked_on_metavar(context, arg, ty, &result_metavars, expected_ground)? {
-            postponed.push((index, arg.clone(), ty.clone()));
-            Ok(arg.clone())
+    // Walk the telescope, checking each argument against its (dependent) domain
+    // and opening the rest with the elaborated form. A checked-only intro form
+    // blocked on a metavar is postponed — its slot keeps the raw term for now —
+    // but the moment a *later* synthesizable argument grounds the metavar it was
+    // waiting on (e.g. `subst`'s `p : Eq(x, y)` grounds the motive's domain), it
+    // is re-checked and the remaining telescope re-opened through its elaborated
+    // form. Otherwise a sibling whose type mentions it (`subst`'s `v : P x`) or
+    // the result (`P y`) would reduce through a raw term whose un-inserted
+    // implicits (like `Eq`'s `@A`) panic the reducer. Arguments still genuinely
+    // blocked at the end (a continuation awaiting a codomain metavar) are settled
+    // after the result `expect`, as before.
+    let original = ft.telescope.clone();
+    let mut elaborated: Vec<Term> = Vec::with_capacity(params.len());
+    let mut postponed: Vec<usize> = Vec::new();
+    let mut tele = original.clone();
+    let mut index = 0;
+    let output = loop {
+        let (ty, rest) = match tele {
+            Telescope::Done(body) => break *body,
+            Telescope::Cons(ty, rest) => (ty, rest),
+        };
+        let quantity = quantities.get(index).copied().unwrap_or(Quantity::Omega);
+        let term = if checking
+            && blocked_on_metavar(context, &params[index], &ty, &result_metavars, expected_ground)?
+        {
+            postponed.push(index);
+            params[index].clone()
         } else {
-            context.with_quantity(quantity, |context| check(context, arg, ty.clone()))
+            context.with_quantity(quantity, |context| check(context, &params[index], ty.clone()))?
+        };
+        elaborated.push(term);
+
+        // Re-check any postponed argument whose block this slot just cleared.
+        let mut resolved = false;
+        let mut cursor = 0;
+        while cursor < postponed.len() {
+            let slot = postponed[cursor];
+            let slot_ty = original
+                .clone()
+                .nth(slot, |k| elaborated[k].clone())
+                .expect("postponed slot is within the telescope");
+            if blocked_on_metavar(context, &params[slot], &slot_ty, &result_metavars, expected_ground)?
+            {
+                cursor += 1;
+            } else {
+                let quantity = quantities.get(slot).copied().unwrap_or(Quantity::Omega);
+                elaborated[slot] =
+                    context.with_quantity(quantity, |context| check(context, &params[slot], slot_ty))?;
+                postponed.remove(cursor);
+                resolved = true;
+            }
         }
-    })?;
+
+        // Re-open from the top through the (possibly updated) prefix so later
+        // slot types carry the elaborated forms; otherwise just advance.
+        tele = match resolved {
+            false => rest.open(&[&elaborated[index]]),
+            true => {
+                let mut reopened = original.clone();
+                for term in &elaborated {
+                    reopened = match reopened {
+                        Telescope::Cons(_, rest) => rest.open(&[term]),
+                        Telescope::Done(_) => unreachable!("the prefix is within the telescope"),
+                    };
+                }
+                reopened
+            }
+        };
+        index += 1;
+    };
 
     if let Mode::Check(expected) = &mode {
         expect(context, term, &output, expected)?;
-        for (index, arg, ty) in postponed {
-            let quantity = quantities.get(index).copied().unwrap_or(Quantity::Omega);
-            elaborated[index] =
-                context.with_quantity(quantity, |context| check(context, &arg, ty))?;
+        for &slot in &postponed {
+            let slot_ty = original
+                .clone()
+                .nth(slot, |k| elaborated[k].clone())
+                .expect("postponed slot is within the telescope");
+            let quantity = quantities.get(slot).copied().unwrap_or(Quantity::Omega);
+            elaborated[slot] =
+                context.with_quantity(quantity, |context| check(context, &params[slot], slot_ty))?;
         }
     }
 
