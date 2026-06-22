@@ -88,7 +88,7 @@ pub let input() -> Option(Bin) =
             | false => Option/some(acc)
             end
         | true =>
-            match Nat/eql(Bin/get(r.bytes, 0), '\n') : Option(Bin)
+            match Nat/eql(Option/unwrap_or(Bin/get(r.bytes, 0), 0), '\n') : Option(Bin)
             | true => Option/some(acc)
             | false => go(Bin/concat(acc, r.bytes))
             end

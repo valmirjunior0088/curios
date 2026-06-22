@@ -43,7 +43,7 @@ let resolve_addr(host : Str, port : Nat) -> Task(Result(Bin, Io/Error)) =
                 let a = /sys/Io/resolve(r.handle);
                 match Nat/eql(a.status, /sys/Io/Status/ok) : Task(Result(Bin, Io/Error))
                 | false => Task/pure(Result/failure(Io/error_of(a.status)))
-                | true => Task/pure(Result/success(Arr/get(a.addresses, 0)))
+                | true => Task/pure(Result/success(Option/unwrap_or(Arr/get(a.addresses, 0), \\)))
                 end))
     end;
 

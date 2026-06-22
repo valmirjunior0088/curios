@@ -319,9 +319,9 @@ fn arr_map_fills_every_slot() {
     // inline closure `call_ref`. A non-identity `f` (`+1`) over `[10, 20, 30]` must
     // fill *every* slot, not just one: `get(_, 0) + get(_, 2)` = 11 + 31 = 42.
     let source = r#"
-        use /std/{Io, Str, Nat, Arr};
+        use /std/{Io, Str, Nat, Arr, Option};
         let xs : Arr(Nat) = Arr/map((n) => Nat/add(n, 1), Arr/cons(10, Arr/cons(20, Arr/single(30))));
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Arr/get(xs, 0), Arr/get(xs, 2)))))
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Option/unwrap_or(Arr/get(xs, 0), 0), Option/unwrap_or(Arr/get(xs, 2), 0)))))
         "#;
     assert_eq!(run(source), b"42");
 }
@@ -459,24 +459,6 @@ fn bin_slice_reduces_across_a_cons_spine() {
             Eq/refl();
         let nested(b : Bin)
             -> Eq(Bin/slice(Bin/slice(b, 2, 10), 1, 3), Bin/slice(b, 3, 5)) = Eq/refl();
-        Io/write(Io/stdout, Str/to_bin("ok"))
-        "#;
-    assert_eq!(run(source), b"ok");
-}
-
-#[test]
-fn bin_get_reduces_across_a_cons_spine() {
-    // The `Bin/get` partner of the slice cons-reduction: a get over a cons spine
-    // peels one byte per `0`/`succ` index — `get(cons(h, t), 0) = h` (the cons
-    // head, via the `get(append(\\, h), 0) = h` base case) and
-    // `get(cons(h, t), 1) = get(t, 0)`. Provable by `refl` for SYMBOLIC head/tail.
-    // This lets `advance_codepoint` walk a symbolic Bin through `Bin/get`.
-    let source = r#"
-        use /std/{Io, Str, Eq, Bin, Nat};
-        let head(h : Nat, t : Bin)
-            -> Eq(Bin/get(Bin/concat(Bin/append(\\, h), t), 0), h) = Eq/refl();
-        let tail(h : Nat, t : Bin)
-            -> Eq(Bin/get(Bin/concat(Bin/append(\\, h), t), 1), Bin/get(t, 0)) = Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
     assert_eq!(run(source), b"ok");
@@ -2373,20 +2355,46 @@ fn str_of_bin_rejects_truncated_multibyte() {
     );
 }
 
+// `/std/BinProof` is a library of erased equational lemmas about the random-access
+// `Bin` ops (`get`/`slice`/`len`). Type checking is demand-driven, so each lemma is
+// referenced here (in a local `let`, checked before it is pruned) to force its proof
+// body through the checker; if any lemma fails to check, this test fails.
+#[test]
+fn bin_proof_lemmas_type_check() {
+    let source = r#"
+        use /std/{BinProof, Bin, Io};
+        let proofs = (
+            BinProof/get_cons_zero(@7, @\\),
+            BinProof/get_cons_succ(@7, @Bin/append(\\, 9), @0),
+            BinProof/len_cons(@7, @\\),
+            BinProof/slice_full(@\\),
+            BinProof/slice_empty(@\\, @0),
+            BinProof/slice_nested(@\\, @0, @0, @0, @0),
+            BinProof/slice_cons_zero(@7, @\\, @0),
+            BinProof/slice_cons_succ(@7, @\\, @0, @1)
+        );
+        Io/print("ok")
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(io.output(), b"ok");
+}
+
 // `Str/len` and `Str/get` count and index by codepoint, not byte. The string is
 // `a€😀` — a 1-byte, a 3-byte, and a 4-byte scalar — so its length is 3 and the
 // codepoints decode to U+0061 (97), U+20AC (8364), and U+1F600 (128512).
 #[test]
 fn str_get_indexes_codepoints_of_every_width() {
     let source = r#"
-        use /std/{Str, Nat, Io};
+        use /std/{Str, Nat, Io, Option};
         match Str/of_bin(\61\e2\82\ac\f0\9f\98\80) : {}
         | some(s) =>
             Io/print(Str/flatten([
                 Nat/to_str(Str/len(s)), ",",
-                Nat/to_str(Str/get(s, 0)), ",",
-                Nat/to_str(Str/get(s, 1)), ",",
-                Nat/to_str(Str/get(s, 2))
+                Nat/to_str(Option/unwrap_or(Str/get(s, 0), 0)), ",",
+                Nat/to_str(Option/unwrap_or(Str/get(s, 1), 0)), ",",
+                Nat/to_str(Option/unwrap_or(Str/get(s, 2), 0))
             ]))
         | none() => Io/print("bad")
         end
@@ -2589,13 +2597,13 @@ fn nat_bitwise_ops_execute() {
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        use /std/{Io, Bin, Nat, Str};
+        use /std/{Io, Bin, Nat, Str, Option};
         let bytes = match Io/read(Io/stdin, 16) : Bin
             | chunk(b) => b
             | eof() => \\
             | error(_) => \\
             end;
-        let x = Bin/get(bytes, 0);
+        let x = Option/unwrap_or(Bin/get(bytes, 0), 0);
         let r = Str/flatten([
             Nat/to_str(Nat/and(x, 15)), ",",
             Nat/to_str(Nat/or(x, 128)), ",",
@@ -2626,13 +2634,13 @@ fn int_bitwise_ops_execute() {
     crate::run_text(
         Duration::from_secs(5),
         r#"
-        use /std/{Io, Bin, Nat, Int, Str};
+        use /std/{Io, Bin, Nat, Int, Str, Option};
         let bytes = match Io/read(Io/stdin, 16) : Bin
             | chunk(b) => b
             | eof() => \\
             | error(_) => \\
             end;
-        let x = Nat/to_int(Bin/get(bytes, 0));
+        let x = Nat/to_int(Option/unwrap_or(Bin/get(bytes, 0), 0));
         let neg = Int/sub(+0, x);
         let r = Str/flatten([
             Int/to_str(Int/and(x, +15)), ",",
@@ -2800,7 +2808,7 @@ fn proc_args_indexes_the_argv_snapshot() {
         MockHost::builder().args(["prog", "hello", "world"]).build();
     crate::run_text(
         Duration::from_secs(5),
-        r#"std/Io/write(std/Io/stdout, /std/Arr/get(/std/Proc/args, 1))"#,
+        r#"std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/Arr/get(/std/Proc/args, 1), \\))"#,
         system,
     )
     .expect("expected result");
@@ -3316,7 +3324,7 @@ fn join_all_runs_children_concurrently_and_collects_in_order() {
                     let w = Io/write(Io/stdout, Str/to_bin("b;"));
                     Task/pure(2)
             ])!;
-            let s = Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Arr/get(rs, 0), Arr/get(rs, 1)))));
+            let s = Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(/std/Option/unwrap_or(Arr/get(rs, 0), 0), /std/Option/unwrap_or(Arr/get(rs, 1), 0)))));
             Task/pure(());
         Task/run(main)
         "#,

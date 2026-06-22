@@ -17,7 +17,7 @@ pub let of_str(s : Str) -> Option(Int) =
     | true => Option/none()
     | false =>
         let ! = Option/bind;
-        let first = Str/get(s, 0);
+        let first = Str/get(s, 0)!;
         let digits =
             match first
             | '+' => Str/slice(s, 1, Str/len(s))

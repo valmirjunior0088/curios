@@ -255,7 +255,7 @@ let poll_ready(blocked : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
             match Cell/get(p.token) : {Lst(Job), Lst(Parked)}
             | true => let _ = run_fins(p.fins); walk(tail, Nat/succ(i), woken, still)
             | false =>
-                match is_ready(Arr/get(results, i), p.interest) : {Lst(Job), Lst(Parked)}
+                match is_ready(/sys/Arr/get(results, i), p.interest) : {Lst(Job), Lst(Parked)}
                 | true => walk(tail, Nat/succ(i), Lst/cons(Job { resume = p.resume, token = p.token, fins = p.fins }, woken), still)
                 | false => walk(tail, Nat/succ(i), woken, Lst/cons(p, still))
                 end
@@ -365,10 +365,10 @@ pub let join_all(@A : Type, tasks : Lst(() -> Task(A))) -> Task(Arr(A)) =
     let ta = Lst/to_arr(tasks);
     rec go(i : Nat) -> Task(Lst(A)) =
         let ! = bind;
-        match Nat/lt(i, Arr/len(ta)) : Task(Lst(A))
-        | false => pure(Lst/nil(@A))
-        | true =>
-            let h = spawn(Arr/get(ta, i))!;
+        match Nat/try_lt(i, Arr/len(ta)) : Task(Lst(A))
+        | none() => pure(Lst/nil(@A))
+        | some(ok) =>
+            let h = spawn(Arr/at(ta, i, ok))!;
             let rest = go(Nat/succ(i))!;
             let a = await(h.result)!;
             pure(Lst/cons(a, rest))
@@ -381,11 +381,11 @@ pub let select(@A : Type, tasks : Lst(() -> Task(A))) -> Task({Nat, A}) =
         let winner : Future({Nat, A}) = new_future(@{Nat, A});
         rec arm(i : Nat) -> Task(Lst(Token)) =
             let ! = bind;
-            match Nat/lt(i, Arr/len(ta)) : Task(Lst(Token))
-            | false => pure(Lst/nil(@Token))
-            | true =>
+            match Nat/try_lt(i, Arr/len(ta)) : Task(Lst(Token))
+            | none() => pure(Lst/nil(@Token))
+            | some(ok) =>
                 let t : Token = Cell/new(false);
-                let _ = fork_with(() => bind((Arr/get(ta, i))(), (a) => let _ = fulfill(winner, (i, a)); pure(())), t)!;
+                let _ = fork_with(() => bind((Arr/at(ta, i, ok))(), (a) => let _ = fulfill(winner, (i, a)); pure(())), t)!;
                 let rest = arm(Nat/succ(i))!;
                 pure(Lst/cons(t, rest))
             end;

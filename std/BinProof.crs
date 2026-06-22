@@ -1,0 +1,36 @@
+use /std/{Nat, Bin, Eq};
+
+pub let get_cons_zero(@h : Nat, @t : Bin)
+    -> Eq(/sys/Bin/get(Bin/cons(h, t), 0), h) =
+    Eq/refl();
+
+pub let get_cons_succ(@h : Nat, @t : Bin, @k : Nat)
+    -> Eq(/sys/Bin/get(Bin/cons(h, t), Nat/succ(k)), /sys/Bin/get(t, k)) =
+    Eq/refl();
+
+pub let len_cons(@h : Nat, @t : Bin)
+    -> Eq(Bin/len(Bin/cons(h, t)), Nat/succ(Bin/len(t))) =
+    Eq/refl();
+
+pub let slice_full(@b : Bin)
+    -> Eq(Bin/slice(b, 0, Bin/len(b)), b) =
+    Eq/refl();
+
+pub let slice_empty(@b : Bin, @i : Nat)
+    -> Eq(Bin/slice(b, i, i), \\) =
+    Eq/refl();
+
+pub let slice_nested(@b : Bin, @p : Nat, @q : Nat, @i : Nat, @j : Nat)
+    -> Eq(Bin/slice(Bin/slice(b, p, q), i, j),
+          Bin/slice(b, Nat/add(p, i), Nat/add(p, j))) =
+    Eq/refl();
+
+pub let slice_cons_zero(@h : Nat, @t : Bin, @e : Nat)
+    -> Eq(Bin/slice(Bin/cons(h, t), 0, Nat/succ(e)),
+          Bin/cons(h, Bin/slice(t, 0, e))) =
+    Eq/refl();
+
+pub let slice_cons_succ(@h : Nat, @t : Bin, @s : Nat, @e : Nat)
+    -> Eq(Bin/slice(Bin/cons(h, t), Nat/succ(s), e),
+          Bin/slice(t, s, Nat/sub(e, 1))) =
+    Eq/refl();

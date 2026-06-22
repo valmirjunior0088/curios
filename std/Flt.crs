@@ -161,10 +161,10 @@ let render(f_mant : Nat, exp_field : Nat, even : Bln) -> Str =
 
 pub let to_str(f : Flt) -> Str =
     let b = Flt/to_le_bin(f);
-    let b0 = Bin/get(b, 0);
-    let b1 = Bin/get(b, 1);
-    let b2 = Bin/get(b, 2);
-    let b3 = Bin/get(b, 3);
+    let b0 = Option/unwrap_or(Bin/get(b, 0), 0);
+    let b1 = Option/unwrap_or(Bin/get(b, 1), 0);
+    let b2 = Option/unwrap_or(Bin/get(b, 2), 0);
+    let b3 = Option/unwrap_or(Bin/get(b, 3), 0);
     let exp_field = Nat/add(Nat/mul(Nat/rem(b3, 0x80), 2), Nat/div(b2, 0x80));
     let mant_field =
         Nat/add(
@@ -224,7 +224,7 @@ pub let of_str(s : Str) -> Option(Flt) =
     match Nat/eql(Str/len(s), 0)
     | true => Option/none()
     | false =>
-        let first = Str/get(s, 0);
+        let first = Str/get(s, 0)!;
         let is_neg = Nat/eql(first, '-');
         let start =
             match first

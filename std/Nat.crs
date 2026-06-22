@@ -1,6 +1,6 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/*;
-use /std/{Str, Option, Char, Bin, Bln, Eq, Order};
+use /std/{Str, Option, Char, Bin, Bln, Eq, Order, Void};
 use /syn/Str/{Scan, Utf8, let step, let Valid};
 
 let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
@@ -65,6 +65,24 @@ pub let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
     match gte(c, lo)
     | true => lte(c, hi)
     | false => false
+    end;
+
+pub let Lte(a : Nat, b : Nat) -> Type =
+    match lte(a, b) : Type
+    | true => {}
+    | false => Void
+    end;
+
+pub let Lt(a : Nat, b : Nat) -> Type =
+    match lt(a, b) : Type
+    | true => {}
+    | false => Void
+    end;
+
+pub let try_lt(a : Nat, b : Nat) -> Option(Lt(a, b)) =
+    match lt(a, b) : (r) => Option(match r : Type | true => {} | false => Void end)
+    | true => Option/some(())
+    | false => Option/none()
     end;
 
 pub let compare(x : Nat, y : Nat) -> Order =

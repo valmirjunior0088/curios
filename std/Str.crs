@@ -160,11 +160,11 @@ rec take_continuations(b : Bin, off : Nat, remaining : Nat, acc : Nat) -> {Nat, 
     | 0 => (acc, off)
     | pred + 1, ih =>
         take_continuations(b, Nat/add(off, 1), pred,
-            Nat/add(Nat/mul(acc, 0x40), Nat/sub(Bin/get(b, off), 0x80)))
+            Nat/add(Nat/mul(acc, 0x40), Nat/sub(/sys/Bin/get(b, off), 0x80)))
     end;
 
 let decode_step(b : Bin, off : Nat) -> {Nat, Nat} =
-    let c = Bin/get(b, off);
+    let c = /sys/Bin/get(b, off);
     match classify(c)
     | ascii() => (c, Nat/add(off, 1))
     | lead(continuations, _, _, payload) => take_continuations(b, Nat/add(off, 1), continuations, payload)
@@ -215,13 +215,21 @@ pub let find_index(s : Str, pred : (Nat) -> Bln) -> Option(Nat) =
 pub let find(s : Str, target : Nat) -> Option(Nat) =
     find_index(s, (codepoint) => Nat/eql(codepoint, target));
 
-pub let get(s : Str, i : Nat) -> Nat =
+pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Nat =
     let b = to_bin(s);
     decode_step(b, byte_offset(b, i)).0;
 
+pub let get(s : Str, i : Nat) -> Option(Nat) =
+    match Nat/lt(i, len(s))
+    | false => Option/none()
+    | true =>
+        let b = to_bin(s);
+        Option/some(decode_step(b, byte_offset(b, i)).0)
+    end;
+
 pub let join(sep : Str, parts : Lst(Str)) -> Str =
     let pa = Lst/to_arr(parts);
-    Arr/balanced(Arr/len(pa), "", (i) => Arr/get(pa, i),
+    Arr/balanced(Arr/len(pa), "", (i) => Option/unwrap_or(Arr/get(pa, i), ""),
         (l, r) => concat(concat(l, sep), r));
 
 let trim_bounds(s : Str) -> {Nat, Nat} =

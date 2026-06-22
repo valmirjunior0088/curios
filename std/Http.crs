@@ -137,10 +137,10 @@ let rest : Parse(Bin) =
 
 let guard_header : Parse({}) =
     (input, pos) =>
-        match Nat/lt(pos, Bin/len(input))
-        | false => Result/failure("unexpected end of headers")
-        | true =>
-            match Nat/eql(Bin/get(input, pos), '\r')
+        match Nat/try_lt(pos, Bin/len(input))
+        | none() => Result/failure("unexpected end of headers")
+        | some(ok) =>
+            match Nat/eql(Bin/at(input, pos, ok), '\r')
             | true => Result/failure("end of header block")
             | false => Result/success((pos, ()))
             end

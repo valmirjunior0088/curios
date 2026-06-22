@@ -7,6 +7,8 @@ pub use Cell/{let Cell};
 pub mod Bin;
 pub use Bin/{let Bin};
 
+pub mod BinProof;
+
 pub mod Nat;
 pub use Nat/{let Nat};
 

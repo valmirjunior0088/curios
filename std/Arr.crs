@@ -1,6 +1,15 @@
 pub use /sys/{Arr};
-pub use /sys/Arr/*;
-use /std/{Nat};
+pub use /sys/Arr/{let len, let slice, let append, let concat, let flatten, let map, let nil, let single};
+use /std/{Nat, Option};
+
+pub let at(@T : Type, a : Arr(T), i : Nat, ok : Nat/Lt(i, len(a))) -> T =
+    /sys/Arr/get(a, i);
+
+pub let get(@T : Type, a : Arr(T), i : Nat) -> Option(T) =
+    match Nat/lt(i, len(a))
+    | true => Option/some(/sys/Arr/get(a, i))
+    | false => Option/none()
+    end;
 
 pub let cons(@A : Type, x : A, xs : Arr(A)) -> Arr(A) =
     concat(single(x), xs);
@@ -8,7 +17,7 @@ pub let cons(@A : Type, x : A, xs : Arr(A)) -> Arr(A) =
 pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
     match len(arr)
     | 0 => init
-    | pred + 1, ih => f(get(arr, pred), ih)
+    | pred + 1, ih => f(/sys/Arr/get(arr, pred), ih)
     end;
 
 pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (A, A) -> A) -> A =

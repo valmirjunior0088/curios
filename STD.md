@@ -17,7 +17,7 @@ This file is the canonical reference for the `/std` public surface and lists eve
 
 ### `/std/Nat`
 
-The natural numbers — unbounded at the type level (an unsigned i31 at runtime). Literals are decimal digits (`0`, `42`); structural induction and sparse dispatch are written with [`match`](SYNTAX.md#match). `pred`, `of_str`, `min`, `in_range`, and `compare` are library helpers; the rest are `/sys` primitives re-exported by `pub use /sys/Nat/*`. The bitwise ops are total and never trap: `and`/`or`/`xor`/`shr` are the usual operations on the binary digits, while `shl` is the unbounded `a * 2^b` — a `Nat` has no top, so no bits are shifted off. There is no `not`: complement has no meaning on an unbounded `Nat` (it would name the runtime word width), so use `Int/not` or `xor` against an explicit mask.
+The natural numbers — unbounded at the type level (an unsigned i31 at runtime). Literals are decimal digits (`0`, `42`); structural induction and sparse dispatch are written with [`match`](SYNTAX.md#match). `pred`, `of_str`, `min`, `in_range`, `compare`, `Lte`, `Lt`, and `try_lt` are library helpers; the rest are `/sys` primitives re-exported by `pub use /sys/Nat/*`. The bitwise ops are total and never trap: `and`/`or`/`xor`/`shr` are the usual operations on the binary digits, while `shl` is the unbounded `a * 2^b` — a `Nat` has no top, so no bits are shifted off. There is no `not`: complement has no meaning on an unbounded `Nat` (it would name the runtime word width), so use `Int/not` or `xor` against an explicit mask.
 
 | Binding       | Type                | Description                          |
 | ------------- | ------------------- | ------------------------------------ |
@@ -47,6 +47,9 @@ The natural numbers — unbounded at the type level (an unsigned i31 at runtime)
 | `max(a, b)`   | `(Nat, Nat) -> Nat` | Maximum                              |
 | `in_range(c, lo, hi)` | `(Nat, Nat, Nat) -> Bln` | Whether `lo ≤ c ≤ hi`            |
 | `compare(a, b)` | `(Nat, Nat) -> Order` | Three-way comparison (`lt`/`eq`/`gt`) |
+| `Lte(a, b)`   | `(Nat, Nat) -> Type` | The proposition `a ≤ b` (reflects `lte`: `{}` if it holds, `Void` otherwise) |
+| `Lt(a, b)`    | `(Nat, Nat) -> Type` | The proposition `a < b` (reflects `lt`) — the in-bounds witness `at` consumes |
+| `try_lt(a, b)` | `(Nat, Nat) -> Option(Lt(a, b))` | Run the `lt` test, returning a proof of `Lt(a, b)` when it holds — the bridge from a runtime check to an `at` index proof |
 
 ### `/std/Int`
 
@@ -133,7 +136,8 @@ Raw byte sequences. `cons`, `fold`, and `join` are library helpers; the rest are
 | `len(b)`            | `(Bin) -> Nat`                            | Byte length                                |
 | `eql(a, b)`         | `(Bin, Bin) -> Bln`                       | Equality                                   |
 | `cons(head, tail)`  | `(Nat, Bin) -> Bin`                       | Prepend a single byte (`concat(append(\\, head), tail)`) |
-| `get(b, i)`         | `(Bin, Nat) -> Nat`                       | Byte at index `i` (traps if out of bounds) |
+| `at(b, i, ok)`      | `(b : Bin, i : Nat, Nat/Lt(i, len(b))) -> Nat` | Byte at index `i`, checkless — the `Nat/Lt` proof witnesses `i` is in bounds (see `Nat/try_lt`) |
+| `get(b, i)`         | `(Bin, Nat) -> Option(Nat)`               | Byte at index `i`, or `none` if out of bounds |
 | `slice(b, s, e)`    | `(Bin, Nat, Nat) -> Bin`                  | Subsequence from `s` to `e` (traps if out of range) |
 | `append(b, x)`      | `(Bin, Nat) -> Bin`                       | Append a single byte (`x` taken mod 256)   |
 | `concat(a, b)`      | `(Bin, Bin) -> Bin`                       | Concatenate two sequences                  |
@@ -152,7 +156,8 @@ Homogeneous, contiguously-backed arrays. The `[a, b, c]` literal builds a [`Lst`
 | `single(x)`          | `(@A : Type, A) -> Arr(A)`                            | A one-element array         |
 | `cons(x, xs)`        | `(@A : Type, A, Arr(A)) -> Arr(A)`                    | Prepend an element          |
 | `len(a)`             | `(@T : Type, Arr(T)) -> Nat`                          | Element count               |
-| `get(a, i)`          | `(@T : Type, Arr(T), Nat) -> T`                       | Element at index `i`        |
+| `at(a, i, ok)`       | `(@T : Type, a : Arr(T), i : Nat, Nat/Lt(i, len(a))) -> T` | Element at index `i`, checkless — the `Nat/Lt` proof witnesses `i` is in bounds |
+| `get(a, i)`          | `(@T : Type, Arr(T), Nat) -> Option(T)`               | Element at index `i`, or `none` if out of bounds |
 | `slice(a, s, e)`     | `(@T : Type, Arr(T), Nat, Nat) -> Arr(T)`             | Subarray from `s` to `e`    |
 | `append(a, x)`       | `(@T : Type, Arr(T), T) -> Arr(T)`                    | Append a single element     |
 | `concat(a, b)`       | `(@T : Type, Arr(T), Arr(T)) -> Arr(T)`               | Concatenate two arrays      |
@@ -180,7 +185,8 @@ Byte classifiers over ASCII code points (`(Nat) -> Bln`): `is_whitespace`, `is_d
 | `eql(a, b)`         | `(Str, Str) -> Bln`      | String equality (byte equality; UTF-8 is canonical)            |
 | `eql_ci(a, b)`      | `(Str, Str) -> Bln`      | Equality after ASCII case folding                             |
 | `len(s)`            | `(Str) -> Nat`           | Codepoint count (Unicode scalar values, _not_ bytes/graphemes) |
-| `get(s, i)`         | `(Str, Nat) -> Nat`      | Codepoint at index `i` (traps if out of bounds)                |
+| `at(s, i, ok)`      | `(s : Str, i : Nat, Nat/Lt(i, len(s))) -> Nat` | Codepoint at index `i`, checkless — the `Nat/Lt` proof witnesses `i` is in bounds |
+| `get(s, i)`         | `(Str, Nat) -> Option(Nat)` | Codepoint at index `i`, or `none` if out of bounds          |
 | `find(s, c)`        | `(Str, Nat) -> Option(Nat)` | Codepoint index of the first occurrence of `c`, or `none`  |
 | `find_index(s, p)`  | `(Str, (Nat) -> Bln) -> Option(Nat)` | Codepoint index of the first codepoint satisfying `p` |
 | `slice(s, x, y)`    | `(Str, Nat, Nat) -> Str` | Codepoints `[x, y)` (traps if out of range)                    |

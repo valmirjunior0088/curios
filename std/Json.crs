@@ -13,7 +13,7 @@ pub use Json/*;
 
 let encode_num(n : Flt) -> Str =
     let raw = Flt/to_str(n);
-    match Nat/eql(Str/get(raw, 0), '+')
+    match Nat/eql(Option/unwrap_or(Str/get(raw, 0), 0), '+')
     | true => Str/slice(raw, 1, Str/len(raw))
     | false => raw
     end;
@@ -85,10 +85,10 @@ let take_literal(literal : Str) -> Parse({}) =
                 match ih.1
                 | false => ih
                 | true =>
-                    match Nat/lt(ih.0, Bin/len(input))
-                    | false => (ih.0, false)
-                    | true =>
-                        match Nat/eql(Bin/get(lit, step), Bin/get(input, ih.0))
+                    match Nat/try_lt(ih.0, Bin/len(input))
+                    | none() => (ih.0, false)
+                    | some(ok) =>
+                        match Nat/eql(Option/unwrap_or(Bin/get(lit, step), 0), Bin/at(input, ih.0, ok))
                         | true => (Nat/add(ih.0, 1), true)
                         | false => (ih.0, false)
                         end
@@ -206,10 +206,10 @@ let symbol(b : Nat) -> Parse(Nat) =
     Parse/take_byte(b);
 
 pub rec decode : Parse(Json) = (input, pos) =>
-    match Nat/lt(pos, Bin/len(input))
-    | false => Result/failure("unexpected end of input")
-    | true =>
-        match Bin/get(input, pos)
+    match Nat/try_lt(pos, Bin/len(input))
+    | none() => Result/failure("unexpected end of input")
+    | some(ok) =>
+        match Bin/at(input, pos, ok)
         | ' ' => decode(input, Nat/add(pos, 1))
         | '\t' => decode(input, Nat/add(pos, 1))
         | '\n' => decode(input, Nat/add(pos, 1))
