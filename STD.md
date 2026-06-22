@@ -17,11 +17,12 @@ This file is the canonical reference for the `/std` public surface and lists eve
 
 ### `/std/Nat`
 
-The natural numbers — unbounded at the type level (an unsigned i31 at runtime). Literals are decimal digits (`0`, `42`); structural induction and sparse dispatch are written with [`match`](SYNTAX.md#match). `of_str`, `min`, `in_range`, and `compare` are library helpers; the rest are `/sys` primitives re-exported by `pub use /sys/Nat/*`. The bitwise ops are total and never trap: `and`/`or`/`xor`/`shr` are the usual operations on the binary digits, while `shl` is the unbounded `a * 2^b` — a `Nat` has no top, so no bits are shifted off. There is no `not`: complement has no meaning on an unbounded `Nat` (it would name the runtime word width), so use `Int/not` or `xor` against an explicit mask.
+The natural numbers — unbounded at the type level (an unsigned i31 at runtime). Literals are decimal digits (`0`, `42`); structural induction and sparse dispatch are written with [`match`](SYNTAX.md#match). `pred`, `of_str`, `min`, `in_range`, and `compare` are library helpers; the rest are `/sys` primitives re-exported by `pub use /sys/Nat/*`. The bitwise ops are total and never trap: `and`/`or`/`xor`/`shr` are the usual operations on the binary digits, while `shl` is the unbounded `a * 2^b` — a `Nat` has no top, so no bits are shifted off. There is no `not`: complement has no meaning on an unbounded `Nat` (it would name the runtime word width), so use `Int/not` or `xor` against an explicit mask.
 
 | Binding       | Type                | Description                          |
 | ------------- | ------------------- | ------------------------------------ |
 | `succ(a)`     | `(Nat) -> Nat`      | Successor (`a + 1`)                  |
+| `pred(a)`     | `(Nat) -> Nat`      | Predecessor (truncating; `pred(0) = 0`) |
 | `add(a, b)`   | `(Nat, Nat) -> Nat` | Addition                             |
 | `sub(a, b)`   | `(Nat, Nat) -> Nat` | Subtraction                          |
 | `mul(a, b)`   | `(Nat, Nat) -> Nat` | Multiplication                       |

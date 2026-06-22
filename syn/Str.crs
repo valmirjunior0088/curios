@@ -39,7 +39,7 @@ pub let step(c : Nat, s : Scan) -> Scan =
         | true =>
             match Nat/eql(rem, 1)
             | true => Scan/lead()
-            | false => Scan/cont(Nat/sub(rem, 1), 0x80, 0xBF)
+            | false => Scan/cont(Nat/pred(rem), 0x80, 0xBF)
             end
         end
     | lead() => classify(c)
@@ -51,7 +51,8 @@ pub union Utf8 : (s : Scan, b : Bin)
     : (st, Bin/cons(c, t))
 end
 
-pub let Valid(b : Bin) -> Type = Utf8(Scan/lead(), b);
+pub let Valid(b : Bin) -> Type =
+    Utf8(Scan/lead(), b);
 
 pub struct Str pub {
     bytes : Bin,

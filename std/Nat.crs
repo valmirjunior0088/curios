@@ -46,6 +46,9 @@ pub let of_str(s : Str) -> Option(Nat) =
             end)
     end;
 
+pub let pred(a : Nat) -> Nat =
+    sub(a, 1);
+
 pub let min(a : Nat, b : Nat) -> Nat =
     match lt(a, b)
     | true => a
