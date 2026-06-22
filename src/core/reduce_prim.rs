@@ -354,6 +354,25 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             {
                 return Ok(Subterm::Prim(Prim::Bln(false)));
             }
+            // Two values over the *same* inner term compare by their successor
+            // spines: `lt(x + sl, x + sr) = lt(sl, sr)` — adding the same amount
+            // to both sides preserves order, so a shared symbolic tail cancels (a
+            // bare term `x` is `x + 0`). The operation-level partner of the `Unary`
+            // eliminator's successor peel: it discharges symbolic bounds the
+            // literal-floor rules above leave stuck, e.g. `lt(pred, succ pred)`.
+            {
+                let spine_inner = |t: &Term| -> (num_bigint::BigUint, Term) {
+                    match &**t {
+                        Subterm::Prim(Prim::Nat(Nat::Succ(s, inner))) => (s.clone(), inner.clone()),
+                        _ => (num_bigint::BigUint::from(0usize), t.clone()),
+                    }
+                };
+                let (sl, il) = spine_inner(&left);
+                let (sr, ir) = spine_inner(&right);
+                if il == ir {
+                    return Ok(Subterm::Prim(Prim::Bln(sl < sr)));
+                }
+            }
             Ok(Subterm::Prim(Prim::nat_lt(left, right)))
         }
         Prim::NatDiv(left, right) => reduce_nat_division(

@@ -1,5 +1,8 @@
 use /std/{Nat, Bin, Eq};
 
+pub let lt_succ(@n : Nat) -> Nat/Lt(n, Nat/succ(n)) =
+    ();
+
 pub let get_cons_zero(@h : Nat, @t : Bin)
     -> Eq(/sys/Bin/get(Bin/cons(h, t), 0), h) =
     Eq/refl();
