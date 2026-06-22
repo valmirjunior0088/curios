@@ -117,6 +117,22 @@ pub rec le_to_lt_succ(@a : Nat, @b : Nat, p : Le(a, b)) -> Lt(a, succ(b)) =
     | s(_, _, prev) => le_to_lt_succ(prev)
     end;
 
+pub rec le_trans(@a : Nat, @b : Nat, @c : Nat, p : Le(a, b), q : Le(b, c)) -> Le(a, c) =
+    let go =
+        match p : (w : Le(x, y)) => (q : Le(y, c)) -> Le(x, c)
+        | z(_) => (q) => Le/z()
+        | s(a2, b2, prev) => (q) =>
+            match q : (w : Le(u, v)) => Le(succ(a2), v)
+            | s(b3, c3, q2) => Le/s(le_trans(prev, q2))
+            end
+        end;
+    go(q);
+
+pub let lt_of_le_succ(@a : Nat, @b : Nat, p : Le(succ(a), b)) -> Lt(a, b) =
+    match p : (w : Le(x, y)) => Lt(pred(x), y)
+    | s(a2, b2, prev) => le_to_lt_succ(prev)
+    end;
+
 pub let compare(x : Nat, y : Nat) -> Order =
     match lt(x, y)
     | true => Order/lt()

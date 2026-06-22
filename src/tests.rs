@@ -2415,8 +2415,9 @@ fn bin_proof_lemmas_type_check() {
 #[test]
 fn utf8_decode_lemmas_type_check() {
     let source = r#"
-        use /std/{Str, Io};
-        let lemmas = (Str/bad_uninhabited, Str/cont_len);
+        use /std/{Str, Nat, Io};
+        let lemmas = (Str/bad_uninhabited, Str/cont_len, Str/slice_get_zero, Str/step_lead_lead,
+            Nat/le_trans, Nat/lt_of_le_succ);
         Io/print("ok")
         "#;
 

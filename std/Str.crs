@@ -1,6 +1,6 @@
 pub use /syn/Str/{let Str};
 use /syn/Str/{Scan, Utf8, Class, let step, let classify, let Valid};
-use /std/{Char, Nat, Bin, Bln, Arr, Lst, Option, Void};
+use /std/{Char, Nat, Bin, Bln, Arr, Lst, Option, Void, Eq};
 
 
 rec seq(@s : Scan, @a : Bin, @b : Bin, va : Utf8(s, a), vb : Valid(b))
@@ -194,6 +194,38 @@ pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(k, 
             on_w
         end;
     on_k(w);
+
+pub rec slice_get_zero(b : Bin, off : Nat, ok : Nat/Lt(off, Bin/len(b)))
+    -> Eq(Bin/get(Bin/slice(b, off, Bin/len(b)), 0), Bin/get(b, off)) =
+    let on_b =
+        match b : (b) =>
+            (off : Nat, ok : Nat/Lt(off, Bin/len(b)))
+                -> Eq(Bin/get(Bin/slice(b, off, Bin/len(b)), 0), Bin/get(b, off))
+        | \\ => (off, ok) => Void/absurd(ok)
+        | (h, t), ih => (off, ok) =>
+            let on_off =
+                match off : (off) =>
+                    (ok : Nat/Lt(off, Bin/len(Bin/cons(h, t))))
+                        -> Eq(Bin/get(Bin/slice(Bin/cons(h, t), off, Bin/len(Bin/cons(h, t))), 0),
+                              Bin/get(Bin/cons(h, t), off))
+                | 0 => (ok) => Eq/refl()
+                | offp + 1, ih2 => (ok) => slice_get_zero(t, offp, ok)
+                end;
+            on_off(ok)
+        end;
+    on_b(off, ok);
+
+let lead_step(cl : Class) -> Scan =
+    match cl
+    | ascii() => Scan/lead()
+    | lead(n, a, b, p) => Scan/cont(n, a, b)
+    | bad() => Scan/bad()
+    end;
+
+pub let step_lead_lead(c : Nat, @k : Nat, @lo : Nat, @hi : Nat, @payload : Nat,
+    eq : Eq(classify(c), Class/lead(k, lo, hi, payload)))
+    -> Eq(step(c, Scan/lead()), Scan/cont(k, lo, hi)) =
+    Eq/cong(lead_step, eq);
 
 rec take_continuations(b : Bin, off : Nat, remaining : Nat, acc : Nat) -> {Nat, Nat} =
     match remaining
