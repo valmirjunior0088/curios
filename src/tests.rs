@@ -2408,6 +2408,23 @@ fn bin_proof_lemmas_type_check() {
     assert_eq!(io.output(), b"ok");
 }
 
+// The UTF-8 decode certification lemmas: naming them forces their bodies to
+// elaborate (demand-driven checking). `cont_len` is the one that exercises the
+// comparison intrinsic — `step` only reduces in `cont` state because
+// `eql(succ(succ k''), 1)` now folds to `false`.
+#[test]
+fn utf8_decode_lemmas_type_check() {
+    let source = r#"
+        use /std/{Str, Io};
+        let lemmas = (Str/bad_uninhabited, Str/cont_len);
+        Io/print("ok")
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(io.output(), b"ok");
+}
+
 // `Str/len` and `Str/get` count and index by codepoint, not byte. The string is
 // `a€😀` — a 1-byte, a 3-byte, and a 4-byte scalar — so its length is 3 and the
 // codepoints decode to U+0061 (97), U+20AC (8364), and U+1F600 (128512).

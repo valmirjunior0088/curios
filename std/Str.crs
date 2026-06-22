@@ -1,6 +1,6 @@
 pub use /syn/Str/{let Str};
 use /syn/Str/{Scan, Utf8, Class, let step, let classify, let Valid};
-use /std/{Char, Nat, Bin, Bln, Arr, Lst, Option};
+use /std/{Char, Nat, Bin, Bln, Arr, Lst, Option, Void};
 
 
 rec seq(@s : Scan, @a : Bin, @b : Bin, va : Utf8(s, a), vb : Valid(b))
@@ -154,6 +154,46 @@ pub rec repeat(s : Str, n : Nat) -> Str =
     | true => ""
     | false => concat(s, repeat(s, Nat/sub(n, 1)))
     end;
+
+pub rec bad_uninhabited(@x : Bin, w : Utf8(Scan/bad(), x)) -> Void =
+    match w : (w : Utf8(q, y)) => Void
+    | more(c, st, t, rest) => bad_uninhabited(@t, rest)
+    end;
+
+pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(k, lo, hi), t))
+    -> Nat/Le(k, Bin/len(t)) =
+    let on_k =
+        match k : (k) => (w : Utf8(Scan/cont(k, lo, hi), t)) -> Nat/Le(k, Bin/len(t))
+        | 0 => (w) => Nat/Le/z()
+        | kp + 1, ih => (w) =>
+            let on_w =
+                match w : (w : Utf8(q, y)) => Nat/Le(Nat/succ(kp), Bin/len(y))
+                | more(c, st, tt, rest) =>
+                    let on_kp =
+                        match kp : (kp) =>
+                            (rest : Utf8(step(c, Scan/cont(Nat/succ(kp), lo, hi)), tt))
+                                -> Nat/Le(Nat/succ(kp), Nat/succ(Bin/len(tt)))
+                        | 0 => (rest) => Nat/Le/s(Nat/Le/z())
+                        | kpp + 1, ih2 => (rest) =>
+                            let on_range =
+                                match Nat/in_range(c, lo, hi) : (r) =>
+                                    (rest : Utf8(match r
+                                        | false => Scan/bad()
+                                        | true => Scan/cont(Nat/succ(kpp), 0x80, 0xBF)
+                                        end, tt))
+                                        -> Nat/Le(Nat/succ(kpp), Bin/len(tt))
+                                | true => (rest) => cont_len(Nat/succ(kpp), @0x80, @0xBF, @tt, rest)
+                                | false => (rest) =>
+                                    Void/absurd(@Nat/Le(Nat/succ(kpp), Bin/len(tt)),
+                                        bad_uninhabited(@tt, rest))
+                                end;
+                            Nat/Le/s(on_range(rest))
+                        end;
+                    on_kp(rest)
+                end;
+            on_w
+        end;
+    on_k(w);
 
 rec take_continuations(b : Bin, off : Nat, remaining : Nat, acc : Nat) -> {Nat, Nat} =
     match remaining
