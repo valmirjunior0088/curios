@@ -62,11 +62,14 @@ impl FreeMonoid for Unary {
             // a shorter `Succ`, exactly as the old bespoke `Nat` eliminator did.
             Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => {
                 let one = BigUint::from(1usize);
-                let tail = match spine == one {
-                    true => inner,
-                    false => Term::prim(Prim::Nat(Nat::Succ(spine - one, inner))),
-                };
-                Layer::Cons { head: None, tail }
+
+                Layer::Cons {
+                    head: None,
+                    tail: match spine == one {
+                        true => inner,
+                        false => Term::prim(Prim::Nat(Nat::Succ(spine - one, inner))),
+                    },
+                }
             }
             stuck => Layer::Stuck(stuck),
         }
@@ -75,11 +78,15 @@ impl FreeMonoid for Unary {
 
 impl FreeMonoid for Bin {
     fn uncons(scrutinee: Subterm) -> Layer {
-        let term: Term = scrutinee.into();
+        let term = scrutinee.into();
+
         match peel_front(&term) {
             Front::Empty => Layer::Empty,
             // The peeled byte is the eliminator's `Nat`-typed head generator.
-            Front::Cons { head, tail } => Layer::Cons { head: Some(head.into_nat()), tail },
+            Front::Cons { head, tail } => Layer::Cons {
+                head: Some(head.into_nat()),
+                tail,
+            },
             Front::Opaque => Layer::Stuck(Term::unwrap_or_clone(term)),
         }
     }
@@ -91,11 +98,10 @@ impl FreeMonoid for Arr {
             // The identity: the empty array.
             Subterm::Prim(Prim::Arr(elems)) if elems.is_empty() => Layer::Empty,
             // A literal run: peel the leading element directly.
-            Subterm::Prim(Prim::Arr(mut elems)) => {
-                let head = elems.remove(0);
-                let tail: Term = Subterm::Prim(Prim::Arr(elems)).into();
-                Layer::Cons { head: Some(head), tail }
-            }
+            Subterm::Prim(Prim::Arr(mut elems)) => Layer::Cons {
+                head: Some(elems.remove(0)),
+                tail: Subterm::Prim(Prim::Arr(elems)).into(),
+            },
             // A symbolic cons `cons(x, xs) = concat([x], xs)`: decode `x` off the
             // leading non-empty literal segment; its remaining elements stay ahead
             // of the rest exactly as `ArrConcat` collapses them.
@@ -106,16 +112,21 @@ impl FreeMonoid for Arr {
                     Subterm::Prim(Prim::Arr(elems)) => elems,
                     _ => unreachable!("guard checked a non-empty `Arr` literal lead segment"),
                 };
+
                 let head = lead.remove(0);
+
                 if !lead.is_empty() {
                     segments.insert(0, Subterm::Prim(Prim::Arr(lead)).into());
                 }
-                let tail: Term = match segments.len() {
-                    0 => Subterm::Prim(Prim::Arr(vec![])).into(),
-                    1 => segments.into_iter().next().unwrap(),
-                    _ => Subterm::Prim(Prim::ArrConcat(concat_elem, segments)).into(),
-                };
-                Layer::Cons { head: Some(head), tail }
+
+                Layer::Cons {
+                    head: Some(head),
+                    tail: match segments.len() {
+                        0 => Subterm::Prim(Prim::Arr(vec![])).into(),
+                        1 => segments.into_iter().next().unwrap(),
+                        _ => Subterm::Prim(Prim::ArrConcat(concat_elem, segments)).into(),
+                    },
+                }
             }
             stuck => Layer::Stuck(stuck),
         }
@@ -189,7 +200,10 @@ fn peel_front(bin: &Term) -> Front {
         // residual first-operand tail rejoins the rest.
         Subterm::Prim(Prim::BinConcat(operands)) => match operands.split_first() {
             Some((first, rest)) => match peel_front(first) {
-                Front::Cons { head, tail: first_tail } => {
+                Front::Cons {
+                    head,
+                    tail: first_tail,
+                } => {
                     let mut segments = Vec::with_capacity(operands.len());
                     if !is_empty_bin(&first_tail) {
                         segments.push(first_tail);

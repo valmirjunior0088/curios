@@ -1377,6 +1377,10 @@ fn printf_partial_evaluation_reduces_residual() {
     // codepoint-peeling proof-carrying `slice` (drop_n/take_n/drop1/take1/tl_proof).
     // Both carry their UTF-8 proof and can't be folded even for a constant, so a
     // handful of extra residual funcs over the pre-`/syn/Str` baseline are expected.
+    // The shared `classify` (the single UTF-8 layout source consumed by both the
+    // validator `step` and the runtime decoder) now has two reachable call sites, so
+    // size-bounded multi-site inlining keeps it as one residual func rather than
+    // folding it into a sole caller — one extra func, the intended cost of the dedup.
     let source = r#"
         use /std/{Str, Io, Bin, Fmt};
 
@@ -1412,8 +1416,8 @@ fn printf_partial_evaluation_reduces_residual() {
 
     let funcs = optm_funcs.expect("Stage::Optm observed");
     assert!(
-        funcs <= 12,
-        "expected at most 12 residual funcs after partial evaluation and \
+        funcs <= 13,
+        "expected at most 13 residual funcs after partial evaluation and \
          size-bounded multi-site inlining, got {funcs}",
     );
 

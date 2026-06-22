@@ -1,10 +1,7 @@
 use /std/{Nat, Bln, Bin, Option};
 
 pub let is_whitespace(c : Nat) -> Bln =
-    match Nat/eql(c, ' ')
-    | true => true
-    | false => Nat/in_range(c, '\t', '\r')
-    end;
+    Bln/or(Nat/eql(c, ' '), Nat/in_range(c, '\t', '\r'));
 
 pub let is_digit(c : Nat) -> Bln =
     Nat/in_range(c, '0', '9');
@@ -16,16 +13,10 @@ pub let is_upper(c : Nat) -> Bln =
     Nat/in_range(c, 'A', 'Z');
 
 pub let is_alpha(c : Nat) -> Bln =
-    match is_lower(c)
-    | true => true
-    | false => is_upper(c)
-    end;
+    Bln/or(is_lower(c), is_upper(c));
 
 pub let is_alphanumeric(c : Nat) -> Bln =
-    match is_alpha(c)
-    | true => true
-    | false => is_digit(c)
-    end;
+    Bln/or(is_alpha(c), is_digit(c));
 
 pub let to_lower(c : Nat) -> Nat =
     match is_upper(c)
@@ -59,31 +50,24 @@ pub let of_hex_digit(c : Nat) -> Option(Nat) =
         end
     end;
 
-pub let to_utf8(cp : Nat) -> Bin =
-    match Nat/lt(cp, 0x80)
-    | true => Bin/append(\\, cp)
+rec emit_continuations(acc : Bin, codepoint : Nat, shift : Nat) -> Bin =
+    match Nat/eql(shift, 0)
+    | true => acc
     | false =>
-        match Nat/lt(cp, 0x800)
-        | true =>
-            Bin/append(
-                Bin/append(\\, Nat/add(0xC0, Nat/div(cp, 0x40))),
-                Nat/add(0x80, Nat/rem(cp, 0x40)))
+        let group = Nat/rem(Nat/div(codepoint, shift), 0x40);
+        emit_continuations(Bin/append(acc, Nat/add(0x80, group)), codepoint, Nat/div(shift, 0x40))
+    end;
+
+pub let to_utf8(codepoint : Nat) -> Bin =
+    match Nat/lt(codepoint, 0x80)
+    | true => Bin/append(\\, codepoint)
+    | false =>
+        match Nat/lt(codepoint, 0x800)
+        | true => emit_continuations(Bin/append(\\, Nat/add(0xC0, Nat/div(codepoint, 0x40))), codepoint, 1)
         | false =>
-            match Nat/lt(cp, 0x10000)
-            | true =>
-                Bin/append(
-                    Bin/append(
-                        Bin/append(\\, Nat/add(0xE0, Nat/div(cp, 0x1000))),
-                        Nat/add(0x80, Nat/rem(Nat/div(cp, 0x40), 0x40))),
-                    Nat/add(0x80, Nat/rem(cp, 0x40)))
-            | false =>
-                Bin/append(
-                    Bin/append(
-                        Bin/append(
-                            Bin/append(\\, Nat/add(0xF0, Nat/div(cp, 0x40000))),
-                            Nat/add(0x80, Nat/rem(Nat/div(cp, 0x1000), 0x40))),
-                        Nat/add(0x80, Nat/rem(Nat/div(cp, 0x40), 0x40))),
-                    Nat/add(0x80, Nat/rem(cp, 0x40)))
+            match Nat/lt(codepoint, 0x10000)
+            | true => emit_continuations(Bin/append(\\, Nat/add(0xE0, Nat/div(codepoint, 0x1000))), codepoint, 0x40)
+            | false => emit_continuations(Bin/append(\\, Nat/add(0xF0, Nat/div(codepoint, 0x40000))), codepoint, 0x1000)
             end
         end
     end;

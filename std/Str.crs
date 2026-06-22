@@ -1,5 +1,5 @@
 pub use /syn/Str/{let Str};
-use /syn/Str/{Scan, Utf8, let step, let Valid};
+use /syn/Str/{Scan, Utf8, Class, let step, let classify, let Valid};
 use /std/{Char, Nat, Bin, Bln, Arr, Lst, Option};
 
 
@@ -155,57 +155,34 @@ pub rec repeat(s : Str, n : Nat) -> Str =
     | false => concat(s, repeat(s, Nat/sub(n, 1)))
     end;
 
-rec scan_to_boundary(b : Bin, pos : Nat, st : Scan) -> Nat =
-    match st
-    | lead() => pos
-    | bad() => pos
-    | cont(rem, lo, hi) =>
-        match Nat/lt(pos, Bin/len(b))
-        | false => pos
-        | true => scan_to_boundary(b, Nat/add(pos, 1), step(Bin/get(b, pos), st))
-        end
+rec take_continuations(b : Bin, off : Nat, remaining : Nat, acc : Nat) -> {Nat, Nat} =
+    match remaining
+    | 0 => (acc, off)
+    | pred + 1, ih =>
+        take_continuations(b, Nat/add(off, 1), pred,
+            Nat/add(Nat/mul(acc, 0x40), Nat/sub(Bin/get(b, off), 0x80)))
     end;
 
-let advance_codepoint(b : Bin, off : Nat) -> Nat =
+let decode_step(b : Bin, off : Nat) -> {Nat, Nat} =
+    let c = Bin/get(b, off);
+    match classify(c)
+    | ascii() => (c, Nat/add(off, 1))
+    | lead(continuations, _, _, payload) => take_continuations(b, Nat/add(off, 1), continuations, payload)
+    | bad() => (c, Nat/add(off, 1))
+    end;
+
+let advance(b : Bin, off : Nat) -> Nat =
     match Nat/lt(off, Bin/len(b))
     | false => off
-    | true => scan_to_boundary(b, Nat/add(off, 1), step(Bin/get(b, off), Scan/lead()))
-    end;
-
-let decode_at(b : Bin, off : Nat) -> Nat =
-    let lead = Bin/get(b, off);
-    match Nat/lt(lead, 0x80)
-    | true => lead
-    | false =>
-        match Nat/lt(lead, 0xE0)
-        | true =>
-            Nat/add(
-                Nat/mul(Nat/sub(lead, 0xC0), 0x40),
-                Nat/sub(Bin/get(b, Nat/add(off, 1)), 0x80))
-        | false =>
-            match Nat/lt(lead, 0xF0)
-            | true =>
-                Nat/add(
-                    Nat/add(
-                        Nat/mul(Nat/sub(lead, 0xE0), 0x1000),
-                        Nat/mul(Nat/sub(Bin/get(b, Nat/add(off, 1)), 0x80), 0x40)),
-                    Nat/sub(Bin/get(b, Nat/add(off, 2)), 0x80))
-            | false =>
-                Nat/add(
-                    Nat/add(
-                        Nat/add(
-                            Nat/mul(Nat/sub(lead, 0xF0), 0x40000),
-                            Nat/mul(Nat/sub(Bin/get(b, Nat/add(off, 1)), 0x80), 0x1000)),
-                        Nat/mul(Nat/sub(Bin/get(b, Nat/add(off, 2)), 0x80), 0x40)),
-                    Nat/sub(Bin/get(b, Nat/add(off, 3)), 0x80))
-            end
-        end
+    | true =>
+        let d = decode_step(b, off);
+        d.1
     end;
 
 let byte_offset(b : Bin, i : Nat) -> Nat =
     match i : Nat
     | 0 => 0
-    | pred + 1, ih => advance_codepoint(b, ih)
+    | pred + 1, ih => advance(b, ih)
     end;
 
 pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
@@ -213,20 +190,22 @@ pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
     rec go(off : Nat, acc : A) -> A =
         match Nat/lt(off, Bin/len(b))
         | false => acc
-        | true => go(advance_codepoint(b, off), f(decode_at(b, off), acc))
+        | true =>
+            let d = decode_step(b, off);
+            go(d.1, f(d.0, acc))
         end;
     go(0, init);
 
 pub let len(s : Str) -> Nat =
-    fold(s, 0, (cp, acc) => Nat/add(acc, 1));
+    fold(s, 0, (codepoint, acc) => Nat/add(acc, 1));
 
 pub let find_index(s : Str, pred : (Nat) -> Bln) -> Option(Nat) =
     let r : {Nat, Option(Nat)} =
-        fold(s, (0, Option/none()), (cp, acc) =>
+        fold(s, (0, Option/none()), (codepoint, acc) =>
             match acc.1
             | some(_) => acc
             | none() =>
-                match pred(cp)
+                match pred(codepoint)
                 | true => (Nat/add(acc.0, 1), Option/some(acc.0))
                 | false => (Nat/add(acc.0, 1), Option/none())
                 end
@@ -234,11 +213,11 @@ pub let find_index(s : Str, pred : (Nat) -> Bln) -> Option(Nat) =
     r.1;
 
 pub let find(s : Str, target : Nat) -> Option(Nat) =
-    find_index(s, (cp) => Nat/eql(cp, target));
+    find_index(s, (codepoint) => Nat/eql(codepoint, target));
 
 pub let get(s : Str, i : Nat) -> Nat =
     let b = to_bin(s);
-    decode_at(b, byte_offset(b, i));
+    decode_step(b, byte_offset(b, i)).0;
 
 pub let join(sep : Str, parts : Lst(Str)) -> Str =
     let pa = Lst/to_arr(parts);
@@ -248,8 +227,8 @@ pub let join(sep : Str, parts : Lst(Str)) -> Str =
 let trim_bounds(s : Str) -> {Nat, Nat} =
     let n = len(s);
     let r : {Nat, Nat, Nat} =
-        fold(s, (0, n, 0), (cp, acc) =>
-            match Char/is_whitespace(cp)
+        fold(s, (0, n, 0), (codepoint, acc) =>
+            match Char/is_whitespace(codepoint)
             | true => (Nat/add(acc.0, 1), acc.1, acc.2)
             | false =>
                 let start =

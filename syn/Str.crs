@@ -1,34 +1,40 @@
 use /std/{Nat, Bin};
 
-pub union Scan
-| lead()
-| cont(Nat, Nat, Nat)
+pub union Class
+| ascii()
+| lead(Nat, Nat, Nat, Nat)
 | bad()
 end
 
-let classify(c : Nat) -> Scan =
+pub let classify(c : Nat) -> Class =
     match Nat/in_range(c, 0x00, 0x7F)
-    | true => Scan/lead()
+    | true => Class/ascii()
     | false =>
         match Nat/in_range(c, 0xC2, 0xDF)
-        | true => Scan/cont(1, 0x80, 0xBF)
+        | true => Class/lead(1, 0x80, 0xBF, Nat/sub(c, 0xC0))
         | false =>
             match Nat/in_range(c, 0xE0, 0xEF)
             | true =>
                 let lo = match Nat/eql(c, 0xE0) | true => 0xA0 | false => 0x80 end;
                 let hi = match Nat/eql(c, 0xED) | true => 0x9F | false => 0xBF end;
-                Scan/cont(2, lo, hi)
+                Class/lead(2, lo, hi, Nat/sub(c, 0xE0))
             | false =>
                 match Nat/in_range(c, 0xF0, 0xF4)
                 | true =>
                     let lo = match Nat/eql(c, 0xF0) | true => 0x90 | false => 0x80 end;
                     let hi = match Nat/eql(c, 0xF4) | true => 0x8F | false => 0xBF end;
-                    Scan/cont(3, lo, hi)
-                | false => Scan/bad()
+                    Class/lead(3, lo, hi, Nat/sub(c, 0xF0))
+                | false => Class/bad()
                 end
             end
         end
     end;
+
+pub union Scan
+| lead()
+| cont(Nat, Nat, Nat)
+| bad()
+end
 
 pub let step(c : Nat, s : Scan) -> Scan =
     match s
@@ -42,7 +48,12 @@ pub let step(c : Nat, s : Scan) -> Scan =
             | false => Scan/cont(Nat/pred(rem), 0x80, 0xBF)
             end
         end
-    | lead() => classify(c)
+    | lead() =>
+        match classify(c)
+        | ascii() => Scan/lead()
+        | lead(cont, lo, hi, _) => Scan/cont(cont, lo, hi)
+        | bad() => Scan/bad()
+        end
     end;
 
 pub union Utf8 : (s : Scan, b : Bin)
