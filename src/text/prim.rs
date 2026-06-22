@@ -7,6 +7,7 @@ pub enum Prim {
     BlnAnd(Term, Term),
     BlnOr(Term, Term),
     BlnXor(Term, Term),
+    BlnEql(Term, Term),
     NatType,
     Nat(Nat),
     NatEql(Term, Term),

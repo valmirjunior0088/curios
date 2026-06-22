@@ -107,6 +107,7 @@ pub fn erase_prim(
         Prim::BlnAnd(l, r) => binary(context, l, r, bln_type, ersd::PurePrim::NatAnd),
         Prim::BlnOr(l, r) => binary(context, l, r, bln_type, ersd::PurePrim::NatOr),
         Prim::BlnXor(l, r) => binary(context, l, r, bln_type, ersd::PurePrim::NatXor),
+        Prim::BlnEql(l, r) => binary(context, l, r, bln_type, ersd::PurePrim::NatEql),
         Prim::NatType => Ok(ersd::Subterm::Erased.into()),
         Prim::Nat(Nat::Zero) => Ok(pure(ersd::PurePrim::Nat(0))),
         Prim::Nat(Nat::Succ(spine, inner)) => {

@@ -208,13 +208,15 @@ fn nat_ops() -> Vec<TopItem> {
 
 // `Bln` rides the same i31ref/u32 carrier as `Nat`, with `false`/`true` as
 // `0`/`1`. `and`/`or`/`xor` are bitwise machine ops on those bits — exact
-// boolean logic — so they are primitives rather than `match` definitions. `not`
-// has no machine instruction; `/std/Bln` defines it as `xor(b, true)`.
+// boolean logic — and `eql` is the `Nat` equality op (`i32.eq`) on that single
+// bit, so all four are primitives rather than `match` definitions. `not` has no
+// machine instruction; `/std/Bln` defines it as `xor(b, true)`.
 fn bln_ops() -> Vec<TopItem> {
     vec![
         binary("and", bln(), bln(), Prim::BlnAnd),
         binary("or", bln(), bln(), Prim::BlnOr),
         binary("xor", bln(), bln(), Prim::BlnXor),
+        binary("eql", bln(), bln(), Prim::BlnEql),
     ]
 }
 

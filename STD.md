@@ -110,7 +110,7 @@ Floating-point numbers (`f32`). `of_str` and `to_str` are library helpers; the r
 
 ### `/std/Bln`
 
-Booleans. The values are the literals `true`/`false`, eliminated with [`match`](SYNTAX.md#match) (`| true => … | false => …`). `Bln` rides the same i31 carrier as `Nat`, with `false`/`true` as `0`/`1`, so the three logic ops (`and`/`or`/`xor`) are `/sys` primitives — bitwise machine ops on that single bit — re-exported by `pub use /sys/Bln/*`; `not` (the library `xor(b, true)`), `eql`, `to_str`, and `of_str` are library helpers.
+Booleans. The values are the literals `true`/`false`, eliminated with [`match`](SYNTAX.md#match) (`| true => … | false => …`). `Bln` rides the same i31 carrier as `Nat`, with `false`/`true` as `0`/`1`, so the four logic ops (`and`/`or`/`xor`/`eql`) are `/sys` primitives — `and`/`or`/`xor` are bitwise machine ops on that single bit and `eql` is the `Nat` equality op (`i32.eq`) — re-exported by `pub use /sys/Bln/*`; `not` (the library `xor(b, true)`), `to_str`, and `of_str` are library helpers.
 
 | Binding     | Type                   | Description                                            |
 | ----------- | ---------------------- | ------------------------------------------------------ |

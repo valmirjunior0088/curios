@@ -157,6 +157,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::BlnAnd(left, right) => print_prim_call("Bln.and", vec![left, right]),
         Prim::BlnOr(left, right) => print_prim_call("Bln.or", vec![left, right]),
         Prim::BlnXor(left, right) => print_prim_call("Bln.xor", vec![left, right]),
+        Prim::BlnEql(left, right) => print_prim_call("Bln.eql", vec![left, right]),
         Prim::NatType => pure("Nat"),
         Prim::Nat(Nat::Zero) => pure("0"),
         Prim::Nat(Nat::Succ(nat, inner)) => {

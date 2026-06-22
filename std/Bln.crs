@@ -5,12 +5,6 @@ use /std/{Str, Option};
 pub let not(b : Bln) -> Bln =
     xor(b, true);
 
-pub let eql(a : Bln, b : Bln) -> Bln =
-    match a
-    | true => b
-    | false => not(b)
-    end;
-
 pub let to_str(b : Bln) -> Str =
     match b
     | true => "true"

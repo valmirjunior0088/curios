@@ -429,6 +429,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::BlnAnd(l, r) => print_binary("Bln.and ", l, r, depth),
         Prim::BlnOr(l, r) => print_binary("Bln.or ", l, r, depth),
         Prim::BlnXor(l, r) => print_binary("Bln.xor ", l, r, depth),
+        Prim::BlnEql(l, r) => print_binary("Bln.eql ", l, r, depth),
         Prim::NatType => pure("Nat"),
         Prim::Nat(Nat::Zero) => pure("0"),
         Prim::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {

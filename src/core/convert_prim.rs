@@ -66,6 +66,7 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::BlnAnd(this_left, this_right), Prim::BlnAnd(that_left, that_right))
         | (Prim::BlnOr(this_left, this_right), Prim::BlnOr(that_left, that_right))
         | (Prim::BlnXor(this_left, this_right), Prim::BlnXor(that_left, that_right))
+        | (Prim::BlnEql(this_left, this_right), Prim::BlnEql(that_left, that_right))
         | (Prim::IntEql(this_left, this_right), Prim::IntEql(that_left, that_right))
         | (Prim::IntNeq(this_left, this_right), Prim::IntNeq(that_left, that_right))
         | (Prim::IntAdd(this_left, this_right), Prim::IntAdd(that_left, that_right))

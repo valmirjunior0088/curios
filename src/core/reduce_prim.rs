@@ -216,6 +216,9 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::BlnXor(left, right) => {
             reduce_bln_binary(context, left, right, |l, r| l != r, Prim::BlnXor)
         }
+        Prim::BlnEql(left, right) => {
+            reduce_bln_binary(context, left, right, |l, r| l == r, Prim::BlnEql)
+        }
         Prim::NatType => Ok(Subterm::Prim(Prim::NatType)),
         Prim::Nat(Nat::Zero) => Ok(Subterm::Prim(Prim::Nat(Nat::Zero))),
         Prim::Nat(Nat::Succ(spine, inner)) => {

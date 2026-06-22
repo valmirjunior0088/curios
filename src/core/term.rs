@@ -1726,6 +1726,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::BlnAnd(a, b)
         | Prim::BlnOr(a, b)
         | Prim::BlnXor(a, b)
+        | Prim::BlnEql(a, b)
         | Prim::IntEql(a, b)
         | Prim::IntNeq(a, b)
         | Prim::IntAdd(a, b)
@@ -1857,6 +1858,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::BlnAnd(a, b)
         | Prim::BlnOr(a, b)
         | Prim::BlnXor(a, b)
+        | Prim::BlnEql(a, b)
         | Prim::IntEql(a, b)
         | Prim::IntNeq(a, b)
         | Prim::IntAdd(a, b)
@@ -2013,6 +2015,7 @@ fn prim_construction_names(prim: &Prim, names: &mut BTreeSet<String>) {
         | Prim::BlnAnd(a, b)
         | Prim::BlnOr(a, b)
         | Prim::BlnXor(a, b)
+        | Prim::BlnEql(a, b)
         | Prim::IntEql(a, b)
         | Prim::IntNeq(a, b)
         | Prim::IntAdd(a, b)
@@ -2152,6 +2155,7 @@ where
         Prim::BlnAnd(l, r) => traverse_binary(l, r, visit, Prim::BlnAnd),
         Prim::BlnOr(l, r) => traverse_binary(l, r, visit, Prim::BlnOr),
         Prim::BlnXor(l, r) => traverse_binary(l, r, visit, Prim::BlnXor),
+        Prim::BlnEql(l, r) => traverse_binary(l, r, visit, Prim::BlnEql),
         Prim::IntType => Prim::IntType,
         Prim::Int(value) => Prim::Int(value.clone()),
         Prim::IntEql(l, r) => traverse_binary(l, r, visit, Prim::IntEql),

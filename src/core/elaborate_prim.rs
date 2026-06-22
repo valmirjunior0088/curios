@@ -66,6 +66,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::BlnAnd(l, r) => binary(context, l, r, &bln_type, bln_type.clone(), Prim::BlnAnd)?,
         Prim::BlnOr(l, r) => binary(context, l, r, &bln_type, bln_type.clone(), Prim::BlnOr)?,
         Prim::BlnXor(l, r) => binary(context, l, r, &bln_type, bln_type.clone(), Prim::BlnXor)?,
+        Prim::BlnEql(l, r) => binary(context, l, r, &bln_type, bln_type.clone(), Prim::BlnEql)?,
         Prim::IntType => (prim.clone(), Term::type_()),
         Prim::Int(_) => (prim.clone(), int_type),
         Prim::IntEql(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntEql)?,

@@ -425,6 +425,7 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::BlnAnd(a, b) => Prim::BlnAnd(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::BlnOr(a, b) => Prim::BlnOr(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::BlnXor(a, b) => Prim::BlnXor(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::BlnEql(a, b) => Prim::BlnEql(zonk_term(context, a)?, zonk_term(context, b)?),
 
         Prim::IntEql(a, b) => Prim::IntEql(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IntNeq(a, b) => Prim::IntNeq(zonk_term(context, a)?, zonk_term(context, b)?),

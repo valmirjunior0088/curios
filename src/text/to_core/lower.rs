@@ -1573,6 +1573,7 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::BlnAnd(left, right) => core::Prim::BlnAnd(self.term(left)?, self.term(right)?),
             Prim::BlnOr(left, right) => core::Prim::BlnOr(self.term(left)?, self.term(right)?),
             Prim::BlnXor(left, right) => core::Prim::BlnXor(self.term(left)?, self.term(right)?),
+            Prim::BlnEql(left, right) => core::Prim::BlnEql(self.term(left)?, self.term(right)?),
             Prim::NatType => core::Prim::NatType,
             Prim::Nat(Nat::Zero) => core::Prim::Nat(core::Nat::Zero),
             Prim::Nat(Nat::Succ(NatLiteral::Number(spine, _), inner)) => {

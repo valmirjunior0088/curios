@@ -2558,6 +2558,27 @@ fn bln_xor_executes() {
 }
 
 #[test]
+fn bln_eql_executes() {
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(5),
+        r#"
+        use /std/{Bln, Str, Io};
+        let a = Bln/eql(true, true);
+        let b = Bln/eql(true, false);
+        Io/write(Io/stdout, Str/to_bin(Str/concat(Bln/to_str(a), Bln/to_str(b))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(
+        io.output(),
+        b"truefalse"
+    );
+}
+
+#[test]
 fn nat_bitwise_ops_execute() {
     // The first input byte is `A` (65); reading it from the host keeps the
     // operand opaque to the optimizer, so each op is lowered to its WebAssembly
