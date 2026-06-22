@@ -1,10 +1,8 @@
 use {
     super::host::Status,
-    rustix::{
-        io::write as fd_write,
-        pipe::{PipeFlags, pipe_with},
-    },
+    rustix::io::write,
     std::{
+        io::pipe,
         net::ToSocketAddrs,
         os::fd::OwnedFd,
         sync::{
@@ -14,17 +12,6 @@ use {
         thread,
     },
 };
-
-/// Worker threads servicing blocking name lookups, and the depth of the queue
-/// feeding them. The pool caps both the threads and — since each queued job
-/// already holds a pipe — the file descriptors a flood of lookups can tie up: at
-/// most `RESOLVER_THREADS + RESOLVER_QUEUE_DEPTH` lookups are ever in flight, so
-/// the host sheds load (a retriable `WouldBlock`) rather than spawning a thread
-/// and two fds per call. `getaddrinfo` is uncancellable, so a worker stuck on a
-/// dead name stays busy until the system resolver times out; the bound contains
-/// the blast radius to a fixed slice of capacity.
-const RESOLVER_THREADS: usize = 8;
-const RESOLVER_QUEUE_DEPTH: usize = 256;
 
 /// The shared cell a worker fills with a finished lookup's result, drained later
 /// by the host's `resolve`. `None` until the worker completes; the
@@ -55,11 +42,23 @@ pub struct OsResolver {
 }
 
 impl OsResolver {
+    /// Worker threads servicing blocking name lookups, and the depth of the
+    /// queue feeding them. The pool caps both the threads and — since each
+    /// queued job already holds a pipe — the file descriptors a flood of
+    /// lookups can tie up: at most `THREADS + QUEUE_DEPTH` lookups are ever in
+    /// flight, so the host sheds load (a retriable `WouldBlock`) rather than
+    /// spawning a thread and two fds per call. `getaddrinfo` is uncancellable,
+    /// so a worker stuck on a dead name stays busy until the system resolver
+    /// times out; the bound contains the blast radius to a fixed slice of
+    /// capacity.
+    const THREADS: usize = 8;
+    const QUEUE_DEPTH: usize = 256;
+
     pub fn new() -> Self {
-        let (sender, receiver) = sync_channel::<Job>(RESOLVER_QUEUE_DEPTH);
+        let (sender, receiver) = sync_channel::<Job>(Self::QUEUE_DEPTH);
         let receiver = Arc::new(Mutex::new(receiver));
 
-        for _ in 0..RESOLVER_THREADS {
+        for _ in 0..Self::THREADS {
             let receiver = Arc::clone(&receiver);
 
             thread::spawn(move || {
@@ -78,9 +77,9 @@ impl OsResolver {
                         Ok(addresses) => {
                             // Each blob is the canonical "ip:port" string —
                             // debuggable, and `socket` recovers the family from it.
-                            let addresses: Vec<Vec<u8>> = addresses
+                            let addresses = addresses
                                 .map(|addr| addr.to_string().into_bytes())
-                                .collect();
+                                .collect::<Vec<_>>();
 
                             if addresses.is_empty() {
                                 (Status::NotFound, vec![])
@@ -100,7 +99,7 @@ impl OsResolver {
                     // result is just discarded. The Rust runtime ignores
                     // `SIGPIPE`, so the write returns an error rather than killing
                     // the process.
-                    let _ = fd_write(&job.done, &[1]);
+                    let _ = write(&job.done, &[1]);
                 }
             });
         }
@@ -114,18 +113,20 @@ impl OsResolver {
     /// means the wakeup pipe could not be created.
     pub fn start(&self, address: String) -> Result<Option<Pending>, Status> {
         // The pipe is the wakeup channel: the read end is polled, the write end
-        // moves to the worker. `CLOEXEC` so a forked child never inherits it.
-        let (read_end, write_end) = pipe_with(PipeFlags::CLOEXEC)
-            .map_err(|errno| Status::Other(errno.raw_os_error() as u32))?;
+        // moves to the worker. `std::io::pipe` sets `CLOEXEC` on both ends, so a
+        // forked child never inherits them.
+        let (read_end, write_end) =
+            pipe().map_err(|err| Status::Other(err.raw_os_error().unwrap_or(0) as u32))?;
 
-        let slot: Slot = Arc::new(Mutex::new(None));
-        let job = Job {
+        let (read_end, write_end) = (OwnedFd::from(read_end), OwnedFd::from(write_end));
+
+        let slot = Arc::new(Mutex::new(None));
+
+        match self.sender.try_send(Job {
             address,
             done: write_end,
             slot: Arc::clone(&slot),
-        };
-
-        match self.sender.try_send(job) {
+        }) {
             Ok(()) => Ok(Some(Pending {
                 ready: read_end,
                 slot,
