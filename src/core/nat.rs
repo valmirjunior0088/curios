@@ -100,25 +100,6 @@ impl Nat {
         ))
     }
 
-    pub fn eql(&self, other: &Self) -> Option<bool> {
-        Some(self.to_big_uint()? == other.to_big_uint()?)
-    }
-
-    pub fn lt(&self, other: &Self) -> Option<bool> {
-        Some(self.to_big_uint()? < other.to_big_uint()?)
-    }
-
-    pub fn lte(&self, other: &Self) -> Option<bool> {
-        Some(self.to_big_uint()? <= other.to_big_uint()?)
-    }
-
-    pub fn gt(&self, other: &Self) -> Option<bool> {
-        Some(self.to_big_uint()? > other.to_big_uint()?)
-    }
-
-    pub fn gte(&self, other: &Self) -> Option<bool> {
-        Some(self.to_big_uint()? >= other.to_big_uint()?)
-    }
 }
 
 impl fmt::Display for Nat {

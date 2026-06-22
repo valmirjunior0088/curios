@@ -4,6 +4,7 @@ use {
         Context, Flt, Int, Nat, Prim, ReduceError, Subterm, Term, normalize_concat, peel_first_byte,
     },
     num_traits::{ToPrimitive, Zero},
+    std::cmp::Ordering,
 };
 
 /// Reduce both operands of a `Bln` binary primitive, then either `fold` the two
@@ -203,6 +204,117 @@ fn reduce_flt_unary(
     }))
 }
 
+/// The structural outcome of comparing two `Nat`s. The whole comparison family
+/// (`eql`/`neq`/`lt`/`lte`/`gt`/`gte`) reads this one result; each op differs only
+/// in how it maps the outcome to a `bool`. `Le`/`Ge` record a *non-strict* bound
+/// the operands force without pinning equality (e.g. `succ x ≥ 1`), letting
+/// `lt`/`gte` decide where `eql` still cannot; `Stuck` is undecidable, and the
+/// op's neutral term is rebuilt.
+#[derive(Debug, PartialEq)]
+enum Comparison {
+    Eq,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+    Stuck,
+}
+
+fn from_ordering(ordering: Ordering) -> Comparison {
+    match ordering {
+        Ordering::Less => Comparison::Lt,
+        Ordering::Equal => Comparison::Eq,
+        Ordering::Greater => Comparison::Gt,
+    }
+}
+
+/// `a = inner + spine`: pull the successor floor off a reduced `Nat`. `Zero` and
+/// stuck terms decompose to `(0, self)`; reduction has flattened nested `Succ`, so
+/// `inner` is never itself successor-headed.
+fn decompose(term: &Term) -> (num_bigint::BigUint, Term) {
+    match &**term {
+        Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => (spine.clone(), inner.clone()),
+        _ => (num_bigint::BigUint::zero(), term.clone()),
+    }
+}
+
+fn is_zero(term: &Term) -> bool {
+    matches!(&**term, Subterm::Prim(Prim::Nat(Nat::Zero)))
+}
+
+/// The inverse of [`decompose`]: `inner + spine`, collapsing a zero floor back to
+/// the bare inner so the rebuilt operand is in the same normal form `decompose`
+/// expects.
+fn rebuild_nat(spine: num_bigint::BigUint, inner: Term) -> Term {
+    match spine.is_zero() {
+        true => inner,
+        false => Term::prim(Prim::Nat(Nat::Succ(spine, inner))),
+    }
+}
+
+/// The `Nat` eliminator's structural comparison, specialized to the flat `BigUint`
+/// successor spine: the floors stand in for peeling successors, so no recursion is
+/// needed and two literals decide in one `BigUint` compare (the literal fold folds
+/// into the shared-inner shortcut). It decides ONLY where the answer is forced and
+/// is `Stuck` otherwise — a sound partial decision procedure, the shared body of
+/// the whole comparison family. (The `lt` partner of the `Unary` eliminator's
+/// successor peel; for `Bin`/`Arr` the same `Comparison` shape would recurse via
+/// `uncons`.)
+///
+/// Returns the operands with their shared successor floor peeled off, so an
+/// *undecided* comparison still rebuilds a normalized neutral: `cmp(x + m, y + m)`
+/// and `cmp(x, y)` reduce to the same term, which conversion needs (e.g.
+/// `Lt(a, succ b) ≡ Lt(succ a, succ(succ b))`).
+fn compare_nat(
+    context: &mut Context,
+    left: Term,
+    right: Term,
+) -> Result<(Comparison, Term, Term), ReduceError> {
+    let (sl, il) = decompose(&reduce(context, left)?);
+    let (sr, ir) = decompose(&reduce(context, right)?);
+
+    // Same inner ⇒ the floors alone decide: `cmp(x + sl, x + sr) = cmp(sl, sr)`
+    // (so `lt(pred, succ pred) = true`). Two literals — inner `0` on both sides —
+    // also land here: this is the O(1) literal fold. Otherwise, whichever side
+    // keeps successors past the shared floor is larger *iff* the other bottomed
+    // out at literal zero (`inner ≥ 0`); equal floors with one zero inner give a
+    // non-strict bound (`a ≤ b`/`a ≥ b`) the strict/`gte`/`lte` reads still use;
+    // anything else is undecidable.
+    let outcome = if il == ir {
+        from_ordering(sl.cmp(&sr))
+    } else {
+        match sl.cmp(&sr) {
+            Ordering::Greater if is_zero(&ir) => Comparison::Gt,
+            Ordering::Less if is_zero(&il) => Comparison::Lt,
+            Ordering::Equal if is_zero(&il) => Comparison::Le,
+            Ordering::Equal if is_zero(&ir) => Comparison::Ge,
+            _ => Comparison::Stuck,
+        }
+    };
+
+    let m = sl.clone().min(sr.clone());
+    Ok((outcome, rebuild_nat(sl - &m, il), rebuild_nat(sr - &m, ir)))
+}
+
+/// Reduce a `Nat` comparison through the shared structural body [`compare_nat`].
+/// `read` projects the outcome to this op's boolean (or `None` when the operands
+/// do not decide it), in which case the neutral term is rebuilt from the peeled
+/// operands so undecided comparisons land in a normal form.
+fn reduce_nat_compare(
+    context: &mut Context,
+    left: &Term,
+    right: &Term,
+    read: impl FnOnce(Comparison) -> Option<bool>,
+    rebuild: impl FnOnce(Term, Term) -> Prim,
+) -> Result<Subterm, ReduceError> {
+    let (outcome, left, right) = compare_nat(context, left.clone(), right.clone())?;
+
+    Ok(match read(outcome) {
+        Some(value) => Subterm::Prim(Prim::Bln(value)),
+        None => Subterm::Prim(rebuild(left, right)),
+    })
+}
+
 pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, ReduceError> {
     match prim {
         Prim::BlnType => Ok(Subterm::Prim(Prim::BlnType)),
@@ -231,22 +343,30 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 inner => Subterm::Prim(Prim::Nat(Nat::Succ(spine.clone(), Term::from(inner)))),
             })
         }
-        Prim::NatEql(left, right) => reduce_nat_binary(
+        Prim::NatEql(left, right) => reduce_nat_compare(
             context,
             left,
             right,
-            |l, r| l.eql(&r).map(Prim::Bln),
-            Prim::NatEql,
+            |c| match c {
+                Comparison::Eq => Some(true),
+                Comparison::Lt | Comparison::Gt => Some(false),
+                Comparison::Le | Comparison::Ge | Comparison::Stuck => None,
+            },
+            Prim::nat_eql,
         ),
         // Handles are opaque runtime tokens with no compile-time literal form,
         // so this only ever reduces its operands and rebuilds -- it never folds.
         Prim::IoEql(left, right) => reduce_nat_binary(context, left, right, |_, _| None, Prim::IoEql),
-        Prim::NatNeq(left, right) => reduce_nat_binary(
+        Prim::NatNeq(left, right) => reduce_nat_compare(
             context,
             left,
             right,
-            |l, r| l.eql(&r).map(|b| Prim::Bln(!b)),
-            Prim::NatNeq,
+            |c| match c {
+                Comparison::Eq => Some(false),
+                Comparison::Lt | Comparison::Gt => Some(true),
+                Comparison::Le | Comparison::Ge | Comparison::Stuck => None,
+            },
+            Prim::nat_neq,
         ),
         // Addition gets more than literal folding: the unit laws and
         // successor peeling are sound ℕ identities, and making them
@@ -327,68 +447,17 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             |l, r| l.checked_mul(r).map(Prim::Nat),
             Prim::NatMul,
         ),
-        Prim::NatLt(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
-            // Both literal: fold exactly.
-            if let (Some(l), Some(r)) = (left.as_nat(), right.as_nat())
-                && let Some(folded) = l.lt(&r)
-            {
-                return Ok(Subterm::Prim(Prim::Bln(folded)));
-            }
-            // `lt(a, s + inner) = true` when the literal `a` is below the
-            // successor floor `s` (`inner ≥ 0`, so the right side is at least
-            // `s > a`). The partner of `Bin/len`'s cons rule: it discharges the
-            // `lt(0, succ(len t))` guard a codepoint walk raises on a cons.
-            if let Some(a) = left.as_nat().and_then(|n| n.to_big_uint())
-                && let Subterm::Prim(Prim::Nat(Nat::Succ(floor, _))) = &*right
-                && a < *floor
-            {
-                return Ok(Subterm::Prim(Prim::Bln(true)));
-            }
-            // `lt(s + inner, b) = false` when the literal `b` is at or below the
-            // successor floor `s` (the left side is at least `s ≥ b`).
-            if let Some(b) = right.as_nat().and_then(|n| n.to_big_uint())
-                && let Subterm::Prim(Prim::Nat(Nat::Succ(floor, _))) = &*left
-                && *floor >= b
-            {
-                return Ok(Subterm::Prim(Prim::Bln(false)));
-            }
-            // Cancel a common successor structure off both sides — the
-            // operation-level partner of the `Unary` eliminator's successor peel,
-            // discharging symbolic bounds the literal-floor rules above leave
-            // stuck. Decompose each side into `(count, inner)` (`Succ(s, x)` is
-            // `(s, x)`, a bare term `t` is `(0, t)`). Two values over the *same*
-            // inner compare by their counts: `lt(x + sl, x + sr) = lt(sl, sr)`
-            // (e.g. `lt(pred, succ pred)`). Otherwise peel the common count floor:
-            // `lt(succ^m a, succ^m b) = lt(a, b)` — both preserve order.
-            {
-                let zero = num_bigint::BigUint::from(0usize);
-                let decompose = |t: &Term| -> (num_bigint::BigUint, Term) {
-                    match &**t {
-                        Subterm::Prim(Prim::Nat(Nat::Succ(s, inner))) => (s.clone(), inner.clone()),
-                        _ => (zero.clone(), t.clone()),
-                    }
-                };
-                let rebuild = |s: num_bigint::BigUint, inner: Term| -> Term {
-                    match s == zero {
-                        true => inner,
-                        false => Term::prim(Prim::Nat(Nat::Succ(s, inner))),
-                    }
-                };
-                let (sl, il) = decompose(&left);
-                let (sr, ir) = decompose(&right);
-                if il == ir {
-                    return Ok(Subterm::Prim(Prim::Bln(sl < sr)));
-                }
-                let m = sl.clone().min(sr.clone());
-                if m > zero {
-                    let peeled = Term::prim(Prim::nat_lt(rebuild(sl - &m, il), rebuild(sr - &m, ir)));
-                    return reduce(context, peeled).map(Term::unwrap_or_clone);
-                }
-            }
-            Ok(Subterm::Prim(Prim::nat_lt(left, right)))
-        }
+        Prim::NatLt(left, right) => reduce_nat_compare(
+            context,
+            left,
+            right,
+            |c| match c {
+                Comparison::Lt => Some(true),
+                Comparison::Eq | Comparison::Gt | Comparison::Ge => Some(false),
+                Comparison::Le | Comparison::Stuck => None,
+            },
+            Prim::nat_lt,
+        ),
         Prim::NatDiv(left, right) => reduce_nat_division(
             context,
             left,
@@ -405,26 +474,38 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             Nat::checked_rem,
             Prim::NatRem,
         ),
-        Prim::NatGt(left, right) => reduce_nat_binary(
+        Prim::NatGt(left, right) => reduce_nat_compare(
             context,
             left,
             right,
-            |l, r| l.gt(&r).map(Prim::Bln),
-            Prim::NatGt,
+            |c| match c {
+                Comparison::Gt => Some(true),
+                Comparison::Eq | Comparison::Lt | Comparison::Le => Some(false),
+                Comparison::Ge | Comparison::Stuck => None,
+            },
+            Prim::nat_gt,
         ),
-        Prim::NatLte(left, right) => reduce_nat_binary(
+        Prim::NatLte(left, right) => reduce_nat_compare(
             context,
             left,
             right,
-            |l, r| l.lte(&r).map(Prim::Bln),
-            Prim::NatLte,
+            |c| match c {
+                Comparison::Lt | Comparison::Eq | Comparison::Le => Some(true),
+                Comparison::Gt => Some(false),
+                Comparison::Ge | Comparison::Stuck => None,
+            },
+            Prim::nat_lte,
         ),
-        Prim::NatGte(left, right) => reduce_nat_binary(
+        Prim::NatGte(left, right) => reduce_nat_compare(
             context,
             left,
             right,
-            |l, r| l.gte(&r).map(Prim::Bln),
-            Prim::NatGte,
+            |c| match c {
+                Comparison::Gt | Comparison::Eq | Comparison::Ge => Some(true),
+                Comparison::Lt => Some(false),
+                Comparison::Le | Comparison::Stuck => None,
+            },
+            Prim::nat_gte,
         ),
         // Bitwise ops fold on the unbounded ℕ the type level pretends: `and`,
         // `or`, `xor` on the infinite binary expansion, `shl` as `· 2^n` and
@@ -1284,5 +1365,102 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             kind: "CellGet",
             span: cell.span(),
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use {
+        super::{Comparison, compare_nat, from_ordering, reduce},
+        crate::core::{Context, Nat, Prim, Subterm, Term, Var},
+        num_bigint::BigUint,
+        std::time::Duration,
+    };
+
+    fn context() -> Context {
+        Context::new(Duration::from_millis(50))
+    }
+
+    fn lit(n: u32) -> Term {
+        Term::prim(Prim::Nat(Nat::new(n as usize)))
+    }
+
+    fn succ(inner: Term) -> Term {
+        Term::prim(Prim::Nat(Nat::Succ(BigUint::from(1u32), inner)))
+    }
+
+    fn x() -> Term {
+        Term::var(Var::free("x"))
+    }
+
+    fn reduced(context: &mut Context, term: Term) -> Subterm {
+        Term::unwrap_or_clone(reduce(context, term).expect("reduces"))
+    }
+
+    // Soundness gate: the structural body agrees with the host ordering on every
+    // pair of literals — the decidable closed case where the two routes into a
+    // `Comparison` (the shared-inner shortcut vs. the host `cmp`) must coincide.
+    #[test]
+    fn compare_nat_agrees_with_literal_ordering() {
+        let mut context = context();
+        let samples = [0u32, 1, 2, 5, 42, 128, 255, 256, 1000];
+        for &m in &samples {
+            for &n in &samples {
+                assert_eq!(
+                    compare_nat(&mut context, lit(m), lit(n)).expect("reduces").0,
+                    from_ordering(m.cmp(&n)),
+                    "compare_nat disagreed with the literal ordering on ({m}, {n})",
+                );
+            }
+        }
+    }
+
+    // Symbolic successor bounds the family must decide — exactly the cases the old
+    // bespoke `lt` rule handled, now shared by the whole family (a regression guard).
+    #[test]
+    fn comparisons_decide_symbolic_successor_bounds() {
+        let mut context = context();
+
+        // `succ x ≥ 1`: lt is false, gte is true; and `0 < succ x` is true.
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::nat_lt(succ(x()), lit(1)))),
+            Subterm::Prim(Prim::Bln(false)),
+        );
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::nat_gte(succ(x()), lit(1)))),
+            Subterm::Prim(Prim::Bln(true)),
+        );
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::nat_lt(lit(0), succ(x())))),
+            Subterm::Prim(Prim::Bln(true)),
+        );
+
+        // Shared inner: `lt(x, succ x) = true`, `gte(x, succ x) = false`.
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::nat_lt(x(), succ(x())))),
+            Subterm::Prim(Prim::Bln(true)),
+        );
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::nat_gte(x(), succ(x())))),
+            Subterm::Prim(Prim::Bln(false)),
+        );
+
+        // The Str decoder blocker: `eql(succ(succ x), 1) = false` (shapes differ
+        // once the shared floor is peeled).
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::nat_eql(succ(succ(x())), lit(1)))),
+            Subterm::Prim(Prim::Bln(false)),
+        );
+
+        // A non-strict bound decides `lte` but leaves `lt` genuinely undecidable
+        // (neutral), since `2 ≤ succ(succ x)` says nothing about strictness.
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::nat_lte(lit(2), succ(succ(x()))))),
+            Subterm::Prim(Prim::Bln(true)),
+        );
+        assert!(matches!(
+            reduced(&mut context, Term::prim(Prim::nat_lt(lit(2), succ(succ(x()))))),
+            Subterm::Prim(Prim::NatLt(..)),
+        ));
     }
 }
