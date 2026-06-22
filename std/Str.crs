@@ -215,6 +215,16 @@ pub rec slice_get_zero(b : Bin, off : Nat, ok : Nat/Lt(off, Bin/len(b)))
         end;
     on_b(off, ok);
 
+pub rec at_concat_head(prefix : Bin, @c : Nat, @t : Bin,
+    @ok : Nat/Lt(Bin/len(prefix), Bin/len(Bin/concat(prefix, Bin/cons(c, t)))))
+    -> Eq(Bin/at(Bin/concat(prefix, Bin/cons(c, t)), Bin/len(prefix), ok), c) =
+    match prefix : (prefix) =>
+        Eq(Bin/at(Bin/concat(prefix, Bin/cons(c, t)), Bin/len(prefix),
+            Nat/le_to_lt_succ(Nat/le_add_r(Bin/len(prefix), Bin/len(t)))), c)
+    | \\ => Eq/refl()
+    | (h, p), ih => ih
+    end;
+
 let lead_step(cl : Class) -> Scan =
     match cl
     | ascii() => Scan/lead()
