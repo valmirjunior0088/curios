@@ -215,7 +215,7 @@ pub let find_index(s : Str, pred : (Nat) -> Bln) -> Option(Nat) =
 pub let find(s : Str, target : Nat) -> Option(Nat) =
     find_index(s, (codepoint) => Nat/eql(codepoint, target));
 
-pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Nat =
+pub let at(s : Str, i : Nat, ok : @Nat/Lt(i, len(s))) -> Nat =
     let b = to_bin(s);
     decode_step(b, byte_offset(b, i)).0;
 

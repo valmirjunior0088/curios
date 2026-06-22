@@ -2360,6 +2360,18 @@ fn str_of_bin_rejects_truncated_multibyte() {
 // referenced here (in a local `let`, checked before it is pruned) to force its proof
 // body through the checker; if any lemma fails to check, this test fails.
 #[test]
+fn arr_fold_sums_elements() {
+    let source = r#"
+        use /std/{Io, Str, Nat, Arr};
+        let xs : Arr(Nat) = Arr/cons(10, Arr/cons(20, Arr/single(30)));
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Arr/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))
+        "#;
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(io.output(), b"60");
+}
+
+#[test]
 fn bin_fold_sums_bytes() {
     let source = r#"
         use /std/{Io, Str, Nat, Bin};
@@ -2374,9 +2386,11 @@ fn bin_fold_sums_bytes() {
 #[test]
 fn bin_proof_lemmas_type_check() {
     let source = r#"
-        use /std/{BinProof, Bin, Io};
+        use /std/{BinProof, Bin, Nat, Io};
         let proofs = (
-            BinProof/lt_succ(@5),
+            Nat/lt_succ(@5),
+            Nat/le_refl(4),
+            Nat/le_to_lt_succ(Nat/le_refl(3)),
             BinProof/get_cons_zero(@7, @\\),
             BinProof/get_cons_succ(@7, @Bin/append(\\, 9), @0),
             BinProof/len_cons(@7, @\\),

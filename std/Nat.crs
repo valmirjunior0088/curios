@@ -85,6 +85,38 @@ pub let try_lt(a : Nat, b : Nat) -> Option(Lt(a, b)) =
     | false => Option/none()
     end;
 
+pub let lt_succ(@n : Nat) -> Lt(n, succ(n)) =
+    ();
+
+pub union Le : (a : Nat, b : Nat)
+| z(@n : Nat) : (0, n)
+| s(@a : Nat, @b : Nat, prev : Le(a, b)) : (succ(a), succ(b))
+end
+
+pub rec le_refl(n : Nat) -> Le(n, n) =
+    match n : (m) => Le(m, m)
+    | 0 => Le/z()
+    | pred + 1, ih => Le/s(ih)
+    end;
+
+pub rec le_succ_r(@a : Nat, @b : Nat, p : Le(a, b)) -> Le(a, succ(b)) =
+    match p : (w : Le(x, y)) => Le(x, succ(y))
+    | z(_) => Le/z()
+    | s(_, _, prev) => Le/s(le_succ_r(prev))
+    end;
+
+pub rec le_add_r(a : Nat, k : Nat) -> Le(a, add(a, k)) =
+    match k : (m) => Le(a, add(a, m))
+    | 0 => le_refl(a)
+    | pred + 1, ih => le_succ_r(ih)
+    end;
+
+pub rec le_to_lt_succ(@a : Nat, @b : Nat, p : Le(a, b)) -> Lt(a, succ(b)) =
+    match p : (w : Le(x, y)) => Lt(x, succ(y))
+    | z(_) => ()
+    | s(_, _, prev) => le_to_lt_succ(prev)
+    end;
+
 pub let compare(x : Nat, y : Nat) -> Order =
     match lt(x, y)
     | true => Order/lt()

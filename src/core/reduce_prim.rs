@@ -354,23 +354,37 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             {
                 return Ok(Subterm::Prim(Prim::Bln(false)));
             }
-            // Two values over the *same* inner term compare by their successor
-            // spines: `lt(x + sl, x + sr) = lt(sl, sr)` — adding the same amount
-            // to both sides preserves order, so a shared symbolic tail cancels (a
-            // bare term `x` is `x + 0`). The operation-level partner of the `Unary`
-            // eliminator's successor peel: it discharges symbolic bounds the
-            // literal-floor rules above leave stuck, e.g. `lt(pred, succ pred)`.
+            // Cancel a common successor structure off both sides — the
+            // operation-level partner of the `Unary` eliminator's successor peel,
+            // discharging symbolic bounds the literal-floor rules above leave
+            // stuck. Decompose each side into `(count, inner)` (`Succ(s, x)` is
+            // `(s, x)`, a bare term `t` is `(0, t)`). Two values over the *same*
+            // inner compare by their counts: `lt(x + sl, x + sr) = lt(sl, sr)`
+            // (e.g. `lt(pred, succ pred)`). Otherwise peel the common count floor:
+            // `lt(succ^m a, succ^m b) = lt(a, b)` — both preserve order.
             {
-                let spine_inner = |t: &Term| -> (num_bigint::BigUint, Term) {
+                let zero = num_bigint::BigUint::from(0usize);
+                let decompose = |t: &Term| -> (num_bigint::BigUint, Term) {
                     match &**t {
                         Subterm::Prim(Prim::Nat(Nat::Succ(s, inner))) => (s.clone(), inner.clone()),
-                        _ => (num_bigint::BigUint::from(0usize), t.clone()),
+                        _ => (zero.clone(), t.clone()),
                     }
                 };
-                let (sl, il) = spine_inner(&left);
-                let (sr, ir) = spine_inner(&right);
+                let rebuild = |s: num_bigint::BigUint, inner: Term| -> Term {
+                    match s == zero {
+                        true => inner,
+                        false => Term::prim(Prim::Nat(Nat::Succ(s, inner))),
+                    }
+                };
+                let (sl, il) = decompose(&left);
+                let (sr, ir) = decompose(&right);
                 if il == ir {
                     return Ok(Subterm::Prim(Prim::Bln(sl < sr)));
+                }
+                let m = sl.clone().min(sr.clone());
+                if m > zero {
+                    let peeled = Term::prim(Prim::nat_lt(rebuild(sl - &m, il), rebuild(sr - &m, ir)));
+                    return reduce(context, peeled).map(Term::unwrap_or_clone);
                 }
             }
             Ok(Subterm::Prim(Prim::nat_lt(left, right)))

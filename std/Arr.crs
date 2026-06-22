@@ -1,8 +1,8 @@
 pub use /sys/{Arr};
 pub use /sys/Arr/{let len, let slice, let append, let concat, let flatten, let map, let nil, let single};
-use /std/{Nat, Option};
+use /std/{Nat, Option, Eq};
 
-pub let at(@T : Type, a : Arr(T), i : Nat, ok : Nat/Lt(i, len(a))) -> T =
+pub let at(@T : Type, a : Arr(T), i : Nat, ok : @Nat/Lt(i, len(a))) -> T =
     /sys/Arr/get(a, i);
 
 pub let get(@T : Type, a : Arr(T), i : Nat) -> Option(T) =
@@ -15,10 +15,18 @@ pub let cons(@A : Type, x : A, xs : Arr(A)) -> Arr(A) =
     concat(single(x), xs);
 
 pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
-    match len(arr)
-    | 0 => init
-    | pred + 1, ih => f(/sys/Arr/get(arr, pred), ih)
-    end;
+    let n = len(arr);
+    rec go(k : Nat, i : Nat, acc : A, inv : Eq(Nat/add(i, k), n)) -> A =
+        let dispatch =
+            match k : (m) => (proof : Eq(Nat/add(i, m), n)) -> A
+            | 0 => (_) => acc
+            | kp + 1, ih => (inv2) =>
+                go(kp, Nat/succ(i),
+                    f(at(arr, i, Eq/subst((x) => Nat/Lt(i, x), inv2, Nat/le_to_lt_succ(Nat/le_add_r(i, kp)))), acc),
+                    inv2)
+            end;
+        dispatch(inv);
+    go(n, 0, init, Eq/refl());
 
 pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (A, A) -> A) -> A =
     rec go(lo : Nat, hi : Nat) -> A =

@@ -1,8 +1,8 @@
 pub use /sys/{Bin};
 pub use /sys/Bin/{let len, let eql, let slice, let append, let concat, let flatten};
-use /std/{Arr, Nat, Bln, Option};
+use /std/{Arr, Nat, Bln, Option, Eq};
 
-pub let at(b : Bin, i : Nat, ok : Nat/Lt(i, len(b))) -> Nat =
+pub let at(b : Bin, i : Nat, ok : @Nat/Lt(i, len(b))) -> Nat =
     /sys/Bin/get(b, i);
 
 pub let get(b : Bin, i : Nat) -> Option(Nat) =
@@ -15,10 +15,18 @@ pub let cons(head : Nat, tail : Bin) -> Bin =
     concat(append(\\, head), tail);
 
 pub let fold(@A : Type, b : Bin, init : A, f : (Nat, A) -> A) -> A =
-    match len(b)
-    | 0 => init
-    | pred + 1, ih => f(/sys/Bin/get(b, pred), ih)
-    end;
+    let n = len(b);
+    rec go(k : Nat, i : Nat, acc : A, inv : Eq(Nat/add(i, k), n)) -> A =
+        let dispatch =
+            match k : (m) => (proof : Eq(Nat/add(i, m), n)) -> A
+            | 0 => (_) => acc
+            | kp + 1, ih => (inv2) =>
+                go(kp, Nat/succ(i),
+                    f(at(b, i, Eq/subst((x) => Nat/Lt(i, x), inv2, Nat/le_to_lt_succ(Nat/le_add_r(i, kp)))), acc),
+                    inv2)
+            end;
+        dispatch(inv);
+    go(n, 0, init, Eq/refl());
 
 pub let find_index(b : Bin, pred : (Nat) -> Bln) -> Option(Nat) =
     let r : {Nat, Option(Nat)} =
