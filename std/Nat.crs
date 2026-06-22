@@ -133,6 +133,12 @@ pub let lt_of_le_succ(@a : Nat, @b : Nat, p : Le(succ(a), b)) -> Lt(a, b) =
     | s(a2, b2, prev) => le_to_lt_succ(prev)
     end;
 
+pub rec le_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Le(a, b)) -> Le(add(n, a), add(n, b)) =
+    match n : (m) => Le(add(m, a), add(m, b))
+    | 0 => p
+    | m + 1, ih => Le/s(ih)
+    end;
+
 pub let compare(x : Nat, y : Nat) -> Order =
     match lt(x, y)
     | true => Order/lt()
