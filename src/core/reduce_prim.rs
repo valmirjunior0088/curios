@@ -1485,7 +1485,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
 #[cfg(test)]
 mod tests {
     use {
-        super::{Comparison, compare_nat, from_ordering, reduce},
+        super::{compare_nat, from_ordering, reduce},
         crate::core::{Context, Nat, Prim, Subterm, Term, Var},
         num_bigint::BigUint,
         std::time::Duration,
