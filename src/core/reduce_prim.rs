@@ -1137,6 +1137,15 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             let list = reduce(context, list.clone())?;
             let start_reduced = reduce(context, start.clone())?;
             let end_reduced = reduce(context, end.clone())?;
+            // The full slice is the identity: `slice(a, 0, len a) = a`. Sound even for
+            // a symbolic `a` — `0..len` is always in range — the `Arr` twin of
+            // `BinSlice`'s full-window identity, letting a full-length `Arr/slice`
+            // reduce to its base instead of copying.
+            if matches!(&*start_reduced, Subterm::Prim(Prim::Nat(Nat::Zero)))
+                && matches!(&*end_reduced, Subterm::Prim(Prim::ArrLen(_, whole)) if *whole == list)
+            {
+                return Ok(Term::unwrap_or_clone(list));
+            }
             // The empty slice is empty: `slice(a, i, i) = []`. Sound for a symbolic
             // `a` — an empty range yields no elements regardless — and the base case
             // the cons peel below bottoms out on (the `Arr` twin of `BinSlice`'s
@@ -1646,6 +1655,22 @@ mod tests {
         assert_eq!(
             reduced(&mut context, Term::prim(Prim::arr_len(Term::prim(Prim::NatType), appended))),
             succ_len(&mut context),
+        );
+    }
+
+    // The full slice is the identity even over a symbolic array: `slice(xs, 0, len
+    // xs) = xs` (the `Arr` twin of `BinSlice`'s full-window identity).
+    #[test]
+    fn arr_slice_full_window_is_identity() {
+        let mut context = context();
+        let xs = Term::var(Var::free("xs"));
+        let len = Term::prim(Prim::arr_len(Term::prim(Prim::NatType), xs.clone()));
+        assert_eq!(
+            reduced(
+                &mut context,
+                Term::prim(Prim::arr_slice(Term::prim(Prim::NatType), xs.clone(), lit(0), len)),
+            ),
+            reduced(&mut context, xs.clone()),
         );
     }
 }
