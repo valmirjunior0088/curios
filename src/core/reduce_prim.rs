@@ -1,7 +1,7 @@
 use {
     super::reduce,
     crate::core::{
-        Context, Flt, Int, Nat, Prim, ReduceError, Subterm, Term, normalize_concat,
+        Context, Flt, Int, Nat, Peel, Prim, ReduceError, Subterm, Term, normalize_concat, peel_bin,
         peel_first_byte, peel_first_elem,
     },
     num_traits::{ToPrimitive, Zero},
@@ -852,14 +852,29 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             let left = reduce(context, left.clone())?;
             let right = reduce(context, right.clone())?;
 
-            Ok(
-                match (Term::unwrap_or_clone(left), Term::unwrap_or_clone(right)) {
-                    (Subterm::Prim(Prim::Bin(left)), Subterm::Prim(Prim::Bin(right))) => {
-                        Subterm::Prim(Prim::Bln(left == right))
-                    }
-                    (left, right) => Subterm::Prim(Prim::bin_eql(left, right)),
-                },
-            )
+            // Reflexivity: any value equals itself. Catches a shared variable, which
+            // the peel below cannot — a bare variable is not a `Bin`-valued prim.
+            if left == right {
+                return Ok(Subterm::Prim(Prim::Bln(true)));
+            }
+
+            // Structural decision via the free-monoid peel (`core::spine`): a
+            // peeled-equal pair is `true`, a definite byte or length clash is `false`
+            // (so `eql([1] ++ x, [2] ++ x) = false` regardless of `x`). Anything the
+            // peel leaves undecided stays neutral — the same conservative seam
+            // conversion reads, so the fold only ever strengthens, never weakens.
+            if let (Subterm::Prim(l), Subterm::Prim(r)) = (&*left, &*right) {
+                match peel_bin(l, r) {
+                    Some(Peel::Equal) => return Ok(Subterm::Prim(Prim::Bln(true))),
+                    Some(Peel::Clash) => return Ok(Subterm::Prim(Prim::Bln(false))),
+                    Some(Peel::Continue(..)) | Some(Peel::Stuck) | None => {}
+                }
+            }
+
+            Ok(Subterm::Prim(Prim::bin_eql(
+                Term::unwrap_or_clone(left),
+                Term::unwrap_or_clone(right),
+            )))
         }
         Prim::BinGet(bin, index) => {
             let bin = reduce(context, bin.clone())?;
@@ -1791,6 +1806,48 @@ mod tests {
         assert!(matches!(
             reduced(&mut context, Term::prim(Prim::arr_flatten(Term::prim(Prim::NatType), mixed))),
             Subterm::Prim(Prim::ArrConcat(..)),
+        ));
+    }
+
+    // `Bin/eql` decides definitional equality through the spine peel: reflexivity and
+    // a peeled-equal pair fold to `true`, a definite byte/length clash to `false`,
+    // and a genuinely undecided pair stays neutral.
+    #[test]
+    fn bin_eql_decides_structurally() {
+        let mut context = context();
+        let bin = |bytes: Vec<u8>| Term::prim(Prim::Bin(bytes));
+        let x = Term::var(Var::free("x"));
+
+        // Reflexivity over a symbolic value: `eql(x, x) = true`.
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::bin_eql(x.clone(), x.clone()))),
+            Subterm::Prim(Prim::Bln(true)),
+        );
+
+        // Literal decisions: equal folds true, unequal folds false.
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::bin_eql(bin(vec![1, 2]), bin(vec![1, 2])))),
+            Subterm::Prim(Prim::Bln(true)),
+        );
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::bin_eql(bin(vec![1, 2]), bin(vec![1, 3])))),
+            Subterm::Prim(Prim::Bln(false)),
+        );
+
+        // A first-byte clash decides `false` even past a shared symbolic tail:
+        // `eql([1] ++ x, [2] ++ x) = false`.
+        let lhs = Term::prim(Prim::bin_concat([bin(vec![1]), x.clone()]));
+        let rhs = Term::prim(Prim::bin_concat([bin(vec![2]), x.clone()]));
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::bin_eql(lhs, rhs))),
+            Subterm::Prim(Prim::Bln(false)),
+        );
+
+        // Distinct variables are undecidable: `eql(x, y)` stays neutral.
+        let y = Term::var(Var::free("y"));
+        assert!(matches!(
+            reduced(&mut context, Term::prim(Prim::bin_eql(x, y))),
+            Subterm::Prim(Prim::BinEql(..)),
         ));
     }
 }
