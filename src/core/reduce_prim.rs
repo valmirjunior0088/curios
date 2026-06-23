@@ -1,8 +1,8 @@
 use {
     super::reduce,
     crate::core::{
-        Context, Flt, Int, Nat, Prim, ReduceError, Subterm, Term, normalize_concat, peel_first_byte,
-        peel_first_elem,
+        Context, Flt, Int, Nat, Prim, ReduceError, Subterm, Term, normalize_concat,
+        peel_first_byte, peel_first_elem,
     },
     num_traits::{ToPrimitive, Zero},
     std::cmp::Ordering,
@@ -270,7 +270,11 @@ fn compare_nat(
     };
 
     let m = sl.clone().min(sr.clone());
-    Ok((outcome, Nat::rebuild(sl - &m, il), Nat::rebuild(sr - &m, ir)))
+    Ok((
+        outcome,
+        Nat::rebuild(sl - &m, il),
+        Nat::rebuild(sr - &m, ir),
+    ))
 }
 
 /// Reduce a `Nat` comparison through the shared structural body [`compare_nat`].
@@ -333,7 +337,9 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         ),
         // Handles are opaque runtime tokens with no compile-time literal form,
         // so this only ever reduces its operands and rebuilds -- it never folds.
-        Prim::IoEql(left, right) => reduce_nat_binary(context, left, right, |_, _| None, Prim::IoEql),
+        Prim::IoEql(left, right) => {
+            reduce_nat_binary(context, left, right, |_, _| None, Prim::IoEql)
+        }
         Prim::NatNeq(left, right) => reduce_nat_compare(
             context,
             left,
@@ -971,8 +977,11 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                         return reduce(context, consed).map(Term::unwrap_or_clone);
                     }
                     (Subterm::Prim(Prim::Nat(Nat::Succ(..))), _) => {
-                        let sliced =
-                            Term::prim(Prim::bin_slice(tail, dec(&start_reduced), dec(&end_reduced)));
+                        let sliced = Term::prim(Prim::bin_slice(
+                            tail,
+                            dec(&start_reduced),
+                            dec(&end_reduced),
+                        ));
                         return reduce(context, sliced).map(Term::unwrap_or_clone);
                     }
                     _ => {}
@@ -1093,7 +1102,10 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                     let len = Term::prim(Prim::arr_len(type_.clone(), base.clone()));
                     reduce(context, Term::prim(Prim::nat_add(one, len))).map(Term::unwrap_or_clone)
                 }
-                _ => Ok(Subterm::Prim(Prim::arr_len(type_, Term::unwrap_or_clone(list)))),
+                _ => Ok(Subterm::Prim(Prim::arr_len(
+                    type_,
+                    Term::unwrap_or_clone(list),
+                ))),
             }
         }
         Prim::ArrGet(type_, list, index) => {
@@ -1186,8 +1198,12 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                         Subterm::Prim(Prim::Nat(Nat::Succ(..))),
                     ) => {
                         let zero = Term::prim(Prim::Nat(Nat::Zero));
-                        let rest =
-                            Term::prim(Prim::arr_slice(type_.clone(), tail, zero, dec(&end_reduced)));
+                        let rest = Term::prim(Prim::arr_slice(
+                            type_.clone(),
+                            tail,
+                            zero,
+                            dec(&end_reduced),
+                        ));
                         let head_singleton: Term = Subterm::Prim(Prim::Arr(vec![head])).into();
                         let consed = Term::prim(Prim::arr_concat(type_, [head_singleton, rest]));
                         return reduce(context, consed).map(Term::unwrap_or_clone);
@@ -1249,22 +1265,32 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::ArrFlatten(type_, operand) => {
             let type_ = reduce(context, type_.clone())?;
             let operand = reduce(context, operand.clone())?;
-            // A literal outer array of literal inner arrays flattens to one array.
-            let merged = match &*operand {
-                Subterm::Prim(Prim::Arr(parts)) => parts.iter().try_fold(Vec::new(), |mut acc, t| {
-                    if let Subterm::Prim(Prim::Arr(elems)) = &**t {
-                        acc.extend(elems.iter().cloned());
-                        Some(acc)
-                    } else {
-                        None
-                    }
-                }),
-                _ => None,
-            };
-            Ok(match merged {
-                Some(elems) => Subterm::Prim(Prim::Arr(elems)),
-                None => Subterm::Prim(Prim::arr_flatten(type_, operand)),
-            })
+
+            match Term::unwrap_or_clone(operand) {
+                // A literal outer array flattens to the concatenation of its inner
+                // arrays. Reducing the `ArrConcat` merges all-literal parts to one
+                // array literal, while symbolic parts (a mapped element, a variable)
+                // survive as an `ArrConcat` rather than getting stuck. The `Arr` twin
+                // of `BinFlatten`'s literal rule.
+                Subterm::Prim(Prim::Arr(parts)) => {
+                    reduce(context, Subterm::Prim(Prim::ArrConcat(type_, parts)).into())
+                        .map(Term::unwrap_or_clone)
+                }
+                // `flatten` distributes over array concatenation: a symbolic outer
+                // cons `cons(x, xs) = concat([x], xs)` flattens to
+                // `concat(flatten([x]), flatten(xs)) = concat(x, flatten(xs))`,
+                // mirroring `BinFlatten` and the `Arr` eliminator's rule.
+                Subterm::Prim(Prim::ArrConcat(_elem, segments)) => {
+                    let distributed = segments
+                        .into_iter()
+                        .map(|seg| Subterm::Prim(Prim::arr_flatten(type_.clone(), seg)).into())
+                        .collect::<Vec<Term>>();
+
+                    reduce(context, Subterm::Prim(Prim::ArrConcat(type_, distributed)).into())
+                        .map(Term::unwrap_or_clone)
+                }
+                operand => Ok(Subterm::Prim(Prim::arr_flatten(type_, operand))),
+            }
         }
         // The eliminator rule, mirroring the native `Arr` `match`: distribute the
         // map over the free-monoid spine so it reduces to the *same* normal form a
@@ -1294,7 +1320,9 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                     b.clone(),
                     segments
                         .iter()
-                        .map(|s| Term::prim(Prim::arr_map(a.clone(), b.clone(), f.clone(), s.clone())))
+                        .map(|s| {
+                            Term::prim(Prim::arr_map(a.clone(), b.clone(), f.clone(), s.clone()))
+                        })
                         .collect(),
                 )),
                 Subterm::Prim(Prim::ArrAppend(_elem, base, x)) => Subterm::Prim(Prim::ArrAppend(
@@ -1467,7 +1495,9 @@ mod tests {
         for &m in &samples {
             for &n in &samples {
                 assert_eq!(
-                    compare_nat(&mut context, lit(m), lit(n)).expect("reduces").0,
+                    compare_nat(&mut context, lit(m), lit(n))
+                        .expect("reduces")
+                        .0,
                     from_ordering(m.cmp(&n)),
                     "compare_nat disagreed with the literal ordering on ({m}, {n})",
                 );
@@ -1508,18 +1538,27 @@ mod tests {
         // The Str decoder blocker: `eql(succ(succ x), 1) = false` (shapes differ
         // once the shared floor is peeled).
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::nat_eql(succ(succ(x())), lit(1)))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::nat_eql(succ(succ(x())), lit(1)))
+            ),
             Subterm::Prim(Prim::Bln(false)),
         );
 
         // A non-strict bound decides `lte` but leaves `lt` genuinely undecidable
         // (neutral), since `2 ≤ succ(succ x)` says nothing about strictness.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::nat_lte(lit(2), succ(succ(x()))))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::nat_lte(lit(2), succ(succ(x()))))
+            ),
             Subterm::Prim(Prim::Bln(true)),
         );
         assert!(matches!(
-            reduced(&mut context, Term::prim(Prim::nat_lt(lit(2), succ(succ(x()))))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::nat_lt(lit(2), succ(succ(x()))))
+            ),
             Subterm::Prim(Prim::NatLt(..)),
         ));
     }
@@ -1555,7 +1594,10 @@ mod tests {
             reduced(&mut context, Term::prim(Prim::nat_mul(succ(x()), lit(2)))),
             reduced(
                 &mut context,
-                Term::prim(Prim::nat_add(Term::prim(Prim::nat_mul(x(), lit(2))), lit(2))),
+                Term::prim(Prim::nat_add(
+                    Term::prim(Prim::nat_mul(x(), lit(2))),
+                    lit(2)
+                )),
             ),
         );
 
@@ -1564,7 +1606,10 @@ mod tests {
             reduced(&mut context, Term::prim(Prim::nat_mul(lit(2), succ(x())))),
             reduced(
                 &mut context,
-                Term::prim(Prim::nat_add(Term::prim(Prim::nat_mul(lit(2), x())), lit(2))),
+                Term::prim(Prim::nat_add(
+                    Term::prim(Prim::nat_mul(lit(2), x())),
+                    lit(2)
+                )),
             ),
         );
 
@@ -1592,13 +1637,23 @@ mod tests {
 
         // `get(cons(7, xs), 0) = 7`.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::arr_get(Term::prim(Prim::NatType), cons.clone(), lit(0)))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::arr_get(
+                    Term::prim(Prim::NatType),
+                    cons.clone(),
+                    lit(0)
+                ))
+            ),
             Subterm::Prim(Prim::Nat(Nat::new(7usize))),
         );
 
         // `get(cons(7, xs), 1)` peels to `get(xs, 0)` — neutral over a symbolic tail.
         assert!(matches!(
-            reduced(&mut context, Term::prim(Prim::arr_get(Term::prim(Prim::NatType), cons, lit(1)))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::arr_get(Term::prim(Prim::NatType), cons, lit(1)))
+            ),
             Subterm::Prim(Prim::ArrGet(..)),
         ));
     }
@@ -1610,13 +1665,29 @@ mod tests {
 
         // `slice(cons(7, xs), 0, 1) = [7] ++ slice(xs, 0, 0) = [7]`.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::arr_slice(Term::prim(Prim::NatType), cons.clone(), lit(0), lit(1)))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::arr_slice(
+                    Term::prim(Prim::NatType),
+                    cons.clone(),
+                    lit(0),
+                    lit(1)
+                ))
+            ),
             Subterm::Prim(Prim::Arr(vec![lit(7)])),
         );
 
         // `slice(cons(7, xs), 1, 1) = []` — the empty-slice identity.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::arr_slice(Term::prim(Prim::NatType), cons, lit(1), lit(1)))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::arr_slice(
+                    Term::prim(Prim::NatType),
+                    cons,
+                    lit(1),
+                    lit(1)
+                ))
+            ),
             Subterm::Prim(Prim::Arr(Vec::new())),
         );
     }
@@ -1631,7 +1702,10 @@ mod tests {
         let succ_len = |context: &mut Context| {
             reduced(
                 context,
-                Term::prim(Prim::nat_add(lit(1), Term::prim(Prim::arr_len(Term::prim(Prim::NatType), xs.clone())))),
+                Term::prim(Prim::nat_add(
+                    lit(1),
+                    Term::prim(Prim::arr_len(Term::prim(Prim::NatType), xs.clone())),
+                )),
             )
         };
 
@@ -1639,21 +1713,37 @@ mod tests {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::arr_len(Term::prim(Prim::NatType), Term::prim(Prim::Arr(vec![lit(1), lit(2), lit(3)])))),
+                Term::prim(Prim::arr_len(
+                    Term::prim(Prim::NatType),
+                    Term::prim(Prim::Arr(vec![lit(1), lit(2), lit(3)]))
+                )),
             ),
             Subterm::Prim(Prim::Nat(Nat::new(3usize))),
         );
 
         // `len(cons(7, xs)) = 1 + len(xs)`.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::arr_len(Term::prim(Prim::NatType), arr_cons_seven(&xs)))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::arr_len(
+                    Term::prim(Prim::NatType),
+                    arr_cons_seven(&xs)
+                ))
+            ),
             succ_len(&mut context),
         );
 
         // `len(append(xs, 9)) = 1 + len(xs)`.
-        let appended = Term::prim(Prim::arr_append(Term::prim(Prim::NatType), xs.clone(), lit(9)));
+        let appended = Term::prim(Prim::arr_append(
+            Term::prim(Prim::NatType),
+            xs.clone(),
+            lit(9),
+        ));
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::arr_len(Term::prim(Prim::NatType), appended))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::arr_len(Term::prim(Prim::NatType), appended))
+            ),
             succ_len(&mut context),
         );
     }
@@ -1668,9 +1758,39 @@ mod tests {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::arr_slice(Term::prim(Prim::NatType), xs.clone(), lit(0), len)),
+                Term::prim(Prim::arr_slice(
+                    Term::prim(Prim::NatType),
+                    xs.clone(),
+                    lit(0),
+                    len
+                )),
             ),
             reduced(&mut context, xs.clone()),
         );
+    }
+
+    // `Arr/flatten` distributes over the monoid like `Bin/flatten`: literal parts
+    // merge, and a part that is symbolic survives as an `ArrConcat` instead of
+    // stalling the whole flatten (the old rule bailed to neutral on any non-literal).
+    #[test]
+    fn arr_flatten_distributes() {
+        let mut context = context();
+        let arr = |elems: Vec<Term>| Term::prim(Prim::Arr(elems));
+
+        // Literal-of-literals: `flatten([[1, 2], [3]]) = [1, 2, 3]`.
+        let outer = arr(vec![arr(vec![lit(1), lit(2)]), arr(vec![lit(3)])]);
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::arr_flatten(Term::prim(Prim::NatType), outer))),
+            Subterm::Prim(Prim::Arr(vec![lit(1), lit(2), lit(3)])),
+        );
+
+        // A symbolic inner array `xs : Arr(Nat)` no longer stalls the flatten:
+        // `flatten([[1, 2], xs])` reduces to `[1, 2] ++ xs` (an `ArrConcat`).
+        let xs = Term::var(Var::free("xs"));
+        let mixed = arr(vec![arr(vec![lit(1), lit(2)]), xs]);
+        assert!(matches!(
+            reduced(&mut context, Term::prim(Prim::arr_flatten(Term::prim(Prim::NatType), mixed))),
+            Subterm::Prim(Prim::ArrConcat(..)),
+        ));
     }
 }
