@@ -180,21 +180,25 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         },
 
         Cases::Switch { cases, default } => {
-            match Term::unwrap_or_clone(reduce_forced(context, head)?) {
-                Subterm::Prim(Prim::Nat(Nat::Zero)) => match cases.get(&0) {
-                    Some(body) => Ok(Reduce::Continue(body.clone())),
-                    None => Ok(Reduce::Continue(default.clone())),
-                },
-                Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner)))
-                    if matches!(inner.as_ref(), Subterm::Prim(Prim::Nat(Nat::Zero))) =>
-                {
-                    match spine.to_u32().and_then(|k| cases.get(&k)) {
-                        Some(body) => Ok(Reduce::Continue(body.clone())),
-                        None => Ok(Reduce::Continue(default.clone())),
-                    }
+            let scrutinee = reduce_forced(context, head)?;
+            // A literal `Nat` is the kernel's spine floor over a `Zero` inner, so
+            // `is_zero` on the peeled inner is exactly "is this a concrete `k`?" — the
+            // same spine view the arithmetic family reads. A literal dispatches to its
+            // case, or the default when none matches (including a value beyond the
+            // `u32` case keys); a symbolic scrutinee rebuilds the neutral switch.
+            let (value, inner) = Nat::decompose(&scrutinee);
+
+            match Nat::is_zero(&inner) {
+                true => {
+                    let body = value
+                        .to_u32()
+                        .and_then(|k| cases.get(&k))
+                        .unwrap_or(&default);
+
+                    Ok(Reduce::Continue(body.clone()))
                 }
-                head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
-                    head: head.into(),
+                false => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
+                    head: scrutinee,
                     motive,
                     cases: Cases::Switch { cases, default },
                 })))),
