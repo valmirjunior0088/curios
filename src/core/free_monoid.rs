@@ -253,13 +253,17 @@ fn peel_front_arr(arr: &Term) -> ArrFront {
                     Subterm::Prim(Prim::Arr(elems)) => elems.clone(),
                     _ => unreachable!("guard checked a non-empty `Arr` literal lead segment"),
                 };
+
                 let head = lead.remove(0);
 
                 let mut segments = Vec::with_capacity(rest.len() + 1);
+
                 if !lead.is_empty() {
                     segments.push(Subterm::Prim(Prim::Arr(lead)).into());
                 }
+
                 segments.extend(rest.iter().cloned());
+
                 let tail = match segments.len() {
                     0 => Subterm::Prim(Prim::Arr(vec![])).into(),
                     1 => segments.into_iter().next().unwrap(),
@@ -324,6 +328,7 @@ pub fn normalize_concat<E: Clone>(
     // stops the fold, leaving the concatenation (a lone operand collapses to itself).
     let merged = kept.iter().try_fold(Vec::new(), |mut run, operand| {
         run.extend(literal(operand)?.iter().cloned());
+
         Some(run)
     });
 
