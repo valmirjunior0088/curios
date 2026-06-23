@@ -283,11 +283,29 @@ pub fn peel_arr(left: &Prim, right: &Prim) -> Option<Peel> {
 /// The `Bin`-valued primitives `peel_bin` decomposes. `Bin` and `BinConcat` carry
 /// the monoid's literals and juxtaposition; `BinSlice` rides in as a measured
 /// `Window` (a length-`hi - lo` chunk whose contents are symbolic), so adjacent
-/// slices of one base fuse and equal slices cancel. The rest (`BinAppend`,
-/// `BinFlatten`) still appear as opaque symbolic chunks left to the caller's own
-/// (structural) comparison.
+/// slices of one base fuse and equal slices cancel; `BinAppend` rides in as its base
+/// followed by the appended byte. Only `BinFlatten` stays an opaque symbolic chunk
+/// left to the caller's own (structural) comparison.
 fn bin_valued(prim: &Prim) -> bool {
-    matches!(prim, Prim::Bin(_) | Prim::BinConcat(_) | Prim::BinSlice(..))
+    matches!(
+        prim,
+        Prim::Bin(_) | Prim::BinConcat(_) | Prim::BinSlice(..) | Prim::BinAppend(..)
+    )
+}
+
+/// The concrete byte an already-reduced `Bin/append` operand carries, taken mod 256
+/// (matching the runtime's packed store), or `None` for a symbolic byte.
+fn byte_as_u8(term: &Term) -> Option<u8> {
+    match &**term {
+        Subterm::Prim(Prim::Nat(n)) => Some(
+            n.to_big_uint()?
+                .to_bytes_le()
+                .first()
+                .copied()
+                .unwrap_or(0),
+        ),
+        _ => None,
+    }
 }
 
 /// The `Arr` analogue of [`bin_valued`]: `Arr` and `ArrConcat` carry the monoid's
@@ -331,6 +349,22 @@ fn bin_collect_prim(prim: &Prim, out: &mut Vec<Atom<u8>>) {
             out,
             Atom::Window { base: base.clone(), lo: lo.clone(), hi: hi.clone() },
         ),
+        // `append(base, b) = base ++ [b]`: decode the base, then the appended byte.
+        // A concrete byte is a length-1 literal run (so it merges with an abutting run
+        // and unifies with `concat(base, \b)`); a symbolic byte is the canonical
+        // one-byte chunk `append(\\, b)` — opaque, so its emptiness stays undecidable.
+        Prim::BinAppend(base, byte) => {
+            bin_collect_term(base, out);
+
+            match byte_as_u8(byte) {
+                Some(b) => push(out, Atom::Literal(vec![b])),
+                None => {
+                    let empty = Subterm::Prim(Prim::Bin(Vec::new()));
+                    let chunk = Term::prim(Prim::bin_append(empty, byte.clone()));
+                    push(out, Atom::Symbolic(chunk));
+                }
+            }
+        }
         other => push(out, Atom::Symbolic(Term::prim(other.clone()))),
     }
 }

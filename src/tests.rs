@@ -475,6 +475,21 @@ fn arr_append_is_concat_with_a_single() {
 }
 
 #[test]
+fn bin_append_is_concat_with_a_single_byte() {
+    // The `Bin` twin of `arr_append_is_concat_with_a_single`: `Bin/append` rides the
+    // spine as `base ++ b`, so it converts to the `concat`-with-a-one-byte form by
+    // `refl` even for a symbolic base and a symbolic byte.
+    let source = r#"
+        use /std/{Io, Str, Eq, Bin, Nat};
+        let law(xs : Bin, y : Nat)
+            -> Eq(Bin/concat(xs, Bin/append(\\, y)), Bin/append(xs, y)) =
+            Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
 fn arr_slice_window_seam_mismatch_is_rejected() {
     // The dual of `bin_slice_window_seam_mismatch_is_rejected`: two `Arr` windows
     // whose seam does not meet must NOT fuse, so the concat is not convertible to the
