@@ -243,49 +243,52 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         // `Layer` peels a generator (its head absent for the unary `Nat`) and
         // recurses symbolically for the induction hypothesis; a stuck scrutinee
         // rebuilds.
-        Cases::Inductive {
-            carrier,
-            empty_case,
-            cons_case,
-        } => {
+        Cases::Inductive { carrier } => {
             let scrutinee = Term::unwrap_or_clone(reduce_forced(context, head)?);
+
             let layer = match &carrier {
-                Carrier::Nat => FreeMonoid::Unary,
-                Carrier::Bin => FreeMonoid::Bin,
-                Carrier::Arr(_) => FreeMonoid::Arr,
+                Carrier::Nat { .. } => FreeMonoid::Unary,
+                Carrier::Bin { .. } => FreeMonoid::Bin,
+                Carrier::Arr { .. } => FreeMonoid::Arr,
             }
             .uncons(scrutinee);
 
             match layer {
-                Layer::Empty => Ok(Reduce::Continue(empty_case)),
+                Layer::Empty => Ok(Reduce::Continue(match carrier {
+                    Carrier::Nat { empty_case, .. }
+                    | Carrier::Bin { empty_case, .. }
+                    | Carrier::Arr { empty_case, .. } => empty_case,
+                })),
                 Layer::Cons { head, tail } => {
                     let ih: Term = Subterm::Match(Match {
                         head: tail.clone(),
                         motive: motive.clone(),
                         cases: Cases::Inductive {
                             carrier: carrier.clone(),
-                            empty_case: empty_case.clone(),
-                            cons_case: cons_case.clone(),
                         },
                     })
                     .into();
 
                     // The cons arm binds the generator's payload (a head, absent for
                     // the unary `Nat`), then the tail and the induction hypothesis.
-                    let mut binders: Vec<&Term> = Vec::with_capacity(3);
-                    binders.extend(head.as_ref());
-                    binders.push(&tail);
-                    binders.push(&ih);
-                    Ok(Reduce::Continue(cons_case.open(binders.as_slice())))
+                    Ok(Reduce::Continue(match &carrier {
+                        Carrier::Nat { cons_case, .. } => cons_case.open(&[&tail, &ih]),
+                        Carrier::Bin { cons_case, .. } => cons_case.open(&[
+                            head.as_ref().expect("Bin cons layer carries a head"),
+                            &tail,
+                            &ih,
+                        ]),
+                        Carrier::Arr { cons_case, .. } => cons_case.open(&[
+                            head.as_ref().expect("Arr cons layer carries a head"),
+                            &tail,
+                            &ih,
+                        ]),
+                    }))
                 }
                 Layer::Stuck(scrutinee) => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
                     head: scrutinee.into(),
                     motive,
-                    cases: Cases::Inductive {
-                        carrier,
-                        empty_case,
-                        cons_case,
-                    },
+                    cases: Cases::Inductive { carrier },
                 })))),
             }
         }

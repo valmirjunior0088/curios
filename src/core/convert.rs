@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, Match, Metavar, Proj, Rec,
-        ReduceError, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, UnionType,
-        Var, Variant, Visit, check, convert_prim, reduce, unfold_rec,
+        ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType,
+        UnionType, Var, Variant, Visit, check, convert_prim, reduce, unfold_rec,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -168,6 +168,19 @@ impl Convert {
 
     pub fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
         self.pending.push_back(Goal { type_, this, that });
+    }
+
+    /// Enqueue the bodies of two arity-3 cons arms (`Bin`/`Arr`) for comparison,
+    /// opened under shared fresh binders for `(head, tail, ih)`.
+    fn compare_cons_three(&mut self, context: &mut Context, this: Scope<Three>, that: Scope<Three>) {
+        let a = Term::var(Var::free(context.fresh(None)));
+        let b = Term::var(Var::free(context.fresh(None)));
+        let c = Term::var(Var::free(context.fresh(None)));
+        self.enqueue(
+            Term::type_(),
+            this.open(&[&a, &b, &c]),
+            that.open(&[&a, &b, &c]),
+        );
     }
 
     fn dequeue(&mut self, context: &Context) -> Result<Option<Goal>, ReduceError> {
@@ -571,40 +584,71 @@ impl Convert {
             (
                 Cases::Inductive {
                     carrier: this_carrier,
-                    empty_case: this_empty,
-                    cons_case: this_cons,
                 },
                 Cases::Inductive {
                     carrier: that_carrier,
-                    empty_case: that_empty,
-                    cons_case: that_cons,
                 },
-            ) => {
-                match (this_carrier, that_carrier) {
-                    (Carrier::Nat, Carrier::Nat) => {}
-                    (Carrier::Arr(this_elem), Carrier::Arr(that_elem)) => {
-                        self.enqueue(Term::type_(), this_elem, that_elem);
-                    }
-                    (Carrier::Bin, Carrier::Bin) => {}
-                    // Distinct carriers are never structurally convertible.
-                    _ => return Ok(false),
+            ) => match (this_carrier, that_carrier) {
+                (
+                    Carrier::Nat {
+                        empty_case: this_empty,
+                        cons_case: this_cons,
+                    },
+                    Carrier::Nat {
+                        empty_case: that_empty,
+                        cons_case: that_cons,
+                    },
+                ) => {
+                    self.enqueue(Term::type_(), this_empty, that_empty);
+
+                    // The unary cons arm binds (predecessor, ih); open both under
+                    // shared fresh binders and compare the bodies.
+                    let a = Term::var(Var::free(context.fresh(None)));
+                    let b = Term::var(Var::free(context.fresh(None)));
+                    self.enqueue(
+                        Term::type_(),
+                        this_cons.open(&[&a, &b]),
+                        that_cons.open(&[&a, &b]),
+                    );
+
+                    Ok(true)
                 }
-                self.enqueue(Term::type_(), this_empty, that_empty);
+                (
+                    Carrier::Bin {
+                        empty_case: this_empty,
+                        cons_case: this_cons,
+                    },
+                    Carrier::Bin {
+                        empty_case: that_empty,
+                        cons_case: that_cons,
+                    },
+                ) => {
+                    self.enqueue(Term::type_(), this_empty, that_empty);
+                    self.compare_cons_three(context, this_cons, that_cons);
 
-                // The cons arm's arity is carrier-dependent (2 for `Nat`, 3 for
-                // `Bin`/`Arr`); matched carriers share it, so open both generically.
-                let binders = (0..this_cons.arity())
-                    .map(|_| Term::var(Var::free(context.fresh(None))))
-                    .collect::<Vec<_>>();
-                let binder_refs = binders.iter().collect::<Vec<_>>();
-                self.enqueue(
-                    Term::type_(),
-                    this_cons.open(&binder_refs),
-                    that_cons.open(&binder_refs),
-                );
+                    Ok(true)
+                }
+                (
+                    Carrier::Arr {
+                        elem: this_elem,
+                        empty_case: this_empty,
+                        cons_case: this_cons,
+                    },
+                    Carrier::Arr {
+                        elem: that_elem,
+                        empty_case: that_empty,
+                        cons_case: that_cons,
+                    },
+                ) => {
+                    self.enqueue(Term::type_(), this_elem, that_elem);
+                    self.enqueue(Term::type_(), this_empty, that_empty);
+                    self.compare_cons_three(context, this_cons, that_cons);
 
-                Ok(true)
-            }
+                    Ok(true)
+                }
+                // Distinct carriers are never structurally convertible.
+                _ => Ok(false),
+            },
 
             // Unreachable under the dispatch guard (same `Cases` discriminant);
             // distinct kinds are never structurally convertible.

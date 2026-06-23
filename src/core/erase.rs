@@ -2,7 +2,7 @@ use {
     super::{
         Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, Item, Let, Many, Match,
         Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Quantity, Rec, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType, UnionType, Var, Variant,
+        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
         erase_prim, expect_prim_head, infer, reduce_with, refine_head,
     },
     crate::ersd,
@@ -282,7 +282,7 @@ fn erase_nat_match(
     head: &Term,
     motive: &Scope<Many>,
     zero_case: &Term,
-    succ_case: &Scope<Many>,
+    succ_case: &Scope<Two>,
 ) -> Result<ersd::Term, Error> {
     let head_type = expect_prim_head(context, head, Prim::NatType)?;
 
@@ -374,19 +374,26 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<ersd::Term, Error> {
             erase_union_match(context, head, motive, cases, pattern.as_ref())
         }
         Cases::Inductive {
-            carrier: Carrier::Nat,
-            empty_case,
-            cons_case,
+            carrier:
+                Carrier::Nat {
+                    empty_case,
+                    cons_case,
+                },
         } => erase_nat_match(context, head, motive, empty_case, cons_case),
         Cases::Inductive {
-            carrier: Carrier::Arr(elem),
-            empty_case,
-            cons_case,
+            carrier:
+                Carrier::Arr {
+                    elem,
+                    empty_case,
+                    cons_case,
+                },
         } => erase_arr_match(context, head, motive, elem, empty_case, cons_case),
         Cases::Inductive {
-            carrier: Carrier::Bin,
-            empty_case,
-            cons_case,
+            carrier:
+                Carrier::Bin {
+                    empty_case,
+                    cons_case,
+                },
         } => erase_bin_match(context, head, motive, empty_case, cons_case),
     }
 }
@@ -403,7 +410,7 @@ fn erase_arr_match(
     motive: &Scope<Many>,
     elem: &Term,
     empty_case: &Term,
-    cons_case: &Scope<Many>,
+    cons_case: &Scope<Three>,
 ) -> Result<ersd::Term, Error> {
     let len: Term = Subterm::Prim(Prim::ArrLen(elem.clone(), head.clone())).into();
     let one: Term = Subterm::Prim(Prim::Nat(Nat::new(1usize))).into();
@@ -443,7 +450,7 @@ fn erase_arr_match(
         &tail_value,
         &Term::var(Var::free(&ih_label)),
     ]);
-    let succ_case = Scope::close(Many(2), &[pred_label.as_str(), ih_label.as_str()], succ_body);
+    let succ_case = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
 
     erase_nat_match(context, &len, &nat_motive, empty_case, &succ_case)
 }
@@ -458,7 +465,7 @@ fn erase_bin_match(
     head: &Term,
     motive: &Scope<Many>,
     empty_case: &Term,
-    cons_case: &Scope<Many>,
+    cons_case: &Scope<Three>,
 ) -> Result<ersd::Term, Error> {
     let len: Term = Subterm::Prim(Prim::BinLen(head.clone())).into();
     let one: Term = Subterm::Prim(Prim::Nat(Nat::new(1usize))).into();
@@ -495,7 +502,7 @@ fn erase_bin_match(
         &tail_value,
         &Term::var(Var::free(&ih_label)),
     ]);
-    let succ_case = Scope::close(Many(2), &[pred_label.as_str(), ih_label.as_str()], succ_body);
+    let succ_case = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
 
     erase_nat_match(context, &len, &nat_motive, empty_case, &succ_case)
 }

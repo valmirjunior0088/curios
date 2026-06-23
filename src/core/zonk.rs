@@ -305,18 +305,32 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                     false_case: zonk_term(context, false_case)?,
                     true_case: zonk_term(context, true_case)?,
                 },
-                Cases::Inductive {
-                    carrier,
-                    empty_case,
-                    cons_case,
-                } => Cases::Inductive {
+                Cases::Inductive { carrier } => Cases::Inductive {
                     carrier: match carrier {
-                        Carrier::Nat => Carrier::Nat,
-                        Carrier::Arr(elem) => Carrier::Arr(zonk_term(context, elem)?),
-                        Carrier::Bin => Carrier::Bin,
+                        Carrier::Nat {
+                            empty_case,
+                            cons_case,
+                        } => Carrier::Nat {
+                            empty_case: zonk_term(context, empty_case)?,
+                            cons_case: enter_scope(cons_case, |b| zonk_term(context, b))?,
+                        },
+                        Carrier::Bin {
+                            empty_case,
+                            cons_case,
+                        } => Carrier::Bin {
+                            empty_case: zonk_term(context, empty_case)?,
+                            cons_case: enter_scope(cons_case, |b| zonk_term(context, b))?,
+                        },
+                        Carrier::Arr {
+                            elem,
+                            empty_case,
+                            cons_case,
+                        } => Carrier::Arr {
+                            elem: zonk_term(context, elem)?,
+                            empty_case: zonk_term(context, empty_case)?,
+                            cons_case: enter_scope(cons_case, |b| zonk_term(context, b))?,
+                        },
                     },
-                    empty_case: zonk_term(context, empty_case)?,
-                    cons_case: enter_scope(cons_case, |b| zonk_term(context, b))?,
                 },
                 Cases::Switch { cases, default } => Cases::Switch {
                     cases: cases

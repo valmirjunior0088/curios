@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Bound, Flt, Int, Many, Nat, One, Prim, Scope, Telescope, Var, Visit},
+    super::{Atom, Bound, Flt, Int, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit},
     crate::Span,
     std::{
         cell::OnceCell,
@@ -519,13 +519,14 @@ impl Term {
                 None => Scope::constant(Many(1), motive.into()),
             },
             cases: Cases::Inductive {
-                carrier: Carrier::Nat,
-                empty_case: zero_case.into(),
-                cons_case: Scope::close(
-                    Many(2),
-                    &[pred_label.as_str(), ih_label.as_str()],
-                    succ_case.into(),
-                ),
+                carrier: Carrier::Nat {
+                    empty_case: zero_case.into(),
+                    cons_case: Scope::close(
+                        Two,
+                        &[pred_label.as_str(), ih_label.as_str()],
+                        succ_case.into(),
+                    ),
+                },
             },
         }))
     }
@@ -563,13 +564,15 @@ impl Term {
                 None => Scope::constant(Many(1), motive.into()),
             },
             cases: Cases::Inductive {
-                carrier: Carrier::Arr(elem.into()),
-                empty_case: empty_case.into(),
-                cons_case: Scope::close(
-                    Many(3),
-                    &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
-                    cons_case.into(),
-                ),
+                carrier: Carrier::Arr {
+                    elem: elem.into(),
+                    empty_case: empty_case.into(),
+                    cons_case: Scope::close(
+                        Three,
+                        &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
+                        cons_case.into(),
+                    ),
+                },
             },
         }))
     }
@@ -605,13 +608,14 @@ impl Term {
                 None => Scope::constant(Many(1), motive.into()),
             },
             cases: Cases::Inductive {
-                carrier: Carrier::Bin,
-                empty_case: empty_case.into(),
-                cons_case: Scope::close(
-                    Many(3),
-                    &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
-                    cons_case.into(),
-                ),
+                carrier: Carrier::Bin {
+                    empty_case: empty_case.into(),
+                    cons_case: Scope::close(
+                        Three,
+                        &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
+                        cons_case.into(),
+                    ),
+                },
             },
         }))
     }
@@ -962,27 +966,34 @@ pub enum Cases {
         pattern: Option<MotivePattern>,
     },
     /// Structural induction on a native free-monoid primitive (`Nat`/`Arr`/`Bin`/
-    /// `Str`): an identity arm plus a cons arm binding the head generator (absent
-    /// for `Nat`, whose unary generator carries no payload), the tail, and the
-    /// induction hypothesis at the tail. The `carrier` selects the primitive and
-    /// carries its parameters (`Arr`'s element type). The cons arm's arity is thus
-    /// payload-dependent — 2 for `Nat` (predecessor, ih), 3 for `Bin`/`Arr` (head,
-    /// tail, ih) — hence `Scope<Many>` rather than a fixed arity.
-    Inductive {
-        carrier: Carrier,
-        empty_case: Term,
-        cons_case: Scope<Many>,
-    },
+    /// `Str`): the `carrier` selects the primitive and carries both its parameters
+    /// (`Arr`'s element type) and its two arms — an identity arm plus a cons arm
+    /// binding the head generator (absent for `Nat`, whose unary generator carries
+    /// no payload), the tail, and the induction hypothesis at the tail.
+    Inductive { carrier: Carrier },
 }
 
 /// The native free-monoid primitive a `Cases::Inductive` eliminates, with its
-/// type parameters. `Nat` is the free monoid on one (payload-less) generator;
-/// `Bin`/`Str` carry none; `Arr` carries its element type.
+/// type parameters and its two eliminator arms. `Nat` is the free monoid on one
+/// (payload-less) generator; `Bin`/`Str` carry none; `Arr` carries its element
+/// type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose
+/// arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih),
+/// `Scope<Three>` for `Bin`/`Arr` (head, tail, ih).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Carrier {
-    Nat,
-    Arr(Term),
-    Bin,
+    Nat {
+        empty_case: Term,
+        cons_case: Scope<Two>,
+    },
+    Bin {
+        empty_case: Term,
+        cons_case: Scope<Three>,
+    },
+    Arr {
+        elem: Term,
+        empty_case: Term,
+        cons_case: Scope<Three>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1200,17 +1211,31 @@ impl Subterm {
                             }
                         });
                     }
-                    Cases::Inductive {
-                        carrier,
-                        empty_case,
-                        cons_case,
-                    } => {
-                        if let Carrier::Arr(elem) = carrier {
-                            elem.collect_construction_names(names);
+                    Cases::Inductive { carrier } => match carrier {
+                        Carrier::Nat {
+                            empty_case,
+                            cons_case,
+                        } => {
+                            empty_case.collect_construction_names(names);
+                            cons_case.body().collect_construction_names(names);
                         }
-                        empty_case.collect_construction_names(names);
-                        cons_case.body().collect_construction_names(names);
-                    }
+                        Carrier::Bin {
+                            empty_case,
+                            cons_case,
+                        } => {
+                            empty_case.collect_construction_names(names);
+                            cons_case.body().collect_construction_names(names);
+                        }
+                        Carrier::Arr {
+                            elem,
+                            empty_case,
+                            cons_case,
+                        } => {
+                            elem.collect_construction_names(names);
+                            empty_case.collect_construction_names(names);
+                            cons_case.body().collect_construction_names(names);
+                        }
+                    },
                 }
             }
             Subterm::Let(Let { type_, body, tail }) => {
@@ -1293,17 +1318,31 @@ impl Subterm {
                             }
                         });
                     }
-                    Cases::Inductive {
-                        carrier,
-                        empty_case,
-                        cons_case,
-                    } => {
-                        if let Carrier::Arr(elem) = carrier {
-                            elem.collect_metavars(ids);
+                    Cases::Inductive { carrier } => match carrier {
+                        Carrier::Nat {
+                            empty_case,
+                            cons_case,
+                        } => {
+                            empty_case.collect_metavars(ids);
+                            cons_case.body().collect_metavars(ids);
                         }
-                        empty_case.collect_metavars(ids);
-                        cons_case.body().collect_metavars(ids);
-                    }
+                        Carrier::Bin {
+                            empty_case,
+                            cons_case,
+                        } => {
+                            empty_case.collect_metavars(ids);
+                            cons_case.body().collect_metavars(ids);
+                        }
+                        Carrier::Arr {
+                            elem,
+                            empty_case,
+                            cons_case,
+                        } => {
+                            elem.collect_metavars(ids);
+                            empty_case.collect_metavars(ids);
+                            cons_case.body().collect_metavars(ids);
+                        }
+                    },
                 }
             }
             Subterm::Let(Let { type_, body, tail }) => {
@@ -1515,18 +1554,32 @@ impl Bound for Subterm {
                                 .collect(),
                         }),
                     },
-                    Cases::Inductive {
-                        carrier,
-                        empty_case,
-                        cons_case,
-                    } => Cases::Inductive {
+                    Cases::Inductive { carrier } => Cases::Inductive {
                         carrier: match carrier {
-                            Carrier::Nat => Carrier::Nat,
-                            Carrier::Arr(elem) => Carrier::Arr(visit.visit_subterm(elem)),
-                            Carrier::Bin => Carrier::Bin,
+                            Carrier::Nat {
+                                empty_case,
+                                cons_case,
+                            } => Carrier::Nat {
+                                empty_case: visit.visit_subterm(empty_case),
+                                cons_case: visit.visit_scope(cons_case),
+                            },
+                            Carrier::Bin {
+                                empty_case,
+                                cons_case,
+                            } => Carrier::Bin {
+                                empty_case: visit.visit_subterm(empty_case),
+                                cons_case: visit.visit_scope(cons_case),
+                            },
+                            Carrier::Arr {
+                                elem,
+                                empty_case,
+                                cons_case,
+                            } => Carrier::Arr {
+                                elem: visit.visit_subterm(elem),
+                                empty_case: visit.visit_subterm(empty_case),
+                                cons_case: visit.visit_scope(cons_case),
+                            },
                         },
-                        empty_case: visit.visit_subterm(empty_case),
-                        cons_case: visit.visit_scope(cons_case),
                     },
                 },
             }),
@@ -1628,18 +1681,21 @@ impl Bound for Subterm {
                             }),
                     )
                 }
-                Cases::Inductive {
-                    carrier,
-                    empty_case,
-                    cons_case,
-                } => {
-                    let carrier_reach = match carrier {
-                        Carrier::Nat => 0,
-                        Carrier::Arr(elem) => elem.reach(),
-                        Carrier::Bin => 0,
-                    };
-                    carrier_reach.max(empty_case.reach()).max(cons_case.reach())
-                }
+                Cases::Inductive { carrier } => match carrier {
+                    Carrier::Nat {
+                        empty_case,
+                        cons_case,
+                    } => empty_case.reach().max(cons_case.reach()),
+                    Carrier::Bin {
+                        empty_case,
+                        cons_case,
+                    } => empty_case.reach().max(cons_case.reach()),
+                    Carrier::Arr {
+                        elem,
+                        empty_case,
+                        cons_case,
+                    } => elem.reach().max(empty_case.reach()).max(cons_case.reach()),
+                },
             }),
             Subterm::Let(Let { type_, body, tail }) => {
                 type_.reach().max(body.reach()).max(tail.reach())
