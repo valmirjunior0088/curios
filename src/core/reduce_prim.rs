@@ -296,6 +296,86 @@ fn reduce_nat_compare(
     })
 }
 
+/// The free-monoid product structure of a reduced carrier value, the view a monoid
+/// homomorphism (`len`/`flatten`) distributes over: a literal run of generators `L`
+/// (bytes for `Bin`, elements for `Arr`), an n-ary `Concat` of operands to recurse
+/// on, an `Append` of a base and one appended generator, or an `Opaque` node (a
+/// variable / slice) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
+enum Shape<L> {
+    Literal(Vec<L>),
+    Concat(Vec<Term>),
+    Append(Term, Term),
+    Opaque(Term),
+}
+
+/// Classify a reduced `Bin` value into its product shape (generators are bytes).
+fn bin_shape(value: Term) -> Shape<u8> {
+    match Term::unwrap_or_clone(value) {
+        Subterm::Prim(Prim::Bin(bytes)) => Shape::Literal(bytes),
+        Subterm::Prim(Prim::BinConcat(operands)) => Shape::Concat(operands),
+        Subterm::Prim(Prim::BinAppend(base, byte)) => Shape::Append(base, byte),
+        other => Shape::Opaque(other.into()),
+    }
+}
+
+/// Classify a reduced `Arr` value into its product shape (generators are elements).
+fn arr_shape(value: Term) -> Shape<Term> {
+    match Term::unwrap_or_clone(value) {
+        Subterm::Prim(Prim::Arr(elems)) => Shape::Literal(elems),
+        Subterm::Prim(Prim::ArrConcat(_, operands)) => Shape::Concat(operands),
+        Subterm::Prim(Prim::ArrAppend(_, base, elem)) => Shape::Append(base, elem),
+        other => Shape::Opaque(other.into()),
+    }
+}
+
+/// `len`: the monoid homomorphism into `(ℕ, +, 0)`, shared by `Bin/len` and
+/// `Arr/len`. A literal run maps to its length; a concatenation to the sum of its
+/// operands' lengths; an append to `succ` of its base's; an opaque value stays
+/// neutral. `node` builds `len(sub)` for the carrier (recurse / rebuild). `NatAdd`'s
+/// successor peeling carries the count out of a symbolic spine.
+fn reduce_len<L>(
+    context: &mut Context,
+    shape: Shape<L>,
+    node: impl Fn(Term) -> Term,
+) -> Result<Subterm, ReduceError> {
+    let built = match shape {
+        Shape::Literal(run) => Term::prim(Prim::Nat(Nat::new(run.len()))),
+        Shape::Concat(operands) => operands.into_iter().rev().fold(
+            Term::prim(Prim::Nat(Nat::Zero)),
+            |acc, operand| Term::prim(Prim::nat_add(node(operand), acc)),
+        ),
+        Shape::Append(base, _) => {
+            let one = Term::prim(Prim::Nat(Nat::new(1usize)));
+            Term::prim(Prim::nat_add(one, node(base)))
+        }
+        Shape::Opaque(value) => return Ok(Term::unwrap_or_clone(node(value))),
+    };
+
+    reduce(context, built).map(Term::unwrap_or_clone)
+}
+
+/// `flatten`: the monoid homomorphism into the inner carrier `(M, ++, ε)`, shared by
+/// `Bin/flatten` and `Arr/flatten`. A literal run flattens to the concatenation of
+/// its inner values; a concatenation distributes (`flatten(concat seg) = concat
+/// (flatten seg)`); an append distributes (`flatten(append(b, g)) = flatten(b) ++
+/// g`); an opaque value stays neutral. `concat` builds the inner carrier's product
+/// and `node` builds `flatten(sub)`.
+fn reduce_flatten(
+    context: &mut Context,
+    shape: Shape<Term>,
+    concat: impl Fn(Vec<Term>) -> Term,
+    node: impl Fn(Term) -> Term,
+) -> Result<Subterm, ReduceError> {
+    let built = match shape {
+        Shape::Literal(parts) => concat(parts),
+        Shape::Concat(segments) => concat(segments.into_iter().map(node).collect()),
+        Shape::Append(base, generator) => concat(vec![node(base), generator]),
+        Shape::Opaque(value) => return Ok(Term::unwrap_or_clone(node(value))),
+    };
+
+    reduce(context, built).map(Term::unwrap_or_clone)
+}
+
 pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, ReduceError> {
     match prim {
         Prim::BlnType => Ok(Subterm::Prim(Prim::BlnType)),
@@ -819,34 +899,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::Bin(bytes) => Ok(Subterm::Prim(Prim::Bin(bytes.clone()))),
         Prim::BinLen(bin) => {
             let bin = reduce(context, bin.clone())?;
-            match &*bin {
-                // A literal run: its byte count.
-                Subterm::Prim(Prim::Bin(bytes)) => {
-                    Ok(Subterm::Prim(Prim::Nat(Nat::new(bytes.len()))))
-                }
-                // `len` distributes over concatenation: `len(concat(a, b, ..)) =
-                // len(a) + len(b) + ..` — the monoid partner of the `BinConcat`
-                // rules, letting a symbolic cons reduce its length to a `succ`
-                // spine (`NatAdd`'s successor peeling carries the `1` outward).
-                Subterm::Prim(Prim::BinConcat(operands)) => {
-                    let sum = operands.iter().rev().fold(
-                        Term::prim(Prim::Nat(Nat::Zero)),
-                        |acc, operand| {
-                            let len = Term::prim(Prim::bin_len(operand.clone()));
-                            Term::prim(Prim::nat_add(len, acc))
-                        },
-                    );
-                    reduce(context, sum).map(Term::unwrap_or_clone)
-                }
-                // `len(append(base, _)) = succ(len base)` — one byte longer, the
-                // base case the cons head (`append(\\, h)`) bottoms out on.
-                Subterm::Prim(Prim::BinAppend(base, _)) => {
-                    let one = Term::prim(Prim::Nat(Nat::new(1usize)));
-                    let len = Term::prim(Prim::bin_len(base.clone()));
-                    reduce(context, Term::prim(Prim::nat_add(one, len))).map(Term::unwrap_or_clone)
-                }
-                _ => Ok(Subterm::Prim(Prim::bin_len(Term::unwrap_or_clone(bin)))),
-            }
+            reduce_len(context, bin_shape(bin), |sub| Term::prim(Prim::bin_len(sub)))
         }
         Prim::BinEql(left, right) => {
             let left = reduce(context, left.clone())?;
@@ -1049,40 +1102,17 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 |kept| Subterm::Prim(Prim::BinConcat(kept)),
             ))
         }
+        // `flatten` is the homomorphism from the outer `Arr` into the inner `Bin`
+        // monoid: a literal of inner `Bin`s concatenates (merging literal parts,
+        // keeping symbolic ones), and it distributes over the outer concat/append.
         Prim::BinFlatten(operand) => {
             let operand = reduce(context, operand.clone())?;
-            match Term::unwrap_or_clone(operand) {
-                // A literal outer array flattens to the concatenation of its inner
-                // `Bin`s. Reducing the `BinConcat` merges all-literal parts to one
-                // byte literal, while symbolic parts (a mapped `to_bin`, a variable)
-                // survive as a `BinConcat` rather than getting stuck.
-                Subterm::Prim(Prim::Arr(parts)) => {
-                    reduce(context, Subterm::Prim(Prim::BinConcat(parts)).into())
-                        .map(Term::unwrap_or_clone)
-                }
-                // `flatten` distributes over array concatenation: a symbolic outer
-                // cons `cons(x, xs) = concat([x], xs)` flattens to
-                // `concat(flatten([x]), flatten(xs)) = concat(x, flatten(xs))` — the
-                // one-step decode the `Bin/flatten` structural proofs
-                // (`flatten_closed`) rely on, mirroring the `Bin` eliminator's rule.
-                Subterm::Prim(Prim::ArrConcat(_elem, segments)) => {
-                    let distributed = segments
-                        .into_iter()
-                        .map(|seg| Subterm::Prim(Prim::bin_flatten(seg)).into())
-                        .collect::<Vec<Term>>();
-                    reduce(context, Subterm::Prim(Prim::BinConcat(distributed)).into())
-                        .map(Term::unwrap_or_clone)
-                }
-                // `flatten` distributes over an outer append like `len`/`map` do:
-                // `flatten(append(base, y)) = flatten(base) ++ y` — the appended inner
-                // `Bin` is already flat, so it concatenates on directly.
-                Subterm::Prim(Prim::ArrAppend(_elem, base, y)) => {
-                    let flat = Term::prim(Prim::bin_flatten(base));
-                    reduce(context, Subterm::Prim(Prim::BinConcat(vec![flat, y])).into())
-                        .map(Term::unwrap_or_clone)
-                }
-                operand => Ok(Subterm::Prim(Prim::bin_flatten(operand))),
-            }
+            reduce_flatten(
+                context,
+                arr_shape(operand),
+                |parts| Term::prim(Prim::bin_concat(parts)),
+                |sub| Term::prim(Prim::bin_flatten(sub)),
+            )
         }
         Prim::ArrType(elem) => {
             let elem = reduce(context, elem.clone())?;
@@ -1098,38 +1128,9 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::ArrLen(type_, list) => {
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
-            match &*list {
-                // A literal run: its element count.
-                Subterm::Prim(Prim::Arr(elems)) => {
-                    Ok(Subterm::Prim(Prim::Nat(Nat::new(elems.len()))))
-                }
-                // `len` distributes over concatenation: `len(concat(a, b, ..)) =
-                // len(a) + len(b) + ..` — the monoid partner of the `ArrConcat` rules,
-                // letting a symbolic cons reduce its length to a `succ` spine
-                // (`NatAdd`'s successor peeling carries the `1` outward). The `Arr`
-                // twin of `BinLen`'s concat rule.
-                Subterm::Prim(Prim::ArrConcat(_elem, operands)) => {
-                    let sum = operands.iter().rev().fold(
-                        Term::prim(Prim::Nat(Nat::Zero)),
-                        |acc, operand| {
-                            let len = Term::prim(Prim::arr_len(type_.clone(), operand.clone()));
-                            Term::prim(Prim::nat_add(len, acc))
-                        },
-                    );
-                    reduce(context, sum).map(Term::unwrap_or_clone)
-                }
-                // `len(append(base, _)) = succ(len base)` — one element longer, the
-                // base case the cons head bottoms out on.
-                Subterm::Prim(Prim::ArrAppend(_elem, base, _)) => {
-                    let one = Term::prim(Prim::Nat(Nat::new(1usize)));
-                    let len = Term::prim(Prim::arr_len(type_.clone(), base.clone()));
-                    reduce(context, Term::prim(Prim::nat_add(one, len))).map(Term::unwrap_or_clone)
-                }
-                _ => Ok(Subterm::Prim(Prim::arr_len(
-                    type_,
-                    Term::unwrap_or_clone(list),
-                ))),
-            }
+            reduce_len(context, arr_shape(list), move |sub| {
+                Term::prim(Prim::arr_len(type_.clone(), sub))
+            })
         }
         Prim::ArrGet(type_, list, index) => {
             let type_ = reduce(context, type_.clone())?;
@@ -1295,43 +1296,18 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 |kept| Subterm::Prim(Prim::arr_concat(type_, kept)),
             ))
         }
+        // The `Arr`-into-`Arr` twin of `BinFlatten`: same homomorphism, inner monoid
+        // is `Arr(T)` carrying its element type.
         Prim::ArrFlatten(type_, operand) => {
             let type_ = reduce(context, type_.clone())?;
             let operand = reduce(context, operand.clone())?;
-
-            match Term::unwrap_or_clone(operand) {
-                // A literal outer array flattens to the concatenation of its inner
-                // arrays. Reducing the `ArrConcat` merges all-literal parts to one
-                // array literal, while symbolic parts (a mapped element, a variable)
-                // survive as an `ArrConcat` rather than getting stuck. The `Arr` twin
-                // of `BinFlatten`'s literal rule.
-                Subterm::Prim(Prim::Arr(parts)) => {
-                    reduce(context, Subterm::Prim(Prim::ArrConcat(type_, parts)).into())
-                        .map(Term::unwrap_or_clone)
-                }
-                // `flatten` distributes over array concatenation: a symbolic outer
-                // cons `cons(x, xs) = concat([x], xs)` flattens to
-                // `concat(flatten([x]), flatten(xs)) = concat(x, flatten(xs))`,
-                // mirroring `BinFlatten` and the `Arr` eliminator's rule.
-                Subterm::Prim(Prim::ArrConcat(_elem, segments)) => {
-                    let distributed = segments
-                        .into_iter()
-                        .map(|seg| Subterm::Prim(Prim::arr_flatten(type_.clone(), seg)).into())
-                        .collect::<Vec<Term>>();
-
-                    reduce(context, Subterm::Prim(Prim::ArrConcat(type_, distributed)).into())
-                        .map(Term::unwrap_or_clone)
-                }
-                // `flatten` distributes over an outer append like `len`/`map` do:
-                // `flatten(append(base, ys)) = flatten(base) ++ ys` — the appended
-                // inner array is already flat, so it concatenates on directly.
-                Subterm::Prim(Prim::ArrAppend(_elem, base, ys)) => {
-                    let flat = Term::prim(Prim::arr_flatten(type_.clone(), base));
-                    reduce(context, Subterm::Prim(Prim::ArrConcat(type_, vec![flat, ys])).into())
-                        .map(Term::unwrap_or_clone)
-                }
-                operand => Ok(Subterm::Prim(Prim::arr_flatten(type_, operand))),
-            }
+            let node_ty = type_.clone();
+            reduce_flatten(
+                context,
+                arr_shape(operand),
+                move |parts| Term::prim(Prim::arr_concat(type_.clone(), parts)),
+                move |sub| Term::prim(Prim::arr_flatten(node_ty.clone(), sub)),
+            )
         }
         // The eliminator rule, mirroring the native `Arr` `match`: distribute the
         // map over the free-monoid spine so it reduces to the *same* normal form a
