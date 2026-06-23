@@ -4253,4 +4253,25 @@ fn erased_indexed_relevant_repro() {
     assert_eq!(io.output(), b"ok");
 }
 
+// Regression: a type-valued *application* (`Box(m)`, here `Void/absurd`'s inferred
+// `@A`) is indexed by an erased binder `m`. It must erase to a unit like any type;
+// erasing it structurally used to leave `m` in the runtime term, so codegen
+// demanded a value for an erased binder ("`to_cont` lacks value").
+#[test]
+fn erased_index_in_type_valued_arg() {
+    let source = r#"
+        use /std/{Nat, Void, Io};
+        union Box : (n : Nat)
+        | mk(x : @Nat) : (x)
+        end
+        let id_void(w : Void) -> Void = w;
+        let f(m : @Nat) -> (Void) -> Box(m) = (v) => Void/absurd(@Box(m), id_void(v));
+        let g = f;
+        Io/print("ok")
+        "#;
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(io.output(), b"ok");
+}
+
 
