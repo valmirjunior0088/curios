@@ -344,75 +344,48 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             },
             Prim::nat_neq,
         ),
-        // Addition gets more than literal folding: the unit laws and
-        // successor peeling are sound ℕ identities, and making them
-        // *definitional* is what lets symbolic index arithmetic converge —
-        // `Nat/add(j + 1, m)` reduces to `(Nat/add(j, m)) + 1`, so an indexed
-        // constructor's target meets the motive's expected index without any
-        // unification. Each step moves a literal spine outward, so the
-        // rewrite terminates.
+        // Addition combines the literal successor floors and recurses on the
+        // symbolic tails: `(il + sl) + (ir + sr) = (il + ir) + (sl + sr)`. A zero
+        // tail drops by the unit law; two non-zero tails stay as the neutral `add`.
+        // Lifting the combined floor back out with `rebuild` is what makes the unit
+        // laws and successor peeling *definitional* — `Nat/add(j + 1, m)` normalises
+        // to `(Nat/add(j, m)) + 1` — so an indexed constructor's target meets the
+        // motive's expected index without unification. The floor only ever moves
+        // outward, so the rewrite terminates.
         Prim::NatAdd(left, right) => {
             let left = reduce(context, left.clone())?;
             let right = reduce(context, right.clone())?;
+            let (sl, il) = Nat::decompose(&left);
+            let (sr, ir) = Nat::decompose(&right);
 
-            if let (Some(l), Some(r)) = (left.as_nat(), right.as_nat())
-                && let Some(sum) = l.checked_add(r)
-            {
-                return Ok(Subterm::Prim(Prim::Nat(sum)));
-            }
-
-            if matches!(&*left, Subterm::Prim(Prim::Nat(Nat::Zero))) {
-                return Ok(Term::unwrap_or_clone(right));
-            }
-            if matches!(&*right, Subterm::Prim(Prim::Nat(Nat::Zero))) {
-                return Ok(Term::unwrap_or_clone(left));
-            }
-
-            if let Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) = &*left {
-                return reduce_prim(
-                    context,
-                    &Prim::Nat(Nat::Succ(
-                        spine.clone(),
-                        Term::prim(Prim::nat_add(inner.clone(), right)),
-                    )),
-                );
-            }
-            if let Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) = &*right {
-                return reduce_prim(
-                    context,
-                    &Prim::Nat(Nat::Succ(
-                        spine.clone(),
-                        Term::prim(Prim::nat_add(left, inner.clone())),
-                    )),
-                );
-            }
-
-            Ok(Subterm::Prim(Prim::nat_add(left, right)))
+            let inner = match (Nat::is_zero(&il), Nat::is_zero(&ir)) {
+                (false, false) => Term::prim(Prim::nat_add(il, ir)),
+                (true, _) => ir,
+                (_, true) => il,
+            };
+            Ok(Term::unwrap_or_clone(Nat::rebuild(sl + sr, inner)))
         }
+        // `(il + sl) - k` for a literal subtrahend `k`: when the floor covers it
+        // (`sl ≥ k`) the borrow stays within the floor and the tail `il ≥ 0` is
+        // untouched, so the result is `il + (sl - k)`. The subtraction twin of the
+        // addition floor law (and it gives `x - 0 = x` for any `x`, the unit law
+        // `NatAdd` already has): it turns the `succ e - 1` bounds the cons-slice rule
+        // produces back into `e`, so a slice over a symbolic cons keeps reducing
+        // instead of stalling on a stuck `Nat/sub`. Both-literal subtraction with `k`
+        // overshooting the floor truncates to zero; anything else stays neutral.
         Prim::NatSub(left, right) => {
             let left = reduce(context, left.clone())?;
             let right = reduce(context, right.clone())?;
-            // Both literal: fold with truncating ℕ subtraction.
-            if let (Some(l), Some(r)) = (left.as_nat(), right.as_nat())
-                && let Some(diff) = l.checked_sub(r)
-            {
-                return Ok(Subterm::Prim(Prim::Nat(diff)));
-            }
-            // `(s + inner) - k = (s - k) + inner` when the literal `k` is at or
-            // below the successor floor `s` (truncated ℕ, `inner ≥ 0`, so no
-            // borrow reaches `inner`). The subtraction twin of `NatAdd`'s
-            // successor peeling: it turns the `succ e - 1` bounds the cons slice
-            // rule produces back into `e`, so a slice over a symbolic cons keeps
-            // reducing instead of stalling on a stuck `Nat/sub`.
-            if let Some(k) = right.as_nat().and_then(|n| n.to_big_uint())
-                && let Subterm::Prim(Prim::Nat(Nat::Succ(floor, inner))) = &*left
-                && *floor >= k
-            {
-                let diff = floor - &k;
-                if diff.is_zero() {
-                    return reduce(context, inner.clone()).map(Term::unwrap_or_clone);
+            let (sl, il) = Nat::decompose(&left);
+            let (k, ir) = Nat::decompose(&right);
+
+            if Nat::is_zero(&ir) {
+                if sl >= k {
+                    return Ok(Term::unwrap_or_clone(Nat::rebuild(sl - k, il)));
                 }
-                return Ok(Subterm::Prim(Prim::Nat(Nat::Succ(diff, inner.clone()))));
+                if Nat::is_zero(&il) {
+                    return Ok(Subterm::Prim(Prim::Nat(Nat::Zero)));
+                }
             }
             Ok(Subterm::Prim(Prim::nat_sub(left, right)))
         }
