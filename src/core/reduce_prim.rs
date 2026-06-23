@@ -1066,10 +1066,35 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::ArrLen(type_, list) => {
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
-            Ok(match Term::unwrap_or_clone(list) {
-                Subterm::Prim(Prim::Arr(elems)) => Subterm::Prim(Prim::Nat(Nat::new(elems.len()))),
-                list => Subterm::Prim(Prim::arr_len(type_, list)),
-            })
+            match &*list {
+                // A literal run: its element count.
+                Subterm::Prim(Prim::Arr(elems)) => {
+                    Ok(Subterm::Prim(Prim::Nat(Nat::new(elems.len()))))
+                }
+                // `len` distributes over concatenation: `len(concat(a, b, ..)) =
+                // len(a) + len(b) + ..` — the monoid partner of the `ArrConcat` rules,
+                // letting a symbolic cons reduce its length to a `succ` spine
+                // (`NatAdd`'s successor peeling carries the `1` outward). The `Arr`
+                // twin of `BinLen`'s concat rule.
+                Subterm::Prim(Prim::ArrConcat(_elem, operands)) => {
+                    let sum = operands.iter().rev().fold(
+                        Term::prim(Prim::Nat(Nat::Zero)),
+                        |acc, operand| {
+                            let len = Term::prim(Prim::arr_len(type_.clone(), operand.clone()));
+                            Term::prim(Prim::nat_add(len, acc))
+                        },
+                    );
+                    reduce(context, sum).map(Term::unwrap_or_clone)
+                }
+                // `len(append(base, _)) = succ(len base)` — one element longer, the
+                // base case the cons head bottoms out on.
+                Subterm::Prim(Prim::ArrAppend(_elem, base, _)) => {
+                    let one = Term::prim(Prim::Nat(Nat::new(1usize)));
+                    let len = Term::prim(Prim::arr_len(type_.clone(), base.clone()));
+                    reduce(context, Term::prim(Prim::nat_add(one, len))).map(Term::unwrap_or_clone)
+                }
+                _ => Ok(Subterm::Prim(Prim::arr_len(type_, Term::unwrap_or_clone(list)))),
+            }
         }
         Prim::ArrGet(type_, list, index) => {
             let type_ = reduce(context, type_.clone())?;
@@ -1554,18 +1579,17 @@ mod tests {
     #[test]
     fn arr_get_peels_symbolic_cons() {
         let mut context = context();
-        let nat = || Term::prim(Prim::NatType);
         let cons = arr_cons_seven(&Term::var(Var::free("xs")));
 
         // `get(cons(7, xs), 0) = 7`.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::arr_get(nat(), cons.clone(), lit(0)))),
+            reduced(&mut context, Term::prim(Prim::arr_get(Term::prim(Prim::NatType), cons.clone(), lit(0)))),
             Subterm::Prim(Prim::Nat(Nat::new(7usize))),
         );
 
         // `get(cons(7, xs), 1)` peels to `get(xs, 0)` — neutral over a symbolic tail.
         assert!(matches!(
-            reduced(&mut context, Term::prim(Prim::arr_get(nat(), cons, lit(1)))),
+            reduced(&mut context, Term::prim(Prim::arr_get(Term::prim(Prim::NatType), cons, lit(1)))),
             Subterm::Prim(Prim::ArrGet(..)),
         ));
     }
@@ -1573,19 +1597,55 @@ mod tests {
     #[test]
     fn arr_slice_peels_symbolic_cons() {
         let mut context = context();
-        let nat = || Term::prim(Prim::NatType);
         let cons = arr_cons_seven(&Term::var(Var::free("xs")));
 
         // `slice(cons(7, xs), 0, 1) = [7] ++ slice(xs, 0, 0) = [7]`.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::arr_slice(nat(), cons.clone(), lit(0), lit(1)))),
+            reduced(&mut context, Term::prim(Prim::arr_slice(Term::prim(Prim::NatType), cons.clone(), lit(0), lit(1)))),
             Subterm::Prim(Prim::Arr(vec![lit(7)])),
         );
 
         // `slice(cons(7, xs), 1, 1) = []` — the empty-slice identity.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::arr_slice(nat(), cons, lit(1), lit(1)))),
+            reduced(&mut context, Term::prim(Prim::arr_slice(Term::prim(Prim::NatType), cons, lit(1), lit(1)))),
             Subterm::Prim(Prim::Arr(Vec::new())),
+        );
+    }
+
+    // `Arr/len` distributes over the monoid like `Bin/len`: a symbolic cons or
+    // append reduces its length to a `succ` spine instead of stalling.
+    #[test]
+    fn arr_len_distributes_over_cons_and_append() {
+        let mut context = context();
+        let xs = Term::var(Var::free("xs"));
+        // `1 + len(xs)`, the shape both symbolic cases reduce to.
+        let succ_len = |context: &mut Context| {
+            reduced(
+                context,
+                Term::prim(Prim::nat_add(lit(1), Term::prim(Prim::arr_len(Term::prim(Prim::NatType), xs.clone())))),
+            )
+        };
+
+        // Literal: `len([1, 2, 3]) = 3`.
+        assert_eq!(
+            reduced(
+                &mut context,
+                Term::prim(Prim::arr_len(Term::prim(Prim::NatType), Term::prim(Prim::Arr(vec![lit(1), lit(2), lit(3)])))),
+            ),
+            Subterm::Prim(Prim::Nat(Nat::new(3usize))),
+        );
+
+        // `len(cons(7, xs)) = 1 + len(xs)`.
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::arr_len(Term::prim(Prim::NatType), arr_cons_seven(&xs)))),
+            succ_len(&mut context),
+        );
+
+        // `len(append(xs, 9)) = 1 + len(xs)`.
+        let appended = Term::prim(Prim::arr_append(Term::prim(Prim::NatType), xs.clone(), lit(9)));
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::arr_len(Term::prim(Prim::NatType), appended))),
+            succ_len(&mut context),
         );
     }
 }
