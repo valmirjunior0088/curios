@@ -328,52 +328,42 @@ fn arr_shape(value: Term) -> Shape<Term> {
     }
 }
 
-/// `len`: the monoid homomorphism into `(ℕ, +, 0)`, shared by `Bin/len` and
-/// `Arr/len`. A literal run maps to its length; a concatenation to the sum of its
-/// operands' lengths; an append to `succ` of its base's; an opaque value stays
-/// neutral. `node` builds `len(sub)` for the carrier (recurse / rebuild). `NatAdd`'s
-/// successor peeling carries the count out of a symbolic spine.
-fn reduce_len<L>(
+/// The shared driver for a free-monoid homomorphism `h` — the one place its
+/// distribution law lives, so a carrier physically cannot forget a case (the gap that
+/// once let `flatten` skip `append`). A literal run maps via `literal`; a
+/// concatenation recurses `h` over its operands and folds the images with `combine`;
+/// an append combines `h(base)` with the appended generator via `append`; an opaque
+/// value stays neutral, rebuilt by `node` (which also builds `h(sub)` to recurse).
+/// `len`, `flatten`, and `map` differ only in those four slots. The built image is
+/// reduced, so the homomorphism is eager.
+fn reduce_homomorphism<L>(
     context: &mut Context,
     shape: Shape<L>,
+    literal: impl Fn(Vec<L>) -> Term,
+    combine: impl Fn(Vec<Term>) -> Term,
+    append: impl Fn(Term, Term) -> Term,
     node: impl Fn(Term) -> Term,
 ) -> Result<Subterm, ReduceError> {
     let built = match shape {
-        Shape::Literal(run) => Term::prim(Prim::Nat(Nat::new(run.len()))),
-        Shape::Concat(operands) => operands.into_iter().rev().fold(
-            Term::prim(Prim::Nat(Nat::Zero)),
-            |acc, operand| Term::prim(Prim::nat_add(node(operand), acc)),
-        ),
-        Shape::Append(base, _) => {
-            let one = Term::prim(Prim::Nat(Nat::new(1usize)));
-            Term::prim(Prim::nat_add(one, node(base)))
-        }
+        Shape::Literal(run) => literal(run),
+        Shape::Concat(operands) => combine(operands.into_iter().map(node).collect()),
+        Shape::Append(base, generator) => append(node(base), generator),
         Shape::Opaque(value) => return Ok(Term::unwrap_or_clone(node(value))),
     };
 
     reduce(context, built).map(Term::unwrap_or_clone)
 }
 
-/// `flatten`: the monoid homomorphism into the inner carrier `(M, ++, ε)`, shared by
-/// `Bin/flatten` and `Arr/flatten`. A literal run flattens to the concatenation of
-/// its inner values; a concatenation distributes (`flatten(concat seg) = concat
-/// (flatten seg)`); an append distributes (`flatten(append(b, g)) = flatten(b) ++
-/// g`); an opaque value stays neutral. `concat` builds the inner carrier's product
-/// and `node` builds `flatten(sub)`.
-fn reduce_flatten(
-    context: &mut Context,
-    shape: Shape<Term>,
-    concat: impl Fn(Vec<Term>) -> Term,
-    node: impl Fn(Term) -> Term,
-) -> Result<Subterm, ReduceError> {
-    let built = match shape {
-        Shape::Literal(parts) => concat(parts),
-        Shape::Concat(segments) => concat(segments.into_iter().map(node).collect()),
-        Shape::Append(base, generator) => concat(vec![node(base), generator]),
-        Shape::Opaque(value) => return Ok(Term::unwrap_or_clone(node(value))),
-    };
-
-    reduce(context, built).map(Term::unwrap_or_clone)
+/// `Σ` over a run of `Nat` images — the `combine` of the `len` homomorphism into
+/// `(ℕ, +, 0)`. `NatAdd`'s successor peeling carries the count out of a symbolic
+/// spine.
+fn nat_sum(images: Vec<Term>) -> Term {
+    images
+        .into_iter()
+        .rev()
+        .fold(Term::prim(Prim::Nat(Nat::Zero)), |acc, image| {
+            Term::prim(Prim::nat_add(image, acc))
+        })
 }
 
 pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, ReduceError> {
@@ -899,7 +889,19 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::Bin(bytes) => Ok(Subterm::Prim(Prim::Bin(bytes.clone()))),
         Prim::BinLen(bin) => {
             let bin = reduce(context, bin.clone())?;
-            reduce_len(context, bin_shape(bin), |sub| Term::prim(Prim::bin_len(sub)))
+            reduce_homomorphism(
+                context,
+                bin_shape(bin),
+                |run| Term::prim(Prim::Nat(Nat::new(run.len()))),
+                nat_sum,
+                |base_len, _| {
+                    Term::prim(Prim::nat_add(
+                        Term::prim(Prim::Nat(Nat::new(1usize))),
+                        base_len,
+                    ))
+                },
+                |sub| Term::prim(Prim::bin_len(sub)),
+            )
         }
         Prim::BinEql(left, right) => {
             let left = reduce(context, left.clone())?;
@@ -1107,10 +1109,12 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         // keeping symbolic ones), and it distributes over the outer concat/append.
         Prim::BinFlatten(operand) => {
             let operand = reduce(context, operand.clone())?;
-            reduce_flatten(
+            reduce_homomorphism(
                 context,
                 arr_shape(operand),
                 |parts| Term::prim(Prim::bin_concat(parts)),
+                |images| Term::prim(Prim::bin_concat(images)),
+                |base_flat, generator| Term::prim(Prim::bin_concat(vec![base_flat, generator])),
                 |sub| Term::prim(Prim::bin_flatten(sub)),
             )
         }
@@ -1128,9 +1132,19 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::ArrLen(type_, list) => {
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
-            reduce_len(context, arr_shape(list), move |sub| {
-                Term::prim(Prim::arr_len(type_.clone(), sub))
-            })
+            reduce_homomorphism(
+                context,
+                arr_shape(list),
+                |run| Term::prim(Prim::Nat(Nat::new(run.len()))),
+                nat_sum,
+                |base_len, _| {
+                    Term::prim(Prim::nat_add(
+                        Term::prim(Prim::Nat(Nat::new(1usize))),
+                        base_len,
+                    ))
+                },
+                |sub| Term::prim(Prim::arr_len(type_.clone(), sub)),
+            )
         }
         Prim::ArrGet(type_, list, index) => {
             let type_ = reduce(context, type_.clone())?;
@@ -1301,54 +1315,49 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::ArrFlatten(type_, operand) => {
             let type_ = reduce(context, type_.clone())?;
             let operand = reduce(context, operand.clone())?;
-            let node_ty = type_.clone();
-            reduce_flatten(
+            reduce_homomorphism(
                 context,
                 arr_shape(operand),
-                move |parts| Term::prim(Prim::arr_concat(type_.clone(), parts)),
-                move |sub| Term::prim(Prim::arr_flatten(node_ty.clone(), sub)),
+                |parts| Term::prim(Prim::arr_concat(type_.clone(), parts)),
+                |images| Term::prim(Prim::arr_concat(type_.clone(), images)),
+                |base_flat, generator| {
+                    Term::prim(Prim::arr_concat(type_.clone(), vec![base_flat, generator]))
+                },
+                |sub| Term::prim(Prim::arr_flatten(type_.clone(), sub)),
             )
         }
-        // The eliminator rule, mirroring the native `Arr` `match`: distribute the
-        // map over the free-monoid spine so it reduces to the *same* normal form a
-        // structural `foldr (::) []` would. `Arr/map(f) = foldr (\x ih. f x :: ih)
-        // []` definitionally, so `to_bins = Arr/map(to_bin)` and the `/syn/Str`
-        // `flatten` proof reduces identically (`concat([f h], Arr/map(f, t))`). A
-        // symbolic array stays stuck after one peel — no O(n) unfold of a variable.
+        // `map`: the eliminator homomorphism. The literal case applies `f`
+        // elementwise; the spine cases distribute (`map f (concat segs) =
+        // concat (map f segs)`, `map f (append b x) = append (map f b) (f x)`) — the
+        // same normal form a structural `foldr (\x ih. f x :: ih) []` produces, so the
+        // `/syn/Str` `flatten` proof still reduces. A symbolic array stays neutral (the
+        // `Opaque` case), so there is no unfold of a variable.
         Prim::ArrMap(a, b, f, arr) => {
             let a = reduce(context, a.clone())?;
             let b = reduce(context, b.clone())?;
             let f = reduce(context, f.clone())?;
             let arr = reduce(context, arr.clone())?;
-
-            Ok(match &*arr {
-                // Empty and literal arrays map elementwise; the literal case folds
-                // to a literal so concrete maps collapse (bounded by the literal).
-                Subterm::Prim(Prim::Arr(elems)) => Subterm::Prim(Prim::Arr(
-                    elems
-                        .iter()
-                        .map(|x| Term::apply(f.clone(), [x.clone()]))
-                        .collect(),
-                )),
-                // Distribute over the monoid generators so a symbolic cons
-                // (`concat([h], t)`) peels: `concat(map f [h], map f t)` — the same
-                // normal form the native `Arr` eliminator produces.
-                Subterm::Prim(Prim::ArrConcat(_elem, segments)) => Subterm::Prim(Prim::ArrConcat(
-                    b.clone(),
-                    segments
-                        .iter()
-                        .map(|s| {
-                            Term::prim(Prim::arr_map(a.clone(), b.clone(), f.clone(), s.clone()))
-                        })
-                        .collect(),
-                )),
-                Subterm::Prim(Prim::ArrAppend(_elem, base, x)) => Subterm::Prim(Prim::ArrAppend(
-                    b.clone(),
-                    Term::prim(Prim::arr_map(a.clone(), b.clone(), f.clone(), base.clone())),
-                    Term::apply(f.clone(), [x.clone()]),
-                )),
-                _ => Subterm::Prim(Prim::arr_map(a, b, f, arr)),
-            })
+            reduce_homomorphism(
+                context,
+                arr_shape(arr),
+                |elems| {
+                    Term::prim(Prim::Arr(
+                        elems
+                            .into_iter()
+                            .map(|x| Term::apply(f.clone(), [x]))
+                            .collect(),
+                    ))
+                },
+                |images| Term::prim(Prim::arr_concat(b.clone(), images)),
+                |base_map, generator| {
+                    Term::prim(Prim::arr_append(
+                        b.clone(),
+                        base_map,
+                        Term::apply(f.clone(), [generator]),
+                    ))
+                },
+                |sub| Term::prim(Prim::arr_map(a.clone(), b.clone(), f.clone(), sub)),
+            )
         }
         // The handle type and handle tokens are inert values, like `Nat`/`Nat(_)`.
         Prim::IoType => Ok(Subterm::Prim(Prim::IoType)),
@@ -1797,7 +1806,10 @@ mod tests {
         // Literal-of-literals: `flatten([[1, 2], [3]]) = [1, 2, 3]`.
         let outer = arr(vec![arr(vec![lit(1), lit(2)]), arr(vec![lit(3)])]);
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::arr_flatten(Term::prim(Prim::NatType), outer))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::arr_flatten(Term::prim(Prim::NatType), outer))
+            ),
             Subterm::Prim(Prim::Arr(vec![lit(1), lit(2), lit(3)])),
         );
 
@@ -1806,7 +1818,10 @@ mod tests {
         let xs = Term::var(Var::free("xs"));
         let mixed = arr(vec![arr(vec![lit(1), lit(2)]), xs]);
         assert!(matches!(
-            reduced(&mut context, Term::prim(Prim::arr_flatten(Term::prim(Prim::NatType), mixed))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::arr_flatten(Term::prim(Prim::NatType), mixed))
+            ),
             Subterm::Prim(Prim::ArrConcat(..)),
         ));
 
@@ -1820,7 +1835,10 @@ mod tests {
             arr(vec![lit(9)]),
         ));
         assert!(matches!(
-            reduced(&mut context, Term::prim(Prim::arr_flatten(Term::prim(Prim::NatType), appended))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::arr_flatten(Term::prim(Prim::NatType), appended))
+            ),
             Subterm::Prim(Prim::ArrConcat(..)),
         ));
     }
@@ -1854,17 +1872,26 @@ mod tests {
 
         // Reflexivity over a symbolic value: `eql(x, x) = true`.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::bin_eql(x.clone(), x.clone()))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::bin_eql(x.clone(), x.clone()))
+            ),
             Subterm::Prim(Prim::Bln(true)),
         );
 
         // Literal decisions: equal folds true, unequal folds false.
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::bin_eql(bin(vec![1, 2]), bin(vec![1, 2])))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::bin_eql(bin(vec![1, 2]), bin(vec![1, 2])))
+            ),
             Subterm::Prim(Prim::Bln(true)),
         );
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::bin_eql(bin(vec![1, 2]), bin(vec![1, 3])))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::bin_eql(bin(vec![1, 2]), bin(vec![1, 3])))
+            ),
             Subterm::Prim(Prim::Bln(false)),
         );
 
@@ -1892,14 +1919,28 @@ mod tests {
     fn arr_slice_reassociates_nested() {
         let mut context = context();
         let xs = Term::var(Var::free("xs"));
-        let inner =
-            Term::prim(Prim::arr_slice(Term::prim(Prim::NatType), xs.clone(), lit(1), lit(5)));
-        let outer = Term::prim(Prim::arr_slice(Term::prim(Prim::NatType), inner, lit(0), lit(2)));
+        let inner = Term::prim(Prim::arr_slice(
+            Term::prim(Prim::NatType),
+            xs.clone(),
+            lit(1),
+            lit(5),
+        ));
+        let outer = Term::prim(Prim::arr_slice(
+            Term::prim(Prim::NatType),
+            inner,
+            lit(0),
+            lit(2),
+        ));
         assert_eq!(
             reduced(&mut context, outer),
             reduced(
                 &mut context,
-                Term::prim(Prim::arr_slice(Term::prim(Prim::NatType), xs.clone(), lit(1), lit(3))),
+                Term::prim(Prim::arr_slice(
+                    Term::prim(Prim::NatType),
+                    xs.clone(),
+                    lit(1),
+                    lit(3)
+                )),
             ),
         );
     }

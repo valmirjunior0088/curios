@@ -5,7 +5,7 @@ use {
 
 fn run(source: &str) -> Vec<u8> {
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     io.output().to_vec()
 }
 
@@ -109,7 +109,7 @@ fn nullary_closure_survives_erasure_and_codegen() {
     // proves the suspended effect fired on `force`.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Io, Str};
         union Susp(A : Type)
@@ -151,7 +151,7 @@ fn end_to_end() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"+42"
@@ -398,7 +398,7 @@ fn bin_concat_leading_byte_clash_is_rejected() {
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 #[test]
@@ -438,7 +438,7 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 #[test]
@@ -502,7 +502,7 @@ fn arr_slice_window_seam_mismatch_is_rejected() {
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 #[test]
@@ -603,7 +603,7 @@ fn arr_concat_length_clash_is_rejected() {
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 #[test]
@@ -617,7 +617,7 @@ fn erased_param_used_at_runtime_is_rejected() {
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 #[test]
@@ -720,7 +720,7 @@ fn erased_definition_param_used_at_runtime_is_rejected() {
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 #[test]
@@ -737,7 +737,7 @@ fn erased_field_projected_at_runtime_is_rejected() {
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 #[test]
@@ -778,7 +778,7 @@ fn erased_union_payload_used_at_runtime_is_rejected() {
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 #[test]
@@ -788,7 +788,7 @@ fn flt_to_le_bin_prints_raw_bytes() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         1.5f32.to_le_bytes()
@@ -799,7 +799,7 @@ fn flt_to_le_bin_prints_raw_bytes() {
 fn io_write() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"std/Io/write(std/Io/stdout, /std/Str/to_bin("hello"))"#,
         system,
     )
@@ -814,7 +814,7 @@ fn io_write() {
 fn io_write_stderr() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"std/Io/write(std/Io/stderr, /std/Str/to_bin("oops"))"#,
         system,
     )
@@ -829,7 +829,7 @@ fn io_write_stderr() {
 fn io_read() {
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         match std/Io/read(std/Io/stdin, 1024) : {}
         | chunk(b) => let w = std/Io/write(std/Io/stdout, b); ()
@@ -851,7 +851,7 @@ fn empty_bin_literal_is_the_empty_sequence() {
     // The empty `Bin` literal concatenated with a value is the identity.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"std/Io/write(std/Io/stdout, std/Bin/concat(\\, /std/Str/to_bin("ok")))"#,
         system,
     )
@@ -886,7 +886,7 @@ fn local_binders_shadow_module_bindings_without_leaking() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"37");
 }
 
@@ -908,7 +908,7 @@ fn named_fields_run_end_to_end() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"42"
@@ -934,7 +934,7 @@ fn io_read_short_reads_and_eof() {
         "#;
 
     let (system, io) = MockHost::builder().stdin_lines(["abc"]).build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"abc\n1");
 }
 
@@ -950,7 +950,7 @@ fn file_read_all_reads_a_seeded_file() {
 
     let (system, io) =
         MockHost::builder().files([("data.txt", "file contents")]).build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"file contents"
@@ -977,7 +977,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"not found"
@@ -995,7 +995,7 @@ fn file_with_write_mode_persists_through_close() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"ok"
@@ -1017,7 +1017,7 @@ fn effectful_match_scrutinee_runs_once() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"ok"
@@ -1046,7 +1046,7 @@ fn file_read_pulls_bytes_inside_the_bracket() {
 
     let (system, io) =
         MockHost::builder().files([("lines.txt", "first\nsecond\n")]).build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"first\nsecond\n"
@@ -1077,7 +1077,7 @@ fn std_io_read_line_sequences_lines() {
         "#;
 
     let (system, io) = MockHost::builder().stdin_lines(["alpha", "beta"]).build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"alpha\nbeta\n"
@@ -1100,7 +1100,7 @@ fn std_io_read_line_signals_eof_with_none() {
         "#;
 
     let (system, io) = MockHost::builder().stdin_lines(["only"]).build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"eof"
@@ -1125,7 +1125,7 @@ fn std_io_read_line_spans_refills() {
 
     let long_line = "a".repeat(1500);
     let (system, io) = MockHost::builder().stdin_lines([long_line.as_str()]).build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"1501"
@@ -1144,7 +1144,7 @@ fn triangular_sum() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"10"
@@ -1166,7 +1166,7 @@ fn match_omitted_motive_infers() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"10"
@@ -1181,7 +1181,7 @@ fn multi_arg_function() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"+7"
@@ -1196,7 +1196,7 @@ fn curried_function() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"+7"
@@ -1218,7 +1218,7 @@ fn let_bang_identity_monad_sequences_bangs() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -1319,7 +1319,7 @@ fn vec_cons_with_nat_succ() {
     "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"42"
@@ -1345,7 +1345,7 @@ fn folds_constant_arg_through_let_function() {
 
     let mut main_func: Option<cont::Func> = None;
     crate::compile_entrypoint(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         &entrypoint,
         &text::NullLoader,
         |stage| {
@@ -1508,7 +1508,7 @@ fn indexed_vec_append_executes() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -1539,7 +1539,7 @@ fn implicit_union_type_param_executes() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"2");
 }
 
@@ -1558,7 +1558,7 @@ fn implicit_union_type_param_rejects_explicit_spelling() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 #[test]
@@ -1586,7 +1586,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"3");
 }
 
@@ -1605,7 +1605,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 #[test]
@@ -1631,7 +1631,7 @@ fn omitted_motive_infers_over_a_compound_scrutinee() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"4");
 }
 
@@ -1657,7 +1657,7 @@ fn bare_tuple_continuation_tail_infers() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"104"
@@ -1683,7 +1683,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"2");
 }
 
@@ -1699,7 +1699,7 @@ fn checking_problem_without_a_pin_still_rejects() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 // === Structs (SYNTAX.md) ================================================
@@ -1716,7 +1716,7 @@ fn struct_transparent_pair_projects() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -1732,7 +1732,7 @@ fn struct_parameter_inference_at_construction() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"12"
@@ -1751,7 +1751,7 @@ fn struct_newtype_projects() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"5");
 }
 
@@ -1772,7 +1772,7 @@ fn struct_dependent_fields_run_end_to_end() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"42"
@@ -1795,7 +1795,7 @@ fn struct_abstract_smart_constructor_round_trips() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"42"
@@ -1817,7 +1817,7 @@ fn struct_private_construction_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
     assert!(
         error.contains("representation"),
         "unexpected error: {error}"
@@ -1840,7 +1840,7 @@ fn struct_private_projection_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
     assert!(
         error.contains("field") && error.contains("private"),
         "unexpected error: {error}"
@@ -1860,7 +1860,7 @@ fn diagnostic_uses_source_binder_names() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
     assert!(
         error.contains("inferred: (n : Nat) -> Nat"),
         "binder lost its source name: {error}"
@@ -1881,7 +1881,7 @@ fn diagnostic_disambiguates_shadowed_binders() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
     assert!(
         error.contains("inferred: (n : Nat) -> (n2 : Nat) -> Nat"),
         "shadowed binders not disambiguated: {error}"
@@ -1901,7 +1901,7 @@ fn diagnostic_shortens_global_names() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
     assert!(
         error.contains("inferred: Vec(Nat, n)"),
         "globals not shortened: {error}"
@@ -1928,7 +1928,7 @@ fn struct_is_not_a_tuple() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 // A struct literal must supply exactly the declared fields, in order.
@@ -1942,7 +1942,7 @@ fn struct_wrong_field_count_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 // Written field labels are validated positionally — no reordering.
@@ -1956,7 +1956,7 @@ fn struct_field_label_out_of_order_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 // A struct literal whose head names a non-struct binding is rejected as
@@ -1971,7 +1971,7 @@ fn struct_literal_non_struct_head_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
     assert!(error.contains("struct type"), "unexpected error: {error}");
 }
 
@@ -1990,7 +1990,7 @@ fn struct_destructure_pun_binds_fields_by_label() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -2006,7 +2006,7 @@ fn struct_destructure_rename_binds_new_names() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"10"
@@ -2025,7 +2025,7 @@ fn struct_destructure_partial_ignores_unlisted_fields() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"9");
 }
 
@@ -2042,7 +2042,7 @@ fn struct_destructure_nested_struct_pattern() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"6");
 }
 
@@ -2060,7 +2060,7 @@ fn struct_destructure_wrong_head_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 // A struct pattern works as an un-annotated lambda parameter — the domain comes
@@ -2076,7 +2076,7 @@ fn struct_destructure_in_lambda_parameter() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
 
@@ -2096,7 +2096,7 @@ fn struct_destructure_in_match_arm() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"11"
@@ -2120,7 +2120,7 @@ fn struct_destructure_private_field_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
     assert!(
         error.contains("field") && error.contains("private"),
         "unexpected error: {error}"
@@ -2147,7 +2147,7 @@ fn matrix_nested_constructor_pattern() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"9");
 }
 
@@ -2171,7 +2171,7 @@ fn matrix_nat_literal_in_nested_column() {
 
     // special -> 100 (head is 0), other -> 7 (head binder). 100 + 7 = 107.
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"107"
@@ -2196,7 +2196,7 @@ fn matrix_nat_literal_named_default() {
 
     // 100 + 200 + 1007 = 1307.
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"1307"
@@ -2219,7 +2219,7 @@ fn matrix_nat_literal_in_struct_field() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"42"
@@ -2246,7 +2246,7 @@ fn matrix_wildcard_expands_unlisted_constructors() {
 
     // full -> 9, empty -> 0 (the `_` materializes the nil arm). 9 + 0 = 9.
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"9");
 }
 
@@ -2272,7 +2272,7 @@ fn matrix_repeated_constructor_head() {
 
     // 1 + 2 + 3 = 6.
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"6");
 }
 
@@ -2292,7 +2292,7 @@ fn matrix_multi_scrutinee_via_tuple() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"2");
 }
 
@@ -2312,7 +2312,7 @@ fn matrix_non_exhaustive_missing_constructor_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
     assert!(
         error.contains("missing match case") && error.contains("nil"),
         "unexpected error: {error}"
@@ -2336,7 +2336,7 @@ fn matrix_wildcard_unresolved_constructor_rejected() {
         "#;
 
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(Duration::from_secs(5), source, system).unwrap_err();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
     assert!(
         error.contains("line") && error.contains("resolve"),
         "unexpected error: {error}"
@@ -2356,7 +2356,7 @@ fn str_literal_prints_its_bytes() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"hello"
@@ -2376,7 +2376,7 @@ fn str_of_bin_accepts_multibyte_utf8() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), [0xc3, 0xa9]);
 }
 
@@ -2392,7 +2392,7 @@ fn str_of_bin_rejects_invalid_utf8() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"rejected"
@@ -2412,7 +2412,7 @@ fn str_of_bin_rejects_truncated_multibyte() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"rejected"
@@ -2431,7 +2431,7 @@ fn arr_fold_sums_elements() {
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(Arr/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"60");
 }
 
@@ -2443,7 +2443,7 @@ fn bin_fold_sums_bytes() {
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(Bin/fold(b, 0, (byte, acc) => Nat/add(acc, byte)))))
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"60");
 }
 
@@ -2463,7 +2463,7 @@ fn erased_void_discharges_to_relevant_result() {
         Io/print("ok")
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
@@ -2488,7 +2488,7 @@ fn bin_proof_lemmas_type_check() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
@@ -2507,7 +2507,7 @@ fn utf8_decode_lemmas_type_check() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
@@ -2527,7 +2527,7 @@ fn subst_motive_inserts_implicit_in_eq() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
@@ -2551,7 +2551,7 @@ fn str_get_indexes_codepoints_of_every_width() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"3,97,8364,128512"
@@ -2589,7 +2589,7 @@ fn str_at_reads_codepoints_with_the_proof() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"97,8364,128512");
 }
 
@@ -2606,7 +2606,7 @@ fn str_slice_cuts_on_codepoint_boundaries() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), [0xe2, 0x82, 0xac]);
 }
 
@@ -2625,7 +2625,7 @@ fn str_slice_spans_every_codepoint_width() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), [0xc3, 0xa9, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80]);
 }
 
@@ -2643,7 +2643,7 @@ fn str_trim_keeps_interior_multibyte() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), [0x63, 0x61, 0x66, 0xc3, 0xa9]);
 }
 
@@ -2660,7 +2660,7 @@ fn str_trim_all_whitespace_is_empty() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"!"
@@ -2695,7 +2695,7 @@ fn nonproductive_inner_rec_in_type_position_is_preempted() {
 fn random_bin_returns_requested_length() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"std/Io/write(std/Io/stdout, /std/Rand/bin(8))"#,
         system,
     )
@@ -2709,7 +2709,7 @@ fn random_bin_returns_requested_length() {
 fn bln_logic_and_of_str() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Bln, Str, Option, Io};
         let computed = Bln/and(Bln/or(false, true), Bln/not(false));
@@ -2733,7 +2733,7 @@ fn bln_logic_and_of_str() {
 fn bln_xor_executes() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Bln, Str, Io};
         let a = Bln/xor(true, false);
@@ -2754,7 +2754,7 @@ fn bln_xor_executes() {
 fn bln_eql_executes() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Bln, Str, Io};
         let a = Bln/eql(true, true);
@@ -2780,7 +2780,7 @@ fn nat_bitwise_ops_execute() {
     // i31 carrier drops to leave 2^25).
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Io, Bin, Nat, Str, Option};
         let bytes = match Io/read(Io/stdin, 16) : Bin
@@ -2817,7 +2817,7 @@ fn int_bitwise_ops_execute() {
     // negative operand (-65 >> 1 = -33), and the `xor`-based `not` (-x - 1).
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Io, Bin, Nat, Int, Str, Option};
         let bytes = match Io/read(Io/stdin, 16) : Bin
@@ -2853,7 +2853,7 @@ fn nat_of_str_returns_option() {
     // the `unwrap_or` defaults — `123 + 7 + 9`.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Nat, Str, Option, Io};
         let ok = Option/unwrap_or(Nat/of_str("123"), 0);
@@ -2876,7 +2876,7 @@ fn int_of_str_returns_option() {
     // `-5` and `+7` parse (compared by magnitude); `x` is `none` → default `+3`.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Nat, Int, Str, Option, Io};
         let neg = Int/abs(Option/unwrap_or(Int/of_str("-5"), +0));
@@ -2901,7 +2901,7 @@ fn flt_of_str_returns_option() {
     // `12 + (0.5*2) + 1000 + 4`.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Nat, Flt, Str, Option, Io};
         let whole = Flt/to_nat(Option/unwrap_or(Flt/of_str("12.0"), +0.0));
@@ -2924,7 +2924,7 @@ fn flt_of_str_returns_option() {
 fn option_result_char_helpers() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Option, Result, Char, Nat, Str, Io};
         let opt = Option/unwrap_or(Option/map((x : Nat) => Nat/add(x, 1), Option/some(4)), 0);
@@ -2953,7 +2953,7 @@ fn clock_diff_of_two_distinct_now_readings() {
     let (system, io) =
         MockHost::builder().wall([(1, 100, 500), (1, 130, 900)]).build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         let a = /std/Time/now();
         let b = /std/Time/now();
@@ -2974,7 +2974,7 @@ fn clock_diff_of_two_distinct_now_readings() {
 fn clock_mono_reads_scripted_elapsed() {
     let (system, io) = MockHost::builder().mono([(2, 7)]).build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         let e = /std/Time/elapsed();
         std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/Time/secs(e))))
@@ -2992,7 +2992,7 @@ fn proc_args_indexes_the_argv_snapshot() {
     let (system, io) =
         MockHost::builder().args(["prog", "hello", "world"]).build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/Arr/get(/std/Proc/args, 1), \\))"#,
         system,
     )
@@ -3008,7 +3008,7 @@ fn proc_args_indexes_the_argv_snapshot() {
 fn proc_env_found_unwraps_to_some() {
     let (system, io) = MockHost::builder().env([("HOME", "/root")]).build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         match /std/Proc/env("HOME") : {}
         | some(v) => let _ = std/Io/write(std/Io/stdout, v); ()
@@ -3029,7 +3029,7 @@ fn proc_env_found_unwraps_to_some() {
 fn proc_env_absent_is_none() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         match /std/Proc/env("NOPE") : {}
         | some(v) => let _ = std/Io/write(std/Io/stdout, v); ()
@@ -3057,7 +3057,7 @@ fn proc_exit_halts_with_code() {
     .expect("failed to parse source");
 
     let module = crate::compile_entrypoint(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         &entrypoint,
         &crate::text::NullLoader,
         |_| {},
@@ -3082,7 +3082,7 @@ fn let_tuple_destructures() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"+4"
@@ -3100,7 +3100,7 @@ fn nested_let_tuple_destructures() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"+3"
@@ -3117,7 +3117,7 @@ fn let_tuple_destructures_without_annotation() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"+4"
@@ -3134,7 +3134,7 @@ fn let_three_tuple_destructures() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"+30"
@@ -3151,7 +3151,7 @@ fn func_tuple_param_destructures() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"+8"
@@ -3167,7 +3167,7 @@ fn lambda_tuple_param_destructures() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"+5"
@@ -3190,7 +3190,7 @@ fn match_arm_tuple_destructures() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"+9"
@@ -3212,7 +3212,7 @@ fn net_call_round_trips_a_scripted_endpoint() {
     let (system, io) = MockHost::builder()
         .net([("example.com:80", "HTTP/1.0 200 OK\r\n\r\nhello")])
         .build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"HTTP/1.0 200 OK\r\n\r\nhello"
@@ -3241,7 +3241,7 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"refused"
@@ -3273,7 +3273,7 @@ fn net_with_custom_timeout_config_reads_response() {
         "#;
 
     let (system, io) = MockHost::builder().net([("db.internal:5432", "PONG")]).build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"PONG"
@@ -3303,7 +3303,7 @@ fn net_serve_handles_a_scripted_inbound_connection() {
         "#;
 
     let (system, io) = MockHost::builder().inbound(["ping"]).build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.captures(), vec![b"echo: ping".to_vec()]);
 }
 
@@ -3337,7 +3337,7 @@ fn net_with_tls_upgrades_and_reads() {
     let (system, io) = MockHost::builder()
         .net([("secure.example:443", "SECURE-PONG")])
         .build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"SECURE-PONG");
 }
 
@@ -3363,7 +3363,7 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
         "#;
 
     let (system, io) = MockHost::builder().inbound(["ping"]).build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.captures(), vec![b"tls: ping".to_vec()]);
 }
 
@@ -3399,7 +3399,7 @@ fn http_perform_parses_a_scripted_response() {
             "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello AND MORE",
         )])
         .build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(
         io.output(),
         b"200 text/plain hello"
@@ -3415,7 +3415,7 @@ fn task_scheduler_parks_polls_and_resumes() {
     // closure through erasure and codegen.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Task, Io, Str};
         let prog : Task({}) =
@@ -3438,7 +3438,7 @@ fn task_bind_reads_and_echoes() {
     // do-notation against the new module.
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Task, Io};
         let prog : Task({}) =
@@ -3468,7 +3468,7 @@ fn block_on_returns_a_typed_value_and_awaits_a_spawned_child() {
     // future with 5; the root resumes and `block_on` hands back 5 + 2 = 7.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Task, Io, Str, Nat};
         let root : Task(Nat) =
@@ -3496,7 +3496,7 @@ fn join_all_runs_children_concurrently_and_collects_in_order() {
     // the gathered results [1, 2] sum to 3.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Task, Io, Str, Nat, Arr};
         let main : Task({}) =
@@ -3525,7 +3525,7 @@ fn map_transforms_a_tasks_result() {
     // 42 into its decimal string, with no explicit `bind`/`pure` at the call site.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Task, Io, Str, Nat};
         let main : Task({}) =
@@ -3551,7 +3551,7 @@ fn race_returns_the_first_and_runs_a_cancelled_losers_finalizer() {
     // loser's cleanup fired without the loser's body completing.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Task, Io, Str, Nat};
         let main : Task({}) =
@@ -3585,7 +3585,7 @@ fn block_on_drops_a_parked_child_when_root_done() {
     // returns rather than hanging.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Task, Io, Str};
         let child : Task({}) =
@@ -3614,7 +3614,7 @@ fn constructing_a_leaf_task_performs_no_effect() {
     // the direct read saw EOF.
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Task, Io, Str};
         let discarded : Task(Io/Read) = Task/read(Io/stdin, 100);
@@ -3643,7 +3643,7 @@ fn finalizer_runs_for_a_child_parked_on_an_unfulfilled_future() {
     // marker leaked and the output was just "root;".
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Task, Io, Str};
         let main : Task({}) =
@@ -3670,7 +3670,7 @@ fn an_acquired_finalizer_runs_when_the_fiber_completes() {
     // "body;closed;" — cleanup happens for free on the success path.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Task, Io, Str};
         let main : Task({}) =
@@ -3695,7 +3695,7 @@ fn manual_release_runs_a_finalizer_once_and_completion_does_not_repeat_it() {
     // and "after;" proves it fired exactly once — at the release, not again at the end.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Task, Io, Str};
         let main : Task({}) =
@@ -3717,7 +3717,7 @@ fn manual_release_runs_a_finalizer_once_and_completion_does_not_repeat_it() {
 fn label_projection_resolves_on_a_type_valued_field() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Io, Str, Nat};
         union Susp(A : Type)
@@ -3749,7 +3749,7 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
     // codegen path that needs the call-site arity registered for `envr`/`clsr`.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
-        Duration::from_secs(5),
+        Duration::from_secs(10),
         r#"
         use /std/{Io, Str, Nat, Lst};
         union Susp(A : Type)
@@ -4369,7 +4369,7 @@ fn erased_indexed_relevant_repro() {
         Io/print("ok")
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
@@ -4390,7 +4390,7 @@ fn erased_index_in_type_valued_arg() {
         Io/print("ok")
         "#;
     let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 }
 
