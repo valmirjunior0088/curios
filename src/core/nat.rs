@@ -100,6 +100,34 @@ impl Nat {
         ))
     }
 
+    /// View a reduced term as a flat successor floor over a symbolic tail:
+    /// `term = inner + floor`. A non-`Succ` term — literal zero, a variable, any
+    /// stuck prim — has floor `0` and is its own `inner`; reduction flattens nested
+    /// `Succ`, so `inner` is never itself successor-headed. The one-value companion
+    /// to `spine::peel_nat` (which peels the floor shared by *two* values): this is
+    /// the seam `Nat/add`, `Nat/sub`, `Nat/mul`, and the comparison family share to
+    /// act on the floor symbolically, then rebuild a canonical neutral.
+    pub fn decompose(term: &Term) -> (BigUint, Term) {
+        match &**term {
+            Subterm::Prim(Prim::Nat(Nat::Succ(floor, inner))) => (floor.clone(), inner.clone()),
+            _ => (BigUint::zero(), term.clone()),
+        }
+    }
+
+    /// The inverse of [`Nat::decompose`]: `inner + floor`, collapsing a zero floor
+    /// back to the bare `inner` so the rebuilt term lands in the same normal form
+    /// `decompose` expects.
+    pub fn rebuild(floor: BigUint, inner: Term) -> Term {
+        match floor.is_zero() {
+            true => inner,
+            false => Term::prim(Prim::Nat(Nat::Succ(floor, inner))),
+        }
+    }
+
+    /// Whether a reduced term is literal zero — the identity floor.
+    pub fn is_zero(term: &Term) -> bool {
+        matches!(&**term, Subterm::Prim(Prim::Nat(Nat::Zero)))
+    }
 }
 
 impl fmt::Display for Nat {

@@ -228,30 +228,6 @@ fn from_ordering(ordering: Ordering) -> Comparison {
     }
 }
 
-/// `a = inner + spine`: pull the successor floor off a reduced `Nat`. `Zero` and
-/// stuck terms decompose to `(0, self)`; reduction has flattened nested `Succ`, so
-/// `inner` is never itself successor-headed.
-fn decompose(term: &Term) -> (num_bigint::BigUint, Term) {
-    match &**term {
-        Subterm::Prim(Prim::Nat(Nat::Succ(spine, inner))) => (spine.clone(), inner.clone()),
-        _ => (num_bigint::BigUint::zero(), term.clone()),
-    }
-}
-
-fn is_zero(term: &Term) -> bool {
-    matches!(&**term, Subterm::Prim(Prim::Nat(Nat::Zero)))
-}
-
-/// The inverse of [`decompose`]: `inner + spine`, collapsing a zero floor back to
-/// the bare inner so the rebuilt operand is in the same normal form `decompose`
-/// expects.
-fn rebuild_nat(spine: num_bigint::BigUint, inner: Term) -> Term {
-    match spine.is_zero() {
-        true => inner,
-        false => Term::prim(Prim::Nat(Nat::Succ(spine, inner))),
-    }
-}
-
 /// The `Nat` eliminator's structural comparison, specialized to the flat `BigUint`
 /// successor spine: the floors stand in for peeling successors, so no recursion is
 /// needed and two literals decide in one `BigUint` compare (the literal fold folds
@@ -270,8 +246,8 @@ fn compare_nat(
     left: Term,
     right: Term,
 ) -> Result<(Comparison, Term, Term), ReduceError> {
-    let (sl, il) = decompose(&reduce(context, left)?);
-    let (sr, ir) = decompose(&reduce(context, right)?);
+    let (sl, il) = Nat::decompose(&reduce(context, left)?);
+    let (sr, ir) = Nat::decompose(&reduce(context, right)?);
 
     // Same inner ⇒ the floors alone decide: `cmp(x + sl, x + sr) = cmp(sl, sr)`
     // (so `lt(pred, succ pred) = true`). Two literals — inner `0` on both sides —
@@ -284,16 +260,16 @@ fn compare_nat(
         from_ordering(sl.cmp(&sr))
     } else {
         match sl.cmp(&sr) {
-            Ordering::Greater if is_zero(&ir) => Comparison::Gt,
-            Ordering::Less if is_zero(&il) => Comparison::Lt,
-            Ordering::Equal if is_zero(&il) => Comparison::Le,
-            Ordering::Equal if is_zero(&ir) => Comparison::Ge,
+            Ordering::Greater if Nat::is_zero(&ir) => Comparison::Gt,
+            Ordering::Less if Nat::is_zero(&il) => Comparison::Lt,
+            Ordering::Equal if Nat::is_zero(&il) => Comparison::Le,
+            Ordering::Equal if Nat::is_zero(&ir) => Comparison::Ge,
             _ => Comparison::Stuck,
         }
     };
 
     let m = sl.clone().min(sr.clone());
-    Ok((outcome, rebuild_nat(sl - &m, il), rebuild_nat(sr - &m, ir)))
+    Ok((outcome, Nat::rebuild(sl - &m, il), Nat::rebuild(sr - &m, ir)))
 }
 
 /// Reduce a `Nat` comparison through the shared structural body [`compare_nat`].
