@@ -677,6 +677,15 @@ fn erase_union_match(
     cases: &BTreeMap<Atom, Scope<Many>>,
     pattern: Option<&MotivePattern>,
 ) -> Result<ersd::Term, Error> {
+    // A match with no arms is a vacuous elimination — of an empty union (`Void`)
+    // or of one whose every constructor inversion-clashes at the scrutinee's
+    // indices. It is unreachable code that never inspects the scrutinee, which
+    // elaborate placed in an erased position; erasing the head here would emit a
+    // reference to an erased binder, so short-circuit to a trap.
+    if cases.is_empty() {
+        return Ok(ersd::Subterm::Unreachable.into());
+    }
+
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
@@ -1022,16 +1031,6 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
 }
 
 fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {
-    // A type-valued term carries no runtime content, so it erases to a unit
-    // *regardless of its shape*. The bare type-former arms below are the syntactic
-    // cases; this catches applied type constructors too — `Cursor(b, i)`, `Eq(x, y)`,
-    // `Vec(T, n)` — which are `Apply` nodes that would otherwise erase structurally
-    // and smuggle their free variables (e.g. an erased type-index) into the runtime
-    // term, leaving codegen to demand a value that was erased.
-    if matches!(&*reduce_with(context, expected)?, Subterm::Type) {
-        return Ok(ersd::Subterm::Erased.into());
-    }
-
     match &**term {
         Subterm::Prim(prim) => erase_prim(context, term, prim, expected),
         Subterm::Match(m) => erase_match(context, m),

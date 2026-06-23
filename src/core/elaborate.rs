@@ -1309,7 +1309,19 @@ fn elaborate_union_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, head_type) = elaborate(context, head, Mode::Infer)?;
+    // A match with no arms is a vacuous elimination — either of an empty union
+    // (`Void`) or of one whose every constructor inversion-clashes at the
+    // scrutinee's indices. Such a match compiles to unreachable code that never
+    // inspects the scrutinee, so the scrutinee occupies an *erased* position: an
+    // erased witness of falsity (e.g. an erased `Void` threaded from a proof) may
+    // discharge it into a relevant result. A match with arms still inspects the
+    // scrutinee at the ambient resource.
+    let head_quantity = match cases.is_empty() {
+        true => Quantity::Zero,
+        false => Quantity::Omega,
+    };
+    let (head_elaborated, head_type) =
+        context.with_quantity(head_quantity, |context| elaborate(context, head, Mode::Infer))?;
     let head_type = reduce_with(context, &head_type)?;
 
     let (name, params, actual_indices) = match &*head_type {

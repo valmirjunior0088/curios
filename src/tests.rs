@@ -2383,6 +2383,26 @@ fn bin_fold_sums_bytes() {
     assert_eq!(io.output(), b"60");
 }
 
+// An empty match is a vacuous elimination: it never inspects its scrutinee, so
+// the scrutinee sits in an erased position. An *erased* `Void` (a contradiction
+// threaded from an erased proof) may therefore discharge into a *relevant*
+// result — both directly (`match c : A end`) and through `Void/absurd`, whose
+// contradiction is now erased. This is what lets an impossible runtime branch be
+// closed off by an erased witness, the crux of the UTF-8 decode certification.
+#[test]
+fn erased_void_discharges_to_relevant_result() {
+    let source = r#"
+        use /std/{Void, Io};
+        let direct(@A : Type, c : @Void) -> A = match c : A end;
+        let via_absurd(@A : Type, c : @Void) -> A = Void/absurd(c);
+        let proofs = (direct, via_absurd);
+        Io/print("ok")
+        "#;
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(io.output(), b"ok");
+}
+
 #[test]
 fn bin_proof_lemmas_type_check() {
     let source = r#"
@@ -2417,7 +2437,8 @@ fn utf8_decode_lemmas_type_check() {
     let source = r#"
         use /std/{Str, Nat, Io};
         let lemmas = (Str/bad_uninhabited, Str/cont_len, Str/slice_get_zero, Str/step_lead_lead,
-            Nat/le_trans, Nat/lt_of_le_succ, Nat/le_add_mono_l, Str/at_concat_head, Str/cont0_uninhabited, Str/take_conts, Str/drop_cont);
+            Nat/le_trans, Nat/lt_of_le_succ, Nat/le_add_mono_l, Str/at_concat_head, Str/cont0_uninhabited, Str/take_conts, Str/drop_cont, Str/head_eq,
+            Str/step_lead_ascii, Str/step_lead_bad, Str/decode_step_c);
         Io/print("ok")
         "#;
 
@@ -2471,6 +2492,41 @@ fn str_get_indexes_codepoints_of_every_width() {
         io.output(),
         b"3,97,8364,128512"
     );
+}
+
+// `Str/at` is the proof-carrying indexer: `ok : Lt(i, len s)` flows (erased) into
+// the `Bin/at` bound, so it reads each codepoint with no fallback. Indexing `a€😀`
+// at 0, 1, 2 yields U+0061, U+20AC, U+1F600 — same widths as `get`, but total.
+#[test]
+fn str_at_reads_codepoints_with_the_proof() {
+    let source = r#"
+        use /std/{Str, Nat, Io, Option};
+        let ! = Option/bind;
+        match Str/of_bin(\61\e2\82\ac\f0\9f\98\80) : {}
+        | some(s) =>
+            let out =
+                let r0 = Nat/try_lt(0, Str/len(s));
+                let r1 = Nat/try_lt(1, Str/len(s));
+                let r2 = Nat/try_lt(2, Str/len(s));
+                match r0 : Option(Str)
+                | none() => Option/none()
+                | some(p0) => match r1 : Option(Str)
+                | none() => Option/none()
+                | some(p1) => match r2 : Option(Str)
+                | none() => Option/none()
+                | some(p2) => Option/some(Str/flatten([
+                    Nat/to_str(Str/at(s, 0, p0)), ",",
+                    Nat/to_str(Str/at(s, 1, p1)), ",",
+                    Nat/to_str(Str/at(s, 2, p2))]))
+                end end end;
+            Io/print(Option/unwrap_or(out, "oob"))
+        | none() => Io/print("bad")
+        end
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(io.output(), b"97,8364,128512");
 }
 
 // `Str/slice` cuts at codepoint boundaries, so slicing `[1, 2)` out of `a€😀`

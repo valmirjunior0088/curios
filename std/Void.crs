@@ -1,7 +1,7 @@
 pub union Void
 end
 
-pub let absurd(@A : Type, contradiction : Void) -> A =
+pub let absurd(@A : @Type, contradiction : @Void) -> A =
     match contradiction : A
     end;
 

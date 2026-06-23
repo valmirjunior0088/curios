@@ -212,16 +212,16 @@ pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(0, 
     end;
 
 pub rec take_conts(b : Bin, off : Nat, remaining : Nat, acc : Nat,
-    @bound : Nat/Le(Nat/add(off, remaining), Bin/len(b))) -> {Nat, Nat} =
+    bound : @Nat/Le(Nat/add(off, remaining), Bin/len(b))) -> {Nat, Nat} =
     let go =
         match remaining : (remaining) =>
-            (bound : Nat/Le(Nat/add(off, remaining), Bin/len(b))) -> {Nat, Nat}
+            (bound : @Nat/Le(Nat/add(off, remaining), Bin/len(b))) -> {Nat, Nat}
         | 0 => (bound) => (acc, off)
         | pred + 1, ih => (bound) =>
             take_conts(b, Nat/succ(off), pred,
                 Nat/add(Nat/mul(acc, 0x40), Nat/sub(Bin/at(b, off,
                     Nat/lt_of_le_succ(Nat/le_trans(Nat/Le/s(Nat/le_add_r(off, pred)), bound))), 0x80)),
-                @bound)
+                bound)
         end;
     go(bound);
 
@@ -327,46 +327,119 @@ pub let step_lead_lead(c : Nat, @k : Nat, @lo : Nat, @hi : Nat, @payload : Nat,
     -> Eq(step(c, Scan/lead()), Scan/cont(k, lo, hi)) =
     Eq/cong(lead_step, eq);
 
-rec take_continuations(b : Bin, off : Nat, remaining : Nat, acc : Nat) -> {Nat, Nat} =
-    match remaining
-    | 0 => (acc, off)
-    | pred + 1, ih =>
-        take_continuations(b, Nat/add(off, 1), pred,
-            Nat/add(Nat/mul(acc, 0x40), Nat/sub(/sys/Bin/get(b, off), 0x80)))
-    end;
+pub let step_lead_ascii(c : Nat, eq : Eq(classify(c), Class/ascii()))
+    -> Eq(step(c, Scan/lead()), Scan/lead()) =
+    Eq/cong(lead_step, eq);
 
-let decode_step(b : Bin, off : Nat) -> {Nat, Nat} =
-    let c = /sys/Bin/get(b, off);
-    match classify(c)
-    | ascii() => (c, Nat/add(off, 1))
-    | lead(continuations, _, _, payload) => take_continuations(b, Nat/add(off, 1), continuations, payload)
-    | bad() => (c, Nat/add(off, 1))
-    end;
+pub let step_lead_bad(c : Nat, eq : Eq(classify(c), Class/bad()))
+    -> Eq(step(c, Scan/lead()), Scan/bad()) =
+    Eq/cong(lead_step, eq);
 
-let advance(b : Bin, off : Nat) -> Nat =
-    match Nat/lt(off, Bin/len(b))
-    | false => off
-    | true =>
-        let d = decode_step(b, off);
-        d.1
-    end;
+union Step(b : Bin)
+| mk(codepoint : Nat, next : Nat, cursor : @Cursor(b, next))
+end
 
-let byte_offset(b : Bin, i : Nat) -> Nat =
-    match i : Nat
-    | 0 => 0
-    | pred + 1, ih => advance(b, ih)
-    end;
+pub let head_eq(@b : Bin, prefix : Bin, @cw : Nat, @tt : Bin,
+    lt : Nat/Lt(Bin/len(prefix), Bin/len(b)),
+    split : Eq(b, Bin/concat(prefix, Bin/cons(cw, tt))))
+    -> Eq(Bin/at(b, Bin/len(prefix), lt), cw) =
+    Eq/subst(
+        (x : Bin) => (lx : Nat/Lt(Bin/len(prefix), Bin/len(x))) -> Eq(Bin/at(x, Bin/len(prefix), lx), cw),
+        Eq/sym(split),
+        (lx) => at_concat_head(prefix, @cw, @tt, @lx))(lt);
+
+pub let decode_step_c(b : Bin, off : Nat, cur : @Cursor(b, off),
+    lt : @Nat/Lt(off, Bin/len(b))) -> Step(b) =
+    let c = Bin/at(b, off, lt);
+    let go =
+        match classify(c) : (cl) => (eq : Eq(classify(c), cl)) -> Step(b)
+        | ascii() => (eq) =>
+            Step/mk(c, Nat/succ(off),
+                (match cur : (cur : Cursor(b, o)) =>
+                    (lt : Nat/Lt(o, Bin/len(b)),
+                     eq : Eq(classify(Bin/at(b, o, lt)), Class/ascii())) -> Cursor(b, Nat/succ(o))
+                | mk(prefix, rest, valid, split) => (lt, eq) =>
+                    (match valid : (valid : Utf8(sc, r)) =>
+                        (split : Eq(b, Bin/concat(prefix, r))) -> Cursor(b, Nat/succ(Bin/len(prefix)))
+                    | stop() => (split) =>
+                        Void/absurd(Eq/subst((x : Bin) => Nat/Lt(Bin/len(prefix), Bin/len(x)), split, lt))
+                    | more(head, st, tt, rest_tail) => (split) =>
+                        let he = head_eq(@b, prefix, @head, @tt, lt, split);
+                        let ch = Eq/trans(Eq/sym(Eq/cong(classify, he)), eq);
+                        let rv = Eq/subst((s : Scan) => Utf8(s, tt), step_lead_ascii(head, ch), rest_tail);
+                        Cursor/mk(Bin/concat(prefix, Bin/append(\\, head)), tt, rv, split)
+                    end)(split)
+                end)(lt, eq))
+        | lead(k, lo, hi, payload) => (eq) =>
+            Step/mk(
+                take_conts(b, Nat/succ(off), k, payload,
+                    (match cur : (cur : Cursor(b, o)) =>
+                        (lt : Nat/Lt(o, Bin/len(b)),
+                         eq : Eq(classify(Bin/at(b, o, lt)), Class/lead(k, lo, hi, payload)))
+                            -> Nat/Le(Nat/add(Nat/succ(o), k), Bin/len(b))
+                    | mk(prefix, rest, valid, split) => (lt, eq) =>
+                        (match valid : (valid : Utf8(sc, r)) =>
+                            (split : Eq(b, Bin/concat(prefix, r)))
+                                -> Nat/Le(Nat/add(Nat/succ(Bin/len(prefix)), k), Bin/len(b))
+                        | stop() => (split) =>
+                            Void/absurd(Eq/subst((x : Bin) => Nat/Lt(Bin/len(prefix), Bin/len(x)), split, lt))
+                        | more(head, st, tt, rest_tail) => (split) =>
+                            let he = head_eq(@b, prefix, @head, @tt, lt, split);
+                            let ch = Eq/trans(Eq/sym(Eq/cong(classify, he)), eq);
+                            let rc = Eq/subst((s : Scan) => Utf8(s, tt), step_lead_lead(head, ch), rest_tail);
+                            Eq/subst((x : Bin) => Nat/Le(Nat/add(Nat/succ(Bin/len(prefix)), k), Bin/len(x)),
+                                Eq/sym(split),
+                                Nat/Le/s(Nat/le_add_mono_l(Bin/len(prefix), cont_len(k, @lo, @hi, @tt, rc))))
+                        end)(split)
+                    end)(lt, eq)).0,
+                Nat/add(Nat/succ(off), k),
+                (match cur : (cur : Cursor(b, o)) =>
+                    (lt : Nat/Lt(o, Bin/len(b)),
+                     eq : Eq(classify(Bin/at(b, o, lt)), Class/lead(k, lo, hi, payload)))
+                        -> Cursor(b, Nat/add(Nat/succ(o), k))
+                | mk(prefix, rest, valid, split) => (lt, eq) =>
+                    (match valid : (valid : Utf8(sc, r)) =>
+                        (split : Eq(b, Bin/concat(prefix, r))) -> Cursor(b, Nat/add(Nat/succ(Bin/len(prefix)), k))
+                    | stop() => (split) =>
+                        Void/absurd(Eq/subst((x : Bin) => Nat/Lt(Bin/len(prefix), Bin/len(x)), split, lt))
+                    | more(head, st, tt, rest_tail) => (split) =>
+                        let he = head_eq(@b, prefix, @head, @tt, lt, split);
+                        let ch = Eq/trans(Eq/sym(Eq/cong(classify, he)), eq);
+                        let rc = Eq/subst((s : Scan) => Utf8(s, tt), step_lead_lead(head, ch), rest_tail);
+                        drop_cont(@b, Bin/concat(prefix, Bin/append(\\, head)), k, @lo, @hi, @tt, rc, split)
+                    end)(split)
+                end)(lt, eq))
+        | bad() => (eq) =>
+            Void/absurd(@Step(b),
+                (match cur : (cur : Cursor(b, o)) =>
+                    (lt : Nat/Lt(o, Bin/len(b)),
+                     eq : Eq(classify(Bin/at(b, o, lt)), Class/bad())) -> Void
+                | mk(prefix, rest, valid, split) => (lt, eq) =>
+                    (match valid : (valid : Utf8(sc, r)) =>
+                        (split : Eq(b, Bin/concat(prefix, r))) -> Void
+                    | stop() => (split) =>
+                        Void/absurd(Eq/subst((x : Bin) => Nat/Lt(Bin/len(prefix), Bin/len(x)), split, lt))
+                    | more(head, st, tt, rest_tail) => (split) =>
+                        let he = head_eq(@b, prefix, @head, @tt, lt, split);
+                        let ch = Eq/trans(Eq/sym(Eq/cong(classify, he)), eq);
+                        let rbad = Eq/subst((s : Scan) => Utf8(s, tt), step_lead_bad(head, ch), rest_tail);
+                        bad_uninhabited(@tt, rbad)
+                    end)(split)
+                end)(lt, eq))
+        end;
+    go(Eq/refl());
 
 pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
     let b = to_bin(s);
-    rec go(off : Nat, acc : A) -> A =
-        match Nat/lt(off, Bin/len(b))
-        | false => acc
-        | true =>
-            let d = decode_step(b, off);
-            go(d.1, f(d.0, acc))
+    rec go(off : Nat, cur : @Cursor(b, off), acc : A) -> A =
+        match Nat/try_lt(off, Bin/len(b)) : A
+        | none() => acc
+        | some(lt) =>
+            match decode_step_c(b, off, cur, lt) : A
+            | mk(codepoint, next, cursor) => go(next, cursor, f(codepoint, acc))
+            end
         end;
-    go(0, init);
+    go(0, Cursor/mk(\\, b, s.valid, Eq/refl()), init);
 
 pub let len(s : Str) -> Nat =
     fold(s, 0, (codepoint, acc) => Nat/add(acc, 1));
@@ -387,17 +460,21 @@ pub let find_index(s : Str, pred : (Nat) -> Bln) -> Option(Nat) =
 pub let find(s : Str, target : Nat) -> Option(Nat) =
     find_index(s, (codepoint) => Nat/eql(codepoint, target));
 
-pub let at(s : Str, i : Nat, ok : @Nat/Lt(i, len(s))) -> Nat =
-    let b = to_bin(s);
-    decode_step(b, byte_offset(b, i)).0;
-
 pub let get(s : Str, i : Nat) -> Option(Nat) =
-    match Nat/lt(i, len(s))
-    | false => Option/none()
-    | true =>
-        let b = to_bin(s);
-        Option/some(decode_step(b, byte_offset(b, i)).0)
-    end;
+    let r : {Nat, Option(Nat)} =
+        fold(s, (0, Option/none()), (codepoint, acc) =>
+            match acc.1
+            | some(_) => acc
+            | none() =>
+                match Nat/eql(acc.0, i)
+                | true => (Nat/add(acc.0, 1), Option/some(codepoint))
+                | false => (Nat/add(acc.0, 1), Option/none())
+                end
+            end);
+    r.1;
+
+pub let at(s : Str, i : Nat, ok : @Nat/Lt(i, len(s))) -> Nat =
+    Option/unwrap_or(get(s, i), 0);
 
 pub let join(sep : Str, parts : Lst(Str)) -> Str =
     let pa = Lst/to_arr(parts);
