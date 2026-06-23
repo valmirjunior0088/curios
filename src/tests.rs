@@ -2417,7 +2417,7 @@ fn utf8_decode_lemmas_type_check() {
     let source = r#"
         use /std/{Str, Nat, Io};
         let lemmas = (Str/bad_uninhabited, Str/cont_len, Str/slice_get_zero, Str/step_lead_lead,
-            Nat/le_trans, Nat/lt_of_le_succ, Nat/le_add_mono_l, Str/at_concat_head, Str/cont0_uninhabited, Str/take_conts);
+            Nat/le_trans, Nat/lt_of_le_succ, Nat/le_add_mono_l, Str/at_concat_head, Str/cont0_uninhabited, Str/take_conts, Str/drop_cont);
         Io/print("ok")
         "#;
 

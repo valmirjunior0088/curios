@@ -225,6 +225,66 @@ pub rec take_conts(b : Bin, off : Nat, remaining : Nat, acc : Nat,
         end;
     go(bound);
 
+union Cursor(b : Bin) : (off : Nat)
+| mk(prefix : @Bin, rest : @Bin, valid : @Utf8(Scan/lead(), rest),
+     split : @Eq(b, Bin/concat(prefix, rest)))
+   : (Bin/len(prefix))
+end
+
+pub rec drop_cont(@b : Bin, prefix1 : @Bin, k : Nat, @lo : Nat, @hi : Nat, @t : Bin,
+    w : Utf8(Scan/cont(k, lo, hi), t), split1 : @Eq(b, Bin/concat(prefix1, t)))
+    -> Cursor(b, Nat/add(Bin/len(prefix1), k)) =
+    let on_k =
+        match k : (k) =>
+            (w : Utf8(Scan/cont(k, lo, hi), t)) -> Cursor(b, Nat/add(Bin/len(prefix1), k))
+        | 0 => (w) =>
+            Void/absurd(@Cursor(b, Nat/add(Bin/len(prefix1), 0)), cont0_uninhabited(w))
+        | kp + 1, ih => (w) =>
+            let on_w =
+                match w : (w : Utf8(q, y)) => Cursor(b, Nat/add(Bin/len(prefix1), Nat/succ(kp)))
+                | more(c, st, tt, rest) =>
+                    let on_kp =
+                        match kp : (kp) =>
+                            (rest : Utf8(step(c, Scan/cont(Nat/succ(kp), lo, hi)), tt))
+                                -> Cursor(b, Nat/add(Bin/len(prefix1), Nat/succ(kp)))
+                        | 0 => (rest) =>
+                            let on_range =
+                                match Nat/in_range(c, lo, hi) : (r) =>
+                                    (rest : Utf8(match r
+                                        | false => Scan/bad()
+                                        | true => Scan/lead()
+                                        end, tt))
+                                        -> Cursor(b, Nat/add(Bin/len(prefix1), 1))
+                                | true => (rest) =>
+                                    Cursor/mk(Bin/concat(prefix1, Bin/append(\\, c)), tt, rest, split1)
+                                | false => (rest) =>
+                                    Void/absurd(@Cursor(b, Nat/add(Bin/len(prefix1), 1)),
+                                        bad_uninhabited(@tt, rest))
+                                end;
+                            on_range(rest)
+                        | kpp + 1, ih2 => (rest) =>
+                            let on_range =
+                                match Nat/in_range(c, lo, hi) : (r) =>
+                                    (rest : Utf8(match r
+                                        | false => Scan/bad()
+                                        | true => Scan/cont(Nat/succ(kpp), 0x80, 0xBF)
+                                        end, tt))
+                                        -> Cursor(b, Nat/add(Bin/len(prefix1), Nat/succ(Nat/succ(kpp))))
+                                | true => (rest) =>
+                                    drop_cont(@b, Bin/concat(prefix1, Bin/append(\\, c)),
+                                        Nat/succ(kpp), @0x80, @0xBF, @tt, rest, split1)
+                                | false => (rest) =>
+                                    Void/absurd(@Cursor(b, Nat/add(Bin/len(prefix1), Nat/succ(Nat/succ(kpp)))),
+                                        bad_uninhabited(@tt, rest))
+                                end;
+                            on_range(rest)
+                        end;
+                    on_kp(rest)
+                end;
+            on_w
+        end;
+    on_k(w);
+
 pub rec slice_get_zero(b : Bin, off : Nat, ok : Nat/Lt(off, Bin/len(b)))
     -> Eq(Bin/get(Bin/slice(b, off, Bin/len(b)), 0), Bin/get(b, off)) =
     let on_b =
