@@ -4230,3 +4230,27 @@ fn utf8_slice_closed_peels_codepoints() {
         "#;
     assert_eq!(run(source), b"ok");
 }
+
+#[test]
+fn erased_indexed_relevant_repro() {
+    let source = r#"
+        use /std/{Nat, Io};
+        union Box : (n : Nat)
+        | mk(x : @Nat) : (x)
+        end
+        let f(m : @Nat, k : Nat) -> Box(m) =
+            let go =
+                match k : (k) => (d : Nat) -> Box(m)
+                | 0 => (d) => Box/mk(m)
+                | kp + 1, ih => (d) => Box/mk(m)
+                end;
+            go(0);
+        let g = f;
+        Io/print("ok")
+        "#;
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(5), source, system).expect("expected result");
+    assert_eq!(io.output(), b"ok");
+}
+
+

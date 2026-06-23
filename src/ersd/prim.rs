@@ -1,4 +1,4 @@
-use super::Term;
+use {super::Term, std::collections::BTreeSet};
 
 #[derive(Debug)]
 pub enum PurePrim {
@@ -126,4 +126,124 @@ pub enum Prim {
     Pure(PurePrim),
     Host(HostPrim),
     Cell(CellPrim),
+}
+
+impl Prim {
+    /// Free names of this primitive's operands (see [`Term::free_names`]).
+    pub fn free_names(&self) -> BTreeSet<String> {
+        match self {
+            Prim::Pure(p) => p.free_names(),
+            Prim::Host(h) => h.free_names(),
+            Prim::Cell(c) => c.free_names(),
+        }
+    }
+}
+
+impl PurePrim {
+    fn free_names(&self) -> BTreeSet<String> {
+        use PurePrim::*;
+
+        let operands: Vec<&Term> = match self {
+            Nat(_) | Int(_) | Flt(_) | Bin(_) | Io(_) => vec![],
+            NatToInt(a) | NatToFlt(a) | IntToNat(a) | IntToFlt(a) | FltToNat(a) | FltToLeBin(a)
+            | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a) | FltFloor(a) | FltCeil(a)
+            | FltTrunc(a) | FltNearest(a) | BinLen(a) | ArrLen(a) | BinFlatten(a)
+            | ArrFlatten(a) => vec![a],
+            NatEql(a, b)
+            | NatNeq(a, b)
+            | NatAdd(a, b)
+            | NatSub(a, b)
+            | NatMul(a, b)
+            | NatLt(a, b)
+            | NatDiv(a, b)
+            | NatRem(a, b)
+            | NatGt(a, b)
+            | NatLte(a, b)
+            | NatGte(a, b)
+            | NatAnd(a, b)
+            | NatOr(a, b)
+            | NatXor(a, b)
+            | NatShl(a, b)
+            | NatShr(a, b)
+            | IntEql(a, b)
+            | IntNeq(a, b)
+            | IntAdd(a, b)
+            | IntSub(a, b)
+            | IntMul(a, b)
+            | IntDiv(a, b)
+            | IntRem(a, b)
+            | IntLt(a, b)
+            | IntGt(a, b)
+            | IntLte(a, b)
+            | IntGte(a, b)
+            | IntAnd(a, b)
+            | IntOr(a, b)
+            | IntXor(a, b)
+            | IntShl(a, b)
+            | IntShr(a, b)
+            | FltAdd(a, b)
+            | FltSub(a, b)
+            | FltMul(a, b)
+            | FltDiv(a, b)
+            | FltEql(a, b)
+            | FltNeq(a, b)
+            | FltLt(a, b)
+            | FltGt(a, b)
+            | FltLte(a, b)
+            | FltGte(a, b)
+            | FltMin(a, b)
+            | FltMax(a, b)
+            | BinEql(a, b)
+            | IoEql(a, b)
+            | BinGet(a, b)
+            | BinAppend(a, b)
+            | ArrGet(a, b)
+            | ArrAppend(a, b)
+            | ArrMap(a, b) => vec![a, b],
+            BinSlice(a, b, c) | ArrSlice(a, b, c) => vec![a, b, c],
+            BinConcat(operands) | ArrConcat(operands) | Arr(operands) => operands.iter().collect(),
+        };
+
+        operands.into_iter().flat_map(|t| t.free_names()).collect()
+    }
+}
+
+impl HostPrim {
+    fn free_names(&self) -> BTreeSet<String> {
+        use HostPrim::*;
+
+        let operands: Vec<&Term> = match self {
+            IoClockWall | IoClockMono | IoArgs => vec![],
+            IoAccept(a) | IoResolve(a) | IoSocket(a) | IoClose(a) | IoRandom(a) | IoEnv(a)
+            | IoExit(a) => vec![a],
+            IoRead(a, b)
+            | IoWrite(a, b)
+            | IoOpen(a, b)
+            | IoLookup(a, b)
+            | IoBind(a, b)
+            | IoConnect(a, b)
+            | IoStartTls(a, b)
+            | IoTlsServerConfig(a, b)
+            | IoStartTlsServer(a, b)
+            | IoListen(a, b)
+            | IoSetNonblocking(a, b)
+            | IoSetRecvTimeout(a, b)
+            | IoSetSendTimeout(a, b)
+            | IoSetReuseaddr(a, b) => vec![a, b],
+            IoPoll(a, b, c) => vec![a, b, c],
+        };
+
+        operands.into_iter().flat_map(|t| t.free_names()).collect()
+    }
+}
+
+impl CellPrim {
+    fn free_names(&self) -> BTreeSet<String> {
+        let operands: Vec<&Term> = match self {
+            CellPrim::New(a) | CellPrim::Get(a) => vec![a],
+            CellPrim::Set(a, b) => vec![a, b],
+        };
+
+        operands.into_iter().flat_map(|t| t.free_names()).collect()
+    }
 }

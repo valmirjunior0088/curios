@@ -84,23 +84,6 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
             &mut dropped,
         )?;
 
-        // Captures are the body's free variables other than the lambda's own
-        // parameters (which appear as fresh frees once the body is opened). The
-        // candidate flag rides from here — the last point a binder's type is
-        // known — down to `cont`, where the optimizer specializes function-typed
-        // arguments. Dropped (erased) parameters are excluded too: they do not
-        // exist at runtime, so they can be neither a param nor a capture.
-        let captures = body_opened
-            .free_vars()
-            .into_iter()
-            .filter(|name| !param_names.contains(name) && !dropped.contains(name))
-            .map(|name| {
-                let type_ = infer(context, &Term::var(Var::free(&name)))?;
-                let candidate = is_candidate(context, &type_)?;
-                Ok(ersd::Argument { name, candidate })
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
-
         // A type-level function (output type `Type`) that dropped an erased
         // parameter has a type-valued body which may reference that now-absent
         // binder. A type carries no runtime content, so erase the whole body to a
@@ -113,6 +96,25 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
         } else {
             erase(context, &body_opened, &output_type)?
         };
+
+        // Captures are the *erased* body's free names — exactly what the runtime
+        // closure references — other than the lambda's own parameters. Reading the
+        // erased body (not the pre-erasure one) is what keeps a variable that
+        // survives only inside an erased position — an erased constructor field or
+        // a type-level index — from being threaded as a capture with no runtime
+        // value (which would leave `to_cont` demanding an erased value). The
+        // candidate flag rides from here — the last point a binder's type is known
+        // — down to `cont`, where the optimizer specializes function-typed args.
+        let captures = erased_body
+            .free_names()
+            .into_iter()
+            .filter(|name| !param_names.contains(name))
+            .map(|name| {
+                let type_ = infer(context, &Term::var(Var::free(&name)))?;
+                let candidate = is_candidate(context, &type_)?;
+                Ok(ersd::Argument { name, candidate })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
 
         Ok::<_, Error>((erased_body, captures))
     })?;

@@ -1,6 +1,6 @@
 use {
     super::{
-        Backpatch, Cont, ContMany, Emit, Frame, FrameEntropy, RecBody, RegionBuilder, free_names,
+        Backpatch, Cont, ContMany, Emit, Frame, FrameEntropy, RecBody, RegionBuilder,
         lower_pure_prim, lower_value_prim, rec_computed_order, unsupported_sync_rec_item,
     },
     crate::{Entropy, cont, ersd},
@@ -493,7 +493,7 @@ impl Work<'_, '_, '_> {
         let deps = computed
             .iter()
             .map(|(_, _, rhs)| {
-                free_names(rhs)
+                rhs.free_names()
                     .iter()
                     .filter_map(|name| name_to_pos.get(name.as_str()).copied())
                     .collect::<Vec<_>>()

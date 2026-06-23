@@ -1,6 +1,9 @@
 use {
     super::{Name, Prim},
-    std::{collections::BTreeMap, ops::Deref},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        ops::Deref,
+    },
 };
 
 #[derive(Debug)]
@@ -15,6 +18,89 @@ impl Term {
 
     pub fn as_subterm(&self) -> &Subterm {
         &self.inner
+    }
+
+    /// Free names of this term, treating a nested `Func` as contributing its
+    /// precomputed `captures` (the closure's free variables) rather than
+    /// descending into its body. Used to build the `rec` dependency graph in
+    /// `to_cont` and to compute a closure's captures during erasure — reading the
+    /// *erased* body's free names is what keeps an erased-only reference from
+    /// being threaded as a runtime capture.
+    pub fn free_names(&self) -> BTreeSet<String> {
+        let mut names = BTreeSet::new();
+
+        match &**self {
+            Subterm::Erased | Subterm::Unreachable | Subterm::Atom(_) => {}
+            Subterm::Name(name) => {
+                names.insert(name.as_str().to_owned());
+            }
+            Subterm::Func(func) => names.extend(func.captures.iter().map(|c| c.name.clone())),
+            Subterm::Apply(apply) => {
+                names.extend(apply.head.free_names());
+                apply
+                    .params
+                    .iter()
+                    .for_each(|param| names.extend(param.free_names()));
+            }
+            Subterm::Tuple(tuple) => tuple
+                .fields
+                .iter()
+                .for_each(|field| names.extend(field.free_names())),
+            Subterm::Proj(proj) => names.extend(proj.head.free_names()),
+            Subterm::Match(m) => {
+                names.extend(m.head.free_names());
+                m.cases
+                    .iter()
+                    .for_each(|case| names.extend(case.free_names()));
+            }
+            Subterm::NatMatch(NatMatch::Induction {
+                head,
+                zero_case,
+                pred,
+                ih,
+                succ_case,
+            }) => {
+                names.extend(head.free_names());
+                names.extend(zero_case.free_names());
+
+                let mut succ = succ_case.free_names();
+                succ.remove(pred);
+                succ.remove(ih);
+                names.extend(succ);
+            }
+            Subterm::NatMatch(NatMatch::Dispatch {
+                head,
+                cases,
+                default,
+            }) => {
+                names.extend(head.free_names());
+                cases
+                    .iter()
+                    .for_each(|(_, case)| names.extend(case.free_names()));
+                names.extend(default.free_names());
+            }
+            Subterm::Let(let_) => {
+                names.extend(let_.body.free_names());
+
+                let mut tail = let_.tail.free_names();
+                tail.remove(&let_.name);
+                names.extend(tail);
+            }
+            Subterm::Rec(rec) => {
+                let mut inner = BTreeSet::new();
+                rec.items
+                    .iter()
+                    .for_each(|item| inner.extend(item.free_names()));
+                inner.extend(rec.tail.free_names());
+                rec.names.iter().for_each(|name| {
+                    inner.remove(name);
+                });
+                names.extend(inner);
+            }
+            Subterm::Prim(prim) => names.extend(prim.free_names()),
+        }
+
+        names
     }
 }
 
