@@ -1180,6 +1180,16 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             if start_reduced == end_reduced {
                 return Ok(Subterm::Prim(Prim::Arr(Vec::new())));
             }
+            // A nested slice reassociates: `slice(slice(a, p, q), i, j) =
+            // slice(a, p + i, p + j)`. Sound for the in-range bounds real call sites
+            // produce — the `Arr` twin of `BinSlice`'s window reassociation — so a
+            // slice of a slice over a symbolic base collapses to one slice.
+            if let Subterm::Prim(Prim::ArrSlice(_inner_ty, inner, p, _q)) = &*list {
+                let lo = Term::prim(Prim::nat_add(p.clone(), start_reduced.clone()));
+                let hi = Term::prim(Prim::nat_add(p.clone(), end_reduced.clone()));
+                let flattened = Term::prim(Prim::arr_slice(type_.clone(), inner.clone(), lo, hi));
+                return reduce(context, flattened).map(Term::unwrap_or_clone);
+            }
             let s = start_reduced
                 .as_nat()
                 .and_then(|n| n.to_big_uint()?.to_usize());
@@ -1849,5 +1859,24 @@ mod tests {
             reduced(&mut context, Term::prim(Prim::bin_eql(x, y))),
             Subterm::Prim(Prim::BinEql(..)),
         ));
+    }
+
+    // A nested `Arr/slice` reassociates to one slice over the base, even when the
+    // base is symbolic: `slice(slice(xs, 1, 5), 0, 2) = slice(xs, 1, 3)` (the `Arr`
+    // twin of `BinSlice`'s window reassociation).
+    #[test]
+    fn arr_slice_reassociates_nested() {
+        let mut context = context();
+        let xs = Term::var(Var::free("xs"));
+        let inner =
+            Term::prim(Prim::arr_slice(Term::prim(Prim::NatType), xs.clone(), lit(1), lit(5)));
+        let outer = Term::prim(Prim::arr_slice(Term::prim(Prim::NatType), inner, lit(0), lit(2)));
+        assert_eq!(
+            reduced(&mut context, outer),
+            reduced(
+                &mut context,
+                Term::prim(Prim::arr_slice(Term::prim(Prim::NatType), xs.clone(), lit(1), lit(3))),
+            ),
+        );
     }
 }
