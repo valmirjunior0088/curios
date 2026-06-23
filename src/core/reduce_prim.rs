@@ -1073,6 +1073,14 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                     reduce(context, Subterm::Prim(Prim::BinConcat(distributed)).into())
                         .map(Term::unwrap_or_clone)
                 }
+                // `flatten` distributes over an outer append like `len`/`map` do:
+                // `flatten(append(base, y)) = flatten(base) ++ y` — the appended inner
+                // `Bin` is already flat, so it concatenates on directly.
+                Subterm::Prim(Prim::ArrAppend(_elem, base, y)) => {
+                    let flat = Term::prim(Prim::bin_flatten(base));
+                    reduce(context, Subterm::Prim(Prim::BinConcat(vec![flat, y])).into())
+                        .map(Term::unwrap_or_clone)
+                }
                 operand => Ok(Subterm::Prim(Prim::bin_flatten(operand))),
             }
         }
@@ -1312,6 +1320,14 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                         .collect::<Vec<Term>>();
 
                     reduce(context, Subterm::Prim(Prim::ArrConcat(type_, distributed)).into())
+                        .map(Term::unwrap_or_clone)
+                }
+                // `flatten` distributes over an outer append like `len`/`map` do:
+                // `flatten(append(base, ys)) = flatten(base) ++ ys` — the appended
+                // inner array is already flat, so it concatenates on directly.
+                Subterm::Prim(Prim::ArrAppend(_elem, base, ys)) => {
+                    let flat = Term::prim(Prim::arr_flatten(type_.clone(), base));
+                    reduce(context, Subterm::Prim(Prim::ArrConcat(type_, vec![flat, ys])).into())
                         .map(Term::unwrap_or_clone)
                 }
                 operand => Ok(Subterm::Prim(Prim::arr_flatten(type_, operand))),
@@ -1816,6 +1832,38 @@ mod tests {
         assert!(matches!(
             reduced(&mut context, Term::prim(Prim::arr_flatten(Term::prim(Prim::NatType), mixed))),
             Subterm::Prim(Prim::ArrConcat(..)),
+        ));
+
+        // `flatten` distributes over an outer append like `len`/`map`:
+        // `flatten(append(xss, [9]))` over a symbolic `xss : Arr(Arr(Nat))` reduces
+        // to `flatten(xss) ++ [9]` (an `ArrConcat`) instead of stalling.
+        let xss = Term::var(Var::free("xss"));
+        let appended = Term::prim(Prim::arr_append(
+            Term::prim(Prim::ArrType(Term::prim(Prim::NatType))),
+            xss,
+            arr(vec![lit(9)]),
+        ));
+        assert!(matches!(
+            reduced(&mut context, Term::prim(Prim::arr_flatten(Term::prim(Prim::NatType), appended))),
+            Subterm::Prim(Prim::ArrConcat(..)),
+        ));
+    }
+
+    // `Bin/flatten` distributes over an outer append too: `flatten(append(xs, \09))`
+    // over a symbolic `xs : Arr(Bin)` reduces to `flatten(xs) ++ \09` (a `BinConcat`)
+    // rather than stalling — the `Bin` twin of the `Arr/flatten` append rule.
+    #[test]
+    fn bin_flatten_distributes_over_append() {
+        let mut context = context();
+        let xs = Term::var(Var::free("xs"));
+        let appended = Term::prim(Prim::arr_append(
+            Term::prim(Prim::BinType),
+            xs,
+            Term::prim(Prim::Bin(vec![9])),
+        ));
+        assert!(matches!(
+            reduced(&mut context, Term::prim(Prim::bin_flatten(appended))),
+            Subterm::Prim(Prim::BinConcat(..)),
         ));
     }
 
