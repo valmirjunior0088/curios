@@ -1,8 +1,7 @@
 use {
     super::{
-        Apply, Arr, Bin, Carrier, Cases, Context, Field, FreeMonoid, Func, Layer, Let, Match,
-        Metavar, Nat, Prim, Proj, Rec, ReduceError, Struct, Subterm, Term, Tuple, Unary, Var,
-        reduce_prim,
+        Apply, Carrier, Cases, Context, Field, FreeMonoid, Func, Layer, Let, Match, Metavar, Nat,
+        Prim, Proj, Rec, ReduceError, Struct, Subterm, Term, Tuple, Var, reduce_prim,
     },
     num_traits::ToPrimitive,
     std::time::Instant,
@@ -247,10 +246,11 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         } => {
             let scrutinee = Term::unwrap_or_clone(reduce_forced(context, head)?);
             let layer = match &carrier {
-                Carrier::Nat => Unary::uncons(scrutinee),
-                Carrier::Bin => Bin::uncons(scrutinee),
-                Carrier::Arr(_) => Arr::uncons(scrutinee),
-            };
+                Carrier::Nat => FreeMonoid::Unary,
+                Carrier::Bin => FreeMonoid::Bin,
+                Carrier::Arr(_) => FreeMonoid::Arr,
+            }
+            .uncons(scrutinee);
 
             match layer {
                 Layer::Empty => Ok(Reduce::Continue(empty_case)),

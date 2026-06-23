@@ -2,10 +2,10 @@
 //! that are free monoids on their generators (the unary unit, bytes, elements).
 //! Their structural eliminator (`Cases::Inductive`) reduces by a one-step decode —
 //! peel the empty identity or a single leading generator off the scrutinee — and
-//! that decode is `uncons`, one method per carrier; the catamorphism driver in
+//! that decode is `uncons`, one match arm per carrier; the catamorphism driver in
 //! `reduce` consumes the `Layer` it returns and never inspects the carrier's
 //! representation again. The eliminator-side analogue of `spine::peel_prim`: a new
-//! free-monoid carrier is one `uncons` and nothing else.
+//! free-monoid carrier is one `FreeMonoid` variant and its `uncons` arm.
 //!
 //! For `Bin`, the same front decode also feeds the operation level: `Bin/get` and
 //! `Bin/slice` peel one byte at a time along a codepoint walk via `peel_first_byte`.
@@ -31,29 +31,35 @@ pub enum Layer {
     Stuck(Subterm),
 }
 
-/// A native primitive that is the free monoid on a generator set: `Nat` on the unit,
-/// `Bin` on its bytes, `Arr` on its elements. Implemented by witness types — the
-/// values live as `Subterm`s, so the method is static. `uncons` is the only seam the
-/// structural eliminator needs; the recursion scheme around it is carrier-generic
-/// and lives in `reduce`.
-pub trait FreeMonoid {
-    /// Decode one constructor layer off an already-reduced scrutinee.
-    fn uncons(scrutinee: Subterm) -> Layer;
+/// A native primitive that is the free monoid on a generator set, named by its
+/// generator: `Unary` is `Nat` on the unit, `Bin` is `Bin` on its bytes, `Arr` is
+/// `Arr` on its elements. A closed set — the value-level twin of the `Carrier` the
+/// eliminator already carries (`reduce` maps one to the other). `uncons` is the only
+/// seam the structural eliminator needs; the recursion scheme around it is
+/// carrier-generic and lives in `reduce`.
+pub enum FreeMonoid {
+    /// The free monoid on one payload-less generator: the unary naturals. `succ`
+    /// peels to its predecessor with no head.
+    Unary,
+    /// The free monoid on bytes. Its generator is a byte, reflected back into the
+    /// eliminator as a `Nat`.
+    Bin,
+    /// The free monoid on its elements. Its generator is the element term itself.
+    Arr,
 }
 
-/// The free monoid on one payload-less generator: the unary naturals. `succ` peels
-/// to its predecessor with no head.
-pub struct Unary;
+impl FreeMonoid {
+    /// Decode one constructor layer off an already-reduced scrutinee — the values
+    /// live as `Subterm`s, so the carrier is the only thing dispatched on.
+    pub fn uncons(self, scrutinee: Subterm) -> Layer {
+        match self {
+            FreeMonoid::Unary => Self::uncons_unary(scrutinee),
+            FreeMonoid::Bin => Self::uncons_bin(scrutinee),
+            FreeMonoid::Arr => Self::uncons_arr(scrutinee),
+        }
+    }
 
-/// The free monoid on bytes. Its generator is a byte, reflected back into the
-/// eliminator as a `Nat`.
-pub struct Bin;
-
-/// The free monoid on its elements. Its generator is the element term itself.
-pub struct Arr;
-
-impl FreeMonoid for Unary {
-    fn uncons(scrutinee: Subterm) -> Layer {
+    fn uncons_unary(scrutinee: Subterm) -> Layer {
         match scrutinee {
             // The identity: zero.
             Subterm::Prim(Prim::Nat(Nat::Zero)) => Layer::Empty,
@@ -74,10 +80,8 @@ impl FreeMonoid for Unary {
             stuck => Layer::Stuck(stuck),
         }
     }
-}
 
-impl FreeMonoid for Bin {
-    fn uncons(scrutinee: Subterm) -> Layer {
+    fn uncons_bin(scrutinee: Subterm) -> Layer {
         let term = scrutinee.into();
 
         match peel_front(&term) {
@@ -90,10 +94,8 @@ impl FreeMonoid for Bin {
             Front::Opaque => Layer::Stuck(Term::unwrap_or_clone(term)),
         }
     }
-}
 
-impl FreeMonoid for Arr {
-    fn uncons(scrutinee: Subterm) -> Layer {
+    fn uncons_arr(scrutinee: Subterm) -> Layer {
         match scrutinee {
             // The identity: the empty array.
             Subterm::Prim(Prim::Arr(elems)) if elems.is_empty() => Layer::Empty,

@@ -16,8 +16,8 @@ pub use prim::*;
 mod spine;
 pub use spine::*;
 
-mod monoid;
-use monoid::*;
+mod free_monoid;
+use free_monoid::*;
 
 mod names;
 pub use names::*;
