@@ -442,6 +442,40 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
 }
 
 #[test]
+fn arr_slice_is_a_monoid_citizen() {
+    // The `Arr` mirror of `bin_slice_is_a_monoid_citizen`: `Arr/slice` now rides the
+    // free-monoid spine as a measured `Window` (`core::spine`), so `split` fuses two
+    // adjacent windows of one base across their seam — the convert-level capability —
+    // while `empty` and `full` exercise the reduce-level slice identities.
+    let source = r#"
+        use /std/{Io, Str, Eq, Arr, Nat};
+        let split(@T : Type, a : Arr(T), s : Nat, m : Nat, e : Nat)
+            -> Eq(Arr/concat(Arr/slice(a, s, m), Arr/slice(a, m, e)), Arr/slice(a, s, e)) =
+            Eq/refl();
+        let empty(@T : Type, a : Arr(T), i : Nat) -> Eq(Arr/slice(a, i, i), Arr/nil()) = Eq/refl();
+        let full(@T : Type, a : Arr(T)) -> Eq(Arr/slice(a, 0, Arr/len(a)), a) = Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
+fn arr_slice_window_seam_mismatch_is_rejected() {
+    // The dual of `bin_slice_window_seam_mismatch_is_rejected`: two `Arr` windows
+    // whose seam does not meet must NOT fuse, so the concat is not convertible to the
+    // single slice and the `refl` is rejected.
+    let source = r#"
+        use /std/{Io, Str, Eq, Arr, Nat};
+        let bad(@T : Type, a : Arr(T), s : Nat, m : Nat, n : Nat, e : Nat)
+            -> Eq(Arr/concat(Arr/slice(a, s, m), Arr/slice(a, n, e)), Arr/slice(a, s, e)) =
+            Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(5), source, system).is_err());
+}
+
+#[test]
 fn bin_slice_reduces_across_a_cons_spine() {
     // Stage B foundation: `Bin/slice` reduces over a cons spine
     // (`concat(append(\\, h), t)`, the shape the `Utf8` relation builds) one byte

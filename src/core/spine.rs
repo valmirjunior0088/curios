@@ -290,17 +290,20 @@ fn bin_valued(prim: &Prim) -> bool {
     matches!(prim, Prim::Bin(_) | Prim::BinConcat(_) | Prim::BinSlice(..))
 }
 
-/// The `Arr` analogue of [`bin_valued`]: only `Arr` and `ArrConcat` carry the
-/// monoid structure (`ArrSlice`/`ArrAppend`/`ArrFlatten` stay opaque chunks).
+/// The `Arr` analogue of [`bin_valued`]: `Arr` and `ArrConcat` carry the monoid's
+/// literals and juxtaposition, and `ArrSlice` rides in as a measured `Window` (like
+/// `BinSlice`), so adjacent slices of one base fuse and equal slices cancel.
+/// `ArrAppend`/`ArrFlatten` stay opaque chunks left to the caller's comparison.
 fn arr_valued(prim: &Prim) -> bool {
-    matches!(prim, Prim::Arr(_) | Prim::ArrConcat(_, _))
+    matches!(prim, Prim::Arr(_) | Prim::ArrConcat(_, _) | Prim::ArrSlice(..))
 }
 
-/// The element type of an `ArrConcat`, for rebuilding residuals (`None` for a bare
-/// `Arr` literal, which never needs it — it rebuilds as a single run).
+/// The element type carried by an `ArrConcat` or `ArrSlice`, for rebuilding residuals
+/// (every atom of an `Arr(T)` value shares `T`, so one suffices for the whole list).
+/// `None` for a bare `Arr` literal, which rebuilds as a single run that never needs it.
 fn arr_elem(prim: &Prim) -> Option<Term> {
     match prim {
-        Prim::ArrConcat(elem, _) => Some(elem.clone()),
+        Prim::ArrConcat(elem, _) | Prim::ArrSlice(elem, ..) => Some(elem.clone()),
         _ => None,
     }
 }
@@ -344,6 +347,10 @@ fn arr_collect_prim(prim: &Prim, out: &mut Vec<Atom<Term>>) {
     match prim {
         Prim::Arr(elems) => push(out, Atom::Literal(elems.clone())),
         Prim::ArrConcat(_, operands) => operands.iter().for_each(|op| arr_collect_term(op, out)),
+        Prim::ArrSlice(_, base, lo, hi) => push(
+            out,
+            Atom::Window { base: base.clone(), lo: lo.clone(), hi: hi.clone() },
+        ),
         other => push(out, Atom::Symbolic(Term::prim(other.clone()))),
     }
 }
@@ -373,23 +380,36 @@ fn reassemble_bin(atoms: VecDeque<Atom<u8>>) -> Term {
 }
 
 /// Rebuild an `Arr` term from a residual segment list — [`reassemble_bin`] over
-/// element runs, restoring the element type a multi-segment `ArrConcat` carries.
-/// `elem` is `Some` whenever the residual has more than one segment (such a
-/// residual can only come from an input `ArrConcat`).
+/// element runs, restoring the element type `Arr`'s `ArrConcat`/`ArrSlice` carry.
+/// `elem` is `Some` whenever the residual has more than one segment or holds a slice
+/// window — both can only come from an input carrying the element type.
 fn reassemble_arr(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
-    let into_term = |atom| match atom {
-        Atom::Literal(elems) => Term::prim(Prim::Arr(elems)),
-        // `arr_collect_prim` leaves `ArrSlice` opaque (a `Symbolic`), so the `Arr` spine
-        // never produces a window — only `Bin/slice` is a first-class citizen today.
-        Atom::Window { .. } => unreachable!("the Arr spine produces no slice windows"),
-        Atom::Symbolic(term) => term,
-    };
+    fn into_term(atom: Atom<Term>, elem: &Option<Term>) -> Term {
+        match atom {
+            Atom::Literal(elems) => Term::prim(Prim::Arr(elems)),
+            // A slice window rebuilds with the value's element type, threaded through
+            // `elem` (every atom of an `Arr(T)` shares `T`).
+            Atom::Window { base, lo, hi } => {
+                let elem = elem
+                    .clone()
+                    .expect("an Arr slice window carries its element type via `elem`");
+
+                Term::prim(Prim::arr_slice(elem, base, lo, hi))
+            }
+            Atom::Symbolic(term) => term,
+        }
+    }
 
     match atoms.len() {
-        1 => into_term(atoms.into_iter().next().unwrap()),
+        1 => into_term(atoms.into_iter().next().unwrap(), &elem),
         _ => {
+            let parts = atoms
+                .into_iter()
+                .map(|atom| into_term(atom, &elem))
+                .collect::<Vec<Term>>();
             let elem = elem.expect("a multi-segment Arr residual implies an ArrConcat operand");
-            Term::prim(Prim::ArrConcat(elem, atoms.into_iter().map(into_term).collect()))
+
+            Term::prim(Prim::ArrConcat(elem, parts))
         }
     }
 }
