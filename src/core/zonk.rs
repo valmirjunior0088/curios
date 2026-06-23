@@ -580,29 +580,26 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
     })
 }
 
-/// Telescopes and the unit body carry term operands too. A small trait threads
-/// `zonk` uniformly over `Telescope<Term>` (a `FuncType`) and `Telescope<()>`
-/// (a `TupleType`, whose trailing body is `()`), mirroring `CollectMetavars`.
-trait Zonk: Sized {
-    fn zonk(&self, context: &Context) -> Result<Self, Error>;
-}
-
-impl Zonk for () {
-    fn zonk(&self, _: &Context) -> Result<Self, Error> {
-        Ok(())
-    }
-}
-
-impl Zonk for Term {
-    fn zonk(&self, context: &Context) -> Result<Self, Error> {
-        zonk_term(context, self)
-    }
-}
-
-impl<B: Zonk + Bound> Zonk for Telescope<B> {
+impl Telescope<Term> {
+    /// Zonk a function/Π telescope (`Func`/`FuncType`): its parameter types and
+    /// its trailing body/return type, which is a real term to recurse into.
     fn zonk(&self, context: &Context) -> Result<Self, Error> {
         match self {
-            Telescope::Done(body) => Ok(Telescope::Done(body.zonk(context)?.into())),
+            Telescope::Done(body) => Ok(Telescope::Done(zonk_term(context, body)?.into())),
+            Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
+                zonk_term(context, ty)?,
+                enter_scope(rest, |inner| inner.zonk(context))?,
+            )),
+        }
+    }
+}
+
+impl Telescope<()> {
+    /// Zonk a Σ telescope (`TupleType`): only its field types — its `Done` body
+    /// is `()`, which carries no metavariables and is rebuilt as-is.
+    fn zonk(&self, context: &Context) -> Result<Self, Error> {
+        match self {
+            Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
             Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
                 zonk_term(context, ty)?,
                 enter_scope(rest, |inner| inner.zonk(context))?,

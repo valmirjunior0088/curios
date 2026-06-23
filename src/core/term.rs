@@ -1253,7 +1253,7 @@ impl Subterm {
         }
     }
 
-    fn collect_metavars(&self, ids: &mut BTreeSet<usize>) {
+    pub fn collect_metavars(&self, ids: &mut BTreeSet<usize>) {
         match self {
             Subterm::Metavar(Metavar { id, spine, .. }) => {
                 ids.insert(*id);
@@ -1261,13 +1261,13 @@ impl Subterm {
             }
             Subterm::Type | Subterm::Var(_) => {}
             Subterm::Prim(prim) => prim_metavars(prim, ids),
-            Subterm::Func(Func { telescope }) => telescope_metavars(telescope, ids),
-            Subterm::FuncType(FuncType { telescope, .. }) => telescope_metavars(telescope, ids),
+            Subterm::Func(Func { telescope }) => telescope.collect_metavars(ids),
+            Subterm::FuncType(FuncType { telescope, .. }) => telescope.collect_metavars(ids),
             Subterm::Apply(Apply { head, params, .. }) => {
                 head.collect_metavars(ids);
                 params.iter().for_each(|p| p.collect_metavars(ids));
             }
-            Subterm::TupleType(TupleType { telescope, .. }) => telescope_metavars(telescope, ids),
+            Subterm::TupleType(TupleType { telescope, .. }) => telescope.collect_metavars(ids),
             Subterm::Tuple(Tuple { fields, .. }) => {
                 fields.iter().for_each(|f| f.collect_metavars(ids));
             }
@@ -1359,36 +1359,6 @@ impl Subterm {
             }
         }
     }
-}
-
-fn telescope_metavars<B>(telescope: &Telescope<B>, ids: &mut BTreeSet<usize>)
-where
-    B: Bound + CollectMetavars,
-{
-    match telescope {
-        Telescope::Cons(ty, rest) => {
-            ty.collect_metavars(ids);
-            telescope_metavars(rest.body(), ids);
-        }
-        Telescope::Done(body) => body.collect_metavars(ids),
-    }
-}
-
-/// Helper so `telescope_metavars` works uniformly over `Telescope<Term>` (a
-/// `FuncType`'s body is a `Term`) and `Telescope<()>` (a `TupleType` has no
-/// trailing body term).
-trait CollectMetavars {
-    fn collect_metavars(&self, ids: &mut BTreeSet<usize>);
-}
-
-impl CollectMetavars for Term {
-    fn collect_metavars(&self, ids: &mut BTreeSet<usize>) {
-        (**self).collect_metavars(ids);
-    }
-}
-
-impl CollectMetavars for () {
-    fn collect_metavars(&self, _: &mut BTreeSet<usize>) {}
 }
 
 // Walk a function/Π telescope (`Func`/`FuncType`): the parameter types and the
