@@ -7,11 +7,12 @@
 //! representation again. The eliminator-side analogue of `spine::peel_prim`: a new
 //! free-monoid carrier is one `FreeMonoid` variant and its `uncons` arm.
 //!
-//! For `Bin`, the same front decode also feeds the operation level: `Bin/get` and
-//! `Bin/slice` peel one byte at a time along a codepoint walk via `peel_first_byte`.
-//! Both destructors share one structural traversal, `peel_front`, differing only in
-//! how they reflect the peeled head — a `Nat` byte for the eliminator, a one-byte
-//! `Bin` chunk for the operations.
+//! For `Bin` and `Arr`, the same front decode also feeds the operation level:
+//! `Bin/get`/`Bin/slice` and `Arr/get`/`Arr/slice` peel one generator at a time via
+//! `peel_first_byte`/`peel_first_elem`. Each carrier's two destructors share one
+//! structural traversal (`peel_front`, `peel_front_arr`); `Bin` reflects the peeled
+//! head two ways — a `Nat` byte for the eliminator, a one-byte `Bin` chunk for the
+//! operations — while `Arr`'s head is the element term for both.
 
 use {
     super::{Nat, Prim, Subterm, Term},
@@ -96,41 +97,16 @@ impl FreeMonoid {
     }
 
     fn uncons_arr(scrutinee: Subterm) -> Layer {
-        match scrutinee {
-            // The identity: the empty array.
-            Subterm::Prim(Prim::Arr(elems)) if elems.is_empty() => Layer::Empty,
-            // A literal run: peel the leading element directly.
-            Subterm::Prim(Prim::Arr(mut elems)) => Layer::Cons {
-                head: Some(elems.remove(0)),
-                tail: Subterm::Prim(Prim::Arr(elems)).into(),
+        let term = scrutinee.into();
+
+        match peel_front_arr(&term) {
+            ArrFront::Empty => Layer::Empty,
+            // The peeled element is the eliminator's head generator directly.
+            ArrFront::Cons { head, tail } => Layer::Cons {
+                head: Some(head),
+                tail,
             },
-            // A symbolic cons `cons(x, xs) = concat([x], xs)`: decode `x` off the
-            // leading non-empty literal segment; its remaining elements stay ahead
-            // of the rest exactly as `ArrConcat` collapses them.
-            Subterm::Prim(Prim::ArrConcat(concat_elem, mut segments))
-                if segments.first().is_some_and(is_nonempty_arr_literal) =>
-            {
-                let mut lead = match Term::unwrap_or_clone(segments.remove(0)) {
-                    Subterm::Prim(Prim::Arr(elems)) => elems,
-                    _ => unreachable!("guard checked a non-empty `Arr` literal lead segment"),
-                };
-
-                let head = lead.remove(0);
-
-                if !lead.is_empty() {
-                    segments.insert(0, Subterm::Prim(Prim::Arr(lead)).into());
-                }
-
-                Layer::Cons {
-                    head: Some(head),
-                    tail: match segments.len() {
-                        0 => Subterm::Prim(Prim::Arr(vec![])).into(),
-                        1 => segments.into_iter().next().unwrap(),
-                        _ => Subterm::Prim(Prim::ArrConcat(concat_elem, segments)).into(),
-                    },
-                }
-            }
-            stuck => Layer::Stuck(stuck),
+            ArrFront::Opaque => Layer::Stuck(Term::unwrap_or_clone(term)),
         }
     }
 }
@@ -239,6 +215,73 @@ pub fn peel_first_byte(bin: &Term) -> Option<(Term, Term)> {
     match peel_front(bin) {
         Front::Cons { head, tail } => Some((head.into_chunk(), tail)),
         Front::Empty | Front::Opaque => None,
+    }
+}
+
+/// One step of the `Arr` front decode — the element-typed analogue of [`Front`].
+/// `Empty` is the identity (`[]`); `Cons` peels the leading element and the residual
+/// tail; `Opaque` is a value exposing no leading element (a variable, a slice, an
+/// append). Unlike `Bin`, the head needs no reflection — an `Arr` generator IS its
+/// element term, used directly by both the eliminator and the operations.
+enum ArrFront {
+    Empty,
+    Cons { head: Term, tail: Term },
+    Opaque,
+}
+
+/// The structural traversal shared by both `Arr` destructors ([`FreeMonoid::uncons`]
+/// for the eliminator, [`peel_first_elem`] for `Arr/get`/`Arr/slice`) — the
+/// element-typed twin of [`peel_front`]. Peel the leading element off an
+/// already-reduced value: a literal run yields its first element; a symbolic cons
+/// `concat([h], t)` yields `h` off its leading non-empty literal segment, the
+/// residual elements rejoining the rest exactly as `ArrConcat` collapses them. The
+/// empty array is `Empty`; anything else (a variable, a slice, an append) is `Opaque`.
+fn peel_front_arr(arr: &Term) -> ArrFront {
+    match &**arr {
+        Subterm::Prim(Prim::Arr(elems)) => match elems.split_first() {
+            None => ArrFront::Empty,
+            Some((head, rest)) => ArrFront::Cons {
+                head: head.clone(),
+                tail: Subterm::Prim(Prim::Arr(rest.to_vec())).into(),
+            },
+        },
+        // A symbolic cons: decode the head off the leading non-empty literal segment;
+        // its remaining elements stay ahead of the rest.
+        Subterm::Prim(Prim::ArrConcat(elem, segments)) => match segments.split_first() {
+            Some((first, rest)) if is_nonempty_arr_literal(first) => {
+                let mut lead = match &**first {
+                    Subterm::Prim(Prim::Arr(elems)) => elems.clone(),
+                    _ => unreachable!("guard checked a non-empty `Arr` literal lead segment"),
+                };
+                let head = lead.remove(0);
+
+                let mut segments = Vec::with_capacity(rest.len() + 1);
+                if !lead.is_empty() {
+                    segments.push(Subterm::Prim(Prim::Arr(lead)).into());
+                }
+                segments.extend(rest.iter().cloned());
+                let tail = match segments.len() {
+                    0 => Subterm::Prim(Prim::Arr(vec![])).into(),
+                    1 => segments.into_iter().next().unwrap(),
+                    _ => Subterm::Prim(Prim::ArrConcat(elem.clone(), segments)).into(),
+                };
+                ArrFront::Cons { head, tail }
+            }
+            _ => ArrFront::Opaque,
+        },
+        _ => ArrFront::Opaque,
+    }
+}
+
+/// Split the first element off a reduced `Arr` value, returning the head element and
+/// the residual tail — the element-typed twin of [`peel_first_byte`]. Lets `Arr/get`
+/// and `Arr/slice` peel a symbolic cons one element at a time, exactly as `Bin/get`/
+/// `Bin/slice` walk a byte at a time. `None` for the empty array or an opaque
+/// symbolic value, where no first element is statically exposed.
+pub fn peel_first_elem(arr: &Term) -> Option<(Term, Term)> {
+    match peel_front_arr(arr) {
+        ArrFront::Cons { head, tail } => Some((head, tail)),
+        ArrFront::Empty | ArrFront::Opaque => None,
     }
 }
 

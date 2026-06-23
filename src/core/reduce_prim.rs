@@ -2,6 +2,7 @@ use {
     super::reduce,
     crate::core::{
         Context, Flt, Int, Nat, Prim, ReduceError, Subterm, Term, normalize_concat, peel_first_byte,
+        peel_first_elem,
     },
     num_traits::{ToPrimitive, Zero},
     std::cmp::Ordering,
@@ -1077,50 +1078,104 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             let i = index_reduced
                 .as_nat()
                 .and_then(|n| n.to_big_uint()?.to_usize());
-            Ok(match (Term::unwrap_or_clone(list), i) {
-                (Subterm::Prim(Prim::Arr(elems)), Some(i)) => {
-                    let len = elems.len();
-                    match elems.into_iter().nth(i).map(Term::unwrap_or_clone) {
-                        Some(elem) => elem,
-                        None => {
-                            return Err(ReduceError::ArrGetOutOfBounds {
-                                len,
-                                index: i,
-                                span: index.span(),
-                            });
-                        }
+            // A concrete index into a literal run.
+            if let (Subterm::Prim(Prim::Arr(elems)), Some(i)) = (&*list, i) {
+                let len = elems.len();
+                return match elems.get(i).cloned().map(Term::unwrap_or_clone) {
+                    Some(elem) => Ok(elem),
+                    None => Err(ReduceError::ArrGetOutOfBounds {
+                        len,
+                        index: i,
+                        span: index.span(),
+                    }),
+                };
+            }
+            // A get over a cons spine peels one element per `0`/`succ` index step,
+            // the `Arr` twin of `BinGet`'s byte peel:
+            //   `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
+            if let Some((head, tail)) = peel_first_elem(&list) {
+                match &*index_reduced {
+                    Subterm::Prim(Prim::Nat(Nat::Zero)) => return Ok(Term::unwrap_or_clone(head)),
+                    Subterm::Prim(Prim::Nat(Nat::Succ(..))) => {
+                        let one = Term::prim(Prim::Nat(Nat::new(1usize)));
+                        let prev = Term::prim(Prim::nat_sub(index_reduced.clone(), one));
+                        return reduce(context, Term::prim(Prim::arr_get(type_, tail, prev)))
+                            .map(Term::unwrap_or_clone);
                     }
+                    _ => {}
                 }
-                (list, _) => Subterm::Prim(Prim::arr_get(type_, list, index_reduced)),
-            })
+            }
+            Ok(Subterm::Prim(Prim::arr_get(type_, list, index_reduced)))
         }
         Prim::ArrSlice(type_, list, start, end) => {
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
             let start_reduced = reduce(context, start.clone())?;
             let end_reduced = reduce(context, end.clone())?;
+            // The empty slice is empty: `slice(a, i, i) = []`. Sound for a symbolic
+            // `a` — an empty range yields no elements regardless — and the base case
+            // the cons peel below bottoms out on (the `Arr` twin of `BinSlice`'s
+            // empty-slice identity).
+            if start_reduced == end_reduced {
+                return Ok(Subterm::Prim(Prim::Arr(Vec::new())));
+            }
             let s = start_reduced
                 .as_nat()
                 .and_then(|n| n.to_big_uint()?.to_usize());
             let e = end_reduced
                 .as_nat()
                 .and_then(|n| n.to_big_uint()?.to_usize());
-            Ok(match (Term::unwrap_or_clone(list), s, e) {
-                (Subterm::Prim(Prim::Arr(elems)), Some(s), Some(e)) => match elems.get(s..e) {
-                    Some(slice) => Subterm::Prim(Prim::Arr(slice.to_vec())),
-                    None => {
-                        return Err(ReduceError::ArrSliceOutOfRange {
-                            len: elems.len(),
-                            start: s,
-                            end: e,
-                            span: start.span().or_else(|| end.span()),
-                        });
+            // A concrete slice of a literal run.
+            if let (Subterm::Prim(Prim::Arr(elems)), Some(s), Some(e)) = (&*list, s, e) {
+                return match elems.get(s..e) {
+                    Some(slice) => Ok(Subterm::Prim(Prim::Arr(slice.to_vec()))),
+                    None => Err(ReduceError::ArrSliceOutOfRange {
+                        len: elems.len(),
+                        start: s,
+                        end: e,
+                        span: start.span().or_else(|| end.span()),
+                    }),
+                };
+            }
+            // A slice over a cons spine peels one element per `0`/`succ` boundary
+            // step, the `Arr` twin of `BinSlice`'s byte peel:
+            //   `slice(cons(h, t), 0, succ e) = [h] ++ slice(t, 0, e)`  and
+            //   `slice(cons(h, t), succ s, e) = slice(t, s - 1, e - 1)`.
+            if let Some((head, tail)) = peel_first_elem(&list) {
+                let dec = |n: &Term| {
+                    let one = Term::prim(Prim::Nat(Nat::new(1usize)));
+                    Term::prim(Prim::nat_sub(n.clone(), one))
+                };
+                match (&*start_reduced, &*end_reduced) {
+                    (
+                        Subterm::Prim(Prim::Nat(Nat::Zero)),
+                        Subterm::Prim(Prim::Nat(Nat::Succ(..))),
+                    ) => {
+                        let zero = Term::prim(Prim::Nat(Nat::Zero));
+                        let rest =
+                            Term::prim(Prim::arr_slice(type_.clone(), tail, zero, dec(&end_reduced)));
+                        let head_singleton: Term = Subterm::Prim(Prim::Arr(vec![head])).into();
+                        let consed = Term::prim(Prim::arr_concat(type_, [head_singleton, rest]));
+                        return reduce(context, consed).map(Term::unwrap_or_clone);
                     }
-                },
-                (list, _, _) => {
-                    Subterm::Prim(Prim::arr_slice(type_, list, start_reduced, end_reduced))
+                    (Subterm::Prim(Prim::Nat(Nat::Succ(..))), _) => {
+                        let sliced = Term::prim(Prim::arr_slice(
+                            type_,
+                            tail,
+                            dec(&start_reduced),
+                            dec(&end_reduced),
+                        ));
+                        return reduce(context, sliced).map(Term::unwrap_or_clone);
+                    }
+                    _ => {}
                 }
-            })
+            }
+            Ok(Subterm::Prim(Prim::arr_slice(
+                type_,
+                list,
+                start_reduced,
+                end_reduced,
+            )))
         }
         Prim::ArrAppend(type_, list, elem) => {
             let type_ = reduce(context, type_.clone())?;
@@ -1484,5 +1539,53 @@ mod tests {
             reduced(&mut context, Term::prim(Prim::nat_mul(x(), x()))),
             Subterm::Prim(Prim::NatMul(..)),
         ));
+    }
+
+    // `cons(7, xs) = [7] ++ xs` over a symbolic tail `xs` — the symbolic cons
+    // `Arr/get` and `Arr/slice` previously could not peel (they folded only literal
+    // arrays), now decoded one element at a time like their `Bin` twins.
+    fn arr_cons_seven(xs: &Term) -> Term {
+        Term::prim(Prim::arr_concat(
+            Term::prim(Prim::NatType),
+            [Term::prim(Prim::Arr(vec![lit(7)])), xs.clone()],
+        ))
+    }
+
+    #[test]
+    fn arr_get_peels_symbolic_cons() {
+        let mut context = context();
+        let nat = || Term::prim(Prim::NatType);
+        let cons = arr_cons_seven(&Term::var(Var::free("xs")));
+
+        // `get(cons(7, xs), 0) = 7`.
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::arr_get(nat(), cons.clone(), lit(0)))),
+            Subterm::Prim(Prim::Nat(Nat::new(7usize))),
+        );
+
+        // `get(cons(7, xs), 1)` peels to `get(xs, 0)` — neutral over a symbolic tail.
+        assert!(matches!(
+            reduced(&mut context, Term::prim(Prim::arr_get(nat(), cons, lit(1)))),
+            Subterm::Prim(Prim::ArrGet(..)),
+        ));
+    }
+
+    #[test]
+    fn arr_slice_peels_symbolic_cons() {
+        let mut context = context();
+        let nat = || Term::prim(Prim::NatType);
+        let cons = arr_cons_seven(&Term::var(Var::free("xs")));
+
+        // `slice(cons(7, xs), 0, 1) = [7] ++ slice(xs, 0, 0) = [7]`.
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::arr_slice(nat(), cons.clone(), lit(0), lit(1)))),
+            Subterm::Prim(Prim::Arr(vec![lit(7)])),
+        );
+
+        // `slice(cons(7, xs), 1, 1) = []` — the empty-slice identity.
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::arr_slice(nat(), cons, lit(1), lit(1)))),
+            Subterm::Prim(Prim::Arr(Vec::new())),
+        );
     }
 }
