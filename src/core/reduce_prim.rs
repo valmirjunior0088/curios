@@ -389,13 +389,35 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             }
             Ok(Subterm::Prim(Prim::nat_sub(left, right)))
         }
-        Prim::NatMul(left, right) => reduce_nat_binary(
-            context,
-            left,
-            right,
-            |l, r| l.checked_mul(r).map(Prim::Nat),
-            Prim::NatMul,
-        ),
+        // Multiplication distributes a literal factor over the other operand's
+        // successor floor: `(it + st) · c = (it · c) + (st · c)`. The literal floors
+        // multiply out; the symbolic tail rides as a neutral `mul` (or drops when it
+        // is zero, which folds two literals). The multiplicative twin of `NatAdd`'s
+        // floor law — it lets `n · k` extract `k` past a symbolic `n` (`(x + 1) · 2 =
+        // x · 2 + 2`) the same way `n + k` does. Whichever side is the literal drives;
+        // two symbolic operands have no literal factor, so the product stays neutral.
+        Prim::NatMul(left, right) => {
+            let left = reduce(context, left.clone())?;
+            let right = reduce(context, right.clone())?;
+            let (sl, il) = Nat::decompose(&left);
+            let (sr, ir) = Nat::decompose(&right);
+
+            if Nat::is_zero(&ir) {
+                // right is the literal `sr`: distribute over the left floor.
+                let inner = match Nat::is_zero(&il) {
+                    true => il,
+                    false => Term::prim(Prim::nat_mul(il, right.clone())),
+                };
+                return Ok(Term::unwrap_or_clone(Nat::rebuild(sl * sr, inner)));
+            }
+            if Nat::is_zero(&il) {
+                // left is the literal `sl`, right symbolic: distribute over the right
+                // floor.
+                let inner = Term::prim(Prim::nat_mul(left.clone(), ir));
+                return Ok(Term::unwrap_or_clone(Nat::rebuild(sl * sr, inner)));
+            }
+            Ok(Subterm::Prim(Prim::nat_mul(left, right)))
+        }
         Prim::NatLt(left, right) => reduce_nat_compare(
             context,
             left,
@@ -1410,6 +1432,57 @@ mod tests {
         assert!(matches!(
             reduced(&mut context, Term::prim(Prim::nat_lt(lit(2), succ(succ(x()))))),
             Subterm::Prim(Prim::NatLt(..)),
+        ));
+    }
+
+    // Soundness gate for the distributing `Nat/mul`: on closed inputs it must still
+    // agree with the host product — the literal fold the floor distribution
+    // subsumes (`il = ir = 0`, so only the floors `sl · sr` remain).
+    #[test]
+    fn mul_agrees_with_literal_product() {
+        let mut context = context();
+        let samples = [0u32, 1, 2, 7, 13, 100];
+        for &a in &samples {
+            for &b in &samples {
+                assert_eq!(
+                    reduced(&mut context, Term::prim(Prim::nat_mul(lit(a), lit(b)))),
+                    Subterm::Prim(Prim::Nat(Nat::new((a * b) as usize))),
+                    "mul disagreed with the literal product on ({a}, {b})",
+                );
+            }
+        }
+    }
+
+    // `Nat/mul` distributes a literal factor over a symbolic successor floor, the
+    // multiplicative twin of `NatAdd`'s floor law: `(x + 1) · c` and `x · c + c`
+    // reduce to the same normal form (either side may be the literal). Two symbolic
+    // operands have no literal factor, so the product stays neutral.
+    #[test]
+    fn mul_distributes_literal_over_symbolic_floor() {
+        let mut context = context();
+
+        // `(x + 1) · 2 = x · 2 + 2`.
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::nat_mul(succ(x()), lit(2)))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::nat_add(Term::prim(Prim::nat_mul(x(), lit(2))), lit(2))),
+            ),
+        );
+
+        // Commutative: `2 · (x + 1) = 2 · x + 2`.
+        assert_eq!(
+            reduced(&mut context, Term::prim(Prim::nat_mul(lit(2), succ(x())))),
+            reduced(
+                &mut context,
+                Term::prim(Prim::nat_add(Term::prim(Prim::nat_mul(lit(2), x())), lit(2))),
+            ),
+        );
+
+        // No literal factor ⇒ neutral.
+        assert!(matches!(
+            reduced(&mut context, Term::prim(Prim::nat_mul(x(), x()))),
+            Subterm::Prim(Prim::NatMul(..)),
         ));
     }
 }

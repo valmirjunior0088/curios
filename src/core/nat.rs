@@ -32,25 +32,6 @@ impl Nat {
         }
     }
 
-    pub fn checked_add(self, other: Self) -> Option<Self> {
-        Some(Self::new(self.to_big_uint()? + other.to_big_uint()?))
-    }
-
-    pub fn checked_sub(self, other: Self) -> Option<Self> {
-        let left = self.to_big_uint()?;
-        let right = other.to_big_uint()?;
-
-        Some(Self::new(if left >= right {
-            left - right
-        } else {
-            BigUint::zero()
-        }))
-    }
-
-    pub fn checked_mul(self, other: Self) -> Option<Self> {
-        Some(Self::new(self.to_big_uint()? * other.to_big_uint()?))
-    }
-
     /// `None` on a symbolic operand *or* a zero divisor — never a panic; the
     /// reducer reports the zero-divisor case before folding.
     pub fn checked_div(self, other: Self) -> Option<Self> {
@@ -72,7 +53,7 @@ impl Nat {
     /// Unbounded bitwise `and`/`or`/`xor` on the infinite binary expansion. The
     /// type level pretends ℕ, so these impose no 31-bit limit; the runtime's
     /// i31 carrier is enforced only in the backend. `None` on a symbolic
-    /// operand, like [`Nat::checked_add`].
+    /// operand, like [`Nat::checked_div`].
     pub fn checked_bitand(self, other: Self) -> Option<Self> {
         Some(Self::new(self.to_big_uint()? & other.to_big_uint()?))
     }
