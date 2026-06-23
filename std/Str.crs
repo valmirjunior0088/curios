@@ -195,6 +195,36 @@ pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(k, 
         end;
     on_k(w);
 
+pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(0, lo, hi), t)) -> Void =
+    match w : (w : Utf8(q, y)) => Void
+    | more(c, st, t2, rest) =>
+        let on_range =
+            match Nat/in_range(c, lo, hi) : (r) =>
+                (rest : Utf8(match r
+                    | false => Scan/bad()
+                    | true => Scan/cont(0, 0x80, 0xBF)
+                    end, t2))
+                    -> Void
+            | false => (rest) => bad_uninhabited(@t2, rest)
+            | true => (rest) => cont0_uninhabited(@0x80, @0xBF, @t2, rest)
+            end;
+        on_range(rest)
+    end;
+
+pub rec take_conts(b : Bin, off : Nat, remaining : Nat, acc : Nat,
+    @bound : Nat/Le(Nat/add(off, remaining), Bin/len(b))) -> {Nat, Nat} =
+    let go =
+        match remaining : (remaining) =>
+            (bound : Nat/Le(Nat/add(off, remaining), Bin/len(b))) -> {Nat, Nat}
+        | 0 => (bound) => (acc, off)
+        | pred + 1, ih => (bound) =>
+            take_conts(b, Nat/succ(off), pred,
+                Nat/add(Nat/mul(acc, 0x40), Nat/sub(Bin/at(b, off,
+                    Nat/lt_of_le_succ(Nat/le_trans(Nat/Le/s(Nat/le_add_r(off, pred)), bound))), 0x80)),
+                @bound)
+        end;
+    go(bound);
+
 pub rec slice_get_zero(b : Bin, off : Nat, ok : Nat/Lt(off, Bin/len(b)))
     -> Eq(Bin/get(Bin/slice(b, off, Bin/len(b)), 0), Bin/get(b, off)) =
     let on_b =
