@@ -291,19 +291,26 @@ fn bin_valued(prim: &Prim) -> bool {
 }
 
 /// The `Arr` analogue of [`bin_valued`]: `Arr` and `ArrConcat` carry the monoid's
-/// literals and juxtaposition, and `ArrSlice` rides in as a measured `Window` (like
-/// `BinSlice`), so adjacent slices of one base fuse and equal slices cancel.
-/// `ArrAppend`/`ArrFlatten` stay opaque chunks left to the caller's comparison.
+/// literals and juxtaposition, `ArrSlice` rides in as a measured `Window` (like
+/// `BinSlice`), and `ArrAppend` rides in as its base followed by a length-1 literal
+/// run — so `append(xs, e) ≡ concat(xs, single(e))`. `ArrFlatten` stays an opaque
+/// chunk left to the caller's comparison.
 fn arr_valued(prim: &Prim) -> bool {
-    matches!(prim, Prim::Arr(_) | Prim::ArrConcat(_, _) | Prim::ArrSlice(..))
+    matches!(
+        prim,
+        Prim::Arr(_) | Prim::ArrConcat(_, _) | Prim::ArrSlice(..) | Prim::ArrAppend(..)
+    )
 }
 
-/// The element type carried by an `ArrConcat` or `ArrSlice`, for rebuilding residuals
-/// (every atom of an `Arr(T)` value shares `T`, so one suffices for the whole list).
-/// `None` for a bare `Arr` literal, which rebuilds as a single run that never needs it.
+/// The element type carried by an `ArrConcat`, `ArrSlice`, or `ArrAppend`, for
+/// rebuilding residuals (every atom of an `Arr(T)` value shares `T`, so one suffices
+/// for the whole list). `None` for a bare `Arr` literal, which rebuilds as a single
+/// run that never needs it.
 fn arr_elem(prim: &Prim) -> Option<Term> {
     match prim {
-        Prim::ArrConcat(elem, _) | Prim::ArrSlice(elem, ..) => Some(elem.clone()),
+        Prim::ArrConcat(elem, _) | Prim::ArrSlice(elem, ..) | Prim::ArrAppend(elem, ..) => {
+            Some(elem.clone())
+        }
         _ => None,
     }
 }
@@ -351,6 +358,13 @@ fn arr_collect_prim(prim: &Prim, out: &mut Vec<Atom<Term>>) {
             out,
             Atom::Window { base: base.clone(), lo: lo.clone(), hi: hi.clone() },
         ),
+        // `append(base, e) = base ++ [e]`: decode the base, then the appended element
+        // as a length-1 literal run, so it merges with an abutting run and unifies
+        // with `concat(base, single(e))`.
+        Prim::ArrAppend(_, base, elem) => {
+            arr_collect_term(base, out);
+            push(out, Atom::Literal(vec![elem.clone()]));
+        }
         other => push(out, Atom::Symbolic(Term::prim(other.clone()))),
     }
 }

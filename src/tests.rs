@@ -460,6 +460,21 @@ fn arr_slice_is_a_monoid_citizen() {
 }
 
 #[test]
+fn arr_append_is_concat_with_a_single() {
+    // `Arr/append` now rides the spine as `base ++ [e]` (`core::spine`), so it
+    // converts to the `concat`-with-`single` form by `refl` even for a symbolic base
+    // and element — `append(xs, y) ≡ concat(xs, single(y))`.
+    let source = r#"
+        use /std/{Io, Str, Eq, Arr};
+        let law(@T : Type, xs : Arr(T), y : T)
+            -> Eq(Arr/concat(xs, Arr/single(y)), Arr/append(xs, y)) =
+            Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
 fn arr_slice_window_seam_mismatch_is_rejected() {
     // The dual of `bin_slice_window_seam_mismatch_is_rejected`: two `Arr` windows
     // whose seam does not meet must NOT fuse, so the concat is not convertible to the
