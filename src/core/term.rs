@@ -126,38 +126,19 @@ impl Term {
         T: Into<Term>,
         O: Into<Term>,
     {
-        Self::func_type_quantified(
-            params
-                .into_iter()
-                .map(|(plicity, label, type_)| (plicity, Quantity::Omega, label, type_)),
-            output,
-        )
-    }
-
-    pub fn func_type_quantified<I, L, T, O>(params: I, output: O) -> Self
-    where
-        I: IntoIterator<Item = (Plicity, Quantity, L, T)>,
-        L: Into<String>,
-        T: Into<Term>,
-        O: Into<Term>,
-    {
         let mut plicities = Vec::new();
-        let mut quantities = Vec::new();
         let telescope = Telescope::build(
-            params.into_iter().map(|(plicity, quantity, label, type_)| {
+            params.into_iter().map(|(plicity, label, type_)| {
                 plicities.push(plicity);
-                quantities.push(quantity);
                 (label, type_)
             }),
             output.into(),
         );
         assert_eq!(plicities.len(), telescope.len());
-        assert_eq!(quantities.len(), telescope.len());
 
         Self::from(Subterm::FuncType(FuncType {
             telescope,
             plicities,
-            quantities,
         }))
     }
 
@@ -206,7 +187,6 @@ impl Term {
     pub fn tuple_type_unit() -> Self {
         Self::from(Subterm::TupleType(TupleType {
             telescope: Telescope::done(()),
-            quantities: Vec::new(),
         }))
     }
 
@@ -216,33 +196,9 @@ impl Term {
         L: Into<String>,
         T: Into<Term>,
     {
-        Self::tuple_type_quantified(
-            fields
-                .into_iter()
-                .map(|(label, type_)| (Quantity::Omega, label, type_)),
-        )
-    }
+        let telescope = Telescope::build(fields, ());
 
-    pub fn tuple_type_quantified<I, L, T>(fields: I) -> Self
-    where
-        I: IntoIterator<Item = (Quantity, L, T)>,
-        L: Into<String>,
-        T: Into<Term>,
-    {
-        let mut quantities = Vec::new();
-        let telescope = Telescope::build(
-            fields.into_iter().map(|(quantity, label, type_)| {
-                quantities.push(quantity);
-                (label, type_)
-            }),
-            (),
-        );
-        assert_eq!(quantities.len(), telescope.len());
-
-        Self::from(Subterm::TupleType(TupleType {
-            telescope,
-            quantities,
-        }))
+        Self::from(Subterm::TupleType(TupleType { telescope }))
     }
 
     pub fn tuple_unit() -> Self {
@@ -761,42 +717,14 @@ pub enum Plicity {
     Implicit,
 }
 
-/// A binder's runtime multiplicity in the `{0, ω}` erasure semiring — QTT
-/// restricted to two quantities (no linear `1`). A `Zero` binder is dropped at
-/// erasure and may only be referenced from erased positions (types, indices,
-/// arguments to other `Zero` binders); an `Omega` binder is unrestricted.
-/// Unlike [`Plicity`], erasing a `Zero` mark does *not* yield the unmarked
-/// system: the binder vanishes, changing the runtime arity. The default is
-/// `Omega`; erasure is opted into explicitly.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Quantity {
-    Zero,
-    Omega,
-}
-
-impl Quantity {
-    /// The semiring product, used to scale the ambient resource when entering a
-    /// sub-position: checking at `ρ` a position whose binder has quantity `q`
-    /// happens at `ρ.meet(q)`. For `{0, ω}` the product collapses to "`Zero`
-    /// unless both are `Omega`" (lattice meet with `Zero ≤ Omega`): an erased
-    /// position stays erased, and an `Omega` position inherits the binder's `q`.
-    pub fn meet(self, other: Quantity) -> Quantity {
-        match (self, other) {
-            (Quantity::Omega, Quantity::Omega) => Quantity::Omega,
-            _ => Quantity::Zero,
-        }
-    }
-}
-
-/// `plicities` and `quantities` each parallel the telescope, one mark per
-/// binder; the builders assert the lengths agree. `Telescope` itself is
-/// unchanged (`TupleType` and `Func` carry no marks; the inductive registry
-/// carries quantities separately, since `erase` must drop `Zero` fields).
+/// `plicities` parallels the telescope, one mark per binder; the builder
+/// asserts the lengths agree. `Telescope` itself is unchanged. Erasure is
+/// sort-driven (a proof or a type erases), so a function type carries no
+/// runtime-multiplicity marks of its own.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FuncType {
     pub telescope: Telescope<Term>,
     pub plicities: Vec<Plicity>,
-    pub quantities: Vec<Quantity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -815,14 +743,12 @@ pub struct Apply {
     pub plicities: Vec<Plicity>,
 }
 
-/// A dependent product (Σ-type). `quantities` parallels the telescope, one mark
-/// per field; an erased (`Zero`) field is a *subset type* witness — dropped at
-/// erasure, leaving the relevant fields (and collapsing to the bare field when
-/// only one remains). The default is `Omega`.
+/// A dependent product (Σ-type). Erasure is sort-driven: a proof or type-valued
+/// field is a *subset type* witness — dropped at erasure, leaving the relevant
+/// fields (and collapsing to the bare field when only one remains).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TupleType {
     pub telescope: Telescope<()>,
-    pub quantities: Vec<Quantity>,
 }
 
 /// `names` carries the literal's written field names (`(status = 0, …)`) from
@@ -1421,11 +1347,9 @@ impl Bound for Subterm {
             Subterm::FuncType(FuncType {
                 telescope,
                 plicities,
-                quantities,
             }) => Subterm::FuncType(FuncType {
                 telescope: telescope.traverse(visit),
                 plicities: plicities.clone(),
-                quantities: quantities.clone(),
             }),
             Subterm::Func(Func { telescope }) => Subterm::Func(Func {
                 telescope: telescope.traverse(visit),
@@ -1439,12 +1363,8 @@ impl Bound for Subterm {
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
                 plicities: plicities.clone(),
             }),
-            Subterm::TupleType(TupleType {
-                telescope,
-                quantities,
-            }) => Subterm::TupleType(TupleType {
+            Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {
                 telescope: telescope.traverse(visit),
-                quantities: quantities.clone(),
             }),
             Subterm::Tuple(Tuple { fields, names }) => Subterm::Tuple(Tuple {
                 fields: fields.iter().map(|f| visit.visit_subterm(f)).collect(),

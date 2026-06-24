@@ -2,7 +2,7 @@ pub use /sys/{Arr};
 pub use /sys/Arr/{let len, let slice, let append, let concat, let flatten, let map, let nil, let single};
 use /std/{Nat, Option, Eq};
 
-pub let at(@T : Type, a : Arr(T), i : Nat, ok : @Nat/Lt(i, len(a))) -> T =
+pub let at(@T : Type, a : Arr(T), i : Nat, ok : Nat/Lt(i, len(a))) -> T =
     /sys/Arr/get(a, i);
 
 pub let get(@T : Type, a : Arr(T), i : Nat) -> Option(T) =

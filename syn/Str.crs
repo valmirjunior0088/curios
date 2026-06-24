@@ -67,5 +67,5 @@ pub let Valid(b : Bin) -> Prop =
 
 pub struct Str pub {
     bytes : Bin,
-    valid : @Valid(bytes)
+    valid : Valid(bytes)
 }

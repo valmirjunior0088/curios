@@ -1,0 +1,5 @@
+pub induct True : Prop
+| qed()
+end
+
+pub use True/*;

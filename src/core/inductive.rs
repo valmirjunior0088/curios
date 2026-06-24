@@ -1,11 +1,9 @@
 use {
-    super::{Atom, Quantity, Telescope, Term},
+    super::{Atom, Telescope, Term},
     std::collections::BTreeMap,
 };
 
-/// One constructor's registry signature: the telescope paired with its payload
-/// quantities, bundled so the two can never drift (the registry mirror of how
-/// [`super::FuncType`] keeps its `quantities` beside its telescope).
+/// One constructor's registry signature: its full telescope.
 ///
 /// The telescope is the constructor's *full* signature — the parameter binders
 /// first, then the payload binders, terminating in the constructed type. E.g.
@@ -14,14 +12,11 @@ use {
 /// target expressions over the payload binders. Instantiating peels the leading
 /// `params.len()` binders by opening each with the corresponding parameter.
 ///
-/// `quantities` is aligned with the *payload* binders that remain after
-/// `instantiate` peels the parameters (it excludes the parameter binders, which
-/// are always relevant); `erase` drops the `Zero` payload fields from the
-/// runtime variant tuple.
+/// Erasure is sort-driven: `erase` drops a payload field whose type is a proof
+/// or a type — no per-payload mark is stored.
 #[derive(Debug, Clone, PartialEq)]
 pub struct InductiveParam {
     pub telescope: Telescope<Term>,
-    pub quantities: Vec<Quantity>,
 }
 
 /// One inductive declaration's registry entry: the metadata an `induct`
@@ -47,8 +42,7 @@ pub struct Inductive {
     /// by peeling the leading `params.len()` binders.
     pub indices: Telescope<()>,
     /// Per-constructor signatures, keyed by tag — each the constructor's
-    /// signature telescope paired with its payload quantities (see
-    /// [`InductiveParam`]).
+    /// signature telescope (see [`InductiveParam`]).
     pub constructors: BTreeMap<Atom, InductiveParam>,
     /// The declared result sort — `Type` or `Prop` — the codomain of the
     /// type-constructor's kind. A fully-applied `InductiveType { name, .. }`

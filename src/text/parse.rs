@@ -3,7 +3,7 @@ use {
         Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, Entrypoint, Field, Func,
         FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Let, LetBang, LetSignature, LoadError,
         Match, Module, Motive, Name, Nat,
-        NatLiteral, NatMatch, Pattern, PatternLit, Plicity, Prim, Proj, Qualifier, Quantity, Radix,
+        NatLiteral, NatMatch, Pattern, PatternLit, Plicity, Prim, Proj, Qualifier, Radix,
         Rec,
         RecItem, StructLit, Subterm, Syn, Term, TupleTypeParam,
         TopCase, TopItem,
@@ -332,23 +332,16 @@ fn parse_parens<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal(")"))
 }
 
-// A Σ-type / struct-declaration field: an optional label, a quantity (`@` on the
-// type = erased), and the field type. Shared by tuple types and `struct` decls.
+// A Σ-type / struct-declaration field: an optional label and the field type.
+// Shared by tuple types and `struct` decls.
 fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
     catch(parse_identifier().and_drop(parse_literal(":")))
-        .and(parse_quantity().and(lazy(parse_term)))
-        .map(|(label, (quantity, type_)): (&str, (Quantity, Term))| TupleTypeParam {
+        .and(lazy(parse_term))
+        .map(|(label, type_): (&str, Term)| TupleTypeParam {
             label: Some(label.to_string()),
-            quantity,
             type_,
         })
-        .or(parse_quantity()
-            .and(lazy(parse_term))
-            .map(|(quantity, type_)| TupleTypeParam {
-                label: None,
-                quantity,
-                type_,
-            }))
+        .or(lazy(parse_term).map(|type_| TupleTypeParam { label: None, type_ }))
 }
 
 fn parse_tuple_type<'a>() -> Parser<'a, Term> {
@@ -430,29 +423,16 @@ fn parse_plicity<'a>() -> Parser<'a, Plicity> {
         .or(pure(Plicity::Explicit))
 }
 
-// A leading `@` on a binder's *type* marks it erased (quantity 0). Distinct from
-// `parse_plicity`'s `@`, which precedes the *name* — the two never collide.
-fn parse_quantity<'a>() -> Parser<'a, Quantity> {
-    catch(parse_literal("@"))
-        .map(|()| Quantity::Zero)
-        .or(pure(Quantity::Omega))
-}
-
 fn parse_func_type_param<'a>() -> Parser<'a, FuncTypeParam> {
     parse_plicity()
         .and(
             catch(parse_identifier().and_drop(parse_literal(":")))
-                .and(parse_quantity().and(lazy(parse_term)))
-                .map(|(label, (quantity, ty)): (&str, (Quantity, Term))| {
-                    (Some(label.to_string()), quantity, ty)
-                })
-                .or(parse_quantity()
-                    .and(lazy(parse_term))
-                    .map(|(quantity, ty)| (None, quantity, ty))),
+                .and(lazy(parse_term))
+                .map(|(label, ty): (&str, Term)| (Some(label.to_string()), ty))
+                .or(lazy(parse_term).map(|ty| (None, ty))),
         )
-        .map(|(plicity, (label, quantity, type_))| FuncTypeParam {
+        .map(|(plicity, (label, type_))| FuncTypeParam {
             plicity,
-            quantity,
             label,
             type_,
         })
@@ -876,15 +856,10 @@ fn parse_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
     parse_plicity()
         .and(parse_pattern())
         .and_drop(parse_literal(":"))
-        .and(parse_quantity())
         .and(lazy(parse_term))
         .map(
-            |(((plicity, pattern), quantity), type_): (
-                ((Plicity, Pattern), Quantity),
-                Term,
-            )| FuncSugarParam {
+            |((plicity, pattern), type_): ((Plicity, Pattern), Term)| FuncSugarParam {
                 plicity,
-                quantity,
                 pattern,
                 type_,
             },
@@ -1300,32 +1275,24 @@ fn parse_top_use<'a>() -> Parser<'a, TopItem> {
 // A payload binder: `@m : Nat` (named, implicit at the constructor function),
 // `m : Nat` (named), or a bare type (positional). Plicity's `@` (on the name)
 // requires a name — a positional binder has nothing for a later type or the
-// target to mention. The quantity's `@` (on the type) marks the field erased and
-// is allowed on both named and positional binders (a dropped field is never
-// referenced, named or not).
+// target to mention.
 fn parse_inductive_payload_field<'a>() -> Parser<'a, CasePayloadParam> {
     catch(
         parse_plicity()
             .and(parse_identifier())
             .and_drop(parse_literal(":")),
     )
-    .and(parse_quantity().and(lazy(parse_term)))
-    .map(|((plicity, name), (quantity, type_)): ((Plicity, &str), (Quantity, Term))| {
-        CasePayloadParam {
-            plicity,
-            quantity,
-            label: Some(name.to_string()),
-            type_,
-        }
+    .and(lazy(parse_term))
+    .map(|((plicity, name), type_): ((Plicity, &str), Term)| CasePayloadParam {
+        plicity,
+        label: Some(name.to_string()),
+        type_,
     })
-    .or(parse_quantity()
-        .and(lazy(parse_term))
-        .map(|(quantity, type_)| CasePayloadParam {
-            plicity: Plicity::Explicit,
-            quantity,
-            label: None,
-            type_,
-        }))
+    .or(lazy(parse_term).map(|type_| CasePayloadParam {
+        plicity: Plicity::Explicit,
+        label: None,
+        type_,
+    }))
 }
 
 fn parse_top_inductive_case<'a>() -> Parser<'a, TopCase> {

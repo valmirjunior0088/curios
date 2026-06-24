@@ -195,12 +195,6 @@ pub enum Error {
     UnboundVariable {
         term: Box<Term>,
     },
-    /// A binder marked erased (quantity 0) was referenced from a runtime
-    /// (ω) position. Erased binders may appear only in erased positions —
-    /// types, indices, and arguments to other erased binders.
-    ErasedVariableAtRuntime {
-        term: Box<Term>,
-    },
     CannotInfer,
     /// An inserted implicit argument that unification never pinned. Carries
     /// the insertion provenance (the applied function and the binder it
@@ -437,12 +431,6 @@ impl Error {
         }
     }
 
-    pub fn erased_variable_at_runtime<T: Into<Term>>(var: T) -> Self {
-        Self::ErasedVariableAtRuntime {
-            term: Box::new(var.into()),
-        }
-    }
-
     pub fn uninferred_implicit(func: String, binder: String) -> Self {
         Self::UninferredImplicit { func, binder }
     }
@@ -568,7 +556,6 @@ impl Error {
             Self::NotAStructType { found } => out.push(found),
             Self::MatchCaseMissing { term, .. } => out.push(term),
             Self::UnboundVariable { term } => out.push(term),
-            Self::ErasedVariableAtRuntime { term } => out.push(term),
             Self::MotiveParamMismatch { written, actual } => {
                 out.push(written);
                 out.push(actual);
@@ -755,12 +742,6 @@ impl fmt::Display for Error {
             }
             Error::UnboundVariable { term } => {
                 write!(f, "unbound variable: {term}")
-            }
-            Error::ErasedVariableAtRuntime { term } => {
-                write!(
-                    f,
-                    "erased variable used at runtime: {term} (a binder marked erased may only appear in erased positions)"
-                )
             }
             Error::CannotInfer => {
                 write!(f, "cannot infer type of expression")

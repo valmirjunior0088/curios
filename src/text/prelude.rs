@@ -1,7 +1,7 @@
 use {
     super::{
         Error, FuncSugarParam, FuncType, FuncTypeParam, LetSignature, Loader, Module, Name, Nat,
-        NatLiteral, Pattern, Plicity, Prim, Qualifier, Quantity, Subterm, Term, TopItem, TopLet,
+        NatLiteral, Pattern, Plicity, Prim, Qualifier, Subterm, Term, TopItem, TopLet,
         TopMod, TupleType, TupleTypeParam,
     },
     crate::wire,
@@ -68,7 +68,6 @@ fn record(fields: Vec<(&str, Term)>) -> Term {
             .into_iter()
             .map(|(label, type_)| TupleTypeParam {
                 label: Some(label.to_string()),
-                quantity: Quantity::Omega,
                 type_,
             })
             .collect(),
@@ -86,7 +85,6 @@ fn fn_of(domain: Term, output: Term) -> Term {
     Subterm::FuncType(FuncType {
         params: vec![FuncTypeParam {
             plicity: Plicity::Explicit,
-            quantity: Quantity::Omega,
             label: None,
             type_: domain,
         }],
@@ -149,7 +147,6 @@ fn pub_fn_marked(
                 .into_iter()
                 .map(|(p, n, t)| FuncSugarParam {
                     plicity: p,
-                    quantity: Quantity::Omega,
                     pattern: Pattern::Bind(n.to_string()),
                     type_: t,
                 })
@@ -597,7 +594,7 @@ fn io_ops() -> Vec<TopItem> {
             prim(Prim::IoEnv(name("name"))),
         ),
         // `(@A : Type) -> Nat -> A`: exit never returns, so its result type is
-        // whatever the caller wants. `/std/Proc/exit` pins `A := Void`.
+        // whatever the caller wants. `/std/Proc/exit` pins `A := False`.
         pub_fn_marked(
             "exit",
             vec![
@@ -743,7 +740,8 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "BigNat"], include_str!("../../std/BigNat.crs")),
     (&["std", "Vec"], include_str!("../../std/Vec.crs")),
     (&["std", "Eq"], include_str!("../../std/Eq.crs")),
-    (&["std", "Void"], include_str!("../../std/Void.crs")),
+    (&["std", "False"], include_str!("../../std/False.crs")),
+    (&["std", "True"], include_str!("../../std/True.crs")),
     (&["std", "Flt"], include_str!("../../std/Flt.crs")),
     (&["std", "Str"], include_str!("../../std/Str.crs")),
     (&["std", "Parse"], include_str!("../../std/Parse.crs")),

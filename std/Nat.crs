@@ -1,6 +1,6 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/*;
-use /std/{Str, Option, Char, Bin, Bln, Eq, Order, Void};
+use /std/{Str, Option, Char, Bin, Bln, Eq, Order, True, False};
 use /syn/Str/{Scan, Utf8, let step, let Valid};
 
 let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
@@ -69,24 +69,24 @@ pub let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
 
 pub let Lte(a : Nat, b : Nat) -> Prop =
     match lte(a, b) : Prop
-    | true => {}
-    | false => Void
+    | true => True
+    | false => False
     end;
 
 pub let Lt(a : Nat, b : Nat) -> Prop =
     match lt(a, b) : Prop
-    | true => {}
-    | false => Void
+    | true => True
+    | false => False
     end;
 
 pub let try_lt(a : Nat, b : Nat) -> Option(Lt(a, b)) =
-    match lt(a, b) : (r) => Option(match r : Prop | true => {} | false => Void end)
-    | true => Option/some(())
+    match lt(a, b) : (r) => Option(match r : Prop | true => True | false => False end)
+    | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
 pub let lt_succ(@n : Nat) -> Lt(n, succ(n)) =
-    ();
+    True/qed();
 
 pub induct Le : (a : Nat, b : Nat) -> Prop
 | z(@n : Nat) : (0, n)
@@ -113,7 +113,7 @@ pub rec le_add_r(a : Nat, k : Nat) -> Le(a, add(a, k)) =
 
 pub rec le_to_lt_succ(@a : Nat, @b : Nat, p : Le(a, b)) -> Lt(a, succ(b)) =
     match p : (w : Le(x, y)) => Lt(x, succ(y))
-    | z(_) => ()
+    | z(_) => True/qed()
     | s(_, _, prev) => le_to_lt_succ(prev)
     end;
 

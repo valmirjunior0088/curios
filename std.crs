@@ -57,8 +57,11 @@ pub use Vec/{let Vec};
 pub mod Eq;
 pub use Eq/{let Eq};
 
-pub mod Void;
-pub use Void/{let Void};
+pub mod False;
+pub use False/{let False};
+
+pub mod True;
+pub use True/{let True};
 
 pub mod Flt;
 pub use Flt/{let Flt};

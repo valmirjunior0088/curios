@@ -1,5 +1,5 @@
 use {
-    super::{Name, Plicity, Quantity, Prim},
+    super::{Name, Plicity, Prim},
     crate::Span,
     std::{collections::BTreeMap, ops::Deref},
 };
@@ -58,23 +58,21 @@ impl From<Subterm> for Term {
     }
 }
 
-/// One Π-binder as written: its plicity (`@` on the name), its quantity (`@` on
-/// the type — erased), an optional binder name, and the domain type.
+/// One Π-binder as written: its plicity (`@` on the name), an optional binder
+/// name, and the domain type.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncTypeParam {
     pub plicity: Plicity,
-    pub quantity: Quantity,
     pub label: Option<String>,
     pub type_: Term,
 }
 
-/// One Σ-type / struct-declaration field as written: an optional label, a
-/// quantity (`@` on the type — erased), and the field type. Shared by tuple
-/// types and `struct` declarations (the `TopStruct` fields reuse this grammar).
+/// One Σ-type / struct-declaration field as written: an optional label and the
+/// field type. Shared by tuple types and `struct` declarations (the `TopStruct`
+/// fields reuse this grammar).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleTypeParam {
     pub label: Option<String>,
-    pub quantity: Quantity,
     pub type_: Term,
 }
 
@@ -317,7 +315,6 @@ pub enum Match {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncSugarParam {
     pub plicity: Plicity,
-    pub quantity: Quantity,
     pub pattern: Pattern,
     pub type_: Term,
 }
@@ -356,7 +353,6 @@ impl LetSignature {
                     .iter()
                     .map(|param| FuncTypeParam {
                         plicity: param.plicity,
-                        quantity: param.quantity,
                         label: param.pattern.binder_name(),
                         type_: param.type_.clone(),
                     })

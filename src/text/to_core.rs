@@ -401,18 +401,9 @@ fn process_items(
                                     core::Term::inductive_type(&name, param_vars.clone(), target),
                                 );
 
-                                // Payload quantities, parallel to the payload
-                                // binders left after `instantiate` peels the
-                                // parameters — `erase` drops the `Zero` ones.
-                                let quantities =
-                                    c.payload.iter().map(|p| p.quantity).collect::<Vec<_>>();
-
                                 Ok((
                                     core::Atom::from(c.label.as_str()),
-                                    core::InductiveParam {
-                                        telescope,
-                                        quantities,
-                                    },
+                                    core::InductiveParam { telescope },
                                 ))
                             })
                             .collect::<Result<BTreeMap<_, _>, Error>>()?;
@@ -530,30 +521,22 @@ fn process_items(
                             u.params
                                 .iter()
                                 .map(|(_, n, t)| {
-                                    Ok((
-                                        core::Plicity::Implicit,
-                                        core::Quantity::Omega,
-                                        n.clone(),
-                                        lower.term(t)?,
-                                    ))
+                                    Ok((core::Plicity::Implicit, n.clone(), lower.term(t)?))
                                 })
                                 .chain(c.payload.iter().enumerate().map(|(i, param)| {
                                     Ok((
                                         param.plicity,
-                                        param.quantity,
                                         payload_name(i, &param.label),
                                         lower.term(&param.type_)?,
                                     ))
                                 }))
                                 .collect::<Result<Vec<_>, Error>>()?;
-                        // Quantified so `erase_func` drops the same `@`-marked
-                        // payload params that `erase_variant` drops from the
-                        // tuple — the constructor function's arity and its
+                        // Erasure is sort-driven: `erase_func` drops the same
+                        // proof/type payload params that `erase_variant` drops
+                        // from the tuple — the constructor function's arity and its
                         // injected variant's arity stay in lockstep.
-                        let ctor_type = core::Term::func_type_quantified(
-                            param_tys.clone(),
-                            lower.term(&output_type)?,
-                        );
+                        let ctor_type =
+                            core::Term::func_type_marked(param_tys.clone(), lower.term(&output_type)?);
 
                         // Constructor body: (params..., _0, ...) => the variant's
                         // injection, a primitive `Variant` normal form.
@@ -575,7 +558,7 @@ fn process_items(
                         );
                         // The lambda binds every parameter regardless of mark.
                         let ctor_body = core::Term::func(
-                            param_tys.into_iter().map(|(_, _, n, t)| (n, t)),
+                            param_tys.into_iter().map(|(_, n, t)| (n, t)),
                             inject,
                         );
 
@@ -629,10 +612,6 @@ fn process_items(
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
-                // One quantity per field binder (field-only, aligned with
-                // `fields_at`); `erase` drops the `Zero` ones.
-                let field_quantities = s.fields.iter().map(|param| param.quantity).collect();
-
                 // Registry entry: the parameter telescope, and the full field
                 // telescope (parameter binders first — field types may mention
                 // them — then field binders), as in `Inductive::indices`.
@@ -648,7 +627,6 @@ fn process_items(
                             param_tys_unmarked.iter().cloned().chain(field_tys),
                             (),
                         ),
-                        field_quantities,
                         result_sort: result_sort.clone(),
                         module,
                         rep_public: s.rep_pub,

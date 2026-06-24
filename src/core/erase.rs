@@ -1,13 +1,75 @@
 use {
     super::{
-        Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, Item, Let, Many, Match,
-        Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Quantity, Rec, Scope, Struct,
+        Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, Item, Let, Many,
+        Match, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Struct,
         StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, InductiveType, Var, Variant,
-        erase_prim, expect_prim_head, infer, reduce_with, refine_head,
+        erase_prim, expect_prim_head, infer, is_prop, reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
 };
+
+/// Whether a value of type `type_` is dropped at runtime. Erasure is sort-driven:
+/// a value erases iff it is a *type/prop-as-value* (`type_` reduces to the
+/// universe `Type` or `Prop`), a *genuine proposition* — a `Prop`-sorted
+/// nominal/neutral type (`Eq`, `False`, `Le`, `Utf8`, a stuck `Nat/Lt` match)
+/// whose inhabitants are pure proof-irrelevant witnesses — or a *function into*
+/// such a thing (a proof-/type-producing function is itself pure content-free).
+///
+/// [`super::Sort::of`] classifies the empty tuple `{}` as `Type`, not a prop —
+/// `{}` is the result type of effects (`print`'s `let _ = write(..); ()`) and
+/// must be kept — so `{}`, `{ .., {} }`, and `X -> {}` are not erased. A
+/// `FuncType` erases only when its ultimate codomain does, recursing past the
+/// parameters into the return type, which lands on `{}` (kept) or on a genuine
+/// proposition / universe (erased).
+/// Every std `@`-marker was either such a proposition/type or a function
+/// returning one, so this stays output-equivalent.
+///
+/// CRITICAL: evaluate against the binder's *declared* (signature) type, opened
+/// only with the surrounding binders as opaque variables — never with concrete
+/// call arguments. A polymorphic field `value : A` is kept (its abstract `A` is
+/// neither prop nor type); re-classifying it at a call where `A := SomeProp`
+/// would diverge the construction's arity from the constructor function's fixed
+/// arity. [`erasure_mask`] enforces the opaque-open discipline.
+fn is_erasable(context: &mut Context, type_: &Term) -> Result<bool, Error> {
+    match Term::unwrap_or_clone(reduce_with(context, type_)?) {
+        Subterm::Type | Subterm::Prop => Ok(true),
+        // A function erases iff what it ultimately returns does — a proof-/type-
+        // producing function is pure, content-free; an effectful `X -> {}` is not.
+        // Recurse past the parameters (opened opaquely) into the codomain.
+        Subterm::FuncType(FuncType { telescope, .. }) => {
+            let vars: Vec<Term> = (0..telescope.len())
+                .map(|_| Term::var(Var::free(context.fresh(None))))
+                .collect();
+            let refs: Vec<&Term> = vars.iter().collect();
+            is_erasable(context, &telescope.open(&refs))
+        }
+        _ => is_prop(context, type_),
+    }
+}
+
+/// The per-binder erasability mask of a telescope, classifying each domain with
+/// the *preceding* binders opened as fresh opaque variables — the signature-only
+/// view that keeps a function's runtime arity fixed across every instantiation
+/// (see [`is_erasable`]). The terminal body is ignored. Pairs with a concrete
+/// walk over the actual values: the mask decides which to drop, the concrete
+/// walk erases the kept ones against their (dependent, instantiated) types.
+fn erasure_mask<B: Bound>(
+    context: &mut Context,
+    mut telescope: Telescope<B>,
+) -> Result<Vec<bool>, Error> {
+    let mut mask = Vec::new();
+    loop {
+        match telescope {
+            Telescope::Cons(ty, rest) => {
+                mask.push(is_erasable(context, &ty)?);
+                let x = Term::var(Var::free(context.fresh(rest.first_label())));
+                telescope = rest.open(&[&x]);
+            }
+            Telescope::Done(_) => break Ok(mask),
+        }
+    }
+}
 
 fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ersd::Term, Error> {
     let Func { telescope } = func;
@@ -22,13 +84,10 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
     // checked function type's telescope (whose `Done` is the output type),
     // generating a fresh name per parameter and recording the candidate flag
     // from each expected domain. The lambda's own domains are erased away.
-    #[allow(clippy::too_many_arguments)]
     fn walk(
         context: &mut Context,
         body: Telescope<Term>,
         type_: Telescope<Term>,
-        quantities: &[Quantity],
-        idx: usize,
         names: &mut Vec<String>,
         candidates: &mut Vec<bool>,
         dropped: &mut Vec<String>,
@@ -38,17 +97,17 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
             (Telescope::Cons(_domain, body_rest), Telescope::Cons(type_, type_rest)) => {
                 let name = context.fresh(body_rest.first_label());
                 let x = Term::var(Var::free(&name));
+                // An erasable parameter (a proof or a type) is dropped from the
+                // runtime closure entirely; no runtime computation can depend on
+                // it. It is still opened/assumed (de Bruijn, typing) and excluded
+                // from captures below — neither a runtime param nor a capture.
+                // The flag is read before the binder is assumed: a parameter's
+                // type never depends on the parameter itself.
+                let erasable = is_erasable(context, &type_)?;
                 context.assume(&name, &type_);
-                // An erased (`Zero`) parameter is dropped from the runtime
-                // closure entirely; the checker guarantees the body only
-                // references it from erased positions, which erase removes. It is
-                // still opened/assumed (de Bruijn, typing) and excluded from
-                // captures below — it is neither a runtime param nor a capture.
-                match quantities.get(idx) {
-                    Some(Quantity::Zero) => dropped.push(name),
-                    _ => {
-                        // The flag is read before the binder is assumed: a
-                        // parameter's type never depends on the parameter itself.
+                match erasable {
+                    true => dropped.push(name),
+                    false => {
                         candidates.push(is_candidate(context, &type_)?);
                         names.push(name);
                     }
@@ -57,8 +116,6 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
                     context,
                     body_rest.open(&[&x]),
                     type_rest.open(&[&x]),
-                    quantities,
-                    idx + 1,
                     names,
                     candidates,
                     dropped,
@@ -77,38 +134,44 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
             context,
             telescope.clone(),
             ft.telescope,
-            &ft.quantities,
-            0,
             &mut param_names,
             &mut candidates,
             &mut dropped,
         )?;
 
-        // A type-level function (output type `Type`) that dropped an erased
-        // parameter has a type-valued body which may reference that now-absent
-        // binder. A type carries no runtime content, so erase the whole body to a
-        // unit — this is what keeps an erased index from dangling in the lowered
-        // closure. (Guarded on a dropped param so existing type-level functions
-        // keep their current lowering.)
-        let body_is_type = matches!(&*reduce_with(context, &output_type)?, Subterm::Type);
-        let erased_body = if body_is_type && !dropped.is_empty() {
+        // Erase the body, then collapse it to a unit only when it is both
+        // proof/type-valued AND would dangle a dropped binder — the proof param of
+        // an `(w : False) => w` thunk, or a type index this lambda dropped. The
+        // collapse is *guarded on a live reference to a dropped binder* so an
+        // effectful body that merely happens to be `False`-typed survives: a
+        // process-exiting `(code) => Io/exit(code)` returns `False` through a real
+        // trap, references no dropped binder, and must keep its effect. A pure
+        // proof body that references nothing dropped is left as-is too (it is
+        // already free of runtime content); only the dangling case is rewritten.
+        let erased_body = erase(context, &body_opened, &output_type)?;
+        let dangles = erased_body
+            .free_names()
+            .iter()
+            .any(|name| dropped.contains(name));
+        let erased_body = if dangles && is_erasable(context, &output_type)? {
             ersd::Subterm::Erased.into()
         } else {
-            erase(context, &body_opened, &output_type)?
+            erased_body
         };
 
         // Captures are the *erased* body's free names — exactly what the runtime
-        // closure references — other than the lambda's own parameters. Reading the
-        // erased body (not the pre-erasure one) is what keeps a variable that
-        // survives only inside an erased position — an erased constructor field or
-        // a type-level index — from being threaded as a capture with no runtime
-        // value (which would leave `to_cont` demanding an erased value). The
-        // candidate flag rides from here — the last point a binder's type is known
-        // — down to `cont`, where the optimizer specializes function-typed args.
+        // closure references — other than the lambda's own parameters and its
+        // dropped (erased) ones. Reading the erased body (not the pre-erasure one)
+        // is what keeps a variable that survives only inside an erased position —
+        // an erased constructor field or a type-level index — from being threaded
+        // as a capture with no runtime value (which would leave `to_cont`
+        // demanding an erased value). The candidate flag rides from here — the last
+        // point a binder's type is known — down to `cont`, where the optimizer
+        // specializes function-typed args.
         let captures = erased_body
             .free_names()
             .into_iter()
-            .filter(|name| !param_names.contains(name))
+            .filter(|name| !param_names.contains(name) && !dropped.contains(name))
             .map(|name| {
                 let type_ = infer(context, &Term::var(Var::free(&name)))?;
                 let candidate = is_candidate(context, &type_)?;
@@ -172,16 +235,17 @@ fn erase_apply(context: &mut Context, apply: &Apply) -> Result<ersd::Term, Error
 
     let mut erased_params = Vec::with_capacity(params.len());
 
-    // Drop arguments to erased (`Zero`) parameters: they are not part of the
-    // runtime closure, so the argument is never evaluated. `walk` still opens the
-    // telescope with the (un-erased) argument for dependent later domains.
-    let quantities = ft.quantities.clone();
-    let mut idx = 0;
-    ft.telescope.clone().walk(params, |_, arg, ty| {
-        if !matches!(quantities.get(idx), Some(Quantity::Zero)) {
+    // Drop arguments to erasable parameters (a proof or a type): they are not
+    // part of the runtime closure, so the argument is never evaluated. The mask
+    // is the *signature* view (opaque-opened), so it agrees with the constructor
+    // function's fixed arity even when a polymorphic domain is instantiated at a
+    // prop here. `walk` still opens with the (un-erased) argument for dependent
+    // later domains and to erase the kept ones.
+    let mask = erasure_mask(context, ft.telescope.clone())?;
+    ft.telescope.clone().walk(params, |i, arg, ty| {
+        if !mask[i] {
             erased_params.push(erase(context, arg, ty)?);
         }
-        idx += 1;
         Ok(())
     })?;
 
@@ -199,23 +263,26 @@ fn erase_apply(context: &mut Context, apply: &Apply) -> Result<ersd::Term, Error
 /// The arity is checked by elaborate (§9), so a `Done` reached before the values
 /// are exhausted is an internal invariant violation.
 ///
-/// Fields at a `Zero` quantity are dropped — not erased at all, so their value
-/// (which may reference erased binders) never reaches the runtime. The telescope
-/// is still opened with the un-erased value, so later dependent (type-valued)
-/// domains stay correct. `quantities` aligns one-for-one with `values`; a short
-/// or empty slice defaults the remaining fields to relevant.
+/// Erasable fields (a proof or a type) are dropped — not erased at all, so their
+/// value (which may reference erased binders) never reaches the runtime. The
+/// telescope is still opened with the un-erased value, so later dependent
+/// (type-valued) domains stay correct.
 fn erase_telescoped<B: Bound>(
     context: &mut Context,
-    mut telescope: Telescope<B>,
+    telescope: Telescope<B>,
     values: &[Term],
-    quantities: &[Quantity],
 ) -> Result<Vec<ersd::Term>, Error> {
+    // The drop decision uses the signature mask (opaque-opened), so a payload
+    // field's erasability matches the constructor's fixed arity even when a
+    // polymorphic field is instantiated at a prop here.
+    let mask = erasure_mask(context, telescope.clone())?;
+    let mut telescope = telescope;
     let mut erased = Vec::with_capacity(values.len());
 
     for (index, value) in values.iter().enumerate() {
         match telescope {
             Telescope::Cons(ty, rest) => {
-                if !matches!(quantities.get(index), Some(Quantity::Zero)) {
+                if !mask[index] {
                     erased.push(erase(context, value, &ty)?);
                 }
                 telescope = rest.open(&[value]);
@@ -232,11 +299,8 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
 
     // Elaborate already checked this tuple against a tuple type of matching
     // arity (§9); the telescope is re-derived here only to lower the fields.
-    let (type_telescope, quantities) = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
-        Subterm::TupleType(TupleType {
-            telescope,
-            quantities,
-        }) => (telescope, quantities),
+    let type_telescope = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
+        Subterm::TupleType(TupleType { telescope }) => telescope,
         _ => unreachable!("erase: tuple checked against non-tuple type"),
     };
 
@@ -246,8 +310,8 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
         "erase: tuple width disagrees with the tuple type",
     );
 
-    let dropped_any = quantities.iter().any(|q| matches!(q, Quantity::Zero));
-    let erased_fields = erase_telescoped(context, type_telescope, fields, &quantities)?;
+    let erased_fields = erase_telescoped(context, type_telescope, fields)?;
+    let dropped_any = erased_fields.len() != fields.len();
 
     // A subset type whose erased witnesses were dropped can collapse to its lone
     // relevant field — the same newtype collapse `erase_struct` performs. Guarded
@@ -558,16 +622,12 @@ fn erase_proj(context: &mut Context, proj: &Proj) -> Result<ersd::Term, Error> {
     // here — `projectable_at` — died with the tagged-tuple encoding: an inductive
     // payload is no longer reached by projecting a structural pair, so a
     // projection's head type is always a `TupleType` again.)
-    // Erased (`Zero`) fields are dropped, so the runtime projection index is the
-    // count of *relevant* fields before `index`, and a record left with a single
-    // relevant field erased to that bare field (the projection then vanishes —
-    // the value already *is* the field). `quantities` is field-only; a short
-    // slice (a plain tuple, or a constructor payload) defaults to all-relevant.
-    let (field_count, quantities) = match &*head_type {
-        Subterm::TupleType(TupleType {
-            telescope,
-            quantities,
-        }) => (telescope.len(), quantities.clone()),
+    // Erasable (proof/type) fields are dropped, so the runtime projection index
+    // is the count of *relevant* fields before `index`, and a record left with a
+    // single relevant field erased to that bare field (the projection then
+    // vanishes — the value already *is* the field).
+    let field_telescope = match &*head_type {
+        Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
         // A struct projects positionally with no tag offset (like a tuple, not a
         // variant).
         Subterm::StructType(StructType { name, params }) => {
@@ -575,18 +635,21 @@ fn erase_proj(context: &mut Context, proj: &Proj) -> Result<ersd::Term, Error> {
                 .structure(name)
                 .cloned()
                 .expect("erase: projection head names a registered struct");
-            (
-                structure.fields_at(params).len(),
-                structure.field_quantities.clone(),
-            )
+            structure.fields_at(params)
         }
         _ => unreachable!("erase: projected a non-tuple/struct"),
     };
 
+    let field_count = field_telescope.len();
     assert!(*index < field_count, "erase: projection out of range");
-    let is_zero = |i: usize| matches!(quantities.get(i), Some(Quantity::Zero));
-    let relevant_total = (0..field_count).filter(|&i| !is_zero(i)).count();
-    let relevant_before = (0..*index).filter(|&i| !is_zero(i)).count();
+
+    // The per-field erasability mask — the same signature view the construction
+    // used, so a projection's relevant-slot arithmetic matches the laid-out
+    // record exactly even under a prop-instantiated polymorphic field.
+    let erasable = erasure_mask(context, field_telescope)?;
+
+    let relevant_total = (0..field_count).filter(|&i| !erasable[i]).count();
+    let relevant_before = (0..*index).filter(|&i| !erasable[i]).count();
 
     if relevant_total == 1 {
         return erase(context, head, &head_type);
@@ -625,16 +688,11 @@ fn erase_variant(context: &mut Context, uc: &Variant) -> Result<ersd::Term, Erro
         .expect("erase: constructor instantiates at its inductive's parameters");
 
     // Erase the payload against the constructor telescope's (dependent) types,
-    // inline after the tag. `Zero`-marked payload fields are dropped from the
-    // tuple (the registry's per-constructor quantities are payload-aligned).
-    let quantities = inductive
-        .constructors
-        .get(tag)
-        .map(|c| c.quantities.as_slice())
-        .unwrap_or(&[]);
+    // inline after the tag. Erasable payload fields (a proof or a type) are
+    // dropped from the tuple — sort-driven, read off each field's domain type.
     let mut fields = Vec::with_capacity(payload.len() + 1);
     fields.push(ersd::Subterm::Atom(ersd::Atom { index }).into());
-    fields.extend(erase_telescoped(context, telescope, payload, quantities)?);
+    fields.extend(erase_telescoped(context, telescope, payload)?);
 
     Ok(ersd::Subterm::Tuple(ersd::Tuple { fields }).into())
 }
@@ -657,14 +715,9 @@ fn erase_struct(context: &mut Context, s: &Struct) -> Result<ersd::Term, Error> 
         .expect("erase: struct names a registered struct");
 
     // Erase the fields against the instantiated (dependent) field telescope,
-    // dropping the `Zero` ones. The single-field collapse below then makes a
-    // proof-carrying record with one relevant field a bare value.
-    let erased = erase_telescoped(
-        context,
-        structure.fields_at(params),
-        fields,
-        &structure.field_quantities,
-    )?;
+    // dropping the erasable (proof/type) ones. The single-field collapse below
+    // then makes a proof-carrying record with one relevant field a bare value.
+    let erased = erase_telescoped(context, structure.fields_at(params), fields)?;
 
     Ok(match erased.len() {
         1 => erased.into_iter().next().expect("one field"),
@@ -676,6 +729,113 @@ fn erase_struct(context: &mut Context, s: &Struct) -> Result<ersd::Term, Error> 
 /// (field 0), each arm rebinding its payload binders to the flat record's
 /// remaining fields (`head.(i + 1)`). Downstream stages
 /// (`cont`/`optm`/`wasm`) see only generic tuples, projections, and an
+/// Erase a match on an *erasable* (proof/type) scrutinee, which carries no
+/// runtime tag. Such an inductive is a subsingleton (large-elimination
+/// soundness), so the match has exactly one live arm — `Eq`'s `refl` being the
+/// canonical case. The arm's body is erased with its payload binders bound (so
+/// it type-checks and refines) but never projected, and the scrutinee head is
+/// not erased: it is a dropped binder with no runtime value.
+#[allow(clippy::too_many_arguments)]
+fn erase_erasable_scrutinee_match(
+    context: &mut Context,
+    head: &Term,
+    motive: &Scope<Many>,
+    cases: &BTreeMap<Atom, Scope<Many>>,
+    inductive: &super::Inductive,
+    name: &str,
+    params: &[Term],
+    actual_indices: &[Term],
+    pattern: Option<&MotivePattern>,
+) -> Result<ersd::Term, Error> {
+    let binder_slots: Vec<(bool, usize)> = pattern
+        .map(|p| {
+            let n_params = inductive.params.len();
+            p.slots
+                .iter()
+                .enumerate()
+                .filter_map(|(position, slot)| match slot {
+                    MotiveSlot::Binder if position < n_params => Some((true, position)),
+                    MotiveSlot::Binder => Some((false, position - n_params)),
+                    MotiveSlot::Term(_) => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // The single live arm. Elaborate prunes impossible arms; an erasable
+    // (subsingleton) scrutinee leaves exactly one, whose body is the result.
+    let (tag, scope) = cases
+        .iter()
+        .next()
+        .expect("erase: erasable scrutinee match has its one live arm");
+
+    let telescope = inductive
+        .instantiate(tag, params)
+        .expect("erase: constructor instantiates at its inductive's parameters");
+
+    let labels = scope
+        .label_iter()
+        .map(|l| context.fresh(l))
+        .collect::<Vec<_>>();
+    let vars = labels
+        .iter()
+        .map(|label| Term::var(Var::free(label)))
+        .collect::<Vec<_>>();
+
+    context.with_frame(|context| {
+        let mut telescope = telescope;
+        for (label, var) in labels.iter().zip(&vars) {
+            match telescope {
+                Telescope::Cons(ty, rest) => {
+                    context.assume(label, &ty);
+                    telescope = rest.open(&[var]);
+                }
+                Telescope::Done(_) => unreachable!("erase: constructor arity checked by elaborate"),
+            }
+        }
+
+        let ix_c = match &telescope {
+            Telescope::Done(terminal) => match &***terminal {
+                Subterm::InductiveType(InductiveType { indices, .. }) => indices.clone(),
+                _ => unreachable!("erase: constructor terminal is its inductive type"),
+            },
+            Telescope::Cons(..) => unreachable!("erase: constructor arity checked by elaborate"),
+        };
+
+        let ctor_val = Term::variant(name.to_string(), params.to_vec(), tag.clone(), vars.clone());
+        refine_head(context, head, &ctor_val);
+        for (actual, target) in actual_indices.iter().zip(&ix_c) {
+            refine_head(context, actual, target);
+        }
+
+        let arm_args = binder_slots
+            .iter()
+            .map(|&(is_param, i)| match is_param {
+                true => params[i].clone(),
+                false => ix_c[i].clone(),
+            })
+            .collect::<Vec<_>>();
+        let arm_refs = arm_args.iter().chain([&ctor_val]).collect::<Vec<_>>();
+        let expected = motive.open(&arm_refs);
+        let var_refs = vars.iter().collect::<Vec<_>>();
+
+        // The payload binders are all erased (the scrutinee is a prop), so the arm
+        // body uses them only in erased positions — no projections are emitted.
+        let body = erase(context, &scope.open(&var_refs), &expected)?;
+
+        // If the erased arm body dangles a payload binder — an `Eq`-elimination
+        // into another proof, e.g. `trans`'s `refl => p` whose `p` is the dropped
+        // proof — and the result is itself proof/type-valued, collapse it to a
+        // unit (it carries no runtime content). A *relevant* result (large
+        // elimination into data, as in `subst`'s `refl => v`) keeps its body.
+        let dangles = body.free_names().iter().any(|name| labels.contains(name));
+        if dangles && is_erasable(context, &expected)? {
+            return Ok(ersd::Subterm::Erased.into());
+        }
+        Ok(body)
+    })
+}
+
 /// index-dispatched match.
 fn erase_inductive_match(
     context: &mut Context,
@@ -684,7 +844,7 @@ fn erase_inductive_match(
     cases: &BTreeMap<Atom, Scope<Many>>,
     pattern: Option<&MotivePattern>,
 ) -> Result<ersd::Term, Error> {
-    // A match with no arms is a vacuous elimination — of an empty inductive (`Void`)
+    // A match with no arms is a vacuous elimination — of an empty inductive (`False`)
     // or of one whose every constructor inversion-clashes at the scrutinee's
     // indices. It is unreachable code that never inspects the scrutinee, which
     // elaborate placed in an erased position; erasing the head here would emit a
@@ -709,6 +869,26 @@ fn erase_inductive_match(
         .inductive(&name)
         .cloned()
         .expect("erase: scrutinee type names a registered inductive");
+
+    // An erasable (proof/type) scrutinee carries no runtime tag to dispatch on.
+    // For its elimination to be sound it must be a subsingleton — `Eq` (one
+    // `refl` arm) is the canonical large-eliminating prop — so the match reduces
+    // to its single arm. Lower that arm directly, *without* erasing the head
+    // (which would reference the dropped scrutinee binder) and without payload
+    // projections: every payload field is erased, used only in erased positions.
+    if is_erasable(context, &head_type)? {
+        return erase_erasable_scrutinee_match(
+            context,
+            head,
+            motive,
+            cases,
+            &inductive,
+            &name,
+            &params,
+            &actual_indices,
+            pattern,
+        );
+    }
 
     let scrutinee_label = context.fresh(Some("scrutinee"));
 
@@ -764,9 +944,14 @@ fn erase_inductive_match(
 
             context.with_frame(|context| {
                 let mut telescope = telescope;
+                // One erasable flag per payload binder (a proof or a type),
+                // computed before the binder is assumed — a binder's type never
+                // depends on itself. Drives the flat-record slot assignment below.
+                let mut erasable = Vec::with_capacity(labels.len());
                 for (label, var) in labels.iter().zip(&vars) {
                     match telescope {
                         Telescope::Cons(ty, rest) => {
+                            erasable.push(is_erasable(context, &ty)?);
                             context.assume(label, &ty);
                             telescope = rest.open(&[var]);
                         }
@@ -814,24 +999,19 @@ fn erase_inductive_match(
 
                 // Bind each *relevant* payload binder to its flat-record slot:
                 // `let x_i = scrutinee.(slot); …` (innermost-last, so fold in
-                // reverse). `Zero` payload fields are absent from the runtime
+                // reverse). Erasable payload fields are absent from the runtime
                 // tuple, so a relevant binder's slot is `1 + (relevant payload
-                // before it)` (field 0 is the tag); an erased binder gets no
+                // before it)` (field 0 is the tag); an erasable binder gets no
                 // `let` at all — the arm body only uses it in erased (→ `Erased`)
                 // positions, so nothing projects it. Projections read the
                 // let-bound scrutinee — never a re-erased copy of the head term,
                 // which would re-execute an effectful scrutinee once per arm.
-                let quantities = inductive
-                    .constructors
-                    .get(tag)
-                    .map(|c| c.quantities.as_slice())
-                    .unwrap_or(&[]);
                 let mut relevant = 0usize;
                 let runtime_slot = labels
                     .iter()
                     .enumerate()
                     .map(|(i, _)| {
-                        if quantities.get(i) == Some(&Quantity::Zero) {
+                        if erasable[i] {
                             None
                         } else {
                             let slot = 1 + relevant;

@@ -2,7 +2,7 @@ use {
     super::{
         Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
         LetBang, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Pattern, PatternLit,
-        Plicity, Prim, Proj, Quantity, Radix,
+        Plicity, Prim, Proj, Radix,
         Rec, StructLit, Subterm, Syn, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopInductive,
         TopUse, Tuple, TupleType, TupleTypeParam, InductiveMatch, UseGroup,
     },
@@ -119,13 +119,9 @@ fn print_labeled((label, ty): (Option<String>, Term)) -> Printer<'static> {
     }
 }
 
-/// A Σ-type / struct field: the quantity prefixes the type (`@T` = erased).
+/// A Σ-type / struct field.
 fn print_field(param: TupleTypeParam) -> Printer<'static> {
-    let quant = match param.quantity {
-        Quantity::Zero => pure("@"),
-        Quantity::Omega => pure(""),
-    };
-    let typed = flat([quant, print_term(param.type_)]);
+    let typed = print_term(param.type_);
     match param.label {
         Some(label) => flat([pure(label), pure(" : "), typed]),
         None => typed,
@@ -368,12 +364,8 @@ fn print_term(term: Term) -> Printer<'static> {
             pure("("),
             sep_flat(
                 params.into_iter().map(|param| {
-                    // Plicity prefixes the name; quantity prefixes the type.
-                    let quant = match param.quantity {
-                        Quantity::Zero => pure("@"),
-                        Quantity::Omega => pure(""),
-                    };
-                    let typed = flat([quant, print_term(param.type_)]);
+                    // Plicity prefixes the name (`@x` = implicit).
+                    let typed = print_term(param.type_);
                     let body = match param.label {
                         Some(label) => flat([pure(label), pure(" : "), typed]),
                         None => typed,
@@ -631,16 +623,11 @@ fn print_let_signature(signature: LetSignature) -> Printer<'static> {
             pure("("),
             sep_flat(
                 params.into_iter().map(|param| {
-                    // Plicity prefixes the name; quantity prefixes the type.
-                    let quant = match param.quantity {
-                        Quantity::Zero => pure("@"),
-                        Quantity::Omega => pure(""),
-                    };
+                    // Plicity prefixes the name (`@x` = implicit).
                     flat([
                         print_plicity(param.plicity),
                         print_pattern(param.pattern),
                         pure(" : "),
-                        quant,
                         print_term(param.type_),
                     ])
                 }),
@@ -754,13 +741,12 @@ fn print_module_items(items: Vec<TopItem>) -> Printer<'static> {
 fn print_top_inductive_case(case: TopCase) -> Printer<'static> {
     let payload = sep_flat(
         case.payload.into_iter().map(|param| {
-            // Plicity prefixes the name; the quantity (`@` = erased) prefixes
-            // the type — shared with `print_field`.
+            // Plicity prefixes the name (`@x` = implicit) — shared with
+            // `print_field`.
             flat([
                 print_plicity(param.plicity),
                 print_field(TupleTypeParam {
                     label: param.label,
-                    quantity: param.quantity,
                     type_: param.type_,
                 }),
             ])

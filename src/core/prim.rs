@@ -163,7 +163,7 @@ pub enum Prim {
     IoArgs,
     IoEnv(Term),
     // `(@A : Type) -> Nat -> A`: polymorphic bottom. The type argument keeps the
-    // kernel from naming `/std/Void`; it is dropped at erasure.
+    // kernel from naming `/std/False`; it is dropped at erasure.
     IoExit(Term, Term),
     CellType(Term),
     Cell(Term, Term),          // type, init

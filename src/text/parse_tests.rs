@@ -14,7 +14,6 @@ fn parse_rec_func_and_apply() {
                         Subterm::FuncType(FuncType {
                             params: vec![FuncTypeParam {
                                 plicity: Plicity::Explicit,
-                                quantity: Quantity::Omega,
                                 label: Some("x".to_string()),
                                 type_: Subterm::Type.into(),
                             }],
@@ -206,7 +205,6 @@ fn parse_top_rec_mixed_pub() {
                         Subterm::FuncType(FuncType {
                             params: vec![FuncTypeParam {
                                 plicity: Plicity::Explicit,
-                                quantity: Quantity::Omega,
                                 label: Some("x".to_string()),
                                 type_: Subterm::Type.into(),
                             }],
@@ -558,12 +556,12 @@ fn parse_top_inductive_single_variant() {
 
 #[test]
 fn parse_top_inductive_empty() {
-    let m = "induct Void\nend".parse::<Module>().unwrap();
+    let m = "induct False\nend".parse::<Module>().unwrap();
     assert_eq!(
         m.items,
         vec![TopItem::Inductive(vec![TopInductive {
             is_pub: false,
-            label: "Void".to_string(),
+            label: "False".to_string(),
             params: vec![],
             indices: vec![],
             result_sort: Subterm::Type.into(),
@@ -748,72 +746,33 @@ fn omitted_motive_round_trips() {
 }
 
 #[test]
-fn erased_quantity_on_type_parses_and_round_trips() {
-    // `@` on the *type* marks the binder erased (quantity 0); `@` on the *name*
-    // is plicity. The two positions are independent and never collide.
-    let param = |src: &str| -> FuncTypeParam {
-        match &*src.parse::<Term>().unwrap() {
-            Subterm::FuncType(ft) => ft.params[0].clone(),
-            other => panic!("expected a function type, got {other:?}"),
-        }
-    };
-
-    let erased = param("(x : @Nat) -> Nat");
-    assert_eq!(erased.plicity, Plicity::Explicit);
-    assert_eq!(erased.quantity, Quantity::Zero);
-
-    let implicit_erased = param("(@x : @Nat) -> Nat");
-    assert_eq!(implicit_erased.plicity, Plicity::Implicit);
-    assert_eq!(implicit_erased.quantity, Quantity::Zero);
-
-    // The default is unrestricted, and an implicit-but-relevant binder keeps
-    // working — the `Vec/len` pattern.
-    let relevant = param("(@n : Nat) -> Nat");
-    assert_eq!(relevant.plicity, Plicity::Implicit);
-    assert_eq!(relevant.quantity, Quantity::Omega);
-
-    for src in ["(x : @Nat) -> Nat", "(@x : @Nat) -> Nat", "(@n : Nat) -> Nat"] {
-        let term = src.parse::<Term>().unwrap();
-        assert_eq!(term.to_string().parse::<Term>().unwrap(), term, "{src}");
+fn at_on_a_binder_type_is_a_parse_error() {
+    // Erasure is sort-driven now: the erasure axis is retired, so `@` on a
+    // binder's *type* (the old erased marker) no longer parses. `@` on a *name*
+    // is plicity and still parses; the two positions never collide.
+    let implicit = "(@n : Nat) -> Nat".parse::<Term>().unwrap();
+    match &*implicit {
+        Subterm::FuncType(ft) => assert_eq!(ft.params[0].plicity, Plicity::Implicit),
+        other => panic!("expected a function type, got {other:?}"),
     }
-}
 
-#[test]
-fn erased_quantity_on_def_form_param() {
-    // Item 3: the combined function-definition sugar `let f(n : @Nat) -> R = …`
-    // now carries `@` on the inline parameter type, not only the explicit
-    // function-type signature form.
-    let m = "let foo(n : @Nat, m : Nat) -> Nat = m;"
-        .parse::<Module>()
-        .unwrap();
-    match &m.items[0] {
-        TopItem::Let(TopLet {
-            signature: LetSignature::Func { params, .. },
-            ..
-        }) => {
-            assert_eq!(params[0].quantity, Quantity::Zero);
-            assert_eq!(params[1].quantity, Quantity::Omega);
-        }
-        other => panic!("expected a func let, got {other:?}"),
+    // `@` on the type is rejected in every binder position it once marked.
+    for src in [
+        "(x : @Nat) -> Nat",
+        "(@x : @Nat) -> Nat",
+    ] {
+        assert!(src.parse::<Term>().is_err(), "{src} should not parse");
     }
-}
 
-#[test]
-fn erased_quantity_on_inductive_payload() {
-    // Item 1: `@` on a constructor payload's type marks the field erased
-    // (dropped from the runtime variant tuple), on named and positional binders
-    // alike. Distinct from the `@`-on-the-name plicity mark.
-    let m = "induct Boxed | box(ghost : @Nat, val : Nat) end"
-        .parse::<Module>()
-        .unwrap();
-    match &m.items[0] {
-        TopItem::Inductive(group) => {
-            let payload = &group[0].cases[0].payload;
-            assert_eq!(payload[0].quantity, Quantity::Zero);
-            assert_eq!(payload[1].quantity, Quantity::Omega);
-        }
-        other => panic!("expected an inductive, got {other:?}"),
-    }
+    assert!(
+        "let foo(n : @Nat) -> Nat = n;".parse::<Module>().is_err(),
+        "@ on a def-form parameter type should not parse",
+    );
+
+    assert!(
+        "induct Boxed | box(ghost : @Nat) end".parse::<Module>().is_err(),
+        "@ on an inductive payload type should not parse",
+    );
 }
 
 #[test]

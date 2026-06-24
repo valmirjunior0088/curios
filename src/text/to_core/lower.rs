@@ -239,10 +239,10 @@ impl<'a, 'b> Lower<'a, 'b> {
                     let domain = self.scoped(seen.clone(), || self.term(&param.type_))?;
                     let name = param.label.clone().unwrap_or_default();
                     seen.push(name.clone());
-                    params.push((param.plicity, param.quantity, name, domain));
+                    params.push((param.plicity, name, domain));
                 }
                 let output = self.scoped(seen, || self.term(&ft.output))?;
-                core::Term::func_type_quantified(params, output)
+                core::Term::func_type_marked(params, output)
             }
             Subterm::Func(func) => {
                 let body =
@@ -267,9 +267,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                     let lowered = self.scoped(seen.clone(), || self.term(&param.type_))?;
                     let name = param.label.clone().unwrap_or_default();
                     seen.push(name.clone());
-                    fields.push((param.quantity, name, lowered));
+                    fields.push((name, lowered));
                 }
-                core::Term::tuple_type_quantified(fields)
+                core::Term::tuple_type(fields)
             }
             Subterm::Tuple(tuple) => core::Term::tuple_named(
                 tuple

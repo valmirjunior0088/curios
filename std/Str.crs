@@ -1,6 +1,6 @@
 pub use /syn/Str/{let Str};
 use /syn/Str/{Scan, Utf8, Class, let step, let classify, let Valid};
-use /std/{Char, Nat, Bin, Bln, Arr, Lst, Option, Void, Eq};
+use /std/{Char, Nat, Bin, Bln, Arr, Lst, Option, True, False, Eq};
 
 
 rec seq(@s : Scan, @a : Bin, @b : Bin, va : Utf8(s, a), vb : Valid(b))
@@ -155,8 +155,8 @@ pub rec repeat(s : Str, n : Nat) -> Str =
     | false => concat(s, repeat(s, Nat/sub(n, 1)))
     end;
 
-pub rec bad_uninhabited(@x : Bin, w : Utf8(Scan/bad(), x)) -> Void =
-    match w : (w : Utf8(q, y)) => Void
+pub rec bad_uninhabited(@x : Bin, w : Utf8(Scan/bad(), x)) -> False =
+    match w : (w : Utf8(q, y)) => False
     | more(c, st, t, rest) => bad_uninhabited(@t, rest)
     end;
 
@@ -184,7 +184,7 @@ pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(k, 
                                         -> Nat/Le(Nat/succ(kpp), Bin/len(tt))
                                 | true => (rest) => cont_len(Nat/succ(kpp), @0x80, @0xBF, @tt, rest)
                                 | false => (rest) =>
-                                    Void/absurd(@Nat/Le(Nat/succ(kpp), Bin/len(tt)),
+                                    False/absurd(@Nat/Le(Nat/succ(kpp), Bin/len(tt)),
                                         bad_uninhabited(@tt, rest))
                                 end;
                             Nat/Le/s(on_range(rest))
@@ -195,8 +195,8 @@ pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(k, 
         end;
     on_k(w);
 
-pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(0, lo, hi), t)) -> Void =
-    match w : (w : Utf8(q, y)) => Void
+pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(0, lo, hi), t)) -> False =
+    match w : (w : Utf8(q, y)) => False
     | more(c, st, t2, rest) =>
         let on_range =
             match Nat/in_range(c, lo, hi) : (r) =>
@@ -204,7 +204,7 @@ pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(0, 
                     | false => Scan/bad()
                     | true => Scan/cont(0, 0x80, 0xBF)
                     end, t2))
-                    -> Void
+                    -> False
             | false => (rest) => bad_uninhabited(@t2, rest)
             | true => (rest) => cont0_uninhabited(@0x80, @0xBF, @t2, rest)
             end;
@@ -212,10 +212,10 @@ pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(0, 
     end;
 
 pub rec take_conts(b : Bin, off : Nat, remaining : Nat, acc : Nat,
-    bound : @Nat/Le(Nat/add(off, remaining), Bin/len(b))) -> {Nat, Nat} =
+    bound : Nat/Le(Nat/add(off, remaining), Bin/len(b))) -> {Nat, Nat} =
     let go =
         match remaining : (remaining) =>
-            (bound : @Nat/Le(Nat/add(off, remaining), Bin/len(b))) -> {Nat, Nat}
+            (bound : Nat/Le(Nat/add(off, remaining), Bin/len(b))) -> {Nat, Nat}
         | 0 => (bound) => (acc, off)
         | pred + 1, ih => (bound) =>
             take_conts(b, Nat/succ(off), pred,
@@ -225,13 +225,13 @@ pub rec take_conts(b : Bin, off : Nat, remaining : Nat, acc : Nat,
         end;
     go(bound);
 
-pub rec peel_byte(@s : Scan, @b : Bin, nz : @Nat/Lt(0, Bin/len(b)), w : Utf8(s, b))
+pub rec peel_byte(@s : Scan, @b : Bin, nz : Nat/Lt(0, Bin/len(b)), w : Utf8(s, b))
     -> Utf8(step(Bin/at(b, 0, nz), s), Bin/slice(b, 1, Bin/len(b))) =
     let go =
-        match w : (w : Utf8(q, x)) => (nz : @Nat/Lt(0, Bin/len(x)))
+        match w : (w : Utf8(q, x)) => (nz : Nat/Lt(0, Bin/len(x)))
             -> Utf8(step(Bin/at(x, 0, nz), q), Bin/slice(x, 1, Bin/len(x)))
         | stop() => (nz) =>
-            Void/absurd(@Utf8(step(Bin/at(\\, 0, nz), Scan/lead()), Bin/slice(\\, 1, Bin/len(\\))), nz)
+            False/absurd(@Utf8(step(Bin/at(\\, 0, nz), Scan/lead()), Bin/slice(\\, 1, Bin/len(\\))), nz)
         | more(c, st, t, rest) => (nz) => rest
         end;
     go(nz);
@@ -267,7 +267,7 @@ pub let step_lead_bad(c : Nat, eq : Eq(classify(c), Class/bad()))
     -> Eq(step(c, Scan/lead()), Scan/bad()) =
     Eq/cong(lead_step, eq);
 
-pub let decode_head(c : Nat, @t : Bin, w : @Utf8(Scan/lead(), Bin/cons(c, t))) -> Nat =
+pub let decode_head(c : Nat, @t : Bin, w : Utf8(Scan/lead(), Bin/cons(c, t))) -> Nat =
     let go =
         match classify(c) : (cl) => (eq : Eq(classify(c), cl)) -> Nat
         | ascii() => (eq) => c
@@ -275,31 +275,31 @@ pub let decode_head(c : Nat, @t : Bin, w : @Utf8(Scan/lead(), Bin/cons(c, t))) -
             take_conts(t, 0, k, payload,
                 cont_len(k, @lo, @hi, @t,
                     Eq/subst((sc : Scan) => Utf8(sc, t), step_lead_lead(c, eq),
-                        peel_byte(@Scan/lead(), @Bin/cons(c, t), (), w)))).0
+                        peel_byte(@Scan/lead(), @Bin/cons(c, t), True/qed(), w)))).0
         | bad() => (eq) =>
-            Void/absurd(@Nat,
+            False/absurd(@Nat,
                 bad_uninhabited(@t,
                     Eq/subst((sc : Scan) => Utf8(sc, t), step_lead_bad(c, eq),
-                        peel_byte(@Scan/lead(), @Bin/cons(c, t), (), w))))
+                        peel_byte(@Scan/lead(), @Bin/cons(c, t), True/qed(), w))))
         end;
     go(Eq/refl());
 
 pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
-    rec go(sc : Scan, b : Bin, valid : @Utf8(sc, b), acc : A) -> A =
-        (match b : (b) => (valid : @Utf8(sc, b)) -> A
+    rec go(sc : Scan, b : Bin, valid : Utf8(sc, b), acc : A) -> A =
+        (match b : (b) => (valid : Utf8(sc, b)) -> A
         | \\ => (valid) => acc
         | (h, t), ih => (valid) =>
-            (match sc : (sc) => (valid : @Utf8(sc, Bin/cons(h, t))) -> A
+            (match sc : (sc) => (valid : Utf8(sc, Bin/cons(h, t))) -> A
             | lead() => (valid) =>
                 go(step(h, Scan/lead()), t,
-                    peel_byte(@Scan/lead(), @Bin/cons(h, t), (), valid),
+                    peel_byte(@Scan/lead(), @Bin/cons(h, t), True/qed(), valid),
                     f(decode_head(h, @t, valid), acc))
             | cont(rem, lo, hi) => (valid) =>
                 go(step(h, Scan/cont(rem, lo, hi)), t,
-                    peel_byte(@Scan/cont(rem, lo, hi), @Bin/cons(h, t), (), valid), acc)
+                    peel_byte(@Scan/cont(rem, lo, hi), @Bin/cons(h, t), True/qed(), valid), acc)
             | bad() => (valid) =>
                 go(step(h, Scan/bad()), t,
-                    peel_byte(@Scan/bad(), @Bin/cons(h, t), (), valid), acc)
+                    peel_byte(@Scan/bad(), @Bin/cons(h, t), True/qed(), valid), acc)
             end)(valid)
         end)(valid);
     go(Scan/lead(), s.bytes, s.valid, init);
@@ -336,13 +336,13 @@ pub let get(s : Str, i : Nat) -> Option(Nat) =
             end);
     r.1;
 
-rec le_succ_of_lt(i : Nat, n : Nat, p : @Nat/Lt(i, n)) -> Nat/Le(Nat/succ(i), n) =
+rec le_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Le(Nat/succ(i), n) =
     let on_n =
-        match n : (n) => (p : @Nat/Lt(i, n)) -> Nat/Le(Nat/succ(i), n)
-        | 0 => (p) => Void/absurd(@Nat/Le(Nat/succ(i), 0), p)
+        match n : (n) => (p : Nat/Lt(i, n)) -> Nat/Le(Nat/succ(i), n)
+        | 0 => (p) => False/absurd(@Nat/Le(Nat/succ(i), 0), p)
         | np + 1, ihn => (p) =>
             let on_i =
-                match i : (i) => (p : @Nat/Lt(i, Nat/succ(np))) -> Nat/Le(Nat/succ(i), Nat/succ(np))
+                match i : (i) => (p : Nat/Lt(i, Nat/succ(np))) -> Nat/Le(Nat/succ(i), Nat/succ(np))
                 | 0 => (p) => Nat/Le/s(Nat/Le/z())
                 | ip + 1, ihi => (p) => Nat/Le/s(le_succ_of_lt(ip, np, p))
                 end;
@@ -350,27 +350,27 @@ rec le_succ_of_lt(i : Nat, n : Nat, p : @Nat/Lt(i, n)) -> Nat/Le(Nat/succ(i), n)
         end;
     on_n(p);
 
-pub let at(s : Str, i : Nat, ok : @Nat/Lt(i, len(s))) -> Nat =
-    rec go(sc : Scan, b : Bin, valid : @Utf8(sc, b), i : Nat,
-        le : @Nat/Le(Nat/succ(i), count_w(sc, b))) -> Nat =
+pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Nat =
+    rec go(sc : Scan, b : Bin, valid : Utf8(sc, b), i : Nat,
+        le : Nat/Le(Nat/succ(i), count_w(sc, b))) -> Nat =
         let on_b =
             match b : (b) =>
-                (valid : @Utf8(sc, b), le : @Nat/Le(Nat/succ(i), count_w(sc, b))) -> Nat
+                (valid : Utf8(sc, b), le : Nat/Le(Nat/succ(i), count_w(sc, b))) -> Nat
             | \\ => (valid, le) => match le : Nat end
             | (h, t), ih => (valid, le) =>
                 let on_sc =
                     match sc : (sc) =>
-                        (valid : @Utf8(sc, Bin/cons(h, t)),
-                         le : @Nat/Le(Nat/succ(i), count_w(sc, Bin/cons(h, t)))) -> Nat
+                        (valid : Utf8(sc, Bin/cons(h, t)),
+                         le : Nat/Le(Nat/succ(i), count_w(sc, Bin/cons(h, t)))) -> Nat
                     | lead() => (valid, le) =>
                         let on_i =
                             match i : (i) =>
-                                (le : @Nat/Le(Nat/succ(i),
+                                (le : Nat/Le(Nat/succ(i),
                                     count_w(Scan/lead(), Bin/cons(h, t)))) -> Nat
                             | 0 => (le) => decode_head(h, @t, valid)
                             | pred + 1, ih2 => (le) =>
                                 go(step(h, Scan/lead()), t,
-                                    peel_byte(@Scan/lead(), @Bin/cons(h, t), (), valid), pred,
+                                    peel_byte(@Scan/lead(), @Bin/cons(h, t), True/qed(), valid), pred,
                                     (match le : (le : Nat/Le(x, y))
                                         => Nat/Le(Nat/pred(x), Nat/pred(y))
                                      | s(a, c, prev) => prev
@@ -379,10 +379,10 @@ pub let at(s : Str, i : Nat, ok : @Nat/Lt(i, len(s))) -> Nat =
                         on_i(le)
                     | cont(rem, lo, hi) => (valid, le) =>
                         go(step(h, Scan/cont(rem, lo, hi)), t,
-                            peel_byte(@Scan/cont(rem, lo, hi), @Bin/cons(h, t), (), valid), i, le)
+                            peel_byte(@Scan/cont(rem, lo, hi), @Bin/cons(h, t), True/qed(), valid), i, le)
                     | bad() => (valid, le) =>
                         go(step(h, Scan/bad()), t,
-                            peel_byte(@Scan/bad(), @Bin/cons(h, t), (), valid), i, le)
+                            peel_byte(@Scan/bad(), @Bin/cons(h, t), True/qed(), valid), i, le)
                     end;
                 on_sc(valid, le)
             end;

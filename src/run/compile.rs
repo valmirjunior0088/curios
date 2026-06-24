@@ -734,13 +734,13 @@ mod tests {
 
     #[test]
     fn empty_inductive_lowers_and_vacuous_match_eliminates_it() {
-        // An inductive may declare zero cases — `Void`. Its eliminator is a match
+        // An inductive may declare zero cases — `False`. Its eliminator is a match
         // with zero arms: every omission is vacuously justified, so the match
         // checks at any motive and lowers through erasure and codegen.
         let source = r#"
-            induct Void
+            induct False
             end
-            let absurd(A : Type, v : Void) -> A =
+            let absurd(A : Type, v : False) -> A =
                 match v : A
                 end;
             5

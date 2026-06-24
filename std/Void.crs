@@ -1,9 +1,0 @@
-pub induct Void : Prop
-end
-
-pub let absurd(@A : @Type, contradiction : @Void) -> A =
-    match contradiction : A
-    end;
-
-pub let Not(P : Type) -> Type =
-    (P) -> Void;

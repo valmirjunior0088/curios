@@ -437,7 +437,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         }
         // `(@A : Type) -> Nat -> A`: exit never returns, so the result type is
         // whatever the caller demands (`/std/Proc/exit` instantiates it at
-        // `Void`). The type argument keeps the kernel from naming `/std/Void`.
+        // `False`). The type argument keeps the kernel from naming `/std/False`.
         Prim::IoExit(type_, code) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
             let code = elaborate(context, code, Mode::Check(nat_type))?.0;

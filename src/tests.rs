@@ -432,10 +432,24 @@ fn data_is_not_proof_irrelevant() {
 }
 
 #[test]
+fn let_bound_unit_effect_survives_erasure() {
+    // `{}` is unit, not a prop, so it is kept — a unit-typed effect must run
+    // after erasure. `Io/print` returns `{}`; binding its first call to an unused
+    // `let` must not drop the "a" write. Guards that the empty tuple stays
+    // runtime content (the `Sort::of` empty-tuple-is-`Type` rule).
+    let source = r#"
+        use /std/{Io};
+        let first = Io/print("a");
+        Io/print("b")
+        "#;
+    assert_eq!(run(source), b"ab");
+}
+
+#[test]
 fn large_elimination_of_a_prop_is_rejected() {
     // The large-elimination guard: `Le` is a multi-constructor proposition, so
     // matching it into `Nat` (data) would observe which constructor it was,
-    // breaking irrelevance — rejected. The permitted cases (empty `Void` via
+    // breaking irrelevance — rejected. The permitted cases (empty `False` via
     // `absurd`, singleton `Eq` via `subst`, and prop→prop) are exercised by std.
     let source = r#"
         use /std/{Io, Str, Nat};
@@ -656,57 +670,30 @@ fn arr_concat_length_clash_is_rejected() {
 }
 
 #[test]
-fn erased_param_used_at_runtime_is_rejected() {
-    // Relevance (QTT {0,ω}), phase 2: `@` on the type marks the binder erased
-    // (quantity 0). Returning an erased binder is a runtime (ω) use of a `Zero`
-    // var — the one and only relevance error.
-    let source = r#"
-        use /std/{Io, Str, Nat};
-        let f : (n : @Nat) -> Nat = (n) => n;
-        Io/write(Io/stdout, Str/to_bin("ok"))
-        "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
-}
-
-#[test]
 fn erased_param_unused_is_accepted() {
-    // An erased binder that the body never references is fine — and at runtime
-    // it is still passed (erasure is phase 3), so the call behaves normally.
+    // A type-valued parameter erases (sort-driven), yet at runtime the call still
+    // behaves normally — the dropped argument never affects the relevant result.
     let source = r#"
         use /std/{Io, Str, Nat};
-        let f : (n : @Nat, m : Nat) -> Nat = (n, m) => m;
-        let r : Nat = f(5, 3);
+        let f : (T : Type, m : Nat) -> Nat = (T, m) => m;
+        let r : Nat = f(Nat, 3);
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"3");
 }
 
 #[test]
-fn erased_param_in_type_position_is_accepted() {
-    // The category-(a) flip: a term checked against `Type` is an erased context
-    // (ρ=0), so an erased binder is usable there. `Eq(n, n)` is a type, so the
-    // erased `n` flows freely into it — rejected without the ρ=0 chokepoint.
-    let source = r#"
-        use /std/{Io, Str, Nat, Eq};
-        let P : (n : @Nat) -> Type = (n) => Eq(n, n);
-        Io/write(Io/stdout, Str/to_bin("ok"))
-        "#;
-    assert_eq!(run(source), b"ok");
-}
-
-#[test]
 fn erased_param_is_dropped_at_runtime() {
-    // Phase 3: erasure actually drops `Zero` binders and their arguments. `g`'s
-    // erased `n` does not exist at runtime, yet `g` passes it to `h`'s erased `m`
-    // (category c lets the erased var be passed). This runs ONLY if both the
-    // parameter and the argument are dropped — otherwise `h(n)` would reference a
-    // variable that erase removed from `g`, a dangling runtime reference.
+    // Sort-driven erasure drops type/proof binders and their arguments. `g`'s
+    // type-valued `n` does not exist at runtime, yet `g` passes it to `h`'s
+    // type-valued `m`. This runs ONLY if both the parameter and the argument are
+    // dropped — otherwise `h(n)` would reference a variable that erase removed
+    // from `g`, a dangling runtime reference.
     let source = r#"
         use /std/{Io, Str, Nat};
-        let h : (m : @Nat) -> Nat = (m) => 0;
-        let g : (n : @Nat) -> Nat = (n) => h(n);
-        let r : Nat = g(7);
+        let h : (m : Type) -> Nat = (m) => 0;
+        let g : (n : Type) -> Nat = (n) => h(n);
+        let r : Nat = g(Nat);
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"0");
@@ -714,16 +701,16 @@ fn erased_param_is_dropped_at_runtime() {
 
 #[test]
 fn erased_struct_field_collapses_to_bare_value() {
-    // Phase 3b: a record with an erased field is a newtype — the erased field is
+    // A record with a type-valued field is a newtype — the erasable field is
     // dropped and the struct collapses to its single relevant field (bare `Nat`
-    // here). `make` fills the erased `ghost` with its own erased `n`, which only
-    // works if both are dropped (else a dangling runtime reference). Projecting
-    // `.val` off the collapsed record must still yield `val`, not `ghost`.
+    // here). `make` fills the erasable `ghost` with its own type-valued `n`,
+    // which only works if both are dropped. Projecting `.val` off the collapsed
+    // record must still yield `val`, not `ghost`.
     let source = r#"
         use /std/{Io, Str, Nat};
-        struct Wrap pub { val : Nat, ghost : @Nat }
-        let make : (n : @Nat) -> Wrap = (n) => Wrap { val = 5, ghost = n };
-        let r : Nat = make(7).val;
+        struct Wrap pub { val : Nat, ghost : Type }
+        let make : (n : Type) -> Wrap = (n) => Wrap { val = 5, ghost = n };
+        let r : Nat = make(Nat).val;
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"5");
@@ -731,13 +718,13 @@ fn erased_struct_field_collapses_to_bare_value() {
 
 #[test]
 fn erased_tuple_field_is_a_subset_type() {
-    // The anonymous Σ form of the same idea: `(bytes : Bin, @proof)` is a subset
-    // type whose erased witness is dropped, collapsing to the bare relevant
-    // field. Here `make` puts its erased `n` in the erased second component.
+    // The anonymous Σ form of the same idea: `(val : Nat, Type)` is a subset type
+    // whose type-valued witness is dropped, collapsing to the bare relevant
+    // field. Here `make` puts its type-valued `n` in the erasable second field.
     let source = r#"
         use /std/{Io, Str, Nat};
-        let make : (n : @Nat) -> { val : Nat, @Nat } = (n) => (5, n);
-        let r : Nat = make(7).0;
+        let make : (n : Type) -> { val : Nat, Type } = (n) => (5, n);
+        let r : Nat = make(Nat).0;
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"5");
@@ -745,89 +732,38 @@ fn erased_tuple_field_is_a_subset_type() {
 
 #[test]
 fn erased_definition_param_is_dropped_at_runtime() {
-    // Item 3 (surface): the combined def-form sugar `let f(n : @Nat) -> R = body`
-    // carries the quantity on the inline parameter — previously only the explicit
-    // `let f : (n : @Nat) -> R = …` signature form did. `g`'s erased `n` is
-    // dropped and passed to `h`'s erased `m` (runs only if both are dropped).
+    // The def-form sugar `let f(n : Type) -> R = body`: `g`'s type-valued `n` is
+    // dropped and passed to `h`'s type-valued `m` (runs only if both are dropped).
     let source = r#"
         use /std/{Io, Str, Nat};
-        let h(m : @Nat) -> Nat = 0;
-        let g(n : @Nat) -> Nat = h(n);
-        let r : Nat = g(7);
+        let h(m : Type) -> Nat = 0;
+        let g(n : Type) -> Nat = h(n);
+        let r : Nat = g(Nat);
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"0");
 }
 
 #[test]
-fn erased_definition_param_used_at_runtime_is_rejected() {
-    // The def-form counterpart of the rejection check: an erased inline param
-    // returned at runtime is the same leak the signature form catches.
-    let source = r#"
-        use /std/{Io, Str, Nat};
-        let f(n : @Nat) -> Nat = n;
-        Io/write(Io/stdout, Str/to_bin("ok"))
-        "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
-}
-
-#[test]
-fn erased_field_projected_at_runtime_is_rejected() {
-    // Item 2 (soundness): the erased field is dropped from the rep, so projecting
-    // it in a runtime (ω) position must be rejected exactly like referencing an
-    // erased binder — otherwise the projection reads past the collapsed value.
-    // The relevant `.val` (the test above) still projects fine.
-    let source = r#"
-        use /std/{Io, Str, Nat};
-        struct Wrap pub { val : Nat, ghost : @Nat }
-        let make : (n : @Nat) -> Wrap = (n) => Wrap { val = 5, ghost = n };
-        let r : Nat = make(7).ghost;
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
-        "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
-}
-
-#[test]
 fn erased_inductive_payload_is_dropped_at_runtime() {
-    // Item 1: a constructor payload field marked `@` on its type is erased —
-    // dropped from the runtime variant tuple. `make` fills the erased `ghost`
-    // with its own erased `n` (runs only if both are dropped); the match binds
-    // only the relevant `val`, so its projection must skip the absent field.
+    // A type-valued constructor payload field erases — dropped from the runtime
+    // variant tuple. `make` fills the erasable `ghost` with its own type-valued
+    // `n` (runs only if both are dropped); the match binds only the relevant
+    // `val`, so its projection must skip the absent field.
     let source = r#"
         use /std/{Io, Str, Nat};
         induct Boxed
-        | box(ghost : @Nat, val : Nat)
+        | box(ghost : Type, val : Nat)
         end
-        let make : (n : @Nat) -> Boxed = (n) => Boxed/box(n, 5);
+        let make : (n : Type) -> Boxed = (n) => Boxed/box(n, 5);
         let get : (b : Boxed) -> Nat = (b) =>
             match b : Nat
             | box(ghost, val) => val
             end;
-        let r : Nat = get(make(7));
+        let r : Nat = get(make(Nat));
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"5");
-}
-
-#[test]
-fn erased_inductive_payload_used_at_runtime_is_rejected() {
-    // The erased payload binder may only appear in erased positions; returning
-    // it from the arm is a runtime use of a field that erase has dropped.
-    let source = r#"
-        use /std/{Io, Str, Nat};
-        induct Boxed
-        | box(ghost : @Nat, val : Nat)
-        end
-        let get : (b : Boxed) -> Nat = (b) =>
-            match b : Nat
-            | box(ghost, val) => ghost
-            end;
-        Io/write(Io/stdout, Str/to_bin("ok"))
-        "#;
-    let (system, _io) = MockHost::builder().build();
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
 #[test]
@@ -2496,18 +2432,17 @@ fn bin_fold_sums_bytes() {
     assert_eq!(io.output(), b"60");
 }
 
-// An empty match is a vacuous elimination: it never inspects its scrutinee, so
-// the scrutinee sits in an erased position. An *erased* `Void` (a contradiction
-// threaded from an erased proof) may therefore discharge into a *relevant*
-// result — both directly (`match c : A end`) and through `Void/absurd`, whose
-// contradiction is now erased. This is what lets an impossible runtime branch be
-// closed off by an erased witness, the crux of the UTF-8 decode certification.
+// An empty match is a vacuous elimination: it never inspects its scrutinee. A
+// `False` is a `Prop`, so it erases (sort-driven) — a contradiction may therefore
+// discharge into a *relevant* result, both directly (`match c : A end`) and
+// through `False/absurd`. This is what lets an impossible runtime branch be closed
+// off by an erased witness, the crux of the UTF-8 decode certification.
 #[test]
 fn erased_void_discharges_to_relevant_result() {
     let source = r#"
-        use /std/{Void, Io};
-        let direct(@A : Type, c : @Void) -> A = match c : A end;
-        let via_absurd(@A : Type, c : @Void) -> A = Void/absurd(c);
+        use /std/{False, Io};
+        let direct(@A : Type, c : False) -> A = match c : A end;
+        let via_absurd(@A : Type, c : False) -> A = False/absurd(c);
         let proofs = (direct, via_absurd);
         Io/print("ok")
         "#;
@@ -3103,7 +3038,7 @@ fn proc_env_absent_is_none() {
 fn proc_exit_halts_with_code() {
     // exit traps: it surfaces its code *and* the trailing write never runs.
     let entrypoint = r#"
-        let _ : std/Void = /std/Proc/exit(7);
+        let _ : std/False = /std/Proc/exit(7);
         std/Io/write(std/Io/stdout, /std/Str/to_bin("unreachable"))
         "#
     .parse::<crate::text::Entrypoint>()
@@ -4406,12 +4341,14 @@ fn utf8_slice_closed_peels_codepoints() {
 
 #[test]
 fn erased_indexed_relevant_repro() {
+    // A type-indexed inductive whose payload is type-valued (sort-erased): the
+    // index binder `m : Type` is dropped, yet `Box(m)` stays a well-formed type.
     let source = r#"
         use /std/{Nat, Io};
-        induct Box : (n : Nat)
-        | mk(x : @Nat) : (x)
+        induct Box : (n : Type)
+        | mk(x : Type) : (x)
         end
-        let f(m : @Nat, k : Nat) -> Box(m) =
+        let f(m : Type, k : Nat) -> Box(m) =
             let go =
                 match k : (k) => (d : Nat) -> Box(m)
                 | 0 => (d) => Box/mk(m)
@@ -4426,19 +4363,19 @@ fn erased_indexed_relevant_repro() {
     assert_eq!(io.output(), b"ok");
 }
 
-// Regression: a type-valued *application* (`Box(m)`, here `Void/absurd`'s inferred
+// Regression: a type-valued *application* (`Box(m)`, here `False/absurd`'s inferred
 // `@A`) is indexed by an erased binder `m`. It must erase to a unit like any type;
 // erasing it structurally used to leave `m` in the runtime term, so codegen
 // demanded a value for an erased binder ("`to_cont` lacks value").
 #[test]
 fn erased_index_in_type_valued_arg() {
     let source = r#"
-        use /std/{Nat, Void, Io};
-        induct Box : (n : Nat)
-        | mk(x : @Nat) : (x)
+        use /std/{Nat, False, Io};
+        induct Box : (n : Type)
+        | mk(x : Type) : (x)
         end
-        let id_void(w : Void) -> Void = w;
-        let f(m : @Nat) -> (Void) -> Box(m) = (v) => Void/absurd(@Box(m), id_void(v));
+        let id_void(w : False) -> False = w;
+        let f(m : Type) -> (False) -> Box(m) = (v) => False/absurd(@Box(m), id_void(v));
         let g = f;
         Io/print("ok")
         "#;

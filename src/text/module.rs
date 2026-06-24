@@ -1,5 +1,5 @@
 use {
-    super::{LetSignature, Name, Plicity, Quantity, Term, TupleTypeParam},
+    super::{LetSignature, Name, Plicity, Term, TupleTypeParam},
     crate::Span,
 };
 
@@ -56,12 +56,10 @@ pub struct TopLet {
 /// stays positional); it is required when a later payload type or the case
 /// target mentions the binder. `plicity` is the `@`-on-the-name mark (implicit
 /// at the value-constructor function — `cons(@m : Nat, …)`, `m` recoverable from
-/// a later payload's type); `quantity` is the `@`-on-the-type mark (erased — the
-/// field is dropped from the runtime variant tuple).
+/// a later payload's type). Erasure is sort-driven, so no per-field mark is kept.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CasePayloadParam {
     pub plicity: Plicity,
-    pub quantity: Quantity,
     pub label: Option<String>,
     pub type_: Term,
 }

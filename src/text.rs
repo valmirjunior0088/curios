@@ -1,4 +1,4 @@
-pub use super::core::{Plicity, Quantity};
+pub use super::core::Plicity;
 
 mod error;
 pub use error::*;

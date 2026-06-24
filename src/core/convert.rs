@@ -163,8 +163,11 @@ impl Sort {
                     None => Sort::Type,
                 }
             }
-            // A record of propositions is a proposition; `{}` is the base case.
-            Subterm::TupleType(TupleType { telescope, .. }) => {
+            // A *non-empty* record of propositions is a proposition. The empty
+            // tuple `{}` is unit, not a prop: it is the result type of effects
+            // (`Io/print : .. -> {}`), so it stays `Type` (the `_` arm) and is
+            // kept at runtime rather than erased.
+            Subterm::TupleType(TupleType { telescope, .. }) if !telescope.is_empty() => {
                 let mut tele = telescope.clone();
                 loop {
                     match tele {
@@ -296,14 +299,9 @@ impl Convert {
         this: FuncType,
         that: FuncType,
     ) -> Result<bool, ReduceError> {
-        // Quantity is part of a function type's identity (unlike plicity, which
-        // convert ignores): an erased domain and a relevant one are different
-        // types — they erase to different runtime arities. Mismatched arity also
-        // shows up here as unequal-length quantity vectors.
-        if this.quantities != that.quantities {
-            return Ok(false);
-        }
-
+        // Plicity is not part of a function type's identity (convert ignores
+        // it); arity is checked by the telescope walk below — a length mismatch
+        // surfaces as a `Cons`/`Done` shape clash.
         fn walk(
             cmp: &mut Convert,
             context: &mut Context,
