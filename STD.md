@@ -232,9 +232,9 @@ Codes are the host's `Status` discriminants; any code without a typed form decod
 `/std/Io` also defines the typed forms every IO operation returns in place of raw status codes — the blocking `read`/`write` above, and the [`/std/Task`](#stdtask)/`/std/File`/`/std/Tcp` layer:
 
 ```
-union Error | not_found() | permission_denied() | exists() | refused() | tls() | would_block() | other(Nat) end
-union Read  | chunk(Bin) | eof() | error(Error) end
-union Mode  | read() | write() | append() end
+induct Error | not_found() | permission_denied() | exists() | refused() | tls() | would_block() | other(Nat) end
+induct Read  | chunk(Bin) | eof() | error(Error) end
+induct Mode  | read() | write() | append() end
 ```
 
 `error_of(status) : (Nat) -> Error` maps a raw status to a typed `Error` (status 2 → `not_found`, 3 → `permission_denied`, 4 → `exists`, 5 → `refused`, 7 → `tls`, 6 → `would_block`, else `other`). `would_block` is a transient backpressure signal rather than a terminal failure: the `read`/`write`/`accept` layer intercepts status 6 and parks/retries before it ever reaches `error_of`, so it surfaces as an `Error` only where there is no handle to wait on — a `Tcp` lookup shed by the host's saturated resolver pool, which the caller may retry. `Read` is the result of a read: a `chunk` of bytes, the distinct `eof`, or an `error`. `Mode` is the open mode (`read`/`write`/`append`); `of_mode(mode) : (Mode) -> Nat` is the wire tag `/std/File/open` marshals.
@@ -372,8 +372,8 @@ As with `File`, the `Socket` must not outlive the `with` or `handler` body — a
 An HTTP/1.1 client layered on `/std/Tcp`, over cleartext (`http://`) or TLS (`https://`): a request is just bytes written to a socket and a response is bytes read back, so the module is request formatting plus a `/std/Parse` parser over the reply. TLS is handled entirely by `/std/Tcp` through the request's `settings.tls` flag — there is no HTTP-specific crypto machinery. The surface is value-centric — build a `Request`, hand it to `perform`, get back a `Result(Response, Error)`. `secure` flips a request to TLS; `get_tls`/`post_tls` are the shorthands.
 
 ```
-union Method | get() | post() end
-union Error  | net(Io/Error) | malformed(Str) end
+induct Method | get() | post() end
+induct Error  | net(Io/Error) | malformed(Str) end
 
 struct Request pub {
     method : Method,
@@ -455,7 +455,7 @@ Across these modules a deliberate argument-order convention holds: `bind` takes 
 ### `/std/Option`
 
 ```
-pub union Option(A : Type)
+pub induct Option(A : Type)
 | some(A)
 | none()
 end
@@ -472,7 +472,7 @@ end
 ### `/std/Result`
 
 ```
-pub union Result(A : Type, E : Type)
+pub induct Result(A : Type, E : Type)
 | success(A)
 | failure(E)
 end
@@ -529,10 +529,10 @@ pub struct BigNat pub { limbs : Lst(Nat) }
 
 ### `/std/Vec`
 
-The length-indexed vector — the canonical indexed union (see SYNTAX.md's Indices section):
+The length-indexed vector — the canonical indexed inductive (see SYNTAX.md's Indices section):
 
 ```
-pub union Vec(T : Type) : (n : Nat)
+pub induct Vec(T : Type) : (n : Nat)
 | nil() : (0)
 | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
 end
@@ -557,7 +557,7 @@ In `first`/`rest` the `nil` arm is provably impossible at length `Nat/succ(n)` a
 Propositional equality: `Eq(x, y)` is inhabited exactly when `x` and `y` are equal, and its only constructor pins both indices to the same value. The parameter is `@`-marked — implicit at the type, recoverable from the indices, pinned with `Eq(@Nat, x, y)` when wanted. Matching on a proof refines the indices inside the arm (`x := z`, `y := z`), which is what makes the eliminators typecheck. See PROOFS_101.md for the full story.
 
 ```
-pub union Eq(@A : Type) : (x : A, y : A)
+pub induct Eq(@A : Type) : (x : A, y : A)
 | refl(@z : A) : (z, z)
 end
 ```
@@ -573,7 +573,7 @@ end
 
 ### `/std/Void`
 
-The uninhabited type: a union with zero cases. No value of `Void` can be constructed, so holding one is itself a contradiction — and eliminating it is a match with zero arms, which checks at any motive.
+The uninhabited type: an inductive with zero cases. No value of `Void` can be constructed, so holding one is itself a contradiction — and eliminating it is a match with zero arms, which checks at any motive.
 
 | Binding                 | Type                               | Description                              |
 | ----------------------- | ---------------------------------- | ---------------------------------------- |
@@ -611,7 +611,7 @@ Parse(A) = (Bin, Nat) -> Result({Nat, A}, Str)
 A JSON tree and a byte-level codec:
 
 ```
-pub union Json
+pub induct Json
 | null() | bln(Bln) | num(Flt) | str(Str)
 | arr(Lst(Json)) | obj(Lst({Str, Json}))
 end

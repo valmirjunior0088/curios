@@ -60,15 +60,15 @@ pub enum Error {
     /// function to sequence it with.
     BangWithoutBind,
     /// The annotated motive form `(x : T(...)) => P` is only meaningful on a
-    /// union scrutinee — `Bln` and `Nat` matches take `: P` or `: (x) => P`.
-    AnnotatedMotiveNotUnion,
+    /// inductive scrutinee — `Bln` and `Nat` matches take `: P` or `: (x) => P`.
+    AnnotatedMotiveNotInductive,
     /// One match-arm column mixes constructor patterns with scalar literal
     /// patterns (`cons(…)` and `0` under the same scrutinee position) — the
     /// pattern-matrix compiler cannot dispatch on a column of inconsistent kind.
     PatternColumnConflict,
-    /// A `_`/binder fallthrough sits at a union column whose unlisted
+    /// A `_`/binder fallthrough sits at an inductive column whose unlisted
     /// constructors must be materialized, but `tag` (an explicit constructor in
-    /// the same column) does not resolve to a known union — bring the
+    /// the same column) does not resolve to a known inductive — bring the
     /// constructors into scope (`use …`) or list every constructor explicitly.
     UnresolvedMatchConstructor {
         tag: String,
@@ -167,10 +167,10 @@ impl fmt::Display for Error {
             Error::BangWithoutBind => {
                 write!(f, "postfix `!` used outside a `let !` block")
             }
-            Error::AnnotatedMotiveNotUnion => {
+            Error::AnnotatedMotiveNotInductive => {
                 write!(
                     f,
-                    "an annotated motive `(x : T(...)) => P` is only legal on a union match"
+                    "an annotated motive `(x : T(...)) => P` is only legal on an inductive match"
                 )
             }
             Error::PatternColumnConflict => write!(
@@ -179,7 +179,7 @@ impl fmt::Display for Error {
             ),
             Error::UnresolvedMatchConstructor { tag } => write!(
                 f,
-                "cannot resolve the union of constructor `{tag}` to expand a `_` arm; \
+                "cannot resolve the inductive of constructor `{tag}` to expand a `_` arm; \
                  bring the constructors into scope or list every constructor"
             ),
             Error::PatternArityMismatch {

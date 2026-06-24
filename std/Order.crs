@@ -1,4 +1,4 @@
-pub union Order
+pub induct Order
 | lt()
 | eq()
 | gt()

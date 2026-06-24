@@ -9,7 +9,7 @@ use {
 // WASM codegen path end-to-end from surface syntax.
 fn main() {
     let source = r#"
-        union Token
+        induct Token
         | quote()
         | lbracket()
         | lbrace()

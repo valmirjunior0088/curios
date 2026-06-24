@@ -102,7 +102,7 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
         )),
         // The untyped reducer's flat view of a constructor value, mirroring the
         // runtime layout `(tag, payload...)`: field i + 1 is the i-th payload
-        // component. `reduce_union_match` relies on this to bind arms by
+        // component. `reduce_inductive_match` relies on this to bind arms by
         // projection (call-by-name). Field 0 (the tag) is never projected at
         // the term level — dispatch inspects the `Variant` directly.
         Subterm::Variant(ctor) if (1..=ctor.payload.len()).contains(&index) => {
@@ -214,7 +214,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         // inline evaluated definition internals (including local-`let`
         // annotation holes that elaboration never births) into types that
         // flow on to `zonk`.
-        Cases::Union { cases, pattern } => {
+        Cases::Inductive { cases, pattern } => {
             let head_reduced = reduce_forced(context, head.clone())?;
 
             if let Subterm::Variant(ctor) = &*head_reduced
@@ -232,7 +232,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             Ok(Reduce::Break(Term::from(Subterm::Match(Match {
                 head: head_reduced,
                 motive,
-                cases: Cases::Union { cases, pattern },
+                cases: Cases::Inductive { cases, pattern },
             }))))
         }
 
@@ -243,7 +243,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         // `Layer` peels a generator (its head absent for the unary `Nat`) and
         // recurses symbolically for the induction hypothesis; a stuck scrutinee
         // rebuilds.
-        Cases::Inductive { carrier } => {
+        Cases::FreeMonoid { carrier } => {
             let scrutinee = Term::unwrap_or_clone(reduce_forced(context, head)?);
 
             let layer = match &carrier {
@@ -263,7 +263,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                     let ih: Term = Subterm::Match(Match {
                         head: tail.clone(),
                         motive: motive.clone(),
-                        cases: Cases::Inductive {
+                        cases: Cases::FreeMonoid {
                             carrier: carrier.clone(),
                         },
                     })
@@ -288,7 +288,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                 Layer::Stuck(scrutinee) => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
                     head: scrutinee.into(),
                     motive,
-                    cases: Cases::Inductive { carrier },
+                    cases: Cases::FreeMonoid { carrier },
                 })))),
             }
         }
@@ -332,7 +332,7 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
                 Subterm::Let(let_) => reduce_let(let_),
                 Subterm::Var(var) => reduce_var(context, var),
                 Subterm::Metavar(metavar) => reduce_metavar(context, metavar),
-                // `UnionType`/`Variant` and `StructType`/`Struct` are primitive
+                // `InductiveType`/`Variant` and `StructType`/`Struct` are primitive
                 // normal forms, like `Tuple`: their sub-terms are not reduced
                 // in WHNF.
                 term => Reduce::Break(term.into()),

@@ -2,7 +2,7 @@ use {
     super::{
         Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, Item, Let, Many, Match,
         Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Quantity, Rec, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
+        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, InductiveType, Var, Variant,
         erase_prim, expect_prim_head, infer, reduce_with, refine_head,
     },
     crate::ersd,
@@ -370,17 +370,17 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<ersd::Term, Error> {
             true_case,
         } => erase_bln_match(context, head, motive, false_case, true_case),
         Cases::Switch { cases, default } => erase_switch(context, head, motive, cases, default),
-        Cases::Union { cases, pattern } => {
-            erase_union_match(context, head, motive, cases, pattern.as_ref())
+        Cases::Inductive { cases, pattern } => {
+            erase_inductive_match(context, head, motive, cases, pattern.as_ref())
         }
-        Cases::Inductive {
+        Cases::FreeMonoid {
             carrier:
                 Carrier::Nat {
                     empty_case,
                     cons_case,
                 },
         } => erase_nat_match(context, head, motive, empty_case, cons_case),
-        Cases::Inductive {
+        Cases::FreeMonoid {
             carrier:
                 Carrier::Arr {
                     elem,
@@ -388,7 +388,7 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<ersd::Term, Error> {
                     cons_case,
                 },
         } => erase_arr_match(context, head, motive, elem, empty_case, cons_case),
-        Cases::Inductive {
+        Cases::FreeMonoid {
             carrier:
                 Carrier::Bin {
                     empty_case,
@@ -554,8 +554,8 @@ fn erase_proj(context: &mut Context, proj: &Proj) -> Result<ersd::Term, Error> {
 
     // Elaborate already checked the head is a tuple and the index is in range
     // (§9); the type is re-derived here only to lower the head. (The
-    // projection-through-a-stuck-union-payload workaround that used to live
-    // here — `projectable_at` — died with the tagged-tuple encoding: a union
+    // projection-through-a-stuck-inductive-payload workaround that used to live
+    // here — `projectable_at` — died with the tagged-tuple encoding: an inductive
     // payload is no longer reached by projecting a structural pair, so a
     // projection's head type is always a `TupleType` again.)
     // Erased (`Zero`) fields are dropped, so the runtime projection index is the
@@ -641,7 +641,7 @@ fn erase_variant(context: &mut Context, uc: &Variant) -> Result<ersd::Term, Erro
 
 /// Lower a struct value to its zero-cost runtime representation: a multi-field
 /// struct is a *tagless* tuple (one fewer field than the equivalent
-/// single-constructor union); a single-field struct (a newtype) is its bare
+/// single-constructor inductive); a single-field struct (a newtype) is its bare
 /// field — no tuple, no tag, so it is byte-identical to the field's own type.
 fn erase_struct(context: &mut Context, s: &Struct) -> Result<ersd::Term, Error> {
     let Struct {
@@ -677,14 +677,14 @@ fn erase_struct(context: &mut Context, s: &Struct) -> Result<ersd::Term, Error> 
 /// remaining fields (`head.(i + 1)`). Downstream stages
 /// (`cont`/`optm`/`wasm`) see only generic tuples, projections, and an
 /// index-dispatched match.
-fn erase_union_match(
+fn erase_inductive_match(
     context: &mut Context,
     head: &Term,
     motive: &Scope<Many>,
     cases: &BTreeMap<Atom, Scope<Many>>,
     pattern: Option<&MotivePattern>,
 ) -> Result<ersd::Term, Error> {
-    // A match with no arms is a vacuous elimination — of an empty union (`Void`)
+    // A match with no arms is a vacuous elimination — of an empty inductive (`Void`)
     // or of one whose every constructor inversion-clashes at the scrutinee's
     // indices. It is unreachable code that never inspects the scrutinee, which
     // elaborate placed in an erased position; erasing the head here would emit a
@@ -697,12 +697,12 @@ fn erase_union_match(
     let head_type = reduce_with(context, &head_type)?;
 
     let (name, params, actual_indices) = match &*head_type {
-        Subterm::UnionType(UnionType {
+        Subterm::InductiveType(InductiveType {
             name,
             params,
             indices,
         }) => (name.clone(), params.clone(), indices.clone()),
-        _ => unreachable!("erase: union match scrutinee checked by elaborate"),
+        _ => unreachable!("erase: inductive match scrutinee checked by elaborate"),
     };
 
     let inductive = context
@@ -779,8 +779,8 @@ fn erase_union_match(
                 // This case's target indices, for opening a pattern motive.
                 let ix_c = match &telescope {
                     Telescope::Done(terminal) => match &***terminal {
-                        Subterm::UnionType(UnionType { indices, .. }) => indices.clone(),
-                        _ => unreachable!("erase: constructor terminal is its union type"),
+                        Subterm::InductiveType(InductiveType { indices, .. }) => indices.clone(),
+                        _ => unreachable!("erase: constructor terminal is its inductive type"),
                     },
                     Telescope::Cons(..) => {
                         unreachable!("erase: constructor arity checked by elaborate")
@@ -1046,7 +1046,7 @@ fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<
         Subterm::Type
         | Subterm::FuncType(_)
         | Subterm::TupleType(_)
-        | Subterm::UnionType(_)
+        | Subterm::InductiveType(_)
         | Subterm::StructType(_) => Ok(ersd::Subterm::Erased.into()),
         Subterm::Variant(uc) => erase_variant(context, uc),
         Subterm::Struct(s) => erase_struct(context, s),

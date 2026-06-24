@@ -57,7 +57,7 @@ struct PubUse {
     group: UseGroup,
 }
 
-// Phase 2 + 3 entry point: seed direct public interfaces (including union
+// Phase 2 + 3 entry point: seed direct public interfaces (including inductive
 // constructor modules), then resolve every `pub use` to a fixed point. Also adds
 // constructor modules to `table` (the direct-interface view) so phase 4 can
 // classify private-vs-missing accesses through them.
@@ -88,7 +88,7 @@ pub fn resolve(
 
 // Phase 2. Walk the module tree (mirroring `discover`/`process_items`): for each
 // module, seed its `PublicInterface` from the direct interface already in
-// `table`; materialize each union's constructor module; and collect every
+// `table`; materialize each inductive's constructor module; and collect every
 // `pub use`.
 #[allow(clippy::too_many_arguments)]
 fn seed(
@@ -139,26 +139,26 @@ fn seed(
                     group: use_item.group.clone(),
                 });
             }
-            TopItem::Union(unions) => {
-                for union in unions {
-                    let ctor = prefix.with(&union.label);
+            TopItem::Inductive(group) => {
+                for inductive in group {
+                    let ctor = prefix.with(&inductive.label);
 
                     // Constructors are always public *within their nested
                     // module* — its direct info and public interface are both
                     // seeded unconditionally, exactly like an ordinary module
                     // whose bindings are all `pub`. Visibility is governed
-                    // entirely by the union itself: the child-module flag in
+                    // entirely by the inductive itself: the child-module flag in
                     // the parent's info gates every walk from outside, so a
-                    // constructor is exactly as visible as its union and the
-                    // declaring module can always use a non-`pub` union.
+                    // constructor is exactly as visible as its inductive and the
+                    // declaring module can always use a non-`pub` inductive.
                     let mut direct = ModuleInfo::new();
-                    for case in &union.cases {
+                    for case in &inductive.cases {
                         direct.insert_binding(case.label.clone(), true)?;
                     }
                     table.insert(ctor.clone(), direct);
 
                     let mut interface = PublicInterface::new();
-                    for case in &union.cases {
+                    for case in &inductive.cases {
                         let target = ctor.with(&case.label);
                         interface.bindings.insert(
                             case.label.clone(),

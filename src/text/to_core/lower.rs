@@ -22,9 +22,9 @@ pub struct Lower<'a, 'b> {
     scope: RefCell<BTreeSet<String>>,
 }
 
-/// One elaborated arm of a single-level core union match: the constructor tag,
+/// One elaborated arm of a single-level core inductive match: the constructor tag,
 /// its payload binder names, and the (already-lowered) body.
-type UnionCase = (core::Atom, Vec<String>, core::Term);
+type InductiveCase = (core::Atom, Vec<String>, core::Term);
 
 /// The active bind of a `let !` region: an atomic term denoting a binary bind
 /// `(M A, A -> M B) -> M B`. [`Lower::instantiate`] re-elaborates `term` (so its
@@ -351,11 +351,11 @@ impl<'a, 'b> Lower<'a, 'b> {
                         self.term(default)?,
                     )
                 }
-                Match::Union(um) => {
-                    // A union match lowers either to a single-level core `Match`
+                Match::Inductive(um) => {
+                    // An inductive match lowers either to a single-level core `Match`
                     // (the legacy distinct-tag shape) or, when its rows nest
                     // refutable patterns, through the pattern-matrix compiler to a
-                    // tree of them. Bodies lower here; `union_rows` decides.
+                    // tree of them. Bodies lower here; `inductive_rows` decides.
                     let head = self.term(&um.head)?;
                     let rows = um
                         .rows
@@ -366,7 +366,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                             Ok((pattern.clone(), body))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
-                    self.union_rows(head, &um.motive, rows)?
+                    self.inductive_rows(head, &um.motive, rows)?
                 }
                 Match::Arr(ArrMatch {
                     head,
@@ -623,7 +623,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                 core::Term::let_(temp, self.struct_head_type(head)?, value, body)
             }
             // The irrefutable `parse_pattern` grammar never yields a refutable
-            // pattern in a binder position; match arms route through `union_rows`.
+            // pattern in a binder position; match arms route through `inductive_rows`.
             Pattern::Variant { .. } | Pattern::Lit(_) => {
                 unreachable!("refutable pattern in a let binder position")
             }
@@ -659,7 +659,7 @@ impl<'a, 'b> Lower<'a, 'b> {
         Ok((lowered, body))
     }
 
-    /// Lowers a union arm's payload patterns into the core arm's binder names
+    /// Lowers an inductive arm's payload patterns into the core arm's binder names
     /// plus a body wrapped with the projections each tuple pattern needs. Like
     /// [`Self::lower_func_params`] without domains.
     fn bind_arm_patterns(
@@ -861,10 +861,10 @@ impl<'a, 'b> Lower<'a, 'b> {
                     self.region(default, bind)?,
                 )
             }
-            Match::Union(um) => {
-                // Mirrors the `Match::Union` arm of `subterm` (see there), swapping
+            Match::Inductive(um) => {
+                // Mirrors the `Match::Inductive` arm of `subterm` (see there), swapping
                 // `collect` on the head and `region` on the arm bodies (branch-local
-                // effects); `union_rows` then dispatches simple-vs-matrix.
+                // effects); `inductive_rows` then dispatches simple-vs-matrix.
                 let head = self.collect(&um.head, bind, binds)?;
                 let rows = um
                     .rows
@@ -875,7 +875,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                         Ok((pattern.clone(), body))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
-                self.union_rows(head, &um.motive, rows)?
+                self.inductive_rows(head, &um.motive, rows)?
             }
             Match::Arr(ArrMatch {
                 head,
@@ -969,7 +969,7 @@ impl<'a, 'b> Lower<'a, 'b> {
     /// match constructors. An omitted motive (`None`) lowers to an unlabelled
     /// fresh metavariable body — the same as writing `: _` — so a non-dependent
     /// match infers its motive by unifying the arms against that metavariable.
-    /// The annotated form is union-only and goes through `union_match` instead.
+    /// The annotated form is inductive-only and goes through `inductive_match` instead.
     fn motive_parts<'m>(
         &self,
         motive: &'m Option<Motive>,
@@ -980,23 +980,23 @@ impl<'a, 'b> Lower<'a, 'b> {
             Some(Motive::Scrutinee { label, body }) => {
                 Ok((Some(label), self.scoped([label.clone()], || self.term(body))?))
             }
-            Some(Motive::Annotated { .. }) => Err(Error::AnnotatedMotiveNotUnion),
+            Some(Motive::Annotated { .. }) => Err(Error::AnnotatedMotiveNotInductive),
             None => Ok((None, core::Term::metavar(self.context.fresh_metavar()))),
         }
     }
 
-    /// Builds the core union match for both lowering paths (`subterm` and
+    /// Builds the core inductive match for both lowering paths (`subterm` and
     /// `match_region`). A plain motive goes through `motive_parts`; the
-    /// annotated type-pattern form resolves its union name, classifies its
+    /// annotated type-pattern form resolves its inductive name, classifies its
     /// slots — a bare identifier that resolves to no module binding is a
     /// binder candidate (locals are invisible here; core elaboration
     /// validates positionally against the registry), anything else verbatim —
     /// and closes the motive body over the binder labels then the scrutinee.
-    fn union_match(
+    fn inductive_match(
         &self,
         head: core::Term,
         motive: &Option<Motive>,
-        cases: Vec<UnionCase>,
+        cases: Vec<InductiveCase>,
     ) -> Result<core::Term, Error> {
         let Some(Motive::Annotated {
             label,
@@ -1006,10 +1006,10 @@ impl<'a, 'b> Lower<'a, 'b> {
         }) = motive
         else {
             let (label, body) = self.motive_parts(motive)?;
-            return Ok(core::Term::union_match(head, label, body, cases));
+            return Ok(core::Term::inductive_match(head, label, body, cases));
         };
 
-        // Resolve the annotation's union name exactly like a term reference.
+        // Resolve the annotation's inductive name exactly like a term reference.
         let resolved = self.resolve_name(name)?;
 
         let mut binders = Vec::new();
@@ -1035,7 +1035,7 @@ impl<'a, 'b> Lower<'a, 'b> {
         // The index binders are in scope inside the motive body.
         let motive_body = self.scoped(binders.clone(), || self.term(body))?;
 
-        Ok(core::Term::union_match_motive(
+        Ok(core::Term::inductive_match_motive(
             head,
             binders,
             label,
@@ -1048,21 +1048,21 @@ impl<'a, 'b> Lower<'a, 'b> {
         ))
     }
 
-    /// Lowers a union match's arm rows (bodies already lowered). The legacy
+    /// Lowers an inductive match's arm rows (bodies already lowered). The legacy
     /// single-level shape — distinct-tag [`Pattern::Variant`] rows whose args are
-    /// all irrefutable — goes through [`Self::union_match`] unchanged (identical
+    /// all irrefutable — goes through [`Self::inductive_match`] unchanged (identical
     /// core, including the dependent/annotated motive forms). Anything richer —
     /// nested refutable patterns, a repeated head, a literal, or a `_`/binder
     /// catch-all — is compiled by the pattern matrix into a tree of the same
     /// single-level nodes.
-    fn union_rows(
+    fn inductive_rows(
         &self,
         head: core::Term,
         motive: &Option<Motive>,
         rows: Vec<(Pattern, core::Term)>,
     ) -> Result<core::Term, Error> {
-        if let Some(cases) = self.simple_union_cases(&rows)? {
-            return self.union_match(head, motive, cases);
+        if let Some(cases) = self.simple_inductive_cases(&rows)? {
+            return self.inductive_match(head, motive, cases);
         }
 
         // Bind the scrutinee to a temp so every dispatch (and every catch-all
@@ -1086,10 +1086,10 @@ impl<'a, 'b> Lower<'a, 'b> {
     /// The legacy single-level cases, or `None` if the rows need the matrix. Rows
     /// qualify only when each is a distinct-tag constructor pattern with
     /// irrefutable arguments — exactly what the pre-matrix lowering accepted.
-    fn simple_union_cases(
+    fn simple_inductive_cases(
         &self,
         rows: &[(Pattern, core::Term)],
-    ) -> Result<Option<Vec<UnionCase>>, Error> {
+    ) -> Result<Option<Vec<InductiveCase>>, Error> {
         let mut seen = std::collections::HashSet::new();
         let mut cases = Vec::with_capacity(rows.len());
 
@@ -1167,7 +1167,7 @@ impl<'a, 'b> Lower<'a, 'b> {
             Pattern::Tuple(_) => self.expand_tuple_column(occurrences, rows, column, motive),
             Pattern::Struct { .. } => self.expand_struct_column(occurrences, rows, column, motive),
             _ => match self.column_kind(&rows, column)? {
-                ColumnKind::Union => self.compile_union_column(occurrences, rows, column, motive),
+                ColumnKind::Inductive => self.compile_inductive_column(occurrences, rows, column, motive),
                 ColumnKind::Nat => self.compile_nat_column(occurrences, rows, column, motive),
                 ColumnKind::Bln => self.compile_bln_column(occurrences, rows, column, motive),
             },
@@ -1248,7 +1248,7 @@ impl<'a, 'b> Lower<'a, 'b> {
         self.compile_matrix(&sub_occ, sub_rows, motive)
     }
 
-    /// Expand a struct column into the union (in first-seen order) of the labels
+    /// Expand a struct column into the inductive (in first-seen order) of the labels
     /// its patterns mention, projected by label. Structs are partial and always
     /// match, so — like tuples — no node is emitted and the motive flows through;
     /// a struct row supplies its named sub-patterns (wildcards for the rest), a
@@ -1321,19 +1321,19 @@ impl<'a, 'b> Lower<'a, 'b> {
         }
 
         match (variant, nat, bln) {
-            (true, false, false) => Ok(ColumnKind::Union),
+            (true, false, false) => Ok(ColumnKind::Inductive),
             (false, true, false) => Ok(ColumnKind::Nat),
             (false, false, true) => Ok(ColumnKind::Bln),
             _ => Err(Error::PatternColumnConflict),
         }
     }
 
-    /// Dispatch on a constructor column. Emits one `union_match` arm per
+    /// Dispatch on a constructor column. Emits one `inductive_match` arm per
     /// constructor: explicit rows contribute their nested sub-patterns; a
     /// `_`/binder catch-all flows into every arm (and, when present, materializes
     /// the unlisted constructors from the registry roster). Constructors covered
     /// by neither are left out for core's coverage/inversion check to judge.
-    fn compile_union_column(
+    fn compile_inductive_column(
         &self,
         occurrences: &[core::Term],
         rows: Vec<MatrixRow>,
@@ -1356,7 +1356,7 @@ impl<'a, 'b> Lower<'a, 'b> {
             }
         }
 
-        // The constructors to emit arms for. A catch-all must cover the union's
+        // The constructors to emit arms for. A catch-all must cover the inductive's
         // *unlisted* constructors, so their arities come from the registry roster;
         // without one, only the explicit tags are emitted (core checks the rest).
         let roster = if catch_all {
@@ -1366,7 +1366,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                 .expect("a constructor column has at least one constructor pattern");
             let canonical = self.resolve_name(&Name::from(vec![tag.clone()]))?;
 
-            match self.context.union_ctors(&canonical) {
+            match self.context.inductive_ctors(&canonical) {
                 Some(roster) => roster.to_vec(),
                 None => return Err(Error::UnresolvedMatchConstructor { tag }),
             }
@@ -1398,7 +1398,7 @@ impl<'a, 'b> Lower<'a, 'b> {
         }
 
         let (label, motive) = self.motive_or_hole(motive);
-        Ok(core::Term::union_match(
+        Ok(core::Term::inductive_match(
             scrutinee,
             label.as_deref(),
             motive,
@@ -1810,7 +1810,7 @@ impl MatrixRow {
 
 /// What a matrix column dispatches on.
 enum ColumnKind {
-    Union,
+    Inductive,
     Nat,
     Bln,
 }

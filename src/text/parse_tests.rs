@@ -537,11 +537,11 @@ fn parse_one_tuple() {
 }
 
 #[test]
-fn parse_top_union_single_variant() {
-    let m = "union Foo\n| bar()\nend".parse::<Module>().unwrap();
+fn parse_top_inductive_single_variant() {
+    let m = "induct Foo\n| bar()\nend".parse::<Module>().unwrap();
     assert_eq!(
         m.items,
-        vec![TopItem::Union(vec![TopUnion {
+        vec![TopItem::Inductive(vec![TopInductive {
             is_pub: false,
             label: "Foo".to_string(),
             params: vec![],
@@ -556,11 +556,11 @@ fn parse_top_union_single_variant() {
 }
 
 #[test]
-fn parse_top_union_empty() {
-    let m = "union Void\nend".parse::<Module>().unwrap();
+fn parse_top_inductive_empty() {
+    let m = "induct Void\nend".parse::<Module>().unwrap();
     assert_eq!(
         m.items,
-        vec![TopItem::Union(vec![TopUnion {
+        vec![TopItem::Inductive(vec![TopInductive {
             is_pub: false,
             label: "Void".to_string(),
             params: vec![],
@@ -571,24 +571,24 @@ fn parse_top_union_empty() {
 }
 
 #[test]
-fn parse_top_union_multi_variant() {
-    let m = "pub union Color\n| red()\n| green()\n| blue()\nend"
+fn parse_top_inductive_multi_variant() {
+    let m = "pub induct Color\n| red()\n| green()\n| blue()\nend"
         .parse::<Module>()
         .unwrap();
     assert!(matches!(
         &m.items[0],
-        TopItem::Union(unions) if unions[0].cases.len() == 3 && unions[0].is_pub
+        TopItem::Inductive(group) if group[0].cases.len() == 3 && group[0].is_pub
     ));
 }
 
 #[test]
-fn parse_top_union_parameterized() {
-    let m = "union Result(A : Type, B : Type)\n| ok(A)\n| err(B)\nend"
+fn parse_top_inductive_parameterized() {
+    let m = "induct Result(A : Type, B : Type)\n| ok(A)\n| err(B)\nend"
         .parse::<Module>()
         .unwrap();
     assert!(matches!(
         &m.items[0],
-        TopItem::Union(unions) if unions[0].params.len() == 2 && unions[0].cases.len() == 2
+        TopItem::Inductive(group) if group[0].params.len() == 2 && group[0].cases.len() == 2
     ));
 }
 
@@ -616,7 +616,7 @@ fn parse_implicit_marks_on_binders_and_arguments() {
 }
 
 #[test]
-fn parse_implicit_marks_on_let_shorthand_and_union_params() {
+fn parse_implicit_marks_on_let_shorthand_and_inductive_params() {
     let m = "let foo(@T : Type, x : T) -> T = x;"
         .parse::<Module>()
         .unwrap();
@@ -631,38 +631,38 @@ fn parse_implicit_marks_on_let_shorthand_and_union_params() {
         other => panic!("expected a func let, got {other:?}"),
     }
 
-    // A union parameter may carry `@`, making it implicit at the type
+    // An inductive parameter may carry `@`, making it implicit at the type
     // constructor (it is implicit at the value constructors either way).
-    let m = "union Result(@A : Type, E : Type)\n| success(A)\nend"
+    let m = "induct Result(@A : Type, E : Type)\n| success(A)\nend"
         .parse::<Module>()
         .unwrap();
     match &m.items[0] {
-        TopItem::Union(unions) => {
-            assert_eq!(unions[0].params[0].0, Plicity::Implicit);
-            assert_eq!(unions[0].params[1].0, Plicity::Explicit);
+        TopItem::Inductive(group) => {
+            assert_eq!(group[0].params[0].0, Plicity::Implicit);
+            assert_eq!(group[0].params[1].0, Plicity::Explicit);
         }
-        other => panic!("expected a union, got {other:?}"),
+        other => panic!("expected an inductive, got {other:?}"),
     }
 }
 
 #[test]
-fn parse_top_union_and_chain() {
-    let m = "union Tree\n| node(Forest)\nand Forest\n| nil()\n| cons(Tree, Forest)\nend"
+fn parse_top_inductive_and_chain() {
+    let m = "induct Tree\n| node(Forest)\nand Forest\n| nil()\n| cons(Tree, Forest)\nend"
         .parse::<Module>()
         .unwrap();
     assert!(matches!(
         &m.items[0],
-        TopItem::Union(unions) if unions.len() == 2
+        TopItem::Inductive(group) if group.len() == 2
     ));
 }
 
 #[test]
-fn parse_union_match_nullary_and_unary() {
+fn parse_inductive_match_nullary_and_unary() {
     assert_eq!(
         "match v : Bin\n| null() => \"null\"\n| bln(b) => b\nend"
             .parse::<Term>()
             .unwrap(),
-        Subterm::Match(Match::Union(UnionMatch {
+        Subterm::Match(Match::Inductive(InductiveMatch {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
             motive: Some(Motive::Constant(
                 Subterm::Name(Name::from(["Bin".to_string()])).into()
@@ -689,12 +689,12 @@ fn parse_union_match_nullary_and_unary() {
 }
 
 #[test]
-fn parse_union_match_multi_binder() {
+fn parse_inductive_match_multi_binder() {
     assert_eq!(
         "match v : T\n| lit(a, b) => a\nend"
             .parse::<Term>()
             .unwrap(),
-        Subterm::Match(Match::Union(UnionMatch {
+        Subterm::Match(Match::Inductive(InductiveMatch {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
             motive: Some(Motive::Constant(
                 Subterm::Name(Name::from(["T".to_string()])).into()
@@ -720,7 +720,7 @@ fn parse_match_omitted_motive() {
     // elaborator later lowers it to a fresh metavariable (sugar for `: _`).
     assert_eq!(
         "match x | foo(y) => y end".parse::<Term>().unwrap(),
-        Subterm::Match(Match::Union(UnionMatch {
+        Subterm::Match(Match::Inductive(InductiveMatch {
             head: Subterm::Name(Name::from(["x".to_string()])).into(),
             motive: None,
             rows: vec![(
@@ -797,20 +797,20 @@ fn erased_quantity_on_def_form_param() {
 }
 
 #[test]
-fn erased_quantity_on_union_payload() {
+fn erased_quantity_on_inductive_payload() {
     // Item 1: `@` on a constructor payload's type marks the field erased
     // (dropped from the runtime variant tuple), on named and positional binders
     // alike. Distinct from the `@`-on-the-name plicity mark.
-    let m = "union Boxed | box(ghost : @Nat, val : Nat) end"
+    let m = "induct Boxed | box(ghost : @Nat, val : Nat) end"
         .parse::<Module>()
         .unwrap();
     match &m.items[0] {
-        TopItem::Union(unions) => {
-            let payload = &unions[0].cases[0].payload;
+        TopItem::Inductive(group) => {
+            let payload = &group[0].cases[0].payload;
             assert_eq!(payload[0].quantity, Quantity::Zero);
             assert_eq!(payload[1].quantity, Quantity::Omega);
         }
-        other => panic!("expected a union, got {other:?}"),
+        other => panic!("expected an inductive, got {other:?}"),
     }
 }
 
@@ -1041,7 +1041,7 @@ fn parse_bang_in_match_scrutinee_and_arm() {
     // the elaborator hoists them into different regions.
     let term = "match x! | foo(z) => y! end".parse::<Term>().unwrap();
     match term.into_subterm() {
-        Subterm::Match(Match::Union(m)) => {
+        Subterm::Match(Match::Inductive(m)) => {
             assert_eq!(m.head, Subterm::Bang(name("x")).into());
             let foo = m.rows.iter().find_map(|(pattern, body)| match pattern {
                 Pattern::Variant { tag, .. } if tag == "foo" => Some(body),
@@ -1049,7 +1049,7 @@ fn parse_bang_in_match_scrutinee_and_arm() {
             });
             assert_eq!(foo, Some(&Subterm::Bang(name("y")).into()));
         }
-        other => panic!("expected union match, got {other:?}"),
+        other => panic!("expected inductive match, got {other:?}"),
     }
 }
 

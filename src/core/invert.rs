@@ -1,4 +1,4 @@
-//! Rung C of the indexed-union ladder: *inversion*. When a union match's
+//! Rung C of the indexed-inductive ladder: *inversion*. When an inductive match's
 //! scrutinee carries indices in constructor form, first-order unification of
 //! the actual indices against each case's target indices either pins arm
 //! binders to the values they are forced to take (`m + 1 ~ n + 1` pins
@@ -7,7 +7,7 @@
 //! `impossible` keyword.
 
 use {
-    super::{Context, Error, Peel, Subterm, Telescope, Term, UnionType, peel_prim, reduce_with},
+    super::{Context, Error, Peel, Subterm, Telescope, Term, InductiveType, peel_prim, reduce_with},
     std::collections::BTreeSet,
 };
 
@@ -38,8 +38,8 @@ pub fn case_target_indices(mut telescope: Telescope<Term>, vars: &[Term]) -> Vec
 
     match telescope {
         Telescope::Done(terminal) => match &**terminal {
-            Subterm::UnionType(UnionType { indices, .. }) => indices.clone(),
-            _ => unreachable!("constructor terminal is its union type"),
+            Subterm::InductiveType(InductiveType { indices, .. }) => indices.clone(),
+            _ => unreachable!("constructor terminal is its inductive type"),
         },
         Telescope::Cons(..) => unreachable!("telescope arity matches the binder count"),
     }
@@ -158,8 +158,8 @@ fn unify_index(
         }
 
         (Subterm::Variant(a), Subterm::Variant(t)) => {
-            // A different union is incomparable; but two *different constructors*
-            // of the same union definitely clash — even though they legitimately
+            // A different inductive is incomparable; but two *different constructors*
+            // of the same inductive definitely clash — even though they legitimately
             // differ in payload arity, so the tag check must precede the arity
             // check (which is then just defensive: equal tags share an arity).
             if a.name != t.name {

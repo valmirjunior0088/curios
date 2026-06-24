@@ -1,4 +1,4 @@
-pub union Lst(A : Type)
+pub induct Lst(A : Type)
 | nil()
 | cons(A, Lst(A))
 end

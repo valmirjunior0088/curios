@@ -6,7 +6,7 @@ use {
 fn main() {
     let source = r#"
         use /std/{Int};
-        union IntList
+        induct IntList
         | nil()
         | cons(Int, IntList)
         end

@@ -6,7 +6,7 @@ use {
 fn main() {
     let source = r#"
         use /std/{Int};
-        union Tree
+        induct Tree
         | leaf(Int)
         | node(Int, Tree, Tree)
         end

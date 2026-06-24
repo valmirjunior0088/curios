@@ -451,7 +451,7 @@ impl Context {
 
     // === Inductive registry =================================================
 
-    /// Record an inductive declaration's metadata. Called once per `union`
+    /// Record an inductive declaration's metadata. Called once per `induct`
     /// declaration as the module's items are processed, alongside the
     /// `define`s for its type-constructor and value-constructor functions.
     pub fn register_inductive<N>(&mut self, name: N, inductive: Inductive)

@@ -5,7 +5,7 @@ use {
         MotivePattern,
         MotiveSlot, Nat, ParkedWork, Plicity, Prim, Proj, Quantity, Rec, Scope, Struct, StructType,
         Structure,
-        Subterm, Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
+        Subterm, Telescope, Term, Three, Tuple, TupleType, Two, InductiveType, Var, Variant,
         case_target_indices,
         check, check_motive, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
         reduce_with, refine_head,
@@ -578,7 +578,7 @@ fn elaborate_nat_match(
         motive,
         // `Nat` is the free monoid on one payload-less generator: its cons arm binds
         // just (predecessor, ih), so the carrier is `Nat` and the head is absent.
-        cases: Cases::Inductive {
+        cases: Cases::FreeMonoid {
             carrier: Carrier::Nat {
                 empty_case: zero_elaborated,
                 cons_case: succ_elaborated,
@@ -665,7 +665,7 @@ fn elaborate_arr_match(
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive,
-        cases: Cases::Inductive {
+        cases: Cases::FreeMonoid {
             carrier: Carrier::Arr {
                 elem,
                 empty_case: empty_elaborated,
@@ -752,7 +752,7 @@ fn elaborate_bin_match(
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive,
-        cases: Cases::Inductive {
+        cases: Cases::FreeMonoid {
             carrier: Carrier::Bin {
                 empty_case: empty_elaborated,
                 cons_case: cons_elaborated,
@@ -833,17 +833,17 @@ fn elaborate_match(
         Cases::Switch { cases, default } => {
             elaborate_switch(context, head, motive, cases, default, term, mode)
         }
-        Cases::Union { cases, pattern } => {
-            elaborate_union_match(context, head, motive, cases, pattern.as_ref(), term, mode)
+        Cases::Inductive { cases, pattern } => {
+            elaborate_inductive_match(context, head, motive, cases, pattern.as_ref(), term, mode)
         }
-        Cases::Inductive {
+        Cases::FreeMonoid {
             carrier:
                 Carrier::Nat {
                     empty_case,
                     cons_case,
                 },
         } => elaborate_nat_match(context, head, motive, empty_case, cons_case, term, mode),
-        Cases::Inductive {
+        Cases::FreeMonoid {
             carrier:
                 Carrier::Arr {
                     empty_case,
@@ -851,7 +851,7 @@ fn elaborate_match(
                     ..
                 },
         } => elaborate_arr_match(context, head, motive, empty_case, cons_case, term, mode),
-        Cases::Inductive {
+        Cases::FreeMonoid {
             carrier:
                 Carrier::Bin {
                     empty_case,
@@ -999,8 +999,8 @@ fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Er
 /// and indices are checked pointwise (dependently) as one flat argument list
 /// through the declaration's full index telescope (whose leading binders are
 /// the parameters), and the whole node is a `Type`.
-fn elaborate_union_type(context: &mut Context, ut: &UnionType) -> Result<(Term, Term), Error> {
-    let UnionType {
+fn elaborate_inductive_type(context: &mut Context, ut: &InductiveType) -> Result<(Term, Term), Error> {
+    let InductiveType {
         name,
         params,
         indices,
@@ -1026,7 +1026,7 @@ fn elaborate_union_type(context: &mut Context, ut: &UnionType) -> Result<(Term, 
     })?;
 
     Ok((
-        Term::union_type(
+        Term::inductive_type(
             name,
             elaborated[..params.len()].iter().cloned(),
             elaborated[params.len()..].iter().cloned(),
@@ -1038,7 +1038,7 @@ fn elaborate_union_type(context: &mut Context, ut: &UnionType) -> Result<(Term, 
 /// Type a primitive constructor value against its registry signature: the
 /// instantiated parameters and the payload are checked through the
 /// constructor's full telescope, whose terminal gives the constructed
-/// `UnionType`.
+/// `InductiveType`.
 fn elaborate_variant(
     context: &mut Context,
     uc: &Variant,
@@ -1103,7 +1103,7 @@ fn elaborate_variant(
 
 /// Type a struct type against its registry entry: the parameters are checked
 /// pointwise (dependently) through the parameter telescope, and the whole node
-/// is a `Type`. The struct analogue of `elaborate_union_type`, with no indices.
+/// is a `Type`. The struct analogue of `elaborate_inductive_type`, with no indices.
 ///
 /// An *empty* parameter list on a parameterized struct is the inferred-head form
 /// (the type struct destructuring gives its temp): mint one fresh metavariable
@@ -1307,11 +1307,11 @@ fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(T
 /// With a plain motive (no pattern) the discipline is constant/scrutinee-only:
 /// arms check against `motive(variant)`, the match has type `motive(head)`,
 /// and any indices ride along inertly. The annotated type-pattern motive
-/// (Rung A of the indexed-union ladder) additionally binds the scrutinee's
+/// (Rung A of the indexed-inductive ladder) additionally binds the scrutinee's
 /// indices: each arm checks against the motive at *that case's* target
 /// indices, and the whole match types at the scrutinee's *actual* indices.
 #[allow(clippy::too_many_arguments)]
-fn elaborate_union_match(
+fn elaborate_inductive_match(
     context: &mut Context,
     head: &Term,
     motive: &Scope<Many>,
@@ -1320,7 +1320,7 @@ fn elaborate_union_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // A match with no arms is a vacuous elimination — either of an empty union
+    // A match with no arms is a vacuous elimination — either of an empty inductive
     // (`Void`) or of one whose every constructor inversion-clashes at the
     // scrutinee's indices. Such a match compiles to unreachable code that never
     // inspects the scrutinee, so the scrutinee occupies an *erased* position: an
@@ -1336,12 +1336,12 @@ fn elaborate_union_match(
     let head_type = reduce_with(context, &head_type)?;
 
     let (name, params, actual_indices) = match &*head_type {
-        Subterm::UnionType(UnionType {
+        Subterm::InductiveType(InductiveType {
             name,
             params,
             indices,
         }) => (name.clone(), params.clone(), indices.clone()),
-        other => return Err(Error::not_a_union_type(other.clone())),
+        other => return Err(Error::not_a_inductive_type(other.clone())),
     };
 
     let Some(inductive) = context.inductive(&name).cloned() else {
@@ -1352,7 +1352,7 @@ fn elaborate_union_match(
         None => (check_motive(context, &head_type, motive)?, None, vec![]),
         Some(pattern) => {
             let (motive_elaborated, pattern_elaborated, plan) =
-                check_union_motive(context, &inductive, &name, &params, motive, pattern)?;
+                check_inductive_motive(context, &inductive, &name, &params, motive, pattern)?;
             (motive_elaborated, Some(pattern_elaborated), plan)
         }
     };
@@ -1396,7 +1396,7 @@ fn elaborate_union_match(
     let mut cases_elaborated = BTreeMap::new();
     for tag in inductive.constructors.keys() {
         let Some(scope) = cases.get(tag) else {
-            // An unindexed union has nothing to invert: every arm is
+            // An unindexed inductive has nothing to invert: every arm is
             // reachable and a missing one is plainly missing.
             if actual_indices.is_empty() {
                 return Err(Error::match_case_missing(term.clone(), tag.clone()));
@@ -1486,8 +1486,8 @@ fn elaborate_union_match(
             // opened) signature states them over the payload binders.
             let ix_c = match &telescope {
                 Telescope::Done(terminal) => match &***terminal {
-                    Subterm::UnionType(UnionType { indices, .. }) => indices.clone(),
-                    _ => unreachable!("constructor terminal is its union type"),
+                    Subterm::InductiveType(InductiveType { indices, .. }) => indices.clone(),
+                    _ => unreachable!("constructor terminal is its inductive type"),
                 },
                 Telescope::Cons(..) => unreachable!("arity checked above"),
             };
@@ -1549,7 +1549,7 @@ fn elaborate_union_match(
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive: motive_elaborated,
-        cases: Cases::Union {
+        cases: Cases::Inductive {
             cases: cases_elaborated,
             pattern: pattern_elaborated,
         },
@@ -1560,7 +1560,7 @@ fn elaborate_union_match(
 }
 
 /// How each binder of an annotated motive scope (scrutinee excluded) maps to
-/// the union's flat argument list: a parameter position (opened with the
+/// the inductive's flat argument list: a parameter position (opened with the
 /// actual parameter everywhere) or an index position (opened with the case's
 /// target index in arms, the scrutinee's actual index for the match itself).
 enum SlotPlan {
@@ -1568,7 +1568,7 @@ enum SlotPlan {
     Index(usize),
 }
 
-/// Check the annotated type-pattern motive of a union match: validate the
+/// Check the annotated type-pattern motive of an inductive match: validate the
 /// pattern against the registry (parameter slots verbatim-or-binder, index
 /// slots binder-only), then check the motive body as a type family over the
 /// index binders and the scrutinee.
@@ -1576,9 +1576,9 @@ enum SlotPlan {
 /// Index binders are assumed at the registry's index telescope instantiated
 /// at the scrutinee's actual parameters, each later type opened with the
 /// earlier binder; the scrutinee binder is assumed at
-/// `UnionType(name, params, index-vars)`. No unification anywhere — the
+/// `InductiveType(name, params, index-vars)`. No unification anywhere — the
 /// eliminator's discipline.
-fn check_union_motive(
+fn check_inductive_motive(
     context: &mut Context,
     inductive: &Inductive,
     name: &str,
@@ -1590,7 +1590,7 @@ fn check_union_motive(
     let n_indices = inductive.indices.len() - n_params;
 
     if pattern.name != name {
-        return Err(Error::motive_wrong_union(
+        return Err(Error::motive_wrong_inductive(
             pattern.name.clone(),
             name.to_string(),
         ));
@@ -1701,7 +1701,7 @@ fn check_union_motive(
         let scrutinee_label = labels.last().expect("motive binds at least the scrutinee");
         context.assume(
             scrutinee_label,
-            &Term::union_type(name, params.to_vec(), index_vars),
+            &Term::inductive_type(name, params.to_vec(), index_vars),
         );
 
         let var_terms = labels
@@ -2175,7 +2175,7 @@ fn elaborate_metavar(
 /// Called from `elaborate_module_rec` after the group's signatures are
 /// reassumed rebuilt and *before* any body is checked — index types may
 /// mention the group's own members (resolved through the assumed signatures),
-/// and the type-constructor bodies' `UnionType` nodes check their arguments
+/// and the type-constructor bodies' `InductiveType` nodes check their arguments
 /// against this very telescope. A name with no registry entry is an ordinary
 /// binding; no-op.
 fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), Error> {
@@ -2230,12 +2230,12 @@ fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), 
 
 /// Rebuild a registry entry's constructor signatures with *elaborated* types —
 /// the second phase of the registry rebuild (see
-/// [`elaborate_inductive_indices`]). Payload types may apply the union group's
+/// [`elaborate_inductive_indices`]). Payload types may apply the inductive group's
 /// type constructors, so this runs from `elaborate_module_rec` only after the
 /// group's rebuilt bodies are defined; each terminal — the constructed
-/// `UnionType` normal form — routes through `elaborate_union_type`, which
+/// `InductiveType` normal form — routes through `elaborate_inductive_type`, which
 /// checks the parameters and the case's target indices against the
-/// already-rebuilt index telescope and returns another `UnionType` node, the
+/// already-rebuilt index telescope and returns another `InductiveType` node, the
 /// shape `case_target_indices` and the match elaborators rely on.
 fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result<(), Error> {
     let Some(inductive) = context.inductive(name).cloned() else {
@@ -2404,10 +2404,10 @@ fn elaborate_module_rec(
         context.reassume(&def.name, type_);
     }
 
-    // A union's type bindings always lower as one `rec` group whose member
+    // An inductive's type bindings always lower as one `rec` group whose member
     // names are the registry keys. Rebuild the registry index telescopes here
     // — after the rebuilt signatures are assumed (index types may mention the
-    // group), before any body's `UnionType` node checks against them.
+    // group), before any body's `InductiveType` node checks against them.
     for def in defs {
         elaborate_inductive_indices(context, &def.name)?;
     }
@@ -2430,7 +2430,7 @@ fn elaborate_module_rec(
     }
 
     // Registry rebuild, phase two: constructor payload types may apply the
-    // group's type constructors, so their signatures (and `UnionType`
+    // group's type constructors, so their signatures (and `InductiveType`
     // terminals) elaborate only now that the rebuilt bodies are defined.
     for def in defs {
         elaborate_inductive_constructors(context, &def.name)?;
@@ -2464,8 +2464,8 @@ pub fn elaborate_module(
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
     // Seed the context's inductive registry before any item is checked: a
-    // union's type-constructor and value-constructor definitions reference
-    // their own registry entry (`elaborate_union_type` / `elaborate_variant`).
+    // inductive's type-constructor and value-constructor definitions reference
+    // their own registry entry (`elaborate_inductive_type` / `elaborate_variant`).
     for (name, inductive) in &module.inductives {
         context.register_inductive(name, inductive.clone());
     }
@@ -2725,7 +2725,7 @@ fn elaborate_subterm(
         Subterm::Func(func) => return elaborate_func(context, func, term, mode),
         Subterm::Tuple(tuple) => return elaborate_tuple(context, tuple, term, mode),
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
-        Subterm::UnionType(ut) => elaborate_union_type(context, ut)?,
+        Subterm::InductiveType(ut) => elaborate_inductive_type(context, ut)?,
         Subterm::Variant(uc) => elaborate_variant(context, uc, term)?,
         Subterm::StructType(st) => elaborate_struct_type(context, st, term)?,
         Subterm::Struct(s) => elaborate_struct(context, s, term)?,

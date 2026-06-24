@@ -288,7 +288,7 @@ impl From<Error> for Status {
     }
 }
 
-/// The open mode of `/sys/Io/open`, mirrored by `/std/File`'s `Mode` union.
+/// The open mode of `/sys/Io/open`, mirrored by `/std/File`'s `Mode` inductive.
 /// Lifts from its `0`/`1`/`2` tag; an out-of-range tag panics — `/std/File`
 /// only ever marshals those three, so anything else is a codegen bug.
 #[derive(Clone, Copy, PartialEq)]

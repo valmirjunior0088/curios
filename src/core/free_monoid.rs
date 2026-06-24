@@ -1,6 +1,6 @@
 //! The free-monoid destructors. `Nat`, `Bin`, and `Arr` are the native primitives
 //! that are free monoids on their generators (the unary unit, bytes, elements).
-//! Their structural eliminator (`Cases::Inductive`) reduces by a one-step decode —
+//! Their structural eliminator (`Cases::FreeMonoid`) reduces by a one-step decode —
 //! peel the empty identity or a single leading generator off the scrutinee — and
 //! that decode is `uncons`, one match arm per carrier; the catamorphism driver in
 //! `reduce` consumes the `Layer` it returns and never inspects the carrier's

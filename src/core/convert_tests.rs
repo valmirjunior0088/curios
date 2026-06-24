@@ -45,11 +45,11 @@ fn convert_func_is_alpha_equivalent() {
 }
 
 #[test]
-fn convert_union_match_compares_cases_and_motive() {
+fn convert_inductive_match_compares_cases_and_motive() {
     let mut context = context();
 
     let make = |motive_label: &str, binder: &str| {
-        Term::union_match(
+        Term::inductive_match(
             Term::var(Var::free("r")),
             Some(motive_label),
             Term::prim(Prim::NatType),
@@ -66,7 +66,7 @@ fn convert_union_match_compares_cases_and_motive() {
         Ok(true)
     );
 
-    let different = Term::union_match(
+    let different = Term::inductive_match(
         Term::var(Var::free("r")),
         Some("m"),
         Term::prim(Prim::NatType),
@@ -554,7 +554,7 @@ fn convert_struct_unit_field_is_irrelevant() {
 fn convert_variant_unit_payload_is_irrelevant() {
     let mut context = context();
 
-    // union Wrap | wrap(x : Nat, u : ()) end
+    // induct Wrap | wrap(x : Nat, u : ()) end
     context.register_inductive(
         "Wrap",
         Inductive {
@@ -568,7 +568,7 @@ fn convert_variant_unit_payload_is_irrelevant() {
                             ("x", Term::prim(Prim::NatType)),
                             ("u", Term::tuple_type_unit()),
                         ],
-                        Term::union_type("Wrap", Vec::<Term>::new(), Vec::<Term>::new()),
+                        Term::inductive_type("Wrap", Vec::<Term>::new(), Vec::<Term>::new()),
                     ),
                     quantities: vec![Quantity::Omega, Quantity::Omega],
                 },
@@ -1128,11 +1128,11 @@ fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
     context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
     let m = Term::metavar_birthed(0, None, vec![Term::var(Var::free("a"))]);
 
-    // A union type against `Nat` is provably unequal whatever `?0` becomes —
+    // An inductive type against `Nat` is provably unequal whatever `?0` becomes —
     // the heads are rigid — so the mismatch stays hard (and is reported at
     // the use site, not deferred to the drain).
-    let union = Term::union_type("Vec", [m], Vec::<Term>::new());
-    let outcome = convert_outcome(&mut context, &Term::type_(), &union, &nat_type());
+    let inductive = Term::inductive_type("Vec", [m], Vec::<Term>::new());
+    let outcome = convert_outcome(&mut context, &Term::type_(), &inductive, &nat_type());
     assert!(matches!(outcome, Ok(Outcome::Mismatch)));
 }
 

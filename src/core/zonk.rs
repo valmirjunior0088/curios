@@ -2,7 +2,7 @@ use super::{
     Apply, Arity, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
     InductiveParam, Item, Let,
     Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Struct,
-    StructType, Structure, Subterm, Telescope, Term, Tuple, TupleType, UnionType, Variant,
+    StructType, Structure, Subterm, Telescope, Term, Tuple, TupleType, InductiveType, Variant,
 };
 
 /// Zonk `scope`'s body in place. (The binder stack that used to thread
@@ -251,11 +251,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             field: field.clone(),
         }),
 
-        Subterm::UnionType(UnionType {
+        Subterm::InductiveType(InductiveType {
             name,
             params,
             indices,
-        }) => Subterm::UnionType(UnionType {
+        }) => Subterm::InductiveType(InductiveType {
             name: name.clone(),
             params: zonk_terms(context, params)?,
             indices: zonk_terms(context, indices)?,
@@ -305,7 +305,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                     false_case: zonk_term(context, false_case)?,
                     true_case: zonk_term(context, true_case)?,
                 },
-                Cases::Inductive { carrier } => Cases::Inductive {
+                Cases::FreeMonoid { carrier } => Cases::FreeMonoid {
                     carrier: match carrier {
                         Carrier::Nat {
                             empty_case,
@@ -339,7 +339,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                         .collect::<Result<_, Error>>()?,
                     default: zonk_term(context, default)?,
                 },
-                Cases::Union { cases, pattern } => Cases::Union {
+                Cases::Inductive { cases, pattern } => Cases::Inductive {
                     cases: cases
                         .iter()
                         .map(|(atom, scope)| {

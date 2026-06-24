@@ -1,4 +1,4 @@
-pub union Eq(@A : Type) : (x : A, y : A)
+pub induct Eq(@A : Type) : (x : A, y : A)
 | refl(@z : A) : (z, z)
 end
 

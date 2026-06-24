@@ -1,6 +1,6 @@
 # Proofs 101
 
-This document assumes you have read `CRASH_COURSE.md`. It teaches one new skill — proving — using zero new language features. Every mechanism here (unions, indices, `match`, implicit binders) is one you already know; what changes is what you point them at. Snippets assume `use /std/{Nat, Str, Bln, Eq, Lst, Vec, Io};`.
+This document assumes you have read `CRASH_COURSE.md`. It teaches one new skill — proving — using zero new language features. Every mechanism here (inductive types, indices, `match`, implicit binders) is one you already know; what changes is what you point them at. Snippets assume `use /std/{Nat, Str, Bln, Eq, Lst, Vec, Io};`.
 
 ## A proof is a test that checks every input
 
@@ -33,10 +33,10 @@ The trivially true proposition is the empty tuple — `()` proves it:
 let trivially_true : {} = ();
 ```
 
-The false proposition is a type with no values — a `union` with zero cases:
+The false proposition is a type with no values — a `induct` with zero cases:
 
 ```
-union Void
+induct Void
 end
 ```
 
@@ -56,12 +56,12 @@ let Not(P : Type) -> Type = (P) -> Void;
 
 All three ship in the standard library as `/std/Void` (`Void`, `Void/absurd`, `Void/Not`); this document declares them inline so every snippet stands on its own.
 
-## Equality is an indexed union
+## Equality is an indexed inductive
 
-`/std/Eq` is the workhorse proposition. It is an ordinary indexed union, two pages after `CRASH_COURSE.md` taught you `Vec`:
+`/std/Eq` is the workhorse proposition. It is an ordinary indexed inductive, two pages after `CRASH_COURSE.md` taught you `Vec`:
 
 ```
-union Eq(@A : Type) : (x : A, y : A)
+induct Eq(@A : Type) : (x : A, y : A)
 | refl(@z : A) : (z, z)
 end
 ```
@@ -74,7 +74,7 @@ let two_is_two : Eq(2, 2) = Eq/refl();
 
 `Eq(2, 3)` rejects `Eq/refl()` with a `TypeMismatch`: the constructor demands both indices be the same `z`, and `2` and `3` are not.
 
-Matching is where proofs pay rent. As with any indexed union, **matching refines the indices inside the arm**: scrutinizing a `p : Eq(x, y)` makes `x` and `y` the same thing in the `refl` arm, so obligations that were stuck now reduce. Symmetry is the whole technique in four lines:
+Matching is where proofs pay rent. As with any indexed inductive, **matching refines the indices inside the arm**: scrutinizing a `p : Eq(x, y)` makes `x` and `y` the same thing in the `refl` arm, so obligations that were stuck now reduce. Symmetry is the whole technique in four lines:
 
 ```
 let sym(@A : Type, @x : A, @y : A, p : Eq(x, y)) -> Eq(y, x) =

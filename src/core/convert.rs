@@ -2,7 +2,7 @@ use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, Match, Metavar, Proj, Rec,
         ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType,
-        UnionType, Var, Variant, Visit, check, convert_prim, reduce, unfold_rec,
+        InductiveType, Var, Variant, Visit, check, convert_prim, reduce, unfold_rec,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -360,10 +360,10 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_union_type(
+    fn compare_inductive_type(
         &mut self,
-        this: UnionType,
-        that: UnionType,
+        this: InductiveType,
+        that: InductiveType,
     ) -> Result<bool, ReduceError> {
         if this.name != that.name
             || this.params.len() != that.params.len()
@@ -487,7 +487,7 @@ impl Convert {
     ) -> Result<bool, ReduceError> {
         self.enqueue(Term::type_(), this.head, that.head);
 
-        // The motive's arity is 1 except for an annotated union-match motive
+        // The motive's arity is 1 except for an annotated inductive-match motive
         // (pattern binders then the scrutinee); different arities are
         // structurally distinct.
         if this.motive.arity() != that.motive.arity() {
@@ -548,10 +548,10 @@ impl Convert {
             // The pattern is elaboration-time data, fully reflected in the
             // motive scope once checked — convertibility ignores it.
             (
-                Cases::Union {
+                Cases::Inductive {
                     cases: this_cases, ..
                 },
-                Cases::Union {
+                Cases::Inductive {
                     cases: that_cases, ..
                 },
             ) => {
@@ -582,10 +582,10 @@ impl Convert {
             }
 
             (
-                Cases::Inductive {
+                Cases::FreeMonoid {
                     carrier: this_carrier,
                 },
-                Cases::Inductive {
+                Cases::FreeMonoid {
                     carrier: that_carrier,
                 },
             ) => match (this_carrier, that_carrier) {
@@ -1268,8 +1268,8 @@ impl Convert {
                     self.eta_expand_tuple(context, tuple, other.into(), type_.clone())?
                 }
                 (Subterm::Proj(this), Subterm::Proj(that)) => self.compare_proj(this, that)?,
-                (Subterm::UnionType(this), Subterm::UnionType(that)) => {
-                    self.compare_union_type(this, that)?
+                (Subterm::InductiveType(this), Subterm::InductiveType(that)) => {
+                    self.compare_inductive_type(this, that)?
                 }
                 (Subterm::Variant(this), Subterm::Variant(that)) => {
                     self.compare_variant(context, this, that)?

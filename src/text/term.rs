@@ -184,7 +184,7 @@ pub struct Tuple {
 /// - `match v : P` — constant;
 /// - `match v : (x) => P` — depends on the scrutinee;
 /// - `match v : (x : Vec(T, k)) => P` — the annotated type-pattern form,
-///   union scrutinees only: binds the indices where they naturally appear.
+///   inductive scrutinees only: binds the indices where they naturally appear.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Motive {
     Constant(Term),
@@ -194,7 +194,7 @@ pub enum Motive {
     },
     Annotated {
         label: String,
-        /// The union type the annotation names.
+        /// The inductive type the annotation names.
         name: Name,
         /// The written argument slots, positionally (parameters then
         /// indices); a bare unresolvable identifier is a binder, anything
@@ -289,7 +289,7 @@ pub struct StructLit {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct UnionMatch {
+pub struct InductiveMatch {
     pub head: Term,
     pub motive: Option<Motive>,
     /// The arm rows, in source order. Each row pairs a (refutable) pattern with
@@ -305,7 +305,7 @@ pub struct UnionMatch {
 pub enum Match {
     Bln(BlnMatch),
     Nat(NatMatch),
-    Union(UnionMatch),
+    Inductive(InductiveMatch),
     Arr(ArrMatch),
     Bin(BinMatch),
 }

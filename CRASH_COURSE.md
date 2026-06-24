@@ -92,7 +92,7 @@ let x_coord(p : {x : Nat, y : Nat}) -> Nat =
 
 ## Sum types
 
-Rust encodes sum types with `enum`. Curios uses `union` declarations with constructor functions and constructor-pattern matching. Fieldless variants are constructors with an empty payload:
+Rust encodes sum types with `enum`. Curios uses `induct` declarations with constructor functions and constructor-pattern matching. Fieldless variants are constructors with an empty payload:
 
 ```rust
 // Rust
@@ -102,14 +102,14 @@ let d: Direction = Direction::North;
 
 ```
 -- Curios
-union Direction
+induct Direction
 | north()
 | south()
 end
 let d : Direction = Direction/north();
 ```
 
-A constructor is exactly as visible as its union: a bare `union` is usable throughout the declaring module, and `pub union` additionally exports the type and its constructors to importing modules.
+A constructor is exactly as visible as its inductive type: a bare `induct` is usable throughout the declaring module, and `pub induct` additionally exports the type and its constructors to importing modules.
 
 ```rust
 // Rust
@@ -121,7 +121,7 @@ enum Shape {
 
 ```
 -- Curios
-union Shape
+induct Shape
 | circle(Flt)
 | rectangle(Flt, Flt)
 end
@@ -168,7 +168,7 @@ id(42)          -- T inferred as Nat
 id(@Str, "hi")  -- T supplied positionally with @
 ```
 
-Union parameters work this way out of the box: `Result/ok(42)` infers the type arguments; only the _type_ `Result(Nat, Bin)` is written out.
+Inductive parameters work this way out of the box: `Result/ok(42)` infers the type arguments; only the _type_ `Result(Nat, Bin)` is written out.
 
 The motive in `match` is the same mechanism: `match head : (label) => T` computes the return type from the scrutinee's value. Naming the return type keeps this readable:
 
@@ -225,10 +225,10 @@ let head(T : Type, n : Nat, v : Vec(T, Nat/succ(n))) -> T =
 
 `Vec(T, Nat/succ(n))` reduces to `{T, Vec(T, n)}`, so `v.0 : T` and `v.1 : Vec(T, n)`. An empty vector has type `{}`, not a pair, so passing one is a type error. There is no runtime check and no `Option` in the return type — the length guarantee is structural.
 
-The same shape is also available as a declared _indexed union_ — this is what `/std/Vec` is:
+The same shape is also available as a declared _indexed inductive_ — this is what `/std/Vec` is:
 
 ```
-union Vec(T : Type) : (n : Nat)
+induct Vec(T : Type) : (n : Nat)
 | nil() : (0)
 | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
 end
@@ -249,7 +249,7 @@ rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T
     end;
 ```
 
-Which to reach for: the _recursion-computed_ type reduces definitionally — `Vec(Nat, 2)` literally **is** `{Nat, {Nat, {}}}`, which is what type-level computation like `/std/Fmt/printf` needs — but it cannot be `match`ed as data. The _indexed union_ is matchable data that carries its invariant, with per-arm index learning and checker-verified impossible-arm omission. They complement each other.
+Which to reach for: the _recursion-computed_ type reduces definitionally — `Vec(Nat, 2)` literally **is** `{Nat, {Nat, {}}}`, which is what type-level computation like `/std/Fmt/printf` needs — but it cannot be `match`ed as data. The _indexed inductive_ is matchable data that carries its invariant, with per-arm index learning and checker-verified impossible-arm omission. They complement each other.
 
 ## Payoff: typed format strings
 
@@ -267,7 +267,7 @@ Length-indexed vectors rule out bounds errors. The same mechanism rules out vari
 -- TypeMismatch: %d expects Nat, but "Alice" has type Str
 ```
 
-The `examples/crs_printf.rs` program exercises the successful case with host input (`Io/read` + `Str/trim`) and asserts the same output, then checks that the ill-typed `%d` example is rejected. `examples/crs_json_codec.rs` shows a larger program combining the standard library's `Json` module, union values, and arrays to encode and decode a `Json` tree.
+The `examples/crs_printf.rs` program exercises the successful case with host input (`Io/read` + `Str/trim`) and asserts the same output, then checks that the ill-typed `%d` example is rejected. `examples/crs_json_codec.rs` shows a larger program combining the standard library's `Json` module, inductive values, and arrays to encode and decode a `Json` tree.
 
 ## Where to next
 

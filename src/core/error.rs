@@ -147,7 +147,7 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
-    NotAUnionType {
+    NotAInductiveType {
         head_type: Box<Term>,
     },
     /// A struct literal's (or struct type's) head names a binding that is not a
@@ -220,13 +220,13 @@ pub enum Error {
     IntOverflow {
         value: Box<Int>,
     },
-    /// A union match's annotated motive names a different union than the
+    /// An inductive match's annotated motive names a different inductive than the
     /// scrutinee's type.
-    MotiveWrongUnion {
+    MotiveWrongInductive {
         written: String,
         actual: String,
     },
-    /// The annotated motive's slot count differs from the union's flat
+    /// The annotated motive's slot count differs from the inductive's flat
     /// argument list (parameters then indices).
     MotivePatternArity {
         expected: usize,
@@ -243,7 +243,7 @@ pub enum Error {
     MotiveIndexSlotNotBinder {
         slot: Box<Term>,
     },
-    /// An arm of an indexed-union match was omitted, but inversion could not
+    /// An arm of an indexed-inductive match was omitted, but inversion could not
     /// prove the case impossible at the scrutinee's indices.
     MissingArmNotImpossible {
         tag: Atom,
@@ -362,8 +362,8 @@ impl Error {
         }
     }
 
-    pub fn not_a_union_type<U: Into<Term>>(head_type: U) -> Self {
-        Self::NotAUnionType {
+    pub fn not_a_inductive_type<U: Into<Term>>(head_type: U) -> Self {
+        Self::NotAInductiveType {
             head_type: Box::new(head_type.into()),
         }
     }
@@ -451,8 +451,8 @@ impl Error {
         }
     }
 
-    pub fn motive_wrong_union(written: String, actual: String) -> Self {
-        Self::MotiveWrongUnion { written, actual }
+    pub fn motive_wrong_inductive(written: String, actual: String) -> Self {
+        Self::MotiveWrongInductive { written, actual }
     }
 
     pub fn motive_pattern_arity(expected: usize, got: usize) -> Self {
@@ -551,7 +551,7 @@ impl Error {
             | Self::NotBlnType { head_type }
             | Self::NotArrType { head_type }
             | Self::NotBinType { head_type }
-            | Self::NotAUnionType { head_type } => out.push(head_type),
+            | Self::NotAInductiveType { head_type } => out.push(head_type),
             Self::NotAFunctionType { expected } | Self::NotATupleType { expected } => {
                 out.push(expected)
             }
@@ -672,10 +672,10 @@ impl fmt::Display for Error {
             Error::MatchCaseMissing { term, atom } => {
                 write!(f, "missing match case for atom '{atom}': {term}")
             }
-            Error::NotAUnionType { head_type } => {
+            Error::NotAInductiveType { head_type } => {
                 write!(
                     f,
-                    "matched union constructors on a non-union type\n  head has type: {head_type}"
+                    "matched inductive constructors on a non-inductive type\n  head has type: {head_type}"
                 )
             }
             Error::NotAStructType { found } => {
@@ -770,7 +770,7 @@ impl fmt::Display for Error {
                     "Int literal {value:+} overflows i32 at the erase boundary"
                 )
             }
-            Error::MotiveWrongUnion { written, actual } => {
+            Error::MotiveWrongInductive { written, actual } => {
                 write!(
                     f,
                     "motive annotation names '{written}', but the scrutinee is a '{actual}'"
@@ -779,7 +779,7 @@ impl fmt::Display for Error {
             Error::MotivePatternArity { expected, got } => {
                 write!(
                     f,
-                    "motive annotation has {got} argument slot(s), but the union takes {expected} (parameters, then indices)"
+                    "motive annotation has {got} argument slot(s), but the inductive takes {expected} (parameters, then indices)"
                 )
             }
             Error::MotiveParamMismatch { written, actual } => {

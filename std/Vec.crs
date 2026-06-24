@@ -1,6 +1,6 @@
 use /std/{Nat};
 
-pub union Vec(T : Type) : (n : Nat)
+pub induct Vec(T : Type) : (n : Nat)
 | nil() : (0)
 | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
 end

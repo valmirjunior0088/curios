@@ -225,7 +225,7 @@ pub rec take_conts(b : Bin, off : Nat, remaining : Nat, acc : Nat,
         end;
     go(bound);
 
-union Cursor(b : Bin) : (off : Nat)
+induct Cursor(b : Bin) : (off : Nat)
 | mk(prefix : @Bin, rest : @Bin, valid : @Utf8(Scan/lead(), rest),
      split : @Eq(b, Bin/concat(prefix, rest)))
    : (Bin/len(prefix))
@@ -335,7 +335,7 @@ pub let step_lead_bad(c : Nat, eq : Eq(classify(c), Class/bad()))
     -> Eq(step(c, Scan/lead()), Scan/bad()) =
     Eq/cong(lead_step, eq);
 
-union Step(b : Bin)
+induct Step(b : Bin)
 | mk(codepoint : Nat, next : Nat, cursor : @Cursor(b, next))
 end
 

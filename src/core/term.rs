@@ -293,7 +293,7 @@ impl Term {
         }))
     }
 
-    pub fn union_type<N, I, P, J, Q>(name: N, params: I, indices: J) -> Self
+    pub fn inductive_type<N, I, P, J, Q>(name: N, params: I, indices: J) -> Self
     where
         N: Into<String>,
         I: IntoIterator<Item = P>,
@@ -301,7 +301,7 @@ impl Term {
         J: IntoIterator<Item = Q>,
         Q: Into<Term>,
     {
-        Self::from(Subterm::UnionType(UnionType {
+        Self::from(Subterm::InductiveType(InductiveType {
             name: name.into(),
             params: params.into_iter().map(|p| p.into()).collect(),
             indices: indices.into_iter().map(|i| i.into()).collect(),
@@ -383,7 +383,7 @@ impl Term {
         }))
     }
 
-    pub fn union_match<H, M, I, A, L, B>(
+    pub fn inductive_match<H, M, I, A, L, B>(
         head: H,
         motive_label: Option<&str>,
         motive: M,
@@ -403,18 +403,18 @@ impl Term {
                 Some(l) => Scope::close(Many(1), &[l], motive.into()),
                 None => Scope::constant(Many(1), motive.into()),
             },
-            cases: Cases::Union {
-                cases: Self::union_cases(cases),
+            cases: Cases::Inductive {
+                cases: Self::inductive_cases(cases),
                 pattern: None,
             },
         }))
     }
 
-    /// A union match with the annotated type-pattern motive: the motive body
+    /// An inductive match with the annotated type-pattern motive: the motive body
     /// is closed over the pattern's binder labels (slot order) then the
     /// scrutinee label. `binders` must list one label per
     /// [`MotiveSlot::Binder`] in `pattern.slots`, in order.
-    pub fn union_match_motive<H, M, I, A, L, B>(
+    pub fn inductive_match_motive<H, M, I, A, L, B>(
         head: H,
         binders: Vec<String>,
         scrutinee_label: &str,
@@ -439,14 +439,14 @@ impl Term {
         Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: Scope::close(Many(labels.len()), &labels, motive.into()),
-            cases: Cases::Union {
-                cases: Self::union_cases(cases),
+            cases: Cases::Inductive {
+                cases: Self::inductive_cases(cases),
                 pattern: Some(pattern),
             },
         }))
     }
 
-    fn union_cases<I, A, L, B>(cases: I) -> BTreeMap<Atom, Scope<Many>>
+    fn inductive_cases<I, A, L, B>(cases: I) -> BTreeMap<Atom, Scope<Many>>
     where
         I: IntoIterator<Item = (A, Vec<L>, B)>,
         A: Into<Atom>,
@@ -518,7 +518,7 @@ impl Term {
                 Some(l) => Scope::close(Many(1), &[l], motive.into()),
                 None => Scope::constant(Many(1), motive.into()),
             },
-            cases: Cases::Inductive {
+            cases: Cases::FreeMonoid {
                 carrier: Carrier::Nat {
                     empty_case: zero_case.into(),
                     cons_case: Scope::close(
@@ -563,7 +563,7 @@ impl Term {
                 Some(l) => Scope::close(Many(1), &[l], motive.into()),
                 None => Scope::constant(Many(1), motive.into()),
             },
-            cases: Cases::Inductive {
+            cases: Cases::FreeMonoid {
                 carrier: Carrier::Arr {
                     elem: elem.into(),
                     empty_case: empty_case.into(),
@@ -607,7 +607,7 @@ impl Term {
                 Some(l) => Scope::close(Many(1), &[l], motive.into()),
                 None => Scope::constant(Many(1), motive.into()),
             },
-            cases: Cases::Inductive {
+            cases: Cases::FreeMonoid {
                 carrier: Carrier::Bin {
                     empty_case: empty_case.into(),
                     cons_case: Scope::close(
@@ -850,7 +850,7 @@ pub struct Proj {
 /// An inductive type as a primitive normal form. Built inside the
 /// automatically-generated type-constructor function's body. Users never write
 /// one directly — they write `Result(A, E)` and the type-constructor function
-/// reduces to this. Two `UnionType`s are convertible iff same `name` and
+/// reduces to this. Two `InductiveType`s are convertible iff same `name` and
 /// pointwise-convertible `params` and `indices`.
 ///
 /// `params` are uniform across constructors; `indices` are the per-case
@@ -859,7 +859,7 @@ pub struct Proj {
 /// flat application of the type-constructor function); the split lives here
 /// and in the registry.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UnionType {
+pub struct InductiveType {
     pub name: String,
     pub params: Vec<Term>,
     pub indices: Vec<Term>,
@@ -881,7 +881,7 @@ pub struct Variant {
     pub payload: Vec<Term>,
 }
 
-/// A struct type as a primitive normal form (cf. [`UnionType`], no indices).
+/// A struct type as a primitive normal form (cf. [`InductiveType`], no indices).
 /// Built inside the generated type-former's body; users write `Pair(A, B)` and
 /// the former reduces to this. Convertible iff same `name` and pointwise-
 /// convertible `params`.
@@ -911,7 +911,7 @@ pub struct Struct {
 /// and differs only in its [`Cases`] payload.
 ///
 /// The motive's arity is 1 (the scrutinee binder) for every form except a
-/// union match with an annotated type-pattern motive, where the pattern's
+/// inductive match with an annotated type-pattern motive, where the pattern's
 /// binder slots precede the scrutinee binder (in slot order, scrutinee last).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Match {
@@ -920,8 +920,8 @@ pub struct Match {
     pub cases: Cases,
 }
 
-/// The written type-pattern of an annotated union-match motive,
-/// `match v : (x : Vec(T, k)) => P`. Slots are positional over the union's
+/// The written type-pattern of an annotated inductive-match motive,
+/// `match v : (x : Vec(T, k)) => P`. Slots are positional over the inductive's
 /// flat argument list (parameters then indices — told apart via the registry
 /// during elaboration, which consumes and validates the pattern):
 ///
@@ -934,8 +934,8 @@ pub struct Match {
 /// positions bind and carries the verbatim terms.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MotivePattern {
-    /// The (resolved) union name the annotation wrote — checked against the
-    /// scrutinee's actual union.
+    /// The (resolved) inductive name the annotation wrote — checked against the
+    /// scrutinee's actual inductive.
     pub name: String,
     pub slots: Vec<MotiveSlot>,
 }
@@ -958,10 +958,10 @@ pub enum Cases {
         cases: BTreeMap<u32, Term>,
         default: Term,
     },
-    /// The primitive eliminator of a nominal union: one arm per constructor,
+    /// The primitive eliminator of a nominal inductive: one arm per constructor,
     /// each arm's arity equal to that constructor's payload arity. `pattern`
     /// is `Some` iff the surface motive was the annotated type-pattern form.
-    Union {
+    Inductive {
         cases: BTreeMap<Atom, Scope<Many>>,
         pattern: Option<MotivePattern>,
     },
@@ -970,10 +970,10 @@ pub enum Cases {
     /// (`Arr`'s element type) and its two arms — an identity arm plus a cons arm
     /// binding the head generator (absent for `Nat`, whose unary generator carries
     /// no payload), the tail, and the induction hypothesis at the tail.
-    Inductive { carrier: Carrier },
+    FreeMonoid { carrier: Carrier },
 }
 
-/// The native free-monoid primitive a `Cases::Inductive` eliminates, with its
+/// The native free-monoid primitive a `Cases::FreeMonoid` eliminates, with its
 /// type parameters and its two eliminator arms. `Nat` is the free monoid on one
 /// (payload-less) generator; `Bin`/`Str` carry none; `Arr` carries its element
 /// type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose
@@ -1058,7 +1058,7 @@ pub enum Subterm {
     Apply(Apply),
     TupleType(TupleType),
     Tuple(Tuple),
-    UnionType(UnionType),
+    InductiveType(InductiveType),
     Variant(Variant),
     Match(Match),
     StructType(StructType),
@@ -1149,7 +1149,7 @@ impl Subterm {
                 fields.iter().for_each(|f| f.collect_construction_names(names));
             }
             Subterm::Proj(Proj { head, .. }) => head.collect_construction_names(names),
-            Subterm::UnionType(UnionType {
+            Subterm::InductiveType(InductiveType {
                 name,
                 params,
                 indices,
@@ -1201,7 +1201,7 @@ impl Subterm {
                         cases.values().for_each(|b| b.collect_construction_names(names));
                         default.collect_construction_names(names);
                     }
-                    Cases::Union { cases, pattern } => {
+                    Cases::Inductive { cases, pattern } => {
                         cases
                             .values()
                             .for_each(|s| s.body().collect_construction_names(names));
@@ -1211,7 +1211,7 @@ impl Subterm {
                             }
                         });
                     }
-                    Cases::Inductive { carrier } => match carrier {
+                    Cases::FreeMonoid { carrier } => match carrier {
                         Carrier::Nat {
                             empty_case,
                             cons_case,
@@ -1272,7 +1272,7 @@ impl Subterm {
                 fields.iter().for_each(|f| f.collect_metavars(ids));
             }
             Subterm::Proj(Proj { head, .. }) => head.collect_metavars(ids),
-            Subterm::UnionType(UnionType {
+            Subterm::InductiveType(InductiveType {
                 params, indices, ..
             }) => {
                 params.iter().for_each(|p| p.collect_metavars(ids));
@@ -1310,7 +1310,7 @@ impl Subterm {
                         cases.values().for_each(|b| b.collect_metavars(ids));
                         default.collect_metavars(ids);
                     }
-                    Cases::Union { cases, pattern } => {
+                    Cases::Inductive { cases, pattern } => {
                         cases.values().for_each(|s| s.body().collect_metavars(ids));
                         pattern.iter().flat_map(|p| &p.slots).for_each(|slot| {
                             if let MotiveSlot::Term(t) = slot {
@@ -1318,7 +1318,7 @@ impl Subterm {
                             }
                         });
                     }
-                    Cases::Inductive { carrier } => match carrier {
+                    Cases::FreeMonoid { carrier } => match carrier {
                         Carrier::Nat {
                             empty_case,
                             cons_case,
@@ -1448,11 +1448,11 @@ impl Bound for Subterm {
                 head: visit.visit_subterm(head),
                 field: field.clone(),
             }),
-            Subterm::UnionType(UnionType {
+            Subterm::InductiveType(InductiveType {
                 name,
                 params,
                 indices,
-            }) => Subterm::UnionType(UnionType {
+            }) => Subterm::InductiveType(InductiveType {
                 name: name.clone(),
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
                 indices: indices.iter().map(|i| visit.visit_subterm(i)).collect(),
@@ -1505,7 +1505,7 @@ impl Bound for Subterm {
                             .collect(),
                         default: visit.visit_subterm(default),
                     },
-                    Cases::Union { cases, pattern } => Cases::Union {
+                    Cases::Inductive { cases, pattern } => Cases::Inductive {
                         cases: cases
                             .iter()
                             .map(|(atom, scope)| (atom.clone(), visit.visit_scope(scope)))
@@ -1524,7 +1524,7 @@ impl Bound for Subterm {
                                 .collect(),
                         }),
                     },
-                    Cases::Inductive { carrier } => Cases::Inductive {
+                    Cases::FreeMonoid { carrier } => Cases::FreeMonoid {
                         carrier: match carrier {
                             Carrier::Nat {
                                 empty_case,
@@ -1620,7 +1620,7 @@ impl Bound for Subterm {
             Subterm::TupleType(TupleType { telescope, .. }) => telescope.reach(),
             Subterm::Tuple(Tuple { fields, .. }) => max_reach(fields),
             Subterm::Proj(Proj { head, .. }) => head.reach(),
-            Subterm::UnionType(UnionType {
+            Subterm::InductiveType(InductiveType {
                 params, indices, ..
             }) => max_reach(params).max(max_reach(indices)),
             Subterm::Variant(Variant {
@@ -1640,7 +1640,7 @@ impl Bound for Subterm {
                     true_case,
                 } => false_case.reach().max(true_case.reach()),
                 Cases::Switch { cases, default } => max_reach(cases.values()).max(default.reach()),
-                Cases::Union { cases, pattern } => {
+                Cases::Inductive { cases, pattern } => {
                     cases.values().map(|s| s.reach()).max().unwrap_or(0).max(
                         pattern
                             .iter()
@@ -1651,7 +1651,7 @@ impl Bound for Subterm {
                             }),
                     )
                 }
-                Cases::Inductive { carrier } => match carrier {
+                Cases::FreeMonoid { carrier } => match carrier {
                     Carrier::Nat {
                         empty_case,
                         cons_case,
@@ -2369,7 +2369,7 @@ mod tests {
         assert_eq!(ctor.metavars(), BTreeSet::from([1, 2]));
         assert_eq!(format!("{ctor}"), "Result/success(?2)");
 
-        let type_ = Term::union_type(
+        let type_ = Term::inductive_type(
             "Result",
             [Term::prim(Prim::NatType), Term::metavar(3)],
             Vec::<Term>::new(),
@@ -2409,9 +2409,9 @@ mod tests {
     }
 
     #[test]
-    fn union_match_case_binders_are_captured() {
+    fn inductive_match_case_binders_are_captured() {
         // match r : #m => Type; | success(value) => value;
-        let term = Term::union_match(
+        let term = Term::inductive_match(
             Term::var(Var::free("r")),
             None,
             Term::type_(),
@@ -2424,9 +2424,9 @@ mod tests {
     }
 
     #[test]
-    fn union_variants_reach_spans_components() {
+    fn inductive_variants_reach_spans_components() {
         assert_eq!(
-            Term::union_type("Result", [Term::var(Var::bound(2))], Vec::<Term>::new()).reach(),
+            Term::inductive_type("Result", [Term::var(Var::bound(2))], Vec::<Term>::new()).reach(),
             3
         );
         assert_eq!(

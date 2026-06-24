@@ -23,7 +23,7 @@ impl Lift for Io {
 }
 
 /// `open`'s mode lifts from its `/std/Io/Mode` tag. An out-of-range tag is a
-/// codegen bug (the union only marshals `0`/`1`/`2`), so it panics.
+/// codegen bug (the inductive only marshals `0`/`1`/`2`), so it panics.
 impl Lift for Mode {
     fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(match params[0].unwrap_i32() as u32 {

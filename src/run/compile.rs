@@ -238,10 +238,10 @@ mod tests {
     }
 
     #[test]
-    fn projection_through_a_stuck_union_payload_lowers() {
+    fn projection_through_a_stuck_inductive_payload_lowers() {
         // `Fmt/printf`'s return type is `format_type_with({}, parse(s))`, so
         // erasing `printf` evaluates `parse(s)` at compile time with a *symbolic*
-        // `s`. The `Parse` combinator's result is a `Result` union whose
+        // `s`. The `Parse` combinator's result is a `Result` inductive whose
         // discriminant is therefore stuck, and the inlined `success` payload is
         // reached by a projection. `erase` must lower that projection through the
         // neutral payload `match` (every variant carries the field at the same
@@ -288,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn union_match_arm_arity_is_checked_statically() {
+    fn inductive_match_arm_arity_is_checked_statically() {
         // Each arm's binder count is checked against the
         // constructor's registry telescope at elaboration time. Under the
         // legacy tagged-tuple desugar this mismatch was silent (the extra
@@ -315,11 +315,11 @@ mod tests {
     #[test]
     fn implicit_arguments_can_all_be_supplied_explicitly() {
         // Every implicit slot can be overridden positionally with a call-site
-        // `@` — including a union constructor's parameters, which are implicit
+        // `@` — including an inductive constructor's parameters, which are implicit
         // by default — and the fully-supplied call compiles end-to-end.
         let source = r#"
             use /std/{Nat};
-            union Opt(A : Type)
+            induct Opt(A : Type)
             | some(A)
             | none()
             end
@@ -335,12 +335,12 @@ mod tests {
 
     #[test]
     fn implicit_argument_is_inserted_and_inferred() {
-        // The INDUCTIVES.md promise realized: an `@`-marked union parameter
+        // The INDUCTIVES.md promise realized: an `@`-marked inductive parameter
         // makes the constructor's type argument implicit, so the call site
         // writes no holes at all.
         let source = r#"
             use /std/{Nat};
-            union Opt(A : Type)
+            induct Opt(A : Type)
             | some(A)
             | none()
             end
@@ -393,7 +393,7 @@ mod tests {
         // result-directed turnaround can pin it.
         let source = r#"
             use /std/{Nat};
-            union Opt(A : Type)
+            induct Opt(A : Type)
             | some(A)
             | none()
             end
@@ -417,7 +417,7 @@ mod tests {
         // sugar (which desugars to exactly that call).
         let source = r#"
             use /std/{Nat};
-            union Id(A : Type)
+            induct Id(A : Type)
             | wrap(A)
             end
             let bind : (@A : Type, @B : Type) -> (Id(A), (A) -> Id(B)) -> Id(B) =
@@ -476,12 +476,12 @@ mod tests {
     }
 
     #[test]
-    fn non_pub_union_constructors_are_usable_in_the_declaring_module() {
-        // Constructors are exactly as visible as their union: a non-`pub`
-        // union is module-local but fully usable where it is declared.
+    fn non_pub_inductive_constructors_are_usable_in_the_declaring_module() {
+        // Constructors are exactly as visible as their inductive: a non-`pub`
+        // inductive is module-local but fully usable where it is declared.
         let source = r#"
             use /std/{Nat};
-            union Opt
+            induct Opt
             | none()
             | some(Nat)
             end
@@ -495,12 +495,12 @@ mod tests {
     }
 
     #[test]
-    fn non_pub_union_constructors_stay_private_across_modules() {
-        // The same union declared inside a submodule is not reachable from
-        // the parent: the union's own visibility still gates the outside.
+    fn non_pub_inductive_constructors_stay_private_across_modules() {
+        // The same inductive declared inside a submodule is not reachable from
+        // the parent: the inductive's own visibility still gates the outside.
         let source = r#"
             pub mod m
-                union Secret
+                induct Secret
                 | hide(/std/Nat)
                 end
             end
@@ -511,9 +511,9 @@ mod tests {
     }
 
     #[test]
-    fn union_match_on_a_non_union_scrutinee_is_rejected_directly() {
-        // With the legacy fallback gone, matching union
-        // constructors on a non-union value reports the real problem instead
+    fn inductive_match_on_a_non_inductive_scrutinee_is_rejected_directly() {
+        // With the legacy fallback gone, matching inductive
+        // constructors on a non-inductive value reports the real problem instead
         // of a downstream projection error.
         let source = r#"
             use /std/{Nat};
@@ -525,16 +525,16 @@ mod tests {
         let error = compile(source, None).unwrap_err();
 
         assert!(
-            error.contains("matched union constructors on a non-union type"),
+            error.contains("matched inductive constructors on a non-inductive type"),
             "unexpected error: {error}"
         );
     }
 
     #[test]
-    fn new_style_union_match_lowers_end_to_end() {
+    fn new_style_inductive_match_lowers_end_to_end() {
         // The same program with correct arities compiles through to wasm: the
-        // `Result` declaration takes the primitive-inductive path (UnionType /
-        // Variant / UnionMatch) and erases back to the legacy tagged-tuple
+        // `Result` declaration takes the primitive-inductive path (InductiveType /
+        // Variant / InductiveMatch) and erases back to the legacy tagged-tuple
         // runtime shape.
         let source = r#"
             use /std/{Result};
@@ -551,7 +551,7 @@ mod tests {
     }
 
     #[test]
-    fn indexed_union_declares_constructs_and_matches() {
+    fn indexed_inductive_declares_constructs_and_matches() {
         // Phase 1 of INDICES.md, end to end: an indexed `Vec` declares (head
         // index telescope, named/`@` payload binders, per-case targets),
         // constructs with `@T`/`@m` inferred — `Nat/succ(?m)` unifies against the
@@ -560,7 +560,7 @@ mod tests {
         // along), lowering through to wasm.
         let source = r#"
             use /std/{Nat};
-            union Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -577,15 +577,15 @@ mod tests {
     }
 
     #[test]
-    fn indexed_union_without_params_and_unnamed_index_lowers() {
-        // The head's index names are optional (`: (Nat)`), and a union can be
+    fn indexed_inductive_without_params_and_unnamed_index_lowers() {
+        // The head's index names are optional (`: (Nat)`), and an inductive can be
         // indexed without being parameterized. Targets are arbitrary index
         // expressions — here distinct literals — and conversion compares them
         // pointwise: `Tag(7)` accepts `Tag/b` and the match dispatches on the
         // tag as ever.
         let source = r#"
             use /std/{Nat, Bin};
-            union Tag : (Nat)
+            induct Tag : (Nat)
             | a() : (0)
             | b() : (7)
             end
@@ -600,7 +600,7 @@ mod tests {
     }
 
     #[test]
-    fn indexed_union_motive_binds_the_index() {
+    fn indexed_inductive_motive_binds_the_index() {
         // Rung A: the annotated motive `(v : Vec(T, k)) => Vec(T, Nat/add(k, m))`
         // binds the length index in its natural slot; each arm checks against
         // the motive at that case's target index (`0` for nil, `Nat/succ(j)` for
@@ -608,7 +608,7 @@ mod tests {
         // arm converges via `Nat/add`'s definitional successor peeling.
         let source = r#"
             use /std/{Nat};
-            union Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -632,16 +632,16 @@ mod tests {
         // registry: slot count must cover parameters then indices; an index
         // slot must bind (a fresh name or `_`); a verbatim parameter must be
         // the scrutinee's actual parameter.
-        let union_decl = r#"
+        let inductive_decl = r#"
             use /std/{Nat, Bin};
-            union Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
         "#;
 
         let arity = format!(
-            r#"{union_decl}
+            r#"{inductive_decl}
             let f(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
                 match v : (v : Vec(T)) => Nat
                 | nil() => 0
@@ -657,7 +657,7 @@ mod tests {
         );
 
         let index_slot = format!(
-            r#"{union_decl}
+            r#"{inductive_decl}
             let f(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> Nat =
                 match v : (v : Vec(T, Nat/succ(n))) => Nat
                 | nil() => 0
@@ -673,7 +673,7 @@ mod tests {
         );
 
         let param = format!(
-            r#"{union_decl}
+            r#"{inductive_decl}
             let f(@n : Nat, v : Vec(Nat, n)) -> Nat =
                 match v : (v : Vec(Bin, k)) => Nat
                 | nil() => 0
@@ -701,11 +701,11 @@ mod tests {
         //   because the arm refines `n := 0`.
         let source = r#"
             use /std/{Nat, Bin};
-            union Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
-            union Eq(A : Type) : (x : A, y : A)
+            induct Eq(A : Type) : (x : A, y : A)
             | refl(z : A) : (z, z)
             end
             let subst(@n : Nat, @m : Nat, p : Eq(Nat, n, m), v : Vec(Bin, n)) -> Vec(Bin, m) =
@@ -733,12 +733,12 @@ mod tests {
     }
 
     #[test]
-    fn empty_union_lowers_and_vacuous_match_eliminates_it() {
-        // A union may declare zero cases — `Void`. Its eliminator is a match
+    fn empty_inductive_lowers_and_vacuous_match_eliminates_it() {
+        // An inductive may declare zero cases — `Void`. Its eliminator is a match
         // with zero arms: every omission is vacuously justified, so the match
         // checks at any motive and lowers through erasure and codegen.
         let source = r#"
-            union Void
+            induct Void
             end
             let absurd(A : Type, v : Void) -> A =
                 match v : A
@@ -759,7 +759,7 @@ mod tests {
         // what types `xs : Vec(T, j)` at the declared `Vec(T, n)`.
         let source = r#"
             use /std/{Nat, Bin};
-            union Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -780,10 +780,10 @@ mod tests {
     }
 
     #[test]
-    fn impossible_union_arm_lowers_to_unreachable() {
+    fn impossible_inductive_arm_lowers_to_unreachable() {
         let source = r#"
             use /std/{Nat, Bin};
-            union Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -813,7 +813,7 @@ mod tests {
         // rejected with the explanation as the error.
         let opaque = r#"
             use /std/{Nat};
-            union Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -836,7 +836,7 @@ mod tests {
         // `(0, 1)` clashes against literals `(5, 5)` and prunes.
         let nonlinear = r#"
             use /std/{Nat, Bin};
-            union Foo : (x : Nat, y : Nat)
+            induct Foo : (x : Nat, y : Nat)
             | same(z : Nat) : (z, z)
             | diff() : (0, 1)
             end
@@ -854,7 +854,7 @@ mod tests {
 
         let prunes = r#"
             use /std/{Nat, Bin};
-            union Foo : (x : Nat, y : Nat)
+            induct Foo : (x : Nat, y : Nat)
             | same(z : Nat) : (z, z)
             | diff() : (0, 1)
             end
@@ -868,13 +868,13 @@ mod tests {
     }
 
     #[test]
-    fn indexed_union_index_mismatch_is_rejected() {
+    fn indexed_inductive_index_mismatch_is_rejected() {
         // A two-element vector annotated at length 3: the per-case target
         // `Nat/succ(m)` propagates through conversion until the index clash
         // surfaces as an ordinary type mismatch.
         let source = r#"
             use /std/{Nat};
-            union Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat)
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -888,13 +888,13 @@ mod tests {
     }
 
     #[test]
-    fn indexed_union_targets_are_required_and_arity_checked() {
-        // A case of an indexed union without its `: (...)` target is a parse
+    fn indexed_inductive_targets_are_required_and_arity_checked() {
+        // A case of an indexed inductive without its `: (...)` target is a parse
         // error, as is a target whose arity differs from the head's index
-        // telescope, or a target on an unindexed union.
+        // telescope, or a target on an unindexed inductive.
         let missing = r#"
             use /std/{Nat};
-            union Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat)
             | nil()
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -908,7 +908,7 @@ mod tests {
 
         let surplus = r#"
             use /std/{Nat};
-            union Pair(A : Type)
+            induct Pair(A : Type)
             | pair(A, A) : (0)
             end
             0
@@ -921,7 +921,7 @@ mod tests {
 
         let arity = r#"
             use /std/{Nat};
-            union Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat)
             | nil() : (0, 1)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -1350,20 +1350,20 @@ mod tests {
     }
 
     #[test]
-    fn union_payload_relying_on_implicit_insertion_is_rebuilt() {
+    fn inductive_payload_relying_on_implicit_insertion_is_rebuilt() {
         // The inductive registry used to keep `to_core`'s *lowered* payload and
         // index types, so a type relying on implicit-argument insertion —
         // `Eq(0, 1)` against `Eq`'s 3-ary type constructor — survived
         // under-applied and panicked the `Telescope::open` arity assert the
         // first time reduction met the registry copy. The registry telescopes
-        // are now rebuilt during `elaborate_module` (indices while the union
+        // are now rebuilt during `elaborate_module` (indices while the inductive
         // group's signatures are assumed, constructors once its bodies are
         // defined), so the payload elaborates like any other type.
         let payload = r#"
-            union Eq(@A : Type) : (x : A, y : A)
+            induct Eq(@A : Type) : (x : A, y : A)
             | refl(z : A) : (z, z)
             end
-            union Box
+            induct Box
             | mk(p : Eq(0, 1))
             end
             0
@@ -1372,12 +1372,12 @@ mod tests {
 
         // Index types take the same path — and previously panicked even
         // earlier, while the type-constructor binding itself elaborated
-        // (its body's `UnionType` node checks against the index telescope).
+        // (its body's `InductiveType` node checks against the index telescope).
         let index = r#"
-            union Eq(@A : Type) : (x : A, y : A)
+            induct Eq(@A : Type) : (x : A, y : A)
             | refl(z : A) : (z, z)
             end
-            union Tag : (p : Eq(0, 0))
+            induct Tag : (p : Eq(0, 0))
             | mk() : (Eq/refl(0))
             end
             0
@@ -1389,10 +1389,10 @@ mod tests {
         // the whole program lowers to wasm.
         let through = r#"
             use /std/{Nat};
-            union Eq(@A : Type) : (x : A, y : A)
+            induct Eq(@A : Type) : (x : A, y : A)
             | refl(z : A) : (z, z)
             end
-            union Box
+            induct Box
             | mk(p : Eq(0, 0))
             end
             let b : Box = Box/mk(Eq/refl(0));

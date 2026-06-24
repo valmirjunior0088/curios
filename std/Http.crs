@@ -1,6 +1,6 @@
 use /std/{Bin, Str, Nat, Bln, Char, Lst, Parse, Result, Option, Tcp, Io, Task};
 
-pub union Method
+pub induct Method
 | get()
 | post()
 end
@@ -11,7 +11,7 @@ let method_str(m : Method) -> Str =
     | post() => "POST"
     end;
 
-pub union Error
+pub induct Error
 | net(Io/Error)
 | malformed(Str)
 end

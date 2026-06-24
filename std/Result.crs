@@ -1,6 +1,6 @@
 use /std/{Bln};
 
-pub union Result(A : Type, E : Type)
+pub induct Result(A : Type, E : Type)
 | success(A)
 | failure(E)
 end

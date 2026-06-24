@@ -1,6 +1,6 @@
 use /std/{Bin, Str, Nat, Parse, Io, Bln, Result};
 
-pub union Fmt
+pub induct Fmt
 | nil()
 | lit(Str, Fmt)
 | str(Fmt)

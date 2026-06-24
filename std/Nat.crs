@@ -88,7 +88,7 @@ pub let try_lt(a : Nat, b : Nat) -> Option(Lt(a, b)) =
 pub let lt_succ(@n : Nat) -> Lt(n, succ(n)) =
     ();
 
-pub union Le : (a : Nat, b : Nat)
+pub induct Le : (a : Nat, b : Nat)
 | z(@n : Nat) : (0, n)
 | s(@a : Nat, @b : Nat, prev : Le(a, b)) : (succ(a), succ(b))
 end

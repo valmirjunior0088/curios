@@ -7,7 +7,7 @@ use {
         Rec,
         RecItem, StructLit, Subterm, Syn, Term, TupleTypeParam,
         TopCase, TopItem,
-        TopLet, TopMod, TopStruct, TopUnion, TopUse, Tuple, TupleType, UnionMatch, UseGroup,
+        TopLet, TopMod, TopStruct, TopInductive, TopUse, Tuple, TupleType, InductiveMatch, UseGroup,
     },
     crate::{
         Source,
@@ -24,7 +24,7 @@ use {
 const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
-    "let", "match", "rec", "mod", "use", "pub", "end", "false", "true", "union", "struct",
+    "let", "match", "rec", "mod", "use", "pub", "end", "false", "true", "induct", "struct",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
@@ -741,7 +741,7 @@ fn parse_nat_switch<'a>() -> Parser<'a, Term> {
 // pattern. The old `| tag(p…) => body` shape is the special case where the
 // pattern is a [`Pattern::Variant`]; a bare `| x =>` / `| _ =>` is now a
 // catch-all binder row, and rows may nest and repeat constructors.
-fn parse_union_match_branch<'a>() -> Parser<'a, (Pattern, Term)> {
+fn parse_inductive_match_branch<'a>() -> Parser<'a, (Pattern, Term)> {
     catch(parse_literal("|"))
         .and_keep(parse_match_pattern())
         .and_drop(parse_literal("=>"))
@@ -751,12 +751,12 @@ fn parse_union_match_branch<'a>() -> Parser<'a, (Pattern, Term)> {
 // Zero arms are legal: under inversion (Rung C) every impossible arm is
 // silently omittable, and a scrutinee whose indices clash with *every*
 // constructor's target eliminates with no arms at all.
-fn parse_union_match<'a>() -> Parser<'a, Term> {
+fn parse_inductive_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
-        .and(many0(parse_union_match_branch))
+        .and(many0(parse_inductive_match_branch))
         .and_drop(parse_keyword("end"))
         .map(|((head, motive), rows)| {
-            Subterm::Match(Match::Union(UnionMatch { head, motive, rows }))
+            Subterm::Match(Match::Inductive(InductiveMatch { head, motive, rows }))
         })
         .map(Into::into)
 }
@@ -845,7 +845,7 @@ fn parse_match<'a>() -> Parser<'a, Term> {
         .or(catch(parse_nat_switch()))
         .or(catch(parse_arr_match()))
         .or(catch(parse_bin_match()))
-        .or(parse_union_match())
+        .or(parse_inductive_match())
 }
 
 fn parse_binding<'a>() -> Parser<'a, RecItem> {
@@ -1296,7 +1296,7 @@ fn parse_top_use<'a>() -> Parser<'a, TopItem> {
 // target to mention. The quantity's `@` (on the type) marks the field erased and
 // is allowed on both named and positional binders (a dropped field is never
 // referenced, named or not).
-fn parse_union_payload_field<'a>() -> Parser<'a, CasePayloadParam> {
+fn parse_inductive_payload_field<'a>() -> Parser<'a, CasePayloadParam> {
     catch(
         parse_plicity()
             .and(parse_identifier())
@@ -1321,16 +1321,16 @@ fn parse_union_payload_field<'a>() -> Parser<'a, CasePayloadParam> {
         }))
 }
 
-fn parse_top_union_case<'a>() -> Parser<'a, TopCase> {
+fn parse_top_inductive_case<'a>() -> Parser<'a, TopCase> {
     parse_literal("|")
         .and_keep(parse_identifier())
         .and(
             parse_literal("(")
-                .and_keep(sep_by0(parse_union_payload_field, || parse_literal(",")))
+                .and_keep(sep_by0(parse_inductive_payload_field, || parse_literal(",")))
                 .and_drop(parse_literal(")")),
         )
         // The case target: `: (index-exprs)` — the terminal with its
-        // mandatory part (the union name and the parameters) elided.
+        // mandatory part (the inductive name and the parameters) elided.
         .and(
             catch(parse_literal(":"))
                 .and_keep(parse_literal("("))
@@ -1348,11 +1348,11 @@ fn parse_top_union_case<'a>() -> Parser<'a, TopCase> {
         )
 }
 
-// A union parameter: `name : type`, or `@name : type` to make it implicit at
+// An inductive parameter: `name : type`, or `@name : type` to make it implicit at
 // the type-constructor function (it is implicit at the value constructors
 // either way — the mark's only job is the type constructor, where unmarked
 // parameters are written out).
-fn parse_union_param<'a>() -> Parser<'a, (Plicity, String, Term)> {
+fn parse_inductive_param<'a>() -> Parser<'a, (Plicity, String, Term)> {
     parse_plicity()
         .and(parse_identifier())
         .and_drop(parse_literal(":"))
@@ -1363,19 +1363,19 @@ fn parse_union_param<'a>() -> Parser<'a, (Plicity, String, Term)> {
 // A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is
 // documentary (and a dependency hook for later entries) — never in scope in
 // the cases — so it is optional and never takes `@`.
-fn parse_union_index<'a>() -> Parser<'a, (Option<String>, Term)> {
+fn parse_inductive_index<'a>() -> Parser<'a, (Option<String>, Term)> {
     catch(parse_identifier().and_drop(parse_literal(":")))
         .and(lazy(parse_term))
         .map(|(name, ty): (&str, Term)| (Some(name.to_string()), ty))
         .or(lazy(parse_term).map(|ty| (None, ty)))
 }
 
-fn parse_top_union_body<'a>(is_pub: bool) -> Parser<'a, TopUnion> {
+fn parse_top_inductive_body<'a>(is_pub: bool) -> Parser<'a, TopInductive> {
     parse_identifier()
         .and(
             catch(
                 parse_literal("(")
-                    .and_keep(sep_by0(parse_union_param, || parse_literal(",")))
+                    .and_keep(sep_by0(parse_inductive_param, || parse_literal(",")))
                     .and_drop(parse_literal(")")),
             )
             .or(pure(vec![])),
@@ -1384,11 +1384,11 @@ fn parse_top_union_body<'a>(is_pub: bool) -> Parser<'a, TopUnion> {
         .and(
             catch(parse_literal(":"))
                 .and_keep(parse_literal("("))
-                .and_keep(sep_by0(parse_union_index, || parse_literal(",")))
+                .and_keep(sep_by0(parse_inductive_index, || parse_literal(",")))
                 .and_drop(parse_literal(")"))
                 .or(pure(vec![])),
         )
-        .and(many0(parse_top_union_case))
+        .and(many0(parse_top_inductive_case))
         .flat_map(move |(((label, params), indices), cases)| {
             // Targets are required on every case iff the head declares
             // indices, with arity equal to the index telescope's.
@@ -1397,21 +1397,21 @@ fn parse_top_union_body<'a>(is_pub: bool) -> Parser<'a, TopUnion> {
                     (None, 0) => {}
                     (None, _) => {
                         return fail(format!(
-                            "case '{}' of indexed union '{label}' must state its \
+                            "case '{}' of indexed inductive '{label}' must state its \
                              index target: `{}(...) : (...)`",
                             case.label, case.label,
                         ));
                     }
                     (Some(_), 0) => {
                         return fail(format!(
-                            "case '{}' states an index target, but union '{label}' \
+                            "case '{}' states an index target, but inductive '{label}' \
                              declares no indices",
                             case.label,
                         ));
                     }
                     (Some(target), arity) if target.len() != arity => {
                         return fail(format!(
-                            "case '{}' of union '{label}' states {} index \
+                            "case '{}' of inductive '{label}' states {} index \
                              expression(s), but the head declares {arity}",
                             case.label,
                             target.len(),
@@ -1422,7 +1422,7 @@ fn parse_top_union_body<'a>(is_pub: bool) -> Parser<'a, TopUnion> {
             }
 
             let label = label.to_string();
-            pure(TopUnion {
+            pure(TopInductive {
                 is_pub,
                 label,
                 params,
@@ -1432,15 +1432,15 @@ fn parse_top_union_body<'a>(is_pub: bool) -> Parser<'a, TopUnion> {
         })
 }
 
-fn parse_top_union<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("union"))).flat_map(|(is_pub, ())| {
-        parse_top_union_body(is_pub)
+fn parse_top_inductive<'a>() -> Parser<'a, TopItem> {
+    catch(parse_pub().and(parse_keyword("induct"))).flat_map(|(is_pub, ())| {
+        parse_top_inductive_body(is_pub)
             .and(many0(|| {
                 catch(parse_pub().and(parse_keyword("and")))
-                    .flat_map(|(is_pub2, ())| parse_top_union_body(is_pub2))
+                    .flat_map(|(is_pub2, ())| parse_top_inductive_body(is_pub2))
             }))
             .and_drop(parse_keyword("end"))
-            .map(|(first, rest)| TopItem::Union(iter::once(first).chain(rest).collect()))
+            .map(|(first, rest)| TopItem::Inductive(iter::once(first).chain(rest).collect()))
     })
 }
 
@@ -1450,7 +1450,7 @@ fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
             .and(
                 catch(
                     parse_literal("(")
-                        .and_keep(sep_by0(parse_union_param, || parse_literal(",")))
+                        .and_keep(sep_by0(parse_inductive_param, || parse_literal(",")))
                         .and_drop(parse_literal(")")),
                 )
                 .or(pure(vec![])),
@@ -1476,7 +1476,7 @@ fn parse_top_item<'a>() -> Parser<'a, TopItem> {
     parse_top_mod()
         .or(parse_top_use())
         .or(parse_top_let())
-        .or(parse_top_union())
+        .or(parse_top_inductive())
         .or(parse_top_struct())
         .or(parse_top_rec())
 }

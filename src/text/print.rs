@@ -3,8 +3,8 @@ use {
         Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
         LetBang, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Pattern, PatternLit,
         Plicity, Prim, Proj, Quantity, Radix,
-        Rec, StructLit, Subterm, Syn, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopUnion,
-        TopUse, Tuple, TupleType, TupleTypeParam, UnionMatch, UseGroup,
+        Rec, StructLit, Subterm, Syn, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopInductive,
+        TopUse, Tuple, TupleType, TupleTypeParam, InductiveMatch, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_bigint::BigUint,
@@ -512,7 +512,7 @@ fn print_term(term: Term) -> Printer<'static> {
                 indent(print_term(default)),
                 pure("\nend"),
             ]),
-            Match::Union(UnionMatch { head, motive, rows }) => flat([
+            Match::Inductive(InductiveMatch { head, motive, rows }) => flat([
                 pure("match "),
                 print_term(head),
                 print_motive(motive),
@@ -750,7 +750,7 @@ fn print_module_items(items: Vec<TopItem>) -> Printer<'static> {
     sep_flat(items.into_iter().map(print_top_item), || pure("\n"))
 }
 
-fn print_top_union_case(case: TopCase) -> Printer<'static> {
+fn print_top_inductive_case(case: TopCase) -> Printer<'static> {
     let payload = sep_flat(
         case.payload.into_iter().map(|param| {
             // Plicity prefixes the name; the quantity (`@` = erased) prefixes
@@ -784,7 +784,7 @@ fn print_top_union_case(case: TopCase) -> Printer<'static> {
     ])
 }
 
-fn print_top_union_params(params: Vec<(Plicity, String, Term)>) -> Printer<'static> {
+fn print_top_inductive_params(params: Vec<(Plicity, String, Term)>) -> Printer<'static> {
     if params.is_empty() {
         return pure("");
     }
@@ -806,7 +806,7 @@ fn print_top_union_params(params: Vec<(Plicity, String, Term)>) -> Printer<'stat
     ])
 }
 
-fn print_top_union_indices(indices: Vec<(Option<String>, Term)>) -> Printer<'static> {
+fn print_top_inductive_indices(indices: Vec<(Option<String>, Term)>) -> Printer<'static> {
     if indices.is_empty() {
         return pure("");
     }
@@ -818,22 +818,22 @@ fn print_top_union_indices(indices: Vec<(Option<String>, Term)>) -> Printer<'sta
     ])
 }
 
-fn print_top_union(unions: Vec<TopUnion>) -> Printer<'static> {
-    let mut iter = unions.into_iter();
+fn print_top_inductive(group: Vec<TopInductive>) -> Printer<'static> {
+    let mut iter = group.into_iter();
     let first = iter.next().unwrap();
     let rest = iter.collect::<Vec<_>>();
 
     flat([
         print_pub(first.is_pub),
-        pure("union "),
+        pure("induct "),
         pure(first.label),
-        print_top_union_params(first.params),
-        print_top_union_indices(first.indices),
+        print_top_inductive_params(first.params),
+        print_top_inductive_indices(first.indices),
         flat(
             first
                 .cases
                 .into_iter()
-                .map(print_top_union_case)
+                .map(print_top_inductive_case)
                 .collect::<Vec<_>>(),
         ),
         flat(
@@ -844,12 +844,12 @@ fn print_top_union(unions: Vec<TopUnion>) -> Printer<'static> {
                         print_pub(u.is_pub),
                         pure("and "),
                         pure(u.label),
-                        print_top_union_params(u.params),
-                        print_top_union_indices(u.indices),
+                        print_top_inductive_params(u.params),
+                        print_top_inductive_indices(u.indices),
                         flat(
                             u.cases
                                 .into_iter()
-                                .map(print_top_union_case)
+                                .map(print_top_inductive_case)
                                 .collect::<Vec<_>>(),
                         ),
                     ])
@@ -865,7 +865,7 @@ fn print_top_struct(item: TopStruct) -> Printer<'static> {
         print_pub(item.is_pub),
         pure("struct "),
         pure(item.label),
-        print_top_union_params(item.params),
+        print_top_inductive_params(item.params),
         pure(" "),
         print_pub(item.rep_pub),
         pure("{ "),
@@ -880,7 +880,7 @@ fn print_top_item(item: TopItem) -> Printer<'static> {
         TopItem::Use(u) => print_top_use(u),
         TopItem::Let(l) => print_top_let(l),
         TopItem::Rec(items) => print_top_rec(items),
-        TopItem::Union(unions) => print_top_union(unions),
+        TopItem::Inductive(group) => print_top_inductive(group),
         TopItem::Struct(s) => print_top_struct(s),
     }
 }

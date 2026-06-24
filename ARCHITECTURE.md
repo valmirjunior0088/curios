@@ -33,7 +33,7 @@ Source Text
 text::Entrypoint          surface AST; all variables are plain String labels
     │
     ▼  src/text/to_core/
-core::Module              de Bruijn AST; names/modules resolved, unions registered as inductives
+core::Module              de Bruijn AST; names/modules resolved, inductive types recorded in the inductives registry
     │
     ▼  src/core/elaborate.rs + src/core/zonk.rs + src/core/erase.rs
 ersd::Module              elaborated, meta-free, type-erased; closures carry explicit capture lists
@@ -79,7 +79,7 @@ Key files by area (not 1:1 with the stages — normalization serves stage 3 thro
 
 Cross-cutting decisions the code depends on but cannot state in any single place:
 
-- **Union `match` reduction is call-by-name.** A selected arm's binders are bound to _projections of the original head term_ (`head.(i + 1)`), never to the reduced payload values — substituting reduced payloads would inline evaluated definition internals into types that flow on to `zonk` (`src/core/reduce.rs`).
+- **Inductive `match` reduction is call-by-name.** A selected arm's binders are bound to _projections of the original head term_ (`head.(i + 1)`), never to the reduced payload values — substituting reduced payloads would inline evaluated definition internals into types that flow on to `zonk` (`src/core/reduce.rs`).
 - **Only rebuilt terms flow downstream.** Elaboration returns _rebuilt_ terms; implicit insertion saturates applications, so a lowered (pre-insertion) type or body is no longer interchangeable with its rebuilt form and must never leak into later reduction. `rec` groups assume lowered signatures to break the cycle, then upgrade them in place via `Context::reassume` (`src/core/context.rs`).
 - **Continuations are second-class.** Block labels scoped to a region, never values — this is what lets CPS map onto WASM structured control flow without reification (see [Stage 5](#stage-5--cps-lowering-srcersdto_cont)).
 - **Binaryen runs with an exact feature set.** `src/binaryen.rs` enables exactly the features the pipeline targets and Wasmtime's engine enables — never `BinaryenFeatureAll`, which lets the optimizer emit post-GC proposals (e.g. exact reference types) the runtime rejects. Binaryen's settings are process-global and its optimizer is not thread-safe across modules, so the whole sequence runs under a lock. The vendored tree keeps `third_party/llvm-project` (DWARF support) because the Outlining pass includes LLVM suffix-tree headers unconditionally (`build.rs`).
@@ -121,19 +121,19 @@ Uses a custom monadic parser combinator library (`src/monads/parser.rs`). `Parse
 
 Line comments (`-- text`) are stripped inside `parse_whitespace`, which is called after every terminal token. Comments are discarded at parse time and do not appear in the AST.
 
-Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail: Term`. Top-level items are `Let`, `Rec` (mutual recursion), `Union` (sum type sugar), `Mod` (inline or file-backed module), and `Use` (import).
+Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail: Term`. Top-level items are `Let`, `Rec` (mutual recursion), `Inductive` (sum type sugar), `Mod` (inline or file-backed module), and `Use` (import).
 
 `text::Term` has no de Bruijn indices — all variables are `String` labels. The grammar covers:
 
 - Π-types `(x : A, y : B) -> C`, lambdas `(x, y) => body`, and the `let`/`rec` function shorthand `f(x : A) -> B = body` (desugared in the parser to a Π-type plus lambda)
 - Application `f(a, b)`
 - Σ-types `{x: A, B, z: C}`, tuples `(a, b)`
-- The unified `match x : motive | … end` eliminator covering unions (`| case(payload, ...)`), booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred + 1, ih`), and sparse `Nat` dispatch (`| n`/`| _`); the motive ladder is `: T`, `: (x) => T`, or — union scrutinees — the index-binding `: (x : Vec(T, k)) => T`
+- The unified `match x : motive | … end` eliminator covering inductives (`| case(payload, ...)`), booleans (`| true`/`| false`), structural `Nat` induction (`| 0`/`| pred + 1, ih`), and sparse `Nat` dispatch (`| n`/`| _`); the motive ladder is `: T`, `: (x) => T`, or — inductive scrutinees — the index-binding `: (x : Vec(T, k)) => T`
 - `e.0`, `e.1` (field access / Σ-elimination)
 - Holes `?`, which elaborate to fresh metavariables solved by bidirectional type checking
 - Monadic sequencing sugar: `let ! = bind; body` plus postfix `!`, desugared before core elaboration by re-elaborating the bind at each bang site
 - Primitive literals plus the prelude-backed `/sys` module, which exposes `Nat`, `Int`, `Flt`, `Bin`, `Arr(T)`, `Bln`, and their operations as ordinary paths
-- Module system: `mod Label ... end`, `mod Label;` (file-backed), `union Label ... end`, `use Path/{name, ...};`, `use Path/*;`, `pub use ...;`
+- Module system: `mod Label ... end`, `mod Label;` (file-backed), `induct Label ... end`, `use Path/{name, ...};`, `use Path/*;`, `pub use ...;`
 - Char literals as nat codepoints: `'a'`
 
 `text::Prim` has richer surface forms than later stages: `Nat(Zero | Succ(NatLiteral, Subterm))` where `NatLiteral` is `Number(BigUint) | Char(char)`, and `Bin(BinLiteral)` where `BinLiteral` is `Bytes(Vec<u8>) | String(String)`. Numeric literals desugar in the parser: `0` → `Nat::Zero`; any `n > 0` → `Nat::Succ(n, Zero)`.
@@ -150,21 +150,21 @@ Parsing produces a `text::Entrypoint`: a list of `TopItem`s followed by a `tail:
 
 **Interface fixed point** (`to_core/interface.rs`): before any body is elaborated, the public export view of every module is computed to a fixed point (`PublicInterface`), resolving `pub use` re-exports (including chains) and rejecting `ExportConflict` / `CyclicReExport`. This separates a module's _interface_ (its exports) from the _lexical_ import effect of `use`, which is applied per-body in source order.
 
-**Module processing** (`to_core.rs`): walks the `TopItem` list, applies `use`/`pub use` scoping, qualifies names under `mod` blocks, and lowers `union` declarations to two parts — a `rec` group of type bindings (each producing a primitive `UnionType` normal form, wrapped in a `Func` over any type parameters and indices) and one constructor function per variant whose body produces a primitive `Variant` normal form. Each union is also recorded in the inductive registry with its parameter telescope, index telescope, and constructor signatures. All generated `let`/`rec` items are flattened, **topologically reordered** (`order_flat_items`, a stable Kahn pass) so each declaration's value dependencies precede it, then folded right-to-left into the tail. A genuine value cycle is left unorderable and surfaces downstream as an unbound name — cross-declaration value recursion is unexpressible by construction.
+**Module processing** (`to_core.rs`): walks the `TopItem` list, applies `use`/`pub use` scoping, qualifies names under `mod` blocks, and lowers `induct` declarations to two parts — a `rec` group of type bindings (each producing a primitive `InductiveType` normal form, wrapped in a `Func` over any type parameters and indices) and one constructor function per variant whose body produces a primitive `Variant` normal form. Each inductive is also recorded in the inductive registry with its parameter telescope, index telescope, and constructor signatures. All generated `let`/`rec` items are flattened, **topologically reordered** (`order_flat_items`, a stable Kahn pass) so each declaration's value dependencies precede it, then folded right-to-left into the tail. A genuine value cycle is left unorderable and surfaces downstream as an unbound name — cross-declaration value recursion is unexpressible by construction.
 
 The `Loader` trait (`src/text/loader.rs`) has two base implementations: `FileLoader` (resolves `Label.crs` relative to a base directory) and `NullLoader` (for inline programs and tests, which have no file-backed modules — any `load` is a `ModuleNotFound`). Because the whole module-info table exists before elaboration, cross-module name references may be cyclic (value-level recursion still needs `rec`).
 
 **Prelude and embedded standard library** (`src/text/prelude.rs`): `prelude(inner)` wraps any base loader in three layers — `SysLoader` serves the built-in `/sys` modules (`Nat`, `Int`, `Flt`, `Bin`, `Arr`, `Bln`, `Io`, …), constructed directly as `text` AST and never parsed; `SynLoader` serves the internal `/syn` modules (the `syn.crs` manifest plus `syn/Str.crs`), the compiler-synthesis targets the lowerer desugars literals into — a string becomes a proof-carrying `/syn/Str` value, a list a `/syn/Lst` cons-spine — embedded with `include_str!` and parsed once (a malformed one is a `panic!`, since well-formedness is a compiler invariant); `StdLoader` serves the `/std` standard library, whose sources are real Curios authored alongside the compiler in `std/*.crs` (plus the `std.crs` manifest of `pub mod`/`pub use` declarations) and embedded into the binary with `include_str!`. Unlike `/sys`, `/syn` is **not** walled off (`to_core::INTERNAL_ROOTS` is just `["sys"]`): literal desugaring emits `/syn` references into ordinary user modules, so the names must resolve from anywhere — though in practice user code reaches its operations through the `/std/Str` and `/std/Lst` re-exports. All three layers add their root (`sys`/`syn`/`std`) to `Loader::roots`, so `to_core` declares them at the entrypoint root automatically — every program sees `/sys`, `/syn`, and `/std` without an explicit import. Anything not under those roots falls through to `inner`.
 
-**Term elaboration** (`to_core/elaborate.rs`): syntactic translation from `text::Term` to `core::Term`. The binding work is calling `Scope::close()` to convert free string labels into de Bruijn indices; a `union` match lowers to a primitive `core::UnionMatch` whose arms carry their binders as scopes. No type-directed work.
+**Term elaboration** (`to_core/elaborate.rs`): syntactic translation from `text::Term` to `core::Term`. The binding work is calling `Scope::close()` to convert free string labels into de Bruijn indices; an `induct` match lowers to a primitive `core::InductiveMatch` whose arms carry their binders as scopes. No type-directed work.
 
-`to_core` returns `Result<(core::Module, usize), text::Error>`, where `core::Module { items, inductives, type_, body }` carries flat top-level definitions, the inductive registry (each `union` declaration's parameter telescope, index telescope, and per-constructor signatures, consulted by elaboration and erasure), the optional entrypoint type annotation, and the entrypoint body. The `usize` is the metavariable floor — how many ids `to_core` minted for the module's holes — passed on to `elaborate_module` so the ids it mints for implicit-argument insertion never collide. `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding`, plus the conflict/interface modes (`QualifierConflict`, `BindingConflict`, `NotAModule`, `NotABinding`, `NoSuchUseTarget`, `DuplicatePublicDeclaration`, `ExportConflict`, `CyclicReExport`, `ModuleLoadFailed`) — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
+`to_core` returns `Result<(core::Module, usize), text::Error>`, where `core::Module { items, inductives, type_, body }` carries flat top-level definitions, the inductive registry (each `induct` declaration's parameter telescope, index telescope, and per-constructor signatures, consulted by elaboration and erasure), the optional entrypoint type annotation, and the entrypoint body. The `usize` is the metavariable floor — how many ids `to_core` minted for the module's holes — passed on to `elaborate_module` so the ids it mints for implicit-argument insertion never collide. `src/text/error.rs` enumerates the failure modes — `UnresolvedQualifier`, `ModuleNotFound`, `ChildModuleNotFound`, `PrivateChildModule`, `BindingNotFound`, `PrivateBinding`, plus the conflict/interface modes (`QualifierConflict`, `BindingConflict`, `NotAModule`, `NotABinding`, `NoSuchUseTarget`, `DuplicatePublicDeclaration`, `ExportConflict`, `CyclicReExport`, `ModuleLoadFailed`) — each attachable to a source `Span` via `.at(span)` (see [Error reporting](#error-reporting)).
 
-The three union lowerings are:
+The three inductive lowerings are:
 
-- a union **declaration** → a type-constructor function whose body is the primitive `UnionType` normal form, plus a registry entry recording the parameter telescope, the index telescope, and per-constructor signatures (for an indexed union each signature terminates in its _per-case_ `UnionType`, indices stated by that case's target)
+- an inductive **declaration** → a type-constructor function whose body is the primitive `InductiveType` normal form, plus a registry entry recording the parameter telescope, the index telescope, and per-constructor signatures (for an indexed inductive each signature terminates in its _per-case_ `InductiveType`, indices stated by that case's target)
 - a **constructor function** → a function whose body is the primitive `Variant` normal form
-- a union **match** → a primitive `Match` with `Cases::Union` (arm binders typed from the registry telescopes during core elaboration, with static arity checking; an annotated motive's type-pattern rides along for positional validation, and index information flows through refinement and the restricted inverter in `core/invert.rs`)
+- an inductive **match** → a primitive `Match` with `Cases::Inductive` (arm binders typed from the registry telescopes during core elaboration, with static arity checking; an annotated motive's type-pattern rides along for positional validation, and index information flows through refinement and the restricted inverter in `core/invert.rs`)
 
 ---
 
@@ -179,8 +179,8 @@ The central `core::Term` enum:
 | `Type`                         | The sort (no universe hierarchy)                                                                                                                       |
 | `FuncType` / `Func` / `Apply`  | Π-types (as a `Telescope<Term>`), λ-abstraction, application                                                                                           |
 | `TupleType` / `Tuple` / `Proj` | Σ-types (as a `Telescope<()>`), construction, field access                                                                                             |
-| `Match`                        | The unified eliminator: one scrutinee + motive (`Scope<Many>` — arity 1 except an index-binding union motive), with `Cases::{Bln, Nat, Switch, Union}` |
-| `UnionType` / `Variant`        | Nominal (inductive) unions: the type and constructor values                                                                                            |
+| `Match`                        | The unified eliminator: one scrutinee + motive (`Scope<Many>` — arity 1 except an index-binding inductive motive), with `Cases::{Bln, Switch, Inductive, FreeMonoid}` |
+| `InductiveType` / `Variant`    | Nominal inductive types: the type and constructor values                                                                                            |
 | `Let` / `Rec`                  | Bindings and mutual recursion                                                                                                                          |
 | `Prim`                         | Built-in values and operations                                                                                                                         |
 | `Var`                          | Variables (free or bound)                                                                                                                              |
@@ -198,7 +198,7 @@ Variables arrive from elaboration as free labels (`Var::free("x")`). Each bindin
 | --------- | ------------------------------------------------------------------------- |
 | `One`     | `Let` (tail), `Telescope` links                                           |
 | `Two`     | `Cases::Nat` (succ_case — binds `pred` and `ih`)                          |
-| `Many(n)` | `Func` (parameters), `Rec` (items and tail), `Match` (motive), union arms |
+| `Many(n)` | `Func` (parameters), `Rec` (items and tail), `Match` (motive), inductive arms |
 
 The `Bound` trait describes types that can sit under a `Scope` — its required method is `traverse(&self, visit: &mut Visit<F>) -> Self`, and it provides `shift`, `capture`, `release`, `free_vars` as default methods on top. `Term`, `()`, and `Telescope<B>` all implement `Bound`. A `Visit<F>` struct threads de Bruijn depth and a per-variable rewrite closure (`F: FnMut(depth, &Var) -> Option<Term>`, returning a replacement or `None`) through the whole tree.
 
@@ -217,7 +217,7 @@ Each `Cons` carries one parameter type and a `Scope<One, …>` that binds exactl
 
 ### Bidirectional elaboration (`elaborate.rs`, `zonk.rs`, `erase.rs`)
 
-`elaborate_module(context, module, metavar_floor, mode)` (in `elaborate.rs`) performs bidirectional type checking and returns a rebuilt `core::Module` plus the entrypoint type. `Mode::Infer` synthesizes a type upward; `Mode::Check(expected)` drives a term against a known type. Elaboration is authoritative: it solves omitted lambda domains and surface holes by creating and unifying metavariables, inserts omitted implicit arguments from `@` plicity marks, validates union constructor and match arities against the inductive registry, then re-closes binders in the rebuilt term.
+`elaborate_module(context, module, metavar_floor, mode)` (in `elaborate.rs`) performs bidirectional type checking and returns a rebuilt `core::Module` plus the entrypoint type. `Mode::Infer` synthesizes a type upward; `Mode::Check(expected)` drives a term against a known type. Elaboration is authoritative: it solves omitted lambda domains and surface holes by creating and unifying metavariables, inserts omitted implicit arguments from `@` plicity marks, validates inductive constructor and match arities against the inductive registry, then re-closes binders in the rebuilt term.
 
 Metavariables are **contextual**: every occurrence carries a spine — a delayed substitution, one term per binder of the frozen birth telescope, identity at birth. The spine is ordinary term content (`traverse` walks it), so `close` captures it and `open` substitutes it, and a solution — stored once, spelled with the birth telescope's names — resolves correctly at every occurrence by rewriting through that occurrence's spine, no matter how many times the surrounding binders were re-closed and reopened under fresh names. Unification (`convert.rs`) solves through the spine's _pattern_ entries (distinct variables, inverted), abstracts the candidate's syntactic occurrences of meta-free non-pattern entries to their birth binders (with a round-trip verification guarding the choice), and postpones what it cannot invert. Note the abstraction match is syntactic: candidates arrive reduced while spine entries stay unreduced, so an entry the reducer rewrites does not match and conservatively postpones.
 
@@ -251,7 +251,7 @@ Erasure is performed by `core::erase_module` after elaboration and zonking. The 
 
 | Removed                                                 | Preserved                                             |
 | ------------------------------------------------------- | ----------------------------------------------------- |
-| `Type`, `FuncType`, `TupleType`, `UnionType`, `BlnType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatMatch`, `Match` |
+| `Type`, `FuncType`, `TupleType`, `InductiveType`, `BlnType` | `Func`, `Apply`, `Tuple`, `Proj`, `NatMatch`, `Match` |
 | Type annotations on binders                             | `Let`, `Rec`, `Prim`, `Bin`, `Arr`, `Name`            |
 
 `Bln(false/true)` erase to `ersd::Prim::Nat` (false → 0, true → 1). `Cases::Bln` erases to `ersd::NatMatch` with the false branch keyed at 0 and the true branch as the default case.
@@ -262,7 +262,7 @@ Key differences from `core`:
 
 - No `Scope` — variables are plain `String` labels
 - `ersd::Func` carries `captures: Vec<String>` explicitly
-- Union constructor tags → numeric indices (`ersd::Atom { index: usize }`); a constructor value lowers to one flat record `(tag, payload...)` and a union match to an `ersd::Match` on the tag
+- Inductive constructor tags → numeric indices (`ersd::Atom { index: usize }`); a constructor value lowers to one flat record `(tag, payload...)` and an inductive match to an `ersd::Match` on the tag
 - `ersd::Match` cases are `Vec<Subterm>` indexed by tag order (no label keys)
 - `ersd::NatMatch` dispatch cases are stored as `BTreeMap<u32, Subterm>`
 
@@ -376,7 +376,7 @@ A `cont::Module` → `cont::Module` transform: `optm::optimize` (`src/optm.rs`) 
 | `Flt`        | GC struct with single `f32` field                                         |
 | `Tuple(n)`   | GC struct with N `anyref` fields; subtype chain `tpl/1 ← tpl/2 ← tpl/3 …` |
 | `Closure`    | GC struct: funcref field + captured values as fields                      |
-| `Atom`       | `i31ref` (the union constructor's tag index)                              |
+| `Atom`       | `i31ref` (the inductive constructor's tag index)                              |
 | `Bin`        | GC array of packed `i8`                                                   |
 | `Arr`        | GC array of nullable `anyref`                                             |
 
@@ -502,7 +502,7 @@ The library-crate test suite covers every layer:
 | Layer            | What is tested                                                                                                                                                                                                                                                                   |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Term operations  | `Scope` open/close symmetry, shift, capture, release                                                                                                                                                                                                                             |
-| Parsing          | Round-trips: rec groups, unions, tuples, function types, primitives, field access                                                                                                                                                                                                |
+| Parsing          | Round-trips: rec groups, inductives, tuples, function types, primitives, field access                                                                                                                                                                                                |
 | Reduction        | Beta reduction, let inlining, nat elimination, array/binary ops, timeout enforcement                                                                                                                                                                                             |
 | Type checking    | Dependent tuples, structural `Nat` induction, recursion, primitive operand validation, arrays, binaries                                                                                                                                                                          |
 | Erasure          | Primitive, tuple, array, binary type erasure                                                                                                                                                                                                                                     |
@@ -517,10 +517,10 @@ The library-crate test suite covers every layer:
 
 ## Reading order
 
-1. **`examples/`** — fastest way to see the language and pipeline in action. Start with `crs_printf.rs` (typed format strings end-to-end, minimal pipeline setup) and `crs_json_codec.rs` (standard-library `Json` encode/decode round-trip, full pipeline with output assertions); `crs_proofs.rs` is the entry point for indexed unions and proofs (`/std/Eq`, `/std/Void`, induction, checked rejections). The `inline_*` examples build terms in Rust directly; `parse_*` examples parse Curios source text.
+1. **`examples/`** — fastest way to see the language and pipeline in action. Start with `crs_printf.rs` (typed format strings end-to-end, minimal pipeline setup) and `crs_json_codec.rs` (standard-library `Json` encode/decode round-trip, full pipeline with output assertions); `crs_proofs.rs` is the entry point for indexed inductives and proofs (`/std/Eq`, `/std/Void`, induction, checked rejections). The `inline_*` examples build terms in Rust directly; `parse_*` examples parse Curios source text.
 2. **`src/text/term.rs`** — the surface AST; variants mirror the language syntax with all variables as plain strings.
 3. **`src/text/parse.rs`** — the surface grammar; test cases at the bottom are concrete examples.
-4. **`src/text/to_core.rs`** + **`src/text/to_core/elaborate.rs`** — how `text::Entrypoint` becomes a flat `core::Module`: how `Scope::close` turns string labels into de Bruijn indices, how `union` lowers to type + constructor bindings, and how the inductive registry records parameters, indices, and constructor signatures for later elaboration and erasure.
+4. **`src/text/to_core.rs`** + **`src/text/to_core/elaborate.rs`** — how `text::Entrypoint` becomes a flat `core::Module`: how `Scope::close` turns string labels into de Bruijn indices, how `induct` lowers to type + constructor bindings, and how the inductive registry records parameters, indices, and constructor signatures for later elaboration and erasure.
 5. **`src/core/scope.rs`** + **`src/core/term.rs`** — the de Bruijn machinery (`Scope<A: Arity, B: Bound>`, the `Bound` trait, `Telescope<B>`) and the typed AST built on it; prerequisite for everything downstream.
 6. **`src/core/elaborate.rs`** + **`src/core/zonk.rs`** + **`src/core/erase.rs`** — bidirectional elaboration, metavariable substitution, and erasure; note where reduction is invoked, how holes are solved, and how the meta-free module is checked while producing `ersd`. Shared helpers live in `src/core/typing.rs`.
 7. **`src/ersd/term.rs`** — what disappears at erasure and what survives into runtime.

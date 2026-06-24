@@ -3,7 +3,7 @@ use {
         Apply, Arity, Atom, Carrier, Cases, Definition, Field, Flt, Func, FuncType, Item, Let,
         Match, Module, Nat, One, Plicity, Prim, Proj, Quantity, Rec, Scope, Struct, StructType,
         Subterm,
-        Telescope, Term, Three, Tuple, TupleType, Two, UnionType, Var, Variant,
+        Telescope, Term, Three, Tuple, TupleType, Two, InductiveType, Var, Variant,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::{
@@ -150,7 +150,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
         }
         Subterm::Tuple(Tuple { fields, .. }) => each(out, fields),
         Subterm::Proj(Proj { head, .. }) => collect_labels(head, out),
-        Subterm::UnionType(UnionType {
+        Subterm::InductiveType(InductiveType {
             params, indices, ..
         }) => {
             each(out, params);
@@ -198,8 +198,8 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
                     cases.iter().for_each(|(_, body)| collect_labels(body, out));
                     collect_labels(default, out);
                 }
-                Cases::Union { cases, .. } => cases.iter().for_each(|(_, s)| scope(out, s)),
-                Cases::Inductive { carrier } => match carrier {
+                Cases::Inductive { cases, .. } => cases.iter().for_each(|(_, s)| scope(out, s)),
+                Cases::FreeMonoid { carrier } => match carrier {
                     Carrier::Nat {
                         empty_case,
                         cons_case,
@@ -266,7 +266,7 @@ pub fn build_rename(names: &BTreeSet<String>) -> HashMap<String, String> {
 }
 
 /// Every global qualified name in `module`: each definition (`let`/`rec`), each
-/// union type, each struct type. The universe a global is shortened *against*.
+/// inductive type, each struct type. The universe a global is shortened *against*.
 pub fn module_symbols(module: &Module) -> Vec<String> {
     let mut symbols = Vec::new();
     for item in &module.items {
@@ -285,7 +285,7 @@ pub fn module_symbols(module: &Module) -> Vec<String> {
 /// so an in-scope name is always a suffix. Only entries that actually shorten
 /// are recorded; an ambiguous (or single-segment) name keeps its full path.
 pub fn build_shorten(symbols: &[String]) -> HashMap<String, String> {
-    // One global can be listed twice (a union is both an `inductives` registry
+    // One global can be listed twice (an inductive is both an `inductives` registry
     // key and an `items` type-constructor definition); count distinct names, or
     // such a name would look ambiguous with itself and never shorten.
     let symbols = symbols.iter().map(String::as_str).collect::<BTreeSet<_>>();
@@ -902,7 +902,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
         }
         // Params then indices, one flat argument list — exactly how the
         // type-constructor function is applied at use sites.
-        Subterm::UnionType(UnionType {
+        Subterm::InductiveType(InductiveType {
             name,
             params,
             indices,
@@ -947,7 +947,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 ])
             }
         }
-        // Like `UnionType` but with no indices: `Pair(Nat, Bin)`.
+        // Like `InductiveType` but with no indices: `Pair(Nat, Bin)`.
         Subterm::StructType(StructType { name, params }) => {
             if params.is_empty() {
                 pure(display_label(&name))
@@ -984,7 +984,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             motive,
             cases,
         }) => {
-            // Arity 1 everywhere except an annotated union-match motive,
+            // Arity 1 everywhere except an annotated inductive-match motive,
             // whose pattern binders precede the scrutinee binder.
             let motive_labels = motive
                 .label_iter()
@@ -1006,8 +1006,8 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let keyword = match &cases {
                 Cases::Bln { .. } => "Bln.match ",
                 Cases::Switch { .. } => "Nat.match ",
-                Cases::Union { .. } => "match ",
-                Cases::Inductive { carrier } => match carrier {
+                Cases::Inductive { .. } => "match ",
+                Cases::FreeMonoid { carrier } => match carrier {
                     Carrier::Nat { .. } => "Nat.fold ",
                     Carrier::Bin { .. } => "Bin.fold ",
                     Carrier::Arr { .. } => "Arr.fold ",
@@ -1052,7 +1052,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         indent(flat([print_term(default, depth), pure(";")])),
                     ])
                 }
-                Cases::Union { cases, .. } => flat(
+                Cases::Inductive { cases, .. } => flat(
                     cases
                         .into_iter()
                         .map(|(atom, scope)| {
@@ -1090,7 +1090,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         })
                         .collect::<Vec<_>>(),
                 ),
-                Cases::Inductive { carrier } => {
+                Cases::FreeMonoid { carrier } => {
                     // The cons arm of `Bin`/`Arr` binds `(head, tail), ih`; shared
                     // rendering for both three-binder carriers.
                     let cons_three = |cons_case: Scope<Three>| {

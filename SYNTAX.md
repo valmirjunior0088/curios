@@ -2,7 +2,7 @@
 
 - [Lexical basics](#lexical-basics)
 - [Source files](#source-files)
-- [Top-level declarations](#top-level-declarations) — `let`, `rec`, `union`, `mod`, `use`
+- [Top-level declarations](#top-level-declarations) — `let`, `rec`, `induct`, `mod`, `use`
 - [Terms](#terms) — application, lambdas, holes, implicits, `let`/`rec`, `let !`/`!`, `match`, field access
 - [Types](#types) — universe, function, tuple, array, primitives
 - [Literals](#literals)
@@ -13,7 +13,7 @@
 
 **Identifiers** are sequences of alphanumeric characters and underscores. Keywords are reserved and may not be used as identifiers.
 
-**Keywords**: `let` `rec` `pub` `match` `mod` `use` `end` `false` `true` `union` `struct`. (`and`, the `rec`-clause separator, is contextual — elsewhere it is an ordinary identifier.)
+**Keywords**: `let` `rec` `pub` `match` `mod` `use` `end` `false` `true` `induct` `struct`. (`and`, the `rec`-clause separator, is contextual — elsewhere it is an ordinary identifier.)
 
 **Paths** are slash-separated identifiers: `Foo/bar`, `Std/List/length`. They refer to values in nested modules. Absolute paths start at the root with `/`, for example `/std/Nat/add`.
 
@@ -76,32 +76,32 @@ pub and parse_arr : Parse(Value) =
 
 Members may refer to one another freely through such calls. The sole exception: two bindings whose values are _calls that each require the other's result_ form a cycle with no way to tie the knot, and the group is rejected.
 
-### Union
+### Inductive
 
 ```
-pub union Result(A : Type, B : Type)
+pub induct Result(A : Type, B : Type)
 | ok(A)
 | err(B)
 end
 ```
 
-Declares a sum type and a constructor module with the same name. The type name is bound as `Result` — a type-constructor function applied explicitly, `Result(Nat, Bin)` — and each constructor is bound under the constructor module. The union's parameters are _implicit_ at the constructors: `Result/ok(value)` infers them, and a call-site `@` supplies one positionally (`Result/ok(@Nat, @Bin, value)`). A constructor is exactly as visible as its union: a bare `union` is usable throughout the declaring module, and `pub union` additionally exports the type and its constructors.
+Declares a sum type and a constructor module with the same name. The type name is bound as `Result` — a type-constructor function applied explicitly, `Result(Nat, Bin)` — and each constructor is bound under the constructor module. The inductive's parameters are _implicit_ at the constructors: `Result/ok(value)` infers them, and a call-site `@` supplies one positionally (`Result/ok(@Nat, @Bin, value)`). A constructor is exactly as visible as its inductive type: a bare `induct` is usable throughout the declaring module, and `pub induct` additionally exports the type and its constructors.
 
-A parameter marked `@` is implicit **at the type constructor as well** (at the value constructors every parameter is implicit regardless). Mark a parameter when it is recoverable at type use sites — `/std/Eq` declares `union Eq(@A : Type) : (x : A, y : A)`, since `A` is pinned by the indices, so the proposition is written `Eq(x, y)` (pin it with `Eq(@Nat, x, y)` when wanted). A parameter that only the use site can supply — `Vec`'s element type, say — stays unmarked.
+A parameter marked `@` is implicit **at the type constructor as well** (at the value constructors every parameter is implicit regardless). Mark a parameter when it is recoverable at type use sites — `/std/Eq` declares `induct Eq(@A : Type) : (x : A, y : A)`, since `A` is pinned by the indices, so the proposition is written `Eq(x, y)` (pin it with `Eq(@Nat, x, y)` when wanted). A parameter that only the use site can supply — `Vec`'s element type, say — stays unmarked.
 
 A payload-less case uses empty parentheses:
 
 ```
-pub union Option(A : Type)
+pub induct Option(A : Type)
 | none()
 | some(A)
 end
 ```
 
-A union may declare zero cases, making the type uninhabited. Its eliminator is a `match` with zero arms — with no constructors every omission is vacuously justified, so the match checks at any motive:
+An inductive may declare zero cases, making the type uninhabited. Its eliminator is a `match` with zero arms — with no constructors every omission is vacuously justified, so the match checks at any motive:
 
 ```
-union Void
+induct Void
 end
 
 let absurd(@A : Type, v : Void) -> A =
@@ -109,10 +109,10 @@ let absurd(@A : Type, v : Void) -> A =
     end;
 ```
 
-Mutually recursive unions are declared with `and` and are closed by a single `end`:
+Mutually recursive inductives are declared with `and` and are closed by a single `end`:
 
 ```
-pub union Tree(A : Type)
+pub induct Tree(A : Type)
 | node(A, Forest(A))
 pub and Forest(A : Type)
 | nil()
@@ -122,17 +122,17 @@ end
 
 #### Indices
 
-A union may declare an **index telescope** after a `:` in its head. A parameter is uniform — every constructor targets the same instantiation — but an index is _constrained per case_: each case states, after its payload, the parenthesized index expressions it inhabits.
+An inductive may declare an **index telescope** after a `:` in its head. A parameter is uniform — every constructor targets the same instantiation — but an index is _constrained per case_: each case states, after its payload, the parenthesized index expressions it inhabits.
 
 ```
-pub union Vec(T : Type) : (n : Nat)
+pub induct Vec(T : Type) : (n : Nat)
 | nil() : (0)
 | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
 end
 ```
 
 - The head's index names (`n`) are documentary — needed only when a later index's type depends on an earlier one; they are not in scope in the cases. `: (Nat)` is equally legal.
-- A case target states _only_ the index expressions — never the union name or the parameters, which are forced uniform by construction. Targets are required on every case exactly when the head declares indices, with arity matching the index telescope's.
+- A case target states _only_ the index expressions — never the inductive name or the parameters, which are forced uniform by construction. Targets are required on every case exactly when the head declares indices, with arity matching the index telescope's.
 - Payload binders may be named (`m : Nat`) — required when a later payload type or the target mentions them — and a named binder may carry `@`, making it implicit at the value constructor (`m` above is recoverable from `xs`, so values are written `Vec/cons(x, xs)`).
 
 The type constructor stays flat and explicit — `Vec : (T : Type, n : Nat) -> Type`, applied `Vec(Bin, 3)` — so use sites never distinguish parameters from indices.
@@ -143,13 +143,13 @@ The type constructor stays flat and explicit — `Vec : (T : Type, n : Nat) -> T
 pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
 ```
 
-Declares a **nominal record** type. Unlike a union it has no value-constructor module and no tag — the brace literal builds it directly — and no indices. The type name is bound as `Pair`, a type-constructor function applied explicitly (`Pair(Nat, Bin)`), exactly like a union's; parameters are written as a union's are. Field types follow the [tuple-type](#tuple-type) field grammar (label optional), and a later field's type may mention an earlier field, making the record dependent:
+Declares a **nominal record** type. Unlike an inductive it has no value-constructor module and no tag — the brace literal builds it directly — and no indices. The type name is bound as `Pair`, a type-constructor function applied explicitly (`Pair(Nat, Bin)`), exactly like an inductive's; parameters are written as an inductive's are. Field types follow the [tuple-type](#tuple-type) field grammar (label optional), and a later field's type may mention an earlier field, making the record dependent:
 
 ```
 struct Sized pub { n : Nat, v : Vec(Nat, n) }
 ```
 
-A struct is _nominal_: as with a union, two structs are the same type only if they are the same declaration, and a struct never converts with a structural [tuple type](#tuple-type) of the same fields. Construction and projection are positional and tagless, so a struct adds no runtime cost over the equivalent tuple, and a single-field struct is a zero-cost newtype — it erases to its bare field, byte-identical at runtime:
+A struct is _nominal_: as with an inductive, two structs are the same type only if they are the same declaration, and a struct never converts with a structural [tuple type](#tuple-type) of the same fields. Construction and projection are positional and tagless, so a struct adds no runtime cost over the equivalent tuple, and a single-field struct is a zero-cost newtype — it erases to its bare field, byte-identical at runtime:
 
 ```
 struct Meters pub { Nat }
@@ -157,7 +157,7 @@ struct Meters pub { Nat }
 
 **Visibility.** Two independent `pub` markers place a struct on a private → abstract → transparent scale:
 
-- The outer `pub` (before `struct`) exports the **type name**, exactly as on a union.
+- The outer `pub` (before `struct`) exports the **type name**, exactly as on an inductive.
 - The inner `pub` (before the `{`) exports the **representation** — the ability to build a value with the brace literal and to project its fields.
 
 ```
@@ -292,7 +292,7 @@ rec bind : (@A : Type, @B : Type) -> (Parse(A), (A) -> Parse(B)) -> Parse(B) = �
 
 Call sites follow a two-queue rule: plain arguments fill the explicit binders in telescope order, `@`-arguments fill the implicit binders in telescope order, matched independently — `f(@Nat, x)` and `f(x, @Nat)` are the same call. An implicit the elaborator cannot infer is rejected with the binder's name; supply it explicitly with `@`.
 
-Union parameters need no marks: they are implicit at the value constructors and explicit at the type constructor by definition (see Union above).
+Inductive parameters need no marks: they are implicit at the value constructors and explicit at the type constructor by definition (see Inductive above).
 
 ### Local let
 
@@ -361,7 +361,7 @@ The `motive` gives the result type — one grammar growing, with the binder pare
 ```
 match v : P                          -- constant: the result does not depend on v
 match v : (x) => P                   -- depends on the scrutinee
-match v : (x : Vec(T, k)) => P       -- union scrutinees: depends on the indices too
+match v : (x : Vec(T, k)) => P       -- inductive scrutinees: depends on the indices too
 ```
 
 In the annotated form the binder's type is the scrutinee's type with its index slots opened — index binders appear where they naturally live. Parameter slots take the actual parameter written verbatim (checked), `_`, or a name binding it; index slots take a fresh name or `_`. The pattern spells **every** slot, `@`-marked parameters included — it is the eliminator's positional contract, not an application, so `match p : (q : Eq(A, s, t)) => …` writes the `A` slot that use sites elide. The motive may also be omitted entirely when the arms determine it. Every `match` is closed by `end`; branches are introduced by `|` and are bounded by the next `|` or by `end`.
@@ -394,7 +394,7 @@ match n : /std/Nat
 end
 ```
 
-**Unions** — one branch per constructor; each branch lists binders for that constructor's payload:
+**Inductives** — one branch per constructor; each branch lists binders for that constructor's payload:
 
 ```
 match r : A
@@ -403,7 +403,7 @@ match r : A
 end
 ```
 
-Matching an _indexed_ union gets three further behaviours, by the shape of each scrutinee index:
+Matching an _indexed_ inductive gets three further behaviours, by the shape of each scrutinee index:
 
 - a **variable** index is refined to the case's target inside each arm, so hypotheses mentioning it reduce there (`match p : Vec(Bin, m)` through an `Eq(n, m)` learns `n := z`, `m := z` in the `refl` arm);
 - a **constructor-form** index is inverted against each case's target: arm binders are pinned to forced values (`Nat/succ(n)` against `cons`'s `Nat/succ(j)` pins `j := n`), and a case whose target _definitely clashes_ (`nil`'s `0` against `Nat/succ(n)`) may simply be omitted — the checker verifies the omission, and there is no `impossible` keyword:
@@ -577,7 +577,7 @@ Fields may carry name annotations. Each written name is checked positionally aga
 
 ### Sum types
 
-Use `union` to declare a sum type (see [Union](#union) for the declaration, parameter, and visibility rules). A union is a primitive _nominal_ (inductive) type: two unions are the same type only if they are the same declaration, and its values are built exclusively through its constructors. At runtime a constructor value is one flat record `(tag, payload...)`.
+Use `induct` to declare a sum type (see [Inductive](#inductive) for the declaration, parameter, and visibility rules). An inductive is a primitive _nominal_ type: two inductives are the same type only if they are the same declaration, and its values are built exclusively through its constructors. At runtime a constructor value is one flat record `(tag, payload...)`.
 
 Construction goes through the constructor module — `Result/ok(42)` — with the type parameters implicit (supply one positionally with a call-site `@` when you want it pinned: `Result/ok(@Nat, @Bin, 42)`). Eliminate with `match`; constructor branches bind the payload fields directly:
 
@@ -593,12 +593,12 @@ let unwrap_or(A : Type, r : Result(A, /std/Bin), default : A) -> A =
 
 ### Recursive types
 
-Recursive types are written as recursive unions. A union case may refer back to the union being declared.
+Recursive types are written as recursive inductives. An inductive case may refer back to the inductive being declared.
 
 **Definition**
 
 ```
-union List(A : Type)
+induct List(A : Type)
 | nil()
 | cons(A, List(A))
 end

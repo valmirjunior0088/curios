@@ -25,13 +25,13 @@ fn reduce_apply_beta_reduces() {
 }
 
 #[test]
-fn reduce_union_match_selects_case_and_projects_payload() {
+fn reduce_inductive_match_selects_case_and_projects_payload() {
     let mut context = context();
 
     // Dispatch inspects the reduced head's `Variant`; the arm's binder is
     // bound call-by-name to the flat projection `head.1`, which then reduces
     // to the payload component.
-    let term: Term = Term::union_match(
+    let term: Term = Term::inductive_match(
         Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
         Some("m"),
         Term::prim(Prim::NatType),

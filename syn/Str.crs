@@ -1,6 +1,6 @@
 use /std/{Nat, Bin};
 
-pub union Class
+pub induct Class
 | ascii()
 | lead(Nat, Nat, Nat, Nat)
 | bad()
@@ -30,7 +30,7 @@ pub let classify(c : Nat) -> Class =
         end
     end;
 
-pub union Scan
+pub induct Scan
 | lead()
 | cont(Nat, Nat, Nat)
 | bad()
@@ -56,7 +56,7 @@ pub let step(c : Nat, s : Scan) -> Scan =
         end
     end;
 
-pub union Utf8 : (s : Scan, b : Bin)
+pub induct Utf8 : (s : Scan, b : Bin)
 | stop() : (Scan/lead(), \\)
 | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
     : (st, Bin/cons(c, t))

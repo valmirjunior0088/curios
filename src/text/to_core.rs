@@ -138,8 +138,8 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
                     info.insert_binding(l.label.clone(), l.is_pub)?;
                 }
             }
-            TopItem::Union(unions) => {
-                for u in unions {
+            TopItem::Inductive(group) => {
+                for u in group {
                     info.insert_child(u.label.clone(), u.is_pub)?;
                     info.insert_binding(u.label.clone(), u.is_pub)?;
                 }
@@ -156,10 +156,10 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
 }
 
 // Walk the resolved module tree (mirroring `Resolved::discover`) collecting
-// every union's constructor roster. Each constructor's canonical name
-// `<module>/<union>/<ctor>` maps to the union's full `(tag, payload arity)` list
+// every inductive's constructor roster. Each constructor's canonical name
+// `<module>/<inductive>/<ctor>` maps to the inductive's full `(tag, payload arity)` list
 // — the arity is just the declared payload count, so no core lowering is needed.
-fn scan_union_ctors(
+fn scan_inductive_ctors(
     items: &[TopItem],
     prefix: &Qualifier,
     modules: &HashMap<Qualifier, Rc<Module>>,
@@ -167,17 +167,17 @@ fn scan_union_ctors(
 ) {
     for item in items {
         match item {
-            TopItem::Union(unions) => {
-                for u in unions {
+            TopItem::Inductive(group) => {
+                for u in group {
                     let roster: Vec<(String, usize)> = u
                         .cases
                         .iter()
                         .map(|c| (c.label.clone(), c.payload.len()))
                         .collect();
-                    let union_name = prefix.with(&u.label);
+                    let inductive_name = prefix.with(&u.label);
 
                     for c in &u.cases {
-                        out.insert(union_name.with(&c.label).join(), roster.clone());
+                        out.insert(inductive_name.with(&c.label).join(), roster.clone());
                     }
                 }
             }
@@ -185,10 +185,10 @@ fn scan_union_ctors(
                 let path = prefix.with(&m.label);
 
                 match &m.module {
-                    Some(module) => scan_union_ctors(&module.items, &path, modules, out),
+                    Some(module) => scan_inductive_ctors(&module.items, &path, modules, out),
                     None => {
                         if let Some(module) = modules.get(&path) {
-                            scan_union_ctors(&module.items, &path, modules, out);
+                            scan_inductive_ctors(&module.items, &path, modules, out);
                         }
                     }
                 }
@@ -217,8 +217,8 @@ fn process_items(
                     context.insert_binding(l.label.clone(), context.prefixed(&l.label))?;
                 }
             }
-            TopItem::Union(unions) => {
-                for u in unions {
+            TopItem::Inductive(group) => {
+                for u in group {
                     context.insert_scope(u.label.clone(), context.prefixed(&u.label))?;
                     context.insert_binding(u.label.clone(), context.prefixed(&u.label))?;
                 }
@@ -313,15 +313,15 @@ fn process_items(
 
                 flat_items.push(FlatItem::Rec(items));
             }
-            TopItem::Union(unions) => {
-                // Step 1: type bindings as one rec group. A union's type
-                // binding wraps a primitive `UnionType` normal form in a
+            TopItem::Inductive(group) => {
+                // Step 1: type bindings as one rec group. An inductive's type
+                // binding wraps a primitive `InductiveType` normal form in a
                 // `Func` over its type parameters and indices (so
-                // `Result(Nat, Bin)` beta-reduces to `UnionType { Result,
-                // [Nat, Bin] }` and `Vec(Bin, 3)` to `UnionType { Vec, [Bin],
+                // `Result(Nat, Bin)` beta-reduces to `InductiveType { Result,
+                // [Nat, Bin] }` and `Vec(Bin, 3)` to `InductiveType { Vec, [Bin],
                 // [3] }`), and its shape is recorded in the inductive
                 // registry.
-                let type_flat_items = unions
+                let type_flat_items = group
                     .iter()
                     .map(|u| {
                         let lower = Lower::new(context);
@@ -332,7 +332,7 @@ fn process_items(
                             .iter()
                             .map(|(p, n, t)| Ok((*p, n.clone(), lower.term(t)?)))
                             .collect::<Result<Vec<_>, Error>>()?;
-                        // The registry and the `UnionType` normal form are
+                        // The registry and the `InductiveType` normal form are
                         // positional; plicity matters only on the generated
                         // type-constructor function.
                         let param_tys_unmarked = param_tys
@@ -366,7 +366,7 @@ fn process_items(
 
                         // Registry entry: the parameter telescope plus each
                         // constructor's full signature `(params..., payload...)
-                        // -> UnionType { name, params, indices }`, where the
+                        // -> InductiveType { name, params, indices }`, where the
                         // terminal's indices are that *case's* target
                         // expressions over its payload binders.
                         // `Telescope::build` captures the parameter and
@@ -398,7 +398,7 @@ fn process_items(
 
                                 let telescope = core::Telescope::build(
                                     param_tys_unmarked.iter().cloned().chain(fields),
-                                    core::Term::union_type(&name, param_vars.clone(), target),
+                                    core::Term::inductive_type(&name, param_vars.clone(), target),
                                 );
 
                                 // Payload quantities, parallel to the payload
@@ -432,7 +432,7 @@ fn process_items(
                             },
                         );
 
-                        let union = core::Term::union_type(&name, param_vars, index_vars);
+                        let inductive = core::Term::inductive_type(&name, param_vars, index_vars);
 
                         // The type constructor is flat over params then
                         // indices: `Vec : (T : Type, n : Nat) -> Type`. Use
@@ -450,7 +450,7 @@ fn process_items(
                             )
                             .collect();
                         let (type_, body) = if binder_tys.is_empty() {
-                            (core::Term::type_(), union)
+                            (core::Term::type_(), inductive)
                         } else {
                             (
                                 core::Term::func_type_marked(
@@ -459,7 +459,7 @@ fn process_items(
                                 ),
                                 core::Term::func(
                                     binder_tys.into_iter().map(|(_, n, t)| (n, t)),
-                                    union,
+                                    inductive,
                                 ),
                             )
                         };
@@ -476,7 +476,7 @@ fn process_items(
 
                 // Step 2: constructor bindings. Each is a function whose body
                 // injects the variant as a tagged tuple.
-                for u in unions {
+                for u in group {
                     for c in &u.cases {
                         let lower = Lower::new(context);
 
@@ -518,7 +518,7 @@ fn process_items(
                         };
 
                         // Constructor type: (params..., _0 : T_0, ...) -> T.
-                        // Every union parameter is implicit at the value
+                        // Every inductive parameter is implicit at the value
                         // constructor — `Result/success(42)` infers them, the
                         // call-site `@` supplies one positionally — while the
                         // payload binders keep their declared marks (`@m`
@@ -701,7 +701,7 @@ fn order_flat_items(
         })
         .collect();
 
-    // A node depends on the nodes declaring its free vars. A union's
+    // A node depends on the nodes declaring its free vars. An inductive's
     // declaration is wider than its items: the registry entry's constructor
     // payload and target types are elaborated alongside the type-binding
     // group (`core::elaborate_module_rec` rebuilds the registry telescopes
@@ -925,19 +925,19 @@ pub fn to_core(
     let metavars = Entropy::<usize>::new();
     let binders = Entropy::<usize>::new();
 
-    // Precompute every union's constructor roster program-wide (before any body
+    // Precompute every inductive's constructor roster program-wide (before any body
     // is lowered, so forward references resolve too), keyed by each constructor's
-    // canonical name. The pattern-matrix compiler reads it to expand a union-column
+    // canonical name. The pattern-matrix compiler reads it to expand an inductive-column
     // `_` into the unlisted constructors.
-    let mut union_ctors = HashMap::new();
-    scan_union_ctors(
+    let mut inductive_ctors = HashMap::new();
+    scan_inductive_ctors(
         &entrypoint.module.items,
         &Qualifier::empty(),
         &modules,
-        &mut union_ctors,
+        &mut inductive_ctors,
     );
 
-    let mut context = Context::new(&table, &public, &metavars, &binders, &union_ctors);
+    let mut context = Context::new(&table, &public, &metavars, &binders, &inductive_ctors);
     let mut flat_items = Vec::new();
     let mut inductives = BTreeMap::new();
     let mut structures = BTreeMap::new();

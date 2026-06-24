@@ -1,6 +1,6 @@
 # Curios
 
-Curios is a functional language with dependent types that compiles to WebAssembly. Most languages with dependent types evolved from proof assistants, where non-determinism is a property to be excluded rather than embraced - Curios inverts this, aiming to bring dependent function types (Π-types, λ-abstractions), dependent tuple types (Σ-types, dependent pairs), and nominal sum types (inductive unions with dependent elimination semantics) to a programming context where non-determinism is simply part of daily life.
+Curios is a functional language with dependent types that compiles to WebAssembly. Most languages with dependent types evolved from proof assistants, where non-determinism is a property to be excluded rather than embraced - Curios inverts this, aiming to bring dependent function types (Π-types, λ-abstractions), dependent tuple types (Σ-types, dependent pairs), and nominal sum types (inductive types with dependent elimination semantics) to a programming context where non-determinism is simply part of daily life.
 
 Dependent types pay off most in a handful of recurring patterns. Length-indexed collections rule out bounds errors by construction, replacing runtime panics with type-level guarantees. Typed format strings derive their argument list directly from the format value, eliminating a whole class of variadic bugs. Dependent records encode protocol state in the type itself, turning invalid transitions into compile-time errors rather than runtime failures.
 
@@ -76,7 +76,7 @@ Passing the wrong type is a compile-time error, not a runtime failure:
 -- TypeMismatch: the format specifier %d expects Nat, but "Alice" has type Str
 ```
 
-**JSON codec** (`examples/crs_json_codec.rs`) — constructs a `Json` tree using `union` constructors such as `Json/obj` and `Json/str`, encodes it to a `Bin` string with `Json/encode`, parses it back with `Json/decode`, and asserts the output is byte-identical to the original. It exercises the prepended standard library (`std/Json`, `std/Parse`), arrays, and nested union values together.
+**JSON codec** (`examples/crs_json_codec.rs`) — constructs a `Json` tree using `induct` constructors such as `Json/obj` and `Json/str`, encodes it to a `Bin` string with `Json/encode`, parses it back with `Json/decode`, and asserts the output is byte-identical to the original. It exercises the prepended standard library (`std/Json`, `std/Parse`), arrays, and nested inductive values together.
 
 ## Documentation
 

@@ -463,13 +463,13 @@ fn rejects_re_export_through_other_modules_private_child() {
     );
 }
 
-// A union's constructor module is a first-class interface member built in phase
+// An inductive's constructor module is a first-class interface member built in phase
 // 2, so its cases re-export by name and by glob through the fixed point.
 #[test]
-fn re_exports_union_constructor_by_name() {
+fn re_exports_inductive_constructor_by_name() {
     let term = run(r#"
         pub mod Foo
-            pub union U
+            pub induct U
             | A()
             | B()
             end
@@ -485,10 +485,10 @@ fn re_exports_union_constructor_by_name() {
 }
 
 #[test]
-fn re_exports_union_constructors_by_glob() {
+fn re_exports_inductive_constructors_by_glob() {
     let term = run(r#"
         pub mod Foo
-            pub union U
+            pub induct U
             | A()
             | B()
             end

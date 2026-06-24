@@ -26,7 +26,7 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
             | false => false
             end;
 
-        union Scan
+        induct Scan
         | lead()
         | cont(Nat, Nat, Nat)
         | bad()
@@ -57,7 +57,7 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
             | lead() => classify(c)
             end;
 
-        union Utf8 : (s : Scan, b : Bin)
+        induct Utf8 : (s : Scan, b : Bin)
         | stop() : (Scan/lead(), \\)
         | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
             : (st, Bin/concat(Bin/append(\\, c), t))
@@ -102,7 +102,7 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
 
 #[test]
 fn nullary_closure_survives_erasure_and_codegen() {
-    // A nullary closure stored in a union field and called indirectly via a
+    // A nullary closure stored in an inductive field and called indirectly via a
     // `call_ref` — the erasure+codegen path that needed `clsr_arities`. Zero-arity
     // closures survive it, which is what lets the suspension/continuation thunks
     // drop their dummy unit argument (`() -> T` rather than `({}) -> T`). Output
@@ -112,7 +112,7 @@ fn nullary_closure_survives_erasure_and_codegen() {
         Duration::from_secs(10),
         r#"
         use /std/{Io, Str};
-        union Susp(A : Type)
+        induct Susp(A : Type)
         | now(A)
         | later(() -> Susp(A))
         end
@@ -137,7 +137,7 @@ fn nullary_closure_survives_erasure_and_codegen() {
 #[test]
 fn end_to_end() {
     let source = r#"
-        union Pair
+        induct Pair
         | left(std/Int)
         | right(std/Flt)
         end
@@ -741,14 +741,14 @@ fn erased_field_projected_at_runtime_is_rejected() {
 }
 
 #[test]
-fn erased_union_payload_is_dropped_at_runtime() {
+fn erased_inductive_payload_is_dropped_at_runtime() {
     // Item 1: a constructor payload field marked `@` on its type is erased —
     // dropped from the runtime variant tuple. `make` fills the erased `ghost`
     // with its own erased `n` (runs only if both are dropped); the match binds
     // only the relevant `val`, so its projection must skip the absent field.
     let source = r#"
         use /std/{Io, Str, Nat};
-        union Boxed
+        induct Boxed
         | box(ghost : @Nat, val : Nat)
         end
         let make : (n : @Nat) -> Boxed = (n) => Boxed/box(n, 5);
@@ -763,12 +763,12 @@ fn erased_union_payload_is_dropped_at_runtime() {
 }
 
 #[test]
-fn erased_union_payload_used_at_runtime_is_rejected() {
+fn erased_inductive_payload_used_at_runtime_is_rejected() {
     // The erased payload binder may only appear in erased positions; returning
     // it from the arm is a runtime use of a field that erase has dropped.
     let source = r#"
         use /std/{Io, Str, Nat};
-        union Boxed
+        induct Boxed
         | box(ghost : @Nat, val : Nat)
         end
         let get : (b : Boxed) -> Nat = (b) =>
@@ -1004,7 +1004,7 @@ fn file_with_write_mode_persists_through_close() {
 }
 
 // Matching on an effectful scrutinee must evaluate it exactly once — the
-// erased union match binds the scrutinee in a `let` and projects from it.
+// erased inductive match binds the scrutinee in a `let` and projects from it.
 // Append mode makes a second evaluation visible: it would append twice.
 #[test]
 fn effectful_match_scrutinee_runs_once() {
@@ -1477,7 +1477,7 @@ fn printf_partial_evaluation_reduces_residual() {
 
 #[test]
 fn indexed_vec_append_executes() {
-    // Rung A of the indexed-union ladder, *executed*: `append`'s motive binds
+    // Rung A of the indexed-inductive ladder, *executed*: `append`'s motive binds
     // the length index (`(v : Vec(T, k)) => Vec(T, Nat/add(k, m))`), the
     // `cons` arm meets it through the definitional successor-peeling of
     // `Nat/add`, and the implicit index arguments of the recursive call are
@@ -1487,7 +1487,7 @@ fn indexed_vec_append_executes() {
     // and the program trapped at runtime.
     let source = r#"
         use /std/{Nat, Bin, Io};
-        union Vec(T : Type) : (n : Nat)
+        induct Vec(T : Type) : (n : Nat)
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
         end
@@ -1513,8 +1513,8 @@ fn indexed_vec_append_executes() {
 }
 
 #[test]
-fn implicit_union_type_param_executes() {
-    // A `@`-marked union parameter is implicit at the type constructor too:
+fn implicit_inductive_type_param_executes() {
+    // A `@`-marked inductive parameter is implicit at the type constructor too:
     // `Eq2(2, 2)` infers `A` from the indices, `Eq2(@Nat, 3, 3)` pins it, and
     // the eliminator's motive type-pattern still spells every slot. Running
     // (not just checking) also guards metavariable spines through the
@@ -1523,7 +1523,7 @@ fn implicit_union_type_param_executes() {
     // spellings of the same domain compare as distinct.
     let source = r#"
         use /std/{Nat, Bin, Io};
-        union Eq2(@A : Type) : (x : A, y : A)
+        induct Eq2(@A : Type) : (x : A, y : A)
         | refl(@z : A) : (z, z)
         end
         let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
@@ -1544,13 +1544,13 @@ fn implicit_union_type_param_executes() {
 }
 
 #[test]
-fn implicit_union_type_param_rejects_explicit_spelling() {
+fn implicit_inductive_type_param_rejects_explicit_spelling() {
     // With `@A` implicit, the old explicit spelling queues `Nat` into the
     // explicit slots — one argument too many, an error rather than a silent
     // reinterpretation. (`Eq2(@Nat, 2, 2)` is the pinned spelling.)
     let source = r#"
         use /std/{Nat, Io};
-        union Eq2(@A : Type) : (x : A, y : A)
+        induct Eq2(@A : Type) : (x : A, y : A)
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(Nat, 2, 2) = Eq2/refl();
@@ -1564,14 +1564,14 @@ fn implicit_union_type_param_rejects_explicit_spelling() {
 #[test]
 fn parked_constraints_let_nested_constructor_metas_resolve() {
     // `sym2(Eq2/refl())` — the argument's fresh metas meet the domain's fresh
-    // metas as flex–flex pairs embedded under the union type. Before the
+    // metas as flex–flex pairs embedded under the inductive type. Before the
     // constraint store (§8) the argument's `expect` failed at quiescence,
     // seconds before the result-type unification would have pinned
     // everything. Now the pairs park, the output `expect` solves the domain
     // metas against the annotation, and the wake retries the parked pairs.
     let source = r#"
         use /std/{Nat, Io};
-        union Eq2(@A : Type) : (x : A, y : A)
+        induct Eq2(@A : Type) : (x : A, y : A)
         | refl(@z : A) : (z, z)
         end
         let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
@@ -1597,7 +1597,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
     // equal; `2` and `3` are not.
     let source = r#"
         use /std/{Nat, Io};
-        union Eq2(@A : Type) : (x : A, y : A)
+        induct Eq2(@A : Type) : (x : A, y : A)
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(2, 3) = Eq2/refl();
@@ -1908,7 +1908,7 @@ fn diagnostic_shortens_global_names() {
     );
     assert!(
         !error.contains("std/Vec"),
-        "qualified union path leaked: {error}"
+        "qualified inductive path leaked: {error}"
     );
     assert!(
         !error.contains("sys/"),
@@ -2086,7 +2086,7 @@ fn struct_destructure_in_match_arm() {
     let source = r#"
         use /std/{Nat, Io};
         pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
-        union Wrap | wrap(Pair(Nat, Nat)) end
+        induct Wrap | wrap(Pair(Nat, Nat)) end
         let w : Wrap = Wrap/wrap(Pair { fst = 3, snd = 8 });
         let out : Nat =
             match w : Nat
@@ -2226,7 +2226,7 @@ fn matrix_nat_literal_in_struct_field() {
     );
 }
 
-// A `_` fallthrough at a union column expands into the *unlisted* constructors:
+// A `_` fallthrough at an inductive column expands into the *unlisted* constructors:
 // here it covers `nil()` (and any non-matching `cons`), which needs the
 // constructor's arity from the registry.
 #[test]
@@ -2296,7 +2296,7 @@ fn matrix_multi_scrutinee_via_tuple() {
     assert_eq!(io.output(), b"2");
 }
 
-// Coverage is left to core: a union match that lists neither every constructor
+// Coverage is left to core: an inductive match that lists neither every constructor
 // nor a `_` fallthrough is rejected as non-exhaustive (the `nil` arm is missing).
 #[test]
 fn matrix_non_exhaustive_missing_constructor_rejected() {
@@ -2319,14 +2319,14 @@ fn matrix_non_exhaustive_missing_constructor_rejected() {
     );
 }
 
-// Expanding a `_` at a union column needs the constructor's union; when the
+// Expanding a `_` at an inductive column needs the constructor's inductive; when the
 // constructors are not in scope (no `use`), the tag cannot be resolved and the
 // match is rejected with an actionable error.
 #[test]
 fn matrix_wildcard_unresolved_constructor_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        union Shape | dot() | line(Nat) end
+        induct Shape | dot() | line(Nat) end
         let area(s : Shape) -> Nat =
             match s
             | line(n) => n
@@ -3178,7 +3178,7 @@ fn lambda_tuple_param_destructures() {
 fn match_arm_tuple_destructures() {
     // A constructor whose payload is a tuple destructures inside the arm binder.
     let source = r#"
-        union Boxed
+        induct Boxed
         | box({ std/Int, std/Int })
         end
         let value : Boxed = Boxed/box((+9, +1));
@@ -3411,7 +3411,7 @@ fn task_scheduler_parks_polls_and_resumes() {
     // The `/std/Task` event loop end to end: the root fiber yields a `wait` on
     // stdin-READ and parks, `run` marshals the parked handle/interest into
     // `Io/poll` (the mock reports it ready), and resumes the continuation — which
-    // performs the write. Exercises the novel path of a union variant carrying a
+    // performs the write. Exercises the novel path of an inductive variant carrying a
     // closure through erasure and codegen.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
@@ -3720,7 +3720,7 @@ fn label_projection_resolves_on_a_type_valued_field() {
         Duration::from_secs(10),
         r#"
         use /std/{Io, Str, Nat};
-        union Susp(A : Type)
+        induct Susp(A : Type)
         | now(A)
         | later(() -> Susp(A))
         end
@@ -3752,7 +3752,7 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
         Duration::from_secs(10),
         r#"
         use /std/{Io, Str, Nat, Lst};
-        union Susp(A : Type)
+        induct Susp(A : Type)
         | now(A)
         | later(() -> Susp(A))
         end
@@ -3833,7 +3833,7 @@ fn utf8_inductive_spike() {
     let source = r#"
         use /std/{Io, Str, Nat, Bin};
 
-        union Scan
+        induct Scan
         | lead()
         | cont()
         | bad()
@@ -3846,7 +3846,7 @@ fn utf8_inductive_spike() {
             | bad() => Scan/bad()
             end;
 
-        union Utf8 : (s : Scan, b : Bin)
+        induct Utf8 : (s : Scan, b : Bin)
         | stop() : (Scan/lead(), \\)
         | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
             : (st, Bin/concat(Bin/append(\\, c), t))
@@ -3876,7 +3876,7 @@ fn utf8_construction_spike() {
     let source = r#"
         use /std/{Io, Str, Nat, Bin};
 
-        union All : (b : Bin)
+        induct All : (b : Bin)
         | empty() : (\\)
         | snoc(c : Nat, t : Bin, rest : All(t)) : (Bin/concat(Bin/append(\\, c), t))
         end
@@ -3910,7 +3910,7 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
             | false => false
             end;
 
-        union Scan
+        induct Scan
         | lead()
         | cont(Nat, Nat, Nat)
         | bad()
@@ -3955,7 +3955,7 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
             | lead() => classify(c)
             end;
 
-        union Utf8 : (s : Scan, b : Bin)
+        induct Utf8 : (s : Scan, b : Bin)
         | stop() : (Scan/lead(), \\)
         | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
             : (st, Bin/concat(Bin/append(\\, c), t))
@@ -3999,7 +3999,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
             | false => false
             end;
 
-        union Scan
+        induct Scan
         | lead()
         | cont(Nat, Nat, Nat)
         | bad()
@@ -4044,7 +4044,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
             | lead() => classify(c)
             end;
 
-        union Utf8 : (s : Scan, b : Bin)
+        induct Utf8 : (s : Scan, b : Bin)
         | stop() : (Scan/lead(), \\)
         | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
             : (st, Bin/concat(Bin/append(\\, c), t))
@@ -4101,7 +4101,7 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
             | false => false
             end;
 
-        union Scan
+        induct Scan
         | lead()
         | cont(Nat, Nat, Nat)
         | bad()
@@ -4146,7 +4146,7 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
             | lead() => classify(c)
             end;
 
-        union Utf8 : (s : Scan, b : Bin)
+        induct Utf8 : (s : Scan, b : Bin)
         | stop() : (Scan/lead(), \\)
         | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
             : (st, Bin/concat(Bin/append(\\, c), t))
@@ -4227,7 +4227,7 @@ fn utf8_slice_closed_peels_codepoints() {
             | false => false
             end;
 
-        union Scan
+        induct Scan
         | lead()
         | cont(Nat, Nat, Nat)
         | bad()
@@ -4266,7 +4266,7 @@ fn utf8_slice_closed_peels_codepoints() {
             | lead() => classify(c)
             end;
 
-        union Utf8 : (s : Scan, b : Bin)
+        induct Utf8 : (s : Scan, b : Bin)
         | stop() : (Scan/lead(), \\)
         | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
             : (st, Bin/concat(Bin/append(\\, c), t))
@@ -4355,7 +4355,7 @@ fn utf8_slice_closed_peels_codepoints() {
 fn erased_indexed_relevant_repro() {
     let source = r#"
         use /std/{Nat, Io};
-        union Box : (n : Nat)
+        induct Box : (n : Nat)
         | mk(x : @Nat) : (x)
         end
         let f(m : @Nat, k : Nat) -> Box(m) =
@@ -4381,7 +4381,7 @@ fn erased_indexed_relevant_repro() {
 fn erased_index_in_type_valued_arg() {
     let source = r#"
         use /std/{Nat, Void, Io};
-        union Box : (n : Nat)
+        induct Box : (n : Nat)
         | mk(x : @Nat) : (x)
         end
         let id_void(w : Void) -> Void = w;

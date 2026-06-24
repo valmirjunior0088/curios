@@ -1,6 +1,6 @@
 use /std/{Bin, Str, Bln, Char, Flt, Nat, Parse, Result, Option, Lst};
 
-pub union Json
+pub induct Json
 | null()
 | bln(Bln)
 | num(Flt)

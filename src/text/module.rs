@@ -52,7 +52,7 @@ pub struct TopLet {
     pub signature: LetSignature,
 }
 
-/// One payload binder of a `union` case. The name is optional (`success(A)`
+/// One payload binder of an `induct` case. The name is optional (`success(A)`
 /// stays positional); it is required when a later payload type or the case
 /// target mentions the binder. `plicity` is the `@`-on-the-name mark (implicit
 /// at the value-constructor function — `cons(@m : Nat, …)`, `m` recoverable from
@@ -72,23 +72,23 @@ pub struct TopCase {
     pub payload: Vec<CasePayloadParam>,
     /// The parenthesized index expressions after the payload — the case's
     /// terminal `: Vec(T, Nat/succ(m))` with the mandatory part elided to
-    /// `: (Nat/succ(m))`. Present iff the union head declares indices.
+    /// `: (Nat/succ(m))`. Present iff the inductive head declares indices.
     pub target: Option<Vec<Term>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TopUnion {
+pub struct TopInductive {
     pub is_pub: bool,
     pub label: String,
-    /// Union parameters are *implicit* on every value constructor regardless
+    /// Inductive parameters are *implicit* on every value constructor regardless
     /// of any mark (the desugar applies those marks), with the call-site `@`
     /// available to supply one positionally when wanted. On the
     /// type-constructor function a parameter is *explicit* by default (types
     /// are written out); a declaration-site `@` makes it implicit there too
-    /// (`union Eq(@A : Type) : (x : A, y : A)` — `A` is recoverable from the
+    /// (`induct Eq(@A : Type) : (x : A, y : A)` — `A` is recoverable from the
     /// indices, so types are written `Eq(x, y)`).
     pub params: Vec<(Plicity, String, Term)>,
-    /// The head's index telescope, `union Vec(T : Type) : (n : Nat)`. Names
+    /// The head's index telescope, `induct Vec(T : Type) : (n : Nat)`. Names
     /// are optional and documentary — needed only when a later index's type
     /// depends on an earlier one; they are *not* in scope in the cases.
     pub indices: Vec<(Option<String>, Term)>,
@@ -98,7 +98,7 @@ pub struct TopUnion {
 /// A `struct` declaration: a nominal record. `is_pub` is the outer `pub` (the
 /// type-former's visibility); `rep_pub` is the inner `pub` before the brace
 /// (whether the representation — construction and projection — is exported).
-/// `params` are written exactly like a union's; `fields` reuse the Σ-type field
+/// `params` are written exactly like an inductive's; `fields` reuse the Σ-type field
 /// grammar (label optional, like tuple-type fields).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopStruct {
@@ -115,7 +115,7 @@ pub enum TopItem {
     Use(TopUse),
     Let(TopLet),
     Rec(Vec<TopLet>),
-    Union(Vec<TopUnion>),
+    Inductive(Vec<TopInductive>),
     Struct(TopStruct),
 }
 
