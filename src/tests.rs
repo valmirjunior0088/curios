@@ -432,6 +432,25 @@ fn data_is_not_proof_irrelevant() {
 }
 
 #[test]
+fn large_elimination_of_a_prop_is_rejected() {
+    // The large-elimination guard: `Le` is a multi-constructor proposition, so
+    // matching it into `Nat` (data) would observe which constructor it was,
+    // breaking irrelevance — rejected. The permitted cases (empty `Void` via
+    // `absurd`, singleton `Eq` via `subst`, and prop→prop) are exercised by std.
+    let source = r#"
+        use /std/{Io, Str, Nat};
+        let bad(a : Nat, b : Nat, p : Nat/Le(a, b)) -> Nat =
+            match p : Nat
+            | z(_) => 0
+            | s(_, _, _) => 1
+            end;
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
+#[test]
 fn bin_slice_is_a_monoid_citizen() {
     // `Bin/slice` rides the free-monoid spine (`core::spine`) as a measured
     // `Window` — a length-`hi - lo` chunk whose contents are symbolic — so the

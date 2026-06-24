@@ -150,6 +150,12 @@ pub enum Error {
     NotAInductiveType {
         head_type: Box<Term>,
     },
+    /// A strict proposition was eliminated into a relevant (data) result — a
+    /// large elimination that would observe which inhabitant it was, breaking
+    /// proof irrelevance. Permitted only for an empty or singleton proposition.
+    LargeElimOfProp {
+        name: String,
+    },
     /// A struct literal's (or struct type's) head names a binding that is not a
     /// struct; `found` is that binding's type.
     NotAStructType {
@@ -366,6 +372,10 @@ impl Error {
         Self::NotAInductiveType {
             head_type: Box::new(head_type.into()),
         }
+    }
+
+    pub fn large_elim_of_prop<N: Into<String>>(name: N) -> Self {
+        Self::LargeElimOfProp { name: name.into() }
     }
 
     pub fn not_a_struct_type<U: Into<Term>>(found: U) -> Self {
@@ -676,6 +686,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "matched inductive constructors on a non-inductive type\n  head has type: {head_type}"
+                )
+            }
+            Error::LargeElimOfProp { name } => {
+                write!(
+                    f,
+                    "cannot eliminate the proposition '{name}' into a relevant result\n  a strict proposition admits large elimination only when empty or singleton"
                 )
             }
             Error::NotAStructType { found } => {

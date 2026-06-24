@@ -8,7 +8,7 @@ use {
         Subterm, Telescope, Term, Three, Tuple, TupleType, Two, InductiveType, Var, Variant,
         case_target_indices,
         check, check_motive, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
-        reduce_with, refine_head, sort_term,
+        is_prop, reduce_with, refine_head, sort_term,
     },
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
@@ -1313,6 +1313,45 @@ fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(T
 /// indices: each arm checks against the motive at *that case's* target
 /// indices, and the whole match types at the scrutinee's *actual* indices.
 #[allow(clippy::too_many_arguments)]
+/// Whether a single-constructor proposition admits large elimination: every
+/// payload binder must be non-informative — a proposition itself, or *forced* by
+/// appearing in the constructor's index targets (recovered from the scrutinee's
+/// type, as `Eq`'s `refl(z) : (z, z)` recovers `z` from its indices).
+fn singleton_eliminable(
+    context: &mut Context,
+    inductive: &Inductive,
+    tag: &Atom,
+    params: &[Term],
+) -> Result<bool, Error> {
+    let Some(payload) = inductive.instantiate(tag, params) else {
+        return Ok(false);
+    };
+
+    // Open the payload telescope under fresh binders, collecting each binder's
+    // (name, type) and the terminal whose indices are the constructor's targets.
+    let mut binders: Vec<(String, Term)> = Vec::new();
+    let mut telescope = payload;
+    let terminal = loop {
+        match telescope {
+            Telescope::Cons(ty, rest) => {
+                let name = context.fresh(rest.first_label());
+                telescope = rest.open(&[&Term::var(Var::free(&name))]);
+                binders.push((name, ty));
+            }
+            Telescope::Done(terminal) => break *terminal,
+        }
+    };
+
+    // A binder is forced iff it occurs in the terminal's index expressions.
+    let forced = terminal.free_vars();
+    for (name, ty) in &binders {
+        if !forced.contains(name) && !is_prop(context, ty)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 fn elaborate_inductive_match(
     context: &mut Context,
     head: &Term,
@@ -1380,6 +1419,30 @@ fn elaborate_inductive_match(
     // expected type before the arms are checked.
     if let Mode::Check(expected) = &mode {
         expect(context, term, &result_type, expected)?;
+    }
+
+    // Large-elimination guard: a strict proposition may not be eliminated into a
+    // relevant (data) result — observing which inhabitant it was would break
+    // proof irrelevance. Permitted only by *empty* elimination (no constructors)
+    // or *singleton* elimination (one constructor whose payload is entirely
+    // non-informative: each binder a proposition, or forced by the indices).
+    if is_prop(context, &head_type)? && !is_prop(context, &result_type)? {
+        // Count the *covered* constructors (the written arms), not the
+        // inductive's global ones: index inversion may leave only one applicable
+        // — a `cont`-scan `Utf8` admits only `more` — making an otherwise
+        // multi-constructor proposition singleton in this context. (An
+        // under-covered match is still caught by the coverage check below.)
+        let permitted = match cases.len() {
+            0 => true,
+            1 => {
+                let tag = cases.keys().next().expect("one covered constructor");
+                singleton_eliminable(context, &inductive, tag, &params)?
+            }
+            _ => false,
+        };
+        if !permitted {
+            return Err(Error::large_elim_of_prop(name.clone()));
+        }
     }
 
     // Every written arm must name a constructor; coverage is decided per

@@ -35,6 +35,14 @@ pub fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Error> {
         .map_err(|error| error.into_error(|| Error::reduce_preempted(type_.clone())))
 }
 
+/// Whether `type_` is a strict proposition (its sort is `Prop`). Wraps
+/// [`super::Sort::of`], mapping preemption like the helpers above.
+pub fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
+    super::Sort::of(context, type_)
+        .map(|sort| matches!(sort, super::Sort::Prop))
+        .map_err(|error| error.into_error(|| Error::reduce_preempted(type_.clone())))
+}
+
 /// Best-effort display form for a mismatch report: substitute the solutions
 /// that have landed, so the message names the actual disagreement rather than
 /// the metavariables it arrived wrapped in. An unsolved metavariable makes
