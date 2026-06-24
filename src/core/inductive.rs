@@ -50,6 +50,10 @@ pub struct Inductive {
     /// signature telescope paired with its payload quantities (see
     /// [`InductiveParam`]).
     pub constructors: BTreeMap<Atom, InductiveParam>,
+    /// The declared result sort — `Type` or `Prop` — the codomain of the
+    /// type-constructor's kind. A fully-applied `InductiveType { name, .. }`
+    /// has this sort, which `sort_of` reads to decide propositional irrelevance.
+    pub result_sort: Term,
 }
 
 impl Inductive {

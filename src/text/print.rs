@@ -339,6 +339,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
 fn print_term(term: Term) -> Printer<'static> {
     match term.into_subterm() {
         Subterm::Type => pure("Type"),
+        Subterm::Prop => pure("Prop"),
         Subterm::Prim(prim) => print_prim(prim),
         Subterm::Name(name) => pure(name.join()),
         Subterm::Hole => pure("?"),

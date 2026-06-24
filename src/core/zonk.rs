@@ -78,6 +78,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                             ))
                         })
                         .collect::<Result<_, Error>>()?,
+                    result_sort: inductive.result_sort.clone(),
                 },
             ))
         })
@@ -94,6 +95,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                     params: structure.params.zonk(context)?,
                     fields: structure.fields.zonk(context)?,
                     field_quantities: structure.field_quantities.clone(),
+                    result_sort: structure.result_sort.clone(),
                     module: structure.module.clone(),
                     rep_public: structure.rep_public,
                 },
@@ -205,6 +207,7 @@ fn zonk_terms(context: &Context, terms: &[Term]) -> Result<Vec<Term>, Error> {
 fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
     Ok(match &**term {
         Subterm::Type => Subterm::Type,
+        Subterm::Prop => Subterm::Prop,
         Subterm::Var(var) => Subterm::Var(var.clone()),
 
         Subterm::Prim(prim) => Subterm::Prim(zonk_prim(context, prim)?),

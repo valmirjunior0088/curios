@@ -52,6 +52,10 @@ impl Term {
         Self::from(Subterm::Type)
     }
 
+    pub fn prop() -> Self {
+        Self::from(Subterm::Prop)
+    }
+
     pub fn prim<P: Into<Prim>>(prim: P) -> Self {
         Self::from(Subterm::Prim(prim.into()))
     }
@@ -1052,6 +1056,7 @@ pub struct Metavar {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Subterm {
     Type,
+    Prop,
     Prim(Prim),
     FuncType(FuncType),
     Func(Func),
@@ -1127,7 +1132,7 @@ impl Subterm {
 
     fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
         match self {
-            Subterm::Type | Subterm::Var(_) => {}
+            Subterm::Type | Subterm::Prop | Subterm::Var(_) => {}
             Subterm::Metavar(Metavar { spine, .. }) => {
                 spine.iter().for_each(|t| t.collect_construction_names(names));
             }
@@ -1259,7 +1264,7 @@ impl Subterm {
                 ids.insert(*id);
                 spine.iter().for_each(|t| t.collect_metavars(ids));
             }
-            Subterm::Type | Subterm::Var(_) => {}
+            Subterm::Type | Subterm::Prop | Subterm::Var(_) => {}
             Subterm::Prim(prim) => prim_metavars(prim, ids),
             Subterm::Func(Func { telescope }) => telescope.collect_metavars(ids),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.collect_metavars(ids),
@@ -1411,6 +1416,7 @@ impl Bound for Subterm {
     {
         match self {
             Subterm::Type => Subterm::Type,
+            Subterm::Prop => Subterm::Prop,
             Subterm::Prim(prim) => Subterm::Prim(traverse_prim(prim, visit)),
             Subterm::FuncType(FuncType {
                 telescope,
@@ -1608,6 +1614,7 @@ impl Bound for Subterm {
     fn reach(&self) -> usize {
         match self {
             Subterm::Type => 0,
+            Subterm::Prop => 0,
             Subterm::Metavar(Metavar { spine, .. }) => max_reach(spine.as_slice()),
             Subterm::Var(var) => match var.as_bound() {
                 Some(index) => index + 1,

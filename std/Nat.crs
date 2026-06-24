@@ -67,20 +67,20 @@ pub let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
     | false => false
     end;
 
-pub let Lte(a : Nat, b : Nat) -> Type =
-    match lte(a, b) : Type
+pub let Lte(a : Nat, b : Nat) -> Prop =
+    match lte(a, b) : Prop
     | true => {}
     | false => Void
     end;
 
-pub let Lt(a : Nat, b : Nat) -> Type =
-    match lt(a, b) : Type
+pub let Lt(a : Nat, b : Nat) -> Prop =
+    match lt(a, b) : Prop
     | true => {}
     | false => Void
     end;
 
 pub let try_lt(a : Nat, b : Nat) -> Option(Lt(a, b)) =
-    match lt(a, b) : (r) => Option(match r : Type | true => {} | false => Void end)
+    match lt(a, b) : (r) => Option(match r : Prop | true => {} | false => Void end)
     | true => Option/some(())
     | false => Option/none()
     end;
@@ -88,7 +88,7 @@ pub let try_lt(a : Nat, b : Nat) -> Option(Lt(a, b)) =
 pub let lt_succ(@n : Nat) -> Lt(n, succ(n)) =
     ();
 
-pub induct Le : (a : Nat, b : Nat)
+pub induct Le : (a : Nat, b : Nat) -> Prop
 | z(@n : Nat) : (0, n)
 | s(@a : Nat, @b : Nat, prev : Le(a, b)) : (succ(a), succ(b))
 end

@@ -8,7 +8,7 @@ use {
         Subterm, Telescope, Term, Three, Tuple, TupleType, Two, InductiveType, Var, Variant,
         case_target_indices,
         check, check_motive, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
-        reduce_with, refine_head,
+        reduce_with, refine_head, sort_term,
     },
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
@@ -458,16 +458,18 @@ fn elaborate_tuple_type(context: &mut Context, tt: &TupleType) -> Result<(Term, 
 
     let telescope = Telescope::build(fields, ()).relabel(&source_labels);
 
-    Ok((
-        Subterm::TupleType(TupleType {
-            telescope,
-            // Field order is preserved through the walk and relabel, so the input
-            // quantities still align one-for-one.
-            quantities: tt.quantities.clone(),
-        })
-        .into(),
-        Term::type_(),
-    ))
+    let rebuilt: Term = Subterm::TupleType(TupleType {
+        telescope,
+        // Field order is preserved through the walk and relabel, so the input
+        // quantities still align one-for-one.
+        quantities: tt.quantities.clone(),
+    })
+    .into();
+
+    // A tuple type's sort: `Prop` when every field is a proposition (`{}` is the
+    // base case), `Type` otherwise — so a record of proofs checks against `Prop`.
+    let sort = sort_term(context, &rebuilt)?;
+    Ok((rebuilt, sort))
 }
 
 /// Infer and rebuild a match scrutinee, requiring its reduced type to be the
@@ -1031,7 +1033,7 @@ fn elaborate_inductive_type(context: &mut Context, ut: &InductiveType) -> Result
             elaborated[..params.len()].iter().cloned(),
             elaborated[params.len()..].iter().cloned(),
         ),
-        Term::type_(),
+        inductive.result_sort,
     ))
 }
 
@@ -1140,7 +1142,7 @@ fn elaborate_struct_type(
             tele = rest.open(&[&arg]);
             resolved.push(arg);
         }
-        return Ok((Term::struct_type(name, resolved), Term::type_()));
+        return Ok((Term::struct_type(name, resolved), structure.result_sort.clone()));
     }
 
     if params.len() != structure.params.len() {
@@ -1157,7 +1159,7 @@ fn elaborate_struct_type(
         Ok(())
     })?;
 
-    Ok((Term::struct_type(name, elaborated), Term::type_()))
+    Ok((Term::struct_type(name, elaborated), structure.result_sort))
 }
 
 /// Type a struct literal against its registry entry (§3.3). The struct's `name`
@@ -2222,6 +2224,7 @@ fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), 
             params,
             indices,
             constructors: inductive.constructors,
+            result_sort: inductive.result_sort,
         },
     );
 
@@ -2287,6 +2290,7 @@ fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result
             params: inductive.params,
             indices: inductive.indices,
             constructors,
+            result_sort: inductive.result_sort,
         },
     );
 
@@ -2341,6 +2345,7 @@ fn elaborate_structure(context: &mut Context, name: &str) -> Result<(), Error> {
             params,
             fields,
             field_quantities: structure.field_quantities.clone(),
+            result_sort: structure.result_sort,
             module: structure.module,
             rep_public: structure.rep_public,
         },
@@ -2700,6 +2705,7 @@ fn elaborate_subterm(
     // term — binders re-closed, lambda domains solved (§9).
     let (rebuilt, type_) = match &**term {
         Subterm::Type => (term.clone(), Term::type_()),
+        Subterm::Prop => (term.clone(), Term::type_()),
         Subterm::Prim(prim) => return elaborate_prim(context, term, prim, mode),
         Subterm::Match(m) => return elaborate_match(context, m, term, mode),
         Subterm::FuncType(ft) => elaborate_func_type(context, ft)?,

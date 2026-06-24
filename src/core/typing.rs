@@ -26,6 +26,15 @@ pub fn convert_with(context: &mut Context, this: &Term, that: &Term) -> Result<b
         .map_err(|error| error.into_error(|| Error::convert_preempted(this.clone(), that.clone())))
 }
 
+/// The sort term (`Type`/`Prop`) `type_` inhabits — what a type-former reports
+/// as its type-of-a-type, so a proposition checks against `Prop`. Wraps
+/// [`super::Sort::of`], mapping preemption to an error like the helpers above.
+pub fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Error> {
+    super::Sort::of(context, type_)
+        .map(super::Sort::term)
+        .map_err(|error| error.into_error(|| Error::reduce_preempted(type_.clone())))
+}
+
 /// Best-effort display form for a mismatch report: substitute the solutions
 /// that have landed, so the message names the actual disagreement rather than
 /// the metavariables it arrived wrapped in. An unsolved metavariable makes
@@ -40,6 +49,16 @@ pub fn expect(
     inferred: &Term,
     expected: &Term,
 ) -> Result<(), Error> {
+    // Cumulativity: `Prop ⊑ Type`. A proposition is a type, so a term whose type
+    // is `Prop` is accepted where a `Type` is expected — the sole universe
+    // subsumption (the reverse does not hold). The direct case at the checking
+    // boundary; everything else goes through ordinary conversion below.
+    if matches!(&*reduce_with(context, expected)?, Subterm::Type)
+        && matches!(&*reduce_with(context, inferred)?, Subterm::Prop)
+    {
+        return retry_parked(context);
+    }
+
     let outcome =
         super::convert_outcome(context, &Term::type_(), inferred, expected).map_err(|error| {
             error.into_error(|| Error::convert_preempted(inferred.clone(), expected.clone()))

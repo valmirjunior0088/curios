@@ -429,6 +429,7 @@ pub struct LetBang {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Subterm {
     Type,
+    Prop,
     Prim(Prim),
     FuncType(FuncType),
     Func(Func),

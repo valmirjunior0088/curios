@@ -26,6 +26,10 @@ pub struct Structure {
     /// proof-carrying record to its relevant fields (and to a bare field, via the
     /// single-field collapse, when only one remains).
     pub field_quantities: Vec<Quantity>,
+    /// The declared result sort — `Type` or `Prop` — the codomain of the
+    /// type-former's kind. A fully-applied `StructType { name, .. }` has this
+    /// sort, which `sort_of` reads to decide propositional irrelevance.
+    pub result_sort: Term,
     /// The declaring module's joined qualified name (e.g. `Foo/Bar`); the root
     /// module is the empty string. Compared against the use-site module for the
     /// representation-privacy checks (§7).

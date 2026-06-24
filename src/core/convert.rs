@@ -132,6 +132,105 @@ fn apply_param_types(
     Ok(Some(types))
 }
 
+/// The universe a type inhabits — `Prop` for a strict proposition, `Type`
+/// otherwise.
+#[derive(Clone, Copy)]
+pub(crate) enum Sort {
+    Type,
+    Prop,
+}
+
+impl Sort {
+    /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally
+    /// equal (proof irrelevance), so a conversion goal at a prop type is
+    /// discharged without comparing the sides. Conservative: a shape this cannot
+    /// classify is reported as `Type` — under-approximating prop-ness is sound;
+    /// the reverse (a non-prop reported as a prop) is the unsound direction and
+    /// never happens.
+    pub(crate) fn of(context: &mut Context, type_: &Term) -> Result<Sort, ReduceError> {
+        let reduced = reduce(context, type_.clone())?;
+
+        Ok(match &*reduced {
+            Subterm::InductiveType(InductiveType { name, .. }) => {
+                match context.inductive(name).map(|i| i.result_sort.clone()) {
+                    Some(sort) => Sort::from_universe(context, &sort)?,
+                    None => Sort::Type,
+                }
+            }
+            Subterm::StructType(StructType { name, .. }) => {
+                match context.structure(name).map(|s| s.result_sort.clone()) {
+                    Some(sort) => Sort::from_universe(context, &sort)?,
+                    None => Sort::Type,
+                }
+            }
+            // A record of propositions is a proposition; `{}` is the base case.
+            Subterm::TupleType(TupleType { telescope, .. }) => {
+                let mut tele = telescope.clone();
+                loop {
+                    match tele {
+                        Telescope::Cons(ty, rest) => {
+                            if !matches!(Sort::of(context, &ty)?, Sort::Prop) {
+                                break Sort::Type;
+                            }
+                            let v = Term::var(Var::free(context.fresh(rest.first_label())));
+                            tele = rest.open(&[&v]);
+                        }
+                        Telescope::Done(_) => break Sort::Prop,
+                    }
+                }
+            }
+            // Π into a proposition is a proposition.
+            Subterm::FuncType(FuncType { telescope, .. }) => {
+                let telescope = telescope.clone();
+                let vars: Vec<Term> = (0..telescope.len())
+                    .map(|_| Term::var(Var::free(context.fresh(None))))
+                    .collect();
+                let refs: Vec<&Term> = vars.iter().collect();
+                Sort::of(context, &telescope.open(&refs))?
+            }
+            // A type-valued match (`Lt = match _ : Prop | ..`): its sort is the
+            // motive — a constant `Prop` when the result is a proposition.
+            Subterm::Match(m) => {
+                let motive = m.motive.clone();
+                let vars: Vec<Term> = (0..motive.arity())
+                    .map(|_| Term::var(Var::free(context.fresh(None))))
+                    .collect();
+                let refs: Vec<&Term> = vars.iter().collect();
+                Sort::from_universe(context, &motive.open(&refs))?
+            }
+            // A neutral type (a `Prop` hypothesis, or a stuck family
+            // application): its synthesized type is its sort.
+            Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) => {
+                match synth_neutral(context, &reduced)? {
+                    Some(sort) => Sort::from_universe(context, &sort)?,
+                    None => Sort::Type,
+                }
+            }
+            _ => Sort::Type,
+        })
+    }
+
+    /// The universe term this sort denotes — `Type` or `Prop`. The inverse of
+    /// [`Sort::from_universe`]; used as the type-of-a-type a type-former reports.
+    pub(crate) fn term(self) -> Term {
+        match self {
+            Sort::Type => Term::type_(),
+            Sort::Prop => Term::prop(),
+        }
+    }
+
+    /// Decode a universe term — a kind's codomain, a match motive, or a
+    /// synthesized neutral type — into its sort. Distinct from [`Sort::of`],
+    /// which classifies an arbitrary *type*: `from_universe(Prop) = Prop`,
+    /// whereas `of(Prop) = Type` (the universe `Prop` is itself `Type`-sorted).
+    fn from_universe(context: &mut Context, universe: &Term) -> Result<Sort, ReduceError> {
+        Ok(match &*reduce(context, universe.clone())? {
+            Subterm::Prop => Sort::Prop,
+            _ => Sort::Type,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Goal {
     pub type_: Term,
@@ -362,6 +461,7 @@ impl Convert {
 
     fn compare_inductive_type(
         &mut self,
+        context: &mut Context,
         this: InductiveType,
         that: InductiveType,
     ) -> Result<bool, ReduceError> {
@@ -372,12 +472,40 @@ impl Convert {
             return Ok(false);
         }
 
-        for (a, b) in this.params.into_iter().zip(that.params) {
-            self.enqueue(Term::type_(), a, b);
-        }
+        // Recover the full param+index telescope from the registry so each
+        // argument compares at its declared type rather than a flat `Type`. When
+        // an index is a proof, that type is a proposition and irrelevance
+        // applies — a stuck `Eq(P, p, q)` converts with `Eq(P, p, p)`. Falls back
+        // to `Type` if the inductive is somehow absent or arity-mismatched.
+        let this_args: Vec<Term> = this
+            .params
+            .iter()
+            .chain(this.indices.iter())
+            .cloned()
+            .collect();
+        let arg_types = match context.inductive(&this.name).map(|i| i.indices.clone()) {
+            Some(telescope) if telescope.len() == this_args.len() => {
+                let mut types = Vec::with_capacity(this_args.len());
+                telescope.walk(&this_args, |_, _, ty| {
+                    types.push(ty.clone());
+                    Ok(())
+                })?;
+                Some(types)
+            }
+            _ => None,
+        };
 
-        for (a, b) in this.indices.into_iter().zip(that.indices) {
-            self.enqueue(Term::type_(), a, b);
+        let args = this
+            .params
+            .into_iter()
+            .chain(this.indices)
+            .zip(that.params.into_iter().chain(that.indices));
+        for (i, (a, b)) in args.enumerate() {
+            let type_ = arg_types
+                .as_ref()
+                .and_then(|types| types.get(i).cloned())
+                .unwrap_or_else(Term::type_);
+            self.enqueue(type_, a, b);
         }
 
         Ok(true)
@@ -1220,6 +1348,14 @@ impl Convert {
                 (None, None) => {}
             }
 
+            // Definitional proof irrelevance: any two inhabitants of a strict
+            // proposition are convertible. Placed after the metavar dispatch so
+            // a flexible side is still solved against the other (a metavar is
+            // not left dangling merely because its type is a proposition).
+            if let Sort::Prop = Sort::of(context, &type_)? {
+                continue;
+            }
+
             let goal = Goal {
                 type_: type_.clone(),
                 this: this.clone(),
@@ -1269,7 +1405,7 @@ impl Convert {
                 }
                 (Subterm::Proj(this), Subterm::Proj(that)) => self.compare_proj(this, that)?,
                 (Subterm::InductiveType(this), Subterm::InductiveType(that)) => {
-                    self.compare_inductive_type(this, that)?
+                    self.compare_inductive_type(context, this, that)?
                 }
                 (Subterm::Variant(this), Subterm::Variant(that)) => {
                     self.compare_variant(context, this, that)?

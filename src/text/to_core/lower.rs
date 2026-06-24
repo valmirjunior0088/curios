@@ -222,6 +222,7 @@ impl<'a, 'b> Lower<'a, 'b> {
     fn subterm(&self, term: &Subterm) -> Result<core::Term, Error> {
         Ok(match term {
             Subterm::Type => core::Term::type_(),
+            Subterm::Prop => core::Term::prop(),
             Subterm::Hole => core::Term::metavar(self.context.fresh_metavar()),
             // A `/syn` literal (string or list) desugars via the meta-emitter to a
             // `/syn` construction (see `syn_literal`), never a core primitive.

@@ -1,4 +1,4 @@
-pub induct Void
+pub induct Void : Prop
 end
 
 pub let absurd(@A : @Type, contradiction : @Void) -> A =

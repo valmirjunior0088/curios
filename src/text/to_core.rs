@@ -417,6 +417,11 @@ fn process_items(
                             })
                             .collect::<Result<BTreeMap<_, _>, Error>>()?;
 
+                        // The declared result sort (`Type`/`Prop`) — closed, so
+                        // it lowers in the base context. It is both the registry
+                        // entry's sort and the type-constructor's codomain.
+                        let result_sort = lower.term(&u.result_sort)?;
+
                         inductives.insert(
                             name.clone(),
                             core::Inductive {
@@ -429,6 +434,7 @@ fn process_items(
                                     (),
                                 ),
                                 constructors,
+                                result_sort: result_sort.clone(),
                             },
                         );
 
@@ -450,13 +456,10 @@ fn process_items(
                             )
                             .collect();
                         let (type_, body) = if binder_tys.is_empty() {
-                            (core::Term::type_(), inductive)
+                            (result_sort, inductive)
                         } else {
                             (
-                                core::Term::func_type_marked(
-                                    binder_tys.clone(),
-                                    core::Term::type_(),
-                                ),
+                                core::Term::func_type_marked(binder_tys.clone(), result_sort),
                                 core::Term::func(
                                     binder_tys.into_iter().map(|(_, n, t)| (n, t)),
                                     inductive,
@@ -633,6 +636,10 @@ fn process_items(
                 // Registry entry: the parameter telescope, and the full field
                 // telescope (parameter binders first — field types may mention
                 // them — then field binders), as in `Inductive::indices`.
+                // The declared result sort (`Type`/`Prop`) — closed; both the
+                // registry entry's sort and the type-former's codomain.
+                let result_sort = lower.term(&s.result_sort)?;
+
                 structures.insert(
                     name.clone(),
                     core::Structure {
@@ -642,6 +649,7 @@ fn process_items(
                             (),
                         ),
                         field_quantities,
+                        result_sort: result_sort.clone(),
                         module,
                         rep_public: s.rep_pub,
                     },
@@ -653,10 +661,10 @@ fn process_items(
                 // `StructType { Pair, [Nat, Bin] }`. No value constructor.
                 let struct_type = core::Term::struct_type(&name, param_vars);
                 let (type_, body) = if param_tys.is_empty() {
-                    (core::Term::type_(), struct_type)
+                    (result_sort, struct_type)
                 } else {
                     (
-                        core::Term::func_type_marked(param_tys.clone(), core::Term::type_()),
+                        core::Term::func_type_marked(param_tys.clone(), result_sort),
                         core::Term::func(
                             param_tys.into_iter().map(|(_, n, t)| (n, t)),
                             struct_type,

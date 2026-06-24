@@ -227,7 +227,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
             }
         }
         Subterm::Metavar(metavar) => metavar.spine.iter().for_each(|t| collect_labels(t, out)),
-        Subterm::Var(_) | Subterm::Type | Subterm::Prim(_) => {}
+        Subterm::Var(_) | Subterm::Type | Subterm::Prop | Subterm::Prim(_) => {}
     }
 }
 
@@ -745,6 +745,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
 fn print_term(term: Term, depth: usize) -> Printer<'static> {
     match Term::unwrap_or_clone(term) {
         Subterm::Type => pure("Type"),
+        Subterm::Prop => pure("Prop"),
         Subterm::Prim(prim) => print_prim(prim, depth),
         Subterm::FuncType(FuncType {
             telescope,

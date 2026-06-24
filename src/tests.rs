@@ -402,6 +402,36 @@ fn bin_concat_leading_byte_clash_is_rejected() {
 }
 
 #[test]
+fn prop_irrelevance_equates_distinct_proofs() {
+    // Definitional proof irrelevance: `Le` is a strict proposition, so any two
+    // proofs of `Le(a, b)` are convertible — `refl` checks at `Eq(p, q)` even
+    // though `p` and `q` are distinct binders. Without the `Prop` short-circuit
+    // in `convert`, `refl : Eq(p, p)` would not check against `Eq(p, q)`.
+    let source = r#"
+        use /std/{Io, Str, Eq, Nat};
+        let irrelevant(a : Nat, b : Nat, p : Nat/Le(a, b), q : Nat/Le(a, b))
+            -> Eq(p, q) =
+            Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
+fn data_is_not_proof_irrelevant() {
+    // The bound on irrelevance: `Nat` is data, not a proposition, so distinct
+    // values are never equated — `refl` at `Eq(x, y)` for unequal `x`, `y` is
+    // rejected. Guards the `Prop` short-circuit against over-firing on non-props.
+    let source = r#"
+        use /std/{Io, Str, Eq, Nat};
+        let bad(x : Nat, y : Nat) -> Eq(x, y) = Eq/refl();
+        Io/write(Io/stdout, Str/to_bin("ok"))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
+#[test]
 fn bin_slice_is_a_monoid_citizen() {
     // `Bin/slice` rides the free-monoid spine (`core::spine`) as a measured
     // `Window` — a length-`hi - lo` chunk whose contents are symbolic — so the

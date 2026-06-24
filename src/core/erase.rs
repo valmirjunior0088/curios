@@ -1044,6 +1044,7 @@ fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<
         // Type formers all erase to a runtime unit; they carry nothing to lower
         // and were already checked by `elaborate`.
         Subterm::Type
+        | Subterm::Prop
         | Subterm::FuncType(_)
         | Subterm::TupleType(_)
         | Subterm::InductiveType(_)

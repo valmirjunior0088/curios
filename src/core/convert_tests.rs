@@ -530,6 +530,7 @@ fn convert_struct_unit_field_is_irrelevant() {
                 (),
             ),
             field_quantities: vec![Quantity::Omega, Quantity::Omega],
+            result_sort: Term::type_(),
             module: String::new(),
             rep_public: true,
         },
@@ -573,6 +574,7 @@ fn convert_variant_unit_payload_is_irrelevant() {
                     quantities: vec![Quantity::Omega, Quantity::Omega],
                 },
             )]),
+            result_sort: Term::type_(),
         },
     );
 

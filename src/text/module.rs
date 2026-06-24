@@ -92,6 +92,10 @@ pub struct TopInductive {
     /// are optional and documentary — needed only when a later index's type
     /// depends on an earlier one; they are *not* in scope in the cases.
     pub indices: Vec<(Option<String>, Term)>,
+    /// The arity's result sort — `Type` or `Prop`. Written after the index
+    /// telescope (`: (n : Nat) -> Prop`) or in its place when there are no
+    /// indices (`: Prop`); defaults to `Type` when omitted.
+    pub result_sort: Term,
     pub cases: Vec<TopCase>,
 }
 
@@ -106,6 +110,9 @@ pub struct TopStruct {
     pub rep_pub: bool,
     pub label: String,
     pub params: Vec<(Plicity, String, Term)>,
+    /// The result sort — `Type` or `Prop`, written `: Sort` after the
+    /// parameters; defaults to `Type` when omitted.
+    pub result_sort: Term,
     pub fields: Vec<TupleTypeParam>,
 }
 

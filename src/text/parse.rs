@@ -104,6 +104,12 @@ fn parse_type<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
+fn parse_prop<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("Prop"))
+        .map(|()| Subterm::Prop)
+        .map(Into::into)
+}
+
 fn parse_int_value<'a>() -> Parser<'a, Term> {
     catch(
         take_n(1)
@@ -1064,6 +1070,7 @@ fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
             .or(parse_struct_lit())
             .or(parse_qualified_name().map(|n| Subterm::Name(n).into()))
             .or(parse_type())
+            .or(parse_prop())
             .or(parse_prim())
             .or(parse_tuple_type())
             .or(parse_empty_tuple())
@@ -1370,6 +1377,21 @@ fn parse_inductive_index<'a>() -> Parser<'a, (Option<String>, Term)> {
         .or(lazy(parse_term).map(|ty| (None, ty)))
 }
 
+// The head's arity after the `:` — either an index telescope optionally landing
+// in a sort, `(n : Nat) -> Prop`, or a bare sort, `Prop`. A bare index group with
+// no `-> Sort` defaults to `Type` (the transition spelling, `: (n : Nat)`).
+fn parse_inductive_arity<'a>() -> Parser<'a, (Vec<(Option<String>, Term)>, Term)> {
+    catch(
+        parse_literal("(")
+            .and_keep(sep_by0(parse_inductive_index, || parse_literal(",")))
+            .and_drop(parse_literal(")")),
+    )
+    .and(
+        catch(parse_literal("->").and_keep(lazy(parse_term))).or(pure(Subterm::Type.into())),
+    )
+    .or(lazy(parse_term).map(|sort| (Vec::new(), sort)))
+}
+
 fn parse_top_inductive_body<'a>(is_pub: bool) -> Parser<'a, TopInductive> {
     parse_identifier()
         .and(
@@ -1380,16 +1402,14 @@ fn parse_top_inductive_body<'a>(is_pub: bool) -> Parser<'a, TopInductive> {
             )
             .or(pure(vec![])),
         )
-        // The head's index telescope: `: (n : Nat)` after the parameters.
+        // The head's arity: `: (n : Nat) -> Prop`, `: Prop`, or omitted (`Type`).
         .and(
             catch(parse_literal(":"))
-                .and_keep(parse_literal("("))
-                .and_keep(sep_by0(parse_inductive_index, || parse_literal(",")))
-                .and_drop(parse_literal(")"))
-                .or(pure(vec![])),
+                .and_keep(parse_inductive_arity())
+                .or(pure((Vec::new(), Subterm::Type.into()))),
         )
         .and(many0(parse_top_inductive_case))
-        .flat_map(move |(((label, params), indices), cases)| {
+        .flat_map(move |(((label, params), (indices, result_sort)), cases)| {
             // Targets are required on every case iff the head declares
             // indices, with arity equal to the index telescope's.
             for case in &cases {
@@ -1427,6 +1447,7 @@ fn parse_top_inductive_body<'a>(is_pub: bool) -> Parser<'a, TopInductive> {
                 label,
                 params,
                 indices,
+                result_sort,
                 cases,
             })
         })
@@ -1455,17 +1476,23 @@ fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
                 )
                 .or(pure(vec![])),
             )
+            // The result sort: `: Prop` after the parameters; omitted is `Type`.
+            .and(
+                catch(parse_literal(":").and_keep(lazy(parse_term)))
+                    .or(pure(Subterm::Type.into())),
+            )
             // The inner `pub` (representation visibility) sits right before `{`.
             .and(parse_pub())
             .and_drop(parse_literal("{"))
             .and(sep_by0(parse_tuple_type_field, || parse_literal(",")))
             .and_drop(parse_literal("}"))
-            .map(move |(((label, params), rep_pub), fields)| {
+            .map(move |((((label, params), result_sort), rep_pub), fields)| {
                 TopItem::Struct(TopStruct {
                     is_pub,
                     rep_pub,
                     label: label.to_string(),
                     params,
+                    result_sort,
                     fields,
                 })
             })

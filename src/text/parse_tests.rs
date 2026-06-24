@@ -546,6 +546,7 @@ fn parse_top_inductive_single_variant() {
             label: "Foo".to_string(),
             params: vec![],
             indices: vec![],
+            result_sort: Subterm::Type.into(),
             cases: vec![TopCase {
                 label: "bar".to_string(),
                 payload: vec![],
@@ -565,6 +566,7 @@ fn parse_top_inductive_empty() {
             label: "Void".to_string(),
             params: vec![],
             indices: vec![],
+            result_sort: Subterm::Type.into(),
             cases: vec![],
         }])]
     );
