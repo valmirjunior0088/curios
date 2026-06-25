@@ -1126,6 +1126,31 @@ fn elaborate_struct_type(
 /// solved by the field checks (and, in `Check` mode, the `expect` turnaround
 /// unifying the result `StructType` against the expected type) — and the fields
 /// are checked in declaration order through the (dependent) field telescope.
+/// Check each positional field against its type in a dependent field telescope,
+/// pushing the elaborated fields onto `elaborated`. Shared by struct and tuple
+/// literal elaboration. The rest of the telescope is opened with the
+/// *elaborated* field, not the raw surface term: the elaborated form carries
+/// label projections rebuilt positionally (and implicits inserted), whereas a
+/// raw `Field::Label` substituted into a later field type would panic once that
+/// type is reduced (e.g. `Task(b.A)` arising from a field typed `Task(A)` in
+/// `{ A : Type, t : Task(A) }`).
+fn check_dependent_fields(
+    context: &mut Context,
+    tele: Telescope<()>,
+    fields: &[Term],
+    elaborated: &mut Vec<Term>,
+) -> Result<(), Error> {
+    match tele {
+        Telescope::Done(_) => Ok(()),
+        Telescope::Cons(ty, rest) => {
+            let head = check(context, &fields[0], ty)?;
+            let rest = rest.open(&[&head]);
+            elaborated.push(head);
+            check_dependent_fields(context, rest, &fields[1..], elaborated)
+        }
+    }
+}
+
 fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(Term, Term), Error> {
     let Struct {
         name,
@@ -1214,31 +1239,8 @@ fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(T
         }
     }
 
-    fn walk(
-        context: &mut Context,
-        tele: Telescope<()>,
-        fields: &[Term],
-        elaborated: &mut Vec<Term>,
-    ) -> Result<(), Error> {
-        match tele {
-            Telescope::Done(_) => Ok(()),
-            Telescope::Cons(ty, rest) => {
-                // Open the rest of the dependent telescope with the *elaborated*
-                // field, not the raw surface term: the elaborated form carries
-                // label projections rebuilt positionally (and implicits inserted),
-                // whereas a raw `Field::Label` substituted into a later field type
-                // would panic once that type is reduced (e.g. `Task(b.A)` arising
-                // from a field typed `Task(A)` in `{ A : Type, t : Task(A) }`).
-                let head = check(context, &fields[0], ty)?;
-                let rest = rest.open(&[&head]);
-                elaborated.push(head);
-                walk(context, rest, &fields[1..], elaborated)
-            }
-        }
-    }
-
     let mut elaborated = Vec::with_capacity(fields.len());
-    walk(context, field_telescope, fields, &mut elaborated)?;
+    check_dependent_fields(context, field_telescope, fields, &mut elaborated)?;
 
     Ok((
         Term::struct_(name, resolved.clone(), elaborated),
@@ -2240,31 +2242,8 @@ fn elaborate_tuple(
         }
     }
 
-    fn walk(
-        context: &mut Context,
-        tele: Telescope<()>,
-        fields: &[Term],
-        elaborated: &mut Vec<Term>,
-    ) -> Result<(), Error> {
-        match tele {
-            Telescope::Done(_) => Ok(()),
-            Telescope::Cons(ty, rest) => {
-                // Open the rest of the dependent telescope with the *elaborated*
-                // field, not the raw surface term: the elaborated form carries
-                // label projections rebuilt positionally (and implicits inserted),
-                // whereas a raw `Field::Label` substituted into a later field type
-                // would panic once that type is reduced (e.g. `Task(b.A)` arising
-                // from a field typed `Task(A)` in `{ A : Type, t : Task(A) }`).
-                let head = check(context, &fields[0], ty)?;
-                let rest = rest.open(&[&head]);
-                elaborated.push(head);
-                walk(context, rest, &fields[1..], elaborated)
-            }
-        }
-    }
-
     let mut elaborated = Vec::with_capacity(fields.len());
-    walk(context, type_telescope, fields, &mut elaborated)?;
+    check_dependent_fields(context, type_telescope, fields, &mut elaborated)?;
 
     Ok((Term::tuple(elaborated), expected))
 }
