@@ -1246,18 +1246,6 @@ fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(T
     ))
 }
 
-/// The primitive eliminator's typing rule. Arm binders are
-/// typed directly from the constructor's registry telescope instantiated at
-/// the scrutinee type's parameters — no projections from a stuck payload —
-/// and each arm's binder count is statically checked against that telescope.
-///
-/// With a plain motive (no pattern) the discipline is constant/scrutinee-only:
-/// arms check against `motive(variant)`, the match has type `motive(head)`,
-/// and any indices ride along inertly. The annotated type-pattern motive
-/// (Rung A of the indexed-inductive ladder) additionally binds the scrutinee's
-/// indices: each arm checks against the motive at *that case's* target
-/// indices, and the whole match types at the scrutinee's *actual* indices.
-#[allow(clippy::too_many_arguments)]
 /// Whether a single-constructor proposition admits large elimination: every
 /// payload binder must be non-informative — a proposition itself, or *forced* by
 /// appearing in the constructor's index targets (recovered from the scrutinee's
@@ -1297,6 +1285,17 @@ fn singleton_eliminable(
     Ok(true)
 }
 
+/// The primitive eliminator's typing rule. Arm binders are
+/// typed directly from the constructor's registry telescope instantiated at
+/// the scrutinee type's parameters — no projections from a stuck payload —
+/// and each arm's binder count is statically checked against that telescope.
+///
+/// With a plain motive (no pattern) the discipline is constant/scrutinee-only:
+/// arms check against `motive(variant)`, the match has type `motive(head)`,
+/// and any indices ride along inertly. The annotated type-pattern motive
+/// (Rung A of the indexed-inductive ladder) additionally binds the scrutinee's
+/// indices: each arm checks against the motive at *that case's* target
+/// indices, and the whole match types at the scrutinee's *actual* indices.
 fn elaborate_inductive_match(
     context: &mut Context,
     head: &Term,
