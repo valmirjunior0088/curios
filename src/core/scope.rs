@@ -518,6 +518,21 @@ impl<B: Bound> Telescope<B> {
         }
     }
 
+    /// Open the leading binders at successive `params` — one binder per param —
+    /// returning the residual telescope. Every caller's telescope leads with the
+    /// type parameters (constructor payloads, struct fields, inductive indices all
+    /// follow them), so a telescope that runs out early is an invariant violation.
+    pub fn open_params(self, params: &[Term]) -> Telescope<B> {
+        let mut telescope = self;
+        for param in params {
+            telescope = match telescope {
+                Telescope::Cons(_, rest) => rest.open(&[param]),
+                Telescope::Done(_) => unreachable!("telescope must lead with its parameters"),
+            };
+        }
+        telescope
+    }
+
     /// Open the telescope across `args`, invoking `f(arg, ty)` at each binder
     /// before substituting that arg into the rest, and return the final `Done`
     /// body. The walk is infallible; the error type `E` belongs to the callback.

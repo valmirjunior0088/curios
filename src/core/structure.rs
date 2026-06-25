@@ -40,15 +40,6 @@ impl Structure {
     /// opening each with the corresponding parameter — exactly as
     /// `Inductive::instantiate` does for a constructor signature.
     pub fn fields_at(&self, params: &[Term]) -> Telescope<()> {
-        let mut telescope = self.fields.clone();
-
-        for param in params {
-            telescope = match telescope {
-                Telescope::Cons(_, rest) => rest.open(&[param]),
-                Telescope::Done(_) => return telescope,
-            };
-        }
-
-        telescope
+        self.fields.clone().open_params(params)
     }
 }

@@ -30,15 +30,8 @@ enum Step {
 
 /// Open a constructor's instantiated telescope with `vars` and read the
 /// terminal's index expressions.
-pub fn case_target_indices(mut telescope: Telescope<Term>, vars: &[Term]) -> Vec<Term> {
-    for var in vars {
-        telescope = match telescope {
-            Telescope::Cons(_, rest) => rest.open(&[var]),
-            Telescope::Done(_) => unreachable!("telescope arity matches the binder count"),
-        };
-    }
-
-    match telescope {
+pub fn case_target_indices(telescope: Telescope<Term>, vars: &[Term]) -> Vec<Term> {
+    match telescope.open_params(vars) {
         Telescope::Done(terminal) => match &**terminal {
             Subterm::InductiveType(InductiveType { indices, .. }) => indices.clone(),
             _ => unreachable!("constructor terminal is its inductive type"),

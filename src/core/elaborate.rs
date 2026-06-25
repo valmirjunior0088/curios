@@ -316,16 +316,7 @@ fn elaborate_apply(
         // slot types carry the elaborated forms; otherwise just advance.
         tele = match resolved {
             false => rest.open(&[&elaborated[index]]),
-            true => {
-                let mut reopened = original.clone();
-                for term in &elaborated {
-                    reopened = match reopened {
-                        Telescope::Cons(_, rest) => rest.open(&[term]),
-                        Telescope::Done(_) => unreachable!("the prefix is within the telescope"),
-                    };
-                }
-                reopened
-            }
+            true => original.clone().open_params(&elaborated),
         };
         index += 1;
     };
@@ -1659,13 +1650,7 @@ fn check_inductive_motive(
     let motive_elaborated = context.with_frame(|context| {
         // Peel the parameter binders off the full index telescope, leaving
         // the index types at the actual parameters.
-        let mut ix_telescope = inductive.indices.clone();
-        for param in params {
-            ix_telescope = match ix_telescope {
-                Telescope::Cons(_, rest) => rest.open(&[param]),
-                Telescope::Done(_) => unreachable!("index telescope leads with the parameters"),
-            };
-        }
+        let mut ix_telescope = inductive.indices.clone().open_params(params);
 
         let mut index_vars = Vec::with_capacity(n_indices);
         for (slot, label) in plan.iter().zip(&labels) {
