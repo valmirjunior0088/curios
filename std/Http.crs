@@ -74,11 +74,7 @@ pub let post_tls(host : Str, port : Nat, path : Str, body : Bin) -> Request =
     secure(post(host, port, path, body));
 
 let until(target : Nat) -> (Nat) -> Bln =
-    (byte) =>
-        match byte == target
-        | true => false
-        | false => true
-        end;
+    (byte) => Bln/not(byte == target);
 
 let header_lookup(headers : Lst({Str, Str}), name : Str) -> Option(Str) =
     Option/map((pair) => pair.1, Lst/find(headers, (pair) => Str/eql_ci(pair.0, name)));
