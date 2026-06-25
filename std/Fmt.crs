@@ -25,7 +25,7 @@ rec parse_fmt : Parse(Fmt) = (input, pos) =>
     match Nat/try_lt(pos, Bin/len(input))
     | none() => Result/success((pos, Fmt/nil()))
     | some(ok) =>
-        match Nat/eql(Bin/at(input, pos, ok), '%')
+        match Bin/at(input, pos, ok) == '%'
         | false => parse_lit(input, pos)
         | true => parse_spec(input, pos)
         end

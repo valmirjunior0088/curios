@@ -13,7 +13,7 @@ pub use Json/*;
 
 let encode_num(n : Flt) -> Str =
     let raw = Flt/to_str(n);
-    match Nat/eql(Option/unwrap_or(Str/get(raw, 0), 0), '+')
+    match Option/unwrap_or(Str/get(raw, 0), 0) == '+'
     | true => Str/slice(raw, 1, Str/len(raw))
     | false => raw
     end;
@@ -28,11 +28,11 @@ let escape_byte(byte : Nat) -> Bin =
     | 0x08 => Str/to_bin("\\b")
     | 0x0C => Str/to_bin("\\f")
     | _ =>
-        match Nat/lt(byte, 0x20)
+        match byte < 0x20
         | true =>
             Bin/append(
-                Bin/append(Str/to_bin("\\u00"), Char/hex_digit(Nat/div(byte, 0x10))),
-                Char/hex_digit(Nat/rem(byte, 0x10)))
+                Bin/append(Str/to_bin("\\u00"), Char/hex_digit(byte / 0x10)),
+                Char/hex_digit(byte % 0x10))
         | false => Bin/append(\\, byte)
         end
     end;
@@ -88,8 +88,8 @@ let take_literal(literal : Str) -> Parse({}) =
                     match Nat/try_lt(ih.0, Bin/len(input))
                     | none() => (ih.0, false)
                     | some(ok) =>
-                        match Nat/eql(Option/unwrap_or(Bin/get(lit, step), 0), Bin/at(input, ih.0, ok))
-                        | true => (Nat/add(ih.0, 1), true)
+                        match Option/unwrap_or(Bin/get(lit, step), 0) == Bin/at(input, ih.0, ok)
+                        | true => (ih.0 + 1, true)
                         | false => (ih.0, false)
                         end
                     end
@@ -141,23 +141,17 @@ let hex4 : Parse(Nat) =
     let b = hex_digit!;
     let c = hex_digit!;
     let d = hex_digit!;
-    Parse/pure(
-        Nat/add(
-            Nat/add(Nat/add(Nat/mul(a, 0x1000), Nat/mul(b, 0x100)), Nat/mul(c, 0x10)),
-            d));
+    Parse/pure(a * 0x1000 + b * 0x100 + c * 0x10 + d);
 
 let parse_unicode : Parse(Bin) =
     let ! = Parse/bind;
     let hi = hex4!;
-    match Bln/and(Nat/gte(hi, 0xD800), Nat/lte(hi, 0xDBFF)) : Parse(Bin)
+    match hi >= 0xD800 && hi <= 0xDBFF : Parse(Bin)
     | true =>
         let _ = Parse/take_byte('\\')!;
         let _ = Parse/take_byte('u')!;
         let lo = hex4!;
-        Parse/pure(Char/to_utf8(
-            Nat/add(
-                0x10000,
-                Nat/add(Nat/mul(Nat/sub(hi, 0xD800), 0x400), Nat/sub(lo, 0xDC00)))))
+        Parse/pure(Char/to_utf8(0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00)))
     | false => Parse/pure(Char/to_utf8(hi))
     end;
 
@@ -210,10 +204,10 @@ pub rec decode : Parse(Json) = (input, pos) =>
     | none() => Result/failure("unexpected end of input")
     | some(ok) =>
         match Bin/at(input, pos, ok)
-        | ' ' => decode(input, Nat/add(pos, 1))
-        | '\t' => decode(input, Nat/add(pos, 1))
-        | '\n' => decode(input, Nat/add(pos, 1))
-        | '\r' => decode(input, Nat/add(pos, 1))
+        | ' ' => decode(input, pos + 1)
+        | '\t' => decode(input, pos + 1)
+        | '\n' => decode(input, pos + 1)
+        | '\r' => decode(input, pos + 1)
         | 'n' => parse_null(input, pos)
         | 't' => parse_true_val(input, pos)
         | 'f' => parse_false_val(input, pos)

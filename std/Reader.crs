@@ -22,9 +22,9 @@ pub let run(@A : Type, m : Reader(A), h : Io) -> A =
 
 pub rec read_line : Reader(Option(Bin)) =
     (b) =>
-        match Bin/find_index(b.1, (byte) => Nat/eql(byte, '\n')) : {Buffer, Option(Bin)}
+        match Bin/find_index(b.1, (byte) => byte == '\n') : {Buffer, Option(Bin)}
         | some(i) =>
-            let stop = Nat/add(i, 1);
+            let stop = i + 1;
             let line = Bin/slice(b.1, 0, stop);
             let rest = Bin/slice(b.1, stop, Bin/len(b.1));
             ((b.0, rest), Option/some(line))
@@ -32,12 +32,12 @@ pub rec read_line : Reader(Option(Bin)) =
             match Io/read(b.0, 4096) : {Buffer, Option(Bin)}
             | chunk(bytes) => read_line((b.0, Bin/concat(b.1, bytes)))
             | eof() =>
-                match Nat/eql(Bin/len(b.1), 0)
+                match Bin/len(b.1) == 0
                 | true => (b, Option/none())
                 | false => ((b.0, \\), Option/some(b.1))
                 end
             | error(_) =>
-                match Nat/eql(Bin/len(b.1), 0)
+                match Bin/len(b.1) == 0
                 | true => (b, Option/none())
                 | false => ((b.0, \\), Option/some(b.1))
                 end

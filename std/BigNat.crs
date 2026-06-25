@@ -7,9 +7,9 @@ pub struct BigNat pub {
 let base : Nat = 10000;
 
 rec limbs_of_nat(n : Nat) -> Lst(Nat) =
-    match Nat/eql(n, 0)
+    match n == 0
     | true => Lst/nil()
-    | false => Lst/cons(Nat/rem(n, base), limbs_of_nat(Nat/div(n, base)))
+    | false => Lst/cons(n % base, limbs_of_nat(n / base))
     end;
 
 pub let zero : BigNat =
@@ -79,22 +79,22 @@ rec add_c(xs : Lst(Nat), ys : Lst(Nat), carry : Nat) -> Lst(Nat) =
     | nil() =>
         match ys
         | nil() =>
-            match Nat/eql(carry, 0)
+            match carry == 0
             | true => Lst/nil()
             | false => Lst/cons(carry, Lst/nil())
             end
         | cons(y, yt) =>
-            let s = Nat/add(y, carry);
-            Lst/cons(Nat/rem(s, base), add_c(Lst/nil(), yt, Nat/div(s, base)))
+            let s = y + carry;
+            Lst/cons(s % base, add_c(Lst/nil(), yt, s / base))
         end
     | cons(x, xt) =>
         match ys
         | nil() =>
-            let s = Nat/add(x, carry);
-            Lst/cons(Nat/rem(s, base), add_c(xt, Lst/nil(), Nat/div(s, base)))
+            let s = x + carry;
+            Lst/cons(s % base, add_c(xt, Lst/nil(), s / base))
         | cons(y, yt) =>
-            let s = Nat/add(Nat/add(x, y), carry);
-            Lst/cons(Nat/rem(s, base), add_c(xt, yt, Nat/div(s, base)))
+            let s = x + y + carry;
+            Lst/cons(s % base, add_c(xt, yt, s / base))
         end
     end;
 
@@ -107,15 +107,15 @@ rec sub_b(xs : Lst(Nat), ys : Lst(Nat), borrow : Nat) -> Lst(Nat) =
     | cons(x, xt) =>
         match ys
         | nil() =>
-            match Nat/lt(x, borrow)
-            | true => Lst/cons(Nat/sub(Nat/add(x, base), borrow), sub_b(xt, Lst/nil(), 1))
-            | false => Lst/cons(Nat/sub(x, borrow), sub_b(xt, Lst/nil(), 0))
+            match x < borrow
+            | true => Lst/cons(x + base - borrow, sub_b(xt, Lst/nil(), 1))
+            | false => Lst/cons(x - borrow, sub_b(xt, Lst/nil(), 0))
             end
         | cons(y, yt) =>
-            let need = Nat/add(y, borrow);
-            match Nat/lt(x, need)
-            | true => Lst/cons(Nat/sub(Nat/add(x, base), need), sub_b(xt, yt, 1))
-            | false => Lst/cons(Nat/sub(x, need), sub_b(xt, yt, 0))
+            let need = y + borrow;
+            match x < need
+            | true => Lst/cons(x + base - need, sub_b(xt, yt, 1))
+            | false => Lst/cons(x - need, sub_b(xt, yt, 0))
             end
         end
     end;
@@ -126,7 +126,7 @@ rec trim(xs : Lst(Nat)) -> Lst(Nat) =
     | cons(x, xt) =>
         match trim(xt)
         | nil() =>
-            match Nat/eql(x, 0)
+            match x == 0
             | true => Lst/nil()
             | false => Lst/cons(x, Lst/nil())
             end
@@ -140,35 +140,35 @@ pub let sub(a : BigNat, b : BigNat) -> BigNat =
 rec mul_c(xs : Lst(Nat), c : Nat, carry : Nat) -> Lst(Nat) =
     match xs
     | nil() =>
-        match Nat/eql(carry, 0)
+        match carry == 0
         | true => Lst/nil()
         | false => limbs_of_nat(carry)
         end
     | cons(x, xt) =>
-        let p = Nat/add(Nat/mul(x, c), carry);
-        Lst/cons(Nat/rem(p, base), mul_c(xt, c, Nat/div(p, base)))
+        let p = x * c + carry;
+        Lst/cons(p % base, mul_c(xt, c, p / base))
     end;
 
 pub let mul_small(a : BigNat, c : Nat) -> BigNat =
-    match Nat/eql(c, 0)
+    match c == 0
     | true => zero
     | false => BigNat { limbs = mul_c(a.limbs, c, 0) }
     end;
 
 pub rec mul_pow2(a : BigNat, k : Nat) -> BigNat =
-    match Nat/eql(k, 0)
+    match k == 0
     | true => a
-    | false => mul_pow2(mul_small(a, 2), Nat/sub(k, 1))
+    | false => mul_pow2(mul_small(a, 2), k - 1)
     end;
 
 let pad4(n : Nat) -> Str =
-    match Nat/lt(n, 10)
+    match n < 10
     | true => Str/concat("000", Nat/to_str(n))
     | false =>
-        match Nat/lt(n, 100)
+        match n < 100
         | true => Str/concat("00", Nat/to_str(n))
         | false =>
-            match Nat/lt(n, 1000)
+            match n < 1000
             | true => Str/concat("0", Nat/to_str(n))
             | false => Nat/to_str(n)
             end

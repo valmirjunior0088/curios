@@ -6,7 +6,7 @@ pub let at(@T : Type, a : Arr(T), i : Nat, ok : Nat/Lt(i, len(a))) -> T =
     /sys/Arr/get(a, i);
 
 pub let get(@T : Type, a : Arr(T), i : Nat) -> Option(T) =
-    match Nat/lt(i, len(a))
+    match i < len(a)
     | true => Option/some(/sys/Arr/get(a, i))
     | false => Option/none()
     end;
@@ -16,12 +16,12 @@ pub let cons(@A : Type, x : A, xs : Arr(A)) -> Arr(A) =
 
 pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
     let n = len(arr);
-    rec go(k : Nat, i : Nat, acc : A, inv : Eq(Nat/add(i, k), n)) -> A =
+    rec go(k : Nat, i : Nat, acc : A, inv : Eq(i + k, n)) -> A =
         let dispatch =
-            match k : (m) => (proof : Eq(Nat/add(i, m), n)) -> A
+            match k : (m) => (proof : Eq(i + m, n)) -> A
             | 0 => (_) => acc
             | kp + 1, ih => (inv2) =>
-                go(kp, Nat/succ(i),
+                go(kp, i + 1,
                     f(at(arr, i, Eq/subst((x) => Nat/Lt(i, x), inv2, Nat/le_to_lt_succ(Nat/le_add_r(i, kp)))), acc),
                     inv2)
             end;
@@ -30,14 +30,14 @@ pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A
 
 pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (A, A) -> A) -> A =
     rec go(lo : Nat, hi : Nat) -> A =
-        match Nat/lt(Nat/add(lo, 1), hi)
+        match lo + 1 < hi
         | false =>
-            match Nat/lt(lo, hi)
+            match lo < hi
             | false => empty
             | true => single(lo)
             end
         | true =>
-            let mid = Nat/div(Nat/add(lo, hi), 2);
+            let mid = (lo + hi) / 2;
             combine(go(lo, mid), go(mid, hi))
         end;
     go(0, n);

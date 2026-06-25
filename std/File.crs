@@ -11,7 +11,7 @@ pub let write(f : File, b : Bin) -> Task(Result({}, Io/Error)) =
 pub let open(path : Str, mode : Io/Mode) -> Task(Result(File, Io/Error)) =
     Task/defer(() =>
         let r = /sys/Io/open(Str/to_bin(path), Io/of_mode(mode));
-        match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result(File, Io/Error))
+        match r.status == /sys/Io/Status/ok : Task(Result(File, Io/Error))
         | true =>
             let _ = Task/nonblocking(r.handle);
             Task/bind(Task/acquire(r.handle, () => /sys/Io/close(r.handle)), (_) =>

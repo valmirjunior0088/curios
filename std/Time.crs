@@ -20,8 +20,8 @@ pub let of_secs(secs : Nat) -> Duration =
 
 pub let of_millis(ms : Nat) -> Duration =
     Duration {
-        secs = Nat/div(ms, 1000),
-        nanos = Nat/mul(Nat/rem(ms, 1000), 1000000)
+        secs = ms / 1000,
+        nanos = ms % 1000 * 1000000
     };
 
 pub let now() -> Instant =
@@ -46,36 +46,36 @@ pub let nanos(d : Duration) -> Nat =
     d.nanos;
 
 pub let to_millis(d : Duration) -> Nat =
-    Nat/add(Nat/mul(d.secs, 1000), Nat/div(d.nanos, 1000000));
+    d.secs * 1000 + d.nanos / 1000000;
 
 let sub_digit(x : Nat, y : Nat) -> {digit : Nat, borrow : Nat} =
-    match Nat/lt(x, y)
-    | true => (digit = Nat/sub(Nat/add(x, 1000000000), y), borrow = 1)
-    | false => (digit = Nat/sub(x, y), borrow = 0)
+    match x < y
+    | true => (digit = x + 1000000000 - y, borrow = 1)
+    | false => (digit = x - y, borrow = 0)
     end;
 
 pub let diff(a : Instant, b : Instant) -> Duration =
     let d_nanos = sub_digit(a.nanos, b.nanos);
-    let d_lo = sub_digit(a.secs_lo, Nat/add(b.secs_lo, d_nanos.borrow));
-    let r_hi = Nat/sub(a.secs_hi, Nat/add(b.secs_hi, d_lo.borrow));
+    let d_lo = sub_digit(a.secs_lo, b.secs_lo + d_nanos.borrow);
+    let r_hi = a.secs_hi - (b.secs_hi + d_lo.borrow);
     Duration {
-        secs = Nat/add(Nat/mul(r_hi, 1000000000), d_lo.digit),
+        secs = r_hi * 1000000000 + d_lo.digit,
         nanos = d_nanos.digit
     };
 
 pub let before(a : Instant, b : Instant) -> Bln =
-    match Nat/lt(a.secs_hi, b.secs_hi)
+    match a.secs_hi < b.secs_hi
     | true => true
     | false =>
-        match Nat/gt(a.secs_hi, b.secs_hi)
+        match a.secs_hi > b.secs_hi
         | true => false
         | false =>
-            match Nat/lt(a.secs_lo, b.secs_lo)
+            match a.secs_lo < b.secs_lo
             | true => true
             | false =>
-                match Nat/gt(a.secs_lo, b.secs_lo)
+                match a.secs_lo > b.secs_lo
                 | true => false
-                | false => Nat/lt(a.nanos, b.nanos)
+                | false => a.nanos < b.nanos
                 end
             end
         end

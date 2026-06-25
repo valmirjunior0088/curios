@@ -6,7 +6,7 @@ pub let at(b : Bin, i : Nat, ok : Nat/Lt(i, len(b))) -> Nat =
     /sys/Bin/get(b, i);
 
 pub let get(b : Bin, i : Nat) -> Option(Nat) =
-    match Nat/lt(i, len(b))
+    match i < len(b)
     | true => Option/some(/sys/Bin/get(b, i))
     | false => Option/none()
     end;
@@ -16,12 +16,12 @@ pub let cons(head : Nat, tail : Bin) -> Bin =
 
 pub let fold(@A : Type, b : Bin, init : A, f : (Nat, A) -> A) -> A =
     let n = len(b);
-    rec go(k : Nat, i : Nat, acc : A, inv : Eq(Nat/add(i, k), n)) -> A =
+    rec go(k : Nat, i : Nat, acc : A, inv : Eq(i + k, n)) -> A =
         let dispatch =
-            match k : (m) => (proof : Eq(Nat/add(i, m), n)) -> A
+            match k : (m) => (proof : Eq(i + m, n)) -> A
             | 0 => (_) => acc
             | kp + 1, ih => (inv2) =>
-                go(kp, Nat/succ(i),
+                go(kp, i + 1,
                     f(at(b, i, Eq/subst((x) => Nat/Lt(i, x), inv2, Nat/le_to_lt_succ(Nat/le_add_r(i, kp)))), acc),
                     inv2)
             end;
@@ -36,7 +36,7 @@ pub let find_index(b : Bin, pred : (Nat) -> Bln) -> Option(Nat) =
             | none() =>
                 match pred(byte)
                 | true => (acc.0, Option/some(acc.0))
-                | false => (Nat/add(acc.0, 1), Option/none())
+                | false => (acc.0 + 1, Option/none())
                 end
             end);
     r.1;

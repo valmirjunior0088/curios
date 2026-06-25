@@ -1,7 +1,7 @@
 use /std/{Nat, Bln, Bin, Option};
 
 pub let is_whitespace(c : Nat) -> Bln =
-    Bln/or(Nat/eql(c, ' '), Nat/in_range(c, '\t', '\r'));
+    c == ' ' || Nat/in_range(c, '\t', '\r');
 
 pub let is_digit(c : Nat) -> Bln =
     Nat/in_range(c, '0', '9');
@@ -13,61 +13,61 @@ pub let is_upper(c : Nat) -> Bln =
     Nat/in_range(c, 'A', 'Z');
 
 pub let is_alpha(c : Nat) -> Bln =
-    Bln/or(is_lower(c), is_upper(c));
+    is_lower(c) || is_upper(c);
 
 pub let is_alphanumeric(c : Nat) -> Bln =
-    Bln/or(is_alpha(c), is_digit(c));
+    is_alpha(c) || is_digit(c);
 
 pub let to_lower(c : Nat) -> Nat =
     match is_upper(c)
-    | true => Nat/add(c, 0x20)
+    | true => c + 0x20
     | false => c
     end;
 
 pub let to_upper(c : Nat) -> Nat =
     match is_lower(c)
-    | true => Nat/sub(c, 0x20)
+    | true => c - 0x20
     | false => c
     end;
 
 pub let hex_digit(nibble : Nat) -> Nat =
-    match Nat/lt(nibble, 10)
-    | true => Nat/add(nibble, '0')
-    | false => Nat/add(Nat/sub(nibble, 10), 'a')
+    match nibble < 10
+    | true => nibble + '0'
+    | false => nibble - 10 + 'a'
     end;
 
 pub let of_hex_digit(c : Nat) -> Option(Nat) =
     match is_digit(c)
-    | true => Option/some(Nat/sub(c, '0'))
+    | true => Option/some(c - '0')
     | false =>
         match Nat/in_range(c, 'a', 'f')
-        | true => Option/some(Nat/add(Nat/sub(c, 'a'), 10))
+        | true => Option/some(c - 'a' + 10)
         | false =>
             match Nat/in_range(c, 'A', 'F')
-            | true => Option/some(Nat/add(Nat/sub(c, 'A'), 10))
+            | true => Option/some(c - 'A' + 10)
             | false => Option/none()
             end
         end
     end;
 
 rec emit_continuations(acc : Bin, codepoint : Nat, shift : Nat) -> Bin =
-    match Nat/eql(shift, 0)
+    match shift == 0
     | true => acc
     | false =>
-        let group = Nat/rem(Nat/div(codepoint, shift), 0x40);
-        emit_continuations(Bin/append(acc, Nat/add(0x80, group)), codepoint, Nat/div(shift, 0x40))
+        let group = codepoint / shift % 0x40;
+        emit_continuations(Bin/append(acc, 0x80 + group), codepoint, shift / 0x40)
     end;
 
 pub let to_utf8(codepoint : Nat) -> Bin =
-    match Nat/lt(codepoint, 0x80)
+    match codepoint < 0x80
     | true => Bin/append(\\, codepoint)
     | false =>
-        match Nat/lt(codepoint, 0x800)
-        | true => emit_continuations(Bin/append(\\, Nat/add(0xC0, Nat/div(codepoint, 0x40))), codepoint, 1)
+        match codepoint < 0x800
+        | true => emit_continuations(Bin/append(\\, 0xC0 + codepoint / 0x40), codepoint, 1)
         | false =>
-            match Nat/lt(codepoint, 0x10000)
-            | true => emit_continuations(Bin/append(\\, Nat/add(0xE0, Nat/div(codepoint, 0x1000))), codepoint, 0x40)
-            | false => emit_continuations(Bin/append(\\, Nat/add(0xF0, Nat/div(codepoint, 0x40000))), codepoint, 0x1000)
+            match codepoint < 0x10000
+            | true => emit_continuations(Bin/append(\\, 0xE0 + codepoint / 0x1000), codepoint, 0x40)
+            | false => emit_continuations(Bin/append(\\, 0xF0 + codepoint / 0x40000), codepoint, 0x1000)
             end
         end
     end;

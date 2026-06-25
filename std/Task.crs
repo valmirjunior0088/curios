@@ -75,13 +75,13 @@ pub let nonblocking(h : Io) -> {} =
 pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
     defer(() =>
         let r = /sys/Io/read(h, n);
-        match Nat/eql(r.status, /sys/Io/Status/would_block) : Task(Io/Read)
+        match r.status == /sys/Io/Status/would_block : Task(Io/Read)
         | true => bind(wait(h, /sys/Io/Poll/read), (_) => read(h, n))
         | false =>
-            match Nat/eql(r.status, /sys/Io/Status/eof) : Task(Io/Read)
+            match r.status == /sys/Io/Status/eof : Task(Io/Read)
             | true => pure(Io/Read/eof())
             | false =>
-                match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Io/Read)
+                match r.status == /sys/Io/Status/ok : Task(Io/Read)
                 | true => pure(Io/Read/chunk(r.bytes))
                 | false => pure(Io/Read/error(Io/error_of(r.status)))
                 end
@@ -91,12 +91,12 @@ pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
 pub rec write(h : Io, b : Bin) -> Task(Result({}, Io/Error)) =
     defer(() =>
         let r = /sys/Io/write(h, b);
-        match Nat/eql(r.status, /sys/Io/Status/would_block) : Task(Result({}, Io/Error))
+        match r.status == /sys/Io/Status/would_block : Task(Result({}, Io/Error))
         | true => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, b))
         | false =>
-            match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result({}, Io/Error))
+            match r.status == /sys/Io/Status/ok : Task(Result({}, Io/Error))
             | true =>
-                match Nat/lt(r.written, Bin/len(b)) : Task(Result({}, Io/Error))
+                match r.written < Bin/len(b) : Task(Result({}, Io/Error))
                 | true => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, Bin/slice(b, r.written, Bin/len(b))))
                 | false => pure(Result/success(()))
                 end
@@ -107,10 +107,10 @@ pub rec write(h : Io, b : Bin) -> Task(Result({}, Io/Error)) =
 pub rec accept(l : Io) -> Task(Result(Io, Io/Error)) =
     defer(() =>
         let r = /sys/Io/accept(l);
-        match Nat/eql(r.status, /sys/Io/Status/would_block) : Task(Result(Io, Io/Error))
+        match r.status == /sys/Io/Status/would_block : Task(Result(Io, Io/Error))
         | true => bind(wait(l, /sys/Io/Poll/read), (_) => accept(l))
         | false =>
-            match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result(Io, Io/Error))
+            match r.status == /sys/Io/Status/ok : Task(Result(Io, Io/Error))
             | true => pure(Result/success(r.handle))
             | false => pure(Result/failure(Io/error_of(r.status)))
             end
@@ -242,7 +242,7 @@ let sweep_parked(ss : Lst(Slot)) -> Lst(Slot) =
     each(ss);
 
 let is_ready(results : Nat, interest : Nat) -> Bln =
-    Nat/gt(Nat/and(results, Nat/add(interest, Nat/add(/sys/Io/Poll/err, /sys/Io/Poll/hup))), 0);
+    Nat/and(results, interest + /sys/Io/Poll/err + /sys/Io/Poll/hup) > 0;
 
 let poll_ready(blocked : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
     let handles = Lst/to_arr(Lst/map((p) => p.handle, blocked));
@@ -253,11 +253,11 @@ let poll_ready(blocked : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
         | nil() => (woken, still)
         | cons(p, tail) =>
             match Cell/get(p.token) : {Lst(Job), Lst(Parked)}
-            | true => let _ = run_fins(p.fins); walk(tail, Nat/succ(i), woken, still)
+            | true => let _ = run_fins(p.fins); walk(tail, i + 1, woken, still)
             | false =>
                 match is_ready(/sys/Arr/get(results, i), p.interest) : {Lst(Job), Lst(Parked)}
-                | true => walk(tail, Nat/succ(i), Lst/cons(Job { resume = p.resume, token = p.token, fins = p.fins }, woken), still)
-                | false => walk(tail, Nat/succ(i), woken, Lst/cons(p, still))
+                | true => walk(tail, i + 1, Lst/cons(Job { resume = p.resume, token = p.token, fins = p.fins }, woken), still)
+                | false => walk(tail, i + 1, woken, Lst/cons(p, still))
                 end
             end
         end;
@@ -369,7 +369,7 @@ pub let join_all(@A : Type, tasks : Lst(() -> Task(A))) -> Task(Arr(A)) =
         | none() => pure(Lst/nil(@A))
         | some(ok) =>
             let h = spawn(Arr/at(ta, i, ok))!;
-            let rest = go(Nat/succ(i))!;
+            let rest = go(i + 1)!;
             let a = await(h.result)!;
             pure(Lst/cons(a, rest))
         end;
@@ -386,7 +386,7 @@ pub let select(@A : Type, tasks : Lst(() -> Task(A))) -> Task({Nat, A}) =
             | some(ok) =>
                 let t : Token = Cell/new(false);
                 let _ = fork_with(() => bind((Arr/at(ta, i, ok))(), (a) => let _ = fulfill(winner, (i, a)); pure(())), t)!;
-                let rest = arm(Nat/succ(i))!;
+                let rest = arm(i + 1)!;
                 pure(Lst/cons(t, rest))
             end;
         let ! = bind;

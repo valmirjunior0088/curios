@@ -75,7 +75,7 @@ pub let post_tls(host : Str, port : Nat, path : Str, body : Bin) -> Request =
 
 let until(target : Nat) -> (Nat) -> Bln =
     (byte) =>
-        match Nat/eql(byte, target)
+        match byte == target
         | true => false
         | false => true
         end;
@@ -87,7 +87,7 @@ let render_header(pair : {Str, Str}) -> Str =
     Str/flatten([pair.0, ": ", pair.1, "\r\n"]);
 
 let content_length(body : Bin) -> Str =
-    match Nat/eql(Bin/len(body), 0) : Str
+    match Bin/len(body) == 0 : Str
     | true => ""
     | false => Str/flatten(["Content-Length: ", Nat/to_str(Bin/len(body)), "\r\n"])
     end;
@@ -140,7 +140,7 @@ let guard_header : Parse({}) =
         match Nat/try_lt(pos, Bin/len(input))
         | none() => Result/failure("unexpected end of headers")
         | some(ok) =>
-            match Nat/eql(Bin/at(input, pos, ok), '\r')
+            match Bin/at(input, pos, ok) == '\r'
             | true => Result/failure("end of header block")
             | false => Result/success((pos, ()))
             end
@@ -158,7 +158,7 @@ let header_line : Parse({Str, Str}) =
 
 let take_n(n : Nat) -> Parse(Bin) =
     (input, pos) =>
-        let stop = Nat/min(Nat/add(pos, n), Bin/len(input));
+        let stop = Nat/min(pos + n, Bin/len(input));
         Result/success((stop, Bin/slice(input, pos, stop)));
 
 let content_length_of(headers : Lst({Str, Str})) -> Option(Nat) =

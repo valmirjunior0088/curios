@@ -2,7 +2,7 @@ use /std/{Nat};
 
 pub induct Vec(T : Type) : (n : Nat)
 | nil() : (0)
-| cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
+| cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
 end
 
 pub use Vec/*;
@@ -10,8 +10,8 @@ pub use Vec/*;
 pub let len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
     n;
 
-pub rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
-    match v : (v : Vec(T, k)) => Vec(T, Nat/add(k, m))
+pub rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, n + m) =
+    match v : (v : Vec(T, k)) => Vec(T, k + m)
     | nil() => w
     | cons(j, x, xs) => Vec/cons(x, append(xs, w))
     end;
@@ -22,12 +22,12 @@ pub rec map(@A : Type, @B : Type, @n : Nat, f : (A) -> B, v : Vec(A, n)) -> Vec(
     | cons(j, x, xs) => Vec/cons(f(x), map(f, xs))
     end;
 
-pub let first(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> T =
+pub let first(@T : Type, @n : Nat, v : Vec(T, n + 1)) -> T =
     match v : T
     | cons(j, x, xs) => x
     end;
 
-pub let rest(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> Vec(T, n) =
+pub let rest(@T : Type, @n : Nat, v : Vec(T, n + 1)) -> Vec(T, n) =
     match v : Vec(T, n)
     | cons(j, x, xs) => xs
     end;

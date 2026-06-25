@@ -8,13 +8,13 @@ let pow2(k : Nat) -> BigNat =
 rec divmod(r : BigNat, s : BigNat, d : Nat) -> {Nat, BigNat} =
     match BigNat/compare(r, s)
     | lt() => (d, r)
-    | eq() => divmod(BigNat/sub(r, s), s, Nat/add(d, 1))
-    | gt() => divmod(BigNat/sub(r, s), s, Nat/add(d, 1))
+    | eq() => divmod(BigNat/sub(r, s), s, d + 1)
+    | gt() => divmod(BigNat/sub(r, s), s, d + 1)
     end;
 
 rec scale_up(rpm : BigNat, s : BigNat, k : Int) -> {BigNat, Int} =
     match BigNat/gt(rpm, s)
-    | true => scale_up(rpm, BigNat/mul_small(s, 10), Int/add(k, +1))
+    | true => scale_up(rpm, BigNat/mul_small(s, 10), k + 1)
     | false => (s, k)
     end;
 
@@ -26,7 +26,7 @@ rec scale_down(r : BigNat, mp : BigNat, mm : BigNat, s : BigNat, k : Int) -> {Bi
             BigNat/mul_small(mp, 10),
             BigNat/mul_small(mm, 10),
             s,
-            Int/sub(k, +1))
+            k - 1)
     | false => (r, mp, mm, k)
     end;
 
@@ -47,19 +47,19 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bln) -> Ls
         | true => BigNat/gte(BigNat/add(rem, mp10), s)
         | false => BigNat/gt(BigNat/add(rem, mp10), s)
         end;
-    match Bln/or(low, high)
+    match low || high
     | false => Lst/cons(d, generate(rem, s, mp10, mm10, even))
     | true =>
         let last =
             match low
-            | false => Nat/add(d, 1)
+            | false => d + 1
             | true =>
                 match high
                 | false => d
                 | true =>
                     match BigNat/lt(BigNat/mul_small(rem, 2), s)
                     | true => d
-                    | false => Nat/add(d, 1)
+                    | false => d + 1
                     end
                 end
             end;
@@ -78,7 +78,7 @@ rec normalize(ds : Lst(Nat)) -> {Lst(Nat), Bln} =
     | cons(h, t) =>
         match t
         | nil() =>
-            match Nat/eql(h, 10)
+            match h == 10
             | true => (Lst/cons(0, Lst/nil()), true)
             | false => (Lst/cons(h, Lst/nil()), false)
             end
@@ -87,41 +87,41 @@ rec normalize(ds : Lst(Nat)) -> {Lst(Nat), Bln} =
             match rest.1
             | false => (Lst/cons(h, rest.0), false)
             | true =>
-                match Nat/eql(h, 9)
+                match h == 9
                 | true => (Lst/cons(0, rest.0), true)
-                | false => (Lst/cons(Nat/add(h, 1), rest.0), false)
+                | false => (Lst/cons(h + 1, rest.0), false)
                 end
             end
         end
     end;
 
 let setup(f_mant : Nat, exp_field : Nat) -> {BigNat, BigNat, BigNat, BigNat} =
-    match Nat/gte(exp_field, 150)
+    match exp_field >= 150
     | true =>
-        let ep = Nat/sub(exp_field, 150);
-        match Nat/eql(f_mant, 0x800000)
+        let ep = exp_field - 150;
+        match f_mant == 0x800000
         | false =>
-            (BigNat/mul_pow2(BigNat/of_nat(f_mant), Nat/add(ep, 1)),
+            (BigNat/mul_pow2(BigNat/of_nat(f_mant), ep + 1),
              BigNat/of_nat(2),
              pow2(ep),
              pow2(ep))
         | true =>
-            (BigNat/mul_pow2(BigNat/of_nat(f_mant), Nat/add(ep, 2)),
+            (BigNat/mul_pow2(BigNat/of_nat(f_mant), ep + 2),
              BigNat/of_nat(4),
-             pow2(Nat/add(ep, 1)),
+             pow2(ep + 1),
              pow2(ep))
         end
     | false =>
-        let abs_e = Nat/sub(150, Nat/max(exp_field, 1));
-        match Bln/or(Nat/lt(exp_field, 2), Bln/not(Nat/eql(f_mant, 0x800000)))
+        let abs_e = 150 - Nat/max(exp_field, 1);
+        match exp_field < 2 || Bln/not(f_mant == 0x800000)
         | true =>
             (BigNat/mul_small(BigNat/of_nat(f_mant), 2),
-             pow2(Nat/add(abs_e, 1)),
+             pow2(abs_e + 1),
              BigNat/of_nat(1),
              BigNat/of_nat(1))
         | false =>
             (BigNat/mul_small(BigNat/of_nat(f_mant), 4),
-             pow2(Nat/add(abs_e, 2)),
+             pow2(abs_e + 2),
              BigNat/of_nat(2),
              BigNat/of_nat(1))
         end
@@ -129,16 +129,16 @@ let setup(f_mant : Nat, exp_field : Nat) -> {BigNat, BigNat, BigNat, BigNat} =
 
 let layout(digits_str : Str, k : Int) -> Str =
     let len = Str/len(digits_str);
-    match Int/lte(k, +0)
+    match k <= 0
     | true => Str/concat(Str/concat("0.", Str/repeat("0", Int/abs(k))), digits_str)
     | false =>
         let kn = Int/to_nat(k);
-        match Nat/lt(kn, len)
+        match kn < len
         | true =>
             Str/concat(
                 Str/concat(Str/slice(digits_str, 0, kn), "."),
                 Str/slice(digits_str, kn, len))
-        | false => Str/concat(digits_str, Str/repeat("0", Nat/sub(kn, len)))
+        | false => Str/concat(digits_str, Str/repeat("0", kn - len))
         end
     end;
 
@@ -155,7 +155,7 @@ let render(f_mant : Nat, exp_field : Nat, even : Bln) -> Str =
     let digits = generate(down.0, s1, down.1, down.2, even);
     let norm = normalize(digits);
     match norm.1
-    | true => layout(digits_to_str(Lst/cons(1, norm.0)), Int/add(down.3, +1))
+    | true => layout(digits_to_str(Lst/cons(1, norm.0)), down.3 + 1)
     | false => layout(digits_to_str(norm.0), down.3)
     end;
 
@@ -165,32 +165,29 @@ pub let to_str(f : Flt) -> Str =
     let b1 = Option/unwrap_or(Bin/get(b, 1), 0);
     let b2 = Option/unwrap_or(Bin/get(b, 2), 0);
     let b3 = Option/unwrap_or(Bin/get(b, 3), 0);
-    let exp_field = Nat/add(Nat/mul(Nat/rem(b3, 0x80), 2), Nat/div(b2, 0x80));
-    let mant_field =
-        Nat/add(
-            Nat/add(Nat/mul(Nat/rem(b2, 0x80), 0x10000), Nat/mul(b1, 0x100)),
-            b0);
+    let exp_field = b3 % 0x80 * 2 + b2 / 0x80;
+    let mant_field = b2 % 0x80 * 0x10000 + b1 * 0x100 + b0;
     let sign =
-        match Nat/gte(b3, 0x80)
+        match b3 >= 0x80
         | true => "-"
         | false => "+"
         end;
-    match Nat/eql(exp_field, 0xFF)
+    match exp_field == 0xFF
     | true =>
-        match Nat/eql(mant_field, 0)
+        match mant_field == 0
         | true => Str/concat(sign, "inf")
         | false => "NaN"
         end
     | false =>
-        match Bln/and(Nat/eql(exp_field, 0), Nat/eql(mant_field, 0))
+        match exp_field == 0 && mant_field == 0
         | true => Str/concat(sign, "0")
         | false =>
             let f_mant =
-                match Nat/eql(exp_field, 0)
+                match exp_field == 0
                 | true => mant_field
-                | false => Nat/add(mant_field, 0x800000)
+                | false => mant_field + 0x800000
                 end;
-            let even = Nat/eql(Nat/rem(f_mant, 2), 0);
+            let even = f_mant % 2 == 0;
             Str/concat(sign, render(f_mant, exp_field, even))
         end
     end;
@@ -198,34 +195,34 @@ pub let to_str(f : Flt) -> Str =
 let pow10(n : Nat) -> Flt =
     match n
     | 0 => +1.0
-    | pred + 1, ih => Flt/mul(ih, +10.0)
+    | pred + 1, ih => ih * 10.0
     end;
 
 let digits_or_zero(s : Str) -> Option(Nat) =
-    match Nat/eql(Str/len(s), 0)
+    match Str/len(s) == 0
     | true => Option/some(0)
     | false => Nat/of_str(s)
     end;
 
 let exp_factor(exp_int : Int) -> Flt =
-    match Int/gte(exp_int, +0)
+    match exp_int >= 0
     | true => pow10(Int/to_nat(exp_int))
-    | false => Flt/div(+1.0, pow10(Int/abs(exp_int)))
+    | false => 1.0 / pow10(Int/abs(exp_int))
     end;
 
 let exp_factor_of(s : Str, e_pos : Nat, len : Nat) -> Option(Flt) =
-    match Nat/lt(e_pos, len)
+    match e_pos < len
     | false => Option/some(+1.0)
-    | true => Option/map(exp_factor, Int/of_str(Str/slice(s, Nat/add(e_pos, 1), len)))
+    | true => Option/map(exp_factor, Int/of_str(Str/slice(s, e_pos + 1, len)))
     end;
 
 pub let of_str(s : Str) -> Option(Flt) =
     let ! = Option/bind;
-    match Nat/eql(Str/len(s), 0)
+    match Str/len(s) == 0
     | true => Option/none()
     | false =>
         let first = Str/get(s, 0)!;
-        let is_neg = Nat/eql(first, '-');
+        let is_neg = first == '-';
         let start =
             match first
             | '+' => 1
@@ -240,21 +237,19 @@ pub let of_str(s : Str) -> Option(Flt) =
         let int_end = Nat/min(dot_pos, e_pos);
         let int_slice = Str/slice(s, start, int_end);
         let frac_slice =
-            match Nat/lt(dot_pos, e_pos)
-            | true => Str/slice(s, Nat/add(dot_pos, 1), e_pos)
+            match dot_pos < e_pos
+            | true => Str/slice(s, dot_pos + 1, e_pos)
             | false => ""
             end;
-        match Bln/or(Nat/gt(Str/len(int_slice), 0), Nat/gt(Str/len(frac_slice), 0))
+        match Str/len(int_slice) > 0 || Str/len(frac_slice) > 0
         | false => Option/none()
         | true =>
             let int_val = digits_or_zero(int_slice)!;
             let frac_val = digits_or_zero(frac_slice)!;
             let factor = exp_factor_of(s, e_pos, len)!;
             let mantissa =
-                Flt/add(
-                    Nat/to_flt(int_val),
-                    Flt/div(Nat/to_flt(frac_val), pow10(Str/len(frac_slice))));
-            let result = Flt/mul(mantissa, factor);
+                Nat/to_flt(int_val) + Nat/to_flt(frac_val) / pow10(Str/len(frac_slice));
+            let result = mantissa * factor;
             match is_neg
             | true => Option/some(Flt/neg(result))
             | false => Option/some(result)

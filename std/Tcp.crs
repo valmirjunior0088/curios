@@ -35,13 +35,13 @@ let upgrade(h : Io, host : Str, tls : Bln) -> Nat =
 
 let resolve_addr(host : Str, port : Nat) -> Task(Result(Bin, Io/Error)) =
     let r = /sys/Io/lookup(Str/to_bin(host), port);
-    match Nat/eql(r.status, /sys/Io/Status/ok) : Task(Result(Bin, Io/Error))
+    match r.status == /sys/Io/Status/ok : Task(Result(Bin, Io/Error))
     | false => Task/pure(Result/failure(Io/error_of(r.status)))
     | true =>
         Task/using(r.handle, () => /sys/Io/close(r.handle),
             Task/bind(Task/wait(r.handle, /sys/Io/Poll/read), (_) =>
                 let a = /sys/Io/resolve(r.handle);
-                match Nat/eql(a.status, /sys/Io/Status/ok) : Task(Result(Bin, Io/Error))
+                match a.status == /sys/Io/Status/ok : Task(Result(Bin, Io/Error))
                 | false => Task/pure(Result/failure(Io/error_of(a.status)))
                 | true => Task/pure(Result/success(Option/unwrap_or(Arr/get(a.addresses, 0), \\)))
                 end))
@@ -49,18 +49,18 @@ let resolve_addr(host : Str, port : Nat) -> Task(Result(Bin, Io/Error)) =
 
 let connect_addr(settings : Settings, host : Str, addr : Bin) -> Result(Socket, Io/Error) =
     let s = /sys/Io/socket(addr);
-    match Nat/eql(s.status, /sys/Io/Status/ok) : Result(Socket, Io/Error)
+    match s.status == /sys/Io/Status/ok : Result(Socket, Io/Error)
     | false => Result/failure(Io/error_of(s.status))
     | true =>
         let _ = configure(s.handle, settings);
         let status = /sys/Io/connect(s.handle, addr);
-        match Nat/eql(status, /sys/Io/Status/ok) : Result(Socket, Io/Error)
+        match status == /sys/Io/Status/ok : Result(Socket, Io/Error)
         | false =>
             let _ = /sys/Io/close(s.handle);
             Result/failure(Io/error_of(status))
         | true =>
             let upgraded = upgrade(s.handle, host, settings.tls);
-            match Nat/eql(upgraded, /sys/Io/Status/ok) : Result(Socket, Io/Error)
+            match upgraded == /sys/Io/Status/ok : Result(Socket, Io/Error)
             | false =>
                 let _ = /sys/Io/close(s.handle);
                 Result/failure(Io/error_of(upgraded))
@@ -114,18 +114,18 @@ struct Listener { Io }
 
 let bind_listen(addr : Bin) -> Result(Listener, Io/Error) =
     let s = /sys/Io/socket(addr);
-    match Nat/eql(s.status, /sys/Io/Status/ok) : Result(Listener, Io/Error)
+    match s.status == /sys/Io/Status/ok : Result(Listener, Io/Error)
     | false => Result/failure(Io/error_of(s.status))
     | true =>
         let _ = /sys/Io/set_reuseaddr(s.handle, true);
         let bound = /sys/Io/bind(s.handle, addr);
-        match Nat/eql(bound, /sys/Io/Status/ok) : Result(Listener, Io/Error)
+        match bound == /sys/Io/Status/ok : Result(Listener, Io/Error)
         | false =>
             let _ = /sys/Io/close(s.handle);
             Result/failure(Io/error_of(bound))
         | true =>
             let status = /sys/Io/listen(s.handle, 128);
-            match Nat/eql(status, /sys/Io/Status/ok) : Result(Listener, Io/Error)
+            match status == /sys/Io/Status/ok : Result(Listener, Io/Error)
             | false =>
                 let _ = /sys/Io/close(s.handle);
                 Result/failure(Io/error_of(status))
@@ -169,13 +169,13 @@ pub let serve(host : Str, port : Nat, handler : (Socket) -> Task({})) -> Task(Re
 pub let serve_tls(host : Str, port : Nat, cert : Bin, key : Bin, handler : (Socket) -> Task({})) -> Task(Result({}, Io/Error)) =
     Task/defer(() =>
         let cfg = /sys/Io/tls_server_config(cert, key);
-        match Nat/eql(cfg.status, /sys/Io/Status/ok) : Task(Result({}, Io/Error))
+        match cfg.status == /sys/Io/Status/ok : Task(Result({}, Io/Error))
         | false => Task/pure(Result/failure(Io/error_of(cfg.status)))
         | true =>
             Task/using(cfg.handle, () => let _ = /sys/Io/close(cfg.handle); (),
                 listen_loop(host, port, (h) =>
                     let status = /sys/Io/start_tls_server(h, cfg.handle);
-                    match Nat/eql(status, /sys/Io/Status/ok) : Task({})
+                    match status == /sys/Io/Status/ok : Task({})
                     | true => Task/using(h, () => /sys/Io/close(h), handler(Socket { h }))
                     | false =>
                         let _ = /sys/Io/close(h);

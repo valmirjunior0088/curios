@@ -11,19 +11,19 @@ pub let classify(c : Nat) -> Class =
     | true => Class/ascii()
     | false =>
         match Nat/in_range(c, 0xC2, 0xDF)
-        | true => Class/lead(1, 0x80, 0xBF, Nat/sub(c, 0xC0))
+        | true => Class/lead(1, 0x80, 0xBF, c - 0xC0)
         | false =>
             match Nat/in_range(c, 0xE0, 0xEF)
             | true =>
-                let lo = match Nat/eql(c, 0xE0) | true => 0xA0 | false => 0x80 end;
-                let hi = match Nat/eql(c, 0xED) | true => 0x9F | false => 0xBF end;
-                Class/lead(2, lo, hi, Nat/sub(c, 0xE0))
+                let lo = match c == 0xE0 | true => 0xA0 | false => 0x80 end;
+                let hi = match c == 0xED | true => 0x9F | false => 0xBF end;
+                Class/lead(2, lo, hi, c - 0xE0)
             | false =>
                 match Nat/in_range(c, 0xF0, 0xF4)
                 | true =>
-                    let lo = match Nat/eql(c, 0xF0) | true => 0x90 | false => 0x80 end;
-                    let hi = match Nat/eql(c, 0xF4) | true => 0x8F | false => 0xBF end;
-                    Class/lead(3, lo, hi, Nat/sub(c, 0xF0))
+                    let lo = match c == 0xF0 | true => 0x90 | false => 0x80 end;
+                    let hi = match c == 0xF4 | true => 0x8F | false => 0xBF end;
+                    Class/lead(3, lo, hi, c - 0xF0)
                 | false => Class/bad()
                 end
             end
@@ -43,9 +43,9 @@ pub let step(c : Nat, s : Scan) -> Scan =
         match Nat/in_range(c, lo, hi)
         | false => Scan/bad()
         | true =>
-            match Nat/eql(rem, 1)
+            match rem == 1
             | true => Scan/lead()
-            | false => Scan/cont(Nat/pred(rem), 0x80, 0xBF)
+            | false => Scan/cont(rem - 1, 0x80, 0xBF)
             end
         end
     | lead() =>

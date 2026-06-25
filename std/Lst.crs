@@ -6,7 +6,7 @@ pub let len(@A : Type, l : Lst(A)) -> Nat =
     rec go(rest : Lst(A), acc : Nat) -> Nat =
         match rest
         | nil() => acc
-        | cons(_, tail) => go(tail, Nat/add(acc, 1))
+        | cons(_, tail) => go(tail, acc + 1)
         end;
     go(l, 0);
 
@@ -46,20 +46,20 @@ pub let find(@A : Type, l : Lst(A), pred : (A) -> Bln) -> Option(A) =
 
 pub let to_arr(@A : Type, l : Lst(A)) -> Arr(A) =
     rec go(rest : Lst(A), n : Nat) -> {Arr(A), Lst(A)} =
-        match Nat/lt(n, 2)
+        match n < 2
         | true =>
             match rest
             | nil() => (Arr/nil(), rest)
             | cons(x, tail) =>
-                match Nat/eql(n, 0)
+                match n == 0
                 | true => (Arr/nil(), rest)
                 | false => (Arr/single(x), tail)
                 end
             end
         | false =>
-            let half = Nat/div(n, 2);
+            let half = n / 2;
             let left = go(rest, half);
-            let right = go(left.1, Nat/sub(n, half));
+            let right = go(left.1, n - half);
             (Arr/concat(left.0, right.0), right.1)
         end;
     (go(l, len(l))).0;

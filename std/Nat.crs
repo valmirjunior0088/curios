@@ -10,16 +10,16 @@ let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
     Utf8/more(c, Scan/lead(), \\, r);
 
 let digit(d : Nat) -> { c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()) } =
-    match Nat/eql(d, 0) | true => ('0', Eq/refl()) | false =>
-    match Nat/eql(d, 1) | true => ('1', Eq/refl()) | false =>
-    match Nat/eql(d, 2) | true => ('2', Eq/refl()) | false =>
-    match Nat/eql(d, 3) | true => ('3', Eq/refl()) | false =>
-    match Nat/eql(d, 4) | true => ('4', Eq/refl()) | false =>
-    match Nat/eql(d, 5) | true => ('5', Eq/refl()) | false =>
-    match Nat/eql(d, 6) | true => ('6', Eq/refl()) | false =>
-    match Nat/eql(d, 7) | true => ('7', Eq/refl()) | false =>
-    match Nat/eql(d, 8) | true => ('8', Eq/refl()) | false =>
-    match Nat/eql(d, 9) | true => ('9', Eq/refl()) | false =>
+    match d == 0 | true => ('0', Eq/refl()) | false =>
+    match d == 1 | true => ('1', Eq/refl()) | false =>
+    match d == 2 | true => ('2', Eq/refl()) | false =>
+    match d == 3 | true => ('3', Eq/refl()) | false =>
+    match d == 4 | true => ('4', Eq/refl()) | false =>
+    match d == 5 | true => ('5', Eq/refl()) | false =>
+    match d == 6 | true => ('6', Eq/refl()) | false =>
+    match d == 7 | true => ('7', Eq/refl()) | false =>
+    match d == 8 | true => ('8', Eq/refl()) | false =>
+    match d == 9 | true => ('9', Eq/refl()) | false =>
     ('0', Eq/refl())
     end end end end end end end end end end;
 
@@ -28,69 +28,69 @@ let single_digit(d : Nat) -> Str =
     Str { bytes = Bin/append(\\, g.c), valid = single(g.c, g.ok) };
 
 pub rec to_str(n : Nat) -> Str =
-    match Nat/lt(n, 10)
+    match n < 10
     | true => single_digit(n)
-    | false => Str/concat(to_str(Nat/div(n, 10)), single_digit(Nat/rem(n, 10)))
+    | false => Str/concat(to_str(n / 10), single_digit(n % 10))
     end;
 
 pub let of_str(s : Str) -> Option(Nat) =
-    match Nat/eql(Str/len(s), 0)
+    match Str/len(s) == 0
     | true => Option/none()
     | false =>
         Str/fold(s, Option/some(0), (cp, acc) =>
             let ! = Option/bind;
             let n = acc!;
             match Char/is_digit(cp)
-            | true => Option/some(Nat/add(Nat/mul(n, 10), Nat/sub(cp, '0')))
+            | true => Option/some(n * 10 + (cp - '0'))
             | false => Option/none()
             end)
     end;
 
 pub let pred(a : Nat) -> Nat =
-    sub(a, 1);
+    a - 1;
 
 pub let min(a : Nat, b : Nat) -> Nat =
-    match lt(a, b)
+    match a < b
     | true => a
     | false => b
     end;
 
 pub let max(a : Nat, b : Nat) -> Nat =
-    match lt(a, b)
+    match a < b
     | true => b
     | false => a
     end;
 
 pub let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
-    match gte(c, lo)
-    | true => lte(c, hi)
+    match c >= lo
+    | true => c <= hi
     | false => false
     end;
 
 pub let Lte(a : Nat, b : Nat) -> Prop =
-    match lte(a, b) : Prop
+    match a <= b : Prop
     | true => True
     | false => False
     end;
 
 pub let Lt(a : Nat, b : Nat) -> Prop =
-    match lt(a, b) : Prop
+    match a < b : Prop
     | true => True
     | false => False
     end;
 
 pub let try_lt(a : Nat, b : Nat) -> Option(Lt(a, b)) =
-    match lt(a, b) : (r) => Option(match r : Prop | true => True | false => False end)
+    match a < b : (r) => Option(match r : Prop | true => True | false => False end)
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
-pub let lt_succ(@n : Nat) -> Lt(n, succ(n)) =
+pub let lt_succ(@n : Nat) -> Lt(n, n + 1) =
     True/qed();
 
 pub induct Le : (a : Nat, b : Nat) -> Prop
 | z(@n : Nat) : (0, n)
-| s(@a : Nat, @b : Nat, prev : Le(a, b)) : (succ(a), succ(b))
+| s(@a : Nat, @b : Nat, prev : Le(a, b)) : (a + 1, b + 1)
 end
 
 pub rec le_refl(n : Nat) -> Le(n, n) =
@@ -99,20 +99,20 @@ pub rec le_refl(n : Nat) -> Le(n, n) =
     | pred + 1, ih => Le/s(ih)
     end;
 
-pub rec le_succ_r(@a : Nat, @b : Nat, p : Le(a, b)) -> Le(a, succ(b)) =
-    match p : (w : Le(x, y)) => Le(x, succ(y))
+pub rec le_succ_r(@a : Nat, @b : Nat, p : Le(a, b)) -> Le(a, b + 1) =
+    match p : (w : Le(x, y)) => Le(x, y + 1)
     | z(_) => Le/z()
     | s(_, _, prev) => Le/s(le_succ_r(prev))
     end;
 
-pub rec le_add_r(a : Nat, k : Nat) -> Le(a, add(a, k)) =
-    match k : (m) => Le(a, add(a, m))
+pub rec le_add_r(a : Nat, k : Nat) -> Le(a, a + k) =
+    match k : (m) => Le(a, a + m)
     | 0 => le_refl(a)
     | pred + 1, ih => le_succ_r(ih)
     end;
 
-pub rec le_to_lt_succ(@a : Nat, @b : Nat, p : Le(a, b)) -> Lt(a, succ(b)) =
-    match p : (w : Le(x, y)) => Lt(x, succ(y))
+pub rec le_to_lt_succ(@a : Nat, @b : Nat, p : Le(a, b)) -> Lt(a, b + 1) =
+    match p : (w : Le(x, y)) => Lt(x, y + 1)
     | z(_) => True/qed()
     | s(_, _, prev) => le_to_lt_succ(prev)
     end;
@@ -122,28 +122,28 @@ pub rec le_trans(@a : Nat, @b : Nat, @c : Nat, p : Le(a, b), q : Le(b, c)) -> Le
         match p : (w : Le(x, y)) => (q : Le(y, c)) -> Le(x, c)
         | z(_) => (q) => Le/z()
         | s(a2, b2, prev) => (q) =>
-            match q : (w : Le(u, v)) => Le(succ(a2), v)
+            match q : (w : Le(u, v)) => Le(a2 + 1, v)
             | s(b3, c3, q2) => Le/s(le_trans(prev, q2))
             end
         end;
     go(q);
 
-pub let lt_of_le_succ(@a : Nat, @b : Nat, p : Le(succ(a), b)) -> Lt(a, b) =
-    match p : (w : Le(x, y)) => Lt(pred(x), y)
+pub let lt_of_le_succ(@a : Nat, @b : Nat, p : Le(a + 1, b)) -> Lt(a, b) =
+    match p : (w : Le(x, y)) => Lt(x - 1, y)
     | s(a2, b2, prev) => le_to_lt_succ(prev)
     end;
 
-pub rec le_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Le(a, b)) -> Le(add(n, a), add(n, b)) =
-    match n : (m) => Le(add(m, a), add(m, b))
+pub rec le_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Le(a, b)) -> Le(n + a, n + b) =
+    match n : (m) => Le(m + a, m + b)
     | 0 => p
     | m + 1, ih => Le/s(ih)
     end;
 
 pub let compare(x : Nat, y : Nat) -> Order =
-    match lt(x, y)
+    match x < y
     | true => Order/lt()
     | false =>
-        match eql(x, y)
+        match x == y
         | true => Order/eq()
         | false => Order/gt()
         end

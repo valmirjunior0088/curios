@@ -24,7 +24,7 @@ let errors : Lst({Nat, Error}) =
 
 pub let error_of(status : Nat) -> Error =
     Lst/fold(errors, Error/other(status), (entry, acc) =>
-        match Nat/eql(status, entry.0) : Error
+        match status == entry.0 : Error
         | true => entry.1
         | false => acc
         end);
@@ -50,10 +50,10 @@ end
 
 pub let read(h : Io, n : Nat) -> Read =
     let r = /sys/Io/read(h, n);
-    match Nat/eql(r.status, /sys/Io/Status/ok) : Read
+    match r.status == /sys/Io/Status/ok : Read
     | true => Read/chunk(r.bytes)
     | false =>
-        match Nat/eql(r.status, /sys/Io/Status/eof) : Read
+        match r.status == /sys/Io/Status/eof : Read
         | true => Read/eof()
         | false => Read/error(error_of(r.status))
         end
@@ -61,9 +61,9 @@ pub let read(h : Io, n : Nat) -> Read =
 
 pub rec write(h : Io, b : Bin) -> Result({}, Error) =
     let r = /sys/Io/write(h, b);
-    match Nat/eql(r.status, /sys/Io/Status/ok) : Result({}, Error)
+    match r.status == /sys/Io/Status/ok : Result({}, Error)
     | true =>
-        match Nat/lt(r.written, Bin/len(b)) : Result({}, Error)
+        match r.written < Bin/len(b) : Result({}, Error)
         | true => write(h, Bin/slice(b, r.written, Bin/len(b)))
         | false => Result/success(())
         end
@@ -81,14 +81,14 @@ pub let print_err(s : Str) -> {} =
 pub let input() -> Option(Bin) =
     rec go(acc : Bin) -> Option(Bin) =
         let r = /sys/Io/read(stdin, 1);
-        match Nat/eql(r.status, /sys/Io/Status/ok) : Option(Bin)
+        match r.status == /sys/Io/Status/ok : Option(Bin)
         | false =>
-            match Nat/eql(Bin/len(acc), 0) : Option(Bin)
+            match Bin/len(acc) == 0 : Option(Bin)
             | true => Option/none()
             | false => Option/some(acc)
             end
         | true =>
-            match Nat/eql(Option/unwrap_or(Bin/get(r.bytes, 0), 0), '\n') : Option(Bin)
+            match Option/unwrap_or(Bin/get(r.bytes, 0), 0) == '\n' : Option(Bin)
             | true => Option/some(acc)
             | false => go(Bin/concat(acc, r.bytes))
             end
