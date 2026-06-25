@@ -22,7 +22,7 @@ pub let fold(@A : Type, b : Bin, init : A, f : (Nat, A) -> A) -> A =
             | 0 => (_) => acc
             | kp + 1, ih => (inv2) =>
                 go(kp, i + 1,
-                    f(at(b, i, Eq/subst((x) => Nat/Lt(i, x), inv2, Nat/le_to_lt_succ(Nat/le_add_r(i, kp)))), acc),
+                    f(at(b, i, Eq/subst((x) => Nat/Lt(i, x), inv2, Nat/lte_to_lt_succ(Nat/lte_add_r(i, kp)))), acc),
                     inv2)
             end;
         dispatch(inv);

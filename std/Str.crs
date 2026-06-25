@@ -161,19 +161,19 @@ pub rec bad_uninhabited(@x : Bin, w : Utf8(Scan/bad(), x)) -> False =
     end;
 
 pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(k, lo, hi), t))
-    -> Nat/Le(k, Bin/len(t)) =
+    -> Nat/Lte(k, Bin/len(t)) =
     let on_k =
-        match k : (k) => (w : Utf8(Scan/cont(k, lo, hi), t)) -> Nat/Le(k, Bin/len(t))
-        | 0 => (w) => Nat/Le/z()
+        match k : (k) => (w : Utf8(Scan/cont(k, lo, hi), t)) -> Nat/Lte(k, Bin/len(t))
+        | 0 => (w) => Nat/Lte/z()
         | kp + 1, ih => (w) =>
             let on_w =
-                match w : (w : Utf8(q, y)) => Nat/Le(kp + 1, Bin/len(y))
+                match w : (w : Utf8(q, y)) => Nat/Lte(kp + 1, Bin/len(y))
                 | more(c, st, tt, rest) =>
                     let on_kp =
                         match kp : (kp) =>
                             (rest : Utf8(step(c, Scan/cont(kp + 1, lo, hi)), tt))
-                                -> Nat/Le(kp + 1, Bin/len(tt) + 1)
-                        | 0 => (rest) => Nat/Le/s(Nat/Le/z())
+                                -> Nat/Lte(kp + 1, Bin/len(tt) + 1)
+                        | 0 => (rest) => Nat/Lte/s(Nat/Lte/z())
                         | kpp + 1, ih2 => (rest) =>
                             let on_range =
                                 match Nat/in_range(c, lo, hi) : (r) =>
@@ -181,13 +181,13 @@ pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(k, 
                                         | false => Scan/bad()
                                         | true => Scan/cont(kpp + 1, 0x80, 0xBF)
                                         end, tt))
-                                        -> Nat/Le(kpp + 1, Bin/len(tt))
+                                        -> Nat/Lte(kpp + 1, Bin/len(tt))
                                 | true => (rest) => cont_len(kpp + 1, @0x80, @0xBF, @tt, rest)
                                 | false => (rest) =>
-                                    False/absurd(@Nat/Le(kpp + 1, Bin/len(tt)),
+                                    False/absurd(@Nat/Lte(kpp + 1, Bin/len(tt)),
                                         bad_uninhabited(@tt, rest))
                                 end;
-                            Nat/Le/s(on_range(rest))
+                            Nat/Lte/s(on_range(rest))
                         end;
                     on_kp(rest)
                 end;
@@ -212,15 +212,15 @@ pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(0, 
     end;
 
 pub rec take_conts(b : Bin, off : Nat, remaining : Nat, acc : Nat,
-    bound : Nat/Le(off + remaining, Bin/len(b))) -> {Nat, Nat} =
+    bound : Nat/Lte(off + remaining, Bin/len(b))) -> {Nat, Nat} =
     let go =
         match remaining : (remaining) =>
-            (bound : Nat/Le(off + remaining, Bin/len(b))) -> {Nat, Nat}
+            (bound : Nat/Lte(off + remaining, Bin/len(b))) -> {Nat, Nat}
         | 0 => (bound) => (acc, off)
         | pred + 1, ih => (bound) =>
             take_conts(b, off + 1, pred,
                 acc * 0x40 + (Bin/at(b, off,
-                    Nat/lt_of_le_succ(Nat/le_trans(Nat/Le/s(Nat/le_add_r(off, pred)), bound))) - 0x80),
+                    Nat/lt_of_lte_succ(Nat/lte_trans(Nat/Lte/s(Nat/lte_add_r(off, pred)), bound))) - 0x80),
                 bound)
         end;
     go(bound);
@@ -336,15 +336,15 @@ pub let get(s : Str, i : Nat) -> Option(Nat) =
             end);
     r.1;
 
-rec le_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Le(i + 1, n) =
+rec lte_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Lte(i + 1, n) =
     let on_n =
-        match n : (n) => (p : Nat/Lt(i, n)) -> Nat/Le(i + 1, n)
-        | 0 => (p) => False/absurd(@Nat/Le(i + 1, 0), p)
+        match n : (n) => (p : Nat/Lt(i, n)) -> Nat/Lte(i + 1, n)
+        | 0 => (p) => False/absurd(@Nat/Lte(i + 1, 0), p)
         | np + 1, ihn => (p) =>
             let on_i =
-                match i : (i) => (p : Nat/Lt(i, np + 1)) -> Nat/Le(i + 1, np + 1)
-                | 0 => (p) => Nat/Le/s(Nat/Le/z())
-                | ip + 1, ihi => (p) => Nat/Le/s(le_succ_of_lt(ip, np, p))
+                match i : (i) => (p : Nat/Lt(i, np + 1)) -> Nat/Lte(i + 1, np + 1)
+                | 0 => (p) => Nat/Lte/s(Nat/Lte/z())
+                | ip + 1, ihi => (p) => Nat/Lte/s(lte_succ_of_lt(ip, np, p))
                 end;
             on_i(p)
         end;
@@ -352,27 +352,27 @@ rec le_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Le(i + 1, n) =
 
 pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Nat =
     rec go(sc : Scan, b : Bin, valid : Utf8(sc, b), i : Nat,
-        le : Nat/Le(i + 1, count_w(sc, b))) -> Nat =
+        le : Nat/Lte(i + 1, count_w(sc, b))) -> Nat =
         let on_b =
             match b : (b) =>
-                (valid : Utf8(sc, b), le : Nat/Le(i + 1, count_w(sc, b))) -> Nat
+                (valid : Utf8(sc, b), le : Nat/Lte(i + 1, count_w(sc, b))) -> Nat
             | \\ => (valid, le) => match le : Nat end
             | (h, t), ih => (valid, le) =>
                 let on_sc =
                     match sc : (sc) =>
                         (valid : Utf8(sc, Bin/cons(h, t)),
-                         le : Nat/Le(i + 1, count_w(sc, Bin/cons(h, t)))) -> Nat
+                         le : Nat/Lte(i + 1, count_w(sc, Bin/cons(h, t)))) -> Nat
                     | lead() => (valid, le) =>
                         let on_i =
                             match i : (i) =>
-                                (le : Nat/Le(i + 1,
+                                (le : Nat/Lte(i + 1,
                                     count_w(Scan/lead(), Bin/cons(h, t)))) -> Nat
                             | 0 => (le) => decode_head(h, @t, valid)
                             | pred + 1, ih2 => (le) =>
                                 go(step(h, Scan/lead()), t,
                                     peel_byte(@Scan/lead(), @Bin/cons(h, t), True/qed(), valid), pred,
-                                    (match le : (le : Nat/Le(x, y))
-                                        => Nat/Le(x - 1, y - 1)
+                                    (match le : (le : Nat/Lte(x, y))
+                                        => Nat/Lte(x - 1, y - 1)
                                      | s(a, c, prev) => prev
                                      end))
                             end;
@@ -388,7 +388,7 @@ pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Nat =
             end;
         on_b(valid, le);
     go(Scan/lead(), s.bytes, s.valid, i,
-        le_succ_of_lt(i, count_w(Scan/lead(), s.bytes), ok));
+        lte_succ_of_lt(i, count_w(Scan/lead(), s.bytes), ok));
 
 pub let join(sep : Str, parts : Lst(Str)) -> Str =
     let pa = Lst/to_arr(parts);

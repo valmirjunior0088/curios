@@ -67,12 +67,6 @@ pub let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
     | false => false
     end;
 
-pub let Lte(a : Nat, b : Nat) -> Prop =
-    match a <= b : Prop
-    | true => True
-    | false => False
-    end;
-
 pub let Lt(a : Nat, b : Nat) -> Prop =
     match a < b : Prop
     | true => True
@@ -88,55 +82,55 @@ pub let try_lt(a : Nat, b : Nat) -> Option(Lt(a, b)) =
 pub let lt_succ(@n : Nat) -> Lt(n, n + 1) =
     True/qed();
 
-pub induct Le : (a : Nat, b : Nat) -> Prop
+pub induct Lte : (a : Nat, b : Nat) -> Prop
 | z(@n : Nat) : (0, n)
-| s(@a : Nat, @b : Nat, prev : Le(a, b)) : (a + 1, b + 1)
+| s(@a : Nat, @b : Nat, prev : Lte(a, b)) : (a + 1, b + 1)
 end
 
-pub rec le_refl(n : Nat) -> Le(n, n) =
-    match n : (m) => Le(m, m)
-    | 0 => Le/z()
-    | pred + 1, ih => Le/s(ih)
+pub rec lte_refl(n : Nat) -> Lte(n, n) =
+    match n : (m) => Lte(m, m)
+    | 0 => Lte/z()
+    | pred + 1, ih => Lte/s(ih)
     end;
 
-pub rec le_succ_r(@a : Nat, @b : Nat, p : Le(a, b)) -> Le(a, b + 1) =
-    match p : (w : Le(x, y)) => Le(x, y + 1)
-    | z(_) => Le/z()
-    | s(_, _, prev) => Le/s(le_succ_r(prev))
+pub rec lte_succ_r(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(a, b + 1) =
+    match p : (w : Lte(x, y)) => Lte(x, y + 1)
+    | z(_) => Lte/z()
+    | s(_, _, prev) => Lte/s(lte_succ_r(prev))
     end;
 
-pub rec le_add_r(a : Nat, k : Nat) -> Le(a, a + k) =
-    match k : (m) => Le(a, a + m)
-    | 0 => le_refl(a)
-    | pred + 1, ih => le_succ_r(ih)
+pub rec lte_add_r(a : Nat, k : Nat) -> Lte(a, a + k) =
+    match k : (m) => Lte(a, a + m)
+    | 0 => lte_refl(a)
+    | pred + 1, ih => lte_succ_r(ih)
     end;
 
-pub rec le_to_lt_succ(@a : Nat, @b : Nat, p : Le(a, b)) -> Lt(a, b + 1) =
-    match p : (w : Le(x, y)) => Lt(x, y + 1)
+pub rec lte_to_lt_succ(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lt(a, b + 1) =
+    match p : (w : Lte(x, y)) => Lt(x, y + 1)
     | z(_) => True/qed()
-    | s(_, _, prev) => le_to_lt_succ(prev)
+    | s(_, _, prev) => lte_to_lt_succ(prev)
     end;
 
-pub rec le_trans(@a : Nat, @b : Nat, @c : Nat, p : Le(a, b), q : Le(b, c)) -> Le(a, c) =
+pub rec lte_trans(@a : Nat, @b : Nat, @c : Nat, p : Lte(a, b), q : Lte(b, c)) -> Lte(a, c) =
     let go =
-        match p : (w : Le(x, y)) => (q : Le(y, c)) -> Le(x, c)
-        | z(_) => (q) => Le/z()
+        match p : (w : Lte(x, y)) => (q : Lte(y, c)) -> Lte(x, c)
+        | z(_) => (q) => Lte/z()
         | s(a2, b2, prev) => (q) =>
-            match q : (w : Le(u, v)) => Le(a2 + 1, v)
-            | s(b3, c3, q2) => Le/s(le_trans(prev, q2))
+            match q : (w : Lte(u, v)) => Lte(a2 + 1, v)
+            | s(b3, c3, q2) => Lte/s(lte_trans(prev, q2))
             end
         end;
     go(q);
 
-pub let lt_of_le_succ(@a : Nat, @b : Nat, p : Le(a + 1, b)) -> Lt(a, b) =
-    match p : (w : Le(x, y)) => Lt(x - 1, y)
-    | s(a2, b2, prev) => le_to_lt_succ(prev)
+pub let lt_of_lte_succ(@a : Nat, @b : Nat, p : Lte(a + 1, b)) -> Lt(a, b) =
+    match p : (w : Lte(x, y)) => Lt(x - 1, y)
+    | s(a2, b2, prev) => lte_to_lt_succ(prev)
     end;
 
-pub rec le_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Le(a, b)) -> Le(n + a, n + b) =
-    match n : (m) => Le(m + a, m + b)
+pub rec lte_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(n + a, n + b) =
+    match n : (m) => Lte(m + a, m + b)
     | 0 => p
-    | m + 1, ih => Le/s(ih)
+    | m + 1, ih => Lte/s(ih)
     end;
 
 pub let compare(x : Nat, y : Nat) -> Order =

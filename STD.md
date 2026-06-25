@@ -47,7 +47,7 @@ The natural numbers — unbounded at the type level (an unsigned i31 at runtime)
 | `max(a, b)`   | `(Nat, Nat) -> Nat` | Maximum                              |
 | `in_range(c, lo, hi)` | `(Nat, Nat, Nat) -> Bln` | Whether `lo ≤ c ≤ hi`            |
 | `compare(a, b)` | `(Nat, Nat) -> Order` | Three-way comparison (`lt`/`eq`/`gt`) |
-| `Lte(a, b)`   | `(Nat, Nat) -> Type` | The proposition `a ≤ b` (reflects `lte`: `{}` if it holds, `Void` otherwise) |
+| `Lte(a, b)`   | `(Nat, Nat) -> Type` | The proposition `a ≤ b` as an inductive relation (ctors `Lte/z`, `Lte/s`); the lemmas `lte_refl`/`lte_succ_r`/`lte_add_r`/`lte_trans`/`lte_add_mono_l`/`lte_to_lt_succ`/`lt_of_lte_succ` build and combine its witnesses |
 | `Lt(a, b)`    | `(Nat, Nat) -> Type` | The proposition `a < b` (reflects `lt`) — the in-bounds witness `at` consumes |
 | `try_lt(a, b)` | `(Nat, Nat) -> Option(Lt(a, b))` | Run the `lt` test, returning a proof of `Lt(a, b)` when it holds — the bridge from a runtime check to an `at` index proof |
 

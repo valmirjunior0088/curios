@@ -400,13 +400,13 @@ fn bin_concat_leading_byte_clash_is_rejected() {
 
 #[test]
 fn prop_irrelevance_equates_distinct_proofs() {
-    // Definitional proof irrelevance: `Le` is a strict proposition, so any two
-    // proofs of `Le(a, b)` are convertible — `refl` checks at `Eq(p, q)` even
+    // Definitional proof irrelevance: `Lte` is a strict proposition, so any two
+    // proofs of `Lte(a, b)` are convertible — `refl` checks at `Eq(p, q)` even
     // though `p` and `q` are distinct binders. Without the `Prop` short-circuit
     // in `convert`, `refl : Eq(p, p)` would not check against `Eq(p, q)`.
     let source = r#"
         use /std/{Io, Str, Eq, Nat};
-        let irrelevant(a : Nat, b : Nat, p : Nat/Le(a, b), q : Nat/Le(a, b))
+        let irrelevant(a : Nat, b : Nat, p : Nat/Lte(a, b), q : Nat/Lte(a, b))
             -> Eq(p, q) =
             Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
@@ -444,13 +444,13 @@ fn let_bound_unit_effect_survives_erasure() {
 
 #[test]
 fn large_elimination_of_a_prop_is_rejected() {
-    // The large-elimination guard: `Le` is a multi-constructor proposition, so
+    // The large-elimination guard: `Lte` is a multi-constructor proposition, so
     // matching it into `Nat` (data) would observe which constructor it was,
     // breaking irrelevance — rejected. The permitted cases (empty `False` via
     // `absurd`, singleton `Eq` via `subst`, and prop→prop) are exercised by std.
     let source = r#"
         use /std/{Io, Str, Nat};
-        let bad(a : Nat, b : Nat, p : Nat/Le(a, b)) -> Nat =
+        let bad(a : Nat, b : Nat, p : Nat/Lte(a, b)) -> Nat =
             match p : Nat
             | z(_) => 0
             | s(_, _, _) => 1
@@ -2362,7 +2362,7 @@ fn utf8_decode_lemmas_type_check() {
     let source = r#"
         use /std/{Str, Nat, Io};
         let lemmas = (Str/bad_uninhabited, Str/cont_len, Str/peel_byte, Str/step_lead_lead,
-            Nat/le_trans, Nat/lt_of_le_succ, Nat/le_add_mono_l, Str/count_w, Str/cont0_uninhabited, Str/take_conts, Str/decode_head,
+            Nat/lte_trans, Nat/lt_of_lte_succ, Nat/lte_add_mono_l, Str/count_w, Str/cont0_uninhabited, Str/take_conts, Str/decode_head,
             Str/step_lead_ascii, Str/step_lead_bad);
         Io/print("ok")
         "#;
