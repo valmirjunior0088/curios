@@ -3,7 +3,9 @@ use {
     std::collections::{HashMap, HashSet},
 };
 
-/// Known-tag threading: thread a `Jump` through the `Match` it already decides.
+/// Decided-dispatch threading: thread a `Jump` through the tail it already
+/// decides — a `Match` whose arm the edge picks, or an `Indirect` call whose
+/// callee the edge resolves to a known closure.
 ///
 /// The shape this targets is the join point a constructor-then-eliminate chain
 /// leaves behind once inlining has brought producer and consumer into one body
@@ -69,15 +71,40 @@ use {
 /// of decided joins — `or` nested in `bind` — thread through in successive
 /// iterations and the fixed point exists.
 ///
+/// ## Indirect-call devirtualization
+///
+/// The same per-edge specialization devirtualizes an indirect call. The residue
+/// a closure-returning `match` leaves once its arms are lifted is a shared join
+/// whose tail is `%f(args)` with `%f` a *block parameter* — one of several known
+/// closures, depending on the edge, so [`closure_lifting`](super::closure_lifting)
+/// (which only devirtualizes a callee that traces to a single known
+/// `Data::Clsr`) cannot resolve it:
+///
+/// ```text
+/// a0: Jump(J, [clsr#0])   -- callee known: closure #0
+/// a1: Jump(J, [clsr#1])   -- callee known: closure #1
+/// J(f): Call(Indirect { target: f, .. })
+/// ```
+///
+/// When an edge's argument for `f` is a known `Data::Clsr`, the jump is replaced
+/// by a clone of `J` whose callee parameter aliases that one closure — monomorphic
+/// per edge. The clone keeps its indirect tail; the settle round's copy
+/// propagation collapses the alias and the following `lift_closures` rewrites the
+/// now-single-callee call to a `Direct` one, which single-site inlining then
+/// fuses. The pass itself only moves the edge, exactly as in the match case.
+///
 /// ## What is left alone
 ///
 /// - **Match-arm edges** — an arm's `JumpTarget` could be threaded the same
 ///   way, but the lowerer emits arms with no parameters, so no deciding
 ///   argument ever flows along one today; only `Jump` tails are considered.
-/// - **Call and host resumes** — the resume edge is the call protocol, not a
+/// - **Dynamic callees** — an indirect call whose callee is computed from
+///   runtime data (no `Data::Clsr` flows along the edge) stays indirect: no
+///   decision, no clone.
+/// - **Host and call *resumes*** — the resume edge is the call protocol, not a
 ///   jump.
 /// - **Loops** — see termination above.
-pub fn thread_known_tags(module: &mut Module) {
+pub fn thread_decided_dispatch(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         thread_tree(&mut func.region);
     }
@@ -116,10 +143,23 @@ fn deciding_blocks(region: &Region) -> HashMap<BlockName, Block> {
 
 fn collect_deciding(region: &Region, graph: &JumpGraph, out: &mut HashMap<BlockName, Block>) {
     for (name, block) in &region.blocks {
-        if matches!(block.region.tail, Tail::Match(_)) && !in_jump_cycle(name, graph) {
+        if is_decidable_candidate(block) && !in_jump_cycle(name, graph) {
             out.insert(name.clone(), block.clone());
         }
         collect_deciding(&block.region, graph, out);
+    }
+}
+
+/// A block whose tail an incoming edge can decide: a `Match` (the edge fixes
+/// the operand), or an `Indirect` call whose callee is a block parameter (the
+/// edge fixes the callee). A callee already bound *inside* the block is a known
+/// closure [`closure_lifting`](super::closure_lifting) devirtualizes directly —
+/// only a parameter join needs per-edge specialization.
+fn is_decidable_candidate(block: &Block) -> bool {
+    match &block.region.tail {
+        Tail::Match(_) => true,
+        Tail::Call(CallTarget::Indirect { target, .. }) => block.params.contains(target),
+        _ => false,
     }
 }
 
@@ -182,14 +222,14 @@ fn thread_first(
     let decided = if let Tail::Jump(jump) = &region.tail
         && let Some(block) = candidates.get(&jump.target)
     {
-        decide_edge(block, &jump.params, lits).map(|arm| (block, jump.params.clone(), arm))
+        decide_edge(block, &jump.params, lits).map(|decision| (block, jump.params.clone(), decision))
     } else {
         None
     };
 
-    if let Some((block, args, arm)) = decided {
+    if let Some((block, args, decision)) = decided {
         *counter += 1;
-        splice_decided(region, block, &args, arm, &mangle::thread_suffix(*counter));
+        splice_decided(region, block, &args, decision, &mangle::thread_suffix(*counter));
         return true;
     }
 
@@ -202,12 +242,24 @@ fn thread_first(
     false
 }
 
-/// The arm `block`'s match takes when entered with `args`, if the literal
+/// How an edge decides a candidate block's tail.
+enum Decision {
+    /// A `Match` the edge picks the arm of: splice with the tail set to the arm,
+    /// the untaken arms pruned.
+    Arm(JumpTarget),
+    /// An `Indirect` call whose callee the edge fixes to a known closure: splice
+    /// as-is, leaving the now-monomorphic call for `lift_closures` to devirtualize.
+    Devirtualize,
+}
+
+/// How `block`'s tail is decided when entered with `args`, if the literal
 /// environment determines it. The check is the constant folder's machinery run
 /// against `lits` extended with the parameter bindings: the prelude is chased
-/// through [`simplify`] so a `TplGet` of a known constructor surfaces its tag,
-/// then [`decide_match`] picks the arm.
-fn decide_edge(block: &Block, args: &[ValueName], lits: &Lits) -> Option<JumpTarget> {
+/// through [`simplify`] so a `TplGet` of a known constructor surfaces its tag (or
+/// a callee parameter surfaces its closure), then the tail is read — [`decide_match`]
+/// picks a `Match`'s arm; a known `Data::Clsr` at an `Indirect` callee selects
+/// devirtualization.
+fn decide_edge(block: &Block, args: &[ValueName], lits: &Lits) -> Option<Decision> {
     debug_assert_eq!(
         block.params.len(),
         args.len(),
@@ -242,23 +294,31 @@ fn decide_edge(block: &Block, args: &[ValueName], lits: &Lits) -> Option<JumpTar
         }
     }
 
-    decide_match(&block.region.tail, &env)
+    match &block.region.tail {
+        Tail::Call(CallTarget::Indirect { target, .. }) => {
+            matches!(env.get(target), Some(Data::Clsr(..))).then_some(Decision::Devirtualize)
+        }
+        _ => decide_match(&block.region.tail, &env).map(Decision::Arm),
+    }
 }
 
-/// Splice a clone of `block`, specialized to the decided `arm`, into `host`
-/// (whose tail is the jump being threaded): bind each parameter to its
-/// argument, keep the whole prelude (its traps must survive), replace the match
-/// with the decided jump, prune the arms not taken, and freshen every bound
-/// name with `suffix`.
+/// Splice a clone of `block`, specialized to the `decision`, into `host` (whose
+/// tail is the jump being threaded): bind each parameter to its argument, keep
+/// the whole prelude (its traps must survive), and freshen every bound name with
+/// `suffix`. A decided `Match` has its tail replaced by the taken arm and the
+/// untaken arms pruned; a devirtualized call keeps its indirect tail, now with a
+/// monomorphic (parameter-aliased) callee.
 fn splice_decided(
     host: &mut Region,
     block: &Block,
     args: &[ValueName],
-    arm: JumpTarget,
+    decision: Decision,
     suffix: &str,
 ) {
     let mut clone = block.region.clone();
-    clone.tail = Tail::Jump(arm);
+    if let Decision::Arm(arm) = decision {
+        clone.tail = Tail::Jump(arm);
+    }
     prune_unreachable_blocks(&mut clone);
 
     let mut bound = harvest::bound_values(&block.region);
@@ -450,7 +510,7 @@ mod tests {
                 region: top,
             },
         );
-        thread_known_tags(&mut module);
+        thread_decided_dispatch(&mut module);
         module.funcs().iter().next().unwrap().1.region.clone()
     }
 
@@ -790,5 +850,115 @@ mod tests {
             other => panic!("expected the default arm selected, got {other:?}"),
         }
         assert!(!has_block(a0, "s0@thread#1"));
+    }
+
+    fn indirect(target: &str, args: Vec<ValueName>, resume: &str) -> Tail {
+        Tail::Call(CallTarget::Indirect {
+            target: v(target),
+            params: args,
+            resume: b(resume),
+        })
+    }
+
+    /// The closure-returning-match residue: two arms pass *different* known
+    /// closures into a shared join whose tail calls the joined parameter. Each
+    /// edge threads to a clone whose callee aliases that edge's closure —
+    /// monomorphic, so the lift round that follows in the pipeline can
+    /// devirtualize the indirect call.
+    #[test]
+    fn devirtualizes_each_edge_to_its_known_closure() {
+        let a0 = block(
+            vec![],
+            region(
+                vec![(
+                    v("f0"),
+                    Value::Pure(Data::Clsr(ClsrName::from("c0"), vec![])),
+                )],
+                vec![],
+                jump("J", vec![v("f0")]),
+            ),
+        );
+        let a1 = block(
+            vec![],
+            region(
+                vec![(
+                    v("f1"),
+                    Value::Pure(Data::Clsr(ClsrName::from("c1"), vec![])),
+                )],
+                vec![],
+                jump("J", vec![v("f1")]),
+            ),
+        );
+        let join = block(
+            vec![v("f")],
+            region(vec![], vec![], indirect("f", vec![v("arg")], "rm")),
+        );
+        let top = region(
+            vec![(v("arg"), Value::Pure(Data::Nat(5)))],
+            vec![(b("a0"), a0), (b("a1"), a1), (b("J"), join)],
+            match_tail("c", vec![(0, "a0"), (1, "a1")]),
+        );
+
+        let result = run(top);
+
+        // a0 threads first: it holds a clone of J whose indirect callee aliases
+        // c0's closure (the tail stays a Call::Indirect — only the join split).
+        let a0 = &block_named(&result, "a0").region;
+        match &a0.tail {
+            Tail::Call(CallTarget::Indirect { target, params, resume }) => {
+                assert_eq!(target, &v("f@thread#1"));
+                assert_eq!(params, &vec![v("arg")]);
+                assert_eq!(resume, &b("rm"));
+            }
+            other => panic!("expected the indirect call kept, got {other:?}"),
+        }
+        assert!(a0.values.iter().any(|(name, value)| name == &v("f@thread#1")
+            && matches!(value, Value::Alias(source) if source == &v("f0"))));
+
+        // a1 threads on the next iteration with its own closure and suffix.
+        let a1 = &block_named(&result, "a1").region;
+        match &a1.tail {
+            Tail::Call(CallTarget::Indirect { target, .. }) => {
+                assert_eq!(target, &v("f@thread#2"))
+            }
+            other => panic!("expected the indirect call kept, got {other:?}"),
+        }
+        assert!(a1.values.iter().any(|(name, value)| name == &v("f@thread#2")
+            && matches!(value, Value::Alias(source) if source == &v("f1"))));
+
+        // The original join survives for DCE to reclaim, untouched.
+        assert!(has_block(&result, "J"));
+    }
+
+    #[test]
+    fn leaves_dynamic_callee_indirect() {
+        // The edge passes a *computed* value (not a known closure) for the
+        // callee: no decision, no clone — the indirect call stays as dynamic
+        // dispatch.
+        let a0 = block(
+            vec![],
+            region(
+                vec![(v("f0"), Value::Eval(Code::ArrGet(v("table"), v("i"))))],
+                vec![],
+                jump("J", vec![v("f0")]),
+            ),
+        );
+        let join = block(
+            vec![v("f")],
+            region(vec![], vec![], indirect("f", vec![], "rm")),
+        );
+        let top = region(
+            vec![],
+            vec![(b("a0"), a0), (b("J"), join)],
+            match_tail("c", vec![(0, "a0")]),
+        );
+
+        let result = run(top);
+
+        let a0 = &block_named(&result, "a0").region;
+        match &a0.tail {
+            Tail::Jump(target) => assert_eq!(target.target, b("J")),
+            other => panic!("expected the edge untouched, got {other:?}"),
+        }
     }
 }

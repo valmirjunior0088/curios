@@ -31,8 +31,10 @@
 //!   multi-site rule dissolves small callees (e.g. the primitive wrappers)
 //!   at every site.
 //! - [`jump_threading`] — merges single-predecessor blocks into their predecessor.
-//! - [`tag_threading`] — threads a jump through the match its known-tag
-//!   argument already decides, specializing the join block per edge.
+//! - [`tag_threading`] — threads a jump through the tail its known argument
+//!   already decides, specializing the join block per edge: a `Match` whose arm
+//!   the edge picks, or an `Indirect` call whose callee the edge fixes to a
+//!   known closure (devirtualized by the lift round that follows).
 //! - [`dead_argument_elimination`] — drops unused function parameters and closure
 //!   captures, finishing type erasure.
 //! - [`dead_code_elimination`] — drops unused bindings and unreachable
@@ -100,7 +102,7 @@ pub use dead_code_elimination::*;
 mod map_simplification;
 pub use map_simplification::*;
 
-use super::cont::*;
+use {super::cont::*, crate::Entropy};
 
 /// Run the optimization pipeline and return the rewritten module.
 ///
@@ -157,6 +159,11 @@ use super::cont::*;
 ///    it sees everything — reclaims the unreferenced bindings, aggregates,
 ///    closures, and untaken arms.
 pub fn optimize(mut module: Module) -> Module {
+    // One gensym shared across every inlining pass below, so the `@{callee}#{n}`
+    // freshening suffix stays unique even when a re-lifted closure is inlined by
+    // more than one pass (see `inline_calls_with`).
+    let entropy = Entropy::new();
+
     // 1. Settle identities.
     propagate_copies(&mut module);
     fold_constants(&mut module);
@@ -169,13 +176,13 @@ pub fn optimize(mut module: Module) -> Module {
 
     // 3. Dissolve call boundaries.
     convert_tail_recursion(&mut module);
-    inline_calls(&mut module);
+    inline_calls_with(&mut module, &entropy);
     thread_jumps(&mut module);
     propagate_copies(&mut module);
     fold_constants(&mut module);
 
-    // 4. Thread decided matches.
-    thread_known_tags(&mut module);
+    // 4. Thread decided dispatch.
+    thread_decided_dispatch(&mut module);
     thread_jumps(&mut module);
     propagate_copies(&mut module);
     fold_constants(&mut module);
@@ -188,12 +195,21 @@ pub fn optimize(mut module: Module) -> Module {
     // 6. Shed recursion residue, then dissolve residual wrappers.
     eliminate_dead_arguments(&mut module);
     eliminate_dead_code(&mut module);
-    inline_calls(&mut module);
+    inline_calls_with(&mut module, &entropy);
     propagate_copies(&mut module);
     fold_constants(&mut module);
     simplify_maps(&mut module);
-    thread_known_tags(&mut module);
+    thread_decided_dispatch(&mut module);
     thread_jumps(&mut module);
+    propagate_copies(&mut module);
+    // Threading monomorphized any closure-returning-match join (the erased
+    // proof-convoy residue): the callee is now a single known closure per edge,
+    // so a lift round rewrites the indirect call to a direct one, a dead-code
+    // sweep reclaims the orphaned closure twins it leaves, and the inline fuses
+    // the now-direct-called arm.
+    lift_closures(&mut module);
+    eliminate_dead_code(&mut module);
+    inline_calls_with(&mut module, &entropy);
     propagate_copies(&mut module);
     fold_constants(&mut module);
 
