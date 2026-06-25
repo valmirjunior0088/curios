@@ -34,10 +34,11 @@ pub let find_index(b : Bin, pred : (Nat) -> Bln) -> Option(Nat) =
             match acc.1
             | some(_) => acc
             | none() =>
-                match pred(byte)
-                | true => (acc.0, Option/some(acc.0))
-                | false => (acc.0 + 1, Option/none())
-                end
+                (acc.0 + 1,
+                    match pred(byte)
+                    | true => Option/some(acc.0)
+                    | false => Option/none()
+                    end)
             end);
     r.1;
 

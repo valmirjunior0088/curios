@@ -313,10 +313,11 @@ pub let find_index(s : Str, pred : (Nat) -> Bln) -> Option(Nat) =
             match acc.1
             | some(_) => acc
             | none() =>
-                match pred(codepoint)
-                | true => (acc.0 + 1, Option/some(acc.0))
-                | false => (acc.0 + 1, Option/none())
-                end
+                (acc.0 + 1,
+                    match pred(codepoint)
+                    | true => Option/some(acc.0)
+                    | false => Option/none()
+                    end)
             end);
     r.1;
 
