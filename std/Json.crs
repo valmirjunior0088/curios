@@ -191,8 +191,17 @@ let parse_raw_str : Parse(Str) =
 let parse_str_value : Parse(Json) =
     Parse/map((s) => Json/str(s), parse_raw_str);
 
+let is_ws(byte : Nat) -> Bln =
+    match byte
+    | ' ' => true
+    | '\t' => true
+    | '\n' => true
+    | '\r' => true
+    | _ => false
+    end;
+
 let ws : Parse({}) =
-    Parse/map((_) => (), Parse/take_while(Char/is_whitespace));
+    Parse/map((_) => (), Parse/take_while(is_ws));
 
 let symbol(b : Nat) -> Parse(Nat) =
     let ! = Parse/bind;
@@ -200,21 +209,22 @@ let symbol(b : Nat) -> Parse(Nat) =
     Parse/take_byte(b);
 
 pub rec decode : Parse(Json) = (input, pos) =>
-    match Nat/try_lt(pos, Bin/len(input))
-    | none() => Result/failure("unexpected end of input")
-    | some(ok) =>
-        match Bin/at(input, pos, ok)
-        | ' ' => decode(input, pos + 1)
-        | '\t' => decode(input, pos + 1)
-        | '\n' => decode(input, pos + 1)
-        | '\r' => decode(input, pos + 1)
-        | 'n' => parse_null(input, pos)
-        | 't' => parse_true_val(input, pos)
-        | 'f' => parse_false_val(input, pos)
-        | '"' => parse_str_value(input, pos)
-        | '[' => parse_arr(input, pos)
-        | '{' => parse_obj(input, pos)
-        | _ => parse_num(input, pos)
+    match ws(input, pos)
+    | failure(msg) => Result/failure(msg)
+    | success(skipped) =>
+        let start = skipped.0;
+        match Nat/try_lt(start, Bin/len(input))
+        | none() => Result/failure("unexpected end of input")
+        | some(ok) =>
+            match Bin/at(input, start, ok)
+            | 'n' => parse_null(input, start)
+            | 't' => parse_true_val(input, start)
+            | 'f' => parse_false_val(input, start)
+            | '"' => parse_str_value(input, start)
+            | '[' => parse_arr(input, start)
+            | '{' => parse_obj(input, start)
+            | _ => parse_num(input, start)
+            end
         end
     end
 and parse_arr : Parse(Json) =
