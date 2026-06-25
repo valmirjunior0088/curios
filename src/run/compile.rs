@@ -144,14 +144,20 @@ where
 {
     let (module, core_type) = elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
 
-    // No reachability prune here: the whole elaborated module (the entire
-    // `sys`/`syn`/`std` prelude included) is erased and lowered. Keeping the
-    // prelude unpruned means it is fully type-checked on every compile — std
-    // bugs surface instead of hiding behind an unreached path — and
-    // `optm::dead_code_elimination` is what drops everything unreachable from the
-    // entrypoint downstream, so the emitted binary stays small.
-    let ersd_module = core::erase_module(&mut core::Context::new(timeout), &module, &core_type)
+    // The whole elaborated module (the entire `sys`/`syn`/`std` prelude included)
+    // is erased: there is no source-level prune, so std is type-checked in full on
+    // every compile and its bugs surface instead of hiding behind an unreached
+    // path.
+    let mut ersd_module = core::erase_module(&mut core::Context::new(timeout), &module, &core_type)
         .map_err(|error| error.format_with(&module))?;
+
+    // *After* erase has type-checked everything, drop the items the entrypoint
+    // cannot reach, so only the program's actual slice is lowered. This keeps
+    // `to_cont` from eagerly initializing the unused prelude — chiefly the
+    // `Parse`/`Json`/`Http` combinator CAFs — in `main`'s entry region, a closure
+    // web the optimizer would otherwise drag through lifting, specialization, and
+    // inlining on every compile (see `ersd::prune_unreachable`).
+    ersd::prune_unreachable(&mut ersd_module);
 
     observe(Stage::Ersd(&ersd_module));
 

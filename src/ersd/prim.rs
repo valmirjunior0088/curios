@@ -132,19 +132,30 @@ pub enum Prim {
 impl Prim {
     /// Free names of this primitive's operands (see [`Term::free_names`]).
     pub fn free_names(&self) -> BTreeSet<String> {
+        self.operands().into_iter().flat_map(Term::free_names).collect()
+    }
+
+    /// The operand terms this primitive evaluates.
+    pub fn operands(&self) -> Vec<&Term> {
         match self {
-            Prim::Pure(p) => p.free_names(),
-            Prim::Host(h) => h.free_names(),
-            Prim::Cell(c) => c.free_names(),
+            Prim::Pure(p) => p.operands(),
+            Prim::Host(h) => h.operands(),
+            Prim::Cell(c) => c.operands(),
         }
+    }
+
+    /// Whether evaluating this primitive performs an observable action — a host
+    /// effect or a cell operation — rather than a pure computation.
+    pub fn is_effectful(&self) -> bool {
+        matches!(self, Prim::Host(_) | Prim::Cell(_))
     }
 }
 
 impl PurePrim {
-    fn free_names(&self) -> BTreeSet<String> {
+    fn operands(&self) -> Vec<&Term> {
         use PurePrim::*;
 
-        let operands: Vec<&Term> = match self {
+        match self {
             Nat(_) | Int(_) | Flt(_) | Bin(_) | Io(_) => vec![],
             NatToInt(a) | NatToFlt(a) | IntToNat(a) | IntToFlt(a) | FltToNat(a) | FltToLeBin(a)
             | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a) | FltFloor(a) | FltCeil(a)
@@ -204,17 +215,15 @@ impl PurePrim {
             | ArrMap(a, b) => vec![a, b],
             BinSlice(a, b, c) | ArrSlice(a, b, c) => vec![a, b, c],
             BinConcat(operands) | ArrConcat(operands) | Arr(operands) => operands.iter().collect(),
-        };
-
-        operands.into_iter().flat_map(|t| t.free_names()).collect()
+        }
     }
 }
 
 impl HostPrim {
-    fn free_names(&self) -> BTreeSet<String> {
+    fn operands(&self) -> Vec<&Term> {
         use HostPrim::*;
 
-        let operands: Vec<&Term> = match self {
+        match self {
             IoClockWall | IoClockMono | IoArgs => vec![],
             IoAccept(a) | IoResolve(a) | IoSocket(a) | IoClose(a) | IoRandom(a) | IoEnv(a)
             | IoExit(a) => vec![a],
@@ -233,19 +242,15 @@ impl HostPrim {
             | IoSetSendTimeout(a, b)
             | IoSetReuseaddr(a, b) => vec![a, b],
             IoPoll(a, b, c) => vec![a, b, c],
-        };
-
-        operands.into_iter().flat_map(|t| t.free_names()).collect()
+        }
     }
 }
 
 impl CellPrim {
-    fn free_names(&self) -> BTreeSet<String> {
-        let operands: Vec<&Term> = match self {
+    fn operands(&self) -> Vec<&Term> {
+        match self {
             CellPrim::New(a) | CellPrim::Get(a) => vec![a],
             CellPrim::Set(a, b) => vec![a, b],
-        };
-
-        operands.into_iter().flat_map(|t| t.free_names()).collect()
+        }
     }
 }
