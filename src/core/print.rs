@@ -602,93 +602,33 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         ]),
         Prim::IoType => pure("Io"),
         Prim::Io(token) => pure(format!("Io({token})")),
-        Prim::IoRead(handle, count) => flat([
-            pure("Io.read "),
-            print_term(handle, depth),
-            pure(" "),
-            print_term(count, depth),
-        ]),
-        Prim::IoWrite(handle, bytes) => flat([
-            pure("Io.write "),
-            print_term(handle, depth),
-            pure(" "),
-            print_term(bytes, depth),
-        ]),
-        Prim::IoOpen(path, mode) => flat([
-            pure("Io.open "),
-            print_term(path, depth),
-            pure(" "),
-            print_term(mode, depth),
-        ]),
-        Prim::IoLookup(host, port) => flat([
-            pure("Io.lookup "),
-            print_term(host, depth),
-            pure(" "),
-            print_term(port, depth),
-        ]),
-        Prim::IoResolve(handle) => flat([pure("Io.resolve "), print_term(handle, depth)]),
-        Prim::IoSocket(addr) => flat([pure("Io.socket "), print_term(addr, depth)]),
-        Prim::IoBind(handle, addr) => flat([
-            pure("Io.bind "),
-            print_term(handle, depth),
-            pure(" "),
-            print_term(addr, depth),
-        ]),
-        Prim::IoConnect(handle, addr) => flat([
-            pure("Io.connect "),
-            print_term(handle, depth),
-            pure(" "),
-            print_term(addr, depth),
-        ]),
-        Prim::IoListen(handle, backlog) => flat([
-            pure("Io.listen "),
-            print_term(handle, depth),
-            pure(" "),
-            print_term(backlog, depth),
-        ]),
-        Prim::IoAccept(handle) => flat([pure("Io.accept "), print_term(handle, depth)]),
-        Prim::IoStartTls(handle, sni) => flat([
-            pure("Io.start_tls "),
-            print_term(handle, depth),
-            pure(" "),
-            print_term(sni, depth),
-        ]),
-        Prim::IoTlsServerConfig(cert, key) => flat([
-            pure("Io.tls_server_config "),
-            print_term(cert, depth),
-            pure(" "),
-            print_term(key, depth),
-        ]),
-        Prim::IoStartTlsServer(handle, cfg) => flat([
-            pure("Io.start_tls_server "),
-            print_term(handle, depth),
-            pure(" "),
-            print_term(cfg, depth),
-        ]),
-        Prim::IoSetNonblocking(handle, on) => flat([
-            pure("Io.set_nonblocking "),
-            print_term(handle, depth),
-            pure(" "),
-            print_term(on, depth),
-        ]),
-        Prim::IoSetRecvTimeout(handle, ms) => flat([
-            pure("Io.set_recv_timeout "),
-            print_term(handle, depth),
-            pure(" "),
-            print_term(ms, depth),
-        ]),
-        Prim::IoSetSendTimeout(handle, ms) => flat([
-            pure("Io.set_send_timeout "),
-            print_term(handle, depth),
-            pure(" "),
-            print_term(ms, depth),
-        ]),
-        Prim::IoSetReuseaddr(handle, on) => flat([
-            pure("Io.set_reuseaddr "),
-            print_term(handle, depth),
-            pure(" "),
-            print_term(on, depth),
-        ]),
+        Prim::IoRead(handle, count) => print_binary("Io.read ", handle, count, depth),
+        Prim::IoWrite(handle, bytes) => print_binary("Io.write ", handle, bytes, depth),
+        Prim::IoOpen(path, mode) => print_binary("Io.open ", path, mode, depth),
+        Prim::IoLookup(host, port) => print_binary("Io.lookup ", host, port, depth),
+        Prim::IoResolve(handle) => print_unary("Io.resolve ", handle, depth),
+        Prim::IoSocket(addr) => print_unary("Io.socket ", addr, depth),
+        Prim::IoBind(handle, addr) => print_binary("Io.bind ", handle, addr, depth),
+        Prim::IoConnect(handle, addr) => print_binary("Io.connect ", handle, addr, depth),
+        Prim::IoListen(handle, backlog) => print_binary("Io.listen ", handle, backlog, depth),
+        Prim::IoAccept(handle) => print_unary("Io.accept ", handle, depth),
+        Prim::IoStartTls(handle, sni) => print_binary("Io.start_tls ", handle, sni, depth),
+        Prim::IoTlsServerConfig(cert, key) => {
+            print_binary("Io.tls_server_config ", cert, key, depth)
+        }
+        Prim::IoStartTlsServer(handle, cfg) => {
+            print_binary("Io.start_tls_server ", handle, cfg, depth)
+        }
+        Prim::IoSetNonblocking(handle, on) => {
+            print_binary("Io.set_nonblocking ", handle, on, depth)
+        }
+        Prim::IoSetRecvTimeout(handle, ms) => {
+            print_binary("Io.set_recv_timeout ", handle, ms, depth)
+        }
+        Prim::IoSetSendTimeout(handle, ms) => {
+            print_binary("Io.set_send_timeout ", handle, ms, depth)
+        }
+        Prim::IoSetReuseaddr(handle, on) => print_binary("Io.set_reuseaddr ", handle, on, depth),
         Prim::IoPoll(handles, events, timeout) => flat([
             pure("Io.poll "),
             print_term(handles, depth),
@@ -697,25 +637,15 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(timeout, depth),
         ]),
-        Prim::IoClose(handle) => flat([pure("Io.close "), print_term(handle, depth)]),
+        Prim::IoClose(handle) => print_unary("Io.close ", handle, depth),
         Prim::IoClockWall => pure("Io.clock_wall"),
         Prim::IoClockMono => pure("Io.clock_mono"),
-        Prim::IoRandom(count) => flat([pure("Io.random "), print_term(count, depth)]),
+        Prim::IoRandom(count) => print_unary("Io.random ", count, depth),
         Prim::IoArgs => pure("Io.args"),
-        Prim::IoEnv(name) => flat([pure("Io.env "), print_term(name, depth)]),
-        Prim::IoExit(type_, code) => flat([
-            pure("Io.exit "),
-            print_term(type_, depth),
-            pure(" "),
-            print_term(code, depth),
-        ]),
+        Prim::IoEnv(name) => print_unary("Io.env ", name, depth),
+        Prim::IoExit(type_, code) => print_binary("Io.exit ", type_, code, depth),
         Prim::CellType(elem) => print_unary("Cell ", elem, depth),
-        Prim::Cell(type_, init) => flat([
-            pure("Cell.new "),
-            print_term(type_, depth),
-            pure(" "),
-            print_term(init, depth),
-        ]),
+        Prim::Cell(type_, init) => print_binary("Cell.new ", type_, init, depth),
         Prim::CellSet(type_, cell, value) => flat([
             pure("Cell.set "),
             print_term(type_, depth),
@@ -724,12 +654,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(value, depth),
         ]),
-        Prim::CellGet(type_, cell) => flat([
-            pure("Cell.get "),
-            print_term(type_, depth),
-            pure(" "),
-            print_term(cell, depth),
-        ]),
+        Prim::CellGet(type_, cell) => print_binary("Cell.get ", type_, cell, depth),
     }
 }
 
@@ -754,9 +679,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                     Telescope::Done(body) => *body,
                     Telescope::Cons(ty, rest) => {
                         let raw = rest.first_label();
-                        let label = raw
-                            .map(str::to_string)
-                            .unwrap_or_else(|| label_at(depth + idx));
+                        let label = label_or(raw, depth + idx);
                         // Plicity marks the name (`@x` = implicit).
                         let mark = match plicities.get(idx) {
                             Some(Plicity::Implicit) => "@",
