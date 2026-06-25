@@ -286,12 +286,14 @@ pub let block_on(@A : Type, root : Task(A)) -> A =
                 end
             end
         end;
+    let drain_all = () =>
+        let _ = drain_jobs(Cell/get(runq));
+        let _ = drain_parked(Cell/get(blocked));
+        drain_slots(Cell/get(parked));
     rec drive() -> A =
         match Cell/get(result) : A
         | some(a) =>
-            let _ = drain_jobs(Cell/get(runq));
-            let _ = drain_parked(Cell/get(blocked));
-            let _ = drain_slots(Cell/get(parked));
+            let _ = drain_all();
             a
         | none() =>
             match Cell/get(runq) : A
@@ -308,9 +310,7 @@ pub let block_on(@A : Type, root : Task(A)) -> A =
                     let _ = Cell/set(blocked, split.1);
                     drive()
                 | nil() =>
-                    let _ = drain_jobs(Cell/get(runq));
-                    let _ = drain_parked(Cell/get(blocked));
-                    let _ = drain_slots(Cell/get(parked));
+                    let _ = drain_all();
                     /sys/Io/exit(@A, 1)
                 end
             end
