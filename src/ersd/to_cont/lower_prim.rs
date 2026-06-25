@@ -336,6 +336,9 @@ pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) ->
         ersd::PurePrim::FltDiv(left, right) => {
             lower_pure_binary_code(work, left, right, frame, cont::Code::FltDiv)
         }
+        ersd::PurePrim::FltRem(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, cont::Code::FltRem)
+        }
         ersd::PurePrim::FltEql(left, right) => {
             lower_pure_binary_code(work, left, right, frame, cont::Code::FltEql)
         }
@@ -1018,6 +1021,9 @@ fn lower_value_pure_prim<'b>(
         }
         ersd::PurePrim::FltDiv(left, right) => {
             lower_binary_code(work, left, right, frame, cont, cont::Code::FltDiv)
+        }
+        ersd::PurePrim::FltRem(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, cont::Code::FltRem)
         }
         ersd::PurePrim::FltEql(left, right) => {
             lower_binary_code(work, left, right, frame, cont, cont::Code::FltEql)

@@ -68,6 +68,7 @@ pub enum Code {
     FltSub(ValueName, ValueName),
     FltMul(ValueName, ValueName),
     FltDiv(ValueName, ValueName),
+    FltRem(ValueName, ValueName),
     FltEql(ValueName, ValueName),
     FltNeq(ValueName, ValueName),
     FltLt(ValueName, ValueName),

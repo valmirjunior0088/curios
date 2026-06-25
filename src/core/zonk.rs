@@ -440,6 +440,7 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::BlnOr(a, b) => Prim::BlnOr(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::BlnXor(a, b) => Prim::BlnXor(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::BlnEql(a, b) => Prim::BlnEql(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::BlnNeq(a, b) => Prim::BlnNeq(zonk_term(context, a)?, zonk_term(context, b)?),
 
         Prim::IntEql(a, b) => Prim::IntEql(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IntNeq(a, b) => Prim::IntNeq(zonk_term(context, a)?, zonk_term(context, b)?),
@@ -462,6 +463,7 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::FltSub(a, b) => Prim::FltSub(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::FltMul(a, b) => Prim::FltMul(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::FltDiv(a, b) => Prim::FltDiv(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltRem(a, b) => Prim::FltRem(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::FltEql(a, b) => Prim::FltEql(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::FltNeq(a, b) => Prim::FltNeq(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::FltLt(a, b) => Prim::FltLt(zonk_term(context, a)?, zonk_term(context, b)?),

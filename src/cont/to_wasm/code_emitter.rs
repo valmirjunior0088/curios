@@ -904,6 +904,22 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 wasm::Instr::F32Div,
                 WrapAs::Flt,
             ),
+            // WebAssembly has no `f32.rem`, so expand the C `fmod` definition
+            // `x - trunc(x / y) * y` inline (`x`/`y` are locals, loaded twice).
+            cont::Code::FltRem(left, right) => {
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Div);
+                self.emit_instr(wasm::Instr::F32Trunc);
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
+                self.emit_instr(wasm::Instr::F32Mul);
+                self.emit_instr(wasm::Instr::F32Sub);
+                self.emit_wrap(WrapAs::Flt);
+                self.emit_instr(wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             cont::Code::FltEql(left, right) => self.emit_binary_op(
                 &result_local,
                 left,

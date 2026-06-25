@@ -807,6 +807,7 @@ impl NumOp {
             (NumOp::Div, Prim::FltType) => Prim::FltDiv,
             (NumOp::Rem, Prim::NatType) => Prim::NatRem,
             (NumOp::Rem, Prim::IntType) => Prim::IntRem,
+            (NumOp::Rem, Prim::FltType) => Prim::FltRem,
             (NumOp::Eql, Prim::NatType) => Prim::NatEql,
             (NumOp::Eql, Prim::IntType) => Prim::IntEql,
             (NumOp::Eql, Prim::FltType) => Prim::FltEql,
@@ -814,6 +815,7 @@ impl NumOp {
             (NumOp::Neq, Prim::NatType) => Prim::NatNeq,
             (NumOp::Neq, Prim::IntType) => Prim::IntNeq,
             (NumOp::Neq, Prim::FltType) => Prim::FltNeq,
+            (NumOp::Neq, Prim::BlnType) => Prim::BlnNeq,
             (NumOp::Lt, Prim::NatType) => Prim::NatLt,
             (NumOp::Lt, Prim::IntType) => Prim::IntLt,
             (NumOp::Lt, Prim::FltType) => Prim::FltLt,
@@ -1842,6 +1844,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::BlnOr(a, b)
         | Prim::BlnXor(a, b)
         | Prim::BlnEql(a, b)
+        | Prim::BlnNeq(a, b)
         | Prim::IntEql(a, b)
         | Prim::IntNeq(a, b)
         | Prim::IntAdd(a, b)
@@ -1862,6 +1865,7 @@ fn prim_reach(prim: &Prim) -> usize {
         | Prim::FltSub(a, b)
         | Prim::FltMul(a, b)
         | Prim::FltDiv(a, b)
+        | Prim::FltRem(a, b)
         | Prim::FltEql(a, b)
         | Prim::FltNeq(a, b)
         | Prim::FltLt(a, b)
@@ -1974,6 +1978,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::BlnOr(a, b)
         | Prim::BlnXor(a, b)
         | Prim::BlnEql(a, b)
+        | Prim::BlnNeq(a, b)
         | Prim::IntEql(a, b)
         | Prim::IntNeq(a, b)
         | Prim::IntAdd(a, b)
@@ -1994,6 +1999,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::FltSub(a, b)
         | Prim::FltMul(a, b)
         | Prim::FltDiv(a, b)
+        | Prim::FltRem(a, b)
         | Prim::FltEql(a, b)
         | Prim::FltNeq(a, b)
         | Prim::FltLt(a, b)
@@ -2131,6 +2137,7 @@ fn prim_construction_names(prim: &Prim, names: &mut BTreeSet<String>) {
         | Prim::BlnOr(a, b)
         | Prim::BlnXor(a, b)
         | Prim::BlnEql(a, b)
+        | Prim::BlnNeq(a, b)
         | Prim::IntEql(a, b)
         | Prim::IntNeq(a, b)
         | Prim::IntAdd(a, b)
@@ -2151,6 +2158,7 @@ fn prim_construction_names(prim: &Prim, names: &mut BTreeSet<String>) {
         | Prim::FltSub(a, b)
         | Prim::FltMul(a, b)
         | Prim::FltDiv(a, b)
+        | Prim::FltRem(a, b)
         | Prim::FltEql(a, b)
         | Prim::FltNeq(a, b)
         | Prim::FltLt(a, b)
@@ -2271,6 +2279,7 @@ where
         Prim::BlnOr(l, r) => traverse_binary(l, r, visit, Prim::BlnOr),
         Prim::BlnXor(l, r) => traverse_binary(l, r, visit, Prim::BlnXor),
         Prim::BlnEql(l, r) => traverse_binary(l, r, visit, Prim::BlnEql),
+        Prim::BlnNeq(l, r) => traverse_binary(l, r, visit, Prim::BlnNeq),
         Prim::IntType => Prim::IntType,
         Prim::Int(value) => Prim::Int(value.clone()),
         Prim::IntEql(l, r) => traverse_binary(l, r, visit, Prim::IntEql),
@@ -2295,6 +2304,7 @@ where
         Prim::FltSub(l, r) => traverse_binary(l, r, visit, Prim::FltSub),
         Prim::FltMul(l, r) => traverse_binary(l, r, visit, Prim::FltMul),
         Prim::FltDiv(l, r) => traverse_binary(l, r, visit, Prim::FltDiv),
+        Prim::FltRem(l, r) => traverse_binary(l, r, visit, Prim::FltRem),
         Prim::FltEql(l, r) => traverse_binary(l, r, visit, Prim::FltEql),
         Prim::FltNeq(l, r) => traverse_binary(l, r, visit, Prim::FltNeq),
         Prim::FltLt(l, r) => traverse_binary(l, r, visit, Prim::FltLt),

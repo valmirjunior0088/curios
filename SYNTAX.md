@@ -269,8 +269,8 @@ The operators, from loosest to tightest binding (all left-associative):
 
 Each operator is **overloaded** and resolves to a concrete primitive from the operand type, with no implicit coercion between types:
 
-- `+ - * /` work on `Nat`, `Int`, and `Flt`; `%` on `Nat` and `Int` (there is no float remainder).
-- `< > <= >=` and `!=` work on `Nat`, `Int`, and `Flt`; `==` additionally on `Bln`.
+- `+ - * / %` work on `Nat`, `Int`, and `Flt`. `Flt`'s `%` is `fmod` (`x - trunc(x/y)·y`, the sign of the dividend).
+- `< > <= >=` work on `Nat`, `Int`, and `Flt`; `==` and `!=` additionally on `Bln`.
 - `&&` and `||` work on `Bln`. (Bitwise operations remain named functions — `Nat/and`, `Int/shl`, … .)
 
 The two operands must share one type. Resolution takes that type from a typed operand, or from the expected type for the arithmetic operators, falling back to the literal default (below) when nothing else pins it. Applying an operator at a type it has no primitive for — `flt % flt`, `bln != bln` — is a compile-time error.

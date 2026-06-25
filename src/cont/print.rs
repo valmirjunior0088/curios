@@ -127,6 +127,7 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::FltSub(l, r) => print_binary("Flt.sub", l, r),
         Code::FltMul(l, r) => print_binary("Flt.mul", l, r),
         Code::FltDiv(l, r) => print_binary("Flt.div", l, r),
+        Code::FltRem(l, r) => print_binary("Flt.rem", l, r),
         Code::FltEql(l, r) => print_binary("Flt.eql", l, r),
         Code::FltNeq(l, r) => print_binary("Flt.neq", l, r),
         Code::FltLt(l, r) => print_binary("Flt.lt", l, r),

@@ -94,6 +94,7 @@ fn print_pure_prim<'a>(prim: &'a PurePrim) -> Printer<'a> {
         PurePrim::FltSub(l, r) => print_binary("Flt.sub", l, r),
         PurePrim::FltMul(l, r) => print_binary("Flt.mul", l, r),
         PurePrim::FltDiv(l, r) => print_binary("Flt.div", l, r),
+        PurePrim::FltRem(l, r) => print_binary("Flt.rem", l, r),
         PurePrim::FltEql(l, r) => print_binary("Flt.eql", l, r),
         PurePrim::FltNeq(l, r) => print_binary("Flt.neq", l, r),
         PurePrim::FltLt(l, r) => print_binary("Flt.lt", l, r),

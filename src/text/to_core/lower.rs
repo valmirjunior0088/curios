@@ -1588,6 +1588,7 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::BlnOr(left, right) => core::Prim::BlnOr(self.term(left)?, self.term(right)?),
             Prim::BlnXor(left, right) => core::Prim::BlnXor(self.term(left)?, self.term(right)?),
             Prim::BlnEql(left, right) => core::Prim::BlnEql(self.term(left)?, self.term(right)?),
+            Prim::BlnNeq(left, right) => core::Prim::BlnNeq(self.term(left)?, self.term(right)?),
             Prim::NatType => core::Prim::NatType,
             Prim::Nat(Nat::Zero) => core::Prim::Nat(core::Nat::Zero),
             Prim::Nat(Nat::Succ(NatLiteral::Number(spine, _), inner)) => {
@@ -1637,6 +1638,7 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::FltSub(left, right) => core::Prim::flt_sub(self.term(left)?, self.term(right)?),
             Prim::FltMul(left, right) => core::Prim::flt_mul(self.term(left)?, self.term(right)?),
             Prim::FltDiv(left, right) => core::Prim::flt_div(self.term(left)?, self.term(right)?),
+            Prim::FltRem(left, right) => core::Prim::FltRem(self.term(left)?, self.term(right)?),
             Prim::FltEql(left, right) => core::Prim::flt_eql(self.term(left)?, self.term(right)?),
             Prim::FltNeq(left, right) => core::Prim::flt_neq(self.term(left)?, self.term(right)?),
             Prim::FltLt(left, right) => core::Prim::flt_lt(self.term(left)?, self.term(right)?),

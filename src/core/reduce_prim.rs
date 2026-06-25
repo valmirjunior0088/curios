@@ -382,6 +382,9 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::BlnEql(left, right) => {
             reduce_bln_binary(context, left, right, |l, r| l == r, Prim::BlnEql)
         }
+        Prim::BlnNeq(left, right) => {
+            reduce_bln_binary(context, left, right, |l, r| l != r, Prim::BlnNeq)
+        }
         Prim::NatType => Ok(Subterm::Prim(Prim::NatType)),
         Prim::Nat(Nat::Zero) => Ok(Subterm::Prim(Prim::Nat(Nat::Zero))),
         Prim::Nat(Nat::Succ(spine, inner)) => {
@@ -744,6 +747,15 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             right,
             |left, right| Prim::Flt(left / right),
             Prim::FltDiv,
+        ),
+        // `%` on `f32` is C `fmod`: `x - trunc(x / y) * y`, sign of the dividend —
+        // the same value the `cont -> wasm` expansion computes.
+        Prim::FltRem(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |left, right| Prim::Flt(left % right),
+            Prim::FltRem,
         ),
         Prim::FltMin(left, right) => reduce_flt_binary(
             context,

@@ -194,6 +194,7 @@ macro_rules! walk_code_operands {
             | FltSub(a, b)
             | FltMul(a, b)
             | FltDiv(a, b)
+            | FltRem(a, b)
             | FltEql(a, b)
             | FltNeq(a, b)
             | FltLt(a, b)

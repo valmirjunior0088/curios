@@ -449,6 +449,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::BlnOr(l, r) => print_binary("Bln.or ", l, r, depth),
         Prim::BlnXor(l, r) => print_binary("Bln.xor ", l, r, depth),
         Prim::BlnEql(l, r) => print_binary("Bln.eql ", l, r, depth),
+        Prim::BlnNeq(l, r) => print_binary("Bln.neq ", l, r, depth),
         Prim::NatType => pure("Nat"),
         Prim::Nat(Nat::Zero) => pure("0"),
         Prim::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {
@@ -510,6 +511,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::FltSub(l, r) => print_binary("Flt.sub ", l, r, depth),
         Prim::FltMul(l, r) => print_binary("Flt.mul ", l, r, depth),
         Prim::FltDiv(l, r) => print_binary("Flt.div ", l, r, depth),
+        Prim::FltRem(l, r) => print_binary("Flt.rem ", l, r, depth),
         Prim::FltEql(l, r) => print_binary("Flt.eql ", l, r, depth),
         Prim::FltNeq(l, r) => print_binary("Flt.neq ", l, r, depth),
         Prim::FltLt(l, r) => print_binary("Flt.lt ", l, r, depth),

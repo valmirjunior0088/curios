@@ -217,6 +217,7 @@ fn eval_scalar<E: EvalEnv>(code: &Code, env: &E) -> Option<Scalar> {
         FltSub(a, b) => Some(Scalar::Flt(env.flt(a)? - env.flt(b)?)),
         FltMul(a, b) => Some(Scalar::Flt(env.flt(a)? * env.flt(b)?)),
         FltDiv(a, b) => Some(Scalar::Flt(env.flt(a)? / env.flt(b)?)),
+        FltRem(a, b) => Some(Scalar::Flt(env.flt(a)? % env.flt(b)?)),
         FltNeg(a) => Some(Scalar::Flt(-env.flt(a)?)),
         FltAbs(a) => Some(Scalar::Flt(env.flt(a)?.abs())),
         FltSqrt(a) => Some(Scalar::Flt(env.flt(a)?.sqrt())),

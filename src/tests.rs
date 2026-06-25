@@ -4504,27 +4504,47 @@ fn infix_mixes_a_float_variable_with_an_integer_literal() {
 
 #[test]
 fn infix_undefined_operator_for_type_is_rejected() {
-    // `%` has no `Flt` primitive, so `flt % flt` is a compile-time error.
-    let (system, _io) = MockHost::builder().build();
-    let source = r#"
-        use /std/{Io, Str, Flt};
-        Io/write(Io/stdout, Str/to_bin(Flt/to_str(3.0 % 2.0)))
-    "#;
-    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
-}
-
-#[test]
-fn infix_not_equal_on_bln_is_rejected() {
-    // There is no `Bln` not-equal primitive, so `bln != bln` is rejected.
+    // `&&` is `Bln`-only, so `nat && nat` has no primitive — a compile-time error.
     let (system, _io) = MockHost::builder().build();
     let source = r#"
         use /std/{Io, Str};
-        match true != false
+        match 1 && 2
         | true => Io/write(Io/stdout, Str/to_bin("yes"))
         | false => Io/write(Io/stdout, Str/to_bin("no"))
         end
     "#;
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
+#[test]
+fn infix_rem_on_flt_computes_fmod() {
+    // `%` on `Flt` is `fmod` (`FltRem`), expanded to `x - trunc(x/y)*y` at the
+    // cont -> wasm boundary. `5.5 % 2.0 == 1.5`, so the branch is `true`.
+    assert_eq!(
+        run(r#"
+            use /std/{Io, Str};
+            match 5.5 % 2.0 == 1.5
+            | true => Io/write(Io/stdout, Str/to_bin("yes"))
+            | false => Io/write(Io/stdout, Str/to_bin("no"))
+            end
+        "#),
+        b"yes"
+    );
+}
+
+#[test]
+fn infix_not_equal_on_bln_resolves_to_bln_neq() {
+    // `bln != bln` now resolves to the `BlnNeq` primitive. `true != false` is `true`.
+    assert_eq!(
+        run(r#"
+            use /std/{Io, Str};
+            match true != false
+            | true => Io/write(Io/stdout, Str/to_bin("yes"))
+            | false => Io/write(Io/stdout, Str/to_bin("no"))
+            end
+        "#),
+        b"yes"
+    );
 }
 
 #[test]

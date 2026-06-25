@@ -108,6 +108,8 @@ pub fn erase_prim(
         Prim::BlnOr(l, r) => binary(context, l, r, bln_type, ersd::PurePrim::NatOr),
         Prim::BlnXor(l, r) => binary(context, l, r, bln_type, ersd::PurePrim::NatXor),
         Prim::BlnEql(l, r) => binary(context, l, r, bln_type, ersd::PurePrim::NatEql),
+        // `bln != bln` is xor on the `0`/`1` carrier, exactly like `BlnXor`.
+        Prim::BlnNeq(l, r) => binary(context, l, r, bln_type, ersd::PurePrim::NatXor),
         Prim::NatType => Ok(ersd::Subterm::Erased.into()),
         Prim::Nat(Nat::Zero) => Ok(pure(ersd::PurePrim::Nat(0))),
         Prim::Nat(Nat::Succ(spine, inner)) => {
@@ -170,6 +172,7 @@ pub fn erase_prim(
         Prim::FltTrunc(i) => unary(context, i, flt_type, ersd::PurePrim::FltTrunc),
         Prim::FltNearest(i) => unary(context, i, flt_type, ersd::PurePrim::FltNearest),
         Prim::FltDiv(l, r) => binary(context, l, r, flt_type, ersd::PurePrim::FltDiv),
+        Prim::FltRem(l, r) => binary(context, l, r, flt_type, ersd::PurePrim::FltRem),
         Prim::FltMin(l, r) => binary(context, l, r, flt_type, ersd::PurePrim::FltMin),
         Prim::FltMax(l, r) => binary(context, l, r, flt_type, ersd::PurePrim::FltMax),
         Prim::FltEql(l, r) => binary(context, l, r, flt_type, ersd::PurePrim::FltEql),

@@ -156,6 +156,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::BlnOr(left, right) => print_prim_call("Bln.or", vec![left, right]),
         Prim::BlnXor(left, right) => print_prim_call("Bln.xor", vec![left, right]),
         Prim::BlnEql(left, right) => print_prim_call("Bln.eql", vec![left, right]),
+        Prim::BlnNeq(left, right) => print_prim_call("Bln.neq", vec![left, right]),
         Prim::NatType => pure("Nat"),
         Prim::Nat(Nat::Zero) => pure("0"),
         Prim::Nat(Nat::Succ(nat, inner)) => {
@@ -232,6 +233,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::FltSub(left, right) => print_prim_call("Flt.sub", vec![left, right]),
         Prim::FltMul(left, right) => print_prim_call("Flt.mul", vec![left, right]),
         Prim::FltDiv(left, right) => print_prim_call("Flt.div", vec![left, right]),
+        Prim::FltRem(left, right) => print_prim_call("Flt.rem", vec![left, right]),
         Prim::FltEql(left, right) => print_prim_call("Flt.eql", vec![left, right]),
         Prim::FltNeq(left, right) => print_prim_call("Flt.neq", vec![left, right]),
         Prim::FltLt(left, right) => print_prim_call("Flt.lt", vec![left, right]),

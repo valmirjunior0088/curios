@@ -1,6 +1,6 @@
 use std::{
     fmt,
-    ops::{Add, Div, Mul, Neg, Sub},
+    ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -103,6 +103,16 @@ impl Div for Flt {
 
     fn div(self, other: Self) -> Self {
         Self::from_f32(self.to_f32() / other.to_f32())
+    }
+}
+
+// C `fmod`: `x - trunc(x / y) * y` (the sign of the dividend), matching `f32`'s
+// `%` and the `cont -> wasm` expansion of `Flt.rem`.
+impl Rem for Flt {
+    type Output = Self;
+
+    fn rem(self, other: Self) -> Self {
+        Self::from_f32(self.to_f32() % other.to_f32())
     }
 }
 

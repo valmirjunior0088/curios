@@ -249,6 +249,7 @@ fn flt_ops() -> Vec<TopItem> {
         binary("sub", flt(), flt(), Prim::FltSub),
         binary("mul", flt(), flt(), Prim::FltMul),
         binary("div", flt(), flt(), Prim::FltDiv),
+        binary("rem", flt(), flt(), Prim::FltRem),
         binary("min", flt(), flt(), Prim::FltMin),
         binary("max", flt(), flt(), Prim::FltMax),
         binary("eql", flt(), bln(), Prim::FltEql),

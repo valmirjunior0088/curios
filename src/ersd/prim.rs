@@ -41,6 +41,7 @@ pub enum PurePrim {
     FltSub(Term, Term),
     FltMul(Term, Term),
     FltDiv(Term, Term),
+    FltRem(Term, Term),
     FltEql(Term, Term),
     FltNeq(Term, Term),
     FltLt(Term, Term),
@@ -185,6 +186,7 @@ impl PurePrim {
             | FltSub(a, b)
             | FltMul(a, b)
             | FltDiv(a, b)
+            | FltRem(a, b)
             | FltEql(a, b)
             | FltNeq(a, b)
             | FltLt(a, b)
