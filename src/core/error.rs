@@ -681,7 +681,7 @@ impl fmt::Display for Error {
                 write!(f, "match arm '{tag}' is not a constructor of '{type_name}'")
             }
             Error::MatchCaseMissing { term, atom } => {
-                write!(f, "missing match case for atom '{atom}': {term}")
+                write!(f, "missing match case for constructor '{atom}': {term}")
             }
             Error::NotAInductiveType { head_type } => {
                 write!(
