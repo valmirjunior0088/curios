@@ -32,6 +32,14 @@ pub let fold(@A : Type, @B : Type, l : Lst(A), init : B, f : (A, B) -> B) -> B =
         end;
     go(l, init);
 
+pub let each(@A : Type, l : Lst(A), f : (A) -> {}) -> {} =
+    rec go(rest : Lst(A)) -> {} =
+        match rest
+        | nil() => ()
+        | cons(x, tail) => let _ = f(x); go(tail)
+        end;
+    go(l);
+
 pub let find(@A : Type, l : Lst(A), pred : (A) -> Bln) -> Option(A) =
     rec go(rest : Lst(A)) -> Option(A) =
         match rest

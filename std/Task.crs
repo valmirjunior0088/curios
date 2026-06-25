@@ -138,12 +138,7 @@ pub let new_future(@A : Type) -> Future(A) =
     Cell/new(Fut/pending(@A, Lst/nil(@Waker)));
 
 let wake_all(ws : Lst(Waker)) -> {} =
-    rec each(rest : Lst(Waker)) -> {} =
-        match rest : {}
-        | nil() => ()
-        | cons(w, more) => let _ = w(); each(more)
-        end;
-    each(ws);
+    Lst/each(ws, (w) => w());
 
 pub let fulfill(@A : Type, f : Future(A), a : A) -> {} =
     match Cell/get(f) : {}
@@ -178,12 +173,7 @@ struct Parked pub {
 }
 
 let run_fins(gs : Lst(Guard)) -> {} =
-    rec each(rest : Lst(Guard)) -> {} =
-        match rest : {}
-        | nil() => ()
-        | cons(g, more) => let _ = g.1(); each(more)
-        end;
-    each(gs);
+    Lst/each(gs, (g) => g.1());
 
 let release_guard(h : Io, gs : Lst(Guard)) -> Lst(Guard) =
     rec each(rest : Lst(Guard)) -> Lst(Guard) =
@@ -198,20 +188,10 @@ let release_guard(h : Io, gs : Lst(Guard)) -> Lst(Guard) =
     each(gs);
 
 let drain_jobs(js : Lst(Job)) -> {} =
-    rec each(rest : Lst(Job)) -> {} =
-        match rest : {}
-        | nil() => ()
-        | cons(j, more) => let _ = run_fins(j.fins); each(more)
-        end;
-    each(js);
+    Lst/each(js, (j) => run_fins(j.fins));
 
 let drain_parked(ps : Lst(Parked)) -> {} =
-    rec each(rest : Lst(Parked)) -> {} =
-        match rest : {}
-        | nil() => ()
-        | cons(p, more) => let _ = run_fins(p.fins); each(more)
-        end;
-    each(ps);
+    Lst/each(ps, (p) => run_fins(p.fins));
 
 let drain_slots(ss : Lst(Slot)) -> {} =
     rec each(rest : Lst(Slot)) -> {} =
@@ -354,12 +334,7 @@ pub let cancel(t : Token) -> {} =
     Cell/set(t, true);
 
 let cancel_all(ts : Lst(Token)) -> {} =
-    rec each(rest : Lst(Token)) -> {} =
-        match rest : {}
-        | nil() => ()
-        | cons(t, more) => let _ = cancel(t); each(more)
-        end;
-    each(ts);
+    Lst/each(ts, cancel);
 
 pub let join_all(@A : Type, tasks : Lst(() -> Task(A))) -> Task(Arr(A)) =
     let ta = Lst/to_arr(tasks);

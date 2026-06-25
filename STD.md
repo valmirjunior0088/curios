@@ -496,6 +496,7 @@ The cons list, `nil()` / `cons(A, Lst(A))` — the general-purpose sequence and 
 | `rev(l)`           | `(@A : Type, Lst(A)) -> Lst(A)`                      | Reversal                    |
 | `map(f, l)`        | `(@A : Type, @B : Type, (A) -> B, Lst(A)) -> Lst(B)` | Elementwise map             |
 | `fold(l, init, f)` | `(@A : Type, @B : Type, Lst(A), B, (A, B) -> B) -> B`| Left fold over the elements |
+| `each(l, f)`       | `(@A : Type, Lst(A), (A) -> {}) -> {}`               | Run an effect for each element, left to right |
 | `find(l, p)`       | `(@A : Type, Lst(A), (A) -> Bln) -> Option(A)`       | First element satisfying `p`, or `none` |
 | `to_arr(l)`        | `(@A : Type, Lst(A)) -> Arr(A)`                      | Conversion to a flat array  |
 
