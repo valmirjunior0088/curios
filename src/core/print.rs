@@ -326,15 +326,18 @@ fn label_at(depth: usize) -> String {
     format!("#{depth}")
 }
 
+/// A binder's stored source label, or a depth-positional `#n` placeholder when
+/// it is unnamed.
+fn label_or(hint: Option<&str>, depth: usize) -> String {
+    hint.map(str::to_string).unwrap_or_else(|| label_at(depth))
+}
+
 fn label_terms(labels: &[String]) -> Vec<Term> {
     labels.iter().map(Var::free).map(Term::var).collect()
 }
 
 fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
-    let label = scope
-        .first_label()
-        .map(str::to_string)
-        .unwrap_or_else(|| label_at(depth));
+    let label = label_or(scope.first_label(), depth);
     let body = scope.open(&[&Term::var(Var::free(&label))]);
 
     (label, body)
@@ -345,10 +348,7 @@ fn open_telescope(telescope: Telescope<Term>, depth: usize) -> (Vec<String>, Ter
         match cur {
             Telescope::Done(body) => *body,
             Telescope::Cons(_ty, rest) => {
-                let label = rest
-                    .first_label()
-                    .map(str::to_string)
-                    .unwrap_or_else(|| label_at(depth + idx));
+                let label = label_or(rest.first_label(), depth + idx);
                 let next = rest.open(&[&Term::var(Var::free(&label))]);
                 labels.push(label);
                 walk(next, depth, idx + 1, labels)
@@ -362,32 +362,17 @@ fn open_telescope(telescope: Telescope<Term>, depth: usize) -> (Vec<String>, Ter
 }
 
 fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
-    let fst = scope
-        .first_label()
-        .map(str::to_string)
-        .unwrap_or_else(|| label_at(depth));
-    let snd = scope
-        .second_label()
-        .map(str::to_string)
-        .unwrap_or_else(|| label_at(depth + 1));
+    let fst = label_or(scope.first_label(), depth);
+    let snd = label_or(scope.second_label(), depth + 1);
     let body = scope.open(&[&Term::var(Var::free(&fst)), &Term::var(Var::free(&snd))]);
 
     ((fst, snd), body)
 }
 
 fn open_scope_three(scope: Scope<Three>, depth: usize) -> ((String, String, String), Term) {
-    let fst = scope
-        .first_label()
-        .map(str::to_string)
-        .unwrap_or_else(|| label_at(depth));
-    let snd = scope
-        .second_label()
-        .map(str::to_string)
-        .unwrap_or_else(|| label_at(depth + 1));
-    let thd = scope
-        .third_label()
-        .map(str::to_string)
-        .unwrap_or_else(|| label_at(depth + 2));
+    let fst = label_or(scope.first_label(), depth);
+    let snd = label_or(scope.second_label(), depth + 1);
+    let thd = label_or(scope.third_label(), depth + 2);
     let body = scope.open(&[
         &Term::var(Var::free(&fst)),
         &Term::var(Var::free(&snd)),
