@@ -149,11 +149,8 @@ let lower_bytes(b : Bin) -> Bin =
 pub let eql_ci(a : Str, b : Str) -> Bln =
     Bin/eql(lower_bytes(to_bin(a)), lower_bytes(to_bin(b)));
 
-pub rec repeat(s : Str, n : Nat) -> Str =
-    match n == 0
-    | true => ""
-    | false => concat(s, repeat(s, n - 1))
-    end;
+pub let repeat(s : Str, n : Nat) -> Str =
+    Arr/balanced(n, "", (i) => s, (l, r) => concat(l, r));
 
 pub rec bad_uninhabited(@x : Bin, w : Utf8(Scan/bad(), x)) -> False =
     match w : (w : Utf8(q, y)) => False
