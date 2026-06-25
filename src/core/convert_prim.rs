@@ -41,11 +41,6 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
         (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
         (Prim::Bin(this), Prim::Bin(that)) => Ok(this == that),
-        (Prim::ArrType(this), Prim::ArrType(that)) => {
-            cmp.enqueue(Term::type_(), this, that);
-
-            Ok(true)
-        }
         (Prim::IoEql(this_left, this_right), Prim::IoEql(that_left, that_right))
         | (Prim::NatEql(this_left, this_right), Prim::NatEql(that_left, that_right))
         | (Prim::NatNeq(this_left, this_right), Prim::NatNeq(that_left, that_right))
@@ -120,7 +115,8 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::FltToNat(this), Prim::FltToNat(that))
         | (Prim::FltToInt(this), Prim::FltToInt(that))
         | (Prim::BinLen(this), Prim::BinLen(that))
-        | (Prim::BinFlatten(this), Prim::BinFlatten(that)) => {
+        | (Prim::BinFlatten(this), Prim::BinFlatten(that))
+        | (Prim::ArrType(this), Prim::ArrType(that)) => {
             cmp.enqueue(Term::type_(), this, that);
 
             Ok(true)
