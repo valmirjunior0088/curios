@@ -3,8 +3,8 @@ use {
         Apply, Atom, Carrier, Cases, Context, Definition, Error, Field, Flt, Func, FuncType,
         ImplicitOrigin, Inductive, InductiveParam, InductiveType, Infix, Int, Invert, Item, Let,
         Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, NumLit, ParkedWork, Plicity,
-        Prim, Proj, Rec, Scope, Struct, StructType, Structure, Subterm, Telescope, Term, Three,
-        Tuple, TupleType, Two, Var, Variant, case_target_indices, check, check_motive,
+        Prim, PrimHead, Proj, Rec, Scope, Struct, StructType, Structure, Subterm, Telescope, Term,
+        Three, Tuple, TupleType, Two, Var, Variant, case_target_indices, check, check_motive,
         convert_with, drain_parked, elaborate_prim, expect, invert_indices, is_prop, reduce_with,
         refine_head, sort_term, zonk, zonk_module,
     },
@@ -472,26 +472,26 @@ fn elaborate_tuple_type(context: &mut Context, tt: &TupleType) -> Result<(Term, 
 fn elaborate_prim_head(
     context: &mut Context,
     head: &Term,
-    expected: Prim,
+    expected: PrimHead,
 ) -> Result<(Term, Term), Error> {
     let (head, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    match expected {
-        Prim::NatType if matches!(&*head_type, Subterm::Prim(Prim::NatType)) => {
-            Ok((head, head_type))
-        }
-        Prim::BlnType if matches!(&*head_type, Subterm::Prim(Prim::BlnType)) => {
-            Ok((head, head_type))
-        }
-        Prim::BinType if matches!(&*head_type, Subterm::Prim(Prim::BinType)) => {
-            Ok((head, head_type))
-        }
-        Prim::NatType => Err(Error::not_nat_type(head_type)),
-        Prim::BlnType => Err(Error::not_bln_type(head_type)),
-        Prim::BinType => Err(Error::not_bin_type(head_type)),
-        _ => unreachable!("elaborate_prim_head supports only NatType, BlnType and BinType"),
+    let matches = match expected {
+        PrimHead::Nat => matches!(&*head_type, Subterm::Prim(Prim::NatType)),
+        PrimHead::Bln => matches!(&*head_type, Subterm::Prim(Prim::BlnType)),
+        PrimHead::Bin => matches!(&*head_type, Subterm::Prim(Prim::BinType)),
+    };
+
+    if matches {
+        return Ok((head, head_type));
     }
+
+    Err(match expected {
+        PrimHead::Nat => Error::not_nat_type(head_type),
+        PrimHead::Bln => Error::not_bln_type(head_type),
+        PrimHead::Bin => Error::not_bin_type(head_type),
+    })
 }
 
 /// When a match is elaborated in checking mode, solve its motive against the
@@ -526,7 +526,7 @@ fn elaborate_nat_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_prim_head(context, head, Prim::NatType)?;
+    let (head_elaborated, _) = elaborate_prim_head(context, head, PrimHead::Nat)?;
 
     // Everything below opens the *rebuilt* motive: insertion saturates
     // applications during elaboration, and a lowered (under-applied) motive
@@ -680,7 +680,7 @@ fn elaborate_bin_match(
 ) -> Result<(Term, Term), Error> {
     // `Bin` is a parameterless carrier (like `Nat`/`Bln`), so the scrutinee's type
     // is just `Bin` — no element type to read off the head as `Arr` needs.
-    let (head_elaborated, head_type) = elaborate_prim_head(context, head, Prim::BinType)?;
+    let (head_elaborated, head_type) = elaborate_prim_head(context, head, PrimHead::Bin)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
     let motive = check_motive(context, &head_type, motive)?;
@@ -760,7 +760,7 @@ fn elaborate_switch(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_prim_head(context, head, Prim::NatType)?;
+    let (head_elaborated, _) = elaborate_prim_head(context, head, PrimHead::Nat)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
     let motive = check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
@@ -858,7 +858,7 @@ fn elaborate_bln_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_prim_head(context, head, Prim::BlnType)?;
+    let (head_elaborated, _) = elaborate_prim_head(context, head, PrimHead::Bln)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
     let motive = check_motive(context, &Subterm::Prim(Prim::BlnType).into(), motive)?;

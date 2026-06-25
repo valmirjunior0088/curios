@@ -2,8 +2,8 @@ use {
     super::{
         Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, InductiveType,
         Item, Let, Many, Match, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope,
-        Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
-        erase_prim, expect_prim_head, infer, is_prop, module_of, reduce_with, refine_head,
+        PrimHead, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var,
+        Variant, erase_prim, expect_prim_head, infer, is_prop, module_of, reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -348,7 +348,7 @@ fn erase_nat_match(
     zero_case: &Term,
     succ_case: &Scope<Two>,
 ) -> Result<ersd::Term, Error> {
-    let head_type = expect_prim_head(context, head, Prim::NatType)?;
+    let head_type = expect_prim_head(context, head, PrimHead::Nat)?;
 
     let erased_zero_case = erase(
         context,
@@ -400,7 +400,7 @@ fn erase_switch(
     cases: &BTreeMap<u32, Term>,
     default: &Term,
 ) -> Result<ersd::Term, Error> {
-    let head_type = expect_prim_head(context, head, Prim::NatType)?;
+    let head_type = expect_prim_head(context, head, PrimHead::Nat)?;
 
     let erased_cases = cases
         .iter()
@@ -577,7 +577,7 @@ fn erase_bln_match(
     false_case: &Term,
     true_case: &Term,
 ) -> Result<ersd::Term, Error> {
-    let head_type = expect_prim_head(context, head, Prim::BlnType)?;
+    let head_type = expect_prim_head(context, head, PrimHead::Bln)?;
 
     let erased_false = erase_refined_case(
         context,

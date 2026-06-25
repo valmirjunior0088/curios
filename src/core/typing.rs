@@ -1,4 +1,6 @@
-use super::{Context, Error, Field, Many, Mode, Prim, Proj, Scope, Subterm, Term, Var, elaborate};
+use super::{
+    Context, Error, Field, Many, Mode, Prim, PrimHead, Proj, Scope, Subterm, Term, Var, elaborate,
+};
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
 /// as a thin shim so the many existing call sites (this module, `erase*.rs`,
@@ -312,18 +314,29 @@ pub fn check_motive(
     })
 }
 
-/// Infer the scrutinee's type, reduce it, and require it to be the given prim type
-/// (`Prim::NatType` or `Prim::BlnType`). Returns the reduced head type — used by `erase`
-/// to erase the head; ignored by `infer`.
-pub fn expect_prim_head(context: &mut Context, head: &Term, expected: Prim) -> Result<Term, Error> {
+/// Infer the scrutinee's type, reduce it, and require it to be the given prim
+/// type. Returns the reduced head type — used by `erase` to erase the head.
+pub fn expect_prim_head(
+    context: &mut Context,
+    head: &Term,
+    expected: PrimHead,
+) -> Result<Term, Error> {
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    match expected {
-        Prim::NatType if matches!(&*head_type, Subterm::Prim(Prim::NatType)) => Ok(head_type),
-        Prim::BlnType if matches!(&*head_type, Subterm::Prim(Prim::BlnType)) => Ok(head_type),
-        Prim::NatType => Err(Error::not_nat_type(head_type)),
-        Prim::BlnType => Err(Error::not_bln_type(head_type)),
-        _ => unreachable!("expect_prim_head supports only NatType and BlnType"),
+    let matches = match expected {
+        PrimHead::Nat => matches!(&*head_type, Subterm::Prim(Prim::NatType)),
+        PrimHead::Bln => matches!(&*head_type, Subterm::Prim(Prim::BlnType)),
+        PrimHead::Bin => matches!(&*head_type, Subterm::Prim(Prim::BinType)),
+    };
+
+    if matches {
+        return Ok(head_type);
     }
+
+    Err(match expected {
+        PrimHead::Nat => Error::not_nat_type(head_type),
+        PrimHead::Bln => Error::not_bln_type(head_type),
+        PrimHead::Bin => Error::not_bin_type(head_type),
+    })
 }

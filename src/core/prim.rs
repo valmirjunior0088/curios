@@ -173,6 +173,17 @@ pub enum Prim {
     CellGet(Term, Term),       // type, cell
 }
 
+/// Which primitive type a match scrutinee is required to have. The legal
+/// selectors for `expect_prim_head`/`elaborate_prim_head` — exactly the
+/// type-former `Prim`s those helpers accept, as a closed set so an out-of-range
+/// selector is unrepresentable rather than an `unreachable!` panic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrimHead {
+    Nat,
+    Bln,
+    Bin,
+}
+
 impl Prim {
     pub fn nat_eql<F, S>(left: F, right: S) -> Self
     where
