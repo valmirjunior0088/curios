@@ -283,11 +283,11 @@ pub fn erase_prim(
         Prim::IoType => Ok(ersd::Subterm::Erased.into()),
         &Prim::Io(token) => Ok(pure(ersd::PurePrim::Io(token))),
         Prim::IoRead(handle, count) => Ok(host(ersd::HostPrim::IoRead(
-            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, handle, &io_type())?,
             erase(context, count, &nat_type())?,
         ))),
         Prim::IoWrite(handle, bytes) => Ok(host(ersd::HostPrim::IoWrite(
-            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, handle, &io_type())?,
             erase(context, bytes, &bin_type())?,
         ))),
         Prim::IoOpen(path, mode) => Ok(host(ersd::HostPrim::IoOpen(
@@ -301,7 +301,7 @@ pub fn erase_prim(
         Prim::IoResolve(handle) => Ok(host(ersd::HostPrim::IoResolve(erase(
             context,
             handle,
-            &prim_type(Prim::IoType),
+            &io_type(),
         )?))),
         Prim::IoSocket(addr) => Ok(host(ersd::HostPrim::IoSocket(erase(
             context,
@@ -309,24 +309,24 @@ pub fn erase_prim(
             &bin_type(),
         )?))),
         Prim::IoBind(handle, addr) => Ok(host(ersd::HostPrim::IoBind(
-            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, handle, &io_type())?,
             erase(context, addr, &bin_type())?,
         ))),
         Prim::IoConnect(handle, addr) => Ok(host(ersd::HostPrim::IoConnect(
-            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, handle, &io_type())?,
             erase(context, addr, &bin_type())?,
         ))),
         Prim::IoListen(handle, backlog) => Ok(host(ersd::HostPrim::IoListen(
-            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, handle, &io_type())?,
             erase(context, backlog, &nat_type())?,
         ))),
         Prim::IoAccept(handle) => Ok(host(ersd::HostPrim::IoAccept(erase(
             context,
             handle,
-            &prim_type(Prim::IoType),
+            &io_type(),
         )?))),
         Prim::IoStartTls(handle, sni) => Ok(host(ersd::HostPrim::IoStartTls(
-            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, handle, &io_type())?,
             erase(context, sni, &bin_type())?,
         ))),
         Prim::IoTlsServerConfig(cert, key) => Ok(host(ersd::HostPrim::IoTlsServerConfig(
@@ -334,27 +334,27 @@ pub fn erase_prim(
             erase(context, key, &bin_type())?,
         ))),
         Prim::IoStartTlsServer(handle, cfg) => Ok(host(ersd::HostPrim::IoStartTlsServer(
-            erase(context, handle, &prim_type(Prim::IoType))?,
-            erase(context, cfg, &prim_type(Prim::IoType))?,
+            erase(context, handle, &io_type())?,
+            erase(context, cfg, &io_type())?,
         ))),
         Prim::IoSetNonblocking(handle, on) => Ok(host(ersd::HostPrim::IoSetNonblocking(
-            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, handle, &io_type())?,
             erase(context, on, &bln_type())?,
         ))),
         Prim::IoSetRecvTimeout(handle, ms) => Ok(host(ersd::HostPrim::IoSetRecvTimeout(
-            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, handle, &io_type())?,
             erase(context, ms, &nat_type())?,
         ))),
         Prim::IoSetSendTimeout(handle, ms) => Ok(host(ersd::HostPrim::IoSetSendTimeout(
-            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, handle, &io_type())?,
             erase(context, ms, &nat_type())?,
         ))),
         Prim::IoSetReuseaddr(handle, on) => Ok(host(ersd::HostPrim::IoSetReuseaddr(
-            erase(context, handle, &prim_type(Prim::IoType))?,
+            erase(context, handle, &io_type())?,
             erase(context, on, &bln_type())?,
         ))),
         Prim::IoPoll(handles, events, timeout) => {
-            let arr_io: Term = Subterm::Prim(Prim::ArrType(prim_type(Prim::IoType))).into();
+            let arr_io: Term = Subterm::Prim(Prim::ArrType(io_type())).into();
             let arr_nat: Term = Subterm::Prim(Prim::ArrType(nat_type())).into();
             Ok(host(ersd::HostPrim::IoPoll(
                 erase(context, handles, &arr_io)?,
@@ -365,7 +365,7 @@ pub fn erase_prim(
         Prim::IoClose(handle) => Ok(host(ersd::HostPrim::IoClose(erase(
             context,
             handle,
-            &prim_type(Prim::IoType),
+            &io_type(),
         )?))),
         Prim::IoClockWall => Ok(host(ersd::HostPrim::IoClockWall)),
         Prim::IoClockMono => Ok(host(ersd::HostPrim::IoClockMono)),
