@@ -29,6 +29,20 @@ fn unary(
     Ok((build(inner), result))
 }
 
+/// Elaborate `bin`, requiring its inferred type to be `Bin`, and return the
+/// rebuilt operand. The `Bin`-indexing/slicing prims read their shape off the
+/// operand's type, so they infer it rather than checking against a known one.
+fn infer_bin(context: &mut Context, bin: &Term) -> Result<Term, Error> {
+    let (bin, actual) = elaborate(context, bin, Mode::Infer)?;
+    match &*reduce_with(context, &actual)? {
+        Subterm::Prim(Prim::BinType) => Ok(bin),
+        other => Err(Error::type_mismatch(
+            other.clone(),
+            Subterm::Prim(Prim::BinType),
+        )),
+    }
+}
+
 /// Synthesize a primitive's type, checking *and rebuilding* its operands. Mirrors
 /// the old `infer_prim`, but every operand obligation goes through
 /// `elaborate(Check)` and the elaborated operand is kept, so the returned `Prim`
@@ -120,17 +134,8 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::BinType => (prim.clone(), Term::type_()),
         Prim::Bin(_) => (prim.clone(), bin_type),
         Prim::BinLen(bin) => {
-            let (bin, bin_actual) = elaborate(context, bin, Mode::Infer)?;
-            let bin_actual = reduce_with(context, &bin_actual)?;
-            match &*bin_actual {
-                Subterm::Prim(Prim::BinType) => (Prim::BinLen(bin), nat_type),
-                other => {
-                    return Err(Error::type_mismatch(
-                        other.clone(),
-                        Subterm::Prim(Prim::BinType),
-                    ));
-                }
-            }
+            let bin = infer_bin(context, bin)?;
+            (Prim::BinLen(bin), nat_type)
         }
         Prim::BinEql(left, right) => {
             let left = elaborate(context, left, Mode::Check(bin_type.clone()))?.0;
@@ -138,53 +143,20 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             (Prim::BinEql(left, right), bln_type)
         }
         Prim::BinGet(bin, index) => {
-            let (bin, bin_actual) = elaborate(context, bin, Mode::Infer)?;
-            let bin_actual = reduce_with(context, &bin_actual)?;
-            match &*bin_actual {
-                Subterm::Prim(Prim::BinType) => {
-                    let index = elaborate(context, index, Mode::Check(nat_type.clone()))?.0;
-                    (Prim::BinGet(bin, index), nat_type)
-                }
-                other => {
-                    return Err(Error::type_mismatch(
-                        other.clone(),
-                        Subterm::Prim(Prim::BinType),
-                    ));
-                }
-            }
+            let bin = infer_bin(context, bin)?;
+            let index = elaborate(context, index, Mode::Check(nat_type.clone()))?.0;
+            (Prim::BinGet(bin, index), nat_type)
         }
         Prim::BinSlice(bin, start, end) => {
-            let (bin, bin_actual) = elaborate(context, bin, Mode::Infer)?;
-            let bin_actual = reduce_with(context, &bin_actual)?;
-            match &*bin_actual {
-                Subterm::Prim(Prim::BinType) => {
-                    let start = elaborate(context, start, Mode::Check(nat_type.clone()))?.0;
-                    let end = elaborate(context, end, Mode::Check(nat_type))?.0;
-                    (Prim::BinSlice(bin, start, end), bin_type)
-                }
-                other => {
-                    return Err(Error::type_mismatch(
-                        other.clone(),
-                        Subterm::Prim(Prim::BinType),
-                    ));
-                }
-            }
+            let bin = infer_bin(context, bin)?;
+            let start = elaborate(context, start, Mode::Check(nat_type.clone()))?.0;
+            let end = elaborate(context, end, Mode::Check(nat_type))?.0;
+            (Prim::BinSlice(bin, start, end), bin_type)
         }
         Prim::BinAppend(bin, byte) => {
-            let (bin, bin_actual) = elaborate(context, bin, Mode::Infer)?;
-            let bin_actual = reduce_with(context, &bin_actual)?;
-            match &*bin_actual {
-                Subterm::Prim(Prim::BinType) => {
-                    let byte = elaborate(context, byte, Mode::Check(nat_type))?.0;
-                    (Prim::BinAppend(bin, byte), bin_type)
-                }
-                other => {
-                    return Err(Error::type_mismatch(
-                        other.clone(),
-                        Subterm::Prim(Prim::BinType),
-                    ));
-                }
-            }
+            let bin = infer_bin(context, bin)?;
+            let byte = elaborate(context, byte, Mode::Check(nat_type))?.0;
+            (Prim::BinAppend(bin, byte), bin_type)
         }
         Prim::BinConcat(operands) => {
             let mut elaborated = Vec::with_capacity(operands.len());
