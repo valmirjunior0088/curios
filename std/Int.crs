@@ -19,10 +19,9 @@ pub let of_str(s : Str) -> Option(Int) =
         let ! = Option/bind;
         let first = Str/get(s, 0)!;
         let digits =
-            match first
-            | '+' => Str/slice(s, 1, Str/len(s))
-            | '-' => Str/slice(s, 1, Str/len(s))
-            | _ => s
+            match first == '+' || first == '-'
+            | true => Str/slice(s, 1, Str/len(s))
+            | false => s
             end;
         let negative = first == '-';
         let n = Nat/of_str(digits)!;
