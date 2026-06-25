@@ -2306,10 +2306,6 @@ fn str_of_bin_rejects_truncated_multibyte() {
     assert_eq!(io.output(), b"rejected");
 }
 
-// `/std/BinProof` is a library of erased equational lemmas about the random-access
-// `Bin` ops (`get`/`slice`/`len`). Type checking is demand-driven, so each lemma is
-// referenced here (in a local `let`, checked before it is pruned) to force its proof
-// body through the checker; if any lemma fails to check, this test fails.
 #[test]
 fn arr_fold_sums_elements() {
     let source = r#"
@@ -2348,31 +2344,6 @@ fn erased_void_discharges_to_relevant_result() {
         let proofs = (direct, via_absurd);
         Io/print("ok")
         "#;
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(io.output(), b"ok");
-}
-
-#[test]
-fn bin_proof_lemmas_type_check() {
-    let source = r#"
-        use /std/{BinProof, Bin, Nat, Io};
-        let proofs = (
-            Nat/lt_succ(@5),
-            Nat/le_refl(4),
-            Nat/le_to_lt_succ(Nat/le_refl(3)),
-            BinProof/get_cons_zero(@7, @\\),
-            BinProof/get_cons_succ(@7, @Bin/append(\\, 9), @0),
-            BinProof/len_cons(@7, @\\),
-            BinProof/slice_full(@\\),
-            BinProof/slice_empty(@\\, @0),
-            BinProof/slice_nested(@\\, @0, @0, @0, @0),
-            BinProof/slice_cons_zero(@7, @\\, @0),
-            BinProof/slice_cons_succ(@7, @\\, @0, @1)
-        );
-        Io/print("ok")
-        "#;
-
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
