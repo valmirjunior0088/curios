@@ -1,23 +1,9 @@
 use super::{
-    Apply, Arity, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
+    Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
     InductiveParam, InductiveType, Item, Let, Match, Metavar, Module, MotivePattern, MotiveSlot,
-    Nat, Prim, Proj, Rec, Scope, Struct, StructType, Structure, Subterm, Telescope, Term, Tuple,
-    TupleType, Variant,
+    Nat, Prim, Proj, Rec, Struct, StructType, Structure, Subterm, Telescope, Term, Tuple, TupleType,
+    Variant,
 };
-
-/// Zonk `scope`'s body in place. (The binder stack that used to thread
-/// through here fed the pre-spine label realignment; spines made it
-/// unnecessary.)
-fn enter_scope<A, B>(
-    scope: &Scope<A, B>,
-    body: impl FnOnce(&B) -> Result<B, Error>,
-) -> Result<Scope<A, B>, Error>
-where
-    A: Arity,
-    B: Bound,
-{
-    scope.map_body(body)
-}
 
 /// Substitute every solved metavariable in `term` by its (recursively zonked)
 /// solution, yielding a meta-free term (§9). An unsolved metavariable is a
@@ -296,7 +282,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             cases,
         }) => Subterm::Match(Match {
             head: zonk_term(context, head)?,
-            motive: enter_scope(motive, |b| zonk_term(context, b))?,
+            motive: motive.map_body(|b| zonk_term(context, b))?,
             cases: match cases {
                 Cases::Bln {
                     false_case,
@@ -312,14 +298,14 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                             cons_case,
                         } => Carrier::Nat {
                             empty_case: zonk_term(context, empty_case)?,
-                            cons_case: enter_scope(cons_case, |b| zonk_term(context, b))?,
+                            cons_case: cons_case.map_body(|b| zonk_term(context, b))?,
                         },
                         Carrier::Bin {
                             empty_case,
                             cons_case,
                         } => Carrier::Bin {
                             empty_case: zonk_term(context, empty_case)?,
-                            cons_case: enter_scope(cons_case, |b| zonk_term(context, b))?,
+                            cons_case: cons_case.map_body(|b| zonk_term(context, b))?,
                         },
                         Carrier::Arr {
                             elem,
@@ -328,7 +314,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                         } => Carrier::Arr {
                             elem: zonk_term(context, elem)?,
                             empty_case: zonk_term(context, empty_case)?,
-                            cons_case: enter_scope(cons_case, |b| zonk_term(context, b))?,
+                            cons_case: cons_case.map_body(|b| zonk_term(context, b))?,
                         },
                     },
                 },
@@ -343,7 +329,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                     cases: cases
                         .iter()
                         .map(|(atom, scope)| {
-                            Ok((atom.clone(), enter_scope(scope, |b| zonk_term(context, b))?))
+                            Ok((atom.clone(), scope.map_body(|b| zonk_term(context, b))?))
                         })
                         .collect::<Result<_, Error>>()?,
                     pattern: pattern
@@ -373,7 +359,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
         Subterm::Let(Let { type_, body, tail }) => Subterm::Let(Let {
             type_: zonk_term(context, type_)?,
             body: zonk_term(context, body)?,
-            tail: enter_scope(tail, |b| zonk_term(context, b))?,
+            tail: tail.map_body(|b| zonk_term(context, b))?,
         }),
 
         Subterm::Rec(Rec { items, tail }) => Subterm::Rec(Rec {
@@ -381,12 +367,12 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                 .iter()
                 .map(|(type_, body)| {
                     Ok((
-                        enter_scope(type_, |t| zonk_term(context, t))?,
-                        enter_scope(body, |b| zonk_term(context, b))?,
+                        type_.map_body(|t| zonk_term(context, t))?,
+                        body.map_body(|b| zonk_term(context, b))?,
                     ))
                 })
                 .collect::<Result<_, Error>>()?,
-            tail: enter_scope(tail, |b| zonk_term(context, b))?,
+            tail: tail.map_body(|b| zonk_term(context, b))?,
         }),
 
         // Handled in `zonk_term` before dispatch.
@@ -590,7 +576,7 @@ impl Telescope<Term> {
             Telescope::Done(body) => Ok(Telescope::Done(zonk_term(context, body)?.into())),
             Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
                 zonk_term(context, ty)?,
-                enter_scope(rest, |inner| inner.zonk(context))?,
+                rest.map_body(|inner| inner.zonk(context))?,
             )),
         }
     }
@@ -604,7 +590,7 @@ impl Telescope<()> {
             Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
             Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
                 zonk_term(context, ty)?,
-                enter_scope(rest, |inner| inner.zonk(context))?,
+                rest.map_body(|inner| inner.zonk(context))?,
             )),
         }
     }
