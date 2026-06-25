@@ -734,6 +734,26 @@ fn erase_struct(context: &mut Context, s: &Struct) -> Result<ersd::Term, Error> 
 /// canonical case. The arm's body is erased with its payload binders bound (so
 /// it type-checks and refines) but never projected, and the scrutinee head is
 /// not erased: it is a dropped binder with no runtime value.
+/// The motive pattern's binder slots, positionally (validated by elaborate):
+/// `true` marks a parameter position (opened with the actual parameter),
+/// `false` an index position (opened with the case's target index). `Term`
+/// slots carry no binder and are dropped.
+fn pattern_binder_slots(pattern: Option<&MotivePattern>, n_params: usize) -> Vec<(bool, usize)> {
+    pattern
+        .map(|p| {
+            p.slots
+                .iter()
+                .enumerate()
+                .filter_map(|(position, slot)| match slot {
+                    MotiveSlot::Binder if position < n_params => Some((true, position)),
+                    MotiveSlot::Binder => Some((false, position - n_params)),
+                    MotiveSlot::Term(_) => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn erase_erasable_scrutinee_match(
     context: &mut Context,
@@ -746,20 +766,7 @@ fn erase_erasable_scrutinee_match(
     actual_indices: &[Term],
     pattern: Option<&MotivePattern>,
 ) -> Result<ersd::Term, Error> {
-    let binder_slots: Vec<(bool, usize)> = pattern
-        .map(|p| {
-            let n_params = inductive.params.len();
-            p.slots
-                .iter()
-                .enumerate()
-                .filter_map(|(position, slot)| match slot {
-                    MotiveSlot::Binder if position < n_params => Some((true, position)),
-                    MotiveSlot::Binder => Some((false, position - n_params)),
-                    MotiveSlot::Term(_) => None,
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let binder_slots = pattern_binder_slots(pattern, inductive.params.len());
 
     // The single live arm. Elaborate prunes impossible arms; an erasable
     // (subsingleton) scrutinee leaves exactly one, whose body is the result.
@@ -891,24 +898,7 @@ fn erase_inductive_match(
 
     let scrutinee_label = context.fresh(Some("scrutinee"));
 
-    // The pattern's binder slots, positionally (validated by elaborate):
-    // `true` marks a parameter position (opened with the actual parameter),
-    // `false` an index position (opened with the case's target index).
-    let binder_slots: Vec<(bool, usize)> = pattern
-        .map(|p| {
-            let n_params = inductive.params.len();
-
-            p.slots
-                .iter()
-                .enumerate()
-                .filter_map(|(position, slot)| match slot {
-                    MotiveSlot::Binder if position < n_params => Some((true, position)),
-                    MotiveSlot::Binder => Some((false, position - n_params)),
-                    MotiveSlot::Term(_) => None,
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let binder_slots = pattern_binder_slots(pattern, inductive.params.len());
 
     let cases_erased = inductive
         .constructors
