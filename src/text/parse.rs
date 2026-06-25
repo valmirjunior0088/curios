@@ -1,15 +1,11 @@
 use {
     super::{
         Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, Entrypoint, Field, Func,
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetBang, LetSignature,
-        LoadError,
-        Match, Module, Motive, Name, Nat,
-        NatLiteral, NatMatch, NumLit, NumOp, Pattern, PatternLit, Plicity, Prim, Proj, Qualifier,
-        Radix,
-        Rec,
-        RecItem, StructLit, Subterm, Syn, Term, TupleTypeParam,
-        TopCase, TopItem,
-        TopLet, TopMod, TopStruct, TopInductive, TopUse, Tuple, TupleType, InductiveMatch, UseGroup,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let, LetBang,
+        LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, NumLit,
+        NumOp, Pattern, PatternLit, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem, StructLit,
+        Subterm, Syn, Term, TopCase, TopInductive, TopItem, TopLet, TopMod, TopStruct, TopUse,
+        Tuple, TupleType, TupleTypeParam, UseGroup,
     },
     crate::{
         Source,
@@ -168,25 +164,25 @@ fn parse_usize<'a>() -> Parser<'a, usize> {
 }
 
 fn parse_radix<'a>(prefix: &'static str, radix: u32, tag: Radix) -> Parser<'a, NatLiteral> {
-    take_exact(prefix).and_keep(
-        take_while(move |char: char| char.is_digit(radix)).flat_map(move |digits| {
-            match BigUint::parse_bytes(digits.as_bytes(), radix) {
-                Some(value) => pure(NatLiteral::Number(value, tag)),
-                None => fail(format!("expected base-{radix} digits after '{prefix}'")),
-            }
-        }),
-    )
+    take_exact(prefix).and_keep(take_while(move |char: char| char.is_digit(radix)).flat_map(
+        move |digits| match BigUint::parse_bytes(digits.as_bytes(), radix) {
+            Some(value) => pure(NatLiteral::Number(value, tag)),
+            None => fail(format!("expected base-{radix} digits after '{prefix}'")),
+        },
+    ))
 }
 
 fn parse_nat_digits<'a>() -> Parser<'a, NatLiteral> {
     catch(parse_radix("0x", 16, Radix::Hex))
         .or(catch(parse_radix("0b", 2, Radix::Bin)))
-        .or(take_while(|char: char| char.is_ascii_digit()).flat_map(|digits| {
-            match digits.parse::<BigUint>() {
-                Ok(value) => pure(NatLiteral::Number(value, Radix::Dec)),
-                Err(_) => fail("expected nat"),
-            }
-        }))
+        .or(
+            take_while(|char: char| char.is_ascii_digit()).flat_map(|digits| {
+                match digits.parse::<BigUint>() {
+                    Ok(value) => pure(NatLiteral::Number(value, Radix::Dec)),
+                    Err(_) => fail("expected nat"),
+                }
+            }),
+        )
         .and_drop(parse_whitespace())
 }
 
@@ -464,14 +460,12 @@ fn parse_func_type<'a>() -> Parser<'a, Term> {
             .and_drop(parse_literal("->")),
     )
     .and(lazy(parse_term))
-    .map(
-        |(params, output): (Vec<FuncTypeParam>, Term)| {
-            Subterm::FuncType(FuncType {
-                params: params.into_iter().collect(),
-                output,
-            })
-        },
-    )
+    .map(|(params, output): (Vec<FuncTypeParam>, Term)| {
+        Subterm::FuncType(FuncType {
+            params: params.into_iter().collect(),
+            output,
+        })
+    })
     .map(Into::into)
 }
 
@@ -493,9 +487,7 @@ fn tuple_pattern<'a>(elem: fn() -> Parser<'a, Pattern>) -> Parser<'a, Pattern> {
 // One field of a struct pattern: a rename `bar = p` (binding the nested pattern
 // `p`, drawn from `elem`), or a pun `bar` (binding the field's own label). The
 // `=` commits to the rename, so a bare label falls through to the pun.
-fn struct_field_pattern<'a>(
-    elem: fn() -> Parser<'a, Pattern>,
-) -> Parser<'a, (String, Pattern)> {
+fn struct_field_pattern<'a>(elem: fn() -> Parser<'a, Pattern>) -> Parser<'a, (String, Pattern)> {
     catch(parse_identifier().and_drop(parse_literal("=")))
         .and(lazy(elem))
         .map(|(label, pattern): (&str, Pattern)| (label.to_string(), pattern))
@@ -510,7 +502,10 @@ fn struct_field_pattern<'a>(
 // inferred from the head.
 fn struct_pattern<'a>(elem: fn() -> Parser<'a, Pattern>) -> Parser<'a, Pattern> {
     catch(parse_name().and_drop(parse_literal("{")))
-        .and(sep_by0(move || struct_field_pattern(elem), || parse_literal(",")))
+        .and(sep_by0(
+            move || struct_field_pattern(elem),
+            || parse_literal(","),
+        ))
         .and_drop(parse_literal("}"))
         .map(|(head, fields)| Pattern::Struct { head, fields })
 }
@@ -1030,7 +1025,12 @@ fn parse_suffix<'a>() -> Parser<'a, Suffix> {
             .map(Suffix::Apply))
         // A postfix `!` — but not the `!=` operator, whose `!` would otherwise be
         // eaten here as a bang, stranding the `=`.
-        .or(catch(take_exact("!").and_drop(not_ahead("=")).and_drop(parse_whitespace())).map(|()| Suffix::Bang))
+        .or(catch(
+            take_exact("!")
+                .and_drop(not_ahead("="))
+                .and_drop(parse_whitespace()),
+        )
+        .map(|()| Suffix::Bang))
 }
 
 fn parse_empty_tuple<'a>() -> Parser<'a, Term> {
@@ -1387,11 +1387,13 @@ fn parse_inductive_payload_field<'a>() -> Parser<'a, CasePayloadParam> {
             .and_drop(parse_literal(":")),
     )
     .and(lazy(parse_term))
-    .map(|((plicity, name), type_): ((Plicity, &str), Term)| CasePayloadParam {
-        plicity,
-        label: Some(name.to_string()),
-        type_,
-    })
+    .map(
+        |((plicity, name), type_): ((Plicity, &str), Term)| CasePayloadParam {
+            plicity,
+            label: Some(name.to_string()),
+            type_,
+        },
+    )
     .or(lazy(parse_term).map(|type_| CasePayloadParam {
         plicity: Plicity::Explicit,
         label: None,
@@ -1404,7 +1406,9 @@ fn parse_top_inductive_case<'a>() -> Parser<'a, TopCase> {
         .and_keep(parse_identifier())
         .and(
             parse_literal("(")
-                .and_keep(sep_by0(parse_inductive_payload_field, || parse_literal(",")))
+                .and_keep(sep_by0(parse_inductive_payload_field, || {
+                    parse_literal(",")
+                }))
                 .and_drop(parse_literal(")")),
         )
         // The case target: `: (index-exprs)` — the terminal with its
@@ -1448,18 +1452,20 @@ fn parse_inductive_index<'a>() -> Parser<'a, (Option<String>, Term)> {
         .or(lazy(parse_term).map(|ty| (None, ty)))
 }
 
+/// A parsed inductive head arity: the index telescope (each binder optionally
+/// named) and the sort it lands in.
+type InductiveArity = (Vec<(Option<String>, Term)>, Term);
+
 // The head's arity after the `:` — either an index telescope optionally landing
 // in a sort, `(n : Nat) -> Prop`, or a bare sort, `Prop`. A bare index group with
 // no `-> Sort` defaults to `Type` (the transition spelling, `: (n : Nat)`).
-fn parse_inductive_arity<'a>() -> Parser<'a, (Vec<(Option<String>, Term)>, Term)> {
+fn parse_inductive_arity<'a>() -> Parser<'a, InductiveArity> {
     catch(
         parse_literal("(")
             .and_keep(sep_by0(parse_inductive_index, || parse_literal(",")))
             .and_drop(parse_literal(")")),
     )
-    .and(
-        catch(parse_literal("->").and_keep(lazy(parse_term))).or(pure(Subterm::Type.into())),
-    )
+    .and(catch(parse_literal("->").and_keep(lazy(parse_term))).or(pure(Subterm::Type.into())))
     .or(lazy(parse_term).map(|sort| (Vec::new(), sort)))
 }
 
@@ -1549,8 +1555,7 @@ fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
             )
             // The result sort: `: Prop` after the parameters; omitted is `Type`.
             .and(
-                catch(parse_literal(":").and_keep(lazy(parse_term)))
-                    .or(pure(Subterm::Type.into())),
+                catch(parse_literal(":").and_keep(lazy(parse_term))).or(pure(Subterm::Type.into())),
             )
             // The inner `pub` (representation visibility) sits right before `{`.
             .and(parse_pub())

@@ -420,12 +420,10 @@ fn lowers_and_runs_global_tuple() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("out"),
-                        cont::Value::Eval(cont::Code::TplGet(cont::ValueName::from("PAIR"), 1)),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("out"),
+                    cont::Value::Eval(cont::Code::TplGet(cont::ValueName::from("PAIR"), 1)),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("out"),

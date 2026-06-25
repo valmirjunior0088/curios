@@ -962,12 +962,12 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             }
             // The cons head's byte: `get(append(\\, byte), 0) = byte` — the base
             // case of the cons-peel below, and the partner of `BinSlice`'s rules.
-            if let Subterm::Prim(Prim::BinAppend(base, byte)) = &*bin {
-                if matches!(&**base, Subterm::Prim(Prim::Bin(b)) if b.is_empty())
-                    && matches!(&*index_reduced, Subterm::Prim(Prim::Nat(Nat::Zero)))
-                {
-                    return reduce(context, byte.clone()).map(Term::unwrap_or_clone);
-                }
+            if let Subterm::Prim(Prim::BinAppend(base, byte)) = &*bin
+                && let Subterm::Prim(Prim::Bin(b)) = &**base
+                && b.is_empty()
+                && let Subterm::Prim(Prim::Nat(Nat::Zero)) = &*index_reduced
+            {
+                return reduce(context, byte.clone()).map(Term::unwrap_or_clone);
             }
             // A get over a cons spine peels one byte per `0`/`succ` index step:
             //   `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.

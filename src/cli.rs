@@ -1,5 +1,5 @@
 use {
-    super::{Stage, OsHost, compile_entrypoint, run_wasm, text, typecheck_entrypoint, wasm},
+    super::{OsHost, Stage, compile_entrypoint, run_wasm, text, typecheck_entrypoint, wasm},
     clap::{Parser, Subcommand},
     std::{
         fs, iter,

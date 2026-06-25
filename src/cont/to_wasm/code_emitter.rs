@@ -674,9 +674,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            cont::Code::IntDiv(left, right) => {
-                self.emit_checked_int_op(&result_local, left, right, "int_div", wasm::Instr::I32DivS)
-            }
+            cont::Code::IntDiv(left, right) => self.emit_checked_int_op(
+                &result_local,
+                left,
+                right,
+                "int_div",
+                wasm::Instr::I32DivS,
+            ),
             cont::Code::IntRem(left, right) => self.emit_binary_op(
                 &result_local,
                 left,
@@ -760,12 +764,20 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 wasm::Instr::I32ShrU,
                 WrapAs::I31,
             ),
-            cont::Code::NatRotl(left, right) => {
-                self.emit_checked_nat_op(&result_local, left, right, "nat_rotl", wasm::Instr::I32Rotl)
-            }
-            cont::Code::NatRotr(left, right) => {
-                self.emit_checked_nat_op(&result_local, left, right, "nat_rotr", wasm::Instr::I32Rotr)
-            }
+            cont::Code::NatRotl(left, right) => self.emit_checked_nat_op(
+                &result_local,
+                left,
+                right,
+                "nat_rotl",
+                wasm::Instr::I32Rotl,
+            ),
+            cont::Code::NatRotr(left, right) => self.emit_checked_nat_op(
+                &result_local,
+                left,
+                right,
+                "nat_rotr",
+                wasm::Instr::I32Rotr,
+            ),
             cont::Code::NatClz(operand) => self.emit_unary_op(
                 &result_local,
                 operand,
@@ -838,12 +850,20 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 wasm::Instr::I32ShrS,
                 WrapAs::I31,
             ),
-            cont::Code::IntRotl(left, right) => {
-                self.emit_checked_int_op(&result_local, left, right, "int_rotl", wasm::Instr::I32Rotl)
-            }
-            cont::Code::IntRotr(left, right) => {
-                self.emit_checked_int_op(&result_local, left, right, "int_rotr", wasm::Instr::I32Rotr)
-            }
+            cont::Code::IntRotl(left, right) => self.emit_checked_int_op(
+                &result_local,
+                left,
+                right,
+                "int_rotl",
+                wasm::Instr::I32Rotl,
+            ),
+            cont::Code::IntRotr(left, right) => self.emit_checked_int_op(
+                &result_local,
+                left,
+                right,
+                "int_rotr",
+                wasm::Instr::I32Rotr,
+            ),
             cont::Code::IntClz(operand) => self.emit_unary_op(
                 &result_local,
                 operand,

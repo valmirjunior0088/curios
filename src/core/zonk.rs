@@ -1,8 +1,8 @@
 use super::{
     Apply, Arity, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
-    InductiveParam, Item, Let,
-    Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Struct,
-    StructType, Structure, Subterm, Telescope, Term, Tuple, TupleType, InductiveType, Variant,
+    InductiveParam, InductiveType, Item, Let, Match, Metavar, Module, MotivePattern, MotiveSlot,
+    Nat, Prim, Proj, Rec, Scope, Struct, StructType, Structure, Subterm, Telescope, Term, Tuple,
+    TupleType, Variant,
 };
 
 /// Zonk `scope`'s body in place. (The binder stack that used to thread
@@ -536,9 +536,7 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::IoRead(a, b) => Prim::IoRead(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoWrite(a, b) => Prim::IoWrite(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoOpen(a, b) => Prim::IoOpen(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoLookup(a, b) => {
-            Prim::IoLookup(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
+        Prim::IoLookup(a, b) => Prim::IoLookup(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoResolve(a) => Prim::IoResolve(zonk_term(context, a)?),
         Prim::IoSocket(a) => Prim::IoSocket(zonk_term(context, a)?),
         Prim::IoBind(a, b) => Prim::IoBind(zonk_term(context, a)?, zonk_term(context, b)?),
@@ -575,9 +573,11 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::IoExit(a, b) => Prim::IoExit(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::CellType(a) => Prim::CellType(zonk_term(context, a)?),
         Prim::Cell(a, b) => Prim::Cell(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::CellSet(a, b, c) => {
-            Prim::CellSet(zonk_term(context, a)?, zonk_term(context, b)?, zonk_term(context, c)?)
-        }
+        Prim::CellSet(a, b, c) => Prim::CellSet(
+            zonk_term(context, a)?,
+            zonk_term(context, b)?,
+            zonk_term(context, c)?,
+        ),
         Prim::CellGet(a, b) => Prim::CellGet(zonk_term(context, a)?, zonk_term(context, b)?),
     })
 }

@@ -126,8 +126,16 @@ fn peel_prefix<E: PartialEq>(left: &mut VecDeque<Atom<E>>, right: &mut VecDeque<
             // other) could peel too, but that needs ordering the symbolic bounds,
             // so it is left to defer rather than decided here.
             (
-                Some(Atom::Window { base: b1, lo: l1, hi: h1 }),
-                Some(Atom::Window { base: b2, lo: l2, hi: h2 }),
+                Some(Atom::Window {
+                    base: b1,
+                    lo: l1,
+                    hi: h1,
+                }),
+                Some(Atom::Window {
+                    base: b2,
+                    lo: l2,
+                    hi: h2,
+                }),
             ) if b1 == b2 && l1 == l2 && h1 == h2 => {
                 peeled = true;
                 left.pop_front();
@@ -297,13 +305,9 @@ fn bin_valued(prim: &Prim) -> bool {
 /// (matching the runtime's packed store), or `None` for a symbolic byte.
 fn byte_as_u8(term: &Term) -> Option<u8> {
     match &**term {
-        Subterm::Prim(Prim::Nat(n)) => Some(
-            n.to_big_uint()?
-                .to_bytes_le()
-                .first()
-                .copied()
-                .unwrap_or(0),
-        ),
+        Subterm::Prim(Prim::Nat(n)) => {
+            Some(n.to_big_uint()?.to_bytes_le().first().copied().unwrap_or(0))
+        }
         _ => None,
     }
 }
@@ -347,7 +351,11 @@ fn bin_collect_prim(prim: &Prim, out: &mut Vec<Atom<u8>>) {
         Prim::BinConcat(operands) => operands.iter().for_each(|op| bin_collect_term(op, out)),
         Prim::BinSlice(base, lo, hi) => push(
             out,
-            Atom::Window { base: base.clone(), lo: lo.clone(), hi: hi.clone() },
+            Atom::Window {
+                base: base.clone(),
+                lo: lo.clone(),
+                hi: hi.clone(),
+            },
         ),
         // `append(base, b) = base ++ [b]`: decode the base, then the appended byte.
         // A concrete byte is a length-1 literal run (so it merges with an abutting run
@@ -390,7 +398,11 @@ fn arr_collect_prim(prim: &Prim, out: &mut Vec<Atom<Term>>) {
         Prim::ArrConcat(_, operands) => operands.iter().for_each(|op| arr_collect_term(op, out)),
         Prim::ArrSlice(_, base, lo, hi) => push(
             out,
-            Atom::Window { base: base.clone(), lo: lo.clone(), hi: hi.clone() },
+            Atom::Window {
+                base: base.clone(),
+                lo: lo.clone(),
+                hi: hi.clone(),
+            },
         ),
         // `append(base, e) = base ++ [e]`: decode the base, then the appended element
         // as a length-1 literal run, so it merges with an abutting run and unifies

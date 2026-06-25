@@ -5,10 +5,10 @@ use {
 
 fn main() {
     let source = r#"
-        use /std/{Nat, Arr};
-        let xs : Arr(Nat) = [10, 20, 30];
+        use /std/{Nat, Arr, True};
+        let xs : Arr(Nat) = Arr/cons(10, Arr/cons(20, Arr/single(30)));
         let len : Nat = Arr/len(xs);
-        let first : Nat = Arr/at(xs, 0, ());
+        let first : Nat = Arr/at(xs, 0, True/qed());
         let rest : Arr(Nat) = Arr/slice(xs, 1, 3);
         let doubled : Arr(Nat) = Arr/concat(xs, xs);
         Arr/len(doubled)

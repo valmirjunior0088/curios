@@ -828,10 +828,7 @@ fn at_on_a_binder_type_is_a_parse_error() {
     }
 
     // `@` on the type is rejected in every binder position it once marked.
-    for src in [
-        "(x : @Nat) -> Nat",
-        "(@x : @Nat) -> Nat",
-    ] {
+    for src in ["(x : @Nat) -> Nat", "(@x : @Nat) -> Nat"] {
         assert!(src.parse::<Term>().is_err(), "{src} should not parse");
     }
 
@@ -841,7 +838,9 @@ fn at_on_a_binder_type_is_a_parse_error() {
     );
 
     assert!(
-        "induct Boxed | box(ghost : @Nat) end".parse::<Module>().is_err(),
+        "induct Boxed | box(ghost : @Nat) end"
+            .parse::<Module>()
+            .is_err(),
         "@ on an inductive payload type should not parse",
     );
 }

@@ -17,15 +17,13 @@ fn lowers_and_runs_nat_add() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatAdd(
-                            cont::ValueName::from("THREE"),
-                            cont::ValueName::from("FOUR"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::NatAdd(
+                        cont::ValueName::from("THREE"),
+                        cont::ValueName::from("FOUR"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -62,12 +60,10 @@ fn lowers_and_runs_arr_len() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::ArrLen(cont::ValueName::from("LST"))),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::ArrLen(cont::ValueName::from("LST"))),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -105,15 +101,13 @@ fn lowers_and_runs_arr_get() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::ArrGet(
-                            cont::ValueName::from("LST"),
-                            cont::ValueName::from("ONE"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::ArrGet(
+                        cont::ValueName::from("LST"),
+                        cont::ValueName::from("ONE"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -588,15 +582,13 @@ fn lowers_and_runs_nat_div() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatDiv(
-                            cont::ValueName::from("TEN"),
-                            cont::ValueName::from("THREE"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::NatDiv(
+                        cont::ValueName::from("TEN"),
+                        cont::ValueName::from("THREE"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -626,15 +618,13 @@ fn lowers_and_runs_nat_rem() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatRem(
-                            cont::ValueName::from("TEN"),
-                            cont::ValueName::from("THREE"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::NatRem(
+                        cont::ValueName::from("TEN"),
+                        cont::ValueName::from("THREE"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -664,15 +654,13 @@ fn lowers_and_runs_nat_lt() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatLt(
-                            cont::ValueName::from("THREE"),
-                            cont::ValueName::from("FIVE"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::NatLt(
+                        cont::ValueName::from("THREE"),
+                        cont::ValueName::from("FIVE"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -743,15 +731,13 @@ fn lowers_and_runs_int_div() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::IntDiv(
-                            cont::ValueName::from("NEG7"),
-                            cont::ValueName::from("TWO"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::IntDiv(
+                        cont::ValueName::from("NEG7"),
+                        cont::ValueName::from("TWO"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -781,15 +767,13 @@ fn lowers_and_runs_int_lt() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::IntLt(
-                            cont::ValueName::from("NEG1"),
-                            cont::ValueName::from("ZERO"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::IntLt(
+                        cont::ValueName::from("NEG1"),
+                        cont::ValueName::from("ZERO"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -879,15 +863,13 @@ fn lowers_and_runs_flt_eql() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltEql(
-                            cont::ValueName::from("A"),
-                            cont::ValueName::from("B"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::FltEql(
+                        cont::ValueName::from("A"),
+                        cont::ValueName::from("B"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -1084,14 +1066,10 @@ fn lowers_and_runs_flt_to_int() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltToInt(cont::ValueName::from(
-                            "THREE_SEVEN",
-                        ))),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::FltToInt(cont::ValueName::from("THREE_SEVEN"))),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -1120,12 +1098,10 @@ fn lowers_and_runs_nat_to_int() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatToInt(cont::ValueName::from("SEVEN"))),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::NatToInt(cont::ValueName::from("SEVEN"))),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -1155,15 +1131,13 @@ fn lowers_and_runs_nat_neq() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatNeq(
-                            cont::ValueName::from("THREE"),
-                            cont::ValueName::from("FIVE"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::NatNeq(
+                        cont::ValueName::from("THREE"),
+                        cont::ValueName::from("FIVE"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -1193,15 +1167,13 @@ fn lowers_and_runs_int_neq() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::IntNeq(
-                            cont::ValueName::from("NEG1"),
-                            cont::ValueName::from("NEG1B"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::IntNeq(
+                        cont::ValueName::from("NEG1"),
+                        cont::ValueName::from("NEG1B"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -1231,15 +1203,13 @@ fn lowers_and_runs_flt_neq() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltNeq(
-                            cont::ValueName::from("ONE"),
-                            cont::ValueName::from("TWO"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::FltNeq(
+                        cont::ValueName::from("ONE"),
+                        cont::ValueName::from("TWO"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -1391,12 +1361,10 @@ fn lowers_and_runs_bin_len() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::BinLen(cont::ValueName::from("HELLO"))),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::BinLen(cont::ValueName::from("HELLO"))),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -1429,15 +1397,13 @@ fn lowers_and_runs_bin_get() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::BinGet(
-                            cont::ValueName::from("HELLO"),
-                            cont::ValueName::from("IDX"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::BinGet(
+                        cont::ValueName::from("HELLO"),
+                        cont::ValueName::from("IDX"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -1522,15 +1488,13 @@ fn lowers_and_runs_bin_eql_equal() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::BinEql(
-                            cont::ValueName::from("A"),
-                            cont::ValueName::from("B"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::BinEql(
+                        cont::ValueName::from("A"),
+                        cont::ValueName::from("B"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -1566,15 +1530,13 @@ fn lowers_and_runs_bin_eql_unequal() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::BinEql(
-                            cont::ValueName::from("A"),
-                            cont::ValueName::from("B"),
-                        )),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::BinEql(
+                        cont::ValueName::from("A"),
+                        cont::ValueName::from("B"),
+                    )),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -1655,9 +1617,7 @@ fn nat_op_module(op: cont::Code, left: u32, right: u32) -> cont::Module {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (cont::ValueName::from("result"), cont::Value::Eval(op)),
-                ],
+                values: vec![(cont::ValueName::from("result"), cont::Value::Eval(op))],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -1776,9 +1736,7 @@ fn int_op_module(op: cont::Code, left: i32, right: i32) -> cont::Module {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (cont::ValueName::from("result"), cont::Value::Eval(op)),
-                ],
+                values: vec![(cont::ValueName::from("result"), cont::Value::Eval(op))],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),
@@ -1889,12 +1847,10 @@ fn flt_to_int_overflow_traps() {
             resume: cont::BlockName::from("r"),
             region: cont::Region {
                 preallocs: vec![],
-                values: vec![
-                    (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltToInt(cont::ValueName::from("TOO_BIG"))),
-                    ),
-                ],
+                values: vec![(
+                    cont::ValueName::from("result"),
+                    cont::Value::Eval(cont::Code::FltToInt(cont::ValueName::from("TOO_BIG"))),
+                )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
                     code: cont::ValueName::from("result"),

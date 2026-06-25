@@ -222,14 +222,21 @@ fn thread_first(
     let decided = if let Tail::Jump(jump) = &region.tail
         && let Some(block) = candidates.get(&jump.target)
     {
-        decide_edge(block, &jump.params, lits).map(|decision| (block, jump.params.clone(), decision))
+        decide_edge(block, &jump.params, lits)
+            .map(|decision| (block, jump.params.clone(), decision))
     } else {
         None
     };
 
     if let Some((block, args, decision)) = decided {
         *counter += 1;
-        splice_decided(region, block, &args, decision, &mangle::thread_suffix(*counter));
+        splice_decided(
+            region,
+            block,
+            &args,
+            decision,
+            &mangle::thread_suffix(*counter),
+        );
         return true;
     }
 
@@ -905,15 +912,23 @@ mod tests {
         // c0's closure (the tail stays a Call::Indirect — only the join split).
         let a0 = &block_named(&result, "a0").region;
         match &a0.tail {
-            Tail::Call(CallTarget::Indirect { target, params, resume }) => {
+            Tail::Call(CallTarget::Indirect {
+                target,
+                params,
+                resume,
+            }) => {
                 assert_eq!(target, &v("f@thread#1"));
                 assert_eq!(params, &vec![v("arg")]);
                 assert_eq!(resume, &b("rm"));
             }
             other => panic!("expected the indirect call kept, got {other:?}"),
         }
-        assert!(a0.values.iter().any(|(name, value)| name == &v("f@thread#1")
-            && matches!(value, Value::Alias(source) if source == &v("f0"))));
+        assert!(
+            a0.values
+                .iter()
+                .any(|(name, value)| name == &v("f@thread#1")
+                    && matches!(value, Value::Alias(source) if source == &v("f0")))
+        );
 
         // a1 threads on the next iteration with its own closure and suffix.
         let a1 = &block_named(&result, "a1").region;
@@ -923,8 +938,12 @@ mod tests {
             }
             other => panic!("expected the indirect call kept, got {other:?}"),
         }
-        assert!(a1.values.iter().any(|(name, value)| name == &v("f@thread#2")
-            && matches!(value, Value::Alias(source) if source == &v("f1"))));
+        assert!(
+            a1.values
+                .iter()
+                .any(|(name, value)| name == &v("f@thread#2")
+                    && matches!(value, Value::Alias(source) if source == &v("f1")))
+        );
 
         // The original join survives for DCE to reclaim, untouched.
         assert!(has_block(&result, "J"));

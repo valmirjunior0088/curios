@@ -34,7 +34,13 @@ fn print_prim<'a>(prim: &'a Prim) -> Printer<'a> {
 }
 
 fn print_binary<'a>(name: &'static str, left: &'a Term, right: &'a Term) -> Printer<'a> {
-    flat([pure(name), pure(" "), print_term(left), pure(" "), print_term(right)])
+    flat([
+        pure(name),
+        pure(" "),
+        print_term(left),
+        pure(" "),
+        print_term(right),
+    ])
 }
 
 fn print_unary<'a>(name: &'static str, operand: &'a Term) -> Printer<'a> {

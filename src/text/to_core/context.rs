@@ -408,8 +408,7 @@ impl<'a> Context<'a> {
     // and binding it exposes (including its re-exports), each under its own label.
     pub fn resolve_glob(&mut self, name: &Name) -> Result<Vec<(String, UseResolved)>, Error> {
         let result = (|| {
-            let module =
-                self.resolve_module_prefix(name, name.qualifier().segments().len())?;
+            let module = self.resolve_module_prefix(name, name.qualifier().segments().len())?;
 
             let interface = self
                 .public

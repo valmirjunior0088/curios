@@ -136,7 +136,10 @@ impl Lift for Vec<PollEvents> {
 /// Read an `Arr(Bin)` host-import argument: a `params[0]` anyref array whose
 /// elements are themselves `Bin`s (i8 arrays). The inbound dual of `lower.rs`'s
 /// `Vec<Vec<u8>>` lowering; `Arr(Io)` rides this shape now that a handle is bytes.
-fn lift_bin_array(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<Vec<u8>>, wasmtime::Error> {
+fn lift_bin_array(
+    caller: &mut Caller<'_, ()>,
+    param: &Val,
+) -> Result<Vec<Vec<u8>>, wasmtime::Error> {
     let Val::AnyRef(Some(anyref)) = param else {
         return Err(wasmtime::Error::msg("expected non-null anyref"));
     };

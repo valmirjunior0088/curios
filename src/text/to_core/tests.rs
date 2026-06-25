@@ -651,8 +651,7 @@ fn rejects_relative_sys_glob() {
 // into its own public surface.
 #[test]
 fn rejects_sys_pub_use_reexport_from_user_code() {
-    let error = lower_with_prelude("pub mod Foo\n    pub use /sys/{Nat};\nend\nType")
-        .unwrap_err();
+    let error = lower_with_prelude("pub mod Foo\n    pub use /sys/{Nat};\nend\nType").unwrap_err();
     assert!(
         error.contains("internal to the standard library"),
         "unexpected error: {error}"

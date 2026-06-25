@@ -192,10 +192,7 @@ pub enum HostTarget {
     },
     /// Create an unconnected socket for the address blob `addr`. Returns
     /// (status, handle); `resume` takes two block parameters.
-    IoSocket {
-        addr: ValueName,
-        resume: BlockName,
-    },
+    IoSocket { addr: ValueName, resume: BlockName },
     /// Bind socket `handle` to local address `addr`. Returns the status scalar;
     /// `resume` takes one block parameter.
     IoBind {
@@ -455,9 +452,19 @@ impl HostTarget {
 /// analysis treats any `Tail::Cell` as an impure boundary, like `Host`.
 #[derive(Debug, Clone)]
 pub enum CellTarget {
-    New { init: ValueName, resume: BlockName },
-    Set { cell: ValueName, value: ValueName, resume: BlockName },
-    Get { cell: ValueName, resume: BlockName },
+    New {
+        init: ValueName,
+        resume: BlockName,
+    },
+    Set {
+        cell: ValueName,
+        value: ValueName,
+        resume: BlockName,
+    },
+    Get {
+        cell: ValueName,
+        resume: BlockName,
+    },
 }
 
 impl CellTarget {

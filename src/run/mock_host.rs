@@ -202,7 +202,10 @@ impl Host for MockHost {
         // the async OS path without a real pipe.
         let endpoint = format!("{}:{port}", String::from_utf8_lossy(host)).into_bytes();
 
-        (Status::Ok, self.mint(MockResource::Resolved(vec![endpoint])))
+        (
+            Status::Ok,
+            self.mint(MockResource::Resolved(vec![endpoint])),
+        )
     }
 
     fn resolve(&self, handle: Io) -> (Status, Vec<Vec<u8>>) {

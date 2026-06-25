@@ -867,7 +867,11 @@ pub fn lower_value_prim<'b>(
                     Cont::new(move |work, value| {
                         let resume = record_resume(work, 0, cont);
 
-                        cont::Tail::Cell(cont::CellTarget::Set { cell, value, resume })
+                        cont::Tail::Cell(cont::CellTarget::Set {
+                            cell,
+                            value,
+                            resume,
+                        })
                     }),
                 )
             }),

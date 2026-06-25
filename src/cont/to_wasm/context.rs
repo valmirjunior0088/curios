@@ -882,11 +882,14 @@ impl<'a, 'b> Context<'a, 'b> {
                 });
                 self.host_single_resume(&mut output, resume);
             }
-            cont::CellTarget::Set { cell, value, resume } => {
-                output.extend(self.load_value_instrs(
-                    cell,
-                    LoadAs::Concrete(self.table().cell_type()),
-                ));
+            cont::CellTarget::Set {
+                cell,
+                value,
+                resume,
+            } => {
+                output.extend(
+                    self.load_value_instrs(cell, LoadAs::Concrete(self.table().cell_type())),
+                );
                 output.extend(self.load_value_instrs(value, LoadAs::NonNull));
                 output.push(wasm::Instr::StructSet {
                     type_name: self.table().cell_type(),
@@ -895,10 +898,9 @@ impl<'a, 'b> Context<'a, 'b> {
                 self.host_unit_resume(&mut output, resume);
             }
             cont::CellTarget::Get { cell, resume } => {
-                output.extend(self.load_value_instrs(
-                    cell,
-                    LoadAs::Concrete(self.table().cell_type()),
-                ));
+                output.extend(
+                    self.load_value_instrs(cell, LoadAs::Concrete(self.table().cell_type())),
+                );
                 output.push(wasm::Instr::StructGet {
                     type_name: self.table().cell_type(),
                     field_name: self.table().special_field(),

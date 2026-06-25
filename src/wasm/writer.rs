@@ -100,7 +100,12 @@ where
     }
 
     /// A GC op with a struct-field operand (`struct.get`, `struct.set`, …).
-    fn gc_field_op(&mut self, sub: u64, type_name: &TypeName, field_name: &FieldName) -> Result<()> {
+    fn gc_field_op(
+        &mut self,
+        sub: u64,
+        type_name: &TypeName,
+        field_name: &FieldName,
+    ) -> Result<()> {
         self.gc_op(sub)?;
         self.write_type_name(type_name)?;
         self.write_field_name(type_name, field_name)
@@ -1043,7 +1048,9 @@ where
 
     fn write_export_section(&mut self, exports: &[(String, Export)]) -> Result<()> {
         self.write_section_with(7, |writer| {
-            writer.write_vec(exports, |writer, (name, export)| writer.write_export(name, export))
+            writer.write_vec(exports, |writer, (name, export)| {
+                writer.write_export(name, export)
+            })
         })
     }
 
@@ -1069,7 +1076,9 @@ where
 
     fn write_code_section(&mut self, funcs: &[(FuncName, Func)]) -> Result<()> {
         self.write_section_with(10, |writer| {
-            writer.write_vec(funcs, |writer, (func_name, func)| writer.write_code(func_name, func))
+            writer.write_vec(funcs, |writer, (func_name, func)| {
+                writer.write_code(func_name, func)
+            })
         })
     }
 

@@ -1,10 +1,8 @@
 use {
     super::{
-        Apply, Arity, Atom, Carrier, Cases, Definition, Field, Flt, Func, FuncType, Infix, Item,
-        Let,
-        Match, Module, Nat, One, Plicity, Prim, Proj, Rec, Scope, Struct, StructType,
-        Subterm,
-        Telescope, Term, Three, Tuple, TupleType, Two, InductiveType, Var, Variant,
+        Apply, Arity, Atom, Carrier, Cases, Definition, Field, Flt, Func, FuncType, InductiveType,
+        Infix, Item, Let, Match, Module, Nat, One, Plicity, Prim, Proj, Rec, Scope, Struct,
+        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::{
@@ -232,7 +230,8 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
             collect_labels(left, out);
             collect_labels(right, out);
         }
-        Subterm::Var(_) | Subterm::Type | Subterm::Prop | Subterm::Prim(_) | Subterm::NumLit(_) => {}
+        Subterm::Var(_) | Subterm::Type | Subterm::Prop | Subterm::Prim(_) | Subterm::NumLit(_) => {
+        }
     }
 }
 
@@ -780,12 +779,9 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         };
                         let typed = print_term(ty, depth + total);
                         let printer = match raw {
-                            Some(_) => flat([
-                                pure(mark),
-                                pure(display_label(&label)),
-                                pure(" : "),
-                                typed,
-                            ]),
+                            Some(_) => {
+                                flat([pure(mark), pure(display_label(&label)), pure(" : "), typed])
+                            }
                             None => flat([pure(mark), typed]),
                         };
                         printers.push(printer);

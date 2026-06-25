@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, Match, Metavar, Proj, Rec,
-        ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType,
-        InductiveType, Var, Variant, Visit, check, convert_prim, reduce, unfold_rec,
+        Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, InductiveType, Match,
+        Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
+        Three, Tuple, TupleType, Var, Variant, Visit, check, convert_prim, reduce, unfold_rec,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -274,7 +274,12 @@ impl Convert {
 
     /// Enqueue the bodies of two arity-3 cons arms (`Bin`/`Arr`) for comparison,
     /// opened under shared fresh binders for `(head, tail, ih)`.
-    fn compare_cons_three(&mut self, context: &mut Context, this: Scope<Three>, that: Scope<Three>) {
+    fn compare_cons_three(
+        &mut self,
+        context: &mut Context,
+        this: Scope<Three>,
+        that: Scope<Three>,
+    ) {
         let a = Term::var(Var::free(context.fresh(None)));
         let b = Term::var(Var::free(context.fresh(None)));
         let c = Term::var(Var::free(context.fresh(None)));
@@ -431,7 +436,9 @@ impl Convert {
         }
 
         let mut cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
-            Subterm::TupleType(TupleType { telescope, .. }) if telescope.len() == n => Some(telescope),
+            Subterm::TupleType(TupleType { telescope, .. }) if telescope.len() == n => {
+                Some(telescope)
+            }
             _ => None,
         };
 
@@ -856,7 +863,9 @@ impl Convert {
         let n = tuple.fields.len();
 
         let mut cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
-            Subterm::TupleType(TupleType { telescope, .. }) if telescope.len() == n => Some(telescope),
+            Subterm::TupleType(TupleType { telescope, .. }) if telescope.len() == n => {
+                Some(telescope)
+            }
             _ => None,
         };
 

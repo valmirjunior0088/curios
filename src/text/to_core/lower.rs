@@ -183,7 +183,8 @@ impl<'a, 'b> Lower<'a, 'b> {
         match bytes.split_first() {
             None => Self::syn_call("/syn/Str/Utf8/stop", []),
             Some((&head, tail)) => {
-                let byte: core::Term = core::Term::prim(core::Prim::Nat(core::Nat::new(head as usize)));
+                let byte: core::Term =
+                    core::Term::prim(core::Prim::Nat(core::Nat::new(head as usize)));
                 let next = Self::syn_call("/syn/Str/step", [byte.clone(), state.clone()]);
                 Self::syn_call(
                     "/syn/Str/Utf8/more",
@@ -368,8 +369,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                         .rows
                         .iter()
                         .map(|(pattern, body)| {
-                            let body =
-                                self.scoped(Self::names_of(pattern), || self.term(body))?;
+                            let body = self.scoped(Self::names_of(pattern), || self.term(body))?;
                             Ok((pattern.clone(), body))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
@@ -438,7 +438,11 @@ impl<'a, 'b> Lower<'a, 'b> {
             // A `rec` is mutually recursive: every item label is in scope across
             // all item types, all item bodies, and the tail.
             Subterm::Rec(rec) => {
-                let labels = rec.items.iter().map(|it| it.label.clone()).collect::<Vec<_>>();
+                let labels = rec
+                    .items
+                    .iter()
+                    .map(|it| it.label.clone())
+                    .collect::<Vec<_>>();
                 self.scoped(labels, || {
                     Ok(core::Term::rec(
                         rec.items
@@ -492,8 +496,9 @@ impl<'a, 'b> Lower<'a, 'b> {
             }
             // A lambda re-roots the region (same bind, lexically in scope).
             Subterm::Func(func) => {
-                let body = self
-                    .scoped(Self::param_names(&func.params), || self.region(&func.body, bind))?;
+                let body = self.scoped(Self::param_names(&func.params), || {
+                    self.region(&func.body, bind)
+                })?;
                 let (params, body) = self.lower_func_params(&func.params, body)?;
                 Ok(core::Term::func(params, body))
             }
@@ -600,7 +605,9 @@ impl<'a, 'b> Lower<'a, 'b> {
         binds: &mut Vec<(String, core::Term)>,
     ) -> Result<core::Term, Error> {
         let value = self.collect(&let_.signature.body(), bind, binds)?;
-        let tail = self.scoped(Self::names_of(&let_.binder), || self.region(&let_.tail, bind))?;
+        let tail = self.scoped(Self::names_of(&let_.binder), || {
+            self.region(&let_.tail, bind)
+        })?;
         let type_ = self.term(&let_.signature.type_())?;
         self.lower_let(&let_.binder, type_, value, tail)
     }
@@ -991,9 +998,10 @@ impl<'a, 'b> Lower<'a, 'b> {
         match motive {
             Some(Motive::Constant(body)) => Ok((None, self.term(body)?)),
             // The scrutinee label binds the matched value inside the motive body.
-            Some(Motive::Scrutinee { label, body }) => {
-                Ok((Some(label), self.scoped([label.clone()], || self.term(body))?))
-            }
+            Some(Motive::Scrutinee { label, body }) => Ok((
+                Some(label),
+                self.scoped([label.clone()], || self.term(body))?,
+            )),
             Some(Motive::Annotated { .. }) => Err(Error::AnnotatedMotiveNotInductive),
             None => Ok((None, core::Term::metavar(self.context.fresh_metavar()))),
         }
@@ -1181,7 +1189,9 @@ impl<'a, 'b> Lower<'a, 'b> {
             Pattern::Tuple(_) => self.expand_tuple_column(occurrences, rows, column, motive),
             Pattern::Struct { .. } => self.expand_struct_column(occurrences, rows, column, motive),
             _ => match self.column_kind(&rows, column)? {
-                ColumnKind::Inductive => self.compile_inductive_column(occurrences, rows, column, motive),
+                ColumnKind::Inductive => {
+                    self.compile_inductive_column(occurrences, rows, column, motive)
+                }
                 ColumnKind::Nat => self.compile_nat_column(occurrences, rows, column, motive),
                 ColumnKind::Bln => self.compile_bln_column(occurrences, rows, column, motive),
             },
@@ -1666,14 +1676,10 @@ impl<'a, 'b> Lower<'a, 'b> {
                 core::Prim::io_write(self.term(handle)?, self.term(bytes)?)
             }
             Prim::IoOpen(path, mode) => core::Prim::IoOpen(self.term(path)?, self.term(mode)?),
-            Prim::IoLookup(host, port) => {
-                core::Prim::IoLookup(self.term(host)?, self.term(port)?)
-            }
+            Prim::IoLookup(host, port) => core::Prim::IoLookup(self.term(host)?, self.term(port)?),
             Prim::IoResolve(handle) => core::Prim::IoResolve(self.term(handle)?),
             Prim::IoSocket(addr) => core::Prim::IoSocket(self.term(addr)?),
-            Prim::IoBind(handle, addr) => {
-                core::Prim::IoBind(self.term(handle)?, self.term(addr)?)
-            }
+            Prim::IoBind(handle, addr) => core::Prim::IoBind(self.term(handle)?, self.term(addr)?),
             Prim::IoConnect(handle, addr) => {
                 core::Prim::IoConnect(self.term(handle)?, self.term(addr)?)
             }
@@ -1702,11 +1708,9 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::IoSetReuseaddr(handle, on) => {
                 core::Prim::IoSetReuseaddr(self.term(handle)?, self.term(on)?)
             }
-            Prim::IoPoll(handles, events, timeout) => core::Prim::IoPoll(
-                self.term(handles)?,
-                self.term(events)?,
-                self.term(timeout)?,
-            ),
+            Prim::IoPoll(handles, events, timeout) => {
+                core::Prim::IoPoll(self.term(handles)?, self.term(events)?, self.term(timeout)?)
+            }
             Prim::IoClose(handle) => core::Prim::IoClose(self.term(handle)?),
             Prim::IoClockWall => core::Prim::IoClockWall,
             Prim::IoClockMono => core::Prim::IoClockMono,
@@ -1759,12 +1763,9 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::ArrFlatten(ty, operand) => {
                 core::Prim::arr_flatten(self.term(ty)?, self.term(operand)?)
             }
-            Prim::ArrMap(a, b, f, arr) => core::Prim::arr_map(
-                self.term(a)?,
-                self.term(b)?,
-                self.term(f)?,
-                self.term(arr)?,
-            ),
+            Prim::ArrMap(a, b, f, arr) => {
+                core::Prim::arr_map(self.term(a)?, self.term(b)?, self.term(f)?, self.term(arr)?)
+            }
             Prim::CellType(inner) => core::Prim::cell_type(self.term(inner)?),
             Prim::Cell(type_, init) => core::Prim::cell_new(self.term(type_)?, self.term(init)?),
             Prim::CellSet(type_, cell, value) => {

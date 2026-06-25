@@ -117,9 +117,9 @@ pub enum HostPrim {
 
 #[derive(Debug)]
 pub enum CellPrim {
-    New(Term),         // init
-    Set(Term, Term),   // cell, value
-    Get(Term),         // cell
+    New(Term),       // init
+    Set(Term, Term), // cell, value
+    Get(Term),       // cell
 }
 
 #[derive(Debug)]

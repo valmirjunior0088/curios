@@ -1,16 +1,12 @@
 use {
     super::{
         Apply, Atom, Carrier, Cases, Context, Definition, Error, Field, Flt, Func, FuncType,
-        ImplicitOrigin, Inductive, InductiveParam, Infix, Int, Invert, Item, Let, Many, Match,
-        Metavar, Module,
-        MotivePattern,
-        MotiveSlot, Nat, NumLit, ParkedWork, Plicity, Prim, Proj, Rec, Scope, Struct,
-        StructType,
-        Structure,
-        Subterm, Telescope, Term, Three, Tuple, TupleType, Two, InductiveType, Var, Variant,
-        case_target_indices,
-        check, check_motive, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
-        is_prop, reduce_with, refine_head, sort_term,
+        ImplicitOrigin, Inductive, InductiveParam, InductiveType, Infix, Int, Invert, Item, Let,
+        Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, NumLit, ParkedWork, Plicity,
+        Prim, Proj, Rec, Scope, Struct, StructType, Structure, Subterm, Telescope, Term, Three,
+        Tuple, TupleType, Two, Var, Variant, case_target_indices, check, check_motive,
+        convert_with, drain_parked, elaborate_prim, expect, invert_indices, is_prop, reduce_with,
+        refine_head, sort_term,
     },
     num_bigint::BigInt,
     num_traits::ToPrimitive,
@@ -278,8 +274,13 @@ fn elaborate_apply(
             Telescope::Cons(ty, rest) => (ty, rest),
         };
         let term = if checking
-            && blocked_on_metavar(context, &params[index], &ty, &result_metavars, expected_ground)?
-        {
+            && blocked_on_metavar(
+                context,
+                &params[index],
+                &ty,
+                &result_metavars,
+                expected_ground,
+            )? {
             postponed.push(index);
             params[index].clone()
         } else {
@@ -296,8 +297,13 @@ fn elaborate_apply(
                 .clone()
                 .nth(slot, |k| elaborated[k].clone())
                 .expect("postponed slot is within the telescope");
-            if blocked_on_metavar(context, &params[slot], &slot_ty, &result_metavars, expected_ground)?
-            {
+            if blocked_on_metavar(
+                context,
+                &params[slot],
+                &slot_ty,
+                &result_metavars,
+                expected_ground,
+            )? {
                 cursor += 1;
             } else {
                 elaborated[slot] = check(context, &params[slot], slot_ty)?;
@@ -559,8 +565,7 @@ fn elaborate_nat_match(
         )
     })?;
 
-    let succ_elaborated =
-        Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
+    let succ_elaborated = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
 
     let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
@@ -643,11 +648,7 @@ fn elaborate_arr_match(
 
     let cons_elaborated = Scope::close(
         Three,
-        &[
-            head_label.as_str(),
-            tail_label.as_str(),
-            ih_label.as_str(),
-        ],
+        &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
         cons_body,
     );
 
@@ -730,11 +731,7 @@ fn elaborate_bin_match(
 
     let cons_elaborated = Scope::close(
         Three,
-        &[
-            head_label.as_str(),
-            tail_label.as_str(),
-            ih_label.as_str(),
-        ],
+        &[head_label.as_str(), tail_label.as_str(), ih_label.as_str()],
         cons_body,
     );
 
@@ -972,7 +969,10 @@ fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Er
 /// and indices are checked pointwise (dependently) as one flat argument list
 /// through the declaration's full index telescope (whose leading binders are
 /// the parameters), and the whole node is a `Type`.
-fn elaborate_inductive_type(context: &mut Context, ut: &InductiveType) -> Result<(Term, Term), Error> {
+fn elaborate_inductive_type(
+    context: &mut Context,
+    ut: &InductiveType,
+) -> Result<(Term, Term), Error> {
     let InductiveType {
         name,
         params,
@@ -1096,7 +1096,10 @@ fn elaborate_struct_type(
             tele = rest.open(&[&arg]);
             resolved.push(arg);
         }
-        return Ok((Term::struct_type(name, resolved), structure.result_sort.clone()));
+        return Ok((
+            Term::struct_type(name, resolved),
+            structure.result_sort.clone(),
+        ));
     }
 
     if params.len() != structure.params.len() {
@@ -1928,12 +1931,20 @@ fn elaborate_num_lit(
         }
         Subterm::Prim(Prim::IntType) => {
             let magnitude = BigInt::from(num_lit.magnitude.clone());
-            let value = if num_lit.negative { -magnitude } else { magnitude };
+            let value = if num_lit.negative {
+                -magnitude
+            } else {
+                magnitude
+            };
             (Prim::Int(Int::new(value)), int_type)
         }
         Subterm::Prim(Prim::FltType) => {
             let magnitude = num_lit.magnitude.to_f32().unwrap_or(f32::INFINITY);
-            let value = if num_lit.negative { -magnitude } else { magnitude };
+            let value = if num_lit.negative {
+                -magnitude
+            } else {
+                magnitude
+            };
             (Prim::Flt(Flt::from_f32(value)), flt_type)
         }
         // A concrete expected type that is non-numeric — or `Nat` for a negative
@@ -1942,7 +1953,11 @@ fn elaborate_num_lit(
             let Mode::Check(expected) = &mode else {
                 unreachable!("Infer-mode target is always the Nat/Int shape default");
             };
-            let inferred = if num_lit.negative { int_type } else { default_type };
+            let inferred = if num_lit.negative {
+                int_type
+            } else {
+                default_type
+            };
             return Err(Error::type_mismatch(inferred, expected.clone()));
         }
     };
@@ -2026,7 +2041,12 @@ fn elaborate_infix(
     let head = Term::unwrap_or_clone(reduce_with(context, &operand_type)?);
     let build = match infix.op.prim_for(&head) {
         Some(build) => build,
-        None => return Err(Error::operator_undefined(infix.op.symbol().to_string(), head)),
+        None => {
+            return Err(Error::operator_undefined(
+                infix.op.symbol().to_string(),
+                head,
+            ));
+        }
     };
 
     let result_type = if infix.op.result_is_bln() {
@@ -2109,9 +2129,8 @@ fn elaborate_func_check(
     }
 
     let mut domains = Vec::new();
-    let body = context.with_frame(|context| {
-        walk(context, term, telescope.clone(), ft.telescope, &mut domains)
-    })?;
+    let body = context
+        .with_frame(|context| walk(context, term, telescope.clone(), ft.telescope, &mut domains))?;
 
     Ok((Term::func(domains, body), expected))
 }

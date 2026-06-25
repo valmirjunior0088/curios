@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, Item, Let, Many,
-        Match, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, InductiveType, Var, Variant,
+        Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, InductiveType,
+        Item, Let, Many, Match, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope,
+        Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
         erase_prim, expect_prim_head, infer, is_prop, reduce_with, refine_head,
     },
     crate::ersd,
@@ -499,21 +499,20 @@ fn erase_arr_match(
         Term::var(Var::free(&pred_label)),
     ))
     .into();
-    let head_value: Term =
-        Subterm::Prim(Prim::ArrGet(elem.clone(), head.clone(), index)).into();
+    let head_value: Term = Subterm::Prim(Prim::ArrGet(elem.clone(), head.clone(), index)).into();
     let tail_value: Term = Subterm::Prim(Prim::ArrSlice(
         elem.clone(),
         head.clone(),
-        Subterm::Prim(Prim::nat_sub(len.clone(), Term::var(Var::free(&pred_label)))).into(),
+        Subterm::Prim(Prim::nat_sub(
+            len.clone(),
+            Term::var(Var::free(&pred_label)),
+        ))
+        .into(),
         len.clone(),
     ))
     .into();
 
-    let succ_body = cons_case.open(&[
-        &head_value,
-        &tail_value,
-        &Term::var(Var::free(&ih_label)),
-    ]);
+    let succ_body = cons_case.open(&[&head_value, &tail_value, &Term::var(Var::free(&ih_label))]);
     let succ_case = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
 
     erase_nat_match(context, &len, &nat_motive, empty_case, &succ_case)
@@ -556,16 +555,16 @@ fn erase_bin_match(
     let head_value: Term = Subterm::Prim(Prim::BinGet(head.clone(), index)).into();
     let tail_value: Term = Subterm::Prim(Prim::BinSlice(
         head.clone(),
-        Subterm::Prim(Prim::nat_sub(len.clone(), Term::var(Var::free(&pred_label)))).into(),
+        Subterm::Prim(Prim::nat_sub(
+            len.clone(),
+            Term::var(Var::free(&pred_label)),
+        ))
+        .into(),
         len.clone(),
     ))
     .into();
 
-    let succ_body = cons_case.open(&[
-        &head_value,
-        &tail_value,
-        &Term::var(Var::free(&ih_label)),
-    ]);
+    let succ_body = cons_case.open(&[&head_value, &tail_value, &Term::var(Var::free(&ih_label))]);
     let succ_case = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
 
     erase_nat_match(context, &len, &nat_motive, empty_case, &succ_case)

@@ -167,15 +167,15 @@ fn main() {
     });
 
     // Third: claiming `IsSorted` of an unsorted list. The proposition computes
-    // to a tuple whose first field is `Lte(3, 1)` — which is `Void`, not a
+    // to a tuple whose first field is `Lte(3, 1)` — which is `False`, not a
     // tuple type, so the `()` written there is refused.
     let unsorted_claim = r#"
-        use /std/{Nat, Lst, Void};
+        use /std/{Nat, Lst, False};
 
         let Lte(a : Nat, b : Nat) -> Type =
             match Nat/lte(a, b) : Type
             | true => {}
-            | false => Void
+            | false => False
             end;
 
         rec IsSorted(l : Lst(Nat)) -> Type =

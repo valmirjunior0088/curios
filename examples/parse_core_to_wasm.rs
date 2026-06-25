@@ -16,7 +16,7 @@ fn main() {
             | left(_) => +42
             | right(_) => +7
             end;
-        let my_list : Arr(Nat) = [1, 2, 3];
+        let my_list : Arr(Nat) = Arr/cons(1, Arr/cons(2, Arr/single(3)));
         let my_bin : Bin = \01\02\03;
         let my_str : Bin = /std/Str/to_bin("hello");
         let list_len : Nat = Arr/len(my_list);

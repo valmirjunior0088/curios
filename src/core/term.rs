@@ -1,5 +1,7 @@
 use {
-    super::{Atom, Bound, Flt, Int, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit},
+    super::{
+        Atom, Bound, Flt, Int, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit,
+    },
     crate::Span,
     num_bigint::BigUint,
     std::{
@@ -1211,7 +1213,9 @@ impl Subterm {
                 right.collect_construction_names(names);
             }
             Subterm::Metavar(Metavar { spine, .. }) => {
-                spine.iter().for_each(|t| t.collect_construction_names(names));
+                spine
+                    .iter()
+                    .for_each(|t| t.collect_construction_names(names));
             }
             Subterm::Prim(prim) => prim_construction_names(prim, names),
             Subterm::Func(Func { telescope }) => {
@@ -1222,13 +1226,17 @@ impl Subterm {
             }
             Subterm::Apply(Apply { head, params, .. }) => {
                 head.collect_construction_names(names);
-                params.iter().for_each(|p| p.collect_construction_names(names));
+                params
+                    .iter()
+                    .for_each(|p| p.collect_construction_names(names));
             }
             Subterm::TupleType(TupleType { telescope, .. }) => {
                 telescope_unit_construction_names(telescope, names)
             }
             Subterm::Tuple(Tuple { fields, .. }) => {
-                fields.iter().for_each(|f| f.collect_construction_names(names));
+                fields
+                    .iter()
+                    .for_each(|f| f.collect_construction_names(names));
             }
             Subterm::Proj(Proj { head, .. }) => head.collect_construction_names(names),
             Subterm::InductiveType(InductiveType {
@@ -1237,8 +1245,12 @@ impl Subterm {
                 indices,
             }) => {
                 names.insert(name.clone());
-                params.iter().for_each(|p| p.collect_construction_names(names));
-                indices.iter().for_each(|i| i.collect_construction_names(names));
+                params
+                    .iter()
+                    .for_each(|p| p.collect_construction_names(names));
+                indices
+                    .iter()
+                    .for_each(|i| i.collect_construction_names(names));
             }
             Subterm::Variant(Variant {
                 name,
@@ -1247,12 +1259,18 @@ impl Subterm {
                 ..
             }) => {
                 names.insert(name.clone());
-                params.iter().for_each(|p| p.collect_construction_names(names));
-                payload.iter().for_each(|p| p.collect_construction_names(names));
+                params
+                    .iter()
+                    .for_each(|p| p.collect_construction_names(names));
+                payload
+                    .iter()
+                    .for_each(|p| p.collect_construction_names(names));
             }
             Subterm::StructType(StructType { name, params }) => {
                 names.insert(name.clone());
-                params.iter().for_each(|p| p.collect_construction_names(names));
+                params
+                    .iter()
+                    .for_each(|p| p.collect_construction_names(names));
             }
             Subterm::Struct(Struct {
                 name,
@@ -1261,8 +1279,12 @@ impl Subterm {
                 ..
             }) => {
                 names.insert(name.clone());
-                params.iter().for_each(|p| p.collect_construction_names(names));
-                fields.iter().for_each(|f| f.collect_construction_names(names));
+                params
+                    .iter()
+                    .for_each(|p| p.collect_construction_names(names));
+                fields
+                    .iter()
+                    .for_each(|f| f.collect_construction_names(names));
             }
             Subterm::Match(Match {
                 head,
@@ -1280,7 +1302,9 @@ impl Subterm {
                         true_case.collect_construction_names(names);
                     }
                     Cases::Switch { cases, default } => {
-                        cases.values().for_each(|b| b.collect_construction_names(names));
+                        cases
+                            .values()
+                            .for_each(|b| b.collect_construction_names(names));
                         default.collect_construction_names(names);
                     }
                     Cases::Inductive { cases, pattern } => {
@@ -2381,9 +2405,7 @@ where
         Prim::IoResolve(handle) => Prim::IoResolve(visit.visit_subterm(handle)),
         Prim::IoSocket(addr) => Prim::IoSocket(visit.visit_subterm(addr)),
         Prim::IoBind(handle, addr) => traverse_binary(handle, addr, visit, Prim::IoBind),
-        Prim::IoListen(handle, backlog) => {
-            traverse_binary(handle, backlog, visit, Prim::IoListen)
-        }
+        Prim::IoListen(handle, backlog) => traverse_binary(handle, backlog, visit, Prim::IoListen),
         Prim::IoAccept(handle) => Prim::IoAccept(visit.visit_subterm(handle)),
         Prim::IoConnect(handle, addr) => traverse_binary(handle, addr, visit, Prim::IoConnect),
         Prim::IoStartTls(handle, sni) => traverse_binary(handle, sni, visit, Prim::IoStartTls),

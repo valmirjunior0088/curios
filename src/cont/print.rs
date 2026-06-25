@@ -497,7 +497,11 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                 pure(" "),
                 print_block_name(resume),
             ]),
-            CellTarget::Set { cell, value, resume } => flat([
+            CellTarget::Set {
+                cell,
+                value,
+                resume,
+            } => flat([
                 pure("Cell.set "),
                 print_value_name(cell),
                 pure(" "),

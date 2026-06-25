@@ -1,8 +1,8 @@
 use {
     super::{
         Error, FuncSugarParam, FuncType, FuncTypeParam, LetSignature, Loader, Module, Name, Nat,
-        NatLiteral, Pattern, Plicity, Prim, Qualifier, Subterm, Term, TopItem, TopLet,
-        TopMod, TupleType, TupleTypeParam,
+        NatLiteral, Pattern, Plicity, Prim, Qualifier, Subterm, Term, TopItem, TopLet, TopMod,
+        TupleType, TupleTypeParam,
     },
     crate::wire,
 };
@@ -550,7 +550,11 @@ fn io_ops() -> Vec<TopItem> {
                 ("timeout", int()),
             ],
             arr_of(nat()),
-            prim(Prim::IoPoll(name("handles"), name("events"), name("timeout"))),
+            prim(Prim::IoPoll(
+                name("handles"),
+                name("events"),
+                name("timeout"),
+            )),
         ),
         pub_fn(
             "close",

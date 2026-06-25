@@ -19,7 +19,11 @@ impl Lower for () {
 
 /// A Curios IO status lowers as its `u32` wire code (an i31).
 impl Lower for Status {
-    fn lower(self, caller: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
         self.code().lower(caller, results)
     }
 }
@@ -27,7 +31,11 @@ impl Lower for Status {
 /// A descriptor lowers as its wire token bytes — a `Bin` (an i8 array), the same
 /// uniform shape the runtime keys handles on.
 impl Lower for Io {
-    fn lower(self, caller: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
         self.bytes().lower(caller, results)
     }
 }

@@ -1,12 +1,10 @@
 use {
     super::{
-        Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Infix,
-        Let,
-        LetBang, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, NumLit, Pattern,
-        PatternLit,
-        Plicity, Prim, Proj, Radix,
-        Rec, StructLit, Subterm, Syn, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopInductive,
-        TopUse, Tuple, TupleType, TupleTypeParam, InductiveMatch, UseGroup,
+        Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem,
+        InductiveMatch, Infix, Let, LetBang, LetSignature, Match, Module, Motive, Nat, NatLiteral,
+        NatMatch, NumLit, Pattern, PatternLit, Plicity, Prim, Proj, Radix, Rec, StructLit, Subterm,
+        Syn, Term, TopCase, TopInductive, TopItem, TopLet, TopMod, TopStruct, TopUse, Tuple,
+        TupleType, TupleTypeParam, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_bigint::BigUint,
@@ -316,9 +314,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::IoSetSendTimeout(handle, ms) => {
             print_prim_call("Io.set_send_timeout", vec![handle, ms])
         }
-        Prim::IoSetReuseaddr(handle, on) => {
-            print_prim_call("Io.set_reuseaddr", vec![handle, on])
-        }
+        Prim::IoSetReuseaddr(handle, on) => print_prim_call("Io.set_reuseaddr", vec![handle, on]),
         Prim::IoPoll(handles, events, timeout) => {
             print_prim_call("Io.poll", vec![handles, events, timeout])
         }
@@ -434,23 +430,21 @@ fn print_term(term: Term) -> Printer<'static> {
             head,
             params,
             fields,
-        }) => {
-            flat([
-                pure(head.join()),
-                if params.is_empty() {
-                    pure("")
-                } else {
-                    flat([
-                        pure("("),
-                        sep_flat(params.into_iter().map(print_term), || pure(", ")),
-                        pure(")"),
-                    ])
-                },
-                pure(" { "),
-                sep_flat(fields.into_iter().map(print_named_field), || pure(", ")),
-                pure(" }"),
-            ])
-        }
+        }) => flat([
+            pure(head.join()),
+            if params.is_empty() {
+                pure("")
+            } else {
+                flat([
+                    pure("("),
+                    sep_flat(params.into_iter().map(print_term), || pure(", ")),
+                    pure(")"),
+                ])
+            },
+            pure(" { "),
+            sep_flat(fields.into_iter().map(print_named_field), || pure(", ")),
+            pure(" }"),
+        ]),
         Subterm::Match(match_) => match match_ {
             Match::Bln(BlnMatch {
                 head,

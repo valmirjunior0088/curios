@@ -387,9 +387,7 @@ pub fn erase_prim(
             &nat_type(),
         )?))),
         Prim::CellType(_) => Ok(ersd::Subterm::Erased.into()),
-        Prim::Cell(type_, init) => {
-            Ok(cell(ersd::CellPrim::New(erase(context, init, type_)?)))
-        }
+        Prim::Cell(type_, init) => Ok(cell(ersd::CellPrim::New(erase(context, init, type_)?))),
         Prim::CellSet(type_, c, v) => {
             let cell_type: Term = Subterm::Prim(Prim::CellType(type_.clone())).into();
             Ok(cell(ersd::CellPrim::Set(

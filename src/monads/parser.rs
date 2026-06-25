@@ -382,7 +382,10 @@ pub fn preceded_by_space<'a>() -> Parser<'a, ()> {
 
         match preceded {
             true => Ok(((), state)),
-            false => Err(ParserError::new(state, "expected whitespace before operator")),
+            false => Err(ParserError::new(
+                state,
+                "expected whitespace before operator",
+            )),
         }
     })
 }

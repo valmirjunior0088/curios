@@ -381,10 +381,8 @@ fn process_items(
                                     .iter()
                                     .enumerate()
                                     .map(|(i, param)| {
-                                        let n = param
-                                            .label
-                                            .clone()
-                                            .unwrap_or_else(|| format!("_{i}"));
+                                        let n =
+                                            param.label.clone().unwrap_or_else(|| format!("_{i}"));
                                         Ok((n, lower.term(&param.type_)?))
                                     })
                                     .collect::<Result<Vec<_>, Error>>()?;
@@ -517,26 +515,28 @@ fn process_items(
                         // call-site `@` supplies one positionally — while the
                         // payload binders keep their declared marks (`@m`
                         // makes one implicit; the default is explicit).
-                        let param_tys =
-                            u.params
-                                .iter()
-                                .map(|(_, n, t)| {
-                                    Ok((core::Plicity::Implicit, n.clone(), lower.term(t)?))
-                                })
-                                .chain(c.payload.iter().enumerate().map(|(i, param)| {
-                                    Ok((
-                                        param.plicity,
-                                        payload_name(i, &param.label),
-                                        lower.term(&param.type_)?,
-                                    ))
-                                }))
-                                .collect::<Result<Vec<_>, Error>>()?;
+                        let param_tys = u
+                            .params
+                            .iter()
+                            .map(|(_, n, t)| {
+                                Ok((core::Plicity::Implicit, n.clone(), lower.term(t)?))
+                            })
+                            .chain(c.payload.iter().enumerate().map(|(i, param)| {
+                                Ok((
+                                    param.plicity,
+                                    payload_name(i, &param.label),
+                                    lower.term(&param.type_)?,
+                                ))
+                            }))
+                            .collect::<Result<Vec<_>, Error>>()?;
                         // Erasure is sort-driven: `erase_func` drops the same
                         // proof/type payload params that `erase_variant` drops
                         // from the tuple — the constructor function's arity and its
                         // injected variant's arity stay in lockstep.
-                        let ctor_type =
-                            core::Term::func_type_marked(param_tys.clone(), lower.term(&output_type)?);
+                        let ctor_type = core::Term::func_type_marked(
+                            param_tys.clone(),
+                            lower.term(&output_type)?,
+                        );
 
                         // Constructor body: (params..., _0, ...) => the variant's
                         // injection, a primitive `Variant` normal form.
@@ -557,10 +557,8 @@ fn process_items(
                             args,
                         );
                         // The lambda binds every parameter regardless of mark.
-                        let ctor_body = core::Term::func(
-                            param_tys.into_iter().map(|(_, n, t)| (n, t)),
-                            inject,
-                        );
+                        let ctor_body =
+                            core::Term::func(param_tys.into_iter().map(|(_, n, t)| (n, t)), inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             name: context.prefixed(&u.label).with(&c.label),

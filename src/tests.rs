@@ -152,10 +152,7 @@ fn end_to_end() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"+42"
-    );
+    assert_eq!(io.output(), b"+42");
 }
 
 #[test]
@@ -774,10 +771,7 @@ fn flt_to_le_bin_prints_raw_bytes() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        1.5f32.to_le_bytes()
-    );
+    assert_eq!(io.output(), 1.5f32.to_le_bytes());
 }
 
 #[test]
@@ -789,10 +783,7 @@ fn io_write() {
         system,
     )
     .expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"hello"
-    );
+    assert_eq!(io.output(), b"hello");
 }
 
 #[test]
@@ -804,10 +795,7 @@ fn io_write_stderr() {
         system,
     )
     .expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"oops"
-    );
+    assert_eq!(io.output(), b"oops");
 }
 
 #[test]
@@ -825,10 +813,7 @@ fn io_read() {
         system,
     )
     .expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"hello\n"
-    );
+    assert_eq!(io.output(), b"hello\n");
 }
 
 #[test]
@@ -841,10 +826,7 @@ fn empty_bin_literal_is_the_empty_sequence() {
         system,
     )
     .expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"ok"
-    );
+    assert_eq!(io.output(), b"ok");
 }
 
 // Local binders shadow like-named *module* bindings, and a local name never
@@ -894,10 +876,7 @@ fn named_fields_run_end_to_end() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"42"
-    );
+    assert_eq!(io.output(), b"42");
 }
 
 // `Io/read(h, n)` is the typed blocking read: each call yields a `chunk` of
@@ -933,13 +912,11 @@ fn file_read_all_reads_a_seeded_file() {
         end
         "#;
 
-    let (system, io) =
-        MockHost::builder().files([("data.txt", "file contents")]).build();
+    let (system, io) = MockHost::builder()
+        .files([("data.txt", "file contents")])
+        .build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"file contents"
-    );
+    assert_eq!(io.output(), b"file contents");
 }
 
 #[test]
@@ -963,10 +940,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"not found"
-    );
+    assert_eq!(io.output(), b"not found");
 }
 
 #[test]
@@ -981,10 +955,7 @@ fn file_with_write_mode_persists_through_close() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"ok"
-    );
+    assert_eq!(io.output(), b"ok");
     assert_eq!(io.file(b"out.txt"), Some(b"written".to_vec()));
 }
 
@@ -1003,10 +974,7 @@ fn effectful_match_scrutinee_runs_once() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"ok"
-    );
+    assert_eq!(io.output(), b"ok");
     assert_eq!(io.file(b"log.txt"), Some(b"x".to_vec()));
 }
 
@@ -1029,13 +997,11 @@ fn file_read_pulls_bytes_inside_the_bracket() {
         end
         "#;
 
-    let (system, io) =
-        MockHost::builder().files([("lines.txt", "first\nsecond\n")]).build();
+    let (system, io) = MockHost::builder()
+        .files([("lines.txt", "first\nsecond\n")])
+        .build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"first\nsecond\n"
-    );
+    assert_eq!(io.output(), b"first\nsecond\n");
 }
 
 #[test]
@@ -1063,10 +1029,7 @@ fn std_io_read_line_sequences_lines() {
 
     let (system, io) = MockHost::builder().stdin_lines(["alpha", "beta"]).build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"alpha\nbeta\n"
-    );
+    assert_eq!(io.output(), b"alpha\nbeta\n");
 }
 
 #[test]
@@ -1086,10 +1049,7 @@ fn std_io_read_line_signals_eof_with_none() {
 
     let (system, io) = MockHost::builder().stdin_lines(["only"]).build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"eof"
-    );
+    assert_eq!(io.output(), b"eof");
 }
 
 // A line longer than `read_line`'s 1024-byte refill chunk forces the buffer
@@ -1109,12 +1069,11 @@ fn std_io_read_line_spans_refills() {
         "#;
 
     let long_line = "a".repeat(1500);
-    let (system, io) = MockHost::builder().stdin_lines([long_line.as_str()]).build();
+    let (system, io) = MockHost::builder()
+        .stdin_lines([long_line.as_str()])
+        .build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"1501"
-    );
+    assert_eq!(io.output(), b"1501");
 }
 
 #[test]
@@ -1130,10 +1089,7 @@ fn triangular_sum() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"10"
-    );
+    assert_eq!(io.output(), b"10");
 }
 
 #[test]
@@ -1152,10 +1108,7 @@ fn match_omitted_motive_infers() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"10"
-    );
+    assert_eq!(io.output(), b"10");
 }
 
 #[test]
@@ -1167,10 +1120,7 @@ fn multi_arg_function() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"+7"
-    );
+    assert_eq!(io.output(), b"+7");
 }
 
 #[test]
@@ -1182,10 +1132,7 @@ fn curried_function() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"+7"
-    );
+    assert_eq!(io.output(), b"+7");
 }
 
 #[test]
@@ -1278,10 +1225,7 @@ fn let_bang_region_mixes_action_types() {
     let (system, io) = MockHost::builder().build();
     crate::run_entrypoint(Duration::from_secs(10), &entrypoint, &loader, system)
         .expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"AB"
-    );
+    assert_eq!(io.output(), b"AB");
 }
 
 #[test]
@@ -1305,10 +1249,7 @@ fn vec_cons_with_nat_succ() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"42"
-    );
+    assert_eq!(io.output(), b"42");
 }
 
 #[test]
@@ -1454,10 +1395,7 @@ fn printf_partial_evaluation_reduces_residual() {
 
     let (system, io) = MockHost::builder().stdin_lines(["Alice"]).build();
     crate::run_wasm(&wasm_module, system).expect("execution succeeded");
-    assert_eq!(
-        io.output(),
-        b"Alice is 30"
-    );
+    assert_eq!(io.output(), b"Alice is 30");
 }
 
 #[test]
@@ -1643,10 +1581,7 @@ fn bare_tuple_continuation_tail_infers() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"104"
-    );
+    assert_eq!(io.output(), b"104");
 }
 
 #[test]
@@ -1718,10 +1653,7 @@ fn struct_parameter_inference_at_construction() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"12"
-    );
+    assert_eq!(io.output(), b"12");
 }
 
 // A zero-cost newtype: a single positional field, projected with `.0`. It
@@ -1758,10 +1690,7 @@ fn struct_dependent_fields_run_end_to_end() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"42"
-    );
+    assert_eq!(io.output(), b"42");
 }
 
 // The motivating case: an abstract type — public type, hidden representation —
@@ -1781,10 +1710,7 @@ fn struct_abstract_smart_constructor_round_trips() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"42"
-    );
+    assert_eq!(io.output(), b"42");
 }
 
 // Constructing a private-representation struct from outside its declaring
@@ -1992,10 +1918,7 @@ fn struct_destructure_rename_binds_new_names() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"10"
-    );
+    assert_eq!(io.output(), b"10");
 }
 
 // Naming a subset of fields is allowed — the rest are simply ignored.
@@ -2082,10 +2005,7 @@ fn struct_destructure_in_match_arm() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"11"
-    );
+    assert_eq!(io.output(), b"11");
 }
 
 // Destructuring projects through the representation-privacy boundary: a
@@ -2157,10 +2077,7 @@ fn matrix_nat_literal_in_nested_column() {
     // special -> 100 (head is 0), other -> 7 (head binder). 100 + 7 = 107.
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"107"
-    );
+    assert_eq!(io.output(), b"107");
 }
 
 // A top-level `Nat` match with a *named* default falls through to the matrix —
@@ -2182,10 +2099,7 @@ fn matrix_nat_literal_named_default() {
     // 100 + 200 + 1007 = 1307.
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"1307"
-    );
+    assert_eq!(io.output(), b"1307");
 }
 
 // A `Nat` literal nested inside a struct field pattern: the struct column expands
@@ -2205,10 +2119,7 @@ fn matrix_nat_literal_in_struct_field() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"42"
-    );
+    assert_eq!(io.output(), b"42");
 }
 
 // A `_` fallthrough at an inductive column expands into the *unlisted* constructors:
@@ -2342,10 +2253,7 @@ fn str_literal_prints_its_bytes() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"hello"
-    );
+    assert_eq!(io.output(), b"hello");
 }
 
 // `Str/of_bin` is the checked constructor: it runs `is_utf8` and yields `some`
@@ -2378,10 +2286,7 @@ fn str_of_bin_rejects_invalid_utf8() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"rejected"
-    );
+    assert_eq!(io.output(), b"rejected");
 }
 
 // A truncated multi-byte sequence (a 2-byte lead with no continuation) fails the
@@ -2398,10 +2303,7 @@ fn str_of_bin_rejects_truncated_multibyte() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"rejected"
-    );
+    assert_eq!(io.output(), b"rejected");
 }
 
 // `/std/BinProof` is a library of erased equational lemmas about the random-access
@@ -2540,10 +2442,7 @@ fn str_get_indexes_codepoints_of_every_width() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"3,97,8364,128512"
-    );
+    assert_eq!(io.output(), b"3,97,8364,128512");
 }
 
 // `Str/at` is the proof-carrying indexer: `ok : Lt(i, len s)` flows (erased) into
@@ -2614,7 +2513,10 @@ fn str_slice_spans_every_codepoint_width() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(io.output(), [0xc3, 0xa9, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80]);
+    assert_eq!(
+        io.output(),
+        [0xc3, 0xa9, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80]
+    );
 }
 
 // `Str/trim` is string-typed and strips only the leading/trailing ASCII
@@ -2649,10 +2551,7 @@ fn str_trim_all_whitespace_is_empty() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"!"
-    );
+    assert_eq!(io.output(), b"!");
 }
 
 // A *non-productive* inner `rec` forced in a type position must degrade to the
@@ -2711,10 +2610,7 @@ fn bln_logic_and_of_str() {
     )
     .expect("expected result");
 
-    assert_eq!(
-        io.output(),
-        b"truefalse"
-    );
+    assert_eq!(io.output(), b"truefalse");
 }
 
 #[test]
@@ -2732,10 +2628,7 @@ fn bln_xor_executes() {
     )
     .expect("expected result");
 
-    assert_eq!(
-        io.output(),
-        b"truefalse"
-    );
+    assert_eq!(io.output(), b"truefalse");
 }
 
 #[test]
@@ -2753,10 +2646,7 @@ fn bln_eql_executes() {
     )
     .expect("expected result");
 
-    assert_eq!(
-        io.output(),
-        b"truefalse"
-    );
+    assert_eq!(io.output(), b"truefalse");
 }
 
 #[test]
@@ -2790,10 +2680,7 @@ fn nat_bitwise_ops_execute() {
     )
     .expect("expected result");
 
-    assert_eq!(
-        io.output(),
-        b"1,193,190,33554432,32"
-    );
+    assert_eq!(io.output(), b"1,193,190,33554432,32");
 }
 
 #[test]
@@ -2829,10 +2716,7 @@ fn int_bitwise_ops_execute() {
     )
     .expect("expected result");
 
-    assert_eq!(
-        io.output(),
-        b"+1,+193,+190,-1056964608,-33,-66"
-    );
+    assert_eq!(io.output(), b"+1,+193,+190,-1056964608,-33,-66");
 }
 
 #[test]
@@ -2853,10 +2737,7 @@ fn nat_of_str_returns_option() {
     )
     .expect("expected result");
 
-    assert_eq!(
-        io.output(),
-        b"139"
-    );
+    assert_eq!(io.output(), b"139");
 }
 
 #[test]
@@ -2876,10 +2757,7 @@ fn int_of_str_returns_option() {
     )
     .expect("expected result");
 
-    assert_eq!(
-        io.output(),
-        b"15"
-    );
+    assert_eq!(io.output(), b"15");
 }
 
 #[test]
@@ -2902,10 +2780,7 @@ fn flt_of_str_returns_option() {
     )
     .expect("expected result");
 
-    assert_eq!(
-        io.output(),
-        b"1017"
-    );
+    assert_eq!(io.output(), b"1017");
 }
 
 #[test]
@@ -2926,10 +2801,7 @@ fn option_result_char_helpers() {
     .expect("expected result");
 
     // opt = 5, res = 10, up = 'A' = 65  ->  80
-    assert_eq!(
-        io.output(),
-        b"80"
-    );
+    assert_eq!(io.output(), b"80");
 }
 
 #[test]
@@ -2938,8 +2810,9 @@ fn clock_diff_of_two_distinct_now_readings() {
     // twice must perform two *distinct* host calls (the nullary-effect
     // distinctness the struct-head reduction relies on), so the diff is the
     // gap between them, not zero.
-    let (system, io) =
-        MockHost::builder().wall([(1, 100, 500), (1, 130, 900)]).build();
+    let (system, io) = MockHost::builder()
+        .wall([(1, 100, 500), (1, 130, 900)])
+        .build();
     crate::run_text(
         Duration::from_secs(10),
         r#"
@@ -2952,10 +2825,7 @@ fn clock_diff_of_two_distinct_now_readings() {
     )
     .expect("expected result");
 
-    assert_eq!(
-        io.output(),
-        b"30"
-    );
+    assert_eq!(io.output(), b"30");
 }
 
 #[test]
@@ -2977,8 +2847,7 @@ fn clock_mono_reads_scripted_elapsed() {
 #[test]
 fn proc_args_indexes_the_argv_snapshot() {
     // argv crosses as a host-built `Arr(Bin)`; indexing it round-trips one entry.
-    let (system, io) =
-        MockHost::builder().args(["prog", "hello", "world"]).build();
+    let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     crate::run_text(
         Duration::from_secs(10),
         r#"std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/Arr/get(/std/Proc/args, 1), \\))"#,
@@ -2986,10 +2855,7 @@ fn proc_args_indexes_the_argv_snapshot() {
     )
     .expect("expected result");
 
-    assert_eq!(
-        io.output(),
-        b"hello"
-    );
+    assert_eq!(io.output(), b"hello");
 }
 
 #[test]
@@ -3007,10 +2873,7 @@ fn proc_env_found_unwraps_to_some() {
     )
     .expect("expected result");
 
-    assert_eq!(
-        io.output(),
-        b"/root"
-    );
+    assert_eq!(io.output(), b"/root");
 }
 
 #[test]
@@ -3028,10 +2891,7 @@ fn proc_env_absent_is_none() {
     )
     .expect("expected result");
 
-    assert_eq!(
-        io.output(),
-        b"missing"
-    );
+    assert_eq!(io.output(), b"missing");
 }
 
 #[test]
@@ -3071,10 +2931,7 @@ fn let_tuple_destructures() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"+4"
-    );
+    assert_eq!(io.output(), b"+4");
 }
 
 #[test]
@@ -3089,10 +2946,7 @@ fn nested_let_tuple_destructures() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"+3"
-    );
+    assert_eq!(io.output(), b"+3");
 }
 
 #[test]
@@ -3106,10 +2960,7 @@ fn let_tuple_destructures_without_annotation() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"+4"
-    );
+    assert_eq!(io.output(), b"+4");
 }
 
 #[test]
@@ -3123,10 +2974,7 @@ fn let_three_tuple_destructures() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"+30"
-    );
+    assert_eq!(io.output(), b"+30");
 }
 
 #[test]
@@ -3140,10 +2988,7 @@ fn func_tuple_param_destructures() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"+8"
-    );
+    assert_eq!(io.output(), b"+8");
 }
 
 #[test]
@@ -3156,10 +3001,7 @@ fn lambda_tuple_param_destructures() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"+5"
-    );
+    assert_eq!(io.output(), b"+5");
 }
 
 #[test]
@@ -3179,10 +3021,7 @@ fn match_arm_tuple_destructures() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"+9"
-    );
+    assert_eq!(io.output(), b"+9");
 }
 
 // Client network IO (Phase A): `connect` rides the `Hdl` byte stream, so
@@ -3201,10 +3040,7 @@ fn net_call_round_trips_a_scripted_endpoint() {
         .net([("example.com:80", "HTTP/1.0 200 OK\r\n\r\nhello")])
         .build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"HTTP/1.0 200 OK\r\n\r\nhello"
-    );
+    assert_eq!(io.output(), b"HTTP/1.0 200 OK\r\n\r\nhello");
 }
 
 // Connecting to an endpoint that was never scripted is refused, and the status
@@ -3230,10 +3066,7 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
 
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"refused"
-    );
+    assert_eq!(io.output(), b"refused");
 }
 
 // A custom `Config` with an optional `Duration` timeout flows through the
@@ -3260,12 +3093,11 @@ fn net_with_custom_timeout_config_reads_response() {
         end
         "#;
 
-    let (system, io) = MockHost::builder().net([("db.internal:5432", "PONG")]).build();
+    let (system, io) = MockHost::builder()
+        .net([("db.internal:5432", "PONG")])
+        .build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"PONG"
-    );
+    assert_eq!(io.output(), b"PONG");
 }
 
 // Server network IO (Stage A): `serve` binds a listener, pulls the scripted
@@ -3388,10 +3220,7 @@ fn http_perform_parses_a_scripted_response() {
         )])
         .build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    assert_eq!(
-        io.output(),
-        b"200 text/plain hello"
-    );
+    assert_eq!(io.output(), b"200 text/plain hello");
 }
 
 #[test]
@@ -4559,5 +4388,3 @@ fn infix_mismatched_operand_types_are_rejected() {
     "#;
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
-
-

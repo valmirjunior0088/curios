@@ -7,7 +7,9 @@
 //! `impossible` keyword.
 
 use {
-    super::{Context, Error, Peel, Subterm, Telescope, Term, InductiveType, peel_prim, reduce_with},
+    super::{
+        Context, Error, InductiveType, Peel, Subterm, Telescope, Term, peel_prim, reduce_with,
+    },
     std::collections::BTreeSet,
 };
 
@@ -148,7 +150,7 @@ fn unify_index(
                 unify_index(context, &left, &right, flex, tainted, false, solutions)
             }
             None => Ok(Step::Refuse),
-        }
+        },
 
         // The same rigid variable on both sides is trivially forced.
         (Subterm::Var(a), Subterm::Var(t))

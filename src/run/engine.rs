@@ -133,33 +133,52 @@ fn instantiate_and_run<H: Host + Send + Sync + 'static>(
         [bin_ref.clone(), bin_ref.clone()],
         [i31_ref.clone(), i31_ref.clone()],
     );
-    let io_connect_type =
-        FuncType::new(engine, [bin_ref.clone(), bin_ref.clone()], [i31_ref.clone()]);
+    let io_connect_type = FuncType::new(
+        engine,
+        [bin_ref.clone(), bin_ref.clone()],
+        [i31_ref.clone()],
+    );
     let io_listen_type = FuncType::new(engine, [bin_ref.clone(), ValType::I32], [i31_ref.clone()]);
-    let io_accept_type = FuncType::new(engine, [bin_ref.clone()], [i31_ref.clone(), bin_ref.clone()]);
+    let io_accept_type = FuncType::new(
+        engine,
+        [bin_ref.clone()],
+        [i31_ref.clone(), bin_ref.clone()],
+    );
     let io_lookup_type = FuncType::new(
         engine,
         [bin_ref.clone(), ValType::I32],
         [i31_ref.clone(), bin_ref.clone()],
     );
-    let io_resolve_type =
-        FuncType::new(engine, [bin_ref.clone()], [i31_ref.clone(), arr_ref.clone()]);
+    let io_resolve_type = FuncType::new(
+        engine,
+        [bin_ref.clone()],
+        [i31_ref.clone(), arr_ref.clone()],
+    );
     let io_socket_type = FuncType::new(
         engine,
         [bin_ref.clone()],
         [i31_ref.clone(), bin_ref.clone()],
     );
-    let io_start_tls_type =
-        FuncType::new(engine, [bin_ref.clone(), bin_ref.clone()], [i31_ref.clone()]);
+    let io_start_tls_type = FuncType::new(
+        engine,
+        [bin_ref.clone(), bin_ref.clone()],
+        [i31_ref.clone()],
+    );
     let io_tls_server_config_type = FuncType::new(
         engine,
         [bin_ref.clone(), bin_ref.clone()],
         [i31_ref.clone(), bin_ref.clone()],
     );
-    let io_start_tls_server_type =
-        FuncType::new(engine, [bin_ref.clone(), bin_ref.clone()], [i31_ref.clone()]);
-    let io_bind_type =
-        FuncType::new(engine, [bin_ref.clone(), bin_ref.clone()], [i31_ref.clone()]);
+    let io_start_tls_server_type = FuncType::new(
+        engine,
+        [bin_ref.clone(), bin_ref.clone()],
+        [i31_ref.clone()],
+    );
+    let io_bind_type = FuncType::new(
+        engine,
+        [bin_ref.clone(), bin_ref.clone()],
+        [i31_ref.clone()],
+    );
     let io_set_nonblocking_type =
         FuncType::new(engine, [bin_ref.clone(), ValType::I32], [i31_ref.clone()]);
     let io_set_recv_timeout_type =

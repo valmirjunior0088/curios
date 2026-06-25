@@ -41,6 +41,12 @@ pub struct OsResolver {
     sender: SyncSender<Job>,
 }
 
+impl Default for OsResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OsResolver {
     /// Worker threads servicing blocking name lookups, and the depth of the
     /// queue feeding them. The pool caps both the threads and — since each
