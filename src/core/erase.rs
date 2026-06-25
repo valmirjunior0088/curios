@@ -1240,5 +1240,8 @@ fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<
         Subterm::Var(var) => Ok(ersd::Subterm::Name(ersd::Name::from(var.unwrap())).into()),
         // Erase runs downstream of zonking, on a meta-free term (§9).
         Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erase"),
+        // `elaborate` resolves every infix/numeric-literal node to a `Prim`.
+        Subterm::Infix(_) => unreachable!("infix node survived elaboration into erase"),
+        Subterm::NumLit(_) => unreachable!("numeric-literal node survived elaboration into erase"),
     }
 }

@@ -228,6 +228,12 @@ impl<'a, 'b> Lower<'a, 'b> {
             // `/syn` construction (see `syn_literal`), never a core primitive.
             Subterm::Syn(syn) => self.syn_literal(syn)?,
             Subterm::Prim(prim) => core::Term::prim(self.prim(prim)?),
+            Subterm::NumLit(num_lit) => {
+                core::Term::num_lit(num_lit.magnitude.clone(), num_lit.signed, num_lit.negative)
+            }
+            Subterm::Infix(infix) => {
+                core::Term::infix(infix.op, self.term(&infix.left)?, self.term(&infix.right)?)
+            }
             Subterm::Name(name) => core::Term::var(core::Var::free(self.resolve_name(name)?)),
             // Each parameter type sees the *preceding* parameters' binders, and
             // the output sees them all (a dependent Π-type), so they lower under a
@@ -562,6 +568,13 @@ impl<'a, 'b> Lower<'a, 'b> {
                     .iter()
                     .map(|(name, field)| Ok((name.clone(), self.collect(field, bind, binds)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
+            ),
+            // An infix operator's operands hoist their bangs into this region,
+            // exactly like an application's arguments.
+            Subterm::Infix(infix) => core::Term::infix(
+                infix.op,
+                self.collect(&infix.left, bind, binds)?,
+                self.collect(&infix.right, bind, binds)?,
             ),
             // A `let`/`match` sub-expression hoists its bound-expression /
             // scrutinee bangs into the enclosing region (this `binds`).

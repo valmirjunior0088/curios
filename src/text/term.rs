@@ -1,6 +1,7 @@
 use {
-    super::{Name, Plicity, Prim},
+    super::{Name, NumOp, Plicity, Prim, Radix},
     crate::Span,
+    num_bigint::BigUint,
     std::{collections::BTreeMap, ops::Deref},
 };
 
@@ -422,6 +423,30 @@ pub struct LetBang {
     pub body: Term,
 }
 
+/// A surface infix application `left <op> right`, produced by the
+/// precedence-climbing parser. Lowered verbatim to a `core::Infix` and resolved
+/// to a concrete scalar primitive during elaboration (the operand types are not
+/// yet known at lowering).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Infix {
+    pub op: NumOp,
+    pub left: Term,
+    pub right: Term,
+}
+
+/// A surface polymorphic numeric literal: an integer `magnitude` with an
+/// optional written sign. Its concrete type (`Nat`/`Int`/`Flt`) is chosen during
+/// elaboration. The `radix` is retained only so the printer round-trips the
+/// written form (`0xC2` back to `0xC2`); lowering to core drops it. Decimal
+/// literals are not `NumLit`; they parse to `Prim::Flt`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NumLit {
+    pub magnitude: BigUint,
+    pub radix: Radix,
+    pub signed: bool,
+    pub negative: bool,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Subterm {
     Type,
@@ -450,6 +475,10 @@ pub enum Subterm {
     /// core primitive (see [`Syn`]). The lowerer runs a meta-emitter on it
     /// instead of `prim()`.
     Syn(Syn),
+    /// An infix operator application `left <op> right` (see [`Infix`]).
+    Infix(Infix),
+    /// A polymorphic numeric literal (see [`NumLit`]).
+    NumLit(NumLit),
 }
 
 /// The literals the lowerer desugars to a `/syn` construction: a string becomes

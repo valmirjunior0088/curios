@@ -1,9 +1,11 @@
 use {
     super::{
         Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, Entrypoint, Field, Func,
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Let, LetBang, LetSignature, LoadError,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetBang, LetSignature,
+        LoadError,
         Match, Module, Motive, Name, Nat,
-        NatLiteral, NatMatch, Pattern, PatternLit, Plicity, Prim, Proj, Qualifier, Radix,
+        NatLiteral, NatMatch, NumLit, NumOp, Pattern, PatternLit, Plicity, Prim, Proj, Qualifier,
+        Radix,
         Rec,
         RecItem, StructLit, Subterm, Syn, Term, TupleTypeParam,
         TopCase, TopItem,
@@ -12,8 +14,9 @@ use {
     crate::{
         Source,
         parser::{
-            Parser, ParserError, catch, fail, lazy, many0, many1, memoize, pure, run_parser,
-            sep_by0, sep_by1, spanned, take_eof, take_exact, take_n, take_while,
+            Parser, ParserError, catch, fail, lazy, many0, many1, memoize, not_ahead,
+            preceded_by_space, pure, run_parser, sep_by0, sep_by1, spanned, take_eof, take_exact,
+            take_n, take_while,
         },
     },
     num_bigint::BigUint,
@@ -110,21 +113,48 @@ fn parse_prop<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_int_value<'a>() -> Parser<'a, Term> {
+// A polymorphic integer literal: an optional sign glued to a magnitude
+// (decimal, `0x`, or `0b`). Its concrete type (`Nat`/`Int`/`Flt`) is chosen by
+// elaboration — a written sign rules out `Nat`. The sign must touch the digits;
+// `- 42` (spaced) is the subtraction operator, not a negative literal.
+fn parse_num_lit<'a>() -> Parser<'a, Term> {
     catch(
-        take_n(1)
-            .flat_map(|sign| match sign {
-                "+" | "-" => pure(sign.to_string()),
-                _ => fail("Expected '+' or '-'"),
-            })
-            .and(take_while(|char| char.is_ascii_digit()))
-            .flat_map::<i32, _>(|(sign, digits)| match format!("{sign}{digits}").parse() {
-                Ok(value) => pure(value),
-                Err(_) => fail("Expected integer literal"),
-            })
+        catch(take_exact("-"))
+            .map(|()| (true, true))
+            .or(catch(take_exact("+")).map(|()| (true, false)))
+            .or(pure((false, false)))
+            .and(parse_nat_digits()),
+    )
+    .map(|((signed, negative), lit)| {
+        let (magnitude, radix) = match lit {
+            NatLiteral::Number(value, radix) => (value, radix),
+            NatLiteral::Char(character) => (BigUint::from(character as u32), Radix::Dec),
+        };
+        Subterm::NumLit(NumLit {
+            magnitude,
+            radix,
+            signed,
+            negative,
+        })
+    })
+    .map(Into::into)
+}
+
+// A character literal `'c'` is a fixed `Nat` codepoint — monomorphic, unlike a
+// bare integer literal.
+fn parse_char_lit<'a>() -> Parser<'a, Term> {
+    catch(
+        take_exact("'")
+            .and_keep(parse_char_value())
+            .and_drop(take_exact("'"))
             .and_drop(parse_whitespace()),
     )
-    .map(|value| Subterm::Prim(Prim::Int(value)))
+    .map(|character| {
+        Subterm::Prim(Prim::Nat(Nat::Succ(
+            NatLiteral::Char(character),
+            Subterm::Prim(Prim::Nat(Nat::Zero)).into(),
+        )))
+    })
     .map(Into::into)
 }
 
@@ -171,18 +201,6 @@ fn parse_nat<'a>() -> Parser<'a, NatLiteral> {
     .or(catch(parse_nat_digits()))
 }
 
-fn parse_nat_value<'a>() -> Parser<'a, Term> {
-    parse_nat()
-        .map(|nat| match nat {
-            NatLiteral::Number(n, _) if n.is_zero() => Subterm::Prim(Prim::Nat(Nat::Zero)),
-            nat => Subterm::Prim(Prim::Nat(Nat::Succ(
-                nat,
-                Subterm::Prim(Prim::Nat(Nat::Zero)).into(),
-            ))),
-        })
-        .map(Into::into)
-}
-
 fn parse_nat_literal_u32<'a>() -> Parser<'a, u32> {
     parse_nat().flat_map(|lit| {
         let n = match lit {
@@ -198,11 +216,10 @@ fn parse_nat_literal_u32<'a>() -> Parser<'a, u32> {
 
 fn parse_flt_value<'a>() -> Parser<'a, Term> {
     catch(
-        take_n(1)
-            .flat_map(|sign| match sign {
-                "+" | "-" => pure(sign.to_string()),
-                _ => fail("Expected '+' or '-'"),
-            })
+        catch(take_exact("-"))
+            .map(|()| "-".to_string())
+            .or(catch(take_exact("+")).map(|()| "+".to_string()))
+            .or(pure(String::new()))
             .and(take_while(|char| {
                 ".-+eE".contains(char) || char.is_ascii_digit()
             }))
@@ -318,9 +335,10 @@ fn parse_bln_prim<'a>() -> Parser<'a, Term> {
 // literals (and the boolean keywords) remain here.
 fn parse_prim<'a>() -> Parser<'a, Term> {
     parse_bln_prim()
+        // Decimal floats first: `5.0` is a `Flt`, not the integer `5` projected.
         .or(parse_flt_value())
-        .or(parse_int_value())
-        .or(parse_nat_value())
+        .or(parse_char_lit())
+        .or(parse_num_lit())
         .or(parse_string_literal())
         .or(parse_bin_literal())
         .or(parse_list_literal())
@@ -1010,7 +1028,9 @@ fn parse_suffix<'a>() -> Parser<'a, Suffix> {
             .and_keep(sep_by0(parse_apply_argument, || parse_literal(",")))
             .and_drop(parse_literal(")"))
             .map(Suffix::Apply))
-        .or(catch(parse_literal("!")).map(|()| Suffix::Bang))
+        // A postfix `!` — but not the `!=` operator, whose `!` would otherwise be
+        // eaten here as a bang, stranding the `=`.
+        .or(catch(take_exact("!").and_drop(not_ahead("=")).and_drop(parse_whitespace())).map(|()| Suffix::Bang))
 }
 
 fn parse_empty_tuple<'a>() -> Parser<'a, Term> {
@@ -1083,6 +1103,90 @@ fn parse_let_bang<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
+// The fixed set of overloaded infix operators, recognised by maximal munch
+// (two-character symbols before their one-character prefixes).
+fn parse_num_op<'a>() -> Parser<'a, NumOp> {
+    fn symbol<'a>(text: &'static str, op: NumOp) -> Parser<'a, NumOp> {
+        catch(take_exact(text)).map(move |()| op)
+    }
+
+    symbol("==", NumOp::Eql)
+        .or(symbol("!=", NumOp::Neq))
+        .or(symbol("<=", NumOp::Lte))
+        .or(symbol(">=", NumOp::Gte))
+        .or(symbol("&&", NumOp::And))
+        .or(symbol("||", NumOp::Or))
+        .or(symbol("+", NumOp::Add))
+        .or(symbol("-", NumOp::Sub))
+        .or(symbol("*", NumOp::Mul))
+        .or(symbol("/", NumOp::Div))
+        .or(symbol("%", NumOp::Rem))
+        .or(symbol("<", NumOp::Lt))
+        .or(symbol(">", NumOp::Gt))
+}
+
+// Operator precedence: higher binds tighter. Every operator is left-associative.
+fn op_precedence(op: NumOp) -> u8 {
+    match op {
+        NumOp::Or => 1,
+        NumOp::And => 2,
+        NumOp::Eql | NumOp::Neq | NumOp::Lt | NumOp::Gt | NumOp::Lte | NumOp::Gte => 3,
+        NumOp::Add | NumOp::Sub => 4,
+        NumOp::Mul | NumOp::Div | NumOp::Rem => 5,
+    }
+}
+
+// At least one whitespace character (then any further whitespace/comments). The
+// trailing-space requirement is what distinguishes the operator `-` in `a - 42`
+// from the glued sign of the literal `-42`.
+fn require_space<'a>() -> Parser<'a, ()> {
+    take_while(|char| char.is_whitespace())
+        .flat_map(|spaces| match spaces.is_empty() {
+            true => fail("expected whitespace after operator"),
+            false => pure(()),
+        })
+        .and_drop(parse_whitespace())
+}
+
+// An infix operator with a space on each side, consumed without its operands.
+fn parse_infix_op<'a>() -> Parser<'a, NumOp> {
+    catch(
+        preceded_by_space()
+            .and_keep(parse_num_op())
+            .and_drop(require_space()),
+    )
+}
+
+// Precedence-climbing over applied atoms: parse a left operand, then fold in
+// every following operator whose precedence is at least `min_prec`. The right
+// operand of an operator at precedence `p` is parsed at `p + 1`
+// (left-associativity).
+fn parse_infix_expr<'a>(min_prec: u8) -> Parser<'a, Term> {
+    parse_atomic_term().flat_map(move |left| parse_infix_rest(left, min_prec))
+}
+
+fn parse_infix_rest<'a>(left: Term, min_prec: u8) -> Parser<'a, Term> {
+    let here = left.clone();
+
+    catch(parse_infix_op().flat_map(move |op| {
+        let precedence = op_precedence(op);
+
+        if precedence < min_prec {
+            // Binds looser than the caller's level: backtrack, leaving the
+            // operator for an enclosing `parse_infix_rest` to consume.
+            return fail("operator below current precedence level");
+        }
+
+        let left = here;
+
+        parse_infix_expr(precedence + 1).flat_map(move |right| {
+            let combined: Term = Subterm::Infix(Infix { op, left, right }).into();
+            parse_infix_rest(combined, min_prec)
+        })
+    }))
+    .or(pure(left))
+}
+
 fn parse_term<'a>() -> Parser<'a, Term> {
     memoize(MEMO_TERM, parse_term_inner())
 }
@@ -1095,7 +1199,7 @@ fn parse_term_inner<'a>() -> Parser<'a, Term> {
             .or(parse_match())
             .or(parse_func_type())
             .or(parse_func())
-            .or(parse_atomic_term()),
+            .or(parse_infix_expr(0)),
     )
 }
 

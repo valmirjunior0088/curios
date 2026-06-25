@@ -4384,4 +4384,160 @@ fn erased_index_in_type_valued_arg() {
     assert_eq!(io.output(), b"ok");
 }
 
+#[test]
+fn infix_nat_arithmetic_respects_precedence_and_associativity() {
+    // `*` binds tighter than `+`; parentheses override; `-` is left-associative.
+    // 2 + 3*4 = 14, (2+3)*4 = 20, 10-3-2 = 5, 17 % 5 = 2.
+    assert_eq!(
+        run(r#"
+            use /std/{Io, Str, Nat};
+            Io/write(Io/stdout, Str/to_bin(Nat/to_str(2 + 3 * 4)))
+        "#),
+        b"14"
+    );
+    assert_eq!(
+        run(r#"
+            use /std/{Io, Str, Nat};
+            Io/write(Io/stdout, Str/to_bin(Nat/to_str((2 + 3) * 4)))
+        "#),
+        b"20"
+    );
+    assert_eq!(
+        run(r#"
+            use /std/{Io, Str, Nat};
+            Io/write(Io/stdout, Str/to_bin(Nat/to_str(10 - 3 - 2)))
+        "#),
+        b"5"
+    );
+    assert_eq!(
+        run(r#"
+            use /std/{Io, Str, Nat};
+            Io/write(Io/stdout, Str/to_bin(Nat/to_str(17 % 5)))
+        "#),
+        b"2"
+    );
+}
+
+#[test]
+fn infix_resolves_to_int_for_signed_literals() {
+    // Both operands carry a written sign, so the operand type defaults to `Int`.
+    assert_eq!(
+        run(r#"
+            use /std/{Io, Str, Int};
+            Io/write(Io/stdout, Str/to_bin(Int/to_str(-2 - +3)))
+        "#),
+        b"-5"
+    );
+}
+
+#[test]
+fn infix_resolves_against_a_bound_variable_type() {
+    // A bare literal takes the type of the variable it is combined with: here
+    // `x : Int`, so `x + 1` is `Int` addition, not a `Nat`/`Int` mismatch.
+    assert_eq!(
+        run(r#"
+            use /std/{Io, Str, Int};
+            let x : Int = -10;
+            Io/write(Io/stdout, Str/to_bin(Int/to_str(x + 1)))
+        "#),
+        b"-9"
+    );
+}
+
+#[test]
+fn infix_comparison_yields_a_bln_scrutinee() {
+    // A comparison resolves on its operand type and yields `Bln`, usable directly
+    // as a `match` scrutinee. `2 + 2 == 4` is true; `3 < 1` is false.
+    assert_eq!(
+        run(r#"
+            use /std/{Io, Str};
+            match 2 + 2 == 4
+            | true => Io/write(Io/stdout, Str/to_bin("yes"))
+            | false => Io/write(Io/stdout, Str/to_bin("no"))
+            end
+        "#),
+        b"yes"
+    );
+    assert_eq!(
+        run(r#"
+            use /std/{Io, Str};
+            match 3 < 1
+            | true => Io/write(Io/stdout, Str/to_bin("yes"))
+            | false => Io/write(Io/stdout, Str/to_bin("no"))
+            end
+        "#),
+        b"no"
+    );
+}
+
+#[test]
+fn infix_equality_is_overloaded_for_bln() {
+    // `==` resolves at `Bln` too (`BlnEql`), so `(1 < 2) == (3 < 4)` is `true`.
+    assert_eq!(
+        run(r#"
+            use /std/{Io, Str};
+            match (1 < 2) == (3 < 4)
+            | true => Io/write(Io/stdout, Str/to_bin("yes"))
+            | false => Io/write(Io/stdout, Str/to_bin("no"))
+            end
+        "#),
+        b"yes"
+    );
+}
+
+#[test]
+fn infix_mixes_a_float_variable_with_an_integer_literal() {
+    // `x : Flt` pins the operand type, so the bare literal `1` in `x + 1` becomes
+    // a `Flt`; the comparison against the `Flt` literal `4.5` then type-checks.
+    assert_eq!(
+        run(r#"
+            use /std/{Io, Str, Flt};
+            let x : Flt = 3.0;
+            match x + 1 < 4.5
+            | true => Io/write(Io/stdout, Str/to_bin("less"))
+            | false => Io/write(Io/stdout, Str/to_bin("more"))
+            end
+        "#),
+        b"less"
+    );
+}
+
+#[test]
+fn infix_undefined_operator_for_type_is_rejected() {
+    // `%` has no `Flt` primitive, so `flt % flt` is a compile-time error.
+    let (system, _io) = MockHost::builder().build();
+    let source = r#"
+        use /std/{Io, Str, Flt};
+        Io/write(Io/stdout, Str/to_bin(Flt/to_str(3.0 % 2.0)))
+    "#;
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
+#[test]
+fn infix_not_equal_on_bln_is_rejected() {
+    // There is no `Bln` not-equal primitive, so `bln != bln` is rejected.
+    let (system, _io) = MockHost::builder().build();
+    let source = r#"
+        use /std/{Io, Str};
+        match true != false
+        | true => Io/write(Io/stdout, Str/to_bin("yes"))
+        | false => Io/write(Io/stdout, Str/to_bin("no"))
+        end
+    "#;
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
+#[test]
+fn infix_mismatched_operand_types_are_rejected() {
+    // No implicit coercion: a `Nat` and an `Int` cannot be added.
+    let (system, _io) = MockHost::builder().build();
+    let source = r#"
+        use /std/{Io, Str, Int};
+        let n : Nat = 1;
+        let i : Int = -1;
+        Io/write(Io/stdout, Str/to_bin(Int/to_str(n + i)))
+    "#;
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
 

@@ -3,7 +3,7 @@
 - [Lexical basics](#lexical-basics)
 - [Source files](#source-files)
 - [Top-level declarations](#top-level-declarations) — `let`, `rec`, `induct`, `mod`, `use`
-- [Terms](#terms) — application, lambdas, holes, implicits, `let`/`rec`, `let !`/`!`, `match`, field access
+- [Terms](#terms) — application, operators, lambdas, holes, implicits, `let`/`rec`, `let !`/`!`, `match`, field access
 - [Types](#types) — universe, function, tuple, array, primitives
 - [Literals](#literals)
 - [Idioms](#idioms) — sum types, recursive types
@@ -248,6 +248,36 @@ Arguments are arbitrary terms — there is no need to parenthesise compound argu
 ```
 /std/Nat/add(/std/Nat/mul(2, 3), 1)
 ```
+
+### Operators
+
+A fixed set of overloaded infix operators stands in for the scalar primitive calls. The same expression as above:
+
+```
+2 * 3 + 1
+```
+
+The operators, from loosest to tightest binding (all left-associative):
+
+| Precedence | Operators         | Meaning                                   |
+| ---------- | ----------------- | ----------------------------------------- |
+| 1          | `\|\|`            | boolean or                                |
+| 2          | `&&`              | boolean and                               |
+| 3          | `== != < > <= >=` | equality and comparison (yield `Bln`)     |
+| 4          | `+ -`             | addition, subtraction                     |
+| 5          | `* / %`           | multiplication, division, remainder       |
+
+Each operator is **overloaded** and resolves to a concrete primitive from the operand type, with no implicit coercion between types:
+
+- `+ - * /` work on `Nat`, `Int`, and `Flt`; `%` on `Nat` and `Int` (there is no float remainder).
+- `< > <= >=` and `!=` work on `Nat`, `Int`, and `Flt`; `==` additionally on `Bln`.
+- `&&` and `||` work on `Bln`. (Bitwise operations remain named functions — `Nat/and`, `Int/shl`, … .)
+
+The two operands must share one type. Resolution takes that type from a typed operand, or from the expected type for the arithmetic operators, falling back to the literal default (below) when nothing else pins it. Applying an operator at a type it has no primitive for — `flt % flt`, `bln != bln` — is a compile-time error.
+
+**Spacing.** Every infix operator requires at least one space on each side. This is what keeps a sign attached to its digits (`-42` is a literal) distinct from subtraction (`a - 42`); `a-42` and `a -42` are parse errors.
+
+For finer control, the underlying `/std` functions (`Nat/add`, `Flt/lt`, `Bln/and`, …) are always available.
 
 ### Lambda
 
@@ -495,32 +525,36 @@ A homogeneous array of elements of type `T`. Write `/std/Arr(/std/Arr(/std/Nat))
 
 ## Literals
 
-### Natural numbers
+### Numbers
+
+An integer literal is **polymorphic**: it elaborates to whichever of `Nat`, `Int`, or `Flt` its context demands, and only commits to a type during elaboration.
 
 ```
 42
-'a'     -- character code point as Nat
+0xC2    -- hexadecimal
+0b1010  -- binary
+-7      -- a sign attaches to the digits with no space
++42
+```
+
+A literal takes its type from the context that checks it — the expected type, or the type of the value it is combined with (`x + 1` where `x : Int` makes `1` an `Int`). When nothing pins it, the literal falls back to a **shape default**: a literal written with no sign defaults to `Nat`; a literal written with a sign (`+`/`-`) defaults to `Int` (and a negative literal is never a `Nat`). A sign must touch the digits — `-7` is a literal, `a - 7` is subtraction.
+
+```
+'a'     -- character code point, a fixed Nat (not polymorphic)
 ```
 
 Char literals support escapes: `'\n'` `'\t'` `'\r'` `'\\'` `'\''`.
 
-### Integers
-
-A sign is required:
-
-```
-+42
--7
-```
+`Nat` and `Int` values are arbitrary precision while parsing and type-level reduction are in progress; erasure narrows runtime `Nat` to `u32` and runtime `Int` to `i32` (see [primitive types](#primitive-types)).
 
 ### Floats
 
-A sign, a decimal point, and at least one digit after the point are all required:
+A float literal carries a decimal point with at least one digit after it; the sign is optional. A float is always a `Flt` (it is not polymorphic — only integer literals are).
 
 ```
-+1.0
+1.0
 -3.14
-+6.022e23
+6.022e23
 ```
 
 ### Strings

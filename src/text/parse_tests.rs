@@ -41,40 +41,42 @@ fn parse_rec_func_and_apply() {
     );
 }
 
+fn num_lit(magnitude: u32, signed: bool, negative: bool) -> Term {
+    Subterm::NumLit(NumLit {
+        magnitude: magnitude.into(),
+        radix: Radix::Dec,
+        signed,
+        negative,
+    })
+    .into()
+}
+
 #[test]
-fn parse_int_literal_and_flt_literal_are_disambiguated() {
+fn parse_integer_literals_are_polymorphic_num_lits() {
+    // Integer literals are polymorphic `NumLit`s; the sign is optional and only
+    // records whether `Nat` is still a candidate. Decimals stay monomorphic `Flt`.
+    assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, false, false));
+    assert_eq!("+42".parse::<Term>().unwrap(), num_lit(42, true, false));
+    assert_eq!("-42".parse::<Term>().unwrap(), num_lit(42, true, true));
     assert_eq!(
-        "+42".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Int(42)))
-    );
-    assert_eq!(
-        "42".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
-            NatLiteral::number(42usize),
-            Subterm::Prim(Prim::Nat(Nat::Zero)).into()
-        ))))
+        "42.0".parse::<Term>().unwrap(),
+        Term::from(Subterm::Prim(Prim::Flt(42.0_f32)))
     );
     assert_eq!(
         "+42.0".parse::<Term>().unwrap(),
         Term::from(Subterm::Prim(Prim::Flt(42.0_f32)))
     );
+    assert_eq!(
+        "-42.0".parse::<Term>().unwrap(),
+        Term::from(Subterm::Prim(Prim::Flt(-42.0_f32)))
+    );
 }
 
 #[test]
 fn parse_prim() {
+    assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, false, false));
     assert_eq!(
-        "+42".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Int(42)))
-    );
-    assert_eq!(
-        "42".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
-            NatLiteral::number(42usize),
-            Subterm::Prim(Prim::Nat(Nat::Zero)).into()
-        ))))
-    );
-    assert_eq!(
-        "+1.5".parse::<Term>().unwrap(),
+        "1.5".parse::<Term>().unwrap(),
         Term::from(Subterm::Prim(Prim::Flt(1.5_f32)))
     );
     assert_eq!(
@@ -84,6 +86,69 @@ fn parse_prim() {
     assert_eq!(
         "true".parse::<Term>().unwrap(),
         Term::from(Subterm::Prim(Prim::Bln(true)))
+    );
+}
+
+#[test]
+fn parse_infix_precedence_and_associativity() {
+    // `a + b * c` → `a + (b * c)` (× binds tighter); `a - b - c` → `(a - b) - c`
+    // (left-associative); comparison binds looser than arithmetic.
+    let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
+    let infix = |op, left, right| -> Term { Subterm::Infix(Infix { op, left, right }).into() };
+
+    assert_eq!(
+        "a + b * c".parse::<Term>().unwrap(),
+        infix(
+            NumOp::Add,
+            name("a"),
+            infix(NumOp::Mul, name("b"), name("c")),
+        )
+    );
+    assert_eq!(
+        "a - b - c".parse::<Term>().unwrap(),
+        infix(
+            NumOp::Sub,
+            infix(NumOp::Sub, name("a"), name("b")),
+            name("c"),
+        )
+    );
+    assert_eq!(
+        "a + b < c".parse::<Term>().unwrap(),
+        infix(
+            NumOp::Lt,
+            infix(NumOp::Add, name("a"), name("b")),
+            name("c"),
+        )
+    );
+}
+
+#[test]
+fn parse_infix_requires_spaces_and_disambiguates_signs() {
+    // A spaced `-` is subtraction; a glued `-` is part of a negative literal.
+    let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
+
+    assert_eq!(
+        "a - 42".parse::<Term>().unwrap(),
+        Subterm::Infix(Infix {
+            op: NumOp::Sub,
+            left: name("a"),
+            right: num_lit(42, false, false),
+        })
+        .into()
+    );
+    // No space ⇒ the operator is not recognised, leaving a trailing token: a
+    // parse error rather than a silent reinterpretation.
+    assert!("a-42".parse::<Term>().is_err());
+    assert!("a +42".parse::<Term>().is_err());
+    // `!=` is the not-equal operator, not a postfix bang followed by `=`.
+    assert_eq!(
+        "a != b".parse::<Term>().unwrap(),
+        Subterm::Infix(Infix {
+            op: NumOp::Neq,
+            left: name("a"),
+            right: name("b"),
+        })
+        .into()
     );
 }
 
@@ -110,24 +175,30 @@ fn parse_char_literal_escape() {
 }
 
 #[test]
-fn parse_hex_literal_is_nat() {
+fn parse_hex_literal_is_num_lit() {
     assert_eq!(
         "0xC2".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
-            NatLiteral::Number(194usize.into(), Radix::Hex),
-            Subterm::Prim(Prim::Nat(Nat::Zero)).into()
-        ))))
+        Subterm::NumLit(NumLit {
+            magnitude: 194usize.into(),
+            radix: Radix::Hex,
+            signed: false,
+            negative: false,
+        })
+        .into()
     );
 }
 
 #[test]
-fn parse_bin_literal_is_nat() {
+fn parse_bin_literal_is_num_lit() {
     assert_eq!(
         "0b1010".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
-            NatLiteral::Number(10usize.into(), Radix::Bin),
-            Subterm::Prim(Prim::Nat(Nat::Zero)).into()
-        ))))
+        Subterm::NumLit(NumLit {
+            magnitude: 10usize.into(),
+            radix: Radix::Bin,
+            signed: false,
+            negative: false,
+        })
+        .into()
     );
 }
 

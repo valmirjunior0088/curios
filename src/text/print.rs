@@ -1,7 +1,9 @@
 use {
     super::{
-        Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Let,
-        LetBang, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, Pattern, PatternLit,
+        Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem, Infix,
+        Let,
+        LetBang, LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, NumLit, Pattern,
+        PatternLit,
         Plicity, Prim, Proj, Radix,
         Rec, StructLit, Subterm, Syn, Term, TopCase, TopItem, TopLet, TopMod, TopStruct, TopInductive,
         TopUse, Tuple, TupleType, TupleTypeParam, InductiveMatch, UseGroup,
@@ -602,6 +604,26 @@ fn print_term(term: Term) -> Printer<'static> {
             print_term(body),
         ]),
         Subterm::Bang(term) => flat([pure("("), print_term(term), pure(")!")]),
+        Subterm::Infix(Infix { op, left, right }) => flat([
+            print_term(left),
+            pure(format!(" {} ", op.symbol())),
+            print_term(right),
+        ]),
+        Subterm::NumLit(NumLit {
+            magnitude,
+            radix,
+            signed,
+            negative,
+        }) => {
+            let sign = if negative {
+                "-"
+            } else if signed {
+                "+"
+            } else {
+                ""
+            };
+            pure(format!("{sign}{}", format_radix(&magnitude, radix)))
+        }
     }
 }
 

@@ -196,6 +196,13 @@ pub enum Error {
         term: Box<Term>,
     },
     CannotInfer,
+    /// An overloaded infix operator applied at an operand type with no matching
+    /// scalar primitive — `%` on `Flt`, `!=` on `Bln`, `+` on `Bln`, etc. The
+    /// `symbol` is the operator's spelling; `type_` is the resolved operand type.
+    OperatorUndefined {
+        symbol: String,
+        type_: Box<Term>,
+    },
     /// An inserted implicit argument that unification never pinned. Carries
     /// the insertion provenance (the applied function and the binder it
     /// filled) so the report names the hole instead of a bare metavar id.
@@ -428,6 +435,13 @@ impl Error {
     pub fn unbound_variable<T: Into<Term>>(var: T) -> Self {
         Self::UnboundVariable {
             term: Box::new(var.into()),
+        }
+    }
+
+    pub fn operator_undefined<T: Into<Term>>(symbol: String, type_: T) -> Self {
+        Self::OperatorUndefined {
+            symbol,
+            type_: Box::new(type_.into()),
         }
     }
 
@@ -745,6 +759,9 @@ impl fmt::Display for Error {
             }
             Error::CannotInfer => {
                 write!(f, "cannot infer type of expression")
+            }
+            Error::OperatorUndefined { symbol, type_ } => {
+                write!(f, "operator '{symbol}' is not defined for type {type_}")
             }
             Error::UninferredImplicit { func, binder } => {
                 write!(

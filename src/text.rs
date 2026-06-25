@@ -1,4 +1,4 @@
-pub use super::core::Plicity;
+pub use super::core::{NumOp, Plicity};
 
 mod error;
 pub use error::*;

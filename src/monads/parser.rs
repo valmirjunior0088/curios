@@ -367,6 +367,39 @@ pub fn take_eof<'a>() -> Parser<'a, ()> {
     })
 }
 
+/// Succeeds (consuming nothing) only when the byte immediately before the
+/// current offset is whitespace, or we are at the start of input. The infix
+/// operator parser uses it to require a space on the *left* of an operator —
+/// the right space is required by consuming whitespace after the symbol — so
+/// `a - 42` is subtraction while the glued `-42` stays a literal.
+pub fn preceded_by_space<'a>() -> Parser<'a, ()> {
+    Parser::new(|state| {
+        let preceded = state.offset == 0
+            || state.source.text[..state.offset]
+                .chars()
+                .next_back()
+                .is_some_and(char::is_whitespace);
+
+        match preceded {
+            true => Ok(((), state)),
+            false => Err(ParserError::new(state, "expected whitespace before operator")),
+        }
+    })
+}
+
+/// Succeeds (consuming nothing) only when the remaining input does *not* start
+/// with `unexpected`. A negative look-ahead — e.g. to read a postfix `!` only
+/// when it is not the start of the `!=` operator.
+pub fn not_ahead<'a>(unexpected: &'static str) -> Parser<'a, ()> {
+    Parser::new(move |state| match state.string.starts_with(unexpected) {
+        true => Err(ParserError::new(
+            state,
+            format!("unexpected '{unexpected}'"),
+        )),
+        false => Ok(((), state)),
+    })
+}
+
 pub fn catch<'a, T>(parser: Parser<'a, T>) -> Parser<'a, T>
 where
     T: 'a,

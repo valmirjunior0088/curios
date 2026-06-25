@@ -1,6 +1,7 @@
 use {
     super::{Atom, Bound, Flt, Int, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit},
     crate::Span,
+    num_bigint::BigUint,
     std::{
         cell::OnceCell,
         collections::{BTreeMap, BTreeSet, hash_map::DefaultHasher},
@@ -62,6 +63,18 @@ impl Term {
 
     pub fn var(var: Var) -> Self {
         Self::from(Subterm::Var(var))
+    }
+
+    pub fn infix(op: NumOp, left: Term, right: Term) -> Self {
+        Self::from(Subterm::Infix(Infix { op, left, right }))
+    }
+
+    pub fn num_lit(magnitude: BigUint, signed: bool, negative: bool) -> Self {
+        Self::from(Subterm::NumLit(NumLit {
+            magnitude,
+            signed,
+            negative,
+        }))
     }
 
     pub fn metavar(id: usize) -> Self {
@@ -717,6 +730,133 @@ pub enum Plicity {
     Implicit,
 }
 
+/// A fixed, overloaded infix operator. The surface parser maps an operator
+/// symbol (with its precedence) onto one of these; elaboration resolves it to a
+/// concrete scalar primitive once the operand type is known (`elaborate_infix`).
+/// Both `NumOp` and the [`Infix`]/[`NumLit`] nodes are *elaboration-transient*:
+/// born in `to_core`, consumed by `elaborate` (replaced with a `Prim` term), so
+/// they never reach reduce/convert/zonk/erase.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NumOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Eql,
+    Neq,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
+    And,
+    Or,
+}
+
+impl NumOp {
+    /// The operator's source spelling, for printing and error messages.
+    pub fn symbol(self) -> &'static str {
+        match self {
+            NumOp::Add => "+",
+            NumOp::Sub => "-",
+            NumOp::Mul => "*",
+            NumOp::Div => "/",
+            NumOp::Rem => "%",
+            NumOp::Eql => "==",
+            NumOp::Neq => "!=",
+            NumOp::Lt => "<",
+            NumOp::Gt => ">",
+            NumOp::Lte => "<=",
+            NumOp::Gte => ">=",
+            NumOp::And => "&&",
+            NumOp::Or => "||",
+        }
+    }
+
+    /// Comparison and equality operators yield `Bln` regardless of operand type;
+    /// arithmetic operators yield the operand type.
+    pub fn result_is_bln(self) -> bool {
+        matches!(
+            self,
+            NumOp::Eql | NumOp::Neq | NumOp::Lt | NumOp::Gt | NumOp::Lte | NumOp::Gte
+        )
+    }
+
+    /// Resolve the operator to the concrete primitive constructor for an operand
+    /// type whose whnf head is `type_head`. `None` when no primitive realizes
+    /// this operator at that type — `%` on `Flt`, `!=` on `Bln`, or any
+    /// arithmetic/`&&`/`||` outside its supported scalar set — which the caller
+    /// turns into an "operator not defined for type" error.
+    pub fn prim_for(self, type_head: &Subterm) -> Option<fn(Term, Term) -> Prim> {
+        let Subterm::Prim(prim) = type_head else {
+            return None;
+        };
+
+        Some(match (self, prim) {
+            (NumOp::Add, Prim::NatType) => Prim::NatAdd,
+            (NumOp::Add, Prim::IntType) => Prim::IntAdd,
+            (NumOp::Add, Prim::FltType) => Prim::FltAdd,
+            (NumOp::Sub, Prim::NatType) => Prim::NatSub,
+            (NumOp::Sub, Prim::IntType) => Prim::IntSub,
+            (NumOp::Sub, Prim::FltType) => Prim::FltSub,
+            (NumOp::Mul, Prim::NatType) => Prim::NatMul,
+            (NumOp::Mul, Prim::IntType) => Prim::IntMul,
+            (NumOp::Mul, Prim::FltType) => Prim::FltMul,
+            (NumOp::Div, Prim::NatType) => Prim::NatDiv,
+            (NumOp::Div, Prim::IntType) => Prim::IntDiv,
+            (NumOp::Div, Prim::FltType) => Prim::FltDiv,
+            (NumOp::Rem, Prim::NatType) => Prim::NatRem,
+            (NumOp::Rem, Prim::IntType) => Prim::IntRem,
+            (NumOp::Eql, Prim::NatType) => Prim::NatEql,
+            (NumOp::Eql, Prim::IntType) => Prim::IntEql,
+            (NumOp::Eql, Prim::FltType) => Prim::FltEql,
+            (NumOp::Eql, Prim::BlnType) => Prim::BlnEql,
+            (NumOp::Neq, Prim::NatType) => Prim::NatNeq,
+            (NumOp::Neq, Prim::IntType) => Prim::IntNeq,
+            (NumOp::Neq, Prim::FltType) => Prim::FltNeq,
+            (NumOp::Lt, Prim::NatType) => Prim::NatLt,
+            (NumOp::Lt, Prim::IntType) => Prim::IntLt,
+            (NumOp::Lt, Prim::FltType) => Prim::FltLt,
+            (NumOp::Gt, Prim::NatType) => Prim::NatGt,
+            (NumOp::Gt, Prim::IntType) => Prim::IntGt,
+            (NumOp::Gt, Prim::FltType) => Prim::FltGt,
+            (NumOp::Lte, Prim::NatType) => Prim::NatLte,
+            (NumOp::Lte, Prim::IntType) => Prim::IntLte,
+            (NumOp::Lte, Prim::FltType) => Prim::FltLte,
+            (NumOp::Gte, Prim::NatType) => Prim::NatGte,
+            (NumOp::Gte, Prim::IntType) => Prim::IntGte,
+            (NumOp::Gte, Prim::FltType) => Prim::FltGte,
+            (NumOp::And, Prim::BlnType) => Prim::BlnAnd,
+            (NumOp::Or, Prim::BlnType) => Prim::BlnOr,
+            _ => return None,
+        })
+    }
+}
+
+/// An unresolved infix application `left <op> right`. Elaboration infers a
+/// shared operand type for the two sides and dispatches `op` to the matching
+/// scalar primitive ([`NumOp::prim_for`]); the node never survives elaboration.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Infix {
+    pub op: NumOp,
+    pub left: Term,
+    pub right: Term,
+}
+
+/// A polymorphic numeric literal: an integer `magnitude` with an optional
+/// written sign. Resolved to a concrete `Nat`/`Int`/`Flt` primitive by
+/// `elaborate_numlit` once the expected type is known (or defaulted by shape).
+/// Decimal literals are *not* `NumLit` — they parse straight to `Prim::Flt`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NumLit {
+    pub magnitude: BigUint,
+    /// A `+`/`-` was written: drops `Nat` from the candidate set and defaults
+    /// the literal to `Int`.
+    pub signed: bool,
+    /// The written sign was `-` (a negative literal can never be a `Nat`).
+    pub negative: bool,
+}
+
 /// `plicities` parallels the telescope, one mark per binder; the builder
 /// asserts the lengths agree. `Telescope` itself is unchanged. Erasure is
 /// sort-driven (a proof or a type erases), so a function type carries no
@@ -999,6 +1139,10 @@ pub enum Subterm {
     Rec(Rec),
     Var(Var),
     Metavar(Metavar),
+    /// An unresolved infix operator application; consumed by `elaborate_infix`.
+    Infix(Infix),
+    /// A polymorphic numeric literal; consumed by `elaborate_numlit`.
+    NumLit(NumLit),
 }
 
 impl Subterm {
@@ -1059,6 +1203,11 @@ impl Subterm {
     fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
         match self {
             Subterm::Type | Subterm::Prop | Subterm::Var(_) => {}
+            Subterm::NumLit(_) => {}
+            Subterm::Infix(Infix { left, right, .. }) => {
+                left.collect_construction_names(names);
+                right.collect_construction_names(names);
+            }
             Subterm::Metavar(Metavar { spine, .. }) => {
                 spine.iter().for_each(|t| t.collect_construction_names(names));
             }
@@ -1191,6 +1340,11 @@ impl Subterm {
                 spine.iter().for_each(|t| t.collect_metavars(ids));
             }
             Subterm::Type | Subterm::Prop | Subterm::Var(_) => {}
+            Subterm::NumLit(_) => {}
+            Subterm::Infix(Infix { left, right, .. }) => {
+                left.collect_metavars(ids);
+                right.collect_metavars(ids);
+            }
             Subterm::Prim(prim) => prim_metavars(prim, ids),
             Subterm::Func(Func { telescope }) => telescope.collect_metavars(ids),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.collect_metavars(ids),
@@ -1353,6 +1507,12 @@ impl Bound for Subterm {
             }),
             Subterm::Func(Func { telescope }) => Subterm::Func(Func {
                 telescope: telescope.traverse(visit),
+            }),
+            Subterm::NumLit(num_lit) => Subterm::NumLit(num_lit.clone()),
+            Subterm::Infix(Infix { op, left, right }) => Subterm::Infix(Infix {
+                op: *op,
+                left: visit.visit_subterm(left),
+                right: visit.visit_subterm(right),
             }),
             Subterm::Apply(Apply {
                 head,
@@ -1535,6 +1695,8 @@ impl Bound for Subterm {
         match self {
             Subterm::Type => 0,
             Subterm::Prop => 0,
+            Subterm::NumLit(_) => 0,
+            Subterm::Infix(Infix { left, right, .. }) => left.reach().max(right.reach()),
             Subterm::Metavar(Metavar { spine, .. }) => max_reach(spine.as_slice()),
             Subterm::Var(var) => match var.as_bound() {
                 Some(index) => index + 1,

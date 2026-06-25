@@ -1,15 +1,19 @@
 use {
     super::{
-        Apply, Atom, Carrier, Cases, Context, Definition, Error, Field, Func, FuncType,
-        ImplicitOrigin, Inductive, InductiveParam, Invert, Item, Let, Many, Match, Metavar, Module,
+        Apply, Atom, Carrier, Cases, Context, Definition, Error, Field, Flt, Func, FuncType,
+        ImplicitOrigin, Inductive, InductiveParam, Infix, Int, Invert, Item, Let, Many, Match,
+        Metavar, Module,
         MotivePattern,
-        MotiveSlot, Nat, ParkedWork, Plicity, Prim, Proj, Rec, Scope, Struct, StructType,
+        MotiveSlot, Nat, NumLit, ParkedWork, Plicity, Prim, Proj, Rec, Scope, Struct,
+        StructType,
         Structure,
         Subterm, Telescope, Term, Three, Tuple, TupleType, Two, InductiveType, Var, Variant,
         case_target_indices,
         check, check_motive, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
         is_prop, reduce_with, refine_head, sort_term,
     },
+    num_bigint::BigInt,
+    num_traits::ToPrimitive,
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
 
@@ -1876,6 +1880,170 @@ fn park_checking(
     Ok((stand_in, expected.clone()))
 }
 
+/// Resolve a polymorphic numeric literal ([`NumLit`]) to a concrete scalar
+/// primitive. In `Check` mode the expected type pins the choice; an expected
+/// type that is still a bare unsolved metavar — and `Infer` mode — fall back to
+/// the literal's shape default (`Int` when a sign was written, else `Nat`), and
+/// the closing `expect` then solves that metavar to the chosen type. The literal
+/// resolves *eagerly*: deferring it would strand downstream elaboration that
+/// needs the type immediately (a projection off the literal's type, say). The
+/// operator (`elaborate_infix`) pins its operand type from the non-literal side
+/// first, so a literal there sees a concrete type and `1 + flt` still works.
+/// Decimal literals never reach here; they parse straight to `Flt`.
+fn elaborate_num_lit(
+    context: &mut Context,
+    num_lit: &NumLit,
+    term: &Term,
+    mode: Mode,
+) -> Result<(Term, Term), Error> {
+    let nat_type: Term = Subterm::Prim(Prim::NatType).into();
+    let int_type: Term = Subterm::Prim(Prim::IntType).into();
+    let flt_type: Term = Subterm::Prim(Prim::FltType).into();
+
+    // A written sign rules out `Nat`, so the default lands on `Int`.
+    let default_type: Term = if num_lit.signed {
+        int_type.clone()
+    } else {
+        nat_type.clone()
+    };
+
+    let target = match &mode {
+        Mode::Check(expected) => {
+            let reduced = reduce_with(context, expected)?;
+            match &*reduced {
+                // Nothing concrete to resolve against yet — commit to the shape
+                // default; the closing `expect` solves the metavar to it.
+                Subterm::Metavar(Metavar { id, .. }) if context.metavar_solution(*id).is_none() => {
+                    Term::unwrap_or_clone(default_type.clone())
+                }
+                _ => Term::unwrap_or_clone(reduced),
+            }
+        }
+        Mode::Infer => Term::unwrap_or_clone(default_type.clone()),
+    };
+
+    let (prim, type_) = match &target {
+        Subterm::Prim(Prim::NatType) if !num_lit.negative => {
+            (Prim::Nat(Nat::new(num_lit.magnitude.clone())), nat_type)
+        }
+        Subterm::Prim(Prim::IntType) => {
+            let magnitude = BigInt::from(num_lit.magnitude.clone());
+            let value = if num_lit.negative { -magnitude } else { magnitude };
+            (Prim::Int(Int::new(value)), int_type)
+        }
+        Subterm::Prim(Prim::FltType) => {
+            let magnitude = num_lit.magnitude.to_f32().unwrap_or(f32::INFINITY);
+            let value = if num_lit.negative { -magnitude } else { magnitude };
+            (Prim::Flt(Flt::from_f32(value)), flt_type)
+        }
+        // A concrete expected type that is non-numeric — or `Nat` for a negative
+        // literal — has no realization: report against the literal's own shape.
+        _ => {
+            let Mode::Check(expected) = &mode else {
+                unreachable!("Infer-mode target is always the Nat/Int shape default");
+            };
+            let inferred = if num_lit.negative { int_type } else { default_type };
+            return Err(Error::type_mismatch(inferred, expected.clone()));
+        }
+    };
+
+    if let Mode::Check(expected) = &mode {
+        expect(context, term, &type_, expected)?;
+    }
+
+    Ok((Term::prim(prim), type_))
+}
+
+/// The shape default for an infix operator whose operand type nothing pinned:
+/// any signed/negative literal operand forces `Int`, otherwise `Nat`.
+fn infix_default_type(infix: &Infix) -> Prim {
+    let signed = |operand: &Term| matches!(&**operand, Subterm::NumLit(num_lit) if num_lit.signed);
+
+    if signed(&infix.left) || signed(&infix.right) {
+        Prim::IntType
+    } else {
+        Prim::NatType
+    }
+}
+
+/// Resolve an overloaded infix operator ([`Infix`]) to a concrete scalar
+/// primitive. A fresh operand-type metavar `?T` is pinned by the non-literal
+/// operands first (or, for arithmetic operators, by the expected result type),
+/// then defaulted from the operand literals if nothing constrains it; only then
+/// are the literal operands checked — against a `?T` that is already concrete,
+/// so they never force it to their own default. That ordering is what lets
+/// `1 + flt` resolve to `Flt` rather than a `Nat`/`Flt` mismatch. The operator
+/// then dispatches through [`NumOp::prim_for`]; the node never survives
+/// elaboration — the rebuilt term is the concrete `Prim` application.
+fn elaborate_infix(
+    context: &mut Context,
+    infix: &Infix,
+    term: &Term,
+    mode: Mode,
+) -> Result<(Term, Term), Error> {
+    let bln_type: Term = Subterm::Prim(Prim::BlnType).into();
+
+    // `?T`: the operand type shared by both sides.
+    let (operand_id, operand_type) = context.fresh_placeholder(Term::type_(), term.span());
+
+    // An arithmetic operator returns its operand type, so an expected result
+    // type pins `?T` straight away; a comparison returns `Bln`, which says
+    // nothing about the operands, so only the operands can pin it.
+    if !infix.op.result_is_bln()
+        && let Mode::Check(expected) = &mode
+    {
+        expect(context, term, &operand_type, expected)?;
+    }
+
+    let left_is_literal = matches!(&*infix.left, Subterm::NumLit(_));
+    let right_is_literal = matches!(&*infix.right, Subterm::NumLit(_));
+
+    // Phase 1: the non-literal operands pin `?T` from their own types.
+    let mut left = match left_is_literal {
+        false => Some(elaborate(context, &infix.left, Mode::Check(operand_type.clone()))?.0),
+        true => None,
+    };
+    let mut right = match right_is_literal {
+        false => Some(elaborate(context, &infix.right, Mode::Check(operand_type.clone()))?.0),
+        true => None,
+    };
+
+    // Nothing pinned `?T` — every non-literal operand left it open. Default from
+    // the operand shapes so the literal operands have a concrete type to take.
+    if context.metavar_solution(operand_id).is_none() {
+        let default = infix_default_type(infix);
+        context.solve_metavar(operand_id, Subterm::Prim(default).into());
+    }
+
+    // Phase 2: the literal operands resolve against the now-concrete `?T`.
+    if left_is_literal {
+        left = Some(elaborate(context, &infix.left, Mode::Check(operand_type.clone()))?.0);
+    }
+    if right_is_literal {
+        right = Some(elaborate(context, &infix.right, Mode::Check(operand_type.clone()))?.0);
+    }
+
+    let head = Term::unwrap_or_clone(reduce_with(context, &operand_type)?);
+    let build = match infix.op.prim_for(&head) {
+        Some(build) => build,
+        None => return Err(Error::operator_undefined(infix.op.symbol().to_string(), head)),
+    };
+
+    let result_type = if infix.op.result_is_bln() {
+        bln_type
+    } else {
+        head.into()
+    };
+
+    let rebuilt = Term::prim(build(left.unwrap(), right.unwrap()));
+
+    if let Mode::Check(expected) = &mode {
+        expect(context, term, &result_type, expected)?;
+    }
+
+    Ok((rebuilt, result_type))
+}
+
 /// Check a lambda against an expected function type. Walk the lambda's own
 /// telescope (whose `Done` is the body) alongside the expected type's telescope
 /// (whose `Done` is the output type) in lockstep. Each parameter's domain is
@@ -2663,6 +2831,8 @@ fn elaborate_subterm(
         },
         Subterm::Func(func) => return elaborate_func(context, func, term, mode),
         Subterm::Tuple(tuple) => return elaborate_tuple(context, tuple, term, mode),
+        Subterm::Infix(infix) => return elaborate_infix(context, infix, term, mode),
+        Subterm::NumLit(num_lit) => return elaborate_num_lit(context, num_lit, term, mode),
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
         Subterm::InductiveType(ut) => elaborate_inductive_type(context, ut)?,
         Subterm::Variant(uc) => elaborate_variant(context, uc, term)?,

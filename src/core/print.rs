@@ -1,6 +1,7 @@
 use {
     super::{
-        Apply, Arity, Atom, Carrier, Cases, Definition, Field, Flt, Func, FuncType, Item, Let,
+        Apply, Arity, Atom, Carrier, Cases, Definition, Field, Flt, Func, FuncType, Infix, Item,
+        Let,
         Match, Module, Nat, One, Plicity, Prim, Proj, Rec, Scope, Struct, StructType,
         Subterm,
         Telescope, Term, Three, Tuple, TupleType, Two, InductiveType, Var, Variant,
@@ -227,7 +228,11 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
             }
         }
         Subterm::Metavar(metavar) => metavar.spine.iter().for_each(|t| collect_labels(t, out)),
-        Subterm::Var(_) | Subterm::Type | Subterm::Prop | Subterm::Prim(_) => {}
+        Subterm::Infix(Infix { left, right, .. }) => {
+            collect_labels(left, out);
+            collect_labels(right, out);
+        }
+        Subterm::Var(_) | Subterm::Type | Subterm::Prop | Subterm::Prim(_) | Subterm::NumLit(_) => {}
     }
 }
 
@@ -1193,6 +1198,21 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ])
         }
         Subterm::Var(var) => print_var(var),
+        Subterm::NumLit(num_lit) => {
+            let sign = if num_lit.negative {
+                "-"
+            } else if num_lit.signed {
+                "+"
+            } else {
+                ""
+            };
+            pure(format!("{sign}{}", num_lit.magnitude))
+        }
+        Subterm::Infix(Infix { op, left, right }) => flat([
+            print_term(left, depth),
+            pure(format!(" {} ", op.symbol())),
+            print_term(right, depth),
+        ]),
         // Identity and renaming spines (every entry a variable) are the
         // uninteresting common case and print as the bare id; a spine carrying
         // anything else is exactly the one worth seeing.
