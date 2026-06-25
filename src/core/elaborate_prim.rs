@@ -110,34 +110,13 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::FltGte(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltGte)?,
         // `Flt/to_le_bin` exposes the IEEE-754 bytes (`Bin`); `/std/Flt/to_str`
         // renders them to the proof-carrying `/syn/Str` in Curios (Dragon4).
-        Prim::FltToLeBin(inner) => {
-            let inner = elaborate(context, inner, Mode::Check(flt_type))?.0;
-            (Prim::FltToLeBin(inner), bin_type)
-        }
-        Prim::NatToInt(inner) => {
-            let inner = elaborate(context, inner, Mode::Check(nat_type))?.0;
-            (Prim::NatToInt(inner), int_type)
-        }
-        Prim::NatToFlt(inner) => {
-            let inner = elaborate(context, inner, Mode::Check(nat_type))?.0;
-            (Prim::NatToFlt(inner), flt_type)
-        }
-        Prim::IntToNat(inner) => {
-            let inner = elaborate(context, inner, Mode::Check(int_type))?.0;
-            (Prim::IntToNat(inner), nat_type)
-        }
-        Prim::IntToFlt(inner) => {
-            let inner = elaborate(context, inner, Mode::Check(int_type))?.0;
-            (Prim::IntToFlt(inner), flt_type)
-        }
-        Prim::FltToNat(inner) => {
-            let inner = elaborate(context, inner, Mode::Check(flt_type))?.0;
-            (Prim::FltToNat(inner), nat_type)
-        }
-        Prim::FltToInt(inner) => {
-            let inner = elaborate(context, inner, Mode::Check(flt_type))?.0;
-            (Prim::FltToInt(inner), int_type)
-        }
+        Prim::FltToLeBin(i) => unary(context, i, &flt_type, bin_type.clone(), Prim::FltToLeBin)?,
+        Prim::NatToInt(i) => unary(context, i, &nat_type, int_type.clone(), Prim::NatToInt)?,
+        Prim::NatToFlt(i) => unary(context, i, &nat_type, flt_type.clone(), Prim::NatToFlt)?,
+        Prim::IntToNat(i) => unary(context, i, &int_type, nat_type.clone(), Prim::IntToNat)?,
+        Prim::IntToFlt(i) => unary(context, i, &int_type, flt_type.clone(), Prim::IntToFlt)?,
+        Prim::FltToNat(i) => unary(context, i, &flt_type, nat_type.clone(), Prim::FltToNat)?,
+        Prim::FltToInt(i) => unary(context, i, &flt_type, int_type.clone(), Prim::FltToInt)?,
         Prim::BinType => (prim.clone(), Term::type_()),
         Prim::Bin(_) => (prim.clone(), bin_type),
         Prim::BinLen(bin) => {
