@@ -1039,8 +1039,8 @@ pub enum Cases {
         cases: BTreeMap<Atom, Scope<Many>>,
         pattern: Option<MotivePattern>,
     },
-    /// Structural induction on a native free-monoid primitive (`Nat`/`Arr`/`Bin`/
-    /// `Str`): the `carrier` selects the primitive and carries both its parameters
+    /// Structural induction on a native free-monoid primitive (`Nat`/`Arr`/
+    /// `Bin`): the `carrier` selects the primitive and carries both its parameters
     /// (`Arr`'s element type) and its two arms — an identity arm plus a cons arm
     /// binding the head generator (absent for `Nat`, whose unary generator carries
     /// no payload), the tail, and the induction hypothesis at the tail.
@@ -1049,7 +1049,7 @@ pub enum Cases {
 
 /// The native free-monoid primitive a `Cases::FreeMonoid` eliminates, with its
 /// type parameters and its two eliminator arms. `Nat` is the free monoid on one
-/// (payload-less) generator; `Bin`/`Str` carry none; `Arr` carries its element
+/// (payload-less) generator; `Bin` carries none; `Arr` carries its element
 /// type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose
 /// arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih),
 /// `Scope<Three>` for `Bin`/`Arr` (head, tail, ih).
