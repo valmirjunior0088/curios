@@ -1388,13 +1388,13 @@ fn elaborate_inductive_match(
     // Every written arm must name a constructor; coverage is decided per
     // constructor below — a missing arm is legal iff inversion proves it
     // impossible (Rung C).
-    if cases
+    if let Some(tag) = cases
         .keys()
-        .any(|tag| !inductive.constructors.contains_key(tag))
+        .find(|tag| !inductive.constructors.contains_key(*tag))
     {
-        return Err(Error::match_arity_mismatch(
-            inductive.constructors.len(),
-            cases.len(),
+        return Err(Error::unknown_match_constructor(
+            name.clone(),
+            tag.to_string(),
         ));
     }
 

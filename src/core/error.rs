@@ -134,9 +134,9 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
-    MatchArityMismatch {
-        expected: usize,
-        got: usize,
+    UnknownMatchConstructor {
+        type_name: String,
+        tag: String,
     },
     MatchCaseMissing {
         term: Box<Term>,
@@ -358,8 +358,8 @@ impl Error {
         Self::WrongNumberOfArguments { expected, got }
     }
 
-    pub fn match_arity_mismatch(expected: usize, got: usize) -> Self {
-        Self::MatchArityMismatch { expected, got }
+    pub fn unknown_match_constructor(type_name: String, tag: String) -> Self {
+        Self::UnknownMatchConstructor { type_name, tag }
     }
 
     pub fn match_case_missing<T: Into<Term>, A: Into<Atom>>(term: T, atom: A) -> Self {
@@ -677,8 +677,8 @@ impl fmt::Display for Error {
                     "wrong number of arguments: expected {expected}, got {got}"
                 )
             }
-            Error::MatchArityMismatch { expected, got } => {
-                write!(f, "match has {got} case(s) but atom type has {expected}")
+            Error::UnknownMatchConstructor { type_name, tag } => {
+                write!(f, "match arm '{tag}' is not a constructor of '{type_name}'")
             }
             Error::MatchCaseMissing { term, atom } => {
                 write!(f, "missing match case for atom '{atom}': {term}")
