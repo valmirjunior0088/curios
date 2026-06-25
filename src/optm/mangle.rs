@@ -22,14 +22,9 @@ pub fn lifted(clsr: &ClsrName) -> FuncName {
     FuncName::from(format!("{clsr}@lifted"))
 }
 
-/// The freshening suffix for a single-site inline
-/// ([`function_inlining`](super::function_inlining) Tier 1).
-pub fn inline_suffix(callee: &FuncName) -> String {
-    format!("@{callee}")
-}
-
-/// The per-site freshening suffix for a multi-site inline
-/// ([`function_inlining`](super::function_inlining) Tier 2).
+/// The per-site freshening suffix for an inline splice
+/// ([`function_inlining`](super::function_inlining)): a per-callee site number
+/// keeps every splice's bound names distinct across all inline passes.
 pub fn inline_site_suffix(callee: &FuncName, site: usize) -> String {
     format!("@{callee}#{site}")
 }

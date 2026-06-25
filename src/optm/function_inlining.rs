@@ -1,5 +1,6 @@
 use {
     super::{harvest, *},
+    crate::Entropy,
     std::collections::{HashMap, HashSet},
 };
 
@@ -40,21 +41,25 @@ enum Tier {
 ///   then dropped. This dissolves the dozen tiny primitive wrappers
 ///   (`Bin.concat`, `Nat.to_str`, …) the higher-level passes leave behind.
 ///
-/// Tier 1 is preferred when applicable: it keeps the suffix format stable for
-/// IR dumps and avoids the counter for callees that are already single-site.
+/// Tier 1 is preferred when applicable: it splices once rather than `count`
+/// times.
 ///
 /// # Name freshening by suffix
 ///
 /// Value and block names are unique only *within* a body (the lowerer restarts
 /// its `v`/`b` counters per region), so a verbatim splice would collide the
 /// callee's `v0` with the caller's. Every name the callee *binds* is suffixed
-/// (Tier 1: `@{callee}`; Tier 2: `@{callee}#{n}`); since caller names are
-/// always `v\d+`/`b\d+`, a suffixed name can never equal one. Free names in
-/// the callee are module-level consts (and closure/function names) — those are
-/// left untouched so their references still resolve.
+/// `@{callee}#{n}`, where `n` is drawn from a per-callee site counter; since
+/// caller names are always `v\d+`/`b\d+`, a suffixed name can never equal one.
+/// Free names in the callee are module-level consts (and closure/function
+/// names) — those are left untouched so their references still resolve.
 ///
-/// For Tier 2 the per-site counter guarantees uniqueness when the same callee
-/// is spliced into the same caller more than once.
+/// Both tiers draw `n` from the same counter, and [`inline_calls_with`] threads
+/// it across every inline pass, so a given site number is never reused — not
+/// within a pass, and not when a re-lifted closure is inlined by a later pass.
+/// That uniqueness is load-bearing: a duplicate block name would corrupt
+/// [`dead_code_elimination`](super::dead_code_elimination)'s name-keyed
+/// reachability and silently prune a live block.
 ///
 /// # Resume stitching is a rename
 ///
@@ -72,7 +77,21 @@ enum Tier {
 /// (Tier 1 splices once; Tier 2 splices `count` times) and strictly shrinks
 /// `Module::funcs`, or selects no candidate and returns.
 pub fn inline_calls(module: &mut Module) {
-    let mut counter: HashMap<FuncName, usize> = HashMap::new();
+    inline_calls_with(module, &Entropy::new());
+}
+
+/// As [`inline_calls`], but drawing the freshening suffix from a caller-owned
+/// [`Entropy`] gensym so every splice's `@{callee}#{n}` is globally distinct.
+///
+/// The pipeline runs inlining several times. A closure can be lifted and inlined in
+/// one pass, removed, then *re-lifted* by a later pass (devirtualization re-creates
+/// its `@lifted` function) and inlined again. With a counter local to each pass, the
+/// second inline restarts numbering and its fresh blocks collide with the first
+/// inline's surviving copies — a duplicate block name, which silently corrupts
+/// [`dead_code_elimination`](super::dead_code_elimination)'s name-keyed reachability
+/// index (it assumes names are unique) and prunes a still-referenced block. A shared
+/// gensym hands every splice — across every pass — its own never-recurring id.
+pub fn inline_calls_with(module: &mut Module, entropy: &Entropy) {
     loop {
         let counts = direct_call_counts(module);
         let graph = call_graph(module);
@@ -87,9 +106,12 @@ pub fn inline_calls(module: &mut Module) {
             .cloned()
             .expect("picked callee is present");
 
+        // Both tiers draw the freshening suffix from the same gensym, so every
+        // splice — single- or multi-site — gets a distinct `@{callee}#{n}` that
+        // never recurs, even across separate inline passes.
         match tier {
             Tier::Single => {
-                let suffix = mangle::inline_suffix(&callee_name);
+                let suffix = mangle::inline_site_suffix(&callee_name, entropy.fresh());
                 if !splice_in_module(module, &callee_name, &callee, &suffix) {
                     return;
                 }
@@ -97,9 +119,7 @@ pub fn inline_calls(module: &mut Module) {
             Tier::Multi => {
                 let total = counts.get(&callee_name).copied().unwrap_or(0);
                 for _ in 0..total {
-                    let n = counter.entry(callee_name.clone()).or_insert(0);
-                    *n += 1;
-                    let suffix = mangle::inline_site_suffix(&callee_name, *n);
+                    let suffix = mangle::inline_site_suffix(&callee_name, entropy.fresh());
                     if !splice_in_module(module, &callee_name, &callee, &suffix) {
                         break;
                     }
@@ -498,18 +518,18 @@ mod tests {
             region
                 .values
                 .iter()
-                .any(|(n, val)| n == &v("p@f") && matches!(val, Value::Alias(a) if a == &v("a")))
+                .any(|(n, val)| n == &v("p@f#0") && matches!(val, Value::Alias(a) if a == &v("a")))
         );
 
         // The body's compute is freshened and its operands point at the bound param.
-        assert!(region.values.iter().any(|(n, val)| n == &v("v0@f")
-            && matches!(val, Value::Eval(Code::NatAdd(x, y)) if x == &v("p@f") && y == &v("p@f"))));
+        assert!(region.values.iter().any(|(n, val)| n == &v("v0@f#0")
+            && matches!(val, Value::Eval(Code::NatAdd(x, y)) if x == &v("p@f#0") && y == &v("p@f#0"))));
 
         // The callee's return now jumps to the call's continuation block "cont".
         match &region.tail {
             Tail::Jump(target) => {
                 assert_eq!(target.target, b("cont"));
-                assert_eq!(target.params, vec![v("v0@f")]);
+                assert_eq!(target.params, vec![v("v0@f#0")]);
             }
             other => panic!("expected jump to continuation, got {other:?}"),
         }
@@ -549,7 +569,7 @@ mod tests {
 
         // main now jumps into the freshened internal block.
         match &region.tail {
-            Tail::Jump(target) => assert_eq!(target.target, b("body@g")),
+            Tail::Jump(target) => assert_eq!(target.target, b("body@g#0")),
             other => panic!("expected jump to merged block, got {other:?}"),
         }
 
@@ -557,12 +577,12 @@ mod tests {
         let (_, merged) = region
             .blocks
             .iter()
-            .find(|(name, _)| name == &b("body@g"))
+            .find(|(name, _)| name == &b("body@g#0"))
             .expect("merged block present");
         match &merged.region.tail {
             Tail::Jump(target) => {
                 assert_eq!(target.target, b("cont"));
-                assert_eq!(target.params, vec![v("s@g")]);
+                assert_eq!(target.params, vec![v("s@g#0")]);
             }
             other => panic!("expected stitched return, got {other:?}"),
         }
@@ -618,12 +638,12 @@ mod tests {
         // f is consumed and dropped.
         assert!(func_named(&module, "f").is_none());
 
-        // Site 1 spliced into main's region with suffix `@f#1`.
+        // Site 1 spliced into main's region with suffix `@f#0`.
         let main_r = main_region(&module);
         assert!(matches!(main_r.tail, Tail::Jump(_)));
-        assert!(main_r.values.iter().any(|(n, _)| n == &v("v1@f#1")));
+        assert!(main_r.values.iter().any(|(n, _)| n == &v("v1@f#0")));
 
-        // Site 2 spliced into k1's region with suffix `@f#2`.
+        // Site 2 spliced into k1's region with suffix `@f#1`.
         let (_, k1_block) = main_r
             .blocks
             .iter()
@@ -635,10 +655,10 @@ mod tests {
                 .region
                 .values
                 .iter()
-                .any(|(n, _)| n == &v("v1@f#2"))
+                .any(|(n, _)| n == &v("v1@f#1"))
         );
 
-        // Site 3 spliced into k2's region with suffix `@f#3`.
+        // Site 3 spliced into k2's region with suffix `@f#2`.
         let (_, k2_block) = k1_block
             .region
             .blocks
@@ -651,7 +671,7 @@ mod tests {
                 .region
                 .values
                 .iter()
-                .any(|(n, _)| n == &v("v1@f#3"))
+                .any(|(n, _)| n == &v("v1@f#2"))
         );
     }
 
@@ -731,7 +751,7 @@ mod tests {
         // f is called from two sites that both live in `main`'s region tree:
         // once from main's tail, once from continuation block `k`. After Tier 2
         // inlining the two splices share the same caller but get distinct
-        // `@f#1` / `@f#2` suffixes — no name collision.
+        // `@f#0` / `@f#1` suffixes — no name collision.
         let f = func(
             vec![v("p")],
             "rf",
@@ -766,18 +786,18 @@ mod tests {
 
         let main_r = main_region(&module);
 
-        // Site 1 (main's tail) spliced with @f#1.
-        assert!(main_r.values.iter().any(|(n, _)| n == &v("v0@f#1")));
-        assert!(main_r.values.iter().any(|(n, _)| n == &v("p@f#1")));
+        // Site 1 (main's tail) spliced with @f#0.
+        assert!(main_r.values.iter().any(|(n, _)| n == &v("v0@f#0")));
+        assert!(main_r.values.iter().any(|(n, _)| n == &v("p@f#0")));
 
-        // Site 2 (continuation block `k`) spliced with @f#2.
+        // Site 2 (continuation block `k`) spliced with @f#1.
         let (_, k_block) = main_r
             .blocks
             .iter()
             .find(|(n, _)| n == &b("k"))
             .expect("k present");
-        assert!(k_block.region.values.iter().any(|(n, _)| n == &v("v0@f#2")));
-        assert!(k_block.region.values.iter().any(|(n, _)| n == &v("p@f#2")));
+        assert!(k_block.region.values.iter().any(|(n, _)| n == &v("v0@f#1")));
+        assert!(k_block.region.values.iter().any(|(n, _)| n == &v("p@f#1")));
     }
 
     #[test]
