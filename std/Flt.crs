@@ -6,10 +6,9 @@ let pow2(k : Nat) -> BigNat =
     BigNat/mul_pow2(BigNat/of_nat(1), k);
 
 rec divmod(r : BigNat, s : BigNat, d : Nat) -> {Nat, BigNat} =
-    match BigNat/compare(r, s)
-    | lt() => (d, r)
-    | eq() => divmod(BigNat/sub(r, s), s, d + 1)
-    | gt() => divmod(BigNat/sub(r, s), s, d + 1)
+    match BigNat/lt(r, s)
+    | true => (d, r)
+    | false => divmod(BigNat/sub(r, s), s, d + 1)
     end;
 
 rec scale_up(rpm : BigNat, s : BigNat, k : Int) -> {BigNat, Int} =
