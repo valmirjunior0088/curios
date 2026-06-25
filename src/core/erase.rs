@@ -724,16 +724,6 @@ fn erase_struct(context: &mut Context, s: &Struct) -> Result<ersd::Term, Error> 
     })
 }
 
-/// Lower the primitive eliminator: an index dispatch on the scrutinee's tag
-/// (field 0), each arm rebinding its payload binders to the flat record's
-/// remaining fields (`head.(i + 1)`). Downstream stages
-/// (`cont`/`optm`/`wasm`) see only generic tuples, projections, and an
-/// Erase a match on an *erasable* (proof/type) scrutinee, which carries no
-/// runtime tag. Such an inductive is a subsingleton (large-elimination
-/// soundness), so the match has exactly one live arm — `Eq`'s `refl` being the
-/// canonical case. The arm's body is erased with its payload binders bound (so
-/// it type-checks and refines) but never projected, and the scrutinee head is
-/// not erased: it is a dropped binder with no runtime value.
 /// The motive pattern's binder slots, positionally (validated by elaborate):
 /// `true` marks a parameter position (opened with the actual parameter),
 /// `false` an index position (opened with the case's target index). `Term`
@@ -754,6 +744,12 @@ fn pattern_binder_slots(pattern: Option<&MotivePattern>, n_params: usize) -> Vec
         .unwrap_or_default()
 }
 
+/// Erase a match on an *erasable* (proof/type) scrutinee, which carries no
+/// runtime tag. Such an inductive is a subsingleton (large-elimination
+/// soundness), so the match has exactly one live arm — `Eq`'s `refl` being the
+/// canonical case. The arm's body is erased with its payload binders bound (so
+/// it type-checks and refines) but never projected, and the scrutinee head is
+/// not erased: it is a dropped binder with no runtime value.
 #[allow(clippy::too_many_arguments)]
 fn erase_erasable_scrutinee_match(
     context: &mut Context,
@@ -842,6 +838,10 @@ fn erase_erasable_scrutinee_match(
     })
 }
 
+/// Lower the primitive eliminator: an index dispatch on the scrutinee's tag
+/// (field 0), each arm rebinding its payload binders to the flat record's
+/// remaining fields (`head.(i + 1)`). Downstream stages
+/// (`cont`/`optm`/`wasm`) see only generic tuples, projections, and an
 /// index-dispatched match.
 fn erase_inductive_match(
     context: &mut Context,
