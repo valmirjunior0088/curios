@@ -88,6 +88,34 @@ fn unary(
     Ok(pure(build(erase(context, inner, &operand())?)))
 }
 
+/// The host-prim analogue of [`binary`]: erase both operands and rebuild as a
+/// `host`-wrapped `ersd::HostPrim`. Host operands are heterogeneous (a handle
+/// against bytes, a count, a flag), so the two operand types are supplied
+/// separately rather than shared.
+fn host_binary(
+    context: &mut Context,
+    left: &Term,
+    left_type: fn() -> Term,
+    right: &Term,
+    right_type: fn() -> Term,
+    build: fn(ersd::Term, ersd::Term) -> ersd::HostPrim,
+) -> Result<ersd::Term, Error> {
+    Ok(host(build(
+        erase(context, left, &left_type())?,
+        erase(context, right, &right_type())?,
+    )))
+}
+
+/// The host-prim analogue of [`unary`], for single-operand host primitives.
+fn host_unary(
+    context: &mut Context,
+    inner: &Term,
+    operand: fn() -> Term,
+    build: fn(ersd::Term) -> ersd::HostPrim,
+) -> Result<ersd::Term, Error> {
+    Ok(host(build(erase(context, inner, &operand())?)))
+}
+
 /// Lower a primitive to its `ersd` form. Pure downstream lowering: the term is
 /// already well-typed (elaborate discharged every obligation) and meta-free
 /// (zonk ran), so there is no checking here. `expected` is consumed only where a
@@ -282,77 +310,81 @@ pub fn erase_prim(
         }
         Prim::IoType => Ok(ersd::Subterm::Erased.into()),
         &Prim::Io(token) => Ok(pure(ersd::PurePrim::Io(token))),
-        Prim::IoRead(handle, count) => Ok(host(ersd::HostPrim::IoRead(
-            erase(context, handle, &io_type())?,
-            erase(context, count, &nat_type())?,
-        ))),
-        Prim::IoWrite(handle, bytes) => Ok(host(ersd::HostPrim::IoWrite(
-            erase(context, handle, &io_type())?,
-            erase(context, bytes, &bin_type())?,
-        ))),
-        Prim::IoOpen(path, mode) => Ok(host(ersd::HostPrim::IoOpen(
-            erase(context, path, &bin_type())?,
-            erase(context, mode, &nat_type())?,
-        ))),
-        Prim::IoLookup(host_, port) => Ok(host(ersd::HostPrim::IoLookup(
-            erase(context, host_, &bin_type())?,
-            erase(context, port, &nat_type())?,
-        ))),
-        Prim::IoResolve(handle) => Ok(host(ersd::HostPrim::IoResolve(erase(
+        Prim::IoRead(handle, count) => {
+            host_binary(context, handle, io_type, count, nat_type, ersd::HostPrim::IoRead)
+        }
+        Prim::IoWrite(handle, bytes) => {
+            host_binary(context, handle, io_type, bytes, bin_type, ersd::HostPrim::IoWrite)
+        }
+        Prim::IoOpen(path, mode) => {
+            host_binary(context, path, bin_type, mode, nat_type, ersd::HostPrim::IoOpen)
+        }
+        Prim::IoLookup(host_, port) => {
+            host_binary(context, host_, bin_type, port, nat_type, ersd::HostPrim::IoLookup)
+        }
+        Prim::IoResolve(handle) => host_unary(context, handle, io_type, ersd::HostPrim::IoResolve),
+        Prim::IoSocket(addr) => host_unary(context, addr, bin_type, ersd::HostPrim::IoSocket),
+        Prim::IoBind(handle, addr) => {
+            host_binary(context, handle, io_type, addr, bin_type, ersd::HostPrim::IoBind)
+        }
+        Prim::IoConnect(handle, addr) => {
+            host_binary(context, handle, io_type, addr, bin_type, ersd::HostPrim::IoConnect)
+        }
+        Prim::IoListen(handle, backlog) => {
+            host_binary(context, handle, io_type, backlog, nat_type, ersd::HostPrim::IoListen)
+        }
+        Prim::IoAccept(handle) => host_unary(context, handle, io_type, ersd::HostPrim::IoAccept),
+        Prim::IoStartTls(handle, sni) => {
+            host_binary(context, handle, io_type, sni, bin_type, ersd::HostPrim::IoStartTls)
+        }
+        Prim::IoTlsServerConfig(cert, key) => host_binary(
+            context,
+            cert,
+            bin_type,
+            key,
+            bin_type,
+            ersd::HostPrim::IoTlsServerConfig,
+        ),
+        Prim::IoStartTlsServer(handle, cfg) => host_binary(
             context,
             handle,
-            &io_type(),
-        )?))),
-        Prim::IoSocket(addr) => Ok(host(ersd::HostPrim::IoSocket(erase(
-            context,
-            addr,
-            &bin_type(),
-        )?))),
-        Prim::IoBind(handle, addr) => Ok(host(ersd::HostPrim::IoBind(
-            erase(context, handle, &io_type())?,
-            erase(context, addr, &bin_type())?,
-        ))),
-        Prim::IoConnect(handle, addr) => Ok(host(ersd::HostPrim::IoConnect(
-            erase(context, handle, &io_type())?,
-            erase(context, addr, &bin_type())?,
-        ))),
-        Prim::IoListen(handle, backlog) => Ok(host(ersd::HostPrim::IoListen(
-            erase(context, handle, &io_type())?,
-            erase(context, backlog, &nat_type())?,
-        ))),
-        Prim::IoAccept(handle) => Ok(host(ersd::HostPrim::IoAccept(erase(
+            io_type,
+            cfg,
+            io_type,
+            ersd::HostPrim::IoStartTlsServer,
+        ),
+        Prim::IoSetNonblocking(handle, on) => host_binary(
             context,
             handle,
-            &io_type(),
-        )?))),
-        Prim::IoStartTls(handle, sni) => Ok(host(ersd::HostPrim::IoStartTls(
-            erase(context, handle, &io_type())?,
-            erase(context, sni, &bin_type())?,
-        ))),
-        Prim::IoTlsServerConfig(cert, key) => Ok(host(ersd::HostPrim::IoTlsServerConfig(
-            erase(context, cert, &bin_type())?,
-            erase(context, key, &bin_type())?,
-        ))),
-        Prim::IoStartTlsServer(handle, cfg) => Ok(host(ersd::HostPrim::IoStartTlsServer(
-            erase(context, handle, &io_type())?,
-            erase(context, cfg, &io_type())?,
-        ))),
-        Prim::IoSetNonblocking(handle, on) => Ok(host(ersd::HostPrim::IoSetNonblocking(
-            erase(context, handle, &io_type())?,
-            erase(context, on, &bln_type())?,
-        ))),
-        Prim::IoSetRecvTimeout(handle, ms) => Ok(host(ersd::HostPrim::IoSetRecvTimeout(
-            erase(context, handle, &io_type())?,
-            erase(context, ms, &nat_type())?,
-        ))),
-        Prim::IoSetSendTimeout(handle, ms) => Ok(host(ersd::HostPrim::IoSetSendTimeout(
-            erase(context, handle, &io_type())?,
-            erase(context, ms, &nat_type())?,
-        ))),
-        Prim::IoSetReuseaddr(handle, on) => Ok(host(ersd::HostPrim::IoSetReuseaddr(
-            erase(context, handle, &io_type())?,
-            erase(context, on, &bln_type())?,
-        ))),
+            io_type,
+            on,
+            bln_type,
+            ersd::HostPrim::IoSetNonblocking,
+        ),
+        Prim::IoSetRecvTimeout(handle, ms) => host_binary(
+            context,
+            handle,
+            io_type,
+            ms,
+            nat_type,
+            ersd::HostPrim::IoSetRecvTimeout,
+        ),
+        Prim::IoSetSendTimeout(handle, ms) => host_binary(
+            context,
+            handle,
+            io_type,
+            ms,
+            nat_type,
+            ersd::HostPrim::IoSetSendTimeout,
+        ),
+        Prim::IoSetReuseaddr(handle, on) => host_binary(
+            context,
+            handle,
+            io_type,
+            on,
+            bln_type,
+            ersd::HostPrim::IoSetReuseaddr,
+        ),
         Prim::IoPoll(handles, events, timeout) => {
             let arr_io: Term = Subterm::Prim(Prim::ArrType(io_type())).into();
             let arr_nat: Term = Subterm::Prim(Prim::ArrType(nat_type())).into();
@@ -362,30 +394,14 @@ pub fn erase_prim(
                 erase(context, timeout, &int_type())?,
             )))
         }
-        Prim::IoClose(handle) => Ok(host(ersd::HostPrim::IoClose(erase(
-            context,
-            handle,
-            &io_type(),
-        )?))),
+        Prim::IoClose(handle) => host_unary(context, handle, io_type, ersd::HostPrim::IoClose),
         Prim::IoClockWall => Ok(host(ersd::HostPrim::IoClockWall)),
         Prim::IoClockMono => Ok(host(ersd::HostPrim::IoClockMono)),
-        Prim::IoRandom(count) => Ok(host(ersd::HostPrim::IoRandom(erase(
-            context,
-            count,
-            &nat_type(),
-        )?))),
+        Prim::IoRandom(count) => host_unary(context, count, nat_type, ersd::HostPrim::IoRandom),
         Prim::IoArgs => Ok(host(ersd::HostPrim::IoArgs)),
-        Prim::IoEnv(name) => Ok(host(ersd::HostPrim::IoEnv(erase(
-            context,
-            name,
-            &bin_type(),
-        )?))),
+        Prim::IoEnv(name) => host_unary(context, name, bin_type, ersd::HostPrim::IoEnv),
         // The polymorphic result type is type-only; only the code survives.
-        Prim::IoExit(_, code) => Ok(host(ersd::HostPrim::IoExit(erase(
-            context,
-            code,
-            &nat_type(),
-        )?))),
+        Prim::IoExit(_, code) => host_unary(context, code, nat_type, ersd::HostPrim::IoExit),
         Prim::CellType(_) => Ok(ersd::Subterm::Erased.into()),
         Prim::Cell(type_, init) => Ok(cell(ersd::CellPrim::New(erase(context, init, type_)?))),
         Prim::CellSet(type_, c, v) => {
