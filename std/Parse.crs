@@ -78,24 +78,23 @@ pub let take_byte(expected : Nat) -> Parse(Nat) =
 pub let take_while(pred : (Nat) -> Bln) -> Parse(Bin) =
     (input, pos) =>
         let r =
-            match Bin/len(input) - pos : {Nat, Bin, Bln}
-            | 0 => (pos, \\, false)
+            match Bin/len(input) - pos : {Nat, Bln}
+            | 0 => (pos, false)
             | step + 1, ih =>
-                match ih.2
+                match ih.1
                 | true => ih
                 | false =>
                     match Nat/try_lt(ih.0, Bin/len(input))
-                    | none() => (ih.0, ih.1, true)
+                    | none() => (ih.0, true)
                     | some(ok) =>
-                        let byte = Bin/at(input, ih.0, ok);
-                        match pred(byte)
-                        | true => (ih.0 + 1, Bin/append(ih.1, byte), false)
-                        | false => (ih.0, ih.1, true)
+                        match pred(Bin/at(input, ih.0, ok))
+                        | true => (ih.0 + 1, false)
+                        | false => (ih.0, true)
                         end
                     end
                 end
             end;
-        Result/success((r.0, r.1));
+        Result/success((r.0, Bin/slice(input, pos, r.0)));
 
 pub let many0(@A : Type, p : Parse(A)) -> Parse(Lst(A)) =
     (input, pos) =>
