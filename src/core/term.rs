@@ -374,10 +374,7 @@ impl Term {
     {
         Self::from(Subterm::Match(Match {
             head: head.into(),
-            motive: match motive_label {
-                Some(l) => Scope::close(Many(1), &[l], motive.into()),
-                None => Scope::constant(Many(1), motive.into()),
-            },
+            motive: Self::motive_scope(motive_label, motive.into()),
             cases: Cases::Inductive {
                 cases: Self::inductive_cases(cases),
                 pattern: None,
@@ -441,6 +438,16 @@ impl Term {
             .collect()
     }
 
+    /// Build a match's arity-1 motive scope from an optional source label: a
+    /// named scope when the label is present, a constant one when not. Shared by
+    /// every match constructor whose motive binds just the scrutinee.
+    fn motive_scope(motive_label: Option<&str>, motive: Term) -> Scope<Many> {
+        match motive_label {
+            Some(label) => Scope::close(Many(1), &[label], motive),
+            None => Scope::constant(Many(1), motive),
+        }
+    }
+
     pub fn bln_match<H, M, F, T>(
         head: H,
         motive_label: Option<&str>,
@@ -456,10 +463,7 @@ impl Term {
     {
         Self::from(Subterm::Match(Match {
             head: head.into(),
-            motive: match motive_label {
-                Some(l) => Scope::close(Many(1), &[l], motive.into()),
-                None => Scope::constant(Many(1), motive.into()),
-            },
+            motive: Self::motive_scope(motive_label, motive.into()),
             cases: Cases::Bln {
                 false_case: false_case.into(),
                 true_case: true_case.into(),
@@ -489,10 +493,7 @@ impl Term {
 
         Self::from(Subterm::Match(Match {
             head: head.into(),
-            motive: match motive_label {
-                Some(l) => Scope::close(Many(1), &[l], motive.into()),
-                None => Scope::constant(Many(1), motive.into()),
-            },
+            motive: Self::motive_scope(motive_label, motive.into()),
             cases: Cases::FreeMonoid {
                 carrier: Carrier::Nat {
                     empty_case: zero_case.into(),
@@ -534,10 +535,7 @@ impl Term {
 
         Self::from(Subterm::Match(Match {
             head: head.into(),
-            motive: match motive_label {
-                Some(l) => Scope::close(Many(1), &[l], motive.into()),
-                None => Scope::constant(Many(1), motive.into()),
-            },
+            motive: Self::motive_scope(motive_label, motive.into()),
             cases: Cases::FreeMonoid {
                 carrier: Carrier::Arr {
                     elem: elem.into(),
@@ -578,10 +576,7 @@ impl Term {
 
         Self::from(Subterm::Match(Match {
             head: head.into(),
-            motive: match motive_label {
-                Some(l) => Scope::close(Many(1), &[l], motive.into()),
-                None => Scope::constant(Many(1), motive.into()),
-            },
+            motive: Self::motive_scope(motive_label, motive.into()),
             cases: Cases::FreeMonoid {
                 carrier: Carrier::Bin {
                     empty_case: empty_case.into(),
@@ -611,10 +606,7 @@ impl Term {
     {
         Self::from(Subterm::Match(Match {
             head: head.into(),
-            motive: match motive_label {
-                Some(l) => Scope::close(Many(1), &[l], motive.into()),
-                None => Scope::constant(Many(1), motive.into()),
-            },
+            motive: Self::motive_scope(motive_label, motive.into()),
             cases: Cases::Switch {
                 cases: cases.into_iter().map(|(n, b)| (n, b.into())).collect(),
                 default: default.into(),
