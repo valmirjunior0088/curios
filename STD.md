@@ -440,11 +440,11 @@ A uniform `Nat`, a bounded range, and a seedable generator are future work, buil
 
 ### `/std/Proc`
 
-Access to the process environment. `args` is a value — an immutable snapshot taken once — while `env` and `exit` are functions.
+Access to the process environment. `args`, `env`, and `exit` are all functions — each reads the host on call, so a program that never calls them performs no such effect (and `args()` is not fetched at startup).
 
 | Binding      | Type                   | Description                                                      |
 | ------------ | ---------------------- | ---------------------------------------------------------------- |
-| `args`       | `Arr(Bin)`             | The command-line arguments                                       |
+| `args()`     | `() -> Arr(Bin)`       | The command-line arguments                                       |
 | `env(name)`  | `(Str) -> Option(Bin)` | The value of environment variable `name`, if set                 |
 | `exit(code)` | `(Nat) -> Void`        | Terminate the process with status `code`; never returns (`Void`) |
 

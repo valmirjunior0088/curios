@@ -588,10 +588,14 @@ fn io_ops() -> Vec<TopItem> {
             bin(),
             prim(Prim::IoRandom(name("n"))),
         ),
-        // argv is an immutable snapshot, so a shared value binding is correct
-        // (and `IoArgs` is inert, so this is not force-reduced into the IO
-        // guard). `env` stays a function — lambda-protected, never force-reduced.
-        pub_let("args", arr_of(bin()), prim(Prim::IoArgs)),
+        // `args` is a 0-arity *function*, like the clocks above: a value binding
+        // would force-reduce its effectful prim body at definition, materializing
+        // an `Io.args` host op in *every* program's entry region (the bare prelude
+        // is lowered whole, so a top-level value `let` lands in `main`). Under the
+        // function abstraction it stays inert until called, so a program that
+        // never reads argv performs no such read. `env` is a function for the
+        // same reason.
+        pub_fn("args", vec![], arr_of(bin()), prim(Prim::IoArgs)),
         pub_fn(
             "env",
             vec![("name", bin())],

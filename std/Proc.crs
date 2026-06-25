@@ -1,8 +1,6 @@
+pub use /sys/Io/{args};
 use /sys/{Io};
-use /std/{Arr, Bin, Nat, Str, Option, False};
-
-pub let args : Arr(Bin) =
-    Io/args;
+use /std/{Bin, Nat, Str, Option, False};
 
 pub let env(name : Str) -> Option(Bin) =
     let r = Io/env(Str/to_bin(name));

@@ -7,8 +7,9 @@ use {
 ///
 /// 1. **Intra-region** — within every function and closure body, first drop
 ///    blocks no edge reaches (a folded `Match` arm, a relocated jump), then drop
-///    value and prealloc bindings whose name is never used, iterated to a fixed
-///    point so transitively-dead chains collapse.
+///    value and prealloc bindings not reachable from the region's roots (its
+///    tails and its non-removable bindings), so dead *cycles* — not just dead
+///    chains — collapse.
 /// 2. **Inter-module** — drop functions, closures, and consts that are not
 ///    reachable from the `main` entry point. A const's data is followed too: a
 ///    const aggregate can name other consts and a const `Data::Clsr` a closure.
@@ -47,23 +48,92 @@ fn is_removable(value: &Value) -> bool {
 
 // --- Layer 1: intra-region liveness -----------------------------------------
 
-/// Eliminate dead bindings in a region and all its nested blocks, to a fixed
-/// point. A prealloc and its same-named fill (a `rec` backpatch cell) share a
-/// name, so they are kept or dropped together automatically.
+/// Eliminate dead bindings in a region and all its nested blocks. A prealloc and
+/// its same-named fill (a `rec` backpatch cell) share a name, so they are kept or
+/// dropped together automatically.
 ///
 /// Unreachable blocks are pruned first, so their value uses no longer pin live
-/// values in the liveness loop below (and their func/closure references no longer
+/// values in the liveness walk below (and their func/closure references no longer
 /// pin code in the module sweep). Constant folding decides a `Match` to a single
 /// arm and jump threading relocates edges, both of which can orphan whole blocks.
 fn dce_region_tree(region: &mut Region) {
     prune_unreachable_blocks(region);
 
-    loop {
-        let used = harvest::value_uses(region);
+    let live = live_values(region);
+    retain_live(region, &live);
+}
 
-        if !retain_live(region, &used) {
-            break;
+/// The value names that survive intra-region elimination: those reachable,
+/// through operand edges, from a *root* — an operand some retained construct
+/// forces. The roots are every tail in the (already block-pruned) region tree
+/// and the operands of every non-removable binding (kept regardless of liveness,
+/// so what it consumes is live too).
+///
+/// A reachability walk, not a flat "used anywhere" set — for the same reason
+/// [`reachable_blocks`] is one: a dead *cycle* of removable bindings each names
+/// the other, so a flat use count keeps both alive forever. The whole (unpruned)
+/// prelude reaches `main` as exactly such a cycle — its top-level closures are a
+/// mutually-recursive `rec` group, materialized as prealloc cells that capture
+/// one another — so only a root-anchored walk strips it.
+fn live_values(region: &Region) -> HashSet<ValueName> {
+    // name → the value names its binding(s) reference. A prealloc and its
+    // same-named fill share a name; their operands union here (the prealloc shell
+    // names only a closure, the fill carries the captures).
+    let mut operands: HashMap<ValueName, Vec<ValueName>> = HashMap::new();
+    let mut work: Vec<ValueName> = Vec::new();
+    collect_liveness(region, &mut operands, &mut work);
+
+    let mut live: HashSet<ValueName> = HashSet::new();
+    while let Some(name) = work.pop() {
+        if !live.insert(name.clone()) {
+            continue;
         }
+        if let Some(referenced) = operands.get(&name) {
+            work.extend(referenced.iter().cloned());
+        }
+    }
+
+    live
+}
+
+/// Walk the region tree, recording each binding's operand edges into `operands`
+/// and seeding `roots` with every forced operand: those of each tail and of each
+/// non-removable binding.
+fn collect_liveness(
+    region: &Region,
+    operands: &mut HashMap<ValueName, Vec<ValueName>>,
+    roots: &mut Vec<ValueName>,
+) {
+    for (name, value) in &region.values {
+        let mut referenced = Operands::default();
+        walk_value_uses(value, &mut referenced);
+
+        // A binding we cannot drop forces everything it consumes live.
+        if !is_removable(value) {
+            roots.extend(referenced.0.iter().cloned());
+        }
+        operands.entry(name.clone()).or_default().extend(referenced.0);
+    }
+
+    // Prealloc shells carry no value operands (only a closure reference); their
+    // captures ride the same-named fill handled above.
+
+    let mut tail = Operands::default();
+    walk_tail(&region.tail, &mut tail);
+    roots.extend(tail.0);
+
+    for (_, block) in &region.blocks {
+        collect_liveness(&block.region, operands, roots);
+    }
+}
+
+/// A [`Sink`] that collects the value operands it is shown.
+#[derive(Default)]
+struct Operands(Vec<ValueName>);
+
+impl Sink for Operands {
+    fn value_use(&mut self, name: &ValueName) {
+        self.0.push(name.clone());
     }
 }
 
@@ -117,26 +187,19 @@ fn retain_reachable(region: &mut Region, reachable: &HashSet<BlockName>) {
     }
 }
 
-/// Drop dead, removable bindings throughout the region tree. Returns whether
-/// anything was removed.
-fn retain_live(region: &mut Region, used: &HashSet<ValueName>) -> bool {
-    let mut changed = false;
-
-    let before = region.values.len();
+/// Drop every dead, removable binding throughout the region tree. A binding
+/// survives if it is live (reachable from a root) or non-removable (an effectful
+/// or trapping `Eval`, kept for its observable behavior); a prealloc survives
+/// only when live.
+fn retain_live(region: &mut Region, live: &HashSet<ValueName>) {
     region
         .values
-        .retain(|(name, value)| used.contains(name) || !is_removable(value));
-    changed |= region.values.len() != before;
-
-    let before = region.preallocs.len();
-    region.preallocs.retain(|(name, _)| used.contains(name));
-    changed |= region.preallocs.len() != before;
+        .retain(|(name, value)| live.contains(name) || !is_removable(value));
+    region.preallocs.retain(|(name, _)| live.contains(name));
 
     for (_, block) in &mut region.blocks {
-        changed |= retain_live(&mut block.region, used);
+        retain_live(&mut block.region, live);
     }
-
-    changed
 }
 
 // --- Layer 2: inter-module reachability -------------------------------------

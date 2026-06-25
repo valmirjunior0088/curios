@@ -105,7 +105,12 @@ pub fn tail_targets(tail: &Tail) -> Vec<&BlockName> {
     }
 }
 
-fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
+/// Walk a single `Tail`'s operands and references, firing events into `sink`.
+/// Exposed (like [`walk_value_uses`] for values) so a pass can harvest a tail's
+/// operands on their own — e.g. seeding the liveness roots in
+/// [`dead_code_elimination`](super::dead_code_elimination) — without a region to
+/// wrap them.
+pub fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
     match tail {
         Tail::Jump(target) => walk_jump(target, sink),
         Tail::Match(target) => {
