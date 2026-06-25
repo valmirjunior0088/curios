@@ -6,7 +6,7 @@ use {
         Prim, Proj, Rec, Scope, Struct, StructType, Structure, Subterm, Telescope, Term, Three,
         Tuple, TupleType, Two, Var, Variant, case_target_indices, check, check_motive,
         convert_with, drain_parked, elaborate_prim, expect, invert_indices, is_prop, reduce_with,
-        refine_head, sort_term,
+        refine_head, sort_term, zonk, zonk_module,
     },
     num_bigint::BigInt,
     num_traits::ToPrimitive,
@@ -2697,10 +2697,160 @@ pub fn elaborate_module(
     Ok((module, body_type))
 }
 
+/// Elaborate a [`Module`] whose `sys`/`syn`/`std` prelude prefix is already
+/// elaborated, reusing the cached result instead of re-type-checking it.
+///
+/// `prelude` is the elaborated + zonked prelude-only module — its `items` are
+/// the whole prelude in dependency order (its trivial `body`/`type_` are
+/// ignored). The lowered `module` still carries the *whole* program as
+/// `text::to_core` produced it, and the prelude is its **leading prefix**: with
+/// the prune gone every program lowers the same prelude, and since prelude items
+/// depend only on each other they always topologically sort ahead of the user
+/// items. So this replays the cached prelude into `context` (registering its
+/// registries and `define`-ing its items — cheap map inserts, no checking) and
+/// then elaborates only the items past that prefix plus the entrypoint body,
+/// before zonking that user portion and splicing it onto the (already zonked)
+/// prelude.
+///
+/// Sound because the prelude is program-independent: its items never see user
+/// code, and — since top-level definitions are excluded from a metavariable's Γ
+/// ([`Context::identity_snapshot`]) — a user item elaborates against the
+/// identical local context it would under a from-scratch [`elaborate_module`], so
+/// the solutions (and the zonked output) are identical. The cached prelude is
+/// meta-free, so its ids never collide with the user metavariable range that
+/// `seed_metavars(metavar_floor)` floors.
+pub fn elaborate_and_zonk_with_prelude(
+    context: &mut Context,
+    prelude: &Module,
+    module: &Module,
+    metavar_floor: usize,
+    mode: Mode,
+) -> Result<(Module, Term), Error> {
+    // Seed the registries — cached prelude entries verbatim, then the user's
+    // (rebuilt by elaboration below). Keep the user keys to pull their rebuilt
+    // forms back out afterwards.
+    for (name, inductive) in &prelude.inductives {
+        context.register_inductive(name, inductive.clone());
+    }
+    for (name, structure) in &prelude.structures {
+        context.register_structure(name, structure.clone());
+    }
+
+    let user_inductive_keys = module
+        .inductives
+        .keys()
+        .filter(|name| !prelude.inductives.contains_key(*name))
+        .cloned()
+        .collect::<Vec<String>>();
+    let user_structure_keys = module
+        .structures
+        .keys()
+        .filter(|name| !prelude.structures.contains_key(*name))
+        .cloned()
+        .collect::<Vec<String>>();
+    for name in &user_inductive_keys {
+        context.register_inductive(name, module.inductives[name].clone());
+    }
+    for name in &user_structure_keys {
+        context.register_structure(name, module.structures[name].clone());
+    }
+
+    // Replay the cached prelude into the persistent base frame: `define_assuming`
+    // reproduces exactly the state `elaborate_module_let`/`_rec` leave behind
+    // (assume the type, define the body), but with no re-checking — these terms
+    // are already elaborated.
+    for item in &prelude.items {
+        match item {
+            Item::Let(def) => context.define_assuming(&def.name, &def.type_, &def.body),
+            Item::Rec(defs) => {
+                for def in defs {
+                    context.define_assuming(&def.name, &def.type_, &def.body);
+                }
+            }
+        }
+    }
+
+    // User-minted metavariables sit strictly above `to_core`'s ids (which already
+    // include the prelude's range); the cached prelude is meta-free, so nothing
+    // collides.
+    context.seed_metavars(metavar_floor);
+
+    // Elaborate only the user items — everything past the cached prelude prefix.
+    let mut user_items = Vec::new();
+    for item in module.items.iter().skip(prelude.items.len()) {
+        let item_module = match item {
+            Item::Let(def) => module_of(&def.name),
+            Item::Rec(defs) => defs.first().map(|d| module_of(&d.name)).unwrap_or(""),
+        };
+        context.set_island(item_module.to_string());
+
+        user_items.push(match item {
+            Item::Let(def) => Item::Let(elaborate_module_let(context, def)?),
+            Item::Rec(defs) => Item::Rec(elaborate_module_rec(context, defs)?),
+        });
+        drain_parked(context)?;
+    }
+
+    context.set_island(String::new());
+    let (body, body_type) = elaborate(context, &module.body, mode)?;
+    drain_parked(context)?;
+    let body_type = reduce_with(context, &body_type)?;
+
+    // Pull the rebuilt user registry entries back out (mirrors `elaborate_module`).
+    let user_inductives = user_inductive_keys
+        .into_iter()
+        .map(|name| {
+            let inductive = context.inductive(&name).expect("user entry registered").clone();
+            (name, inductive)
+        })
+        .collect();
+    let user_structures = user_structure_keys
+        .into_iter()
+        .map(|name| {
+            let structure = context.structure(&name).expect("user entry registered").clone();
+            (name, structure)
+        })
+        .collect();
+
+    // Zonk only the user portion (the cached prelude is already zonked), then
+    // splice: cached prelude prefix ++ zonked user items / registries.
+    let user_module = Module {
+        items: user_items,
+        inductives: user_inductives,
+        structures: user_structures,
+        type_: module.type_.clone(),
+        body,
+    };
+    let user_module = zonk_module(context, &user_module)?;
+    let body_type = zonk(context, &body_type)?;
+
+    let mut items = prelude.items.clone();
+    items.extend(user_module.items);
+    let mut inductives = prelude.inductives.clone();
+    inductives.extend(user_module.inductives);
+    let mut structures = prelude.structures.clone();
+    structures.extend(user_module.structures);
+
+    let module = Module {
+        items,
+        inductives,
+        structures,
+        type_: user_module.type_,
+        body: user_module.body,
+    };
+
+    Ok((module, body_type))
+}
+
 /// The module of a flat item: its name's qualifier prefix (`Foo/Bar` for
 /// `Foo/Bar/f`; the empty string for a root-level `f`). The struct projection
 /// privacy check compares this against the struct's declaring module.
-fn module_of(name: &str) -> &str {
+/// The module an item belongs to: the qualifier prefix of its fully-qualified
+/// name (everything before the last `/`; the root module is the empty string).
+/// The flat `Module` stores no separate module field — the name is the source
+/// of truth. Used to set the per-item `island` for the struct privacy check (§7),
+/// in both `elaborate_module` and `erase_module`.
+pub fn module_of(name: &str) -> &str {
     match name.rfind('/') {
         Some(slash) => &name[..slash],
         None => "",

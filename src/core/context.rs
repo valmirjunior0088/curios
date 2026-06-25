@@ -464,10 +464,39 @@ impl Context {
         });
     }
 
+    /// The boundary between the top-level (base-frame) entries of `local` and
+    /// the genuine local binders above them. Top-level definitions are
+    /// `assume`d into `local` at the base level (never inside a frame), so the
+    /// outermost frame mark is exactly the count of top-level entries; with no
+    /// frame open, everything in `local` is top-level. A metavariable's Γ is
+    /// only the binders past this point (see [`Context::identity_snapshot`]).
+    fn base_locals(&self) -> usize {
+        self.local_marks.first().copied().unwrap_or(self.local.len())
+    }
+
+    /// Whether `name` is bound at the top level (the persistent base frame) —
+    /// a global definition, always in scope. The metavariable solver admits
+    /// such names in a solution even though they are not in the metavariable's
+    /// Γ/spine (which holds only local binders): a solution may freely mention
+    /// a global constant without that constant being a context binder.
+    pub fn is_top_level(&self, name: &str) -> bool {
+        self.assumptions
+            .first()
+            .is_some_and(|frame| frame.contains_key(name))
+    }
+
     /// The frozen telescope and identity spine for the *current* Γ, shared:
     /// rebuilt only when `local` has changed since the last birth, so minting
     /// a metavariable is O(1) amortized instead of O(|Γ|) per mint — the
     /// difference between linear and quadratic elaboration over a module.
+    ///
+    /// Γ is the *local* binders only — `local` past [`Context::base_locals`].
+    /// Top-level definitions are excluded so an item's elaboration is
+    /// independent of how much else is in scope: a metavariable born deep in a
+    /// proof carries just its enclosing binders, not the whole prelude, keeping
+    /// the contextual solve's spine a small pattern (and the prelude cacheable).
+    /// Globals a solution mentions are admitted by the solver's scope check via
+    /// [`Context::is_top_level`] instead.
     pub fn identity_snapshot(&mut self) -> (SharedTelescope, SharedSpine) {
         if let Some((stamp, telescope, spine)) = &self.identity_cache
             && *stamp == self.locals_stamp.count()
@@ -475,7 +504,7 @@ impl Context {
             return (telescope.clone(), spine.clone());
         }
 
-        let telescope = Rc::new(self.local.clone());
+        let telescope = Rc::new(self.local[self.base_locals()..].to_vec());
 
         let spine = Rc::new(
             telescope

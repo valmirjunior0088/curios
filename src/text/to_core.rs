@@ -10,6 +10,7 @@ use {
     super::*,
     crate::{Entropy, core, core::Bound},
     std::{
+        cell::RefCell,
         collections::{BTreeMap, HashMap, HashSet},
         rc::Rc,
     },
@@ -666,116 +667,185 @@ fn process_items(
 // source order; a genuine value cycle leaves nodes unorderable, which are emitted
 // in source order and rejected downstream as unbound names — there is nothing to
 // repair, as cross-declaration value recursion is unexpressible by construction.
-fn order_flat_items(
-    items: Vec<FlatItem>,
-    referenced: &HashSet<String>,
-    library_roots: &HashSet<String>,
+// The roots of the embedded, fixed prelude (the `SysLoader`/`SynLoader`/
+// `StdLoader` that `text::prelude` wraps every loader with). An item under one
+// of them is part of the program-independent prelude prefix, whose topological
+// order is cached. This is deliberately *not* the full set of loader roots a
+// custom loader may add — only the fixed embedded ones, so the cache stays
+// valid across programs.
+const PRELUDE_ROOTS: [&str; 3] = ["std", "syn", "sys"];
+
+thread_local! {
+    // The fixed prelude's topological order, as a *relative permutation* of its
+    // declaration order: emit position `j` of the prelude is the prelude item at
+    // relative declaration index `permutation[j]`. Program-independent — the
+    // embedded prelude is fixed and always lowered in the same relative order —
+    // so the dep-graph build + O(N²) topo-sort happen once, and every compile
+    // just indexes through it (no `free_vars`, no name hashing, no sort): the
+    // `order_flat_items` hot path was ~⅔ of `to_core` (samply). A
+    // `RefCell<Option<_>>`, not `OnceCell`: a `to_core` call without a prelude (a
+    // bare-loader test) must not poison the cache, and a prelude of a different
+    // size — the only way a custom loader could change the order — refreshes it.
+    static PRELUDE_PERMUTATION: RefCell<Option<Vec<usize>>> = const { RefCell::new(None) };
+}
+
+/// Whether a flat item belongs to the fixed embedded prelude. Checked on the
+/// *structured* qualifier's root segment, before names are flattened to strings.
+fn flat_item_in_prelude(item: &FlatItem) -> bool {
+    let lets = match item {
+        FlatItem::Let(let_) => std::slice::from_ref(let_),
+        FlatItem::Rec(lets) => lets.as_slice(),
+    };
+
+    !lets.is_empty()
+        && lets.iter().all(|let_| {
+            let_.name
+                .segments()
+                .first()
+                .is_some_and(|root| PRELUDE_ROOTS.contains(&root.as_str()))
+        })
+}
+
+/// The nodes a node depends on: those declaring its free vars (and, for a
+/// declared inductive/struct, its registry entry's free vars — see the note
+/// inline). Self-edges and names `owner` does not map (primitives, or items in
+/// the other partition, when `owner` is restricted to one) drop out.
+fn dep_nodes(
+    node: usize,
+    item: &FlatItem,
+    declared: &[String],
     inductives: &BTreeMap<String, core::Inductive>,
     structures: &BTreeMap<String, core::Structure>,
-) -> Vec<FlatItem> {
-    // Index every declared qualifier to the node that owns it (a rec group owns
-    // all its members).
-    let owner: HashMap<String, usize> = items
+    owner: &HashMap<String, usize>,
+) -> HashSet<usize> {
+    // An inductive's declaration is wider than its items: the registry entry's
+    // constructor payload and target types are elaborated alongside the
+    // type-binding group (`core::elaborate_module_rec` rebuilds the registry
+    // telescopes there), so a node declaring a registered name references
+    // everything its registry entry does — those names live nowhere in the type
+    // binding's own `type_`/`body`. Struct field types live in the registry too.
+    let mut names = flat_item_free_vars(item);
+    for name in declared {
+        if let Some(inductive) = inductives.get(name) {
+            names.extend(inductive_free_vars(inductive));
+        }
+        if let Some(structure) = structures.get(name) {
+            names.extend(structure_free_vars(structure));
+        }
+    }
+
+    names
         .iter()
-        .enumerate()
-        .flat_map(|(node, item)| {
-            flat_item_names(item)
-                .into_iter()
-                .map(move |name| (name, node))
-        })
-        .collect();
+        .filter_map(|name| owner.get(name).copied())
+        .filter(|&dep| dep != node)
+        .collect()
+}
 
-    // A node depends on the nodes declaring its free vars. An inductive's
-    // declaration is wider than its items: the registry entry's constructor
-    // payload and target types are elaborated alongside the type-binding
-    // group (`core::elaborate_module_rec` rebuilds the registry telescopes
-    // there), so a node declaring a registered name references everything its
-    // registry entry does, too — those names live nowhere in the type
-    // binding's own `type_`/`body`. Self-edges and free vars naming no local
-    // declaration (primitives, externals) contribute none.
-    let deps: Vec<HashSet<usize>> = items
+/// Owner index (declared name → node) over the given nodes only.
+fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<String, usize> {
+    nodes
         .iter()
-        .enumerate()
-        .map(|(node, item)| {
-            let mut names = flat_item_free_vars(item);
-            for declared in flat_item_names(item) {
-                if let Some(inductive) = inductives.get(&declared) {
-                    names.extend(inductive_free_vars(inductive));
-                }
-                // A struct's field types live in the registry, not the
-                // type-former's body, so seed them here too (see
-                // `structure_free_vars`) — otherwise the former could be
-                // ordered before a type its fields mention is defined.
-                if let Some(structure) = structures.get(&declared) {
-                    names.extend(structure_free_vars(structure));
-                }
-            }
+        .flat_map(|&n| flat_item_names(&items[n]).into_iter().map(move |name| (name, n)))
+        .collect()
+}
 
-            names
-                .iter()
-                .filter_map(|name| owner.get(name).copied())
-                .filter(|&dep| dep != node)
-                .collect()
-        })
-        .collect();
+/// Topologically order `nodes` (assumed ascending, for the lowest-index
+/// tiebreak) under `deps` restricted to that set: lowest-index node whose deps
+/// are all emitted; on a cycle, the lowest remaining one breaks the deadlock.
+fn topological_order(nodes: &[usize], deps: &HashMap<usize, HashSet<usize>>) -> Vec<usize> {
+    let mut emitted = HashSet::with_capacity(nodes.len());
+    let mut order = Vec::with_capacity(nodes.len());
 
-    let count = items.len();
-
-    // Reachability prune: drop library (`sys`/`std`) definitions the program can't
-    // reach, so they are never type-checked or lowered (the wasm DCE already removed
-    // them downstream — this just stops the wasted work earlier). A node is a
-    // prunable library item only if *every* name it declares lives under a loader
-    // root; user-authored items are never pruned, so a dead user definition is still
-    // type-checked. Seeds: every non-prunable node (kept unconditionally) plus every
-    // node owning a name the program references directly; BFS over `deps` keeps the
-    // transitive closure.
-    let mut keep = vec![false; count];
-    let mut stack = Vec::new();
-
-    for (node, slot) in keep.iter_mut().enumerate() {
-        if !flat_item_prunable(&items[node], library_roots) {
-            *slot = true;
-            stack.push(node);
-        }
-    }
-
-    for name in referenced {
-        if let Some(&node) = owner.get(name)
-            && !keep[node]
-        {
-            keep[node] = true;
-            stack.push(node);
-        }
-    }
-
-    while let Some(node) = stack.pop() {
-        for &dep in &deps[node] {
-            if !keep[dep] {
-                keep[dep] = true;
-                stack.push(dep);
-            }
-        }
-    }
-
-    let mut emitted = vec![false; count];
-    let mut order = Vec::with_capacity(count);
-
-    while order.len() < count {
-        // Lowest-index node whose dependencies are all emitted; on a cycle no
-        // such node exists, so break the deadlock with the lowest remaining one.
-        let ready = (0..count)
-            .find(|&node| !emitted[node] && deps[node].iter().all(|dep| emitted[*dep]))
-            .or_else(|| (0..count).find(|&node| !emitted[node]))
+    while order.len() < nodes.len() {
+        let ready = nodes
+            .iter()
+            .copied()
+            .find(|&n| !emitted.contains(&n) && deps[&n].iter().all(|dep| emitted.contains(dep)))
+            .or_else(|| nodes.iter().copied().find(|&n| !emitted.contains(&n)))
             .expect("a node remains while order is incomplete");
 
-        emitted[ready] = true;
+        emitted.insert(ready);
         order.push(ready);
     }
 
-    let mut slots: Vec<Option<FlatItem>> = items.into_iter().map(Some).collect();
+    order
+}
+
+/// The prelude's topological order as positions *relative to* `prelude_nodes`
+/// (ascending), so it can be replayed against a later compile's prelude block
+/// wherever it lands. Run once, behind the [`PRELUDE_PERMUTATION`] cache.
+fn prelude_permutation(
+    items: &[FlatItem],
+    prelude_nodes: &[usize],
+    inductives: &BTreeMap<String, core::Inductive>,
+    structures: &BTreeMap<String, core::Structure>,
+) -> Vec<usize> {
+    let owner = owner_of(items, prelude_nodes);
+    let deps = prelude_nodes
+        .iter()
+        .map(|&n| {
+            let declared = flat_item_names(&items[n]);
+            (n, dep_nodes(n, &items[n], &declared, inductives, structures, &owner))
+        })
+        .collect::<HashMap<usize, HashSet<usize>>>();
+
+    let relative = prelude_nodes
+        .iter()
+        .enumerate()
+        .map(|(rel, &node)| (node, rel))
+        .collect::<HashMap<usize, usize>>();
+
+    topological_order(prelude_nodes, &deps)
+        .iter()
+        .map(|node| relative[node])
+        .collect()
+}
+
+fn order_flat_items(
+    items: Vec<FlatItem>,
+    inductives: &BTreeMap<String, core::Inductive>,
+    structures: &BTreeMap<String, core::Structure>,
+) -> Vec<FlatItem> {
+    let count = items.len();
+
+    let is_prelude = items.iter().map(flat_item_in_prelude).collect::<Vec<bool>>();
+    let prelude_nodes = (0..count).filter(|&i| is_prelude[i]).collect::<Vec<usize>>();
+    let rest = (0..count).filter(|&i| !is_prelude[i]).collect::<Vec<usize>>();
+
+    let mut order = Vec::with_capacity(count);
+
+    // Prelude prefix: replay the cached relative permutation — pure indexing,
+    // no name handling. Prelude items depend only on each other, so emitting the
+    // whole block (in that order) ahead of everything else is always valid.
+    PRELUDE_PERMUTATION.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        if slot.as_ref().is_none_or(|perm| perm.len() != prelude_nodes.len())
+            && !prelude_nodes.is_empty()
+        {
+            *slot = Some(prelude_permutation(&items, &prelude_nodes, inductives, structures));
+        }
+        if let Some(perm) = slot.as_ref() {
+            order.extend(perm.iter().map(|&rel| prelude_nodes[rel]));
+        }
+    });
+
+    // Everything else (user code, plus any non-prelude library a custom loader
+    // serves): topologically ordered among itself, after the whole prelude. Its
+    // dependencies on prelude items are already satisfied by the prefix above,
+    // so the owner map (and thus the dep edges) need only cover `rest`.
+    let rest_owner = owner_of(&items, &rest);
+    let rest_deps = rest
+        .iter()
+        .map(|&n| {
+            let declared = flat_item_names(&items[n]);
+            (n, dep_nodes(n, &items[n], &declared, inductives, structures, &rest_owner))
+        })
+        .collect::<HashMap<usize, HashSet<usize>>>();
+    order.extend(topological_order(&rest, &rest_deps));
+
+    let mut slots = items.into_iter().map(Some).collect::<Vec<Option<FlatItem>>>();
     order
         .into_iter()
-        .filter(|&node| keep[node])
         .map(|node| slots[node].take().unwrap())
         .collect()
 }
@@ -841,17 +911,6 @@ fn structure_free_vars(structure: &core::Structure) -> HashSet<String> {
         .into_iter()
         .chain(structure.fields.free_vars())
         .collect()
-}
-
-fn flat_item_prunable(item: &FlatItem, library_roots: &HashSet<String>) -> bool {
-    !library_roots.is_empty()
-        && flat_item_names(item).iter().all(|name| {
-            // Names are absolute (leading `/`), so the root is the first non-empty segment.
-            name.trim_start_matches('/')
-                .split('/')
-                .next()
-                .is_some_and(|segment| library_roots.contains(segment))
-        })
 }
 
 fn flat_let_to_core(let_: FlatLet) -> core::Definition {
@@ -949,27 +1008,10 @@ pub fn to_core(
     // free `Var`s keyed by the definition's joined name; the core passes `define`
     // each one into the `Context`, so both the body and its annotation reduce
     // through those definitions and agree — no shared binder scope required.
-    // The program references these top-level names directly (the entrypoint body and
-    // its type annotation); they seed the reachability prune in `order_flat_items`.
-    let referenced: HashSet<String> = tail
-        .free_vars()
+    let items = order_flat_items(flat_items, &inductives, &structures)
         .into_iter()
-        .chain(type_.iter().flat_map(|type_| type_.free_vars()))
-        .chain(tail.construction_names())
-        .chain(type_.iter().flat_map(|type_| type_.construction_names()))
+        .map(flat_item_to_core)
         .collect();
-    let library_roots: HashSet<String> = roots.iter().cloned().collect();
-
-    let items = order_flat_items(
-        flat_items,
-        &referenced,
-        &library_roots,
-        &inductives,
-        &structures,
-    )
-    .into_iter()
-    .map(flat_item_to_core)
-    .collect();
 
     Ok((
         core::Module {

@@ -1106,6 +1106,13 @@ impl Convert {
             if allowed.contains(&name) {
                 continue;
             }
+            // A top-level definition is a global constant, in scope everywhere
+            // and absent from Γ's spine by construction (Γ holds only local
+            // binders); a solution may mention it freely. This is what lets an
+            // item elaborate independently of the ambient prelude.
+            if context.is_top_level(&name) {
+                continue;
+            }
             let mentioned = entries.is_empty()
                 || entries
                     .iter()

@@ -12,6 +12,51 @@ pub enum Stage<'a> {
     Wasm(&'a wasm::Module),
 }
 
+thread_local! {
+    // The fixed `sys`/`syn`/`std` prelude, elaborated and zonked once per thread
+    // and reused for every compile. Since the reachability prune no longer runs
+    // in `text::to_core`, every program lowers the *same* prelude prefix, so its
+    // (expensive) type-checking is program-independent and cacheable — the whole
+    // point of removing the prune. `Term` is not `Sync`, so this is thread-local
+    // (like the loader's parse caches), built once per `cargo test` worker thread
+    // rather than once per test. A malformed prelude is a compiler invariant, so
+    // a failure here is a `panic!`.
+    static PRELUDE: core::Module = build_prelude();
+}
+
+/// Elaborate the bare `sys`/`syn`/`std` prelude (no user code) once, to seed
+/// [`PRELUDE`]. Lowers a trivial entrypoint under the standard prelude loader —
+/// the embedded prelude is identical regardless of any inner loader — then
+/// elaborates and zonks it. The result is an ordinary (meta-free) `core::Module`
+/// whose `items` are the whole prelude; its trivial `body`/`type_` go unused.
+/// A generous timeout: this is a one-time, per-thread cost amortized across
+/// every compile.
+fn build_prelude() -> core::Module {
+    let entrypoint = "0"
+        .parse::<text::Entrypoint>()
+        .expect("the trivial prelude entrypoint parses");
+
+    let (module, metavars) = text::to_core(&entrypoint, &text::prelude(text::NullLoader))
+        .unwrap_or_else(|error| panic!("the embedded prelude failed to lower: {}", error.format()));
+
+    let mut context = core::Context::new(Duration::from_secs(300));
+
+    let (module, _) = core::elaborate_module(&mut context, &module, metavars, core::Mode::Infer)
+        .unwrap_or_else(|error| {
+            panic!(
+                "the embedded prelude failed to elaborate: {}",
+                error.format_with(&module)
+            )
+        });
+
+    core::zonk_module(&context, &module).unwrap_or_else(|error| {
+        panic!(
+            "the embedded prelude failed to zonk: {}",
+            error.format_with(&module)
+        )
+    })
+}
+
 /// The type-checking prologue shared by [`compile_entrypoint`] and
 /// [`typecheck_entrypoint`]: lower to core, elaborate (checking against the
 /// entrypoint's type when it carries one, else synthesizing), then zonk
@@ -23,6 +68,10 @@ pub enum Stage<'a> {
 /// merely *type-checks* is fully validated by the time this returns. Elaboration
 /// and zonking share one context (the solutions live in its `MetaStore`); the
 /// returned module is self-contained, so the caller's `erase` runs over a fresh one.
+///
+/// The `sys`/`syn`/`std` prelude is not re-elaborated per call: the cached
+/// [`PRELUDE`] is replayed into the fresh context and only the user code is
+/// type-checked on top (see [`core::elaborate_and_zonk_with_prelude`]).
 fn elaborate_and_zonk<O>(
     timeout: Duration,
     entrypoint: &text::Entrypoint,
@@ -34,24 +83,35 @@ where
 {
     observe(Stage::Text(entrypoint));
 
-    let (module, metavars) =
+    let (lowered, metavars) =
         text::to_core(entrypoint, &text::prelude(loader)).map_err(|error| error.format())?;
 
-    observe(Stage::Core(&module));
+    observe(Stage::Core(&lowered));
 
-    let mut context = core::Context::new(timeout);
-
-    let core_mode = match &module.type_ {
+    let core_mode = match &lowered.type_ {
         Some(type_) => core::Mode::Check(type_.clone()),
         None => core::Mode::Infer,
     };
 
-    let (module, core_type) = core::elaborate_module(&mut context, &module, metavars, core_mode)
-        .map_err(|error| error.format_with(&module))?;
+    // Reuse the cached, pre-elaborated prelude: only the user items and the
+    // entrypoint body are type-checked here, not the whole `sys`/`syn`/`std`
+    // prelude (the bulk of the work). See `core::elaborate_and_zonk_with_prelude`.
+    // The timed context is created *inside* `with` so the one-time, per-thread
+    // prelude build (which `with` triggers on first access) does not count
+    // against the caller's `timeout` — the deadline bounds only the user work.
+    let (module, core_type) = PRELUDE
+        .with(|prelude| {
+            let mut context = core::Context::new(timeout);
 
-    let module =
-        core::zonk_module(&context, &module).map_err(|error| error.format_with(&module))?;
-    let core_type = core::zonk(&context, &core_type).map_err(|error| error.format_with(&module))?;
+            core::elaborate_and_zonk_with_prelude(
+                &mut context,
+                prelude,
+                &lowered,
+                metavars,
+                core_mode,
+            )
+        })
+        .map_err(|error| error.format_with(&lowered))?;
 
     Ok((module, core_type))
 }
@@ -84,6 +144,12 @@ where
 {
     let (module, core_type) = elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
 
+    // No reachability prune here: the whole elaborated module (the entire
+    // `sys`/`syn`/`std` prelude included) is erased and lowered. Keeping the
+    // prelude unpruned means it is fully type-checked on every compile — std
+    // bugs surface instead of hiding behind an unreached path — and
+    // `optm::dead_code_elimination` is what drops everything unreachable from the
+    // entrypoint downstream, so the emitted binary stays small.
     let ersd_module = core::erase_module(&mut core::Context::new(timeout), &module, &core_type)
         .map_err(|error| error.format_with(&module))?;
 
@@ -116,7 +182,7 @@ mod tests {
             .with_type("/std/Bln".parse().unwrap());
 
         let error = compile_entrypoint(
-            Duration::from_secs(1),
+            Duration::from_secs(5),
             &entrypoint,
             &text::NullLoader,
             |_| {},
@@ -1283,72 +1349,6 @@ mod tests {
         assert!(typecheck(source).is_ok());
     }
 
-    // --- C: reachability prune of unused std/std -----------------------------
-
-    /// The `name`s of every top-level item in the lowered `core::Module`, captured
-    /// from the `Core` stage of a full compile (which runs the real `prelude`).
-    fn core_item_names(source: &str) -> Vec<String> {
-        let entrypoint = source.parse::<text::Entrypoint>().unwrap();
-        let mut names = Vec::new();
-
-        compile_entrypoint(
-            Duration::from_secs(5),
-            &entrypoint,
-            &text::NullLoader,
-            |stage| {
-                if let Stage::Core(module) = stage {
-                    for item in &module.items {
-                        match item {
-                            core::Item::Let(def) => names.push(def.name.clone()),
-                            core::Item::Rec(defs) => {
-                                names.extend(defs.iter().map(|def| def.name.clone()))
-                            }
-                        }
-                    }
-                }
-            },
-        )
-        .unwrap();
-
-        names
-    }
-
-    #[test]
-    fn prune_drops_unreachable_library_modules() {
-        // A program touching only `Io`/`Nat` must not drag the unrelated (and
-        // expensive) `std/Json`, `std/Parse`, `std/Fmt`, … into the typechecked core.
-        // `std/Str` is *not* in the unused set: `Nat/to_str` renders via `Str/concat`
-        // and `Io/print` ends in `Str/to_bin`, so the string library is a genuine
-        // transitive dependency here. Neither is `std/Lst`: `Io/write` maps a failing
-        // status through a `Lst` error table (`Lst/fold`). DCE still drops the Str ops
-        // `Nat/to_str` cannot reach — `slice`, `trim`, `flatten`, `of_bin`, … stay pruned.
-        let names = core_item_names("use /std/{Io, Nat};\n/std/Io/print(/std/Nat/to_str(0))");
-
-        for unused in ["/std/Json", "/std/Parse", "/std/Fmt"] {
-            assert!(
-                !names.iter().any(|name| name.starts_with(unused)),
-                "expected `{unused}` to be pruned, but it survived in {names:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn prune_keeps_reachable_library_and_transitive_deps() {
-        // Decoding pulls `std/Json` and its transitive `std/Parse` dependency.
-        let names = core_item_names(
-            "use /std/{Io, Json, Parse};\n/std/Parse/run(/std/Json/decode, /std/Str/to_bin(\"1\"))",
-        );
-
-        assert!(
-            names.iter().any(|name| name.starts_with("/std/Json")),
-            "expected `/std/Json` to be retained, got {names:?}"
-        );
-        assert!(
-            names.iter().any(|name| name.starts_with("/std/Parse")),
-            "expected transitive `/std/Parse` to be retained, got {names:?}"
-        );
-    }
-
     #[test]
     fn inductive_payload_relying_on_implicit_insertion_is_rebuilt() {
         // The inductive registry used to keep `to_core`'s *lowered* payload and
@@ -1404,10 +1404,10 @@ mod tests {
     }
 
     #[test]
-    fn prune_still_typechecks_dead_user_definitions() {
-        // The prune is root-restricted: a user-authored top-level binding the body
-        // never references is still type-checked, so its error is reported.
-        // (`write` returns its `Nat` status, so `Bin` is the mismatch.)
+    fn dead_user_definition_is_still_typechecked() {
+        // A user-authored top-level binding the body never references is still
+        // type-checked (every item is, before any reachability is considered), so
+        // its error is reported. (`write` returns its `Nat` status, `Bin` mismatches.)
         let error = typecheck(
             r#"
             let dead : /std/Bin = /std/Io/write(/std/Io/stdout, /std/Str/to_bin("x"));

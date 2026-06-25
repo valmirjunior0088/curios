@@ -101,12 +101,18 @@ fn annotated_func_infers_a_function_type() {
 fn check_on_a_hole_births_it_freezing_the_local_context() {
     let mut context = context();
 
-    // With `x : Nat` in scope, checking the hole `?0` against `Nat` births it,
-    // recording `Nat` as its type and the in-scope assumptions as its frozen Γ.
-    context.assume("x", &nat());
-
-    let hole = Term::metavar(0);
-    let (term, type_) = elaborate(&mut context, &hole, Mode::Check(nat())).unwrap();
+    // `x : Nat` is a genuine *local* binder — assumed inside a frame, the way a
+    // lambda or match body brings one into scope. Only locals are frozen into a
+    // metavariable's Γ; top-level definitions are excluded (a solution may
+    // mention them as globals instead — see `Context::identity_snapshot`), so
+    // the binder must be inside a frame to appear here. Checking the hole `?0`
+    // against `Nat` births it, recording `Nat` as its type and the in-scope
+    // locals as its frozen Γ.
+    let (term, type_) = context.with_frame(|context| {
+        context.assume("x", &nat());
+        let hole = Term::metavar(0);
+        elaborate(context, &hole, Mode::Check(nat())).unwrap()
+    });
 
     // Birth rebuilds the hole with the identity spine over its frozen Γ — the
     // delayed substitution that keeps its eventual solution aligned through

@@ -3,7 +3,7 @@ use {
         Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, InductiveType,
         Item, Let, Many, Match, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope,
         Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
-        erase_prim, expect_prim_head, infer, is_prop, reduce_with, refine_head,
+        erase_prim, expect_prim_head, infer, is_prop, module_of, reduce_with, refine_head,
     },
     crate::ersd,
     std::collections::BTreeMap,
@@ -1164,6 +1164,18 @@ pub fn erase_module(
     let mut items = Vec::with_capacity(module.items.len());
 
     for item in &module.items {
+        // Mirror `elaborate_module`: set the use-site module (`island`) to the
+        // item's qualifier prefix (a `rec` group shares one). `erase` re-derives
+        // types via `infer` (= `elaborate` in Infer mode), which re-runs the
+        // struct projection privacy check (§7); without the island an in-module
+        // projection of a private-rep struct (e.g. `/std/Time`'s `Instant`)
+        // would be wrongly rejected, the island defaulting to the root.
+        let item_module = match item {
+            Item::Let(def) => module_of(&def.name),
+            Item::Rec(defs) => defs.first().map(|def| module_of(&def.name)).unwrap_or(""),
+        };
+        context.set_island(item_module.to_string());
+
         match item {
             Item::Let(def) => {
                 let body = erase(context, &def.body, &def.type_)?;
@@ -1198,6 +1210,8 @@ pub fn erase_module(
         }
     }
 
+    // The entrypoint body runs under the root module (mirrors `elaborate_module`).
+    context.set_island(String::new());
     let body = erase(context, &module.body, expected)?;
 
     Ok(ersd::Module { items, body })

@@ -164,6 +164,15 @@ pub fn optimize(mut module: Module) -> Module {
     // more than one pass (see `inline_calls_with`).
     let entropy = Entropy::new();
 
+    // 0. Collapse the prelude. The erased module materializes *every* builtin
+    //    closure (there is no source-level reachability prune — the whole prelude
+    //    is type-checked on each compile, by design), but a program reaches only a
+    //    handful. An up-front dead-code sweep drops the unreachable rest so the
+    //    super-linear passes below — lifting, specialization, inlining — only ever
+    //    walk the reachable subset. The final sweep (§8) still reclaims whatever
+    //    those passes newly expose.
+    eliminate_dead_code(&mut module);
+
     // 1. Settle identities.
     propagate_copies(&mut module);
     fold_constants(&mut module);
