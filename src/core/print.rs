@@ -332,6 +332,15 @@ fn label_or(hint: Option<&str>, depth: usize) -> String {
     hint.map(str::to_string).unwrap_or_else(|| label_at(depth))
 }
 
+/// Every binder label of a scope, unnamed ones filled with `#n` placeholders
+/// positioned from `depth`.
+fn scope_labels<'a>(labels: impl Iterator<Item = Option<&'a str>>, depth: usize) -> Vec<String> {
+    labels
+        .enumerate()
+        .map(|(index, label)| label_or(label, depth + index))
+        .collect()
+}
+
 fn label_terms(labels: &[String]) -> Vec<Term> {
     labels.iter().map(Var::free).map(Term::var).collect()
 }
@@ -761,10 +770,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 match cur {
                     Telescope::Done(_) => {}
                     Telescope::Cons(ty, rest) => {
-                        let label = rest
-                            .first_label()
-                            .map(str::to_string)
-                            .unwrap_or_else(|| label_at(depth + idx));
+                        let label = label_or(rest.first_label(), depth + idx);
                         items.push(indent(flat([
                             pure(display_label(&label)),
                             pure(" : "),
@@ -891,11 +897,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
         }) => {
             // Arity 1 everywhere except an annotated inductive-match motive,
             // whose pattern binders precede the scrutinee binder.
-            let motive_labels = motive
-                .label_iter()
-                .enumerate()
-                .map(|(i, l)| l.map(str::to_string).unwrap_or_else(|| label_at(depth + i)))
-                .collect::<Vec<_>>();
+            let motive_labels = scope_labels(motive.label_iter(), depth);
             let motive_terms = label_terms(&motive_labels);
             let motive_refs = motive_terms.iter().collect::<Vec<_>>();
             let motive_arity = motive_labels.len();
@@ -961,13 +963,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                     cases
                         .into_iter()
                         .map(|(atom, scope)| {
-                            let labels = scope
-                                .label_iter()
-                                .enumerate()
-                                .map(|(i, l)| {
-                                    l.map(str::to_string).unwrap_or_else(|| label_at(depth + i))
-                                })
-                                .collect::<Vec<_>>();
+                            let labels = scope_labels(scope.label_iter(), depth);
                             let label_terms = label_terms(&labels);
                             let label_terms = label_terms.iter().collect::<Vec<_>>();
                             let body = scope.open(&label_terms);
@@ -1068,11 +1064,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ])
         }
         Subterm::Rec(Rec { items, tail }) => {
-            let labels = tail
-                .label_iter()
-                .enumerate()
-                .map(|(i, l)| l.map(str::to_string).unwrap_or_else(|| label_at(depth + i)))
-                .collect::<Vec<_>>();
+            let labels = scope_labels(tail.label_iter(), depth);
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
             let inner_depth = depth + labels.len();
