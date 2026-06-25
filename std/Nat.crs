@@ -79,9 +79,6 @@ pub let try_lt(a : Nat, b : Nat) -> Option(Lt(a, b)) =
     | false => Option/none()
     end;
 
-pub let lt_succ(@n : Nat) -> Lt(n, n + 1) =
-    True/qed();
-
 pub induct Lte : (a : Nat, b : Nat) -> Prop
 | z(@n : Nat) : (0, n)
 | s(@a : Nat, @b : Nat, prev : Lte(a, b)) : (a + 1, b + 1)
