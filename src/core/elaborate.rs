@@ -34,7 +34,7 @@ fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Te
             Telescope::Cons(ty, rest) => {
                 let domain = check(context, &ty, Term::type_())?;
                 let name = context.fresh(rest.first_label());
-                let x = Term::var(Var::free(&name));
+                let x = Term::free_var(&name);
                 // Assume the *rebuilt* domain: insertion saturates applications
                 // during elaboration, and a lowered (under-applied) type leaking
                 // into later reduction would open a telescope at the wrong arity.
@@ -424,7 +424,7 @@ fn elaborate_tuple_type(context: &mut Context, tt: &TupleType) -> Result<(Term, 
             Telescope::Cons(ty, rest) => {
                 let field = check(context, &ty, Term::type_())?;
                 let name = context.fresh(rest.first_label());
-                let x = Term::var(Var::free(&name));
+                let x = Term::free_var(&name);
                 // The *rebuilt* field type, as in `elaborate_func_type`.
                 context.assume(&name, &field);
                 fields.push((name, field));
@@ -525,17 +525,17 @@ fn elaborate_nat_match(
         context.assume(&pred_label, &Subterm::Prim(Prim::NatType).into());
         context.assume(
             &ih_label,
-            &motive.open(&[&Term::var(Var::free(&pred_label))]),
+            &motive.open(&[&Term::free_var(&pred_label)]),
         );
 
         check(
             context,
             &succ_case.open(&[
-                &Term::var(Var::free(&pred_label)),
-                &Term::var(Var::free(&ih_label)),
+                &Term::free_var(&pred_label),
+                &Term::free_var(&ih_label),
             ]),
             motive.open(&[&Subterm::Prim(Prim::nat_add(
-                Term::var(Var::free(&pred_label)),
+                Term::free_var(&pred_label),
                 Subterm::Prim(Prim::Nat(Nat::new(1usize))),
             ))
             .into()]),
@@ -598,7 +598,7 @@ fn elaborate_arr_match(
         context.assume(&tail_label, &head_type);
         context.assume(
             &ih_label,
-            &motive.open(&[&Term::var(Var::free(&tail_label))]),
+            &motive.open(&[&Term::free_var(&tail_label)]),
         );
 
         // The cons value `head :: tail`, encoded as the monoid operation on a
@@ -606,8 +606,8 @@ fn elaborate_arr_match(
         let cons_value: Term = Subterm::Prim(Prim::ArrConcat(
             elem.clone(),
             vec![
-                Subterm::Prim(Prim::Arr(vec![Term::var(Var::free(&head_label))])).into(),
-                Term::var(Var::free(&tail_label)),
+                Subterm::Prim(Prim::Arr(vec![Term::free_var(&head_label)])).into(),
+                Term::free_var(&tail_label),
             ],
         ))
         .into();
@@ -615,9 +615,9 @@ fn elaborate_arr_match(
         check(
             context,
             &cons_case.open(&[
-                &Term::var(Var::free(&head_label)),
-                &Term::var(Var::free(&tail_label)),
-                &Term::var(Var::free(&ih_label)),
+                &Term::free_var(&head_label),
+                &Term::free_var(&tail_label),
+                &Term::free_var(&ih_label),
             ]),
             motive.open(&[&cons_value]),
         )
@@ -677,7 +677,7 @@ fn elaborate_bin_match(
         context.assume(&tail_label, &head_type);
         context.assume(
             &ih_label,
-            &motive.open(&[&Term::var(Var::free(&tail_label))]),
+            &motive.open(&[&Term::free_var(&tail_label)]),
         );
 
         // The cons value `head :: tail`, encoded as the monoid operation on the
@@ -686,21 +686,21 @@ fn elaborate_bin_match(
         // (a byte appended to the empty bytestring), not a `Bin` literal.
         let singleton: Term = Subterm::Prim(Prim::BinAppend(
             Subterm::Prim(Prim::Bin(vec![])).into(),
-            Term::var(Var::free(&head_label)),
+            Term::free_var(&head_label),
         ))
         .into();
         let cons_value: Term = Subterm::Prim(Prim::BinConcat(vec![
             singleton,
-            Term::var(Var::free(&tail_label)),
+            Term::free_var(&tail_label),
         ]))
         .into();
 
         check(
             context,
             &cons_case.open(&[
-                &Term::var(Var::free(&head_label)),
-                &Term::var(Var::free(&tail_label)),
-                &Term::var(Var::free(&ih_label)),
+                &Term::free_var(&head_label),
+                &Term::free_var(&tail_label),
+                &Term::free_var(&ih_label),
             ]),
             motive.open(&[&cons_value]),
         )
@@ -887,7 +887,7 @@ fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Er
         Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
         Subterm::StructType(StructType { name, params }) => {
             let Some(structure) = context.structure(name).cloned() else {
-                return Err(Error::unbound_variable(Term::var(Var::free(name))));
+                return Err(Error::unbound_variable(Term::free_var(name)));
             };
 
             // The use-site module is the enclosing item's qualifier prefix
@@ -957,7 +957,7 @@ fn elaborate_inductive_type(
     } = ut;
 
     let Some(inductive) = context.inductive(name).cloned() else {
-        return Err(Error::unbound_variable(Term::var(Var::free(name))));
+        return Err(Error::unbound_variable(Term::free_var(name)));
     };
 
     let args: Vec<Term> = params.iter().chain(indices.iter()).cloned().collect();
@@ -1002,7 +1002,7 @@ fn elaborate_variant(
     } = uc;
 
     let Some(inductive) = context.inductive(name).cloned() else {
-        return Err(Error::unbound_variable(Term::var(Var::free(name))));
+        return Err(Error::unbound_variable(Term::free_var(name)));
     };
 
     let Some(signature) = inductive.constructors.get(tag).map(|c| c.telescope.clone()) else {
@@ -1053,7 +1053,7 @@ fn elaborate_struct_type(
     let Some(structure) = context.structure(name).cloned() else {
         return Err(match context.assumption(name) {
             Some(found) => Error::not_a_struct_type(found.clone()),
-            None => Error::unbound_variable(Term::var(Var::free(name))),
+            None => Error::unbound_variable(Term::free_var(name)),
         });
     };
 
@@ -1139,7 +1139,7 @@ fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(T
     let Some(structure) = context.structure(name).cloned() else {
         return Err(match context.assumption(name) {
             Some(found) => Error::not_a_struct_type(found.clone()),
-            None => Error::unbound_variable(Term::var(Var::free(name))),
+            None => Error::unbound_variable(Term::free_var(name)),
         });
     };
 
@@ -1247,7 +1247,7 @@ fn singleton_eliminable(
         match telescope {
             Telescope::Cons(ty, rest) => {
                 let name = context.fresh(rest.first_label());
-                telescope = rest.open(&[&Term::var(Var::free(&name))]);
+                telescope = rest.open(&[&Term::free_var(&name)]);
                 binders.push((name, ty));
             }
             Telescope::Done(terminal) => break *terminal,
@@ -1303,7 +1303,7 @@ fn elaborate_inductive_match(
     };
 
     let Some(inductive) = context.inductive(&name).cloned() else {
-        return Err(Error::unbound_variable(Term::var(Var::free(&name))));
+        return Err(Error::unbound_variable(Term::free_var(&name)));
     };
 
     let (motive_elaborated, pattern_elaborated, plan) = match pattern {
@@ -1398,7 +1398,7 @@ fn elaborate_inductive_match(
                 .collect::<Vec<_>>();
             let vars = labels
                 .iter()
-                .map(|label| Term::var(Var::free(label)))
+                .map(|label| Term::free_var(label))
                 .collect::<Vec<_>>();
             let ix_c = case_target_indices(telescope, &vars);
 
@@ -1437,7 +1437,7 @@ fn elaborate_inductive_match(
             .collect::<Vec<_>>();
         let vars = labels
             .iter()
-            .map(|label| Term::var(Var::free(label)))
+            .map(|label| Term::free_var(label))
             .collect::<Vec<_>>();
 
         let body_elaborated = context.with_frame(|context| {
@@ -1640,7 +1640,7 @@ fn check_inductive_motive(
 
         let mut index_vars = Vec::with_capacity(n_indices);
         for (slot, label) in plan.iter().zip(&labels) {
-            let var = Term::var(Var::free(label));
+            let var = Term::free_var(label);
             match slot {
                 // A parameter binder is an *alias* of the actual parameter —
                 // defined, not assumed, so the motive body's uses of it are
@@ -1670,7 +1670,7 @@ fn check_inductive_motive(
 
         let var_terms = labels
             .iter()
-            .map(|label| Term::var(Var::free(label)))
+            .map(|label| Term::free_var(label))
             .collect::<Vec<_>>();
         let var_refs = var_terms.iter().collect::<Vec<_>>();
         let body = elaborate(context, &motive.open(&var_refs), Mode::Check(Term::type_()))?.0;
@@ -1726,7 +1726,7 @@ fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(Term,
         context.define_assuming(&label, &assumed, &body_elaborated);
 
         let (tail_elaborated, tail_type) =
-            elaborate(context, &tail.open(&[&Term::var(Var::free(&label))]), mode)?;
+            elaborate(context, &tail.open(&[&Term::free_var(&label)]), mode)?;
 
         Ok::<_, Error>((tail_elaborated, reduce_with(context, &tail_type)?))
     })?;
@@ -2084,7 +2084,7 @@ fn elaborate_func_check(
                 let domain = check(context, &domain, Term::type_())?;
                 expect(context, term, &domain, &type_)?;
                 let name = context.fresh(body_rest.first_label());
-                let x = Term::var(Var::free(&name));
+                let x = Term::free_var(&name);
                 context.assume(&name, &type_);
                 domains.push((name, type_.clone()));
                 walk(
@@ -2133,7 +2133,7 @@ fn elaborate_func_infer(
                 }
 
                 let name = context.fresh(body_rest.first_label());
-                let x = Term::var(Var::free(&name));
+                let x = Term::free_var(&name);
                 context.assume(&name, &domain);
                 domains.push((name, domain));
                 walk(context, body_rest.open(&[&x]), domains)
@@ -2301,7 +2301,7 @@ fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), 
                     let rebuilt = check(context, &ty, Term::type_())?;
                     let label = context.fresh(rest.first_label());
                     context.assume(&label, &rebuilt);
-                    telescope = rest.open(&[&Term::var(Var::free(&label))]);
+                    telescope = rest.open(&[&Term::free_var(&label)]);
                     entries.push((label, rebuilt));
                 }
             }
@@ -2362,7 +2362,7 @@ fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result
                         let rebuilt = check(context, &ty, Term::type_())?;
                         let label = context.fresh(rest.first_label());
                         context.assume(&label, &rebuilt);
-                        telescope = rest.open(&[&Term::var(Var::free(&label))]);
+                        telescope = rest.open(&[&Term::free_var(&label)]);
                         entries.push((label, rebuilt));
                     }
                 }
@@ -2421,7 +2421,7 @@ fn elaborate_structure(context: &mut Context, name: &str) -> Result<(), Error> {
                     let rebuilt = check(context, &ty, Term::type_())?;
                     let label = context.fresh(rest.first_label());
                     context.assume(&label, &rebuilt);
-                    telescope = rest.open(&[&Term::var(Var::free(&label))]);
+                    telescope = rest.open(&[&Term::free_var(&label)]);
                     entries.push((label, rebuilt));
                 }
             }
@@ -2886,7 +2886,7 @@ fn insert_implicits_on_check(
                     Some(Plicity::Explicit) => {
                         let label = context.fresh(rest.first_label());
                         context.assume(&label, &domain);
-                        let var = Term::var(Var::free(&label));
+                        let var = Term::free_var(&label);
                         tele = rest.open(&[&var]);
                         binders.push((label, domain));
                         head_args.push((Plicity::Explicit, var));

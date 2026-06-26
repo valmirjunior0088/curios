@@ -2,7 +2,7 @@ use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, InductiveType, Match,
         Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
-        Three, Tuple, TupleType, Var, Variant, Visit, check, convert_prim, reduce, unfold_rec,
+        Three, Tuple, TupleType, Variant, Visit, check, convert_prim, reduce, unfold_rec,
     },
     std::{
         collections::{HashSet, VecDeque},
@@ -141,7 +141,7 @@ fn func_eta_args(
     type_: Term,
 ) -> Result<(Vec<Term>, Term), ReduceError> {
     let ys: Vec<Term> = (0..n)
-        .map(|_| Term::var(Var::free(context.fresh(None))))
+        .map(|_| Term::free_var(context.fresh(None)))
         .collect();
     let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
         Subterm::FuncType(FuncType { telescope, .. }) => {
@@ -195,7 +195,7 @@ impl Sort {
                             if !matches!(Sort::of(context, &ty)?, Sort::Prop) {
                                 break Sort::Type;
                             }
-                            let v = Term::var(Var::free(context.fresh(rest.first_label())));
+                            let v = Term::free_var(context.fresh(rest.first_label()));
                             tele = rest.open(&[&v]);
                         }
                         Telescope::Done(_) => break Sort::Prop,
@@ -206,7 +206,7 @@ impl Sort {
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let telescope = telescope.clone();
                 let vars: Vec<Term> = (0..telescope.len())
-                    .map(|_| Term::var(Var::free(context.fresh(None))))
+                    .map(|_| Term::free_var(context.fresh(None)))
                     .collect();
                 let refs: Vec<&Term> = vars.iter().collect();
                 Sort::of(context, &telescope.open(&refs))?
@@ -216,7 +216,7 @@ impl Sort {
             Subterm::Match(m) => {
                 let motive = m.motive.clone();
                 let vars: Vec<Term> = (0..motive.arity())
-                    .map(|_| Term::var(Var::free(context.fresh(None))))
+                    .map(|_| Term::free_var(context.fresh(None)))
                     .collect();
                 let refs: Vec<&Term> = vars.iter().collect();
                 Sort::from_universe(context, &motive.open(&refs))?
@@ -300,9 +300,9 @@ impl Convert {
         this: Scope<Three>,
         that: Scope<Three>,
     ) {
-        let a = Term::var(Var::free(context.fresh(None)));
-        let b = Term::var(Var::free(context.fresh(None)));
-        let c = Term::var(Var::free(context.fresh(None)));
+        let a = Term::free_var(context.fresh(None));
+        let b = Term::free_var(context.fresh(None));
+        let c = Term::free_var(context.fresh(None));
         self.enqueue(
             Term::type_(),
             this.open(&[&a, &b, &c]),
@@ -336,7 +336,7 @@ impl Convert {
             match (this, that) {
                 (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
                     cmp.enqueue(Term::type_(), ty_a.clone(), ty_b.clone());
-                    let v = Term::var(Var::free(context.fresh(rest_a.first_label())));
+                    let v = Term::free_var(context.fresh(rest_a.first_label()));
                     let inner_a = rest_a.open(&[&v]);
                     let inner_b = rest_b.open(&[&v]);
                     walk(cmp, context, &inner_a, &inner_b)
@@ -424,7 +424,7 @@ impl Convert {
                         return Ok(false);
                     }
                     cmp.enqueue(Term::type_(), ty_a.clone(), ty_b.clone());
-                    let v = Term::var(Var::free(context.fresh(rest_a.first_label())));
+                    let v = Term::free_var(context.fresh(rest_a.first_label()));
                     let inner_a = rest_a.open(&[&v]);
                     let inner_b = rest_b.open(&[&v]);
                     walk(cmp, context, &inner_a, &inner_b)
@@ -637,7 +637,7 @@ impl Convert {
         }
 
         let labels = (0..this.motive.arity())
-            .map(|_| Term::var(Var::free(context.fresh(None))))
+            .map(|_| Term::free_var(context.fresh(None)))
             .collect::<Vec<_>>();
         let label_refs = labels.iter().collect::<Vec<_>>();
         self.enqueue(
@@ -709,7 +709,7 @@ impl Convert {
                     }
 
                     let binders = (0..this_scope.arity())
-                        .map(|_| Term::var(Var::free(context.fresh(None))))
+                        .map(|_| Term::free_var(context.fresh(None)))
                         .collect::<Vec<_>>();
                     let binder_refs = binders.iter().collect::<Vec<_>>();
 
@@ -745,8 +745,8 @@ impl Convert {
 
                     // The unary cons arm binds (predecessor, ih); open both under
                     // shared fresh binders and compare the bodies.
-                    let a = Term::var(Var::free(context.fresh(None)));
-                    let b = Term::var(Var::free(context.fresh(None)));
+                    let a = Term::free_var(context.fresh(None));
+                    let b = Term::free_var(context.fresh(None));
                     self.enqueue(
                         Term::type_(),
                         this_cons.open(&[&a, &b]),
@@ -809,7 +809,7 @@ impl Convert {
         }
 
         let labels = (0..this.items.len())
-            .map(|_| Term::var(Var::free(context.fresh(None))))
+            .map(|_| Term::free_var(context.fresh(None)))
             .collect::<Vec<_>>();
 
         let labels = labels.iter().collect::<Vec<_>>();
@@ -886,7 +886,7 @@ impl Convert {
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let n = telescope.len();
                 let ys: Vec<Term> = (0..n)
-                    .map(|_| Term::var(Var::free(context.fresh(None))))
+                    .map(|_| Term::free_var(context.fresh(None)))
                     .collect();
                 let y_refs: Vec<&Term> = ys.iter().collect();
                 let output_type = telescope.open(&y_refs);
@@ -921,7 +921,7 @@ impl Convert {
     /// which the round-trip verification in `solve` catches conservatively.)
     fn abstract_occurrences(t: &Term, subjects: &[(Term, String)]) -> Term {
         if let Some((_, name)) = subjects.iter().find(|(s, _)| s == t) {
-            return Term::var(Var::free(name));
+            return Term::free_var(name);
         }
 
         let owned = subjects.to_vec();
@@ -931,7 +931,7 @@ impl Convert {
                 owned
                     .iter()
                     .find(|(s, _)| s == term)
-                    .map(|(_, name)| Term::var(Var::free(name.as_str())))
+                    .map(|(_, name)| Term::free_var(name.as_str()))
             }),
         ))
     }
@@ -1127,7 +1127,7 @@ impl Convert {
                 .collect::<Vec<_>>();
             let birth_vars = image
                 .iter()
-                .map(|(_, birth)| Term::var(Var::free(*birth)))
+                .map(|(_, birth)| Term::free_var(*birth))
                 .collect::<Vec<_>>();
             let refs = birth_vars.iter().collect::<Vec<_>>();
             abstracted.capture(&labels).release(&refs)

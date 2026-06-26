@@ -1,5 +1,5 @@
 use {
-    super::{Bound, Goal, ImplicitOrigin, Inductive, Metavar, Structure, Term, Var},
+    super::{Bound, Goal, ImplicitOrigin, Inductive, Metavar, Structure, Term},
     crate::{Entropy, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -509,7 +509,7 @@ impl Context {
         let spine = Rc::new(
             telescope
                 .iter()
-                .map(|(name, _)| Term::var(Var::free(name)))
+                .map(|(name, _)| Term::free_var(name))
                 .collect::<Vec<_>>(),
         );
 

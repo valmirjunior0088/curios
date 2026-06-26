@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::core::{Atom, Inductive, InductiveParam, Int, Nat, Prim, Structure, Var},
+    crate::core::{Atom, Inductive, InductiveParam, Int, Nat, Prim, Structure},
     std::{collections::BTreeMap, time::Duration},
 };
 
@@ -26,9 +26,9 @@ fn func<const N: usize>(labels: [&str; N], body: impl Into<Term>) -> Term {
 fn convert_func_type_is_alpha_equivalent() {
     let mut context = context();
 
-    let this = Term::func_type([("x", Term::type_())], Term::var(Var::free("x")));
+    let this = Term::func_type([("x", Term::type_())], Term::free_var("x"));
 
-    let that = Term::func_type([("y", Term::type_())], Term::var(Var::free("y")));
+    let that = Term::func_type([("y", Term::type_())], Term::free_var("y"));
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -37,9 +37,9 @@ fn convert_func_type_is_alpha_equivalent() {
 fn convert_func_is_alpha_equivalent() {
     let mut context = context();
 
-    let this = func(["x"], Term::var(Var::free("x")));
+    let this = func(["x"], Term::free_var("x"));
 
-    let that = func(["y"], Term::var(Var::free("y")));
+    let that = func(["y"], Term::free_var("y"));
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -50,12 +50,12 @@ fn convert_inductive_match_compares_cases_and_motive() {
 
     let make = |motive_label: &str, binder: &str| {
         Term::inductive_match(
-            Term::var(Var::free("r")),
+            Term::free_var("r"),
             Some(motive_label),
             Term::prim(Prim::NatType),
             [
                 ("none", Vec::<&str>::new(), nat(0)),
-                ("some", vec![binder], Term::var(Var::free(binder))),
+                ("some", vec![binder], Term::free_var(binder)),
             ],
         )
     };
@@ -67,12 +67,12 @@ fn convert_inductive_match_compares_cases_and_motive() {
     );
 
     let different = Term::inductive_match(
-        Term::var(Var::free("r")),
+        Term::free_var("r"),
         Some("m"),
         Term::prim(Prim::NatType),
         [
             ("none", Vec::<&str>::new(), nat(1)),
-            ("some", vec!["x"], Term::var(Var::free("x"))),
+            ("some", vec!["x"], Term::free_var("x")),
         ],
     );
 
@@ -86,7 +86,7 @@ fn convert_prim_recurses_into_operands() {
     let this = func(
         ["x"],
         Subterm::Prim(Prim::int_add(
-            Term::var(Var::free("x")),
+            Term::free_var("x"),
             Subterm::Prim(Prim::Int(Int::new(1))),
         )),
     );
@@ -94,7 +94,7 @@ fn convert_prim_recurses_into_operands() {
     let that = func(
         ["y"],
         Subterm::Prim(Prim::int_add(
-            Term::var(Var::free("y")),
+            Term::free_var("y"),
             Subterm::Prim(Prim::Int(Int::new(1))),
         )),
     );
@@ -109,7 +109,7 @@ fn convert_prim_distinguishes_operator_kind() {
     let this = func(
         ["x"],
         Subterm::Prim(Prim::int_add(
-            Term::var(Var::free("x")),
+            Term::free_var("x"),
             Subterm::Prim(Prim::Int(Int::new(1))),
         )),
     );
@@ -117,7 +117,7 @@ fn convert_prim_distinguishes_operator_kind() {
     let that = func(
         ["x"],
         Subterm::Prim(Prim::int_sub(
-            Term::var(Var::free("x")),
+            Term::free_var("x"),
             Subterm::Prim(Prim::Int(Int::new(1))),
         )),
     );
@@ -130,13 +130,13 @@ fn convert_rec_is_alpha_equivalent() {
     let mut context = context();
 
     let this = Term::rec(
-        vec![("x", Term::type_(), Term::var(Var::free("x")))],
-        Term::var(Var::free("x")),
+        vec![("x", Term::type_(), Term::free_var("x"))],
+        Term::free_var("x"),
     );
 
     let that = Term::rec(
-        vec![("y", Term::type_(), Term::var(Var::free("y")))],
-        Term::var(Var::free("y")),
+        vec![("y", Term::type_(), Term::free_var("y"))],
+        Term::free_var("y"),
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -149,7 +149,7 @@ fn convert_prim_nat_add_recurses_into_operands() {
     let this = func(
         ["x"],
         Subterm::Prim(Prim::nat_add(
-            Term::var(Var::free("x")),
+            Term::free_var("x"),
             Subterm::Prim(Prim::Nat(Nat::new(1usize))),
         )),
     );
@@ -157,7 +157,7 @@ fn convert_prim_nat_add_recurses_into_operands() {
     let that = func(
         ["y"],
         Subterm::Prim(Prim::nat_add(
-            Term::var(Var::free("y")),
+            Term::free_var("y"),
             Subterm::Prim(Prim::Nat(Nat::new(1usize))),
         )),
     );
@@ -171,12 +171,12 @@ fn convert_prim_flt_neg_recurses_into_operand() {
 
     let this = func(
         ["x"],
-        Subterm::Prim(Prim::flt_neg(Term::var(Var::free("x")))),
+        Subterm::Prim(Prim::flt_neg(Term::free_var("x"))),
     );
 
     let that = func(
         ["y"],
-        Subterm::Prim(Prim::flt_neg(Term::var(Var::free("y")))),
+        Subterm::Prim(Prim::flt_neg(Term::free_var("y"))),
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -188,12 +188,12 @@ fn convert_prim_nat_to_int_recurses_into_operand() {
 
     let this = func(
         ["x"],
-        Subterm::Prim(Prim::nat_to_int(Term::var(Var::free("x")))),
+        Subterm::Prim(Prim::nat_to_int(Term::free_var("x"))),
     );
 
     let that = func(
         ["y"],
-        Subterm::Prim(Prim::nat_to_int(Term::var(Var::free("y")))),
+        Subterm::Prim(Prim::nat_to_int(Term::free_var("y"))),
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -272,11 +272,11 @@ fn convert_prim_bin_len_recurses_into_operand() {
 
     let this = func(
         ["x"],
-        Subterm::Prim(Prim::bin_len(Term::var(Var::free("x")))),
+        Subterm::Prim(Prim::bin_len(Term::free_var("x"))),
     );
     let that = func(
         ["y"],
-        Subterm::Prim(Prim::bin_len(Term::var(Var::free("y")))),
+        Subterm::Prim(Prim::bin_len(Term::free_var("y"))),
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -291,8 +291,8 @@ fn convert_prim_bin_get_recurses_into_operands() {
         func(
             ["a"],
             Subterm::Prim(Prim::bin_get(
-                Term::var(Var::free("x")),
-                Term::var(Var::free("a")),
+                Term::free_var("x"),
+                Term::free_var("a"),
             )),
         ),
     );
@@ -302,8 +302,8 @@ fn convert_prim_bin_get_recurses_into_operands() {
         func(
             ["b"],
             Subterm::Prim(Prim::bin_get(
-                Term::var(Var::free("y")),
-                Term::var(Var::free("b")),
+                Term::free_var("y"),
+                Term::free_var("b"),
             )),
         ),
     );
@@ -320,8 +320,8 @@ fn convert_prim_bin_concat_recurses_into_operands() {
         func(
             ["a"],
             Subterm::Prim(Prim::bin_concat([
-                Term::var(Var::free("x")),
-                Term::var(Var::free("a")),
+                Term::free_var("x"),
+                Term::free_var("a"),
             ])),
         ),
     );
@@ -331,8 +331,8 @@ fn convert_prim_bin_concat_recurses_into_operands() {
         func(
             ["b"],
             Subterm::Prim(Prim::bin_concat([
-                Term::var(Var::free("y")),
-                Term::var(Var::free("b")),
+                Term::free_var("y"),
+                Term::free_var("b"),
             ])),
         ),
     );
@@ -351,9 +351,9 @@ fn convert_prim_bin_slice_recurses_into_operands() {
             func(
                 ["p"],
                 Subterm::Prim(Prim::bin_slice(
-                    Term::var(Var::free("x")),
-                    Term::var(Var::free("a")),
-                    Term::var(Var::free("p")),
+                    Term::free_var("x"),
+                    Term::free_var("a"),
+                    Term::free_var("p"),
                 )),
             ),
         ),
@@ -366,9 +366,9 @@ fn convert_prim_bin_slice_recurses_into_operands() {
             func(
                 ["q"],
                 Subterm::Prim(Prim::bin_slice(
-                    Term::var(Var::free("y")),
-                    Term::var(Var::free("b")),
-                    Term::var(Var::free("q")),
+                    Term::free_var("y"),
+                    Term::free_var("b"),
+                    Term::free_var("q"),
                 )),
             ),
         ),
@@ -401,8 +401,8 @@ fn convert_tuple_unequal_field() {
 fn convert_proj_same_index_and_head() {
     let mut context = context();
 
-    let this = Term::proj(Term::var(Var::free("r")), 0);
-    let that = Term::proj(Term::var(Var::free("r")), 0);
+    let this = Term::proj(Term::free_var("r"), 0);
+    let that = Term::proj(Term::free_var("r"), 0);
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -411,8 +411,8 @@ fn convert_proj_same_index_and_head() {
 fn convert_proj_different_index_is_false() {
     let mut context = context();
 
-    let this = Term::proj(Term::var(Var::free("r")), 0);
-    let that = Term::proj(Term::var(Var::free("r")), 1);
+    let this = Term::proj(Term::free_var("r"), 0);
+    let that = Term::proj(Term::free_var("r"), 1);
 
     assert_eq!(conv(&mut context, &this, &that), Ok(false));
 }
@@ -426,8 +426,8 @@ fn convert_eta_tuple_neutral_with_known_type() {
         ("y", Term::prim(Prim::BlnType)),
     ]);
 
-    let r: Term = Term::var(Var::free("r"));
-    let s: Term = Term::var(Var::free("s"));
+    let r: Term = Term::free_var("r");
+    let s: Term = Term::free_var("s");
 
     assert_eq!(convert(&mut context, &tuple_type, &r, &r), Ok(true));
 
@@ -447,8 +447,8 @@ fn convert_partial_projection_tuple_at_narrow_type() {
 
     // this = (p.0), that = (q.0). At the 1-field type both denote (a),
     // so conversion should return true.
-    let this: Term = Term::tuple([Term::proj(Term::var(Var::free("p")), 0)]);
-    let that: Term = Term::tuple([Term::proj(Term::var(Var::free("q")), 0)]);
+    let this: Term = Term::tuple([Term::proj(Term::free_var("p"), 0)]);
+    let that: Term = Term::tuple([Term::proj(Term::free_var("q"), 0)]);
 
     // Even though eta_reduce_tuple widens each 1-tuple to its bare base
     // (`Var p`, `Var q`), the convert loop then routes the neutral pair
@@ -462,22 +462,22 @@ fn convert_partial_projection_tuple_at_narrow_type() {
 fn convert_times_out_on_pathological_inputs() {
     let mut context = context();
 
-    context.define("loop", &Term::var(Var::free("loop")));
+    context.define("loop", &Term::free_var("loop"));
 
     let this = Term::tuple_type([
         (
             "x",
             Term::apply(
-                func(["z"], Term::var(Var::free("z"))),
-                [Term::var(Var::free("loop"))],
+                func(["z"], Term::free_var("z")),
+                [Term::free_var("loop")],
             ),
         ),
-        ("y", Term::var(Var::free("x"))),
+        ("y", Term::free_var("x")),
     ]);
 
     let that = Term::tuple_type([
-        ("x", Term::var(Var::free("loop"))),
-        ("y", Term::var(Var::free("x"))),
+        ("x", Term::free_var("loop")),
+        ("y", Term::free_var("x")),
     ]);
 
     assert_eq!(
@@ -500,9 +500,9 @@ fn convert_unit_typed_neutrals_in_type_argument() {
     context.assume("r", &Term::tuple_type_unit());
     context.assume("s", &Term::tuple_type_unit());
 
-    let f = Term::var(Var::free("F"));
-    let r = Term::var(Var::free("r"));
-    let s = Term::var(Var::free("s"));
+    let f = Term::free_var("F");
+    let r = Term::free_var("r");
+    let s = Term::free_var("s");
 
     let this = Term::apply(f.clone(), [r]); // F r
     let that = Term::apply(f, [s]); // F s
@@ -538,8 +538,8 @@ fn convert_struct_unit_field_is_irrelevant() {
     context.assume("r", &Term::tuple_type_unit());
     context.assume("s", &Term::tuple_type_unit());
 
-    let r = Term::var(Var::free("r"));
-    let s = Term::var(Var::free("s"));
+    let r = Term::free_var("r");
+    let s = Term::free_var("s");
 
     // Wrap { 1, r } and Wrap { 1, s } differ only in the unit field's neutral.
     let this = Term::struct_("Wrap", Vec::<Term>::new(), [nat(1), r]);
@@ -579,8 +579,8 @@ fn convert_variant_unit_payload_is_irrelevant() {
     context.assume("r", &Term::tuple_type_unit());
     context.assume("s", &Term::tuple_type_unit());
 
-    let r = Term::var(Var::free("r"));
-    let s = Term::var(Var::free("s"));
+    let r = Term::free_var("r");
+    let s = Term::free_var("s");
 
     // wrap(1, r) and wrap(1, s) differ only in the unit payload's neutral.
     let this = Term::variant("Wrap", Vec::<Term>::new(), "wrap", [nat(1), r]);
@@ -631,7 +631,7 @@ fn scope_check_rejects_out_of_context_variable() {
     context.birth_metavar(0, Vec::new(), Term::type_());
 
     // ?0 ≟ x  — `x` is not available to ?0.
-    let x = Term::var(Var::free("x"));
+    let x = Term::free_var("x");
     assert_eq!(conv(&mut context, &Term::metavar(0), &x), Ok(false));
     assert_eq!(context.metavar_solution(0), None);
 }
@@ -643,7 +643,7 @@ fn scope_check_allows_in_context_variable() {
     context.assume("x", &Term::type_());
     context.birth_metavar(0, vec![("x".to_string(), Term::type_())], Term::type_());
 
-    let x = Term::var(Var::free("x"));
+    let x = Term::free_var("x");
     let occurrence = Term::metavar_birthed(0, None, vec![x.clone()]);
     assert_eq!(conv(&mut context, &occurrence, &x), Ok(true));
     assert_eq!(context.metavar_solution(0), Some(&x));
@@ -748,13 +748,13 @@ fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
     context.birth_metavar(
         0,
         vec![("t".to_string(), Term::type_())],
-        Term::var(Var::free("t")),
+        Term::free_var("t"),
     );
 
     // `?0 ≟ 5` at type `t`. Locally (refinement on) `t ⇝ Nat` and `5 : t` holds,
     // but re-validation suppresses refinements, leaving `t` abstract, so `5 : t`
     // fails and the solution is rejected — the program is unsound otherwise.
-    let t = Term::var(Var::free("t"));
+    let t = Term::free_var("t");
     let occurrence = Term::metavar_birthed(0, None, vec![t.clone()]);
     let five = Term::prim(Prim::Nat(Nat::new(5usize)));
     assert_eq!(convert(&mut context, &t, &occurrence, &five), Ok(false));
@@ -776,7 +776,7 @@ fn revalidation_accepts_a_refinement_independent_solution() {
     );
 
     let nat = Term::prim(Prim::NatType);
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("t"))]);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("t")]);
     let five = Term::prim(Prim::Nat(Nat::new(5usize)));
     assert_eq!(convert(&mut context, &nat, &occurrence, &five), Ok(true));
     assert_eq!(context.metavar_solution(0), Some(&five));
@@ -794,17 +794,17 @@ fn solve_inverts_a_renaming() {
     // ?0 born under Γ = [a : Nat]; this occurrence's spine maps `a` to the
     // live name `y` (the enclosing binders were re-closed and reopened).
     context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("y"))]);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y")]);
 
     // ?0[y] ≟ y — inverting the renaming stores the solution in birth-named
     // form: `a`, not `y`.
     assert_eq!(
-        conv(&mut context, &occurrence, &Term::var(Var::free("y"))),
+        conv(&mut context, &occurrence, &Term::free_var("y")),
         Ok(true)
     );
     assert_eq!(
         context.metavar_solution(0),
-        Some(&Term::var(Var::free("a")))
+        Some(&Term::free_var("a"))
     );
 }
 
@@ -812,7 +812,7 @@ fn solve_inverts_a_renaming() {
 fn solve_through_an_identity_spine_matches_legacy() {
     let mut context = context();
     context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("a"))]);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("a")]);
 
     // The identity spine behaves exactly like the empty (legacy bare-hole)
     // spine: the candidate is stored unchanged.
@@ -833,14 +833,14 @@ fn solve_postpones_a_duplicated_renaming() {
     let occurrence = Term::metavar_birthed(
         0,
         None,
-        vec![Term::var(Var::free("y")), Term::var(Var::free("y"))],
+        vec![Term::free_var("y"), Term::free_var("y")],
     );
 
     let outcome = convert_outcome(
         &mut context,
         &Term::type_(),
         &occurrence,
-        &Term::var(Var::free("y")),
+        &Term::free_var("y"),
     );
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(0), None);
@@ -856,18 +856,18 @@ fn solve_prunes_dependence_on_a_non_pattern_entry() {
     );
     // First slot a pattern variable, second a compound term: the candidate
     // may depend on the first but not (yet) on the second.
-    let compound: Term = Subterm::Prim(Prim::nat_add(Term::var(Var::free("z")), nat(1))).into();
+    let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var("z"), nat(1))).into();
     let occurrence =
-        Term::metavar_birthed(0, None, vec![Term::var(Var::free("y")), compound.clone()]);
+        Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound.clone()]);
 
     // ?0[y, z+1] ≟ y — solvable through the pattern slot alone.
     assert_eq!(
-        conv(&mut context, &occurrence, &Term::var(Var::free("y"))),
+        conv(&mut context, &occurrence, &Term::free_var("y")),
         Ok(true)
     );
     assert_eq!(
         context.metavar_solution(0),
-        Some(&Term::var(Var::free("a")))
+        Some(&Term::free_var("a"))
     );
 }
 
@@ -879,8 +879,8 @@ fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
     );
-    let compound: Term = Subterm::Prim(Prim::nat_add(Term::var(Var::free("z")), nat(1))).into();
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("y")), compound]);
+    let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var("z"), nat(1))).into();
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound]);
 
     // ?0[y, z+1] ≟ z — `z` is reachable only through the non-pattern slot
     // (and is not an occurrence of the whole entry): undecided.
@@ -888,7 +888,7 @@ fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
         &mut context,
         &Term::type_(),
         &occurrence,
-        &Term::var(Var::free("z")),
+        &Term::free_var("z"),
     );
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(0), None);
@@ -898,7 +898,7 @@ fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
 fn solve_rejects_an_out_of_image_variable() {
     let mut context = context();
     context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("y"))]);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y")]);
 
     // ?0[y] ≟ z — `z` corresponds to no birth binder and never can: a hard
     // mismatch, not a postponement.
@@ -906,7 +906,7 @@ fn solve_rejects_an_out_of_image_variable() {
         &mut context,
         &Term::type_(),
         &occurrence,
-        &Term::var(Var::free("z")),
+        &Term::free_var("z"),
     );
     assert!(matches!(outcome, Ok(Outcome::Mismatch)));
     assert_eq!(context.metavar_solution(0), None);
@@ -918,20 +918,20 @@ fn solve_classifies_a_solved_metavariable_spine_entry_by_its_value() {
     // ?0 is already solved to its own binder, so an occurrence ?0[y] stands
     // for `y` — a perfectly good pattern variable hiding behind a node.
     context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
-    context.solve_metavar(0, Term::var(Var::free("a")));
-    let entry = Term::metavar_birthed(0, None, vec![Term::var(Var::free("y"))]);
+    context.solve_metavar(0, Term::free_var("a"));
+    let entry = Term::metavar_birthed(0, None, vec![Term::free_var("y")]);
 
     context.birth_metavar(1, vec![("b".into(), nat_type())], nat_type());
     let occurrence = Term::metavar_birthed(1, None, vec![entry]);
 
     // ?1[?0[y]] ≟ y — the entry resolves to `y` and inverts to `b`.
     assert_eq!(
-        conv(&mut context, &occurrence, &Term::var(Var::free("y"))),
+        conv(&mut context, &occurrence, &Term::free_var("y")),
         Ok(true)
     );
     assert_eq!(
         context.metavar_solution(1),
-        Some(&Term::var(Var::free("b")))
+        Some(&Term::free_var("b"))
     );
 }
 
@@ -945,16 +945,16 @@ fn solve_abstracts_a_non_pattern_occurrence() {
     );
     // A reduce-stable compound (a tuple is a normal form), matched by the
     // raw spelling; the reduced-spelling case is the next test.
-    let compound = Term::tuple([Term::var(Var::free("z"))]);
+    let compound = Term::tuple([Term::free_var("z")]);
     let occurrence =
-        Term::metavar_birthed(0, None, vec![Term::var(Var::free("y")), compound.clone()]);
+        Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound.clone()]);
 
     // ?0[y, (z,)] ≟ (z,) — the candidate *is* an occurrence of the
     // non-pattern entry, which abstracts to its birth binder `b`.
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
     assert_eq!(
         context.metavar_solution(0),
-        Some(&Term::var(Var::free("b")))
+        Some(&Term::free_var("b"))
     );
 }
 
@@ -973,10 +973,10 @@ fn parked_goals_retry_under_their_frozen_refinements() {
         context.park(
             ParkedWork::Conversion(Goal {
                 type_: Term::type_(),
-                this: Term::var(Var::free("b")),
+                this: Term::free_var("b"),
                 that: nat_type(),
             }),
-            Term::var(Var::free("b")),
+            Term::free_var("b"),
         );
     });
 
@@ -996,10 +996,10 @@ fn parked_goals_without_their_refinement_mismatch() {
         context.park(
             ParkedWork::Conversion(Goal {
                 type_: Term::type_(),
-                this: Term::var(Var::free("b")),
+                this: Term::free_var("b"),
                 that: nat_type(),
             }),
-            Term::var(Var::free("b")),
+            Term::free_var("b"),
         );
     });
 
@@ -1018,14 +1018,14 @@ fn solve_abstracts_a_reduced_spelling_occurrence() {
     // reduced — each subject contributes both spellings, so the occurrence
     // still abstracts, and the round-trip verification accepts the pair by
     // definitional (not syntactic) equality.
-    let compound: Term = Subterm::Prim(Prim::nat_add(Term::var(Var::free("z")), nat(1))).into();
+    let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var("z"), nat(1))).into();
     let occurrence =
-        Term::metavar_birthed(0, None, vec![Term::var(Var::free("y")), compound.clone()]);
+        Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound.clone()]);
 
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
     assert_eq!(
         context.metavar_solution(0),
-        Some(&Term::var(Var::free("b")))
+        Some(&Term::free_var("b"))
     );
 }
 
@@ -1072,8 +1072,8 @@ fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
     context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
     context.birth_metavar(1, vec![("b".into(), nat_type())], nat_type());
 
-    let this = Term::metavar_birthed(0, None, vec![Term::var(Var::free("x"))]);
-    let that = Term::metavar_birthed(1, None, vec![Term::var(Var::free("x"))]);
+    let this = Term::metavar_birthed(0, None, vec![Term::free_var("x")]);
+    let that = Term::metavar_birthed(1, None, vec![Term::free_var("x")]);
 
     let outcome = convert_outcome(&mut context, &Term::type_(), &this, &that);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
@@ -1104,7 +1104,7 @@ fn rollback_solutions_unwinds_to_the_mark() {
 fn stuck_prim_on_a_metavar_parks_instead_of_mismatching() {
     let mut context = context();
     context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
-    let m = Term::metavar_birthed(0, None, vec![Term::var(Var::free("a"))]);
+    let m = Term::metavar_birthed(0, None, vec![Term::free_var("a")]);
     let stuck: Term = Subterm::Prim(Prim::NatSub(m.clone(), nat(1))).into();
 
     // `?0 - 1 ≈ 0` is undecided, not unequal: solving `?0` may fold the
@@ -1126,7 +1126,7 @@ fn stuck_prim_on_a_metavar_parks_instead_of_mismatching() {
 fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
     let mut context = context();
     context.birth_metavar(0, vec![("a".into(), nat_type())], nat_type());
-    let m = Term::metavar_birthed(0, None, vec![Term::var(Var::free("a"))]);
+    let m = Term::metavar_birthed(0, None, vec![Term::free_var("a")]);
 
     // An inductive type against `Nat` is provably unequal whatever `?0` becomes —
     // the heads are rigid — so the mismatch stays hard (and is reported at
@@ -1141,7 +1141,7 @@ fn arm_refinement_does_not_taint_a_committed_solution() {
     let mut context = context();
     context.assume("n", &nat_type());
     context.birth_metavar(0, vec![("n".into(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::var(Var::free("n"))]);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("n")]);
 
     // Inside a frame that counterfactually refines `n := 0` (a match arm),
     // the goal `?0[n] ≈ n` still discharges — but the *committed* solution is
@@ -1149,12 +1149,12 @@ fn arm_refinement_does_not_taint_a_committed_solution() {
     // be pinned to a value that holds only counterfactually inside the arm.
     let converts = context.with_frame(|context| {
         context.refine("n", &nat(0));
-        conv(context, &occurrence, &Term::var(Var::free("n")))
+        conv(context, &occurrence, &Term::free_var("n"))
     });
     assert_eq!(converts, Ok(true));
     assert_eq!(
         context.metavar_solution(0),
-        Some(&Term::var(Var::free("n")))
+        Some(&Term::free_var("n"))
     );
 }
 

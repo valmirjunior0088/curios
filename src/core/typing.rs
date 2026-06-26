@@ -1,5 +1,5 @@
 use super::{
-    Context, Error, Field, Many, Mode, Prim, PrimHead, Proj, Scope, Subterm, Term, Var, elaborate,
+    Context, Error, Field, Many, Mode, Prim, PrimHead, Proj, Scope, Subterm, Term, elaborate,
 };
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
@@ -307,7 +307,7 @@ pub fn check_motive(
         context.assume(&label, head_type);
         let body = elaborate(
             context,
-            &motive.open(&[&Term::var(Var::free(&label))]),
+            &motive.open(&[&Term::free_var(&label)]),
             Mode::Check(Term::type_()),
         )?
         .0;

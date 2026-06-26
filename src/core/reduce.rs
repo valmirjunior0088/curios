@@ -136,7 +136,7 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
 
     let ys = freshs
         .iter()
-        .map(|f| Term::var(Var::free(f)))
+        .map(|f| Term::free_var(f))
         .collect::<Vec<_>>();
 
     let y_refs = ys.iter().collect::<Vec<_>>();

@@ -347,7 +347,7 @@ fn label_terms(labels: &[String]) -> Vec<Term> {
 
 fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
     let label = label_or(scope.first_label(), depth);
-    let body = scope.open(&[&Term::var(Var::free(&label))]);
+    let body = scope.open(&[&Term::free_var(&label)]);
 
     (label, body)
 }
@@ -358,7 +358,7 @@ fn open_telescope(telescope: Telescope<Term>, depth: usize) -> (Vec<String>, Ter
             Telescope::Done(body) => *body,
             Telescope::Cons(_ty, rest) => {
                 let label = label_or(rest.first_label(), depth + idx);
-                let next = rest.open(&[&Term::var(Var::free(&label))]);
+                let next = rest.open(&[&Term::free_var(&label)]);
                 labels.push(label);
                 walk(next, depth, idx + 1, labels)
             }
@@ -373,7 +373,7 @@ fn open_telescope(telescope: Telescope<Term>, depth: usize) -> (Vec<String>, Ter
 fn open_scope_two(scope: Scope<Two>, depth: usize) -> ((String, String), Term) {
     let fst = label_or(scope.first_label(), depth);
     let snd = label_or(scope.second_label(), depth + 1);
-    let body = scope.open(&[&Term::var(Var::free(&fst)), &Term::var(Var::free(&snd))]);
+    let body = scope.open(&[&Term::free_var(&fst), &Term::free_var(&snd)]);
 
     ((fst, snd), body)
 }
@@ -383,9 +383,9 @@ fn open_scope_three(scope: Scope<Three>, depth: usize) -> ((String, String, Stri
     let snd = label_or(scope.second_label(), depth + 1);
     let thd = label_or(scope.third_label(), depth + 2);
     let body = scope.open(&[
-        &Term::var(Var::free(&fst)),
-        &Term::var(Var::free(&snd)),
-        &Term::var(Var::free(&thd)),
+        &Term::free_var(&fst),
+        &Term::free_var(&snd),
+        &Term::free_var(&thd),
     ]);
 
     ((fst, snd, thd), body)
@@ -702,7 +702,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                             None => flat([pure(mark), typed]),
                         };
                         printers.push(printer);
-                        let next = rest.open(&[&Term::var(Var::free(&label))]);
+                        let next = rest.open(&[&Term::free_var(&label)]);
                         walk(next, plicities, depth, total, idx + 1, printers)
                     }
                 }
@@ -776,7 +776,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                             pure(" : "),
                             print_term(ty, depth + total),
                         ])));
-                        let next = rest.open(&[&Term::var(Var::free(&label))]);
+                        let next = rest.open(&[&Term::free_var(&label)]);
                         walk(next, depth, total, idx + 1, items);
                     }
                 }

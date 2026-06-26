@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::{
-        core::{Flt, Int, Nat, Prim, Term, Var},
+        core::{Flt, Int, Nat, Prim, Term},
         ersd,
     },
     std::time::Duration,
@@ -24,9 +24,9 @@ fn erase_rec_single_identity_function() {
         vec![(
             "f",
             func_type.clone(),
-            Term::func([("x", Term::type_())], Term::var(Var::free("x"))),
+            Term::func([("x", Term::type_())], Term::free_var("x")),
         )],
-        Term::var(Var::free("f")),
+        Term::free_var("f"),
     );
 
     erase(&mut context, &term, &func_type).unwrap();
@@ -39,8 +39,8 @@ fn erase_accepts_term_level_loop_with_stable_type() {
     let type_ = Term::prim(Prim::NatType);
 
     let term = Term::rec(
-        vec![("loop", type_.clone(), Term::var(Var::free("loop")))],
-        Term::var(Var::free("loop")),
+        vec![("loop", type_.clone(), Term::free_var("loop"))],
+        Term::free_var("loop"),
     );
 
     erase(&mut context, &term, &type_).unwrap();
@@ -80,7 +80,7 @@ fn erase_func_captures_free_variables_before_opening_body() {
     let type_ = Term::func_type([("x", nat_type.clone())], tuple_type);
     let term = Term::func(
         [("x", Term::type_())],
-        Term::tuple([Term::var(Var::free("x")), Term::var(Var::free("y"))]),
+        Term::tuple([Term::free_var("x"), Term::free_var("y")]),
     );
 
     let mut context = Context::new(Duration::from_secs(1));
@@ -113,7 +113,7 @@ fn erase_arr_nat_type_literal_len_and_get() {
     context.assume("xs", &arr_nat);
     let len = Subterm::Prim(Prim::arr_len(
         Subterm::Prim(Prim::NatType),
-        Term::var(Var::free("xs")),
+        Term::free_var("xs"),
     ))
     .into();
     assert_eq!(
@@ -123,7 +123,7 @@ fn erase_arr_nat_type_literal_len_and_get() {
 
     let get = Subterm::Prim(Prim::arr_get(
         Subterm::Prim(Prim::NatType),
-        Term::var(Var::free("xs")),
+        Term::free_var("xs"),
         Subterm::Prim(Prim::Nat(Nat::new(0usize))),
     ))
     .into();
@@ -145,14 +145,14 @@ fn erase_bin_type_literal_len_and_get() {
     erase(&mut context, &literal, &bin_type).unwrap();
 
     context.assume("b", &bin_type);
-    let len = Subterm::Prim(Prim::bin_len(Term::var(Var::free("b")))).into();
+    let len = Subterm::Prim(Prim::bin_len(Term::free_var("b"))).into();
     assert_eq!(
         infer(&mut context, &len).unwrap(),
         Subterm::Prim(Prim::NatType).into()
     );
 
     let get = Subterm::Prim(Prim::bin_get(
-        Term::var(Var::free("b")),
+        Term::free_var("b"),
         Subterm::Prim(Prim::Nat(Nat::new(0usize))),
     ))
     .into();
@@ -171,8 +171,8 @@ fn erase_bin_append() {
     context.assume("n", &Subterm::Prim(Prim::NatType).into());
 
     let append = Subterm::Prim(Prim::bin_append(
-        Term::var(Var::free("b")),
-        Term::var(Var::free("n")),
+        Term::free_var("b"),
+        Term::free_var("n"),
     ))
     .into();
     assert_eq!(infer(&mut context, &append).unwrap(), bin_type);
@@ -189,8 +189,8 @@ fn erase_bin_eql() {
     context.assume("b", &bin_type);
 
     let eql = Subterm::Prim(Prim::bin_eql(
-        Term::var(Var::free("a")),
-        Term::var(Var::free("b")),
+        Term::free_var("a"),
+        Term::free_var("b"),
     ))
     .into();
     assert_eq!(infer(&mut context, &eql).unwrap(), bool_type);
@@ -240,8 +240,8 @@ fn erase_lst_append() {
 
     let append = Subterm::Prim(Prim::arr_append(
         Subterm::Prim(Prim::NatType),
-        Term::var(Var::free("xs")),
-        Term::var(Var::free("n")),
+        Term::free_var("xs"),
+        Term::free_var("n"),
     ))
     .into();
     assert_eq!(infer(&mut context, &append).unwrap(), arr_nat);
@@ -293,7 +293,7 @@ fn erase_arr_concat() {
 
     let concat = Subterm::Prim(Prim::arr_concat(
         Subterm::Prim(Prim::NatType),
-        [Term::var(Var::free("xs")), Term::var(Var::free("ys"))],
+        [Term::free_var("xs"), Term::free_var("ys")],
     ))
     .into();
 

@@ -80,7 +80,7 @@ fn annotated_func_infers_a_function_type() {
     let mut context = context();
 
     // `(x : Nat) => x` synthesizes `(Nat) -> Nat` on its own — no expected type.
-    let func = Term::func([("x", nat())], Term::var(Var::free("x")));
+    let func = Term::func([("x", nat())], Term::free_var("x"));
     let (term, type_) = elaborate(&mut context, &func, Mode::Infer).unwrap();
 
     // Meta-free, and convertible (alpha-insensitive) to the expected function
@@ -119,7 +119,7 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
     // every later `close`/`open`.
     assert_eq!(
         term,
-        Term::metavar_birthed(0, None, vec![Term::var(Var::free("x"))])
+        Term::metavar_birthed(0, None, vec![Term::free_var("x")])
     );
     assert_eq!(type_, nat());
 

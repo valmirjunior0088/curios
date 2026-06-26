@@ -17,7 +17,7 @@ fn reduce_apply_beta_reduces() {
     let mut context = context();
 
     let term: Term = Term::apply(
-        Term::func([("x", Term::type_())], Term::var(Var::free("x"))),
+        Term::func([("x", Term::type_())], Term::free_var("x")),
         [nat(1)],
     );
 
@@ -37,7 +37,7 @@ fn reduce_inductive_match_selects_case_and_projects_payload() {
         Term::prim(Prim::NatType),
         [
             ("none", Vec::<&str>::new(), nat(0)),
-            ("some", vec!["x"], Term::var(Var::free("x"))),
+            ("some", vec!["x"], Term::free_var("x")),
         ],
     );
 
@@ -73,8 +73,8 @@ fn reduce_let_then_var_unfolds_definition() {
     let term: Term = Term::let_(
         "x",
         Term::type_(),
-        Term::var(Var::free("y")),
-        Term::var(Var::free("x")),
+        Term::free_var("y"),
+        Term::free_var("x"),
     );
 
     assert_eq!(reduce(&mut context, term.clone()), Ok(nat(7)));
@@ -84,10 +84,10 @@ fn reduce_let_then_var_unfolds_definition() {
 fn reduce_var_cycle_times_out() {
     let mut context = context();
 
-    context.define("loop", &Term::var(Var::free("loop")));
+    context.define("loop", &Term::free_var("loop"));
 
     assert_eq!(
-        reduce(&mut context, Term::var(Var::free("loop"))),
+        reduce(&mut context, Term::free_var("loop")),
         Err(ReduceError::Preempted)
     );
 }
@@ -287,9 +287,9 @@ fn reduce_proj_beta_reduces() {
 fn reduce_proj_refinement_lookup() {
     let mut context = context();
 
-    context.refine_projection(Term::var(Var::free("r")), 0, nat(1));
+    context.refine_projection(Term::free_var("r"), 0, nat(1));
 
-    let term: Term = Term::proj(Term::var(Var::free("r")), 0);
+    let term: Term = Term::proj(Term::free_var("r"), 0);
 
     assert_eq!(reduce(&mut context, term.clone()), Ok(nat(1)));
 }
@@ -303,8 +303,8 @@ fn reduce_does_not_eta_reduce_tuple() {
     // `(r.0, r.1)` to `r` would widen the tuple whenever `r` has more
     // fields than the tuple does.
     let term: Term = Term::tuple([
-        Term::proj(Term::var(Var::free("r")), 0),
-        Term::proj(Term::var(Var::free("r")), 1),
+        Term::proj(Term::free_var("r"), 0),
+        Term::proj(Term::free_var("r"), 1),
     ]);
 
     assert_eq!(reduce(&mut context, term.clone()), Ok(term));
@@ -316,19 +316,19 @@ fn eta_reduce_func_fires() {
 
     let term: Term = Term::func(
         [("y", Term::type_())],
-        Term::apply(Term::var(Var::free("f")), [Term::var(Var::free("y"))]),
+        Term::apply(Term::free_var("f"), [Term::free_var("y")]),
     );
 
     assert_eq!(
         reduce(&mut context, term.clone()),
-        Ok(Term::var(Var::free("f")))
+        Ok(Term::free_var("f"))
     );
 }
 
 #[test]
 fn define_invalidates_cached_reduction() {
     let mut context = context();
-    let x: Term = Term::var(Var::free("x"));
+    let x: Term = Term::free_var("x");
 
     // No definition yet: x reduces to itself and the result is cached.
     assert_eq!(reduce(&mut context, x.clone()), Ok(x.clone()));
@@ -341,20 +341,20 @@ fn define_invalidates_cached_reduction() {
 #[test]
 fn refine_projection_invalidates_cached_reduction() {
     let mut context = context();
-    let proj: Term = Term::proj(Term::var(Var::free("r")), 0);
+    let proj: Term = Term::proj(Term::free_var("r"), 0);
 
     // No projection refinement yet: proj reduces to itself and is cached.
     assert_eq!(reduce(&mut context, proj.clone()), Ok(proj.clone()));
 
     // Refining the projection must clear the cache.
-    context.refine_projection(Term::var(Var::free("r")), 0, nat(1));
+    context.refine_projection(Term::free_var("r"), 0, nat(1));
     assert_eq!(reduce(&mut context, proj), Ok(nat(1)));
 }
 
 #[test]
 fn leave_frame_with_definitions_invalidates_cached_reduction() {
     let mut context = context();
-    let x: Term = Term::var(Var::free("x"));
+    let x: Term = Term::free_var("x");
 
     // Inside a frame, define x and reduce — the cache will hold x → "inner".
     context.with_frame(|context| {
@@ -399,7 +399,7 @@ fn reduce_solved_metavar_yields_solution_and_clears_cache() {
 #[test]
 fn refinement_is_suppressible() {
     let mut context = context();
-    let b = Term::var(Var::free("b"));
+    let b = Term::free_var("b");
     let truth = Term::prim(Prim::Bln(true));
 
     context.refine("b", &truth);
@@ -443,7 +443,7 @@ fn reduce_nat_div_by_zero_reports() {
         reduce(
             &mut context,
             Term::prim(Prim::nat_div(
-                Term::var(Var::free("x")),
+                Term::free_var("x"),
                 Term::prim(Prim::Nat(Nat::new(0usize))),
             )),
         ),

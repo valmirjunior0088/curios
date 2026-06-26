@@ -67,6 +67,10 @@ impl Term {
         Self::from(Subterm::Var(var))
     }
 
+    pub fn free_var<A: Into<String>>(label: A) -> Self {
+        Self::var(Var::free(label))
+    }
+
     pub fn infix(op: NumOp, left: Term, right: Term) -> Self {
         Self::from(Subterm::Infix(Infix { op, left, right }))
     }
@@ -2201,7 +2205,7 @@ mod tests {
         let m = Term::metavar(4);
         assert_eq!(m.shift(3), m);
         let scope = Scope::close(One, &["x"], Term::metavar(4));
-        assert_eq!(scope.open(&[&Term::var(Var::free("y"))]), Term::metavar(4));
+        assert_eq!(scope.open(&[&Term::free_var("y")]), Term::metavar(4));
     }
 
     #[test]
@@ -2224,9 +2228,9 @@ mod tests {
         let ft = Term::func_type_marked(
             [
                 (Plicity::Implicit, "T", Term::type_()),
-                (Plicity::Explicit, "x", Term::var(Var::free("T"))),
+                (Plicity::Explicit, "x", Term::free_var("T")),
             ],
-            Term::var(Var::free("T")),
+            Term::free_var("T"),
         );
         assert_eq!(format!("{ft}"), "(@T : Type, x : T) -> T");
 
@@ -2240,10 +2244,10 @@ mod tests {
         }
 
         let call = Term::apply_marked(
-            Term::var(Var::free("foo")),
+            Term::free_var("foo"),
             [
-                (Plicity::Implicit, Term::var(Var::free("Nat"))),
-                (Plicity::Explicit, Term::var(Var::free("x"))),
+                (Plicity::Implicit, Term::free_var("Nat")),
+                (Plicity::Explicit, Term::free_var("x")),
             ],
         );
         assert_eq!(format!("{call}"), "foo(@Nat, x)");
@@ -2253,10 +2257,10 @@ mod tests {
     fn inductive_match_case_binders_are_captured() {
         // match r : #m => Type; | success(value) => value;
         let term = Term::inductive_match(
-            Term::var(Var::free("r")),
+            Term::free_var("r"),
             None,
             Term::type_(),
-            [("success", vec!["value"], Term::var(Var::free("value")))],
+            [("success", vec!["value"], Term::free_var("value"))],
         );
 
         let free = term.free_vars();
@@ -2285,12 +2289,12 @@ mod tests {
     #[test]
     fn reach_basic_values() {
         assert_eq!(Term::type_().reach(), 0);
-        assert_eq!(Term::var(Var::free("x")).reach(), 0);
+        assert_eq!(Term::free_var("x").reach(), 0);
         assert_eq!(Term::var(Var::bound(0)).reach(), 1);
         assert_eq!(Term::var(Var::bound(3)).reach(), 4);
         // closed identity function λx.x
         assert_eq!(
-            Term::func([("x", Term::type_())], Term::var(Var::free("x"))).reach(),
+            Term::func([("x", Term::type_())], Term::free_var("x")).reach(),
             0
         );
     }
@@ -2327,17 +2331,17 @@ mod tests {
     fn open_shares_closed_body_without_rebuild() {
         // body does not mention the bound variable -> open returns the stored Rc unchanged
         let scope = Scope::close(One, &["x"], Term::type_());
-        let opened = scope.open(&[&Term::var(Var::free("y"))]);
+        let opened = scope.open(&[&Term::free_var("y")]);
         assert!(Rc::ptr_eq(&opened.inner, &scope.body().inner));
     }
 
     #[test]
     fn open_shares_closed_subterm_inside_substituted_body() {
-        let closed = Term::func([("a", Term::type_())], Term::var(Var::free("a"))); // λa.a, closed
+        let closed = Term::func([("a", Term::type_())], Term::free_var("a")); // λa.a, closed
         let scope = Scope::close(
             One,
             &["x"],
-            Term::tuple([Term::var(Var::free("x")), closed]),
+            Term::tuple([Term::free_var("x"), closed]),
         );
 
         let stored_field = match &**scope.body() {
@@ -2345,7 +2349,7 @@ mod tests {
             _ => panic!("expected tuple body"),
         };
 
-        let opened = scope.open(&[&Term::var(Var::free("y"))]);
+        let opened = scope.open(&[&Term::free_var("y")]);
 
         let opened_field = match &*opened {
             Subterm::Tuple(Tuple { fields, .. }) => fields[1].clone(),

@@ -39,7 +39,7 @@ fn is_erasable(context: &mut Context, type_: &Term) -> Result<bool, Error> {
         // Recurse past the parameters (opened opaquely) into the codomain.
         Subterm::FuncType(FuncType { telescope, .. }) => {
             let vars: Vec<Term> = (0..telescope.len())
-                .map(|_| Term::var(Var::free(context.fresh(None))))
+                .map(|_| Term::free_var(context.fresh(None)))
                 .collect();
             let refs: Vec<&Term> = vars.iter().collect();
             is_erasable(context, &telescope.open(&refs))
@@ -63,7 +63,7 @@ fn erasure_mask<B: Bound>(
         match telescope {
             Telescope::Cons(ty, rest) => {
                 mask.push(is_erasable(context, &ty)?);
-                let x = Term::var(Var::free(context.fresh(rest.first_label())));
+                let x = Term::free_var(context.fresh(rest.first_label()));
                 telescope = rest.open(&[&x]);
             }
             Telescope::Done(_) => break Ok(mask),
@@ -96,7 +96,7 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
             (Telescope::Done(body), Telescope::Done(output)) => Ok((*body, *output)),
             (Telescope::Cons(_domain, body_rest), Telescope::Cons(type_, type_rest)) => {
                 let name = context.fresh(body_rest.first_label());
-                let x = Term::var(Var::free(&name));
+                let x = Term::free_var(&name);
                 // An erasable parameter (a proof or a type) is dropped from the
                 // runtime closure entirely; no runtime computation can depend on
                 // it. It is still opened/assumed (de Bruijn, typing) and excluded
@@ -173,7 +173,7 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
             .into_iter()
             .filter(|name| !param_names.contains(name) && !dropped.contains(name))
             .map(|name| {
-                let type_ = infer(context, &Term::var(Var::free(&name)))?;
+                let type_ = infer(context, &Term::free_var(&name))?;
                 let candidate = is_candidate(context, &type_)?;
                 Ok(ersd::Argument { name, candidate })
             })
@@ -408,17 +408,17 @@ fn erase_nat_match(
 
         context.assume(
             &ih_label,
-            &motive.open(&[&Term::var(Var::free(&pred_label))]),
+            &motive.open(&[&Term::free_var(&pred_label)]),
         );
 
         erase(
             context,
             &succ_case.open(&[
-                &Term::var(Var::free(&pred_label)),
-                &Term::var(Var::free(&ih_label)),
+                &Term::free_var(&pred_label),
+                &Term::free_var(&ih_label),
             ]),
             &motive.open(&[&Subterm::Prim(Prim::nat_add(
-                Term::var(Var::free(&pred_label)),
+                Term::free_var(&pred_label),
                 Subterm::Prim(Prim::Nat(Nat::new(1usize))),
             ))
             .into()]),
@@ -530,7 +530,7 @@ fn erase_indexed_match(
     let i_label = context.fresh(None);
     let suffix_i = slice(
         head,
-        Subterm::Prim(Prim::nat_sub(len_term.clone(), Term::var(Var::free(&i_label)))).into(),
+        Subterm::Prim(Prim::nat_sub(len_term.clone(), Term::free_var(&i_label))).into(),
         len_term.clone(),
     );
     let nat_motive = Scope::close(Many(1), &[i_label.as_str()], motive.open(&[&suffix_i]));
@@ -541,17 +541,17 @@ fn erase_indexed_match(
 
     let index = Subterm::Prim(Prim::nat_sub(
         Subterm::Prim(Prim::nat_sub(len_term.clone(), one)),
-        Term::var(Var::free(&pred_label)),
+        Term::free_var(&pred_label),
     ))
     .into();
     let head_value = get(head, index);
     let tail_value = slice(
         head,
-        Subterm::Prim(Prim::nat_sub(len_term.clone(), Term::var(Var::free(&pred_label)))).into(),
+        Subterm::Prim(Prim::nat_sub(len_term.clone(), Term::free_var(&pred_label))).into(),
         len_term.clone(),
     );
 
-    let succ_body = cons_case.open(&[&head_value, &tail_value, &Term::var(Var::free(&ih_label))]);
+    let succ_body = cons_case.open(&[&head_value, &tail_value, &Term::free_var(&ih_label)]);
     let succ_case = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
 
     erase_nat_match(context, &len_term, &nat_motive, empty_case, &succ_case)
@@ -811,7 +811,7 @@ fn erase_erasable_scrutinee_match(
         .collect::<Vec<_>>();
     let vars = labels
         .iter()
-        .map(|label| Term::var(Var::free(label)))
+        .map(|label| Term::free_var(label))
         .collect::<Vec<_>>();
 
     context.with_frame(|context| {
@@ -958,7 +958,7 @@ fn erase_inductive_match(
 
             let vars = labels
                 .iter()
-                .map(|label| Term::var(Var::free(label)))
+                .map(|label| Term::free_var(label))
                 .collect::<Vec<_>>();
 
             context.with_frame(|context| {
@@ -1093,7 +1093,7 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
 
     let name = context.fresh(tail.first_label());
     let erased_body = erase(context, body, body_type)?;
-    let var_term = Term::var(Var::free(&name));
+    let var_term = Term::free_var(&name);
     let tail = tail.open(&[&var_term]);
 
     let tail = context.with_frame(|context| {

@@ -1494,7 +1494,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
 mod tests {
     use {
         super::{compare_nat, from_ordering, reduce},
-        crate::core::{Context, Nat, Prim, Subterm, Term, Var},
+        crate::core::{Context, Nat, Prim, Subterm, Term},
         num_bigint::BigUint,
         std::time::Duration,
     };
@@ -1512,7 +1512,7 @@ mod tests {
     }
 
     fn x() -> Term {
-        Term::var(Var::free("x"))
+        Term::free_var("x")
     }
 
     fn reduced(context: &mut Context, term: Term) -> Subterm {
@@ -1667,7 +1667,7 @@ mod tests {
     #[test]
     fn arr_get_peels_symbolic_cons() {
         let mut context = context();
-        let cons = arr_cons_seven(&Term::var(Var::free("xs")));
+        let cons = arr_cons_seven(&Term::free_var("xs"));
 
         // `get(cons(7, xs), 0) = 7`.
         assert_eq!(
@@ -1695,7 +1695,7 @@ mod tests {
     #[test]
     fn arr_slice_peels_symbolic_cons() {
         let mut context = context();
-        let cons = arr_cons_seven(&Term::var(Var::free("xs")));
+        let cons = arr_cons_seven(&Term::free_var("xs"));
 
         // `slice(cons(7, xs), 0, 1) = [7] ++ slice(xs, 0, 0) = [7]`.
         assert_eq!(
@@ -1731,7 +1731,7 @@ mod tests {
     #[test]
     fn arr_len_distributes_over_cons_and_append() {
         let mut context = context();
-        let xs = Term::var(Var::free("xs"));
+        let xs = Term::free_var("xs");
         // `1 + len(xs)`, the shape both symbolic cases reduce to.
         let succ_len = |context: &mut Context| {
             reduced(
@@ -1787,7 +1787,7 @@ mod tests {
     #[test]
     fn arr_slice_full_window_is_identity() {
         let mut context = context();
-        let xs = Term::var(Var::free("xs"));
+        let xs = Term::free_var("xs");
         let len = Term::prim(Prim::arr_len(Term::prim(Prim::NatType), xs.clone()));
         assert_eq!(
             reduced(
@@ -1823,7 +1823,7 @@ mod tests {
 
         // A symbolic inner array `xs : Arr(Nat)` no longer stalls the flatten:
         // `flatten([[1, 2], xs])` reduces to `[1, 2] ++ xs` (an `ArrConcat`).
-        let xs = Term::var(Var::free("xs"));
+        let xs = Term::free_var("xs");
         let mixed = arr(vec![arr(vec![lit(1), lit(2)]), xs]);
         assert!(matches!(
             reduced(
@@ -1836,7 +1836,7 @@ mod tests {
         // `flatten` distributes over an outer append like `len`/`map`:
         // `flatten(append(xss, [9]))` over a symbolic `xss : Arr(Arr(Nat))` reduces
         // to `flatten(xss) ++ [9]` (an `ArrConcat`) instead of stalling.
-        let xss = Term::var(Var::free("xss"));
+        let xss = Term::free_var("xss");
         let appended = Term::prim(Prim::arr_append(
             Term::prim(Prim::ArrType(Term::prim(Prim::NatType))),
             xss,
@@ -1857,7 +1857,7 @@ mod tests {
     #[test]
     fn bin_flatten_distributes_over_append() {
         let mut context = context();
-        let xs = Term::var(Var::free("xs"));
+        let xs = Term::free_var("xs");
         let appended = Term::prim(Prim::arr_append(
             Term::prim(Prim::BinType),
             xs,
@@ -1876,7 +1876,7 @@ mod tests {
     fn bin_eql_decides_structurally() {
         let mut context = context();
         let bin = |bytes: Vec<u8>| Term::prim(Prim::Bin(bytes));
-        let x = Term::var(Var::free("x"));
+        let x = Term::free_var("x");
 
         // Reflexivity over a symbolic value: `eql(x, x) = true`.
         assert_eq!(
@@ -1913,7 +1913,7 @@ mod tests {
         );
 
         // Distinct variables are undecidable: `eql(x, y)` stays neutral.
-        let y = Term::var(Var::free("y"));
+        let y = Term::free_var("y");
         assert!(matches!(
             reduced(&mut context, Term::prim(Prim::bin_eql(x, y))),
             Subterm::Prim(Prim::BinEql(..)),
@@ -1926,7 +1926,7 @@ mod tests {
     #[test]
     fn arr_slice_reassociates_nested() {
         let mut context = context();
-        let xs = Term::var(Var::free("xs"));
+        let xs = Term::free_var("xs");
         let inner = Term::prim(Prim::arr_slice(
             Term::prim(Prim::NatType),
             xs.clone(),
