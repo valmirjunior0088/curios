@@ -53,6 +53,15 @@ fn resolved_for_display(context: &Context, term: &Term) -> Term {
     super::zonk(context, term).unwrap_or_else(|_| term.clone())
 }
 
+/// A `type_mismatch` error naming both sides in their best-effort display
+/// form (see [`resolved_for_display`]).
+fn display_mismatch(context: &Context, this: &Term, that: &Term) -> Error {
+    Error::type_mismatch(
+        resolved_for_display(context, this),
+        resolved_for_display(context, that),
+    )
+}
+
 pub fn expect(
     context: &mut Context,
     term: &Term,
@@ -76,20 +85,14 @@ pub fn expect(
 
     match outcome {
         super::Outcome::Converts => retry_parked(context),
-        super::Outcome::Mismatch => Err(Error::type_mismatch(
-            resolved_for_display(context, inferred),
-            resolved_for_display(context, expected),
-        )),
+        super::Outcome::Mismatch => Err(display_mismatch(context, inferred, expected)),
         // Undecided: blocked on unsolved metavariables. Park the goals to be
         // retried when a watched metavariable is solved (§8) and succeed
         // provisionally — unless conversion is currently a yes/no oracle, in
         // which case undecided must stay a mismatch.
         super::Outcome::Blocked(goals) => {
             if context.parking_suppressed() {
-                return Err(Error::type_mismatch(
-                    resolved_for_display(context, inferred),
-                    resolved_for_display(context, expected),
-                ));
+                return Err(display_mismatch(context, inferred, expected));
             }
 
             for goal in goals {
@@ -254,9 +257,7 @@ pub fn drain_parked(context: &mut Context) -> Result<(), Error> {
             if let Some(parked) = context.take_parked().into_iter().next() {
                 return Err(match parked.work {
                     super::ParkedWork::Conversion(goal) => {
-                        let this = resolved_for_display(context, &goal.this);
-                        let that = resolved_for_display(context, &goal.that);
-                        Error::type_mismatch(this, that)
+                        display_mismatch(context, &goal.this, &goal.that)
                     }
                     super::ParkedWork::Checking { .. } => Error::CannotInfer,
                 });
