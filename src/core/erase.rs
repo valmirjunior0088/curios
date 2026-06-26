@@ -506,12 +506,58 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<ersd::Term, Error> {
     }
 }
 
-/// Erase an `Arr` induction by desugaring it to `Nat` induction on the array's
-/// length, reusing `erase_nat_match` and so the `Nat` loop emitter wholesale (no
-/// new ersd/cont machinery). The structural fold is a `foldr`, so the loop walks
-/// the buffer back-to-front: at `Nat`-step `pred = i` the original cons arm fires
-/// with `head := v[len-1-i]` and `tail := v[len-i ..]`, and the induction
+/// Desugar a length-indexed sequence induction (`Arr`/`Bin`) to `Nat` induction
+/// on the carrier's length, reusing `erase_nat_match` and so the `Nat` loop emitter
+/// wholesale (no new ersd/cont machinery). The structural fold is a `foldr`, so the
+/// loop walks the buffer back-to-front: at `Nat`-step `pred = i` the original cons
+/// arm fires with `head := xs[len-1-i]` and `tail := xs[len-i ..]`, and the induction
 /// hypothesis is the accumulator. (See `reduce` for the matching type-level rule.)
+/// The carrier supplies its length, element-at, and sub-slice operations.
+fn erase_indexed_match(
+    context: &mut Context,
+    head: &Term,
+    motive: &Scope<Many>,
+    empty_case: &Term,
+    cons_case: &Scope<Three>,
+    len: impl Fn(&Term) -> Term,
+    get: impl Fn(&Term, Term) -> Term,
+    slice: impl Fn(&Term, Term, Term) -> Term,
+) -> Result<ersd::Term, Error> {
+    let len_term = len(head);
+    let one: Term = Subterm::Prim(Prim::Nat(Nat::new(1usize))).into();
+
+    // Nat motive `Q(i) = P(suffix of length i) = motive[ xs[len - i ..] ]`.
+    let i_label = context.fresh(None);
+    let suffix_i = slice(
+        head,
+        Subterm::Prim(Prim::nat_sub(len_term.clone(), Term::var(Var::free(&i_label)))).into(),
+        len_term.clone(),
+    );
+    let nat_motive = Scope::close(Many(1), &[i_label.as_str()], motive.open(&[&suffix_i]));
+
+    // Successor arm: recover the element and tail at index `len - 1 - pred`.
+    let pred_label = context.fresh(cons_case.first_label());
+    let ih_label = context.fresh(cons_case.third_label());
+
+    let index = Subterm::Prim(Prim::nat_sub(
+        Subterm::Prim(Prim::nat_sub(len_term.clone(), one)),
+        Term::var(Var::free(&pred_label)),
+    ))
+    .into();
+    let head_value = get(head, index);
+    let tail_value = slice(
+        head,
+        Subterm::Prim(Prim::nat_sub(len_term.clone(), Term::var(Var::free(&pred_label)))).into(),
+        len_term.clone(),
+    );
+
+    let succ_body = cons_case.open(&[&head_value, &tail_value, &Term::var(Var::free(&ih_label))]);
+    let succ_case = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
+
+    erase_nat_match(context, &len_term, &nat_motive, empty_case, &succ_case)
+}
+
+/// Erase an `Arr` induction via `erase_indexed_match` with the array carrier ops.
 fn erase_arr_match(
     context: &mut Context,
     head: &Term,
@@ -520,53 +566,21 @@ fn erase_arr_match(
     empty_case: &Term,
     cons_case: &Scope<Three>,
 ) -> Result<ersd::Term, Error> {
-    let len: Term = Subterm::Prim(Prim::ArrLen(elem.clone(), head.clone())).into();
-    let one: Term = Subterm::Prim(Prim::Nat(Nat::new(1usize))).into();
-
-    // Nat motive `Q(i) = P(suffix of length i) = motive[ v[len - i ..] ]`.
-    let i_label = context.fresh(None);
-    let suffix_i: Term = Subterm::Prim(Prim::ArrSlice(
-        elem.clone(),
-        head.clone(),
-        Subterm::Prim(Prim::nat_sub(len.clone(), Term::var(Var::free(&i_label)))).into(),
-        len.clone(),
-    ))
-    .into();
-    let nat_motive = Scope::close(Many(1), &[i_label.as_str()], motive.open(&[&suffix_i]));
-
-    // Successor arm: recover the element and tail at index `len - 1 - pred`.
-    let pred_label = context.fresh(cons_case.first_label());
-    let ih_label = context.fresh(cons_case.third_label());
-
-    let index: Term = Subterm::Prim(Prim::nat_sub(
-        Subterm::Prim(Prim::nat_sub(len.clone(), one)),
-        Term::var(Var::free(&pred_label)),
-    ))
-    .into();
-    let head_value: Term = Subterm::Prim(Prim::ArrGet(elem.clone(), head.clone(), index)).into();
-    let tail_value: Term = Subterm::Prim(Prim::ArrSlice(
-        elem.clone(),
-        head.clone(),
-        Subterm::Prim(Prim::nat_sub(
-            len.clone(),
-            Term::var(Var::free(&pred_label)),
-        ))
-        .into(),
-        len.clone(),
-    ))
-    .into();
-
-    let succ_body = cons_case.open(&[&head_value, &tail_value, &Term::var(Var::free(&ih_label))]);
-    let succ_case = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
-
-    erase_nat_match(context, &len, &nat_motive, empty_case, &succ_case)
+    erase_indexed_match(
+        context,
+        head,
+        motive,
+        empty_case,
+        cons_case,
+        |head| Subterm::Prim(Prim::ArrLen(elem.clone(), head.clone())).into(),
+        |head, index| Subterm::Prim(Prim::ArrGet(elem.clone(), head.clone(), index)).into(),
+        |head, lo, hi| Subterm::Prim(Prim::ArrSlice(elem.clone(), head.clone(), lo, hi)).into(),
+    )
 }
 
-/// Erase a `Bin` induction exactly as `erase_arr_match` does for `Arr` — `Nat`
-/// induction on the bytestring's length, reusing the `Nat` loop emitter wholesale.
-/// `Bin` carries no element type, so this is the `erase_arr_match` desugar with the
-/// element parameter dropped (`BinLen`/`BinGet`/`BinSlice` for `ArrLen`/`ArrGet`/
-/// `ArrSlice`); the recovered byte is a `Nat`, the `Bin`'s generator.
+/// Erase a `Bin` induction via `erase_indexed_match`. `Bin` carries no element type,
+/// so it is the `Arr` desugar with the element parameter dropped (`BinLen`/`BinGet`/
+/// `BinSlice`); the recovered byte is a `Nat`, the `Bin`'s generator.
 fn erase_bin_match(
     context: &mut Context,
     head: &Term,
@@ -574,44 +588,16 @@ fn erase_bin_match(
     empty_case: &Term,
     cons_case: &Scope<Three>,
 ) -> Result<ersd::Term, Error> {
-    let len: Term = Subterm::Prim(Prim::BinLen(head.clone())).into();
-    let one: Term = Subterm::Prim(Prim::Nat(Nat::new(1usize))).into();
-
-    // Nat motive `Q(i) = P(suffix of length i) = motive[ b[len - i ..] ]`.
-    let i_label = context.fresh(None);
-    let suffix_i: Term = Subterm::Prim(Prim::BinSlice(
-        head.clone(),
-        Subterm::Prim(Prim::nat_sub(len.clone(), Term::var(Var::free(&i_label)))).into(),
-        len.clone(),
-    ))
-    .into();
-    let nat_motive = Scope::close(Many(1), &[i_label.as_str()], motive.open(&[&suffix_i]));
-
-    // Successor arm: recover the byte and tail at index `len - 1 - pred`.
-    let pred_label = context.fresh(cons_case.first_label());
-    let ih_label = context.fresh(cons_case.third_label());
-
-    let index: Term = Subterm::Prim(Prim::nat_sub(
-        Subterm::Prim(Prim::nat_sub(len.clone(), one)),
-        Term::var(Var::free(&pred_label)),
-    ))
-    .into();
-    let head_value: Term = Subterm::Prim(Prim::BinGet(head.clone(), index)).into();
-    let tail_value: Term = Subterm::Prim(Prim::BinSlice(
-        head.clone(),
-        Subterm::Prim(Prim::nat_sub(
-            len.clone(),
-            Term::var(Var::free(&pred_label)),
-        ))
-        .into(),
-        len.clone(),
-    ))
-    .into();
-
-    let succ_body = cons_case.open(&[&head_value, &tail_value, &Term::var(Var::free(&ih_label))]);
-    let succ_case = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
-
-    erase_nat_match(context, &len, &nat_motive, empty_case, &succ_case)
+    erase_indexed_match(
+        context,
+        head,
+        motive,
+        empty_case,
+        cons_case,
+        |head| Subterm::Prim(Prim::BinLen(head.clone())).into(),
+        |head, index| Subterm::Prim(Prim::BinGet(head.clone(), index)).into(),
+        |head, lo, hi| Subterm::Prim(Prim::BinSlice(head.clone(), lo, hi)).into(),
+    )
 }
 
 fn erase_bln_match(
