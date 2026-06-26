@@ -552,11 +552,7 @@ impl Context {
     }
 
     pub fn metavar_solution(&self, id: usize) -> Option<&Term> {
-        self.metas
-            .entries
-            .get(id)
-            .and_then(Option::as_ref)
-            .and_then(|e| e.solution.as_ref())
+        self.metavar_entry(id).and_then(|e| e.solution.as_ref())
     }
 
     /// Resolve a solved metavariable *at its occurrence*: the stored solution

@@ -118,7 +118,7 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
 fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
     // A metavariable node *is* the substitution site: replace it by its solution,
     // recursively zonked (the solution may itself mention solved metavariables).
-    if let Subterm::Metavar(Metavar { id, origin, spine }) = &**term {
+    if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
         let solution = context.metavar_solution(*id).ok_or_else(|| {
             // An unsolved metavariable the *elaborator* minted (an omitted
             // implicit argument) is reported by the binder it filled — the

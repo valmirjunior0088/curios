@@ -86,8 +86,8 @@ impl Term {
     pub fn metavar(id: usize) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id,
-            origin: None,
             spine: Rc::new(Vec::new()),
+            origin: None,
         }))
     }
 
@@ -100,8 +100,8 @@ impl Term {
     ) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id,
-            origin: Some(origin),
             spine: spine.into(),
+            origin: Some(origin),
         }))
     }
 
@@ -114,8 +114,8 @@ impl Term {
     ) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id,
-            origin,
             spine: spine.into(),
+            origin,
         }))
     }
 
@@ -1115,8 +1115,8 @@ pub struct ImplicitOrigin {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Metavar {
     pub id: usize,
-    pub origin: Option<ImplicitOrigin>,
     pub spine: Rc<Vec<Term>>,
+    pub origin: Option<ImplicitOrigin>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1682,7 +1682,7 @@ impl Bound for Subterm {
             // rebuild — and an entirely untouched spine reuses its shared
             // allocation. This is what keeps per-traversal cost flat for the
             // common meta instead of O(|Γ|) allocations.
-            Subterm::Metavar(Metavar { id, origin, spine }) => {
+            Subterm::Metavar(Metavar { id, spine, origin }) => {
                 let mut touched = false;
                 let visited = spine
                     .iter()
@@ -1703,11 +1703,11 @@ impl Bound for Subterm {
                     .collect::<Vec<_>>();
                 Subterm::Metavar(Metavar {
                     id: *id,
-                    origin: origin.clone(),
                     spine: match touched {
                         true => Rc::new(visited),
                         false => spine.clone(),
                     },
+                    origin: origin.clone(),
                 })
             }
         }
