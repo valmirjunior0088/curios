@@ -132,6 +132,26 @@ fn apply_param_types(
     Ok(Some(types))
 }
 
+/// η-frame at a function type of arity `n`: mint `n` fresh argument variables
+/// and recover the codomain after instantiating them, falling back to `Type`
+/// when `type_` does not reduce to a function type.
+fn func_eta_args(
+    context: &mut Context,
+    n: usize,
+    type_: Term,
+) -> Result<(Vec<Term>, Term), ReduceError> {
+    let ys: Vec<Term> = (0..n)
+        .map(|_| Term::var(Var::free(context.fresh(None))))
+        .collect();
+    let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
+        Subterm::FuncType(FuncType { telescope, .. }) => {
+            telescope.open(&ys.iter().collect::<Vec<_>>())
+        }
+        _ => Term::type_(),
+    };
+    Ok((ys, output_type))
+}
+
 /// The universe a type inhabits — `Prop` for a strict proposition, `Type`
 /// otherwise.
 #[derive(Clone, Copy)]
@@ -338,15 +358,8 @@ impl Convert {
         that: Func,
         type_: Term,
     ) -> Result<bool, ReduceError> {
-        let n = this.telescope.len();
-        let ys: Vec<Term> = (0..n)
-            .map(|_| Term::var(Var::free(context.fresh(None))))
-            .collect();
-        let y_refs: Vec<&Term> = ys.iter().collect();
-        let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
-            Subterm::FuncType(FuncType { telescope, .. }) => telescope.open(&y_refs),
-            _ => Term::type_(),
-        };
+        let (ys, output_type) = func_eta_args(context, this.telescope.len(), type_)?;
+        let y_refs = ys.iter().collect::<Vec<_>>();
         self.enqueue(
             output_type,
             this.telescope.open(&y_refs),
@@ -832,20 +845,9 @@ impl Convert {
         other: Term,
         type_: Term,
     ) -> Result<bool, ReduceError> {
-        let n = func.telescope.len();
-        let ys: Vec<Term> = (0..n)
-            .map(|_| Term::var(Var::free(context.fresh(None))))
-            .collect();
-        let y_refs: Vec<&Term> = ys.iter().collect();
-        let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
-            Subterm::FuncType(FuncType { telescope, .. }) => telescope.open(&y_refs),
-            _ => Term::type_(),
-        };
-        self.enqueue(
-            output_type,
-            func.telescope.open(&y_refs),
-            Term::apply(other, ys),
-        );
+        let (ys, output_type) = func_eta_args(context, func.telescope.len(), type_)?;
+        let body = func.telescope.open(&ys.iter().collect::<Vec<_>>());
+        self.enqueue(output_type, body, Term::apply(other, ys));
         Ok(true)
     }
 
