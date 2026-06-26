@@ -169,24 +169,16 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
 
             Ok(true)
         }
-        (Prim::Arr(this_elems), Prim::Arr(that_elems)) => {
-            if this_elems.len() != that_elems.len() {
-                return Ok(false);
-            }
-
-            for (this, that) in this_elems.into_iter().zip(that_elems) {
-                cmp.enqueue(Term::type_(), this, that);
-            }
-
-            Ok(true)
-        }
-        (Prim::BinConcat(this_ops), Prim::BinConcat(that_ops)) => {
+        (Prim::Arr(this_ops), Prim::Arr(that_ops))
+        | (Prim::BinConcat(this_ops), Prim::BinConcat(that_ops)) => {
             if this_ops.len() != that_ops.len() {
                 return Ok(false);
             }
+
             for (this, that) in this_ops.into_iter().zip(that_ops) {
                 cmp.enqueue(Term::type_(), this, that);
             }
+
             Ok(true)
         }
         (Prim::ArrConcat(this_ty, this_ops), Prim::ArrConcat(that_ty, that_ops)) => {
