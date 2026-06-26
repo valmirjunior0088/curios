@@ -8,6 +8,13 @@ use {
     std::cmp::Ordering,
 };
 
+/// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when
+/// it is still symbolic or too large to fit. The shared decode behind the
+/// `Bin`/`Arr` `get`/`slice` bounds.
+fn as_index(term: &Term) -> Option<usize> {
+    term.as_nat().and_then(|n| n.to_big_uint()?.to_usize())
+}
+
 /// Reduce both operands of a `Bln` binary primitive, then either `fold` the two
 /// literals or `rebuild` the neutral term. `Bln` has no numeric carrier at the
 /// type level, so the fold reads the `true`/`false` constructors directly.
@@ -947,9 +954,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::BinGet(bin, index) => {
             let bin = reduce(context, bin.clone())?;
             let index_reduced = reduce(context, index.clone())?;
-            let i = index_reduced
-                .as_nat()
-                .and_then(|n| n.to_big_uint()?.to_usize());
+            let i = as_index(&index_reduced);
             // A concrete index into a literal run.
             if let (Subterm::Prim(Prim::Bin(bytes)), Some(i)) = (&*bin, i) {
                 return match bytes.get(i).copied() {
@@ -1022,12 +1027,8 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 let flattened = Term::prim(Prim::bin_slice(inner.clone(), lo, hi));
                 return reduce(context, flattened).map(Term::unwrap_or_clone);
             }
-            let s = start_reduced
-                .as_nat()
-                .and_then(|n| n.to_big_uint()?.to_usize());
-            let e = end_reduced
-                .as_nat()
-                .and_then(|n| n.to_big_uint()?.to_usize());
+            let s = as_index(&start_reduced);
+            let e = as_index(&end_reduced);
             // A concrete slice of a literal run.
             if let (Subterm::Prim(Prim::Bin(bytes)), Some(s), Some(e)) = (&*bin, s, e) {
                 return match bytes.get(s..e) {
@@ -1163,9 +1164,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
             let index_reduced = reduce(context, index.clone())?;
-            let i = index_reduced
-                .as_nat()
-                .and_then(|n| n.to_big_uint()?.to_usize());
+            let i = as_index(&index_reduced);
             // A concrete index into a literal run.
             if let (Subterm::Prim(Prim::Arr(elems)), Some(i)) = (&*list, i) {
                 let len = elems.len();
@@ -1226,12 +1225,8 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 let flattened = Term::prim(Prim::arr_slice(type_.clone(), inner.clone(), lo, hi));
                 return reduce(context, flattened).map(Term::unwrap_or_clone);
             }
-            let s = start_reduced
-                .as_nat()
-                .and_then(|n| n.to_big_uint()?.to_usize());
-            let e = end_reduced
-                .as_nat()
-                .and_then(|n| n.to_big_uint()?.to_usize());
+            let s = as_index(&start_reduced);
+            let e = as_index(&end_reduced);
             // A concrete slice of a literal run.
             if let (Subterm::Prim(Prim::Arr(elems)), Some(s), Some(e)) = (&*list, s, e) {
                 return match elems.get(s..e) {
