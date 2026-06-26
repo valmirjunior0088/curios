@@ -858,23 +858,17 @@ impl Convert {
     ) -> Result<bool, ReduceError> {
         let n = tuple.fields.len();
 
-        let mut cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
+        let cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
             Subterm::TupleType(TupleType { telescope, .. }) if telescope.len() == n => {
                 Some(telescope)
             }
             _ => None,
         };
 
-        for (i, field) in tuple.fields.iter().enumerate() {
-            let ft = match cur.take() {
-                Some(Telescope::Cons(ty, rest)) => {
-                    cur = Some(rest.open(&[field]));
-                    ty
-                }
-                _ => Term::type_(),
-            };
-            self.enqueue(ft, field.clone(), Term::proj(other.clone(), i));
-        }
+        let projections = (0..n)
+            .map(|i| Term::proj(other.clone(), i))
+            .collect::<Vec<_>>();
+        self.enqueue_fields(tuple.fields, projections, cur);
 
         Ok(true)
     }
