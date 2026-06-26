@@ -90,3 +90,10 @@ pub fn hoisted_const(kind: &str, index: usize) -> ValueName {
 pub fn eval_result(index: usize) -> ValueName {
     ValueName::from(format!("v@eval#{index}"))
 }
+
+/// An offset adjustment minted when forwarding an aggregate access through a
+/// slice ([`slice_forwarding`](super::slice_forwarding)): the `start + index`
+/// re-basing that lets a `get`/`slice` read the underlying buffer directly.
+pub fn slice_offset(index: usize) -> ValueName {
+    ValueName::from(format!("v@slice#{index}"))
+}

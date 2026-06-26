@@ -13,6 +13,12 @@ pub use module::*;
 mod prune;
 pub use prune::*;
 
+mod accumulate;
+pub use accumulate::*;
+
+mod offsets;
+pub use offsets::*;
+
 mod print;
 
 mod to_cont;

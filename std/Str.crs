@@ -282,24 +282,31 @@ pub let decode_head(c : Nat, @t : Bin, w : Utf8(Scan/lead(), Bin/cons(c, t))) ->
     go(Eq/refl());
 
 pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
-    rec go(sc : Scan, b : Bin, valid : Utf8(sc, b), acc : A) -> A =
-        (match b : (b) => (valid : Utf8(sc, b)) -> A
-        | \\ => (valid) => acc
-        | (h, t), ih => (valid) =>
-            (match sc : (sc) => (valid : Utf8(sc, Bin/cons(h, t))) -> A
-            | lead() => (valid) =>
-                go(step(h, Scan/lead()), t,
-                    peel_byte(@Scan/lead(), @Bin/cons(h, t), True/qed(), valid),
-                    f(decode_head(h, @t, valid), acc))
-            | cont(rem, lo, hi) => (valid) =>
-                go(step(h, Scan/cont(rem, lo, hi)), t,
-                    peel_byte(@Scan/cont(rem, lo, hi), @Bin/cons(h, t), True/qed(), valid), acc)
-            | bad() => (valid) =>
-                go(step(h, Scan/bad()), t,
-                    peel_byte(@Scan/bad(), @Bin/cons(h, t), True/qed(), valid), acc)
-            end)(valid)
-        end)(valid);
-    go(Scan/lead(), s.bytes, s.valid, init);
+    (match s.bytes : (b) => (sc : Scan, valid : Utf8(sc, b), acc : {A, Nat}) -> {A, Nat}
+    | \\ => (sc, valid, acc) => acc
+    | (h, t), ih => (sc, valid, acc) =>
+        (match sc : (sc) => (valid : Utf8(sc, Bin/cons(h, t))) -> {A, Nat}
+        | lead() => (valid) =>
+            ih(step(h, Scan/lead()),
+                peel_byte(@Scan/lead(), @Bin/cons(h, t), True/qed(), valid),
+                match classify(h)
+                | ascii() => (f(h, acc.0), 0)
+                | lead(width, lo, hi, payload) => (acc.0, payload)
+                | bad() => acc
+                end)
+        | cont(rem, lo, hi) => (valid) =>
+            let partial = acc.1 * 0x40 + (h - 0x80);
+            ih(step(h, Scan/cont(rem, lo, hi)),
+                peel_byte(@Scan/cont(rem, lo, hi), @Bin/cons(h, t), True/qed(), valid),
+                match rem == 1
+                | true => (f(partial, acc.0), 0)
+                | false => (acc.0, partial)
+                end)
+        | bad() => (valid) =>
+            ih(step(h, Scan/bad()),
+                peel_byte(@Scan/bad(), @Bin/cons(h, t), True/qed(), valid), acc)
+        end)(valid)
+    end)(Scan/lead(), s.valid, (init, 0)).0;
 
 pub let len(s : Str) -> Nat =
     count_w(Scan/lead(), s.bytes);

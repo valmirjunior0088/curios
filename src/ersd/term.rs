@@ -20,6 +20,10 @@ impl Term {
         &self.inner
     }
 
+    pub fn as_subterm_mut(&mut self) -> &mut Subterm {
+        &mut self.inner
+    }
+
     /// Free names of this term, treating a nested `Func` as contributing its
     /// precomputed `captures` (the closure's free variables) rather than
     /// descending into its body. Used to build the `rec` dependency graph in

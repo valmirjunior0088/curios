@@ -334,6 +334,22 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     pub fn free_vars(&self) -> BTreeSet<String> {
         self.body.free_vars()
     }
+
+    /// Whether the binder at position `index` (0 = first/outermost label) is
+    /// referenced anywhere in the body. A bound var refers to this binder iff its
+    /// de Bruijn index equals `index` plus the number of binders entered since —
+    /// which `Visit` tracks as `depth`. Used by erasure to spot an eliminator
+    /// whose induction hypothesis is dead: that arm is a case-split, not a fold.
+    pub fn uses(&self, index: usize) -> bool {
+        let mut used = false;
+        self.body.traverse(&mut Visit::new(|depth, var: &Var| {
+            if var.as_bound() == Some(index + depth) {
+                used = true;
+            }
+            None
+        }));
+        used
+    }
 }
 
 // === Telescope ===============================================================

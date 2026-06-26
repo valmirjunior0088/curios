@@ -42,6 +42,9 @@
 //! - [`map_simplification`] — collapses an `Arr.map` by the identity closure to
 //!   an alias of its source, letting copy propagation and dead-code elimination
 //!   see through the otherwise-opaque map primitive.
+//! - [`slice_forwarding`] — re-bases `len`/`get`/`slice` of a slice onto the
+//!   sliced buffer, so a recursor's per-step tail slice goes unmaterialised and
+//!   the quadratic free-monoid fold turns linear.
 
 mod mangle;
 
@@ -101,6 +104,9 @@ pub use dead_code_elimination::*;
 
 mod map_simplification;
 pub use map_simplification::*;
+
+mod slice_forwarding;
+pub use slice_forwarding::*;
 
 use {super::cont::*, crate::Entropy};
 
@@ -207,6 +213,11 @@ pub fn optimize(mut module: Module) -> Module {
     inline_calls_with(&mut module, &entropy);
     propagate_copies(&mut module);
     fold_constants(&mut module);
+    // With the loop bodies inlined and settled, a recursor's per-step tail slice
+    // now sits in the same region as its consumers: forwarding re-bases those
+    // reads onto the original buffer, and the copy propagation and dead-code
+    // sweeps below reclaim the slice that is left with no uses.
+    forward_slices(&mut module);
     simplify_maps(&mut module);
     thread_decided_dispatch(&mut module);
     thread_jumps(&mut module);

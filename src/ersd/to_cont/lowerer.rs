@@ -220,10 +220,21 @@ impl Work<'_, '_, '_> {
         frame
     }
 
+    /// The runtime stand-in for an `Erased` term — a proof or type that survived
+    /// into a slot the signature keeps for uniform arity, but which no code reads.
+    /// It only has to *inhabit* the slot, and every slot is the uniform `anyref`
+    /// (`top_type`), so the canonical i31 `0` serves: a zero-cost scalar with no
+    /// heap object to allocate (or hoist) — unlike an empty tuple, the other
+    /// "nothing" value, which is a real `array.new`. The value is never inspected,
+    /// so sharing the carrier with `Nat 0` is immaterial.
+    fn erased(&mut self) -> cont::ValueName {
+        self.emit.fresh(cont::Value::Pure(cont::Data::Nat(0)))
+    }
+
     pub fn lower_pure_name(&mut self, term: &ersd::Term, frame: &Frame) -> cont::ValueName {
         match &**term {
             ersd::Subterm::Name(name) => frame.find(name.as_str()),
-            ersd::Subterm::Erased => self.emit.fresh(cont::Value::Pure(cont::Data::Tpl(vec![]))),
+            ersd::Subterm::Erased => self.erased(),
             ersd::Subterm::Unreachable => {
                 panic!("unreachable Ersd term cannot be lowered in pure-name position")
             }
@@ -301,7 +312,7 @@ impl Work<'_, '_, '_> {
         match &**term {
             ersd::Subterm::Name(name) => cont.call(self, frame.find(name.as_str())),
             ersd::Subterm::Erased => {
-                let value = self.emit.fresh(cont::Value::Pure(cont::Data::Tpl(vec![])));
+                let value = self.erased();
 
                 cont.call(self, value)
             }

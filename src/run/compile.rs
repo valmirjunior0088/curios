@@ -159,6 +159,16 @@ where
     // inlining on every compile (see `ersd::prune_unreachable`).
     ersd::prune_unreachable(&mut ersd_module);
 
+    // Re-base `Nat`-summing self-recursion (e.g. `Str/len`'s `… + 1`) onto an
+    // inner accumulator so it becomes a tail-recursive loop downstream — O(1)
+    // stack instead of a frame per element.
+    ersd::introduce_accumulators(&mut ersd_module);
+
+    // Re-base buffer-walking self-recursion (e.g. `Str/len`'s `count_w`) onto an
+    // integer cursor over the original buffer, so each step advances an offset
+    // instead of re-slicing the tail — O(1) per step instead of O(n).
+    ersd::introduce_offsets(&mut ersd_module);
+
     observe(Stage::Ersd(&ersd_module));
 
     let cont_module = ersd::to_cont(&ersd_module);

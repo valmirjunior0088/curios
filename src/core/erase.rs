@@ -244,7 +244,7 @@ fn erase_apply(context: &mut Context, apply: &Apply) -> Result<ersd::Term, Error
     let mask = erasure_mask(context, ft.telescope.clone())?;
     ft.telescope.clone().walk(params, |i, arg, ty| {
         if !mask[i] {
-            erased_params.push(erase(context, arg, ty)?);
+            erased_params.push(erase_kept(context, arg, ty)?);
         }
         Ok(())
     })?;
@@ -256,6 +256,23 @@ fn erase_apply(context: &mut Context, apply: &Apply) -> Result<ersd::Term, Error
         params: erased_params,
     })
     .into())
+}
+
+/// Erase a value held in a *kept* slot — a constructor field or function
+/// argument the (opaque) signature mask retains for uniform arity. The mask
+/// keeps the slot, but this *instantiation* can still make it a proof or a type,
+/// which carries no runtime content: proof/type irrelevance then fills the slot
+/// with the trivial `Erased` rather than materialising a witness no runtime code
+/// reads. Without this a `Prop`-payload constructor — `Option(Utf8)` in
+/// `/std/Str`'s `check` — builds its proof at runtime, and an inductive proof
+/// like `Utf8/more` drags the tail `Bin` along: an O(n²) of per-step slices in
+/// `of_bin`. The slot stays (arity is fixed by the opaque mask); only its
+/// contents collapse.
+fn erase_kept(context: &mut Context, value: &Term, ty: &Term) -> Result<ersd::Term, Error> {
+    match is_erasable(context, ty)? {
+        true => Ok(ersd::Subterm::Erased.into()),
+        false => erase(context, value, ty),
+    }
 }
 
 /// Erase each value against its telescope domain, opening the telescope with
@@ -272,7 +289,7 @@ fn erase_telescoped<B: Bound>(
     telescope: Telescope<B>,
     values: &[Term],
 ) -> Result<Vec<ersd::Term>, Error> {
-    // The drop decision uses the signature mask (opaque-opened), so a payload
+    // The *drop* decision uses the signature mask (opaque-opened), so a payload
     // field's erasability matches the constructor's fixed arity even when a
     // polymorphic field is instantiated at a prop here.
     let mask = erasure_mask(context, telescope.clone())?;
@@ -283,7 +300,7 @@ fn erase_telescoped<B: Bound>(
         match telescope {
             Telescope::Cons(ty, rest) => {
                 if !mask[index] {
-                    erased.push(erase(context, value, &ty)?);
+                    erased.push(erase_kept(context, value, &ty)?);
                 }
                 telescope = rest.open(&[value]);
             }
@@ -355,6 +372,33 @@ fn erase_nat_match(
         zero_case,
         &motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(0usize))).into()]),
     )?;
+
+    // When the successor arm ignores its induction hypothesis, the eliminator is
+    // a *case-split*, not a fold — so emit a single peel (`n == 0 ? zero :
+    // succ[pred := n-1]`) rather than an n-step induction loop. Without this, a
+    // non-tail-recursive caller that re-recurses on the peeled tail (e.g.
+    // `/std/Str/count_w`) re-runs the whole fold at every level: the loop fires a
+    // fresh recursion each of its n iterations, all discarded but the last, so
+    // O(n) work becomes O(2^n). The `Arr`/`Bin` eliminators desugar through here
+    // (their `Nat` succ arm threads `ih` iff the cons arm did), so this covers
+    // them too.
+    if !succ_case.uses(1) {
+        let one: Term = Subterm::Prim(Prim::Nat(Nat::new(1usize))).into();
+        let pred: Term = Subterm::Prim(Prim::nat_sub(head.clone(), one)).into();
+        // `ih` is dead, so the term opened into it never appears — any term serves.
+        let dead_ih: Term = Subterm::Prim(Prim::Nat(Nat::new(0usize))).into();
+        let peeled = succ_case.open(&[&pred, &dead_ih]);
+
+        let erased_default = erase(context, &peeled, &motive.open(&[head]))?;
+        let erased_head = erase(context, head, &head_type)?;
+
+        return Ok(ersd::Subterm::NatMatch(ersd::NatMatch::Dispatch {
+            head: erased_head,
+            cases: BTreeMap::from([(0, erased_zero_case)]),
+            default: erased_default,
+        })
+        .into());
+    }
 
     let pred_label = context.fresh(succ_case.first_label());
     let ih_label = context.fresh(succ_case.second_label());
