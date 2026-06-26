@@ -5,8 +5,8 @@ use {
         Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, NumLit, ParkedWork, Plicity,
         Prim, PrimHead, Proj, Rec, Scope, Struct, StructType, Structure, Subterm, Telescope, Term,
         Three, Tuple, TupleType, Two, Var, Variant, case_target_indices, check, check_motive,
-        convert_with, drain_parked, elaborate_prim, expect, invert_indices, is_prop, reduce_with,
-        refine_head, sort_term, zonk, zonk_module,
+        check_prim_head, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
+        is_prop, reduce_with, refine_head, sort_term, zonk, zonk_module,
     },
     num_bigint::BigInt,
     num_traits::ToPrimitive,
@@ -468,21 +468,7 @@ fn elaborate_prim_head(
     let (head, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let matches = match expected {
-        PrimHead::Nat => matches!(&*head_type, Subterm::Prim(Prim::NatType)),
-        PrimHead::Bln => matches!(&*head_type, Subterm::Prim(Prim::BlnType)),
-        PrimHead::Bin => matches!(&*head_type, Subterm::Prim(Prim::BinType)),
-    };
-
-    if matches {
-        return Ok((head, head_type));
-    }
-
-    Err(match expected {
-        PrimHead::Nat => Error::not_nat_type(head_type),
-        PrimHead::Bln => Error::not_bln_type(head_type),
-        PrimHead::Bin => Error::not_bin_type(head_type),
-    })
+    check_prim_head(expected, head_type).map(|head_type| (head, head_type))
 }
 
 /// When a match is elaborated in checking mode, solve its motive against the

@@ -314,6 +314,27 @@ pub fn check_motive(
     })
 }
 
+/// Accept `head_type` (already reduced) when it is `expected`'s type-former,
+/// else the matching `not_*_type` error. The shared core of `expect_prim_head`
+/// and `elaborate`'s `elaborate_prim_head` — one source of truth for the
+/// `PrimHead` → type-former / error mapping.
+pub fn check_prim_head(expected: PrimHead, head_type: Term) -> Result<Term, Error> {
+    let matches = match expected {
+        PrimHead::Nat => matches!(&*head_type, Subterm::Prim(Prim::NatType)),
+        PrimHead::Bln => matches!(&*head_type, Subterm::Prim(Prim::BlnType)),
+        PrimHead::Bin => matches!(&*head_type, Subterm::Prim(Prim::BinType)),
+    };
+
+    match matches {
+        true => Ok(head_type),
+        false => Err(match expected {
+            PrimHead::Nat => Error::not_nat_type(head_type),
+            PrimHead::Bln => Error::not_bln_type(head_type),
+            PrimHead::Bin => Error::not_bin_type(head_type),
+        }),
+    }
+}
+
 /// Infer the scrutinee's type, reduce it, and require it to be the given prim
 /// type. Returns the reduced head type — used by `erase` to erase the head.
 pub fn expect_prim_head(
@@ -324,19 +345,5 @@ pub fn expect_prim_head(
     let head_type = infer(context, head)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let matches = match expected {
-        PrimHead::Nat => matches!(&*head_type, Subterm::Prim(Prim::NatType)),
-        PrimHead::Bln => matches!(&*head_type, Subterm::Prim(Prim::BlnType)),
-        PrimHead::Bin => matches!(&*head_type, Subterm::Prim(Prim::BinType)),
-    };
-
-    if matches {
-        return Ok(head_type);
-    }
-
-    Err(match expected {
-        PrimHead::Nat => Error::not_nat_type(head_type),
-        PrimHead::Bln => Error::not_bln_type(head_type),
-        PrimHead::Bin => Error::not_bin_type(head_type),
-    })
+    check_prim_head(expected, head_type)
 }
