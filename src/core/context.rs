@@ -634,24 +634,19 @@ impl Context {
     /// base frame persists for the whole elaboration, so only the local
     /// frames — which pop before a retry can happen — are captured.
     pub fn freeze_frame(&self) -> FrozenFrame {
-        let flatten = |frames: &[HashMap<String, Term>]| {
+        fn flatten_frames<K: Clone, V: Clone>(frames: &[HashMap<K, V>]) -> Vec<(K, V)> {
             frames
                 .iter()
                 .skip(1)
-                .flat_map(|frame| frame.iter().map(|(n, t)| (n.clone(), t.clone())))
-                .collect::<Vec<_>>()
-        };
+                .flat_map(|frame| frame.iter().map(|(k, v)| (k.clone(), v.clone())))
+                .collect()
+        }
 
         FrozenFrame {
             assumptions: self.local.clone(),
-            definitions: flatten(&self.definitions),
-            refinements: flatten(&self.refinements),
-            refinement_projections: self
-                .refinement_projections
-                .iter()
-                .skip(1)
-                .flat_map(|frame| frame.iter().map(|(k, v)| (k.clone(), v.clone())))
-                .collect(),
+            definitions: flatten_frames(&self.definitions),
+            refinements: flatten_frames(&self.refinements),
+            refinement_projections: flatten_frames(&self.refinement_projections),
         }
     }
 
