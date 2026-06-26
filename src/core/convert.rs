@@ -435,23 +435,14 @@ impl Convert {
             return Ok(false);
         }
 
-        let mut cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
+        let cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
             Subterm::TupleType(TupleType { telescope, .. }) if telescope.len() == n => {
                 Some(telescope)
             }
             _ => None,
         };
 
-        for (a, b) in this.fields.iter().zip(that.fields.iter()) {
-            let ft = match cur.take() {
-                Some(Telescope::Cons(ty, rest)) => {
-                    cur = Some(rest.open(&[a]));
-                    ty
-                }
-                _ => Term::type_(),
-            };
-            self.enqueue(ft, a.clone(), b.clone());
-        }
+        self.enqueue_fields(this.fields, that.fields, cur);
 
         Ok(true)
     }
@@ -516,6 +507,29 @@ impl Convert {
         Ok(true)
     }
 
+    /// Enqueue each `this`/`that` field pair at the type the telescope assigns it
+    /// (each `rest` opened at the field value), defaulting to `Type` once the
+    /// telescope is exhausted or absent. Shared by `compare_variant`,
+    /// `compare_struct`, and `compare_tuple`: η and proof irrelevance must fire
+    /// per field rather than at a flat `Type`.
+    fn enqueue_fields<B: Bound>(
+        &mut self,
+        this: Vec<Term>,
+        that: Vec<Term>,
+        mut telescope: Option<Telescope<B>>,
+    ) {
+        for (a, b) in this.into_iter().zip(that) {
+            let type_ = match telescope.take() {
+                Some(Telescope::Cons(ty, rest)) => {
+                    telescope = Some(rest.open(&[&a]));
+                    ty
+                }
+                _ => Term::type_(),
+            };
+            self.enqueue(type_, a, b);
+        }
+    }
+
     fn compare_variant(
         &mut self,
         context: &mut Context,
@@ -535,7 +549,7 @@ impl Convert {
         // compares at its own type — η and proof irrelevance fire per field,
         // instead of a structural compare at `Type`. Same recovery `erase`
         // uses; falls back to `Type` if the inductive is somehow absent.
-        let mut telescope = context
+        let telescope = context
             .inductive(&this.name)
             .and_then(|inductive| inductive.instantiate(&this.tag, &this.params));
 
@@ -543,16 +557,7 @@ impl Convert {
             self.enqueue(Term::type_(), a, b);
         }
 
-        for (a, b) in this.payload.into_iter().zip(that.payload) {
-            let payload_type = match telescope.take() {
-                Some(Telescope::Cons(ty, rest)) => {
-                    telescope = Some(rest.open(&[&a]));
-                    ty
-                }
-                _ => Term::type_(),
-            };
-            self.enqueue(payload_type, a, b);
-        }
+        self.enqueue_fields(this.payload, that.payload, telescope);
 
         Ok(true)
     }
@@ -590,7 +595,7 @@ impl Convert {
         // parameters) so each field compares at its own type — η and proof
         // irrelevance fire per field, as `compare_tuple` does with the tuple
         // type's telescope. Falls back to `Type` if the struct is somehow absent.
-        let mut telescope = context
+        let telescope = context
             .structure(&this.name)
             .map(|structure| structure.fields_at(&this.params));
 
@@ -598,16 +603,7 @@ impl Convert {
             self.enqueue(Term::type_(), a, b);
         }
 
-        for (a, b) in this.fields.into_iter().zip(that.fields) {
-            let field_type = match telescope.take() {
-                Some(Telescope::Cons(ty, rest)) => {
-                    telescope = Some(rest.open(&[&a]));
-                    ty
-                }
-                _ => Term::type_(),
-            };
-            self.enqueue(field_type, a, b);
-        }
+        self.enqueue_fields(this.fields, that.fields, telescope);
 
         Ok(true)
     }
