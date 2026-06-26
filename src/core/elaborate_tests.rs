@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::core::{Nat, Prim, Term},
+    crate::core::{MetavarId, Nat, Prim, Term},
     std::time::Duration,
 };
 
@@ -123,7 +123,7 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
     );
     assert_eq!(type_, nat());
 
-    let entry = context.metavar_entry(0).expect("hole was born");
+    let entry = context.metavar_entry(MetavarId(0)).expect("hole was born");
     assert_eq!(entry.result, nat());
     assert_eq!(*entry.telescope, vec![("x".to_string(), nat())]);
 }

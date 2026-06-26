@@ -2,7 +2,8 @@ use {
     super::{
         Apply, Atom, Carrier, Cases, Context, Definition, Error, Field, Flt, Func, FuncType,
         ImplicitOrigin, Inductive, InductiveParam, InductiveType, Infix, Int, Invert, Item, Let,
-        Many, Match, Metavar, Module, MotivePattern, MotiveSlot, Nat, NumLit, ParkedWork, Plicity,
+        Many, Match, Metavar, MetavarId, Module, MotivePattern, MotiveSlot, Nat, NumLit, ParkedWork,
+        Plicity,
         Prim, PrimHead, Proj, Rec, Scope, Struct, StructType, Structure, Subterm, Telescope, Term,
         Three, Tuple, TupleType, Two, Var, Variant, case_target_indices, check, check_motive,
         check_prim_head, convert_with, drain_parked, elaborate_prim, expect, invert_indices,
@@ -355,7 +356,7 @@ fn blocked_on_metavar(
     context: &mut Context,
     arg: &Term,
     ty: &Term,
-    result_metavars: &BTreeSet<usize>,
+    result_metavars: &BTreeSet<MetavarId>,
     expected_ground: bool,
 ) -> Result<bool, Error> {
     let is_lambda = matches!(&**arg, Subterm::Func(_));
@@ -403,7 +404,7 @@ fn blocked_on_metavar(
 /// a solution can still embed unsolved metavars, so `expected_ground` needs this
 /// transitive view to be sure the turnaround will actually pin a result metavar rather
 /// than alias it flex-flex. Terminates: the occurs check forbids cyclic solutions.
-fn transitively_ground(context: &Context, id: usize) -> bool {
+fn transitively_ground(context: &Context, id: MetavarId) -> bool {
     match context.metavar_solution(id) {
         None => false,
         Some(solution) => solution

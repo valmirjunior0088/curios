@@ -1,5 +1,5 @@
 use {
-    super::{Bound, Goal, ImplicitOrigin, Inductive, Metavar, Structure, Term},
+    super::{Bound, Goal, ImplicitOrigin, Inductive, Metavar, MetavarId, Structure, Term},
     crate::{Entropy, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -70,7 +70,7 @@ pub enum ParkedWork {
     Checking {
         term: Term,
         expected: Term,
-        placeholder: usize,
+        placeholder: MetavarId,
     },
 }
 
@@ -86,7 +86,7 @@ pub struct ParkedGoal {
     pub frame: FrozenFrame,
     /// The unsolved metavariables whose solutions could unblock this —
     /// solving any of them is the wake signal.
-    pub watching: BTreeSet<usize>,
+    pub watching: BTreeSet<MetavarId>,
 }
 
 #[derive(Debug)]
@@ -110,12 +110,12 @@ pub struct Context {
     // Parked conversion constraints (§8) — frame-independent, like `metas`.
     parked: Vec<ParkedGoal>,
     // Ids solved since the last `wake_parked` sweep: the wake signal.
-    newly_solved: Vec<usize>,
+    newly_solved: Vec<MetavarId>,
     // Journal of every committed solution id, in commit order — never
     // consumed, only marked and rolled back. The watermark/rollback pair lets
     // re-validation (§7.4) unwind solutions that landed while validating a
     // candidate it then rejected.
-    solved_log: Vec<usize>,
+    solved_log: Vec<MetavarId>,
     // While set, `expect` may not park: conversion is being used as a yes/no
     // oracle (re-validation) and provisional success would leak into it.
     suppress_parking: bool,
@@ -129,7 +129,7 @@ pub struct Context {
     // The next metavariable id this context may mint (implicit-argument
     // insertion). Seeded by `elaborate_module` with its `metavar_floor`
     // argument so core-minted ids sit strictly above `to_core`'s.
-    next_metavar: Entropy,
+    next_metavar: Entropy<MetavarId>,
     // Inductive declarations, keyed by the type's qualified name ("Result").
     // Like `metas`, a flat store of monotonic facts about the program, not
     // lexically-scoped bindings — `enter_frame`/`leave_frame` never touch it.
@@ -165,7 +165,7 @@ impl Context {
             local: Vec::new(),
             local_marks: Vec::new(),
             metas: MetaStore::default(),
-            next_metavar: Entropy::<usize>::new(),
+            next_metavar: Entropy::<MetavarId>::new(),
             inductives: BTreeMap::new(),
             structures: BTreeMap::new(),
             island: String::new(),
@@ -449,15 +449,15 @@ impl Context {
     /// once).
     pub fn birth_metavar(
         &mut self,
-        id: usize,
+        id: MetavarId,
         telescope: impl Into<SharedTelescope>,
         result: Term,
     ) {
-        if id >= self.metas.entries.len() {
-            self.metas.entries.resize_with(id + 1, || None);
+        if id.0 >= self.metas.entries.len() {
+            self.metas.entries.resize_with(id.0 + 1, || None);
         }
 
-        self.metas.entries[id] = Some(MetaEntry {
+        self.metas.entries[id.0] = Some(MetaEntry {
             telescope: telescope.into(),
             result,
             solution: None,
@@ -547,11 +547,11 @@ impl Context {
         }
     }
 
-    pub fn metavar_entry(&self, id: usize) -> Option<&MetaEntry> {
-        self.metas.entries.get(id).and_then(Option::as_ref)
+    pub fn metavar_entry(&self, id: MetavarId) -> Option<&MetaEntry> {
+        self.metas.entries.get(id.0).and_then(Option::as_ref)
     }
 
-    pub fn metavar_solution(&self, id: usize) -> Option<&Term> {
+    pub fn metavar_solution(&self, id: MetavarId) -> Option<&Term> {
         self.metavar_entry(id).and_then(|e| e.solution.as_ref())
     }
 
@@ -585,8 +585,8 @@ impl Context {
     /// as itself while unsolved (§7.2). Records the id as newly solved — the
     /// wake signal for parked constraints (§8) — and journals it for
     /// [`Context::rollback_solutions`].
-    pub fn solve_metavar(&mut self, id: usize, term: Term) {
-        if let Some(Some(entry)) = self.metas.entries.get_mut(id) {
+    pub fn solve_metavar(&mut self, id: MetavarId, term: Term) {
+        if let Some(Some(entry)) = self.metas.entries.get_mut(id.0) {
             entry.solution = Some(term);
             self.newly_solved.push(id);
             self.solved_log.push(id);
@@ -615,7 +615,7 @@ impl Context {
         let unwound = self.solved_log.split_off(mark);
 
         for id in &unwound {
-            if let Some(Some(entry)) = self.metas.entries.get_mut(*id) {
+            if let Some(Some(entry)) = self.metas.entries.get_mut(id.0) {
                 entry.solution = None;
             }
         }
@@ -704,7 +704,7 @@ impl Context {
     /// birthed like any hole — frozen Γ, identity spine — with no insertion
     /// provenance. If it survives unsolved, the item drain reports the parked
     /// problem at its origin before zonk could ever meet the placeholder.
-    pub fn fresh_placeholder(&mut self, result: Term, span: Option<Span>) -> (usize, Term) {
+    pub fn fresh_placeholder(&mut self, result: Term, span: Option<Span>) -> (MetavarId, Term) {
         let id = self.next_metavar.fresh();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);

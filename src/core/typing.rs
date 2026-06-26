@@ -1,5 +1,6 @@
 use super::{
-    Context, Error, Field, Many, Mode, Prim, PrimHead, Proj, Scope, Subterm, Term, elaborate,
+    Context, Error, Field, Many, MetavarId, Mode, Prim, PrimHead, Proj, Scope, Subterm, Term,
+    elaborate,
 };
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
@@ -197,7 +198,7 @@ fn retry_checking(
     context: &mut Context,
     term: Term,
     expected: Term,
-    placeholder: usize,
+    placeholder: MetavarId,
     origin: Term,
     frame: super::FrozenFrame,
 ) -> Result<(), Error> {

@@ -6,7 +6,7 @@
 //! plugs it into this machinery by implementing `Bound`.
 
 use {
-    super::{Subterm, Term},
+    super::{MetavarId, Subterm, Term},
     std::{collections::BTreeSet, fmt::Debug, hash::Hash, ops::Deref},
 };
 
@@ -639,7 +639,7 @@ impl Telescope<Term> {
     /// Collect the ids of every metavariable in a function/Π telescope
     /// (`Func`/`FuncType`): the parameter types and the trailing body/return
     /// type — its `Done` body is a real term to recurse into.
-    pub fn collect_metavars(&self, ids: &mut BTreeSet<usize>) {
+    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
         match self {
             Telescope::Cons(ty, rest) => {
                 ty.collect_metavars(ids);
@@ -654,7 +654,7 @@ impl Telescope<()> {
     /// Collect the ids of every metavariable in a Σ telescope (`TupleType`):
     /// only the field types — its `Done` body is `()`, so there is nothing to
     /// recurse into there.
-    pub fn collect_metavars(&self, ids: &mut BTreeSet<usize>) {
+    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
         match self {
             Telescope::Cons(ty, rest) => {
                 ty.collect_metavars(ids);

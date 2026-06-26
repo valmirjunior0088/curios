@@ -83,9 +83,9 @@ impl Term {
         }))
     }
 
-    pub fn metavar(id: usize) -> Self {
+    pub fn metavar(id: impl Into<MetavarId>) -> Self {
         Self::from(Subterm::Metavar(Metavar {
-            id,
+            id: id.into(),
             spine: Rc::new(Vec::new()),
             origin: None,
         }))
@@ -94,12 +94,12 @@ impl Term {
     /// A metavariable minted for an omitted implicit argument, carrying its
     /// insertion provenance (see [`Metavar::origin`]) and its birth spine.
     pub fn metavar_inserted(
-        id: usize,
+        id: impl Into<MetavarId>,
         origin: ImplicitOrigin,
         spine: impl Into<Rc<Vec<Term>>>,
     ) -> Self {
         Self::from(Subterm::Metavar(Metavar {
-            id,
+            id: id.into(),
             spine: spine.into(),
             origin: Some(origin),
         }))
@@ -108,12 +108,12 @@ impl Term {
     /// A hole rebuilt at its birth point with the identity spine over its
     /// frozen telescope (see [`Metavar::spine`]).
     pub fn metavar_birthed(
-        id: usize,
+        id: impl Into<MetavarId>,
         origin: Option<ImplicitOrigin>,
         spine: impl Into<Rc<Vec<Term>>>,
     ) -> Self {
         Self::from(Subterm::Metavar(Metavar {
-            id,
+            id: id.into(),
             spine: spine.into(),
             origin,
         }))
@@ -1088,6 +1088,31 @@ pub struct ImplicitOrigin {
     pub binder: String,
 }
 
+/// A metavariable's identity: a dense index into the `Context`'s `MetaStore`,
+/// minted monotonically by an [`Entropy`](crate::Entropy). A newtype so it can
+/// never be confused with the other `usize`-shaped notions the kernel juggles
+/// (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MetavarId(pub usize);
+
+impl From<usize> for MetavarId {
+    fn from(raw: usize) -> Self {
+        Self(raw)
+    }
+}
+
+impl crate::Mint for MetavarId {
+    fn mint(entropy: usize) -> Self {
+        Self(entropy)
+    }
+}
+
+impl std::fmt::Display for MetavarId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// A metavariable: a placeholder term standing for an as-yet-unknown subterm,
 /// born from a surface hole `?` and (possibly) solved by unification. The
 /// solution, when one exists, lives in the `Context`'s `MetaStore`, keyed by
@@ -1114,7 +1139,7 @@ pub struct ImplicitOrigin {
 /// keeps minting metavariables O(1) instead of O(|Γ|).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Metavar {
-    pub id: usize,
+    pub id: MetavarId,
     pub spine: Rc<Vec<Term>>,
     pub origin: Option<ImplicitOrigin>,
 }
@@ -1181,7 +1206,7 @@ impl Subterm {
     /// Collect the ids of every metavariable occurring in this subterm. `Visit`
     /// only sees `Var`s and a `Metavar` holds none, so occurs/zonk analyses
     /// cannot piggyback on `free_vars` — this walk enumerates them directly.
-    pub fn metavars(&self) -> BTreeSet<usize> {
+    pub fn metavars(&self) -> BTreeSet<MetavarId> {
         let mut ids = BTreeSet::new();
         self.collect_metavars(&mut ids);
         ids
@@ -1355,7 +1380,7 @@ impl Subterm {
         }
     }
 
-    pub fn collect_metavars(&self, ids: &mut BTreeSet<usize>) {
+    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
         match self {
             Subterm::Metavar(Metavar { id, spine, .. }) => {
                 ids.insert(*id);
@@ -1967,7 +1992,7 @@ fn prim_reach(prim: &Prim) -> usize {
     reach
 }
 
-fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
+fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<MetavarId>) {
     for_each_prim_operand(prim, &mut |term| term.collect_metavars(ids));
 }
 
@@ -2196,7 +2221,7 @@ mod tests {
                 Term::prim(Prim::nat_add(Term::metavar(3), Term::metavar(1))),
             ],
         );
-        assert_eq!(term.metavars(), BTreeSet::from([1, 2, 3]));
+        assert_eq!(term.metavars(), BTreeSet::from([1, 2, 3].map(MetavarId)));
     }
 
     #[test]
@@ -2211,7 +2236,7 @@ mod tests {
     #[test]
     fn variant_collects_metavars_and_prints_as_function_call() {
         let ctor = Term::variant("Result", [Term::metavar(1)], "success", [Term::metavar(2)]);
-        assert_eq!(ctor.metavars(), BTreeSet::from([1, 2]));
+        assert_eq!(ctor.metavars(), BTreeSet::from([1, 2].map(MetavarId)));
         assert_eq!(format!("{ctor}"), "Result/success(?2)");
 
         let type_ = Term::inductive_type(
@@ -2219,7 +2244,7 @@ mod tests {
             [Term::prim(Prim::NatType), Term::metavar(3)],
             Vec::<Term>::new(),
         );
-        assert_eq!(type_.metavars(), BTreeSet::from([3]));
+        assert_eq!(type_.metavars(), BTreeSet::from([3].map(MetavarId)));
         assert_eq!(format!("{type_}"), "Result(Nat, ?3)");
     }
 
