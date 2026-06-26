@@ -49,6 +49,10 @@ fn io_type() -> Term {
     prim_type(Prim::IoType)
 }
 
+fn arr_type(elem: Term) -> Term {
+    Subterm::Prim(Prim::ArrType(elem)).into()
+}
+
 fn pure(prim: ersd::PurePrim) -> ersd::Term {
     ersd::Subterm::Prim(ersd::Prim::Pure(prim)).into()
 }
@@ -241,7 +245,7 @@ pub fn erase_prim(
             Ok(pure(ersd::PurePrim::BinConcat(erased)))
         }
         Prim::BinFlatten(operand) => {
-            let outer_type = Subterm::Prim(Prim::ArrType(bin_type())).into();
+            let outer_type = arr_type(bin_type());
             let operand = erase(context, operand, &outer_type)?;
             Ok(pure(ersd::PurePrim::BinFlatten(operand)))
         }
@@ -260,18 +264,18 @@ pub fn erase_prim(
             Ok(pure(ersd::PurePrim::Arr(erased_elems)))
         }
         Prim::ArrLen(type_, list) => {
-            let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let expected_list_type = arr_type(type_.clone());
             let list_erased = erase(context, list, &expected_list_type)?;
             Ok(pure(ersd::PurePrim::ArrLen(list_erased)))
         }
         Prim::ArrGet(type_, list, index) => {
-            let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let expected_list_type = arr_type(type_.clone());
             let list_erased = erase(context, list, &expected_list_type)?;
             let index_erased = erase(context, index, &nat_type())?;
             Ok(pure(ersd::PurePrim::ArrGet(list_erased, index_erased)))
         }
         Prim::ArrSlice(type_, list, start, end) => {
-            let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let expected_list_type = arr_type(type_.clone());
             let list_erased = erase(context, list, &expected_list_type)?;
             let start_erased = erase(context, start, &nat_type())?;
             let end_erased = erase(context, end, &nat_type())?;
@@ -282,13 +286,13 @@ pub fn erase_prim(
             )))
         }
         Prim::ArrAppend(type_, list, elem) => {
-            let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let expected_list_type = arr_type(type_.clone());
             let list_erased = erase(context, list, &expected_list_type)?;
             let elem_erased = erase(context, elem, type_)?;
             Ok(pure(ersd::PurePrim::ArrAppend(list_erased, elem_erased)))
         }
         Prim::ArrConcat(type_, operands) => {
-            let expected_list_type = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let expected_list_type = arr_type(type_.clone());
             let erased = operands
                 .iter()
                 .map(|e| erase(context, e, &expected_list_type))
@@ -296,16 +300,15 @@ pub fn erase_prim(
             Ok(pure(ersd::PurePrim::ArrConcat(erased)))
         }
         Prim::ArrFlatten(type_, operand) => {
-            let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
-            let outer_type = Subterm::Prim(Prim::ArrType(list_type)).into();
+            let outer_type = arr_type(arr_type(type_.clone()));
             let operand = erase(context, operand, &outer_type)?;
             Ok(pure(ersd::PurePrim::ArrFlatten(operand)))
         }
         Prim::ArrMap(a, b, f, arr) => {
             let f_type = Term::func_type([("x", a.clone())], b.clone());
             let f_erased = erase(context, f, &f_type)?;
-            let arr_type: Term = Subterm::Prim(Prim::ArrType(a.clone())).into();
-            let arr_erased = erase(context, arr, &arr_type)?;
+            let arr_ty = arr_type(a.clone());
+            let arr_erased = erase(context, arr, &arr_ty)?;
             Ok(pure(ersd::PurePrim::ArrMap(arr_erased, f_erased)))
         }
         Prim::IoType => Ok(ersd::Subterm::Erased.into()),
@@ -386,8 +389,8 @@ pub fn erase_prim(
             ersd::HostPrim::IoSetReuseaddr,
         ),
         Prim::IoPoll(handles, events, timeout) => {
-            let arr_io: Term = Subterm::Prim(Prim::ArrType(io_type())).into();
-            let arr_nat: Term = Subterm::Prim(Prim::ArrType(nat_type())).into();
+            let arr_io = arr_type(io_type());
+            let arr_nat = arr_type(nat_type());
             Ok(host(ersd::HostPrim::IoPoll(
                 erase(context, handles, &arr_io)?,
                 erase(context, events, &arr_nat)?,
