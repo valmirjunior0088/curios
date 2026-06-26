@@ -970,11 +970,7 @@ fn elaborate_inductive_type(
         ));
     }
 
-    let mut elaborated = Vec::with_capacity(args.len());
-    inductive.indices.walk(&args, |_, arg, ty| {
-        elaborated.push(check(context, arg, ty.clone())?);
-        Ok(())
-    })?;
+    let (elaborated, ()) = check_args_against(context, inductive.indices, &args)?;
 
     Ok((
         Term::inductive_type(
@@ -1019,11 +1015,7 @@ fn elaborate_variant(
         ));
     }
 
-    let mut elaborated = Vec::with_capacity(args.len());
-    let output = signature.walk(&args, |_, arg, ty| {
-        elaborated.push(check(context, arg, ty.clone())?);
-        Ok(())
-    })?;
+    let (elaborated, output) = check_args_against(context, signature, &args)?;
 
     let rebuilt = Term::variant(
         name,
@@ -1088,11 +1080,7 @@ fn elaborate_struct_type(
         ));
     }
 
-    let mut elaborated = Vec::with_capacity(params.len());
-    structure.params.walk(params, |_, arg, ty| {
-        elaborated.push(check(context, arg, ty.clone())?);
-        Ok(())
-    })?;
+    let (elaborated, ()) = check_args_against(context, structure.params, params)?;
 
     Ok((Term::struct_type(name, elaborated), structure.result_sort))
 }
@@ -2298,6 +2286,24 @@ fn check_telescope_entries<B: Bound>(
             }
         }
     }
+}
+
+/// Check `args` pointwise against the dependent telescope `signature` — each arg
+/// under the earlier ones — collecting the rebuilt args and returning the
+/// telescope's terminal, opened at those args. The caller checks arity first; the
+/// arity error differs by site. The given-args counterpart to
+/// `check_telescope_entries`.
+fn check_args_against<B: Bound>(
+    context: &mut Context,
+    signature: Telescope<B>,
+    args: &[Term],
+) -> Result<(Vec<Term>, B), Error> {
+    let mut elaborated = Vec::with_capacity(args.len());
+    let terminal = signature.walk(args, |_, arg, ty| {
+        elaborated.push(check(context, arg, ty.clone())?);
+        Ok(())
+    })?;
+    Ok((elaborated, terminal))
 }
 
 fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), Error> {
