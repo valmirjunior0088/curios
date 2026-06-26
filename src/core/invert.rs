@@ -166,28 +166,35 @@ fn unify_index(
             if a.payload.len() != t.payload.len() {
                 return Ok(Step::Refuse);
             }
-            for (pa, pt) in a.payload.iter().zip(&t.payload) {
-                match unify_index(context, pa, pt, flex, tainted, false, solutions)? {
-                    Step::Ok => {}
-                    other => return Ok(other),
-                }
-            }
-            Ok(Step::Ok)
+            unify_all(context, &a.payload, &t.payload, flex, tainted, solutions)
         }
 
         (Subterm::Tuple(a), Subterm::Tuple(t)) => {
             if a.fields.len() != t.fields.len() {
                 return Ok(Step::Refuse);
             }
-            for (fa, ft) in a.fields.iter().zip(&t.fields) {
-                match unify_index(context, fa, ft, flex, tainted, false, solutions)? {
-                    Step::Ok => {}
-                    other => return Ok(other),
-                }
-            }
-            Ok(Step::Ok)
+            unify_all(context, &a.fields, &t.fields, flex, tainted, solutions)
         }
 
         _ => Ok(Step::Refuse),
     }
+}
+
+/// Unify a sequence of sub-positions pairwise, short-circuiting on the first
+/// that does not cleanly decompose. Each sub-position is non-`top`.
+fn unify_all(
+    context: &mut Context,
+    actuals: &[Term],
+    targets: &[Term],
+    flex: &[String],
+    tainted: &BTreeSet<String>,
+    solutions: &mut Vec<(String, Term)>,
+) -> Result<Step, Error> {
+    for (actual, target) in actuals.iter().zip(targets) {
+        match unify_index(context, actual, target, flex, tainted, false, solutions)? {
+            Step::Ok => {}
+            other => return Ok(other),
+        }
+    }
+    Ok(Step::Ok)
 }
