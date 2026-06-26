@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Atom, Carrier, Cases, Context, Definition, Error, Field, Flt, Func, FuncType,
+        Apply, Atom, Bound, Carrier, Cases, Context, Definition, Error, Field, Flt, Func, FuncType,
         ImplicitOrigin, Inductive, InductiveParam, InductiveType, Infix, Int, Invert, Item, Let,
         Many, Match, Metavar, MetavarId, Module, MotivePattern, MotiveSlot, Nat, NumLit, ParkedWork,
         Plicity,
@@ -2276,6 +2276,30 @@ fn elaborate_metavar(
 /// and the type-constructor bodies' `InductiveType` nodes check their arguments
 /// against this very telescope. A name with no registry entry is an ordinary
 /// binding; no-op.
+/// Walk a (params-first) telescope, checking each binder's type against `Type`
+/// under the earlier binders (fresh-gensym, assume), and return the rebuilt
+/// `(label, type)` entries alongside the telescope's terminal — opened under
+/// those binders. Runs in the caller's frame; the same gensym-then-relabel
+/// discipline as `elaborate_tuple_type`.
+fn check_telescope_entries<B: Bound>(
+    context: &mut Context,
+    mut telescope: Telescope<B>,
+) -> Result<(Vec<(String, Term)>, B), Error> {
+    let mut entries = Vec::new();
+    loop {
+        match telescope {
+            Telescope::Done(body) => break Ok((entries, *body)),
+            Telescope::Cons(ty, rest) => {
+                let rebuilt = check(context, &ty, Term::type_())?;
+                let label = context.fresh(rest.first_label());
+                context.assume(&label, &rebuilt);
+                telescope = rest.open(&[&Term::free_var(&label)]);
+                entries.push((label, rebuilt));
+            }
+        }
+    }
+}
+
 fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), Error> {
     let Some(inductive) = context.inductive(name).cloned() else {
         return Ok(());
@@ -2290,24 +2314,9 @@ fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), 
         .collect::<Vec<_>>();
 
     // Walk the full (params-first) index telescope, checking each entry type
-    // against `Type` under the earlier binders — the same gensym-then-relabel
-    // discipline as `elaborate_tuple_type`.
-    let mut entries = Vec::new();
-    context.with_frame(|context| {
-        let mut telescope = inductive.indices.clone();
-        loop {
-            match telescope {
-                Telescope::Done(_) => break Ok::<_, Error>(()),
-                Telescope::Cons(ty, rest) => {
-                    let rebuilt = check(context, &ty, Term::type_())?;
-                    let label = context.fresh(rest.first_label());
-                    context.assume(&label, &rebuilt);
-                    telescope = rest.open(&[&Term::free_var(&label)]);
-                    entries.push((label, rebuilt));
-                }
-            }
-        }
-    })?;
+    // against `Type` under the earlier binders.
+    let (entries, ()) =
+        context.with_frame(|context| check_telescope_entries(context, inductive.indices.clone()))?;
 
     let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
     let params =
@@ -2351,23 +2360,9 @@ fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result
             .collect::<Vec<_>>();
 
         let (entries, terminal) = context.with_frame(|context| {
-            let mut telescope = signature.clone();
-            let mut entries = Vec::new();
-            loop {
-                match telescope {
-                    Telescope::Done(terminal) => {
-                        let terminal = check(context, &terminal, Term::type_())?;
-                        break Ok::<_, Error>((entries, terminal));
-                    }
-                    Telescope::Cons(ty, rest) => {
-                        let rebuilt = check(context, &ty, Term::type_())?;
-                        let label = context.fresh(rest.first_label());
-                        context.assume(&label, &rebuilt);
-                        telescope = rest.open(&[&Term::free_var(&label)]);
-                        entries.push((label, rebuilt));
-                    }
-                }
-            }
+            let (entries, terminal) = check_telescope_entries(context, signature.clone())?;
+            let terminal = check(context, &terminal, Term::type_())?;
+            Ok::<_, Error>((entries, terminal))
         })?;
 
         let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
@@ -2412,22 +2407,8 @@ fn elaborate_structure(context: &mut Context, name: &str) -> Result<(), Error> {
         .map(|label| label.to_string())
         .collect::<Vec<_>>();
 
-    let mut entries = Vec::new();
-    context.with_frame(|context| {
-        let mut telescope = structure.fields.clone();
-        loop {
-            match telescope {
-                Telescope::Done(_) => break Ok::<_, Error>(()),
-                Telescope::Cons(ty, rest) => {
-                    let rebuilt = check(context, &ty, Term::type_())?;
-                    let label = context.fresh(rest.first_label());
-                    context.assume(&label, &rebuilt);
-                    telescope = rest.open(&[&Term::free_var(&label)]);
-                    entries.push((label, rebuilt));
-                }
-            }
-        }
-    })?;
+    let (entries, ()) =
+        context.with_frame(|context| check_telescope_entries(context, structure.fields.clone()))?;
 
     let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
     let params =
