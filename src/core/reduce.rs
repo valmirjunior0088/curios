@@ -273,16 +273,13 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                     // the unary `Nat`), then the tail and the induction hypothesis.
                     Ok(Reduce::Continue(match &carrier {
                         Carrier::Nat { cons_case, .. } => cons_case.open(&[&tail, &ih]),
-                        Carrier::Bin { cons_case, .. } => cons_case.open(&[
-                            head.as_ref().expect("Bin cons layer carries a head"),
-                            &tail,
-                            &ih,
-                        ]),
-                        Carrier::Arr { cons_case, .. } => cons_case.open(&[
-                            head.as_ref().expect("Arr cons layer carries a head"),
-                            &tail,
-                            &ih,
-                        ]),
+                        Carrier::Bin { cons_case, .. } | Carrier::Arr { cons_case, .. } => {
+                            cons_case.open(&[
+                                head.as_ref().expect("Bin/Arr cons layer carries a head"),
+                                &tail,
+                                &ih,
+                            ])
+                        }
                     }))
                 }
                 Layer::Stuck(scrutinee) => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
