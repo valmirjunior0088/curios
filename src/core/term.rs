@@ -1795,141 +1795,13 @@ fn max_reach<'a>(terms: impl IntoIterator<Item = &'a Term>) -> usize {
         .unwrap_or(0)
 }
 
-fn prim_reach(prim: &Prim) -> usize {
-    match prim {
-        Prim::BlnType
-        | Prim::Bln(_)
-        | Prim::NatType
-        | Prim::Nat(Nat::Zero)
-        | Prim::IntType
-        | Prim::Int(_)
-        | Prim::FltType
-        | Prim::Flt(_)
-        | Prim::BinType
-        | Prim::Bin(_)
-        | Prim::IoType
-        | Prim::Io(_)
-        | Prim::IoClockWall
-        | Prim::IoClockMono
-        | Prim::IoArgs => 0,
-
-        Prim::Nat(Nat::Succ(_, inner)) => inner.reach(),
-
-        Prim::FltToLeBin(t)
-        | Prim::NatToInt(t)
-        | Prim::NatToFlt(t)
-        | Prim::IntToNat(t)
-        | Prim::IntToFlt(t)
-        | Prim::FltToNat(t)
-        | Prim::FltToInt(t)
-        | Prim::FltNeg(t)
-        | Prim::FltAbs(t)
-        | Prim::FltSqrt(t)
-        | Prim::FltFloor(t)
-        | Prim::FltCeil(t)
-        | Prim::FltTrunc(t)
-        | Prim::FltNearest(t)
-        | Prim::BinLen(t)
-        | Prim::BinFlatten(t)
-        | Prim::ArrType(t)
-        | Prim::IoClose(t)
-        | Prim::IoResolve(t)
-        | Prim::IoSocket(t)
-        | Prim::IoAccept(t)
-        | Prim::IoRandom(t)
-        | Prim::IoEnv(t) => t.reach(),
-
-        Prim::IoEql(a, b)
-        | Prim::NatEql(a, b)
-        | Prim::NatNeq(a, b)
-        | Prim::NatAdd(a, b)
-        | Prim::NatSub(a, b)
-        | Prim::NatMul(a, b)
-        | Prim::NatLt(a, b)
-        | Prim::NatDiv(a, b)
-        | Prim::NatRem(a, b)
-        | Prim::NatGt(a, b)
-        | Prim::NatLte(a, b)
-        | Prim::NatGte(a, b)
-        | Prim::NatAnd(a, b)
-        | Prim::NatOr(a, b)
-        | Prim::NatXor(a, b)
-        | Prim::NatShl(a, b)
-        | Prim::NatShr(a, b)
-        | Prim::BlnAnd(a, b)
-        | Prim::BlnOr(a, b)
-        | Prim::BlnXor(a, b)
-        | Prim::BlnEql(a, b)
-        | Prim::BlnNeq(a, b)
-        | Prim::IntEql(a, b)
-        | Prim::IntNeq(a, b)
-        | Prim::IntAdd(a, b)
-        | Prim::IntSub(a, b)
-        | Prim::IntMul(a, b)
-        | Prim::IntDiv(a, b)
-        | Prim::IntRem(a, b)
-        | Prim::IntLt(a, b)
-        | Prim::IntGt(a, b)
-        | Prim::IntLte(a, b)
-        | Prim::IntGte(a, b)
-        | Prim::IntAnd(a, b)
-        | Prim::IntOr(a, b)
-        | Prim::IntXor(a, b)
-        | Prim::IntShl(a, b)
-        | Prim::IntShr(a, b)
-        | Prim::FltAdd(a, b)
-        | Prim::FltSub(a, b)
-        | Prim::FltMul(a, b)
-        | Prim::FltDiv(a, b)
-        | Prim::FltRem(a, b)
-        | Prim::FltEql(a, b)
-        | Prim::FltNeq(a, b)
-        | Prim::FltLt(a, b)
-        | Prim::FltGt(a, b)
-        | Prim::FltLte(a, b)
-        | Prim::FltGte(a, b)
-        | Prim::FltMin(a, b)
-        | Prim::FltMax(a, b)
-        | Prim::BinEql(a, b)
-        | Prim::BinGet(a, b)
-        | Prim::BinAppend(a, b)
-        | Prim::ArrLen(a, b)
-        | Prim::ArrFlatten(a, b)
-        | Prim::IoRead(a, b)
-        | Prim::IoWrite(a, b)
-        | Prim::IoOpen(a, b)
-        | Prim::IoLookup(a, b)
-        | Prim::IoBind(a, b)
-        | Prim::IoConnect(a, b)
-        | Prim::IoListen(a, b)
-        | Prim::IoSetNonblocking(a, b)
-        | Prim::IoSetRecvTimeout(a, b)
-        | Prim::IoSetSendTimeout(a, b)
-        | Prim::IoSetReuseaddr(a, b)
-        | Prim::IoStartTls(a, b)
-        | Prim::IoTlsServerConfig(a, b)
-        | Prim::IoStartTlsServer(a, b)
-        | Prim::IoExit(a, b) => a.reach().max(b.reach()),
-
-        Prim::BinSlice(a, b, c)
-        | Prim::ArrGet(a, b, c)
-        | Prim::ArrAppend(a, b, c)
-        | Prim::IoPoll(a, b, c) => a.reach().max(b.reach()).max(c.reach()),
-
-        Prim::ArrSlice(a, b, c, d) | Prim::ArrMap(a, b, c, d) => {
-            a.reach().max(b.reach()).max(c.reach()).max(d.reach())
-        }
-
-        Prim::BinConcat(terms) | Prim::Arr(terms) => max_reach(terms),
-        Prim::ArrConcat(ty, terms) => ty.reach().max(max_reach(terms)),
-
-        Prim::CellType(a) => a.reach(),
-        Prim::Cell(a, b) | Prim::CellGet(a, b) => a.reach().max(b.reach()),
-        Prim::CellSet(a, b, c) => a.reach().max(b.reach()).max(c.reach()),
-    }
-}
-
-fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
+/// Visit each `Term` operand of `prim`, in field order. The single source of
+/// truth for which fields of a primitive are its term operands — `prim_reach`,
+/// `prim_metavars`, and `prim_construction_names` all read it. (`traverse_prim`
+/// keeps its own match: it rebuilds rather than visits.) The closure is taken
+/// `impl FnMut` so it monomorphises and inlines, leaving the de Bruijn / region
+/// hot path allocation- and indirection-free.
+fn for_each_prim_operand(prim: &Prim, visit: &mut impl FnMut(&Term)) {
     match prim {
         Prim::BlnType
         | Prim::Bln(_)
@@ -1947,7 +1819,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::IoClockMono
         | Prim::IoArgs => {}
 
-        Prim::Nat(Nat::Succ(_, inner)) => inner.collect_metavars(ids),
+        Prim::Nat(Nat::Succ(_, inner)) => visit(inner),
 
         Prim::FltToLeBin(t)
         | Prim::NatToInt(t)
@@ -1971,7 +1843,7 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::IoSocket(t)
         | Prim::IoAccept(t)
         | Prim::IoRandom(t)
-        | Prim::IoEnv(t) => t.collect_metavars(ids),
+        | Prim::IoEnv(t) => visit(t),
 
         Prim::IoEql(a, b)
         | Prim::NatEql(a, b)
@@ -2044,206 +1916,62 @@ fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
         | Prim::IoTlsServerConfig(a, b)
         | Prim::IoStartTlsServer(a, b)
         | Prim::IoExit(a, b) => {
-            a.collect_metavars(ids);
-            b.collect_metavars(ids);
+            visit(a);
+            visit(b);
         }
 
         Prim::BinSlice(a, b, c)
         | Prim::ArrGet(a, b, c)
         | Prim::ArrAppend(a, b, c)
         | Prim::IoPoll(a, b, c) => {
-            a.collect_metavars(ids);
-            b.collect_metavars(ids);
-            c.collect_metavars(ids);
+            visit(a);
+            visit(b);
+            visit(c);
         }
 
         Prim::ArrSlice(a, b, c, d) | Prim::ArrMap(a, b, c, d) => {
-            a.collect_metavars(ids);
-            b.collect_metavars(ids);
-            c.collect_metavars(ids);
-            d.collect_metavars(ids);
+            visit(a);
+            visit(b);
+            visit(c);
+            visit(d);
         }
 
         Prim::BinConcat(terms) | Prim::Arr(terms) => {
-            terms.iter().for_each(|term| term.collect_metavars(ids))
+            terms.iter().for_each(|term| visit(term))
         }
         Prim::ArrConcat(ty, terms) => {
-            ty.collect_metavars(ids);
-            terms.iter().for_each(|term| term.collect_metavars(ids));
+            visit(ty);
+            terms.iter().for_each(|term| visit(term));
         }
 
-        Prim::CellType(a) => a.collect_metavars(ids),
+        Prim::CellType(a) => visit(a),
         Prim::Cell(a, b) | Prim::CellGet(a, b) => {
-            a.collect_metavars(ids);
-            b.collect_metavars(ids);
+            visit(a);
+            visit(b);
         }
         Prim::CellSet(a, b, c) => {
-            a.collect_metavars(ids);
-            b.collect_metavars(ids);
-            c.collect_metavars(ids);
+            visit(a);
+            visit(b);
+            visit(c);
         }
     }
 }
 
-// Construction-name twin of `prim_metavars`: recurse into every operand `Term` so
-// a construction nested inside a primitive (e.g. `Arr(Str)`'s element type) still
-// contributes its head name. Prims own no head names of their own.
+fn prim_reach(prim: &Prim) -> usize {
+    let mut reach = 0;
+    for_each_prim_operand(prim, &mut |term| reach = reach.max(term.reach()));
+    reach
+}
+
+fn prim_metavars(prim: &Prim, ids: &mut BTreeSet<usize>) {
+    for_each_prim_operand(prim, &mut |term| term.collect_metavars(ids));
+}
+
+// Recurse into every operand `Term` so a construction nested inside a primitive
+// (e.g. `Arr(Str)`'s element type) still contributes its head name. Prims own no
+// head names of their own.
 fn prim_construction_names(prim: &Prim, names: &mut BTreeSet<String>) {
-    match prim {
-        Prim::BlnType
-        | Prim::Bln(_)
-        | Prim::NatType
-        | Prim::Nat(Nat::Zero)
-        | Prim::IntType
-        | Prim::Int(_)
-        | Prim::FltType
-        | Prim::Flt(_)
-        | Prim::BinType
-        | Prim::Bin(_)
-        | Prim::IoType
-        | Prim::Io(_)
-        | Prim::IoClockWall
-        | Prim::IoClockMono
-        | Prim::IoArgs => {}
-
-        Prim::Nat(Nat::Succ(_, inner)) => inner.collect_construction_names(names),
-
-        Prim::FltToLeBin(t)
-        | Prim::NatToInt(t)
-        | Prim::NatToFlt(t)
-        | Prim::IntToNat(t)
-        | Prim::IntToFlt(t)
-        | Prim::FltToNat(t)
-        | Prim::FltToInt(t)
-        | Prim::FltNeg(t)
-        | Prim::FltAbs(t)
-        | Prim::FltSqrt(t)
-        | Prim::FltFloor(t)
-        | Prim::FltCeil(t)
-        | Prim::FltTrunc(t)
-        | Prim::FltNearest(t)
-        | Prim::BinLen(t)
-        | Prim::BinFlatten(t)
-        | Prim::ArrType(t)
-        | Prim::IoClose(t)
-        | Prim::IoResolve(t)
-        | Prim::IoSocket(t)
-        | Prim::IoAccept(t)
-        | Prim::IoRandom(t)
-        | Prim::IoEnv(t) => t.collect_construction_names(names),
-
-        Prim::IoEql(a, b)
-        | Prim::NatEql(a, b)
-        | Prim::NatNeq(a, b)
-        | Prim::NatAdd(a, b)
-        | Prim::NatSub(a, b)
-        | Prim::NatMul(a, b)
-        | Prim::NatLt(a, b)
-        | Prim::NatDiv(a, b)
-        | Prim::NatRem(a, b)
-        | Prim::NatGt(a, b)
-        | Prim::NatLte(a, b)
-        | Prim::NatGte(a, b)
-        | Prim::NatAnd(a, b)
-        | Prim::NatOr(a, b)
-        | Prim::NatXor(a, b)
-        | Prim::NatShl(a, b)
-        | Prim::NatShr(a, b)
-        | Prim::BlnAnd(a, b)
-        | Prim::BlnOr(a, b)
-        | Prim::BlnXor(a, b)
-        | Prim::BlnEql(a, b)
-        | Prim::BlnNeq(a, b)
-        | Prim::IntEql(a, b)
-        | Prim::IntNeq(a, b)
-        | Prim::IntAdd(a, b)
-        | Prim::IntSub(a, b)
-        | Prim::IntMul(a, b)
-        | Prim::IntDiv(a, b)
-        | Prim::IntRem(a, b)
-        | Prim::IntLt(a, b)
-        | Prim::IntGt(a, b)
-        | Prim::IntLte(a, b)
-        | Prim::IntGte(a, b)
-        | Prim::IntAnd(a, b)
-        | Prim::IntOr(a, b)
-        | Prim::IntXor(a, b)
-        | Prim::IntShl(a, b)
-        | Prim::IntShr(a, b)
-        | Prim::FltAdd(a, b)
-        | Prim::FltSub(a, b)
-        | Prim::FltMul(a, b)
-        | Prim::FltDiv(a, b)
-        | Prim::FltRem(a, b)
-        | Prim::FltEql(a, b)
-        | Prim::FltNeq(a, b)
-        | Prim::FltLt(a, b)
-        | Prim::FltGt(a, b)
-        | Prim::FltLte(a, b)
-        | Prim::FltGte(a, b)
-        | Prim::FltMin(a, b)
-        | Prim::FltMax(a, b)
-        | Prim::BinEql(a, b)
-        | Prim::BinGet(a, b)
-        | Prim::BinAppend(a, b)
-        | Prim::ArrLen(a, b)
-        | Prim::ArrFlatten(a, b)
-        | Prim::IoRead(a, b)
-        | Prim::IoWrite(a, b)
-        | Prim::IoOpen(a, b)
-        | Prim::IoLookup(a, b)
-        | Prim::IoBind(a, b)
-        | Prim::IoConnect(a, b)
-        | Prim::IoListen(a, b)
-        | Prim::IoSetNonblocking(a, b)
-        | Prim::IoSetRecvTimeout(a, b)
-        | Prim::IoSetSendTimeout(a, b)
-        | Prim::IoSetReuseaddr(a, b)
-        | Prim::IoStartTls(a, b)
-        | Prim::IoTlsServerConfig(a, b)
-        | Prim::IoStartTlsServer(a, b)
-        | Prim::IoExit(a, b) => {
-            a.collect_construction_names(names);
-            b.collect_construction_names(names);
-        }
-
-        Prim::BinSlice(a, b, c)
-        | Prim::ArrGet(a, b, c)
-        | Prim::ArrAppend(a, b, c)
-        | Prim::IoPoll(a, b, c) => {
-            a.collect_construction_names(names);
-            b.collect_construction_names(names);
-            c.collect_construction_names(names);
-        }
-
-        Prim::ArrSlice(a, b, c, d) | Prim::ArrMap(a, b, c, d) => {
-            a.collect_construction_names(names);
-            b.collect_construction_names(names);
-            c.collect_construction_names(names);
-            d.collect_construction_names(names);
-        }
-
-        Prim::BinConcat(terms) | Prim::Arr(terms) => terms
-            .iter()
-            .for_each(|term| term.collect_construction_names(names)),
-        Prim::ArrConcat(ty, terms) => {
-            ty.collect_construction_names(names);
-            terms
-                .iter()
-                .for_each(|term| term.collect_construction_names(names));
-        }
-
-        Prim::CellType(a) => a.collect_construction_names(names),
-        Prim::Cell(a, b) | Prim::CellGet(a, b) => {
-            a.collect_construction_names(names);
-            b.collect_construction_names(names);
-        }
-        Prim::CellSet(a, b, c) => {
-            a.collect_construction_names(names);
-            b.collect_construction_names(names);
-            c.collect_construction_names(names);
-        }
-    }
+    for_each_prim_operand(prim, &mut |term| term.collect_construction_names(names));
 }
 
 /// Visit both operands of a binary primitive and rebuild it through `build`. The
