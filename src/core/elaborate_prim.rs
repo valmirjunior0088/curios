@@ -43,6 +43,10 @@ fn infer_bin(context: &mut Context, bin: &Term) -> Result<Term, Error> {
     }
 }
 
+fn arr_type(elem: Term) -> Term {
+    Subterm::Prim(Prim::ArrType(elem)).into()
+}
+
 /// Synthesize a primitive's type, checking *and rebuilding* its operands. Mirrors
 /// the old `infer_prim`, but every operand obligation goes through
 /// `elaborate(Check)` and the elaborated operand is kept, so the returned `Prim`
@@ -166,7 +170,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             (Prim::BinConcat(elaborated), bin_type)
         }
         Prim::BinFlatten(operand) => {
-            let outer_type: Term = Subterm::Prim(Prim::ArrType(bin_type.clone())).into();
+            let outer_type = arr_type(bin_type.clone());
             let operand = elaborate(context, operand, Mode::Check(outer_type))?.0;
             (Prim::BinFlatten(operand), bin_type)
         }
@@ -177,13 +181,13 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::Arr(_) => return Err(Error::CannotInferLiteral),
         Prim::ArrLen(type_, list) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
-            let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let list_type = arr_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type))?.0;
             (Prim::ArrLen(type_, list), nat_type)
         }
         Prim::ArrGet(type_, list, index) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
-            let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let list_type = arr_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type))?.0;
             let index = elaborate(context, index, Mode::Check(nat_type))?.0;
             let output = type_.clone();
@@ -191,7 +195,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         }
         Prim::ArrSlice(type_, list, start, end) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
-            let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let list_type = arr_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type.clone()))?.0;
             let start = elaborate(context, start, Mode::Check(nat_type.clone()))?.0;
             let end = elaborate(context, end, Mode::Check(nat_type))?.0;
@@ -199,14 +203,14 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         }
         Prim::ArrAppend(type_, list, elem) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
-            let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let list_type = arr_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type.clone()))?.0;
             let elem = elaborate(context, elem, Mode::Check(type_.clone()))?.0;
             (Prim::ArrAppend(type_, list, elem), list_type)
         }
         Prim::ArrConcat(type_, operands) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
-            let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
+            let list_type = arr_type(type_.clone());
             let mut elaborated = Vec::with_capacity(operands.len());
             for operand in operands {
                 elaborated.push(elaborate(context, operand, Mode::Check(list_type.clone()))?.0);
@@ -215,8 +219,8 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         }
         Prim::ArrFlatten(type_, operand) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
-            let list_type: Term = Subterm::Prim(Prim::ArrType(type_.clone())).into();
-            let outer_type: Term = Subterm::Prim(Prim::ArrType(list_type.clone())).into();
+            let list_type = arr_type(type_.clone());
+            let outer_type = arr_type(list_type.clone());
             let operand = elaborate(context, operand, Mode::Check(outer_type))?.0;
             (Prim::ArrFlatten(type_, operand), list_type)
         }
@@ -225,9 +229,9 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let b = elaborate(context, b, Mode::Check(Term::type_()))?.0;
             let f_type = Term::func_type([("x", a.clone())], b.clone());
             let f = elaborate(context, f, Mode::Check(f_type))?.0;
-            let arr_a: Term = Subterm::Prim(Prim::ArrType(a.clone())).into();
+            let arr_a = arr_type(a.clone());
             let arr = elaborate(context, arr, Mode::Check(arr_a))?.0;
-            let arr_b: Term = Subterm::Prim(Prim::ArrType(b.clone())).into();
+            let arr_b = arr_type(b.clone());
             (Prim::ArrMap(a, b, f, arr), arr_b)
         }
         Prim::IoType => (prim.clone(), Term::type_()),
@@ -276,7 +280,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 Prim::IoResolve(handle),
                 Term::tuple_type([
                     ("status", nat_type.clone()),
-                    ("addresses", Subterm::Prim(Prim::ArrType(bin_type)).into()),
+                    ("addresses", arr_type(bin_type)),
                 ]),
             )
         }
@@ -351,8 +355,8 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             // `handles : Arr(Io)`, `events : Arr(Nat)` (parallel interest masks),
             // `timeout : Int` (poll(2) sign convention); result is the parallel
             // `Arr(Nat)` of revents.
-            let arr_io: Term = Subterm::Prim(Prim::ArrType(io_type)).into();
-            let arr_nat: Term = Subterm::Prim(Prim::ArrType(nat_type)).into();
+            let arr_io = arr_type(io_type);
+            let arr_nat = arr_type(nat_type);
             let handles = elaborate(context, handles, Mode::Check(arr_io))?.0;
             let events = elaborate(context, events, Mode::Check(arr_nat.clone()))?.0;
             let timeout = elaborate(context, timeout, Mode::Check(int_type))?.0;
@@ -379,7 +383,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             (Prim::IoRandom(count), bin_type)
         }
         // argv: an immutable snapshot of the process arguments.
-        Prim::IoArgs => (prim.clone(), Subterm::Prim(Prim::ArrType(bin_type)).into()),
+        Prim::IoArgs => (prim.clone(), arr_type(bin_type)),
         Prim::IoEnv(name) => {
             let name = elaborate(context, name, Mode::Check(bin_type.clone()))?.0;
             // Found/not-found crosses as a status record: 0 ok, 2 not found.
