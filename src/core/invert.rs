@@ -8,7 +8,8 @@
 
 use {
     super::{
-        Context, Error, InductiveType, Peel, Subterm, Telescope, Term, peel_prim, reduce_with,
+        Context, Error, InductiveType, Peel, Subterm, Telescope, Term, convert_at, peel_prim,
+        reduce_with,
     },
     std::collections::BTreeSet,
 };
@@ -40,14 +41,15 @@ pub fn case_target_indices(telescope: Telescope<Term>, vars: &[Term]) -> Vec<Ter
     }
 }
 
-/// The unifier, deliberately tiny: first-order, constructor-form, linear.
-/// Per index position it decomposes matching constructor forms (`Nat`
-/// successor spines, variants by tag, tuples pointwise), solves an unbound
-/// arm binder against the rigid term it is forced to equal, and declares a
-/// clash on distinct constructors. Everything else — non-linear binders
-/// (shared across positions, the K-shaped reasoning this refuses),
-/// metavariables, opaque applications, key-shaped actuals at the top of a
-/// position (Rung B's territory) — it *refuses*: the arm stays mandatory and
+/// The unifier, deliberately tiny: first-order, constructor-form. Per index
+/// position it decomposes matching constructor forms (`Nat` successor spines,
+/// variants by tag, tuples pointwise), solves an unbound arm binder against
+/// the rigid term it is forced to equal, and declares a clash on distinct
+/// constructors. A binder forced in more than one position is reconciled by
+/// the *deletion* rule (`consolidate`): its forcings must be convertible —
+/// sound because `Eq : Prop` makes the system definitionally K. Everything
+/// else — metavariables, opaque applications, key-shaped actuals at the top of
+/// a position (Rung B's territory) — it *refuses*: the arm stays mandatory and
 /// the binder unsolved.
 pub fn invert_indices(
     context: &mut Context,
@@ -55,32 +57,68 @@ pub fn invert_indices(
     targets: &[Term],
     flex: &[String],
 ) -> Result<Invert, Error> {
-    let mut seen = BTreeSet::new();
-    let mut tainted = BTreeSet::new();
-
-    for target in targets {
-        for name in target.free_vars() {
-            if flex.contains(&name) && !seen.insert(name.clone()) {
-                tainted.insert(name);
-            }
-        }
-    }
-
     let mut solutions = Vec::new();
 
     for (actual, target) in actuals.iter().zip(targets) {
         let mut position = Vec::new();
 
-        match unify_index(context, actual, target, flex, &tainted, true, &mut position)? {
+        match unify_index(context, actual, target, flex, true, &mut position)? {
             Step::Clash => return Ok(Invert::Impossible),
             // A refused position contributes nothing — solutions found on
             // the way in are discarded with it, conservatively.
             Step::Refuse => {}
+            // A solved position's forcings join the pool; a binder forced here
+            // *and* in another position becomes a duplicate, reconciled by the
+            // deletion rule below.
             Step::Ok => solutions.extend(position),
         }
     }
 
-    Ok(Invert::Solved(solutions))
+    consolidate(context, solutions).map(Invert::Solved)
+}
+
+/// The deletion rule (Goguen–McBride–McKinna), the last of the first-order
+/// set, restored here as a *semantic* test in place of the old syntactic
+/// non-linearity refusal. A flex arm binder forced in more than one index
+/// position must take convertible values; since `Eq : Prop` makes the system
+/// definitionally K, deleting the redundant constraint is sound. A *definite*
+/// yes from the boolean oracle (`Prop`-typed positions convert by irrelevance,
+/// so they delete for free) keeps one solution; anything short — a `Mismatch`,
+/// a `Blocked`, or a binder whose type is out of scope (the prune site, which
+/// only reads `Impossible` vs `Solved`) — drops that binder's solutions,
+/// conservatively. Never a `Clash`, so `Impossible`/prune semantics hold.
+fn consolidate(
+    context: &mut Context,
+    solutions: Vec<(String, Term)>,
+) -> Result<Vec<(String, Term)>, Error> {
+    let mut kept: Vec<(String, Term)> = Vec::new();
+    let mut refused = BTreeSet::new();
+
+    for (label, value) in solutions {
+        if refused.contains(&label) {
+            continue;
+        }
+
+        let Some(index) = kept.iter().position(|(l, _)| *l == label) else {
+            kept.push((label, value));
+            continue;
+        };
+
+        // A re-forcing: keep the prior solution iff the two are convertible at
+        // the binder's declared type (cloned to release the context borrow).
+        let prior = kept[index].1.clone();
+        let deletes = match context.assumption(&label).cloned() {
+            Some(type_) => convert_at(context, &type_, &prior, &value)?,
+            None => false,
+        };
+
+        if !deletes {
+            kept.remove(index);
+            refused.insert(label);
+        }
+    }
+
+    Ok(kept)
 }
 
 fn unify_index(
@@ -88,7 +126,6 @@ fn unify_index(
     actual: &Term,
     target: &Term,
     flex: &[String],
-    tainted: &BTreeSet<String>,
     top: bool,
     solutions: &mut Vec<(String, Term)>,
 ) -> Result<Step, Error> {
@@ -96,16 +133,15 @@ fn unify_index(
     let target = reduce_with(context, target)?;
 
     // Solve a flex arm binder against the rigid term it is forced to equal —
-    // forced because every decomposition step above it was injective.
+    // forced because every decomposition step above it was injective. A binder
+    // already forced elsewhere is recorded again, not refused: the deletion
+    // rule in `consolidate` reconciles the two forcings by convertibility.
     if let Subterm::Var(var) = &*target
         && var.as_bound().is_none()
         && flex.iter().any(|l| l == var.unwrap())
     {
         let label = var.unwrap().to_string();
 
-        if tainted.contains(&label) || solutions.iter().any(|(l, _)| *l == label) {
-            return Ok(Step::Refuse);
-        }
         // At the top of a position a key-shaped actual is Rung B's: it was
         // refined *to* this binder, and solving the binder back to it would
         // tie a reduction cycle. A flex actual (metavariable) is refused
@@ -140,7 +176,7 @@ fn unify_index(
             Some(Peel::Clash) => Ok(Step::Clash),
             Some(Peel::Stuck) => Ok(Step::Refuse),
             Some(Peel::Continue(left, right)) => {
-                unify_index(context, &left, &right, flex, tainted, false, solutions)
+                unify_index(context, &left, &right, flex, false, solutions)
             }
             None => Ok(Step::Refuse),
         },
@@ -166,14 +202,14 @@ fn unify_index(
             if a.payload.len() != t.payload.len() {
                 return Ok(Step::Refuse);
             }
-            unify_all(context, &a.payload, &t.payload, flex, tainted, solutions)
+            unify_all(context, &a.payload, &t.payload, flex, solutions)
         }
 
         (Subterm::Tuple(a), Subterm::Tuple(t)) => {
             if a.fields.len() != t.fields.len() {
                 return Ok(Step::Refuse);
             }
-            unify_all(context, &a.fields, &t.fields, flex, tainted, solutions)
+            unify_all(context, &a.fields, &t.fields, flex, solutions)
         }
 
         _ => Ok(Step::Refuse),
@@ -187,11 +223,10 @@ fn unify_all(
     actuals: &[Term],
     targets: &[Term],
     flex: &[String],
-    tainted: &BTreeSet<String>,
     solutions: &mut Vec<(String, Term)>,
 ) -> Result<Step, Error> {
     for (actual, target) in actuals.iter().zip(targets) {
-        match unify_index(context, actual, target, flex, tainted, false, solutions)? {
+        match unify_index(context, actual, target, flex, false, solutions)? {
             Step::Ok => {}
             other => return Ok(other),
         }

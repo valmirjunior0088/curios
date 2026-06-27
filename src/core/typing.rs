@@ -24,9 +24,23 @@ pub fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
         .map_err(|error| error.into_error(|| Error::reduce_preempted(term.clone())))
 }
 
-pub fn convert_with(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
-    super::convert(context, &Term::type_(), this, that)
+/// [`super::convert`] with its `ReduceError` mapped to `Error`, at an explicit
+/// type so proof-irrelevance and eta fire at the terms' real sort. The inverter
+/// uses it to compare a binder's competing forcings at the binder's own type.
+pub fn convert_at(
+    context: &mut Context,
+    type_: &Term,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, Error> {
+    super::convert(context, type_, this, that)
         .map_err(|error| error.into_error(|| Error::convert_preempted(this.clone(), that.clone())))
+}
+
+/// `convert_at` at `Type`: comparing two types, the elaboration turnaround's
+/// common case.
+pub fn convert_with(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
+    convert_at(context, &Term::type_(), this, that)
 }
 
 /// The sort term (`Type`/`Prop`) `type_` inhabits — what a type-former reports
