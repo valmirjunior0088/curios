@@ -313,33 +313,73 @@ pub fn erase_prim(
         }
         Prim::IoType => Ok(ersd::Subterm::Erased.into()),
         &Prim::Io(token) => Ok(pure(ersd::PurePrim::Io(token))),
-        Prim::IoRead(handle, count) => {
-            host_binary(context, handle, io_type, count, nat_type, ersd::HostPrim::IoRead)
-        }
-        Prim::IoWrite(handle, bytes) => {
-            host_binary(context, handle, io_type, bytes, bin_type, ersd::HostPrim::IoWrite)
-        }
-        Prim::IoOpen(path, mode) => {
-            host_binary(context, path, bin_type, mode, nat_type, ersd::HostPrim::IoOpen)
-        }
-        Prim::IoLookup(host_, port) => {
-            host_binary(context, host_, bin_type, port, nat_type, ersd::HostPrim::IoLookup)
-        }
+        Prim::IoRead(handle, count) => host_binary(
+            context,
+            handle,
+            io_type,
+            count,
+            nat_type,
+            ersd::HostPrim::IoRead,
+        ),
+        Prim::IoWrite(handle, bytes) => host_binary(
+            context,
+            handle,
+            io_type,
+            bytes,
+            bin_type,
+            ersd::HostPrim::IoWrite,
+        ),
+        Prim::IoOpen(path, mode) => host_binary(
+            context,
+            path,
+            bin_type,
+            mode,
+            nat_type,
+            ersd::HostPrim::IoOpen,
+        ),
+        Prim::IoLookup(host_, port) => host_binary(
+            context,
+            host_,
+            bin_type,
+            port,
+            nat_type,
+            ersd::HostPrim::IoLookup,
+        ),
         Prim::IoResolve(handle) => host_unary(context, handle, io_type, ersd::HostPrim::IoResolve),
         Prim::IoSocket(addr) => host_unary(context, addr, bin_type, ersd::HostPrim::IoSocket),
-        Prim::IoBind(handle, addr) => {
-            host_binary(context, handle, io_type, addr, bin_type, ersd::HostPrim::IoBind)
-        }
-        Prim::IoConnect(handle, addr) => {
-            host_binary(context, handle, io_type, addr, bin_type, ersd::HostPrim::IoConnect)
-        }
-        Prim::IoListen(handle, backlog) => {
-            host_binary(context, handle, io_type, backlog, nat_type, ersd::HostPrim::IoListen)
-        }
+        Prim::IoBind(handle, addr) => host_binary(
+            context,
+            handle,
+            io_type,
+            addr,
+            bin_type,
+            ersd::HostPrim::IoBind,
+        ),
+        Prim::IoConnect(handle, addr) => host_binary(
+            context,
+            handle,
+            io_type,
+            addr,
+            bin_type,
+            ersd::HostPrim::IoConnect,
+        ),
+        Prim::IoListen(handle, backlog) => host_binary(
+            context,
+            handle,
+            io_type,
+            backlog,
+            nat_type,
+            ersd::HostPrim::IoListen,
+        ),
         Prim::IoAccept(handle) => host_unary(context, handle, io_type, ersd::HostPrim::IoAccept),
-        Prim::IoStartTls(handle, sni) => {
-            host_binary(context, handle, io_type, sni, bin_type, ersd::HostPrim::IoStartTls)
-        }
+        Prim::IoStartTls(handle, sni) => host_binary(
+            context,
+            handle,
+            io_type,
+            sni,
+            bin_type,
+            ersd::HostPrim::IoStartTls,
+        ),
         Prim::IoTlsServerConfig(cert, key) => host_binary(
             context,
             cert,

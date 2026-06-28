@@ -1,8 +1,8 @@
 use super::{
     Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
     InductiveParam, InductiveType, Item, Let, Match, Metavar, Module, MotivePattern, MotiveSlot,
-    Nat, Prim, Proj, Rec, Struct, StructType, Structure, Subterm, Telescope, Term, Tuple, TupleType,
-    Variant,
+    Nat, Prim, Proj, Rec, Struct, StructType, Structure, Subterm, Telescope, Term, Tuple,
+    TupleType, Variant,
 };
 
 /// Substitute every solved metavariable in `term` by its (recursively zonked)

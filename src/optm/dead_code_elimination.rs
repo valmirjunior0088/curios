@@ -112,7 +112,10 @@ fn collect_liveness(
         if !is_removable(value) {
             roots.extend(referenced.0.iter().cloned());
         }
-        operands.entry(name.clone()).or_default().extend(referenced.0);
+        operands
+            .entry(name.clone())
+            .or_default()
+            .extend(referenced.0);
     }
 
     // Prealloc shells carry no value operands (only a closure reference); their

@@ -1,7 +1,4 @@
-use {
-    crate::MockHost,
-    std::time::Duration,
-};
+use {crate::MockHost, std::time::Duration};
 
 #[test]
 fn net_call_round_trips_a_scripted_endpoint() {

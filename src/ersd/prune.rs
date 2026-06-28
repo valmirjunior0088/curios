@@ -44,7 +44,10 @@ pub fn prune_unreachable(module: &mut Module) {
 
     let edge = |name: &str| owner.get(name).copied();
     let references = |names: BTreeSet<String>| {
-        names.iter().filter_map(|name| edge(name)).collect::<HashSet<usize>>()
+        names
+            .iter()
+            .filter_map(|name| edge(name))
+            .collect::<HashSet<usize>>()
     };
 
     // The items each item references, and whether it is synchronous / directly
@@ -55,7 +58,11 @@ pub fn prune_unreachable(module: &mut Module) {
         .iter()
         .map(|item| references(item_free_names(item)))
         .collect::<Vec<HashSet<usize>>>();
-    let synchronous = module.items.iter().map(item_is_synchronous).collect::<Vec<bool>>();
+    let synchronous = module
+        .items
+        .iter()
+        .map(item_is_synchronous)
+        .collect::<Vec<bool>>();
 
     // `tainted[i]`: evaluating item `i` could perform an effect — it contains one
     // directly, or it references a tainted item (calling/forcing which runs one).
@@ -150,7 +157,9 @@ fn is_synchronous(term: &Term) -> bool {
 /// the caller's evaluation is what we are classifying.
 fn contains_effect(term: &Term) -> bool {
     match term.as_subterm() {
-        Subterm::Prim(prim) => prim.is_effectful() || prim.operands().iter().any(|t| contains_effect(t)),
+        Subterm::Prim(prim) => {
+            prim.is_effectful() || prim.operands().iter().any(|t| contains_effect(t))
+        }
         Subterm::Func(func) => contains_effect(&func.body),
         Subterm::Apply(apply) => {
             contains_effect(&apply.head) || apply.params.iter().any(contains_effect)
@@ -163,9 +172,7 @@ fn contains_effect(term: &Term) -> bool {
             zero_case,
             succ_case,
             ..
-        }) => {
-            contains_effect(head) || contains_effect(zero_case) || contains_effect(succ_case)
-        }
+        }) => contains_effect(head) || contains_effect(zero_case) || contains_effect(succ_case),
         Subterm::NatMatch(NatMatch::Dispatch {
             head,
             cases,
@@ -260,7 +267,8 @@ mod tests {
             items: vec![
                 Item::Let {
                     name: "eff".to_owned(),
-                    body: Subterm::Prim(Prim::Host(HostPrim::IoExit(Subterm::Erased.into()))).into(),
+                    body: Subterm::Prim(Prim::Host(HostPrim::IoExit(Subterm::Erased.into())))
+                        .into(),
                 },
                 leaf("pure_unused"),
             ],

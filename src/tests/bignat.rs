@@ -1,8 +1,4 @@
-use {
-    super::run,
-    crate::MockHost,
-    std::time::Duration,
-};
+use {super::run, crate::MockHost, std::time::Duration};
 
 #[test]
 fn bignat_add_carries_across_limbs() {

@@ -169,15 +169,9 @@ fn convert_prim_nat_add_recurses_into_operands() {
 fn convert_prim_flt_neg_recurses_into_operand() {
     let mut context = context();
 
-    let this = func(
-        ["x"],
-        Subterm::Prim(Prim::flt_neg(Term::free_var("x"))),
-    );
+    let this = func(["x"], Subterm::Prim(Prim::flt_neg(Term::free_var("x"))));
 
-    let that = func(
-        ["y"],
-        Subterm::Prim(Prim::flt_neg(Term::free_var("y"))),
-    );
+    let that = func(["y"], Subterm::Prim(Prim::flt_neg(Term::free_var("y"))));
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -186,15 +180,9 @@ fn convert_prim_flt_neg_recurses_into_operand() {
 fn convert_prim_nat_to_int_recurses_into_operand() {
     let mut context = context();
 
-    let this = func(
-        ["x"],
-        Subterm::Prim(Prim::nat_to_int(Term::free_var("x"))),
-    );
+    let this = func(["x"], Subterm::Prim(Prim::nat_to_int(Term::free_var("x"))));
 
-    let that = func(
-        ["y"],
-        Subterm::Prim(Prim::nat_to_int(Term::free_var("y"))),
-    );
+    let that = func(["y"], Subterm::Prim(Prim::nat_to_int(Term::free_var("y"))));
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -270,14 +258,8 @@ fn convert_prim_bin_literal_compares_bytes() {
 fn convert_prim_bin_len_recurses_into_operand() {
     let mut context = context();
 
-    let this = func(
-        ["x"],
-        Subterm::Prim(Prim::bin_len(Term::free_var("x"))),
-    );
-    let that = func(
-        ["y"],
-        Subterm::Prim(Prim::bin_len(Term::free_var("y"))),
-    );
+    let this = func(["x"], Subterm::Prim(Prim::bin_len(Term::free_var("x"))));
+    let that = func(["y"], Subterm::Prim(Prim::bin_len(Term::free_var("y"))));
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -290,10 +272,7 @@ fn convert_prim_bin_get_recurses_into_operands() {
         ["x"],
         func(
             ["a"],
-            Subterm::Prim(Prim::bin_get(
-                Term::free_var("x"),
-                Term::free_var("a"),
-            )),
+            Subterm::Prim(Prim::bin_get(Term::free_var("x"), Term::free_var("a"))),
         ),
     );
 
@@ -301,10 +280,7 @@ fn convert_prim_bin_get_recurses_into_operands() {
         ["y"],
         func(
             ["b"],
-            Subterm::Prim(Prim::bin_get(
-                Term::free_var("y"),
-                Term::free_var("b"),
-            )),
+            Subterm::Prim(Prim::bin_get(Term::free_var("y"), Term::free_var("b"))),
         ),
     );
 
@@ -319,10 +295,7 @@ fn convert_prim_bin_concat_recurses_into_operands() {
         ["x"],
         func(
             ["a"],
-            Subterm::Prim(Prim::bin_concat([
-                Term::free_var("x"),
-                Term::free_var("a"),
-            ])),
+            Subterm::Prim(Prim::bin_concat([Term::free_var("x"), Term::free_var("a")])),
         ),
     );
 
@@ -330,10 +303,7 @@ fn convert_prim_bin_concat_recurses_into_operands() {
         ["y"],
         func(
             ["b"],
-            Subterm::Prim(Prim::bin_concat([
-                Term::free_var("y"),
-                Term::free_var("b"),
-            ])),
+            Subterm::Prim(Prim::bin_concat([Term::free_var("y"), Term::free_var("b")])),
         ),
     );
 
@@ -467,18 +437,12 @@ fn convert_times_out_on_pathological_inputs() {
     let this = Term::tuple_type([
         (
             "x",
-            Term::apply(
-                func(["z"], Term::free_var("z")),
-                [Term::free_var("loop")],
-            ),
+            Term::apply(func(["z"], Term::free_var("z")), [Term::free_var("loop")]),
         ),
         ("y", Term::free_var("x")),
     ]);
 
-    let that = Term::tuple_type([
-        ("x", Term::free_var("loop")),
-        ("y", Term::free_var("x")),
-    ]);
+    let that = Term::tuple_type([("x", Term::free_var("loop")), ("y", Term::free_var("x"))]);
 
     assert_eq!(
         conv(&mut context, &this, &that),
@@ -641,7 +605,11 @@ fn scope_check_allows_in_context_variable() {
     let mut context = context();
     // Γ = (x : Type); result is Type, and the candidate `x` is in scope.
     context.assume("x", &Term::type_());
-    context.birth_metavar(MetavarId(0), vec![("x".to_string(), Term::type_())], Term::type_());
+    context.birth_metavar(
+        MetavarId(0),
+        vec![("x".to_string(), Term::type_())],
+        Term::type_(),
+    );
 
     let x = Term::free_var("x");
     let occurrence = Term::metavar_birthed(0, None, vec![x.clone()]);
@@ -745,7 +713,8 @@ fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
     let mut context = context();
     context.assume("t", &Term::type_());
     context.refine("t", &Term::prim(Prim::NatType));
-    context.birth_metavar(MetavarId(0),
+    context.birth_metavar(
+        MetavarId(0),
         vec![("t".to_string(), Term::type_())],
         Term::free_var("t"),
     );
@@ -768,7 +737,8 @@ fn revalidation_accepts_a_refinement_independent_solution() {
     let mut context = context();
     context.assume("t", &Term::type_());
     context.refine("t", &Term::prim(Prim::NatType));
-    context.birth_metavar(MetavarId(0),
+    context.birth_metavar(
+        MetavarId(0),
         vec![("t".to_string(), Term::type_())],
         Term::prim(Prim::NatType),
     );
@@ -821,17 +791,14 @@ fn solve_through_an_identity_spine_matches_legacy() {
 #[test]
 fn solve_postpones_a_duplicated_renaming() {
     let mut context = context();
-    context.birth_metavar(MetavarId(0),
+    context.birth_metavar(
+        MetavarId(0),
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
     );
     // Both entries are the same live name: which birth binder `y` stands for
     // is ambiguous, so a candidate mentioning it is undecided, not unequal.
-    let occurrence = Term::metavar_birthed(
-        0,
-        None,
-        vec![Term::free_var("y"), Term::free_var("y")],
-    );
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y"), Term::free_var("y")]);
 
     let outcome = convert_outcome(
         &mut context,
@@ -846,15 +813,15 @@ fn solve_postpones_a_duplicated_renaming() {
 #[test]
 fn solve_prunes_dependence_on_a_non_pattern_entry() {
     let mut context = context();
-    context.birth_metavar(MetavarId(0),
+    context.birth_metavar(
+        MetavarId(0),
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
     );
     // First slot a pattern variable, second a compound term: the candidate
     // may depend on the first but not (yet) on the second.
     let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var("z"), nat(1))).into();
-    let occurrence =
-        Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound.clone()]);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound.clone()]);
 
     // ?0[y, z+1] ≟ y — solvable through the pattern slot alone.
     assert_eq!(
@@ -870,7 +837,8 @@ fn solve_prunes_dependence_on_a_non_pattern_entry() {
 #[test]
 fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
     let mut context = context();
-    context.birth_metavar(MetavarId(0),
+    context.birth_metavar(
+        MetavarId(0),
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
     );
@@ -933,15 +901,15 @@ fn solve_classifies_a_solved_metavariable_spine_entry_by_its_value() {
 #[test]
 fn solve_abstracts_a_non_pattern_occurrence() {
     let mut context = context();
-    context.birth_metavar(MetavarId(0),
+    context.birth_metavar(
+        MetavarId(0),
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
     );
     // A reduce-stable compound (a tuple is a normal form), matched by the
     // raw spelling; the reduced-spelling case is the next test.
     let compound = Term::tuple([Term::free_var("z")]);
-    let occurrence =
-        Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound.clone()]);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound.clone()]);
 
     // ?0[y, (z,)] ≟ (z,) — the candidate *is* an occurrence of the
     // non-pattern entry, which abstracts to its birth binder `b`.
@@ -1003,7 +971,8 @@ fn parked_goals_without_their_refinement_mismatch() {
 #[test]
 fn solve_abstracts_a_reduced_spelling_occurrence() {
     let mut context = context();
-    context.birth_metavar(MetavarId(0),
+    context.birth_metavar(
+        MetavarId(0),
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
     );
@@ -1012,8 +981,7 @@ fn solve_abstracts_a_reduced_spelling_occurrence() {
     // still abstracts, and the round-trip verification accepts the pair by
     // definitional (not syntactic) equality.
     let compound: Term = Subterm::Prim(Prim::nat_add(Term::free_var("z"), nat(1))).into();
-    let occurrence =
-        Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound.clone()]);
+    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var("y"), compound.clone()]);
 
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
     assert_eq!(

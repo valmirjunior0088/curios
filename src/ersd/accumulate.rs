@@ -1,5 +1,8 @@
 use {
-    super::{Apply, Argument, Func, Item, Match, Module, Name, NatMatch, Prim, PurePrim, Rec, Subterm, Term},
+    super::{
+        Apply, Argument, Func, Item, Match, Module, Name, NatMatch, Prim, PurePrim, Rec, Subterm,
+        Term,
+    },
     std::iter,
 };
 
@@ -135,7 +138,10 @@ fn accumulate(name: &str, term: &mut Term) {
 /// argument, a non-`NatAdd` combine) would be missed by the rewrite, so the whole
 /// function is declined.
 fn is_summing(name: &str, func: &Func) -> bool {
-    let TailTally { self_calls, combines } = tally_tail(&func.body, name);
+    let TailTally {
+        self_calls,
+        combines,
+    } = tally_tail(&func.body, name);
     combines >= 1 && count_self_calls(&func.body, name) == self_calls
 }
 
@@ -158,9 +164,7 @@ impl TailTally {
 /// operand of each `NatAdd` combine), and how many of those are combines.
 fn tally_tail(term: &Term, name: &str) -> TailTally {
     match term.as_subterm() {
-        Subterm::NatMatch(NatMatch::Dispatch {
-            cases, default, ..
-        }) => cases
+        Subterm::NatMatch(NatMatch::Dispatch { cases, default, .. }) => cases
             .values()
             .chain(iter::once(default))
             .fold(TailTally::default(), |acc, case| {
@@ -171,9 +175,11 @@ fn tally_tail(term: &Term, name: &str) -> TailTally {
             succ_case,
             ..
         }) => tally_tail(zero_case, name).plus(tally_tail(succ_case, name)),
-        Subterm::Match(Match { cases, .. }) => cases
-            .iter()
-            .fold(TailTally::default(), |acc, case| acc.plus(tally_tail(case, name))),
+        Subterm::Match(Match { cases, .. }) => {
+            cases.iter().fold(TailTally::default(), |acc, case| {
+                acc.plus(tally_tail(case, name))
+            })
+        }
         Subterm::Let(let_) => tally_tail(&let_.tail, name),
         Subterm::Apply(apply) if is_named(&apply.head, name) => TailTally {
             self_calls: 1,
@@ -194,7 +200,11 @@ fn tally_tail(term: &Term, name: &str) -> TailTally {
 /// Every self-call in the term, tail or not.
 fn count_self_calls(term: &Term, name: &str) -> usize {
     let here = matches!(term.as_subterm(), Subterm::Apply(apply) if is_named(&apply.head, name));
-    here as usize + subterms(term).iter().map(|sub| count_self_calls(sub, name)).sum::<usize>()
+    here as usize
+        + subterms(term)
+            .iter()
+            .map(|sub| count_self_calls(sub, name))
+            .sum::<usize>()
 }
 
 /// Rewrite the term's tail positions to thread the accumulator into the inner

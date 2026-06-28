@@ -745,7 +745,11 @@ fn dep_nodes(
 fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<String, usize> {
     nodes
         .iter()
-        .flat_map(|&n| flat_item_names(&items[n]).into_iter().map(move |name| (name, n)))
+        .flat_map(|&n| {
+            flat_item_names(&items[n])
+                .into_iter()
+                .map(move |name| (name, n))
+        })
         .collect()
 }
 
@@ -785,7 +789,10 @@ fn prelude_permutation(
         .iter()
         .map(|&n| {
             let declared = flat_item_names(&items[n]);
-            (n, dep_nodes(n, &items[n], &declared, inductives, structures, &owner))
+            (
+                n,
+                dep_nodes(n, &items[n], &declared, inductives, structures, &owner),
+            )
         })
         .collect::<HashMap<usize, HashSet<usize>>>();
 
@@ -808,9 +815,16 @@ fn order_flat_items(
 ) -> Vec<FlatItem> {
     let count = items.len();
 
-    let is_prelude = items.iter().map(flat_item_in_prelude).collect::<Vec<bool>>();
-    let prelude_nodes = (0..count).filter(|&i| is_prelude[i]).collect::<Vec<usize>>();
-    let rest = (0..count).filter(|&i| !is_prelude[i]).collect::<Vec<usize>>();
+    let is_prelude = items
+        .iter()
+        .map(flat_item_in_prelude)
+        .collect::<Vec<bool>>();
+    let prelude_nodes = (0..count)
+        .filter(|&i| is_prelude[i])
+        .collect::<Vec<usize>>();
+    let rest = (0..count)
+        .filter(|&i| !is_prelude[i])
+        .collect::<Vec<usize>>();
 
     let mut order = Vec::with_capacity(count);
 
@@ -819,10 +833,17 @@ fn order_flat_items(
     // whole block (in that order) ahead of everything else is always valid.
     PRELUDE_PERMUTATION.with(|cell| {
         let mut slot = cell.borrow_mut();
-        if slot.as_ref().is_none_or(|perm| perm.len() != prelude_nodes.len())
+        if slot
+            .as_ref()
+            .is_none_or(|perm| perm.len() != prelude_nodes.len())
             && !prelude_nodes.is_empty()
         {
-            *slot = Some(prelude_permutation(&items, &prelude_nodes, inductives, structures));
+            *slot = Some(prelude_permutation(
+                &items,
+                &prelude_nodes,
+                inductives,
+                structures,
+            ));
         }
         if let Some(perm) = slot.as_ref() {
             order.extend(perm.iter().map(|&rel| prelude_nodes[rel]));
@@ -838,12 +859,18 @@ fn order_flat_items(
         .iter()
         .map(|&n| {
             let declared = flat_item_names(&items[n]);
-            (n, dep_nodes(n, &items[n], &declared, inductives, structures, &rest_owner))
+            (
+                n,
+                dep_nodes(n, &items[n], &declared, inductives, structures, &rest_owner),
+            )
         })
         .collect::<HashMap<usize, HashSet<usize>>>();
     order.extend(topological_order(&rest, &rest_deps));
 
-    let mut slots = items.into_iter().map(Some).collect::<Vec<Option<FlatItem>>>();
+    let mut slots = items
+        .into_iter()
+        .map(Some)
+        .collect::<Vec<Option<FlatItem>>>();
     order
         .into_iter()
         .map(|node| slots[node].take().unwrap())

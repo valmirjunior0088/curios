@@ -1,7 +1,4 @@
-use {
-    crate::MockHost,
-    std::time::Duration,
-};
+use {crate::MockHost, std::time::Duration};
 
 #[test]
 fn task_scheduler_parks_polls_and_resumes() {

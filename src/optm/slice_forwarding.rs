@@ -67,7 +67,11 @@ struct Slice {
 /// has every slice registered before the consumers that read it — and a slice
 /// lingering from an already-walked sibling block is harmless, since no in-scope
 /// use can name it.
-fn forward_in_region(region: &mut Region, slices: &mut HashMap<ValueName, Slice>, offsets: &Entropy) {
+fn forward_in_region(
+    region: &mut Region,
+    slices: &mut HashMap<ValueName, Slice>,
+    offsets: &Entropy,
+) {
     let mut rewritten = Vec::with_capacity(region.values.len());
 
     for (name, value) in std::mem::take(&mut region.values) {
@@ -129,12 +133,26 @@ fn forward_eval(
             }
             None => Value::Eval(Code::BinGet(operand, index)),
         },
-        Code::ArrSlice(operand, start, end) => {
-            forward_slice(name, Carrier::Arr, operand, start, end, slices, offsets, prelude)
-        }
-        Code::BinSlice(operand, start, end) => {
-            forward_slice(name, Carrier::Bin, operand, start, end, slices, offsets, prelude)
-        }
+        Code::ArrSlice(operand, start, end) => forward_slice(
+            name,
+            Carrier::Arr,
+            operand,
+            start,
+            end,
+            slices,
+            offsets,
+            prelude,
+        ),
+        Code::BinSlice(operand, start, end) => forward_slice(
+            name,
+            Carrier::Bin,
+            operand,
+            start,
+            end,
+            slices,
+            offsets,
+            prelude,
+        ),
         other => Value::Eval(other),
     }
 }

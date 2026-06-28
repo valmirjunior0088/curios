@@ -1,8 +1,4 @@
-use {
-    super::run,
-    crate::MockHost,
-    std::time::Duration,
-};
+use {super::run, crate::MockHost, std::time::Duration};
 
 #[test]
 fn prop_irrelevance_equates_distinct_proofs() {

@@ -471,7 +471,10 @@ impl Context {
     /// frame open, everything in `local` is top-level. A metavariable's Γ is
     /// only the binders past this point (see [`Context::identity_snapshot`]).
     fn base_locals(&self) -> usize {
-        self.local_marks.first().copied().unwrap_or(self.local.len())
+        self.local_marks
+            .first()
+            .copied()
+            .unwrap_or(self.local.len())
     }
 
     /// Whether `name` is bound at the top level (the persistent base frame) —

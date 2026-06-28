@@ -70,12 +70,7 @@ fn reduce_let_then_var_unfolds_definition() {
 
     context.define("y", &nat(7));
 
-    let term: Term = Term::let_(
-        "x",
-        Term::type_(),
-        Term::free_var("y"),
-        Term::free_var("x"),
-    );
+    let term: Term = Term::let_("x", Term::type_(), Term::free_var("y"), Term::free_var("x"));
 
     assert_eq!(reduce(&mut context, term.clone()), Ok(nat(7)));
 }
@@ -319,10 +314,7 @@ fn eta_reduce_func_fires() {
         Term::apply(Term::free_var("f"), [Term::free_var("y")]),
     );
 
-    assert_eq!(
-        reduce(&mut context, term.clone()),
-        Ok(Term::free_var("f"))
-    );
+    assert_eq!(reduce(&mut context, term.clone()), Ok(Term::free_var("f")));
 }
 
 #[test]
@@ -566,9 +558,8 @@ fn reduce_flt_to_int_is_exact_or_stuck() {
 mod prim {
     use {
         crate::core::{
-            reduce,
+            Context, Nat, Prim, Subterm, Term, reduce,
             reduce_prim::{compare_nat, from_ordering},
-            Context, Nat, Prim, Subterm, Term,
         },
         num_bigint::BigUint,
         std::time::Duration,

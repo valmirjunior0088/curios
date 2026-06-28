@@ -170,11 +170,7 @@ fn erase_bin_append() {
     context.assume("b", &bin_type);
     context.assume("n", &Subterm::Prim(Prim::NatType).into());
 
-    let append = Subterm::Prim(Prim::bin_append(
-        Term::free_var("b"),
-        Term::free_var("n"),
-    ))
-    .into();
+    let append = Subterm::Prim(Prim::bin_append(Term::free_var("b"), Term::free_var("n"))).into();
     assert_eq!(infer(&mut context, &append).unwrap(), bin_type);
     erase(&mut context, &append, &bin_type).unwrap();
 }
@@ -188,11 +184,7 @@ fn erase_bin_eql() {
     context.assume("a", &bin_type);
     context.assume("b", &bin_type);
 
-    let eql = Subterm::Prim(Prim::bin_eql(
-        Term::free_var("a"),
-        Term::free_var("b"),
-    ))
-    .into();
+    let eql = Subterm::Prim(Prim::bin_eql(Term::free_var("a"), Term::free_var("b"))).into();
     assert_eq!(infer(&mut context, &eql).unwrap(), bool_type);
     erase(&mut context, &eql, &bool_type).unwrap();
 }

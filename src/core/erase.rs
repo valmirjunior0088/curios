@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, InductiveType,
-        Item, Let, Many, Match, Module, MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Scope,
-        PrimHead, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var,
+        Item, Let, Many, Match, Module, MotivePattern, MotiveSlot, Nat, Prim, PrimHead, Proj, Rec,
+        Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var,
         Variant, erase_prim, expect_prim_head, infer, is_prop, module_of, reduce_with, refine_head,
     },
     crate::ersd,
@@ -406,17 +406,11 @@ fn erase_nat_match(
     let erased_succ_case = context.with_frame(|context| {
         context.assume(&pred_label, &Subterm::Prim(Prim::NatType).into());
 
-        context.assume(
-            &ih_label,
-            &motive.open(&[&Term::free_var(&pred_label)]),
-        );
+        context.assume(&ih_label, &motive.open(&[&Term::free_var(&pred_label)]));
 
         erase(
             context,
-            &succ_case.open(&[
-                &Term::free_var(&pred_label),
-                &Term::free_var(&ih_label),
-            ]),
+            &succ_case.open(&[&Term::free_var(&pred_label), &Term::free_var(&ih_label)]),
             &motive.open(&[&Subterm::Prim(Prim::nat_add(
                 Term::free_var(&pred_label),
                 Subterm::Prim(Prim::Nat(Nat::new(1usize))),

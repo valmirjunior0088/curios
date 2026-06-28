@@ -1,5 +1,7 @@
 use {
-    super::{Apply, Argument, Func, Item, Module, Name, NatMatch, Prim, PurePrim, Rec, Subterm, Term},
+    super::{
+        Apply, Argument, Func, Item, Module, Name, NatMatch, Prim, PurePrim, Rec, Subterm, Term,
+    },
     std::{
         collections::{HashMap, HashSet},
         iter, mem,
@@ -116,7 +118,15 @@ fn transform(name: &str, item: &mut Term) {
     // Rewrite buffer reads onto base+offset and self-calls into offset-threading
     // tail calls to the cursor.
     let mut cursor_body = body;
-    rewrite(&mut cursor_body, name, &cursor, &base, &offset, index, carrier);
+    rewrite(
+        &mut cursor_body,
+        name,
+        &cursor,
+        &base,
+        &offset,
+        index,
+        carrier,
+    );
 
     // Inner cursor recursion: (params…, offset) => cursor_body.
     let mut cursor_params = clone_args(&params);
@@ -193,7 +203,11 @@ fn refresh_captures(term: &mut Term, cursor: &str, offset: &str) {
         candidate.insert(cursor.to_owned(), true);
         candidate.insert(offset.to_owned(), false);
 
-        let params = func.params.iter().map(|param| param.name.as_str()).collect::<HashSet<&str>>();
+        let params = func
+            .params
+            .iter()
+            .map(|param| param.name.as_str())
+            .collect::<HashSet<&str>>();
 
         func.captures = func
             .body
@@ -223,14 +237,20 @@ fn drop_front_param(name: &str, func: &Func) -> Option<(usize, Carrier)> {
     let mut self_calls = Vec::new();
     collect_self_calls(&func.body, name, &mut self_calls);
 
-    if self_calls.is_empty() || self_calls.iter().any(|call| call.params.len() != func.params.len())
+    if self_calls.is_empty()
+        || self_calls
+            .iter()
+            .any(|call| call.params.len() != func.params.len())
     {
         return None;
     }
 
     (0..func.params.len()).find_map(|index| {
         let base = &func.params[index].name;
-        let slots = self_calls.iter().map(|call| &call.params[index]).collect::<Vec<_>>();
+        let slots = self_calls
+            .iter()
+            .map(|call| &call.params[index])
+            .collect::<Vec<_>>();
 
         let carrier = slots.iter().find_map(|slot| slice_carrier(slot))?;
 
@@ -265,7 +285,10 @@ fn legible(term: &Term, name: &str, base: &str, index: usize, carrier: Carrier) 
                 legible(from, name, base, index, carrier)
                     && legible(upto, name, base, index, carrier)
             }
-            _ => prim.operands().iter().all(|operand| legible(operand, name, base, index, carrier)),
+            _ => prim
+                .operands()
+                .iter()
+                .all(|operand| legible(operand, name, base, index, carrier)),
         },
         // A self-call: every non-cursor argument must be legible, and the cursor
         // slot must be `b` or a drop-front suffix (whose start is itself legible).
@@ -439,9 +462,8 @@ fn into_slice_start(term: Term, carrier: Carrier) -> Term {
         unreachable!("a drop-front slot is a slice")
     };
     match (carrier, slice) {
-        (Carrier::Bin, PurePrim::BinSlice(_, from, _)) | (Carrier::Arr, PurePrim::ArrSlice(_, from, _)) => {
-            from
-        }
+        (Carrier::Bin, PurePrim::BinSlice(_, from, _))
+        | (Carrier::Arr, PurePrim::ArrSlice(_, from, _)) => from,
         _ => unreachable!("a drop-front slot is a carrier slice"),
     }
 }
@@ -515,12 +537,18 @@ fn subterms_mut(term: &mut Term) -> Vec<&mut Term> {
             .chain(iter::once(default))
             .collect(),
         Subterm::Func(func) => vec![&mut func.body],
-        Subterm::Apply(apply) => iter::once(&mut apply.head).chain(&mut apply.params).collect(),
+        Subterm::Apply(apply) => iter::once(&mut apply.head)
+            .chain(&mut apply.params)
+            .collect(),
         Subterm::Tuple(tuple) => tuple.fields.iter_mut().collect(),
         Subterm::Proj(proj) => vec![&mut proj.head],
         Subterm::Match(m) => iter::once(&mut m.head).chain(&mut m.cases).collect(),
         Subterm::Let(let_) => vec![&mut let_.body, &mut let_.tail],
-        Subterm::Rec(rec) => rec.items.iter_mut().chain(iter::once(&mut rec.tail)).collect(),
+        Subterm::Rec(rec) => rec
+            .items
+            .iter_mut()
+            .chain(iter::once(&mut rec.tail))
+            .collect(),
     }
 }
 
@@ -584,12 +612,14 @@ mod tests {
         Module {
             items: vec![Item::Rec {
                 names: vec!["f".to_owned()],
-                items: vec![Subterm::Func(Func {
-                    captures: vec![Argument::from("f")],
-                    params: vec![Argument::from("b")],
-                    body,
-                })
-                .into()],
+                items: vec![
+                    Subterm::Func(Func {
+                        captures: vec![Argument::from("f")],
+                        params: vec![Argument::from("b")],
+                        body,
+                    })
+                    .into(),
+                ],
             }],
             body: Subterm::Erased.into(),
         }
@@ -609,30 +639,47 @@ mod tests {
         introduce_offsets(&mut module);
 
         let printed = format!("{module}");
-        assert!(printed.contains("f@cur"), "expected a cursor loop:\n{printed}");
-        assert!(printed.contains("b@offset"), "expected a threaded offset:\n{printed}");
+        assert!(
+            printed.contains("f@cur"),
+            "expected a cursor loop:\n{printed}"
+        );
+        assert!(
+            printed.contains("b@offset"),
+            "expected a threaded offset:\n{printed}"
+        );
         // The recursion's only `slice` was the drop-front; the cursor eliminates it.
-        assert!(!printed.contains("Bin.slice"), "the drop-front slice should be gone:\n{printed}");
+        assert!(
+            !printed.contains("Bin.slice"),
+            "the drop-front slice should be gone:\n{printed}"
+        );
     }
 
     #[test]
     fn buffer_escaping_to_another_primitive_is_declined() {
         // `b` flows into `Bin.eql` (a whole-buffer read), so the virtual suffix would
         // have to be materialised — the recursion is left untouched.
-        let recursion = walk(Subterm::Match(super::super::Match {
-            head: bin_eql(name_term("b"), name_term("b")),
-            cases: vec![
-                apply("f", vec![bin_slice(name_term("b"), nat(1), bin_len(name_term("b")))]),
-                nat(0),
-            ],
-        })
-        .into());
+        let recursion = walk(
+            Subterm::Match(super::super::Match {
+                head: bin_eql(name_term("b"), name_term("b")),
+                cases: vec![
+                    apply(
+                        "f",
+                        vec![bin_slice(name_term("b"), nat(1), bin_len(name_term("b")))],
+                    ),
+                    nat(0),
+                ],
+            })
+            .into(),
+        );
         let mut module = rec_module(recursion);
 
         introduce_offsets(&mut module);
 
         let printed = format!("{module}");
-        assert!(!printed.contains("f@cur"), "the escaping buffer must not be threaded:\n{printed}");
+        assert!(
+            !printed.contains("f@cur"),
+            "the escaping buffer must not be threaded:\n{printed}"
+        );
     }
 
     #[test]
@@ -652,6 +699,9 @@ mod tests {
         introduce_offsets(&mut module);
 
         let printed = format!("{module}");
-        assert!(!printed.contains("f@cur"), "a non-suffix recursion must be declined:\n{printed}");
+        assert!(
+            !printed.contains("f@cur"),
+            "a non-suffix recursion must be declined:\n{printed}"
+        );
     }
 }

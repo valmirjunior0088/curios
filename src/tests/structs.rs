@@ -1,7 +1,4 @@
-use {
-    crate::MockHost,
-    std::time::Duration,
-};
+use {crate::MockHost, std::time::Duration};
 
 #[test]
 fn named_fields_run_end_to_end() {

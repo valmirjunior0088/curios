@@ -1,7 +1,4 @@
-use {
-    super::MockHost,
-    std::time::Duration,
-};
+use {super::MockHost, std::time::Duration};
 
 fn run(source: &str) -> Vec<u8> {
     let (system, io) = MockHost::builder().build();

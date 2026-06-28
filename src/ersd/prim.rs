@@ -132,7 +132,10 @@ pub enum Prim {
 impl Prim {
     /// Free names of this primitive's operands (see [`Term::free_names`]).
     pub fn free_names(&self) -> BTreeSet<String> {
-        self.operands().into_iter().flat_map(Term::free_names).collect()
+        self.operands()
+            .into_iter()
+            .flat_map(Term::free_names)
+            .collect()
     }
 
     /// The operand terms this primitive evaluates.
@@ -290,7 +293,9 @@ impl PurePrim {
             | ArrAppend(a, b)
             | ArrMap(a, b) => vec![a, b],
             BinSlice(a, b, c) | ArrSlice(a, b, c) => vec![a, b, c],
-            BinConcat(operands) | ArrConcat(operands) | Arr(operands) => operands.iter_mut().collect(),
+            BinConcat(operands) | ArrConcat(operands) | Arr(operands) => {
+                operands.iter_mut().collect()
+            }
         }
     }
 }

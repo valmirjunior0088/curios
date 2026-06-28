@@ -1,8 +1,4 @@
-use {
-    super::run,
-    crate::MockHost,
-    std::time::Duration,
-};
+use {super::run, crate::MockHost, std::time::Duration};
 
 #[test]
 fn utf8_slice_proof_aligns_with_byte_walk() {

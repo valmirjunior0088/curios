@@ -55,7 +55,13 @@ impl Inductive {
     /// payload-only telescope: `success` at `[Nat, Bin]` becomes
     /// `(_0 : Nat) -> InductiveType { Result, [Nat, Bin] }`.
     pub fn instantiate(&self, tag: &Atom, params: &[Term]) -> Option<Telescope<Term>> {
-        Some(self.constructors.get(tag)?.telescope.clone().open_params(params))
+        Some(
+            self.constructors
+                .get(tag)?
+                .telescope
+                .clone()
+                .open_params(params),
+        )
     }
 
     /// The runtime tag index of `tag`: its position among this inductive's

@@ -1,8 +1,4 @@
-use {
-    super::run,
-    crate::MockHost,
-    std::time::Duration,
-};
+use {super::run, crate::MockHost, std::time::Duration};
 
 #[test]
 fn bln_logic_and_of_str() {

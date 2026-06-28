@@ -1,8 +1,4 @@
-use {
-    super::run,
-    crate::MockHost,
-    std::time::Duration,
-};
+use {super::run, crate::MockHost, std::time::Duration};
 
 #[test]
 fn arr_match_is_a_foldr() {
