@@ -1,2 +1,2 @@
 pub use /sys/{Cell};
-pub use /sys/Cell/*;
+pub use /sys/Cell/{new, set, get};

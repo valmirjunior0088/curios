@@ -1,5 +1,5 @@
-pub use /syn/{let Str};
-pub use /syn/Str/{let Class, mod Class, let classify, let Scan, mod Scan, let step, let Utf8, mod Utf8, let Valid};
+pub use /syn/{Str};
+pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /std/{Char, Nat, Bin, Bln, Arr, Lst, Option, True, False, Eq};
 
 

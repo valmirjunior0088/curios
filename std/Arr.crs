@@ -1,5 +1,5 @@
 pub use /sys/{Arr};
-pub use /sys/Arr/{let len, let slice, let append, let concat, let flatten, let map, let nil, let single};
+pub use /sys/Arr/{len, slice, append, concat, flatten, map, nil, single};
 use /std/{Nat, Option, Eq};
 
 pub let at(@T : Type, a : Arr(T), i : Nat, ok : Nat/Lt(i, len(a))) -> T =

@@ -1,5 +1,5 @@
 pub use /sys/{Bln};
-pub use /sys/Bln/*;
+pub use /sys/Bln/{and, or, xor, eql};
 use /std/{Str, Option};
 
 pub let not(b : Bln) -> Bln =

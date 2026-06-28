@@ -1,7 +1,7 @@
 pub use /sys/{Nat};
-pub use /sys/Nat/*;
+pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, to_int, to_flt};
 use /std/{Str, Option, Char, Bin, Bln, Eq, Order, True, False};
-use /syn/Str/{Scan, Utf8, let step, let Valid};
+use /syn/Str/{Scan, Utf8, step, Valid};
 
 let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
     -> Valid(Bin/append(\\, c)) =

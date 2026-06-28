@@ -1,8 +1,8 @@
 use {
     super::{
-        Error, FuncSugarParam, FuncType, FuncTypeParam, LetSignature, Loader, Module, Name, Nat,
-        NatLiteral, Pattern, Plicity, Prim, Qualifier, Subterm, Term, TopItem, TopLet, TopMod,
-        TupleType, TupleTypeParam,
+        Error, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, LetSignature, Loader, Module,
+        Name, Nat, NatLiteral, Pattern, Plicity, Prim, Qualifier, Subterm, Term, TopItem, TopLet,
+        TopMod, TopUse, TupleType, TupleTypeParam, UseGroup,
     },
     crate::wire,
 };
@@ -119,6 +119,24 @@ fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
         label: label.to_string(),
         module: Some(Module { items }),
     })
+}
+
+// `pub use Label/{let Label}` — the facade re-export that hoists a submodule's
+// own type binding up to the library root, so `/sys/{Label}` names the type.
+fn pub_use(label: &str) -> TopItem {
+    TopItem::Use(TopUse {
+        is_pub: true,
+        name: Name::from([label.to_string()]),
+        group: UseGroup::Named(vec![GroupItem::Let(label.to_string())]),
+    })
+}
+
+// A primitive module's items: its type declaration first, then its operations,
+// so the type lives *inside* its module and the root facade re-exports it.
+fn with_type(type_decl: TopItem, mut ops: Vec<TopItem>) -> Vec<TopItem> {
+    let mut items = vec![type_decl];
+    items.append(&mut ops);
+    items
 }
 
 fn pub_fn(label: &str, params: Vec<(&str, Term)>, output: Term, body: Term) -> TopItem {
@@ -659,22 +677,34 @@ fn io_ops() -> Vec<TopItem> {
 fn sys_module() -> Module {
     Module {
         items: vec![
-            pub_let("Nat", type_(), nat()),
-            pub_let("Int", type_(), int()),
-            pub_let("Flt", type_(), flt()),
-            pub_let("Bin", type_(), bin()),
-            pub_let("Bln", type_(), bln()),
-            pub_let("Io", type_(), io()),
-            pub_fn("Arr", vec![("T", type_())], type_(), arr_of(name("T"))),
-            pub_fn("Cell", vec![("T", type_())], type_(), cell_of(name("T"))),
-            pub_mod("Nat", nat_ops()),
-            pub_mod("Bln", bln_ops()),
-            pub_mod("Int", int_ops()),
-            pub_mod("Flt", flt_ops()),
-            pub_mod("Bin", bin_ops()),
-            pub_mod("Arr", arr_ops()),
-            pub_mod("Cell", cell_ops()),
-            pub_mod("Io", io_ops()),
+            pub_mod("Nat", with_type(pub_let("Nat", type_(), nat()), nat_ops())),
+            pub_use("Nat"),
+            pub_mod("Int", with_type(pub_let("Int", type_(), int()), int_ops())),
+            pub_use("Int"),
+            pub_mod("Flt", with_type(pub_let("Flt", type_(), flt()), flt_ops())),
+            pub_use("Flt"),
+            pub_mod("Bin", with_type(pub_let("Bin", type_(), bin()), bin_ops())),
+            pub_use("Bin"),
+            pub_mod("Bln", with_type(pub_let("Bln", type_(), bln()), bln_ops())),
+            pub_use("Bln"),
+            pub_mod("Io", with_type(pub_let("Io", type_(), io()), io_ops())),
+            pub_use("Io"),
+            pub_mod(
+                "Arr",
+                with_type(
+                    pub_fn("Arr", vec![("T", type_())], type_(), arr_of(name("T"))),
+                    arr_ops(),
+                ),
+            ),
+            pub_use("Arr"),
+            pub_mod(
+                "Cell",
+                with_type(
+                    pub_fn("Cell", vec![("T", type_())], type_(), cell_of(name("T"))),
+                    cell_ops(),
+                ),
+            ),
+            pub_use("Cell"),
         ],
     }
 }
