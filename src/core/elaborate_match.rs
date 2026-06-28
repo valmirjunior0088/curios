@@ -5,7 +5,7 @@ use {
         Two, case_target_indices, check, check_motive, check_prim_head, convert_with, elaborate,
         expect, invert_indices, is_prop, reduce_with, refine_head,
     },
-    std::collections::BTreeMap,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// Infer and rebuild a match scrutinee, requiring its reduced type to be the
@@ -45,6 +45,39 @@ fn seed_motive(
     Ok(())
 }
 
+/// Resolve the (arity-one) motive of a primitive eliminator. An elided motive
+/// checked against an expected type and matched on a *bare variable* scrutinee
+/// is synthesised dependent — abstracting that variable out of the expected
+/// type — so each arm checks against the goal specialised at its constructor
+/// (`0` / `pred + 1`, `\\` / `head :: tail`, `false` / `true`, ...) rather than
+/// the unspecialised expected a constant motive would leave.
+///
+/// This complements `solve`'s occurrence abstraction (`convert.rs`), which
+/// already derives the dependent motive for a *compound* scrutinee: there the
+/// scrutinee is a clean abstraction subject in the motive metavar's spine,
+/// whereas a bare variable coincides with its own context binder — a duplicated,
+/// non-invertible spine entry that `solve` must leave alone. So anything but an
+/// elided-checking-mode-bare-variable match keeps the metavar path verbatim,
+/// letting `solve` (or the constant motive) do its job exactly as before.
+fn resolve_prim_motive(
+    context: &mut Context,
+    head_type: &Term,
+    head: &Term,
+    motive: &Scope<Many>,
+    mode: &Mode,
+) -> Result<Scope<Many>, Error> {
+    if let (Mode::Check(expected), Subterm::Var(var)) = (mode, &**head) {
+        if is_elided_motive(motive) {
+            if let Some(label) = var.as_free() {
+                let synthesized = Scope::close(Many(1), &[label], expected.clone());
+                return check_motive(context, head_type, &synthesized);
+            }
+        }
+    }
+
+    check_motive(context, head_type, motive)
+}
+
 fn elaborate_nat_match(
     context: &mut Context,
     head: &Term,
@@ -59,15 +92,25 @@ fn elaborate_nat_match(
     // Everything below opens the *rebuilt* motive: insertion saturates
     // applications during elaboration, and a lowered (under-applied) motive
     // body reaching the reducer would open a telescope at the wrong arity.
-    let motive = check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
+    let motive = resolve_prim_motive(
+        context,
+        &Subterm::Prim(Prim::NatType).into(),
+        &head_elaborated,
+        motive,
+        &mode,
+    )?;
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
-    let zero_elaborated = check(
-        context,
-        zero_case,
-        motive.open(&[&Subterm::Prim(Prim::Nat(Nat::new(0usize))).into()]),
-    )?;
+    // Refine the scrutinee to its constructor in each arm (as `Bln`/`Switch`
+    // already do): a context hypothesis whose type mentions the scrutinee then
+    // reduces at the arm's value, so a dependent match needs no hand-written
+    // convoy to carry it across the eliminator.
+    let zero_value: Term = Subterm::Prim(Prim::Nat(Nat::new(0usize))).into();
+    let zero_elaborated = context.with_frame(|context| {
+        refine_head(context, head, &zero_value);
+        check(context, zero_case, motive.open(&[&zero_value]))
+    })?;
 
     let pred_label = context.fresh(succ_case.first_label());
     let ih_label = context.fresh(succ_case.second_label());
@@ -76,14 +119,17 @@ fn elaborate_nat_match(
         context.assume(&pred_label, &Subterm::Prim(Prim::NatType).into());
         context.assume(&ih_label, &motive.open(&[&Term::free_var(&pred_label)]));
 
+        let succ_value: Term = Subterm::Prim(Prim::nat_add(
+            Term::free_var(&pred_label),
+            Subterm::Prim(Prim::Nat(Nat::new(1usize))),
+        ))
+        .into();
+        refine_head(context, head, &succ_value);
+
         check(
             context,
             &succ_case.open(&[&Term::free_var(&pred_label), &Term::free_var(&ih_label)]),
-            motive.open(&[&Subterm::Prim(Prim::nat_add(
-                Term::free_var(&pred_label),
-                Subterm::Prim(Prim::Nat(Nat::new(1usize))),
-            ))
-            .into()]),
+            motive.open(&[&succ_value]),
         )
     })?;
 
@@ -127,7 +173,7 @@ fn elaborate_arr_match(
     };
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
-    let motive = check_motive(context, &head_type, motive)?;
+    let motive = resolve_prim_motive(context, &head_type, &head_elaborated, motive, &mode)?;
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
@@ -202,7 +248,7 @@ fn elaborate_bin_match(
     let (head_elaborated, head_type) = elaborate_prim_head(context, head, PrimHead::Bin)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
-    let motive = check_motive(context, &head_type, motive)?;
+    let motive = resolve_prim_motive(context, &head_type, &head_elaborated, motive, &mode)?;
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
@@ -279,7 +325,13 @@ fn elaborate_switch(
     let (head_elaborated, _) = elaborate_prim_head(context, head, PrimHead::Nat)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
-    let motive = check_motive(context, &Subterm::Prim(Prim::NatType).into(), motive)?;
+    let motive = resolve_prim_motive(
+        context,
+        &Subterm::Prim(Prim::NatType).into(),
+        &head_elaborated,
+        motive,
+        &mode,
+    )?;
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
@@ -377,7 +429,13 @@ fn elaborate_bln_match(
     let (head_elaborated, _) = elaborate_prim_head(context, head, PrimHead::Bln)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
-    let motive = check_motive(context, &Subterm::Prim(Prim::BlnType).into(), motive)?;
+    let motive = resolve_prim_motive(
+        context,
+        &Subterm::Prim(Prim::BlnType).into(),
+        &head_elaborated,
+        motive,
+        &mode,
+    )?;
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
@@ -481,7 +539,7 @@ fn elaborate_inductive_match(
     let (head_elaborated, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
 
-    let (name, params, actual_indices) = match &*head_type {
+    let (name, params, indices) = match &*head_type {
         Subterm::InductiveType(InductiveType {
             name,
             params,
@@ -490,17 +548,51 @@ fn elaborate_inductive_match(
         other => return Err(Error::not_a_inductive_type(other.clone())),
     };
 
+    // Reducing the scrutinee type to weak-head normal form leaves its index
+    // *arguments* untouched, so an index that is an outer-arm key (`s` refined
+    // to `Scan/bad()` by an enclosing match) still reads as the bare variable.
+    // Reduce each index in the current (refined) context so inversion sees the
+    // forced value and pins arm binders against it, rather than refusing it as
+    // Rung B's key-shaped territory.
+    let actual_indices = indices
+        .iter()
+        .map(|index| reduce_with(context, index))
+        .collect::<Result<Vec<_>, _>>()?;
+
     let Some(inductive) = context.inductive(&name).cloned() else {
         return Err(Error::unbound_variable(Term::free_var(&name)));
     };
 
     let (motive_elaborated, pattern_elaborated, plan) = match pattern {
-        None => (check_motive(context, &head_type, motive)?, None, vec![]),
         Some(pattern) => {
             let (motive_elaborated, pattern_elaborated, plan) =
                 check_inductive_motive(context, &inductive, &name, &params, motive, pattern)?;
             (motive_elaborated, Some(pattern_elaborated), plan)
         }
+        // An elided motive (the lowering's bare metavar) checked against an
+        // expected type is filled in by dependent-motive synthesis: the arms are
+        // then checked against the expected type specialised at each
+        // constructor, exactly as a hand-written convoy motive would, and the
+        // match's result is a concrete type rather than a metavar that would
+        // stall the large-elimination guard. Outside checking mode there is no
+        // expected type to abstract, so the metavar stays and is solved by
+        // unifying the arms (`check_motive`).
+        None if is_elided_motive(motive) => match &mode {
+            Mode::Check(expected) => {
+                let (motive_elaborated, pattern_elaborated, plan) = synthesize_inductive_motive(
+                    context,
+                    &inductive,
+                    &name,
+                    &params,
+                    &actual_indices,
+                    &head_elaborated,
+                    expected,
+                )?;
+                (motive_elaborated, Some(pattern_elaborated), plan)
+            }
+            Mode::Infer => (check_motive(context, &head_type, motive)?, None, vec![]),
+        },
+        None => (check_motive(context, &head_type, motive)?, None, vec![]),
     };
 
     // The match's own type: the motive at the scrutinee itself — and, for a
@@ -724,6 +816,72 @@ fn elaborate_inductive_match(
 enum SlotPlan {
     Param(usize),
     Index(usize),
+}
+
+/// Whether a motive scope is the lowering's elided form — a bare metavariable
+/// body (`match s | ..` or the explicit hole `match s : _ | ..`), as opposed to
+/// a user-written constant or scrutinee-binding motive. Synthesis only steps in
+/// for the elided form; everything else is taken verbatim.
+fn is_elided_motive(motive: &Scope<Many>) -> bool {
+    matches!(&**motive.body(), Subterm::Metavar(_))
+}
+
+/// The label by which a flat motive slot (or the scrutinee) abstracts the
+/// expected type: a slot whose actual value is a not-yet-used free variable
+/// abstracts by that variable's name, so the eliminator specialises the goal at
+/// each constructor when it reopens the motive; a forced constructor, a compound
+/// term, or a repeated variable takes a fresh label and binds vacuously (the
+/// inversion already pins it).
+fn abstraction_label(context: &mut Context, value: &Term, used: &mut BTreeSet<String>) -> String {
+    if let Subterm::Var(var) = &**value {
+        if let Some(label) = var.as_free() {
+            if used.insert(label.to_string()) {
+                return label.to_string();
+            }
+        }
+    }
+    context.fresh(None)
+}
+
+/// Derive, for an inductive match that elided its motive, the dependent motive
+/// the convoy pattern would otherwise be written by hand. The expected type is
+/// abstracted over the scrutinee's index *variables* and the scrutinee itself
+/// (forced or compound positions bind vacuously), yielding an all-binders
+/// pattern motive; the resulting scope is validated by the same
+/// [`check_inductive_motive`] the annotated form goes through, so its plan and
+/// per-arm specialisation behave identically.
+fn synthesize_inductive_motive(
+    context: &mut Context,
+    inductive: &Inductive,
+    name: &str,
+    params: &[Term],
+    actual_indices: &[Term],
+    head: &Term,
+    expected: &Term,
+) -> Result<(Scope<Many>, MotivePattern, Vec<SlotPlan>), Error> {
+    let n_params = inductive.params.len();
+    let n_indices = inductive.indices.len() - n_params;
+
+    // One abstraction label per flat slot (parameters then indices), then the
+    // scrutinee — the same binder order `check_inductive_motive` expects.
+    let mut used = BTreeSet::new();
+    let mut labels = Vec::with_capacity(n_params + n_indices + 1);
+    for value in params.iter().chain(actual_indices) {
+        labels.push(abstraction_label(context, value, &mut used));
+    }
+    labels.push(abstraction_label(context, head, &mut used));
+
+    let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let motive = Scope::close(Many(labels.len()), &label_refs, expected.clone());
+
+    // Every slot binds: the abstraction above, not a verbatim parameter, is what
+    // specialises the goal.
+    let pattern = MotivePattern {
+        name: name.to_string(),
+        slots: vec![MotiveSlot::Binder; n_params + n_indices],
+    };
+
+    check_inductive_motive(context, inductive, name, params, &motive, &pattern)
 }
 
 /// Check the annotated type-pattern motive of an inductive match: validate the

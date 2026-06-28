@@ -59,64 +59,55 @@ rec drop_width(n : Nat, s : Scan, b : Bin) -> Nat =
 
 rec drop_valid(n : Nat, s : Scan, @b : Bin, d : Utf8(s, b))
     -> Valid(Bin/slice(b, drop_width(n, s, b), Bin/len(b))) =
-    let go =
-        match s : (s) => (p : Utf8(s, b))
-            -> Valid(Bin/slice(b, drop_width(n, s, b), Bin/len(b)))
-        | lead() => (p) =>
-            match p : (w : Utf8(q, x)) => Valid(Bin/slice(x, drop_width(n, q, x), Bin/len(x)))
-            | stop() => Utf8/stop()
-            | more(c, st, t, rest) =>
-                match n : (n) => Valid(Bin/slice(Bin/cons(c, t),
-                    drop_width(n, Scan/lead(), Bin/cons(c, t)),
-                    Bin/len(Bin/cons(c, t))))
-                | 0 => Utf8/more(c, Scan/lead(), t, rest)
-                | pred + 1, ih => drop_valid(pred, step(c, Scan/lead()), @t, rest)
-                end
+    match s
+    | lead() =>
+        match d
+        | stop() => Utf8/stop()
+        | more(c, st, t, rest) =>
+            match n
+            | 0 => Utf8/more(c, Scan/lead(), t, rest)
+            | pred + 1, ih => drop_valid(pred, step(c, Scan/lead()), @t, rest)
             end
-        | cont(rem, lo, hi) => (p) =>
-            match p : (w : Utf8(q, x)) => Valid(Bin/slice(x, drop_width(n, q, x), Bin/len(x)))
-            | more(c, st, t, rest) => drop_valid(n, step(c, Scan/cont(rem, lo, hi)), @t, rest)
-            end
-        | bad() => (p) =>
-            match p : (w : Utf8(q, x)) => Valid(Bin/slice(x, drop_width(n, q, x), Bin/len(x)))
-            | more(c, st, t, rest) => drop_valid(n, step(c, Scan/bad()), @t, rest)
-            end
-        end;
-    go(d);
+        end
+    | cont(rem, lo, hi) =>
+        match d
+        | more(c, st, t, rest) => drop_valid(n, step(c, Scan/cont(rem, lo, hi)), @t, rest)
+        end
+    | bad() =>
+        match d
+        | more(c, st, t, rest) => drop_valid(n, step(c, Scan/bad()), @t, rest)
+        end
+    end;
 
 rec take_valid(n : Nat, s : Scan, @b : Bin, d : Utf8(s, b))
     -> Utf8(s, Bin/slice(b, 0, drop_width(n, s, b))) =
-    let go =
-        match s : (s) => (p : Utf8(s, b))
-            -> Utf8(s, Bin/slice(b, 0, drop_width(n, s, b)))
-        | lead() => (p) =>
-            match p : (w : Utf8(q, x)) => Utf8(q, Bin/slice(x, 0, drop_width(n, q, x)))
-            | stop() => Utf8/stop()
-            | more(c, st, t, rest) =>
-                match n : (n) => Utf8(Scan/lead(), Bin/slice(Bin/cons(c, t), 0,
-                    drop_width(n, Scan/lead(), Bin/cons(c, t))))
-                | 0 => Utf8/stop()
-                | pred + 1, ih =>
-                    Utf8/more(c, Scan/lead(), Bin/slice(t, 0, drop_width(pred, step(c, Scan/lead()), t)),
-                        take_valid(pred, step(c, Scan/lead()), @t, rest))
-                end
+    match s
+    | lead() =>
+        match d
+        | stop() => Utf8/stop()
+        | more(c, st, t, rest) =>
+            match n
+            | 0 => Utf8/stop()
+            | pred + 1, ih =>
+                Utf8/more(c, Scan/lead(), Bin/slice(t, 0, drop_width(pred, step(c, Scan/lead()), t)),
+                    take_valid(pred, step(c, Scan/lead()), @t, rest))
             end
-        | cont(rem, lo, hi) => (p) =>
-            match p : (w : Utf8(q, x)) => Utf8(q, Bin/slice(x, 0, drop_width(n, q, x)))
-            | more(c, st, t, rest) =>
-                Utf8/more(c, Scan/cont(rem, lo, hi),
-                    Bin/slice(t, 0, drop_width(n, step(c, Scan/cont(rem, lo, hi)), t)),
-                    take_valid(n, step(c, Scan/cont(rem, lo, hi)), @t, rest))
-            end
-        | bad() => (p) =>
-            match p : (w : Utf8(q, x)) => Utf8(q, Bin/slice(x, 0, drop_width(n, q, x)))
-            | more(c, st, t, rest) =>
-                Utf8/more(c, Scan/bad(),
-                    Bin/slice(t, 0, drop_width(n, step(c, Scan/bad()), t)),
-                    take_valid(n, step(c, Scan/bad()), @t, rest))
-            end
-        end;
-    go(d);
+        end
+    | cont(rem, lo, hi) =>
+        match d
+        | more(c, st, t, rest) =>
+            Utf8/more(c, Scan/cont(rem, lo, hi),
+                Bin/slice(t, 0, drop_width(n, step(c, Scan/cont(rem, lo, hi)), t)),
+                take_valid(n, step(c, Scan/cont(rem, lo, hi)), @t, rest))
+        end
+    | bad() =>
+        match d
+        | more(c, st, t, rest) =>
+            Utf8/more(c, Scan/bad(),
+                Bin/slice(t, 0, drop_width(n, step(c, Scan/bad()), t)),
+                take_valid(n, step(c, Scan/bad()), @t, rest))
+        end
+    end;
 
 let drop_n(n : Nat, s : Str) -> Str =
     Str { bytes = Bin/slice(s.bytes, drop_width(n, Scan/lead(), s.bytes), Bin/len(s.bytes)),
@@ -159,38 +150,30 @@ pub rec bad_uninhabited(@x : Bin, w : Utf8(Scan/bad(), x)) -> False =
 
 pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(k, lo, hi), t))
     -> Nat/Lte(k, Bin/len(t)) =
-    let on_k =
-        match k : (k) => (w : Utf8(Scan/cont(k, lo, hi), t)) -> Nat/Lte(k, Bin/len(t))
-        | 0 => (w) => Nat/Lte/z()
-        | kp + 1, ih => (w) =>
-            let on_w =
-                match w : (w : Utf8(q, y)) => Nat/Lte(kp + 1, Bin/len(y))
-                | more(c, st, tt, rest) =>
-                    let on_kp =
-                        match kp : (kp) =>
-                            (rest : Utf8(step(c, Scan/cont(kp + 1, lo, hi)), tt))
-                                -> Nat/Lte(kp + 1, Bin/len(tt) + 1)
-                        | 0 => (rest) => Nat/Lte/s(Nat/Lte/z())
-                        | kpp + 1, ih2 => (rest) =>
-                            let on_range =
-                                match Nat/in_range(c, lo, hi) : (r) =>
-                                    (rest : Utf8(match r
-                                        | false => Scan/bad()
-                                        | true => Scan/cont(kpp + 1, 0x80, 0xBF)
-                                        end, tt))
-                                        -> Nat/Lte(kpp + 1, Bin/len(tt))
-                                | true => (rest) => cont_len(kpp + 1, @0x80, @0xBF, @tt, rest)
-                                | false => (rest) =>
-                                    False/absurd(@Nat/Lte(kpp + 1, Bin/len(tt)),
-                                        bad_uninhabited(@tt, rest))
-                                end;
-                            Nat/Lte/s(on_range(rest))
-                        end;
-                    on_kp(rest)
-                end;
-            on_w
-        end;
-    on_k(w);
+    match k
+    | 0 => Nat/Lte/z()
+    | kp + 1, ih =>
+        match w
+        | more(c, st, tt, rest) =>
+            match kp
+            | 0 => Nat/Lte/s(Nat/Lte/z())
+            | kpp + 1, ih2 =>
+                let on_range =
+                    match Nat/in_range(c, lo, hi) : (r) =>
+                        (rest : Utf8(match r
+                            | false => Scan/bad()
+                            | true => Scan/cont(kpp + 1, 0x80, 0xBF)
+                            end, tt))
+                            -> Nat/Lte(kpp + 1, Bin/len(tt))
+                    | true => (rest) => cont_len(kpp + 1, @0x80, @0xBF, @tt, rest)
+                    | false => (rest) =>
+                        False/absurd(@Nat/Lte(kpp + 1, Bin/len(tt)),
+                            bad_uninhabited(@tt, rest))
+                    end;
+                Nat/Lte/s(on_range(rest))
+            end
+        end
+    end;
 
 pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(0, lo, hi), t)) -> False =
     match w : (w : Utf8(q, y)) => False
@@ -210,17 +193,14 @@ pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(0, 
 
 pub rec take_conts(b : Bin, off : Nat, remaining : Nat, acc : Nat,
     bound : Nat/Lte(off + remaining, Bin/len(b))) -> {Nat, Nat} =
-    let go =
-        match remaining : (remaining) =>
-            (bound : Nat/Lte(off + remaining, Bin/len(b))) -> {Nat, Nat}
-        | 0 => (bound) => (acc, off)
-        | pred + 1, ih => (bound) =>
-            take_conts(b, off + 1, pred,
-                acc * 0x40 + (Bin/at(b, off,
-                    Nat/lt_of_lte_succ(Nat/lte_trans(Nat/Lte/s(Nat/lte_add_r(off, pred)), bound))) - 0x80),
-                bound)
-        end;
-    go(bound);
+    match remaining
+    | 0 => (acc, off)
+    | pred + 1, ih =>
+        take_conts(b, off + 1, pred,
+            acc * 0x40 + (Bin/at(b, off,
+                Nat/lt_of_lte_succ(Nat/lte_trans(Nat/Lte/s(Nat/lte_add_r(off, pred)), bound))) - 0x80),
+            bound)
+    end;
 
 pub rec peel_byte(@s : Scan, @b : Bin, nz : Nat/Lt(0, Bin/len(b)), w : Utf8(s, b))
     -> Utf8(step(Bin/at(b, 0, nz), s), Bin/slice(b, 1, Bin/len(b))) =
@@ -342,18 +322,14 @@ pub let get(s : Str, i : Nat) -> Option(Nat) =
     r.1;
 
 rec lte_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Lte(i + 1, n) =
-    let on_n =
-        match n : (n) => (p : Nat/Lt(i, n)) -> Nat/Lte(i + 1, n)
-        | 0 => (p) => False/absurd(@Nat/Lte(i + 1, 0), p)
-        | np + 1, ihn => (p) =>
-            let on_i =
-                match i : (i) => (p : Nat/Lt(i, np + 1)) -> Nat/Lte(i + 1, np + 1)
-                | 0 => (p) => Nat/Lte/s(Nat/Lte/z())
-                | ip + 1, ihi => (p) => Nat/Lte/s(lte_succ_of_lt(ip, np, p))
-                end;
-            on_i(p)
-        end;
-    on_n(p);
+    match n
+    | 0 => False/absurd(@Nat/Lte(i + 1, 0), p)
+    | np + 1, ihn =>
+        match i
+        | 0 => Nat/Lte/s(Nat/Lte/z())
+        | ip + 1, ihi => Nat/Lte/s(lte_succ_of_lt(ip, np, p))
+        end
+    end;
 
 pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Nat =
     rec go(sc : Scan, b : Bin, valid : Utf8(sc, b), i : Nat,
