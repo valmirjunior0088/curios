@@ -1,6 +1,6 @@
 use /std/{Nat, Bln, Lst, Str, Order};
 
-pub struct BigNat pub {
+pub record BigNat {
     limbs : Lst(Nat)
 }
 

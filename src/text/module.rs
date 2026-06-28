@@ -97,11 +97,13 @@ pub struct TopInductive {
     pub cases: Vec<TopCase>,
 }
 
-/// A `struct` declaration: a nominal record. `is_pub` is the outer `pub` (the
-/// type-former's visibility); `rep_pub` is the inner `pub` before the brace
-/// (whether the representation — construction and projection — is exported).
-/// `params` are written exactly like an inductive's; `fields` reuse the Σ-type field
-/// grammar (label optional, like tuple-type fields).
+/// A `struct`/`record` declaration: a nominal record. `is_pub` is the outer
+/// `pub` (the type-former's visibility); `rep_pub` is the kind keyword —
+/// `record` (representation exported, reaching wherever the type name is
+/// visible) vs `struct` (representation private to the exact declaring module).
+/// The two markers are orthogonal; every combination is legal. `params` are
+/// written exactly like an inductive's; `fields` reuse the Σ-type field grammar
+/// (label optional, like tuple-type fields).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopStruct {
     pub is_pub: bool,

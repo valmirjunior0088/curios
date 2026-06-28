@@ -26,7 +26,7 @@ fn named_fields_run_end_to_end() {
 fn struct_transparent_pair_projects() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair(Nat, Nat) { fst = 2, snd = 5 };
         Io/print(Nat/to_str(Nat/add(p.fst, p.1)))
         "#;
@@ -42,7 +42,7 @@ fn struct_transparent_pair_projects() {
 fn struct_parameter_inference_at_construction() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         Io/print(Nat/to_str(Nat/mul(p.fst, p.snd)))
         "#;
@@ -58,7 +58,7 @@ fn struct_parameter_inference_at_construction() {
 fn struct_newtype_projects() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Meters pub { Nat }
+        pub record Meters { Nat }
         let m : Meters = Meters { 5 };
         Io/print(Nat/to_str(m.0))
         "#;
@@ -74,7 +74,7 @@ fn struct_newtype_projects() {
 fn struct_dependent_fields_run_end_to_end() {
     let source = r#"
         use /std/{Vec, Nat, Io};
-        pub struct Sized pub { n : Nat, v : Vec(Nat, n) }
+        pub record Sized { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
             match v : Nat
@@ -161,7 +161,7 @@ fn struct_private_projection_rejected() {
 fn struct_is_not_a_tuple() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
         let p : { fst : Nat, snd : Nat } = Pair { fst = 1, snd = 2 };
         Io/print("no")
         "#;
@@ -175,7 +175,7 @@ fn struct_is_not_a_tuple() {
 fn struct_wrong_field_count_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1 };
         Io/print("no")
         "#;
@@ -189,7 +189,7 @@ fn struct_wrong_field_count_rejected() {
 fn struct_field_label_out_of_order_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { snd = 1, fst = 2 };
         Io/print("no")
         "#;
@@ -222,7 +222,7 @@ fn struct_literal_non_struct_head_rejected() {
 fn struct_destructure_pun_binds_fields_by_label() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 2, snd = 5 };
         let Pair { fst, snd } = p;
         Io/print(Nat/to_str(Nat/add(fst, snd)))
@@ -238,7 +238,7 @@ fn struct_destructure_pun_binds_fields_by_label() {
 fn struct_destructure_rename_binds_new_names() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 2, snd = 5 };
         let Pair { fst = a, snd = b } = p;
         Io/print(Nat/to_str(Nat/mul(a, b)))
@@ -254,7 +254,7 @@ fn struct_destructure_rename_binds_new_names() {
 fn struct_destructure_partial_ignores_unlisted_fields() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 9, snd = 5 };
         let Pair { fst } = p;
         Io/print(Nat/to_str(fst))
@@ -270,8 +270,8 @@ fn struct_destructure_partial_ignores_unlisted_fields() {
 fn struct_destructure_nested_struct_pattern() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Inner pub { a : Nat, b : Nat }
-        pub struct Outer pub { it : Inner, c : Nat }
+        pub record Inner { a : Nat, b : Nat }
+        pub record Outer { it : Inner, c : Nat }
         let o : Outer = Outer { it = Inner { a = 1, b = 2 }, c = 3 };
         let Outer { it = Inner { a, b }, c } = o;
         Io/print(Nat/to_str(Nat/add(Nat/add(a, b), c)))
@@ -288,8 +288,8 @@ fn struct_destructure_nested_struct_pattern() {
 fn struct_destructure_wrong_head_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
-        pub struct Other pub { fst : Nat, snd : Nat }
+        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
+        pub record Other { fst : Nat, snd : Nat }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let Other { fst, snd } = p;
         Io/print("no")
@@ -305,7 +305,7 @@ fn struct_destructure_wrong_head_rejected() {
 fn struct_destructure_in_lambda_parameter() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
         let sum : (_ : Pair(Nat, Nat)) -> Nat = (Pair { fst, snd }) => Nat/add(fst, snd);
         let p : Pair(Nat, Nat) = Pair { fst = 6, snd = 1 };
         Io/print(Nat/to_str(sum(p)))
@@ -321,7 +321,7 @@ fn struct_destructure_in_lambda_parameter() {
 fn struct_destructure_in_match_arm() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
         induct Wrap | wrap(Pair(Nat, Nat)) end
         let w : Wrap = Wrap/wrap(Pair { fst = 3, snd = 8 });
         let out : Nat =

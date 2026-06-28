@@ -1146,12 +1146,14 @@ fn let_bang_and_bang_round_trip() {
 
 #[test]
 fn parse_struct_visibility_spellings() {
-    // The three legal states on the single private→abstract→transparent scale,
-    // distinguished by the outer (`is_pub`) and inner (`rep_pub`) `pub`.
+    // The two orthogonal markers: the outer `pub` (`is_pub`) exports the type,
+    // the kind keyword (`rep_pub`) exports the representation — `record` vs
+    // `struct`. All four combinations are legal.
     for (source, is_pub, rep_pub) in [
         ("struct Foo { x : Type } u", false, false),
+        ("record Foo { x : Type } u", false, true),
         ("pub struct Foo { x : Type } u", true, false),
-        ("pub struct Foo pub { x : Type } u", true, true),
+        ("pub record Foo { x : Type } u", true, true),
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         let TopItem::Struct(s) = &entrypoint.module.items[0] else {
@@ -1190,13 +1192,15 @@ fn parse_struct_literal_disambiguates_from_tuple_type() {
 
 #[test]
 fn struct_round_trips() {
-    // Declarations (all three spellings, parameterized and parameterless) and
-    // literals (inferred / pinned / hole-pinned head, named and positional
-    // fields) survive a print → re-parse cycle unchanged.
+    // Declarations (all four visibility spellings, parameterized and
+    // parameterless) and literals (inferred / pinned / hole-pinned head, named
+    // and positional fields) survive a print → re-parse cycle unchanged.
     for source in [
         "struct Foo { x : Type } u",
-        "pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B } u",
-        "pub struct Meters pub { Nat } u",
+        "record Foo { x : Type } u",
+        "pub struct Foo { x : Type } u",
+        "pub record Pair(A : Type, B : Type) { fst : A, snd : B } u",
+        "pub record Meters { Nat } u",
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(

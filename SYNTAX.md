@@ -140,33 +140,34 @@ The type constructor stays flat and explicit — `Vec : (T : Type, n : Nat) -> T
 ### Struct
 
 ```
-pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
+pub record Pair(A : Type, B : Type) { fst : A, snd : B }
 ```
 
 Declares a **nominal record** type. Unlike an inductive it has no value-constructor module and no tag — the brace literal builds it directly — and no indices. The type name is bound as `Pair`, a type-constructor function applied explicitly (`Pair(Nat, Bin)`), exactly like an inductive's; parameters are written as an inductive's are. Field types follow the [tuple-type](#tuple-type) field grammar (label optional), and a later field's type may mention an earlier field, making the record dependent:
 
 ```
-struct Sized pub { n : Nat, v : Vec(Nat, n) }
+record Sized { n : Nat, v : Vec(Nat, n) }
 ```
 
 A struct is _nominal_: as with an inductive, two structs are the same type only if they are the same declaration, and a struct never converts with a structural [tuple type](#tuple-type) of the same fields. Construction and projection are positional and tagless, so a struct adds no runtime cost over the equivalent tuple, and a single-field struct is a zero-cost newtype — it erases to its bare field, byte-identical at runtime:
 
 ```
-struct Meters pub { Nat }
+record Meters { Nat }
 ```
 
-**Visibility.** Two independent `pub` markers place a struct on a private → abstract → transparent scale:
+**Visibility.** Two orthogonal markers — the outer `pub`, and the declaration keyword:
 
-- The outer `pub` (before `struct`) exports the **type name**, exactly as on an inductive.
-- The inner `pub` (before the `{`) exports the **representation** — the ability to build a value with the brace literal and to project its fields.
+- The outer `pub` (before the keyword) exports the **type name**, exactly as on an inductive.
+- `record` exports the **representation** — the ability to build a value with the brace literal and to project its fields — letting it reach wherever the type name is visible; `struct` keeps the representation private to the _exact_ declaring module. `struct` is the default kind, as `induct` is for sums — reach for it first and opt into `record` only when callers genuinely need the representation.
 
 ```
-struct Foo { ... }          -- private:     type and representation module-local
-pub struct Foo { ... }      -- abstract:    type exported, representation hidden
-pub struct Foo pub { ... }  -- transparent: both exported
+struct Foo { ... }      -- type & representation module-local
+record Foo { ... }      -- type module-local, representation reaches the type name (e.g. submodules)
+pub struct Foo { ... }  -- abstract:    type exported, representation hidden
+pub record Foo { ... }  -- transparent: type and representation exported
 ```
 
-The abstract form is the motivating case: outside the declaring module the type is namable but opaque, reachable only through the smart constructors and accessors that module exports. The representation boundary is exact — a representation-private struct may be constructed or projected only in the very module that declares it, not in its submodules — and a violation is a compile-time error.
+The abstract `pub struct` form is the motivating case: outside the declaring module the type is namable but opaque, reachable only through the smart constructors and accessors that module exports. The representation boundary of a `struct` is exact — its value may be constructed or projected only in the very module that declares it, not in its submodules — and a violation is a compile-time error.
 
 **Construction.** A struct literal is the type name followed by a brace of fields:
 

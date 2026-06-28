@@ -16,7 +16,7 @@ pub induct Error
 | malformed(Str)
 end
 
-pub struct Request pub {
+pub record Request {
     method : Method,
     host : Str,
     port : Nat,
@@ -100,7 +100,7 @@ pub let render(request : Request) -> Bin =
         ])),
         request.body);
 
-pub struct Status pub {
+pub record Status {
     version : Str,
     code : Nat,
     reason : Str
@@ -121,7 +121,7 @@ pub let status_line : Parse(Status) =
         reason = Option/unwrap_or(Str/of_bin(reason), "")
     });
 
-pub struct Response pub {
+pub record Response {
     status : Status,
     headers : Lst({Str, Str}),
     body : Bin

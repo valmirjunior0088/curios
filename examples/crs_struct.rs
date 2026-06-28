@@ -14,8 +14,8 @@ fn main() {
     let source = r#"
         use /std/{Bin, Nat, Str, Io};
 
-        pub struct Pair(A : Type, B : Type) pub { fst : A, snd : B }
-        pub struct Meters pub { Nat }
+        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
+        pub record Meters { Nat }
 
         mod Token
             use /std/{Bin};

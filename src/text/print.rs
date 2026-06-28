@@ -868,11 +868,10 @@ fn print_top_inductive(group: Vec<TopInductive>) -> Printer<'static> {
 fn print_top_struct(item: TopStruct) -> Printer<'static> {
     flat([
         print_pub(item.is_pub),
-        pure("struct "),
+        pure(if item.rep_pub { "record " } else { "struct " }),
         pure(item.label),
         print_top_inductive_params(item.params),
         pure(" "),
-        print_pub(item.rep_pub),
         pure("{ "),
         sep_flat(item.fields.into_iter().map(print_field), || pure(", ")),
         pure(" }"),

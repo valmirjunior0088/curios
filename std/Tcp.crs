@@ -1,6 +1,6 @@
 use /std/{Bin, Str, Nat, Bln, Io, Result, Option, Time, Arr, Task};
 
-pub struct Settings pub {
+pub record Settings {
     connect_timeout : Option(Time/Duration),
     read_timeout : Option(Time/Duration),
     write_timeout : Option(Time/Duration),

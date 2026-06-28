@@ -65,7 +65,7 @@ end
 pub let Valid(b : Bin) -> Prop =
     Utf8(Scan/lead(), b);
 
-pub struct Str pub {
+pub record Str {
     bytes : Bin,
     valid : Valid(bytes)
 }

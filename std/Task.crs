@@ -156,7 +156,7 @@ pub rec await(@A : Type, f : Future(A)) -> Task(A) =
         bind(park((w) => Cell/set(f, Fut/pending(@A, Lst/cons(w, ws)))), (_) => await(f))
     end;
 
-struct Job pub {
+record Job {
     resume : Fiber,
     token : Token,
     fins : Lst(Guard)
@@ -165,7 +165,7 @@ struct Job pub {
 let Slot : Type =
     Cell(Option(Job));
 
-struct Parked pub {
+record Parked {
     handle : Io,
     interest : Nat,
     resume : Fiber,

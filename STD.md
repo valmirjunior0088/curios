@@ -341,7 +341,7 @@ File/write(f, b)               -- (File, Bin) -> Task(Result({}, Io/Error))
 A TCP client and a concurrent TCP server, in cleartext or over TLS. Every operation is an asynchronous [`Task`](#stdtask). `Socket` is an **abstract handle** — like `/std/File`, a zero-cost newtype over `Io`, kept distinct so a socket is never confused with stdin/stdout or a file. `connect` and `close` are public and flat: `connect` registers the close as a handle-keyed finalizer when it hands back the `Socket`, so a connection dropped or cancelled before its `close` is still closed (and never twice); `with`/`call`/`serve`/`serve_tls` are the bracketed forms over that pair. It builds on the `/sys/Io/lookup` + `/sys/Io/resolve` name-resolution pair (`lookup` starts an asynchronous `host`:`port` lookup and hands back a poll-readable handle; once it is ready, `resolve` forces the address list off it — the blocking `getaddrinfo` runs on a host worker thread, so a `connect`/`serve` suspends only its own fiber on the lookup rather than blocking the scheduler) and the `/sys/Io/connect`, `/sys/Io/listen`, and `/sys/Io/accept` primitives, with TLS layered on the conduit-upgrade primitives `/sys/Io/start_tls` (client) and `/sys/Io/tls_server_config` + `/sys/Io/start_tls_server` (server): the socket connects (or is accepted) in cleartext, then the handshake upgrades it in place to an encrypted stream the same `read`/`write` serve. The client trusts a bundled root set with verification on; the SNI is taken from `host`. Custom roots and client certificates are future work.
 
 ```
-struct Settings pub {
+record Settings {
     connect_timeout : Option(Time/Duration),
     read_timeout : Option(Time/Duration),
     write_timeout : Option(Time/Duration),
@@ -375,7 +375,7 @@ An HTTP/1.1 client layered on `/std/Tcp`, over cleartext (`http://`) or TLS (`ht
 induct Method | get() | post() end
 induct Error  | net(Io/Error) | malformed(Str) end
 
-struct Request pub {
+record Request {
     method : Method,
     host : Str,
     port : Nat,
@@ -385,8 +385,8 @@ struct Request pub {
     settings : Tcp/Settings
 }
 
-struct Status pub   { version : Str, code : Nat, reason : Str }
-struct Response pub { status : Status, headers : Lst({Str, Str}), body : Bin }
+record Status   { version : Str, code : Nat, reason : Str }
+record Response { status : Status, headers : Lst({Str, Str}), body : Bin }
 ```
 
 `Request`, `Status`, and `Response` all have public representations. In a `Request`, `headers` are sent verbatim and in order after the automatic `Host`/`Connection: close`/`Content-Length` lines; `body` is sent as-is (its `Content-Length` is added automatically when non-empty). A failed round trip is `Error/net` (a transport failure surfaced by `/std/Tcp`) or `Error/malformed` (a response that did not parse).
@@ -509,7 +509,7 @@ The three-way comparison result, `lt()` / `eq()` / `gt()` — the shape returned
 Arbitrary-precision non-negative integers, needed because the runtime `Nat` is a 31-bit carrier that traps on overflow. A `BigNat` is a list of base-10⁴ limbs held least-significant-first, kept canonical (no high zero limbs; zero is the empty list), so the supported algorithm — shortest-round-trip float rendering (`Flt/to_str`) — can do the wide arithmetic it needs without ever exceeding `Nat`.
 
 ```
-pub struct BigNat pub { limbs : Lst(Nat) }
+pub record BigNat { limbs : Lst(Nat) }
 ```
 
 | Binding             | Type                          | Description                                                       |

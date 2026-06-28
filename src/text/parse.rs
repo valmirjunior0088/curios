@@ -24,6 +24,7 @@ const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
     "let", "match", "rec", "mod", "use", "pub", "end", "false", "true", "induct", "struct",
+    "record",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
@@ -1543,7 +1544,11 @@ fn parse_top_inductive<'a>() -> Parser<'a, TopItem> {
 }
 
 fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("struct"))).flat_map(|(is_pub, ())| {
+    // `pub`? then the kind keyword: `struct` (rep private) or `record` (rep public).
+    let kind = catch(parse_keyword("struct"))
+        .map(|()| false)
+        .or(parse_keyword("record").map(|()| true));
+    catch(parse_pub().and(kind)).flat_map(|(is_pub, rep_pub)| {
         parse_identifier()
             .and(
                 catch(
@@ -1557,12 +1562,11 @@ fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
             .and(
                 catch(parse_literal(":").and_keep(lazy(parse_term))).or(pure(Subterm::Type.into())),
             )
-            // The inner `pub` (representation visibility) sits right before `{`.
-            .and(parse_pub())
+            // Representation visibility comes from the keyword, not an inner `pub`.
             .and_drop(parse_literal("{"))
             .and(sep_by0(parse_tuple_type_field, || parse_literal(",")))
             .and_drop(parse_literal("}"))
-            .map(move |((((label, params), result_sort), rep_pub), fields)| {
+            .map(move |(((label, params), result_sort), fields)| {
                 TopItem::Struct(TopStruct {
                     is_pub,
                     rep_pub,

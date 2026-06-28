@@ -91,7 +91,7 @@ fn matrix_nat_literal_named_default() {
 fn matrix_nat_literal_in_struct_field() {
     let source = r#"
         use /std/{Nat, Io};
-        pub struct Tagged pub { tag : Nat, val : Nat }
+        pub record Tagged { tag : Nat, val : Nat }
         let read(t : Tagged) -> Nat =
             match t
             | Tagged { tag = 0, val = v } => v
