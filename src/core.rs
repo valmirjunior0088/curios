@@ -79,6 +79,12 @@ use elaborate_prim::*;
 mod elaborate;
 pub use elaborate::*;
 
+mod elaborate_match;
+use elaborate_match::*;
+
+mod elaborate_module;
+pub use elaborate_module::*;
+
 #[cfg(test)]
 mod elaborate_tests;
 

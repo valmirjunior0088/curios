@@ -1,4 +1,7 @@
-use super::{Flt, Int, Nat, Term};
+use {
+    super::{Bound, Flt, Int, MetavarId, Nat, Subterm, Term, Var, Visit},
+    std::collections::BTreeSet,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Prim {
@@ -746,4 +749,379 @@ impl Prim {
     {
         Self::CellGet(type_.into(), cell.into())
     }
+
+    /// Visit each `Term` operand of `self`, in field order. The single source of
+    /// truth for which fields of a primitive are its term operands — `reach`,
+    /// `collect_metavars`, and `collect_construction_names` all read it.
+    /// (`traverse` keeps its own match: it rebuilds rather than visits.) The
+    /// closure is taken `impl FnMut` so it monomorphises and inlines, leaving the
+    /// de Bruijn / region hot path allocation- and indirection-free.
+    pub fn for_each_operand(&self, visit: &mut impl FnMut(&Term)) {
+        match self {
+            Prim::BlnType
+            | Prim::Bln(_)
+            | Prim::NatType
+            | Prim::Nat(Nat::Zero)
+            | Prim::IntType
+            | Prim::Int(_)
+            | Prim::FltType
+            | Prim::Flt(_)
+            | Prim::BinType
+            | Prim::Bin(_)
+            | Prim::IoType
+            | Prim::Io(_)
+            | Prim::IoClockWall
+            | Prim::IoClockMono
+            | Prim::IoArgs => {}
+
+            Prim::Nat(Nat::Succ(_, inner)) => visit(inner),
+
+            Prim::FltToLeBin(t)
+            | Prim::NatToInt(t)
+            | Prim::NatToFlt(t)
+            | Prim::IntToNat(t)
+            | Prim::IntToFlt(t)
+            | Prim::FltToNat(t)
+            | Prim::FltToInt(t)
+            | Prim::FltNeg(t)
+            | Prim::FltAbs(t)
+            | Prim::FltSqrt(t)
+            | Prim::FltFloor(t)
+            | Prim::FltCeil(t)
+            | Prim::FltTrunc(t)
+            | Prim::FltNearest(t)
+            | Prim::BinLen(t)
+            | Prim::BinFlatten(t)
+            | Prim::ArrType(t)
+            | Prim::IoClose(t)
+            | Prim::IoResolve(t)
+            | Prim::IoSocket(t)
+            | Prim::IoAccept(t)
+            | Prim::IoRandom(t)
+            | Prim::IoEnv(t) => visit(t),
+
+            Prim::IoEql(a, b)
+            | Prim::NatEql(a, b)
+            | Prim::NatNeq(a, b)
+            | Prim::NatAdd(a, b)
+            | Prim::NatSub(a, b)
+            | Prim::NatMul(a, b)
+            | Prim::NatLt(a, b)
+            | Prim::NatDiv(a, b)
+            | Prim::NatRem(a, b)
+            | Prim::NatGt(a, b)
+            | Prim::NatLte(a, b)
+            | Prim::NatGte(a, b)
+            | Prim::NatAnd(a, b)
+            | Prim::NatOr(a, b)
+            | Prim::NatXor(a, b)
+            | Prim::NatShl(a, b)
+            | Prim::NatShr(a, b)
+            | Prim::BlnAnd(a, b)
+            | Prim::BlnOr(a, b)
+            | Prim::BlnXor(a, b)
+            | Prim::BlnEql(a, b)
+            | Prim::BlnNeq(a, b)
+            | Prim::IntEql(a, b)
+            | Prim::IntNeq(a, b)
+            | Prim::IntAdd(a, b)
+            | Prim::IntSub(a, b)
+            | Prim::IntMul(a, b)
+            | Prim::IntDiv(a, b)
+            | Prim::IntRem(a, b)
+            | Prim::IntLt(a, b)
+            | Prim::IntGt(a, b)
+            | Prim::IntLte(a, b)
+            | Prim::IntGte(a, b)
+            | Prim::IntAnd(a, b)
+            | Prim::IntOr(a, b)
+            | Prim::IntXor(a, b)
+            | Prim::IntShl(a, b)
+            | Prim::IntShr(a, b)
+            | Prim::FltAdd(a, b)
+            | Prim::FltSub(a, b)
+            | Prim::FltMul(a, b)
+            | Prim::FltDiv(a, b)
+            | Prim::FltRem(a, b)
+            | Prim::FltEql(a, b)
+            | Prim::FltNeq(a, b)
+            | Prim::FltLt(a, b)
+            | Prim::FltGt(a, b)
+            | Prim::FltLte(a, b)
+            | Prim::FltGte(a, b)
+            | Prim::FltMin(a, b)
+            | Prim::FltMax(a, b)
+            | Prim::BinEql(a, b)
+            | Prim::BinGet(a, b)
+            | Prim::BinAppend(a, b)
+            | Prim::ArrLen(a, b)
+            | Prim::ArrFlatten(a, b)
+            | Prim::IoRead(a, b)
+            | Prim::IoWrite(a, b)
+            | Prim::IoOpen(a, b)
+            | Prim::IoLookup(a, b)
+            | Prim::IoBind(a, b)
+            | Prim::IoConnect(a, b)
+            | Prim::IoListen(a, b)
+            | Prim::IoSetNonblocking(a, b)
+            | Prim::IoSetRecvTimeout(a, b)
+            | Prim::IoSetSendTimeout(a, b)
+            | Prim::IoSetReuseaddr(a, b)
+            | Prim::IoStartTls(a, b)
+            | Prim::IoTlsServerConfig(a, b)
+            | Prim::IoStartTlsServer(a, b)
+            | Prim::IoExit(a, b) => {
+                visit(a);
+                visit(b);
+            }
+
+            Prim::BinSlice(a, b, c)
+            | Prim::ArrGet(a, b, c)
+            | Prim::ArrAppend(a, b, c)
+            | Prim::IoPoll(a, b, c) => {
+                visit(a);
+                visit(b);
+                visit(c);
+            }
+
+            Prim::ArrSlice(a, b, c, d) | Prim::ArrMap(a, b, c, d) => {
+                visit(a);
+                visit(b);
+                visit(c);
+                visit(d);
+            }
+
+            Prim::BinConcat(terms) | Prim::Arr(terms) => terms.iter().for_each(|term| visit(term)),
+            Prim::ArrConcat(ty, terms) => {
+                visit(ty);
+                terms.iter().for_each(|term| visit(term));
+            }
+
+            Prim::CellType(a) => visit(a),
+            Prim::Cell(a, b) | Prim::CellGet(a, b) => {
+                visit(a);
+                visit(b);
+            }
+            Prim::CellSet(a, b, c) => {
+                visit(a);
+                visit(b);
+                visit(c);
+            }
+        }
+    }
+
+    pub fn reach(&self) -> usize {
+        let mut reach = 0;
+        self.for_each_operand(&mut |term| reach = reach.max(term.reach()));
+        reach
+    }
+
+    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
+        self.for_each_operand(&mut |term| term.collect_metavars(ids));
+    }
+
+    // Recurse into every operand `Term` so a construction nested inside a primitive
+    // (e.g. `Arr(Str)`'s element type) still contributes its head name. Prims own no
+    // head names of their own.
+    pub fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
+        self.for_each_operand(&mut |term| term.collect_construction_names(names));
+    }
+
+    pub fn traverse<F>(&self, visit: &mut Visit<F>) -> Prim
+    where
+        F: FnMut(usize, &Var) -> Option<Subterm>,
+    {
+        match self {
+            Prim::BlnType => Prim::BlnType,
+            Prim::Bln(value) => Prim::Bln(*value),
+            Prim::NatType => Prim::NatType,
+            Prim::Nat(Nat::Zero) => Prim::Nat(Nat::Zero),
+            Prim::Nat(Nat::Succ(spine, inner)) => {
+                Prim::Nat(Nat::Succ(spine.clone(), visit.visit_subterm(inner)))
+            }
+            Prim::NatEql(l, r) => traverse_binary(l, r, visit, Prim::NatEql),
+            Prim::IoEql(l, r) => traverse_binary(l, r, visit, Prim::IoEql),
+            Prim::NatNeq(l, r) => traverse_binary(l, r, visit, Prim::NatNeq),
+            Prim::NatAdd(l, r) => traverse_binary(l, r, visit, Prim::NatAdd),
+            Prim::NatSub(l, r) => traverse_binary(l, r, visit, Prim::NatSub),
+            Prim::NatMul(l, r) => traverse_binary(l, r, visit, Prim::NatMul),
+            Prim::NatLt(l, r) => traverse_binary(l, r, visit, Prim::NatLt),
+            Prim::NatDiv(l, r) => traverse_binary(l, r, visit, Prim::NatDiv),
+            Prim::NatRem(l, r) => traverse_binary(l, r, visit, Prim::NatRem),
+            Prim::NatGt(l, r) => traverse_binary(l, r, visit, Prim::NatGt),
+            Prim::NatLte(l, r) => traverse_binary(l, r, visit, Prim::NatLte),
+            Prim::NatGte(l, r) => traverse_binary(l, r, visit, Prim::NatGte),
+            Prim::NatAnd(l, r) => traverse_binary(l, r, visit, Prim::NatAnd),
+            Prim::NatOr(l, r) => traverse_binary(l, r, visit, Prim::NatOr),
+            Prim::NatXor(l, r) => traverse_binary(l, r, visit, Prim::NatXor),
+            Prim::NatShl(l, r) => traverse_binary(l, r, visit, Prim::NatShl),
+            Prim::NatShr(l, r) => traverse_binary(l, r, visit, Prim::NatShr),
+            Prim::BlnAnd(l, r) => traverse_binary(l, r, visit, Prim::BlnAnd),
+            Prim::BlnOr(l, r) => traverse_binary(l, r, visit, Prim::BlnOr),
+            Prim::BlnXor(l, r) => traverse_binary(l, r, visit, Prim::BlnXor),
+            Prim::BlnEql(l, r) => traverse_binary(l, r, visit, Prim::BlnEql),
+            Prim::BlnNeq(l, r) => traverse_binary(l, r, visit, Prim::BlnNeq),
+            Prim::IntType => Prim::IntType,
+            Prim::Int(value) => Prim::Int(value.clone()),
+            Prim::IntEql(l, r) => traverse_binary(l, r, visit, Prim::IntEql),
+            Prim::IntNeq(l, r) => traverse_binary(l, r, visit, Prim::IntNeq),
+            Prim::IntAdd(l, r) => traverse_binary(l, r, visit, Prim::IntAdd),
+            Prim::IntSub(l, r) => traverse_binary(l, r, visit, Prim::IntSub),
+            Prim::IntMul(l, r) => traverse_binary(l, r, visit, Prim::IntMul),
+            Prim::IntDiv(l, r) => traverse_binary(l, r, visit, Prim::IntDiv),
+            Prim::IntRem(l, r) => traverse_binary(l, r, visit, Prim::IntRem),
+            Prim::IntLt(l, r) => traverse_binary(l, r, visit, Prim::IntLt),
+            Prim::IntGt(l, r) => traverse_binary(l, r, visit, Prim::IntGt),
+            Prim::IntLte(l, r) => traverse_binary(l, r, visit, Prim::IntLte),
+            Prim::IntGte(l, r) => traverse_binary(l, r, visit, Prim::IntGte),
+            Prim::IntAnd(l, r) => traverse_binary(l, r, visit, Prim::IntAnd),
+            Prim::IntOr(l, r) => traverse_binary(l, r, visit, Prim::IntOr),
+            Prim::IntXor(l, r) => traverse_binary(l, r, visit, Prim::IntXor),
+            Prim::IntShl(l, r) => traverse_binary(l, r, visit, Prim::IntShl),
+            Prim::IntShr(l, r) => traverse_binary(l, r, visit, Prim::IntShr),
+            Prim::FltType => Prim::FltType,
+            Prim::Flt(flt) => Prim::Flt(*flt),
+            Prim::FltAdd(l, r) => traverse_binary(l, r, visit, Prim::FltAdd),
+            Prim::FltSub(l, r) => traverse_binary(l, r, visit, Prim::FltSub),
+            Prim::FltMul(l, r) => traverse_binary(l, r, visit, Prim::FltMul),
+            Prim::FltDiv(l, r) => traverse_binary(l, r, visit, Prim::FltDiv),
+            Prim::FltRem(l, r) => traverse_binary(l, r, visit, Prim::FltRem),
+            Prim::FltEql(l, r) => traverse_binary(l, r, visit, Prim::FltEql),
+            Prim::FltNeq(l, r) => traverse_binary(l, r, visit, Prim::FltNeq),
+            Prim::FltLt(l, r) => traverse_binary(l, r, visit, Prim::FltLt),
+            Prim::FltGt(l, r) => traverse_binary(l, r, visit, Prim::FltGt),
+            Prim::FltLte(l, r) => traverse_binary(l, r, visit, Prim::FltLte),
+            Prim::FltGte(l, r) => traverse_binary(l, r, visit, Prim::FltGte),
+            Prim::FltMin(l, r) => traverse_binary(l, r, visit, Prim::FltMin),
+            Prim::FltMax(l, r) => traverse_binary(l, r, visit, Prim::FltMax),
+            Prim::FltNeg(inner) => Prim::FltNeg(visit.visit_subterm(inner)),
+            Prim::FltAbs(inner) => Prim::FltAbs(visit.visit_subterm(inner)),
+            Prim::FltSqrt(inner) => Prim::FltSqrt(visit.visit_subterm(inner)),
+            Prim::FltFloor(inner) => Prim::FltFloor(visit.visit_subterm(inner)),
+            Prim::FltCeil(inner) => Prim::FltCeil(visit.visit_subterm(inner)),
+            Prim::FltTrunc(inner) => Prim::FltTrunc(visit.visit_subterm(inner)),
+            Prim::FltNearest(inner) => Prim::FltNearest(visit.visit_subterm(inner)),
+            Prim::FltToLeBin(inner) => Prim::FltToLeBin(visit.visit_subterm(inner)),
+            Prim::NatToInt(inner) => Prim::NatToInt(visit.visit_subterm(inner)),
+            Prim::NatToFlt(inner) => Prim::NatToFlt(visit.visit_subterm(inner)),
+            Prim::IntToNat(inner) => Prim::IntToNat(visit.visit_subterm(inner)),
+            Prim::IntToFlt(inner) => Prim::IntToFlt(visit.visit_subterm(inner)),
+            Prim::FltToNat(inner) => Prim::FltToNat(visit.visit_subterm(inner)),
+            Prim::FltToInt(inner) => Prim::FltToInt(visit.visit_subterm(inner)),
+            Prim::BinType => Prim::BinType,
+            Prim::Bin(bytes) => Prim::Bin(bytes.clone()),
+            Prim::BinLen(bin) => Prim::BinLen(visit.visit_subterm(bin)),
+            Prim::BinEql(l, r) => traverse_binary(l, r, visit, Prim::BinEql),
+            Prim::BinGet(b, i) => traverse_binary(b, i, visit, Prim::BinGet),
+            Prim::BinSlice(bin, start, end) => Prim::BinSlice(
+                visit.visit_subterm(bin),
+                visit.visit_subterm(start),
+                visit.visit_subterm(end),
+            ),
+            Prim::BinAppend(b, byte) => traverse_binary(b, byte, visit, Prim::BinAppend),
+            Prim::BinConcat(operands) => {
+                Prim::BinConcat(operands.iter().map(|e| visit.visit_subterm(e)).collect())
+            }
+            Prim::BinFlatten(operand) => Prim::BinFlatten(visit.visit_subterm(operand)),
+            Prim::ArrType(elem) => Prim::ArrType(visit.visit_subterm(elem)),
+            Prim::Arr(elems) => Prim::Arr(elems.iter().map(|e| visit.visit_subterm(e)).collect()),
+            Prim::ArrLen(ty, list) => traverse_binary(ty, list, visit, Prim::ArrLen),
+            Prim::ArrGet(ty, list, index) => Prim::ArrGet(
+                visit.visit_subterm(ty),
+                visit.visit_subterm(list),
+                visit.visit_subterm(index),
+            ),
+            Prim::ArrSlice(ty, list, start, end) => Prim::ArrSlice(
+                visit.visit_subterm(ty),
+                visit.visit_subterm(list),
+                visit.visit_subterm(start),
+                visit.visit_subterm(end),
+            ),
+            Prim::ArrAppend(ty, list, elem) => Prim::ArrAppend(
+                visit.visit_subterm(ty),
+                visit.visit_subterm(list),
+                visit.visit_subterm(elem),
+            ),
+            Prim::ArrConcat(ty, operands) => Prim::ArrConcat(
+                visit.visit_subterm(ty),
+                operands.iter().map(|e| visit.visit_subterm(e)).collect(),
+            ),
+            Prim::ArrFlatten(ty, operand) => traverse_binary(ty, operand, visit, Prim::ArrFlatten),
+            Prim::ArrMap(a, b, f, arr) => Prim::ArrMap(
+                visit.visit_subterm(a),
+                visit.visit_subterm(b),
+                visit.visit_subterm(f),
+                visit.visit_subterm(arr),
+            ),
+            Prim::IoType => Prim::IoType,
+            Prim::Io(token) => Prim::Io(*token),
+            Prim::IoRead(handle, count) => traverse_binary(handle, count, visit, Prim::IoRead),
+            Prim::IoWrite(handle, bytes) => traverse_binary(handle, bytes, visit, Prim::IoWrite),
+            Prim::IoOpen(path, mode) => traverse_binary(path, mode, visit, Prim::IoOpen),
+            Prim::IoLookup(host, port) => traverse_binary(host, port, visit, Prim::IoLookup),
+            Prim::IoResolve(handle) => Prim::IoResolve(visit.visit_subterm(handle)),
+            Prim::IoSocket(addr) => Prim::IoSocket(visit.visit_subterm(addr)),
+            Prim::IoBind(handle, addr) => traverse_binary(handle, addr, visit, Prim::IoBind),
+            Prim::IoListen(handle, backlog) => {
+                traverse_binary(handle, backlog, visit, Prim::IoListen)
+            }
+            Prim::IoAccept(handle) => Prim::IoAccept(visit.visit_subterm(handle)),
+            Prim::IoConnect(handle, addr) => traverse_binary(handle, addr, visit, Prim::IoConnect),
+            Prim::IoStartTls(handle, sni) => traverse_binary(handle, sni, visit, Prim::IoStartTls),
+            Prim::IoTlsServerConfig(cert, key) => {
+                traverse_binary(cert, key, visit, Prim::IoTlsServerConfig)
+            }
+            Prim::IoStartTlsServer(handle, cfg) => {
+                traverse_binary(handle, cfg, visit, Prim::IoStartTlsServer)
+            }
+            Prim::IoSetNonblocking(handle, on) => {
+                traverse_binary(handle, on, visit, Prim::IoSetNonblocking)
+            }
+            Prim::IoSetRecvTimeout(handle, ms) => {
+                traverse_binary(handle, ms, visit, Prim::IoSetRecvTimeout)
+            }
+            Prim::IoSetSendTimeout(handle, ms) => {
+                traverse_binary(handle, ms, visit, Prim::IoSetSendTimeout)
+            }
+            Prim::IoSetReuseaddr(handle, on) => {
+                traverse_binary(handle, on, visit, Prim::IoSetReuseaddr)
+            }
+            Prim::IoPoll(handles, events, timeout) => Prim::IoPoll(
+                visit.visit_subterm(handles),
+                visit.visit_subterm(events),
+                visit.visit_subterm(timeout),
+            ),
+            Prim::IoClose(handle) => Prim::IoClose(visit.visit_subterm(handle)),
+            Prim::IoClockWall => Prim::IoClockWall,
+            Prim::IoClockMono => Prim::IoClockMono,
+            Prim::IoRandom(count) => Prim::IoRandom(visit.visit_subterm(count)),
+            Prim::IoArgs => Prim::IoArgs,
+            Prim::IoEnv(name) => Prim::IoEnv(visit.visit_subterm(name)),
+            Prim::IoExit(type_, code) => traverse_binary(type_, code, visit, Prim::IoExit),
+            Prim::CellType(a) => Prim::CellType(visit.visit_subterm(a)),
+            Prim::Cell(a, b) => traverse_binary(a, b, visit, Prim::Cell),
+            Prim::CellGet(a, b) => traverse_binary(a, b, visit, Prim::CellGet),
+            Prim::CellSet(a, b, c) => Prim::CellSet(
+                visit.visit_subterm(a),
+                visit.visit_subterm(b),
+                visit.visit_subterm(c),
+            ),
+        }
+    }
+}
+
+/// Visit both operands of a binary primitive and rebuild it through `build`. The
+/// constructor is taken generically (not as a `fn` pointer) so every call site
+/// monomorphises to the same direct construction — this is the de Bruijn
+/// traversal hot path, so the indirection must vanish.
+fn traverse_binary<F>(
+    left: &Term,
+    right: &Term,
+    visit: &mut Visit<F>,
+    build: impl FnOnce(Term, Term) -> Prim,
+) -> Prim
+where
+    F: FnMut(usize, &Var) -> Option<Subterm>,
+{
+    build(visit.visit_subterm(left), visit.visit_subterm(right))
 }
