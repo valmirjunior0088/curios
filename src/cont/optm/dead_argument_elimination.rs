@@ -167,15 +167,16 @@ fn drop_dead_positions(module: &mut Module) -> bool {
     true
 }
 
-/// Solve the liveness fixed point and return the dead positions: per-function
-/// parameter drops and per-body block-parameter drops (indexed like [`bodies`]).
-#[allow(clippy::type_complexity)]
-fn dead_parameter_positions(
-    module: &Module,
-) -> (
+/// Return type of [`dead_parameter_positions`]: per-function parameter drops,
+/// and per-body block-parameter drops (indexed like [`bodies`]).
+type DeadPositions = (
     HashMap<FuncName, HashSet<usize>>,
     Vec<HashMap<BlockName, HashSet<usize>>>,
-) {
+);
+
+/// Solve the liveness fixed point and return the dead positions: per-function
+/// parameter drops and per-body block-parameter drops (indexed like [`bodies`]).
+fn dead_parameter_positions(module: &Module) -> DeadPositions {
     let bodies = bodies(module);
     let mut liveness = Liveness::default();
 

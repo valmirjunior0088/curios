@@ -1,8 +1,9 @@
 use {super::Work, crate::cont};
 
+type ContFn<'a> = Box<dyn FnOnce(&mut Work<'_, '_, '_>, cont::ValueName) -> cont::Tail + 'a>;
+
 pub struct Cont<'a> {
-    #[allow(clippy::type_complexity)]
-    func: Box<dyn FnOnce(&mut Work<'_, '_, '_>, cont::ValueName) -> cont::Tail + 'a>,
+    func: ContFn<'a>,
 }
 
 impl<'a> Cont<'a> {
@@ -28,9 +29,11 @@ impl<'a> Cont<'a> {
     }
 }
 
+type ContManyFn<'a> =
+    Box<dyn FnOnce(&mut Work<'_, '_, '_>, Vec<cont::ValueName>) -> cont::Tail + 'a>;
+
 pub struct ContMany<'a> {
-    #[allow(clippy::type_complexity)]
-    func: Box<dyn FnOnce(&mut Work<'_, '_, '_>, Vec<cont::ValueName>) -> cont::Tail + 'a>,
+    func: ContManyFn<'a>,
 }
 
 impl<'a> ContMany<'a> {
@@ -57,9 +60,10 @@ impl<'a> ContMany<'a> {
     }
 }
 
+type RecBodyFn<'a> = Box<dyn FnOnce(&mut Work<'_, '_, '_>, &super::Frame) -> cont::Tail + 'a>;
+
 pub struct RecBody<'a> {
-    #[allow(clippy::type_complexity)]
-    func: Box<dyn FnOnce(&mut Work<'_, '_, '_>, &super::Frame) -> cont::Tail + 'a>,
+    func: RecBodyFn<'a>,
 }
 
 impl<'a> RecBody<'a> {
