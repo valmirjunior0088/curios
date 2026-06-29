@@ -62,8 +62,8 @@ struct Cli {
         long,
         value_name = "STAGES",
         num_args = 0..=1,
-        default_missing_value = "text,core,ersd,cont,optm,wasm",
-        help = "Print selected IRs to stderr (comma-separated: text,core,ersd,cont,optm,wasm; bare --print prints all)"
+        default_missing_value = "text,core,ersd,ersd-optm,cont,cont-optm,wasm",
+        help = "Print selected IRs to stderr (comma-separated: text,core,ersd,ersd-optm,cont,cont-optm,wasm; bare --print prints all)"
     )]
     print: Option<String>,
 
@@ -82,8 +82,13 @@ fn compile_file(timeout: Duration, print: &str, input_path: &Path) -> Result<was
         Stage::Text(text) if stages.contains(&"text") => eprintln!("\n=== text ===\n{text}"),
         Stage::Core(core) if stages.contains(&"core") => eprintln!("\n=== core ===\n{core}"),
         Stage::Ersd(ersd) if stages.contains(&"ersd") => eprintln!("\n=== ersd ===\n{ersd}"),
+        Stage::ErsdOptm(ersd) if stages.contains(&"ersd-optm") => {
+            eprintln!("\n=== ersd-optm ===\n{ersd}")
+        }
         Stage::Cont(cont) if stages.contains(&"cont") => eprintln!("\n=== cont ===\n{cont}"),
-        Stage::Optm(optm) if stages.contains(&"optm") => eprintln!("\n=== optm ===\n{optm}"),
+        Stage::ContOptm(cont) if stages.contains(&"cont-optm") => {
+            eprintln!("\n=== cont-optm ===\n{cont}")
+        }
         Stage::Wasm(wasm) if stages.contains(&"wasm") => eprintln!("\n=== wasm ===\n{wasm}"),
         _ => {}
     })
@@ -147,7 +152,7 @@ pub fn cli() -> Result<(), String> {
             // Run the fast type-check-only path; fall through to the full pipeline
             // only when a post-core stage is requested for printing, since those
             // stages do not exist until lowering runs.
-            let post_core = ["ersd", "cont", "optm", "wasm"];
+            let post_core = ["ersd", "ersd-optm", "cont", "cont-optm", "wasm"];
 
             if print.split(',').any(|stage| post_core.contains(&stage)) {
                 compile_file(timeout, &print, &input_path)?;

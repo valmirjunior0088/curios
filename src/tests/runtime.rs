@@ -239,7 +239,7 @@ fn folds_constant_arg_through_let_function() {
         &entrypoint,
         &text::NullLoader,
         |stage| {
-            if let crate::Stage::Optm(module) = stage {
+            if let crate::Stage::ContOptm(module) = stage {
                 let entry = module.entry().expect("module has entry").clone();
                 let (_, func) = module
                     .funcs()
@@ -252,7 +252,7 @@ fn folds_constant_arg_through_let_function() {
     )
     .expect("compile succeeded");
 
-    let main = main_func.expect("Stage::Optm observed");
+    let main = main_func.expect("Stage::ContOptm observed");
 
     assert!(
         main.region.preallocs.is_empty(),
@@ -336,21 +336,21 @@ fn printf_partial_evaluation_reduces_residual() {
         .expect("failed to parse source")
         .with_type("()".parse().unwrap());
 
-    let mut optm_funcs: Option<usize> = None;
+    let mut cont_optm_funcs: Option<usize> = None;
 
     let wasm_module = crate::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
         &crate::text::NullLoader,
         |stage| {
-            if let crate::Stage::Optm(module) = stage {
-                optm_funcs = Some(module.funcs().len());
+            if let crate::Stage::ContOptm(module) = stage {
+                cont_optm_funcs = Some(module.funcs().len());
             }
         },
     )
     .expect("compile succeeded");
 
-    let funcs = optm_funcs.expect("Stage::Optm observed");
+    let funcs = cont_optm_funcs.expect("Stage::ContOptm observed");
     assert!(
         funcs <= 13,
         "expected at most 13 residual funcs after partial evaluation and \

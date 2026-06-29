@@ -108,7 +108,7 @@ pub use map_simplification::*;
 mod slice_forwarding;
 pub use slice_forwarding::*;
 
-use {super::cont::*, crate::Entropy};
+use {super::*, crate::Entropy};
 
 /// Run the optimization pipeline and return the rewritten module.
 ///
@@ -164,7 +164,7 @@ use {super::cont::*, crate::Entropy};
 ///    elimination finishes type erasure, and dead-code elimination — last, so
 ///    it sees everything — reclaims the unreferenced bindings, aggregates,
 ///    closures, and untaken arms.
-pub fn optimize(mut module: Module) -> Module {
+pub fn optimize(module: &mut Module) {
     // One gensym shared across every inlining pass below, so the `@{callee}#{n}`
     // freshening suffix stays unique even when a re-lifted closure is inlined by
     // more than one pass (see `inline_calls_with`).
@@ -177,70 +177,68 @@ pub fn optimize(mut module: Module) -> Module {
     //    super-linear passes below — lifting, specialization, inlining — only ever
     //    walk the reachable subset. The final sweep (§8) still reclaims whatever
     //    those passes newly expose.
-    eliminate_dead_code(&mut module);
+    eliminate_dead_code(module);
 
     // 1. Settle identities.
-    propagate_copies(&mut module);
-    fold_constants(&mut module);
+    propagate_copies(module);
+    fold_constants(module);
 
     // 2. Flatten the higher-order layer.
-    lift_closures(&mut module);
-    specialize_calls(&mut module);
-    lift_closures(&mut module);
-    eliminate_dead_code(&mut module);
+    lift_closures(module);
+    specialize_calls(module);
+    lift_closures(module);
+    eliminate_dead_code(module);
 
     // 3. Dissolve call boundaries.
-    convert_tail_recursion(&mut module);
-    inline_calls_with(&mut module, &entropy);
-    thread_jumps(&mut module);
-    propagate_copies(&mut module);
-    fold_constants(&mut module);
+    convert_tail_recursion(module);
+    inline_calls_with(module, &entropy);
+    thread_jumps(module);
+    propagate_copies(module);
+    fold_constants(module);
 
     // 4. Thread decided dispatch.
-    thread_decided_dispatch(&mut module);
-    thread_jumps(&mut module);
-    propagate_copies(&mut module);
-    fold_constants(&mut module);
+    thread_decided_dispatch(module);
+    thread_jumps(module);
+    propagate_copies(module);
+    fold_constants(module);
 
     // 5. Partially evaluate pure calls.
-    evaluate_pure_calls(&mut module);
-    propagate_copies(&mut module);
-    fold_constants(&mut module);
+    evaluate_pure_calls(module);
+    propagate_copies(module);
+    fold_constants(module);
 
     // 6. Shed recursion residue, then dissolve residual wrappers.
-    eliminate_dead_arguments(&mut module);
-    eliminate_dead_code(&mut module);
-    inline_calls_with(&mut module, &entropy);
-    propagate_copies(&mut module);
-    fold_constants(&mut module);
+    eliminate_dead_arguments(module);
+    eliminate_dead_code(module);
+    inline_calls_with(module, &entropy);
+    propagate_copies(module);
+    fold_constants(module);
     // With the loop bodies inlined and settled, a recursor's per-step tail slice
     // now sits in the same region as its consumers: forwarding re-bases those
     // reads onto the original buffer, and the copy propagation and dead-code
     // sweeps below reclaim the slice that is left with no uses.
-    forward_slices(&mut module);
-    simplify_maps(&mut module);
-    thread_decided_dispatch(&mut module);
-    thread_jumps(&mut module);
-    propagate_copies(&mut module);
+    forward_slices(module);
+    simplify_maps(module);
+    thread_decided_dispatch(module);
+    thread_jumps(module);
+    propagate_copies(module);
     // Threading monomorphized any closure-returning-match join (the erased
     // proof-convoy residue): the callee is now a single known closure per edge,
     // so a lift round rewrites the indirect call to a direct one, a dead-code
     // sweep reclaims the orphaned closure twins it leaves, and the inline fuses
     // the now-direct-called arm.
-    lift_closures(&mut module);
-    eliminate_dead_code(&mut module);
-    inline_calls_with(&mut module, &entropy);
-    propagate_copies(&mut module);
-    fold_constants(&mut module);
+    lift_closures(module);
+    eliminate_dead_code(module);
+    inline_calls_with(module, &entropy);
+    propagate_copies(module);
+    fold_constants(module);
 
     // 7. Hoist constants.
-    hoist_literals(&mut module);
+    hoist_literals(module);
 
     // 8. Final cleanup.
-    thread_jumps(&mut module);
-    propagate_copies(&mut module);
-    eliminate_dead_arguments(&mut module);
-    eliminate_dead_code(&mut module);
-
-    module
+    thread_jumps(module);
+    propagate_copies(module);
+    eliminate_dead_arguments(module);
+    eliminate_dead_code(module);
 }

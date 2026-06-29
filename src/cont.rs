@@ -7,4 +7,6 @@ pub use module::*;
 mod to_wasm;
 pub use to_wasm::*;
 
+pub mod optm;
+
 mod print;

@@ -904,7 +904,7 @@ mod tests {
         module.add_clsr(ClsrName::from("c_dead"), c_dead);
         module.set_entry(FuncName::from("main"));
 
-        // Pipeline order from src/optm.rs::optimize.
+        // Pipeline order from src/cont/optm.rs::optimize.
         eliminate_dead_code(&mut module);
         inline_calls(&mut module);
 

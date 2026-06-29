@@ -19,8 +19,6 @@ pub mod ersd;
 
 pub mod cont;
 
-pub mod optm;
-
 pub mod wasm;
 
 #[cfg(feature = "binaryen")]

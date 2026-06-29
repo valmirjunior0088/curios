@@ -1,5 +1,5 @@
 use {
-    crate::{cont, core, ersd, optm, text, wasm},
+    crate::{cont, core, ersd, text, wasm},
     std::time::Duration,
 };
 
@@ -7,8 +7,9 @@ pub enum Stage<'a> {
     Text(&'a text::Entrypoint),
     Core(&'a core::Module),
     Ersd(&'a ersd::Module),
+    ErsdOptm(&'a ersd::Module),
     Cont(&'a cont::Module),
-    Optm(&'a cont::Module),
+    ContOptm(&'a cont::Module),
     Wasm(&'a wasm::Module),
 }
 
@@ -148,38 +149,30 @@ where
     // is erased: there is no source-level prune, so std is type-checked in full on
     // every compile and its bugs surface instead of hiding behind an unreached
     // path.
-    let mut ersd_module = core::erase_module(&mut core::Context::new(timeout), &module, &core_type)
+    let ersd_module = core::erase_module(&mut core::Context::new(timeout), &module, &core_type)
         .map_err(|error| error.format_with(&module))?;
-
-    // *After* erase has type-checked everything, drop the items the entrypoint
-    // cannot reach, so only the program's actual slice is lowered. This keeps
-    // `to_cont` from eagerly initializing the unused prelude — chiefly the
-    // `Parse`/`Json`/`Http` combinator CAFs — in `main`'s entry region, a closure
-    // web the optimizer would otherwise drag through lifting, specialization, and
-    // inlining on every compile (see `ersd::prune_unreachable`).
-    ersd::prune_unreachable(&mut ersd_module);
-
-    // Re-base `Nat`-summing self-recursion (e.g. `Str/len`'s `… + 1`) onto an
-    // inner accumulator so it becomes a tail-recursive loop downstream — O(1)
-    // stack instead of a frame per element.
-    ersd::introduce_accumulators(&mut ersd_module);
-
-    // Re-base buffer-walking self-recursion (e.g. `Str/len`'s `count_w`) onto an
-    // integer cursor over the original buffer, so each step advances an offset
-    // instead of re-slicing the tail — O(1) per step instead of O(n).
-    ersd::introduce_offsets(&mut ersd_module);
 
     observe(Stage::Ersd(&ersd_module));
 
-    let cont_module = ersd::to_cont(&ersd_module);
+    // *After* erase has type-checked everything, run the Ersd optimization
+    // pipeline in place: drop the items the entrypoint cannot reach, then re-base
+    // self-recursion onto accumulators and offsets (see `ersd::optm`).
+    let mut ersd_optm_module = ersd_module;
+    ersd::optm::optimize(&mut ersd_optm_module);
+
+    observe(Stage::ErsdOptm(&ersd_optm_module));
+
+    let cont_module = ersd::to_cont(&ersd_optm_module);
 
     observe(Stage::Cont(&cont_module));
 
-    let optm_module = optm::optimize(cont_module);
+    // Run the Cont optimization pipeline in place (see `cont::optm`).
+    let mut cont_optm_module = cont_module;
+    cont::optm::optimize(&mut cont_optm_module);
 
-    observe(Stage::Optm(&optm_module));
+    observe(Stage::ContOptm(&cont_optm_module));
 
-    let wasm_module = cont::to_wasm(&optm_module);
+    let wasm_module = cont::to_wasm(&cont_optm_module);
 
     observe(Stage::Wasm(&wasm_module));
 

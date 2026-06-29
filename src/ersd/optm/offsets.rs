@@ -1,5 +1,5 @@
 use {
-    super::{
+    crate::ersd::{
         Apply, Argument, Func, Item, Module, Name, NatMatch, Prim, PurePrim, Rec, Subterm, Term,
     },
     std::{
@@ -45,7 +45,7 @@ use {
 /// ```
 ///
 /// `f`'s signature is untouched (the offset is internal), so no caller changes. The
-/// pass runs after [`introduce_accumulators`](super::introduce_accumulators), so on
+/// pass runs after [`introduce_accumulators`](super::accumulate::introduce_accumulators), so on
 /// `count_w` it threads the cursor through the already-tail-recursive `count_w@sum`
 /// inner loop — yielding a loop that is `O(1)` in *both* stack and per-step time.
 /// It descends into nested `rec`s to reach exactly that accumulator-introduced inner
@@ -660,7 +660,7 @@ mod tests {
         // `b` flows into `Bin.eql` (a whole-buffer read), so the virtual suffix would
         // have to be materialised — the recursion is left untouched.
         let recursion = walk(
-            Subterm::Match(super::super::Match {
+            Subterm::Match(crate::ersd::Match {
                 head: bin_eql(name_term("b"), name_term("b")),
                 cases: vec![
                     apply(

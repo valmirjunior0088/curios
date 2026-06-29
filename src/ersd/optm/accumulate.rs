@@ -1,5 +1,5 @@
 use {
-    super::{
+    crate::ersd::{
         Apply, Argument, Func, Item, Match, Module, Name, NatMatch, Prim, PurePrim, Rec, Subterm,
         Term,
     },
@@ -26,7 +26,7 @@ use {
 /// ```
 ///
 /// `f@sum` is now plainly tail-recursive, so the ordinary lowering plus
-/// [`convert_tail_recursion`](crate::optm) turn it into a loop — O(1) stack. `f`'s
+/// [`convert_tail_recursion`](crate::cont::optm) turn it into a loop — O(1) stack. `f`'s
 /// own signature is untouched (the accumulator is internal), so no caller changes.
 /// Recognising the shape here, at one `NatAdd(Apply(self), lit)` node, is what the
 /// desugared `cont` would force us to reconstruct from blocks.
@@ -247,7 +247,7 @@ fn rewrite_tail(term: Term, name: &str, inner: &str, accumulator: &str) -> Term 
                 .collect(),
         })
         .into(),
-        Subterm::Let(let_) => Subterm::Let(super::Let {
+        Subterm::Let(let_) => Subterm::Let(crate::ersd::Let {
             name: let_.name,
             body: let_.body,
             tail: rewrite_tail(let_.tail, name, inner, accumulator),

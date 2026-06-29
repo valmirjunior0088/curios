@@ -44,14 +44,19 @@ fn main() {
                 println!("=== ersd ===");
                 println!("{term}");
             }
+            Stage::ErsdOptm(term) => {
+                println!();
+                println!("=== ersd-optm ===");
+                println!("{term}");
+            }
             Stage::Cont(module) => {
                 println!();
                 println!("=== cont ===");
                 println!("{module}");
             }
-            Stage::Optm(module) => {
+            Stage::ContOptm(module) => {
                 println!();
-                println!("=== optm ===");
+                println!("=== cont-optm ===");
                 println!("{module}");
             }
             Stage::Wasm(module) => {

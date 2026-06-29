@@ -25,9 +25,8 @@ The compiler is a chain of stages, each its own module under `src/`. This chain 
 .crs source
   → text/   parse surface syntax; lower to core (text/to_core)
   → core/   elaborate, typecheck, reduce/convert, then erase types
-  → ersd/   "erased" IR (types gone); lower to continuations (ersd/to_cont)
-  → cont/   continuation-passing-style IR; emit wasm (cont/to_wasm)
-  → optm/   optimization passes over the cont IR
+  → ersd/   "erased" IR (types gone); ersd→ersd optimization (ersd/optm), then lower to continuations (ersd/to_cont)
+  → cont/   continuation-passing-style IR; cont→cont optimization (cont/optm), then emit wasm (cont/to_wasm)
   → wasm/   wasm module model, encoder/writer, parser
   → run/    execute the module on wasmtime (feature "run")
 ```
@@ -40,9 +39,8 @@ The compiler is a chain of stages, each its own module under `src/`. This chain 
 | ----------------------------------- | -------------------------------------------------------------------------------------------- |
 | `src/text/`                         | Lexer/parser, surface AST, lowering to core (`to_core/`)                                     |
 | `src/core/`                         | Core language: elaboration, typing, reduction, conversion, inductives, erasure, zonking      |
-| `src/ersd/`                         | Erased IR (post type-erasure); lowering to CPS (`to_cont/`)                                  |
-| `src/cont/`                         | Continuation-passing IR; wasm emission (`to_wasm/`)                                          |
-| `src/optm/`                         | Optimization passes over cont IR (inlining, DCE, copy/tag/jump threading, tail recursion, …) |
+| `src/ersd/`                         | Erased IR (post type-erasure); ersd→ersd optimization (`optm/`: prune, accumulators, offsets); lowering to CPS (`to_cont/`) |
+| `src/cont/`                         | Continuation-passing IR; cont→cont optimization (`optm/`: inlining, DCE, copy/tag/jump threading, tail recursion, …); wasm emission (`to_wasm/`) |
 | `src/wasm/`                         | Wasm module model, parser, binary writer/encoder                                             |
 | `src/binaryen/`                     | FFI bindings to vendored Binaryen (`sys.rs`)                                                 |
 | `src/run/`                          | wasmtime engine, host functions, OS + mock hosts (feature `run`)                             |

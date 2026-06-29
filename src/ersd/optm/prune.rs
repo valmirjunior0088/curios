@@ -1,5 +1,5 @@
 use {
-    super::{Item, Module, NatMatch, Subterm, Term},
+    crate::ersd::{Item, Module, NatMatch, Subterm, Term},
     std::collections::{BTreeSet, HashMap, HashSet},
 };
 
@@ -26,7 +26,7 @@ use {
 ///
 /// This is the reachability/effect information that is plain at this layer and
 /// lost once `to_cont` turns each item into anonymous CPS blocks — which is why
-/// the prune lives here rather than in `optm`, where the dead initialization is
+/// the prune lives here rather than in `cont::optm`, where the dead initialization is
 /// indistinguishable from a live, possibly-effectful call sequence. Items keep
 /// their original relative order, so `to_cont`'s dependency ordering (a
 /// definition precedes its uses) is preserved.
@@ -190,9 +190,9 @@ fn contains_effect(term: &Term) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        super::{HostPrim, Name, Prim, Subterm},
-        *,
+    use {
+        super::*,
+        crate::ersd::{HostPrim, Name, Prim, Subterm},
     };
 
     fn names(module: &Module) -> Vec<String> {
@@ -208,7 +208,7 @@ mod tests {
         // — not the synchronous short-circuit — is what carries `refers`.
         Item::Let {
             name: name.to_owned(),
-            body: Subterm::Apply(super::super::Apply {
+            body: Subterm::Apply(crate::ersd::Apply {
                 head: Subterm::Name(Name::from(refers)).into(),
                 params: vec![Subterm::Erased.into()],
             })
@@ -289,7 +289,7 @@ mod tests {
             items: vec![
                 Item::Let {
                     name: "exit".to_owned(),
-                    body: Subterm::Func(super::super::Func {
+                    body: Subterm::Func(crate::ersd::Func {
                         captures: vec![],
                         params: vec!["c".into()],
                         body: Subterm::Prim(Prim::Host(HostPrim::IoExit(
