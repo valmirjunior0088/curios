@@ -43,7 +43,7 @@ pub struct MetaStore {
 
 /// The local frame a parked problem froze at park time: assumptions (in
 /// binding order), and the non-base-frame definitions, counterfactual
-/// refinements, and projection refinements (each outermost frame first, so
+/// refinements, projection refinements, and scrutinee refinements (each outermost frame first, so
 /// reapplying in order reproduces the shadowing). A retry must run under the
 /// same equalities its origin saw — including the arm-local refinements —
 /// while solution re-validation independently suppresses them, keeping
@@ -54,6 +54,7 @@ pub struct FrozenFrame {
     pub definitions: Vec<(String, Term)>,
     pub refinements: Vec<(String, Term)>,
     pub refinement_projections: Vec<((Term, usize), Term)>,
+    pub refinement_scrutinees: Vec<(Term, Term)>,
 }
 
 /// The work a parked problem will retry (§8).
@@ -101,6 +102,14 @@ pub struct Context {
     // solution (§7.4) must keep stable definitions yet ignore these.
     refinements: Vec<HashMap<String, Term>>,
     refinement_projections: Vec<HashMap<(Term, usize), Term>>,
+    // Counterfactual refinements keyed by a *stuck application* scrutinee — a
+    // non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head`
+    // could not record. Keyed by a *canonical* form (head verbatim, arguments
+    // reduced to WHNF), so an occurrence that surfaces spelled differently
+    // (`classify(Bin/at(cons(c,t),0,_))`, `Nat/in_range(c, lo', hi')`) still
+    // matches the stored key once both are canonicalized. The term-keyed
+    // analogue of the two stores above, suppressed by the same flag.
+    refinement_scrutinees: Vec<HashMap<Term, Term>>,
     suppress_refinements: bool,
     // The local assumption context in binding order (a companion to
     // `assumptions`, which is keyed by name and loses order). `assume` appends;
@@ -161,6 +170,7 @@ impl Context {
             definitions: vec![HashMap::new()],
             refinements: vec![HashMap::new()],
             refinement_projections: vec![HashMap::new()],
+            refinement_scrutinees: vec![HashMap::new()],
             suppress_refinements: false,
             local: Vec::new(),
             local_marks: Vec::new(),
@@ -214,6 +224,7 @@ impl Context {
         self.definitions.push(HashMap::new());
         self.refinements.push(HashMap::new());
         self.refinement_projections.push(HashMap::new());
+        self.refinement_scrutinees.push(HashMap::new());
         self.local_marks.push(self.local.len());
     }
 
@@ -223,9 +234,13 @@ impl Context {
         let definitions = self.definitions.pop().unwrap();
         let refinements = self.refinements.pop().unwrap();
         let refinement_projections = self.refinement_projections.pop().unwrap();
+        let refinement_scrutinees = self.refinement_scrutinees.pop().unwrap();
         self.local.truncate(self.local_marks.pop().unwrap());
 
-        if !definitions.is_empty() || !refinements.is_empty() || !refinement_projections.is_empty()
+        if !definitions.is_empty()
+            || !refinements.is_empty()
+            || !refinement_projections.is_empty()
+            || !refinement_scrutinees.is_empty()
         {
             self.reductions.clear();
         }
@@ -283,6 +298,16 @@ impl Context {
             .iter()
             .rev()
             .find_map(|assumptions| assumptions.get(label))
+    }
+
+    /// The local assumption context in binding order (outermost first). The
+    /// dependent-match generalizer (`elaborate_match`) walks this to find the
+    /// hypotheses whose type depends on a scrutinee index being abstracted: they
+    /// must ride into the motive as Π-binders, or the synthesized motive is
+    /// ill-typed. Binding order matters — a hypothesis's type can only mention
+    /// earlier binders, so the telescope it yields is already well-ordered.
+    pub fn locals(&self) -> &[(String, Term)] {
+        &self.local
     }
 
     pub fn define<A>(&mut self, label: A, term: &Term)
@@ -368,6 +393,67 @@ impl Context {
             .find_map(|p| p.get(&(base.clone(), index)))
     }
 
+    /// Register a counterfactual refinement of a stuck-application scrutinee
+    /// (`refine_head` on a non-key head). `canonical` is the canonical
+    /// form (head verbatim, arguments in WHNF); `value` is the arm's
+    /// constructor. Sound for the same reason `refine` is — the arm is reached
+    /// only when the scrutinee equals `value` — and non-cyclic because `value`
+    /// is a constructor of the scrutinee's inductive, a normal form.
+    pub fn refine_scrutinee(&mut self, canonical: Term, value: Term) {
+        self.refinement_scrutinees
+            .last_mut()
+            .unwrap()
+            .insert(canonical, value);
+
+        self.reductions.clear();
+    }
+
+    /// Whether any scrutinee refinement is registered (regardless of
+    /// suppression). The cheap outer gate for the reducer probe — skipped on
+    /// the common refinement-free reduction without hashing anything.
+    pub fn has_scrutinee_refinements(&self) -> bool {
+        !self.refinement_scrutinees.iter().all(|f| f.is_empty())
+    }
+
+    /// Whether some registered scrutinee key shares `label` as its applied-head
+    /// symbol. The second gate, past [`Term::head_label`]: only a head that is
+    /// actually refined justifies canonicalizing the candidate's arguments.
+    pub fn scrutinee_head_refined(&self, label: &str) -> bool {
+        self.refinement_scrutinees
+            .iter()
+            .any(|f| f.keys().any(|k| k.head_label() == Some(label)))
+    }
+
+    /// The reduct of a canonical stuck scrutinee: its refinement value, unless
+    /// suppressed (re-validation, §7.4).
+    pub fn scrutinee_reduct(&self, canonical: &Term) -> Option<&Term> {
+        if self.suppress_refinements {
+            return None;
+        }
+
+        self.refinement_scrutinees
+            .iter()
+            .rev()
+            .find_map(|f| f.get(canonical))
+    }
+
+    /// Whether `canonical` is itself a registered scrutinee key — checked *past*
+    /// suppression. A `Var`/`Proj` key stays neutral under suppression for free
+    /// (its reduct is withheld, so it does not unfold); an application key would
+    /// otherwise unfold to its definition body and stop being a key. The reducer
+    /// consults this to keep such a key neutral while suppressed, so
+    /// `solve_refinement_free`'s committed (refinement-free) spelling stays a
+    /// term the live refinement can still fire on.
+    pub fn is_scrutinee_key(&self, canonical: &Term) -> bool {
+        self.refinement_scrutinees
+            .iter()
+            .any(|f| f.contains_key(canonical))
+    }
+
+    pub fn refinements_suppressed(&self) -> bool {
+        self.suppress_refinements
+    }
+
     /// Whether any counterfactual refinement is currently registered (and not
     /// already suppressed) — the gate for the refinement-free candidate
     /// re-reduction in `Convert::solve_refinement_free`, so the common
@@ -377,6 +463,10 @@ impl Context {
             && (self.refinements.iter().any(|frame| !frame.is_empty())
                 || self
                     .refinement_projections
+                    .iter()
+                    .any(|frame| !frame.is_empty())
+                || self
+                    .refinement_scrutinees
                     .iter()
                     .any(|frame| !frame.is_empty()))
     }
@@ -646,6 +736,7 @@ impl Context {
             definitions: flatten_frames(&self.definitions),
             refinements: flatten_frames(&self.refinements),
             refinement_projections: flatten_frames(&self.refinement_projections),
+            refinement_scrutinees: flatten_frames(&self.refinement_scrutinees),
         }
     }
 
@@ -666,6 +757,10 @@ impl Context {
 
         for ((base, index), value) in &frame.refinement_projections {
             self.refine_projection(base.clone(), *index, value.clone());
+        }
+
+        for (canonical, value) in &frame.refinement_scrutinees {
+            self.refine_scrutinee(canonical.clone(), value.clone());
         }
     }
 

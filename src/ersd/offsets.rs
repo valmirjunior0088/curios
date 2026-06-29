@@ -74,11 +74,12 @@ fn descend(term: &mut Term) {
         descend(child);
     }
 
-    if let Subterm::Rec(rec) = term.as_subterm_mut() {
-        if rec.names.len() == 1 && rec.items.len() == 1 {
-            let name = rec.names[0].clone();
-            transform(&name, &mut rec.items[0]);
-        }
+    if let Subterm::Rec(rec) = term.as_subterm_mut()
+        && rec.names.len() == 1
+        && rec.items.len() == 1
+    {
+        let name = rec.names[0].clone();
+        transform(&name, &mut rec.items[0]);
     }
 }
 
@@ -471,10 +472,10 @@ fn into_slice_start(term: Term, carrier: Carrier) -> Term {
 /// Collect every self-call (an `Apply` whose head names `name`) reachable in
 /// `term`, descending into the calls' own arguments to catch nested ones.
 fn collect_self_calls<'a>(term: &'a Term, name: &str, out: &mut Vec<&'a Apply>) {
-    if let Subterm::Apply(apply) = term.as_subterm() {
-        if is_named(&apply.head, name) {
-            out.push(apply);
-        }
+    if let Subterm::Apply(apply) = term.as_subterm()
+        && is_named(&apply.head, name)
+    {
+        out.push(apply);
     }
 
     for child in subterms(term) {

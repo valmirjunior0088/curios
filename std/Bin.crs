@@ -17,15 +17,13 @@ pub let cons(head : Nat, tail : Bin) -> Bin =
 pub let fold(@A : Type, b : Bin, init : A, f : (Nat, A) -> A) -> A =
     let n = len(b);
     rec go(k : Nat, i : Nat, acc : A, inv : Eq(i + k, n)) -> A =
-        let dispatch =
-            match k : (m) => (proof : Eq(i + m, n)) -> A
-            | 0 => (_) => acc
-            | kp + 1, ih => (inv2) =>
-                go(kp, i + 1,
-                    f(at(b, i, Eq/subst((x) => Nat/Lt(i, x), inv2, Nat/lte_to_lt_succ(Nat/lte_add_r(i, kp)))), acc),
-                    inv2)
-            end;
-        dispatch(inv);
+        match k
+        | 0 => acc
+        | kp + 1, ih =>
+            go(kp, i + 1,
+                f(at(b, i, Eq/subst((x) => Nat/Lt(i, x), inv, Nat/lte_to_lt_succ(Nat/lte_add_r(i, kp)))), acc),
+                inv)
+        end;
     go(n, 0, init, Eq/refl());
 
 pub let find_index(b : Bin, pred : (Nat) -> Bln) -> Option(Nat) =

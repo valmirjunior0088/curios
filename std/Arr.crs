@@ -17,15 +17,13 @@ pub let cons(@A : Type, x : A, xs : Arr(A)) -> Arr(A) =
 pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
     let n = len(arr);
     rec go(k : Nat, i : Nat, acc : A, inv : Eq(i + k, n)) -> A =
-        let dispatch =
-            match k : (m) => (proof : Eq(i + m, n)) -> A
-            | 0 => (_) => acc
-            | kp + 1, ih => (inv2) =>
-                go(kp, i + 1,
-                    f(at(arr, i, Eq/subst((x) => Nat/Lt(i, x), inv2, Nat/lte_to_lt_succ(Nat/lte_add_r(i, kp)))), acc),
-                    inv2)
-            end;
-        dispatch(inv);
+        match k
+        | 0 => acc
+        | kp + 1, ih =>
+            go(kp, i + 1,
+                f(at(arr, i, Eq/subst((x) => Nat/Lt(i, x), inv, Nat/lte_to_lt_succ(Nat/lte_add_r(i, kp)))), acc),
+                inv)
+        end;
     go(n, 0, init, Eq/refl());
 
 pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (A, A) -> A) -> A =

@@ -891,10 +891,10 @@ impl Prim {
                 visit(d);
             }
 
-            Prim::BinConcat(terms) | Prim::Arr(terms) => terms.iter().for_each(|term| visit(term)),
+            Prim::BinConcat(terms) | Prim::Arr(terms) => terms.iter().for_each(&mut *visit),
             Prim::ArrConcat(ty, terms) => {
                 visit(ty);
-                terms.iter().for_each(|term| visit(term));
+                terms.iter().for_each(&mut *visit);
             }
 
             Prim::CellType(a) => visit(a),

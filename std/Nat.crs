@@ -109,15 +109,13 @@ pub rec lte_to_lt_succ(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lt(a, b + 1) =
     end;
 
 pub rec lte_trans(@a : Nat, @b : Nat, @c : Nat, p : Lte(a, b), q : Lte(b, c)) -> Lte(a, c) =
-    let go =
-        match p : (w : Lte(x, y)) => (q : Lte(y, c)) -> Lte(x, c)
-        | z(_) => (q) => Lte/z()
-        | s(a2, b2, prev) => (q) =>
-            match q : (w : Lte(u, v)) => Lte(a2 + 1, v)
-            | s(b3, c3, q2) => Lte/s(lte_trans(prev, q2))
-            end
-        end;
-    go(q);
+    match p
+    | z(_) => Lte/z()
+    | s(a2, b2, prev) =>
+        match q
+        | s(b3, c3, q2) => Lte/s(lte_trans(prev, q2))
+        end
+    end;
 
 pub let lt_of_lte_succ(@a : Nat, @b : Nat, p : Lte(a + 1, b)) -> Lt(a, b) =
     match p : (w : Lte(x, y)) => Lt(x - 1, y)

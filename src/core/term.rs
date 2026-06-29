@@ -36,6 +36,20 @@ impl Term {
         Rc::unwrap_or_clone(this.inner)
     }
 
+    /// The free-variable label at the head of an application spine, descending
+    /// through curried `Apply` heads: `classify(c)` and `f(a)(b)` report the
+    /// label of `classify` / `f`. A bare free variable reports itself; anything
+    /// else is `None`. Used to cheaply gate scrutinee-refinement
+    /// canonicalization on the applied symbol before paying for argument
+    /// reduction.
+    pub fn head_label(&self) -> Option<&str> {
+        match &*self.inner {
+            Subterm::Apply(Apply { head, .. }) => head.head_label(),
+            Subterm::Var(var) => var.as_free(),
+            _ => None,
+        }
+    }
+
     /// Returns the span attached to this term, if any.
     pub fn span(&self) -> Option<Span> {
         self.span.clone()

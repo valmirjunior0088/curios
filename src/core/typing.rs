@@ -282,14 +282,26 @@ pub fn drain_parked(context: &mut Context) -> Result<(), Error> {
     }
 }
 
-/// Register a counterfactual match-arm refinement of the scrutinee: a `Var`
-/// scrutinee reduces to the arm's value inside the arm (`refine`), and a
-/// projection scrutinee (e.g. a `Bln` or `Nat` match on a tuple field) refines that
-/// projection (`refine_projection`). The frame containing the refinement is
-/// scoped to the arm, so the (possibly counterfactual) assumption does not
-/// leak. Any other scrutinee shape records nothing — there is no stable key
-/// to refine, and the arm then types against the unrefined head.
-pub fn refine_head(context: &mut Context, head: &Term, value: &Term) {
+/// Register a counterfactual match-arm refinement of a scrutinee (or a learned
+/// scrutinee index), so a context hypothesis whose type mentions it reduces at
+/// the arm's value. The frame holding the refinement is scoped to the arm, so
+/// the (counterfactual) assumption does not leak. Three keyings, by head shape:
+///
+/// - a `Var` reduces to the value (`refine`);
+/// - a projection — a `Bln`/`Nat` match on a tuple field — refines that
+///   projection (`refine_projection`);
+/// - any other head — a stuck application like `classify(c)` / `Nat/in_range(...)`
+///   — is canonicalized (head verbatim, arguments in WHNF) and recorded in the
+///   term-keyed scrutinee store (`refine_scrutinee`), so an occurrence spelled
+///   with differently-reduced arguments still matches.
+///
+/// Also drives Rung-B index *learning* (`refine_head(actual, target)`), where
+/// `actual` is a scrutinee index: a `Var` index is the live case, and a
+/// *constructor* index records an entry the reducer never fires (it has no
+/// applied-head symbol to probe) — the inverter pins the arm binders the other
+/// way. A stuck-*application* index would be the genuinely cyclic case, but no
+/// inductive in the library is indexed by one.
+pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
     match &**head {
         Subterm::Var(var) => {
             context.refine(var.unwrap(), value);
@@ -300,8 +312,14 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) {
         }) => {
             context.refine_projection(head.clone(), *index, value.clone());
         }
-        _ => {}
+        _ => {
+            let canonical = super::canonical_scrutinee(context, head)
+                .map_err(|error| error.into_error(|| Error::reduce_preempted(head.clone())))?;
+            context.refine_scrutinee(canonical, value.clone());
+        }
     }
+
+    Ok(())
 }
 
 /// Check that `motive` is a well-formed type family over a scrutinee of `head_type`,

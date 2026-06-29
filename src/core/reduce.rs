@@ -62,6 +62,48 @@ fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, ReduceError>
     force_rec(context, reduced)
 }
 
+/// The canonical form of a (potential) scrutinee refinement key: the head kept
+/// verbatim — so the refined function (`classify`, `Nat/in_range`) is *not*
+/// unfolded and stays the key — with each argument reduced to WHNF. Storing and
+/// probing through one canonicalizer makes occurrences that differ only in
+/// argument spelling (`c` vs `Bin/at(cons(c,t),0,_)`, `lo` vs a projection that
+/// reduces to it) collapse to the same key. A non-application is its own
+/// canonical form.
+///
+/// Argument reduction is *best-effort*: an argument that cannot reduce at the
+/// type level (a runtime-only IO primitive like `is_ready`'s `/sys/Io/poll`
+/// result, or an out-of-range access) is kept verbatim rather than forced. Such
+/// an argument was never going to differ in spelling — the only occurrence is
+/// the scrutinee itself, which matches the key raw — so keeping it raw both
+/// avoids forcing effects at elaboration and still matches. A `Preempted`
+/// deadline is the one error that propagates.
+pub fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
+    match &**term {
+        Subterm::Apply(Apply {
+            head,
+            params,
+            plicities,
+        }) => {
+            let params = params
+                .iter()
+                .map(|p| match reduce(context, p.clone()) {
+                    Ok(reduced) => Ok(reduced),
+                    Err(ReduceError::Preempted) => Err(ReduceError::Preempted),
+                    Err(_) => Ok(p.clone()),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Ok(Subterm::Apply(Apply {
+                head: head.clone(),
+                params,
+                plicities: plicities.clone(),
+            })
+            .into())
+        }
+        _ => Ok(term.clone()),
+    }
+}
+
 fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceError> {
     let Apply {
         head,
@@ -134,7 +176,7 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
 
     let freshs = (0..n).map(|_| context.fresh(None)).collect::<Vec<_>>();
 
-    let ys = freshs.iter().map(|f| Term::free_var(f)).collect::<Vec<_>>();
+    let ys = freshs.iter().map(Term::free_var).collect::<Vec<_>>();
 
     let y_refs = ys.iter().collect::<Vec<_>>();
 
@@ -315,6 +357,29 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
         loop {
             if Instant::now() > context.deadline() {
                 break Err(ReduceError::Preempted);
+            }
+
+            // Rung B for stuck applications (convertibility-keyed). Gated cheaply
+            // — store non-empty, then a refined applied-head symbol — before
+            // canonicalizing the candidate's arguments and looking the key up.
+            if context.has_scrutinee_refinements()
+                && let Some(head) = term.head_label()
+                && context.scrutinee_head_refined(head)
+            {
+                let canonical = canonical_scrutinee(context, &term)?;
+
+                if context.refinements_suppressed() {
+                    // Withhold the value, but keep an application key neutral —
+                    // as a `Var` key already is — so `solve_refinement_free`'s
+                    // committed spelling stays a term the live refinement can
+                    // fire on (the canonical form, never the unfolded body).
+                    if context.is_scrutinee_key(&canonical) {
+                        break Ok(canonical);
+                    }
+                } else if let Some(value) = context.scrutinee_reduct(&canonical) {
+                    term = value.clone();
+                    continue;
+                }
             }
 
             let step = match Term::unwrap_or_clone(term) {

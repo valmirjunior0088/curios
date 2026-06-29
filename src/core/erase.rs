@@ -353,7 +353,7 @@ fn erase_refined_case(
     body: &Term,
 ) -> Result<ersd::Term, Error> {
     context.with_frame(|context| {
-        refine_head(context, head, scrutinee);
+        refine_head(context, head, scrutinee)?;
         erase(context, body, &motive.open(&[scrutinee]))
     })
 }
@@ -507,6 +507,7 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<ersd::Term, Error> {
 /// arm fires with `head := xs[len-1-i]` and `tail := xs[len-i ..]`, and the induction
 /// hypothesis is the accumulator. (See `reduce` for the matching type-level rule.)
 /// The carrier supplies its length, element-at, and sub-slice operations.
+#[allow(clippy::too_many_arguments)]
 fn erase_indexed_match(
     context: &mut Context,
     head: &Term,
@@ -803,10 +804,7 @@ fn erase_erasable_scrutinee_match(
         .label_iter()
         .map(|l| context.fresh(l))
         .collect::<Vec<_>>();
-    let vars = labels
-        .iter()
-        .map(|label| Term::free_var(label))
-        .collect::<Vec<_>>();
+    let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
 
     context.with_frame(|context| {
         let mut telescope = telescope;
@@ -829,9 +827,9 @@ fn erase_erasable_scrutinee_match(
         };
 
         let ctor_val = Term::variant(name.to_string(), params.to_vec(), tag.clone(), vars.clone());
-        refine_head(context, head, &ctor_val);
+        refine_head(context, head, &ctor_val)?;
         for (actual, target) in actual_indices.iter().zip(&ix_c) {
-            refine_head(context, actual, target);
+            refine_head(context, actual, target)?;
         }
 
         let arm_args = binder_slots
@@ -950,10 +948,7 @@ fn erase_inductive_match(
                 .map(|hint| context.fresh(hint.as_deref()))
                 .collect::<Vec<_>>();
 
-            let vars = labels
-                .iter()
-                .map(|label| Term::free_var(label))
-                .collect::<Vec<_>>();
+            let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
 
             context.with_frame(|context| {
                 let mut telescope = telescope;
@@ -988,13 +983,13 @@ fn erase_inductive_match(
                 let ctor_val =
                     Term::variant(name.clone(), params.clone(), tag.clone(), vars.clone());
 
-                refine_head(context, head, &ctor_val);
+                refine_head(context, head, &ctor_val)?;
 
                 // Rung B, mirrored from elaborate: key-shaped scrutinee
                 // indices reduce to the case's targets inside the arm, so
                 // types erased here converge the same way they checked.
                 for (actual, target) in actual_indices.iter().zip(&ix_c) {
-                    refine_head(context, actual, target);
+                    refine_head(context, actual, target)?;
                 }
 
                 let arm_args = binder_slots
