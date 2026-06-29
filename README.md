@@ -1,86 +1,113 @@
-# Curios
+# curios
 
-Curios is a functional language with dependent types that compiles to WebAssembly. Most languages with dependent types evolved from proof assistants, where non-determinism is a property to be excluded rather than embraced - Curios inverts this, aiming to bring dependent function types (Π-types, λ-abstractions), dependent tuple types (Σ-types, dependent pairs), and nominal sum types (inductive types with dependent elimination semantics) to a programming context where non-determinism is simply part of daily life.
+A work-in-progress functional, **dependently-typed** programming language that compiles to WebAssembly.
 
-Dependent types pay off most in a handful of recurring patterns. Length-indexed collections rule out bounds errors by construction, replacing runtime panics with type-level guarantees. Typed format strings derive their argument list directly from the format value, eliminating a whole class of variadic bugs. Dependent records encode protocol state in the type itself, turning invalid transitions into compile-time errors rather than runtime failures.
+curios is a small language with a full dependent type system: types can depend on values, propositions are first-class, and you can write machine-checked proofs alongside ordinary code. Programs compile through a series of typed intermediate representations down to WebAssembly and run on an embedded [wasmtime](https://wasmtime.dev/) engine, with an optimizing backend built on [Binaryen](https://github.com/WebAssembly/binaryen).
 
-Curios is an impure language, like OCaml. Side effects — currently terminal IO through `/std/Io` — are ordinary expressions that can appear anywhere in a program. The type system accommodates this by treating effectful operations as opaque at the type level: when the type checker encounters a term that performs IO during reduction, it raises a type error rather than attempting to evaluate the side effect.
+> **Status: early and experimental.** This is a research language under active development. The syntax, standard library, and compiler internals all change frequently, and there is no stability guarantee yet. If you enjoy poking at dependently-typed languages and compilers in progress, you're in the right place; if you need something production-ready, this isn't it (yet).
 
-## Installation
+## What's interesting about it
 
-Download a pre-built binary for your platform from the [releases page](https://github.com/valmirjunior0088/curios/releases), or install directly from the repository:
+- **Full dependent types** — function and tuple types are Π/Σ types, so a value's type can mention earlier values (e.g. a length-indexed vector `Vec(T, n)`).
+- **Propositions and proofs** — a separate `Prop` sort for proof-irrelevant propositions, with propositional equality (`Eq`) and the usual `refl`/`sym`/`trans`/`cong`/`subst` toolkit in the standard library.
+- **Indexed inductive types** — declare your own data and proof families with index telescopes and per-constructor targets.
+- **Type erasure** — implicit/erased arguments (marked `@`) and zero-cost newtypes carry type-level information that vanishes at runtime.
+- **Compiles to WebAssembly** — a real lowering pipeline (parse → elaborate/typecheck → erase → CPS → optimize → emit), not an interpreter.
+- **A practical standard library** — numbers (including `BigNat`), strings, lists, vectors, options/results, plus IO, files, TCP, HTTP, tasks, time, and JSON.
 
-```
-cargo install --git https://github.com/valmirjunior0088/curios
-```
+## A taste
 
-Or, if you have a local clone:
-
-```
-cargo install --path .
-```
-
-Building from source compiles the vendored [Binaryen](https://github.com/WebAssembly/binaryen) optimizer, which requires CMake and a C++17 compiler. To build without them, disable the `binaryen` feature (compiled modules are then emitted unoptimized): `cargo install --path . --no-default-features --features cli`.
-
-## Usage
+A length-indexed vector whose `append` is checked to produce the right length:
 
 ```
-curios [--timeout MILLIS] [--print [STAGES]] run <input-path>
-curios [--timeout MILLIS] [--print [STAGES]] check <input-path>
-curios [--timeout MILLIS] [--print [STAGES]] compile <input-path> [--output-path PATH]
-```
-
-- `--timeout` sets the type-checker's reduction timeout in milliseconds (default: 1000)
-- `--print [STAGES]` prints selected intermediate representations to stderr; `STAGES` is a comma-separated subset of `text,core,ersd,cont,optm,wasm`. Bare `--print` selects all; omitting the flag prints none.
-- `run` compiles and executes the entrypoint
-- `check` type-checks the entrypoint without executing it, exiting with a non-zero status on failure; if `--print` requests a post-core stage (`ersd`, `cont`, `optm`, or `wasm`), it runs the full lowering pipeline so that stage exists to print
-- `compile` emits the compiled WebAssembly module; pass `--output-path PATH` to write the binary to that path, otherwise it writes `<input-stem>.wasm`
-- `<input-path>` is the path to an entrypoint file; a Curios source file whose last expression is the program's result
-
-A minimal example:
-
-```
--- hello.crs
-/std/Io/print("hello, world")
-```
-
-```
-curios run hello.crs
-```
-
-Programs can read and write files through `/std/File` (`open`/`close`/`with`); they run with the invoking user's filesystem access — there is no sandbox.
-
-## Examples
-
-The `examples/` directory contains end-to-end Rust programs that drive the full compiler pipeline. Two are particularly instructive:
-
-**Typed format strings** (`examples/crs_printf.rs`) — reads a name from stdin via `Io/read`, trims it, then calls `/std/Fmt/printf` with a format string whose argument list is derived from the string's content at compile time:
-
-```
-match Io/read(Io/stdin, 1024) : {}
-| chunk(bytes) =>
-    match Str/of_bin(bytes) : {}
-    | some(name) => Fmt/printf("%s is %d")(Str/trim(name))(30)
-    | none() => Io/print("invalid input")
-    end
-| eof() => Io/print("no input")
-| error(_) => Io/print("no input")
+pub induct Vec(T : Type) : (n : Nat)
+| nil() : (0)
+| cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
 end
--- with input "Alice": "Alice is 30"
+
+pub rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, n + m) =
+    match v : (v : Vec(T, k)) => Vec(T, k + m)
+    | nil()          => w
+    | cons(j, x, xs) => Vec/cons(x, append(xs, w))
+    end;
 ```
 
-Passing the wrong type is a compile-time error, not a runtime failure:
+And a proof — symmetry of equality, by matching on the single `refl` constructor:
 
 ```
-/std/Fmt/printf("%d")("Alice")
--- TypeMismatch: the format specifier %d expects Nat, but "Alice" has type Str
+pub let sym(@A : Type, @x : A, @y : A, p : Eq(x, y)) -> Eq(y, x) =
+    match p : (q : Eq(A, s, t)) => Eq(t, s)
+    | refl(z) => Eq/refl()
+    end;
 ```
 
-**JSON codec** (`examples/crs_json_codec.rs`) — constructs a `Json` tree using `induct` constructors such as `Json/obj` and `Json/str`, encodes it to a `Bin` string with `Json/encode`, parses it back with `Json/decode`, and asserts the output is byte-identical to the original. It exercises the prepended standard library (`std/Json`, `std/Parse`), arrays, and nested inductive values together.
+A minimal program (an entrypoint is a sequence of declarations followed by a final term):
 
-## Documentation
+```
+use /std/{Io};
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — full architectural overview of the compiler pipeline, from parsing through type checking, erasure, CPS lowering, and WebAssembly code generation, including a "Reading order" guide for newcomers.
-- [SYNTAX.md](SYNTAX.md) — language syntax reference covering lexical basics, all term and type forms, primitive operations, and idioms for sum types and recursive types.
-- [CRASH_COURSE.md](CRASH_COURSE.md) — guided introduction for Rust programmers, building from familiar constructs up to dependent function types and length-indexed vectors.
-- [PROOFS_101.md](PROOFS_101.md) — follow-up to the crash course on proving: propositions as types, equality via `/std/Eq`, induction with `match`, negation, and proofs that re-type data; every snippet is pinned by `examples/crs_proofs.rs`.
+Io/print("Hello, world!\n")
+```
+
+See [SYNTAX.md](SYNTAX.md) for the full language reference.
+
+## Getting started
+
+### Prerequisites
+
+- A recent Rust toolchain (the project uses edition 2024).
+- A C++ toolchain and **CMake** — the default build compiles the vendored Binaryen optimizer. The first build takes a few minutes as a result.
+
+To skip the Binaryen build during experimentation, disable default features:
+
+```sh
+cargo build --no-default-features --features cli
+```
+
+### Build
+
+```sh
+git clone https://github.com/valmirjunior0088/curios
+cd curios
+cargo build --release
+```
+
+### Run a program
+
+Save the hello-world snippet above as `hello.crs`, then:
+
+```sh
+cargo run --release -- run hello.crs
+```
+
+## Using the CLI
+
+The compiler exposes three subcommands:
+
+| Command | What it does |
+| --- | --- |
+| `curios run <file.crs> [args...]` | Compile and execute the program. Extra arguments are readable from `/std/Proc/args`. |
+| `curios check <file.crs>` | Type-check the entrypoint without running it. |
+| `curios compile <file.crs> [--output-path out.wasm]` | Compile and write the `.wasm` module to disk. |
+
+Two global flags are useful while exploring:
+
+- `--print[=STAGES]` dumps intermediate representations to stderr. With no value it prints all stages; or pass a comma-separated subset, e.g. `--print=core,wasm` (stages: `text,core,ersd,cont,optm,wasm`).
+- `--timeout MILLIS` bounds the type-checker's reduction time (default `1000`).
+
+```sh
+cargo run --release -- check examples/myprog.crs --print=core
+cargo run --release -- compile examples/myprog.crs --output-path myprog.wasm
+```
+
+## Repository layout
+
+The compiler is a chain of stages under `src/`: `text` (parse) → `core` (elaborate, typecheck, erase) → `ersd` (erased IR) → `cont` (CPS IR) → `optm` (optimization) → `wasm` (emit) → `run` (execute). The curios standard library lives in `std/` (with a smaller support library in `syn/`).
+
+For a full tour of the architecture, build/test workflow, and conventions, see [AGENTS.md](AGENTS.md). For the language itself, see [SYNTAX.md](SYNTAX.md).
+
+## Contributing & feedback
+
+curios is exploratory and moving fast, so the most useful contributions right now are bug reports, small example programs that break things, and feedback on the language design. Please open an issue at <https://github.com/valmirjunior0088/curios>.
+
+A license has not been finalized yet; until one is added, all rights are reserved by the author. If you'd like to use or build on curios, please get in touch.
