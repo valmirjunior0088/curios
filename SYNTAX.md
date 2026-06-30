@@ -209,15 +209,15 @@ pub use Arr/{let Arr};           -- re-export only the value `Arr`
 use /syn/Lst/{nil, cons};        -- import specific members
 ```
 
-**`induct`.** An inductive type. After the name come optional parameters `(p : T)` (mark with `@` to make them implicit at the type constructor; they are always implicit at value constructors). An optional `: (indices) -> Sort` declares an index telescope and/or the result sort (`Type` by default, or `Prop`). Each case is `| name(payload)` with an optional `: (targets)` stating its index instantiation — required exactly when the type is indexed. Mutually-recursive families join with `and`; the block ends with `end`.
+**`induct`.** An inductive type. After the name come optional parameters `(p : T)` (mark with `@` to make them implicit at the type constructor; they are always implicit at value constructors). A **required** `: Sort` declares the result sort — `Type` or `Prop` — written `: Sort` for a plain type or `: (indices) -> Sort` to also declare an index telescope. Each case is `| name(payload)` with an optional `: (targets)` stating its index instantiation — required exactly when the type is indexed. Mutually-recursive families join with `and`; the block ends with `end`.
 
 ```
-pub induct Option(A : Type)          -- parameterized, lands in Type
+pub induct Option(A : Type) : Type   -- parameterized, lands in Type
 | some(A)
 | none()
 end
 
-pub induct Vec(T : Type) : (n : Nat) -- indexed by a Nat
+pub induct Vec(T : Type) : (n : Nat) -> Type -- indexed by a Nat
 | nil() : (0)
 | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
 end
@@ -229,17 +229,17 @@ end
 
 Payload binders may be named (`x : T`), named-implicit (`@m : T`, in scope for later binders and the target), or bare positional types (`A`).
 
-**`struct` / `record`.** A nominal record type. The keyword sets _representation visibility_: `record` makes the representation **public** (callers construct and project directly); `struct` makes it **private** to the declaring module (construct/project only via exported helpers, else a `PrivateRepresentation` error). Optional parameters and `: Sort` work as for `induct`. Fields are labeled (`x : A`) or a single unlabeled field forms a newtype.
+**`struct` / `record`.** A nominal record type. The keyword sets _representation visibility_: `record` makes the representation **public** (callers construct and project directly); `struct` makes it **private** to the declaring module (construct/project only via exported helpers, else a `PrivateRepresentation` error). Optional parameters and a **required** `: Sort` work as for `induct` (a struct has no indices, so its sort is the bare `: Type` or `: Prop`; a `Prop` struct's fields must all be non-informative). Fields are labeled (`x : A`) or a single unlabeled field forms a newtype.
 
 ```
-pub record Pair(A : Type, B : Type) {   -- transparent
+pub record Pair(A : Type, B : Type) : Type {   -- transparent
     fst : A,
     snd : B
 }
 
-pub record Meters { Nat }       -- newtype; project with `.0`; erases to the bare field
+pub record Meters : Type { Nat }   -- newtype; project with `.0`; erases to the bare field
 
-pub struct Token { Bin }        -- opaque: representation private to this module
+pub struct Token : Type { Bin }    -- opaque: representation private to this module
 ```
 
 **Construction and projection.** Build with `Name { field = value, ... }` (or `Name(params) { ... }` when the type takes parameters); read fields with `.label` or `.0`.

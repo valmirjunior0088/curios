@@ -102,7 +102,7 @@ fn erased_struct_field_collapses_to_bare_value() {
     // record must still yield `val`, not `ghost`.
     let source = r#"
         use /std/{Io, Str, Nat};
-        record Wrap { val : Nat, ghost : Type }
+        record Wrap : Type { val : Nat, ghost : Type }
         let make : (n : Type) -> Wrap = (n) => Wrap { val = 5, ghost = n };
         let r : Nat = make(Nat).val;
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
@@ -146,7 +146,7 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
     // `val`, so its projection must skip the absent field.
     let source = r#"
         use /std/{Io, Str, Nat};
-        induct Boxed
+        induct Boxed : Type
         | box(ghost : Type, val : Nat)
         end
         let make : (n : Type) -> Boxed = (n) => Boxed/box(n, 5);
@@ -188,7 +188,7 @@ fn erased_indexed_relevant_repro() {
     // index binder `m : Type` is dropped, yet `Box(m)` stays a well-formed type.
     let source = r#"
         use /std/{Nat, Io};
-        induct Box : (n : Type)
+        induct Box : (n : Type) -> Type
         | mk(x : Type) : (x)
         end
         let f(m : Type, k : Nat) -> Box(m) =
@@ -214,7 +214,7 @@ fn erased_indexed_relevant_repro() {
 fn erased_index_in_type_valued_arg() {
     let source = r#"
         use /std/{Nat, False, Io};
-        induct Box : (n : Type)
+        induct Box : (n : Type) -> Type
         | mk(x : Type) : (x)
         end
         let id_void(w : False) -> False = w;

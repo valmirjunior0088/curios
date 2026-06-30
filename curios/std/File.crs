@@ -1,6 +1,6 @@
 use /std/{Bin, Nat, Str, Io, Result, Task};
 
-pub struct File { Io }
+pub struct File : Type { Io }
 
 pub let read(f : File, n : Nat) -> Task(Io/Read) =
     Task/read(f.0, n);

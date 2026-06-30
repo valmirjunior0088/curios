@@ -6,7 +6,7 @@ use {
 fn main() {
     let source = r#"
         use /std/{Int};
-        induct IntList
+        induct IntList : Type
         | nil()
         | cons(Int, IntList)
         end

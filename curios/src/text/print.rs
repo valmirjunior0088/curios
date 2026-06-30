@@ -784,15 +784,23 @@ fn print_top_inductive_params(params: Vec<(Plicity, String, Term)>) -> Printer<'
     ])
 }
 
-fn print_top_inductive_indices(indices: Vec<(Option<String>, Term)>) -> Printer<'static> {
+/// The head's arity after the name: the (mandatory) result sort, preceded by an
+/// index telescope when the inductive is indexed. `: Sort` for a plain type,
+/// `: (indices) -> Sort` for an indexed one — the spellings `parse_inductive_arity`
+/// accepts, so a printed declaration round-trips.
+fn print_top_inductive_arity(
+    indices: Vec<(Option<String>, Term)>,
+    result_sort: Term,
+) -> Printer<'static> {
     if indices.is_empty() {
-        return pure("");
+        return flat([pure(" : "), print_term(result_sort)]);
     }
 
     flat([
         pure(" : ("),
         sep_flat(indices.into_iter().map(print_labeled), || pure(", ")),
-        pure(")"),
+        pure(") -> "),
+        print_term(result_sort),
     ])
 }
 
@@ -806,7 +814,7 @@ fn print_top_inductive(group: Vec<TopInductive>) -> Printer<'static> {
         pure("induct "),
         pure(first.label),
         print_top_inductive_params(first.params),
-        print_top_inductive_indices(first.indices),
+        print_top_inductive_arity(first.indices, first.result_sort),
         flat(
             first
                 .cases
@@ -823,7 +831,7 @@ fn print_top_inductive(group: Vec<TopInductive>) -> Printer<'static> {
                         pure("and "),
                         pure(u.label),
                         print_top_inductive_params(u.params),
-                        print_top_inductive_indices(u.indices),
+                        print_top_inductive_arity(u.indices, u.result_sort),
                         flat(
                             u.cases
                                 .into_iter()
@@ -844,6 +852,8 @@ fn print_top_struct(item: TopStruct) -> Printer<'static> {
         pure(if item.rep_pub { "record " } else { "struct " }),
         pure(item.label),
         print_top_inductive_params(item.params),
+        pure(" : "),
+        print_term(item.result_sort),
         pure(" "),
         pure("{ "),
         sep_flat(item.fields.into_iter().map(print_field), || pure(", ")),

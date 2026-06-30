@@ -1,6 +1,6 @@
 use /std/{Bin, Str, Nat, Bln, Char, Lst, Parse, Result, Option, Tcp, Io, Task};
 
-pub induct Method
+pub induct Method : Type
 | get()
 | post()
 end
@@ -11,12 +11,12 @@ let method_str(m : Method) -> Str =
     | post() => "POST"
     end;
 
-pub induct Error
+pub induct Error : Type
 | net(Io/Error)
 | malformed(Str)
 end
 
-pub record Request {
+pub record Request : Type {
     method : Method,
     host : Str,
     port : Nat,
@@ -100,7 +100,7 @@ pub let render(request : Request) -> Bin =
         ])),
         request.body);
 
-pub record Status {
+pub record Status : Type {
     version : Str,
     code : Nat,
     reason : Str
@@ -121,7 +121,7 @@ pub let status_line : Parse(Status) =
         reason = Option/unwrap_or(Str/of_bin(reason), "")
     });
 
-pub record Response {
+pub record Response : Type {
     status : Status,
     headers : Lst({Str, Str}),
     body : Bin

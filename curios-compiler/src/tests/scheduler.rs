@@ -319,7 +319,7 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
         Duration::from_secs(10),
         r#"
         use /std/{Io, Str, Nat, Lst};
-        induct Susp(A : Type)
+        induct Susp(A : Type) : Type
         | now(A)
         | later(() -> Susp(A))
         end

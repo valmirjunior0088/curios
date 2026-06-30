@@ -370,7 +370,7 @@ fn indexed_vec_append_executes() {
     // and the program trapped at runtime.
     let source = r#"
         use /std/{Nat, Bin, Io};
-        induct Vec(T : Type) : (n : Nat)
+        induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
         end

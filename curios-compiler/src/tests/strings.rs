@@ -17,7 +17,7 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
             | false => false
             end;
 
-        induct Scan
+        induct Scan : Type
         | lead()
         | cont(Nat, Nat, Nat)
         | bad()
@@ -48,7 +48,7 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
             | lead() => classify(c)
             end;
 
-        induct Utf8 : (s : Scan, b : Bin)
+        induct Utf8 : (s : Scan, b : Bin) -> Type
         | stop() : (Scan/lead(), \\)
         | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
             : (st, Bin/concat(Bin/append(\\, c), t))
@@ -319,7 +319,7 @@ fn utf8_inductive_spike() {
     let source = r#"
         use /std/{Io, Str, Nat, Bin};
 
-        induct Scan
+        induct Scan : Type
         | lead()
         | cont()
         | bad()
@@ -332,7 +332,7 @@ fn utf8_inductive_spike() {
             | bad() => Scan/bad()
             end;
 
-        induct Utf8 : (s : Scan, b : Bin)
+        induct Utf8 : (s : Scan, b : Bin) -> Type
         | stop() : (Scan/lead(), \\)
         | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
             : (st, Bin/concat(Bin/append(\\, c), t))
@@ -362,7 +362,7 @@ fn utf8_construction_spike() {
     let source = r#"
         use /std/{Io, Str, Nat, Bin};
 
-        induct All : (b : Bin)
+        induct All : (b : Bin) -> Type
         | empty() : (\\)
         | snoc(c : Nat, t : Bin, rest : All(t)) : (Bin/concat(Bin/append(\\, c), t))
         end
@@ -396,7 +396,7 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
             | false => false
             end;
 
-        induct Scan
+        induct Scan : Type
         | lead()
         | cont(Nat, Nat, Nat)
         | bad()
@@ -441,7 +441,7 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
             | lead() => classify(c)
             end;
 
-        induct Utf8 : (s : Scan, b : Bin)
+        induct Utf8 : (s : Scan, b : Bin) -> Type
         | stop() : (Scan/lead(), \\)
         | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
             : (st, Bin/concat(Bin/append(\\, c), t))
@@ -485,7 +485,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
             | false => false
             end;
 
-        induct Scan
+        induct Scan : Type
         | lead()
         | cont(Nat, Nat, Nat)
         | bad()
@@ -530,7 +530,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
             | lead() => classify(c)
             end;
 
-        induct Utf8 : (s : Scan, b : Bin)
+        induct Utf8 : (s : Scan, b : Bin) -> Type
         | stop() : (Scan/lead(), \\)
         | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
             : (st, Bin/concat(Bin/append(\\, c), t))
@@ -587,7 +587,7 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
             | false => false
             end;
 
-        induct Scan
+        induct Scan : Type
         | lead()
         | cont(Nat, Nat, Nat)
         | bad()
@@ -632,7 +632,7 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
             | lead() => classify(c)
             end;
 
-        induct Utf8 : (s : Scan, b : Bin)
+        induct Utf8 : (s : Scan, b : Bin) -> Type
         | stop() : (Scan/lead(), \\)
         | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
             : (st, Bin/concat(Bin/append(\\, c), t))
@@ -713,7 +713,7 @@ fn utf8_slice_closed_peels_codepoints() {
             | false => false
             end;
 
-        induct Scan
+        induct Scan : Type
         | lead()
         | cont(Nat, Nat, Nat)
         | bad()
@@ -752,7 +752,7 @@ fn utf8_slice_closed_peels_codepoints() {
             | lead() => classify(c)
             end;
 
-        induct Utf8 : (s : Scan, b : Bin)
+        induct Utf8 : (s : Scan, b : Bin) -> Type
         | stop() : (Scan/lead(), \\)
         | more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
             : (st, Bin/concat(Bin/append(\\, c), t))

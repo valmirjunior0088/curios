@@ -14,12 +14,12 @@ fn main() {
     let source = r#"
         use /std/{Bin, Nat, Str, Io};
 
-        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
-        pub record Meters { Nat }
+        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub record Meters : Type { Nat }
 
         mod Token
             use /std/{Bin};
-            pub struct Token { Bin }
+            pub struct Token : Type { Bin }
             pub let of_bin(b : Bin) -> Token = Token { b };
             pub let to_bin(t : Token) -> Bin = t.0;
         end
@@ -72,7 +72,7 @@ fn main() {
 
         mod Token
             use /std/{Bin};
-            pub struct Token { Bin }
+            pub struct Token : Type { Bin }
         end
 
         let bad : Token/Token = Token/Token { /std/Str/to_bin("x") };

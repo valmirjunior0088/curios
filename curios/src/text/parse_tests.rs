@@ -607,7 +607,7 @@ fn parse_one_tuple() {
 
 #[test]
 fn parse_top_inductive_single_variant() {
-    let m = "induct Foo\n| bar()\nend".parse::<Module>().unwrap();
+    let m = "induct Foo : Type\n| bar()\nend".parse::<Module>().unwrap();
     assert_eq!(
         m.items,
         vec![TopItem::Inductive(vec![TopInductive {
@@ -627,7 +627,7 @@ fn parse_top_inductive_single_variant() {
 
 #[test]
 fn parse_top_inductive_empty() {
-    let m = "induct False\nend".parse::<Module>().unwrap();
+    let m = "induct False : Type\nend".parse::<Module>().unwrap();
     assert_eq!(
         m.items,
         vec![TopItem::Inductive(vec![TopInductive {
@@ -643,7 +643,7 @@ fn parse_top_inductive_empty() {
 
 #[test]
 fn parse_top_inductive_multi_variant() {
-    let m = "pub induct Color\n| red()\n| green()\n| blue()\nend"
+    let m = "pub induct Color : Type\n| red()\n| green()\n| blue()\nend"
         .parse::<Module>()
         .unwrap();
     assert!(matches!(
@@ -654,7 +654,7 @@ fn parse_top_inductive_multi_variant() {
 
 #[test]
 fn parse_top_inductive_parameterized() {
-    let m = "induct Result(A : Type, B : Type)\n| ok(A)\n| err(B)\nend"
+    let m = "induct Result(A : Type, B : Type) : Type\n| ok(A)\n| err(B)\nend"
         .parse::<Module>()
         .unwrap();
     assert!(matches!(
@@ -704,7 +704,7 @@ fn parse_implicit_marks_on_let_shorthand_and_inductive_params() {
 
     // An inductive parameter may carry `@`, making it implicit at the type
     // constructor (it is implicit at the value constructors either way).
-    let m = "induct Result(@A : Type, E : Type)\n| success(A)\nend"
+    let m = "induct Result(@A : Type, E : Type) : Type\n| success(A)\nend"
         .parse::<Module>()
         .unwrap();
     match &m.items[0] {
@@ -718,9 +718,10 @@ fn parse_implicit_marks_on_let_shorthand_and_inductive_params() {
 
 #[test]
 fn parse_top_inductive_and_chain() {
-    let m = "induct Tree\n| node(Forest)\nand Forest\n| nil()\n| cons(Tree, Forest)\nend"
-        .parse::<Module>()
-        .unwrap();
+    let m =
+        "induct Tree : Type\n| node(Forest)\nand Forest : Type\n| nil()\n| cons(Tree, Forest)\nend"
+            .parse::<Module>()
+            .unwrap();
     assert!(matches!(
         &m.items[0],
         TopItem::Inductive(group) if group.len() == 2
@@ -827,7 +828,7 @@ fn at_on_a_binder_type_is_a_parse_error() {
     );
 
     assert!(
-        "induct Boxed | box(ghost : @Nat) end"
+        "induct Boxed : Type | box(ghost : @Nat) end"
             .parse::<Module>()
             .is_err(),
         "@ on an inductive payload type should not parse",
@@ -1112,10 +1113,10 @@ fn parse_struct_visibility_spellings() {
     // the kind keyword (`rep_pub`) exports the representation — `record` vs
     // `struct`. All four combinations are legal.
     for (source, is_pub, rep_pub) in [
-        ("struct Foo { x : Type } u", false, false),
-        ("record Foo { x : Type } u", false, true),
-        ("pub struct Foo { x : Type } u", true, false),
-        ("pub record Foo { x : Type } u", true, true),
+        ("struct Foo : Type { x : Type } u", false, false),
+        ("record Foo : Type { x : Type } u", false, true),
+        ("pub struct Foo : Type { x : Type } u", true, false),
+        ("pub record Foo : Type { x : Type } u", true, true),
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         let TopItem::Struct(s) = &entrypoint.module.items[0] else {
@@ -1158,11 +1159,11 @@ fn struct_round_trips() {
     // parameterless) and literals (inferred / pinned / hole-pinned head, named
     // and positional fields) survive a print → re-parse cycle unchanged.
     for source in [
-        "struct Foo { x : Type } u",
-        "record Foo { x : Type } u",
-        "pub struct Foo { x : Type } u",
-        "pub record Pair(A : Type, B : Type) { fst : A, snd : B } u",
-        "pub record Meters { Nat } u",
+        "struct Foo : Type { x : Type } u",
+        "record Foo : Type { x : Type } u",
+        "pub struct Foo : Type { x : Type } u",
+        "pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B } u",
+        "pub record Meters : Type { Nat } u",
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(

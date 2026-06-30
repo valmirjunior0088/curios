@@ -394,7 +394,7 @@ mod tests {
         // by default — and the fully-supplied call compiles end-to-end.
         let source = r#"
             use /std/{Nat};
-            induct Opt(A : Type)
+            induct Opt(A : Type) : Type
             | some(A)
             | none()
             end
@@ -415,7 +415,7 @@ mod tests {
         // writes no holes at all.
         let source = r#"
             use /std/{Nat};
-            induct Opt(A : Type)
+            induct Opt(A : Type) : Type
             | some(A)
             | none()
             end
@@ -468,7 +468,7 @@ mod tests {
         // result-directed turnaround can pin it.
         let source = r#"
             use /std/{Nat};
-            induct Opt(A : Type)
+            induct Opt(A : Type) : Type
             | some(A)
             | none()
             end
@@ -492,7 +492,7 @@ mod tests {
         // sugar (which desugars to exactly that call).
         let source = r#"
             use /std/{Nat};
-            induct Id(A : Type)
+            induct Id(A : Type) : Type
             | wrap(A)
             end
             let bind : (@A : Type, @B : Type) -> (Id(A), (A) -> Id(B)) -> Id(B) =
@@ -556,7 +556,7 @@ mod tests {
         // inductive is module-local but fully usable where it is declared.
         let source = r#"
             use /std/{Nat};
-            induct Opt
+            induct Opt : Type
             | none()
             | some(Nat)
             end
@@ -575,7 +575,7 @@ mod tests {
         // the parent: the inductive's own visibility still gates the outside.
         let source = r#"
             pub mod m
-                induct Secret
+                induct Secret : Type
                 | hide(/std/Nat)
                 end
             end
@@ -635,7 +635,7 @@ mod tests {
         // along), lowering through to wasm.
         let source = r#"
             use /std/{Nat};
-            induct Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat) -> Type
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -660,7 +660,7 @@ mod tests {
         // tag as ever.
         let source = r#"
             use /std/{Nat, Bin};
-            induct Tag : (Nat)
+            induct Tag : (Nat) -> Type
             | a() : (0)
             | b() : (7)
             end
@@ -683,7 +683,7 @@ mod tests {
         // arm converges via `Nat/add`'s definitional successor peeling.
         let source = r#"
             use /std/{Nat};
-            induct Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat) -> Type
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -709,7 +709,7 @@ mod tests {
         // the scrutinee's actual parameter.
         let inductive_decl = r#"
             use /std/{Nat, Bin};
-            induct Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat) -> Type
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -776,11 +776,11 @@ mod tests {
         //   because the arm refines `n := 0`.
         let source = r#"
             use /std/{Nat, Bin};
-            induct Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat) -> Type
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
-            induct Eq(A : Type) : (x : A, y : A)
+            induct Eq(A : Type) : (x : A, y : A) -> Type
             | refl(z : A) : (z, z)
             end
             let subst(@n : Nat, @m : Nat, p : Eq(Nat, n, m), v : Vec(Bin, n)) -> Vec(Bin, m) =
@@ -813,7 +813,7 @@ mod tests {
         // with zero arms: every omission is vacuously justified, so the match
         // checks at any motive and lowers through erasure and codegen.
         let source = r#"
-            induct False
+            induct False : Type
             end
             let absurd(A : Type, v : False) -> A =
                 match v : A
@@ -834,7 +834,7 @@ mod tests {
         // what types `xs : Vec(T, j)` at the declared `Vec(T, n)`.
         let source = r#"
             use /std/{Nat, Bin};
-            induct Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat) -> Type
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -858,7 +858,7 @@ mod tests {
     fn impossible_inductive_arm_lowers_to_unreachable() {
         let source = r#"
             use /std/{Nat, Bin};
-            induct Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat) -> Type
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -888,7 +888,7 @@ mod tests {
         // rejected with the explanation as the error.
         let opaque = r#"
             use /std/{Nat};
-            induct Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat) -> Type
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -911,7 +911,7 @@ mod tests {
         // `(0, 1)` clashes against literals `(5, 5)` and prunes.
         let nonlinear = r#"
             use /std/{Nat, Bin};
-            induct Foo : (x : Nat, y : Nat)
+            induct Foo : (x : Nat, y : Nat) -> Type
             | same(z : Nat) : (z, z)
             | diff() : (0, 1)
             end
@@ -929,7 +929,7 @@ mod tests {
 
         let prunes = r#"
             use /std/{Nat, Bin};
-            induct Foo : (x : Nat, y : Nat)
+            induct Foo : (x : Nat, y : Nat) -> Type
             | same(z : Nat) : (z, z)
             | diff() : (0, 1)
             end
@@ -949,7 +949,7 @@ mod tests {
         // surfaces as an ordinary type mismatch.
         let source = r#"
             use /std/{Nat};
-            induct Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat) -> Type
             | nil() : (0)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -969,7 +969,7 @@ mod tests {
         // telescope, or a target on an unindexed inductive.
         let missing = r#"
             use /std/{Nat};
-            induct Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat) -> Type
             | nil()
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -983,7 +983,7 @@ mod tests {
 
         let surplus = r#"
             use /std/{Nat};
-            induct Pair(A : Type)
+            induct Pair(A : Type) : Type
             | pair(A, A) : (0)
             end
             0
@@ -996,7 +996,7 @@ mod tests {
 
         let arity = r#"
             use /std/{Nat};
-            induct Vec(T : Type) : (n : Nat)
+            induct Vec(T : Type) : (n : Nat) -> Type
             | nil() : (0, 1)
             | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
             end
@@ -1369,10 +1369,10 @@ mod tests {
         // group's signatures are assumed, constructors once its bodies are
         // defined), so the payload elaborates like any other type.
         let payload = r#"
-            induct Eq(@A : Type) : (x : A, y : A)
+            induct Eq(@A : Type) : (x : A, y : A) -> Type
             | refl(z : A) : (z, z)
             end
-            induct Box
+            induct Box : Type
             | mk(p : Eq(0, 1))
             end
             0
@@ -1383,10 +1383,10 @@ mod tests {
         // earlier, while the type-constructor binding itself elaborated
         // (its body's `InductiveType` node checks against the index telescope).
         let index = r#"
-            induct Eq(@A : Type) : (x : A, y : A)
+            induct Eq(@A : Type) : (x : A, y : A) -> Type
             | refl(z : A) : (z, z)
             end
-            induct Tag : (p : Eq(0, 0))
+            induct Tag : (p : Eq(0, 0)) -> Type
             | mk() : (Eq/refl(0))
             end
             0
@@ -1398,10 +1398,10 @@ mod tests {
         // the whole program lowers to wasm.
         let through = r#"
             use /std/{Nat};
-            induct Eq(@A : Type) : (x : A, y : A)
+            induct Eq(@A : Type) : (x : A, y : A) -> Type
             | refl(z : A) : (z, z)
             end
-            induct Box
+            induct Box : Type
             | mk(p : Eq(0, 0))
             end
             let b : Box = Box/mk(Eq/refl(0));

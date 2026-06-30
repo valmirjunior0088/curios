@@ -1,6 +1,6 @@
 use /std/{Nat, Bin};
 
-pub induct Class
+pub induct Class : Type
 | ascii()
 | lead(Nat, Nat, Nat, Nat)
 | bad()
@@ -30,7 +30,7 @@ pub let classify(c : Nat) -> Class =
         end
     end;
 
-pub induct Scan
+pub induct Scan : Type
 | lead()
 | cont(Nat, Nat, Nat)
 | bad()
@@ -65,7 +65,7 @@ end
 pub let Valid(b : Bin) -> Prop =
     Utf8(Scan/lead(), b);
 
-pub record Str {
+pub record Str : Type {
     bytes : Bin,
     valid : Valid(bytes)
 }

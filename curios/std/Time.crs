@@ -1,13 +1,13 @@
 use /sys/{Io};
 use /std/{Nat, Bln};
 
-pub struct Instant {
+pub struct Instant : Type {
     secs_hi : Nat,
     secs_lo : Nat,
     nanos : Nat
 }
 
-pub struct Duration {
+pub struct Duration : Type {
     secs : Nat,
     nanos : Nat
 }

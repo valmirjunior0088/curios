@@ -30,7 +30,7 @@ fn implicit_inductive_type_param_executes() {
     // spellings of the same domain compare as distinct.
     let source = r#"
         use /std/{Nat, Bin, Io};
-        induct Eq2(@A : Type) : (x : A, y : A)
+        induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
         let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
@@ -57,7 +57,7 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
     // reinterpretation. (`Eq2(@Nat, 2, 2)` is the pinned spelling.)
     let source = r#"
         use /std/{Nat, Io};
-        induct Eq2(@A : Type) : (x : A, y : A)
+        induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(Nat, 2, 2) = Eq2/refl();
@@ -78,7 +78,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
     // metas against the annotation, and the wake retries the parked pairs.
     let source = r#"
         use /std/{Nat, Io};
-        induct Eq2(@A : Type) : (x : A, y : A)
+        induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
         let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
@@ -104,7 +104,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
     // equal; `2` and `3` are not.
     let source = r#"
         use /std/{Nat, Io};
-        induct Eq2(@A : Type) : (x : A, y : A)
+        induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(2, 3) = Eq2/refl();

@@ -1,4 +1,4 @@
-pub induct Order
+pub induct Order : Type
 | lt()
 | eq()
 | gt()

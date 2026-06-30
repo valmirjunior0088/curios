@@ -1,6 +1,6 @@
 use /std/{Nat, Bln, Lst, Str, Order};
 
-pub record BigNat {
+pub record BigNat : Type {
     limbs : Lst(Nat)
 }
 

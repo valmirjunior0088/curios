@@ -1356,17 +1356,18 @@ fn parse_inductive_index<'a>() -> Parser<'a, (Option<String>, Term)> {
 /// named) and the sort it lands in.
 type InductiveArity = (Vec<(Option<String>, Term)>, Term);
 
-// The head's arity after the `:` — either an index telescope optionally landing
-// in a sort, `(n : Nat) -> Prop`, or a bare sort, `Prop`. A bare index group with
-// no `-> Sort` defaults to `Type` (the transition spelling, `: (n : Nat)`).
+// The head's arity after the `:` — either an index telescope landing in a sort,
+// `(n : Nat) -> Prop`, or a bare sort, `Prop`. The sort is mandatory: an index
+// telescope must state where it lands (`-> Sort`), and a sortless head is a
+// parse error, never an implicit `Type`.
 fn parse_inductive_arity<'a>() -> Parser<'a, InductiveArity> {
     catch(
         parse_literal("(")
             .and_keep(sep_by0(parse_inductive_index, || parse_literal(",")))
             .and_drop(parse_literal(")")),
     )
-    .and(catch(parse_literal("->").and_keep(lazy(parse_term))).or(pure(Subterm::Type.into())))
-    .or(lazy(parse_term).map(|sort| (Vec::new(), sort)))
+    .and(parse_literal("->").and_keep(parse_sort()))
+    .or(parse_sort().map(|sort| (Vec::new(), sort)))
 }
 
 fn parse_top_inductive_body<'a>(is_pub: bool) -> Parser<'a, TopInductive> {
@@ -1379,12 +1380,9 @@ fn parse_top_inductive_body<'a>(is_pub: bool) -> Parser<'a, TopInductive> {
             )
             .or(pure(vec![])),
         )
-        // The head's arity: `: (n : Nat) -> Prop`, `: Prop`, or omitted (`Type`).
-        .and(
-            catch(parse_literal(":"))
-                .and_keep(parse_inductive_arity())
-                .or(pure((Vec::new(), Subterm::Type.into()))),
-        )
+        // The head's arity: `: (n : Nat) -> Prop` or `: Prop`. The sort is
+        // required — there is no implicit `Type`.
+        .and(parse_literal(":").and_keep(parse_inductive_arity()))
         .and(many0(parse_top_inductive_case))
         .flat_map(move |(((label, params), (indices, result_sort)), cases)| {
             // Targets are required on every case iff the head declares
@@ -1442,6 +1440,16 @@ fn parse_top_inductive<'a>() -> Parser<'a, TopItem> {
     })
 }
 
+/// A universe sort: exactly `Type` or `Prop`. The result sort of a struct or an
+/// inductive head is always one of these two — the only universes — so the sort
+/// position parses this targeted form rather than a generic `lazy(parse_term)`.
+/// A generic term parser is both too loose (admitting terms the elaborator only
+/// ever treats as `Type`) and, for a struct, actively wrong: it greedily eats
+/// the `{` opening the field block, so `record X : Prop { … }` fails to parse.
+fn parse_sort<'a>() -> Parser<'a, Term> {
+    parse_prop().or(parse_type())
+}
+
 fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
     // `pub`? then the kind keyword: `struct` (rep private) or `record` (rep public).
     let kind = catch(parse_keyword("struct"))
@@ -1457,10 +1465,8 @@ fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
                 )
                 .or(pure(vec![])),
             )
-            // The result sort: `: Prop` after the parameters; omitted is `Type`.
-            .and(
-                catch(parse_literal(":").and_keep(lazy(parse_term))).or(pure(Subterm::Type.into())),
-            )
+            // The result sort: `: Type` or `: Prop` after the parameters. Required.
+            .and(parse_literal(":").and_keep(parse_sort()))
             // Representation visibility comes from the keyword, not an inner `pub`.
             .and_drop(parse_literal("{"))
             .and(sep_by0(parse_tuple_type_field, || parse_literal(",")))

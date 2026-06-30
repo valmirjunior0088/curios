@@ -20,7 +20,7 @@ curios is a small language with a full dependent type system: types can depend o
 A length-indexed vector whose `append` is checked to produce the right length:
 
 ```
-pub induct Vec(T : Type) : (n : Nat)
+pub induct Vec(T : Type) : (n : Nat) -> Type
 | nil() : (0)
 | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
 end

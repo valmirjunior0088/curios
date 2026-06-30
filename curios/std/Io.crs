@@ -2,7 +2,7 @@ pub use /sys/{Io};
 pub use /sys/Io/{stdin, stdout, stderr};
 use /std/{Bin, Str, Nat, Option, Result, Lst};
 
-pub induct Error
+pub induct Error : Type
 | not_found()
 | permission_denied()
 | exists()
@@ -29,7 +29,7 @@ pub let error_of(status : Nat) -> Error =
         | false => acc
         end);
 
-pub induct Mode
+pub induct Mode : Type
 | read()
 | write()
 | append()
@@ -42,7 +42,7 @@ pub let of_mode(mode : Mode) -> Nat =
     | append() => /sys/Io/Mode/append
     end;
 
-pub induct Read
+pub induct Read : Type
 | chunk(Bin)
 | eof()
 | error(Error)

@@ -16,7 +16,7 @@ fn nullary_closure_survives_erasure_and_codegen() {
         Duration::from_secs(10),
         r#"
         use /std/{Io, Str};
-        induct Susp(A : Type)
+        induct Susp(A : Type) : Type
         | now(A)
         | later(() -> Susp(A))
         end
@@ -41,7 +41,7 @@ fn nullary_closure_survives_erasure_and_codegen() {
 #[test]
 fn end_to_end() {
     let source = r#"
-        induct Pair
+        induct Pair : Type
         | left(std/Int)
         | right(std/Flt)
         end

@@ -469,7 +469,7 @@ fn rejects_re_export_through_other_modules_private_child() {
 fn re_exports_inductive_constructor_by_name() {
     let term = run(r#"
         pub mod Foo
-            pub induct U
+            pub induct U : Type
             | A()
             | B()
             end
@@ -488,7 +488,7 @@ fn re_exports_inductive_constructor_by_name() {
 fn re_exports_inductive_constructors_by_glob() {
     let term = run(r#"
         pub mod Foo
-            pub induct U
+            pub induct U : Type
             | A()
             | B()
             end

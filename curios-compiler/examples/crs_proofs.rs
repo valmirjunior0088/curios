@@ -15,7 +15,7 @@ fn main() {
     let source = r#"
         use /std/{Nat, Str, Bln, Eq, Lst, Vec, Io};
 
-        induct Void
+        induct Void : Type
         end
 
         let absurd(@A : Type, contradiction : Void) -> A =
@@ -142,7 +142,7 @@ fn main() {
     let zero_arm_match = r#"
         use /std/{Nat, Eq};
 
-        induct Void
+        induct Void : Type
         end
         let zero_is_not_one(p : Eq(0, 1)) -> Void =
             match p : Void

@@ -26,7 +26,7 @@ fn named_fields_run_end_to_end() {
 fn struct_transparent_pair_projects() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair(Nat, Nat) { fst = 2, snd = 5 };
         Io/print(Nat/to_str(Nat/add(p.fst, p.1)))
         "#;
@@ -42,7 +42,7 @@ fn struct_transparent_pair_projects() {
 fn struct_parameter_inference_at_construction() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         Io/print(Nat/to_str(Nat/mul(p.fst, p.snd)))
         "#;
@@ -58,7 +58,7 @@ fn struct_parameter_inference_at_construction() {
 fn struct_newtype_projects() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Meters { Nat }
+        pub record Meters : Type { Nat }
         let m : Meters = Meters { 5 };
         Io/print(Nat/to_str(m.0))
         "#;
@@ -74,7 +74,7 @@ fn struct_newtype_projects() {
 fn struct_dependent_fields_run_end_to_end() {
     let source = r#"
         use /std/{Vec, Nat, Io};
-        pub record Sized { n : Nat, v : Vec(Nat, n) }
+        pub record Sized : Type { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
             match v : Nat
@@ -97,7 +97,7 @@ fn struct_abstract_smart_constructor_round_trips() {
         use /std/{Nat, Io};
         mod Celsius
             use /std/{Nat};
-            pub struct Celsius { Nat }
+            pub struct Celsius : Type { Nat }
             pub let of_nat(n : Nat) -> Celsius = Celsius { n };
             pub let to_nat(c : Celsius) -> Nat = c.0;
         end
@@ -117,7 +117,7 @@ fn struct_private_construction_rejected() {
         use /std/{Nat, Io};
         mod Celsius
             use /std/{Nat};
-            pub struct Celsius { Nat }
+            pub struct Celsius : Type { Nat }
         end
         let c : Celsius/Celsius = Celsius/Celsius { 42 };
         Io/print("no")
@@ -139,7 +139,7 @@ fn struct_private_projection_rejected() {
         use /std/{Nat, Io};
         mod Celsius
             use /std/{Nat};
-            pub struct Celsius { Nat }
+            pub struct Celsius : Type { Nat }
             pub let of_nat(n : Nat) -> Celsius = Celsius { n };
         end
         let c : Celsius/Celsius = Celsius/of_nat(42);
@@ -161,7 +161,7 @@ fn struct_private_projection_rejected() {
 fn struct_is_not_a_tuple() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
         let p : { fst : Nat, snd : Nat } = Pair { fst = 1, snd = 2 };
         Io/print("no")
         "#;
@@ -175,7 +175,7 @@ fn struct_is_not_a_tuple() {
 fn struct_wrong_field_count_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1 };
         Io/print("no")
         "#;
@@ -189,7 +189,7 @@ fn struct_wrong_field_count_rejected() {
 fn struct_field_label_out_of_order_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) { fst : A, snd : B }
+        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { snd = 1, fst = 2 };
         Io/print("no")
         "#;
@@ -212,4 +212,65 @@ fn struct_literal_non_struct_head_rejected() {
     let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
     assert!(error.contains("struct type"), "unexpected error: {error}");
+}
+
+// A `Prop`-sorted struct whose fields are all propositions is a sub-singleton:
+// every projection lands in `Prop`, so proof irrelevance leaks nothing. It is
+// accepted, and — its content being non-informative — erases away: the program
+// compiles and runs, the projected proof contributing no runtime code while the
+// ordinary `Nat` computation still produces its result.
+#[test]
+fn prop_struct_with_prop_fields_runs() {
+    let source = r#"
+        use /std/{Nat, Eq, Io};
+        record And(A : Prop, B : Prop) : Prop { fst : A, snd : B }
+        let p : And(Eq(0, 0), Eq(1, 1)) = And { Eq/refl(), Eq/refl() };
+        let proof : Eq(0, 0) = p.fst;
+        Io/print(Nat/to_str(7))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"7");
+}
+
+// A `Prop`-sorted struct with an informative (`Type`-sorted) field is rejected
+// at declaration. Projection is an unguarded eliminator, so admitting it under
+// proof irrelevance proves `Eq(b0, b1)` for distinct `b0`, `b1` — and thence
+// `Eq(0, 1)` and `False`. The soundness-critical regression (bare `: Prop`).
+#[test]
+fn prop_struct_with_informative_field_rejected() {
+    let source = r#"
+        use /std/{Nat, Eq, Io};
+        record Box : Prop { val : Nat }
+        let b0 : Box = Box { 0 };
+        let b1 : Box = Box { 1 };
+        let irrelevant : Eq(b0, b1) = Eq/refl();
+        let get(b : Box) -> Nat = b.val;
+        let zero_eq_one : Eq(0, 1) = Eq/cong(get, irrelevant);
+        Io/print("no")
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    assert!(error.contains("informative"), "unexpected error: {error}");
+}
+
+// Control: the same record at the default `Type` sort gets no proof
+// irrelevance, so `Eq(b0, b1)` for distinct values is correctly rejected by
+// conversion — confirming the `Prop` sort was the only door to the
+// contradiction, and that closing it leaves ordinary records untouched.
+#[test]
+fn type_struct_distinct_values_not_convertible() {
+    let source = r#"
+        use /std/{Nat, Eq, Io};
+        record Box : Type { val : Nat }
+        let b0 : Box = Box { 0 };
+        let b1 : Box = Box { 1 };
+        let irrelevant : Eq(b0, b1) = Eq/refl();
+        Io/print("no")
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }

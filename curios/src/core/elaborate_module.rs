@@ -1,8 +1,8 @@
 use {
     super::{
         Context, Definition, Error, Inductive, InductiveParam, Item, Mode, Module, Structure,
-        Telescope, Term, check, check_telescope_entries, drain_parked, elaborate, reduce_with,
-        zonk, zonk_module,
+        Subterm, Telescope, Term, check, check_telescope_entries, drain_parked, elaborate, is_prop,
+        reduce_with, zonk, zonk_module,
     },
     std::collections::BTreeMap,
 };
@@ -114,8 +114,34 @@ fn elaborate_structure(context: &mut Context, name: &str) -> Result<(), Error> {
         .map(|label| label.to_string())
         .collect::<Vec<_>>();
 
-    let (entries, ()) =
-        context.with_frame(|context| check_telescope_entries(context, structure.fields.clone()))?;
+    let declared_prop = matches!(
+        &*reduce_with(context, &structure.result_sort)?,
+        Subterm::Prop
+    );
+
+    let (entries, ()) = context.with_frame(|context| -> Result<_, Error> {
+        let (entries, ()) = check_telescope_entries(context, structure.fields.clone())?;
+
+        // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof
+        // irrelevance, yet projection is an *unguarded* eliminator — it reads a
+        // field out of a value the theory believes is interchangeable with any
+        // other. That is consistent only when no field is informative, the
+        // singleton-elimination condition (`elaborate_match::singleton_eliminable`)
+        // checked here at declaration time rather than per projection. A struct
+        // carries no indices, so nothing is forced and the condition reduces to:
+        // every field type is itself a proposition. With this enforced, every
+        // projection lands in a `Prop`, so `elaborate_proj` needs no guard.
+        if declared_prop {
+            for (i, (_, ty)) in entries[n_params..].iter().enumerate() {
+                if !is_prop(context, ty)? {
+                    let field = labels[n_params + i].clone();
+                    return Err(Error::informative_prop_struct(name, field, ty.clone()));
+                }
+            }
+        }
+
+        Ok((entries, ()))
+    })?;
 
     let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
     let params =

@@ -6,7 +6,7 @@ use {
 fn main() {
     let source = r#"
         use /std/{Nat, Int, Flt, Bin, Arr};
-        induct Pair
+        induct Pair : Type
         | left(Int)
         | right(Flt)
         end

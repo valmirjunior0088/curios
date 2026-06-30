@@ -1,6 +1,6 @@
 use /std/{Bln};
 
-pub induct Option(A : Type)
+pub induct Option(A : Type) : Type
 | some(A)
 | none()
 end

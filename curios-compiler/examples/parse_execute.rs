@@ -8,7 +8,7 @@ fn main() {
         use /std/{Int, Flt};
         rec id : (Type) -> Type = (x) => x;
         let witness : Type = id(Int);
-        induct Pair
+        induct Pair : Type
         | left(Int)
         | right(Flt)
         end

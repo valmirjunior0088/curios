@@ -1,6 +1,6 @@
 use /std/{Bin, Str, Nat, Parse, Io, Bln, Result};
 
-pub induct Fmt
+pub induct Fmt : Type
 | nil()
 | lit(Str, Fmt)
 | str(Fmt)

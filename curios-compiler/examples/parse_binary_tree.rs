@@ -6,7 +6,7 @@ use {
 fn main() {
     let source = r#"
         use /std/{Int};
-        induct Tree
+        induct Tree : Type
         | leaf(Int)
         | node(Int, Tree, Tree)
         end

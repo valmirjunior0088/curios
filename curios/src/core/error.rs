@@ -156,6 +156,16 @@ pub enum Error {
     LargeElimOfProp {
         name: String,
     },
+    /// A struct was declared at sort `Prop` but a field is informative (its type
+    /// is not itself a proposition). Proof irrelevance would then let projection
+    /// observe which inhabitant was built — the singleton-elimination condition,
+    /// applied at declaration time. `field` is the offending field; `field_type`
+    /// its type.
+    InformativePropStruct {
+        name: String,
+        field: String,
+        field_type: Box<Term>,
+    },
     /// A struct literal's (or struct type's) head names a binding that is not a
     /// struct; `found` is that binding's type.
     NotAStructType {
@@ -376,6 +386,18 @@ impl Error {
 
     pub fn large_elim_of_prop<N: Into<String>>(name: N) -> Self {
         Self::LargeElimOfProp { name: name.into() }
+    }
+
+    pub fn informative_prop_struct<N: Into<String>, F: Into<String>, T: Into<Term>>(
+        name: N,
+        field: F,
+        field_type: T,
+    ) -> Self {
+        Self::InformativePropStruct {
+            name: name.into(),
+            field: field.into(),
+            field_type: Box::new(field_type.into()),
+        }
     }
 
     pub fn not_a_struct_type<U: Into<Term>>(found: U) -> Self {
@@ -692,6 +714,16 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "cannot eliminate the proposition '{name}' into a relevant result\n  a strict proposition admits large elimination only when empty or singleton"
+                )
+            }
+            Error::InformativePropStruct {
+                name,
+                field,
+                field_type,
+            } => {
+                write!(
+                    f,
+                    "struct '{name}' is declared at sort 'Prop' but field '{field} : {field_type}' is informative\n  a 'Prop' struct's fields must all be propositions (or forced by indices)"
                 )
             }
             Error::NotAStructType { found } => {

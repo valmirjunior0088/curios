@@ -1,6 +1,6 @@
 use /std/{Bin, Str, Nat, Bln, Io, Result, Option, Time, Arr, Task};
 
-pub record Settings {
+pub record Settings : Type {
     connect_timeout : Option(Time/Duration),
     read_timeout : Option(Time/Duration),
     write_timeout : Option(Time/Duration),
@@ -14,7 +14,7 @@ pub let default : Settings = Settings {
     tls = false
 };
 
-pub struct Socket { Io }
+pub struct Socket : Type { Io }
 
 pub let read(c : Socket, n : Nat) -> Task(Io/Read) =
     Task/read(c.0, n);
@@ -110,7 +110,7 @@ pub let call(settings : Settings, host : Str, port : Nat, request : Bin) -> Task
     with(settings, host, port, (c) =>
         Task/bind(write(c, request), (_) => drain(c)));
 
-struct Listener { Io }
+struct Listener : Type { Io }
 
 let bind_listen(addr : Bin) -> Result(Listener, Io/Error) =
     let s = /sys/Io/socket(addr);
