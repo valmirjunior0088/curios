@@ -13,7 +13,7 @@ The repo is a **Cargo workspace** (virtual manifest at the root) of four crates:
 - **`curios-runtime`** — runtime-only engine (lib) + the launcher stub (bin `curios-runtime`). Deserializes a precompiled module and runs it on wasmtime; **never** links Cranelift or Binaryen.
 - **`curios-compiler`** — the CLI (bin `curios-compiler`) + a lib with the compile / precompile (`to_cwasm`) / run-from-source helpers. The **only** crate that links Cranelift (via `wasmtime`'s `cranelift` feature) and Binaryen.
 
-The JIT-vs-deserialize split is a *crate boundary*, not a feature flag: `cargo build --package curios-runtime` yields a slim launcher with no Cranelift/Binaryen. The CLI's `wasmtime` dependency adds `cranelift`, which feature-unification makes available in compiler builds; both crates share one `wasmtime` (version pinned once in `[workspace.dependencies]`) so the `.cwasm` a `curios-compiler` produces matches what `curios-runtime` deserializes.
+The JIT-vs-deserialize split is a *crate boundary*, not a feature flag (the full mechanism is in [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher)). Both crates share one `wasmtime`, version-pinned once in `[workspace.dependencies]`, so the `.cwasm` a `curios-compiler` produces matches what `curios-runtime` deserializes.
 
 Two languages live in this repo: **Rust** (the compiler) and **curios** itself (the object language, with a standard library under `curios/std/`). Work touches one or both.
 
@@ -73,7 +73,7 @@ then, in curios-compiler:
 
 ## Build & test
 
-**Run `make curios-compiler/runtime` first, then build with `cargo` as usual.** `curios-compiler` embeds the slim launcher via `include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/runtime"))`, so the launcher must sit at `curios-compiler/runtime` before the compiler is built. `make curios-compiler/runtime` builds the runtime in isolation (which keeps it slim, see below) and copies it there; everything else is plain `cargo`. If `curios-compiler/runtime` is missing, the build **fails** at the `include_bytes!` with a clear "couldn't read" error — run `make curios-compiler/runtime` and rebuild.
+**Run `make curios-compiler/runtime` first, then build with `cargo` as usual.** `curios-compiler` embeds the slim launcher via `include_bytes!`, so the launcher must sit at `curios-compiler/runtime` before the compiler is built; `make` builds it in isolation (which is what keeps it slim — see [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher)) and copies it there. If the file is missing, the build **fails** at the `include_bytes!` with a clear "couldn't read" error — run `make curios-compiler/runtime` and rebuild.
 
 ```sh
 make curios-compiler/runtime                  # build the slim launcher, place it for embedding
@@ -121,56 +121,14 @@ There is no `rustfmt.toml` or `clippy.toml` — stock toolchain defaults apply. 
 
 The standard library under `curios/std/` is the reference for idiomatic curios. Each module is one file (`curios/std/Foo.crs`) and must be registered in two places: `curios/std.crs` (`pub mod Foo; pub use Foo/{let Foo};`) **and** the `include_str!` table in `curios/src/text/prelude.rs` (the modules are embedded into the compiler at build time, not read from disk). The same applies to `curios/syn/` via `curios/syn.crs`.
 
-For the full surface language — every construct, with examples — see [SYNTAX.md](SYNTAX.md). The cheat sheet below is just enough to get oriented; `curios/src/text/parse.rs` is the ultimate source of truth.
+**Read [SYNTAX.md](SYNTAX.md) in full before writing `.crs`** — it covers every construct with examples, and `curios/src/text/parse.rs` is the ultimate source of truth. A few essentials that are easy to trip on from memory:
 
-Syntax cheat-sheet:
-
-```
-use /std/{Bln, Nat};            -- import names from a module (paths use `/`)
-
-pub induct Option(A : Type)     -- inductive type declaration
-| some(A)
-| none()
-end
-
-pub use Option/*;               -- re-export constructors
-
-pub record Pair(A : Type, B : Type) {   -- transparent struct: representation is public
-    fst : A,
-    snd : B
-}
-
-pub record Meters { Nat }       -- single unnamed field; newtype, project with `.0`
-
-pub struct Token { Bin }        -- opaque struct: representation private to this module
-
-pub let mk_pair(@A : Type, @B : Type, a : A, b : B) -> Pair(A, B) =
-    Pair {                      -- construct by field; project with `p.fst`, `p.snd`
-        fst = a,
-        snd = b
-    };
-
-pub let map(@A : Type, @B : Type, f : (A) -> B, m : Option(A)) -> Option(B) =
-    match m                     -- `@` marks an implicit/erased argument
-    | some(a) => Option/some(f(a))
-    | none()  => Option/none()
-    end;
-
-pub rec len(@A : Type, l : Lst(A)) -> Nat =   -- `rec` for recursive defs
-    match l
-    | nil()        => 0
-    | cons(_, t)   => len(t) + 1
-    end;
-```
-
-- `record` declares a struct with a **public** representation (callers can construct and project it directly); `struct` declares one whose representation is **private** to its module — construct/project it only via exported helpers, or you hit a `PrivateRepresentation` error. A single unnamed field (`record Meters { Nat }`) is a newtype, projected with `.0`, and erases to the bare field at runtime.
+- Names are path-qualified with `/`: `Option/none`, `/std/Lst`, `/syn/Lst`; a leading `/` is absolute.
 - `@x : T` is an implicit (type-erased) parameter; ordinary `x : T` is explicit.
 - `{}` is the unit type; `()` is the unit value.
-- Names are path-qualified with `/`: `Option/none`, `/std/Lst`, `/syn/Lst`.
-- A `match` may carry a motive annotation: `match l : Lst(B) | … end`.
-- Local recursion uses `rec go(...) -> T = ...;` then a call to `go(...)`.
+- `record` exposes its representation (construct/project directly); `struct` keeps it private to the module — touch it only via exported helpers, or you hit a `PrivateRepresentation` error.
 
-To run or test `.crs` code, use the CLI (`cargo run --package curios-compiler -- run …`) or follow an existing example in `curios-compiler/examples/` (the `crs_*` and `parse_*` examples drive `.crs` programs through the pipeline).
+To run or test `.crs` code, use the CLI (`cargo run --package curios-compiler -- run …`) or one of the runnable examples in `curios-compiler/examples/` (`cargo run --package curios-compiler --example crs_eq`; the `crs_*` and `parse_*` examples drive `.crs` programs through the pipeline).
 
 ## Gotchas
 
