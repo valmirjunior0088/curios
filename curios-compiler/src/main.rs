@@ -4,7 +4,7 @@ use {
     curios_compiler::{run_wasm, to_cwasm},
     curios_runtime::OsHost,
     std::{
-        env, fs, iter,
+        fs, iter,
         path::{Path, PathBuf},
         process::{self, ExitCode},
         time::Duration,
@@ -14,6 +14,13 @@ use {
 /// Footer appended after the `.cwasm` payload: `payload ++ (len: u64 LE) ++ MAGIC`.
 /// Kept in sync with the launcher in `curios-runtime`.
 const MAGIC: &[u8; 8] = b"CRSEXEC1";
+
+/// The slim `curios-runtime` launcher stub, embedded at build time. The `Makefile`
+/// builds `-p curios-runtime` (in isolation, so it stays Cranelift/Binaryen-free)
+/// and copies the artifact to `src/runtime`. A bare `cargo build` of this crate
+/// fails until that file exists — by design: a compiler can never be built without
+/// an embedded launcher, so `compile` needs no launcher lookup at runtime.
+static LAUNCHER: &[u8] = include_bytes!("runtime");
 
 fn parse_timeout(input: &str) -> Result<Duration, String> {
     input
@@ -56,14 +63,6 @@ enum Mode {
             help = "Write the executable to PATH (default: the input file stem)"
         )]
         output_path: Option<PathBuf>,
-
-        #[arg(
-            long,
-            value_name = "PATH",
-            help = "Path to the curios-runtime launcher stub (default: a sibling of \
-                    this binary, or $CURIOS_LAUNCHER)"
-        )]
-        launcher: Option<PathBuf>,
     },
 }
 
@@ -128,33 +127,10 @@ fn exe_output_path(input_path: &Path) -> PathBuf {
     PathBuf::from(input_path.file_stem().unwrap_or(input_path.as_os_str()))
 }
 
-/// Find the `curios-runtime` launcher stub to append the payload to: an explicit
-/// `--launcher`, else `$CURIOS_LAUNCHER`, else a sibling of this binary.
-fn locate_launcher(flag: Option<&Path>) -> Result<PathBuf, String> {
-    if let Some(path) = flag {
-        return Ok(path.to_path_buf());
-    }
-
-    if let Some(path) = env::var_os("CURIOS_LAUNCHER") {
-        return Ok(PathBuf::from(path));
-    }
-
-    let here =
-        env::current_exe().map_err(|error| format!("cannot locate own executable: {error}"))?;
-    let candidate = here.with_file_name("curios-runtime");
-
-    if candidate.exists() {
-        return Ok(candidate);
-    }
-
-    Err("could not find the curios-runtime launcher (set --launcher or CURIOS_LAUNCHER)".into())
-}
-
-/// Build a self-contained executable: a copy of the launcher stub with the
+/// Build a self-contained executable: the embedded launcher stub with the
 /// `.cwasm` payload and a `len ++ MAGIC` footer appended to its tail.
-fn emit_exe(launcher: &Path, cwasm: &[u8], output: &Path) -> Result<(), String> {
-    let mut bytes = fs::read(launcher)
-        .map_err(|error| format!("failed to read launcher {}: {error}", launcher.display()))?;
+fn emit_exe(cwasm: &[u8], output: &Path) -> Result<(), String> {
+    let mut bytes = LAUNCHER.to_vec();
 
     bytes.extend_from_slice(cwasm);
     bytes.extend_from_slice(&(cwasm.len() as u64).to_le_bytes());
@@ -175,9 +151,9 @@ fn emit_exe(launcher: &Path, cwasm: &[u8], output: &Path) -> Result<(), String> 
             .map_err(|error| format!("failed to chmod {}: {error}", output.display()))?;
     }
 
-    // On macOS we do NOT re-sign. The launcher stub carries an ad-hoc signature
-    // from the linker whose code-limit covers the original image; our payload is
-    // appended *past* that limit, so the signature stays valid and the loader
+    // On macOS we do NOT re-sign. The embedded launcher image carries an ad-hoc
+    // signature from the linker whose code-limit covers the original image; our
+    // payload is appended *past* that limit, so the signature stays valid and the loader
     // ignores the trailing bytes (the launcher reads them via `current_exe`).
     // `codesign --force` would in fact reject the result ("data after signature"),
     // so leaving the original signature in place is both correct and necessary.
@@ -226,14 +202,12 @@ fn cli() -> Result<(), String> {
         Mode::Compile {
             input_path,
             output_path,
-            launcher,
         } => {
             let module = compile_file(timeout, &print, &input_path)?;
             let cwasm = to_cwasm(&module)?;
-            let stub = locate_launcher(launcher.as_deref())?;
             let output = output_path.unwrap_or_else(|| exe_output_path(&input_path));
 
-            emit_exe(&stub, &cwasm, &output)?;
+            emit_exe(&cwasm, &output)?;
         }
     }
 

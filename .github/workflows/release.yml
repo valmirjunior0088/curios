@@ -19,15 +19,18 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-24.04
-            binary: curios
+            binary: curios-compiler
+            runtime: curios-runtime
             asset: curios-linux-x86_64
           - target: aarch64-apple-darwin
             runner: macos-14
-            binary: curios
+            binary: curios-compiler
+            runtime: curios-runtime
             asset: curios-macos-aarch64
           - target: x86_64-pc-windows-msvc
             runner: windows-2025
-            binary: curios.exe
+            binary: curios-compiler.exe
+            runtime: curios-runtime.exe
             asset: curios-windows-x86_64.exe
 
     steps:
@@ -41,8 +44,16 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
+      # Build the slim launcher first and embed it (mirrors the Makefile; done
+      # inline so it works on the Windows runner, which has no `make`). The
+      # compiler then bundles this stub into every executable it emits, so the
+      # released `curios-compiler` is fully self-contained.
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        shell: bash
+        run: |
+          cargo build --release --target ${{ matrix.target }} -p curios-runtime
+          cp target/${{ matrix.target }}/release/${{ matrix.runtime }} curios-compiler/src/runtime
+          cargo build --release --target ${{ matrix.target }} -p curios-compiler
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -68,9 +79,9 @@ jobs:
 
       - name: Rename artifacts
         run: |
-          mv artifacts/curios-linux-x86_64/curios curios-linux-x86_64
-          mv artifacts/curios-macos-aarch64/curios curios-macos-aarch64
-          mv artifacts/curios-windows-x86_64.exe/curios.exe curios-windows-x86_64.exe
+          mv artifacts/curios-linux-x86_64/curios-compiler curios-linux-x86_64
+          mv artifacts/curios-macos-aarch64/curios-compiler curios-macos-aarch64
+          mv artifacts/curios-windows-x86_64.exe/curios-compiler.exe curios-windows-x86_64.exe
 
       - name: Create release
         env:

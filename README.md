@@ -60,15 +60,22 @@ See [SYNTAX.md](SYNTAX.md) for the full language reference.
 
 Binaryen is built only by the crates that need it. For fast iteration on the compiler alone you can build `cargo build -p curios` (pure Rust, no Binaryen/CMake); the slim launcher `cargo build -p curios-runtime` likewise needs neither Binaryen nor Cranelift.
 
+### Download a pre-built binary
+
+If you'd rather not build from source, a pre-built `curios-compiler` for your platform is published on the [GitHub releases page](https://github.com/valmirjunior0088/curios/releases). It's a single self-contained binary with the launcher embedded. Download it and skip straight to [Run a program](#run-a-program).
+
 ### Build
+
+The compiler embeds the slim runtime launcher at build time, so generate it with `make` first, then build with `cargo` as usual:
 
 ```sh
 git clone https://github.com/valmirjunior0088/curios
 cd curios
-cargo build --release            # builds the whole workspace
+make                             # generate the embedded launcher (curios-compiler/src/runtime)
+cargo build --release -p curios-compiler
 ```
 
-This produces two binaries in `target/release/`: `curios-compiler` (the CLI) and `curios-runtime` (the launcher stub the CLI appends to when building executables).
+This produces `target/release/curios-compiler` — a single self-contained CLI with the launcher embedded.
 
 ### Run a program
 
@@ -99,7 +106,7 @@ cargo run -p curios-compiler --release -- compile hello.crs -o hello
 ./hello
 ```
 
-A compiled executable is the `curios-runtime` launcher stub with the program's precompiled module appended to it, so it runs standalone (the `curios-runtime` binary must be available next to `curios-compiler`, or pointed at with `--launcher` / `$CURIOS_LAUNCHER`, at compile time).
+A compiled executable is the slim launcher stub — embedded inside `curios-compiler` itself — with the program's precompiled module appended to it, so it runs standalone. The launcher is baked in at compile time, so `curios-compiler` needs no companion files to build executables.
 
 ## Repository layout
 

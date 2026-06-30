@@ -1,30 +1,22 @@
 //! End-to-end test of the `compile` subcommand's bundler: compile a program to a
 //! native executable, run it, and check its output.
 //!
-//! Gated with `#[ignore]` because it execs a produced binary and needs the
-//! `curios-runtime` launcher stub built alongside the compiler. Run it with:
+//! Gated with `#[ignore]` because it execs a produced binary. The compiler embeds
+//! its launcher, so the produced executable is self-contained — but the compiler
+//! itself only builds once `make` has generated `curios-compiler/src/runtime`. Run
+//! it with:
 //!
 //! ```sh
-//! cargo build --workspace
+//! make
 //! cargo test -p curios-compiler --test bundle -- --ignored
 //! ```
 
-use std::{fs, path::Path, process::Command};
+use std::{fs, process::Command};
 
 #[test]
-#[ignore = "execs a produced executable; needs `cargo build --workspace` first"]
+#[ignore = "execs a produced executable; build the compiler with `make` first"]
 fn compile_produces_a_runnable_executable() {
     let compiler = env!("CARGO_BIN_EXE_curios-compiler");
-    let bin_dir = Path::new(compiler)
-        .parent()
-        .expect("compiler binary has a parent directory");
-
-    let launcher = bin_dir.join("curios-runtime");
-    assert!(
-        launcher.exists(),
-        "launcher stub {} not found — run `cargo build --workspace` first",
-        launcher.display()
-    );
 
     let dir = std::env::temp_dir();
     let source = dir.join("curios_bundle_e2e.crs");
