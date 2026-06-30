@@ -52,7 +52,7 @@ then, in curios-compiler:
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `curios/src/text/`                             | Lexer/parser, surface AST, lowering to core (`to_core/`)                                                                                         |
 | `curios/src/core/`                             | Core language: elaboration, typing, reduction, conversion, inductives, erasure, zonking                                                          |
-| `curios/src/ersd/`                             | Erased IR (post type-erasure); ersd→ersd optimization (`optm/`: prune, accumulators, offsets); lowering to CPS (`to_cont/`)                      |
+| `curios/src/ersd/`                             | Erased IR (post type-erasure); ersd→ersd optimization (`optm/`: prune, the `worker_wrapper` engine — monoid accumulator + suffix cursor — over a shared `call_graph`/`suffix_view`); lowering to CPS (`to_cont/`) |
 | `curios/src/cont/`                             | Continuation-passing IR; cont→cont optimization (`optm/`: inlining, DCE, copy/tag/jump threading, tail recursion, …); wasm emission (`to_wasm/`) |
 | `curios/src/wasm/`                             | Wasm module model, parser, binary writer/encoder                                                                                                 |
 | `curios/src/driver.rs`                         | Pipeline driver: `compile_entrypoint`, `typecheck_entrypoint`, `Stage`                                                                           |

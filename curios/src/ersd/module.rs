@@ -1,4 +1,4 @@
-use super::Term;
+use {super::Term, std::collections::BTreeSet};
 
 /// A top-level item of a [`Module`]: a single `let` definition, or a `rec` group
 /// of mutually-recursive definitions. The flat, name-keyed mirror of `core::Item`
@@ -14,6 +14,45 @@ pub enum Item {
         names: Vec<String>,
         items: Vec<Term>,
     },
+}
+
+impl Item {
+    /// The names this item declares — one for a `let`, the whole group for a `rec`.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        match self {
+            Item::Let { name, .. } => std::slice::from_ref(name),
+            Item::Rec { names, .. } => names.as_slice(),
+        }
+        .iter()
+        .map(String::as_str)
+    }
+
+    /// The free names this item's body (or, for a `rec` group, every member)
+    /// references. See [`Term::free_names`].
+    pub fn free_names(&self) -> BTreeSet<String> {
+        match self {
+            Item::Let { body, .. } => body.free_names(),
+            Item::Rec { items, .. } => items.iter().flat_map(Term::free_names).collect(),
+        }
+    }
+
+    /// Whether evaluating this item could perform an effect — directly, anywhere in
+    /// its body (or any member). See [`Term::contains_effect`].
+    pub fn contains_effect(&self) -> bool {
+        match self {
+            Item::Let { body, .. } => body.contains_effect(),
+            Item::Rec { items, .. } => items.iter().any(Term::contains_effect),
+        }
+    }
+
+    /// Whether binding this item performs no action (see [`Term::is_synchronous`]);
+    /// a `rec` group is synchronous only if every member is.
+    pub fn is_synchronous(&self) -> bool {
+        match self {
+            Item::Let { body, .. } => body.is_synchronous(),
+            Item::Rec { items, .. } => items.iter().all(Term::is_synchronous),
+        }
+    }
 }
 
 /// The erased program: a flat list of top-level `items` plus the entrypoint

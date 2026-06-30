@@ -1,7 +1,4 @@
-use {
-    crate::ersd::{Item, Module, NatMatch, Subterm, Term},
-    std::collections::{BTreeSet, HashMap, HashSet},
-};
+use crate::ersd::{Item, Module, optm::call_graph::CallGraph};
 
 /// Drop top-level items that neither contribute to the entrypoint nor perform an
 /// effect.
@@ -33,159 +30,39 @@ use {
 pub fn prune_unreachable(module: &mut Module) {
     let count = module.items.len();
 
-    // Every declared name to the item that owns it (a `rec` group's members all
-    // map to the one group node).
-    let owner = module
-        .items
-        .iter()
-        .enumerate()
-        .flat_map(|(index, item)| item_names(item).map(move |name| (name.to_owned(), index)))
-        .collect::<HashMap<String, usize>>();
+    // The reference graph + transitive effect taint. `tainted[i]` means evaluating
+    // item `i` could perform an effect — directly, or via a reference to something
+    // that does (calling/forcing which runs one).
+    let graph = CallGraph::build(module);
 
-    let edge = |name: &str| owner.get(name).copied();
-    let references = |names: BTreeSet<String>| {
-        names
-            .iter()
-            .filter_map(|name| edge(name))
-            .collect::<HashSet<usize>>()
-    };
-
-    // The items each item references, and whether it is synchronous / directly
-    // effectful (its body contains a host or cell op anywhere — even under a
-    // lambda, since calling that lambda would run it).
-    let refs = module
-        .items
-        .iter()
-        .map(|item| references(item_free_names(item)))
-        .collect::<Vec<HashSet<usize>>>();
+    // Whether each item is synchronous: bound without evaluating an effect (a
+    // closure, name, or atom). Non-synchronous tainted items are run for effect by
+    // the eager top-level init even when their result is unused.
     let synchronous = module
         .items
         .iter()
-        .map(item_is_synchronous)
+        .map(Item::is_synchronous)
         .collect::<Vec<bool>>();
-
-    // `tainted[i]`: evaluating item `i` could perform an effect — it contains one
-    // directly, or it references a tainted item (calling/forcing which runs one).
-    // Seed from the directly-effectful items and propagate along reverse edges.
-    let mut referrers = vec![Vec::<usize>::new(); count];
-    for (referrer, set) in refs.iter().enumerate() {
-        for &referee in set {
-            referrers[referee].push(referrer);
-        }
-    }
-    let mut tainted = vec![false; count];
-    let mut work = (0..count)
-        .filter(|&i| item_contains_effect(&module.items[i]))
-        .collect::<Vec<usize>>();
-    while let Some(i) = work.pop() {
-        if tainted[i] {
-            continue;
-        }
-        tainted[i] = true;
-        work.extend(referrers[i].iter().copied());
-    }
 
     // Keep what the entrypoint reaches, plus every item the eager top-level init
     // runs for effect (a non-synchronous tainted item) — and, transitively,
     // everything those reach, so no kept body references a dropped definition.
     let mut reachable = vec![false; count];
-    let mut work = references(module.body.free_names())
+    let mut work = graph
+        .references(&module.body.free_names())
         .into_iter()
-        .chain((0..count).filter(|&i| !synchronous[i] && tainted[i]))
+        .chain((0..count).filter(|&i| !synchronous[i] && graph.is_tainted(i)))
         .collect::<Vec<usize>>();
     while let Some(i) = work.pop() {
         if reachable[i] {
             continue;
         }
         reachable[i] = true;
-        work.extend(refs[i].iter().copied());
+        work.extend(graph.refs_of(i).iter().copied());
     }
 
     let mut keep = reachable.into_iter();
     module.items.retain(|_| keep.next().unwrap());
-}
-
-/// The names an item declares.
-fn item_names(item: &Item) -> impl Iterator<Item = &str> {
-    match item {
-        Item::Let { name, .. } => std::slice::from_ref(name),
-        Item::Rec { names, .. } => names.as_slice(),
-    }
-    .iter()
-    .map(String::as_str)
-}
-
-/// The free names an item's body (or, for a `rec` group, every member) references.
-fn item_free_names(item: &Item) -> BTreeSet<String> {
-    match item {
-        Item::Let { body, .. } => body.free_names(),
-        Item::Rec { items, .. } => items.iter().flat_map(Term::free_names).collect(),
-    }
-}
-
-/// Whether binding this item performs no action — it is a closure, name, or atom,
-/// allocated without evaluating an effect. Mirrors `to_cont`'s `is_synchronous`;
-/// a `rec` group is synchronous only if every member is.
-fn item_is_synchronous(item: &Item) -> bool {
-    match item {
-        Item::Let { body, .. } => is_synchronous(body),
-        Item::Rec { items, .. } => items.iter().all(is_synchronous),
-    }
-}
-
-/// Whether evaluating this item could perform an effect.
-fn item_contains_effect(item: &Item) -> bool {
-    match item {
-        Item::Let { body, .. } => contains_effect(body),
-        Item::Rec { items, .. } => items.iter().any(contains_effect),
-    }
-}
-
-fn is_synchronous(term: &Term) -> bool {
-    matches!(
-        term.as_subterm(),
-        Subterm::Func(_)
-            | Subterm::Erased
-            | Subterm::Unreachable
-            | Subterm::Atom(_)
-            | Subterm::Name(_)
-    )
-}
-
-/// Whether `term` contains an effectful primitive anywhere — including under a
-/// lambda, since a closure that performs an effect performs it when *called*, and
-/// the caller's evaluation is what we are classifying.
-fn contains_effect(term: &Term) -> bool {
-    match term.as_subterm() {
-        Subterm::Prim(prim) => {
-            prim.is_effectful() || prim.operands().iter().any(|t| contains_effect(t))
-        }
-        Subterm::Func(func) => contains_effect(&func.body),
-        Subterm::Apply(apply) => {
-            contains_effect(&apply.head) || apply.params.iter().any(contains_effect)
-        }
-        Subterm::Tuple(tuple) => tuple.fields.iter().any(contains_effect),
-        Subterm::Proj(proj) => contains_effect(&proj.head),
-        Subterm::Match(m) => contains_effect(&m.head) || m.cases.iter().any(contains_effect),
-        Subterm::NatMatch(NatMatch::Induction {
-            head,
-            zero_case,
-            succ_case,
-            ..
-        }) => contains_effect(head) || contains_effect(zero_case) || contains_effect(succ_case),
-        Subterm::NatMatch(NatMatch::Dispatch {
-            head,
-            cases,
-            default,
-        }) => {
-            contains_effect(head)
-                || cases.iter().any(|(_, case)| contains_effect(case))
-                || contains_effect(default)
-        }
-        Subterm::Let(let_) => contains_effect(&let_.body) || contains_effect(&let_.tail),
-        Subterm::Rec(rec) => rec.items.iter().any(contains_effect) || contains_effect(&rec.tail),
-        Subterm::Name(_) | Subterm::Atom(_) | Subterm::Erased | Subterm::Unreachable => false,
-    }
 }
 
 #[cfg(test)]
@@ -199,7 +76,7 @@ mod tests {
         module
             .items
             .iter()
-            .flat_map(|item| item_names(item).map(str::to_owned).collect::<Vec<_>>())
+            .flat_map(|item| item.names().map(str::to_owned).collect::<Vec<_>>())
             .collect()
     }
 

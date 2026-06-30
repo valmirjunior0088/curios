@@ -106,6 +106,71 @@ impl Term {
 
         names
     }
+
+    /// Whether this term contains an effectful primitive anywhere — including
+    /// under a lambda, since a closure that performs an effect performs it when
+    /// *called*, and the caller's evaluation is what this classifies. The
+    /// impurity boundary is exactly [`Prim::is_effectful`] (`Host`/`Cell`);
+    /// everything in `PurePrim` is pure by construction.
+    ///
+    /// This is the intra-term half of the purity question shared between
+    /// `optm::prune` (which seeds its effect taint with it) and
+    /// `optm::worker_wrapper` (whose `MonoidAccumulator` gate rejects an
+    /// absorbed context that is not pure). The transitive half — following an
+    /// `Apply` to another module item — lives in `optm::call_graph`.
+    pub fn contains_effect(&self) -> bool {
+        match self.as_subterm() {
+            Subterm::Prim(prim) => {
+                prim.is_effectful() || prim.operands().iter().any(|t| t.contains_effect())
+            }
+            Subterm::Func(func) => func.body.contains_effect(),
+            Subterm::Apply(apply) => {
+                apply.head.contains_effect() || apply.params.iter().any(Term::contains_effect)
+            }
+            Subterm::Tuple(tuple) => tuple.fields.iter().any(Term::contains_effect),
+            Subterm::Proj(proj) => proj.head.contains_effect(),
+            Subterm::Match(m) => {
+                m.head.contains_effect() || m.cases.iter().any(Term::contains_effect)
+            }
+            Subterm::NatMatch(NatMatch::Induction {
+                head,
+                zero_case,
+                succ_case,
+                ..
+            }) => {
+                head.contains_effect() || zero_case.contains_effect() || succ_case.contains_effect()
+            }
+            Subterm::NatMatch(NatMatch::Dispatch {
+                head,
+                cases,
+                default,
+            }) => {
+                head.contains_effect()
+                    || cases.iter().any(|(_, case)| case.contains_effect())
+                    || default.contains_effect()
+            }
+            Subterm::Let(let_) => let_.body.contains_effect() || let_.tail.contains_effect(),
+            Subterm::Rec(rec) => {
+                rec.items.iter().any(Term::contains_effect) || rec.tail.contains_effect()
+            }
+            Subterm::Name(_) | Subterm::Atom(_) | Subterm::Erased | Subterm::Unreachable => false,
+        }
+    }
+
+    /// Whether binding this term performs no action — it is a closure, name, or
+    /// atom, allocated without evaluating an effect. `to_cont` lowers such terms
+    /// into the flat top-level loop rather than the CPS path, and `optm::prune`
+    /// keeps a non-synchronous tainted item for its eager init effect.
+    pub fn is_synchronous(&self) -> bool {
+        matches!(
+            self.as_subterm(),
+            Subterm::Func(_)
+                | Subterm::Erased
+                | Subterm::Unreachable
+                | Subterm::Atom(_)
+                | Subterm::Name(_)
+        )
+    }
 }
 
 impl Deref for Term {

@@ -1,4 +1,11 @@
-use {super::*, crate::Entropy, std::collections::HashMap};
+use {
+    super::*,
+    crate::{
+        Entropy,
+        ersd::optm::{Carrier, SuffixRead},
+    },
+    std::collections::HashMap,
+};
 
 /// Slice forwarding: re-base an aggregate access made through a slice onto the
 /// slice's underlying buffer, so the slice never has to be materialised.
@@ -8,22 +15,17 @@ use {super::*, crate::Entropy, std::collections::HashMap};
 /// re-slicing the original buffer at every step: `tail := slice(xs, len - i, len)`.
 /// A slice is an `array.new` + `array.copy` (`cont::to_wasm`), so a fold that
 /// consumes its tail copies an `i`-long suffix on iteration `i` — `Θ(n²)` over the
-/// whole walk. But a slice is only ever *read* through three primitives, and each
-/// reads through to the base in `O(1)`:
-///
-/// ```text
-/// len(  slice(b, s, e)    )   ⟶   e − s
-/// get(  slice(b, s, e), j )   ⟶   get(b, s + j)
-/// slice(slice(b, s, e), p, q) ⟶   slice(b, s + p, s + q)
-/// ```
+/// whole walk. But a slice is only ever *read* through the three suffix-view
+/// primitives, each reading through to the base in `O(1)` — see the canonical
+/// re-base laws in [`suffix_view`](crate::ersd::optm::suffix_view).
 ///
 /// Rewriting each consumer this way drops the slice's last use; the now-dead
 /// pure slice is reclaimed by the dead-code sweep that follows, turning the
-/// quadratic fold linear. A consumer that is *not* one of these three — a closure
-/// call, a host write, `concat`/`append`/`flatten`/`eql` — keeps the slice, so an
-/// escaping tail still materialises exactly once (the irreducible cost). The
-/// `slice(slice(..))` rule re-bases through to the deepest buffer, so a chain of
-/// sub-slices collapses to a single re-based access in one pass.
+/// quadratic fold linear. A consumer that is *not* one of the three suffix reads —
+/// a closure call, a host write, `concat`/`append`/`flatten`/`eql` — keeps the
+/// slice, so an escaping tail still materialises exactly once (the irreducible
+/// cost). The `slice(slice(..))` rule re-bases through to the deepest buffer, so a
+/// chain of sub-slices collapses to a single re-based access in one pass.
 ///
 /// Soundness rides on the same premise as [`simplify_maps`](super::simplify_maps):
 /// aggregates are immutable, so `b[s + j] == slice(b, s, e)[j]` for every in-bounds
@@ -39,15 +41,6 @@ pub fn forward_slices(module: &mut Module) {
     for (_, clsr) in module.clsrs_mut() {
         forward_in_region(&mut clsr.region, &mut HashMap::new(), &offsets);
     }
-}
-
-/// Whether a tracked binding is an `Arr` slice or a `Bin` slice — a consumer only
-/// forwards through a slice of its own carrier, though well-typed code can never
-/// mix them.
-#[derive(Clone, Copy, PartialEq)]
-enum Carrier {
-    Arr,
-    Bin,
 }
 
 /// A binding known to be `slice(base, start, end)` of the given carrier. Every
@@ -121,37 +114,58 @@ fn forward_in_region(
 /// into `prelude`, which is spliced in just before this binding); a fresh slice
 /// is registered under `name`; everything else passes through untouched.
 fn forward_eval(name: &ValueName, code: Code, ctx: &mut ForwardCtx) -> Value {
-    match code {
-        Code::ArrLen(operand) => match lookup(ctx.slices, &operand, Carrier::Arr) {
+    let Some((operand, carrier, read)) = classify(&code) else {
+        return Value::Eval(code);
+    };
+
+    match read {
+        // `len(slice(b, s, e))` ⟶ `e − s`.
+        SuffixRead::Len => match lookup(ctx.slices, &operand, carrier) {
             Some(slice) => Value::Eval(Code::NatSub(slice.end, slice.start)),
-            None => Value::Eval(Code::ArrLen(operand)),
+            None => Value::Eval(code),
         },
-        Code::BinLen(operand) => match lookup(ctx.slices, &operand, Carrier::Bin) {
-            Some(slice) => Value::Eval(Code::NatSub(slice.end, slice.start)),
-            None => Value::Eval(Code::BinLen(operand)),
-        },
-        Code::ArrGet(operand, index) => match lookup(ctx.slices, &operand, Carrier::Arr) {
+        // `get(slice(b, s, e), j)` ⟶ `get(b, s + j)`.
+        SuffixRead::Get(index) => match lookup(ctx.slices, &operand, carrier) {
             Some(slice) => {
                 let offset = rebased_index(&slice.start, &index, ctx);
-                Value::Eval(Code::ArrGet(slice.base, offset))
+                Value::Eval(rebuild_get(carrier, slice.base, offset))
             }
-            None => Value::Eval(Code::ArrGet(operand, index)),
+            None => Value::Eval(code),
         },
-        Code::BinGet(operand, index) => match lookup(ctx.slices, &operand, Carrier::Bin) {
-            Some(slice) => {
-                let offset = rebased_index(&slice.start, &index, ctx);
-                Value::Eval(Code::BinGet(slice.base, offset))
-            }
-            None => Value::Eval(Code::BinGet(operand, index)),
-        },
-        Code::ArrSlice(operand, start, end) => {
-            forward_slice(name, Carrier::Arr, operand, start, end, ctx)
-        }
-        Code::BinSlice(operand, start, end) => {
-            forward_slice(name, Carrier::Bin, operand, start, end, ctx)
-        }
-        other => Value::Eval(other),
+        // `slice(b, p, q)` — re-base onto the deepest base and register `name`.
+        SuffixRead::Slice(start, end) => forward_slice(name, carrier, operand, start, end, ctx),
     }
+}
+
+/// Classify an `Eval`'d `Code` as a [`SuffixRead`] of some operand buffer, if it is
+/// one: the operand that might resolve to a slice, its carrier, and which of the
+/// three reads it performs. Anything else is left for the caller to pass through.
+fn classify(code: &Code) -> Option<(ValueName, Carrier, SuffixRead<ValueName>)> {
+    Some(match code {
+        Code::ArrLen(operand) => (operand.clone(), Carrier::Arr, SuffixRead::Len),
+        Code::BinLen(operand) => (operand.clone(), Carrier::Bin, SuffixRead::Len),
+        Code::ArrGet(operand, index) => (
+            operand.clone(),
+            Carrier::Arr,
+            SuffixRead::Get(index.clone()),
+        ),
+        Code::BinGet(operand, index) => (
+            operand.clone(),
+            Carrier::Bin,
+            SuffixRead::Get(index.clone()),
+        ),
+        Code::ArrSlice(operand, start, end) => (
+            operand.clone(),
+            Carrier::Arr,
+            SuffixRead::Slice(start.clone(), end.clone()),
+        ),
+        Code::BinSlice(operand, start, end) => (
+            operand.clone(),
+            Carrier::Bin,
+            SuffixRead::Slice(start.clone(), end.clone()),
+        ),
+        _ => return None,
+    })
 }
 
 /// Forward (and register) a slice binding. When its operand is itself a slice,
@@ -202,6 +216,13 @@ fn rebuild_slice(carrier: Carrier, base: ValueName, start: ValueName, end: Value
     match carrier {
         Carrier::Arr => Code::ArrSlice(base, start, end),
         Carrier::Bin => Code::BinSlice(base, start, end),
+    }
+}
+
+fn rebuild_get(carrier: Carrier, base: ValueName, index: ValueName) -> Code {
+    match carrier {
+        Carrier::Arr => Code::ArrGet(base, index),
+        Carrier::Bin => Code::BinGet(base, index),
     }
 }
 

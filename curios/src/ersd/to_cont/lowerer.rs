@@ -38,27 +38,6 @@ impl<'a> Lowerer<'a> {
     }
 }
 
-/// Whether a top-level `let` body can be lowered *synchronously* by
-/// `lower_pure_name` — i.e. it produces a value with no resume block, so its
-/// continuation runs in the same stack frame. Conservatively limited to the forms
-/// that are pure at any depth (a `Func` always is: its body lowers into its own
-/// region). Everything else (prims, tuples, projections, and computational
-/// `Apply`/`Match`/`NatMatch`) takes the CPS path in `lower_module_items`.
-///
-/// This is what keeps the flat-module lowering off the native stack: the prelude
-/// is overwhelmingly functions and (erased) types, all synchronous, so they fold
-/// into a flat loop; only the rare non-synchronous top-level `let` recurses.
-fn is_synchronous(term: &ersd::Term) -> bool {
-    matches!(
-        &**term,
-        ersd::Subterm::Func(_)
-            | ersd::Subterm::Erased
-            | ersd::Subterm::Unreachable
-            | ersd::Subterm::Atom(_)
-            | ersd::Subterm::Name(_)
-    )
-}
-
 /// A unit of lowering work: the shared [`Lowerer`] (module + closure names) paired with the
 /// region currently being emitted into. Threading one `Work` instead of a `Lowerer` and an
 /// `Emit` separately keeps the per-primitive helpers down to their operands plus a continuation.
@@ -844,7 +823,9 @@ impl Work<'_, '_, '_> {
             match &items[index] {
                 // A `rec` group of only synchronous members (mutually-recursive
                 // functions — the common case) lowers in place, no recursion.
-                ersd::Item::Rec { names, items: defs } if defs.iter().all(is_synchronous) => {
+                ersd::Item::Rec { names, items: defs }
+                    if defs.iter().all(ersd::Term::is_synchronous) =>
+                {
                     frame = self.lower_letrec_bindings(names, defs.iter(), &frame);
                     index += 1;
                 }
@@ -867,7 +848,7 @@ impl Work<'_, '_, '_> {
                 ersd::Item::Let {
                     name,
                     body: let_body,
-                } if is_synchronous(let_body) => {
+                } if let_body.is_synchronous() => {
                     let value = self.lower_pure_name(let_body, &frame);
                     frame.push(name.clone(), value);
                     index += 1;
