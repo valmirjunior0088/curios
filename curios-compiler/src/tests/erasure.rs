@@ -195,7 +195,7 @@ fn erased_indexed_relevant_repro() {
             let go =
                 match k : (k) => (d : Nat) -> Box(m)
                 | 0 => (d) => Box/mk(m)
-                | kp + 1, ih => (d) => Box/mk(m)
+                | kp + 1; ih => (d) => Box/mk(m)
                 end;
             go(0);
         let g = f;

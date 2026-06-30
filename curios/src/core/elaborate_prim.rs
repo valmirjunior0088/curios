@@ -1,4 +1,6 @@
-use super::{Context, Error, Mode, Prim, Subterm, Term, elaborate, expect, reduce_with};
+use super::{
+    Context, Error, ImplicitOrigin, Mode, Prim, Subterm, Term, elaborate, expect, reduce_with,
+};
 
 /// Elaborate both operands of a homogeneous binary primitive at `operand`, then
 /// rebuild the variant through its constructor (`build`) and pair it with
@@ -45,6 +47,24 @@ fn infer_bin(context: &mut Context, bin: &Term) -> Result<Term, Error> {
 
 fn arr_type(elem: Term) -> Term {
     Subterm::Prim(Prim::ArrType(elem)).into()
+}
+
+/// Check every element of an `Arr` literal against an already-determined element
+/// type, returning the rebuilt elements. Shared by the two ways the element type
+/// is fixed: borrowed from `expected` when checking, or a fresh metavar when
+/// inferring (see [`elaborate_prim`] and [`synth_prim`]'s `Arr` arm).
+fn check_arr_elems(
+    context: &mut Context,
+    elems: &[Term],
+    elem_type: &Term,
+) -> Result<Vec<Term>, Error> {
+    let mut elaborated = Vec::with_capacity(elems.len());
+
+    for elem in elems {
+        elaborated.push(elaborate(context, elem, Mode::Check(elem_type.clone()))?.0);
+    }
+
+    Ok(elaborated)
 }
 
 /// Synthesize a primitive's type, checking *and rebuilding* its operands. Mirrors
@@ -178,7 +198,23 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;
             (Prim::ArrType(elem), Term::type_())
         }
-        Prim::Arr(_) => return Err(Error::CannotInferLiteral),
+        // Inferring: the element type is unknown, so mint a fresh metavar — the
+        // implicit `@T` a `nil`/`cons` constructor would insert — which the elements
+        // solve (an empty `[||]` leaves it for a later unification to ground, exactly
+        // as the old `Arr/nil()` did). Checking goes through `elaborate_prim`, which
+        // borrows the concrete element type from `expected` before reaching here.
+        Prim::Arr(elems) => {
+            let elem_type = context.fresh_metavar(
+                Term::type_(),
+                None,
+                ImplicitOrigin {
+                    func: "Arr".to_string(),
+                    binder: "T".to_string(),
+                },
+            );
+            let elaborated = check_arr_elems(context, elems, &elem_type)?;
+            (Prim::Arr(elaborated), arr_type(elem_type))
+        }
         Prim::ArrLen(type_, list) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
             let list_type = arr_type(type_.clone());
@@ -433,23 +469,18 @@ pub fn elaborate_prim(
     prim: &Prim,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // `Arr` is the one naturally-checked primitive: it borrows its element type
-    // from `expected` and cannot synthesize.
-    if let Prim::Arr(elems) = prim {
-        let Mode::Check(expected) = &mode else {
-            return Err(Error::CannotInferLiteral);
-        };
-
+    // `Arr` is bidirectional. Checking, it borrows the concrete element type from
+    // `expected` — definitional, so each element is checked against the known type
+    // (better errors, and numeric element literals pick the right numeric type).
+    // Inferring, it falls through to `synth_prim`, which mints a fresh element-type
+    // metavar instead — mirroring how a `Lst` literal synthesizes its element type.
+    if let (Prim::Arr(elems), Mode::Check(expected)) = (prim, &mode) {
         let elem_type = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
             Subterm::Prim(Prim::ArrType(elem_type)) => elem_type,
             other => return Err(Error::type_mismatch(other, expected.clone())),
         };
 
-        let mut elaborated = Vec::with_capacity(elems.len());
-
-        for elem in elems {
-            elaborated.push(elaborate(context, elem, Mode::Check(elem_type.clone()))?.0);
-        }
+        let elaborated = check_arr_elems(context, elems, &elem_type)?;
 
         return Ok((Term::prim(Prim::Arr(elaborated)), expected.clone()));
     }

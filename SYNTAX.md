@@ -27,7 +27,8 @@ Option/some(x)         -- qualified member
 | Char               | `'c'`, `'\n'`, `'\''`                   | A fixed `Nat` codepoint (monomorphic). Escapes: `\n \t \r \\ \'`.                                                                                                                                                      |
 | String             | `"hi"`, `"a\tb\n"`                      | A `Str`. Escapes: `\n \t \r \\ \"`.                                                                                                                                                                                    |
 | Bytestring (`Bin`) | `\48\69`, `\\`                          | Each byte is `\` followed by exactly two hex digits. The empty bytestring is `\\`.                                                                                                                                     |
-| List               | `[]`, `[1, 2, 3]`                       | Sugar producing a `Lst`.                                                                                                                                                                                               |
+| List               | `[]`, `[1, 2, 3]`                       | Sugar producing a `Lst` (a linked cons-spine).                                                                                                                                                                         |
+| Array (`Arr`)      | `[||]`, `[|1, 2, 3|]`                   | The native contiguous sequence. Element-type-checked: it borrows `Arr(T)`'s `T` from the expected type, and a non-empty literal can also synthesize `T` from its elements — but a bare empty `[||]` with no expected type cannot, so annotate it (`[||] : Arr(Nat)`).                                            |
 | Boolean            | `true`, `false`                         | Keywords.                                                                                                                                                                                                              |
 
 ## Types and sorts
@@ -140,10 +141,12 @@ match cond | true => a | false => b end
 
 ```
 match n : (m) => Lte(m, m)
-| 0          => Lte/z()
-| pred + 1, ih => Lte/s(ih)
+| 0           => Lte/z()
+| pred + 1; ih => Lte/s(ih)
 end
 ```
+
+The `;` separates the scrutinee's shape (`pred + 1`) from the induction hypothesis `ih` (the recursive result on `pred`).
 
 **Nat — switch/dispatch** (literal cases plus a mandatory `_` default):
 
@@ -155,21 +158,21 @@ match d
 end
 ```
 
-**`Arr` fold** (empty arm uses `[]`; cons arm binds head, tail, and the recursive result):
+**`Arr` fold** (empty arm uses the empty-array literal `[||]`; the cons arm `head, ..tail; ih` peels the leading element `head` off the rest `tail`, with `ih` the fold of `tail`):
 
 ```
 match a
-| []                  => base
-| (head, tail), ih    => step(head, ih)
+| [||]              => base
+| head, ..tail; ih  => step(head, ih)
 end
 ```
 
-**`Bin` fold** (identical, but the empty arm is the empty bytestring `\\`):
+**`Bin` fold** (identical, but the empty arm is the empty bytestring `\\` and `head` is the leading byte, a `Nat`):
 
 ```
 match b
-| \\                  => base
-| (head, tail), ih    => step(head, ih)
+| \\                => base
+| head, ..tail; ih  => step(head, ih)
 end
 ```
 

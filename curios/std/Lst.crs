@@ -57,11 +57,11 @@ pub let to_arr(@A : Type, l : Lst(A)) -> Arr(A) =
         match n < 2
         | true =>
             match rest
-            | nil() => (Arr/nil(), rest)
+            | nil() => ([||], rest)
             | cons(x, tail) =>
                 match n == 0
-                | true => (Arr/nil(), rest)
-                | false => (Arr/single(x), tail)
+                | true => ([||], rest)
+                | false => ([|x|], tail)
                 end
             end
         | false =>

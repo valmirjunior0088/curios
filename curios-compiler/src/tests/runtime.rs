@@ -89,7 +89,7 @@ fn triangular_sum() {
         let result : std/Nat =
             match 5 : std/Nat
             | 0 => 0
-            | pred + 1, ih => std/Nat/add(ih, pred)
+            | pred + 1; ih => std/Nat/add(ih, pred)
             end;
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(result)))
         "#;

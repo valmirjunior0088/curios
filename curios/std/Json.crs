@@ -81,7 +81,7 @@ let take_literal(literal : Str) -> Parse({}) =
         let r =
             match Bin/len(lit) : {Nat, Bln}
             | 0 => (pos, true)
-            | step + 1, ih =>
+            | step + 1; ih =>
                 match ih.1
                 | false => ih
                 | true =>

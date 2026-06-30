@@ -14,7 +14,7 @@ fn optimizes_to_a_smaller_valid_module() {
         rec sum(n : /std/Nat) -> /std/Nat =
             match n : /std/Nat
             | 0 => 0
-            | pred + 1, ih => /std/Nat/add(/std/Nat/succ(pred), ih)
+            | pred + 1; ih => /std/Nat/add(/std/Nat/succ(pred), ih)
             end;
 
         /std/Fmt/printf("%d")(sum(10))

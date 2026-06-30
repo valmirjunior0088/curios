@@ -1,5 +1,5 @@
 pub use /sys/{Arr};
-pub use /sys/Arr/{len, slice, append, concat, flatten, map, nil, single};
+pub use /sys/Arr/{len, slice, append, concat, flatten, map};
 use /std/{Nat, Option, Eq};
 
 pub let at(@T : Type, a : Arr(T), i : Nat, ok : Nat/Lt(i, len(a))) -> T =
@@ -11,15 +11,12 @@ pub let get(@T : Type, a : Arr(T), i : Nat) -> Option(T) =
     | false => Option/none()
     end;
 
-pub let cons(@A : Type, x : A, xs : Arr(A)) -> Arr(A) =
-    concat(single(x), xs);
-
 pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
     let n = len(arr);
     rec go(k : Nat, i : Nat, acc : A, inv : Eq(i + k, n)) -> A =
         match k
         | 0 => acc
-        | kp + 1, ih =>
+        | kp + 1; ih =>
             go(kp, i + 1,
                 f(at(arr, i, Eq/subst((x) => Nat/Lt(i, x), inv, Nat/lte_to_lt_succ(Nat/lte_add_r(i, kp)))), acc),
                 inv)

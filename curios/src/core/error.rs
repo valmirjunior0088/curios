@@ -191,7 +191,6 @@ pub enum Error {
     PrivateRepresentation {
         name: String,
     },
-    CannotInferLiteral,
     UnboundVariable {
         term: Box<Term>,
     },
@@ -750,9 +749,6 @@ impl fmt::Display for Error {
                     f,
                     "constructor '{atom}' takes {expected} argument(s) but the match arm binds {got}"
                 )
-            }
-            Error::CannotInferLiteral => {
-                write!(f, "cannot infer type of literal (add an annotation)")
             }
             Error::UnboundVariable { term } => {
                 write!(f, "unbound variable: {term}")

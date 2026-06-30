@@ -230,8 +230,8 @@ pub struct BlnMatch {
     pub true_case: Term,
 }
 
-/// Structural induction on an `Arr`: an `| [] =>` identity arm and a
-/// `| (head, tail), ih =>` cons arm. The surface analogue of `NatMatch::Induction`
+/// Structural induction on an `Arr`: an `| [||] =>` identity arm and a
+/// `| head, ..tail; ih =>` cons arm. The surface analogue of `NatMatch::Induction`
 /// for the native free-monoid primitives (the empty literal selects the carrier).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArrMatch {
@@ -245,7 +245,7 @@ pub struct ArrMatch {
 }
 
 /// Structural induction on a `Bin`: a `| \\ =>` identity arm (the empty
-/// bytestring literal) and a `| (head, tail), ih =>` cons arm whose `head` is the
+/// bytestring literal) and a `| head, ..tail; ih =>` cons arm whose `head` is the
 /// leading byte (a `Nat`) and `tail` the rest. The `Bin` analogue of [`ArrMatch`];
 /// `Bin` carries no element type, so there is no carrier parameter to read off.
 #[derive(Debug, Clone, PartialEq)]

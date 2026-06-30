@@ -9,7 +9,7 @@ fn match_omitted_motive_infers() {
         let result : std/Nat =
             match 5
             | 0 => 0
-            | pred + 1, ih => std/Nat/add(ih, pred)
+            | pred + 1; ih => std/Nat/add(ih, pred)
             end;
         std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(result)))
         "#;
@@ -127,12 +127,12 @@ fn omitted_motive_infers_over_a_compound_scrutinee() {
         rec build(n : Nat) -> Vec(Nat, n) =
             match n : (m) => Vec(Nat, m)
             | 0 => Vec/nil()
-            | pred + 1, ih => Vec/cons(0, ih)
+            | pred + 1; ih => Vec/cons(0, ih)
             end;
         let d(k : Nat) -> Vec(Nat, Nat/add(k, k)) =
             match Nat/add(k, k)
             | 0 => Vec/nil()
-            | pred + 1, ih => build(Nat/succ(pred))
+            | pred + 1; ih => build(Nat/succ(pred))
             end;
         Io/print(Nat/to_str(Vec/len(d(2))))
         "#;

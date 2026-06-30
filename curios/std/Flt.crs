@@ -194,7 +194,7 @@ pub let to_str(f : Flt) -> Str =
 let pow10(n : Nat) -> Flt =
     match n
     | 0 => +1.0
-    | pred + 1, ih => ih * 10.0
+    | pred + 1; ih => ih * 10.0
     end;
 
 let digits_or_zero(s : Str) -> Option(Nat) =

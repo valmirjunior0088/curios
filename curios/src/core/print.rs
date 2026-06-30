@@ -556,11 +556,11 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::BinFlatten(operand) => print_unary("Bin.flatten ", operand, depth),
         Prim::ArrType(elem) => print_unary("Arr ", elem, depth),
         Prim::Arr(elems) => flat([
-            pure("["),
+            pure("[|"),
             sep_flat(elems.into_iter().map(move |e| print_term(e, depth)), || {
                 pure(", ")
             }),
-            pure("]"),
+            pure("|]"),
         ]),
         Prim::ArrLen(ty, list) => print_binary("Arr.len ", ty, list, depth),
         Prim::ArrGet(ty, list, index) => flat([
@@ -992,17 +992,17 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         .collect::<Vec<_>>(),
                 ),
                 Cases::FreeMonoid { carrier } => {
-                    // The cons arm of `Bin`/`Arr` binds `(head, tail), ih`; shared
+                    // The cons arm of `Bin`/`Arr` binds `head, ..tail; ih`; shared
                     // rendering for both three-binder carriers.
                     let cons_three = |cons_case: Scope<Three>| {
                         let ((head_label, tail_label, ih_label), cons_case) =
                             open_scope_three(cons_case, depth);
                         flat([
-                            pure("\n| ("),
+                            pure("\n| "),
                             pure(display_label(&head_label)),
-                            pure(", "),
+                            pure(", .."),
                             pure(display_label(&tail_label)),
-                            pure("), "),
+                            pure("; "),
                             pure(display_label(&ih_label)),
                             pure(" =>\n"),
                             indent(flat([print_term(cons_case, depth), pure(";")])),
@@ -1037,7 +1037,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                             empty_case,
                             cons_case,
                             ..
-                        } => ("\n| [] =>\n", empty_case, cons_three(cons_case)),
+                        } => ("\n| [||] =>\n", empty_case, cons_three(cons_case)),
                     };
                     flat([
                         pure(empty_lit),

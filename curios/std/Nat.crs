@@ -10,18 +10,19 @@ let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
     Utf8/more(c, Scan/lead(), \\, r);
 
 let digit(d : Nat) -> { c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()) } =
-    match d == 0 | true => ('0', Eq/refl()) | false =>
-    match d == 1 | true => ('1', Eq/refl()) | false =>
-    match d == 2 | true => ('2', Eq/refl()) | false =>
-    match d == 3 | true => ('3', Eq/refl()) | false =>
-    match d == 4 | true => ('4', Eq/refl()) | false =>
-    match d == 5 | true => ('5', Eq/refl()) | false =>
-    match d == 6 | true => ('6', Eq/refl()) | false =>
-    match d == 7 | true => ('7', Eq/refl()) | false =>
-    match d == 8 | true => ('8', Eq/refl()) | false =>
-    match d == 9 | true => ('9', Eq/refl()) | false =>
-    ('0', Eq/refl())
-    end end end end end end end end end end;
+    match d
+    | 0 => ('0', Eq/refl())
+    | 1 => ('1', Eq/refl())
+    | 2 => ('2', Eq/refl())
+    | 3 => ('3', Eq/refl())
+    | 4 => ('4', Eq/refl())
+    | 5 => ('5', Eq/refl())
+    | 6 => ('6', Eq/refl())
+    | 7 => ('7', Eq/refl())
+    | 8 => ('8', Eq/refl())
+    | 9 => ('9', Eq/refl())
+    | _ => ('0', Eq/refl())
+    end;
 
 let single_digit(d : Nat) -> Str =
     let g = digit(d);
@@ -87,7 +88,7 @@ end
 pub rec lte_refl(n : Nat) -> Lte(n, n) =
     match n : (m) => Lte(m, m)
     | 0 => Lte/z()
-    | pred + 1, ih => Lte/s(ih)
+    | pred + 1; ih => Lte/s(ih)
     end;
 
 pub rec lte_succ_r(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(a, b + 1) =
@@ -99,7 +100,7 @@ pub rec lte_succ_r(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(a, b + 1) =
 pub rec lte_add_r(a : Nat, k : Nat) -> Lte(a, a + k) =
     match k : (m) => Lte(a, a + m)
     | 0 => lte_refl(a)
-    | pred + 1, ih => lte_succ_r(ih)
+    | pred + 1; ih => lte_succ_r(ih)
     end;
 
 pub rec lte_to_lt_succ(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lt(a, b + 1) =
@@ -125,7 +126,7 @@ pub let lt_of_lte_succ(@a : Nat, @b : Nat, p : Lte(a + 1, b)) -> Lt(a, b) =
 pub rec lte_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(n + a, n + b) =
     match n : (m) => Lte(m + a, m + b)
     | 0 => p
-    | m + 1, ih => Lte/s(ih)
+    | m + 1; ih => Lte/s(ih)
     end;
 
 pub let compare(x : Nat, y : Nat) -> Order =

@@ -35,13 +35,13 @@ fn main() {
         let add_zero(n : Nat) -> Eq(Nat/add(n, 0), n) =
             match n : (m) => Eq(Nat/add(m, 0), m)
             | 0 => Eq/refl()
-            | pred + 1, ih => Eq/cong(succ_f, ih)
+            | pred + 1; ih => Eq/cong(succ_f, ih)
             end;
 
         let IsZero(n : Nat) -> Type =
             match n : Type
             | 0 => {}
-            | pred + 1, _ => Void
+            | pred + 1; _ => Void
             end;
 
         let zero_is_not_one : Not(Eq(0, 1)) =

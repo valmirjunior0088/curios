@@ -22,7 +22,7 @@ let check(b : Bin) -> ((s : Scan) -> Option(Utf8(s, b))) =
         | cont(rem, lo, hi) => Option/none()
         | bad() => Option/none()
         end
-    | (h, t), ih => (s) =>
+    | h, ..t; ih => (s) =>
         match ih(step(h, s))
         | some(rest) => Option/some(Utf8/more(h, s, t, rest))
         | none() => Option/none()
@@ -45,12 +45,12 @@ pub let concat(a : Str, b : Str) -> Str =
 rec drop_width(n : Nat, s : Scan, b : Bin) -> Nat =
     match b
     | \\ => 0
-    | (h, t), ih =>
+    | h, ..t; ih =>
         match s
         | lead() =>
             match n
             | 0 => 0
-            | pred + 1, ih2 => 1 + drop_width(pred, step(h, Scan/lead()), t)
+            | pred + 1; ih2 => 1 + drop_width(pred, step(h, Scan/lead()), t)
             end
         | cont(rem, lo, hi) => 1 + drop_width(n, step(h, Scan/cont(rem, lo, hi)), t)
         | bad() => 1 + drop_width(n, step(h, Scan/bad()), t)
@@ -66,7 +66,7 @@ rec drop_valid(n : Nat, s : Scan, @b : Bin, d : Utf8(s, b))
         | more(c, st, t, rest) =>
             match n
             | 0 => Utf8/more(c, Scan/lead(), t, rest)
-            | pred + 1, ih => drop_valid(pred, step(c, Scan/lead()), @t, rest)
+            | pred + 1; ih => drop_valid(pred, step(c, Scan/lead()), @t, rest)
             end
         end
     | cont(rem, lo, hi) =>
@@ -88,7 +88,7 @@ rec take_valid(n : Nat, s : Scan, @b : Bin, d : Utf8(s, b))
         | more(c, st, t, rest) =>
             match n
             | 0 => Utf8/stop()
-            | pred + 1, ih =>
+            | pred + 1; ih =>
                 Utf8/more(c, Scan/lead(), Bin/slice(t, 0, drop_width(pred, step(c, Scan/lead()), t)),
                     take_valid(pred, step(c, Scan/lead()), @t, rest))
             end
@@ -126,8 +126,8 @@ pub let flatten(parts : Lst(Str)) -> Str =
         bytes = Bin/flatten(Arr/map(to_bin, pa)),
         valid =
             match pa : (p) => Valid(Bin/flatten(Arr/map(to_bin, p)))
-            | [] => Utf8/stop()
-            | (h, t), ih => concat_closed(@to_bin(h), @Bin/flatten(Arr/map(to_bin, t)), h.valid, ih)
+            | [||] => Utf8/stop()
+            | h, ..t; ih => concat_closed(@to_bin(h), @Bin/flatten(Arr/map(to_bin, t)), h.valid, ih)
             end
     };
 
@@ -152,12 +152,12 @@ pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(k, 
     -> Nat/Lte(k, Bin/len(t)) =
     match k
     | 0 => Nat/Lte/z()
-    | kp + 1, ih =>
+    | kp + 1; ih =>
         match w
         | more(c, st, tt, rest) =>
             match kp
             | 0 => Nat/Lte/s(Nat/Lte/z())
-            | kpp + 1, ih2 =>
+            | kpp + 1; ih2 =>
                 -- Matching `Nat/in_range(c, lo, hi)` directly refines `rest`'s
                 -- type: `step(c, Scan/cont(kp + 1, lo, hi))` reduces to
                 -- `Scan/cont(kpp + 1, 0x80, 0xBF)` (true) or `Scan/bad()` (false).
@@ -185,7 +185,7 @@ pub rec take_conts(b : Bin, off : Nat, remaining : Nat, acc : Nat,
     bound : Nat/Lte(off + remaining, Bin/len(b))) -> {Nat, Nat} =
     match remaining
     | 0 => (acc, off)
-    | pred + 1, ih =>
+    | pred + 1; ih =>
         take_conts(b, off + 1, pred,
             acc * 0x40 + (Bin/at(b, off,
                 Nat/lt_of_lte_succ(Nat/lte_trans(Nat/Lte/s(Nat/lte_add_r(off, pred)), bound))) - 0x80),
@@ -205,7 +205,7 @@ pub rec peel_byte(@s : Scan, @b : Bin, nz : Nat/Lt(0, Bin/len(b)), w : Utf8(s, b
 pub rec count_w(s : Scan, b : Bin) -> Nat =
     match b
     | \\ => 0
-    | (h, t), ih =>
+    | h, ..t; ih =>
         match s
         | lead() => count_w(step(h, Scan/lead()), t) + 1
         | cont(rem, lo, hi) => count_w(step(h, Scan/cont(rem, lo, hi)), t)
@@ -233,7 +233,7 @@ pub let decode_head(c : Nat, @t : Bin, w : Utf8(Scan/lead(), Bin/cons(c, t))) ->
 pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
     (match s.bytes : (b) => (sc : Scan, valid : Utf8(sc, b), acc : {A, Nat}) -> {A, Nat}
     | \\ => (sc, valid, acc) => acc
-    | (h, t), ih => (sc, valid, acc) =>
+    | h, ..t; ih => (sc, valid, acc) =>
         match sc
         | lead() =>
             ih(step(h, Scan/lead()),
@@ -293,10 +293,10 @@ pub let get(s : Str, i : Nat) -> Option(Nat) =
 rec lte_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Lte(i + 1, n) =
     match n
     | 0 => False/absurd(@Nat/Lte(i + 1, 0), p)
-    | np + 1, ihn =>
+    | np + 1; ihn =>
         match i
         | 0 => Nat/Lte/s(Nat/Lte/z())
-        | ip + 1, ihi => Nat/Lte/s(lte_succ_of_lt(ip, np, p))
+        | ip + 1; ihi => Nat/Lte/s(lte_succ_of_lt(ip, np, p))
         end
     end;
 
@@ -305,12 +305,12 @@ pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Nat =
         le : Nat/Lte(i + 1, count_w(sc, b))) -> Nat =
         match b
         | \\ => match le : Nat end
-        | (h, t), ih =>
+        | h, ..t; ih =>
             match sc
             | lead() =>
                 match i
                 | 0 => decode_head(h, @t, valid)
-                | pred + 1, ih2 =>
+                | pred + 1; ih2 =>
                     go(step(h, Scan/lead()), t,
                         peel_byte(@Scan/lead(), @Bin/cons(h, t), True/qed(), valid), pred,
                         (match le : (le : Nat/Lte(x, y)) => Nat/Lte(x - 1, y - 1)
