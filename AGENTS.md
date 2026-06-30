@@ -13,7 +13,7 @@ The repo is a **Cargo workspace** (virtual manifest at the root) of four crates:
 - **`curios-runtime`** — runtime-only engine (lib) + the launcher stub (bin `curios-runtime`). Deserializes a precompiled module and runs it on wasmtime; **never** links Cranelift or Binaryen.
 - **`curios-compiler`** — the CLI (bin `curios-compiler`) + a lib with the compile / precompile (`to_cwasm`) / run-from-source helpers. The **only** crate that links Cranelift (via `wasmtime`'s `cranelift` feature) and Binaryen.
 
-The JIT-vs-deserialize split is a *crate boundary*, not a feature flag: `cargo build -p curios-runtime` yields a slim launcher with no Cranelift/Binaryen. The CLI's `wasmtime` dependency adds `cranelift`, which feature-unification makes available in compiler builds; both crates share one `wasmtime` (version pinned once in `[workspace.dependencies]`) so the `.cwasm` a `curios-compiler` produces matches what `curios-runtime` deserializes.
+The JIT-vs-deserialize split is a *crate boundary*, not a feature flag: `cargo build --package curios-runtime` yields a slim launcher with no Cranelift/Binaryen. The CLI's `wasmtime` dependency adds `cranelift`, which feature-unification makes available in compiler builds; both crates share one `wasmtime` (version pinned once in `[workspace.dependencies]`) so the `.cwasm` a `curios-compiler` produces matches what `curios-runtime` deserializes.
 
 Two languages live in this repo: **Rust** (the compiler) and **curios** itself (the object language, with a standard library under `curios/std/`). Work touches one or both.
 
@@ -66,20 +66,19 @@ then, in curios-compiler:
 | `curios-runtime/src/main.rs`                  | The launcher stub (bin `curios-runtime`): reads its appended `.cwasm` tail and runs it        |
 | `curios-compiler/src/lib.rs`                  | `to_cwasm`, `run_wasm`, run-from-source helpers; re-exports `Stage`/`MockHost`/`OsHost`       |
 | `curios-compiler/src/main.rs`                 | clap-based CLI (bin `curios-compiler`) incl. the `compile`→executable bundler                 |
-| `curios-compiler/src/runtime`                 | Generated (gitignored): the slim launcher embedded via `include_bytes!`; produced by `make`   |
+| `Makefile`                                    | Builds the slim `curios-runtime` and copies it to `curios-compiler/runtime` for `main.rs` to `include_bytes!` |
 | `curios-compiler/src/tests/`                  | Cross-stage integration tests (incl. relocated `codegen/` tests)                             |
 | `curios-compiler/examples/`                   | Runnable examples that execute (`parse_*`, `inline_*`, `crs_*`, `bench_parse`)               |
 | `curios-compiler/tests/bundle.rs`             | Gated (`#[ignore]`) end-to-end test of the `compile`→executable path                          |
 
 ## Build & test
 
-**Run `make` once, then build with `cargo` as usual.** `curios-compiler` embeds the slim launcher via `include_bytes!("runtime")`, so `curios-compiler/src/runtime` must exist *before* the crate compiles — the crate will not build without it (by design: a compiler can never ship without an embedded launcher). `make` (its only target) generates the launcher; everything else is plain `cargo`. A bare `cargo build`/`check`/`clippy`/`test` that touches `curios-compiler` fails until you have run `make` at least once — `curios-compiler/build.rs` guards this and prints `use \`make\` to build it`.
+**Run `make curios-compiler/runtime` first, then build with `cargo` as usual.** `curios-compiler` embeds the slim launcher via `include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/runtime"))`, so the launcher must sit at `curios-compiler/runtime` before the compiler is built. `make curios-compiler/runtime` builds the runtime in isolation (which keeps it slim, see below) and copies it there; everything else is plain `cargo`. If `curios-compiler/runtime` is missing, the build **fails** at the `include_bytes!` with a clear "couldn't read" error — run `make curios-compiler/runtime` and rebuild.
 
 ```sh
-make                                         # generate curios-compiler/src/runtime (the embedded launcher)
-cargo build --workspace                      # build every crate (Binaryen C++ build on first run)
-cargo run -p curios-compiler -- <args>       # invoke the CLI
-cargo build -p curios-runtime                # the slim launcher stub on its own
+make curios-compiler/runtime                  # build the slim launcher, place it for embedding
+cargo build --package curios-compiler         # the CLI (Binaryen C++ build on first run)
+cargo run   --package curios-compiler -- <args> # invoke the CLI
 cargo test --workspace --all-targets --all-features
 ```
 
@@ -89,26 +88,25 @@ cargo test --workspace --all-targets --all-features
 
 There are **no Cargo features** on the workspace crates. The JIT/Cranelift split is a crate boundary instead:
 
-- `curios-runtime` declares only a runtime-only `wasmtime` (no `cranelift`) and never depends on `curios-binaryen`. **`cargo build -p curios-runtime` is a slim, Cranelift/Binaryen-free launcher** — that is the build embedded into the compiler as the stub.
-- `curios-compiler` adds the `cranelift` feature to its own `wasmtime` dependency and depends on `curios-binaryen`. Feature unification makes Cranelift available throughout a `curios-compiler` build (and a `--workspace` build), so the `curios-runtime` *bin* produced by a `--workspace` build is **not** the slim one. This is exactly why the `Makefile` builds the launcher with an isolated `cargo build -p curios-runtime` and copies that artifact to `curios-compiler/src/runtime`: building it alone keeps Cranelift out, so the embedded stub is guaranteed slim regardless of how the compiler is built.
-- `cargo check -p curios-runtime` is part of the done bar precisely because `--workspace --all-features` cannot prove the runtime-only configuration still compiles.
+- `curios-runtime` declares only a runtime-only `wasmtime` (no `cranelift`) and never depends on `curios-binaryen`. **`cargo build --package curios-runtime` is a slim, Cranelift/Binaryen-free launcher** — that is the build embedded into the compiler as the stub.
+- `curios-compiler` adds the `cranelift` feature to its own `wasmtime` dependency and depends on `curios-binaryen`. Feature unification makes Cranelift available throughout a `curios-compiler` build (and a `--workspace` build), so the `curios-runtime` *bin* produced by a `--workspace` build is **not** the slim one. This is why `make curios-compiler/runtime` builds the launcher with an isolated `cargo build --release --package curios-runtime` *before* the compiler and copies it to `curios-compiler/runtime`: building it alone keeps Cranelift out. Do not hand-build the launcher via `--workspace` and expect it to be slim — it will be the fat (Cranelift-linked) one.
+- `cargo check --package curios-runtime` is part of the done bar precisely because `--workspace --all-features` cannot prove the runtime-only configuration still compiles.
 
 Building `curios-binaryen` compiles a large C++ project via CMake on first build — expect minutes, not seconds, and a C++ toolchain + CMake on the machine. Anything depending on it (`curios-binaryen`, `curios-compiler`, the whole `--workspace`) pays that cost once; `curios` and `curios-runtime` on their own do not.
 
 ## The done bar
 
-Before considering any change complete, run the same gate CI enforces, in order. All five must pass. `clippy` runs with warnings denied. Run `make` first if you have not already this session — the `check`/`clippy`/`test` steps compile `curios-compiler`, which needs `src/runtime` to exist.
+Before considering any change complete, run the same gate CI enforces, in order. All five must pass. `clippy` runs with warnings denied. Run `make curios-compiler/runtime` first if you have not already this session — the `check`/`clippy`/`test` steps compile `curios-compiler`, which `include_bytes!`s the launcher from `curios-compiler/runtime` (this isolated runtime build also proves the slim runtime-only config still compiles, so no separate isolated check is needed).
 
 ```sh
-make                                                       # generate the embedded launcher (see Build & test)
+make curios-compiler/runtime                               # provide the launcher curios-compiler embeds
 cargo fmt --all -- --check
 cargo check  --workspace --all-targets --all-features
 cargo clippy --workspace --all-targets --all-features      # CI sets RUSTFLAGS="-Dwarnings"
 cargo test   --workspace --all-targets --all-features
-cargo check  -p curios-runtime                             # the runtime-only config still compiles
 ```
 
-The last line is not redundant: `--workspace --all-features` unifies Cranelift into the shared `wasmtime`, so only an isolated `-p curios-runtime` build proves the slim launcher configuration still compiles.
+The first line is load-bearing twice over: it provides the launcher binary `main.rs` embeds (at `curios-compiler/runtime`), and — because `--workspace --all-features` unifies Cranelift into the shared `wasmtime` — the isolated `--package curios-runtime` build `make curios-compiler/runtime` runs is also the only thing that proves the slim launcher configuration still compiles.
 
 There is no `rustfmt.toml` or `clippy.toml` — stock toolchain defaults apply. Run `cargo fmt --all` to fix formatting rather than hand-aligning.
 
@@ -172,12 +170,12 @@ pub rec len(@A : Type, l : Lst(A)) -> Nat =   -- `rec` for recursive defs
 - A `match` may carry a motive annotation: `match l : Lst(B) | … end`.
 - Local recursion uses `rec go(...) -> T = ...;` then a call to `go(...)`.
 
-To run or test `.crs` code, use the CLI (`cargo run -p curios-compiler -- run …`) or follow an existing example in `curios-compiler/examples/` (the `crs_*` and `parse_*` examples drive `.crs` programs through the pipeline).
+To run or test `.crs` code, use the CLI (`cargo run --package curios-compiler -- run …`) or follow an existing example in `curios-compiler/examples/` (the `crs_*` and `parse_*` examples drive `.crs` programs through the pipeline).
 
 ## Gotchas
 
 - **Never edit `curios-binaryen/binaryen/`.** It is vendored upstream source, used unpatched. The re-vendoring procedure (which files to copy, how to bump the tag) is documented at the top of `curios-binaryen/build.rs`. Changes belong in `curios-binaryen/src/`, not the vendored tree.
-- **The slim launcher is a separate build, embedded at compile time.** `cargo build -p curios-runtime` must stay free of Cranelift and Binaryen; if you add a runtime dependency, keep it out of that crate's graph or you defeat the slim launcher. A change can pass `--workspace --all-features` and still break `-p curios-runtime` (or vice versa) — run both. The launcher is baked into `curios-compiler` via `include_bytes!("runtime")`, generated by `make` into `curios-compiler/src/runtime`; the crate does not compile without it, so run `make` before bare `cargo` commands.
+- **The slim launcher is a separate build, embedded at compile time.** `cargo build --package curios-runtime` must stay free of Cranelift and Binaryen; if you add a runtime dependency, keep it out of that crate's graph or you defeat the slim launcher. A change can pass `--workspace --all-features` and still break `--package curios-runtime` (or vice versa) — run both. The launcher is baked into `curios-compiler` via `include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/runtime"))`; `make curios-compiler/runtime` builds the slim runtime and copies it there. If that file is missing the build fails at the `include_bytes!` — run `make curios-compiler/runtime` before the compiler.
 - **The codegen tests live in `curios-compiler`, not `curios`.** They execute emitted wasm, which needs the runtime; `curios` cannot depend on the runtime (that would be a cycle), so `curios-compiler/src/tests/codegen/` is their home even though they test `curios`'s `cont::to_wasm`.
 - **Generated `.wasm` files** are gitignored (`/*.wasm`); don't commit build output.
 - **`Cargo.lock` is committed** — keep it in sync when changing dependencies.

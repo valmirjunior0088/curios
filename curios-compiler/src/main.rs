@@ -15,12 +15,12 @@ use {
 /// Kept in sync with the launcher in `curios-runtime`.
 const MAGIC: &[u8; 8] = b"CRSEXEC1";
 
-/// The slim `curios-runtime` launcher stub, embedded at build time. The `Makefile`
-/// builds `-p curios-runtime` (in isolation, so it stays Cranelift/Binaryen-free)
-/// and copies the artifact to `src/runtime`. A bare `cargo build` of this crate
-/// fails until that file exists — by design: a compiler can never be built without
-/// an embedded launcher, so `compile` needs no launcher lookup at runtime.
-static LAUNCHER: &[u8] = include_bytes!("runtime");
+/// The slim `curios-runtime` launcher stub, embedded at build time. Produced by
+/// `make curios-compiler/runtime` (an isolated `--package curios-runtime` build,
+/// kept Cranelift/Binaryen-free) which copies it next to this crate's manifest.
+/// If the file is absent this `include_bytes!` fails the build — run `make`. So
+/// `compile` needs no launcher lookup at runtime.
+const LAUNCHER: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/runtime"));
 
 fn parse_timeout(input: &str) -> Result<Duration, String> {
     input

@@ -3,6 +3,4 @@
 /.claude
 /.antigravitycli
 /*.wasm
-
-# Generated build product: the slim launcher embedded into curios-compiler (see Makefile).
-/curios-compiler/src/runtime
+/curios-compiler/runtime

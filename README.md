@@ -58,7 +58,7 @@ See [SYNTAX.md](SYNTAX.md) for the full language reference.
 - A recent Rust toolchain (the project uses edition 2024).
 - A C++ toolchain and **CMake** — the default build compiles the vendored Binaryen optimizer. The first build takes a few minutes as a result.
 
-Binaryen is built only by the crates that need it. For fast iteration on the compiler alone you can build `cargo build -p curios` (pure Rust, no Binaryen/CMake); the slim launcher `cargo build -p curios-runtime` likewise needs neither Binaryen nor Cranelift.
+Binaryen is built only by the crates that need it. For fast iteration on the compiler alone you can build `cargo build --package curios` (pure Rust, no Binaryen/CMake); the slim launcher `cargo build --package curios-runtime` likewise needs neither Binaryen nor Cranelift.
 
 ### Download a pre-built binary
 
@@ -71,18 +71,18 @@ The compiler embeds the slim runtime launcher at build time, so generate it with
 ```sh
 git clone https://github.com/valmirjunior0088/curios
 cd curios
-make                             # generate the embedded launcher (curios-compiler/src/runtime)
-cargo build --release -p curios-compiler
+make curios-compiler/runtime                     # build the slim launcher the compiler embeds
+cargo build --release --package curios-compiler
 ```
 
-This produces `target/release/curios-compiler` — a single self-contained CLI with the launcher embedded.
+This produces `target/release/curios-compiler` — a single self-contained CLI with the launcher embedded. (If you build the compiler before the launcher, the build fails with a clear "couldn't read" error — run `make curios-compiler/runtime` and rebuild.)
 
 ### Run a program
 
 Save the hello-world snippet above as `hello.crs`, then:
 
 ```sh
-cargo run -p curios-compiler --release -- run hello.crs
+cargo run --package curios-compiler --release -- run hello.crs
 ```
 
 ## Using the CLI
@@ -101,8 +101,8 @@ Two global flags are useful while exploring:
 - `--timeout MILLIS` bounds the type-checker's reduction time (default `1000`).
 
 ```sh
-cargo run -p curios-compiler --release -- check hello.crs --print=core
-cargo run -p curios-compiler --release -- compile hello.crs -o hello
+cargo run --package curios-compiler --release -- check hello.crs --print=core
+cargo run --package curios-compiler --release -- compile hello.crs -o hello
 ./hello
 ```
 

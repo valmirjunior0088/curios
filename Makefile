@@ -1,7 +1,12 @@
-.DEFAULT_GOAL := runtime
+EXTENSION :=
+ifeq ($(OS),Windows_NT)
+EXTENSION := .exe
+endif
 
-.PHONY: runtime
+.PHONY: target/release/curios-runtime$(EXTENSION)
 
-runtime:
-	cargo build --release -p curios-runtime
-	cp target/release/curios-runtime curios-compiler/src/runtime
+target/release/curios-runtime$(EXTENSION):
+	cargo build --release --package curios-runtime
+
+curios-compiler/runtime: target/release/curios-runtime$(EXTENSION)
+	cp $< $@
