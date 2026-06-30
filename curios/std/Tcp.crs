@@ -100,7 +100,7 @@ pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket
         | failure(e) => Task/pure(Result/failure(e))
         | success(c) =>
             Task/bind(f(c), (a) =>
-                Task/bind(close(c), (()) => Task/pure(Result/success(a))))
+                Task/bind(close(c), (_) => Task/pure(Result/success(a))))
         end);
 
 let drain(c : Socket) -> Task(Bin) =
@@ -154,10 +154,10 @@ let listen_loop(host : Str, port : Nat, on_conn : (Io) -> Task({})) -> Task(Resu
                         Task/bind(Task/accept(l.0), (r) =>
                             match r : Task({})
                             | failure(_) => Task/pure(())
-                            | success(h) => Task/bind(on_conn(h), (()) => go())
+                            | success(h) => Task/bind(on_conn(h), (_) => go())
                             end);
                     go()),
-                (()) => Task/pure(Result/success(())))
+                (_) => Task/pure(Result/success(())))
         end);
 
 pub let serve(host : Str, port : Nat, handler : (Socket) -> Task({})) -> Task(Result({}, Io/Error)) =

@@ -28,12 +28,12 @@ Option/some(x)         -- qualified member
 | String             | `"hi"`, `"a\tb\n"`                      | A `Str`. Escapes: `\n \t \r \\ \"`.                                                                                                                                                                                    |
 | Bytestring (`Bin`) | `\48\69`, `\\`                          | Each byte is `\` followed by exactly two hex digits. The empty bytestring is `\\`.                                                                                                                                     |
 | List               | `[]`, `[1, 2, 3]`                       | Sugar producing a `Lst` (a linked cons-spine).                                                                                                                                                                         |
-| Array (`Arr`)      | `[||]`, `[|1, 2, 3|]`                   | The native contiguous sequence. Element-type-checked: it borrows `Arr(T)`'s `T` from the expected type, and a non-empty literal can also synthesize `T` from its elements — but a bare empty `[||]` with no expected type cannot, so annotate it (`[||] : Arr(Nat)`).                                            |
+| Array (`Arr`)      | `[\|\|]`, `[\|1, 2, 3\|]`               | The native contiguous sequence. Element-type-checked: it borrows `Arr(T)`'s `T` from the expected type, and a non-empty literal can also synthesize `T` from its elements — but a bare empty `[\|\|]` with no expected type cannot, so annotate it (`[\|\|] : Arr(Nat)`). |
 | Boolean            | `true`, `false`                         | Keywords.                                                                                                                                                                                                              |
 
 ## Types and sorts
 
-`Type` and `Prop` are the two sorts (`Prop` for proof-irrelevant propositions). A hole `?` stands for a term to be inferred (a fresh metavariable); `_` is the wildcard binder in patterns and the nat-switch default.
+`Type` and `Prop` are the two sorts (`Prop` for proof-irrelevant propositions). A hole `?` stands for a term to be inferred (a fresh metavariable); `_` is the wildcard binder and the nat-switch default.
 
 **Function types (Π).** `(p : A, q : B) -> R`. Parameters may be unlabeled (`(A) -> B`) and may be marked implicit with `@` (`(@A : Type, x : A) -> A`). Dependent: later parameters and the result may mention earlier labels.
 
@@ -51,7 +51,7 @@ Option/some(x)         -- qualified member
 
 **Projection.** `.0` (positional) or `.label` (named): `p.fst`, `t.0`.
 
-**Lambdas.** `(x, y) => body`. Parameters are patterns with an optional `: T` annotation; `(x)` is sugar for `(x : _)`.
+**Lambdas.** `(x, y) => body`. Each parameter is a single binder name (`_` to ignore) with an optional `: T` annotation; `(x)` is sugar for `(x : _)`.
 
 ```
 (x) => x
@@ -66,8 +66,7 @@ let x = compute(a);          -- type inferred
 let y : Nat = 0;             -- type annotated
 let f(n : Nat) -> Nat =      -- function-definition sugar (local; type optional)
     n + 1;
-let (a, b) = pair;           -- tuple destructuring
-let Pair { fst, snd } = p;   -- struct destructuring (pun fields)
+let p = pair;                -- single binder; destructure with projections (p.0, p.1)
 body_using_the_bindings
 ```
 
@@ -104,11 +103,11 @@ Binary operators, overloaded across numeric types. Listed loosest to tightest bi
 | 4            | `+` `-`                     |
 | 5 (tightest) | `*` `/` `%`                 |
 
-## Patterns
+## Binders
 
-Irrefutable patterns (used at `let`, lambda, and binder sites): a name bind (`x`), a tuple pattern (`(a, b)`), or a struct pattern (`Foo { bar, baz }`). Struct fields may be punned (`bar`, binding `bar`) or renamed (`bar = p`, binding `p`).
+Every binder — `let`, lambda parameter, function parameter, and constructor-arm payload — is a single name (`_` to ignore). There are no compound binding patterns: destructure a tuple or struct with projections (`p.0`, `p.label`).
 
-Refutable patterns (only in match arms) additionally allow constructor patterns (`cons(x, xs)`, `nil()`) and scalar literal patterns (`0`, `true`). Patterns nest, so a literal or constructor can sit at any depth (`cons((0, x), _)`).
+Match arms dispatch on one constructor each: `| tag(x, …) =>` binds the payload by name (see [Match](#match)). There are no nested, literal, or catch-all patterns in arms.
 
 ## Match
 
@@ -243,7 +242,7 @@ pub record Meters { Nat }       -- newtype; project with `.0`; erases to the bar
 pub struct Token { Bin }        -- opaque: representation private to this module
 ```
 
-**Construction and projection.** Build with `Name { field = value, ... }` (or `Name(params) { ... }` when the type takes parameters); project with `.label` or `.0`. Destructure with a struct pattern.
+**Construction and projection.** Build with `Name { field = value, ... }` (or `Name(params) { ... }` when the type takes parameters); read fields with `.label` or `.0`.
 
 ```
 let p = Pair { fst = 1, snd = 2 };

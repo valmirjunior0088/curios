@@ -27,7 +27,7 @@ pub let with(@A : Type, path : Str, mode : Io/Mode, body : (File) -> Task(A)) ->
         match opened : Task(Result(A, Io/Error))
         | success(f) =>
             Task/bind(body(f), (a) =>
-                Task/bind(close(f), (()) => Task/pure(Result/success(a))))
+                Task/bind(close(f), (_) => Task/pure(Result/success(a))))
         | failure(e) => Task/pure(Result/failure(e))
         end);
 

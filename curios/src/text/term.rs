@@ -83,52 +83,13 @@ pub struct FuncType {
     pub output: Term,
 }
 
-/// A binding pattern in a binder position (`let`, lambda parameter, match-arm
-/// constructor payload). The irrefutable *product* fragment — plain binders,
-/// positional tuple patterns, and partial struct patterns; all lower to
-/// projections off a fresh temp in `to_core`, never to a branch.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Pattern {
-    /// A plain binder `x` (or `_`). `_` lowers to a fresh internal name, so
-    /// repeated wildcards within one pattern never collide.
-    Bind(String),
-    /// A positional tuple pattern `(p0, p1, …)`. Irrefutable — a tuple has a
-    /// single shape, so destructuring is pure projection.
-    Tuple(Vec<Pattern>),
-    /// A nominal struct pattern `Foo { bar, baz }` (pun, binding each field by
-    /// its label) or `Foo { bar = p, … }` (rename, binding the nested pattern
-    /// `p`). The `head` names the struct type — checked nominally, like the
-    /// `Foo { … }` struct literal it mirrors. Irrefutable, and *partial*: only
-    /// the listed fields are projected, the rest are ignored.
-    Struct {
-        head: Name,
-        fields: Vec<(String, Pattern)>,
-    },
-}
-
-impl Pattern {
-    /// The name a Π-binder should carry when this pattern is a function
-    /// parameter: a plain `Bind`'s name (so dependent domains/outputs can refer
-    /// to it), or `None` for any compound/refutable pattern (no whole-value name
-    /// to refer to).
-    pub fn binder_name(&self) -> Option<String> {
-        match self {
-            Pattern::Bind(name) => Some(name.clone()),
-            Pattern::Tuple(_) | Pattern::Struct { .. } => None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Func {
-    /// Each parameter binds a [`Pattern`] and carries an optional domain
-    /// annotation. `None` is the surface `(x) => …` form, sugar for `(x : _) =>
-    /// …`; it lowers to a hole (`to_core::elaborate`), solved against the
-    /// expected function type when the lambda is checked, or synthesized from
-    /// the annotation when inferred. A tuple-pattern parameter needs its own
-    /// parentheses — `((a, b)) => …` is one pair-destructuring parameter, while
-    /// `(a, b) => …` stays two parameters.
-    pub params: Vec<(Pattern, Option<Term>)>,
+    /// Each parameter is a binder name with an optional domain annotation. `None`
+    /// is the surface `(x) => …` form, sugar for `(x : _) => …`; it lowers to a
+    /// hole (`to_core::elaborate`), solved against the expected function type when
+    /// the lambda is checked, or synthesized from the annotation when inferred.
+    pub params: Vec<(String, Option<Term>)>,
     pub body: Term,
 }
 
@@ -276,11 +237,11 @@ pub struct InductiveMatch {
 }
 
 /// One constructor arm of an [`InductiveMatch`]: `| tag(args…) => body`. `args`
-/// are irrefutable [`Pattern`]s binding the constructor's payload.
+/// are the binder names for the constructor's payload (`_` to ignore).
 #[derive(Debug, Clone, PartialEq)]
 pub struct InductiveArm {
     pub tag: String,
-    pub args: Vec<Pattern>,
+    pub args: Vec<String>,
     pub body: Term,
 }
 
@@ -293,14 +254,12 @@ pub enum Match {
     Bin(BinMatch),
 }
 
-/// One parameter of the function-definition sugar `let f(p : T, …) -> R = body`.
-/// Unlike [`FuncTypeParam`], it carries a [`Pattern`] (so a parameter can
-/// destructure) rather than a bare label, and feeds two lowerings: the binder
-/// name flows into the Π-type, the whole pattern into the lambda.
+/// One parameter of the function-definition sugar `let f(x : T, …) -> R = body`.
+/// The binder name flows into both the Π-type binder and the lambda parameter.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncSugarParam {
     pub plicity: Plicity,
-    pub pattern: Pattern,
+    pub label: String,
     pub type_: Term,
 }
 
@@ -329,16 +288,14 @@ impl LetSignature {
             // An omitted (local-only) annotation lowers to a hole, so the core
             // elaborator infers the body's type; identical to writing `: _`.
             LetSignature::Name { type_: None, .. } => Subterm::Hole.into(),
-            // A plain-binder parameter names the Π-binder (so a later domain or
-            // the output may depend on it); a tuple-pattern parameter has no
-            // whole-value name, so its Π-binder is anonymous — the result type
-            // cannot mention a destructured argument.
+            // Each parameter names its Π-binder, so a later domain or the output
+            // may depend on it.
             LetSignature::Func { params, output, .. } => Subterm::FuncType(FuncType {
                 params: params
                     .iter()
                     .map(|param| FuncTypeParam {
                         plicity: param.plicity,
-                        label: param.pattern.binder_name(),
+                        label: Some(param.label.clone()),
                         type_: param.type_.clone(),
                     })
                     .collect(),
@@ -352,13 +309,11 @@ impl LetSignature {
         match self {
             LetSignature::Name { body, .. } => body.clone(),
             // The lambda binds every parameter, implicit or not — plicity is a
-            // fact about the *type*, consulted only at application sites. Each
-            // parameter keeps its pattern, so tuple parameters destructure in
-            // the lambda body exactly as a bare lambda's would.
+            // fact about the *type*, consulted only at application sites.
             LetSignature::Func { params, body, .. } => Subterm::Func(Func {
                 params: params
                     .iter()
-                    .map(|param| (param.pattern.clone(), Some(param.type_.clone())))
+                    .map(|param| (param.label.clone(), Some(param.type_.clone())))
                     .collect(),
                 body: body.clone(),
             })
@@ -369,13 +324,9 @@ impl LetSignature {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Let {
-    /// The bound pattern. A plain `Bind` is the ordinary `let x = …` (and the
-    /// `let f(…) -> R = …` function-definition sugar, where `f` is the binder);
-    /// a `Tuple` destructures — `let (a, b) = …`. The function-definition
-    /// [`LetSignature::Func`] only ever pairs with a `Bind` binder (the parser
-    /// never mints a tuple-pattern function definition); a tuple binder always
-    /// carries the [`LetSignature::Name`] `(: T)? = value` form.
-    pub binder: Pattern,
+    /// The bound name — `let x = …` or the `let f(…) -> R = …` function-definition
+    /// sugar (where `f` is the binder).
+    pub binder: String,
     pub signature: LetSignature,
     pub tail: Term,
 }

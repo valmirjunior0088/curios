@@ -2,9 +2,9 @@ use {
     super::{
         Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem,
         InductiveMatch, Infix, Let, LetBang, LetSignature, Match, Module, Motive, Nat, NatLiteral,
-        NatMatch, NumLit, Pattern, Plicity, Prim, Proj, Radix, Rec, StructLit, Subterm, Syn, Term,
-        TopCase, TopInductive, TopItem, TopLet, TopMod, TopStruct, TopUse, Tuple, TupleType,
-        TupleTypeParam, UseGroup,
+        NatMatch, NumLit, Plicity, Prim, Proj, Radix, Rec, StructLit, Subterm, Syn, Term, TopCase,
+        TopInductive, TopItem, TopLet, TopMod, TopStruct, TopUse, Tuple, TupleType, TupleTypeParam,
+        UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_bigint::BigUint,
@@ -19,40 +19,10 @@ fn print_plicity(plicity: Plicity) -> Printer<'static> {
     }
 }
 
-fn print_pattern(pattern: Pattern) -> Printer<'static> {
-    match pattern {
-        Pattern::Bind(name) => pure(name),
-        Pattern::Tuple(fields) => flat([
-            pure("("),
-            sep_flat(fields.into_iter().map(print_pattern), || pure(", ")),
-            pure(")"),
-        ]),
-        // A pun field `(bar, Bind("bar"))` prints as the bare label; any other
-        // binding prints as a rename `bar = <pattern>`.
-        Pattern::Struct { head, fields } => flat([
-            pure(head.join()),
-            pure(" { "),
-            sep_flat(
-                fields.into_iter().map(|(label, pattern)| match pattern {
-                    Pattern::Bind(ref name) if *name == label => pure(label),
-                    pattern => flat([pure(label), pure(" = "), print_pattern(pattern)]),
-                }),
-                || pure(", "),
-            ),
-            pure(" }"),
-        ]),
-    }
-}
-
 /// Prints one constructor arm pattern `tag(args…)` — the head of an inductive
-/// match arm. `args` are irrefutable [`Pattern`]s.
-fn print_constructor(tag: String, args: Vec<Pattern>) -> Printer<'static> {
-    flat([
-        pure(tag),
-        pure("("),
-        sep_flat(args.into_iter().map(print_pattern), || pure(", ")),
-        pure(")"),
-    ])
+/// match arm. `args` are the payload binder names.
+fn print_constructor(tag: String, args: Vec<String>) -> Printer<'static> {
+    pure(format!("{tag}({})", args.join(", ")))
 }
 
 /// Prints a match's optional motive — the parenthesized ladder: ` : body`,
@@ -385,9 +355,9 @@ fn print_term(term: Term) -> Printer<'static> {
             sep_flat(
                 params
                     .into_iter()
-                    .map(|(pattern, annotation)| match annotation {
-                        Some(ty) => flat([print_pattern(pattern), pure(" : "), print_term(ty)]),
-                        None => print_pattern(pattern),
+                    .map(|(name, annotation)| match annotation {
+                        Some(ty) => flat([pure(name), pure(" : "), print_term(ty)]),
+                        None => pure(name),
                     }),
                 || pure(", "),
             ),
@@ -579,7 +549,7 @@ fn print_term(term: Term) -> Printer<'static> {
             tail,
         }) => flat([
             pure("let "),
-            print_pattern(binder),
+            pure(binder),
             print_let_signature(signature),
             pure(";"),
             pure("\n"),
@@ -647,7 +617,7 @@ fn print_let_signature(signature: LetSignature) -> Printer<'static> {
                     // Plicity prefixes the name (`@x` = implicit).
                     flat([
                         print_plicity(param.plicity),
-                        print_pattern(param.pattern),
+                        pure(param.label),
                         pure(" : "),
                         print_term(param.type_),
                     ])

@@ -1,8 +1,8 @@
 use {
     super::{
         Error, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, LetSignature, Loader, Module,
-        Name, Nat, NatLiteral, Pattern, Plicity, Prim, Qualifier, Subterm, Term, TopItem, TopLet,
-        TopMod, TopUse, TupleType, TupleTypeParam, UseGroup,
+        Name, Nat, NatLiteral, Plicity, Prim, Qualifier, Subterm, Term, TopItem, TopLet, TopMod,
+        TopUse, TupleType, TupleTypeParam, UseGroup,
     },
     crate::wire,
 };
@@ -165,7 +165,7 @@ fn pub_fn_marked(
                 .into_iter()
                 .map(|(p, n, t)| FuncSugarParam {
                     plicity: p,
-                    pattern: Pattern::Bind(n.to_string()),
+                    label: n.to_string(),
                     type_: t,
                 })
                 .collect(),

@@ -22,7 +22,7 @@ fn parse_rec_func_and_apply() {
                         .into(),
                     ),
                     body: Subterm::Func(Func {
-                        params: vec![(Pattern::Bind("x".to_string()), None)],
+                        params: vec![("x".to_string(), None)],
                         body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
@@ -284,7 +284,7 @@ fn parse_top_rec_mixed_pub() {
                         .into(),
                     ),
                     body: Subterm::Func(Func {
-                        params: vec![(Pattern::Bind("x".to_string()), None)],
+                        params: vec![("x".to_string(), None)],
                         body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
@@ -746,7 +746,7 @@ fn parse_inductive_match_nullary_and_unary() {
                 },
                 InductiveArm {
                     tag: "bln".to_string(),
-                    args: vec![Pattern::Bind("b".to_string())],
+                    args: vec!["b".to_string()],
                     body: Subterm::Name(Name::from(["b".to_string()])).into(),
                 },
             ],
@@ -768,10 +768,7 @@ fn parse_inductive_match_multi_binder() {
             )),
             arms: vec![InductiveArm {
                 tag: "lit".to_string(),
-                args: vec![
-                    Pattern::Bind("a".to_string()),
-                    Pattern::Bind("b".to_string()),
-                ],
+                args: vec!["a".to_string(), "b".to_string(),],
                 body: Subterm::Name(Name::from(["a".to_string()])).into(),
             }],
         }))
@@ -790,7 +787,7 @@ fn parse_match_omitted_motive() {
             motive: None,
             arms: vec![InductiveArm {
                 tag: "foo".to_string(),
-                args: vec![Pattern::Bind("y".to_string())],
+                args: vec!["y".to_string()],
                 body: Subterm::Name(Name::from(["y".to_string()])).into(),
             }],
         }))
@@ -869,7 +866,7 @@ fn parse_local_let_without_type() {
     assert_eq!(
         "let x = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            binder: Pattern::Bind("x".to_string()),
+            binder: "x".to_string(),
             signature: LetSignature::Name {
                 type_: None,
                 body: Subterm::Type.into(),
@@ -885,7 +882,7 @@ fn parse_local_let_with_type_still_works() {
     assert_eq!(
         "let x : Type = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            binder: Pattern::Bind("x".to_string()),
+            binder: "x".to_string(),
             signature: LetSignature::Name {
                 type_: Some(Subterm::Type.into()),
                 body: Subterm::Type.into(),
@@ -897,38 +894,11 @@ fn parse_local_let_with_type_still_works() {
 }
 
 #[test]
-fn parse_struct_pattern_in_let() {
-    // `let Foo { pun, rename = p } = value; tail` — a pun field binds its own
-    // label; a rename binds the nested pattern. The head's trailing `{` commits
-    // to the struct form, distinguishing it from a plain `let x = …` binder.
-    assert_eq!(
-        "let Pair { fst, snd = s } = p; fst"
-            .parse::<Term>()
-            .unwrap(),
-        Subterm::Let(Let {
-            binder: Pattern::Struct {
-                head: Name::from(["Pair".to_string()]),
-                fields: vec![
-                    ("fst".to_string(), Pattern::Bind("fst".to_string())),
-                    ("snd".to_string(), Pattern::Bind("s".to_string())),
-                ],
-            },
-            signature: LetSignature::Name {
-                type_: None,
-                body: name("p"),
-            },
-            tail: name("fst"),
-        })
-        .into()
-    );
-}
-
-#[test]
 fn parse_func_with_annotation() {
     assert_eq!(
         "(x : Type) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
-            params: vec![(Pattern::Bind("x".to_string()), Some(Subterm::Type.into()))],
+            params: vec![("x".to_string(), Some(Subterm::Type.into()))],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
         .into()
@@ -942,8 +912,8 @@ fn parse_func_with_mixed_annotations() {
         "(x : Type, y) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
             params: vec![
-                (Pattern::Bind("x".to_string()), Some(Subterm::Type.into())),
-                (Pattern::Bind("y".to_string()), None),
+                ("x".to_string(), Some(Subterm::Type.into())),
+                ("y".to_string(), None),
             ],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
@@ -956,7 +926,7 @@ fn parse_func_without_annotation_still_works() {
     assert_eq!(
         "(x) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
-            params: vec![(Pattern::Bind("x".to_string()), None)],
+            params: vec![("x".to_string(), None)],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
         .into()
@@ -1047,7 +1017,7 @@ fn parse_bang_in_let_binding() {
     assert_eq!(
         "let x = e!; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            binder: Pattern::Bind("x".to_string()),
+            binder: "x".to_string(),
             signature: LetSignature::Name {
                 type_: None,
                 body: Subterm::Bang(name("e")).into(),
@@ -1218,31 +1188,13 @@ fn struct_round_trips() {
 }
 
 #[test]
-fn struct_pattern_round_trips() {
-    // A struct pattern survives print → re-parse: a pun prints as the bare label,
-    // a rename as `label = pattern`, and both nest.
-    for source in [
-        "let Pair { fst, snd } = p; fst",
-        "let Pair { fst = a, snd = b } = p; a",
-        "let Outer { it = Inner { a, b }, c } = o; c",
-    ] {
-        let term = source.parse::<Term>().unwrap();
-        assert_eq!(
-            term.to_string().parse::<Term>().unwrap(),
-            term,
-            "struct pattern round-trip failed for {source:?}"
-        );
-    }
-}
-
-#[test]
 fn inductive_match_round_trips() {
     // Constructor-arm rows survive print → re-parse: distinct tags, a nullary
-    // `nil()`, a wildcard payload binder, and a nested tuple payload pattern.
+    // `nil()`, and a wildcard payload binder.
     for source in [
         "match xs | cons(x, xs) => x | nil() => y end",
         "match xs | cons(x, _) => x | nil() => y end",
-        "match xs | cons((a, b), xs) => a | nil() => y end",
+        "match xs | cons(a, b) => a | nil() => y end",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(

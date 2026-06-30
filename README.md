@@ -89,11 +89,11 @@ cargo run --package curios-compiler --release -- run hello.crs
 
 The `curios-compiler` binary exposes three subcommands:
 
-| Command | What it does |
-| --- | --- |
-| `curios-compiler run <file.crs> [args...]` | Compile and execute the program. Extra arguments are readable from `/std/Proc/args`. |
-| `curios-compiler check <file.crs>` | Type-check the entrypoint without running it. |
-| `curios-compiler compile <file.crs> [-o out]` | Compile to a self-contained native executable (default name: the input file stem). |
+| Command                                       | What it does                                                                         |
+| --------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `curios-compiler run <file.crs> [args...]`    | Compile and execute the program. Extra arguments are readable from `/std/Proc/args`. |
+| `curios-compiler check <file.crs>`            | Type-check the entrypoint without running it.                                        |
+| `curios-compiler compile <file.crs> [-o out]` | Compile to a self-contained native executable (default name: the input file stem).   |
 
 Two global flags are useful while exploring:
 

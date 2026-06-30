@@ -13,7 +13,7 @@ The repo is a **Cargo workspace** (virtual manifest at the root) of four crates:
 - **`curios-runtime`** — runtime-only engine (lib) + the launcher stub (bin `curios-runtime`). Deserializes a precompiled module and runs it on wasmtime; **never** links Cranelift or Binaryen.
 - **`curios-compiler`** — the CLI (bin `curios-compiler`) + a lib with the compile / precompile (`to_cwasm`) / run-from-source helpers. The **only** crate that links Cranelift (via `wasmtime`'s `cranelift` feature) and Binaryen.
 
-The JIT-vs-deserialize split is a *crate boundary*, not a feature flag (the full mechanism is in [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher)). Both crates share one `wasmtime`, version-pinned once in `[workspace.dependencies]`, so the `.cwasm` a `curios-compiler` produces matches what `curios-runtime` deserializes.
+The JIT-vs-deserialize split is a _crate boundary_, not a feature flag (the full mechanism is in [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher)). Both crates share one `wasmtime`, version-pinned once in `[workspace.dependencies]`, so the `.cwasm` a `curios-compiler` produces matches what `curios-runtime` deserializes.
 
 Two languages live in this repo: **Rust** (the compiler) and **curios** itself (the object language, with a standard library under `curios/std/`). Work touches one or both.
 
@@ -48,30 +48,30 @@ then, in curios-compiler:
 
 ## Where things live
 
-| Path                                          | Role                                                                                         |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `curios/src/text/`                            | Lexer/parser, surface AST, lowering to core (`to_core/`)                                     |
-| `curios/src/core/`                            | Core language: elaboration, typing, reduction, conversion, inductives, erasure, zonking      |
-| `curios/src/ersd/`                            | Erased IR (post type-erasure); ersd→ersd optimization (`optm/`: prune, accumulators, offsets); lowering to CPS (`to_cont/`) |
-| `curios/src/cont/`                            | Continuation-passing IR; cont→cont optimization (`optm/`: inlining, DCE, copy/tag/jump threading, tail recursion, …); wasm emission (`to_wasm/`) |
-| `curios/src/wasm/`                            | Wasm module model, parser, binary writer/encoder                                             |
-| `curios/src/driver.rs`                        | Pipeline driver: `compile_entrypoint`, `typecheck_entrypoint`, `Stage`                       |
-| `curios/src/monads/`                          | Parser/printer monad combinators                                                             |
-| `curios/src/{span,entropy,wire,macros}.rs`    | Shared utilities (`wire` = host↔guest ABI constants)                                         |
-| `curios/{std,syn}/`                           | curios standard / support libraries (`*.crs`), indexed by `curios/{std,syn}.crs`            |
-| `curios/examples/`                            | Pipeline-only Rust examples (`bench_check`, `inline_wasm`)                                    |
-| `curios-binaryen/src/`                        | FFI bindings to vendored Binaryen (`sys.rs`); `optimize(bytes)`; `build.rs` links it         |
-| `curios-binaryen/binaryen/`                   | Vendored Binaryen C++ source (do not edit — see Gotchas)                                      |
-| `curios-runtime/src/`                         | wasmtime engine + host stack (`run_bytes`, `instantiate`, `shared_engine`); OS + mock hosts  |
-| `curios-runtime/src/bundle.rs`                | Bundled-executable footer format (`append_payload`/`extract_payload`), shared by bundler + launcher |
-| `curios-runtime/src/main.rs`                  | The launcher stub (bin `curios-runtime`): reads its appended `.cwasm` tail and runs it        |
-| `curios-compiler/src/lib.rs`                  | `to_cwasm`, `run_wasm`, `load`, run-from-source helpers; re-exports `Stage`/`MockHost`/`OsHost` |
-| `curios-compiler/src/main.rs`                 | clap-based CLI (bin `curios-compiler`): module wiring + subcommand dispatch                    |
-| `curios-compiler/src/{cli,pipeline,bundle}.rs`| CLI surface (clap), pipeline driving + `--print` stage dumps, and the `compile`→executable bundler |
-| `Makefile`                                    | Builds the slim `curios-runtime` and copies it to `curios-compiler/runtime` for `bundle.rs` to `include_bytes!` |
-| `curios-compiler/src/tests/`                  | Cross-stage integration tests (incl. relocated `codegen/` tests)                             |
-| `curios-compiler/examples/`                   | Runnable examples that execute (`parse_*`, `inline_*`, `crs_*`, `bench_parse`)               |
-| `curios-compiler/tests/bundle.rs`             | Gated (`#[ignore]`) end-to-end test of the `compile`→executable path                          |
+| Path                                           | Role                                                                                                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `curios/src/text/`                             | Lexer/parser, surface AST, lowering to core (`to_core/`)                                                                                         |
+| `curios/src/core/`                             | Core language: elaboration, typing, reduction, conversion, inductives, erasure, zonking                                                          |
+| `curios/src/ersd/`                             | Erased IR (post type-erasure); ersd→ersd optimization (`optm/`: prune, accumulators, offsets); lowering to CPS (`to_cont/`)                      |
+| `curios/src/cont/`                             | Continuation-passing IR; cont→cont optimization (`optm/`: inlining, DCE, copy/tag/jump threading, tail recursion, …); wasm emission (`to_wasm/`) |
+| `curios/src/wasm/`                             | Wasm module model, parser, binary writer/encoder                                                                                                 |
+| `curios/src/driver.rs`                         | Pipeline driver: `compile_entrypoint`, `typecheck_entrypoint`, `Stage`                                                                           |
+| `curios/src/monads/`                           | Parser/printer monad combinators                                                                                                                 |
+| `curios/src/{span,entropy,wire,macros}.rs`     | Shared utilities (`wire` = host↔guest ABI constants)                                                                                             |
+| `curios/{std,syn}/`                            | curios standard / support libraries (`*.crs`), indexed by `curios/{std,syn}.crs`                                                                 |
+| `curios/examples/`                             | Pipeline-only Rust examples (`bench_check`, `inline_wasm`)                                                                                       |
+| `curios-binaryen/src/`                         | FFI bindings to vendored Binaryen (`sys.rs`); `optimize(bytes)`; `build.rs` links it                                                             |
+| `curios-binaryen/binaryen/`                    | Vendored Binaryen C++ source (do not edit — see Gotchas)                                                                                         |
+| `curios-runtime/src/`                          | wasmtime engine + host stack (`run_bytes`, `instantiate`, `shared_engine`); OS + mock hosts                                                      |
+| `curios-runtime/src/bundle.rs`                 | Bundled-executable footer format (`append_payload`/`extract_payload`), shared by bundler + launcher                                              |
+| `curios-runtime/src/main.rs`                   | The launcher stub (bin `curios-runtime`): reads its appended `.cwasm` tail and runs it                                                           |
+| `curios-compiler/src/lib.rs`                   | `to_cwasm`, `run_wasm`, `load`, run-from-source helpers; re-exports `Stage`/`MockHost`/`OsHost`                                                  |
+| `curios-compiler/src/main.rs`                  | clap-based CLI (bin `curios-compiler`): module wiring + subcommand dispatch                                                                      |
+| `curios-compiler/src/{cli,pipeline,bundle}.rs` | CLI surface (clap), pipeline driving + `--print` stage dumps, and the `compile`→executable bundler                                               |
+| `Makefile`                                     | Builds the slim `curios-runtime` and copies it to `curios-compiler/runtime` for `bundle.rs` to `include_bytes!`                                  |
+| `curios-compiler/src/tests/`                   | Cross-stage integration tests (incl. relocated `codegen/` tests)                                                                                 |
+| `curios-compiler/examples/`                    | Runnable examples that execute (`parse_*`, `inline_*`, `crs_*`, `bench_parse`)                                                                   |
+| `curios-compiler/tests/bundle.rs`              | Gated (`#[ignore]`) end-to-end test of the `compile`→executable path                                                                             |
 
 ## Build & test
 
@@ -91,7 +91,7 @@ cargo test --workspace --all-targets --all-features
 There are **no Cargo features** on the workspace crates. The JIT/Cranelift split is a crate boundary instead:
 
 - `curios-runtime` declares only a runtime-only `wasmtime` (no `cranelift`) and never depends on `curios-binaryen`. **`cargo build --package curios-runtime` is a slim, Cranelift/Binaryen-free launcher** — that is the build embedded into the compiler as the stub.
-- `curios-compiler` adds the `cranelift` feature to its own `wasmtime` dependency and depends on `curios-binaryen`. Feature unification makes Cranelift available throughout a `curios-compiler` build (and a `--workspace` build), so the `curios-runtime` *bin* produced by a `--workspace` build is **not** the slim one. This is why `make curios-compiler/runtime` builds the launcher with an isolated `cargo build --release --package curios-runtime` *before* the compiler and copies it to `curios-compiler/runtime`: building it alone keeps Cranelift out. Do not hand-build the launcher via `--workspace` and expect it to be slim — it will be the fat (Cranelift-linked) one.
+- `curios-compiler` adds the `cranelift` feature to its own `wasmtime` dependency and depends on `curios-binaryen`. Feature unification makes Cranelift available throughout a `curios-compiler` build (and a `--workspace` build), so the `curios-runtime` _bin_ produced by a `--workspace` build is **not** the slim one. This is why `make curios-compiler/runtime` builds the launcher with an isolated `cargo build --release --package curios-runtime` _before_ the compiler and copies it to `curios-compiler/runtime`: building it alone keeps Cranelift out. Do not hand-build the launcher via `--workspace` and expect it to be slim — it will be the fat (Cranelift-linked) one.
 - The done bar lists no separate `cargo check --package curios-runtime`: the isolated `cargo build --release --package curios-runtime` that `make curios-compiler/runtime` runs already proves the runtime-only configuration compiles — something `--workspace --all-features` cannot do, since feature unification pulls Cranelift in.
 
 Building `curios-binaryen` compiles a large C++ project via CMake on first build — expect minutes, not seconds, and a C++ toolchain + CMake on the machine. Anything depending on it (`curios-binaryen`, `curios-compiler`, the whole `--workspace`) pays that cost once; `curios` and `curios-runtime` on their own do not.

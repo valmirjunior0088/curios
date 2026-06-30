@@ -3,9 +3,9 @@ use {
         Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, Entrypoint, Field, Func,
         FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm, InductiveMatch, Infix,
         Let, LetBang, LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral,
-        NatMatch, NumLit, NumOp, Pattern, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem,
-        StructLit, Subterm, Syn, Term, TopCase, TopInductive, TopItem, TopLet, TopMod, TopStruct,
-        TopUse, Tuple, TupleType, TupleTypeParam, UseGroup,
+        NatMatch, NumLit, NumOp, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem, StructLit,
+        Subterm, Syn, Term, TopCase, TopInductive, TopItem, TopLet, TopMod, TopStruct, TopUse,
+        Tuple, TupleType, TupleTypeParam, UseGroup,
     },
     crate::{
         Source,
@@ -487,74 +487,26 @@ fn parse_func_type<'a>() -> Parser<'a, Term> {
 // A lambda parameter with an optional domain annotation. `(x)` is sugar for
 // `(x : _)`; the annotation, when present, parses as an arbitrary term and stops
 // at the closing `)` (mirrors `parse_func_type_param`).
-// A binder pattern: a plain identifier, or a parenthesized positional tuple
-// pattern. A leading `(` always commits to a tuple pattern — patterns never need
-// grouping, so there is no `(p)`-as-grouping ambiguity.
-// A positional tuple pattern `(p, …)`, its fields drawn from `elem` — the
-// irrefutable (`parse_pattern`) or refutable (`parse_match_pattern`) sub-grammar.
-fn tuple_pattern<'a>(elem: fn() -> Parser<'a, Pattern>) -> Parser<'a, Pattern> {
-    catch(parse_literal("("))
-        .and_keep(sep_by0(move || lazy(elem), || parse_literal(",")))
-        .and_drop(parse_literal(")"))
-        .map(Pattern::Tuple)
+// A binder name: a plain identifier (`_` to ignore). The language has no
+// compound binder patterns — `let`, lambda, function, and constructor-arm binders
+// all bind a single name and destructure via projections (`.0`, `.label`).
+fn parse_binder<'a>() -> Parser<'a, String> {
+    parse_identifier().map(str::to_string)
 }
 
-// One field of a struct pattern: a rename `bar = p` (binding the nested pattern
-// `p`, drawn from `elem`), or a pun `bar` (binding the field's own label). The
-// `=` commits to the rename, so a bare label falls through to the pun.
-fn struct_field_pattern<'a>(elem: fn() -> Parser<'a, Pattern>) -> Parser<'a, (String, Pattern)> {
-    catch(parse_identifier().and_drop(parse_literal("=")))
-        .and(lazy(elem))
-        .map(|(label, pattern): (&str, Pattern)| (label.to_string(), pattern))
-        .or(parse_identifier()
-            .map(|label: &str| (label.to_string(), Pattern::Bind(label.to_string()))))
-}
-
-// A nominal struct pattern `Name { field, … }`, its fields drawn from `elem`. The
-// trailing `{` after the head is the commit point — it distinguishes the pattern
-// from a bare `Bind` (no brace), exactly as `parse_struct_lit` distinguishes a
-// literal from a name reference. Parameters are never written here; they are
-// inferred from the head.
-fn struct_pattern<'a>(elem: fn() -> Parser<'a, Pattern>) -> Parser<'a, Pattern> {
-    catch(parse_name().and_drop(parse_literal("{")))
-        .and(sep_by0(
-            move || struct_field_pattern(elem),
-            || parse_literal(","),
-        ))
-        .and_drop(parse_literal("}"))
-        .map(|(head, fields)| Pattern::Struct { head, fields })
-}
-
-// The irrefutable tuple/struct entry points (also used at `let`-binder sites),
-// binding their fields with the irrefutable grammar.
-fn parse_tuple_pattern<'a>() -> Parser<'a, Pattern> {
-    tuple_pattern(parse_pattern)
-}
-
-fn parse_struct_pattern<'a>() -> Parser<'a, Pattern> {
-    struct_pattern(parse_pattern)
-}
-
-fn parse_pattern<'a>() -> Parser<'a, Pattern> {
-    parse_tuple_pattern()
-        .or(parse_struct_pattern())
-        .or(parse_identifier().map(|name: &str| Pattern::Bind(name.to_string())))
-}
-
-// A match-arm constructor pattern `tag(p, …)` — `nil()` for the nullary case.
+// A match-arm constructor pattern `tag(x, …)` — `nil()` for the nullary case.
 // The `(` immediately after the tag is the commit point, distinguishing it from
-// a bare binder. Arguments are *irrefutable* binder patterns (`parse_pattern`):
-// the language admits no nested refutable patterns, scalar literals, or
-// catch-all arms — every match arm is one distinct constructor.
-fn parse_constructor_arm<'a>() -> Parser<'a, (String, Vec<Pattern>)> {
+// a bare name. Arguments are plain binder names: every match arm is one distinct
+// constructor binding its payload by name.
+fn parse_constructor_arm<'a>() -> Parser<'a, (String, Vec<String>)> {
     catch(parse_identifier().and_drop(parse_literal("(")))
-        .and(sep_by0(parse_pattern, || parse_literal(",")))
+        .and(sep_by0(parse_binder, || parse_literal(",")))
         .and_drop(parse_literal(")"))
-        .map(|(tag, args): (&str, Vec<Pattern>)| (tag.to_string(), args))
+        .map(|(tag, args): (&str, Vec<String>)| (tag.to_string(), args))
 }
 
-fn parse_func_param<'a>() -> Parser<'a, (Pattern, Option<Term>)> {
-    parse_pattern().and(
+fn parse_func_param<'a>() -> Parser<'a, (String, Option<Term>)> {
+    parse_binder().and(
         catch(parse_literal(":").and_keep(lazy(parse_term)))
             .map(Some)
             .or(pure(None)),
@@ -859,13 +811,13 @@ fn parse_rec<'a>() -> Parser<'a, Term> {
 
 fn parse_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
     parse_plicity()
-        .and(parse_pattern())
+        .and(parse_binder())
         .and_drop(parse_literal(":"))
         .and(lazy(parse_term))
         .map(
-            |((plicity, pattern), type_): ((Plicity, Pattern), Term)| FuncSugarParam {
+            |((plicity, label), type_): ((Plicity, String), Term)| FuncSugarParam {
                 plicity,
-                pattern,
+                label,
                 type_,
             },
         )
@@ -925,47 +877,9 @@ fn parse_local_let_signature<'a>() -> Parser<'a, LetSignature> {
     parse_func_let_signature().or(parse_optional_name_signature())
 }
 
-// `let (a, b) = e; tail` / `let (a, b) : T = e; tail`. A `(` right after `let`
-// (an identifier can never start there) commits to the destructuring form, so
-// `.or(parse_let_name)` only backtracks when there is no tuple pattern. The
-// binder is a pattern but the signature is always the plain `(: T)? = value`
-// form — a tuple pattern never carries the function-definition sugar.
-fn parse_let_tuple<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("let").and_keep(parse_tuple_pattern()))
-        .and(parse_optional_name_signature())
-        .and_drop(parse_literal(";"))
-        .and(lazy(parse_term))
-        .map(|((binder, signature), tail)| {
-            Subterm::Let(Let {
-                binder,
-                signature,
-                tail,
-            })
-        })
-        .map(Into::into)
-}
-
-// `let Foo { bar, baz } = e; tail`. A struct pattern right after `let` commits
-// to the destructuring form (the head's trailing `{`), so `.or(parse_let_name)`
-// only backtracks when there is no struct pattern. Like the tuple form, the
-// signature is always the plain `(: T)? = value` shape — the head already pins
-// the struct type, so an annotation is optional.
-fn parse_let_struct<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("let").and_keep(parse_struct_pattern()))
-        .and(parse_optional_name_signature())
-        .and_drop(parse_literal(";"))
-        .and(lazy(parse_term))
-        .map(|((binder, signature), tail)| {
-            Subterm::Let(Let {
-                binder,
-                signature,
-                tail,
-            })
-        })
-        .map(Into::into)
-}
-
-fn parse_let_name<'a>() -> Parser<'a, Term> {
+// `let x = e; tail` / `let x : T = e; tail` / `let f(p : T, …) -> R = …; tail`.
+// The binder is always a single name; destructuring is done with projections.
+fn parse_let<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("let"))
         .and_keep(parse_identifier())
         .and(parse_local_let_signature())
@@ -973,18 +887,12 @@ fn parse_let_name<'a>() -> Parser<'a, Term> {
         .and(lazy(parse_term))
         .map(|((label, signature), tail)| {
             Subterm::Let(Let {
-                binder: Pattern::Bind(label.to_string()),
+                binder: label.to_string(),
                 signature,
                 tail,
             })
         })
         .map(Into::into)
-}
-
-fn parse_let<'a>() -> Parser<'a, Term> {
-    parse_let_tuple()
-        .or(parse_let_struct())
-        .or(parse_let_name())
 }
 
 fn parse_proj_suffix<'a>() -> Parser<'a, Field> {
