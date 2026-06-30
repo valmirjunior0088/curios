@@ -84,10 +84,9 @@ pub struct FuncType {
 }
 
 /// A binding pattern in a binder position (`let`, lambda parameter, match-arm
-/// payload). Stage 1 covers the irrefutable *product* fragment — plain binders
-/// and positional tuple patterns; both lower to projections off a fresh temp in
-/// `to_core`, never to a branch. The grammar is shared with the (future)
-/// refutable constructor patterns the pattern-matrix compiler will consume.
+/// constructor payload). The irrefutable *product* fragment — plain binders,
+/// positional tuple patterns, and partial struct patterns; all lower to
+/// projections off a fresh temp in `to_core`, never to a branch.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
     /// A plain binder `x` (or `_`). `_` lowers to a fresh internal name, so
@@ -105,25 +104,6 @@ pub enum Pattern {
         head: Name,
         fields: Vec<(String, Pattern)>,
     },
-    /// A *refutable* nominal constructor pattern `tag(p, …)` — `nil()` is the
-    /// nullary form. Mandatory parens distinguish it from a `Bind`. Appears only
-    /// in match-arm rows (stage 2 — the pattern-matrix compiler consumes it);
-    /// the irrefutable binder positions (`let`, lambda params) reject it.
-    Variant { tag: String, args: Vec<Pattern> },
-    /// A *refutable* scalar literal pattern — `0`/`'c'` (Nat) or `true`/`false`
-    /// (Bln) — nested in the matrix. Compiles to a `switch` / `bln_match`
-    /// dispatch with the catch-all rows as the default.
-    Lit(PatternLit),
-}
-
-/// The scalar literal a [`Pattern::Lit`] tests. Only the kinds with a core
-/// dispatch node are representable: `Nat` (→ `switch`, `u32`-ranged like the
-/// surface `match`) and `Bln` (→ `bln_match`). `Int`/`Flt`/`Str` have no
-/// elimination node, so they are not pattern-matchable.
-#[derive(Debug, Clone, PartialEq)]
-pub enum PatternLit {
-    Nat(u32),
-    Bln(bool),
 }
 
 impl Pattern {
@@ -134,10 +114,7 @@ impl Pattern {
     pub fn binder_name(&self) -> Option<String> {
         match self {
             Pattern::Bind(name) => Some(name.clone()),
-            Pattern::Tuple(_)
-            | Pattern::Struct { .. }
-            | Pattern::Variant { .. }
-            | Pattern::Lit(_) => None,
+            Pattern::Tuple(_) | Pattern::Struct { .. } => None,
         }
     }
 }
@@ -291,13 +268,20 @@ pub struct StructLit {
 pub struct InductiveMatch {
     pub head: Term,
     pub motive: Option<Motive>,
-    /// The arm rows, in source order. Each row pairs a (refutable) pattern with
-    /// its body. Unlike a per-constructor map, the rows are *ordered* and may
-    /// *repeat* a head constructor (`cons(0, _) => … | cons(x, _) => …`) — the
-    /// matrix the pattern compiler consumes. The legacy single-level shape is
-    /// the special case of distinct-tag [`Pattern::Variant`] rows whose args are
-    /// all irrefutable.
-    pub rows: Vec<(Pattern, Term)>,
+    /// The constructor arms, in source order. Each is a single-level pattern
+    /// `tag(p, …)` (distinct tags, irrefutable arguments) paired with its body —
+    /// the only refutable match shape the language admits. The grammar enforces
+    /// the shape; lowering only rejects a repeated `tag`.
+    pub arms: Vec<InductiveArm>,
+}
+
+/// One constructor arm of an [`InductiveMatch`]: `| tag(args…) => body`. `args`
+/// are irrefutable [`Pattern`]s binding the constructor's payload.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InductiveArm {
+    pub tag: String,
+    pub args: Vec<Pattern>,
+    pub body: Term,
 }
 
 #[derive(Debug, Clone, PartialEq)]

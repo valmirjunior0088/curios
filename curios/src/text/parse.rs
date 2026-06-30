@@ -1,11 +1,11 @@
 use {
     super::{
         Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, Entrypoint, Field, Func,
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let, LetBang,
-        LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral, NatMatch, NumLit,
-        NumOp, Pattern, PatternLit, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem, StructLit,
-        Subterm, Syn, Term, TopCase, TopInductive, TopItem, TopLet, TopMod, TopStruct, TopUse,
-        Tuple, TupleType, TupleTypeParam, UseGroup,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm, InductiveMatch, Infix,
+        Let, LetBang, LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral,
+        NatMatch, NumLit, NumOp, Pattern, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem,
+        StructLit, Subterm, Syn, Term, TopCase, TopInductive, TopItem, TopLet, TopMod, TopStruct,
+        TopUse, Tuple, TupleType, TupleTypeParam, UseGroup,
     },
     crate::{
         Source,
@@ -541,39 +541,16 @@ fn parse_pattern<'a>() -> Parser<'a, Pattern> {
         .or(parse_identifier().map(|name: &str| Pattern::Bind(name.to_string())))
 }
 
-// The *refutable* pattern grammar, used only in match-arm rows. It extends the
-// irrefutable grammar with constructor patterns (`tag(p, …)`) and scalar literal
-// patterns (`0`, `true`), and recurses into itself through tuples and structs so
-// a literal/constructor may sit at any depth (`cons((0, x), _)`) — hence the
-// tuple/struct parsers recurse into `parse_match_pattern`, not `parse_pattern`.
-fn parse_match_pattern<'a>() -> Parser<'a, Pattern> {
-    tuple_pattern(parse_match_pattern)
-        .or(struct_pattern(parse_match_pattern))
-        .or(parse_variant_pattern())
-        .or(parse_lit_pattern())
-        .or(parse_identifier().map(|name: &str| Pattern::Bind(name.to_string())))
-}
-
-// A constructor pattern `tag(p, …)` — `nil()` for the nullary case. The `(`
-// immediately after the tag is the commit point, distinguishing it from a bare
-// `Bind` (which has no paren), exactly as `parse_struct_pattern` commits on `{`.
-fn parse_variant_pattern<'a>() -> Parser<'a, Pattern> {
+// A match-arm constructor pattern `tag(p, …)` — `nil()` for the nullary case.
+// The `(` immediately after the tag is the commit point, distinguishing it from
+// a bare binder. Arguments are *irrefutable* binder patterns (`parse_pattern`):
+// the language admits no nested refutable patterns, scalar literals, or
+// catch-all arms — every match arm is one distinct constructor.
+fn parse_constructor_arm<'a>() -> Parser<'a, (String, Vec<Pattern>)> {
     catch(parse_identifier().and_drop(parse_literal("(")))
-        .and(sep_by0(|| lazy(parse_match_pattern), || parse_literal(",")))
+        .and(sep_by0(parse_pattern, || parse_literal(",")))
         .and_drop(parse_literal(")"))
-        .map(|(tag, args): (&str, Vec<Pattern>)| Pattern::Variant {
-            tag: tag.to_string(),
-            args,
-        })
-}
-
-// A scalar literal pattern: `true`/`false` (Bln) or a Nat literal (`0`, `'c'`).
-// `Int`/`Flt`/`Str` have no dispatch node, so they are not pattern-matchable.
-fn parse_lit_pattern<'a>() -> Parser<'a, Pattern> {
-    catch(parse_keyword("true"))
-        .map(|()| Pattern::Lit(PatternLit::Bln(true)))
-        .or(catch(parse_keyword("false")).map(|()| Pattern::Lit(PatternLit::Bln(false))))
-        .or(catch(parse_nat_literal_u32()).map(|n| Pattern::Lit(PatternLit::Nat(n))))
+        .map(|(tag, args): (&str, Vec<Pattern>)| (tag.to_string(), args))
 }
 
 fn parse_func_param<'a>() -> Parser<'a, (Pattern, Option<Term>)> {
@@ -751,15 +728,15 @@ fn parse_nat_switch<'a>() -> Parser<'a, Term> {
         })
 }
 
-// A match-arm row: `| <pattern> => body`, where `<pattern>` is a full refutable
-// pattern. The old `| tag(p…) => body` shape is the special case where the
-// pattern is a [`Pattern::Variant`]; a bare `| x =>` / `| _ =>` is now a
-// catch-all binder row, and rows may nest and repeat constructors.
-fn parse_inductive_match_branch<'a>() -> Parser<'a, (Pattern, Term)> {
+// A match-arm: `| tag(args…) => body`, one distinct constructor with irrefutable
+// payload binders. Nested refutable patterns, scalar literals, and bare
+// `| x =>` / `| _ =>` catch-alls are not part of the grammar.
+fn parse_inductive_match_branch<'a>() -> Parser<'a, InductiveArm> {
     catch(parse_literal("|"))
-        .and_keep(parse_match_pattern())
+        .and_keep(parse_constructor_arm())
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
+        .map(|((tag, args), body)| InductiveArm { tag, args, body })
 }
 
 // Zero arms are legal: under inversion (Rung C) every impossible arm is
@@ -769,8 +746,8 @@ fn parse_inductive_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
         .and(many0(parse_inductive_match_branch))
         .and_drop(parse_keyword("end"))
-        .map(|((head, motive), rows)| {
-            Subterm::Match(Match::Inductive(InductiveMatch { head, motive, rows }))
+        .map(|((head, motive), arms)| {
+            Subterm::Match(Match::Inductive(InductiveMatch { head, motive, arms }))
         })
         .map(Into::into)
 }

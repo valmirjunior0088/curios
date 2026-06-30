@@ -4,7 +4,7 @@ use {
         core,
         text::{
             ArrMatch, BinMatch, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch,
-            Pattern, PatternLit, Prim, Subterm, Syn, Term,
+            Pattern, Prim, Subterm, Syn, Term,
         },
     },
     num_bigint::BigUint,
@@ -75,8 +75,8 @@ impl<'a, 'b> Lower<'a, 'b> {
 
     /// Collects the user-written identifiers a binder pattern introduces — the
     /// names that must shadow module bindings inside the binder's scope. Nested
-    /// tuple/struct/variant patterns contribute their leaves; the wildcard `_`
-    /// rides along but is ignored by [`Self::scoped`].
+    /// tuple/struct patterns contribute their leaves; the wildcard `_` rides along
+    /// but is ignored by [`Self::scoped`].
     fn pattern_names(pattern: &Pattern, out: &mut Vec<String>) {
         match pattern {
             Pattern::Bind(name) => out.push(name.clone()),
@@ -84,8 +84,6 @@ impl<'a, 'b> Lower<'a, 'b> {
             Pattern::Struct { fields, .. } => {
                 fields.iter().for_each(|(_, p)| Self::pattern_names(p, out))
             }
-            Pattern::Variant { args, .. } => args.iter().for_each(|p| Self::pattern_names(p, out)),
-            Pattern::Lit(_) => {}
         }
     }
 
@@ -360,20 +358,21 @@ impl<'a, 'b> Lower<'a, 'b> {
                     )
                 }
                 Match::Inductive(um) => {
-                    // An inductive match lowers either to a single-level core `Match`
-                    // (the legacy distinct-tag shape) or, when its rows nest
-                    // refutable patterns, through the pattern-matrix compiler to a
-                    // tree of them. Bodies lower here; `inductive_rows` decides.
+                    // A distinct-tag inductive match lowers to a single-level core
+                    // `Match`. Bodies lower here (under the arm's payload binders);
+                    // `inductive_rows` checks distinctness and assembles the cases.
                     let head = self.term(&um.head)?;
-                    let rows = um
-                        .rows
+                    let arms = um
+                        .arms
                         .iter()
-                        .map(|(pattern, body)| {
-                            let body = self.scoped(Self::names_of(pattern), || self.term(body))?;
-                            Ok((pattern.clone(), body))
+                        .map(|arm| {
+                            let names =
+                                arm.args.iter().flat_map(Self::names_of).collect::<Vec<_>>();
+                            let body = self.scoped(names, || self.term(&arm.body))?;
+                            Ok((arm.tag.clone(), arm.args.clone(), body))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
-                    self.inductive_rows(head, &um.motive, rows)?
+                    self.inductive_rows(head, &um.motive, arms)?
                 }
                 Match::Arr(ArrMatch {
                     head,
@@ -643,11 +642,6 @@ impl<'a, 'b> Lower<'a, 'b> {
                 let body = self.project_struct_fields(&scrutinee, fields, tail)?;
                 core::Term::let_(temp, self.struct_head_type(head)?, value, body)
             }
-            // The irrefutable `parse_pattern` grammar never yields a refutable
-            // pattern in a binder position; match arms route through `inductive_rows`.
-            Pattern::Variant { .. } | Pattern::Lit(_) => {
-                unreachable!("refutable pattern in a let binder position")
-            }
         })
     }
 
@@ -725,9 +719,6 @@ impl<'a, 'b> Lower<'a, 'b> {
                 let scrutinee = core::Term::var(core::Var::free(name.clone()));
                 (name, self.project_struct_fields(&scrutinee, fields, body)?)
             }
-            Pattern::Variant { .. } | Pattern::Lit(_) => {
-                unreachable!("refutable pattern in a top binder position")
-            }
         })
     }
 
@@ -803,11 +794,6 @@ impl<'a, 'b> Lower<'a, 'b> {
                 let inner = core::Term::var(core::Var::free(temp.clone()));
                 let body = self.project_struct_fields(&inner, fields, body)?;
                 core::Term::let_(temp, self.struct_head_type(head)?, scrutinee, body)
-            }
-            // Nested refutable patterns are bound by the matrix compiler, which
-            // dispatches on them rather than binding them irrefutably here.
-            Pattern::Variant { .. } | Pattern::Lit(_) => {
-                unreachable!("refutable pattern reached irrefutable nested binding")
             }
         })
     }
@@ -885,18 +871,18 @@ impl<'a, 'b> Lower<'a, 'b> {
             Match::Inductive(um) => {
                 // Mirrors the `Match::Inductive` arm of `subterm` (see there), swapping
                 // `collect` on the head and `region` on the arm bodies (branch-local
-                // effects); `inductive_rows` then dispatches simple-vs-matrix.
+                // effects).
                 let head = self.collect(&um.head, bind, binds)?;
-                let rows = um
-                    .rows
+                let arms = um
+                    .arms
                     .iter()
-                    .map(|(pattern, body)| {
-                        let body =
-                            self.scoped(Self::names_of(pattern), || self.region(body, bind))?;
-                        Ok((pattern.clone(), body))
+                    .map(|arm| {
+                        let names = arm.args.iter().flat_map(Self::names_of).collect::<Vec<_>>();
+                        let body = self.scoped(names, || self.region(&arm.body, bind))?;
+                        Ok((arm.tag.clone(), arm.args.clone(), body))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
-                self.inductive_rows(head, &um.motive, rows)?
+                self.inductive_rows(head, &um.motive, arms)?
             }
             Match::Arr(ArrMatch {
                 head,
@@ -1070,524 +1056,25 @@ impl<'a, 'b> Lower<'a, 'b> {
         ))
     }
 
-    /// Lowers an inductive match's arm rows (bodies already lowered). The legacy
-    /// single-level shape — distinct-tag [`Pattern::Variant`] rows whose args are
-    /// all irrefutable — goes through [`Self::inductive_match`] unchanged (identical
-    /// core, including the dependent/annotated motive forms). Anything richer —
-    /// nested refutable patterns, a repeated head, a literal, or a `_`/binder
-    /// catch-all — is compiled by the pattern matrix into a tree of the same
-    /// single-level nodes.
+    /// Assembles an inductive match's already-lowered constructor arms into a
+    /// single-level core `Match` via [`Self::inductive_match`]. The surface
+    /// grammar guarantees each arm is one constructor with irrefutable payload
+    /// binders; unknown tags, arity, exhaustiveness, and repeated tags are all
+    /// verified by core elaboration against the inductive's registry.
     fn inductive_rows(
         &self,
         head: core::Term,
         motive: &Option<Motive>,
-        rows: Vec<(Pattern, core::Term)>,
+        arms: Vec<(String, Vec<Pattern>, core::Term)>,
     ) -> Result<core::Term, Error> {
-        if let Some(cases) = self.simple_inductive_cases(&rows)? {
-            return self.inductive_match(head, motive, cases);
-        }
+        let mut cases = Vec::with_capacity(arms.len());
 
-        // Bind the scrutinee to a temp so every dispatch (and every catch-all
-        // binder) reads a plain variable, then compile the one-column matrix.
-        let temp = self.context.fresh_binder();
-        let scrutinee = core::Term::var(core::Var::free(temp.clone()));
-        let matrix = rows
-            .into_iter()
-            .map(|(pattern, body)| MatrixRow {
-                columns: vec![pattern],
-                bindings: vec![],
-                body,
-            })
-            .collect();
-        let motive = self.matrix_motive(motive)?;
-        let compiled = self.compile_matrix(&[scrutinee], matrix, motive)?;
-        let temp_type = core::Term::metavar(self.context.fresh_metavar());
-        Ok(core::Term::let_(temp, temp_type, head, compiled))
-    }
-
-    /// The legacy single-level cases, or `None` if the rows need the matrix. Rows
-    /// qualify only when each is a distinct-tag constructor pattern with
-    /// irrefutable arguments — exactly what the pre-matrix lowering accepted.
-    fn simple_inductive_cases(
-        &self,
-        rows: &[(Pattern, core::Term)],
-    ) -> Result<Option<Vec<InductiveCase>>, Error> {
-        let mut seen = std::collections::HashSet::new();
-        let mut cases = Vec::with_capacity(rows.len());
-
-        for (pattern, body) in rows {
-            let Pattern::Variant { tag, args } = pattern else {
-                return Ok(None);
-            };
-
-            if !seen.insert(tag.clone()) || args.iter().any(pattern_is_refutable) {
-                return Ok(None);
-            }
-
-            let (binders, body) = self.bind_arm_patterns(args, body.clone())?;
+        for (tag, args, body) in arms {
+            let (binders, body) = self.bind_arm_patterns(&args, body)?;
             cases.push((core::Atom::from(tag.as_str()), binders, body));
         }
 
-        Ok(Some(cases))
-    }
-
-    /// Splits the user motive into the `(label, body)` the outermost synthesized
-    /// dispatch node carries. An omitted motive yields `None` (the node then
-    /// elides to a fresh metavariable, like every inner node). The annotated
-    /// index-pattern form has no place in a nested match — its refinement cannot
-    /// thread through the inferred inner motives.
-    fn matrix_motive(
-        &self,
-        motive: &Option<Motive>,
-    ) -> Result<Option<(Option<String>, core::Term)>, Error> {
-        Ok(match motive {
-            None => None,
-            Some(Motive::Constant(body)) => Some((None, self.term(body)?)),
-            Some(Motive::Scrutinee { label, body }) => {
-                let body = self.scoped([label.clone()], || self.term(body))?;
-                Some((Some(label.clone()), body))
-            }
-            Some(Motive::Annotated { .. }) => return Err(Error::DependentMatrixMotive),
-        })
-    }
-
-    /// The pattern-matrix compiler (Maranget-style). `occurrences` are the core
-    /// terms (variables/projections) being scrutinized, one per matrix column;
-    /// each row carries one pattern per column, the bindings accumulated as
-    /// irrefutable/catch-all columns were peeled, and its already-lowered body.
-    /// `motive` rides on the *first* dispatch node emitted (the user's, for the
-    /// outermost match); every nested node infers its motive.
-    fn compile_matrix(
-        &self,
-        occurrences: &[core::Term],
-        rows: Vec<MatrixRow>,
-        motive: Option<(Option<String>, core::Term)>,
-    ) -> Result<core::Term, Error> {
-        // The leftmost column that any row refutes; if none, every row is a pure
-        // binding and the first one wins (first-match semantics).
-        let column = (0..occurrences.len())
-            .find(|&i| rows.iter().any(|row| pattern_is_refutable(&row.columns[i])));
-
-        let Some(column) = column else {
-            let row = rows
-                .into_iter()
-                .next()
-                .expect("a matrix never has zero rows");
-            return self.bind_matrix_leaf(occurrences, row);
-        };
-
-        // A tuple/struct column has a single shape, so it never dispatches — it
-        // expands into its fields as sub-columns (the motive passes through to the
-        // first real dispatch beneath it). Only constructors/literals branch.
-        let refutable = rows
-            .iter()
-            .map(|row| &row.columns[column])
-            .find(|pattern| pattern_is_refutable(pattern))
-            .expect("the chosen column is refutable in some row");
-
-        match refutable {
-            Pattern::Tuple(_) => self.expand_tuple_column(occurrences, rows, column, motive),
-            Pattern::Struct { .. } => self.expand_struct_column(occurrences, rows, column, motive),
-            _ => match self.column_kind(&rows, column)? {
-                ColumnKind::Inductive => {
-                    self.compile_inductive_column(occurrences, rows, column, motive)
-                }
-                ColumnKind::Nat => self.compile_nat_column(occurrences, rows, column, motive),
-                ColumnKind::Bln => self.compile_bln_column(occurrences, rows, column, motive),
-            },
-        }
-    }
-
-    /// A leaf: bind the (now all-irrefutable) columns against their occurrences
-    /// and the accumulated catch-all bindings around the row's body.
-    fn bind_matrix_leaf(
-        &self,
-        occurrences: &[core::Term],
-        row: MatrixRow,
-    ) -> Result<core::Term, Error> {
-        let MatrixRow {
-            columns,
-            bindings,
-            mut body,
-        } = row;
-
-        for (pattern, scrutinee) in bindings.into_iter().rev() {
-            body = self.bind_pattern(&pattern, scrutinee, body)?;
-        }
-
-        for (pattern, scrutinee) in columns.into_iter().zip(occurrences).rev() {
-            body = self.bind_pattern(&pattern, scrutinee.clone(), body)?;
-        }
-
-        Ok(body)
-    }
-
-    /// Expand a tuple column into its fields as sub-columns (positional
-    /// projections). A tuple always matches, so no node is emitted and the motive
-    /// flows through; tuple rows splice their fields, a catch-all wildcards them
-    /// and binds the whole tuple.
-    fn expand_tuple_column(
-        &self,
-        occurrences: &[core::Term],
-        rows: Vec<MatrixRow>,
-        column: usize,
-        motive: Option<(Option<String>, core::Term)>,
-    ) -> Result<core::Term, Error> {
-        let arity = rows
-            .iter()
-            .find_map(|row| match &row.columns[column] {
-                Pattern::Tuple(fields) => Some(fields.len()),
-                _ => None,
-            })
-            .expect("a tuple column has a tuple pattern");
-
-        let scrutinee = occurrences[column].clone();
-        let fields = (0..arity)
-            .map(|index| core::Term::proj(scrutinee.clone(), index))
-            .collect::<Vec<_>>();
-        let sub_occ = splice(occurrences, column, &fields);
-
-        let mut sub_rows = Vec::new();
-        for row in &rows {
-            match &row.columns[column] {
-                Pattern::Tuple(fields) => {
-                    if fields.len() != arity {
-                        return Err(Error::PatternArityMismatch {
-                            tag: "(tuple)".to_string(),
-                            expected: arity,
-                            found: fields.len(),
-                        });
-                    }
-                    sub_rows.push(row.with_column_replaced(column, fields.clone(), None));
-                }
-                other if !pattern_is_refutable(other) => {
-                    let wildcards = vec![Pattern::Bind("_".to_string()); arity];
-                    let binding = (other.clone(), scrutinee.clone());
-                    sub_rows.push(row.with_column_replaced(column, wildcards, Some(binding)));
-                }
-                _ => return Err(Error::PatternColumnConflict),
-            }
-        }
-
-        self.compile_matrix(&sub_occ, sub_rows, motive)
-    }
-
-    /// Expand a struct column into the inductive (in first-seen order) of the labels
-    /// its patterns mention, projected by label. Structs are partial and always
-    /// match, so — like tuples — no node is emitted and the motive flows through;
-    /// a struct row supplies its named sub-patterns (wildcards for the rest), a
-    /// catch-all wildcards all and binds the whole value.
-    fn expand_struct_column(
-        &self,
-        occurrences: &[core::Term],
-        rows: Vec<MatrixRow>,
-        column: usize,
-        motive: Option<(Option<String>, core::Term)>,
-    ) -> Result<core::Term, Error> {
-        let mut labels: Vec<String> = Vec::new();
-        for row in &rows {
-            if let Pattern::Struct { fields, .. } = &row.columns[column] {
-                for (label, _) in fields {
-                    if !labels.contains(label) {
-                        labels.push(label.clone());
-                    }
-                }
-            }
-        }
-
-        let scrutinee = occurrences[column].clone();
-        let fields = labels
-            .iter()
-            .map(|label| core::Term::proj_label(scrutinee.clone(), label.clone()))
-            .collect::<Vec<_>>();
-        let sub_occ = splice(occurrences, column, &fields);
-
-        let mut sub_rows = Vec::new();
-        for row in &rows {
-            match &row.columns[column] {
-                Pattern::Struct { fields, .. } => {
-                    let sub = labels
-                        .iter()
-                        .map(|label| {
-                            fields
-                                .iter()
-                                .find(|(field, _)| field == label)
-                                .map(|(_, pattern)| pattern.clone())
-                                .unwrap_or_else(|| Pattern::Bind("_".to_string()))
-                        })
-                        .collect::<Vec<_>>();
-                    sub_rows.push(row.with_column_replaced(column, sub, None));
-                }
-                other if !pattern_is_refutable(other) => {
-                    let wildcards = vec![Pattern::Bind("_".to_string()); labels.len()];
-                    let binding = (other.clone(), scrutinee.clone());
-                    sub_rows.push(row.with_column_replaced(column, wildcards, Some(binding)));
-                }
-                _ => return Err(Error::PatternColumnConflict),
-            }
-        }
-
-        self.compile_matrix(&sub_occ, sub_rows, motive)
-    }
-
-    /// What a column dispatches on, read off its refutable patterns. A column
-    /// mixing constructors with literals (or `Nat` with `Bln`) is ill-formed.
-    fn column_kind(&self, rows: &[MatrixRow], column: usize) -> Result<ColumnKind, Error> {
-        let (mut variant, mut nat, mut bln) = (false, false, false);
-
-        for row in rows {
-            match &row.columns[column] {
-                Pattern::Variant { .. } => variant = true,
-                Pattern::Lit(PatternLit::Nat(_)) => nat = true,
-                Pattern::Lit(PatternLit::Bln(_)) => bln = true,
-                _ => {}
-            }
-        }
-
-        match (variant, nat, bln) {
-            (true, false, false) => Ok(ColumnKind::Inductive),
-            (false, true, false) => Ok(ColumnKind::Nat),
-            (false, false, true) => Ok(ColumnKind::Bln),
-            _ => Err(Error::PatternColumnConflict),
-        }
-    }
-
-    /// Dispatch on a constructor column. Emits one `inductive_match` arm per
-    /// constructor: explicit rows contribute their nested sub-patterns; a
-    /// `_`/binder catch-all flows into every arm (and, when present, materializes
-    /// the unlisted constructors from the registry roster). Constructors covered
-    /// by neither are left out for core's coverage/inversion check to judge.
-    fn compile_inductive_column(
-        &self,
-        occurrences: &[core::Term],
-        rows: Vec<MatrixRow>,
-        column: usize,
-        motive: Option<(Option<String>, core::Term)>,
-    ) -> Result<core::Term, Error> {
-        let scrutinee = occurrences[column].clone();
-
-        let mut explicit: Vec<(String, usize)> = Vec::new();
-        let mut catch_all = false;
-        for row in &rows {
-            match &row.columns[column] {
-                Pattern::Variant { tag, args } => {
-                    if !explicit.iter().any(|(t, _)| t == tag) {
-                        explicit.push((tag.clone(), args.len()));
-                    }
-                }
-                Pattern::Lit(_) => return Err(Error::PatternColumnConflict),
-                _ => catch_all = true,
-            }
-        }
-
-        // The constructors to emit arms for. A catch-all must cover the inductive's
-        // *unlisted* constructors, so their arities come from the registry roster;
-        // without one, only the explicit tags are emitted (core checks the rest).
-        let roster = if catch_all {
-            let tag = explicit
-                .first()
-                .map(|(tag, _)| tag.clone())
-                .expect("a constructor column has at least one constructor pattern");
-            let canonical = self.resolve_name(&Name::from(vec![tag.clone()]))?;
-
-            match self.context.inductive_ctors(&canonical) {
-                Some(roster) => roster.to_vec(),
-                None => return Err(Error::UnresolvedMatchConstructor { tag }),
-            }
-        } else {
-            explicit
-        };
-
-        let mut cases = Vec::new();
-        for (tag, arity) in &roster {
-            let sub_rows = self.specialize_constructor(&rows, column, tag, *arity, &scrutinee)?;
-
-            // No explicit row and no catch-all reaches this constructor: omit the
-            // arm so core can report it missing (or prune it as impossible).
-            if sub_rows.is_empty() {
-                continue;
-            }
-
-            let payload = (0..*arity)
-                .map(|_| self.context.fresh_binder())
-                .collect::<Vec<_>>();
-            let payload_occ = payload
-                .iter()
-                .map(|name| core::Term::var(core::Var::free(name.clone())))
-                .collect::<Vec<_>>();
-            let sub_occ = splice(occurrences, column, &payload_occ);
-
-            let body = self.compile_matrix(&sub_occ, sub_rows, None)?;
-            cases.push((core::Atom::from(tag.as_str()), payload, body));
-        }
-
-        let (label, motive) = self.motive_or_hole(motive);
-        Ok(core::Term::inductive_match(
-            scrutinee,
-            label.as_deref(),
-            motive,
-            cases,
-        ))
-    }
-
-    /// The rows of one constructor arm: explicit `tag(args…)` rows splice their
-    /// arguments in as new columns; a catch-all row wildcards the payload and
-    /// binds the whole value; other constructors drop out.
-    fn specialize_constructor(
-        &self,
-        rows: &[MatrixRow],
-        column: usize,
-        tag: &str,
-        arity: usize,
-        scrutinee: &core::Term,
-    ) -> Result<Vec<MatrixRow>, Error> {
-        let mut out = Vec::new();
-
-        for row in rows {
-            match &row.columns[column] {
-                Pattern::Variant { tag: t, args } if t == tag => {
-                    if args.len() != arity {
-                        return Err(Error::PatternArityMismatch {
-                            tag: tag.to_string(),
-                            expected: arity,
-                            found: args.len(),
-                        });
-                    }
-                    out.push(row.with_column_replaced(column, args.clone(), None));
-                }
-                Pattern::Variant { .. } => {}
-                other => {
-                    let wildcards = vec![Pattern::Bind("_".to_string()); arity];
-                    let binding = (other.clone(), scrutinee.clone());
-                    out.push(row.with_column_replaced(column, wildcards, Some(binding)));
-                }
-            }
-        }
-
-        Ok(out)
-    }
-
-    /// Dispatch on a `Nat` literal column via `switch`: one case per distinct
-    /// literal, the catch-all rows forming the (mandatory) default.
-    fn compile_nat_column(
-        &self,
-        occurrences: &[core::Term],
-        rows: Vec<MatrixRow>,
-        column: usize,
-        motive: Option<(Option<String>, core::Term)>,
-    ) -> Result<core::Term, Error> {
-        let scrutinee = occurrences[column].clone();
-        let sub_occ = without_column(occurrences, column);
-
-        if !rows
-            .iter()
-            .any(|row| !pattern_is_refutable(&row.columns[column]))
-        {
-            return Err(Error::NonExhaustiveScalarMatch);
-        }
-
-        let mut values: Vec<u32> = Vec::new();
-        for row in &rows {
-            if let Pattern::Lit(PatternLit::Nat(n)) = &row.columns[column]
-                && !values.contains(n)
-            {
-                values.push(*n);
-            }
-        }
-
-        let mut cases = Vec::new();
-        for value in values {
-            let predicate = |pattern: &Pattern| matches!(pattern, Pattern::Lit(PatternLit::Nat(n)) if *n == value);
-            let sub_rows = self.specialize_scalar(&rows, column, predicate, &scrutinee);
-            cases.push((value, self.compile_matrix(&sub_occ, sub_rows, None)?));
-        }
-
-        let default_rows = self.specialize_scalar(&rows, column, |_| false, &scrutinee);
-        let default = self.compile_matrix(&sub_occ, default_rows, None)?;
-
-        let (label, motive) = self.motive_or_hole(motive);
-        Ok(core::Term::switch(
-            scrutinee,
-            label.as_deref(),
-            motive,
-            cases,
-            default,
-        ))
-    }
-
-    /// Dispatch on a `Bln` literal column via `bln_match`. Both branches must be
-    /// reachable — a literal must appear, or a catch-all must supply it.
-    fn compile_bln_column(
-        &self,
-        occurrences: &[core::Term],
-        rows: Vec<MatrixRow>,
-        column: usize,
-        motive: Option<(Option<String>, core::Term)>,
-    ) -> Result<core::Term, Error> {
-        let scrutinee = occurrences[column].clone();
-        let sub_occ = without_column(occurrences, column);
-
-        let branch = |value: bool| {
-            self.specialize_scalar(
-                &rows,
-                column,
-                move |pattern| matches!(pattern, Pattern::Lit(PatternLit::Bln(b)) if *b == value),
-                &scrutinee,
-            )
-        };
-
-        let false_rows = branch(false);
-        let true_rows = branch(true);
-        if false_rows.is_empty() || true_rows.is_empty() {
-            return Err(Error::NonExhaustiveScalarMatch);
-        }
-
-        let false_case = self.compile_matrix(&sub_occ, false_rows, None)?;
-        let true_case = self.compile_matrix(&sub_occ, true_rows, None)?;
-
-        let (label, motive) = self.motive_or_hole(motive);
-        Ok(core::Term::bln_match(
-            scrutinee,
-            label.as_deref(),
-            motive,
-            false_case,
-            true_case,
-        ))
-    }
-
-    /// The rows of one scalar branch: rows whose column matches `predicate` drop
-    /// the column; catch-all rows drop it too and bind the whole value; the rest
-    /// fall away. Scalars have no payload, so no new columns appear.
-    fn specialize_scalar(
-        &self,
-        rows: &[MatrixRow],
-        column: usize,
-        predicate: impl Fn(&Pattern) -> bool,
-        scrutinee: &core::Term,
-    ) -> Vec<MatrixRow> {
-        let mut out = Vec::new();
-
-        for row in rows {
-            let pattern = &row.columns[column];
-            if predicate(pattern) {
-                out.push(row.with_column_dropped(column, None));
-            } else if !pattern_is_refutable(pattern) {
-                let binding = (pattern.clone(), scrutinee.clone());
-                out.push(row.with_column_dropped(column, Some(binding)));
-            }
-        }
-
-        out
-    }
-
-    /// The motive `(label, body)` a synthesized dispatch node carries: the user's
-    /// (passed only to the outermost node), or a fresh metavariable for every
-    /// inner node — inferred from its arms, the non-dependent reach.
-    fn motive_or_hole(
-        &self,
-        motive: Option<(Option<String>, core::Term)>,
-    ) -> (Option<String>, core::Term) {
-        motive.unwrap_or_else(|| (None, core::Term::metavar(self.context.fresh_metavar())))
+        self.inductive_match(head, motive, cases)
     }
 
     pub fn prim(&self, prim: &Prim) -> Result<core::Prim, Error> {
@@ -1774,93 +1261,4 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::CellGet(type_, cell) => core::Prim::cell_get(self.term(type_)?, self.term(cell)?),
         })
     }
-}
-
-/// One row of the pattern matrix during compilation.
-struct MatrixRow {
-    /// One pattern per live column (parallel to the occurrence list).
-    columns: Vec<Pattern>,
-    /// Irrefutable/catch-all patterns peeled from already-dispatched columns,
-    /// each paired with the occurrence it binds; applied around the body at the
-    /// leaf. A catch-all binds the *whole* dispatched value, not its payload.
-    bindings: Vec<(Pattern, core::Term)>,
-    /// The arm body, already lowered to core (cloned when a row fans out into
-    /// several constructor arms — branches are mutually exclusive, so sharing the
-    /// term across them is sound).
-    body: core::Term,
-}
-
-impl MatrixRow {
-    /// Replace this row's `column` with `replacement` sub-patterns (a
-    /// constructor's payload becoming new columns), optionally recording a
-    /// binding. Clones the row.
-    fn with_column_replaced(
-        &self,
-        column: usize,
-        replacement: Vec<Pattern>,
-        binding: Option<(Pattern, core::Term)>,
-    ) -> MatrixRow {
-        let mut columns = self.columns[..column].to_vec();
-        columns.extend(replacement);
-        columns.extend_from_slice(&self.columns[column + 1..]);
-
-        let mut bindings = self.bindings.clone();
-        bindings.extend(binding);
-
-        MatrixRow {
-            columns,
-            bindings,
-            body: self.body.clone(),
-        }
-    }
-
-    /// Drop this row's `column` (a scalar branch — scalars carry no payload),
-    /// optionally recording a binding. Clones the row.
-    fn with_column_dropped(
-        &self,
-        column: usize,
-        binding: Option<(Pattern, core::Term)>,
-    ) -> MatrixRow {
-        self.with_column_replaced(column, vec![], binding)
-    }
-}
-
-/// What a matrix column dispatches on.
-enum ColumnKind {
-    Inductive,
-    Nat,
-    Bln,
-}
-
-/// Whether a pattern forces a runtime test — a constructor or scalar literal,
-/// possibly nested inside a tuple/struct. Plain binders/wildcards (and tuples or
-/// structs of only such) are irrefutable and never split a column.
-fn pattern_is_refutable(pattern: &Pattern) -> bool {
-    match pattern {
-        Pattern::Bind(_) => false,
-        Pattern::Tuple(fields) => fields.iter().any(pattern_is_refutable),
-        Pattern::Struct { fields, .. } => fields
-            .iter()
-            .any(|(_, pattern)| pattern_is_refutable(pattern)),
-        Pattern::Variant { .. } | Pattern::Lit(_) => true,
-    }
-}
-
-/// The occurrence list with `column` replaced by `replacement` (a constructor's
-/// payload occurrences spliced in at that position).
-fn splice(
-    occurrences: &[core::Term],
-    column: usize,
-    replacement: &[core::Term],
-) -> Vec<core::Term> {
-    let mut out = occurrences[..column].to_vec();
-    out.extend_from_slice(replacement);
-    out.extend_from_slice(&occurrences[column + 1..]);
-    out
-}
-
-/// The occurrence list with `column` removed (a scalar branch consumes its
-/// column without introducing any).
-fn without_column(occurrences: &[core::Term], column: usize) -> Vec<core::Term> {
-    splice(occurrences, column, &[])
 }

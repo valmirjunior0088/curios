@@ -7,13 +7,13 @@ end
 
 pub use Result/*;
 
-pub let map(@A : Type, @B : Type, @E : Type, f : (A) -> B, r : Result(A, E)) -> Result(B, E) =
+pub let map_success(@A : Type, @B : Type, @E : Type, f : (A) -> B, r : Result(A, E)) -> Result(B, E) =
     match r
     | success(a) => Result/success(f(a))
     | failure(e) => Result/failure(e)
     end;
 
-pub let map_err(@A : Type, @E : Type, @F : Type, f : (E) -> F, r : Result(A, E)) -> Result(A, F) =
+pub let map_failure(@A : Type, @E : Type, @F : Type, f : (E) -> F, r : Result(A, E)) -> Result(A, F) =
     match r
     | success(a) => Result/success(a)
     | failure(e) => Result/failure(f(e))
@@ -32,13 +32,13 @@ pub let unwrap_or(@A : Type, @E : Type, r : Result(A, E), default : A) -> A =
     | failure(_) => default
     end;
 
-pub let is_ok(@A : Type, @E : Type, r : Result(A, E)) -> Bln =
+pub let is_success(@A : Type, @E : Type, r : Result(A, E)) -> Bln =
     match r
     | success(_) => true
     | failure(_) => false
     end;
 
-pub let is_err(@A : Type, @E : Type, r : Result(A, E)) -> Bln =
+pub let is_failure(@A : Type, @E : Type, r : Result(A, E)) -> Bln =
     match r
     | success(_) => false
     | failure(_) => true

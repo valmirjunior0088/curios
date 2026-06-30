@@ -2,9 +2,9 @@ use {
     super::{
         Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem,
         InductiveMatch, Infix, Let, LetBang, LetSignature, Match, Module, Motive, Nat, NatLiteral,
-        NatMatch, NumLit, Pattern, PatternLit, Plicity, Prim, Proj, Radix, Rec, StructLit, Subterm,
-        Syn, Term, TopCase, TopInductive, TopItem, TopLet, TopMod, TopStruct, TopUse, Tuple,
-        TupleType, TupleTypeParam, UseGroup,
+        NatMatch, NumLit, Pattern, Plicity, Prim, Proj, Radix, Rec, StructLit, Subterm, Syn, Term,
+        TopCase, TopInductive, TopItem, TopLet, TopMod, TopStruct, TopUse, Tuple, TupleType,
+        TupleTypeParam, UseGroup,
     },
     crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_bigint::BigUint,
@@ -41,15 +41,18 @@ fn print_pattern(pattern: Pattern) -> Printer<'static> {
             ),
             pure(" }"),
         ]),
-        Pattern::Variant { tag, args } => flat([
-            pure(tag),
-            pure("("),
-            sep_flat(args.into_iter().map(print_pattern), || pure(", ")),
-            pure(")"),
-        ]),
-        Pattern::Lit(PatternLit::Nat(n)) => pure(n.to_string()),
-        Pattern::Lit(PatternLit::Bln(b)) => pure(b.to_string()),
     }
+}
+
+/// Prints one constructor arm pattern `tag(args…)` — the head of an inductive
+/// match arm. `args` are irrefutable [`Pattern`]s.
+fn print_constructor(tag: String, args: Vec<Pattern>) -> Printer<'static> {
+    flat([
+        pure(tag),
+        pure("("),
+        sep_flat(args.into_iter().map(print_pattern), || pure(", ")),
+        pure(")"),
+    ])
 }
 
 /// Prints a match's optional motive — the parenthesized ladder: ` : body`,
@@ -503,18 +506,18 @@ fn print_term(term: Term) -> Printer<'static> {
                 indent(print_term(default)),
                 pure("\nend"),
             ]),
-            Match::Inductive(InductiveMatch { head, motive, rows }) => flat([
+            Match::Inductive(InductiveMatch { head, motive, arms }) => flat([
                 pure("match "),
                 print_term(head),
                 print_motive(motive),
                 flat(
-                    rows.into_iter()
-                        .map(|(pattern, body)| {
+                    arms.into_iter()
+                        .map(|arm| {
                             flat([
                                 pure("\n| "),
-                                print_pattern(pattern),
+                                print_constructor(arm.tag, arm.args),
                                 pure(" =>\n"),
-                                indent(print_term(body)),
+                                indent(print_term(arm.body)),
                             ])
                         })
                         .collect::<Vec<_>>(),

@@ -156,49 +156,6 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
     Ok(info)
 }
 
-// Walk the resolved module tree (mirroring `Resolved::discover`) collecting
-// every inductive's constructor roster. Each constructor's canonical name
-// `<module>/<inductive>/<ctor>` maps to the inductive's full `(tag, payload arity)` list
-// — the arity is just the declared payload count, so no core lowering is needed.
-fn scan_inductive_ctors(
-    items: &[TopItem],
-    prefix: &Qualifier,
-    modules: &HashMap<Qualifier, Rc<Module>>,
-    out: &mut HashMap<String, Vec<(String, usize)>>,
-) {
-    for item in items {
-        match item {
-            TopItem::Inductive(group) => {
-                for u in group {
-                    let roster: Vec<(String, usize)> = u
-                        .cases
-                        .iter()
-                        .map(|c| (c.label.clone(), c.payload.len()))
-                        .collect();
-                    let inductive_name = prefix.with(&u.label);
-
-                    for c in &u.cases {
-                        out.insert(inductive_name.with(&c.label).join(), roster.clone());
-                    }
-                }
-            }
-            TopItem::Mod(m) => {
-                let path = prefix.with(&m.label);
-
-                match &m.module {
-                    Some(module) => scan_inductive_ctors(&module.items, &path, modules, out),
-                    None => {
-                        if let Some(module) = modules.get(&path) {
-                            scan_inductive_ctors(&module.items, &path, modules, out);
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
 fn process_items(
     top_items: &[TopItem],
     context: &mut Context,
@@ -995,19 +952,7 @@ pub fn to_core(
     let metavars = Entropy::<usize>::new();
     let binders = Entropy::<usize>::new();
 
-    // Precompute every inductive's constructor roster program-wide (before any body
-    // is lowered, so forward references resolve too), keyed by each constructor's
-    // canonical name. The pattern-matrix compiler reads it to expand an inductive-column
-    // `_` into the unlisted constructors.
-    let mut inductive_ctors = HashMap::new();
-    scan_inductive_ctors(
-        &entrypoint.module.items,
-        &Qualifier::empty(),
-        &modules,
-        &mut inductive_ctors,
-    );
-
-    let mut context = Context::new(&table, &public, &metavars, &binders, &inductive_ctors);
+    let mut context = Context::new(&table, &public, &metavars, &binders);
     let mut flat_items = Vec::new();
     let mut inductives = BTreeMap::new();
     let mut structures = BTreeMap::new();

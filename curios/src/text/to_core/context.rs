@@ -107,12 +107,6 @@ pub struct Context<'a> {
     // `core::Scope`'s `PartialEq` compares binder *names*, so term-equality in
     // tests must be order-stable.
     binders: &'a Entropy,
-    // Every inductive's constructor roster, keyed by each constructor's canonical
-    // (joined) name `<module>/<inductive>/<ctor>` and mapping to the inductive's full
-    // `(tag, payload arity)` list. Precomputed program-wide so the pattern-matrix
-    // compiler can expand a `_` fallthrough at an inductive column into the unlisted
-    // constructors (it needs their arities, which are otherwise registry-only).
-    inductive_ctors: &'a HashMap<String, Vec<(String, usize)>>,
 }
 
 fn attach(error: Error, name: &Name) -> Error {
@@ -128,7 +122,6 @@ impl<'a> Context<'a> {
         public: &'a HashMap<Qualifier, PublicInterface>,
         metavars: &'a Entropy,
         binders: &'a Entropy,
-        inductive_ctors: &'a HashMap<String, Vec<(String, usize)>>,
     ) -> Context<'a> {
         Context {
             prefix: Qualifier::empty(),
@@ -138,7 +131,6 @@ impl<'a> Context<'a> {
             bindings: HashMap::new(),
             metavars,
             binders,
-            inductive_ctors,
         }
     }
 
@@ -151,15 +143,7 @@ impl<'a> Context<'a> {
             bindings: HashMap::new(),
             metavars: self.metavars,
             binders: self.binders,
-            inductive_ctors: self.inductive_ctors,
         }
-    }
-
-    /// The constructor roster of the inductive owning the constructor whose canonical
-    /// (joined) name is `ctor` — `(tag, payload arity)` for every sibling, or
-    /// `None` if `ctor` names no known constructor (e.g. an out-of-scope tag).
-    pub fn inductive_ctors(&self, ctor: &str) -> Option<&[(String, usize)]> {
-        self.inductive_ctors.get(ctor).map(Vec::as_slice)
     }
 
     /// Mint a fresh, program-globally-unique metavariable id for a surface hole.
