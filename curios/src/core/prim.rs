@@ -916,8 +916,17 @@ impl Prim {
         reach
     }
 
+    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
+        let mut found = false;
+        self.for_each_operand(&mut |term| found = found || term.any_metavar(pred));
+        found
+    }
+
     pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
-        self.for_each_operand(&mut |term| term.collect_metavars(ids));
+        self.any_metavar(&mut |id| {
+            ids.insert(id);
+            false
+        });
     }
 
     // Recurse into every operand `Term` so a construction nested inside a primitive

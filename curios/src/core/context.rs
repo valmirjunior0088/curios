@@ -94,7 +94,7 @@ pub struct ParkedGoal {
 pub struct Context {
     fresh_names: Entropy,
     deadline: Instant,
-    reductions: HashMap<Term, Term>,
+    reduction_cache: HashMap<Term, Term>,
     assumptions: Vec<HashMap<String, Term>>,
     definitions: Vec<HashMap<String, Term>>,
     // Counterfactual match-arm refinements (`refine_head`), kept parallel to
@@ -165,7 +165,7 @@ impl Context {
         Self {
             fresh_names: Entropy::<usize>::new(),
             deadline: Instant::now() + timeout,
-            reductions: HashMap::new(),
+            reduction_cache: HashMap::new(),
             assumptions: vec![HashMap::new()],
             definitions: vec![HashMap::new()],
             refinements: vec![HashMap::new()],
@@ -206,14 +206,26 @@ impl Context {
         term: Term,
         compute: impl FnOnce(&mut Self, Term) -> Result<Term, E>,
     ) -> Result<Term, E> {
-        if let Some(cached) = self.reductions.get(&term) {
+        if let Some(cached) = self.reduction_cache.get(&term) {
             return Ok(cached.clone());
         }
 
         let result = compute(self, term.clone())?;
 
-        if term.closed() {
-            self.reductions.insert(term, result.clone());
+        // Memoize only closed terms whose WHNF names no *unsolved* metavariable
+        // — `any_metavar` bails on the first one, never building the id set. A
+        // solve is monotonic, so it can only invalidate a reduct that still
+        // names the metavariable it solved, and reduction gets stuck on (hence
+        // surfaces) an unsolved metavariable it actually depends on. Refusing to
+        // cache those is what lets `solve_metavar` skip a cache clear; an entry
+        // naming only *solved* metavariables stays valid under forward solves
+        // (re-validation's `rollback_solutions`, which *un*-solves, clears
+        // separately).
+        let cacheable =
+            term.closed() && !result.any_metavar(&mut |id| self.metavar_solution(id).is_none());
+
+        if cacheable {
+            self.reduction_cache.insert(term, result.clone());
         }
 
         Ok(result)
@@ -242,7 +254,7 @@ impl Context {
             || !refinement_projections.is_empty()
             || !refinement_scrutinees.is_empty()
         {
-            self.reductions.clear();
+            self.reduction_cache.clear();
         }
     }
 
@@ -319,7 +331,7 @@ impl Context {
             .unwrap()
             .insert(label.into(), term.clone());
 
-        self.reductions.clear();
+        self.reduction_cache.clear();
     }
 
     pub fn definition(&self, label: &str) -> Option<&Term> {
@@ -352,7 +364,7 @@ impl Context {
             .unwrap()
             .insert(label.into(), term.clone());
 
-        self.reductions.clear();
+        self.reduction_cache.clear();
     }
 
     /// Register a counterfactual refinement of a projection (`refine_head` on a
@@ -363,7 +375,7 @@ impl Context {
             .unwrap()
             .insert((base, index), value);
 
-        self.reductions.clear();
+        self.reduction_cache.clear();
     }
 
     /// The reduct of a variable: its definition, or — unless refinements are
@@ -405,7 +417,7 @@ impl Context {
             .unwrap()
             .insert(canonical, value);
 
-        self.reductions.clear();
+        self.reduction_cache.clear();
     }
 
     /// Whether any scrutinee refinement is registered (regardless of
@@ -459,28 +471,49 @@ impl Context {
     /// re-reduction in `Convert::solve_refinement_free`, so the common
     /// refinement-free path pays nothing.
     pub fn has_refinements(&self) -> bool {
-        !self.suppress_refinements
-            && (self.refinements.iter().any(|frame| !frame.is_empty())
-                || self
-                    .refinement_projections
-                    .iter()
-                    .any(|frame| !frame.is_empty())
-                || self
-                    .refinement_scrutinees
-                    .iter()
-                    .any(|frame| !frame.is_empty()))
+        !self.suppress_refinements && self.any_refinements_registered()
+    }
+
+    /// Whether any counterfactual refinement of any kind is registered in any
+    /// frame, *regardless* of suppression. The cache-contamination gate for
+    /// [`Context::with_suppressed_refinements`]: only a registered refinement
+    /// can make a suppressed reduct differ from the live one. (`has_refinements`
+    /// is this plus "not already suppressed".)
+    fn any_refinements_registered(&self) -> bool {
+        self.refinements.iter().any(|frame| !frame.is_empty())
+            || self
+                .refinement_projections
+                .iter()
+                .any(|frame| !frame.is_empty())
+            || self
+                .refinement_scrutinees
+                .iter()
+                .any(|frame| !frame.is_empty())
     }
 
     /// Run `f` with refinements suppressed (re-validation, §7.4). Brackets the
     /// region with reduction-cache clears so refinement-applied and
-    /// refinement-suppressed reducts never contaminate each other's cache.
+    /// refinement-suppressed reducts never contaminate each other's cache — but
+    /// only when some refinement is actually registered. With none, suppressing
+    /// changes no reduct, so the flag is inert and the clears are pure waste
+    /// (the common re-validation path: an oracle run outside any match arm).
+    /// Each boundary is gated on the live state independently, so a refinement
+    /// added and dropped *inside* `f` — which clears on its own add and exit —
+    /// does not force a clear here.
     pub fn with_suppressed_refinements<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         let previous = self.suppress_refinements;
-        self.reductions.clear();
+
+        if self.any_refinements_registered() {
+            self.reduction_cache.clear();
+        }
+
         self.suppress_refinements = true;
         let result = f(self);
         self.suppress_refinements = previous;
-        self.reductions.clear();
+
+        if self.any_refinements_registered() {
+            self.reduction_cache.clear();
+        }
 
         result
     }
@@ -673,17 +706,18 @@ impl Context {
         Some(solution.capture(&labels).release(&spine))
     }
 
-    /// Commit a metavariable's solution. Clears the reduction cache, since a
-    /// bare metavariable is `reach == 0` (hence cacheable) and may have cached
-    /// as itself while unsolved (§7.2). Records the id as newly solved — the
-    /// wake signal for parked constraints (§8) — and journals it for
-    /// [`Context::rollback_solutions`].
+    /// Commit a metavariable's solution. Needs no reduction-cache clear: a WHNF
+    /// that still named an unsolved metavariable was never memoized (see
+    /// [`Context::get_or_init_reduced`]), and a solve is monotonic, so every
+    /// surviving entry stays valid (§7.2). (Re-validation's
+    /// [`Context::rollback_solutions`], which *un*-solves, does clear.) Records
+    /// the id as newly solved — the wake signal for parked constraints (§8) —
+    /// and journals it for [`Context::rollback_solutions`].
     pub fn solve_metavar(&mut self, id: MetavarId, term: Term) {
         if let Some(Some(entry)) = self.metas.entries.get_mut(id.0) {
             entry.solution = Some(term);
             self.newly_solved.push(id);
             self.solved_log.push(id);
-            self.reductions.clear();
         }
     }
 
@@ -714,7 +748,7 @@ impl Context {
         }
 
         self.newly_solved.retain(|id| !unwound.contains(id));
-        self.reductions.clear();
+        self.reduction_cache.clear();
     }
 
     // === Parked constraints (§8) ============================================

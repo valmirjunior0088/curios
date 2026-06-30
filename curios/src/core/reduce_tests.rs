@@ -372,19 +372,21 @@ fn reduce_unsolved_metavar_is_neutral() {
 }
 
 #[test]
-fn reduce_solved_metavar_yields_solution_and_clears_cache() {
+fn reduce_solved_metavar_yields_solution() {
     let mut context = context();
     let m = Term::metavar(0);
 
     context.birth_metavar(MetavarId(0), Vec::new(), Term::type_());
 
-    // First reduce caches the metavariable as itself (it is `reach == 0`).
+    // An unsolved metavariable reduces to itself, but that reduct names an
+    // unsolved metavariable, so it is deliberately not memoized.
     assert_eq!(reduce(&mut context, m.clone()), Ok(m.clone()));
 
     let solution = nat(1);
     context.solve_metavar(MetavarId(0), solution.clone());
 
-    // `solve` cleared the cache, so the stale "itself" reduct is gone.
+    // Nothing stale was cached, so the reduct now follows the solution —
+    // `solve_metavar` needs no cache clear.
     assert_eq!(reduce(&mut context, m), Ok(solution));
 }
 

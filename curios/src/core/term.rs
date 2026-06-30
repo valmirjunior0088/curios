@@ -1394,116 +1394,115 @@ impl Subterm {
         }
     }
 
-    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
+    /// Whether any metavariable occurring in this subterm satisfies `pred`,
+    /// stopping at the first hit. The early-exit dual of `collect_metavars`
+    /// (which is this with a collector that never stops): the reducer's memo
+    /// gate uses it to reject caching a WHNF that still names an unsolved
+    /// metavariable, without allocating the full id set.
+    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { id, spine, .. }) => {
-                ids.insert(*id);
-                spine.iter().for_each(|t| t.collect_metavars(ids));
+                pred(*id) || spine.iter().any(|t| t.any_metavar(pred))
             }
-            Subterm::Type | Subterm::Prop | Subterm::Var(_) => {}
-            Subterm::NumLit(_) => {}
+            Subterm::Type | Subterm::Prop | Subterm::Var(_) => false,
+            Subterm::NumLit(_) => false,
             Subterm::Infix(Infix { left, right, .. }) => {
-                left.collect_metavars(ids);
-                right.collect_metavars(ids);
+                left.any_metavar(pred) || right.any_metavar(pred)
             }
-            Subterm::Prim(prim) => prim.collect_metavars(ids),
-            Subterm::Func(Func { telescope }) => telescope.collect_metavars(ids),
-            Subterm::FuncType(FuncType { telescope, .. }) => telescope.collect_metavars(ids),
+            Subterm::Prim(prim) => prim.any_metavar(pred),
+            Subterm::Func(Func { telescope }) => telescope.any_metavar(pred),
+            Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_metavar(pred),
             Subterm::Apply(Apply { head, params, .. }) => {
-                head.collect_metavars(ids);
-                params.iter().for_each(|p| p.collect_metavars(ids));
+                head.any_metavar(pred) || params.iter().any(|p| p.any_metavar(pred))
             }
-            Subterm::TupleType(TupleType { telescope, .. }) => telescope.collect_metavars(ids),
-            Subterm::Tuple(Tuple { fields, .. }) => {
-                fields.iter().for_each(|f| f.collect_metavars(ids));
-            }
-            Subterm::Proj(Proj { head, .. }) => head.collect_metavars(ids),
+            Subterm::TupleType(TupleType { telescope, .. }) => telescope.any_metavar(pred),
+            Subterm::Tuple(Tuple { fields, .. }) => fields.iter().any(|f| f.any_metavar(pred)),
+            Subterm::Proj(Proj { head, .. }) => head.any_metavar(pred),
             Subterm::InductiveType(InductiveType {
                 params, indices, ..
             }) => {
-                params.iter().for_each(|p| p.collect_metavars(ids));
-                indices.iter().for_each(|i| i.collect_metavars(ids));
+                params.iter().any(|p| p.any_metavar(pred))
+                    || indices.iter().any(|i| i.any_metavar(pred))
             }
             Subterm::Variant(Variant {
                 params, payload, ..
             }) => {
-                params.iter().for_each(|p| p.collect_metavars(ids));
-                payload.iter().for_each(|p| p.collect_metavars(ids));
+                params.iter().any(|p| p.any_metavar(pred))
+                    || payload.iter().any(|p| p.any_metavar(pred))
             }
             Subterm::StructType(StructType { params, .. }) => {
-                params.iter().for_each(|p| p.collect_metavars(ids));
+                params.iter().any(|p| p.any_metavar(pred))
             }
             Subterm::Struct(Struct { params, fields, .. }) => {
-                params.iter().for_each(|p| p.collect_metavars(ids));
-                fields.iter().for_each(|f| f.collect_metavars(ids));
+                params.iter().any(|p| p.any_metavar(pred))
+                    || fields.iter().any(|f| f.any_metavar(pred))
             }
             Subterm::Match(Match {
                 head,
                 motive,
                 cases,
             }) => {
-                head.collect_metavars(ids);
-                motive.body().collect_metavars(ids);
-                match cases {
-                    Cases::Bln {
-                        false_case,
-                        true_case,
-                    } => {
-                        false_case.collect_metavars(ids);
-                        true_case.collect_metavars(ids);
-                    }
-                    Cases::Switch { cases, default } => {
-                        cases.values().for_each(|b| b.collect_metavars(ids));
-                        default.collect_metavars(ids);
-                    }
-                    Cases::Inductive { cases, pattern } => {
-                        cases.values().for_each(|s| s.body().collect_metavars(ids));
-                        pattern.iter().flat_map(|p| &p.slots).for_each(|slot| {
-                            if let MotiveSlot::Term(t) = slot {
-                                t.collect_metavars(ids);
+                head.any_metavar(pred)
+                    || motive.body().any_metavar(pred)
+                    || match cases {
+                        Cases::Bln {
+                            false_case,
+                            true_case,
+                        } => false_case.any_metavar(pred) || true_case.any_metavar(pred),
+                        Cases::Switch { cases, default } => {
+                            cases.values().any(|b| b.any_metavar(pred)) || default.any_metavar(pred)
+                        }
+                        Cases::Inductive { cases, pattern } => {
+                            cases.values().any(|s| s.body().any_metavar(pred))
+                                || pattern
+                                    .iter()
+                                    .flat_map(|p| &p.slots)
+                                    .any(|slot| match slot {
+                                        MotiveSlot::Term(t) => t.any_metavar(pred),
+                                        _ => false,
+                                    })
+                        }
+                        Cases::FreeMonoid { carrier } => match carrier {
+                            Carrier::Nat {
+                                empty_case,
+                                cons_case,
+                            } => empty_case.any_metavar(pred) || cons_case.body().any_metavar(pred),
+                            Carrier::Bin {
+                                empty_case,
+                                cons_case,
+                            } => empty_case.any_metavar(pred) || cons_case.body().any_metavar(pred),
+                            Carrier::Arr {
+                                elem,
+                                empty_case,
+                                cons_case,
+                            } => {
+                                elem.any_metavar(pred)
+                                    || empty_case.any_metavar(pred)
+                                    || cons_case.body().any_metavar(pred)
                             }
-                        });
+                        },
                     }
-                    Cases::FreeMonoid { carrier } => match carrier {
-                        Carrier::Nat {
-                            empty_case,
-                            cons_case,
-                        } => {
-                            empty_case.collect_metavars(ids);
-                            cons_case.body().collect_metavars(ids);
-                        }
-                        Carrier::Bin {
-                            empty_case,
-                            cons_case,
-                        } => {
-                            empty_case.collect_metavars(ids);
-                            cons_case.body().collect_metavars(ids);
-                        }
-                        Carrier::Arr {
-                            elem,
-                            empty_case,
-                            cons_case,
-                        } => {
-                            elem.collect_metavars(ids);
-                            empty_case.collect_metavars(ids);
-                            cons_case.body().collect_metavars(ids);
-                        }
-                    },
-                }
             }
             Subterm::Let(Let { type_, body, tail }) => {
-                type_.collect_metavars(ids);
-                body.collect_metavars(ids);
-                tail.body().collect_metavars(ids);
+                type_.any_metavar(pred) || body.any_metavar(pred) || tail.body().any_metavar(pred)
             }
             Subterm::Rec(Rec { items, tail }) => {
-                for (type_, value) in items {
-                    type_.body().collect_metavars(ids);
-                    value.body().collect_metavars(ids);
-                }
-                tail.body().collect_metavars(ids);
+                items.iter().any(|(type_, value)| {
+                    type_.body().any_metavar(pred) || value.body().any_metavar(pred)
+                }) || tail.body().any_metavar(pred)
             }
         }
+    }
+
+    /// Collect the ids of every metavariable occurring in this subterm. `Visit`
+    /// only sees `Var`s and a `Metavar` holds none, so occurs/zonk analyses
+    /// cannot piggyback on `free_vars` — this walk (an `any_metavar` whose
+    /// collector never short-circuits) enumerates them directly.
+    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
+        self.any_metavar(&mut |id| {
+            ids.insert(id);
+            false
+        });
     }
 }
 

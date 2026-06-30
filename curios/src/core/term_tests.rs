@@ -73,6 +73,42 @@ fn metavars_collects_ids_across_structure() {
 }
 
 #[test]
+fn any_metavar_short_circuits_and_agrees_with_collection() {
+    // (λx. ?1)(?2, Nat.add ?3 ?1)
+    let term = Term::apply(
+        Term::func([("x", Term::type_())], Term::metavar(1)),
+        [
+            Term::metavar(2),
+            Term::prim(Prim::nat_add(Term::metavar(3), Term::metavar(1))),
+        ],
+    );
+
+    // A predicate over the ids agrees with the collecting walk: a present id is
+    // found, an absent one is not.
+    assert!(term.any_metavar(&mut |id| id == MetavarId(3)));
+    assert!(!term.any_metavar(&mut |id| id == MetavarId(99)));
+    assert_eq!(term.any_metavar(&mut |_| true), !term.metavars().is_empty());
+
+    // Bails on the first metavariable: the head's `?1` is reached first, so an
+    // accept-anything predicate runs exactly once instead of visiting all four.
+    let mut visits = 0;
+    assert!(term.any_metavar(&mut |_| {
+        visits += 1;
+        true
+    }));
+    assert_eq!(visits, 1);
+
+    // A metavariable-free term never fires the predicate.
+    let plain = Term::func([("x", Term::type_())], Term::free_var("x"));
+    let mut fired = false;
+    assert!(!plain.any_metavar(&mut |_| {
+        fired = true;
+        true
+    }));
+    assert!(!fired);
+}
+
+#[test]
 fn metavar_is_inert_under_traversal() {
     // shifting/capture must not disturb a metavariable node
     let m = Term::metavar(4);

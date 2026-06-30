@@ -636,33 +636,45 @@ impl<B: Bound> Telescope<B> {
 }
 
 impl Telescope<Term> {
-    /// Collect the ids of every metavariable in a function/Π telescope
-    /// (`Func`/`FuncType`): the parameter types and the trailing body/return
-    /// type — its `Done` body is a real term to recurse into.
-    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
+    /// Whether any metavariable in a function/Π telescope (`Func`/`FuncType`) —
+    /// the parameter types and the trailing body/return type — satisfies
+    /// `pred`, short-circuiting on the first hit.
+    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
-            Telescope::Cons(ty, rest) => {
-                ty.collect_metavars(ids);
-                rest.body().collect_metavars(ids);
-            }
-            Telescope::Done(body) => body.collect_metavars(ids),
+            Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
+            Telescope::Done(body) => body.any_metavar(pred),
         }
+    }
+
+    /// Collect the ids of every metavariable in this telescope (an `any_metavar`
+    /// whose collector never short-circuits).
+    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
+        self.any_metavar(&mut |id| {
+            ids.insert(id);
+            false
+        });
     }
 }
 
 impl Telescope<()> {
-    /// Collect the ids of every metavariable in a Σ telescope (`TupleType`):
-    /// only the field types — its `Done` body is `()`, so there is nothing to
-    /// recurse into there.
-    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
+    /// Whether any metavariable in a Σ telescope (`TupleType`) — only the field
+    /// types; its `Done` body is `()` — satisfies `pred`, short-circuiting on
+    /// the first hit.
+    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
-            Telescope::Cons(ty, rest) => {
-                ty.collect_metavars(ids);
-                rest.body().collect_metavars(ids);
-            }
+            Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             // The trailing body is `()`, which holds no metavariables.
-            Telescope::Done(_) => {}
+            Telescope::Done(_) => false,
         }
+    }
+
+    /// Collect the ids of every metavariable in this telescope (an `any_metavar`
+    /// whose collector never short-circuits).
+    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
+        self.any_metavar(&mut |id| {
+            ids.insert(id);
+            false
+        });
     }
 }
 
