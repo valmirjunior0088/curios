@@ -58,37 +58,35 @@ See [SYNTAX.md](SYNTAX.md) for the full language reference.
 - A recent Rust toolchain (the project uses edition 2024).
 - A C++ toolchain and **CMake** — the default build compiles the vendored Binaryen optimizer. The first build takes a few minutes as a result.
 
-To skip the Binaryen build during experimentation, disable default features:
-
-```sh
-cargo build --no-default-features --features cli
-```
+Binaryen is built only by the crates that need it. For fast iteration on the compiler alone you can build `cargo build -p curios` (pure Rust, no Binaryen/CMake); the slim launcher `cargo build -p curios-runtime` likewise needs neither Binaryen nor Cranelift.
 
 ### Build
 
 ```sh
 git clone https://github.com/valmirjunior0088/curios
 cd curios
-cargo build --release
+cargo build --release            # builds the whole workspace
 ```
+
+This produces two binaries in `target/release/`: `curios-compiler` (the CLI) and `curios-runtime` (the launcher stub the CLI appends to when building executables).
 
 ### Run a program
 
 Save the hello-world snippet above as `hello.crs`, then:
 
 ```sh
-cargo run --release -- run hello.crs
+cargo run -p curios-compiler --release -- run hello.crs
 ```
 
 ## Using the CLI
 
-The compiler exposes three subcommands:
+The `curios-compiler` binary exposes three subcommands:
 
 | Command | What it does |
 | --- | --- |
-| `curios run <file.crs> [args...]` | Compile and execute the program. Extra arguments are readable from `/std/Proc/args`. |
-| `curios check <file.crs>` | Type-check the entrypoint without running it. |
-| `curios compile <file.crs> [--output-path out.wasm]` | Compile and write the `.wasm` module to disk. |
+| `curios-compiler run <file.crs> [args...]` | Compile and execute the program. Extra arguments are readable from `/std/Proc/args`. |
+| `curios-compiler check <file.crs>` | Type-check the entrypoint without running it. |
+| `curios-compiler compile <file.crs> [-o out]` | Compile to a self-contained native executable (default name: the input file stem). |
 
 Two global flags are useful while exploring:
 
@@ -96,13 +94,16 @@ Two global flags are useful while exploring:
 - `--timeout MILLIS` bounds the type-checker's reduction time (default `1000`).
 
 ```sh
-cargo run --release -- check examples/myprog.crs --print=core
-cargo run --release -- compile examples/myprog.crs --output-path myprog.wasm
+cargo run -p curios-compiler --release -- check hello.crs --print=core
+cargo run -p curios-compiler --release -- compile hello.crs -o hello
+./hello
 ```
+
+A compiled executable is the `curios-runtime` launcher stub with the program's precompiled module appended to it, so it runs standalone (the `curios-runtime` binary must be available next to `curios-compiler`, or pointed at with `--launcher` / `$CURIOS_LAUNCHER`, at compile time).
 
 ## Repository layout
 
-The compiler is a chain of stages under `src/`: `text` (parse) → `core` (elaborate, typecheck, erase) → `ersd` (erased IR) → `cont` (CPS IR) → `optm` (optimization) → `wasm` (emit) → `run` (execute). The curios standard library lives in `std/` (with a smaller support library in `syn/`).
+A Cargo workspace of four crates: **`curios`** (the compiler library — the `text` → `core` → `ersd` → `cont` → `wasm` pipeline, plus the `curios/std` and `curios/syn` libraries), **`curios-binaryen`** (the vendored Binaryen optimizer), **`curios-runtime`** (the runtime-only engine + launcher stub), and **`curios-compiler`** (the CLI + the compile/precompile/run helpers).
 
 For a full tour of the architecture, build/test workflow, and conventions, see [AGENTS.md](AGENTS.md). For the language itself, see [SYNTAX.md](SYNTAX.md).
 

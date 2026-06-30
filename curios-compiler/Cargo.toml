@@ -1,0 +1,16 @@
+[package]
+name = "curios-compiler"
+version.workspace = true
+edition.workspace = true
+description = "The curios command-line compiler driver"
+
+# Lib (compile / precompile / run-from-source helpers + the integration suite) +
+# bin (the clap front-end). This is the only crate that declares Cranelift and
+# Binaryen, so they are confined to compiler builds.
+
+[dependencies]
+curios = { workspace = true }
+curios-binaryen = { workspace = true }
+curios-runtime = { workspace = true }
+wasmtime = { workspace = true, features = ["cranelift"] }
+clap = { version = "4.5.60", features = ["derive"] }

@@ -1,0 +1,250 @@
+use {curios_runtime::MockHost, std::time::Duration};
+
+#[test]
+fn match_omitted_motive_infers() {
+    // The same induction as `triangular_sum`, but with the motive omitted. It is
+    // non-dependent (every arm has type `std/Nat`), so the synthesized metavar
+    // motive is solved by the arms — no explicit `: std/Nat` needed.
+    let source = r#"
+        let result : std/Nat =
+            match 5
+            | 0 => 0
+            | pred + 1, ih => std/Nat/add(ih, pred)
+            end;
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(result)))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"10");
+}
+
+#[test]
+fn implicit_inductive_type_param_executes() {
+    // A `@`-marked inductive parameter is implicit at the type constructor too:
+    // `Eq2(2, 2)` infers `A` from the indices, `Eq2(@Nat, 3, 3)` pins it, and
+    // the eliminator's motive type-pattern still spells every slot. Running
+    // (not just checking) also guards metavariable spines through the
+    // Π-domain close/reopen round trip: a solved implicit type-arg's solution
+    // names a sibling binder, and without the delayed substitution the two
+    // spellings of the same domain compare as distinct.
+    let source = r#"
+        use /std/{Nat, Bin, Io};
+        induct Eq2(@A : Type) : (x : A, y : A)
+        | refl(@z : A) : (z, z)
+        end
+        let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
+            match p : (q : Eq2(A, s, t)) => Eq2(t, s)
+            | refl(z) => Eq2/refl()
+            end;
+        let pinned : Eq2(@Nat, 3, 3) = Eq2/refl();
+        let proof : Eq2(2, 2) = Eq2/refl();
+        let inferred : Eq2(2, 2) = sym2(proof);
+        match inferred : {}
+        | refl(z) => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z))); ()
+        end
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"2");
+}
+
+#[test]
+fn implicit_inductive_type_param_rejects_explicit_spelling() {
+    // With `@A` implicit, the old explicit spelling queues `Nat` into the
+    // explicit slots — one argument too many, an error rather than a silent
+    // reinterpretation. (`Eq2(@Nat, 2, 2)` is the pinned spelling.)
+    let source = r#"
+        use /std/{Nat, Io};
+        induct Eq2(@A : Type) : (x : A, y : A)
+        | refl(@z : A) : (z, z)
+        end
+        let bad : Eq2(Nat, 2, 2) = Eq2/refl();
+        Io/write(Io/stdout, /std/Str/to_bin("no"))
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
+#[test]
+fn parked_constraints_let_nested_constructor_metas_resolve() {
+    // `sym2(Eq2/refl())` — the argument's fresh metas meet the domain's fresh
+    // metas as flex–flex pairs embedded under the inductive type. Before the
+    // constraint store (§8) the argument's `expect` failed at quiescence,
+    // seconds before the result-type unification would have pinned
+    // everything. Now the pairs park, the output `expect` solves the domain
+    // metas against the annotation, and the wake retries the parked pairs.
+    let source = r#"
+        use /std/{Nat, Io};
+        induct Eq2(@A : Type) : (x : A, y : A)
+        | refl(@z : A) : (z, z)
+        end
+        let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
+            match p : (q : Eq2(A, s, t)) => Eq2(t, s)
+            | refl(z) => Eq2/refl()
+            end;
+        let direct : Eq2(2, 2) = sym2(Eq2/refl());
+        let chained : Eq2(3, 3) = sym2(sym2(Eq2/refl()));
+        match chained : {}
+        | refl(z) => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z))); ()
+        end
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"3");
+}
+
+#[test]
+fn parked_constraints_still_reject_the_unsolvable() {
+    // An undecidable-at-first constraint that never resolves must still fail —
+    // at the item drain, attributed to its origin. `refl` forces both indices
+    // equal; `2` and `3` are not.
+    let source = r#"
+        use /std/{Nat, Io};
+        induct Eq2(@A : Type) : (x : A, y : A)
+        | refl(@z : A) : (z, z)
+        end
+        let bad : Eq2(2, 3) = Eq2/refl();
+        Io/write(Io/stdout, /std/Str/to_bin("no"))
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
+#[test]
+fn omitted_motive_infers_over_a_compound_scrutinee() {
+    // The motive hole's scope is opened with the scrutinee — a non-pattern
+    // spine entry when the scrutinee is compound. Occurrence abstraction in
+    // `solve` rewrites the scrutinee's occurrences in the expected type to
+    // the motive binder, so the dependent motive infers where it previously
+    // had to be spelled.
+    let source = r#"
+        use /std/{Nat, Vec, Io};
+        rec build(n : Nat) -> Vec(Nat, n) =
+            match n : (m) => Vec(Nat, m)
+            | 0 => Vec/nil()
+            | pred + 1, ih => Vec/cons(0, ih)
+            end;
+        let d(k : Nat) -> Vec(Nat, Nat/add(k, k)) =
+            match Nat/add(k, k)
+            | 0 => Vec/nil()
+            | pred + 1, ih => build(Nat/succ(pred))
+            end;
+        Io/print(Nat/to_str(Vec/len(d(2))))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"4");
+}
+
+#[test]
+fn bare_tuple_continuation_tail_infers() {
+    // The recorded dead-end from the result-directed elaboration work: a bare
+    // tuple in a monadic continuation's tail, its expected type a metavariable
+    // pinned only by the *outer* apply's result unification. The in-apply
+    // postponement defers the tuple, the constraint store parks the flex–flex
+    // codomain pair across the inner apply, and the outer pin wakes both.
+    let source = r#"
+        use /std/{Parse, Nat, Bin, Io};
+        let pairer : Parse({ Nat, Nat }) =
+            Parse/bind(Parse/any_byte, (a) => Parse/pure((a, a)));
+        rec with_sugar : Parse({ Nat, Nat }) =
+            let ! = Parse/bind;
+            let a = Parse/any_byte!;
+            Parse/pure((a, 0));
+        match Parse/run(pairer, /std/Str/to_bin("hi"))
+        | success(pair) => Io/print(Nat/to_str(pair.0))
+        | failure(_) => Io/print("error")
+        end
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"104");
+}
+
+#[test]
+fn checking_problem_parks_until_an_outer_pin_lands() {
+    // The constraint store's own window: the inner apply's output expect
+    // parks (provisional success), so the postponed tuple re-check meets a
+    // still-unsolved expected type — it now parks as a *checking problem*
+    // behind a placeholder metavariable, and the outer annotation's pin wakes
+    // it. Before ParkedWork::Checking this was a NotATupleType error.
+    let source = r#"
+        use /std/{Nat, Lst, Io};
+        let mk(@A : Type, a : A) -> Lst(A) = Lst/cons(a, Lst/nil());
+        let use_(@B : Type, l : Lst(B)) -> Lst(B) = l;
+        let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
+        match v : {}
+        | nil() => ()
+        | cons(p, rest) => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(p.1))); ()
+        end
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"2");
+}
+
+#[test]
+fn checking_problem_without_a_pin_still_rejects() {
+    // A checking problem whose expected type is never pinned drains as a
+    // cannot-infer at the tuple's own span — parked, not silently accepted.
+    let source = r#"
+        use /std/{Nat, Io};
+        let swallow(@A : Type, a : A) -> Nat = 0;
+        let n : Nat = swallow((1, 2));
+        Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(n)))
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
+// === Structs (SYNTAX.md) ================================================
+
+// A transparent record: build with a pinned head, project by label and by
+// index — both resolve to the same positional projection.
+#[test]
+fn subst_motive_inserts_implicit_in_eq() {
+    let source = r#"
+        use /std/{Eq, Nat, Io};
+        let g(n : Nat) -> Nat = n;
+        let lemma(@a : Nat, @b : Nat, p : Eq(a, b)) -> Eq(g(a), g(b)) =
+            Eq/subst((x) => Eq(g(a), g(x)), p, Eq/refl());
+        let _ = lemma;
+        Io/print("ok")
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"ok");
+}
+
+// `Str/len` and `Str/get` count and index by codepoint, not byte. The string is
+// `a€😀` — a 1-byte, a 3-byte, and a 4-byte scalar — so its length is 3 and the
+// codepoints decode to U+0061 (97), U+20AC (8364), and U+1F600 (128512).
+#[test]
+fn nonproductive_inner_rec_in_type_position_is_preempted() {
+    let source = r#"
+        use /std/{Bln};
+        let spin : Bln =
+            rec go : Bln = go;
+            go;
+        let bad : Type =
+            match spin : Type
+            | true => {}
+            | false => {}
+            end;
+        let x : bad = ();
+        0
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(1), source, system).is_err());
+}

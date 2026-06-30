@@ -1,37 +1,21 @@
-[package]
-name = "curios"
+[workspace]
+resolver = "2"
+members = ["curios", "curios-binaryen", "curios-runtime", "curios-compiler"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 description = "Work-in-progress functional dependently typed programming language"
 
-[features]
-run = [
-    "dep:wasmtime",
-    "dep:getrandom",
-    "dep:socket2",
-    "dep:rustix",
-    "dep:rustls",
-    "dep:rustls-pemfile",
-    "dep:webpki-roots",
-]
-binaryen = ["dep:cmake"]
-cli = ["dep:clap", "run"]
-default = ["binaryen", "cli"]
-
-[build-dependencies]
-cmake = { version = "0.1.54", optional = true }
-
-[dev-dependencies]
-curios = { path = ".", default-features = false, features = ["run"] }
-
-[dependencies]
-wasmtime = { version = "44.0.1", optional = true }
-getrandom = { version = "0.3.3", optional = true }
-socket2 = { version = "0.5.8", optional = true }
-rustix = { version = "1.1.4", features = ["event"], optional = true }
-rustls = { version = "0.23.5", default-features = false, features = ["ring", "std", "tls12"], optional = true }
-rustls-pemfile = { version = "2.1.2", optional = true }
-webpki-roots = { version = "0.26.1", optional = true }
-clap = { version = "4.5.60", features = ["derive"], optional = true }
+[workspace.dependencies]
+curios = { path = "curios" }
+curios-binaryen = { path = "curios-binaryen" }
+curios-runtime = { path = "curios-runtime" }
+curios-compiler = { path = "curios-compiler" }
+# wasmtime's version + runtime baseline live here so they are declared once. The
+# `.cwasm` format is wasmtime-version-locked, so curios-cli (which precompiles) and
+# curios-run (which deserializes) must share one version; inheriting from here
+# guarantees it. curios-cli adds the `cranelift` feature on top.
+wasmtime = { version = "44.0.1", default-features = false, features = ["runtime", "gc", "gc-drc", "std"] }
 num-bigint = { version = "0.4.6" }
 num-traits = { version = "0.2.19" }
