@@ -12,10 +12,6 @@ curios = { path = "curios" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-runtime = { path = "curios-runtime" }
 curios-compiler = { path = "curios-compiler" }
-# wasmtime's version + runtime baseline live here so they are declared once. The
-# `.cwasm` format is wasmtime-version-locked, so curios-cli (which precompiles) and
-# curios-run (which deserializes) must share one version; inheriting from here
-# guarantees it. curios-cli adds the `cranelift` feature on top.
 wasmtime = { version = "44.0.1", default-features = false, features = ["runtime", "gc", "gc-drc", "std"] }
 num-bigint = { version = "0.4.6" }
 num-traits = { version = "0.2.19" }

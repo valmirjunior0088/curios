@@ -97,7 +97,7 @@ The `curios-compiler` binary exposes three subcommands:
 
 Two global flags are useful while exploring:
 
-- `--print[=STAGES]` dumps intermediate representations to stderr. With no value it prints all stages; or pass a comma-separated subset, e.g. `--print=core,wasm` (stages: `text,core,ersd,cont,optm,wasm`).
+- `--print[=STAGES]` dumps intermediate representations to stderr. With no value it prints all stages; or pass a comma-separated subset, e.g. `--print=core,wasm` (stages: `text,core,ersd,ersd-optm,cont,cont-optm,wasm`).
 - `--timeout MILLIS` bounds the type-checker's reduction time (default `1000`).
 
 ```sh
