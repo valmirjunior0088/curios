@@ -67,14 +67,23 @@ pub fn run_text<H: Host + Send + Sync + 'static>(
     run(timeout, source, host)
 }
 
+/// Open a `.crs` entrypoint at `path`, paired with a [`text::FileLoader`] rooted
+/// at its parent directory — the standard way to resolve a program's imports
+/// relative to the file it lives in.
+pub fn load(path: &Path) -> Result<(text::Entrypoint, text::FileLoader), String> {
+    let entrypoint = text::Entrypoint::from_path(path).map_err(|error| error.format())?;
+    let loader = text::FileLoader::new(path.parent().unwrap_or(Path::new(".")));
+
+    Ok((entrypoint, loader))
+}
+
 /// Load `path`'s entrypoint (file loader rooted at its parent) and run it.
 pub fn run_file<H: Host + Send + Sync + 'static>(
     timeout: Duration,
     path: &Path,
     host: H,
 ) -> Result<(), String> {
-    let entrypoint = text::Entrypoint::from_path(path).map_err(|error| error.format())?;
-    let loader = text::FileLoader::new(path.parent().unwrap_or(Path::new(".")));
+    let (entrypoint, loader) = load(path)?;
 
     run_entrypoint(timeout, &entrypoint, &loader, host)
 }

@@ -3,6 +3,9 @@
 //! Cranelift or Binaryen — JIT and precompilation live in `curios-cli`, which
 //! reuses [`shared_engine`], [`instantiate`], and [`run_bytes`] from here.
 
+mod bundle;
+pub use bundle::*;
+
 mod host;
 pub use host::*;
 

@@ -63,10 +63,12 @@ then, in curios-compiler:
 | `curios-binaryen/src/`                        | FFI bindings to vendored Binaryen (`sys.rs`); `optimize(bytes)`; `build.rs` links it         |
 | `curios-binaryen/binaryen/`                   | Vendored Binaryen C++ source (do not edit — see Gotchas)                                      |
 | `curios-runtime/src/`                         | wasmtime engine + host stack (`run_bytes`, `instantiate`, `shared_engine`); OS + mock hosts  |
+| `curios-runtime/src/bundle.rs`                | Bundled-executable footer format (`append_payload`/`extract_payload`), shared by bundler + launcher |
 | `curios-runtime/src/main.rs`                  | The launcher stub (bin `curios-runtime`): reads its appended `.cwasm` tail and runs it        |
-| `curios-compiler/src/lib.rs`                  | `to_cwasm`, `run_wasm`, run-from-source helpers; re-exports `Stage`/`MockHost`/`OsHost`       |
-| `curios-compiler/src/main.rs`                 | clap-based CLI (bin `curios-compiler`) incl. the `compile`→executable bundler                 |
-| `Makefile`                                    | Builds the slim `curios-runtime` and copies it to `curios-compiler/runtime` for `main.rs` to `include_bytes!` |
+| `curios-compiler/src/lib.rs`                  | `to_cwasm`, `run_wasm`, `load`, run-from-source helpers; re-exports `Stage`/`MockHost`/`OsHost` |
+| `curios-compiler/src/main.rs`                 | clap-based CLI (bin `curios-compiler`): module wiring + subcommand dispatch                    |
+| `curios-compiler/src/{cli,pipeline,bundle}.rs`| CLI surface (clap), pipeline driving + `--print` stage dumps, and the `compile`→executable bundler |
+| `Makefile`                                    | Builds the slim `curios-runtime` and copies it to `curios-compiler/runtime` for `bundle.rs` to `include_bytes!` |
 | `curios-compiler/src/tests/`                  | Cross-stage integration tests (incl. relocated `codegen/` tests)                             |
 | `curios-compiler/examples/`                   | Runnable examples that execute (`parse_*`, `inline_*`, `crs_*`, `bench_parse`)               |
 | `curios-compiler/tests/bundle.rs`             | Gated (`#[ignore]`) end-to-end test of the `compile`→executable path                          |
@@ -106,7 +108,7 @@ cargo clippy --workspace --all-targets --all-features      # CI sets RUSTFLAGS="
 cargo test   --workspace --all-targets --all-features
 ```
 
-The first line is load-bearing twice over: it provides the launcher binary `main.rs` embeds, and its isolated build doubles as the slim-configuration check (see [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher)).
+The first line is load-bearing twice over: it provides the launcher binary `bundle.rs` embeds, and its isolated build doubles as the slim-configuration check (see [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher)).
 
 There is no `rustfmt.toml` or `clippy.toml` — stock toolchain defaults apply. Run `cargo fmt --all` to fix formatting rather than hand-aligning.
 
