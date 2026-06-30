@@ -2,9 +2,13 @@ use {
     super::{
         host::*,
         os_resolver::{OsResolver, Slot},
+        table::Table,
     },
     rustix::event::{PollFd, Timespec, poll},
-    rustls::{ClientConnection, StreamOwned},
+    rustls::{
+        ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
+        crypto::ring, pki_types::ServerName,
+    },
     socket2::{Domain, SockAddr, Socket, Type},
     std::{
         env,
@@ -15,24 +19,24 @@ use {
         sync::{Arc, LazyLock, Mutex, OnceLock},
         time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     },
+    webpki_roots::TLS_SERVER_ROOTS,
 };
 
 /// The shared client TLS configuration: a bundled `webpki-roots` trust-anchor
 /// set with certificate verification on, built once and `Arc`-cloned by every
 /// `start_tls`. An explicit `ring` crypto provider is wired in so the config
 /// never depends on a process-global default provider being installed.
-static CLIENT_CONFIG: LazyLock<Arc<rustls::ClientConfig>> = LazyLock::new(|| {
-    let mut roots = rustls::RootCertStore::empty();
-    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+static CLIENT_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
+    let mut roots = RootCertStore::empty();
+
+    roots.extend(TLS_SERVER_ROOTS.iter().cloned());
 
     Arc::new(
-        rustls::ClientConfig::builder_with_provider(Arc::new(
-            rustls::crypto::ring::default_provider(),
-        ))
-        .with_safe_default_protocol_versions()
-        .expect("ring provider supports the default protocol versions")
-        .with_root_certificates(roots)
-        .with_no_client_auth(),
+        ClientConfig::builder_with_provider(Arc::new(ring::default_provider()))
+            .with_safe_default_protocol_versions()
+            .expect("ring provider supports the default protocol versions")
+            .with_root_certificates(roots)
+            .with_no_client_auth(),
     )
 });
 
@@ -66,10 +70,10 @@ enum OsResource {
     ClientTls(StreamOwned<ClientConnection, Socket>),
     /// A server-side TLS stream: the encrypted conduit an accepted socket
     /// became under `start_tls_server`.
-    ServerTls(StreamOwned<rustls::ServerConnection, Socket>),
+    ServerTls(StreamOwned<ServerConnection, Socket>),
     /// An opaque server TLS configuration minted by `tls_server_config`, held
     /// in the table as a handle and consumed by `start_tls_server`.
-    TlsConfig(Arc<rustls::ServerConfig>),
+    TlsConfig(Arc<ServerConfig>),
 }
 
 pub struct OsHost {
@@ -216,15 +220,18 @@ impl Host for OsHost {
         // Start the lookup on the pool (booted on first use). A saturated pool
         // sheds the load as a retriable `WouldBlock`; on success the read end and
         // result slot become a `Resolving` handle the scheduler polls.
-        match self.resolver.get_or_init(OsResolver::new).start(address) {
-            Ok(Some(pending)) => {
-                let handle = self.mint(OsResource::Resolving {
-                    done: pending.ready,
+        match self
+            .resolver
+            .get_or_init(OsResolver::default)
+            .start(address)
+        {
+            Ok(Some(pending)) => (
+                Status::Ok,
+                self.mint(OsResource::Resolving {
+                    done: pending.fd,
                     slot: pending.slot,
-                });
-
-                (Status::Ok, handle)
-            }
+                }),
+            ),
             Ok(None) => (Status::WouldBlock, Io::Other(Vec::new())),
             Err(status) => (status, Io::Other(Vec::new())),
         }
@@ -237,15 +244,15 @@ impl Host for OsHost {
         let mut table = self.table.lock().unwrap();
 
         let ready = match table.get(&handle) {
-            Some(OsResource::Resolving { slot, .. }) => slot.lock().unwrap().take(),
+            Some(OsResource::Resolving { slot, .. }) => slot.get(),
             _ => return (Status::NotFound, vec![]),
         };
 
         match ready {
             // Drop the handle (closing the pipe read end) only once drained.
-            Some(result) => {
+            Some(resolved) => {
                 table.remove(&handle);
-                result
+                (resolved.status, resolved.addresses)
             }
             None => (Status::WouldBlock, vec![]),
         }
@@ -253,7 +260,7 @@ impl Host for OsHost {
 
     fn socket(&self, addr: &[u8]) -> (Status, Io) {
         // The address blob is the canonical "ip:port" string `resolve` minted.
-        let address: SocketAddr = match String::from_utf8_lossy(addr).parse() {
+        let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
             Ok(address) => address,
             Err(_) => return (Status::NotFound, Io::Other(Vec::new())),
         };
@@ -266,7 +273,7 @@ impl Host for OsHost {
 
     fn bind(&self, io: Io, addr: &[u8]) -> Status {
         // The address blob is the canonical "ip:port" string `resolve` minted.
-        let address: SocketAddr = match String::from_utf8_lossy(addr).parse() {
+        let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
             Ok(address) => address,
             Err(_) => return Status::NotFound,
         };
@@ -282,7 +289,7 @@ impl Host for OsHost {
 
     fn connect(&self, io: Io, addr: &[u8]) -> Status {
         // The address blob is the canonical "ip:port" string `resolve` minted.
-        let address: SocketAddr = match String::from_utf8_lossy(addr).parse() {
+        let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
             Ok(address) => address,
             Err(_) => return Status::NotFound,
         };
@@ -310,7 +317,7 @@ impl Host for OsHost {
     fn start_tls(&self, io: Io, sni: &[u8]) -> Status {
         let server_name = match std::str::from_utf8(sni)
             .ok()
-            .and_then(|name| rustls::pki_types::ServerName::try_from(name.to_owned()).ok())
+            .and_then(|name| ServerName::try_from(name.to_owned()).ok())
         {
             Some(name) => name,
             None => return Status::TlsError,
@@ -346,26 +353,22 @@ impl Host for OsHost {
         }
     }
 
-    fn tls_server_config(&self, cert: &[u8], key: &[u8]) -> (Status, Io) {
-        let mut cert_reader: &[u8] = cert;
-        let certs = match rustls_pemfile::certs(&mut cert_reader).collect::<Result<Vec<_>, _>>() {
+    fn tls_server_config(&self, mut cert: &[u8], mut key: &[u8]) -> (Status, Io) {
+        let certs = match rustls_pemfile::certs(&mut cert).collect::<Result<Vec<_>, _>>() {
             Ok(certs) if !certs.is_empty() => certs,
             _ => return (Status::TlsError, Io::Other(Vec::new())),
         };
 
-        let mut key_reader: &[u8] = key;
-        let key = match rustls_pemfile::private_key(&mut key_reader) {
+        let key = match rustls_pemfile::private_key(&mut key) {
             Ok(Some(key)) => key,
             _ => return (Status::TlsError, Io::Other(Vec::new())),
         };
 
-        let config = match rustls::ServerConfig::builder_with_provider(Arc::new(
-            rustls::crypto::ring::default_provider(),
-        ))
-        .with_safe_default_protocol_versions()
-        .expect("ring provider supports the default protocol versions")
-        .with_no_client_auth()
-        .with_single_cert(certs, key)
+        let config = match ServerConfig::builder_with_provider(Arc::new(ring::default_provider()))
+            .with_safe_default_protocol_versions()
+            .expect("ring provider supports the default protocol versions")
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
         {
             Ok(config) => Arc::new(config),
             Err(_) => return (Status::TlsError, Io::Other(Vec::new())),
@@ -387,7 +390,7 @@ impl Host for OsHost {
             None => return Status::NotFound,
         };
 
-        let conn = match rustls::ServerConnection::new(config) {
+        let conn = match ServerConnection::new(config) {
             Ok(conn) => conn,
             Err(_) => return Status::TlsError,
         };
@@ -447,21 +450,23 @@ impl Host for OsHost {
 
     fn set_recv_timeout(&self, io: Io, ms: u32) -> Status {
         // `0` ms clears the timeout (`None`); any other value is a duration.
-        let timeout = (ms != 0).then(|| Duration::from_millis(ms.into()));
-        self.with_socket(&io, |socket| socket.set_read_timeout(timeout))
+        self.with_socket(&io, |socket| {
+            socket.set_read_timeout((ms != 0).then(|| Duration::from_millis(ms.into())))
+        })
     }
 
     fn set_send_timeout(&self, io: Io, ms: u32) -> Status {
         // `0` ms clears the timeout (`None`); any other value is a duration.
-        let timeout = (ms != 0).then(|| Duration::from_millis(ms.into()));
-        self.with_socket(&io, |socket| socket.set_write_timeout(timeout))
+        self.with_socket(&io, |socket| {
+            socket.set_write_timeout((ms != 0).then(|| Duration::from_millis(ms.into())))
+        })
     }
 
     fn set_reuseaddr(&self, io: Io, on: u32) -> Status {
         self.with_socket(&io, |socket| socket.set_reuse_address(on != 0))
     }
 
-    fn poll(&self, handles: &[Io], events: &[PollEvents], timeout_ms: i32) -> Vec<PollEvents> {
+    fn poll(&self, handles: &[Io], events: &[Poll], timeout_ms: i32) -> Vec<Poll> {
         let table = self.table.lock().unwrap();
 
         // Keep the stdio owners alive for the duration of the borrow: each
@@ -473,7 +478,7 @@ impl Host for OsHost {
         // keeps its `empty()` slot and is never polled.
         let mut polls = Vec::with_capacity(handles.len());
         let mut slots = Vec::with_capacity(handles.len());
-        let mut results = vec![PollEvents::empty(); handles.len()];
+        let mut results = vec![Poll::empty(); handles.len()];
 
         for (slot, handle) in handles.iter().enumerate() {
             let fd = match handle {
@@ -502,8 +507,15 @@ impl Host for OsHost {
             };
 
             if let Some(fd) = fd {
-                let interest = events.get(slot).copied().unwrap_or_else(PollEvents::empty);
-                polls.push(PollFd::from_borrowed_fd(fd, interest.to_poll_flags()));
+                polls.push(PollFd::from_borrowed_fd(
+                    fd,
+                    events
+                        .get(slot)
+                        .copied()
+                        .unwrap_or_else(Poll::empty)
+                        .to_poll_flags(),
+                ));
+
                 slots.push(slot);
             }
         }
@@ -523,7 +535,7 @@ impl Host for OsHost {
         // re-polls. On success, scatter each revents back to its input slot.
         if poll(&mut polls, timeout.as_ref()).is_ok() {
             for (index, &slot) in slots.iter().enumerate() {
-                results[slot] = PollEvents::from_poll_flags(polls[index].revents());
+                results[slot] = Poll::from_poll_flags(polls[index].revents());
             }
         }
 
@@ -589,8 +601,8 @@ impl Host for OsHost {
 
         let mut table = self.table.lock().unwrap();
 
-        let stream: &mut dyn Write = match table.get_mut(&io) {
-            Some(OsResource::File(file)) => file,
+        let stream = match table.get_mut(&io) {
+            Some(OsResource::File(file)) => file as &mut dyn Write,
             Some(OsResource::Connected(socket)) => socket,
             Some(OsResource::ClientTls(tls)) => tls,
             Some(OsResource::ServerTls(tls)) => tls,

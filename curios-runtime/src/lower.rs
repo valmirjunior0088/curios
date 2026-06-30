@@ -1,5 +1,5 @@
 use {
-    super::{Io, PollEvents, Status},
+    super::{Io, Poll, Status},
     wasmtime::{
         AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, FieldType, HeapType, I31, Mutability,
         RefType, StorageType, Val, ValType,
@@ -67,8 +67,9 @@ impl<A: Lower, B: Lower> Lower for (A, B) {
     ) -> Result<(), wasmtime::Error> {
         let (a, b) = self;
         a.lower(caller, &mut results[0..1])?;
+        b.lower(caller, &mut results[1..2])?;
 
-        b.lower(caller, &mut results[1..2])
+        Ok(())
     }
 }
 
@@ -81,8 +82,9 @@ impl<A: Lower, B: Lower, C: Lower> Lower for (A, B, C) {
         let (a, b, c) = self;
         a.lower(caller, &mut results[0..1])?;
         b.lower(caller, &mut results[1..2])?;
+        c.lower(caller, &mut results[2..3])?;
 
-        c.lower(caller, &mut results[2..3])
+        Ok(())
     }
 }
 
@@ -119,7 +121,7 @@ impl Lower for Vec<u8> {
 /// i31-boxed bits. Same uniform `Arr` shape as `Vec<Vec<u8>>` below (anyref
 /// elements over the codegen's `arr_type`), only the elements are i31s rather
 /// than `Bin`s — the outbound dual of `lift.rs`'s `lift_i31_array`.
-impl Lower for Vec<PollEvents> {
+impl Lower for Vec<Poll> {
     fn lower(
         self,
         caller: &mut Caller<'_, ()>,
@@ -132,15 +134,18 @@ impl Lower for Vec<PollEvents> {
                 StorageType::ValType(ValType::Ref(RefType::new(true, HeapType::Any))),
             ),
         );
+
         let outer_pre = ArrayRefPre::new(&mut *caller, outer_type);
 
-        let mut elements = Vec::with_capacity(self.len());
-        for mask in self {
-            elements.push(Val::AnyRef(Some(AnyRef::from_i31(
-                &mut *caller,
-                I31::wrapping_u32(mask.bits()),
-            ))));
-        }
+        let elements = self
+            .into_iter()
+            .map(|mask| {
+                Val::AnyRef(Some(AnyRef::from_i31(
+                    &mut *caller,
+                    I31::wrapping_u32(mask.bits()),
+                )))
+            })
+            .collect::<Vec<_>>();
 
         results[0] = Val::AnyRef(Some(
             ArrayRef::new_fixed(&mut *caller, &outer_pre, &elements)?.to_anyref(),
@@ -164,20 +169,25 @@ impl Lower for Vec<Vec<u8>> {
             caller.engine(),
             FieldType::new(Mutability::Var, StorageType::I8),
         );
+
         let byte_pre = ArrayRefPre::new(&mut *caller, byte_type);
 
-        let mut elements = Vec::with_capacity(self.len());
-        for bytes in self {
-            let bin = ArrayRef::new_fixed(
-                &mut *caller,
-                &byte_pre,
-                &bytes
-                    .into_iter()
-                    .map(|byte| Val::I32(byte as i32))
-                    .collect::<Vec<_>>(),
-            )?;
-            elements.push(Val::AnyRef(Some(bin.to_anyref())));
-        }
+        let elements = self
+            .into_iter()
+            .map(|bytes| {
+                Ok(Val::AnyRef(Some(
+                    ArrayRef::new_fixed(
+                        &mut *caller,
+                        &byte_pre,
+                        &bytes
+                            .into_iter()
+                            .map(|byte| Val::I32(byte as i32))
+                            .collect::<Vec<_>>(),
+                    )?
+                    .to_anyref(),
+                )))
+            })
+            .collect::<Result<Vec<_>, wasmtime::Error>>()?;
 
         let outer_type = ArrayType::new(
             caller.engine(),
@@ -186,6 +196,7 @@ impl Lower for Vec<Vec<u8>> {
                 StorageType::ValType(ValType::Ref(RefType::new(true, HeapType::Any))),
             ),
         );
+
         let outer_pre = ArrayRefPre::new(&mut *caller, outer_type);
 
         results[0] = Val::AnyRef(Some(

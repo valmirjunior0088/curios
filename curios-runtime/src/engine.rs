@@ -1,5 +1,5 @@
 use {
-    super::{Host, Io, Lift, Lower, Mode, PollEvents},
+    super::{Host, Io, Lift, Lower, Mode, Poll},
     std::{
         error::Error,
         fmt,
@@ -338,7 +338,7 @@ pub fn instantiate<H: Host + Send + Sync + 'static>(
     define_import(&mut linker, "io_poll", io_poll_type, {
         let host = host.clone();
 
-        move |(handles, events, timeout): (Vec<Io>, Vec<PollEvents>, i32)| {
+        move |(handles, events, timeout): (Vec<Io>, Vec<Poll>, i32)| {
             host.poll(&handles, &events, timeout)
         }
     })?;

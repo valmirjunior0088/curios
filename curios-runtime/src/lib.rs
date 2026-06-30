@@ -6,6 +6,9 @@
 mod host;
 pub use host::*;
 
+mod table;
+pub use table::*;
+
 mod os_host;
 pub use os_host::*;
 

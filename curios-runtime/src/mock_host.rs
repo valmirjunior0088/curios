@@ -1,5 +1,5 @@
 use {
-    super::host::*,
+    super::{host::*, table::Table},
     std::{
         collections::{HashMap, VecDeque},
         sync::{Arc, Mutex},
@@ -145,6 +145,13 @@ pub struct MockHost {
 }
 
 impl MockHost {
+    /// An unseeded host — empty stdin, files, net, and clocks — paired with its
+    /// [`MockIo`]. Shortcut for `MockHost::builder().build()` for tests that need
+    /// no scripted inputs.
+    pub fn unseeded() -> (MockHost, MockIo) {
+        Self::builder().build()
+    }
+
     /// Start seeding a host. Chain the `stdin_lines`/`files`/`net`/… setters,
     /// then `build` for the `(host, io)` pair.
     pub fn builder() -> MockHostBuilder {
@@ -353,7 +360,7 @@ impl Host for MockHost {
         Status::Ok
     }
 
-    fn poll(&self, handles: &[Io], events: &[PollEvents], _: i32) -> Vec<PollEvents> {
+    fn poll(&self, handles: &[Io], events: &[Poll], _: i32) -> Vec<Poll> {
         // In-memory data is always ready, so readiness just mirrors the requested
         // interest: a known handle reports `revents == events`, an unknown one
         // reports nothing. The deterministic in-memory oracle — any scheduler
@@ -370,9 +377,9 @@ impl Host for MockHost {
                 };
 
                 if known {
-                    events.get(slot).copied().unwrap_or_else(PollEvents::empty)
+                    events.get(slot).copied().unwrap_or_else(Poll::empty)
                 } else {
-                    PollEvents::empty()
+                    Poll::empty()
                 }
             })
             .collect()
@@ -579,6 +586,7 @@ impl MockHostBuilder {
     pub fn stdin_line(mut self, line: impl AsRef<[u8]>) -> Self {
         self.input.extend_from_slice(line.as_ref());
         self.input.push(b'\n');
+
         self
     }
 

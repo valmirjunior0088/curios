@@ -20,6 +20,7 @@ const FOOTER_LEN: usize = 16;
 fn payload() -> Result<Vec<u8>, String> {
     let exe =
         env::current_exe().map_err(|error| format!("cannot locate own executable: {error}"))?;
+
     let image =
         fs::read(&exe).map_err(|error| format!("cannot read {}: {error}", exe.display()))?;
 

@@ -1,5 +1,5 @@
 use {
-    super::{Io, Mode, PollEvents},
+    super::{Io, Mode, Poll},
     curios::wire,
     wasmtime::{Caller, Val},
 };
@@ -124,11 +124,11 @@ fn lift_i31_array(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<u32>, 
 }
 
 /// `Arr(Nat)` lifts to the per-handle interest masks — `poll`'s `events` array.
-impl Lift for Vec<PollEvents> {
+impl Lift for Vec<Poll> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(lift_i31_array(caller, &params[0])?
             .into_iter()
-            .map(PollEvents::from_bits)
+            .map(Poll::from_bits)
             .collect())
     }
 }

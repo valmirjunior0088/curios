@@ -2,7 +2,7 @@
 //! source of truth for `/sys/Io`'s status, poll-event, and open-mode tags.
 //!
 //! Both ends cite these constants: the runtime (`run::host`) when it lowers a
-//! `Status`/`PollEvents`/`Mode` to the wire, and the guest prelude
+//! `Status`/`Poll`/`Mode` to the wire, and the guest prelude
 //! (`text::prelude`) when it mints the `/sys/Io/{Status,Poll,Mode}` constants the
 //! standard library compares against. Because the two sides derive from the same
 //! definitions, they cannot drift. This module is a leaf — it depends on nothing,
