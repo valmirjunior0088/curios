@@ -121,7 +121,7 @@ match v : (v : Vec(A, k)) => Vec(B, k) ... -- scrutinee-bound motive
 match p : (q : Eq(A, s, t)) => Eq(t, s) ...-- annotated (names the type + its slots)
 ```
 
-**Inductive** (the general form). Arms are `| <pattern> => body`; a bare `| x =>` or `| _ =>` is a catch-all; constructors may repeat and nest. Zero arms is legal (for scrutinees no constructor can inhabit):
+**Inductive** (the general form). Each arm is `| tag(x, …) => body` — one constructor, binding its payload by name (`_` to ignore). There are no catch-all (`| x =>` / `| _ =>`), nested, or literal patterns, and each constructor is handled by at most one arm. Zero arms is legal (for scrutinees no constructor can inhabit):
 
 ```
 match m
@@ -247,7 +247,7 @@ pub struct Token { Bin }        -- opaque: representation private to this module
 ```
 let p = Pair { fst = 1, snd = 2 };
 let sum = p.fst + p.snd;
-let Pair { fst, snd } = p;       -- pun-bind both fields
+let fst = p.fst;                 -- bind a field via projection
 ```
 
 ## Proofs (Eq idioms)
