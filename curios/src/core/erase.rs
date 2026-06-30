@@ -489,14 +489,72 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<ersd::Term, Error> {
                     empty_case,
                     cons_case,
                 },
-        } => erase_arr_match(context, head, motive, elem, empty_case, cons_case),
+        } => erase_indexed_match(
+            context,
+            head,
+            motive,
+            empty_case,
+            cons_case,
+            IndexedCarrier::Arr { elem },
+        ),
         Cases::FreeMonoid {
             carrier:
                 Carrier::Bin {
                     empty_case,
                     cons_case,
                 },
-        } => erase_bin_match(context, head, motive, empty_case, cons_case),
+        } => erase_indexed_match(
+            context,
+            head,
+            motive,
+            empty_case,
+            cons_case,
+            IndexedCarrier::Bin,
+        ),
+    }
+}
+
+/// A borrowed view of the length-indexed carriers (`Arr`/`Bin`) — the eliminator's
+/// "cons binds a head" axis, which cross-cuts the has-element axis the structural
+/// traversals carve `Carrier` on. Local to `erase` because this is the only place
+/// that axis matters: it bundles the carrier-specific reads behind one parameter so
+/// [`erase_indexed_match`] stays carrier-agnostic, and it holds only the two indexed
+/// variants, so those reads need no unreachable arm.
+#[derive(Clone, Copy)]
+enum IndexedCarrier<'a> {
+    Arr { elem: &'a Term },
+    Bin,
+}
+
+impl IndexedCarrier<'_> {
+    /// The length of `head` (`Arr`/`Bin` are length-indexed).
+    fn len(self, head: &Term) -> Term {
+        match self {
+            IndexedCarrier::Arr { elem } => {
+                Subterm::Prim(Prim::ArrLen(elem.clone(), head.clone())).into()
+            }
+            IndexedCarrier::Bin => Subterm::Prim(Prim::BinLen(head.clone())).into(),
+        }
+    }
+
+    /// The element of `head` at `index`.
+    fn get(self, head: &Term, index: Term) -> Term {
+        match self {
+            IndexedCarrier::Arr { elem } => {
+                Subterm::Prim(Prim::ArrGet(elem.clone(), head.clone(), index)).into()
+            }
+            IndexedCarrier::Bin => Subterm::Prim(Prim::BinGet(head.clone(), index)).into(),
+        }
+    }
+
+    /// The sub-slice `head[lo .. hi]`.
+    fn slice(self, head: &Term, lo: Term, hi: Term) -> Term {
+        match self {
+            IndexedCarrier::Arr { elem } => {
+                Subterm::Prim(Prim::ArrSlice(elem.clone(), head.clone(), lo, hi)).into()
+            }
+            IndexedCarrier::Bin => Subterm::Prim(Prim::BinSlice(head.clone(), lo, hi)).into(),
+        }
     }
 }
 
@@ -507,23 +565,20 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<ersd::Term, Error> {
 /// arm fires with `head := xs[len-1-i]` and `tail := xs[len-i ..]`, and the induction
 /// hypothesis is the accumulator. (See `reduce` for the matching type-level rule.)
 /// The carrier supplies its length, element-at, and sub-slice operations.
-#[allow(clippy::too_many_arguments)]
 fn erase_indexed_match(
     context: &mut Context,
     head: &Term,
     motive: &Scope<Many>,
     empty_case: &Term,
     cons_case: &Scope<Three>,
-    len: impl Fn(&Term) -> Term,
-    get: impl Fn(&Term, Term) -> Term,
-    slice: impl Fn(&Term, Term, Term) -> Term,
+    carrier: IndexedCarrier<'_>,
 ) -> Result<ersd::Term, Error> {
-    let len_term = len(head);
+    let len_term = carrier.len(head);
     let one: Term = Subterm::Prim(Prim::Nat(Nat::new(1usize))).into();
 
     // Nat motive `Q(i) = P(suffix of length i) = motive[ xs[len - i ..] ]`.
     let i_label = context.fresh(None);
-    let suffix_i = slice(
+    let suffix_i = carrier.slice(
         head,
         Subterm::Prim(Prim::nat_sub(len_term.clone(), Term::free_var(&i_label))).into(),
         len_term.clone(),
@@ -539,8 +594,8 @@ fn erase_indexed_match(
         Term::free_var(&pred_label),
     ))
     .into();
-    let head_value = get(head, index);
-    let tail_value = slice(
+    let head_value = carrier.get(head, index);
+    let tail_value = carrier.slice(
         head,
         Subterm::Prim(Prim::nat_sub(len_term.clone(), Term::free_var(&pred_label))).into(),
         len_term.clone(),
@@ -550,49 +605,6 @@ fn erase_indexed_match(
     let succ_case = Scope::close(Two, &[pred_label.as_str(), ih_label.as_str()], succ_body);
 
     erase_nat_match(context, &len_term, &nat_motive, empty_case, &succ_case)
-}
-
-/// Erase an `Arr` induction via `erase_indexed_match` with the array carrier ops.
-fn erase_arr_match(
-    context: &mut Context,
-    head: &Term,
-    motive: &Scope<Many>,
-    elem: &Term,
-    empty_case: &Term,
-    cons_case: &Scope<Three>,
-) -> Result<ersd::Term, Error> {
-    erase_indexed_match(
-        context,
-        head,
-        motive,
-        empty_case,
-        cons_case,
-        |head| Subterm::Prim(Prim::ArrLen(elem.clone(), head.clone())).into(),
-        |head, index| Subterm::Prim(Prim::ArrGet(elem.clone(), head.clone(), index)).into(),
-        |head, lo, hi| Subterm::Prim(Prim::ArrSlice(elem.clone(), head.clone(), lo, hi)).into(),
-    )
-}
-
-/// Erase a `Bin` induction via `erase_indexed_match`. `Bin` carries no element type,
-/// so it is the `Arr` desugar with the element parameter dropped (`BinLen`/`BinGet`/
-/// `BinSlice`); the recovered byte is a `Nat`, the `Bin`'s generator.
-fn erase_bin_match(
-    context: &mut Context,
-    head: &Term,
-    motive: &Scope<Many>,
-    empty_case: &Term,
-    cons_case: &Scope<Three>,
-) -> Result<ersd::Term, Error> {
-    erase_indexed_match(
-        context,
-        head,
-        motive,
-        empty_case,
-        cons_case,
-        |head| Subterm::Prim(Prim::BinLen(head.clone())).into(),
-        |head, index| Subterm::Prim(Prim::BinGet(head.clone(), index)).into(),
-        |head, lo, hi| Subterm::Prim(Prim::BinSlice(head.clone(), lo, hi)).into(),
-    )
 }
 
 fn erase_bln_match(
@@ -775,18 +787,30 @@ fn pattern_binder_slots(pattern: Option<&MotivePattern>, n_params: usize) -> Vec
 /// canonical case. The arm's body is erased with its payload binders bound (so
 /// it type-checks and refines) but never projected, and the scrutinee head is
 /// not erased: it is a dropped binder with no runtime value.
-#[allow(clippy::too_many_arguments)]
+/// The scrutinee's inductive type at a match site: its registered declaration
+/// plus the concrete instantiation (`name`, parameters, indices) read off the
+/// scrutinee's type.
+struct Scrutinee<'a> {
+    inductive: &'a super::Inductive,
+    name: &'a str,
+    params: &'a [Term],
+    actual_indices: &'a [Term],
+}
+
 fn erase_erasable_scrutinee_match(
     context: &mut Context,
     head: &Term,
     motive: &Scope<Many>,
     cases: &BTreeMap<Atom, Scope<Many>>,
-    inductive: &super::Inductive,
-    name: &str,
-    params: &[Term],
-    actual_indices: &[Term],
+    scrutinee: Scrutinee<'_>,
     pattern: Option<&MotivePattern>,
 ) -> Result<ersd::Term, Error> {
+    let Scrutinee {
+        inductive,
+        name,
+        params,
+        actual_indices,
+    } = scrutinee;
     let binder_slots = pattern_binder_slots(pattern, inductive.params.len());
 
     // The single live arm. Elaborate prunes impossible arms; an erasable
@@ -910,10 +934,12 @@ fn erase_inductive_match(
             head,
             motive,
             cases,
-            &inductive,
-            &name,
-            &params,
-            &actual_indices,
+            Scrutinee {
+                inductive: &inductive,
+                name: &name,
+                params: &params,
+                actual_indices: &actual_indices,
+            },
             pattern,
         );
     }

@@ -61,6 +61,15 @@ struct Slice {
     end: ValueName,
 }
 
+/// The mutable state threaded through the forwarding rewrite: the registry of known
+/// slices, the offset-name source, and the prelude bindings spliced in just before
+/// the binding currently being rewritten.
+struct ForwardCtx<'a> {
+    slices: &'a mut HashMap<ValueName, Slice>,
+    offsets: &'a Entropy,
+    prelude: &'a mut Vec<(ValueName, Value)>,
+}
+
 /// Rewrite a region and its nested blocks in pre-order, threading the slice map
 /// down. Bindings are SSA and globally unique within a function tree, and a use
 /// is always dominated by its definition, so a flat map populated in pre-order
@@ -76,7 +85,15 @@ fn forward_in_region(
 
     for (name, value) in std::mem::take(&mut region.values) {
         let value = match value {
-            Value::Eval(code) => forward_eval(&name, code, slices, offsets, &mut rewritten),
+            Value::Eval(code) => forward_eval(
+                &name,
+                code,
+                &mut ForwardCtx {
+                    slices: &mut *slices,
+                    offsets,
+                    prelude: &mut rewritten,
+                },
+            ),
             // An alias to a slice is a slice — register it so the alias's own
             // consumers forward too. (Copy propagation runs first and usually
             // threads these away, but tracking them costs nothing.)
@@ -103,56 +120,36 @@ fn forward_in_region(
 /// re-based onto the underlying buffer (minting any `start + index` adjustment
 /// into `prelude`, which is spliced in just before this binding); a fresh slice
 /// is registered under `name`; everything else passes through untouched.
-fn forward_eval(
-    name: &ValueName,
-    code: Code,
-    slices: &mut HashMap<ValueName, Slice>,
-    offsets: &Entropy,
-    prelude: &mut Vec<(ValueName, Value)>,
-) -> Value {
+fn forward_eval(name: &ValueName, code: Code, ctx: &mut ForwardCtx) -> Value {
     match code {
-        Code::ArrLen(operand) => match lookup(slices, &operand, Carrier::Arr) {
+        Code::ArrLen(operand) => match lookup(ctx.slices, &operand, Carrier::Arr) {
             Some(slice) => Value::Eval(Code::NatSub(slice.end, slice.start)),
             None => Value::Eval(Code::ArrLen(operand)),
         },
-        Code::BinLen(operand) => match lookup(slices, &operand, Carrier::Bin) {
+        Code::BinLen(operand) => match lookup(ctx.slices, &operand, Carrier::Bin) {
             Some(slice) => Value::Eval(Code::NatSub(slice.end, slice.start)),
             None => Value::Eval(Code::BinLen(operand)),
         },
-        Code::ArrGet(operand, index) => match lookup(slices, &operand, Carrier::Arr) {
+        Code::ArrGet(operand, index) => match lookup(ctx.slices, &operand, Carrier::Arr) {
             Some(slice) => {
-                let offset = rebased_index(&slice.start, &index, offsets, prelude);
+                let offset = rebased_index(&slice.start, &index, ctx);
                 Value::Eval(Code::ArrGet(slice.base, offset))
             }
             None => Value::Eval(Code::ArrGet(operand, index)),
         },
-        Code::BinGet(operand, index) => match lookup(slices, &operand, Carrier::Bin) {
+        Code::BinGet(operand, index) => match lookup(ctx.slices, &operand, Carrier::Bin) {
             Some(slice) => {
-                let offset = rebased_index(&slice.start, &index, offsets, prelude);
+                let offset = rebased_index(&slice.start, &index, ctx);
                 Value::Eval(Code::BinGet(slice.base, offset))
             }
             None => Value::Eval(Code::BinGet(operand, index)),
         },
-        Code::ArrSlice(operand, start, end) => forward_slice(
-            name,
-            Carrier::Arr,
-            operand,
-            start,
-            end,
-            slices,
-            offsets,
-            prelude,
-        ),
-        Code::BinSlice(operand, start, end) => forward_slice(
-            name,
-            Carrier::Bin,
-            operand,
-            start,
-            end,
-            slices,
-            offsets,
-            prelude,
-        ),
+        Code::ArrSlice(operand, start, end) => {
+            forward_slice(name, Carrier::Arr, operand, start, end, ctx)
+        }
+        Code::BinSlice(operand, start, end) => {
+            forward_slice(name, Carrier::Bin, operand, start, end, ctx)
+        }
         other => Value::Eval(other),
     }
 }
@@ -161,27 +158,24 @@ fn forward_eval(
 /// the window re-bases onto the deeper buffer (`[s + p, s + q)` of the base);
 /// either way `name` is recorded so its own consumers forward through to the
 /// resolved base.
-#[allow(clippy::too_many_arguments)]
 fn forward_slice(
     name: &ValueName,
     carrier: Carrier,
     operand: ValueName,
     start: ValueName,
     end: ValueName,
-    slices: &mut HashMap<ValueName, Slice>,
-    offsets: &Entropy,
-    prelude: &mut Vec<(ValueName, Value)>,
+    ctx: &mut ForwardCtx,
 ) -> Value {
-    let (base, start, end) = match lookup(slices, &operand, carrier) {
+    let (base, start, end) = match lookup(ctx.slices, &operand, carrier) {
         Some(inner) => (
             inner.base,
-            rebased_index(&inner.start, &start, offsets, prelude),
-            rebased_index(&inner.start, &end, offsets, prelude),
+            rebased_index(&inner.start, &start, ctx),
+            rebased_index(&inner.start, &end, ctx),
         ),
         None => (operand, start, end),
     };
 
-    slices.insert(
+    ctx.slices.insert(
         name.clone(),
         Slice {
             carrier,
@@ -194,15 +188,10 @@ fn forward_slice(
     Value::Eval(rebuild_slice(carrier, base, start, end))
 }
 
-/// `base + index`, materialised as a fresh `NatAdd` binding pushed onto `prelude`.
-fn rebased_index(
-    base: &ValueName,
-    index: &ValueName,
-    offsets: &Entropy,
-    prelude: &mut Vec<(ValueName, Value)>,
-) -> ValueName {
-    let offset = mangle::slice_offset(offsets.fresh());
-    prelude.push((
+/// `base + index`, materialised as a fresh `NatAdd` binding pushed onto the prelude.
+fn rebased_index(base: &ValueName, index: &ValueName, ctx: &mut ForwardCtx) -> ValueName {
+    let offset = mangle::slice_offset(ctx.offsets.fresh());
+    ctx.prelude.push((
         offset.clone(),
         Value::Eval(Code::NatAdd(base.clone(), index.clone())),
     ));

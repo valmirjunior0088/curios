@@ -430,7 +430,6 @@ pub fn elaborate_match(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn elaborate_bln_match(
     context: &mut Context,
     head: &Term,

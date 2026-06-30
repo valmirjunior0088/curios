@@ -90,7 +90,6 @@ pub fn resolve(
 // module, seed its `PublicInterface` from the direct interface already in
 // `table`; materialize each inductive's constructor module; and collect every
 // `pub use`.
-#[allow(clippy::too_many_arguments)]
 fn seed(
     items: &[TopItem],
     prefix: &Qualifier,
