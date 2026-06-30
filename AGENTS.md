@@ -13,7 +13,7 @@ The repo is a **Cargo workspace** (virtual manifest at the root) of four crates:
 - **`curios-runtime`** — runtime-only engine (lib) + the launcher stub (bin `curios-runtime`). Deserializes a precompiled module and runs it on wasmtime; **never** links Cranelift or Binaryen.
 - **`curios-compiler`** — the CLI (bin `curios-compiler`) + a lib with the compile / precompile (`to_cwasm`) / run-from-source helpers. The **only** crate that links Cranelift (via `wasmtime`'s `cranelift` feature) and Binaryen.
 
-The JIT-vs-deserialize split is a _crate boundary_, not a feature flag (the full mechanism is in [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher)). Both crates share one `wasmtime`, version-pinned once in `[workspace.dependencies]`, so the `.cwasm` a `curios-compiler` produces matches what `curios-runtime` deserializes.
+The JIT-vs-deserialize split is a _crate boundary_, not a feature flag — see [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher) for the full mechanism. Both crates share one `wasmtime`, version-pinned once in `[workspace.dependencies]`, so the `.cwasm` a `curios-compiler` produces matches what `curios-runtime` deserializes.
 
 Two languages live in this repo: **Rust** (the compiler) and **curios** itself (the object language, with a standard library under `curios/std/`). Work touches one or both.
 
@@ -75,7 +75,7 @@ then, in curios-compiler:
 
 ## Build & test
 
-**Run `make curios-compiler/runtime` first, then build with `cargo` as usual.** `curios-compiler` embeds the slim launcher via `include_bytes!`, so the launcher must sit at `curios-compiler/runtime` before the compiler is built; `make` builds it in isolation (which is what keeps it slim — see [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher)) and copies it there. If the file is missing, the build **fails** at the `include_bytes!` with a clear "couldn't read" error — run `make curios-compiler/runtime` and rebuild.
+**Run `make curios-compiler/runtime` first, then build with `cargo` as usual.** `curios-compiler` embeds the slim launcher via `include_bytes!`, so it must sit at `curios-compiler/runtime` before the compiler is built; `make` builds it in isolation and copies it there. If the file is missing, the build **fails** at the `include_bytes!` with a clear "couldn't read" error — run `make curios-compiler/runtime` and rebuild. The isolated build is also what keeps the launcher slim ([Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher)).
 
 ```sh
 make curios-compiler/runtime                  # build the slim launcher, place it for embedding
@@ -98,7 +98,7 @@ Building `curios-binaryen` compiles a large C++ project via CMake on first build
 
 ## The done bar
 
-Before considering any change complete, run the same gate CI enforces, in order. All five must pass. `clippy` runs with warnings denied. Run `make curios-compiler/runtime` first if you have not already this session — the `check`/`clippy`/`test` steps compile `curios-compiler`, which `include_bytes!`s the launcher from `curios-compiler/runtime`.
+Before considering any change complete, run the same gate CI enforces, in order. All five must pass; `clippy` runs with warnings denied.
 
 ```sh
 make curios-compiler/runtime                               # provide the launcher curios-compiler embeds
@@ -123,7 +123,7 @@ There is no `rustfmt.toml` or `clippy.toml` — stock toolchain defaults apply. 
 
 The standard library under `curios/std/` is the reference for idiomatic curios. Each module is one file (`curios/std/Foo.crs`) and must be registered in two places: `curios/std.crs` (`pub mod Foo; pub use Foo/{let Foo};`) **and** the `include_str!` table in `curios/src/text/prelude.rs` (the modules are embedded into the compiler at build time, not read from disk). The same applies to `curios/syn/` via `curios/syn.crs`.
 
-**Read [SYNTAX.md](SYNTAX.md) in full before writing `.crs`** — it covers every construct with examples, and `curios/src/text/parse.rs` is the ultimate source of truth. A few essentials that are easy to trip on from memory:
+[SYNTAX.md](SYNTAX.md) covers every construct with examples (and `curios/src/text/parse.rs` is the ultimate source of truth). A few essentials that are easy to trip on from memory:
 
 - Names are path-qualified with `/`: `Option/none`, `/std/Lst`, `/syn/Lst`; a leading `/` is absolute.
 - `@x : T` is an implicit (type-erased) parameter; ordinary `x : T` is explicit.

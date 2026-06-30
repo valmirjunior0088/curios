@@ -58,7 +58,7 @@ See [SYNTAX.md](SYNTAX.md) for the full language reference.
 - A recent Rust toolchain (the project uses edition 2024).
 - A C++ toolchain and **CMake** — the default build compiles the vendored Binaryen optimizer. The first build takes a few minutes as a result.
 
-Binaryen is built only by the crates that need it. For fast iteration on the compiler alone you can build `cargo build --package curios` (pure Rust, no Binaryen/CMake); the slim launcher `cargo build --package curios-runtime` likewise needs neither Binaryen nor Cranelift.
+Binaryen is built only by the crates that need it. For fast iteration on the compiler alone you can build `cargo build --package curios` — pure Rust, no Binaryen/CMake.
 
 ### Download a pre-built binary
 
