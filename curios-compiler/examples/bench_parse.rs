@@ -5,7 +5,7 @@
 
 use {
     curios::{compile_entrypoint, text},
-    curios_runtime::MockHost,
+    curios_rt::MockHost,
     std::time::{Duration, Instant},
 };
 

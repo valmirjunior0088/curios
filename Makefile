@@ -3,10 +3,10 @@ ifeq ($(OS),Windows_NT)
 EXTENSION := .exe
 endif
 
-.PHONY: target/release/curios-runtime$(EXTENSION)
+.PHONY: target/release/curios-rt$(EXTENSION)
 
-target/release/curios-runtime$(EXTENSION):
-	cargo build --release --package curios-runtime
+target/release/curios-rt$(EXTENSION):
+	cargo build --release --package curios-rt
 
-curios-compiler/runtime: target/release/curios-runtime$(EXTENSION)
+curios-compiler/runtime: target/release/curios-rt$(EXTENSION)
 	cp $< $@

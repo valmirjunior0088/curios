@@ -1,4 +1,4 @@
-use {curios_compiler::run_text, curios_runtime::OsHost, std::time::Duration};
+use {curios_compiler::run_text, curios_rt::OsHost, std::time::Duration};
 
 // A network-gated manual check of the cleartext HTTP client path: a real
 // `http://` GET against a public host through the real `OsHost`. It drives a

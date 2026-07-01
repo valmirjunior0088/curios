@@ -1,10 +1,10 @@
 //! The launcher stub. A bundled curios executable is this binary with a `.cwasm`
-//! payload appended to its tail (see `curios-compiler`'s `compile` subcommand).
+//! payload appended to its tail (see `curios`'s `compile` subcommand).
 //! At startup it reads its own image, slices off the trailing payload, and runs
 //! it on the runtime-only engine.
 
 use {
-    curios_runtime::{OsHost, extract_payload, run_bytes},
+    curios_rt::{OsHost, extract_payload, run_bytes},
     std::{
         env, fs,
         process::{self, ExitCode},
@@ -12,7 +12,7 @@ use {
 };
 
 /// Recover the appended `.cwasm` payload from this executable's own tail. The
-/// footer format lives in `curios_runtime::bundle`, shared with the bundler.
+/// footer format lives in `curios_rt::bundle`, shared with the bundler.
 fn payload() -> Result<Vec<u8>, String> {
     let exe =
         env::current_exe().map_err(|error| format!("cannot locate own executable: {error}"))?;

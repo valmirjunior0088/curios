@@ -59,7 +59,7 @@ fn main() {
     })
     .expect("expected wasm module");
 
-    let (system, io) = curios_runtime::MockHost::builder().build();
+    let (system, io) = curios_rt::MockHost::builder().build();
     let t = Instant::now();
     curios_compiler::run_wasm(&wasm_module, system).expect("expected result");
     println!("run:  {:?}", t.elapsed());

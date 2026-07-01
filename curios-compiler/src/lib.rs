@@ -5,7 +5,7 @@
 
 use {
     curios::{compile_entrypoint, text, wasm},
-    curios_runtime::{Host, run_bytes, shared_engine},
+    curios_rt::{Host, run_bytes, shared_engine},
     std::{path::Path, time::Duration},
 };
 

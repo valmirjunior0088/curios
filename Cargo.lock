@@ -415,7 +415,7 @@ dependencies = [
  "clap",
  "curios",
  "curios-binaryen",
- "curios-runtime",
+ "curios-rt",
  "wasmtime",
 ]
 
@@ -448,7 +448,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "curios-runtime"
+name = "curios-rt"
 version = "0.1.0"
 dependencies = [
  "curios-abi",

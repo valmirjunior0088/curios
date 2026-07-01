@@ -1,6 +1,6 @@
 use {
     super::run,
-    curios_runtime::MockHost,
+    curios_rt::MockHost,
     std::{path::Path, time::Duration},
 };
 

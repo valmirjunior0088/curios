@@ -85,9 +85,16 @@ RUN npm install -g assemblyscript \
 # layer-cached afterward).
 WORKDIR /curios
 COPY Cargo.toml Cargo.lock Makefile ./
+COPY curios-abi curios-abi
+COPY curios-base curios-base
+COPY curios-wasm curios-wasm
+COPY curios-cont curios-cont
+COPY curios-ersd curios-ersd
+COPY curios-core curios-core
+COPY curios-text curios-text
 COPY curios curios
 COPY curios-binaryen curios-binaryen
-COPY curios-runtime curios-runtime
+COPY curios-rt curios-rt
 COPY curios-compiler curios-compiler
 RUN make curios-compiler/runtime \
     && cargo build --release --package curios-compiler

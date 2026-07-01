@@ -1,4 +1,4 @@
-use {curios_compiler::run_text, curios_runtime::OsHost, std::time::Duration};
+use {curios_compiler::run_text, curios_rt::OsHost, std::time::Duration};
 
 // A network-gated manual check of the real TLS *client* path: a genuine
 // `https://` GET against a public host. It exercises the whole stack end to end

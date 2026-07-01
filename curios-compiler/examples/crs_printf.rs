@@ -47,7 +47,7 @@ fn main() {
     })
     .expect("expected wasm module");
 
-    let (system, io) = curios_runtime::MockHost::builder()
+    let (system, io) = curios_rt::MockHost::builder()
         .stdin_lines(["Alice"])
         .build();
     let t = Instant::now();

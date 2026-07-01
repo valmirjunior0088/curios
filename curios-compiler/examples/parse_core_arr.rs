@@ -64,5 +64,5 @@ fn main() {
 
     println!();
     println!("=== result ===");
-    curios_compiler::run_wasm(&wasm_module, curios_runtime::OsHost::new()).unwrap();
+    curios_compiler::run_wasm(&wasm_module, curios_rt::OsHost::new()).unwrap();
 }

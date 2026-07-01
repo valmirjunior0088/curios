@@ -1,4 +1,4 @@
-use {super::run, curios_runtime::MockHost, std::time::Duration};
+use {super::run, curios_rt::MockHost, std::time::Duration};
 
 #[test]
 fn bln_logic_and_of_str() {

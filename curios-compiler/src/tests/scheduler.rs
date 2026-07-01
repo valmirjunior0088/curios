@@ -1,4 +1,4 @@
-use {curios_runtime::MockHost, std::time::Duration};
+use {curios_rt::MockHost, std::time::Duration};
 
 #[test]
 fn task_scheduler_parks_polls_and_resumes() {

@@ -6,7 +6,7 @@ use {
     clap::Parser,
     cli::{Cli, Mode},
     curios_compiler::{run_wasm, to_cwasm},
-    curios_runtime::OsHost,
+    curios_rt::OsHost,
     std::{
         iter,
         process::{self, ExitCode},

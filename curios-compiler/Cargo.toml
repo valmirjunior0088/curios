@@ -11,6 +11,6 @@ description = "The curios command-line compiler driver"
 [dependencies]
 curios = { workspace = true }
 curios-binaryen = { workspace = true }
-curios-runtime = { workspace = true }
+curios-rt = { workspace = true }
 wasmtime = { workspace = true, features = ["cranelift"] }
 clap = { version = "4.5.60", features = ["derive"] }

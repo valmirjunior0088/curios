@@ -1,10 +1,10 @@
 //! Emitting a self-contained native executable: the embedded slim launcher with
 //! the program's `.cwasm` payload appended. The trailing footer layout lives in
-//! `curios_runtime::bundle` (shared with the launcher that recovers it); this
+//! `curios_rt::bundle` (shared with the launcher that recovers it); this
 //! module only embeds the launcher image and writes the result to disk.
 
 use {
-    curios_runtime::append_payload,
+    curios_rt::append_payload,
     std::{
         fs,
         path::{Path, PathBuf},
@@ -25,7 +25,7 @@ pub fn exe_output_path(input_path: &Path) -> PathBuf {
 
 /// Build a self-contained executable: the embedded launcher stub with the
 /// `.cwasm` payload and its footer appended to the tail (see
-/// [`curios_runtime::append_payload`]).
+/// [`curios_rt::append_payload`]).
 pub fn emit_exe(cwasm: &[u8], output: &Path) -> Result<(), String> {
     let mut bytes = LAUNCHER.to_vec();
 

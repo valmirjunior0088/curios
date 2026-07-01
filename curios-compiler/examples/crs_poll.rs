@@ -1,4 +1,4 @@
-use curios_runtime::{Host, Io, OsHost, Poll};
+use curios_rt::{Host, Io, OsHost, Poll};
 
 // A manual check of the real readiness oracle: a genuine `poll(2)` through
 // rustix. stdout (fd 1) is essentially always ready to write and `timeout 0`

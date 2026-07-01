@@ -1,4 +1,4 @@
-use {curios_runtime::MockHost, std::time::Duration};
+use {curios_rt::MockHost, std::time::Duration};
 
 #[test]
 fn net_call_round_trips_a_scripted_endpoint() {
