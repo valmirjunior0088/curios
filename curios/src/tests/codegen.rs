@@ -1,7 +1,9 @@
 //! End-to-end codegen tests: build a `cont::Module` directly, lower it to wasm
 //! via `crate::cont::to_wasm`, and execute it through the compiler's run path
-//! (`curios_compiler::run_wasm`). Relocated here from the compiler crate because
-//! executing emitted wasm needs the runtime, which `curios` cannot depend on.
+//! (`crate::run_wasm`). Executing emitted wasm needs the runtime; these tests
+//! live here, alongside the rest of the integration suite, because `curios`
+//! can depend on `curios-rt` without a cycle (`curios-rt` depends only on
+//! `curios-abi`).
 
 use crate::cont::{self, to_wasm};
 

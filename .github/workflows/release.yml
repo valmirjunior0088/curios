@@ -19,15 +19,15 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-24.04
-            binary: curios-compiler
+            binary: curios
             asset: curios-linux-x86_64
           - target: aarch64-apple-darwin
             runner: macos-14
-            binary: curios-compiler
+            binary: curios
             asset: curios-macos-aarch64
           - target: x86_64-pc-windows-msvc
             runner: windows-2025
-            binary: curios-compiler.exe
+            binary: curios.exe
             asset: curios-windows-x86_64.exe
 
     steps:
@@ -48,8 +48,8 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          make curios-compiler/runtime
-          cargo build --release --target ${{ matrix.target }} --package curios-compiler
+          make curios/runtime
+          cargo build --release --target ${{ matrix.target }} --package curios
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -75,9 +75,9 @@ jobs:
 
       - name: Rename artifacts
         run: |
-          mv artifacts/curios-linux-x86_64/curios-compiler curios-linux-x86_64
-          mv artifacts/curios-macos-aarch64/curios-compiler curios-macos-aarch64
-          mv artifacts/curios-windows-x86_64.exe/curios-compiler.exe curios-windows-x86_64.exe
+          mv artifacts/curios-linux-x86_64/curios curios-linux-x86_64
+          mv artifacts/curios-macos-aarch64/curios curios-macos-aarch64
+          mv artifacts/curios-windows-x86_64.exe/curios.exe curios-windows-x86_64.exe
 
       - name: Create release
         env:

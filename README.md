@@ -58,11 +58,11 @@ See [SYNTAX.md](SYNTAX.md) for the full language reference.
 - A recent Rust toolchain (the project uses edition 2024).
 - A C++ toolchain and **CMake** — the default build compiles the vendored Binaryen optimizer. The first build takes a few minutes as a result.
 
-Binaryen is built only by the crates that need it. For fast iteration on the compiler alone you can build `cargo build --package curios` — pure Rust, no Binaryen/CMake.
+Binaryen is built only by the crates that need it. For fast iteration on a single pipeline stage you can build e.g. `cargo build --package curios-core` — pure Rust, no Binaryen/CMake.
 
 ### Download a pre-built binary
 
-If you'd rather not build from source, a pre-built `curios-compiler` for your platform is published on the [GitHub releases page](https://github.com/valmirjunior0088/curios/releases). It's a single self-contained binary with the launcher embedded. Download it and skip straight to [Run a program](#run-a-program).
+If you'd rather not build from source, a pre-built `curios` for your platform is published on the [GitHub releases page](https://github.com/valmirjunior0088/curios/releases). It's a single self-contained binary with the launcher embedded. Download it and skip straight to [Run a program](#run-a-program).
 
 ### Build
 
@@ -71,29 +71,29 @@ The compiler embeds the slim runtime launcher at build time, so generate it with
 ```sh
 git clone https://github.com/valmirjunior0088/curios
 cd curios
-make curios-compiler/runtime                     # build the slim launcher the compiler embeds
-cargo build --release --package curios-compiler
+make curios/runtime                     # build the slim launcher the compiler embeds
+cargo build --release --package curios
 ```
 
-This produces `target/release/curios-compiler` — a single self-contained CLI with the launcher embedded. (If you build the compiler before the launcher, the build fails with a clear "couldn't read" error — run `make curios-compiler/runtime` and rebuild.)
+This produces `target/release/curios` — a single self-contained CLI with the launcher embedded. (If you build the compiler before the launcher, the build fails with a clear "couldn't read" error — run `make curios/runtime` and rebuild.)
 
 ### Run a program
 
 Save the hello-world snippet above as `hello.crs`, then:
 
 ```sh
-cargo run --package curios-compiler --release -- run hello.crs
+cargo run --package curios --release -- run hello.crs
 ```
 
 ## Using the CLI
 
-The `curios-compiler` binary exposes three subcommands:
+The `curios` binary exposes three subcommands:
 
-| Command                                       | What it does                                                                         |
-| --------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `curios-compiler run <file.crs> [args...]`    | Compile and execute the program. Extra arguments are readable from `/std/Proc/args`. |
-| `curios-compiler check <file.crs>`            | Type-check the entrypoint without running it.                                        |
-| `curios-compiler compile <file.crs> [-o out]` | Compile to a self-contained native executable (default name: the input file stem).   |
+| Command                              | What it does                                                                         |
+| -------------------------------------- | ------------------------------------------------------------------------------------ |
+| `curios run <file.crs> [args...]`    | Compile and execute the program. Extra arguments are readable from `/std/Proc/args`. |
+| `curios check <file.crs>`            | Type-check the entrypoint without running it.                                        |
+| `curios compile <file.crs> [-o out]` | Compile to a self-contained native executable (default name: the input file stem).   |
 
 Two global flags are useful while exploring:
 
@@ -101,16 +101,16 @@ Two global flags are useful while exploring:
 - `--timeout MILLIS` bounds the type-checker's reduction time (default `1000`).
 
 ```sh
-cargo run --package curios-compiler --release -- check hello.crs --print=core
-cargo run --package curios-compiler --release -- compile hello.crs -o hello
+cargo run --package curios --release -- check hello.crs --print=core
+cargo run --package curios --release -- compile hello.crs -o hello
 ./hello
 ```
 
-A compiled executable is the slim launcher stub — embedded inside `curios-compiler` itself — with the program's precompiled module appended to it, so it runs standalone. The launcher is baked in at compile time, so `curios-compiler` needs no companion files to build executables.
+A compiled executable is the slim launcher stub — embedded inside `curios` itself — with the program's precompiled module appended to it, so it runs standalone. The launcher is baked in at compile time, so `curios` needs no companion files to build executables.
 
 ## Repository layout
 
-A Cargo workspace of four crates: **`curios`** (the compiler library — the `text` → `core` → `ersd` → `cont` → `wasm` pipeline, plus the `curios/std` and `curios/syn` libraries), **`curios-binaryen`** (the vendored Binaryen optimizer), **`curios-runtime`** (the runtime-only engine + launcher stub), and **`curios-compiler`** (the CLI + the compile/precompile/run helpers).
+A Cargo workspace of ten crates, layered along the pipeline: **`curios-abi`** (host/guest wire ABI constants) and **`curios-base`** (spans, entropy, the `name!` macro, parser/printer monads) are the shared foundations; **`curios-wasm`** → **`curios-cont`** → **`curios-ersd`** → **`curios-core`** → **`curios-text`** are the pipeline stages (`text` → `core` → `ersd` → `cont` → `wasm`, each its own crate, code dependencies running the opposite direction of data flow); **`curios-binaryen`** is the vendored Binaryen optimizer; **`curios-rt`** is the runtime-only engine + launcher stub; and **`curios`** is the facade + driver + CLI (the compiler library, plus the `curios/std` and `curios/syn` libraries), the only crate that links Cranelift and Binaryen.
 
 For a full tour of the architecture, build/test workflow, and conventions, see [AGENTS.md](AGENTS.md). For the language itself, see [SYNTAX.md](SYNTAX.md).
 

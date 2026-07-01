@@ -11,7 +11,7 @@ use {
 
 /// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm`
 /// payload the runtime deserializes — the same payload a bundled executable
-/// carries. Uses `curios-runtime`'s shared engine so the precompiled artifact
+/// carries. Uses `curios-rt`'s shared engine so the precompiled artifact
 /// matches the configuration `run_bytes` deserializes against.
 pub fn to_cwasm(module: &wasm::Module) -> Result<Vec<u8>, String> {
     let bytes = curios_binaryen::optimize(wasm::to_bytes(module));

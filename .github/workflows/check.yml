@@ -32,7 +32,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build runtime launcher
-        run: make curios-compiler/runtime
+        run: make curios/runtime
       - name: Run cargo check
         run: cargo check --all-targets --all-features
 
@@ -50,7 +50,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Build runtime launcher
-        run: make curios-compiler/runtime
+        run: make curios/runtime
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features
 
@@ -64,6 +64,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build runtime launcher
-        run: make curios-compiler/runtime
+        run: make curios/runtime
       - name: Run tests
         run: cargo test --all-targets --all-features

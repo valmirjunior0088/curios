@@ -1,4 +1,4 @@
-//! The bundled-executable footer format, shared by the `curios-compiler` bundler
+//! The bundled-executable footer format, shared by the `curios` bundler
 //! (which appends a `.cwasm` payload to the launcher image) and the launcher stub
 //! (which recovers it at startup). Defining the layout once here is what keeps the
 //! two sides in lockstep — neither crate hand-rolls the byte layout.

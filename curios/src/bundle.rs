@@ -11,8 +11,8 @@ use {
     },
 };
 
-/// The slim `curios-runtime` launcher stub, embedded at build time. Produced by
-/// `make curios-compiler/runtime` (an isolated `--package curios-runtime` build,
+/// The slim `curios-rt` launcher stub, embedded at build time. Produced by
+/// `make curios/runtime` (an isolated `--package curios-rt` build,
 /// kept Cranelift/Binaryen-free) which copies it next to this crate's manifest.
 /// If the file is absent this `include_bytes!` fails the build — run `make`. So
 /// `compile` needs no launcher lookup at runtime.
