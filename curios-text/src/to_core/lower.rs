@@ -1,0 +1,1075 @@
+use {
+    super::Context,
+    crate::{
+        ArrMatch, BinMatch, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch,
+        Prim, Subterm, Syn, Term,
+    },
+    curios_core as core,
+    num_bigint::BigUint,
+    std::{cell::RefCell, collections::BTreeSet},
+};
+
+pub struct Lower<'a, 'b> {
+    context: &'a Context<'b>,
+    /// The user-written names bound by the enclosing local binders (function and
+    /// `let`/`rec` binders, match-arm patterns, motive labels). A bare reference
+    /// whose name is in this set resolves to the binder rather than a like-named
+    /// module binding — see [`Self::resolve_name`]. Internal gensym binders (the
+    /// `#`-sigil names from [`Context::fresh_binder`]) can never collide with a
+    /// source identifier, so they are deliberately never inserted here.
+    scope: RefCell<BTreeSet<String>>,
+}
+
+/// One elaborated arm of a single-level core inductive match: the constructor tag,
+/// its payload binder names, and the (already-lowered) body.
+type InductiveCase = (core::Atom, Vec<String>, core::Term);
+
+/// The active bind of a `let !` region: an atomic term denoting a binary bind
+/// `(M A, A -> M B) -> M B`. [`Lower::instantiate`] re-elaborates `term` (so its
+/// `?` holes are fresh per `!` site) and applies it to `(action, continuation)`.
+struct Bind<'t> {
+    term: &'t Term,
+}
+
+impl<'a, 'b> Lower<'a, 'b> {
+    pub fn new(context: &'a Context<'b>) -> Self {
+        Self {
+            context,
+            scope: RefCell::new(BTreeSet::new()),
+        }
+    }
+
+    /// Lowers under an extended local scope: each of `names` is treated as an
+    /// in-scope binder for the duration of `body`, then the previous scope is
+    /// restored. Only names this call *newly* introduces are removed on exit, so
+    /// an inner binder shadowing an outer one of the same name leaves the outer
+    /// binding intact. Empty (unlabelled) and `_` names bind nothing and are
+    /// skipped. The scope borrow is released before `body` runs, so nested
+    /// `scoped` calls and [`Self::resolve_name`] reads inside it are free.
+    fn scoped<T>(
+        &self,
+        names: impl IntoIterator<Item = String>,
+        body: impl FnOnce() -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let mut added = Vec::new();
+        {
+            let mut scope = self.scope.borrow_mut();
+            for name in names {
+                if name.is_empty() || name == "_" {
+                    continue;
+                }
+                if scope.insert(name.clone()) {
+                    added.push(name);
+                }
+            }
+        }
+        let result = body();
+        let mut scope = self.scope.borrow_mut();
+        for name in &added {
+            scope.remove(name);
+        }
+        result
+    }
+
+    /// The binder names a parameter list introduces — each parameter's name, all
+    /// in scope across the body. These shadow like-named module bindings; the
+    /// wildcard `_` rides along but is ignored by [`Self::scoped`].
+    fn param_names(params: &[(String, Option<Term>)]) -> Vec<String> {
+        params.iter().map(|(name, _)| name.clone()).collect()
+    }
+
+    pub fn term(&self, term: &Term) -> Result<core::Term, Error> {
+        let span = term.span().cloned();
+        let elaborated = match span.as_ref() {
+            Some(s) => self
+                .subterm(term.as_subterm())
+                .map_err(|error| error.at(s.clone()))?,
+            None => self.subterm(term.as_subterm())?,
+        };
+        Ok(match span {
+            Some(s) => core::Term::spanned(s, elaborated),
+            None => elaborated,
+        })
+    }
+
+    /// Resolve a surface name to its qualified (joined) core name — the same
+    /// rule the `Subterm::Name` term-reference arm uses.
+    fn resolve_name(&self, name: &Name) -> Result<String, Error> {
+        Ok(if name.is_abs() || !name.is_single() {
+            self.context.resolve_term_name(name)?.join()
+        } else if self.scope.borrow().contains(name.head()) {
+            // A local binder shadows any like-named module binding: emit the
+            // spelled (unqualified) name, which core then resolves to the
+            // innermost enclosing binder. Without this an in-scope module binding
+            // of the same name would unlawfully capture the reference — and inside
+            // a qualified module the module's name (`std/Task/go`) and the local
+            // binder (`go`) are *different* strings, so core cannot recover from a
+            // wrong choice made here.
+            name.head().to_string()
+        } else {
+            match self.context.bindings().get(name.head()) {
+                Some(full) => full.join(),
+                None => name.head().to_string(),
+            }
+        })
+    }
+
+    // The meta-emitter: a string literal becomes a proof-carrying `/syn/Str/Str`
+    // value `Str { bytes = <Bin>, valid = <Utf8 derivation> }`. The derivation is the
+    // canonical `more`-spine (one `more` per byte, ending in `stop`), starting from
+    // the `lead` state — `valid`'s type is `Valid(b) = Utf8(lead, b)`. `valid` is
+    // erased, so at runtime `Str` collapses to its `Bin` bytes — a literal costs
+    // exactly what a `Bin` literal did.
+    fn str_literal(&self, bytes: &[u8]) -> core::Term {
+        core::Term::struct_named(
+            "/syn/Str/Str",
+            Vec::<core::Term>::new(),
+            [
+                (None, core::Term::prim(core::Prim::Bin(bytes.to_vec()))),
+                (None, self.utf8_derivation(bytes, Self::scan_lead())),
+            ],
+        )
+    }
+
+    // A constructor/function `Var` applied to `args` — the absolute core name as the
+    // parser would resolve it (privacy is a surface-resolution concern; these are
+    // already-resolved core `Var`s, so referencing a private `/syn` helper is fine).
+    fn syn_call(name: &str, args: impl IntoIterator<Item = core::Term>) -> core::Term {
+        core::Term::apply(
+            core::Term::var(core::Var::free(name)),
+            args.into_iter().collect::<Vec<_>>(),
+        )
+    }
+
+    fn scan_lead() -> core::Term {
+        Self::syn_call("/syn/Str/Scan/lead", [])
+    }
+
+    // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term —
+    // `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s
+    // expected index (`Utf8(step(c, state), tail)`) is definitionally the state we
+    // thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, \\)`
+    // matches because `step` of the last byte reduces back to `lead` for valid UTF-8
+    // (a string literal is valid UTF-8 by construction).
+    fn utf8_derivation(&self, bytes: &[u8], state: core::Term) -> core::Term {
+        match bytes.split_first() {
+            None => Self::syn_call("/syn/Str/Utf8/stop", []),
+            Some((&head, tail)) => {
+                let byte: core::Term =
+                    core::Term::prim(core::Prim::Nat(core::Nat::new(head as usize)));
+                let next = Self::syn_call("/syn/Str/step", [byte.clone(), state.clone()]);
+                Self::syn_call(
+                    "/syn/Str/Utf8/more",
+                    [
+                        byte,
+                        state,
+                        core::Term::prim(core::Prim::Bin(tail.to_vec())),
+                        self.utf8_derivation(tail, next),
+                    ],
+                )
+            }
+        }
+    }
+
+    // A list literal `[e0, e1, …]` desugars to a `/syn/Lst/Lst` cons-spine
+    // `cons(e0, cons(e1, … nil()))`. The element type is an implicit the literal
+    // can't name; elaboration inserts it (a metavar) and solves it from the
+    // elements or the expected type — exactly as a hand-written `Lst/cons` would.
+    fn lst_literal(&self, elems: &[Term]) -> Result<core::Term, Error> {
+        let mut spine = Self::syn_call("/syn/Lst/Lst/nil", []);
+        for elem in elems.iter().rev() {
+            spine = Self::syn_call("/syn/Lst/Lst/cons", [self.term(elem)?, spine]);
+        }
+        Ok(spine)
+    }
+
+    // A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter
+    // rather than lowered to a core primitive.
+    fn syn_literal(&self, syn: &Syn) -> Result<core::Term, Error> {
+        match syn {
+            Syn::Str(string) => Ok(self.str_literal(string.as_bytes())),
+            Syn::Lst(elems) => self.lst_literal(elems),
+        }
+    }
+
+    fn subterm(&self, term: &Subterm) -> Result<core::Term, Error> {
+        Ok(match term {
+            Subterm::Type => core::Term::type_(),
+            Subterm::Prop => core::Term::prop(),
+            Subterm::Hole => core::Term::metavar(self.context.fresh_metavar()),
+            // A `/syn` literal (string or list) desugars via the meta-emitter to a
+            // `/syn` construction (see `syn_literal`), never a core primitive.
+            Subterm::Syn(syn) => self.syn_literal(syn)?,
+            Subterm::Prim(prim) => core::Term::prim(self.prim(prim)?),
+            Subterm::NumLit(num_lit) => {
+                core::Term::num_lit(num_lit.magnitude.clone(), num_lit.signed, num_lit.negative)
+            }
+            Subterm::Infix(infix) => {
+                core::Term::infix(infix.op, self.term(&infix.left)?, self.term(&infix.right)?)
+            }
+            Subterm::Name(name) => core::Term::var(core::Var::free(self.resolve_name(name)?)),
+            // Each parameter type sees the *preceding* parameters' binders, and
+            // the output sees them all (a dependent Π-type), so they lower under a
+            // progressively-extended scope.
+            Subterm::FuncType(ft) => {
+                let mut seen = Vec::new();
+                let mut params = Vec::with_capacity(ft.params.len());
+                for param in &ft.params {
+                    let domain = self.scoped(seen.clone(), || self.term(&param.type_))?;
+                    let name = param.label.clone().unwrap_or_default();
+                    seen.push(name.clone());
+                    params.push((param.plicity, name, domain));
+                }
+                let output = self.scoped(seen, || self.term(&ft.output))?;
+                core::Term::func_type_marked(params, output)
+            }
+            Subterm::Func(func) => {
+                let body =
+                    self.scoped(Self::param_names(&func.params), || self.term(&func.body))?;
+                let (params, body) = self.lower_func_params(&func.params, body)?;
+                core::Term::func(params, body)
+            }
+            Subterm::Apply(apply) => core::Term::apply_marked(
+                self.term(&apply.head)?,
+                apply
+                    .params
+                    .iter()
+                    .map(|(plicity, p)| Ok((*plicity, self.term(p)?)))
+                    .collect::<Result<Vec<_>, Error>>()?,
+            ),
+            // A dependent Σ-type: each field type sees the preceding fields'
+            // labels, so they lower under a progressively-extended scope.
+            Subterm::TupleType(tt) => {
+                let mut seen = Vec::new();
+                let mut fields = Vec::with_capacity(tt.fields.len());
+                for param in &tt.fields {
+                    let lowered = self.scoped(seen.clone(), || self.term(&param.type_))?;
+                    let name = param.label.clone().unwrap_or_default();
+                    seen.push(name.clone());
+                    fields.push((name, lowered));
+                }
+                core::Term::tuple_type(fields)
+            }
+            Subterm::Tuple(tuple) => core::Term::tuple_named(
+                tuple
+                    .fields
+                    .iter()
+                    .map(|(name, field)| Ok((name.clone(), self.term(field)?)))
+                    .collect::<Result<Vec<_>, Error>>()?,
+            ),
+            Subterm::Proj(proj) => {
+                let head = self.term(&proj.head)?;
+                match &proj.field {
+                    Field::Index(index) => core::Term::proj(head, *index),
+                    Field::Label(label) => core::Term::proj_label(head, label.clone()),
+                }
+            }
+            // A struct literal lowers to a `core::Struct` carrying the resolved
+            // (qualified) struct name, the head parameters (empty → core
+            // elaboration mints metavariables), and the field values with their
+            // written names (validated positionally and dropped by elaborate).
+            // Construction privacy is enforced in core (`elaborate_struct`),
+            // alongside projection privacy.
+            Subterm::StructLit(lit) => core::Term::struct_named(
+                self.resolve_name(&lit.head)?,
+                lit.params
+                    .iter()
+                    .map(|p| self.term(p))
+                    .collect::<Result<Vec<_>, Error>>()?,
+                lit.fields
+                    .iter()
+                    .map(|(name, field)| Ok((name.clone(), self.term(field)?)))
+                    .collect::<Result<Vec<_>, Error>>()?,
+            ),
+            Subterm::Match(match_) => match match_ {
+                Match::Bln(bm) => {
+                    let (label, body) = self.motive_parts(&bm.motive)?;
+                    core::Term::bln_match(
+                        self.term(&bm.head)?,
+                        label,
+                        body,
+                        self.term(&bm.false_case)?,
+                        self.term(&bm.true_case)?,
+                    )
+                }
+                Match::Nat(NatMatch::Induction {
+                    head,
+                    motive,
+                    zero_case,
+                    pred_label,
+                    ih_label,
+                    succ_case,
+                }) => {
+                    let (label, body) = self.motive_parts(motive)?;
+                    core::Term::nat_match(
+                        self.term(head)?,
+                        label,
+                        body,
+                        self.term(zero_case)?,
+                        pred_label.clone(),
+                        ih_label.clone(),
+                        self.scoped([pred_label.clone(), ih_label.clone()], || {
+                            self.term(succ_case)
+                        })?,
+                    )
+                }
+                Match::Nat(NatMatch::Dispatch {
+                    head,
+                    motive,
+                    cases,
+                    default,
+                }) => {
+                    let (label, motive_body) = self.motive_parts(motive)?;
+                    core::Term::switch(
+                        self.term(head)?,
+                        label,
+                        motive_body,
+                        cases
+                            .iter()
+                            .map(|(&nat, body)| Ok((nat, self.term(body)?)))
+                            .collect::<Result<Vec<_>, Error>>()?,
+                        self.term(default)?,
+                    )
+                }
+                Match::Inductive(um) => {
+                    // A distinct-tag inductive match lowers to a single-level core
+                    // `Match`. Bodies lower here (under the arm's payload binders);
+                    // `inductive_rows` checks distinctness and assembles the cases.
+                    let head = self.term(&um.head)?;
+                    let arms = um
+                        .arms
+                        .iter()
+                        .map(|arm| {
+                            let body = self.scoped(arm.args.clone(), || self.term(&arm.body))?;
+                            Ok((arm.tag.clone(), arm.args.clone(), body))
+                        })
+                        .collect::<Result<Vec<_>, Error>>()?;
+                    self.inductive_rows(head, &um.motive, arms)?
+                }
+                Match::Arr(ArrMatch {
+                    head,
+                    motive,
+                    empty_case,
+                    head_label,
+                    tail_label,
+                    ih_label,
+                    cons_case,
+                }) => {
+                    let (label, body) = self.motive_parts(motive)?;
+                    // The element type is type-directed (read off the scrutinee
+                    // during elaboration), so lowering leaves it a hole.
+                    core::Term::arr_match(
+                        self.term(head)?,
+                        core::Term::metavar(self.context.fresh_metavar()),
+                        label,
+                        body,
+                        self.term(empty_case)?,
+                        head_label.clone(),
+                        tail_label.clone(),
+                        ih_label.clone(),
+                        self.scoped(
+                            [head_label.clone(), tail_label.clone(), ih_label.clone()],
+                            || self.term(cons_case),
+                        )?,
+                    )
+                }
+                Match::Bin(BinMatch {
+                    head,
+                    motive,
+                    empty_case,
+                    head_label,
+                    tail_label,
+                    ih_label,
+                    cons_case,
+                }) => {
+                    let (label, body) = self.motive_parts(motive)?;
+                    core::Term::bin_match(
+                        self.term(head)?,
+                        label,
+                        body,
+                        self.term(empty_case)?,
+                        head_label.clone(),
+                        tail_label.clone(),
+                        ih_label.clone(),
+                        self.scoped(
+                            [head_label.clone(), tail_label.clone(), ih_label.clone()],
+                            || self.term(cons_case),
+                        )?,
+                    )
+                }
+            },
+            // A `let` is non-recursive: its binder is in scope only in the tail,
+            // never in its own type or value.
+            Subterm::Let(let_) => {
+                let type_ = self.term(&let_.signature.type_())?;
+                let value = self.term(&let_.signature.body())?;
+                let tail = self.scoped([let_.binder.clone()], || self.term(&let_.tail))?;
+                core::Term::let_(self.pattern_binder_name(&let_.binder), type_, value, tail)
+            }
+            // A `rec` is mutually recursive: every item label is in scope across
+            // all item types, all item bodies, and the tail.
+            Subterm::Rec(rec) => {
+                let labels = rec
+                    .items
+                    .iter()
+                    .map(|it| it.label.clone())
+                    .collect::<Vec<_>>();
+                self.scoped(labels, || {
+                    Ok(core::Term::rec(
+                        rec.items
+                            .iter()
+                            .map(|it| {
+                                Ok((
+                                    it.label.clone(),
+                                    self.term(&it.signature.type_())?,
+                                    self.term(&it.signature.body())?,
+                                ))
+                            })
+                            .collect::<Result<Vec<_>, Error>>()?,
+                        self.term(&rec.tail)?,
+                    ))
+                })?
+            }
+            // `let !` opens a monadic block. The body is desugared (eliminating every
+            // `Bang`) into ordinary core terms by re-elaborating the bind and applying
+            // it to `(action, continuation)` per `!` site. See `region`/`instantiate`.
+            Subterm::LetBang(let_bang) => {
+                let bind = Bind {
+                    term: &let_bang.bind,
+                };
+                self.region(&let_bang.body, &bind)?
+            }
+            // A bang outside any `let !` body has no continuation to hoist to.
+            Subterm::Bang(_) => return Err(Error::BangWithoutBind),
+        })
+    }
+
+    /// Desugars `term` as a single **region** under the active `bind`. A region
+    /// is a stretch of a `let !` body that shares one continuation; each `!` in it
+    /// hoists to the top of the region, never past a boundary (lambda body, match
+    /// arm, nested `let !`). Boundaries re-root a region.
+    fn region(&self, term: &Term, bind: &Bind) -> Result<core::Term, Error> {
+        match term.as_subterm() {
+            // A `let`'s bound expression evaluates in place (its bangs hoist to
+            // this region); the tail continues the same region (a bang there
+            // hoists after `x` is bound, not above the `let`).
+            Subterm::Let(let_) => {
+                let mut binds = Vec::new();
+                let let_term = self.build_let(let_, bind, &mut binds)?;
+                self.wrap(binds, let_term, bind)
+            }
+            // The scrutinee evaluates before branching (its bangs hoist here);
+            // each arm is its own region (branch-local effects).
+            Subterm::Match(match_) => {
+                let mut binds = Vec::new();
+                let match_term = self.match_region(match_, bind, &mut binds)?;
+                self.wrap(binds, match_term, bind)
+            }
+            // A lambda re-roots the region (same bind, lexically in scope).
+            Subterm::Func(func) => {
+                let body = self.scoped(Self::param_names(&func.params), || {
+                    self.region(&func.body, bind)
+                })?;
+                let (params, body) = self.lower_func_params(&func.params, body)?;
+                Ok(core::Term::func(params, body))
+            }
+            // A nested `let !` switches the bind and desugars independently.
+            Subterm::LetBang(let_bang) => {
+                let inner = Bind {
+                    term: &let_bang.bind,
+                };
+                self.region(&let_bang.body, &inner)
+            }
+            // Spine forms (atomic / apply / tuple / proj): collect bangs in
+            // left-to-right evaluation order, then wrap.
+            _ => {
+                let mut binds = Vec::new();
+                let body = self.collect(term, bind, &mut binds)?;
+                self.wrap(binds, body, bind)
+            }
+        }
+    }
+
+    /// Walks a non-boundary expression, elaborating to core and accumulating each
+    /// `Bang` into `binds` (in evaluation order) replaced by a fresh variable.
+    /// Boundary/binding forms desugar as their own nested region; `let`/`match`
+    /// hoist their bound-expression/scrutinee bangs into the *enclosing* `binds`.
+    fn collect(
+        &self,
+        term: &Term,
+        bind: &Bind,
+        binds: &mut Vec<(String, core::Term)>,
+    ) -> Result<core::Term, Error> {
+        Ok(match term.as_subterm() {
+            Subterm::Bang(action) => {
+                // The action is itself desugared first, so its inner bangs
+                // evaluate before this one (left-to-right).
+                let action = self.collect(action, bind, binds)?;
+                let name = self.context.fresh_binder();
+                let var = core::Term::var(core::Var::free(name.clone()));
+                binds.push((name, action));
+                var
+            }
+            Subterm::Apply(apply) => core::Term::apply_marked(
+                self.collect(&apply.head, bind, binds)?,
+                apply
+                    .params
+                    .iter()
+                    .map(|(plicity, p)| Ok((*plicity, self.collect(p, bind, binds)?)))
+                    .collect::<Result<Vec<_>, Error>>()?,
+            ),
+            Subterm::Tuple(tuple) => core::Term::tuple_named(
+                tuple
+                    .fields
+                    .iter()
+                    .map(|(name, f)| Ok((name.clone(), self.collect(f, bind, binds)?)))
+                    .collect::<Result<Vec<_>, Error>>()?,
+            ),
+            Subterm::Proj(proj) => {
+                let head = self.collect(&proj.head, bind, binds)?;
+                match &proj.field {
+                    Field::Index(index) => core::Term::proj(head, *index),
+                    Field::Label(label) => core::Term::proj_label(head, label.clone()),
+                }
+            }
+            // A struct literal's field values hoist their bangs into this
+            // region, exactly like a tuple's.
+            Subterm::StructLit(lit) => core::Term::struct_named(
+                self.resolve_name(&lit.head)?,
+                lit.params
+                    .iter()
+                    .map(|p| self.collect(p, bind, binds))
+                    .collect::<Result<Vec<_>, Error>>()?,
+                lit.fields
+                    .iter()
+                    .map(|(name, field)| Ok((name.clone(), self.collect(field, bind, binds)?)))
+                    .collect::<Result<Vec<_>, Error>>()?,
+            ),
+            // An infix operator's operands hoist their bangs into this region,
+            // exactly like an application's arguments.
+            Subterm::Infix(infix) => core::Term::infix(
+                infix.op,
+                self.collect(&infix.left, bind, binds)?,
+                self.collect(&infix.right, bind, binds)?,
+            ),
+            // A `let`/`match` sub-expression hoists its bound-expression /
+            // scrutinee bangs into the enclosing region (this `binds`).
+            Subterm::Let(let_) => self.build_let(let_, bind, binds)?,
+            Subterm::Match(match_) => self.match_region(match_, bind, binds)?,
+            // A lambda is a value and a nested `let !` is independent: neither
+            // hoists anything outward, so desugar each as its own region.
+            Subterm::Func(_) | Subterm::LetBang(_) => self.region(term, bind)?,
+            // Leaves elaborate normally. A `Bang` reachable here (e.g. nested in a
+            // type position) hits `self.term`'s `Bang` arm and is rejected.
+            _ => self.term(term)?,
+        })
+    }
+
+    /// Builds `let x = value; tail` for a `let` inside a `let !` region,
+    /// collecting the bound expression's bangs into `binds` and desugaring the
+    /// tail as the continuation of the same region.
+    fn build_let(
+        &self,
+        let_: &Let,
+        bind: &Bind,
+        binds: &mut Vec<(String, core::Term)>,
+    ) -> Result<core::Term, Error> {
+        let value = self.collect(&let_.signature.body(), bind, binds)?;
+        let tail = self.scoped([let_.binder.clone()], || self.region(&let_.tail, bind))?;
+        let type_ = self.term(&let_.signature.type_())?;
+        Ok(core::Term::let_(
+            self.pattern_binder_name(&let_.binder),
+            type_,
+            value,
+            tail,
+        ))
+    }
+
+    /// Lowers a function's parameters into core binder `(name, domain)` pairs.
+    /// Each parameter binds a single name; an un-annotated parameter takes a fresh
+    /// metavar domain. The body needs no wrapping — there is no destructuring.
+    fn lower_func_params(
+        &self,
+        params: &[(String, Option<Term>)],
+        body: core::Term,
+    ) -> Result<(Vec<(String, core::Term)>, core::Term), Error> {
+        let lowered = params
+            .iter()
+            .map(|(name, annotation)| {
+                let domain = match annotation {
+                    Some(annotation) => self.term(annotation)?,
+                    None => core::Term::metavar(self.context.fresh_metavar()),
+                };
+                Ok((self.pattern_binder_name(name), domain))
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        Ok((lowered, body))
+    }
+
+    /// A pattern binder's core name: `_` mints a fresh internal name (so repeated
+    /// wildcards never collide), any other identifier is used verbatim.
+    fn pattern_binder_name(&self, name: &str) -> String {
+        match name {
+            "_" => self.context.fresh_binder(),
+            name => name.to_string(),
+        }
+    }
+
+    /// Desugars a `match` inside a `let !` region: the scrutinee's bangs are
+    /// collected into `binds` (hoisted out — the scrutinee runs unconditionally),
+    /// while each arm is desugared as its own region (branch-local effects). This
+    /// mirrors the `Match` arm of `subterm`, swapping `self.term` for `collect`
+    /// on heads and `region` on arm bodies.
+    fn match_region(
+        &self,
+        match_: &Match,
+        bind: &Bind,
+        binds: &mut Vec<(String, core::Term)>,
+    ) -> Result<core::Term, Error> {
+        Ok(match match_ {
+            Match::Bln(bm) => {
+                let (label, body) = self.motive_parts(&bm.motive)?;
+                core::Term::bln_match(
+                    self.collect(&bm.head, bind, binds)?,
+                    label,
+                    body,
+                    self.region(&bm.false_case, bind)?,
+                    self.region(&bm.true_case, bind)?,
+                )
+            }
+            Match::Nat(NatMatch::Induction {
+                head,
+                motive,
+                zero_case,
+                pred_label,
+                ih_label,
+                succ_case,
+            }) => {
+                let (label, body) = self.motive_parts(motive)?;
+                core::Term::nat_match(
+                    self.collect(head, bind, binds)?,
+                    label,
+                    body,
+                    self.region(zero_case, bind)?,
+                    pred_label.clone(),
+                    ih_label.clone(),
+                    self.scoped([pred_label.clone(), ih_label.clone()], || {
+                        self.region(succ_case, bind)
+                    })?,
+                )
+            }
+            Match::Nat(NatMatch::Dispatch {
+                head,
+                motive,
+                cases,
+                default,
+            }) => {
+                let (label, motive_body) = self.motive_parts(motive)?;
+                core::Term::switch(
+                    self.collect(head, bind, binds)?,
+                    label,
+                    motive_body,
+                    cases
+                        .iter()
+                        .map(|(&nat, body)| Ok((nat, self.region(body, bind)?)))
+                        .collect::<Result<Vec<_>, Error>>()?,
+                    self.region(default, bind)?,
+                )
+            }
+            Match::Inductive(um) => {
+                // Mirrors the `Match::Inductive` arm of `subterm` (see there), swapping
+                // `collect` on the head and `region` on the arm bodies (branch-local
+                // effects).
+                let head = self.collect(&um.head, bind, binds)?;
+                let arms = um
+                    .arms
+                    .iter()
+                    .map(|arm| {
+                        let names = arm.args.clone();
+                        let body = self.scoped(names, || self.region(&arm.body, bind))?;
+                        Ok((arm.tag.clone(), arm.args.clone(), body))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+                self.inductive_rows(head, &um.motive, arms)?
+            }
+            Match::Arr(ArrMatch {
+                head,
+                motive,
+                empty_case,
+                head_label,
+                tail_label,
+                ih_label,
+                cons_case,
+            }) => {
+                let (label, body) = self.motive_parts(motive)?;
+                core::Term::arr_match(
+                    self.collect(head, bind, binds)?,
+                    core::Term::metavar(self.context.fresh_metavar()),
+                    label,
+                    body,
+                    self.region(empty_case, bind)?,
+                    head_label.clone(),
+                    tail_label.clone(),
+                    ih_label.clone(),
+                    self.scoped(
+                        [head_label.clone(), tail_label.clone(), ih_label.clone()],
+                        || self.region(cons_case, bind),
+                    )?,
+                )
+            }
+            Match::Bin(BinMatch {
+                head,
+                motive,
+                empty_case,
+                head_label,
+                tail_label,
+                ih_label,
+                cons_case,
+            }) => {
+                let (label, body) = self.motive_parts(motive)?;
+                core::Term::bin_match(
+                    self.collect(head, bind, binds)?,
+                    label,
+                    body,
+                    self.region(empty_case, bind)?,
+                    head_label.clone(),
+                    tail_label.clone(),
+                    ih_label.clone(),
+                    self.scoped(
+                        [head_label.clone(), tail_label.clone(), ih_label.clone()],
+                        || self.region(cons_case, bind),
+                    )?,
+                )
+            }
+        })
+    }
+
+    /// Wraps `body` in one instantiation of the bind template per collected bang.
+    /// The first-collected bang (`binds[0]`) becomes the outermost bind, preserving
+    /// left-to-right evaluation order. Continuation lambdas are built with
+    /// `core::Term::func` over the gensym'd free name, whose `capture` closes it
+    /// robustly under nesting; the domain is a fresh hole, inference-solved.
+    fn wrap(
+        &self,
+        binds: Vec<(String, core::Term)>,
+        body: core::Term,
+        bind: &Bind,
+    ) -> Result<core::Term, Error> {
+        binds
+            .into_iter()
+            .rev()
+            .try_fold(body, |acc, (name, action)| {
+                let domain = core::Term::metavar(self.context.fresh_metavar());
+                let cont = core::Term::func([(name, domain)], acc);
+                self.instantiate(bind, action, cont)
+            })
+    }
+
+    /// Instantiates the bind for one `!` site: re-elaborate the bind term, then apply
+    /// it to `(action, cont)`. The term is re-elaborated each call, so its `?` holes
+    /// get *fresh* metavariables — a region can therefore sequence actions of
+    /// differing result types. Because the result keeps the bind's own head (e.g.
+    /// `Parse/bind`) in head position — never a bare lambda — it synthesizes without
+    /// annotations.
+    fn instantiate(
+        &self,
+        bind: &Bind,
+        action: core::Term,
+        cont: core::Term,
+    ) -> Result<core::Term, Error> {
+        Ok(core::Term::apply(self.term(bind.term)?, [action, cont]))
+    }
+
+    /// Splits an optional match motive into its `(label, body)` for the core
+    /// match constructors. An omitted motive (`None`) lowers to an unlabelled
+    /// fresh metavariable body — the same as writing `: _` — so a non-dependent
+    /// match infers its motive by unifying the arms against that metavariable.
+    /// The annotated form is inductive-only and goes through `inductive_match` instead.
+    fn motive_parts<'m>(
+        &self,
+        motive: &'m Option<Motive>,
+    ) -> Result<(Option<&'m str>, core::Term), Error> {
+        match motive {
+            Some(Motive::Constant(body)) => Ok((None, self.term(body)?)),
+            // The scrutinee label binds the matched value inside the motive body.
+            Some(Motive::Scrutinee { label, body }) => Ok((
+                Some(label),
+                self.scoped([label.clone()], || self.term(body))?,
+            )),
+            Some(Motive::Annotated { .. }) => Err(Error::AnnotatedMotiveNotInductive),
+            None => Ok((None, core::Term::metavar(self.context.fresh_metavar()))),
+        }
+    }
+
+    /// Builds the core inductive match for both lowering paths (`subterm` and
+    /// `match_region`). A plain motive goes through `motive_parts`; the
+    /// annotated type-pattern form resolves its inductive name, classifies its
+    /// slots — a bare identifier that resolves to no module binding is a
+    /// binder candidate (locals are invisible here; core elaboration
+    /// validates positionally against the registry), anything else verbatim —
+    /// and closes the motive body over the binder labels then the scrutinee.
+    fn inductive_match(
+        &self,
+        head: core::Term,
+        motive: &Option<Motive>,
+        cases: Vec<InductiveCase>,
+    ) -> Result<core::Term, Error> {
+        let Some(Motive::Annotated {
+            label,
+            name,
+            slots,
+            body,
+        }) = motive
+        else {
+            let (label, body) = self.motive_parts(motive)?;
+            return Ok(core::Term::inductive_match(head, label, body, cases));
+        };
+
+        // Resolve the annotation's inductive name exactly like a term reference.
+        let resolved = self.resolve_name(name)?;
+
+        let mut binders = Vec::new();
+        let mut pattern_slots = Vec::new();
+        for slot in slots {
+            match slot.as_subterm() {
+                // A single unqualified identifier naming no module binding:
+                // a binder candidate. (One that *does* name a module binding
+                // — `Vec(Nat, k)`'s `Nat` — must stay a reference: binding it
+                // would capture the global's occurrences in `P`.)
+                Subterm::Name(n)
+                    if n.is_single()
+                        && !n.is_abs()
+                        && self.context.bindings().get(n.head()).is_none() =>
+                {
+                    binders.push(n.head().to_string());
+                    pattern_slots.push(core::MotiveSlot::Binder);
+                }
+                _ => pattern_slots.push(core::MotiveSlot::Term(self.term(slot)?)),
+            }
+        }
+
+        // The index binders are in scope inside the motive body.
+        let motive_body = self.scoped(binders.clone(), || self.term(body))?;
+
+        Ok(core::Term::inductive_match_motive(
+            head,
+            binders,
+            label,
+            motive_body,
+            core::MotivePattern {
+                name: resolved,
+                slots: pattern_slots,
+            },
+            cases,
+        ))
+    }
+
+    /// Assembles an inductive match's already-lowered constructor arms into a
+    /// single-level core `Match` via [`Self::inductive_match`]. The surface
+    /// grammar guarantees each arm is one constructor binding its payload by name;
+    /// unknown tags, arity, exhaustiveness, and repeated tags are all verified by
+    /// core elaboration against the inductive's registry.
+    fn inductive_rows(
+        &self,
+        head: core::Term,
+        motive: &Option<Motive>,
+        arms: Vec<(String, Vec<String>, core::Term)>,
+    ) -> Result<core::Term, Error> {
+        let mut cases = Vec::with_capacity(arms.len());
+
+        for (tag, args, body) in arms {
+            let binders = args
+                .iter()
+                .map(|name| self.pattern_binder_name(name))
+                .collect();
+            cases.push((core::Atom::from(tag.as_str()), binders, body));
+        }
+
+        self.inductive_match(head, motive, cases)
+    }
+
+    pub fn prim(&self, prim: &Prim) -> Result<core::Prim, Error> {
+        Ok(match prim {
+            Prim::BlnType => core::Prim::BlnType,
+            Prim::Bln(b) => core::Prim::Bln(*b),
+            Prim::BlnAnd(left, right) => core::Prim::BlnAnd(self.term(left)?, self.term(right)?),
+            Prim::BlnOr(left, right) => core::Prim::BlnOr(self.term(left)?, self.term(right)?),
+            Prim::BlnXor(left, right) => core::Prim::BlnXor(self.term(left)?, self.term(right)?),
+            Prim::BlnEql(left, right) => core::Prim::BlnEql(self.term(left)?, self.term(right)?),
+            Prim::BlnNeq(left, right) => core::Prim::BlnNeq(self.term(left)?, self.term(right)?),
+            Prim::NatType => core::Prim::NatType,
+            Prim::Nat(Nat::Zero) => core::Prim::Nat(core::Nat::Zero),
+            Prim::Nat(Nat::Succ(NatLiteral::Number(spine, _), inner)) => {
+                core::Prim::Nat(core::Nat::Succ(spine.clone(), self.term(inner)?))
+            }
+            Prim::Nat(Nat::Succ(NatLiteral::Char(c), inner)) => core::Prim::Nat(core::Nat::Succ(
+                BigUint::from(*c as usize),
+                self.term(inner)?,
+            )),
+            Prim::NatEql(left, right) => core::Prim::nat_eql(self.term(left)?, self.term(right)?),
+            Prim::NatNeq(left, right) => core::Prim::nat_neq(self.term(left)?, self.term(right)?),
+            Prim::NatAdd(left, right) => core::Prim::nat_add(self.term(left)?, self.term(right)?),
+            Prim::NatSub(left, right) => core::Prim::nat_sub(self.term(left)?, self.term(right)?),
+            Prim::NatMul(left, right) => core::Prim::nat_mul(self.term(left)?, self.term(right)?),
+            Prim::NatLt(left, right) => core::Prim::nat_lt(self.term(left)?, self.term(right)?),
+            Prim::NatDiv(left, right) => core::Prim::nat_div(self.term(left)?, self.term(right)?),
+            Prim::NatRem(left, right) => core::Prim::nat_rem(self.term(left)?, self.term(right)?),
+            Prim::NatGt(left, right) => core::Prim::nat_gt(self.term(left)?, self.term(right)?),
+            Prim::NatLte(left, right) => core::Prim::nat_lte(self.term(left)?, self.term(right)?),
+            Prim::NatGte(left, right) => core::Prim::nat_gte(self.term(left)?, self.term(right)?),
+            Prim::NatAnd(left, right) => core::Prim::NatAnd(self.term(left)?, self.term(right)?),
+            Prim::NatOr(left, right) => core::Prim::NatOr(self.term(left)?, self.term(right)?),
+            Prim::NatXor(left, right) => core::Prim::NatXor(self.term(left)?, self.term(right)?),
+            Prim::NatShl(left, right) => core::Prim::NatShl(self.term(left)?, self.term(right)?),
+            Prim::NatShr(left, right) => core::Prim::NatShr(self.term(left)?, self.term(right)?),
+            Prim::IntType => core::Prim::IntType,
+            Prim::Int(value) => core::Prim::Int(core::Int::new(*value as i64)),
+            Prim::IntEql(left, right) => core::Prim::int_eql(self.term(left)?, self.term(right)?),
+            Prim::IntNeq(left, right) => core::Prim::int_neq(self.term(left)?, self.term(right)?),
+            Prim::IntAdd(left, right) => core::Prim::int_add(self.term(left)?, self.term(right)?),
+            Prim::IntSub(left, right) => core::Prim::int_sub(self.term(left)?, self.term(right)?),
+            Prim::IntMul(left, right) => core::Prim::int_mul(self.term(left)?, self.term(right)?),
+            Prim::IntDiv(left, right) => core::Prim::int_div(self.term(left)?, self.term(right)?),
+            Prim::IntRem(left, right) => core::Prim::int_rem(self.term(left)?, self.term(right)?),
+            Prim::IntLt(left, right) => core::Prim::int_lt(self.term(left)?, self.term(right)?),
+            Prim::IntGt(left, right) => core::Prim::int_gt(self.term(left)?, self.term(right)?),
+            Prim::IntLte(left, right) => core::Prim::int_lte(self.term(left)?, self.term(right)?),
+            Prim::IntGte(left, right) => core::Prim::int_gte(self.term(left)?, self.term(right)?),
+            Prim::IntAnd(left, right) => core::Prim::IntAnd(self.term(left)?, self.term(right)?),
+            Prim::IntOr(left, right) => core::Prim::IntOr(self.term(left)?, self.term(right)?),
+            Prim::IntXor(left, right) => core::Prim::IntXor(self.term(left)?, self.term(right)?),
+            Prim::IntShl(left, right) => core::Prim::IntShl(self.term(left)?, self.term(right)?),
+            Prim::IntShr(left, right) => core::Prim::IntShr(self.term(left)?, self.term(right)?),
+            Prim::FltType => core::Prim::FltType,
+            Prim::Flt(flt) => core::Prim::Flt(core::Flt::from_f32(*flt)),
+            Prim::FltAdd(left, right) => core::Prim::flt_add(self.term(left)?, self.term(right)?),
+            Prim::FltSub(left, right) => core::Prim::flt_sub(self.term(left)?, self.term(right)?),
+            Prim::FltMul(left, right) => core::Prim::flt_mul(self.term(left)?, self.term(right)?),
+            Prim::FltDiv(left, right) => core::Prim::flt_div(self.term(left)?, self.term(right)?),
+            Prim::FltRem(left, right) => core::Prim::FltRem(self.term(left)?, self.term(right)?),
+            Prim::FltEql(left, right) => core::Prim::flt_eql(self.term(left)?, self.term(right)?),
+            Prim::FltNeq(left, right) => core::Prim::flt_neq(self.term(left)?, self.term(right)?),
+            Prim::FltLt(left, right) => core::Prim::flt_lt(self.term(left)?, self.term(right)?),
+            Prim::FltGt(left, right) => core::Prim::flt_gt(self.term(left)?, self.term(right)?),
+            Prim::FltLte(left, right) => core::Prim::flt_lte(self.term(left)?, self.term(right)?),
+            Prim::FltGte(left, right) => core::Prim::flt_gte(self.term(left)?, self.term(right)?),
+            Prim::FltMin(left, right) => core::Prim::flt_min(self.term(left)?, self.term(right)?),
+            Prim::FltMax(left, right) => core::Prim::flt_max(self.term(left)?, self.term(right)?),
+            Prim::FltNeg(inner) => core::Prim::flt_neg(self.term(inner)?),
+            Prim::FltAbs(inner) => core::Prim::flt_abs(self.term(inner)?),
+            Prim::FltSqrt(inner) => core::Prim::flt_sqrt(self.term(inner)?),
+            Prim::FltFloor(inner) => core::Prim::flt_floor(self.term(inner)?),
+            Prim::FltCeil(inner) => core::Prim::flt_ceil(self.term(inner)?),
+            Prim::FltTrunc(inner) => core::Prim::flt_trunc(self.term(inner)?),
+            Prim::FltNearest(inner) => core::Prim::flt_nearest(self.term(inner)?),
+            Prim::FltToLeBin(inner) => core::Prim::flt_to_le_bin(self.term(inner)?),
+            Prim::NatToInt(inner) => core::Prim::nat_to_int(self.term(inner)?),
+            Prim::IoType => core::Prim::IoType,
+            Prim::Io(token) => core::Prim::Io(*token),
+            Prim::IoEql(left, right) => core::Prim::io_eql(self.term(left)?, self.term(right)?),
+            Prim::IoRead(handle, count) => {
+                core::Prim::io_read(self.term(handle)?, self.term(count)?)
+            }
+            Prim::IoWrite(handle, bytes) => {
+                core::Prim::io_write(self.term(handle)?, self.term(bytes)?)
+            }
+            Prim::IoOpen(path, mode) => core::Prim::IoOpen(self.term(path)?, self.term(mode)?),
+            Prim::IoLookup(host, port) => core::Prim::IoLookup(self.term(host)?, self.term(port)?),
+            Prim::IoResolve(handle) => core::Prim::IoResolve(self.term(handle)?),
+            Prim::IoSocket(addr) => core::Prim::IoSocket(self.term(addr)?),
+            Prim::IoBind(handle, addr) => core::Prim::IoBind(self.term(handle)?, self.term(addr)?),
+            Prim::IoConnect(handle, addr) => {
+                core::Prim::IoConnect(self.term(handle)?, self.term(addr)?)
+            }
+            Prim::IoListen(handle, backlog) => {
+                core::Prim::IoListen(self.term(handle)?, self.term(backlog)?)
+            }
+            Prim::IoAccept(handle) => core::Prim::IoAccept(self.term(handle)?),
+            Prim::IoStartTls(handle, sni) => {
+                core::Prim::IoStartTls(self.term(handle)?, self.term(sni)?)
+            }
+            Prim::IoTlsServerConfig(cert, key) => {
+                core::Prim::IoTlsServerConfig(self.term(cert)?, self.term(key)?)
+            }
+            Prim::IoStartTlsServer(handle, cfg) => {
+                core::Prim::IoStartTlsServer(self.term(handle)?, self.term(cfg)?)
+            }
+            Prim::IoSetNonblocking(handle, on) => {
+                core::Prim::IoSetNonblocking(self.term(handle)?, self.term(on)?)
+            }
+            Prim::IoSetRecvTimeout(handle, ms) => {
+                core::Prim::IoSetRecvTimeout(self.term(handle)?, self.term(ms)?)
+            }
+            Prim::IoSetSendTimeout(handle, ms) => {
+                core::Prim::IoSetSendTimeout(self.term(handle)?, self.term(ms)?)
+            }
+            Prim::IoSetReuseaddr(handle, on) => {
+                core::Prim::IoSetReuseaddr(self.term(handle)?, self.term(on)?)
+            }
+            Prim::IoPoll(handles, events, timeout) => {
+                core::Prim::IoPoll(self.term(handles)?, self.term(events)?, self.term(timeout)?)
+            }
+            Prim::IoClose(handle) => core::Prim::IoClose(self.term(handle)?),
+            Prim::IoClockWall => core::Prim::IoClockWall,
+            Prim::IoClockMono => core::Prim::IoClockMono,
+            Prim::IoRandom(count) => core::Prim::IoRandom(self.term(count)?),
+            Prim::IoArgs => core::Prim::IoArgs,
+            Prim::IoEnv(name) => core::Prim::IoEnv(self.term(name)?),
+            Prim::IoExit(type_, code) => core::Prim::IoExit(self.term(type_)?, self.term(code)?),
+            Prim::NatToFlt(inner) => core::Prim::nat_to_flt(self.term(inner)?),
+            Prim::IntToNat(inner) => core::Prim::int_to_nat(self.term(inner)?),
+            Prim::IntToFlt(inner) => core::Prim::int_to_flt(self.term(inner)?),
+            Prim::FltToNat(inner) => core::Prim::flt_to_nat(self.term(inner)?),
+            Prim::FltToInt(inner) => core::Prim::flt_to_int(self.term(inner)?),
+            Prim::BinType => core::Prim::BinType,
+            // `\hex` is a raw byte sequence.
+            Prim::Bin(bytes) => core::Prim::Bin(bytes.clone()),
+            Prim::BinLen(inner) => core::Prim::bin_len(self.term(inner)?),
+            Prim::BinEql(left, right) => core::Prim::bin_eql(self.term(left)?, self.term(right)?),
+            Prim::BinGet(bin, index) => core::Prim::bin_get(self.term(bin)?, self.term(index)?),
+            Prim::BinSlice(bin, start, end) => {
+                core::Prim::bin_slice(self.term(bin)?, self.term(start)?, self.term(end)?)
+            }
+            Prim::BinAppend(bin, byte) => core::Prim::bin_append(self.term(bin)?, self.term(byte)?),
+            Prim::BinConcat(left, right) => {
+                core::Prim::bin_concat([self.term(left)?, self.term(right)?])
+            }
+            Prim::BinFlatten(operand) => core::Prim::bin_flatten(self.term(operand)?),
+            Prim::ArrType(inner) => core::Prim::arr_type(self.term(inner)?),
+            Prim::Arr(elems) => core::Prim::Arr(
+                elems
+                    .iter()
+                    .map(|elem| self.term(elem))
+                    .collect::<Result<Vec<_>, Error>>()?,
+            ),
+            Prim::ArrLen(ty, inner) => core::Prim::arr_len(self.term(ty)?, self.term(inner)?),
+            Prim::ArrGet(ty, list, index) => {
+                core::Prim::arr_get(self.term(ty)?, self.term(list)?, self.term(index)?)
+            }
+            Prim::ArrSlice(ty, list, start, end) => core::Prim::arr_slice(
+                self.term(ty)?,
+                self.term(list)?,
+                self.term(start)?,
+                self.term(end)?,
+            ),
+            Prim::ArrAppend(ty, list, elem) => {
+                core::Prim::arr_append(self.term(ty)?, self.term(list)?, self.term(elem)?)
+            }
+            Prim::ArrConcat(ty, left, right) => {
+                core::Prim::arr_concat(self.term(ty)?, [self.term(left)?, self.term(right)?])
+            }
+            Prim::ArrFlatten(ty, operand) => {
+                core::Prim::arr_flatten(self.term(ty)?, self.term(operand)?)
+            }
+            Prim::ArrMap(a, b, f, arr) => {
+                core::Prim::arr_map(self.term(a)?, self.term(b)?, self.term(f)?, self.term(arr)?)
+            }
+            Prim::CellType(inner) => core::Prim::cell_type(self.term(inner)?),
+            Prim::Cell(type_, init) => core::Prim::cell_new(self.term(type_)?, self.term(init)?),
+            Prim::CellSet(type_, cell, value) => {
+                core::Prim::cell_set(self.term(type_)?, self.term(cell)?, self.term(value)?)
+            }
+            Prim::CellGet(type_, cell) => core::Prim::cell_get(self.term(type_)?, self.term(cell)?),
+        })
+    }
+}

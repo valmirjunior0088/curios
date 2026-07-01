@@ -36,7 +36,7 @@ This is cheap insurance: both languages reward precision and punish half-remembe
 
 ## The pipeline
 
-The compiler is a chain of stages, each its own crate (module root `src/<stage>/`). This chain is the backbone — when orienting yourself in unfamiliar code, find the stage first.
+The compiler is a chain of stages, each its own crate (module root `src/`). This chain is the backbone — when orienting yourself in unfamiliar code, find the stage first.
 
 ```
 .crs source
@@ -58,11 +58,11 @@ then, in curios itself:
 
 | Path                                              | Role                                                                                                                                             |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `curios-text/src/text/`                          | Lexer/parser, surface AST, lowering to core (`to_core/`)                                                                                         |
-| `curios-core/src/core/`                          | Core language: elaboration, typing, reduction, conversion, inductives, erasure, zonking                                                          |
-| `curios-ersd/src/ersd/`                          | Erased IR (post type-erasure); ersd→ersd optimization (`optm/`: prune, the `worker_wrapper` engine — monoid accumulator + suffix cursor — over a shared `call_graph`/`curios_base::suffix_view`); lowering to CPS (`to_cont/`) |
-| `curios-cont/src/cont/`                          | Continuation-passing IR; cont→cont optimization (`optm/`: inlining, DCE, copy/tag/jump threading, tail recursion, …); wasm emission (`to_wasm/`) |
-| `curios-wasm/src/wasm/`                          | Wasm module model, parser, binary writer/encoder                                                                                                 |
+| `curios-text/src/`                               | Lexer/parser, surface AST, lowering to core (`to_core/`)                                                                                         |
+| `curios-core/src/`                               | Core language: elaboration, typing, reduction, conversion, inductives, erasure, zonking                                                          |
+| `curios-ersd/src/`                               | Erased IR (post type-erasure); ersd→ersd optimization (`optm/`: prune, the `worker_wrapper` engine — monoid accumulator + suffix cursor — over a shared `call_graph`/`curios_base::suffix_view`); lowering to CPS (`to_cont/`) |
+| `curios-cont/src/`                               | Continuation-passing IR; cont→cont optimization (`optm/`: inlining, DCE, copy/tag/jump threading, tail recursion, …); wasm emission (`to_wasm/`) |
+| `curios-wasm/src/`                               | Wasm module model, parser, binary writer/encoder                                                                                                 |
 | `curios/src/driver.rs`                           | Pipeline driver: `compile_entrypoint`, `typecheck_entrypoint`, `Stage`                                                                           |
 | `curios-base/src/monads/`                        | Parser/printer monad combinators                                                                                                                 |
 | `curios-base/src/{span,entropy,macros,suffix_view}.rs` | Foundational utilities shared by every stage                                                                                               |
@@ -129,9 +129,9 @@ There is no `rustfmt.toml` or `clippy.toml` — stock toolchain defaults apply. 
 
 ## Writing curios (`.crs`)
 
-The standard library under `curios-text/std/` is the reference for idiomatic curios. Each module is one file (`curios-text/std/Foo.crs`) and must be registered in two places: `curios-text/std.crs` (`pub mod Foo; pub use Foo/{let Foo};`) **and** the `include_str!` table in `curios-text/src/text/prelude.rs` (the modules are embedded into the compiler at build time, not read from disk). The same applies to `curios-text/syn/` via `curios-text/syn.crs`.
+The standard library under `curios-text/std/` is the reference for idiomatic curios. Each module is one file (`curios-text/std/Foo.crs`) and must be registered in two places: `curios-text/std.crs` (`pub mod Foo; pub use Foo/{let Foo};`) **and** the `include_str!` table in `curios-text/src/prelude.rs` (the modules are embedded into the compiler at build time, not read from disk). The same applies to `curios-text/syn/` via `curios-text/syn.crs`.
 
-[SYNTAX.md](SYNTAX.md) covers every construct with examples (and `curios-text/src/text/parse.rs` is the ultimate source of truth). A few essentials that are easy to trip on from memory:
+[SYNTAX.md](SYNTAX.md) covers every construct with examples (and `curios-text/src/parse.rs` is the ultimate source of truth). A few essentials that are easy to trip on from memory:
 
 - Names are path-qualified with `/`: `Option/none`, `/std/Lst`, `/syn/Lst`; a leading `/` is absolute.
 - `@x : T` is an implicit (type-erased) parameter; ordinary `x : T` is explicit.

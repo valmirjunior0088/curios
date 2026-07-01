@@ -2,7 +2,7 @@
 
 A pragmatic reference for the curios surface language (`.crs`). It covers every construct with examples, organized for lookup rather than cover-to-cover reading.
 
-`curios/src/text/parse.rs` is the **source of truth**. Where this document and the parser disagree, the parser wins — and this file should be fixed. The standard library under `curios/std/` and `curios/syn/` is the best corpus of idiomatic usage.
+`curios-text/src/parse.rs` is the **source of truth**. Where this document and the parser disagree, the parser wins — and this file should be fixed. The standard library under `curios-text/std/` and `curios-text/syn/` is the best corpus of idiomatic usage.
 
 ## Lexical structure
 
@@ -252,7 +252,7 @@ let fst = p.fst;                 -- bind a field via projection
 
 ## Proofs (Eq idioms)
 
-Propositional equality `Eq` is an ordinary indexed inductive in `curios/std/Eq.crs`; proofs are built and eliminated with `match` like any other inductive. The common combinators — `refl`, `sym`, `trans`, `cong`, `subst` — live there and are the idiomatic building blocks:
+Propositional equality `Eq` is an ordinary indexed inductive in `curios-text/std/Eq.crs`; proofs are built and eliminated with `match` like any other inductive. The common combinators — `refl`, `sym`, `trans`, `cong`, `subst` — live there and are the idiomatic building blocks:
 
 ```
 pub let sym(@A : Type, @x : A, @y : A, p : Eq(x, y)) -> Eq(y, x) =
