@@ -161,7 +161,16 @@ pub fn resolve_witness(
     let mut saw_undecided = false;
 
     // Step 1: local `use` binders, innermost-first, first match wins.
-    let binders = context.witness_scope().to_vec();
+    //
+    // Retrying a parked goal restores its frozen frame's witness binders on top
+    // of whatever scope is live at retry time, so a binder that was already in
+    // scope at park time can appear twice. Binder names are globally fresh and
+    // unique, so a repeated name denotes the *same* binder; dedup by name (the
+    // retained occurrence is arbitrary but identical) to keep the superclass
+    // search from reporting a projection against itself as ambiguous.
+    let mut binders = context.witness_scope().to_vec();
+    let mut seen = std::collections::HashSet::new();
+    binders.retain(|(name, _)| seen.insert(name.clone()));
     for (name, type_) in binders.iter().rev() {
         match commit_match(context, type_, &goal_whnf)? {
             Probe::Yes => return Ok(Resolution::Solved(Term::free_var(name))),

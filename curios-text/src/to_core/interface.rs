@@ -136,7 +136,7 @@ fn seed(
                     group: use_item.group.clone(),
                 });
             }
-            TopItem::Inductive(group) => {
+            TopItem::Induct(group) => {
                 for inductive in group {
                     let ctor = prefix.with(&inductive.label);
 
@@ -167,6 +167,34 @@ fn seed(
                     }
                     public.insert(ctor, interface);
                 }
+            }
+            TopItem::Concept(concept) => {
+                // A concept's method wrappers live in a nested namespace, exactly
+                // like an inductive's constructors: seed both the direct info and
+                // the public interface of that module unconditionally (the fields
+                // are always public within it), so `Show/show` resolves. The
+                // concept's own visibility gates the walk from outside via the
+                // parent's child-module flag.
+                let namespace = prefix.with(&concept.label);
+
+                let mut direct = ModuleInfo::new();
+                for field in &concept.fields {
+                    direct.insert_binding(field.label.clone(), true)?;
+                }
+                table.insert(namespace.clone(), direct);
+
+                let mut interface = PublicInterface::new();
+                for field in &concept.fields {
+                    let target = namespace.with(&field.label);
+                    interface.bindings.insert(
+                        field.label.clone(),
+                        Entry {
+                            target,
+                            source: Source::Direct,
+                        },
+                    );
+                }
+                public.insert(namespace, interface);
             }
             TopItem::Mod(mod_item) => {
                 let path = prefix.with(&mod_item.label);

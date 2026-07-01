@@ -1,11 +1,11 @@
 use {
     super::{
-        Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, Entrypoint, Field, Func,
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm, InductiveMatch, Infix,
-        Let, LetBang, LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral,
+        Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, ConceptField, Entrypoint, Field,
+        Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm, InductiveMatch,
+        Infix, Let, LetBang, LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral,
         NatMatch, NumLit, NumOp, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem, StructLit,
-        Subterm, Syn, Term, TopCase, TopInductive, TopItem, TopLet, TopMod, TopStruct, TopUse,
-        Tuple, TupleType, TupleTypeParam, UseGroup,
+        Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem, TopLet, TopMod, TopStruct,
+        TopUse, TopWitness, Tuple, TupleType, TupleTypeParam, UseGroup,
     },
     curios_base::{
         Source,
@@ -452,8 +452,27 @@ fn parse_plicity<'a>() -> Parser<'a, Plicity> {
         .or(pure(Plicity::Explicit))
 }
 
+// A `use` Π-binder: `use (name ":")? term`. A named form binds `name` for the
+// rest of the type; an anonymous form binds nothing nameable (`_`) but still
+// joins the instance scope. `use` is a reserved word, so there is no ambiguity
+// with an ordinary binder name.
+fn parse_use_func_type_param<'a>() -> Parser<'a, FuncTypeParam> {
+    catch(parse_keyword("use"))
+        .and_keep(
+            catch(parse_identifier().and_drop(parse_literal(":")))
+                .map(|label: &str| Some(label.to_string()))
+                .or(pure(None))
+                .and(lazy(parse_term)),
+        )
+        .map(|(label, type_)| FuncTypeParam {
+            plicity: Plicity::Witness,
+            label,
+            type_,
+        })
+}
+
 fn parse_func_type_param<'a>() -> Parser<'a, FuncTypeParam> {
-    parse_plicity()
+    parse_use_func_type_param().or(parse_plicity()
         .and(
             catch(parse_identifier().and_drop(parse_literal(":")))
                 .and(lazy(parse_term))
@@ -464,7 +483,7 @@ fn parse_func_type_param<'a>() -> Parser<'a, FuncTypeParam> {
             plicity,
             label,
             type_,
-        })
+        }))
 }
 
 fn parse_func_type<'a>() -> Parser<'a, Term> {
@@ -506,11 +525,17 @@ fn parse_constructor_arm<'a>() -> Parser<'a, (String, Vec<String>)> {
 }
 
 fn parse_func_param<'a>() -> Parser<'a, (String, Option<Term>)> {
-    parse_binder().and(
-        catch(parse_literal(":").and_keep(lazy(parse_term)))
-            .map(Some)
-            .or(pure(None)),
-    )
+    // A leading `use` on a lambda parameter is accepted and dropped: lambdas
+    // carry no plicity marks (checking against a Π type supplies them), so the
+    // marker is purely documentary here.
+    catch(parse_keyword("use"))
+        .or(pure(()))
+        .and_keep(parse_binder())
+        .and(
+            catch(parse_literal(":").and_keep(lazy(parse_term)))
+                .map(Some)
+                .or(pure(None)),
+        )
 }
 
 fn parse_func<'a>() -> Parser<'a, Term> {
@@ -809,8 +834,25 @@ fn parse_rec<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
+// A `use` binder in function-definition sugar (`let`/`rec`/`witness` telescopes):
+// `use (name ":")? term`. An anonymous form binds `_` (lowering mints a fresh
+// name); the binder joins the instance scope either way.
+fn parse_use_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
+    catch(parse_keyword("use"))
+        .and_keep(
+            catch(parse_binder().and_drop(parse_literal(":")))
+                .or(pure("_".to_string()))
+                .and(lazy(parse_term)),
+        )
+        .map(|(label, type_)| FuncSugarParam {
+            plicity: Plicity::Witness,
+            label,
+            type_,
+        })
+}
+
 fn parse_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
-    parse_plicity()
+    parse_use_func_sugar_param().or(parse_plicity()
         .and(parse_binder())
         .and_drop(parse_literal(":"))
         .and(lazy(parse_term))
@@ -820,7 +862,7 @@ fn parse_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
                 label,
                 type_,
             },
-        )
+        ))
 }
 
 // The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the
@@ -912,8 +954,14 @@ enum Suffix {
     Bang,
 }
 
+// A call-site argument's plicity: `use <term>` fills a witness slot, `@<term>`
+// an implicit slot, a plain term an explicit slot. `use` is reserved, so it can
+// never begin a plain-argument term.
 fn parse_apply_argument<'a>() -> Parser<'a, (Plicity, Term)> {
-    parse_plicity().and(lazy(parse_term))
+    catch(parse_keyword("use"))
+        .map(|()| Plicity::Witness)
+        .or(parse_plicity())
+        .and(lazy(parse_term))
 }
 
 fn parse_suffix<'a>() -> Parser<'a, Suffix> {
@@ -1370,7 +1418,7 @@ fn parse_inductive_arity<'a>() -> Parser<'a, InductiveArity> {
     .or(parse_sort().map(|sort| (Vec::new(), sort)))
 }
 
-fn parse_top_inductive_body<'a>(is_pub: bool) -> Parser<'a, TopInductive> {
+fn parse_top_inductive_body<'a>(is_pub: bool) -> Parser<'a, TopInduct> {
     parse_identifier()
         .and(
             catch(
@@ -1417,7 +1465,7 @@ fn parse_top_inductive_body<'a>(is_pub: bool) -> Parser<'a, TopInductive> {
             }
 
             let label = label.to_string();
-            pure(TopInductive {
+            pure(TopInduct {
                 is_pub,
                 label,
                 params,
@@ -1436,7 +1484,7 @@ fn parse_top_inductive<'a>() -> Parser<'a, TopItem> {
                     .flat_map(|(is_pub2, ())| parse_top_inductive_body(is_pub2))
             }))
             .and_drop(parse_keyword("end"))
-            .map(|(first, rest)| TopItem::Inductive(iter::once(first).chain(rest).collect()))
+            .map(|(first, rest)| TopItem::Induct(iter::once(first).chain(rest).collect()))
     })
 }
 
@@ -1484,9 +1532,135 @@ fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
     })
 }
 
+// A concept field: `use? label : term`, or the signature sugar
+// `label(params) -> term`, desugared here to `label : (params) -> term`
+// (mirroring top-level `let`'s function sugar). A `use`-prefixed field is a
+// superclass edge — its type must be a concept application, checked at lowering.
+fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
+    let super_field = catch(
+        parse_keyword("use")
+            .and_keep(parse_identifier())
+            .and_drop(parse_literal(":")),
+    )
+    .and(lazy(parse_term))
+    .map(|(label, type_): (&str, Term)| ConceptField {
+        is_super: true,
+        label: label.to_string(),
+        type_,
+    });
+
+    let plain_or_sugar = parse_identifier()
+        .and(
+            catch(
+                parse_literal("(")
+                    .and_keep(sep_by0(parse_func_type_param, || parse_literal(",")))
+                    .and_drop(parse_literal(")"))
+                    .and_drop(parse_literal("->")),
+            )
+            .and(lazy(parse_term))
+            .map(|(params, output): (Vec<FuncTypeParam>, Term)| {
+                Subterm::FuncType(FuncType { params, output }).into()
+            })
+            .or(catch(parse_literal(":")).and_keep(lazy(parse_term))),
+        )
+        .map(|(label, type_): (&str, Term)| ConceptField {
+            is_super: false,
+            label: label.to_string(),
+            type_,
+        });
+
+    super_field.or(plain_or_sugar)
+}
+
+fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
+    catch(parse_pub().and(parse_keyword("concept"))).flat_map(|(is_pub, ())| {
+        parse_identifier()
+            .and(
+                catch(
+                    parse_literal("(")
+                        .and_keep(sep_by0(parse_inductive_param, || parse_literal(",")))
+                        .and_drop(parse_literal(")")),
+                )
+                .or(pure(vec![])),
+            )
+            .and(parse_literal(":").and_keep(parse_sort()))
+            .and_drop(parse_literal("{"))
+            .and(sep_by0(parse_concept_field, || parse_literal(",")))
+            .and_drop(parse_literal("}"))
+            .map(move |(((label, params), result_sort), fields)| {
+                TopItem::Concept(TopConcept {
+                    is_pub,
+                    label: label.to_string(),
+                    params,
+                    result_sort,
+                    fields,
+                })
+            })
+    })
+}
+
+// A witness field: `label = term`, or the definition sugar `label(params) = term`,
+// desugared here to `label = (params) => term`.
+fn parse_witness_field<'a>() -> Parser<'a, (String, Term)> {
+    parse_identifier()
+        .and(
+            catch(
+                parse_literal("(")
+                    .and_keep(sep_by0(parse_func_param, || parse_literal(",")))
+                    .and_drop(parse_literal(")"))
+                    .and_drop(parse_literal("=")),
+            )
+            .and(lazy(parse_term))
+            .map(|(params, body): (Vec<(String, Option<Term>)>, Term)| {
+                Subterm::Func(Func { params, body }).into()
+            })
+            .or(catch(parse_literal("=")).and_keep(lazy(parse_term))),
+        )
+        .map(|(label, term): (&str, Term)| (label.to_string(), term))
+}
+
+fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
+    catch(parse_pub().and(parse_keyword("witness"))).flat_map(|(is_pub, ())| {
+        parse_identifier()
+            .and(
+                catch(
+                    parse_literal("(")
+                        .and_keep(sep_by0(parse_func_sugar_param, || parse_literal(",")))
+                        .and_drop(parse_literal(")")),
+                )
+                .or(pure(vec![])),
+            )
+            .and_drop(parse_literal(":"))
+            .and(parse_name())
+            .and(
+                catch(
+                    parse_literal("(")
+                        .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+                        .and_drop(parse_literal(")")),
+                )
+                .or(pure(vec![])),
+            )
+            .and_drop(parse_literal("{"))
+            .and(sep_by0(parse_witness_field, || parse_literal(",")))
+            .and_drop(parse_literal("}"))
+            .map(move |((((label, params), concept), args), fields)| {
+                TopItem::Witness(TopWitness {
+                    is_pub,
+                    label: label.to_string(),
+                    params,
+                    concept,
+                    args,
+                    fields,
+                })
+            })
+    })
+}
+
 fn parse_top_item<'a>() -> Parser<'a, TopItem> {
     parse_top_mod()
         .or(parse_top_use())
+        .or(parse_top_concept())
+        .or(parse_top_witness())
         .or(parse_top_let())
         .or(parse_top_inductive())
         .or(parse_top_struct())

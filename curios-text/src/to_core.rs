@@ -12,7 +12,7 @@ use {
     curios_core::Bound,
     std::{
         cell::RefCell,
-        collections::{BTreeMap, HashMap, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
     },
 };
@@ -140,7 +140,7 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
                     info.insert_binding(l.label.clone(), l.is_pub)?;
                 }
             }
-            TopItem::Inductive(group) => {
+            TopItem::Induct(group) => {
                 for u in group {
                     info.insert_child(u.label.clone(), u.is_pub)?;
                     info.insert_binding(u.label.clone(), u.is_pub)?;
@@ -150,6 +150,14 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
             // there are no value constructors and no nested namespace, so no
             // child module.
             TopItem::Struct(s) => info.insert_binding(s.label.clone(), s.is_pub)?,
+            // A concept declares the type-former binding *and* a nested namespace
+            // (its method wrappers), like an inductive.
+            TopItem::Concept(c) => {
+                info.insert_child(c.label.clone(), c.is_pub)?;
+                info.insert_binding(c.label.clone(), c.is_pub)?;
+            }
+            // A witness declares one binding (its backing definition), like a `let`.
+            TopItem::Witness(w) => info.insert_binding(w.label.clone(), w.is_pub)?,
             _ => {}
         }
     }
@@ -157,12 +165,78 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
     Ok(info)
 }
 
+// The surface concept application `C(p₁, …)` for a method wrapper's `use w`
+// binder: the concept name applied to its parameters, each carrying the
+// parameter's declared plicity so the application matches the type-former.
+fn concept_application(label: &str, params: &[(Plicity, String, Term)]) -> Term {
+    let head: Term = Subterm::Name(Name::from(vec![label.to_string()])).into();
+    if params.is_empty() {
+        return head;
+    }
+
+    Subterm::Apply(Apply {
+        head,
+        params: params
+            .iter()
+            .map(|(plicity, n, _)| (*plicity, Subterm::Name(Name::from(vec![n.clone()])).into()))
+            .collect(),
+    })
+    .into()
+}
+
+// The surface concept application `C(args)` for a witness's declared type: the
+// witnessed concept applied to the annotation's arguments (as written, so
+// explicit).
+fn witness_concept_application(concept: &Name, args: &[Term]) -> Term {
+    let head: Term = Subterm::Name(concept.clone()).into();
+    if args.is_empty() {
+        return head;
+    }
+
+    Subterm::Apply(Apply {
+        head,
+        params: args
+            .iter()
+            .map(|arg| (Plicity::Explicit, arg.clone()))
+            .collect(),
+    })
+    .into()
+}
+
+// The head name of a concept-application term (a path, optionally applied) —
+// used to read the super concept off a `use`-marked field's type. `None` if the
+// type is not shaped like a concept application.
+fn concept_app_head(term: &Term) -> Option<Name> {
+    match term.as_subterm() {
+        Subterm::Name(name) => Some(name.clone()),
+        Subterm::Apply(apply) => concept_app_head(&apply.head),
+        _ => None,
+    }
+}
+
+// Resolve a super concept's head to its qualified core name — the same rule
+// `Lower`'s term-reference arm uses, minus the local-binder shadowing (a
+// declaration-site super edge has no enclosing value scope).
+fn resolve_concept_head(context: &Context, name: &Name) -> Result<String, Error> {
+    if name.is_abs() || !name.is_single() {
+        Ok(context.resolve_term_name(name)?.join())
+    } else {
+        match context.bindings().get(name.head()) {
+            Some(qualifier) => Ok(qualifier.join()),
+            None => Ok(name.head().to_string()),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn process_items(
     top_items: &[TopItem],
     context: &mut Context,
     flat_items: &mut Vec<FlatItem>,
     inductives: &mut BTreeMap<String, curios_core::Inductive>,
     structures: &mut BTreeMap<String, curios_core::Structure>,
+    concepts: &mut BTreeMap<String, curios_core::Concept>,
+    witnesses: &mut BTreeSet<String>,
     modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
     for top_item in top_items {
@@ -176,7 +250,7 @@ fn process_items(
                     context.insert_binding(l.label.clone(), context.prefixed(&l.label))?;
                 }
             }
-            TopItem::Inductive(group) => {
+            TopItem::Induct(group) => {
                 for u in group {
                     context.insert_scope(u.label.clone(), context.prefixed(&u.label))?;
                     context.insert_binding(u.label.clone(), context.prefixed(&u.label))?;
@@ -186,6 +260,16 @@ fn process_items(
             // namespace).
             TopItem::Struct(s) => {
                 context.insert_binding(s.label.clone(), context.prefixed(&s.label))?
+            }
+            // A concept declares its type-former binding and a nested namespace
+            // for the method wrappers, like an inductive.
+            TopItem::Concept(c) => {
+                context.insert_scope(c.label.clone(), context.prefixed(&c.label))?;
+                context.insert_binding(c.label.clone(), context.prefixed(&c.label))?;
+            }
+            // A witness declares its backing definition's binding, like a `let`.
+            TopItem::Witness(w) => {
+                context.insert_binding(w.label.clone(), context.prefixed(&w.label))?
             }
             _ => {}
         }
@@ -201,6 +285,8 @@ fn process_items(
                         flat_items,
                         inductives,
                         structures,
+                        concepts,
+                        witnesses,
                         modules,
                     )?;
                 }
@@ -216,6 +302,8 @@ fn process_items(
                         flat_items,
                         inductives,
                         structures,
+                        concepts,
+                        witnesses,
                         modules,
                     )?;
                 }
@@ -272,7 +360,7 @@ fn process_items(
 
                 flat_items.push(FlatItem::Rec(items));
             }
-            TopItem::Inductive(group) => {
+            TopItem::Induct(group) => {
                 // Step 1: type bindings as one rec group. An inductive's type
                 // binding wraps a primitive `InductiveType` normal form in a
                 // `Func` over its type parameters and indices (so
@@ -629,6 +717,188 @@ fn process_items(
                     body,
                 }));
             }
+            // A concept lowers to exactly what a `record` lowers to — a nominal
+            // `Structure` with `rep_public = true` and its type-former `let` —
+            // plus a concept-registry entry (field labels, superclass edges, the
+            // parameter telescope) and one method-wrapper `let` per field, synthed
+            // into the concept's own namespace (§4.1).
+            TopItem::Concept(concept) => {
+                let name = context.prefixed(&concept.label).join();
+                let module = match name.rfind('/') {
+                    Some(slash) => name[..slash].to_string(),
+                    None => String::new(),
+                };
+
+                let param_tys = {
+                    let lower = Lower::new(context);
+                    concept
+                        .params
+                        .iter()
+                        .map(|(p, n, t)| Ok((*p, n.clone(), lower.term(t)?)))
+                        .collect::<Result<Vec<_>, Error>>()?
+                };
+                let param_tys_unmarked = param_tys
+                    .iter()
+                    .map(|(_, n, t)| (n.clone(), t.clone()))
+                    .collect::<Vec<_>>();
+                let param_vars = concept
+                    .params
+                    .iter()
+                    .map(|(_, n, _)| curios_core::Term::var(curios_core::Var::free(n)))
+                    .collect::<Vec<_>>();
+
+                // Field types, lowered under the parameter scope (concept fields
+                // are always named, so the label is the binder for later fields).
+                let field_tys = {
+                    let lower = Lower::new(context);
+                    concept
+                        .fields
+                        .iter()
+                        .map(|field| Ok((field.label.clone(), lower.term(&field.type_)?)))
+                        .collect::<Result<Vec<_>, Error>>()?
+                };
+
+                let result_sort = {
+                    let lower = Lower::new(context);
+                    lower.term(&concept.result_sort)?
+                };
+
+                // The record shape drives struct literals and projections.
+                structures.insert(
+                    name.clone(),
+                    curios_core::Structure {
+                        params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
+                        fields: curios_core::Telescope::build(
+                            param_tys_unmarked.iter().cloned().chain(field_tys),
+                            (),
+                        ),
+                        result_sort: result_sort.clone(),
+                        module,
+                        rep_public: true,
+                    },
+                );
+
+                // Superclass edges: each `use`-marked field names a super concept
+                // by its (resolved, qualified) head.
+                let supers = concept
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, field)| field.is_super)
+                    .map(|(idx, field)| {
+                        let head = concept_app_head(&field.type_).ok_or_else(|| {
+                            Error::MalformedSuperField {
+                                label: field.label.clone(),
+                            }
+                        })?;
+                        Ok((idx, resolve_concept_head(context, &head)?))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+
+                concepts.insert(
+                    name.clone(),
+                    curios_core::Concept {
+                        params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
+                        fields: concept.fields.iter().map(|f| f.label.clone()).collect(),
+                        supers,
+                    },
+                );
+
+                // The type-former, exactly like a `record`'s.
+                let struct_type = curios_core::Term::struct_type(&name, param_vars);
+                let (type_, body) = if param_tys.is_empty() {
+                    (result_sort, struct_type)
+                } else {
+                    (
+                        curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
+                        curios_core::Term::func(
+                            param_tys.iter().cloned().map(|(_, n, t)| (n, t)),
+                            struct_type,
+                        ),
+                    )
+                };
+                flat_items.push(FlatItem::Let(FlatLet {
+                    name: context.prefixed(&concept.label),
+                    type_,
+                    body,
+                }));
+
+                // Method wrappers: for each field `f : F` at index `idx`,
+                //   pub let C/f(@p₁ : P₁, …, use w : C(p₁, …)) -> F = w.f;
+                // Built as surface AST and lowered through `Lower`, so binder
+                // scoping and de-Bruijn capture are handled uniformly.
+                let concept_app = concept_application(&concept.label, &concept.params);
+                for field in &concept.fields {
+                    let mut params = concept
+                        .params
+                        .iter()
+                        .map(|(_, n, t)| FuncSugarParam {
+                            plicity: Plicity::Implicit,
+                            label: n.clone(),
+                            type_: t.clone(),
+                        })
+                        .collect::<Vec<_>>();
+                    params.push(FuncSugarParam {
+                        plicity: Plicity::Witness,
+                        label: "w".to_string(),
+                        type_: concept_app.clone(),
+                    });
+
+                    let signature = LetSignature::Func {
+                        params,
+                        output: field.type_.clone(),
+                        body: Subterm::Proj(Proj {
+                            head: Subterm::Name(Name::from(vec!["w".to_string()])).into(),
+                            field: Field::Label(field.label.clone()),
+                        })
+                        .into(),
+                    };
+
+                    let lower = Lower::new(context);
+                    flat_items.push(FlatItem::Let(FlatLet {
+                        name: context.prefixed(&concept.label).with(&field.label),
+                        type_: lower.term(&signature.type_())?,
+                        body: lower.term(&signature.body())?,
+                    }));
+                }
+            }
+            // A witness desugars to an ordinary definition
+            //   let w(tele) -> C(args) = C(args) { f = e, … };
+            // and marks `w` for registration in the program-wide witness table.
+            TopItem::Witness(witness) => {
+                let concept_app = witness_concept_application(&witness.concept, &witness.args);
+                let body: Term = Subterm::StructLit(StructLit {
+                    head: witness.concept.clone(),
+                    params: witness.args.clone(),
+                    fields: witness
+                        .fields
+                        .iter()
+                        .map(|(label, value)| (Some(label.clone()), value.clone()))
+                        .collect(),
+                })
+                .into();
+
+                let signature = if witness.params.is_empty() {
+                    LetSignature::Name {
+                        type_: Some(concept_app),
+                        body,
+                    }
+                } else {
+                    LetSignature::Func {
+                        params: witness.params.clone(),
+                        output: concept_app,
+                        body,
+                    }
+                };
+
+                let lower = Lower::new(context);
+                flat_items.push(FlatItem::Let(FlatLet {
+                    name: context.prefixed(&witness.label),
+                    type_: lower.term(&signature.type_())?,
+                    body: lower.term(&signature.body())?,
+                }));
+                witnesses.insert(context.prefixed(&witness.label).join());
+            }
         }
     }
 
@@ -975,10 +1245,10 @@ pub fn to_core(
     let mut flat_items = Vec::new();
     let mut inductives = BTreeMap::new();
     let mut structures = BTreeMap::new();
-    // Concept metadata and witness markers, populated as `concept`/`witness`
-    // items lower (empty until then).
-    let concepts = BTreeMap::new();
-    let witnesses = std::collections::BTreeSet::new();
+    // Concept resolution metadata and witness registration markers, populated as
+    // `concept`/`witness` items lower.
+    let mut concepts = BTreeMap::new();
+    let mut witnesses = BTreeSet::new();
 
     process_items(
         &entrypoint.module.items,
@@ -986,6 +1256,8 @@ pub fn to_core(
         &mut flat_items,
         &mut inductives,
         &mut structures,
+        &mut concepts,
+        &mut witnesses,
         &modules,
     )?;
 

@@ -56,6 +56,11 @@ pub enum Error {
     CyclicReExport {
         label: String,
     },
+    /// A `use`-marked concept field's type is not a concept application (a path,
+    /// optionally applied). Only such a type names a superclass edge.
+    MalformedSuperField {
+        label: String,
+    },
     /// A postfix `!` appeared outside any `let !` body, so there is no bind
     /// function to sequence it with.
     BangWithoutBind,
@@ -136,6 +141,12 @@ impl fmt::Display for Error {
             }
             Error::CyclicReExport { label } => {
                 write!(f, "cyclic re-export with no concrete target: {label}")
+            }
+            Error::MalformedSuperField { label } => {
+                write!(
+                    f,
+                    "the `use` field `{label}` must have a concept-application type"
+                )
             }
             Error::BangWithoutBind => {
                 write!(f, "postfix `!` used outside a `let !` block")

@@ -1,5 +1,5 @@
 use {
-    super::{LetSignature, Name, Plicity, Term, TupleTypeParam},
+    super::{FuncSugarParam, LetSignature, Name, Plicity, Term, TupleTypeParam},
     curios_base::Span,
 };
 
@@ -75,7 +75,7 @@ pub struct TopCase {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TopInductive {
+pub struct TopInduct {
     pub is_pub: bool,
     pub label: String,
     /// Inductive parameters are *implicit* on every value constructor regardless
@@ -116,14 +116,59 @@ pub struct TopStruct {
     pub fields: Vec<TupleTypeParam>,
 }
 
+/// One field of a `concept` declaration. The signature-sugar form
+/// `name(params) -> T` is desugared by the parser into `name : (params) -> T`,
+/// so only the `label : type` shape survives here. `is_super` marks a
+/// `use`-prefixed field, whose type must elaborate to a concept application (a
+/// superclass edge, §4.1).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConceptField {
+    pub is_super: bool,
+    pub label: String,
+    pub type_: Term,
+}
+
+/// A `concept` declaration: a record-shaped interface. It lowers to a nominal
+/// `record` (representation public) plus a concept-registry entry and, into its
+/// own namespace, one method-wrapper `let` per field (§4.1). `params` are
+/// written exactly like a `record`'s; the result sort is `Type` or `Prop`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopConcept {
+    pub is_pub: bool,
+    pub label: String,
+    pub params: Vec<(Plicity, String, Term)>,
+    pub result_sort: Term,
+    pub fields: Vec<ConceptField>,
+}
+
+/// A `witness` declaration: a registered inhabitant of a concept. It desugars to
+/// an ordinary top-level definition `let name(tele) -> C(args) = C(args) { … }`
+/// (§4.3) and marks `name` for registration in the program-wide witness table.
+/// The telescope admits only `@` and `use` parameters (explicit binders are
+/// rejected at lowering); `concept`/`args` are the witnessed concept application,
+/// reused verbatim as the struct-literal head.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopWitness {
+    pub is_pub: bool,
+    pub label: String,
+    pub params: Vec<FuncSugarParam>,
+    pub concept: Name,
+    pub args: Vec<Term>,
+    /// The implementation fields `label = body` — the definition-sugar form
+    /// `label(args) = body` is desugared by the parser into `label = (args) => body`.
+    pub fields: Vec<(String, Term)>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TopItem {
     Mod(TopMod),
     Use(TopUse),
     Let(TopLet),
     Rec(Vec<TopLet>),
-    Inductive(Vec<TopInductive>),
+    Induct(Vec<TopInduct>),
     Struct(TopStruct),
+    Concept(TopConcept),
+    Witness(TopWitness),
 }
 
 #[derive(Debug, Clone, PartialEq)]

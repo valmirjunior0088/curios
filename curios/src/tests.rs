@@ -10,6 +10,7 @@ mod aggregates;
 mod bignat;
 mod binaryen;
 mod codegen;
+mod concepts;
 mod erasure;
 mod inference;
 mod io;

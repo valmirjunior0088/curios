@@ -610,7 +610,7 @@ fn parse_top_inductive_single_variant() {
     let m = "induct Foo : Type\n| bar()\nend".parse::<Module>().unwrap();
     assert_eq!(
         m.items,
-        vec![TopItem::Inductive(vec![TopInductive {
+        vec![TopItem::Induct(vec![TopInduct {
             is_pub: false,
             label: "Foo".to_string(),
             params: vec![],
@@ -630,7 +630,7 @@ fn parse_top_inductive_empty() {
     let m = "induct False : Type\nend".parse::<Module>().unwrap();
     assert_eq!(
         m.items,
-        vec![TopItem::Inductive(vec![TopInductive {
+        vec![TopItem::Induct(vec![TopInduct {
             is_pub: false,
             label: "False".to_string(),
             params: vec![],
@@ -648,7 +648,7 @@ fn parse_top_inductive_multi_variant() {
         .unwrap();
     assert!(matches!(
         &m.items[0],
-        TopItem::Inductive(group) if group[0].cases.len() == 3 && group[0].is_pub
+        TopItem::Induct(group) if group[0].cases.len() == 3 && group[0].is_pub
     ));
 }
 
@@ -659,7 +659,7 @@ fn parse_top_inductive_parameterized() {
         .unwrap();
     assert!(matches!(
         &m.items[0],
-        TopItem::Inductive(group) if group[0].params.len() == 2 && group[0].cases.len() == 2
+        TopItem::Induct(group) if group[0].params.len() == 2 && group[0].cases.len() == 2
     ));
 }
 
@@ -708,7 +708,7 @@ fn parse_implicit_marks_on_let_shorthand_and_inductive_params() {
         .parse::<Module>()
         .unwrap();
     match &m.items[0] {
-        TopItem::Inductive(group) => {
+        TopItem::Induct(group) => {
             assert_eq!(group[0].params[0].0, Plicity::Implicit);
             assert_eq!(group[0].params[1].0, Plicity::Explicit);
         }
@@ -724,7 +724,7 @@ fn parse_top_inductive_and_chain() {
             .unwrap();
     assert!(matches!(
         &m.items[0],
-        TopItem::Inductive(group) if group.len() == 2
+        TopItem::Induct(group) if group.len() == 2
     ));
 }
 
@@ -1202,6 +1202,131 @@ fn inductive_match_round_trips() {
             term.to_string().parse::<Term>().unwrap(),
             term,
             "match arm round-trip failed for {source:?}"
+        );
+    }
+}
+
+#[test]
+fn parse_concept_item() {
+    // Fields: a `use` superclass edge, the signature sugar `cmp(A, A) -> Order`
+    // (desugared to `cmp : (A, A) -> Order`), and a plain `name : T` field.
+    let source = "\
+        concept Ord(A : Type) : Type { \
+            use eql : Eql(A), \
+            cmp(A, A) -> Order, \
+            top : A \
+        } u";
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    let TopItem::Concept(concept) = &entrypoint.module.items[0] else {
+        panic!("expected a concept declaration");
+    };
+
+    assert_eq!(concept.label, "Ord");
+    assert_eq!(concept.params.len(), 1);
+    assert_eq!(concept.fields.len(), 3);
+
+    // The `use` field is a superclass edge.
+    assert!(concept.fields[0].is_super);
+    assert_eq!(concept.fields[0].label, "eql");
+
+    // The sugar field desugars to a function-type annotation.
+    assert!(!concept.fields[1].is_super);
+    assert_eq!(concept.fields[1].label, "cmp");
+    assert!(matches!(
+        concept.fields[1].type_.as_subterm(),
+        Subterm::FuncType(_)
+    ));
+
+    // The plain field keeps its written type.
+    assert_eq!(concept.fields[2].label, "top");
+    assert!(matches!(
+        concept.fields[2].type_.as_subterm(),
+        Subterm::Name(_)
+    ));
+}
+
+#[test]
+fn parse_witness_item() {
+    // A premised witness: an `@` binder, a `use` premise, and both field
+    // spellings (`eql = ...` and the definition sugar `cmp(a, b) = ...`).
+    let source = "\
+        witness ord_lst(@A : Type, use Ord(A)) : Ord(Lst(A)) { \
+            eql = eql_lst, \
+            cmp(a, b) = Order/lt() \
+        } u";
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    let TopItem::Witness(witness) = &entrypoint.module.items[0] else {
+        panic!("expected a witness declaration");
+    };
+
+    assert_eq!(witness.label, "ord_lst");
+    assert_eq!(witness.concept, Name::from(["Ord".to_string()]));
+    assert_eq!(witness.args.len(), 1);
+
+    // The telescope: an implicit `@A` and an anonymous `use` premise.
+    assert_eq!(witness.params.len(), 2);
+    assert_eq!(witness.params[0].plicity, Plicity::Implicit);
+    assert_eq!(witness.params[1].plicity, Plicity::Witness);
+
+    // The definition-sugar field desugars to a lambda.
+    assert_eq!(witness.fields.len(), 2);
+    assert_eq!(witness.fields[0].0, "eql");
+    assert_eq!(witness.fields[1].0, "cmp");
+    assert!(matches!(witness.fields[1].1.as_subterm(), Subterm::Func(_)));
+}
+
+#[test]
+fn parse_use_parameter_forms() {
+    // A `use` Π-binder, named and anonymous, alongside `@` and plain binders.
+    let TopItem::Let(item) =
+        &"pub let f(@A : Type, use w : Show(A), use Eql(A), x : A) -> A = x; u"
+            .parse::<Entrypoint>()
+            .unwrap()
+            .module
+            .items[0]
+    else {
+        panic!("expected a let");
+    };
+    let LetSignature::Func { params, .. } = &item.signature else {
+        panic!("expected function sugar");
+    };
+    assert_eq!(params.len(), 4);
+    assert_eq!(params[0].plicity, Plicity::Implicit);
+    assert_eq!(params[1].plicity, Plicity::Witness);
+    assert_eq!(params[1].label, "w");
+    assert_eq!(params[2].plicity, Plicity::Witness);
+    assert_eq!(params[2].label, "_"); // anonymous
+    assert_eq!(params[3].plicity, Plicity::Explicit);
+}
+
+#[test]
+fn parse_use_argument_form() {
+    // `use <term>` at a call site marks a witness argument.
+    let term = "f(use dict, x)".parse::<Term>().unwrap();
+    let Subterm::Apply(apply) = term.as_subterm() else {
+        panic!("expected an application");
+    };
+    assert_eq!(apply.params[0].0, Plicity::Witness);
+    assert_eq!(apply.params[1].0, Plicity::Explicit);
+}
+
+#[test]
+fn concept_witness_use_round_trip() {
+    // Concept/witness declarations and `use` binders/arguments survive a
+    // print → re-parse cycle unchanged.
+    for source in [
+        "concept Show(A : Type) : Type { show : A } u",
+        "pub concept Ord(A : Type) : Type { use eql : Eql(A), cmp : A } u",
+        "witness show_nat : Show(Nat) { show = f } u",
+        "pub witness show_lst(@A : Type, use w : Show(A)) : Show(Lst(A)) { show = g } u",
+        "f(use dict, x)",
+        "(@A : Type, use w : Show(A), x : A) -> A",
+    ] {
+        let entrypoint = source.parse::<Entrypoint>().unwrap();
+        assert_eq!(
+            entrypoint.to_string().parse::<Entrypoint>().unwrap(),
+            entrypoint,
+            "round-trip failed for {source:?}"
         );
     }
 }

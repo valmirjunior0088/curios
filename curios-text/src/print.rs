@@ -1,10 +1,10 @@
 use {
     super::{
-        Apply, ArrMatch, BinMatch, BlnMatch, Entrypoint, Field, Func, FuncType, GroupItem,
-        InductiveMatch, Infix, Let, LetBang, LetSignature, Match, Module, Motive, Nat, NatLiteral,
-        NatMatch, NumLit, Plicity, Prim, Proj, Radix, Rec, StructLit, Subterm, Syn, Term, TopCase,
-        TopInductive, TopItem, TopLet, TopMod, TopStruct, TopUse, Tuple, TupleType, TupleTypeParam,
-        UseGroup,
+        Apply, ArrMatch, BinMatch, BlnMatch, ConceptField, Entrypoint, Field, Func, FuncType,
+        GroupItem, InductiveMatch, Infix, Let, LetBang, LetSignature, Match, Module, Motive, Nat,
+        NatLiteral, NatMatch, NumLit, Plicity, Prim, Proj, Radix, Rec, StructLit, Subterm, Syn,
+        Term, TopCase, TopConcept, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse,
+        TopWitness, Tuple, TupleType, TupleTypeParam, UseGroup,
     },
     curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_bigint::BigUint,
@@ -774,7 +774,7 @@ fn print_top_inductive_arity(
     ])
 }
 
-fn print_top_inductive(group: Vec<TopInductive>) -> Printer<'static> {
+fn print_top_induct(group: Vec<TopInduct>) -> Printer<'static> {
     let mut iter = group.into_iter();
     let first = iter.next().unwrap();
     let rest = iter.collect::<Vec<_>>();
@@ -831,14 +831,95 @@ fn print_top_struct(item: TopStruct) -> Printer<'static> {
     ])
 }
 
+fn print_concept_field(field: ConceptField) -> Printer<'static> {
+    flat([
+        if field.is_super {
+            pure("use ")
+        } else {
+            pure("")
+        },
+        pure(field.label),
+        pure(" : "),
+        print_term(field.type_),
+    ])
+}
+
+fn print_top_concept(item: TopConcept) -> Printer<'static> {
+    flat([
+        print_pub(item.is_pub),
+        pure("concept "),
+        pure(item.label),
+        print_top_inductive_params(item.params),
+        pure(" : "),
+        print_term(item.result_sort),
+        pure(" { "),
+        sep_flat(item.fields.into_iter().map(print_concept_field), || {
+            pure(", ")
+        }),
+        pure(" }"),
+    ])
+}
+
+fn print_top_witness(item: TopWitness) -> Printer<'static> {
+    let params = if item.params.is_empty() {
+        pure("")
+    } else {
+        flat([
+            pure("("),
+            sep_flat(
+                item.params.into_iter().map(|param| {
+                    flat([
+                        print_plicity(param.plicity),
+                        pure(param.label),
+                        pure(" : "),
+                        print_term(param.type_),
+                    ])
+                }),
+                || pure(", "),
+            ),
+            pure(")"),
+        ])
+    };
+
+    let app = if item.args.is_empty() {
+        pure(item.concept.join())
+    } else {
+        flat([
+            pure(item.concept.join()),
+            pure("("),
+            sep_flat(item.args.into_iter().map(print_term), || pure(", ")),
+            pure(")"),
+        ])
+    };
+
+    flat([
+        print_pub(item.is_pub),
+        pure("witness "),
+        pure(item.label),
+        params,
+        pure(" : "),
+        app,
+        pure(" { "),
+        sep_flat(
+            item.fields
+                .into_iter()
+                .map(|(label, body)| flat([pure(label), pure(" = "), print_term(body)])),
+            || pure(", "),
+        ),
+        pure(" }"),
+    ])
+}
+
 fn print_top_item(item: TopItem) -> Printer<'static> {
     match item {
         TopItem::Mod(m) => print_top_mod(m),
         TopItem::Use(u) => print_top_use(u),
         TopItem::Let(l) => print_top_let(l),
         TopItem::Rec(items) => print_top_rec(items),
-        TopItem::Inductive(group) => print_top_inductive(group),
+        TopItem::Induct(group) => print_top_induct(group),
         TopItem::Struct(s) => print_top_struct(s),
+        TopItem::Concept(c) => print_top_concept(c),
+        TopItem::Witness(w) => print_top_witness(w),
     }
 }
 
