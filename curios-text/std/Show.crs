@@ -1,0 +1,32 @@
+use /std/{Nat, Int, Flt, Bln, Str};
+
+-- Rendering a value as a `Str`. Witnesses wrap the per-type `to_str` functions,
+-- which remain available directly.
+pub concept Show(A : Type) : Type {
+    show(A) -> Str
+}
+
+-- Lift the method wrappers (`Show/show`) out of the concept's namespace to the
+-- module level, so `use /std/{Show}` makes `Show/show` resolve.
+pub use Show/*;
+
+pub witness show_nat : Show(Nat) {
+    show(n) = Nat/to_str(n)
+}
+
+pub witness show_int : Show(Int) {
+    show(n) = Int/to_str(n)
+}
+
+pub witness show_flt : Show(Flt) {
+    show(f) = Flt/to_str(f)
+}
+
+pub witness show_bln : Show(Bln) {
+    show(b) = Bln/to_str(b)
+}
+
+-- A `Str` shows as itself.
+pub witness show_str : Show(Str) {
+    show(s) = s
+}

@@ -130,6 +130,46 @@ fn missing_witness_is_an_error() {
     assert!(error(source).contains("witness"));
 }
 
+// The prelude-provided `Show` concept and its witnesses resolve, proving the
+// cached-prelude replay path registers concepts and witnesses.
+#[test]
+fn prelude_show_resolves() {
+    let source = r#"
+        use /std/{Nat, Io, Show};
+        let n : Nat = 42;
+        Io/print(Show/show(n))
+        "#;
+
+    assert_eq!(run(source), b"42");
+}
+
+// The prelude `Eql` concept resolves through the value-level witnesses.
+#[test]
+fn prelude_eql_resolves() {
+    let source = r#"
+        use /std/{Nat, Bln, Io, Eql};
+        let a : Nat = 5;
+        let b : Nat = 5;
+        Io/print(Bln/to_str(Eql/eql(a, b)))
+        "#;
+
+    assert_eq!(run(source), b"true");
+}
+
+// The prelude `Ord` concept resolves, and its `Eql` superclass is reachable by
+// projection from an `Ord` in scope.
+#[test]
+fn prelude_ord_superclass_projects() {
+    let source = r#"
+        use /std/{Nat, Bln, Io, Ord, Eql};
+        pub let equal(@A : Type, use Ord(A), x : A, y : A) -> Bln = Eql/eql(x, y);
+        let n : Nat = 4;
+        Io/print(Bln/to_str(equal(n, n)))
+        "#;
+
+    assert_eq!(run(source), b"true");
+}
+
 // Registering two witnesses for the same `(concept, head)` key is a coherence
 // error (global uniqueness, no orphan rule).
 #[test]

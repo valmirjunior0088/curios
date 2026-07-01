@@ -1,0 +1,16 @@
+use /std/{Nat, Order, Eql};
+
+-- A total order. The `use eql : Eql(A)` field is a superclass edge: an `Ord(A)`
+-- in scope yields an `Eql(A)` by projection.
+pub concept Ord(A : Type) : Type {
+    use eql : Eql(A),
+    cmp(A, A) -> Order
+}
+
+-- Lift `Ord/eql` and `Ord/cmp` to the module level (see `Show`).
+pub use Ord/*;
+
+pub witness ord_nat : Ord(Nat) {
+    eql = Eql/eql_nat,
+    cmp(a, b) = Nat/compare(a, b)
+}

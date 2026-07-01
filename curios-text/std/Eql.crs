@@ -1,0 +1,34 @@
+use /std/{Nat, Int, Flt, Bln, Str, Bin};
+
+-- Value-level equality, distinct from propositional `Eq` (`std/Eq.crs`).
+-- Witnesses wrap the per-type comparison primitives.
+pub concept Eql(A : Type) : Type {
+    eql(A, A) -> Bln
+}
+
+-- Lift `Eql/eql` to the module level (see `Show`).
+pub use Eql/*;
+
+pub witness eql_nat : Eql(Nat) {
+    eql(a, b) = a == b
+}
+
+pub witness eql_int : Eql(Int) {
+    eql(a, b) = a == b
+}
+
+pub witness eql_flt : Eql(Flt) {
+    eql(a, b) = a == b
+}
+
+pub witness eql_bln : Eql(Bln) {
+    eql(a, b) = a == b
+}
+
+pub witness eql_str : Eql(Str) {
+    eql(a, b) = Str/eql(a, b)
+}
+
+pub witness eql_bin : Eql(Bin) {
+    eql(a, b) = Bin/eql(a, b)
+}

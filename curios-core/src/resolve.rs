@@ -26,7 +26,7 @@ use {
         ParkedWork, Plicity, StructType, Subterm, Telescope, Term, Witness, WitnessOrigin,
         convert_outcome, reduce_with, retry_parked,
     },
-    std::collections::BTreeSet,
+    std::collections::{BTreeSet, HashSet},
 };
 
 /// The outcome of one resolution attempt.
@@ -169,7 +169,7 @@ pub fn resolve_witness(
     // retained occurrence is arbitrary but identical) to keep the superclass
     // search from reporting a projection against itself as ambiguous.
     let mut binders = context.witness_scope().to_vec();
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = HashSet::new();
     binders.retain(|(name, _)| seen.insert(name.clone()));
     for (name, type_) in binders.iter().rev() {
         match commit_match(context, type_, &goal_whnf)? {

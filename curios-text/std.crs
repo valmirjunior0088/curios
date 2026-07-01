@@ -46,6 +46,15 @@ pub use Lst/{let Lst};
 pub mod Order;
 pub use Order/{let Order};
 
+pub mod Eql;
+pub use Eql/{let Eql};
+
+pub mod Ord;
+pub use Ord/{let Ord};
+
+pub mod Show;
+pub use Show/{let Show};
+
 pub mod BigNat;
 pub use BigNat/{let BigNat};
 
