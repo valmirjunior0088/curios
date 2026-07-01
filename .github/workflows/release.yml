@@ -21,6 +21,10 @@ jobs:
             runner: ubuntu-24.04
             binary: curios
             asset: curios-linux-x86_64
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+            binary: curios
+            asset: curios-linux-aarch64
           - target: aarch64-apple-darwin
             runner: macos-14
             binary: curios
@@ -57,11 +61,42 @@ jobs:
           name: ${{ matrix.asset }}
           path: target/${{ matrix.target }}/release/${{ matrix.binary }}
 
+  build-wasm:
+    name: Build curios-js (wasm)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build
+        run: wasm-pack build curios-js --release --target web
+
+      - name: Archive package
+        run: tar -czf curios-wasm.tar.gz -C curios-js/pkg .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: curios-wasm
+          path: curios-wasm.tar.gz
+
   release:
     name: Create release
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    needs: build
+    needs: [build, build-wasm]
 
     permissions:
       contents: write
@@ -76,8 +111,10 @@ jobs:
       - name: Rename artifacts
         run: |
           mv artifacts/curios-linux-x86_64/curios curios-linux-x86_64
+          mv artifacts/curios-linux-aarch64/curios curios-linux-aarch64
           mv artifacts/curios-macos-aarch64/curios curios-macos-aarch64
           mv artifacts/curios-windows-x86_64.exe/curios.exe curios-windows-x86_64.exe
+          mv artifacts/curios-wasm/curios-wasm.tar.gz curios-wasm.tar.gz
 
       - name: Create release
         env:
@@ -87,5 +124,7 @@ jobs:
             --title "${{ github.ref_name }}" \
             --generate-notes \
             curios-linux-x86_64 \
+            curios-linux-aarch64 \
             curios-macos-aarch64 \
-            curios-windows-x86_64.exe
+            curios-windows-x86_64.exe \
+            curios-wasm.tar.gz
