@@ -1,5 +1,6 @@
 use {
-    crate::{cont, wasm},
+    crate::cont,
+    curios_wasm::wasm,
     std::collections::{HashMap, HashSet},
 };
 

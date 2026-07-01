@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["curios-abi", "curios-base", "curios-wasm", "curios", "curios-binaryen", "curios-runtime", "curios-compiler"]
+members = ["curios-abi", "curios-base", "curios-wasm", "curios-cont", "curios", "curios-binaryen", "curios-runtime", "curios-compiler"]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,6 +12,7 @@ curios = { path = "curios" }
 curios-abi = { path = "curios-abi" }
 curios-base = { path = "curios-base" }
 curios-wasm = { path = "curios-wasm" }
+curios-cont = { path = "curios-cont" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-runtime = { path = "curios-runtime" }
 curios-compiler = { path = "curios-compiler" }

@@ -16,7 +16,8 @@ use expr_emitter::*;
 mod module_emitter;
 use module_emitter::*;
 
-use crate::{cont, wasm};
+use crate::cont;
+use curios_wasm::wasm;
 
 pub fn to_wasm(cont_module: &cont::Module) -> wasm::Module {
     let mut wasm_module = wasm::Module::new("module");

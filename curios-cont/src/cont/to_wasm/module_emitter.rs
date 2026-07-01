@@ -1,6 +1,7 @@
 use {
     super::{Context, ExprEmitter, Table},
-    crate::{cont, wasm},
+    crate::cont,
+    curios_wasm::wasm,
     std::iter,
 };
 

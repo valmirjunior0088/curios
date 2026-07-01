@@ -8,7 +8,7 @@ pub mod core;
 
 pub mod ersd;
 
-pub mod cont;
+pub use curios_cont::cont;
 
 pub use curios_wasm::wasm;
 

@@ -8,5 +8,6 @@ description.workspace = true
 curios-abi = { workspace = true }
 curios-base = { workspace = true }
 curios-wasm = { workspace = true }
+curios-cont = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }

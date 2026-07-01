@@ -24,7 +24,7 @@
 
 use {
     super::*,
-    crate::Entropy,
+    curios_base::Entropy,
     std::{
         collections::{HashMap, HashSet},
         rc::Rc,

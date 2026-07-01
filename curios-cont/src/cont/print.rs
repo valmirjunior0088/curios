@@ -3,7 +3,7 @@ use {
         Argument, Block, BlockName, CallTarget, CellTarget, Clsr, ClsrName, Code, Data, Func,
         FuncName, HostTarget, JumpTarget, Module, Region, Tail, Value, ValueName,
     },
-    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
 

@@ -108,7 +108,7 @@ pub use map_simplification::*;
 mod slice_forwarding;
 pub use slice_forwarding::*;
 
-use {super::*, crate::Entropy};
+use {super::*, curios_base::Entropy};
 
 /// Run the optimization pipeline and return the rewritten module.
 ///

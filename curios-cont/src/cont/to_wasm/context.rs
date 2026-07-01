@@ -1,6 +1,8 @@
 use {
     super::{BlockData, ClsrData, FieldData, Frame, FuncData, LocalData, Table},
-    crate::{Entropy, cont, wasm},
+    crate::cont,
+    curios_base::Entropy,
+    curios_wasm::wasm,
     std::{
         collections::{BTreeMap, HashMap},
         iter,

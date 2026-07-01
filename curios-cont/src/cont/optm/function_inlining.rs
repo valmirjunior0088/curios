@@ -1,6 +1,6 @@
 use {
     super::{harvest, *},
-    crate::Entropy,
+    curios_base::Entropy,
     std::collections::{HashMap, HashSet},
 };
 

@@ -1,6 +1,7 @@
 use {
     super::{BlockData, CodeEmitter, Context, Frame, LoadAs, LocalData},
-    crate::{cont, wasm},
+    crate::cont,
+    curios_wasm::wasm,
     std::collections::HashMap,
 };
 

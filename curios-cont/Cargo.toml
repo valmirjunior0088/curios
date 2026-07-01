@@ -1,0 +1,9 @@
+[package]
+name = "curios-cont"
+version.workspace = true
+edition.workspace = true
+description = "The curios continuation-passing IR: cont->cont optimization and wasm emission"
+
+[dependencies]
+curios-base = { workspace = true }
+curios-wasm = { workspace = true }

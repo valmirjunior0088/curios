@@ -1,6 +1,7 @@
 use {
     super::{Context, LoadAs},
-    crate::{cont, wasm},
+    crate::cont,
+    curios_wasm::wasm,
 };
 
 /// How a freshly-computed numeric value is boxed: an `i31ref` for `Nat`/`Int`/`Bln`
