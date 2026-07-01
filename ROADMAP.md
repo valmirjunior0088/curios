@@ -88,6 +88,12 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
   - [x] Process IO
 - [x] Runtime-driven IO (program output flows through the host bridge, not compile-time introspection)
 
+## Host Interface (FFI)
+
+- [x] Signature-driven host-function table (`curios-abi`'s `HostFunction`/`WireSignature`): the `/sys/Io` prelude declarations, elaboration, wasm `env.*` imports, and runtime linker types all derive from one table — a generic `Foreign` node replaces the per-op enum variants in every IR
+- [ ] Surface `foreign` declarations (user-visible FFI syntax)
+- [ ] Embedder-extensible host-function registry
+
 ## Error Messages
 
 - [x] Diagnostics

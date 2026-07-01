@@ -8,7 +8,7 @@ Agent guide to `curios`. Operational reference plus an orientation map. Read thi
 
 The repo is a **Cargo workspace** (virtual manifest at the root) of twelve crates, layered along the pipeline:
 
-- **`curios-abi`** — host/guest wire ABI constants (`/sys/Io`'s status, poll-event, and open-mode codes). A pure leaf, shared by the compiler front end and the runtime.
+- **`curios-abi`** — the host/guest contract: wire ABI constants (`/sys/Io`'s status, poll-event, and open-mode codes) plus the `HostFunction`/`WireSignature` table describing every host operation (import name, operand/result wire types). The single source the `/sys/Io` prelude declarations, elaboration checks, wasm `env.*` imports, and runtime linker types all derive from — adding a host op is one table row, one `define_host_import` closure, and the `Host` trait method/impls. A pure leaf, shared by the compiler stages and the runtime.
 - **`curios-base`** — foundational utilities shared by every stage: source spans, the fresh-name `Entropy`/`Mint` supply, the `name!` newtype macro, the parser/printer monad combinators, and the slice `suffix_view` re-base laws (shared by `ersd`'s `worker_wrapper` and `cont`'s `slice_forwarding`).
 - **`curios-wasm`** — the wasm module model, parser, and binary writer/encoder. A pristine leaf on top of `curios-base`.
 - **`curios-cont`** — the continuation-passing IR: cont→cont optimization (`optm/`) and wasm emission (`to_wasm/`).
@@ -71,7 +71,7 @@ then, in curios itself:
 | `curios-js/src/lib.rs`                           | `wasm-bindgen` exports of `curios-pipeline` for a browser build (`compile`, `typecheck`)                                                         |
 | `curios-base/src/monads/`                        | Parser/printer monad combinators                                                                                                                 |
 | `curios-base/src/{span,entropy,macros,suffix_view}.rs` | Foundational utilities shared by every stage                                                                                               |
-| `curios-abi/src/lib.rs`                          | Host↔guest wire ABI constants (`/sys/Io`'s status, poll-event, open-mode codes)                                                                  |
+| `curios-abi/src/{lib,host}.rs`                   | Host↔guest contract: wire ABI constants and the `HostFunction`/`WireSignature` host-op table                                                     |
 | `curios-text/{std,syn}/`                         | curios standard / support libraries (`*.crs`), indexed by `curios-text/{std,syn}.crs`                                                            |
 | `curios/examples/`                               | Runnable examples that execute (`parse_*`, `inline_*`, `crs_*`, `bench_parse`, `bench_check`)                                                    |
 | `curios-binaryen/src/`                           | FFI bindings to vendored Binaryen (`sys.rs`); `optimize(bytes)`; `build.rs` links it                                                             |
