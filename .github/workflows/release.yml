@@ -29,10 +29,6 @@ jobs:
             runner: macos-14
             binary: curios
             asset: curios-macos-aarch64
-          - target: x86_64-pc-windows-msvc
-            runner: windows-2025
-            binary: curios.exe
-            asset: curios-windows-x86_64.exe
 
     steps:
       - uses: actions/checkout@v6
@@ -44,10 +40,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-
-      - name: Install make
-        if: runner.os == 'Windows'
-        run: choco install make -y
 
       - name: Build
         shell: bash
@@ -113,7 +105,6 @@ jobs:
           mv artifacts/curios-linux-x86_64/curios curios-linux-x86_64
           mv artifacts/curios-linux-aarch64/curios curios-linux-aarch64
           mv artifacts/curios-macos-aarch64/curios curios-macos-aarch64
-          mv artifacts/curios-windows-x86_64.exe/curios.exe curios-windows-x86_64.exe
           mv artifacts/curios-wasm/curios-wasm.tar.gz curios-wasm.tar.gz
 
       - name: Create release
@@ -126,5 +117,4 @@ jobs:
             curios-linux-x86_64 \
             curios-linux-aarch64 \
             curios-macos-aarch64 \
-            curios-windows-x86_64.exe \
             curios-wasm.tar.gz
