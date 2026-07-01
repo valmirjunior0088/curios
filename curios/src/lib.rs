@@ -14,3 +14,9 @@ pub use curios_wasm::wasm;
 
 mod driver;
 pub use driver::*;
+
+mod compile;
+pub use compile::*;
+
+#[cfg(test)]
+mod tests;

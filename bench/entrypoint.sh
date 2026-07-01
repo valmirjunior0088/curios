@@ -53,7 +53,7 @@ build() {
   cp "prebuilt/${stem}_grain.wasm" "bin/${stem}_grain.wasm"
 
   # Curios — self-contained native executable (embeds wasmtime + the .cwasm)
-  curios-compiler compile "$dir/$stem.crs" -o "bin/${stem}_curios"
+  curios compile "$dir/$stem.crs" -o "bin/${stem}_curios"
 }
 
 # --- correctness cross-check: every language must print the same number ------

@@ -8,7 +8,3 @@ description = "Wasm optimization for curios via the vendored Binaryen library"
 
 [build-dependencies]
 cmake = { version = "0.1.54" }
-
-[dev-dependencies]
-# The tests compile a `.crs` program through the pipeline, then optimize it.
-curios = { workspace = true }

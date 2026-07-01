@@ -95,9 +95,8 @@ COPY curios-text curios-text
 COPY curios curios
 COPY curios-binaryen curios-binaryen
 COPY curios-rt curios-rt
-COPY curios-compiler curios-compiler
-RUN make curios-compiler/runtime \
-    && cargo build --release --package curios-compiler
+RUN make curios/runtime \
+    && cargo build --release --package curios
 ENV PATH="/curios/target/release:${PATH}"
 
 # --- the benchmark harness --------------------------------------------------

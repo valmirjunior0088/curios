@@ -383,13 +383,17 @@ dependencies = [
 name = "curios"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "curios-abi",
  "curios-base",
+ "curios-binaryen",
  "curios-cont",
  "curios-core",
  "curios-ersd",
+ "curios-rt",
  "curios-text",
  "curios-wasm",
+ "wasmtime",
 ]
 
 [[package]]
@@ -405,18 +409,6 @@ name = "curios-binaryen"
 version = "0.1.0"
 dependencies = [
  "cmake",
- "curios",
-]
-
-[[package]]
-name = "curios-compiler"
-version = "0.1.0"
-dependencies = [
- "clap",
- "curios",
- "curios-binaryen",
- "curios-rt",
- "wasmtime",
 ]
 
 [[package]]

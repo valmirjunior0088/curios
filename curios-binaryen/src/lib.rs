@@ -6,9 +6,6 @@
 
 mod sys;
 
-#[cfg(test)]
-mod tests;
-
 use std::{ptr, slice, sync::Mutex};
 
 pub fn optimize(mut bytes: Vec<u8>) -> Vec<u8> {

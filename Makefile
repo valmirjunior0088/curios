@@ -8,5 +8,5 @@ endif
 target/release/curios-rt$(EXTENSION):
 	cargo build --release --package curios-rt
 
-curios-compiler/runtime: target/release/curios-rt$(EXTENSION)
+curios/runtime: target/release/curios-rt$(EXTENSION)
 	cp $< $@
