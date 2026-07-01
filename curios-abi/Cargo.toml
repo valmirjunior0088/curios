@@ -2,4 +2,5 @@
 name = "curios-abi"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Host/guest ABI wire constants shared by the curios compiler and runtime"

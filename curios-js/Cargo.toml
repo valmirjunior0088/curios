@@ -2,6 +2,7 @@
 name = "curios-js"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "The curios <-> JavaScript boundary: wasm-bindgen exports of the pure compile pipeline"
 
 # cdylib for wasm-pack; rlib so `cargo test -p curios-js` still has something to link against.

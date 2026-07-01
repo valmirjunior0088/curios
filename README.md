@@ -120,4 +120,4 @@ For a full tour of the architecture, build/test workflow, and conventions, see [
 
 curios is exploratory and moving fast, so the most useful contributions right now are bug reports, small example programs that break things, and feedback on the language design. Please open an issue at <https://github.com/valmirjunior0088/curios>.
 
-A license has not been finalized yet; until one is added, all rights are reserved by the author. If you'd like to use or build on curios, please get in touch.
+curios is licensed under [Apache-2.0](LICENSE).

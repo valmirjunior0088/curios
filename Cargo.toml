@@ -6,6 +6,7 @@ members = ["curios-abi", "curios-base", "curios-wasm", "curios-cont", "curios-er
 version = "0.2.1"
 edition = "2024"
 description = "Work-in-progress functional dependently typed programming language"
+license = "Apache-2.0"
 
 [workspace.dependencies]
 curios = { path = "curios" }

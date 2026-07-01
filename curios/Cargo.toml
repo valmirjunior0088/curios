@@ -2,6 +2,7 @@
 name = "curios"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "The curios pipeline library and command-line compiler driver"
 
 # Lib (the pipeline facade + compile/precompile/run-from-source helpers

@@ -2,6 +2,7 @@
 name = "curios-cont"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "The curios continuation-passing IR: cont->cont optimization and wasm emission"
 
 [dependencies]

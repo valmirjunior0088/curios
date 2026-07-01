@@ -2,6 +2,7 @@
 name = "curios-binaryen"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Wasm optimization for curios via the vendored Binaryen library"
 
 [dependencies]

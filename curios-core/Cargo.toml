@@ -2,6 +2,7 @@
 name = "curios-core"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "The curios core language: elaboration, typing, reduction, conversion, and erasure"
 
 [dependencies]
