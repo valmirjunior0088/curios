@@ -4,7 +4,7 @@ use {
         Infix, Item, Let, Match, Module, Nat, One, Plicity, Prim, Proj, Rec, Scope, Struct,
         StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
     },
-    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::{
         cell::RefCell,
         collections::{BTreeSet, HashMap},

@@ -1,6 +1,6 @@
 use {
     super::{Bound, Goal, ImplicitOrigin, Inductive, Metavar, MetavarId, Structure, Term},
-    crate::{Entropy, Span},
+    curios_base::{Entropy, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         mem,

@@ -50,13 +50,14 @@ pub struct Module {
     pub body: Term,
 }
 
-#[cfg(test)]
 impl Module {
     /// Re-fold the flat module into the legacy nested `Let`/`Rec` `Term` it
     /// replaced (items are already in binding order). Test-only: lets the
     /// `to_core`/`erase` suites keep asserting against the historical shape — and
     /// keep feeding a single `Term` to `erase` — without rewriting every
     /// expectation. Drops `type_` (the old `run` helper only returned the term).
+    /// Not `#[cfg(test)]`: its callers live in `curios`'s test suite, a
+    /// different crate, where that cfg would never activate.
     pub fn into_nested_term(self) -> Term {
         self.items
             .into_iter()

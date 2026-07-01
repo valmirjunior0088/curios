@@ -386,6 +386,7 @@ dependencies = [
  "curios-abi",
  "curios-base",
  "curios-cont",
+ "curios-core",
  "curios-ersd",
  "curios-wasm",
  "num-bigint",
@@ -425,6 +426,16 @@ version = "0.1.0"
 dependencies = [
  "curios-base",
  "curios-wasm",
+]
+
+[[package]]
+name = "curios-core"
+version = "0.1.0"
+dependencies = [
+ "curios-base",
+ "curios-ersd",
+ "num-bigint",
+ "num-traits",
 ]
 
 [[package]]

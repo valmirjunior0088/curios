@@ -1,9 +1,7 @@
 use {
     super::erase,
-    crate::{
-        core::{Context, Error, Int, Nat, Prim, Subterm, Term, reduce_with},
-        ersd,
-    },
+    crate::core::{Context, Error, Int, Nat, Prim, Subterm, Term, reduce_with},
+    curios_ersd::ersd,
     num_bigint::BigUint,
     num_traits::ToPrimitive,
 };

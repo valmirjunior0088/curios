@@ -1,11 +1,4 @@
-use {
-    super::*,
-    crate::{
-        core::{Flt, Int, Nat, Prim, Term},
-        ersd,
-    },
-    std::time::Duration,
-};
+use {super::*, curios_ersd::ersd, std::time::Duration};
 
 fn context() -> Context {
     Context::new(Duration::from_secs(1))

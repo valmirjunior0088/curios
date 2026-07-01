@@ -1,6 +1,6 @@
 use {
     super::{Atom, Int, Module, Term},
-    crate::Span,
+    curios_base::Span,
     num_bigint::BigUint,
     std::{collections::BTreeSet, fmt, rc::Rc},
 };

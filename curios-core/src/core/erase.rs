@@ -5,7 +5,7 @@ use {
         Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var,
         Variant, erase_prim, expect_prim_head, infer, is_prop, module_of, reduce_with, refine_head,
     },
-    crate::ersd,
+    curios_ersd::ersd,
     std::collections::BTreeMap,
 };
 

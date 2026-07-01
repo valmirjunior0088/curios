@@ -2,7 +2,7 @@ use {
     super::{
         Atom, Bound, Flt, Int, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit,
     },
-    crate::Span,
+    curios_base::Span,
     num_bigint::BigUint,
     std::{
         cell::OnceCell,
@@ -1103,7 +1103,7 @@ pub struct ImplicitOrigin {
 }
 
 /// A metavariable's identity: a dense index into the `Context`'s `MetaStore`,
-/// minted monotonically by an [`Entropy`](crate::Entropy). A newtype so it can
+/// minted monotonically by an [`Entropy`](curios_base::Entropy). A newtype so it can
 /// never be confused with the other `usize`-shaped notions the kernel juggles
 /// (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1115,7 +1115,7 @@ impl From<usize> for MetavarId {
     }
 }
 
-impl crate::Mint for MetavarId {
+impl curios_base::Mint for MetavarId {
     fn mint(entropy: usize) -> Self {
         Self(entropy)
     }

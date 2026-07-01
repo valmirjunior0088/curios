@@ -4,7 +4,7 @@ pub use curios_abi as wire;
 
 pub mod text;
 
-pub mod core;
+pub use curios_core::core;
 
 pub use curios_ersd::ersd;
 
