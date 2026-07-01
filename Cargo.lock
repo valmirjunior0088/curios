@@ -383,9 +383,14 @@ dependencies = [
 name = "curios"
 version = "0.1.0"
 dependencies = [
+ "curios-abi",
  "num-bigint",
  "num-traits",
 ]
+
+[[package]]
+name = "curios-abi"
+version = "0.1.0"
 
 [[package]]
 name = "curios-binaryen"
@@ -410,7 +415,7 @@ dependencies = [
 name = "curios-runtime"
 version = "0.1.0"
 dependencies = [
- "curios",
+ "curios-abi",
  "getrandom 0.3.4",
  "num-bigint",
  "rustix",

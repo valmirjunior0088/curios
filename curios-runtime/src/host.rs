@@ -1,5 +1,5 @@
 use {
-    curios::wire,
+    curios_abi as wire,
     num_bigint::BigUint,
     rustix::event::PollFlags,
     std::{

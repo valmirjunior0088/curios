@@ -1,6 +1,6 @@
 use {
     super::{Io, Mode, Poll},
-    curios::wire,
+    curios_abi as wire,
     wasmtime::{Caller, Val},
 };
 

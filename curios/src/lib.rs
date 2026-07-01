@@ -9,7 +9,7 @@ pub use span::*;
 mod monads;
 pub use monads::*;
 
-pub mod wire;
+pub use curios_abi as wire;
 
 pub mod text;
 

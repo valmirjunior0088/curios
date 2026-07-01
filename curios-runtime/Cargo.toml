@@ -9,7 +9,7 @@ description = "Runtime-only curios engine (deserialize + host stack) and the lau
 # `-p curios-runtime` yields a slim, runtime-only launcher.
 
 [dependencies]
-curios = { workspace = true }            # for the host<->guest wire ABI constants
+curios-abi = { workspace = true }        # for the host<->guest wire ABI constants
 wasmtime = { workspace = true }          # runtime baseline only (no cranelift)
 num-bigint = { workspace = true }
 getrandom = { version = "0.3.3" }
