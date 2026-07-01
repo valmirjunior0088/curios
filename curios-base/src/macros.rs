@@ -1,3 +1,4 @@
+#[macro_export]
 macro_rules! name {
     ($name:ident) => {
         #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -31,14 +32,12 @@ macro_rules! name {
     };
 
     ($name:ident, $prefix:literal) => {
-        name!($name);
+        $crate::name!($name);
 
-        impl crate::Mint for $name {
+        impl $crate::Mint for $name {
             fn mint(entropy: usize) -> Self {
                 Self::from(format!(concat!($prefix, "{}"), entropy))
             }
         }
     };
 }
-
-pub(super) use name;

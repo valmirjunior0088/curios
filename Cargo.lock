@@ -384,12 +384,17 @@ name = "curios"
 version = "0.1.0"
 dependencies = [
  "curios-abi",
+ "curios-base",
  "num-bigint",
  "num-traits",
 ]
 
 [[package]]
 name = "curios-abi"
+version = "0.1.0"
+
+[[package]]
+name = "curios-base"
 version = "0.1.0"
 
 [[package]]

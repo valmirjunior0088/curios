@@ -1,4 +1,4 @@
-use crate::macros::name;
+use curios_base::name;
 
 name!(ValueName, "v");
 name!(BlockName, "b");

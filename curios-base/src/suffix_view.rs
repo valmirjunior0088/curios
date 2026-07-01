@@ -22,10 +22,10 @@
 //! `cont` side mints fresh SSA bindings for `s + j` while the `ersd` side builds
 //! inline `Term` arithmetic, and that divergence is heavier than the ~6-line law):
 //!
-//! - [`worker_wrapper`](super::worker_wrapper)'s `SliceCursor` (on `ersd` `Term`s,
+//! - `worker_wrapper`'s `SliceCursor` (on `ersd` `Term`s,
 //!   indices inline `nat_add`/`nat_sub` trees) applies the laws *across recursion*
 //!   with a whole-function, all-or-nothing escape gate;
-//! - [`slice_forwarding`](crate::cont::optm) (on `cont` SSA, indices `ValueName`s)
+//! - `slice_forwarding` (on `cont` SSA, indices `ValueName`s)
 //!   applies them to *local* consumers, an unmatched one simply keeping the slice
 //!   for the dead-code sweep.
 

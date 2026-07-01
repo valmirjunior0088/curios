@@ -1,4 +1,4 @@
-use crate::macros::name;
+use curios_base::name;
 
 name!(TypeName);
 name!(FieldName);

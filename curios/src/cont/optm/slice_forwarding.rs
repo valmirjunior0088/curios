@@ -1,9 +1,7 @@
 use {
     super::*,
-    crate::{
-        Entropy,
-        ersd::optm::{Carrier, SuffixRead},
-    },
+    crate::Entropy,
+    curios_base::suffix_view::{Carrier, SuffixRead},
     std::collections::HashMap,
 };
 

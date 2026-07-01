@@ -4,8 +4,8 @@
 //!
 //! - [`call_graph`] — the [`CallGraph`] purity oracle: the top-level reference
 //!   graph plus its transitive effect taint, shared by `prune` and the engine.
-//! - [`suffix_view`] — the shared re-base laws (`Carrier`/`SuffixRead`) for reading
-//!   a slice through to its base buffer, consumed here and by `cont`'s
+//! - the shared slice re-base laws (`Carrier`/`SuffixRead`) live in
+//!   `curios_base::suffix_view`, read here by `worker_wrapper` and by `cont`'s
 //!   `slice_forwarding`.
 //! - [`prune`] — drops the items the entrypoint cannot reach, so only the
 //!   program's actual slice is lowered.
@@ -15,9 +15,6 @@
 
 mod call_graph;
 pub use call_graph::*;
-
-mod suffix_view;
-pub use suffix_view::*;
 
 mod prune;
 pub use prune::*;

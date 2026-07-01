@@ -26,9 +26,8 @@ use {
         Change, Lower, ThreadedParam, is_named, name_term, nat, nat_add, nat_sub, subterms,
         subterms_mut,
     },
-    crate::ersd::{
-        Apply, Argument, Func, Prim, PurePrim, Subterm, Term, optm::CallGraph, optm::Carrier,
-    },
+    crate::ersd::{Apply, Argument, Func, Prim, PurePrim, Subterm, Term, optm::CallGraph},
+    curios_base::suffix_view::Carrier,
     std::mem,
 };
 
