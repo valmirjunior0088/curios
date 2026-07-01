@@ -967,6 +967,12 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::IoType => core::Prim::IoType,
             Prim::Io(token) => core::Prim::Io(*token),
             Prim::IoEql(left, right) => core::Prim::io_eql(self.term(left)?, self.term(right)?),
+            Prim::Foreign(function, args) => core::Prim::Foreign(
+                *function,
+                args.iter()
+                    .map(|arg| self.term(arg))
+                    .collect::<Result<_, _>>()?,
+            ),
             Prim::IoRead(handle, count) => {
                 core::Prim::io_read(self.term(handle)?, self.term(count)?)
             }

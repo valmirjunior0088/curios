@@ -154,6 +154,17 @@ pub enum CallTarget {
 /// as the impure boundary of its enclosing region tree.
 #[derive(Debug, Clone)]
 pub enum HostTarget {
+    /// A table-described host call: `function`'s [`WireSignature`] fixes the
+    /// operand order/types and the resume shape — `resume` takes one block
+    /// parameter per signature result (the multi-result records arrive as
+    /// parallel block parameters, exactly like the per-op variants did).
+    ///
+    /// [`WireSignature`]: curios_abi::WireSignature
+    Foreign {
+        function: curios_abi::HostFunction,
+        operands: Vec<ValueName>,
+        resume: BlockName,
+    },
     /// Read up to `count` bytes from `handle`. Returns (status, bytes);
     /// `resume` takes two block parameters.
     IoRead {
@@ -311,7 +322,8 @@ pub enum HostTarget {
 impl HostTarget {
     pub fn resume(&self) -> &BlockName {
         match self {
-            HostTarget::IoRead { resume, .. }
+            HostTarget::Foreign { resume, .. }
+            | HostTarget::IoRead { resume, .. }
             | HostTarget::IoWrite { resume, .. }
             | HostTarget::IoOpen { resume, .. }
             | HostTarget::IoLookup { resume, .. }
@@ -341,7 +353,8 @@ impl HostTarget {
 
     pub fn resume_mut(&mut self) -> &mut BlockName {
         match self {
-            HostTarget::IoRead { resume, .. }
+            HostTarget::Foreign { resume, .. }
+            | HostTarget::IoRead { resume, .. }
             | HostTarget::IoWrite { resume, .. }
             | HostTarget::IoOpen { resume, .. }
             | HostTarget::IoLookup { resume, .. }
@@ -372,6 +385,7 @@ impl HostTarget {
     /// The value operands this host op reads, in argument order.
     pub fn operands(&self) -> Vec<&ValueName> {
         match self {
+            HostTarget::Foreign { operands, .. } => operands.iter().collect(),
             HostTarget::IoRead { handle, count, .. } => vec![handle, count],
             HostTarget::IoWrite { handle, bytes, .. } => vec![handle, bytes],
             HostTarget::IoOpen { path, mode, .. } => vec![path, mode],
@@ -411,6 +425,7 @@ impl HostTarget {
     /// argument order.
     pub fn operands_mut(&mut self) -> Vec<&mut ValueName> {
         match self {
+            HostTarget::Foreign { operands, .. } => operands.iter_mut().collect(),
             HostTarget::IoRead { handle, count, .. } => vec![handle, count],
             HostTarget::IoWrite { handle, bytes, .. } => vec![handle, bytes],
             HostTarget::IoOpen { path, mode, .. } => vec![path, mode],

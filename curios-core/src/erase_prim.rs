@@ -1,6 +1,6 @@
 use {
     super::erase,
-    crate::{Context, Error, Int, Nat, Prim, Subterm, Term, reduce_with},
+    crate::{Context, Error, Int, Nat, Prim, Subterm, Term, reduce_with, wire_term},
     curios_ersd as ersd,
     num_bigint::BigUint,
     num_traits::ToPrimitive,
@@ -443,6 +443,18 @@ pub fn erase_prim(
         Prim::IoEnv(name) => host_unary(context, name, bin_type, ersd::HostPrim::IoEnv),
         // The polymorphic result type is type-only; only the code survives.
         Prim::IoExit(_, code) => host_unary(context, code, nat_type, ersd::HostPrim::IoExit),
+        // A table-described host call: each operand erases against its wire
+        // type, read off the same signature elaboration checked it with.
+        Prim::Foreign(function, args) => {
+            let signature = function.signature();
+            let mut erased = Vec::with_capacity(args.len());
+
+            for (arg, (_, wire_type)) in args.iter().zip(signature.params) {
+                erased.push(erase(context, arg, &wire_term(*wire_type))?);
+            }
+
+            Ok(host(ersd::HostPrim::Foreign(*function, erased)))
+        }
         Prim::CellType(_) => Ok(ersd::Subterm::Erased.into()),
         Prim::Cell(type_, init) => Ok(cell(ersd::CellPrim::New(erase(context, init, type_)?))),
         Prim::CellSet(type_, c, v) => {

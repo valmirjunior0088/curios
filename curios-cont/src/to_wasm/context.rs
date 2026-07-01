@@ -1,6 +1,6 @@
 use {
     super::{BlockData, ClsrData, FieldData, Frame, FuncData, LocalData, Table},
-    crate as cont,
+    crate as cont, curios_abi as abi,
     curios_base::Entropy,
     curios_wasm as wasm,
     std::{
@@ -44,6 +44,19 @@ pub enum LoadAs {
     Flt,
     Bin,
     Arr,
+}
+
+/// How a host-import operand of the given wire type is loaded at the call
+/// site: `Nat`/`Bln` unbox their i31 carrier unsigned to a raw i32, `Int`
+/// unboxes signed (the `poll(2)` timeout convention), and the reference
+/// shapes cast to their concrete heap type (a handle is its `Bin` token).
+fn wire_load_as(wire_type: abi::WireType) -> LoadAs {
+    match wire_type {
+        abi::WireType::Nat | abi::WireType::Bln => LoadAs::Nat,
+        abi::WireType::Int => LoadAs::Int,
+        abi::WireType::Bin | abi::WireType::Io => LoadAs::Bin,
+        abi::WireType::Arr(_) => LoadAs::Arr,
+    }
 }
 
 impl<'a, 'b> Context<'a, 'b> {
@@ -604,6 +617,34 @@ impl<'a, 'b> Context<'a, 'b> {
         let mut output = Vec::new();
 
         match host {
+            cont::HostTarget::Foreign {
+                function,
+                operands,
+                resume,
+            } => {
+                let signature = function.signature();
+
+                debug_assert_eq!(
+                    operands.len(),
+                    signature.params.len(),
+                    "{} operand count does not match its signature",
+                    function.name()
+                );
+
+                for (operand, (_, wire_type)) in operands.iter().zip(signature.params) {
+                    output.extend(self.load_value_instrs(operand, wire_load_as(*wire_type)));
+                }
+
+                output.push(wasm::Instr::Call {
+                    func_name: self.table().host_func(*function).clone(),
+                });
+
+                match signature.results.len() {
+                    0 => self.host_unit_resume(&mut output, resume),
+                    1 => self.host_single_resume(&mut output, resume),
+                    results => self.host_multi_resume(&mut output, resume, results),
+                }
+            }
             cont::HostTarget::IoRead {
                 handle,
                 count,

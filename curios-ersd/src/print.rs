@@ -161,6 +161,16 @@ fn print_pure_prim<'a>(prim: &'a PurePrim) -> Printer<'a> {
 
 fn print_host_prim<'a>(prim: &'a HostPrim) -> Printer<'a> {
     match prim {
+        HostPrim::Foreign(function, args) => {
+            let (module, label) = function.path();
+
+            flat(
+                [pure(format!("{module}.{label}"))]
+                    .into_iter()
+                    .chain(args.iter().flat_map(|arg| [pure(" "), print_term(arg)]))
+                    .collect::<Vec<_>>(),
+            )
+        }
         HostPrim::IoRead(h, n) => print_binary("Io.read", h, n),
         HostPrim::IoWrite(h, b) => print_binary("Io.write", h, b),
         HostPrim::IoOpen(p, m) => print_binary("Io.open", p, m),

@@ -4,6 +4,7 @@ use {
         Context, Flt, Int, Nat, Peel, Prim, ReduceError, Subterm, Term, normalize_concat, peel_bin,
         peel_first_byte, peel_first_elem,
     },
+    curios_abi::HostFunction,
     num_traits::{ToPrimitive, Zero},
     std::cmp::Ordering,
 };
@@ -1471,6 +1472,17 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             kind: "IoExit",
             span: code.span(),
         }),
+        // A table-described host call never reduces at the type level — except
+        // `args`, the immutable argv snapshot, which stays inert (stuck-to-self,
+        // like `IoArgs` above) so a top-level `args : Arr(Bin)` value binding
+        // does not trip the IO guard; it becomes a host call only at erasure.
+        Prim::Foreign(function, args) => match function {
+            HostFunction::Args => Ok(Subterm::Prim(Prim::Foreign(*function, args.clone()))),
+            _ => Err(ReduceError::IoAtTypeLevel {
+                kind: function.name(),
+                span: args.first().and_then(|arg| arg.span()),
+            }),
+        },
         Prim::CellType(elem) => {
             let elem = reduce(context, elem.clone())?;
             Ok(Subterm::Prim(Prim::cell_type(elem)))

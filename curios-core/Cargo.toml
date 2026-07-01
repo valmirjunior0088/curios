@@ -6,6 +6,7 @@ license.workspace = true
 description = "The curios core language: elaboration, typing, reduction, conversion, and erasure"
 
 [dependencies]
+curios-abi = { workspace = true }
 curios-base = { workspace = true }
 curios-ersd = { workspace = true }
 num-bigint = { workspace = true }

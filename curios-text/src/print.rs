@@ -109,7 +109,7 @@ fn format_radix(n: &BigUint, radix: Radix) -> String {
     }
 }
 
-fn print_prim_call(name: &'static str, args: Vec<Term>) -> Printer<'static> {
+fn print_prim_call(name: impl Into<String> + 'static, args: Vec<Term>) -> Printer<'static> {
     flat([
         pure(name),
         pure("("),
@@ -261,6 +261,11 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::IoType => pure("Io"),
         Prim::Io(token) => pure(format!("Io({token})")),
         Prim::IoEql(left, right) => print_prim_call("Io.eql", vec![left, right]),
+        Prim::Foreign(function, args) => {
+            let (module, label) = function.path();
+
+            print_prim_call(format!("{module}.{label}"), args)
+        }
         Prim::IoRead(handle, count) => print_prim_call("Io.read", vec![handle, count]),
         Prim::IoWrite(handle, bytes) => print_prim_call("Io.write", vec![handle, bytes]),
         Prim::IoOpen(path, mode) => print_prim_call("Io.open", vec![path, mode]),

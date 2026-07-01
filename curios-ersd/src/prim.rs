@@ -1,4 +1,4 @@
-use {super::Term, std::collections::BTreeSet};
+use {super::Term, curios_abi::HostFunction, std::collections::BTreeSet};
 
 #[derive(Debug)]
 pub enum PurePrim {
@@ -88,6 +88,9 @@ pub enum PurePrim {
 
 #[derive(Debug)]
 pub enum HostPrim {
+    /// A table-described host call: the function's `WireSignature` fixes the
+    /// operand order/types and how many results the continuation receives.
+    Foreign(HostFunction, Vec<Term>),
     IoRead(Term, Term),
     IoWrite(Term, Term),
     IoOpen(Term, Term),
@@ -305,6 +308,7 @@ impl HostPrim {
         use HostPrim::*;
 
         match self {
+            Foreign(_, args) => args.iter().collect(),
             IoClockWall | IoClockMono | IoArgs => vec![],
             IoAccept(a) | IoResolve(a) | IoSocket(a) | IoClose(a) | IoRandom(a) | IoEnv(a)
             | IoExit(a) => vec![a],
@@ -330,6 +334,7 @@ impl HostPrim {
         use HostPrim::*;
 
         match self {
+            Foreign(_, args) => args.iter_mut().collect(),
             IoClockWall | IoClockMono | IoArgs => vec![],
             IoAccept(a) | IoResolve(a) | IoSocket(a) | IoClose(a) | IoRandom(a) | IoEnv(a)
             | IoExit(a) => vec![a],

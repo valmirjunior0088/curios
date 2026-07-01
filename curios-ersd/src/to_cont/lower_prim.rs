@@ -1,6 +1,6 @@
 use {
     super::{Cont, Frame, Work},
-    crate as ersd, curios_cont as cont,
+    crate as ersd, curios_abi as abi, curios_cont as cont,
     num_bigint::BigUint,
 };
 
@@ -74,6 +74,43 @@ fn forward_resume<'b>(work: &mut Work, cont: Cont<'b>) -> cont::BlockName {
     });
 
     resume
+}
+
+/// Lower a table-described host call: CPS-lower each operand to a value name
+/// in signature order (like `lower_lst` builds an array's elements), then
+/// branch to the host with a resume shaped by the signature's result count —
+/// one result forwards straight through, any other count packs the record
+/// (zero packing unit).
+fn lower_foreign<'b>(
+    work: &mut Work,
+    function: abi::HostFunction,
+    args: &'b [ersd::Term],
+    frame: &'b Frame,
+    mut operands: Vec<cont::ValueName>,
+    cont: Cont<'b>,
+) -> cont::Tail {
+    match args {
+        [] => {
+            let resume = match function.signature().results.len() {
+                1 => forward_resume(work, cont),
+                arity => record_resume(work, arity, cont),
+            };
+
+            cont::Tail::Host(cont::HostTarget::Foreign {
+                function,
+                operands,
+                resume,
+            })
+        }
+        [head, tail @ ..] => work.lower_value_name(
+            head,
+            frame,
+            Cont::new(move |work, name| {
+                operands.push(name);
+                lower_foreign(work, function, tail, frame, operands, cont)
+            }),
+        ),
+    }
 }
 
 fn lower_unary_code<'b>(
@@ -474,6 +511,9 @@ pub fn lower_value_prim<'b>(
 ) -> cont::Tail {
     match prim {
         ersd::Prim::Pure(pure_prim) => lower_value_pure_prim(work, pure_prim, frame, cont),
+        ersd::Prim::Host(ersd::HostPrim::Foreign(function, args)) => {
+            lower_foreign(work, *function, args, frame, Vec::new(), cont)
+        }
         ersd::Prim::Host(ersd::HostPrim::IoRead(handle, count)) => work.lower_value_name(
             handle,
             frame,

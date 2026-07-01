@@ -37,6 +37,9 @@ pub enum WireType {
     Arr(&'static WireType),
 }
 
+/// One side of a [`WireSignature`]: named slots, in order.
+pub type WireSlots = &'static [(&'static str, WireType)];
+
 /// The signature of one host function: named operands and named results. The
 /// result count fixes the guest-facing shape — `0` is the unit value, `1` is
 /// the bare result forwarded through, `2..` is a record of the named fields
@@ -44,8 +47,8 @@ pub enum WireType {
 /// `.secs_hi`, …).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WireSignature {
-    pub params: &'static [(&'static str, WireType)],
-    pub results: &'static [(&'static str, WireType)],
+    pub params: WireSlots,
+    pub results: WireSlots,
 }
 
 /// One host operation. Declared in `/sys/Io` prelude order, and fieldless, so
@@ -182,10 +185,7 @@ impl HostFunction {
     /// names match the `/sys/Io` prelude declarations; result labels are the
     /// record fields the guest projects.
     pub fn signature(self) -> WireSignature {
-        let (params, results): (
-            &'static [(&'static str, WireType)],
-            &'static [(&'static str, WireType)],
-        ) = match self {
+        let (params, results): (WireSlots, WireSlots) = match self {
             HostFunction::Read => (&[("h", Io), ("n", Nat)], &[("status", Nat), ("bytes", Bin)]),
             HostFunction::Write => (
                 &[("h", Io), ("b", Bin)],

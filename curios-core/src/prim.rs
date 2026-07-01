@@ -1,7 +1,24 @@
 use {
     super::{Bound, Flt, Int, MetavarId, Nat, Subterm, Term, Var, Visit},
+    curios_abi::{HostFunction, WireType},
     std::collections::BTreeSet,
 };
+
+/// The core type a host-boundary [`WireType`] denotes — the one reading of the
+/// signature table shared by elaboration (operand checks, result records) and
+/// erasure, so the two cannot disagree about what crosses the wire.
+pub fn wire_term(wire_type: WireType) -> Term {
+    let prim = match wire_type {
+        WireType::Nat => Prim::NatType,
+        WireType::Int => Prim::IntType,
+        WireType::Bln => Prim::BlnType,
+        WireType::Bin => Prim::BinType,
+        WireType::Io => Prim::IoType,
+        WireType::Arr(elem) => Prim::ArrType(wire_term(*elem)),
+    };
+
+    Subterm::Prim(prim).into()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Prim {
@@ -103,6 +120,11 @@ pub enum Prim {
     // (a, b) -> Bln: identity of two handles. The one pure operation on `Io` --
     // handles are opaque i31 tokens, so this erases to the `Nat` equality op.
     IoEql(Term, Term),
+    // A table-described host call: the function's `WireSignature` fixes the
+    // operand types checked at elaboration and the result shape (unit, bare
+    // value, or named record). Effectful, so opaque under reduction like every
+    // host op.
+    Foreign(HostFunction, Vec<Term>),
     IoRead(Term, Term),
     IoWrite(Term, Term),
     IoOpen(Term, Term),
@@ -891,6 +913,8 @@ impl Prim {
                 visit(d);
             }
 
+            Prim::Foreign(_, args) => args.iter().for_each(&mut *visit),
+
             Prim::BinConcat(terms) | Prim::Arr(terms) => terms.iter().for_each(&mut *visit),
             Prim::ArrConcat(ty, terms) => {
                 visit(ty);
@@ -1064,6 +1088,10 @@ impl Prim {
             ),
             Prim::IoType => Prim::IoType,
             Prim::Io(token) => Prim::Io(*token),
+            Prim::Foreign(function, args) => Prim::Foreign(
+                *function,
+                args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
+            ),
             Prim::IoRead(handle, count) => traverse_binary(handle, count, visit, Prim::IoRead),
             Prim::IoWrite(handle, bytes) => traverse_binary(handle, bytes, visit, Prim::IoWrite),
             Prim::IoOpen(path, mode) => traverse_binary(path, mode, visit, Prim::IoOpen),

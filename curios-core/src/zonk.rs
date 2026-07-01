@@ -519,6 +519,7 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
             zonk_term(context, arr)?,
         ),
 
+        Prim::Foreign(function, args) => Prim::Foreign(*function, zonk_terms(context, args)?),
         Prim::IoRead(a, b) => Prim::IoRead(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoWrite(a, b) => Prim::IoWrite(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IoOpen(a, b) => Prim::IoOpen(zonk_term(context, a)?, zonk_term(context, b)?),

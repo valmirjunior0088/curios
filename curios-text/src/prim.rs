@@ -1,4 +1,7 @@
-use super::{Nat, Term};
+use {
+    super::{Nat, Term},
+    curios_abi::HostFunction,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Prim {
@@ -95,6 +98,9 @@ pub enum Prim {
     IoType,
     Io(u32),
     IoEql(Term, Term),
+    // A table-described host call; the prelude bakes it into the `/sys/Io`
+    // declaration whose parameters the argument terms name.
+    Foreign(HostFunction, Vec<Term>),
     IoRead(Term, Term),
     IoWrite(Term, Term),
     IoOpen(Term, Term),

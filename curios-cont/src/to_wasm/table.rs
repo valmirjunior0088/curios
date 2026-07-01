@@ -1,6 +1,7 @@
 use {
-    crate as cont, curios_wasm as wasm,
+    crate as cont, curios_abi as abi, curios_wasm as wasm,
     std::{
+        array,
         cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashMap},
     },
@@ -246,6 +247,11 @@ pub struct Table<'a> {
     io_args: OnceCell<wasm::FuncName>,
     io_env: OnceCell<wasm::FuncName>,
     io_exit: OnceCell<wasm::FuncName>,
+    // One cell per `HostFunction`, indexed by discriminant (`f as usize`).
+    // Same lazy used-tracking as the per-op cells: first reference during
+    // emission interns the name, `emit_sys_imports` then only declares the
+    // imports the program touched.
+    host_funcs: [OnceCell<wasm::FuncName>; abi::HostFunction::ALL.len()],
     tpl_types: BTreeMap<usize, wasm::TypeName>,
     envr_types: BTreeMap<usize, wasm::TypeName>,
     clsr_types: BTreeMap<usize, wasm::TypeName>,
@@ -317,6 +323,7 @@ impl<'a> Table<'a> {
             io_args: OnceCell::new(),
             io_env: OnceCell::new(),
             io_exit: OnceCell::new(),
+            host_funcs: array::from_fn(|_| OnceCell::new()),
             tpl_types: {
                 let max = module
                     .consts()
@@ -420,6 +427,17 @@ impl<'a> Table<'a> {
 
     pub fn cell_type(&self) -> wasm::TypeName {
         self.cell_type.clone()
+    }
+
+    /// The interned import name of a table-described host function. First use
+    /// during emission marks it live; [`host_func_used`](Self::host_func_used)
+    /// reports that mark to `emit_sys_imports`.
+    pub fn host_func(&self, function: abi::HostFunction) -> &wasm::FuncName {
+        self.host_funcs[function as usize].get_or_init(|| wasm::FuncName::from(function.name()))
+    }
+
+    pub fn host_func_used(&self, function: abi::HostFunction) -> bool {
+        self.host_funcs[function as usize].get().is_some()
     }
 
     pub fn io_read_func(&self) -> &wasm::FuncName {

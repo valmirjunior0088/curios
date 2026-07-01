@@ -611,6 +611,19 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         ]),
         Prim::IoType => pure("Io"),
         Prim::Io(token) => pure(format!("Io({token})")),
+        Prim::Foreign(function, args) => {
+            let (module, label) = function.path();
+
+            flat(
+                [pure(format!("{module}.{label}"))]
+                    .into_iter()
+                    .chain(
+                        args.into_iter()
+                            .flat_map(|arg| [pure(" "), print_term(arg, depth)]),
+                    )
+                    .collect::<Vec<_>>(),
+            )
+        }
         Prim::IoRead(handle, count) => print_binary("Io.read ", handle, count, depth),
         Prim::IoWrite(handle, bytes) => print_binary("Io.write ", handle, bytes, depth),
         Prim::IoOpen(path, mode) => print_binary("Io.open ", path, mode, depth),

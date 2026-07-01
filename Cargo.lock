@@ -416,6 +416,7 @@ dependencies = [
 name = "curios-cont"
 version = "0.2.1"
 dependencies = [
+ "curios-abi",
  "curios-base",
  "curios-wasm",
 ]
@@ -424,6 +425,7 @@ dependencies = [
 name = "curios-core"
 version = "0.2.1"
 dependencies = [
+ "curios-abi",
  "curios-base",
  "curios-ersd",
  "num-bigint",
@@ -435,6 +437,7 @@ dependencies = [
 name = "curios-ersd"
 version = "0.2.1"
 dependencies = [
+ "curios-abi",
  "curios-base",
  "curios-cont",
  "num-bigint",

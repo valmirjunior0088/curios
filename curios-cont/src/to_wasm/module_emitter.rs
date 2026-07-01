@@ -1,6 +1,6 @@
 use {
     super::{Context, ExprEmitter, Table},
-    crate as cont, curios_wasm as wasm,
+    crate as cont, curios_abi as abi, curios_wasm as wasm,
     std::iter,
 };
 
@@ -34,6 +34,39 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 }),
             },
         );
+    }
+
+    /// The wasm-level type of a host-import *parameter* of the given wire
+    /// type: scalars cross as raw `i32` (the call site unboxes the i31 carrier
+    /// via `LoadAs::Nat`/`LoadAs::Int`), references as their concrete
+    /// non-nullable heap type (a handle is its `Bin` token).
+    fn wire_param_type(&self, wire_type: abi::WireType) -> wasm::ValType {
+        match wire_type {
+            abi::WireType::Nat | abi::WireType::Bln | abi::WireType::Int => {
+                wasm::ValType::Num(wasm::NumType::I32)
+            }
+            abi::WireType::Bin | abi::WireType::Io => wasm::ValType::Ref(wasm::RefType {
+                is_nullable: false,
+                heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
+            }),
+            abi::WireType::Arr(_) => wasm::ValType::Ref(wasm::RefType {
+                is_nullable: false,
+                heap_type: wasm::HeapType::Concrete(self.table.arr_type()),
+            }),
+        }
+    }
+
+    /// The wasm-level type of a host-import *result*: scalars re-enter
+    /// pre-boxed as i31 refs so they land directly in anyref block params
+    /// (no host op returns an `Int` today; mapping it like `Nat` keeps the
+    /// function total), references exactly as in parameter position.
+    fn wire_result_type(&self, wire_type: abi::WireType) -> wasm::ValType {
+        match wire_type {
+            abi::WireType::Nat | abi::WireType::Bln | abi::WireType::Int => {
+                wasm::ValType::Ref(self.table.int_type(false))
+            }
+            reference => self.wire_param_type(reference),
+        }
     }
 
     /// Declare a host import: a final func type plus an `("env", name)` import
@@ -354,6 +387,36 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 self.table.io_env_func().clone(),
                 wasm::ResultType::from([bin_ref.clone()]),
                 wasm::ResultType::from([status_ref.clone(), bin_ref.clone()]),
+            );
+        }
+
+        // The table-described imports, in `ALL` (= `/sys/Io` prelude) order.
+        // Everything above is the not-yet-ported hand-rolled set; a function
+        // reaches at most one of the two paths, keyed on which table cell its
+        // call sites interned.
+        for function in abi::HostFunction::ALL {
+            if !self.table.host_func_used(function) {
+                continue;
+            }
+
+            let signature = function.signature();
+
+            self.add_host_import(
+                function.name(),
+                wasm::TypeName::from(function.name()),
+                self.table.host_func(function).clone(),
+                wasm::ResultType::from(
+                    signature
+                        .params
+                        .iter()
+                        .map(|(_, wire_type)| self.wire_param_type(*wire_type)),
+                ),
+                wasm::ResultType::from(
+                    signature
+                        .results
+                        .iter()
+                        .map(|(_, wire_type)| self.wire_result_type(*wire_type)),
+                ),
             );
         }
 

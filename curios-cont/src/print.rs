@@ -285,6 +285,25 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
             ],
         }),
         Tail::Host(host) => match host {
+            HostTarget::Foreign {
+                function,
+                operands,
+                resume,
+            } => {
+                let (module, label) = function.path();
+
+                flat(
+                    [pure(format!("{module}.{label}"))]
+                        .into_iter()
+                        .chain(
+                            operands
+                                .iter()
+                                .flat_map(|operand| [pure(" "), print_value_name(operand)]),
+                        )
+                        .chain([pure(" "), print_block_name(resume)])
+                        .collect::<Vec<_>>(),
+                )
+            }
             HostTarget::IoRead {
                 handle,
                 count,
