@@ -91,27 +91,6 @@ pub enum HostPrim {
     /// A table-described host call: the function's `WireSignature` fixes the
     /// operand order/types and how many results the continuation receives.
     Foreign(HostFunction, Vec<Term>),
-    IoRead(Term, Term),
-    IoWrite(Term, Term),
-    IoOpen(Term, Term),
-    IoLookup(Term, Term),
-    IoResolve(Term),
-    IoSocket(Term),
-    IoBind(Term, Term),
-    IoConnect(Term, Term),
-    IoListen(Term, Term),
-    IoAccept(Term),
-    IoSetNonblocking(Term, Term),
-    IoSetRecvTimeout(Term, Term),
-    IoSetSendTimeout(Term, Term),
-    IoSetReuseaddr(Term, Term),
-    IoPoll(Term, Term, Term),
-    IoClose(Term),
-    IoClockWall,
-    IoClockMono,
-    IoRandom(Term),
-    IoArgs,
-    IoEnv(Term),
     IoExit(Term),
 }
 
@@ -306,21 +285,7 @@ impl HostPrim {
 
         match self {
             Foreign(_, args) => args.iter().collect(),
-            IoClockWall | IoClockMono | IoArgs => vec![],
-            IoAccept(a) | IoResolve(a) | IoSocket(a) | IoClose(a) | IoRandom(a) | IoEnv(a)
-            | IoExit(a) => vec![a],
-            IoRead(a, b)
-            | IoWrite(a, b)
-            | IoOpen(a, b)
-            | IoLookup(a, b)
-            | IoBind(a, b)
-            | IoConnect(a, b)
-            | IoListen(a, b)
-            | IoSetNonblocking(a, b)
-            | IoSetRecvTimeout(a, b)
-            | IoSetSendTimeout(a, b)
-            | IoSetReuseaddr(a, b) => vec![a, b],
-            IoPoll(a, b, c) => vec![a, b, c],
+            IoExit(a) => vec![a],
         }
     }
 
@@ -329,21 +294,7 @@ impl HostPrim {
 
         match self {
             Foreign(_, args) => args.iter_mut().collect(),
-            IoClockWall | IoClockMono | IoArgs => vec![],
-            IoAccept(a) | IoResolve(a) | IoSocket(a) | IoClose(a) | IoRandom(a) | IoEnv(a)
-            | IoExit(a) => vec![a],
-            IoRead(a, b)
-            | IoWrite(a, b)
-            | IoOpen(a, b)
-            | IoLookup(a, b)
-            | IoBind(a, b)
-            | IoConnect(a, b)
-            | IoListen(a, b)
-            | IoSetNonblocking(a, b)
-            | IoSetRecvTimeout(a, b)
-            | IoSetSendTimeout(a, b)
-            | IoSetReuseaddr(a, b) => vec![a, b],
-            IoPoll(a, b, c) => vec![a, b, c],
+            IoExit(a) => vec![a],
         }
     }
 }

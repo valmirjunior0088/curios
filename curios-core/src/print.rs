@@ -624,40 +624,6 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                     .collect::<Vec<_>>(),
             )
         }
-        Prim::IoRead(handle, count) => print_binary("Io.read ", handle, count, depth),
-        Prim::IoWrite(handle, bytes) => print_binary("Io.write ", handle, bytes, depth),
-        Prim::IoOpen(path, mode) => print_binary("Io.open ", path, mode, depth),
-        Prim::IoLookup(host, port) => print_binary("Io.lookup ", host, port, depth),
-        Prim::IoResolve(handle) => print_unary("Io.resolve ", handle, depth),
-        Prim::IoSocket(addr) => print_unary("Io.socket ", addr, depth),
-        Prim::IoBind(handle, addr) => print_binary("Io.bind ", handle, addr, depth),
-        Prim::IoConnect(handle, addr) => print_binary("Io.connect ", handle, addr, depth),
-        Prim::IoListen(handle, backlog) => print_binary("Io.listen ", handle, backlog, depth),
-        Prim::IoAccept(handle) => print_unary("Io.accept ", handle, depth),
-        Prim::IoSetNonblocking(handle, on) => {
-            print_binary("Io.set_nonblocking ", handle, on, depth)
-        }
-        Prim::IoSetRecvTimeout(handle, ms) => {
-            print_binary("Io.set_recv_timeout ", handle, ms, depth)
-        }
-        Prim::IoSetSendTimeout(handle, ms) => {
-            print_binary("Io.set_send_timeout ", handle, ms, depth)
-        }
-        Prim::IoSetReuseaddr(handle, on) => print_binary("Io.set_reuseaddr ", handle, on, depth),
-        Prim::IoPoll(handles, events, timeout) => flat([
-            pure("Io.poll "),
-            print_term(handles, depth),
-            pure(" "),
-            print_term(events, depth),
-            pure(" "),
-            print_term(timeout, depth),
-        ]),
-        Prim::IoClose(handle) => print_unary("Io.close ", handle, depth),
-        Prim::IoClockWall => pure("Io.clock_wall"),
-        Prim::IoClockMono => pure("Io.clock_mono"),
-        Prim::IoRandom(count) => print_unary("Io.random ", count, depth),
-        Prim::IoArgs => pure("Io.args"),
-        Prim::IoEnv(name) => print_unary("Io.env ", name, depth),
         Prim::IoExit(type_, code) => print_binary("Io.exit ", type_, code, depth),
         Prim::CellType(elem) => print_unary("Cell ", elem, depth),
         Prim::Cell(type_, init) => print_binary("Cell.new ", type_, init, depth),

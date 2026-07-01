@@ -171,27 +171,6 @@ fn print_host_prim<'a>(prim: &'a HostPrim) -> Printer<'a> {
                     .collect::<Vec<_>>(),
             )
         }
-        HostPrim::IoRead(h, n) => print_binary("Io.read", h, n),
-        HostPrim::IoWrite(h, b) => print_binary("Io.write", h, b),
-        HostPrim::IoOpen(p, m) => print_binary("Io.open", p, m),
-        HostPrim::IoLookup(h, p) => print_binary("Io.lookup", h, p),
-        HostPrim::IoResolve(h) => print_unary("Io.resolve", h),
-        HostPrim::IoSocket(a) => print_unary("Io.socket", a),
-        HostPrim::IoBind(h, a) => print_binary("Io.bind", h, a),
-        HostPrim::IoConnect(h, a) => print_binary("Io.connect", h, a),
-        HostPrim::IoListen(h, b) => print_binary("Io.listen", h, b),
-        HostPrim::IoAccept(h) => print_unary("Io.accept", h),
-        HostPrim::IoSetNonblocking(h, on) => print_binary("Io.set_nonblocking", h, on),
-        HostPrim::IoSetRecvTimeout(h, ms) => print_binary("Io.set_recv_timeout", h, ms),
-        HostPrim::IoSetSendTimeout(h, ms) => print_binary("Io.set_send_timeout", h, ms),
-        HostPrim::IoSetReuseaddr(h, on) => print_binary("Io.set_reuseaddr", h, on),
-        HostPrim::IoPoll(h, e, t) => print_ternary("Io.poll", h, e, t),
-        HostPrim::IoClose(h) => print_unary("Io.close", h),
-        HostPrim::IoClockWall => pure("Io.clock_wall"),
-        HostPrim::IoClockMono => pure("Io.clock_mono"),
-        HostPrim::IoRandom(n) => print_unary("Io.random", n),
-        HostPrim::IoArgs => pure("Io.args"),
-        HostPrim::IoEnv(name) => print_unary("Io.env", name),
         HostPrim::IoExit(code) => print_unary("Io.exit", code),
     }
 }

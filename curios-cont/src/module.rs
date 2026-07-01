@@ -165,131 +165,6 @@ pub enum HostTarget {
         operands: Vec<ValueName>,
         resume: BlockName,
     },
-    /// Read up to `count` bytes from `handle`. Returns (status, bytes);
-    /// `resume` takes two block parameters.
-    IoRead {
-        handle: ValueName,
-        count: ValueName,
-        resume: BlockName,
-    },
-    /// Write `bytes` (a `Bin`) to `handle`. Returns (status, written);
-    /// `resume` takes two block parameters.
-    IoWrite {
-        handle: ValueName,
-        bytes: ValueName,
-        resume: BlockName,
-    },
-    /// Open the file at `path` (a `Bin`) with `mode` (an i32 token). Returns
-    /// (status, handle); `resume` takes two block parameters.
-    IoOpen {
-        path: ValueName,
-        mode: ValueName,
-        resume: BlockName,
-    },
-    /// Start an asynchronous lookup of `host`:`port` (a `Bin` and an i32).
-    /// Returns (status, handle); the handle is poll-readable and becomes ready
-    /// when the lookup finishes. `resume` takes two block parameters.
-    IoLookup {
-        host: ValueName,
-        port: ValueName,
-        resume: BlockName,
-    },
-    /// Force the finished lookup `handle` to its list of opaque address blobs.
-    /// Returns (status, addresses : Arr(Bin)); `resume` takes two block
-    /// parameters.
-    IoResolve {
-        handle: ValueName,
-        resume: BlockName,
-    },
-    /// Create an unconnected socket for the address blob `addr`. Returns
-    /// (status, handle); `resume` takes two block parameters.
-    IoSocket { addr: ValueName, resume: BlockName },
-    /// Bind socket `handle` to local address `addr`. Returns the status scalar;
-    /// `resume` takes one block parameter.
-    IoBind {
-        handle: ValueName,
-        addr: ValueName,
-        resume: BlockName,
-    },
-    /// Connect socket `handle` to the resolved address `addr`. Returns the
-    /// status scalar; `resume` takes one block parameter.
-    IoConnect {
-        handle: ValueName,
-        addr: ValueName,
-        resume: BlockName,
-    },
-    /// Mark bound socket `handle` as listening with accept-queue depth
-    /// `backlog`. Returns the status scalar; `resume` takes one block parameter.
-    IoListen {
-        handle: ValueName,
-        backlog: ValueName,
-        resume: BlockName,
-    },
-    /// Pull the next connection from the listener `handle`. Returns
-    /// (status, handle); `resume` takes two block parameters.
-    IoAccept {
-        handle: ValueName,
-        resume: BlockName,
-    },
-    /// Set socket `handle`'s non-blocking flag `on` (a `Bln`). Returns the
-    /// status scalar; `resume` takes one block parameter.
-    IoSetNonblocking {
-        handle: ValueName,
-        on: ValueName,
-        resume: BlockName,
-    },
-    /// Set socket `handle`'s receive timeout to `ms` milliseconds (`0` clears).
-    /// Returns the status scalar; `resume` takes one block parameter.
-    IoSetRecvTimeout {
-        handle: ValueName,
-        ms: ValueName,
-        resume: BlockName,
-    },
-    /// Set socket `handle`'s send timeout to `ms` milliseconds (`0` clears).
-    /// Returns the status scalar; `resume` takes one block parameter.
-    IoSetSendTimeout {
-        handle: ValueName,
-        ms: ValueName,
-        resume: BlockName,
-    },
-    /// Set socket `handle`'s SO_REUSEADDR flag `on` (a `Bln`). Returns the
-    /// status scalar; `resume` takes one block parameter.
-    IoSetReuseaddr {
-        handle: ValueName,
-        on: ValueName,
-        resume: BlockName,
-    },
-    /// Poll `handles` (an `Arr(Io)`) for the parallel `events` (an `Arr(Nat)` of
-    /// interest masks), waiting up to `timeout` (an `Int`: `<0` forever, `0`
-    /// immediate, `>0` ms). Returns the parallel `Arr(Nat)` of revents directly;
-    /// `resume` takes one block parameter.
-    IoPoll {
-        handles: ValueName,
-        events: ValueName,
-        timeout: ValueName,
-        resume: BlockName,
-    },
-    /// Close `handle`. Returns no payload; `resume` takes zero block
-    /// parameters.
-    IoClose {
-        handle: ValueName,
-        resume: BlockName,
-    },
-    /// Read the wall clock. Ambient — no operands. Returns
-    /// (secs_hi, secs_lo, nanos); `resume` takes three block parameters.
-    IoClockWall { resume: BlockName },
-    /// Read the monotonic clock. Ambient. Returns (secs, nanos);
-    /// `resume` takes two block parameters.
-    IoClockMono { resume: BlockName },
-    /// Fill `count` random bytes. Returns a `Bin`; `resume` takes one
-    /// block parameter.
-    IoRandom { count: ValueName, resume: BlockName },
-    /// Read the process arguments. Ambient — no operands. Returns the
-    /// `Arr(Bin)` directly; `resume` takes one block parameter.
-    IoArgs { resume: BlockName },
-    /// Look up the environment variable `name` (a `Bin`). Returns
-    /// (status, value); `resume` takes two block parameters.
-    IoEnv { name: ValueName, resume: BlockName },
     /// Terminate the process with exit `code`. The host traps, so the resume is
     /// never reached; it is kept (taking zero block parameters) only so the
     /// uniform `Tail::Host { resume }` shape holds.
@@ -299,57 +174,13 @@ pub enum HostTarget {
 impl HostTarget {
     pub fn resume(&self) -> &BlockName {
         match self {
-            HostTarget::Foreign { resume, .. }
-            | HostTarget::IoRead { resume, .. }
-            | HostTarget::IoWrite { resume, .. }
-            | HostTarget::IoOpen { resume, .. }
-            | HostTarget::IoLookup { resume, .. }
-            | HostTarget::IoResolve { resume, .. }
-            | HostTarget::IoSocket { resume, .. }
-            | HostTarget::IoBind { resume, .. }
-            | HostTarget::IoConnect { resume, .. }
-            | HostTarget::IoListen { resume, .. }
-            | HostTarget::IoAccept { resume, .. }
-            | HostTarget::IoSetNonblocking { resume, .. }
-            | HostTarget::IoSetRecvTimeout { resume, .. }
-            | HostTarget::IoSetSendTimeout { resume, .. }
-            | HostTarget::IoSetReuseaddr { resume, .. }
-            | HostTarget::IoPoll { resume, .. }
-            | HostTarget::IoClose { resume, .. }
-            | HostTarget::IoClockWall { resume }
-            | HostTarget::IoClockMono { resume }
-            | HostTarget::IoRandom { resume, .. }
-            | HostTarget::IoArgs { resume }
-            | HostTarget::IoEnv { resume, .. }
-            | HostTarget::IoExit { resume, .. } => resume,
+            HostTarget::Foreign { resume, .. } | HostTarget::IoExit { resume, .. } => resume,
         }
     }
 
     pub fn resume_mut(&mut self) -> &mut BlockName {
         match self {
-            HostTarget::Foreign { resume, .. }
-            | HostTarget::IoRead { resume, .. }
-            | HostTarget::IoWrite { resume, .. }
-            | HostTarget::IoOpen { resume, .. }
-            | HostTarget::IoLookup { resume, .. }
-            | HostTarget::IoResolve { resume, .. }
-            | HostTarget::IoSocket { resume, .. }
-            | HostTarget::IoBind { resume, .. }
-            | HostTarget::IoConnect { resume, .. }
-            | HostTarget::IoListen { resume, .. }
-            | HostTarget::IoAccept { resume, .. }
-            | HostTarget::IoSetNonblocking { resume, .. }
-            | HostTarget::IoSetRecvTimeout { resume, .. }
-            | HostTarget::IoSetSendTimeout { resume, .. }
-            | HostTarget::IoSetReuseaddr { resume, .. }
-            | HostTarget::IoPoll { resume, .. }
-            | HostTarget::IoClose { resume, .. }
-            | HostTarget::IoClockWall { resume }
-            | HostTarget::IoClockMono { resume }
-            | HostTarget::IoRandom { resume, .. }
-            | HostTarget::IoArgs { resume }
-            | HostTarget::IoEnv { resume, .. }
-            | HostTarget::IoExit { resume, .. } => resume,
+            HostTarget::Foreign { resume, .. } | HostTarget::IoExit { resume, .. } => resume,
         }
     }
 
@@ -357,34 +188,6 @@ impl HostTarget {
     pub fn operands(&self) -> Vec<&ValueName> {
         match self {
             HostTarget::Foreign { operands, .. } => operands.iter().collect(),
-            HostTarget::IoRead { handle, count, .. } => vec![handle, count],
-            HostTarget::IoWrite { handle, bytes, .. } => vec![handle, bytes],
-            HostTarget::IoOpen { path, mode, .. } => vec![path, mode],
-            HostTarget::IoLookup { host, port, .. } => vec![host, port],
-            HostTarget::IoResolve { handle, .. } => vec![handle],
-            HostTarget::IoSocket { addr, .. } => vec![addr],
-            HostTarget::IoBind { handle, addr, .. } => vec![handle, addr],
-            HostTarget::IoConnect { handle, addr, .. } => vec![handle, addr],
-            HostTarget::IoListen {
-                handle, backlog, ..
-            } => vec![handle, backlog],
-            HostTarget::IoAccept { handle, .. } => vec![handle],
-            HostTarget::IoSetNonblocking { handle, on, .. } => vec![handle, on],
-            HostTarget::IoSetRecvTimeout { handle, ms, .. } => vec![handle, ms],
-            HostTarget::IoSetSendTimeout { handle, ms, .. } => vec![handle, ms],
-            HostTarget::IoSetReuseaddr { handle, on, .. } => vec![handle, on],
-            HostTarget::IoPoll {
-                handles,
-                events,
-                timeout,
-                ..
-            } => vec![handles, events, timeout],
-            HostTarget::IoClose { handle, .. } => vec![handle],
-            HostTarget::IoClockWall { .. }
-            | HostTarget::IoClockMono { .. }
-            | HostTarget::IoArgs { .. } => vec![],
-            HostTarget::IoRandom { count, .. } => vec![count],
-            HostTarget::IoEnv { name, .. } => vec![name],
             HostTarget::IoExit { code, .. } => vec![code],
         }
     }
@@ -394,34 +197,6 @@ impl HostTarget {
     pub fn operands_mut(&mut self) -> Vec<&mut ValueName> {
         match self {
             HostTarget::Foreign { operands, .. } => operands.iter_mut().collect(),
-            HostTarget::IoRead { handle, count, .. } => vec![handle, count],
-            HostTarget::IoWrite { handle, bytes, .. } => vec![handle, bytes],
-            HostTarget::IoOpen { path, mode, .. } => vec![path, mode],
-            HostTarget::IoLookup { host, port, .. } => vec![host, port],
-            HostTarget::IoResolve { handle, .. } => vec![handle],
-            HostTarget::IoSocket { addr, .. } => vec![addr],
-            HostTarget::IoBind { handle, addr, .. } => vec![handle, addr],
-            HostTarget::IoConnect { handle, addr, .. } => vec![handle, addr],
-            HostTarget::IoListen {
-                handle, backlog, ..
-            } => vec![handle, backlog],
-            HostTarget::IoAccept { handle, .. } => vec![handle],
-            HostTarget::IoSetNonblocking { handle, on, .. } => vec![handle, on],
-            HostTarget::IoSetRecvTimeout { handle, ms, .. } => vec![handle, ms],
-            HostTarget::IoSetSendTimeout { handle, ms, .. } => vec![handle, ms],
-            HostTarget::IoSetReuseaddr { handle, on, .. } => vec![handle, on],
-            HostTarget::IoPoll {
-                handles,
-                events,
-                timeout,
-                ..
-            } => vec![handles, events, timeout],
-            HostTarget::IoClose { handle, .. } => vec![handle],
-            HostTarget::IoClockWall { .. }
-            | HostTarget::IoClockMono { .. }
-            | HostTarget::IoArgs { .. } => vec![],
-            HostTarget::IoRandom { count, .. } => vec![count],
-            HostTarget::IoEnv { name, .. } => vec![name],
             HostTarget::IoExit { code, .. } => vec![code],
         }
     }

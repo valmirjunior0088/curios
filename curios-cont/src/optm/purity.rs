@@ -188,9 +188,9 @@ mod tests {
     }
 
     fn io_write(bytes: ValueName, resume: &str) -> Tail {
-        Tail::Host(HostTarget::IoWrite {
-            handle: bytes.clone(),
-            bytes,
+        Tail::Host(HostTarget::Foreign {
+            function: curios_abi::HostFunction::Write,
+            operands: vec![bytes.clone(), bytes],
             resume: b(resume),
         })
     }

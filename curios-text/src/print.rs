@@ -266,35 +266,6 @@ fn print_prim(prim: Prim) -> Printer<'static> {
 
             print_prim_call(format!("{module}.{label}"), args)
         }
-        Prim::IoRead(handle, count) => print_prim_call("Io.read", vec![handle, count]),
-        Prim::IoWrite(handle, bytes) => print_prim_call("Io.write", vec![handle, bytes]),
-        Prim::IoOpen(path, mode) => print_prim_call("Io.open", vec![path, mode]),
-        Prim::IoLookup(host, port) => print_prim_call("Io.lookup", vec![host, port]),
-        Prim::IoResolve(handle) => print_prim_call("Io.resolve", vec![handle]),
-        Prim::IoSocket(addr) => print_prim_call("Io.socket", vec![addr]),
-        Prim::IoBind(handle, addr) => print_prim_call("Io.bind", vec![handle, addr]),
-        Prim::IoConnect(handle, addr) => print_prim_call("Io.connect", vec![handle, addr]),
-        Prim::IoListen(handle, backlog) => print_prim_call("Io.listen", vec![handle, backlog]),
-        Prim::IoAccept(handle) => print_prim_call("Io.accept", vec![handle]),
-        Prim::IoSetNonblocking(handle, on) => {
-            print_prim_call("Io.set_nonblocking", vec![handle, on])
-        }
-        Prim::IoSetRecvTimeout(handle, ms) => {
-            print_prim_call("Io.set_recv_timeout", vec![handle, ms])
-        }
-        Prim::IoSetSendTimeout(handle, ms) => {
-            print_prim_call("Io.set_send_timeout", vec![handle, ms])
-        }
-        Prim::IoSetReuseaddr(handle, on) => print_prim_call("Io.set_reuseaddr", vec![handle, on]),
-        Prim::IoPoll(handles, events, timeout) => {
-            print_prim_call("Io.poll", vec![handles, events, timeout])
-        }
-        Prim::IoClose(handle) => print_prim_call("Io.close", vec![handle]),
-        Prim::IoClockWall => pure("Io.clock_wall"),
-        Prim::IoClockMono => pure("Io.clock_mono"),
-        Prim::IoRandom(count) => print_prim_call("Io.random", vec![count]),
-        Prim::IoArgs => pure("Io.args"),
-        Prim::IoEnv(name) => print_prim_call("Io.env", vec![name]),
         Prim::IoExit(type_, code) => print_prim_call("Io.exit", vec![type_, code]),
         Prim::CellType(elem) => print_prim_call("Cell", vec![elem]),
         Prim::Cell(type_, init) => print_prim_call("Cell.new", vec![type_, init]),

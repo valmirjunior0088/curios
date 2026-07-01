@@ -1,4 +1,7 @@
-use {super::*, crate::cont};
+use {
+    super::*,
+    crate::{cont, wire},
+};
 
 #[test]
 fn lowers_unreachable_tail_to_trap() {
@@ -384,9 +387,12 @@ fn lowers_and_runs_float_result() {
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::IoWrite {
-                    handle: cont::ValueName::from("STDOUT"),
-                    bytes: cont::ValueName::from("str"),
+                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                    function: wire::HostFunction::Write,
+                    operands: vec![
+                        cont::ValueName::from("STDOUT"),
+                        cont::ValueName::from("str"),
+                    ],
                     resume: cont::BlockName::from("io_done"),
                 }),
             },

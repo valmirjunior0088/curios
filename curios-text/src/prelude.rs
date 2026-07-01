@@ -477,7 +477,7 @@ fn cell_ops() -> Vec<TopItem> {
 }
 
 fn io_ops() -> Vec<TopItem> {
-    vec![
+    let mut ops = vec![
         pub_let("stdin", io(), prim(Prim::Io(0))),
         pub_let("stdout", io(), prim(Prim::Io(1))),
         pub_let("stderr", io(), prim(Prim::Io(2))),
@@ -487,157 +487,16 @@ fn io_ops() -> Vec<TopItem> {
             bln(),
             prim(Prim::IoEql(name("a"), name("b"))),
         ),
-        pub_fn(
-            "read",
-            vec![("h", io()), ("n", nat())],
-            record(vec![("status", nat()), ("bytes", bin())]),
-            prim(Prim::IoRead(name("h"), name("n"))),
-        ),
-        pub_fn(
-            "write",
-            vec![("h", io()), ("b", bin())],
-            record(vec![("status", nat()), ("written", nat())]),
-            prim(Prim::IoWrite(name("h"), name("b"))),
-        ),
-        pub_fn(
-            "open",
-            vec![("path", bin()), ("mode", nat())],
-            record(vec![("status", nat()), ("handle", io())]),
-            prim(Prim::IoOpen(name("path"), name("mode"))),
-        ),
-        pub_fn(
-            "lookup",
-            vec![("host", bin()), ("port", nat())],
-            record(vec![("status", nat()), ("handle", io())]),
-            prim(Prim::IoLookup(name("host"), name("port"))),
-        ),
-        pub_fn(
-            "resolve",
-            vec![("handle", io())],
-            record(vec![("status", nat()), ("addresses", arr_of(bin()))]),
-            prim(Prim::IoResolve(name("handle"))),
-        ),
-        pub_fn(
-            "socket",
-            vec![("addr", bin())],
-            record(vec![("status", nat()), ("handle", io())]),
-            prim(Prim::IoSocket(name("addr"))),
-        ),
-        pub_fn(
-            "bind",
-            vec![("h", io()), ("addr", bin())],
-            nat(),
-            prim(Prim::IoBind(name("h"), name("addr"))),
-        ),
-        pub_fn(
-            "connect",
-            vec![("h", io()), ("addr", bin())],
-            nat(),
-            prim(Prim::IoConnect(name("h"), name("addr"))),
-        ),
-        pub_fn(
-            "listen",
-            vec![("h", io()), ("backlog", nat())],
-            nat(),
-            prim(Prim::IoListen(name("h"), name("backlog"))),
-        ),
-        pub_fn(
-            "accept",
-            vec![("h", io())],
-            record(vec![("status", nat()), ("handle", io())]),
-            prim(Prim::IoAccept(name("h"))),
-        ),
-        host_fn(HostFunction::StartTls),
-        host_fn(HostFunction::TlsServerConfig),
-        host_fn(HostFunction::StartTlsServer),
-        pub_fn(
-            "set_nonblocking",
-            vec![("h", io()), ("on", bln())],
-            nat(),
-            prim(Prim::IoSetNonblocking(name("h"), name("on"))),
-        ),
-        pub_fn(
-            "set_recv_timeout",
-            vec![("h", io()), ("ms", nat())],
-            nat(),
-            prim(Prim::IoSetRecvTimeout(name("h"), name("ms"))),
-        ),
-        pub_fn(
-            "set_send_timeout",
-            vec![("h", io()), ("ms", nat())],
-            nat(),
-            prim(Prim::IoSetSendTimeout(name("h"), name("ms"))),
-        ),
-        pub_fn(
-            "set_reuseaddr",
-            vec![("h", io()), ("on", bln())],
-            nat(),
-            prim(Prim::IoSetReuseaddr(name("h"), name("on"))),
-        ),
-        // The readiness oracle: `handles` and `events` are parallel — `events[i]`
-        // is the interest bitmask (`POLL_*`) for `handles[i]` — and the result is
-        // parallel too. `timeout : Int` follows `poll(2)`: `< 0` forever, `0`
-        // immediate, `> 0` milliseconds.
-        pub_fn(
-            "poll",
-            vec![
-                ("handles", arr_of(io())),
-                ("events", arr_of(nat())),
-                ("timeout", int()),
-            ],
-            arr_of(nat()),
-            prim(Prim::IoPoll(
-                name("handles"),
-                name("events"),
-                name("timeout"),
-            )),
-        ),
-        pub_fn(
-            "close",
-            vec![("h", io())],
-            unit(),
-            prim(Prim::IoClose(name("h"))),
-        ),
-        // Clock/random are ambient (no handle). The clocks are 0-arity
-        // *functions* (not value bindings), so each call re-performs the read
-        // and the bare effectful-prim body stays under the function abstraction,
-        // never force-reduced at definition — like read/write/open/close.
-        pub_fn(
-            "clock_wall",
-            vec![],
-            record(vec![
-                ("secs_hi", nat()),
-                ("secs_lo", nat()),
-                ("nanos", nat()),
-            ]),
-            prim(Prim::IoClockWall),
-        ),
-        pub_fn(
-            "clock_mono",
-            vec![],
-            record(vec![("secs", nat()), ("nanos", nat())]),
-            prim(Prim::IoClockMono),
-        ),
-        pub_fn(
-            "random",
-            vec![("n", nat())],
-            bin(),
-            prim(Prim::IoRandom(name("n"))),
-        ),
-        // `args` is a 0-arity *function*, like the clocks above: a value binding
-        // would force-reduce its effectful prim body at definition, materializing
-        // an `Io.args` host op in *every* program's entry region (the bare prelude
-        // is lowered whole, so a top-level value `let` lands in `main`). Under the
-        // function abstraction it stays inert until called, so a program that
-        // never reads argv performs no such read. `env` is a function for the
-        // same reason.
-        pub_fn("args", vec![], arr_of(bin()), prim(Prim::IoArgs)),
-        pub_fn(
-            "env",
-            vec![("name", bin())],
-            record(vec![("status", nat()), ("value", bin())]),
-            prim(Prim::IoEnv(name("name"))),
-        ),
+    ];
+
+    // Every table-described host op, in `/sys/Io` prelude (= declaration) order.
+    // Each is a *function*, including the 0-arity clocks/args: a value binding
+    // would force-reduce its effectful prim body at definition (the bare prelude
+    // is lowered whole, so a top-level value `let` lands in `main`), while under
+    // the function abstraction it stays inert until called.
+    ops.extend(HostFunction::ALL.into_iter().map(host_fn));
+
+    ops.extend([
         // `(@A : Type) -> Nat -> A`: exit never returns, so its result type is
         // whatever the caller wants. `/std/Proc/exit` pins `A := False`.
         pub_fn_marked(
@@ -687,7 +546,9 @@ fn io_ops() -> Vec<TopItem> {
                 pub_let("append", nat(), nat_lit(mode::APPEND)),
             ],
         ),
-    ]
+    ]);
+
+    ops
 }
 
 // The `sys` module body of primitive types and operations, served to discovery by

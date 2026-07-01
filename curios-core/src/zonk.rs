@@ -395,10 +395,7 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         | Prim::BinType
         | Prim::Bin(_)
         | Prim::IoType
-        | Prim::Io(_)
-        | Prim::IoClockWall
-        | Prim::IoClockMono
-        | Prim::IoArgs => prim.clone(),
+        | Prim::Io(_) => prim.clone(),
 
         Prim::Nat(Nat::Succ(spine, inner)) => {
             Prim::Nat(Nat::Succ(spine.clone(), zonk_term(context, inner)?))
@@ -520,36 +517,6 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         ),
 
         Prim::Foreign(function, args) => Prim::Foreign(*function, zonk_terms(context, args)?),
-        Prim::IoRead(a, b) => Prim::IoRead(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoWrite(a, b) => Prim::IoWrite(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoOpen(a, b) => Prim::IoOpen(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoLookup(a, b) => Prim::IoLookup(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoResolve(a) => Prim::IoResolve(zonk_term(context, a)?),
-        Prim::IoSocket(a) => Prim::IoSocket(zonk_term(context, a)?),
-        Prim::IoBind(a, b) => Prim::IoBind(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoConnect(a, b) => Prim::IoConnect(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoListen(a, b) => Prim::IoListen(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoAccept(a) => Prim::IoAccept(zonk_term(context, a)?),
-        Prim::IoSetNonblocking(a, b) => {
-            Prim::IoSetNonblocking(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Prim::IoSetRecvTimeout(a, b) => {
-            Prim::IoSetRecvTimeout(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Prim::IoSetSendTimeout(a, b) => {
-            Prim::IoSetSendTimeout(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Prim::IoSetReuseaddr(a, b) => {
-            Prim::IoSetReuseaddr(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Prim::IoPoll(a, b, c) => Prim::IoPoll(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-            zonk_term(context, c)?,
-        ),
-        Prim::IoClose(a) => Prim::IoClose(zonk_term(context, a)?),
-        Prim::IoRandom(a) => Prim::IoRandom(zonk_term(context, a)?),
-        Prim::IoEnv(a) => Prim::IoEnv(zonk_term(context, a)?),
         Prim::IoExit(a, b) => Prim::IoExit(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::CellType(a) => Prim::CellType(zonk_term(context, a)?),
         Prim::Cell(a, b) => Prim::Cell(zonk_term(context, a)?, zonk_term(context, b)?),

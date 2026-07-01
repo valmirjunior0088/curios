@@ -125,59 +125,6 @@ pub enum Prim {
     // value, or named record). Effectful, so opaque under reduction like every
     // host op.
     Foreign(HostFunction, Vec<Term>),
-    IoRead(Term, Term),
-    IoWrite(Term, Term),
-    IoOpen(Term, Term),
-    // (host, port) -> { status, handle }: start an asynchronous host:port name
-    // lookup. Returns a poll-readable handle that becomes ready when the lookup
-    // completes; `resolve` then forces the address list off it. The blocking
-    // `getaddrinfo` runs on a host worker thread, off the scheduler.
-    IoLookup(Term, Term),
-    // (handle) -> { status, addresses }: force the finished lookup `handle` to a
-    // list of opaque address blobs the socket lifecycle consumes. The blobs are
-    // the host's private encoding (it derives the address family from them); the
-    // guest only shuttles them back into `socket`/`bind`/`connect`.
-    IoResolve(Term),
-    // (addr) -> { status, handle }: create an unconnected socket for the address
-    // family encoded in `addr`. The handle is a bare `Io`, configured via the
-    // setters before `bind`/`connect`/`listen` transition it.
-    IoSocket(Term),
-    // (handle, addr) -> Nat status: bind a socket to a local address.
-    IoBind(Term, Term),
-    // (handle, addr) -> Nat status: connect a socket to a resolved address. The
-    // handle then serves the read/write/close plumbing like any byte stream.
-    IoConnect(Term, Term),
-    // (handle, backlog) -> Nat status: mark a bound socket as listening with the
-    // given accept-queue depth (OS-clamped to somaxconn). `accept` pulls
-    // connections from it and `close` releases it.
-    IoListen(Term, Term),
-    // (handle) -> { status, handle }: pull the next connection from a listener.
-    // The returned handle is an ordinary `Io` the read/write/close plumbing
-    // serves, exactly like a `connect`ed socket.
-    IoAccept(Term),
-    // (handle, on) -> Nat status: set the handle's non-blocking flag (`on` is a
-    // `Bln` riding the i31 carrier). fcntl O_NONBLOCK.
-    IoSetNonblocking(Term, Term),
-    // (handle, ms) -> Nat status: SO_RCVTIMEO; `0` ms clears the timeout.
-    IoSetRecvTimeout(Term, Term),
-    // (handle, ms) -> Nat status: SO_SNDTIMEO; `0` ms clears the timeout.
-    IoSetSendTimeout(Term, Term),
-    // (handle, on) -> Nat status: SO_REUSEADDR (`on` a `Bln`); set before bind.
-    IoSetReuseaddr(Term, Term),
-    // (handles, events, timeout) -> Arr(Nat) revents: the readiness oracle. The
-    // `handles : Arr(Io)` and `events : Arr(Nat)` are parallel — `events[i]` is
-    // the interest bitmask for `handles[i]` — and the result is parallel too.
-    // `timeout : Int` mirrors `poll(2)`: `< 0` waits forever, `0` returns
-    // immediately, `> 0` waits that many milliseconds.
-    IoPoll(Term, Term, Term),
-    IoClose(Term),
-    IoClockWall,
-    IoClockMono,
-    IoRandom(Term),
-    // argv as an immutable snapshot: inert at the type level (reduce-to-self,
-    // like `Io(token)`), a host call only at erasure.
-    IoArgs,
-    IoEnv(Term),
     // `(@A : Type) -> Nat -> A`: polymorphic bottom. The type argument keeps the
     // kernel from naming `/std/False`; it is dropped at erasure.
     IoExit(Term, Term),
@@ -713,22 +660,6 @@ impl Prim {
         Self::ArrMap(a.into(), b.into(), f.into(), arr.into())
     }
 
-    pub fn io_read<H, N>(handle: H, count: N) -> Self
-    where
-        H: Into<Term>,
-        N: Into<Term>,
-    {
-        Self::IoRead(handle.into(), count.into())
-    }
-
-    pub fn io_write<H, B>(handle: H, bytes: B) -> Self
-    where
-        H: Into<Term>,
-        B: Into<Term>,
-    {
-        Self::IoWrite(handle.into(), bytes.into())
-    }
-
     pub fn cell_type<T>(elem: T) -> Self
     where
         T: Into<Term>,
@@ -780,10 +711,7 @@ impl Prim {
             | Prim::BinType
             | Prim::Bin(_)
             | Prim::IoType
-            | Prim::Io(_)
-            | Prim::IoClockWall
-            | Prim::IoClockMono
-            | Prim::IoArgs => {}
+            | Prim::Io(_) => {}
 
             Prim::Nat(Nat::Succ(_, inner)) => visit(inner),
 
@@ -803,13 +731,7 @@ impl Prim {
             | Prim::FltNearest(t)
             | Prim::BinLen(t)
             | Prim::BinFlatten(t)
-            | Prim::ArrType(t)
-            | Prim::IoClose(t)
-            | Prim::IoResolve(t)
-            | Prim::IoSocket(t)
-            | Prim::IoAccept(t)
-            | Prim::IoRandom(t)
-            | Prim::IoEnv(t) => visit(t),
+            | Prim::ArrType(t) => visit(t),
 
             Prim::IoEql(a, b)
             | Prim::NatEql(a, b)
@@ -867,26 +789,12 @@ impl Prim {
             | Prim::BinAppend(a, b)
             | Prim::ArrLen(a, b)
             | Prim::ArrFlatten(a, b)
-            | Prim::IoRead(a, b)
-            | Prim::IoWrite(a, b)
-            | Prim::IoOpen(a, b)
-            | Prim::IoLookup(a, b)
-            | Prim::IoBind(a, b)
-            | Prim::IoConnect(a, b)
-            | Prim::IoListen(a, b)
-            | Prim::IoSetNonblocking(a, b)
-            | Prim::IoSetRecvTimeout(a, b)
-            | Prim::IoSetSendTimeout(a, b)
-            | Prim::IoSetReuseaddr(a, b)
             | Prim::IoExit(a, b) => {
                 visit(a);
                 visit(b);
             }
 
-            Prim::BinSlice(a, b, c)
-            | Prim::ArrGet(a, b, c)
-            | Prim::ArrAppend(a, b, c)
-            | Prim::IoPoll(a, b, c) => {
+            Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
                 visit(a);
                 visit(b);
                 visit(c);
@@ -1078,41 +986,6 @@ impl Prim {
                 *function,
                 args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
             ),
-            Prim::IoRead(handle, count) => traverse_binary(handle, count, visit, Prim::IoRead),
-            Prim::IoWrite(handle, bytes) => traverse_binary(handle, bytes, visit, Prim::IoWrite),
-            Prim::IoOpen(path, mode) => traverse_binary(path, mode, visit, Prim::IoOpen),
-            Prim::IoLookup(host, port) => traverse_binary(host, port, visit, Prim::IoLookup),
-            Prim::IoResolve(handle) => Prim::IoResolve(visit.visit_subterm(handle)),
-            Prim::IoSocket(addr) => Prim::IoSocket(visit.visit_subterm(addr)),
-            Prim::IoBind(handle, addr) => traverse_binary(handle, addr, visit, Prim::IoBind),
-            Prim::IoListen(handle, backlog) => {
-                traverse_binary(handle, backlog, visit, Prim::IoListen)
-            }
-            Prim::IoAccept(handle) => Prim::IoAccept(visit.visit_subterm(handle)),
-            Prim::IoConnect(handle, addr) => traverse_binary(handle, addr, visit, Prim::IoConnect),
-            Prim::IoSetNonblocking(handle, on) => {
-                traverse_binary(handle, on, visit, Prim::IoSetNonblocking)
-            }
-            Prim::IoSetRecvTimeout(handle, ms) => {
-                traverse_binary(handle, ms, visit, Prim::IoSetRecvTimeout)
-            }
-            Prim::IoSetSendTimeout(handle, ms) => {
-                traverse_binary(handle, ms, visit, Prim::IoSetSendTimeout)
-            }
-            Prim::IoSetReuseaddr(handle, on) => {
-                traverse_binary(handle, on, visit, Prim::IoSetReuseaddr)
-            }
-            Prim::IoPoll(handles, events, timeout) => Prim::IoPoll(
-                visit.visit_subterm(handles),
-                visit.visit_subterm(events),
-                visit.visit_subterm(timeout),
-            ),
-            Prim::IoClose(handle) => Prim::IoClose(visit.visit_subterm(handle)),
-            Prim::IoClockWall => Prim::IoClockWall,
-            Prim::IoClockMono => Prim::IoClockMono,
-            Prim::IoRandom(count) => Prim::IoRandom(visit.visit_subterm(count)),
-            Prim::IoArgs => Prim::IoArgs,
-            Prim::IoEnv(name) => Prim::IoEnv(visit.visit_subterm(name)),
             Prim::IoExit(type_, code) => traverse_binary(type_, code, visit, Prim::IoExit),
             Prim::CellType(a) => Prim::CellType(visit.visit_subterm(a)),
             Prim::Cell(a, b) => traverse_binary(a, b, visit, Prim::Cell),
