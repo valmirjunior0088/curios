@@ -1,13 +1,22 @@
-//! The wire codes shared across the host/guest boundary — the single numeric
-//! source of truth for `/sys/Io`'s status, poll-event, and open-mode tags.
+//! The contract shared across the host/guest boundary: the numeric wire codes
+//! for `/sys/Io`'s status, poll-event, and open-mode tags, and the
+//! [`HostFunction`] table describing every host operation's import name and
+//! [`WireSignature`].
 //!
-//! Both ends cite these constants: the runtime (`run::host`) when it lowers a
-//! `Status`/`Poll`/`Mode` to the wire, and the guest prelude
-//! (`text::prelude`) when it mints the `/sys/Io/{Status,Poll,Mode}` constants the
-//! standard library compares against. Because the two sides derive from the same
-//! definitions, they cannot drift. This module is a leaf — it depends on nothing,
-//! so both the front-end and the runtime can import it without inverting the
-//! pipeline's layering.
+//! Both ends cite these definitions: the runtime (`run::host`) when it lowers a
+//! `Status`/`Poll`/`Mode` to the wire and when it types the `env.*` imports,
+//! and the compiler when it mints the `/sys/Io` prelude declarations, checks
+//! host-op operands, and emits the wasm imports. Because the two sides derive
+//! from the same definitions, they cannot drift. This crate is a leaf — it
+//! depends on nothing, so both the front-end and the runtime can import it
+//! without inverting the pipeline's layering.
+
+mod host;
+
+pub use host::*;
+
+#[cfg(test)]
+mod host_tests;
 
 /// Status codes of failable IO ops, mirrored by the guest's `/sys/Io/Status` and
 /// decoded into `/std/Io/Error`. `Other` carries an OS errno raw, so it has no
