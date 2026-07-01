@@ -72,7 +72,7 @@ impl Error for ExitTrap {}
 ///
 /// `payload` must be unmodified output of `precompile_module` for this engine.
 /// Provenance is guaranteed by callers: the launcher reads it from its own
-/// trusted footer, and `curios-cli` produces it in-process. `Module::deserialize`
+/// trusted footer, and `curios` produces it in-process. `Module::deserialize`
 /// performs only light validation, so a foreign blob could execute arbitrary code.
 pub fn run_bytes<H: Host + Send + Sync + 'static>(payload: &[u8], host: H) -> Result<i32, String> {
     let engine = shared_engine();
@@ -86,7 +86,7 @@ pub fn run_bytes<H: Host + Send + Sync + 'static>(payload: &[u8], host: H) -> Re
 
 /// Instantiate `module` against `engine`, wire up the host imports, and run its
 /// entrypoint, returning the process exit code. Shared by [`run_bytes`] and by
-/// `curios-cli`'s JIT path (which builds the `Module` via `from_binary`).
+/// `curios`'s JIT path (which builds the `Module` via `from_binary`).
 pub fn instantiate<H: Host + Send + Sync + 'static>(
     engine: &Engine,
     module: &Module,

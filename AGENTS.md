@@ -27,6 +27,8 @@ The JIT-vs-deserialize split is a _crate boundary_, not a feature flag — see [
 
 Two languages live in this repo: **Rust** (the compiler) and **curios** itself (the object language, with a standard library under `curios-text/std/`). Work touches one or both.
 
+For what's already built vs. still planned, see [ROADMAP.md](ROADMAP.md) — check it before starting work on a new capability, both to confirm it's genuinely unstarted and to see how finished, related features are described.
+
 ## Before you write code
 
 Refresh the relevant reference into working memory _before_ writing, every time — do not rely on a stale recollection from earlier in the session or from training.
