@@ -32,6 +32,12 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 ## Type System
 
 - [x] Implicit arguments (`@`-marked binders)
+- [x] Instance arguments (ad-hoc polymorphism: `concept`/`witness` declarations, the `use` binder plicity, deterministic witness resolution with local-scope, superclass-projection, and global-table steps)
+  - [x] `Show`/`Eql`/`Ord` in the standard library
+  - [ ] Higher-kinded concepts (`Monad(M : (Type) -> Type)`): needs a flex-apply decomposition rule in `convert.rs` (`?M(?A) ≡ Option(Nat)`) so a metavariable applied to a spine can unify against a rigid nominal type
+  - [ ] Multi-parameter keying and non-first functional dependencies
+  - [ ] Orphan rule (deferred until a package ecosystem exists)
+  - [ ] Concept-based numeric operators (`Add`/`Mul`/`Cmp` with `/sys` witnesses)
 - [x] `struct`/`record` declarations (nominal types with representation-visibility control)
 - [x] Inductive types (`induct` declarations)
   - [x] Constructor registry & dependent eliminators

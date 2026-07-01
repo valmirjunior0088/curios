@@ -250,6 +250,50 @@ let sum = p.fst + p.snd;
 let fst = p.fst;                 -- bind a field via projection
 ```
 
+## Concepts, witnesses, and instance arguments
+
+Ad-hoc polymorphism is expressed with three constructs. A **concept** is a record-shaped interface; a **witness** is a registered inhabitant of a concept for a given type; a **`use` binder** is a third parameter plicity the elaborator fills by resolution rather than unification. `concept` and `witness` are contextual keywords — legal identifiers and path segments everywhere else, recognized only at item start (optionally after `pub`).
+
+**`concept`.** A concept lowers to an ordinary `record` (its representation is always public) plus a per-field method wrapper synthesized into the concept's namespace. Fields are signatures — `name : T`, or the function sugar `name(params) -> T` (desugaring to `name : (params) -> T`). A field prefixed with `use` is a **superclass** edge: its type must be a concept application, and an instance of the outer concept in scope yields the inner one by projection. The result sort (`Type` or `Prop`) is required; a `Prop` concept's witnesses erase entirely.
+
+```
+pub concept Show(A : Type) : Type {
+    show(A) -> Str                  -- signature sugar
+}
+
+pub concept Ord(A : Type) : Type {
+    use eql : Eql(A),               -- superclass: an Ord(A) grants an Eql(A)
+    cmp(A, A) -> Order
+}
+```
+
+**`witness`.** A witness desugars to an ordinary top-level definition `let name(tele) -> C(args) = C(args) { … }`; the field block is a struct literal, so field coverage and labels are checked for free. Fields are implementations — `name = body`, or the definition sugar `name(args) = body`. The name is mandatory (it appears in diagnostics and explicit overrides). The telescope admits only `@` and `use` parameters — an explicit binder is illegal, since nothing supplies it at resolution time.
+
+```
+pub witness show_nat : Show(Nat) {
+    show(n) = Nat/to_str(n)
+}
+
+-- A premised witness: the `use Show(A)` premise is resolved recursively.
+pub witness show_lst(@A : Type, use Show(A)) : Show(Lst(A)) {
+    show(l) = Lst/fold(l, "", (x, acc) => Str/concat(acc, Show/show(x)))
+}
+```
+
+Every concept–type pair has **at most one** witness, program-wide (global coherence, no orphan rule); a duplicate registration is a compile error wherever it is declared. Registration ignores `pub` — visibility governs the name, never table membership. A witness keys on the concept and the *rigid head* of its first parameter (an inductive, a struct, or a primitive type constructor); the remaining parameters are checked by unification at resolution time.
+
+**`use` binders and arguments.** A `use` parameter is legal anywhere Π binders appear (function/`let`/`rec`/`witness` telescopes): `use (name :)? T`, optionally anonymous. It is filled by resolution at call sites and is in scope as an instance for the body. At a call site, `use <term>` supplies one explicitly, overriding table resolution; it sits alongside `@`-arguments and plain arguments.
+
+```
+pub let join(@A : Type, use Show(A), l : Lst(A)) -> Str =
+    Lst/fold(l, "", (x, acc) => Str/concat(acc, Show/show(x)));
+
+join([1, 2, 3])                 -- resolves show_lst(show_nat)
+join(use my_dict, [1, 2, 3])    -- explicit override
+```
+
+**Resolution** proceeds deterministically: local `use` binders innermost-first; then superclass projections of local binders, breadth-first by depth (two matches at the same minimal depth are ambiguous); then the global table, keyed by the concept and the first parameter's rigid head. A goal whose first parameter is still an unsolved metavariable waits until it is solved. The standard library provides `Show`, `Eql` (value-level equality — distinct from propositional `Eq`), and `Ord`, with witnesses for the primitive types.
+
 ## Proofs (Eq idioms)
 
 Propositional equality `Eq` is an ordinary indexed inductive in `curios-text/std/Eq.crs`; proofs are built and eliminated with `match` like any other inductive. The common combinators — `refl`, `sym`, `trans`, `cong`, `subst` — live there and are the idiomatic building blocks:
