@@ -975,6 +975,10 @@ pub fn to_core(
     let mut flat_items = Vec::new();
     let mut inductives = BTreeMap::new();
     let mut structures = BTreeMap::new();
+    // Concept metadata and witness markers, populated as `concept`/`witness`
+    // items lower (empty until then).
+    let concepts = BTreeMap::new();
+    let witnesses = std::collections::BTreeSet::new();
 
     process_items(
         &entrypoint.module.items,
@@ -1009,6 +1013,8 @@ pub fn to_core(
             items,
             inductives,
             structures,
+            concepts,
+            witnesses,
             type_,
             body: tail,
         },

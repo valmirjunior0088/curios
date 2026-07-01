@@ -1,0 +1,700 @@
+//! Witness resolution: filling omitted `use`-plicity arguments (§ instance
+//! arguments). A goal is a metavariable standing in a `use` slot together with
+//! its (concept application) type. Resolution is deterministic, in strict
+//! order:
+//!
+//! 1. **Local scope, direct** — the `use` binders in Γ, innermost-first;
+//!    first match wins (shadowing, like names).
+//! 2. **Local scope, superclass projection** — projections of local `use`
+//!    binders through the (acyclic) superclass graph, breadth-first by depth;
+//!    two matches at the same minimal depth are ambiguous.
+//! 3. **Global table** — pure lookup by `(concept, rigid head of the first
+//!    parameter)`; a hit instantiates the witness's telescope (fresh
+//!    metavariables for `@` binders, recursive goals for `use` premises) and
+//!    unifies its result type against the goal. No projections here.
+//! 4. **Flex head** — a first parameter still headed by a metavariable parks
+//!    the goal, woken when a watched metavariable solves.
+//!
+//! A rigid, keyable head with no table entry *defers* rather than failing:
+//! items elaborate in order, and a later item may register the witness. The
+//! deferred store is retried after every item and drained — erroring — once
+//! the whole module has elaborated.
+
+use {
+    super::{
+        Context, Error, HeadKey, ImplicitOrigin, Metavar, MetavarId, Outcome, ParkedGoal,
+        ParkedWork, Plicity, StructType, Subterm, Telescope, Term, Witness, WitnessOrigin,
+        convert_outcome, reduce_with, retry_parked,
+    },
+    std::collections::BTreeSet,
+};
+
+/// The outcome of one resolution attempt.
+pub enum Resolution {
+    /// A witness term for the goal; solutions its unification committed stay.
+    Solved(Term),
+    /// The goal's key is still flexible — park, watching its metavariables.
+    Flex,
+    /// The key is rigid and keyable but the table has no entry (yet) — defer.
+    Missing,
+    /// Definitely unresolvable: rigid non-keyable head, or a table hit whose
+    /// remaining parameters do not unify. The caller reports `NoWitness`.
+    NoMatch,
+}
+
+/// Best-effort display form of a goal for diagnostics: substitute the
+/// solutions that have landed, keeping the raw spelling if any hole survives.
+fn display_goal(context: &Context, goal: &Term) -> Term {
+    super::zonk(context, goal).unwrap_or_else(|_| goal.clone())
+}
+
+fn no_witness_error(context: &Context, goal: &Term, provenance: &WitnessOrigin) -> Error {
+    Error::no_witness(
+        display_goal(context, goal),
+        provenance.func.clone(),
+        provenance.binder.clone(),
+    )
+}
+
+/// Whether the (reduced) term is headed by an unsolved metavariable —
+/// including a stuck application of one, the higher-kinded case (`?M(?A)`).
+fn flex_head(context: &Context, term: &Term) -> bool {
+    match &**term {
+        Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
+        Subterm::Apply(apply) => flex_head(context, &apply.head),
+        _ => false,
+    }
+}
+
+/// The goal type as a concept application: its (reduced) `StructType` name and
+/// parameters, when that name is a registered concept.
+fn as_concept_app(context: &Context, goal_whnf: &Term) -> Option<(String, Vec<Term>)> {
+    let Subterm::StructType(StructType { name, params }) = &**goal_whnf else {
+        return None;
+    };
+    context
+        .concept(name)
+        .map(|_| (name.clone(), params.clone()))
+}
+
+enum Probe {
+    Yes,
+    No,
+    Undecided,
+}
+
+/// Whether `candidate` converts with `goal`, *without* committing: solutions
+/// the comparison lands are rolled back regardless of the verdict. Used to
+/// test every same-depth superclass projection before committing the unique
+/// match.
+fn probe_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<Probe, Error> {
+    let mark = context.solution_mark();
+    let outcome = convert_outcome(context, &Term::type_(), candidate, goal).map_err(|error| {
+        error.into_error(|| Error::convert_preempted(candidate.clone(), goal.clone()))
+    })?;
+    context.rollback_solutions(mark);
+
+    Ok(match outcome {
+        Outcome::Converts => Probe::Yes,
+        Outcome::Mismatch => Probe::No,
+        Outcome::Blocked(_) => Probe::Undecided,
+    })
+}
+
+/// Like [`probe_match`], but a positive verdict keeps its solutions — the
+/// unification is what pins the goal's open parameters to the candidate's.
+fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<Probe, Error> {
+    let mark = context.solution_mark();
+    let outcome = convert_outcome(context, &Term::type_(), candidate, goal).map_err(|error| {
+        error.into_error(|| Error::convert_preempted(candidate.clone(), goal.clone()))
+    })?;
+
+    Ok(match outcome {
+        Outcome::Converts => Probe::Yes,
+        Outcome::Mismatch => {
+            context.rollback_solutions(mark);
+            Probe::No
+        }
+        Outcome::Blocked(_) => {
+            context.rollback_solutions(mark);
+            Probe::Undecided
+        }
+    })
+}
+
+/// Run the resolution algorithm for `goal`. `origin` anchors spans and parked
+/// premise goals. Solutions committed by a successful match stay in force.
+pub fn resolve_witness(
+    context: &mut Context,
+    goal: &Term,
+    origin: &Term,
+) -> Result<Resolution, Error> {
+    let goal_whnf = reduce_with(context, goal)?;
+
+    // A goal whose whole type is still a hole offers nothing to match on.
+    if flex_head(context, &goal_whnf) {
+        return Ok(Resolution::Flex);
+    }
+
+    let concept_app = as_concept_app(context, &goal_whnf);
+
+    // Step 4 gates steps 1–3 for concept goals: a flex *first parameter* must
+    // park rather than match eagerly, or an in-scope binder of the same
+    // concept would overcommit the hole (`Show(?T)` grabbing a local
+    // `Show(Nat)` while `?T` was headed for `Bin`).
+    if let Some((_, params)) = &concept_app
+        && let Some(first) = params.first()
+    {
+        let head = reduce_with(context, first)?;
+        if flex_head(context, &head) {
+            return Ok(Resolution::Flex);
+        }
+    }
+
+    // A non-concept goal still carrying holes is likewise premature.
+    if concept_app.is_none()
+        && goal_whnf.any_metavar(&mut |id| context.metavar_solution(id).is_none())
+    {
+        return Ok(Resolution::Flex);
+    }
+
+    let mut saw_undecided = false;
+
+    // Step 1: local `use` binders, innermost-first, first match wins.
+    let binders = context.witness_scope().to_vec();
+    for (name, type_) in binders.iter().rev() {
+        match commit_match(context, type_, &goal_whnf)? {
+            Probe::Yes => return Ok(Resolution::Solved(Term::free_var(name))),
+            Probe::Undecided => saw_undecided = true,
+            Probe::No => {}
+        }
+    }
+
+    // Steps 2–3 need a concept goal; anything else has no projections and no
+    // table to consult.
+    let Some((concept_name, params)) = concept_app else {
+        return Ok(match saw_undecided {
+            true => Resolution::Flex,
+            false => Resolution::NoMatch,
+        });
+    };
+
+    // Step 2: superclass projections of local binders, breadth-first by
+    // depth. The graph is acyclic (checked at registration), so this is
+    // finite; two matches at the same minimal depth are ambiguous.
+    let mut frontier: Vec<Term> = Vec::new();
+    for (name, type_) in binders.iter().rev() {
+        let reduced = reduce_with(context, type_)?;
+        if as_concept_app(context, &reduced).is_some() {
+            frontier.push(Term::free_var(name));
+        }
+    }
+
+    while !frontier.is_empty() {
+        let mut next = Vec::new();
+        let mut matched: Vec<(Term, Term)> = Vec::new();
+
+        for node in &frontier {
+            for (projection, field_type) in superclass_projections(context, node)? {
+                match probe_match(context, &field_type, &goal_whnf)? {
+                    Probe::Yes => matched.push((projection.clone(), field_type.clone())),
+                    Probe::Undecided => saw_undecided = true,
+                    Probe::No => {}
+                }
+                next.push(projection);
+            }
+        }
+
+        match matched.len() {
+            0 => {}
+            1 => {
+                let (projection, field_type) = matched.into_iter().next().unwrap();
+                // Re-run committing: the probe rolled its solutions back.
+                match commit_match(context, &field_type, &goal_whnf)? {
+                    Probe::Yes => return Ok(Resolution::Solved(projection)),
+                    _ => unreachable!("a probed match commits deterministically"),
+                }
+            }
+            _ => {
+                return Err(Error::ambiguous_witness(
+                    display_goal(context, &goal_whnf),
+                    matched[0].0.clone(),
+                    matched[1].0.clone(),
+                ));
+            }
+        }
+
+        frontier = next;
+    }
+
+    // Step 3: the global table — pure lookup by (concept, head of the first
+    // parameter).
+    let Some(first) = params.first() else {
+        return Ok(match saw_undecided {
+            true => Resolution::Flex,
+            false => Resolution::NoMatch,
+        });
+    };
+    let head = reduce_with(context, first)?;
+    let Some(key) = HeadKey::of_whnf(&head) else {
+        return Ok(match saw_undecided {
+            true => Resolution::Flex,
+            false => Resolution::NoMatch,
+        });
+    };
+
+    let Some(witness) = context.witness(&concept_name, &key).cloned() else {
+        return Ok(Resolution::Missing);
+    };
+
+    instantiate(context, &witness, &goal_whnf, origin)
+}
+
+/// The immediate superclass projections of a node whose type reduces to a
+/// concept application: `(projection term, projected field type)` per
+/// `use`-marked field.
+fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Term, Term)>, Error> {
+    // The node's type: a local binder's assumption, or the previously computed
+    // field type — re-derive it via inference-free means: nodes are either a
+    // free var (assumption lookup) or a projection whose type we compute here.
+    let node_type = node_type(context, node)?;
+    let reduced = reduce_with(context, &node_type)?;
+    let Subterm::StructType(StructType { name, params }) = &*reduced else {
+        return Ok(Vec::new());
+    };
+    let Some(concept) = context.concept(name).cloned() else {
+        return Ok(Vec::new());
+    };
+    let Some(structure) = context.structure(name).cloned() else {
+        return Ok(Vec::new());
+    };
+
+    let telescope = structure.fields_at(params);
+    let mut out = Vec::with_capacity(concept.supers.len());
+    for (index, _) in &concept.supers {
+        let field_type = telescope
+            .clone()
+            .nth(*index, |j| Term::proj(node.clone(), j))
+            .expect("superclass field index is within the concept's telescope");
+        out.push((Term::proj(node.clone(), *index), field_type));
+    }
+
+    Ok(out)
+}
+
+/// The type of a step-2 node: an assumption for a variable, or the projected
+/// field type for a projection (recursing on its head).
+fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
+    match &**node {
+        Subterm::Var(var) => context
+            .assumption(var.unwrap())
+            .cloned()
+            .ok_or_else(|| Error::unbound_variable(node.clone())),
+        Subterm::Proj(proj) => {
+            let super::Field::Index(index) = proj.field else {
+                unreachable!("step-2 projections are built positionally");
+            };
+            let head_type = node_type(context, &proj.head)?;
+            let reduced = reduce_with(context, &head_type)?;
+            let Subterm::StructType(StructType { name, params }) = &*reduced else {
+                return Err(Error::not_a_tuple(Term::unwrap_or_clone(reduced)));
+            };
+            let structure = context
+                .structure(name)
+                .cloned()
+                .ok_or_else(|| Error::unbound_variable(Term::free_var(name)))?;
+            Ok(structure
+                .fields_at(params)
+                .nth(index, |j| Term::proj(proj.head.clone(), j))
+                .expect("projection index within telescope"))
+        }
+        _ => unreachable!("step-2 nodes are variables or their projections"),
+    }
+}
+
+/// Instantiate a table hit: fresh metavariables for `@` binders, recursive
+/// goals for `use` premises, then unify the result type against the goal
+/// (which checks the parameters past the head). Premise goals run through the
+/// same algorithm; a premise that parks leaves its metavariable in the built
+/// term, spliced once it solves.
+fn instantiate(
+    context: &mut Context,
+    witness: &Witness,
+    goal: &Term,
+    origin: &Term,
+) -> Result<Resolution, Error> {
+    let mark = context.solution_mark();
+    let head = Term::free_var(&witness.name);
+    let span = origin.span();
+
+    let (args, premises, terminal) = match &*witness.signature {
+        Subterm::FuncType(ft) => {
+            let mut args: Vec<(Plicity, Term)> = Vec::with_capacity(ft.plicities.len());
+            let mut premises: Vec<(MetavarId, Term, WitnessOrigin)> = Vec::new();
+            let mut tele = ft.telescope.clone();
+            for plicity in &ft.plicities {
+                let Telescope::Cons(ty, rest) = tele else {
+                    unreachable!("plicities parallel the telescope");
+                };
+                let binder = rest.first_label().unwrap_or("_").to_string();
+                let arg = match plicity {
+                    Plicity::Implicit => context.fresh_metavar(
+                        ty.clone(),
+                        span.clone(),
+                        ImplicitOrigin {
+                            func: witness.name.clone(),
+                            binder,
+                        },
+                    ),
+                    Plicity::Witness => {
+                        let provenance = WitnessOrigin {
+                            func: witness.name.clone(),
+                            binder,
+                        };
+                        let (id, metavar) = context.fresh_witness_metavar(
+                            ty.clone(),
+                            span.clone(),
+                            provenance.clone(),
+                        );
+                        premises.push((id, ty.clone(), provenance));
+                        metavar
+                    }
+                    Plicity::Explicit => {
+                        unreachable!("registration rejects explicit witness parameters")
+                    }
+                };
+                tele = rest.open(&[&arg]);
+                args.push((*plicity, arg));
+            }
+            let Telescope::Done(terminal) = tele else {
+                unreachable!("plicities parallel the telescope");
+            };
+            (args, premises, *terminal)
+        }
+        _ => (Vec::new(), Vec::new(), witness.signature.clone()),
+    };
+
+    // Instantiated premise types must reflect solutions the terminal
+    // unification lands, so unify first, then resolve premises.
+    match commit_match(context, &terminal, goal)? {
+        Probe::Yes => {}
+        Probe::No => {
+            context.rollback_solutions(mark);
+            return Ok(Resolution::NoMatch);
+        }
+        Probe::Undecided => {
+            context.rollback_solutions(mark);
+            return Ok(Resolution::Flex);
+        }
+    }
+
+    for (id, type_, provenance) in premises {
+        attempt_witness_goal(context, id, &type_, provenance, origin)?;
+    }
+
+    let term = match args.is_empty() {
+        true => head,
+        false => Term::apply_marked(head, args),
+    };
+
+    Ok(Resolution::Solved(term))
+}
+
+/// Attempt a freshly minted witness goal: solve it now, park it on a flex
+/// key, or defer it on a missing table entry. A definite failure is an error
+/// at `origin`'s span.
+pub fn attempt_witness_goal(
+    context: &mut Context,
+    slot: MetavarId,
+    goal: &Term,
+    provenance: WitnessOrigin,
+    origin: &Term,
+) -> Result<(), Error> {
+    match resolve_witness(context, goal, origin)? {
+        Resolution::Solved(term) => {
+            context.solve_metavar(slot, term);
+            Ok(())
+        }
+        Resolution::Flex => {
+            context.park(
+                ParkedWork::Witness {
+                    slot,
+                    goal: goal.clone(),
+                    provenance,
+                },
+                origin.clone(),
+            );
+            Ok(())
+        }
+        Resolution::Missing => {
+            let frame = context.freeze_frame();
+            context.defer_witness(ParkedGoal {
+                work: ParkedWork::Witness {
+                    slot,
+                    goal: goal.clone(),
+                    provenance,
+                },
+                origin: origin.clone(),
+                frame,
+                watching: BTreeSet::new(),
+            });
+            Ok(())
+        }
+        Resolution::NoMatch => {
+            Err(no_witness_error(context, goal, &provenance).at_opt(origin.span()))
+        }
+    }
+}
+
+/// Retry a parked or deferred witness goal under its frozen frame. Called by
+/// `retry_parked`'s wake path and the deferred-goal sweeps.
+pub fn retry_witness(
+    context: &mut Context,
+    slot: MetavarId,
+    goal: Term,
+    provenance: WitnessOrigin,
+    origin: Term,
+    frame: super::FrozenFrame,
+) -> Result<(), Error> {
+    let resolution = context.with_frame(|context| {
+        context.restore_frame(&frame);
+        resolve_witness(context, &goal, &origin)
+    })?;
+
+    match resolution {
+        Resolution::Solved(term) => {
+            context.solve_metavar(slot, term);
+            Ok(())
+        }
+        Resolution::Flex => {
+            context.repark(
+                ParkedWork::Witness {
+                    slot,
+                    goal,
+                    provenance,
+                },
+                origin,
+                frame,
+            );
+            Ok(())
+        }
+        Resolution::Missing => {
+            context.defer_witness(ParkedGoal {
+                work: ParkedWork::Witness {
+                    slot,
+                    goal,
+                    provenance,
+                },
+                origin,
+                frame,
+                watching: BTreeSet::new(),
+            });
+            Ok(())
+        }
+        Resolution::NoMatch => {
+            Err(no_witness_error(context, &goal, &provenance).at_opt(origin.span()))
+        }
+    }
+}
+
+/// Retry every deferred witness goal — after an item, when new witnesses may
+/// have registered. Goals that stay unresolvable re-defer; solutions that land
+/// wake parked constraints.
+pub fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
+    let deferred = context.take_deferred_witnesses();
+    if deferred.is_empty() {
+        return Ok(());
+    }
+
+    for parked in deferred {
+        let ParkedGoal {
+            work:
+                ParkedWork::Witness {
+                    slot,
+                    goal,
+                    provenance,
+                },
+            origin,
+            frame,
+            ..
+        } = parked
+        else {
+            unreachable!("only witness goals defer");
+        };
+        retry_witness(context, slot, goal, provenance, origin, frame)?;
+    }
+
+    retry_parked(context)
+}
+
+/// The end-of-module sweep: retry once more, then report any survivor — the
+/// whole program has elaborated, so a still-missing table entry will never
+/// register.
+pub fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
+    retry_deferred_witnesses(context)?;
+
+    if let Some(parked) = context.take_deferred_witnesses().into_iter().next() {
+        let ParkedGoal {
+            work: ParkedWork::Witness {
+                goal, provenance, ..
+            },
+            origin,
+            ..
+        } = parked
+        else {
+            unreachable!("only witness goals defer");
+        };
+        return Err(no_witness_error(context, &goal, &provenance).at_opt(origin.span()));
+    }
+
+    Ok(())
+}
+
+/// Register an elaborated definition as a witness: validate its telescope
+/// (no explicit binders, regular premises), key it on the rigid head of the
+/// concept's first parameter, and insert it into the program-wide table —
+/// rejecting a duplicate key. `signature` is the definition's *elaborated*
+/// type. Registration ignores `pub`: visibility governs the name, never table
+/// membership.
+pub fn register_witness(context: &mut Context, name: &str, signature: &Term) -> Result<(), Error> {
+    let reduced = reduce_with(context, signature)?;
+
+    // Peel the telescope, opening each binder with its own label as a neutral
+    // free variable (elaborated binder labels are entropy-fresh, so they
+    // cannot collide).
+    let mut binders: Vec<(Plicity, String, Term)> = Vec::new();
+    let terminal = match &*reduced {
+        Subterm::FuncType(ft) => {
+            let mut tele = ft.telescope.clone();
+            for plicity in &ft.plicities {
+                let Telescope::Cons(ty, rest) = tele else {
+                    unreachable!("plicities parallel the telescope");
+                };
+                if matches!(plicity, Plicity::Explicit) {
+                    return Err(Error::explicit_witness_param(name));
+                }
+                let label = rest.first_label().unwrap_or("_").to_string();
+                tele = rest.open(&[&Term::free_var(&label)]);
+                binders.push((*plicity, label, ty.clone()));
+            }
+            let Telescope::Done(terminal) = tele else {
+                unreachable!("plicities parallel the telescope");
+            };
+            *terminal
+        }
+        _ => reduced.clone(),
+    };
+
+    let terminal = reduce_with(context, &terminal)?;
+    let Subterm::StructType(StructType {
+        name: concept_name,
+        params,
+    }) = &*terminal
+    else {
+        return Err(Error::not_a_concept(name, terminal.clone()));
+    };
+    if context.concept(concept_name).is_none() {
+        return Err(Error::not_a_concept(name, terminal.clone()));
+    }
+
+    let Some(first) = params.first() else {
+        return Err(Error::invalid_witness_head(name, terminal.clone()));
+    };
+    let head = reduce_with(context, first)?;
+    let Some(key) = HeadKey::of_whnf(&head) else {
+        return Err(Error::invalid_witness_head(name, head));
+    };
+
+    // Termination (Haskell-98-lite): every `use` premise applies a concept to
+    // *variables bound by this witness's own telescope* — resolution through
+    // it is then structurally decreasing, with no fuel or tabling.
+    let binder_names: BTreeSet<&str> = binders.iter().map(|(_, n, _)| n.as_str()).collect();
+    for (plicity, _, type_) in &binders {
+        if !matches!(plicity, Plicity::Witness) {
+            continue;
+        }
+        let premise = reduce_with(context, type_)?;
+        let Subterm::StructType(StructType {
+            name: premise_concept,
+            params: premise_args,
+        }) = &*premise
+        else {
+            return Err(Error::non_regular_witness_premise(name, premise.clone()));
+        };
+        if context.concept(premise_concept).is_none() {
+            return Err(Error::non_regular_witness_premise(name, premise.clone()));
+        }
+        let regular = premise_args.iter().all(|arg| match &**arg {
+            Subterm::Var(var) => var
+                .as_free()
+                .is_some_and(|free| binder_names.contains(free)),
+            _ => false,
+        });
+        if !regular {
+            return Err(Error::non_regular_witness_premise(name, premise.clone()));
+        }
+    }
+
+    if let Some(first_name) = context.insert_witness(
+        concept_name.clone(),
+        key.clone(),
+        Witness {
+            name: name.to_string(),
+            signature: signature.clone(),
+        },
+    ) {
+        return Err(Error::duplicate_witness(
+            concept_name.clone(),
+            key.to_string(),
+            first_name,
+            name.to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+/// Validate the seeded concept registry: every superclass edge targets a
+/// registered, different concept, and the graph is acyclic.
+pub fn check_concept_registry(context: &Context) -> Result<(), Error> {
+    let concepts = context.concepts();
+
+    for (name, concept) in concepts {
+        for (_, target) in &concept.supers {
+            if target == name || !concepts.contains_key(target) {
+                return Err(Error::cyclic_superclass(name.clone()));
+            }
+        }
+    }
+
+    // Three-color DFS over the superclass edges.
+    fn visit(
+        concepts: &std::collections::BTreeMap<String, super::Concept>,
+        name: &str,
+        visiting: &mut BTreeSet<String>,
+        done: &mut BTreeSet<String>,
+    ) -> Result<(), Error> {
+        if done.contains(name) {
+            return Ok(());
+        }
+        if !visiting.insert(name.to_string()) {
+            return Err(Error::cyclic_superclass(name));
+        }
+        if let Some(concept) = concepts.get(name) {
+            for (_, target) in &concept.supers {
+                visit(concepts, target, visiting, done)?;
+            }
+        }
+        visiting.remove(name);
+        done.insert(name.to_string());
+        Ok(())
+    }
+
+    let mut visiting = BTreeSet::new();
+    let mut done = BTreeSet::new();
+    for name in concepts.keys() {
+        visit(concepts, name, &mut visiting, &mut done)?;
+    }
+
+    Ok(())
+}

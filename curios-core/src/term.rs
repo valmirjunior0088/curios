@@ -105,11 +105,12 @@ impl Term {
         }))
     }
 
-    /// A metavariable minted for an omitted implicit argument, carrying its
-    /// insertion provenance (see [`Metavar::origin`]) and its birth spine.
+    /// A metavariable minted for an omitted implicit or witness argument,
+    /// carrying its insertion provenance (see [`Metavar::origin`]) and its
+    /// birth spine.
     pub fn metavar_inserted(
         id: impl Into<MetavarId>,
-        origin: ImplicitOrigin,
+        origin: MetavarOrigin,
         spine: impl Into<Rc<Vec<Term>>>,
     ) -> Self {
         Self::from(Subterm::Metavar(Metavar {
@@ -123,7 +124,7 @@ impl Term {
     /// frozen telescope (see [`Metavar::spine`]).
     pub fn metavar_birthed(
         id: impl Into<MetavarId>,
-        origin: Option<ImplicitOrigin>,
+        origin: Option<MetavarOrigin>,
         spine: impl Into<Rc<Vec<Term>>>,
     ) -> Self {
         Self::from(Subterm::Metavar(Metavar {
@@ -740,6 +741,10 @@ impl From<Subterm> for Term {
 pub enum Plicity {
     Explicit,
     Implicit,
+    /// A `use` binder/argument: filled by witness resolution (concept lookup)
+    /// rather than unification when omitted at a call site. Like `Implicit`,
+    /// purely an elaboration directive — conversion and erasure never read it.
+    Witness,
 }
 
 /// A fixed, overloaded infix operator. The surface parser maps an operator
@@ -1102,6 +1107,26 @@ pub struct ImplicitOrigin {
     pub binder: String,
 }
 
+/// Provenance of an inserted witness argument: the applied function (`func`)
+/// had no `use`-argument for its witness binder `binder` at some call site, so
+/// the elaborator filled the slot with a fresh metavariable and registered a
+/// resolution goal for it. An occurrence still unsolved at zonk reports as a
+/// missing witness (naming the goal type from the birth record) rather than an
+/// uninferred implicit.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct WitnessOrigin {
+    pub func: String,
+    pub binder: String,
+}
+
+/// Provenance of an elaborator-minted metavariable — which insertion mechanism
+/// created it, deciding how an unsolved survivor is reported at zonk.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MetavarOrigin {
+    Implicit(ImplicitOrigin),
+    Witness(WitnessOrigin),
+}
+
 /// A metavariable's identity: a dense index into the `Context`'s `MetaStore`,
 /// minted monotonically by an [`Entropy`](curios_base::Entropy). A newtype so it can
 /// never be confused with the other `usize`-shaped notions the kernel juggles
@@ -1155,7 +1180,7 @@ impl std::fmt::Display for MetavarId {
 pub struct Metavar {
     pub id: MetavarId,
     pub spine: Rc<Vec<Term>>,
-    pub origin: Option<ImplicitOrigin>,
+    pub origin: Option<MetavarOrigin>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -2,8 +2,9 @@ use {
     super::{
         Apply, Bound, Context, Error, Field, Flt, Func, FuncType, ImplicitOrigin, InductiveType,
         Infix, Int, Let, Metavar, MetavarId, Nat, NumLit, ParkedWork, Plicity, Prim, Proj, Rec,
-        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant, check,
-        elaborate_match, elaborate_prim, expect, reduce_with, sort_term,
+        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
+        WitnessOrigin, attempt_witness_goal, check, elaborate_match, elaborate_prim, expect,
+        reduce_with, sort_term,
     },
     num_bigint::BigInt,
     num_traits::ToPrimitive,
@@ -24,6 +25,7 @@ fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Te
     fn walk(
         context: &mut Context,
         tele: Telescope<Term>,
+        plicities: &[Plicity],
         domains: &mut Vec<(String, Term)>,
     ) -> Result<Term, Error> {
         match tele {
@@ -35,15 +37,21 @@ fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Te
                 // Assume the *rebuilt* domain: insertion saturates applications
                 // during elaboration, and a lowered (under-applied) type leaking
                 // into later reduction would open a telescope at the wrong arity.
-                context.assume(&name, &domain);
+                // A `use` binder additionally joins the witness scope: the rest
+                // of the type may itself need resolution through it.
+                match plicities.get(domains.len()) {
+                    Some(Plicity::Witness) => context.assume_witness(&name, &domain),
+                    _ => context.assume(&name, &domain),
+                }
                 domains.push((name, domain));
-                walk(context, rest.open(&[&x]), domains)
+                walk(context, rest.open(&[&x]), plicities, domains)
             }
         }
     }
 
     let mut domains = Vec::new();
-    let output = context.with_frame(|context| walk(context, ft.telescope.clone(), &mut domains))?;
+    let output = context
+        .with_frame(|context| walk(context, ft.telescope.clone(), &ft.plicities, &mut domains))?;
 
     let rebuilt = Term::func_type_marked(
         ft.plicities
@@ -54,6 +62,44 @@ fn elaborate_func_type(context: &mut Context, ft: &FuncType) -> Result<(Term, Te
     );
 
     Ok((rebuilt, Term::type_()))
+}
+
+/// Fill an omitted non-explicit slot: an implicit binder gets a fresh
+/// metavariable; a witness binder gets a fresh metavariable *plus* a
+/// resolution goal, attempted eagerly (solved now, parked on a flex key, or
+/// deferred on a missing table entry). `origin` is the application node — the
+/// span anchor for the goal.
+fn insert_auto_argument(
+    context: &mut Context,
+    plicity: Plicity,
+    type_: &Term,
+    label: Option<&str>,
+    func: &str,
+    origin: &Term,
+) -> Result<Term, Error> {
+    let binder = binder_name(label.unwrap_or("_"));
+
+    match plicity {
+        Plicity::Implicit => Ok(context.fresh_metavar(
+            type_.clone(),
+            origin.span(),
+            ImplicitOrigin {
+                func: func.to_string(),
+                binder,
+            },
+        )),
+        Plicity::Witness => {
+            let provenance = WitnessOrigin {
+                func: func.to_string(),
+                binder,
+            };
+            let (id, metavar) =
+                context.fresh_witness_metavar(type_.clone(), origin.span(), provenance.clone());
+            attempt_witness_goal(context, id, type_, provenance, origin)?;
+            Ok(metavar)
+        }
+        Plicity::Explicit => unreachable!("explicit slots are never auto-filled"),
+    }
 }
 
 /// A binder's user-facing name. The head's function type is the *rebuilt* one,
@@ -90,23 +136,26 @@ fn elaborate_apply(
     let (mut head, head_type) = elaborate(context, head, Mode::Infer)?;
     let mut head_type = reduce_with(context, &head_type)?;
 
-    // The two call-site queues: plain arguments fill explicit binders in
-    // telescope order, `@`-arguments fill implicit binders in telescope order,
-    // matched independently — the relative position of an `@`-argument among
-    // the plain ones carries no meaning.
+    // The three call-site queues: plain arguments fill explicit binders in
+    // telescope order, `@`-arguments fill implicit binders, `use`-arguments
+    // fill witness binders — each matched independently, so the relative
+    // position of a marked argument among the plain ones carries no meaning.
     let mut plain: VecDeque<Term> = VecDeque::new();
     let mut marked: VecDeque<Term> = VecDeque::new();
+    let mut used: VecDeque<Term> = VecDeque::new();
     for (plicity, param) in plicities.iter().zip(params) {
         match plicity {
             Plicity::Explicit => plain.push_back(param.clone()),
             Plicity::Implicit => marked.push_back(param.clone()),
+            Plicity::Witness => used.push_back(param.clone()),
         }
     }
 
-    // All-implicit telescopes (the curried `bind` shape, e.g.
-    // `(@A, @B) -> (M A, A -> M B) -> M B`): when the head telescope has zero
-    // explicit slots but plain arguments were given, saturate it — `@`-queue
-    // first, fresh metavariables for the rest — reduce the output, and
+    // All-auto telescopes (the curried `bind` shape, e.g.
+    // `(@A, @B) -> (M A, A -> M B) -> M B`, or a method wrapper's
+    // `(@A, use w) -> …`): when the head telescope has zero explicit slots but
+    // plain arguments were given, saturate it — marked queues first, fresh
+    // metavariables (and witness goals) for the rest — reduce the output, and
     // re-target the plain arguments at the next telescope. This fires *only*
     // with zero explicit slots, so application stays arity-strict everywhere
     // else (this is deliberately not general partial application).
@@ -116,51 +165,63 @@ fn elaborate_apply(
             other => return Err(Error::not_a_function(other.clone())),
         };
 
-        let all_implicit =
-            !ft.plicities.is_empty() && ft.plicities.iter().all(|p| matches!(p, Plicity::Implicit));
-        if !all_implicit || plain.is_empty() {
+        let all_auto = !ft.plicities.is_empty()
+            && ft.plicities.iter().all(|p| !matches!(p, Plicity::Explicit));
+        if !all_auto || plain.is_empty() {
             break ft;
         }
 
         let mut args = Vec::with_capacity(ft.plicities.len());
         let mut tele = ft.telescope.clone();
-        let output = loop {
-            match tele {
-                Telescope::Done(output) => break *output,
-                Telescope::Cons(ty, rest) => {
-                    let arg = match marked.pop_front() {
-                        Some(arg) => check(context, &arg, ty.clone())?,
-                        None => {
-                            let binder = binder_name(rest.first_label().unwrap_or("_"));
-                            context.fresh_metavar(
-                                ty.clone(),
-                                term.span(),
-                                ImplicitOrigin {
-                                    func: func_label.clone(),
-                                    binder,
-                                },
-                            )
-                        }
-                    };
-                    tele = rest.open(&[&arg]);
-                    args.push(arg);
-                }
-            }
+        for plicity in &ft.plicities {
+            let Telescope::Cons(ty, rest) = tele else {
+                unreachable!("plicities parallel the telescope");
+            };
+            let queue = match plicity {
+                Plicity::Implicit => &mut marked,
+                Plicity::Witness => &mut used,
+                Plicity::Explicit => unreachable!("all-auto telescope"),
+            };
+            let arg = match queue.pop_front() {
+                Some(arg) => check(context, &arg, ty.clone())?,
+                None => insert_auto_argument(
+                    context,
+                    *plicity,
+                    &ty,
+                    rest.first_label(),
+                    &func_label,
+                    term,
+                )?,
+            };
+            tele = rest.open(&[&arg]);
+            args.push((*plicity, arg));
+        }
+        let Telescope::Done(output) = tele else {
+            unreachable!("plicities parallel the telescope");
         };
 
-        head = Term::apply_marked(head, args.into_iter().map(|a| (Plicity::Implicit, a)));
+        head = Term::apply_marked(head, args);
         head_type = reduce_with(context, &output)?;
     };
 
     // Arity is checked per queue: plain arguments must exactly cover the
-    // explicit slots; `@`-arguments may undershoot the implicit slots (the
-    // remainder is inserted) but never overshoot them.
+    // explicit slots; `@`- and `use`-arguments may undershoot their slots (the
+    // remainder is inserted/resolved) but never overshoot them.
     let explicit_slots = ft
         .plicities
         .iter()
         .filter(|p| matches!(p, Plicity::Explicit))
         .count();
-    let implicit_slots = ft.plicities.len() - explicit_slots;
+    let implicit_slots = ft
+        .plicities
+        .iter()
+        .filter(|p| matches!(p, Plicity::Implicit))
+        .count();
+    let witness_slots = ft
+        .plicities
+        .iter()
+        .filter(|p| matches!(p, Plicity::Witness))
+        .count();
 
     if plain.len() != explicit_slots {
         return Err(Error::wrong_number_of_arguments(
@@ -170,6 +231,9 @@ fn elaborate_apply(
     }
     if marked.len() > implicit_slots {
         return Err(Error::too_many_implicits(implicit_slots, marked.len()));
+    }
+    if used.len() > witness_slots {
+        return Err(Error::too_many_witness_args(witness_slots, used.len()));
     }
 
     // Materialize the saturated argument vector, threading the dependent
@@ -187,17 +251,25 @@ fn elaborate_apply(
                 Plicity::Explicit => plain.pop_front().expect("arity checked above"),
                 Plicity::Implicit => match marked.pop_front() {
                     Some(arg) => arg,
-                    None => {
-                        let binder = binder_name(rest.first_label().unwrap_or("_"));
-                        context.fresh_metavar(
-                            ty.clone(),
-                            term.span(),
-                            ImplicitOrigin {
-                                func: func_label.clone(),
-                                binder,
-                            },
-                        )
-                    }
+                    None => insert_auto_argument(
+                        context,
+                        *plicity,
+                        &ty,
+                        rest.first_label(),
+                        &func_label,
+                        term,
+                    )?,
+                },
+                Plicity::Witness => match used.pop_front() {
+                    Some(arg) => arg,
+                    None => insert_auto_argument(
+                        context,
+                        *plicity,
+                        &ty,
+                        rest.first_label(),
+                        &func_label,
+                        term,
+                    )?,
                 },
             };
             tele = rest.open(&[&arg]);
@@ -1175,6 +1247,7 @@ fn elaborate_func_check(
         term: &Term,
         body: Telescope<Term>,
         type_: Telescope<Term>,
+        plicities: &[Plicity],
         domains: &mut Vec<(String, Term)>,
     ) -> Result<Term, Error> {
         match (body, type_) {
@@ -1189,13 +1262,19 @@ fn elaborate_func_check(
                 expect(context, term, &domain, &type_)?;
                 let name = context.fresh(body_rest.first_label());
                 let x = Term::free_var(&name);
-                context.assume(&name, &type_);
+                // A binder the expected type marks `use` joins the witness
+                // scope: resolution inside the body finds it there.
+                match plicities.get(domains.len()) {
+                    Some(Plicity::Witness) => context.assume_witness(&name, &type_),
+                    _ => context.assume(&name, &type_),
+                }
                 domains.push((name, type_.clone()));
                 walk(
                     context,
                     term,
                     body_rest.open(&[&x]),
                     type_rest.open(&[&x]),
+                    plicities,
                     domains,
                 )
             }
@@ -1205,8 +1284,16 @@ fn elaborate_func_check(
     }
 
     let mut domains = Vec::new();
-    let body = context
-        .with_frame(|context| walk(context, term, telescope.clone(), ft.telescope, &mut domains))?;
+    let body = context.with_frame(|context| {
+        walk(
+            context,
+            term,
+            telescope.clone(),
+            ft.telescope,
+            &ft.plicities,
+            &mut domains,
+        )
+    })?;
 
     Ok((Term::func(domains, body), expected))
 }
@@ -1451,29 +1538,32 @@ fn insert_implicits_on_check(
     let Subterm::FuncType(ift) = &*inferred else {
         return Ok((rebuilt, type_));
     };
-    if ift.plicities.first() != Some(&Plicity::Implicit) {
+    if matches!(ift.plicities.first(), Some(Plicity::Explicit) | None) {
         return Ok((rebuilt, type_));
     }
 
     let expected_reduced = reduce_with(context, expected)?;
     let expected_explicit = matches!(
         &*expected_reduced,
-        Subterm::FuncType(eft) if eft.plicities.first() != Some(&Plicity::Implicit)
+        Subterm::FuncType(eft) if !matches!(
+            eft.plicities.first(),
+            Some(Plicity::Implicit) | Some(Plicity::Witness)
+        )
     );
     if !expected_explicit {
         return Ok((rebuilt, type_));
     }
 
     let ift = ift.clone();
-    let span = term.span();
     let func_label = match &**term {
         Subterm::Var(var) => var.unwrap().to_string(),
         _ => "<function>".to_string(),
     };
 
-    // Walk the head's telescope: implicit binders become fresh metavariables (the
-    // inserted arguments), explicit binders become fresh lambda parameters (the
-    // eta variables). `head_args` records both in telescope order so the body
+    // Walk the head's telescope: implicit binders become fresh metavariables
+    // (the inserted arguments), witness binders fresh metavariables with
+    // resolution goals, explicit binders fresh lambda parameters (the eta
+    // variables). `head_args` records all in telescope order so the body
     // re-applies the head fully saturated; `open` threads the dependent
     // substitution so a later binder mentioning an earlier one is instantiated.
     let mut head_args: Vec<(Plicity, Term)> = Vec::new();
@@ -1483,20 +1573,19 @@ fn insert_implicits_on_check(
         let mut plicities = ift.plicities.iter();
         loop {
             match tele {
-                Telescope::Done(output) => break *output,
+                Telescope::Done(output) => break Ok(*output),
                 Telescope::Cons(domain, rest) => match plicities.next() {
-                    Some(Plicity::Implicit) => {
-                        let binder = binder_name(rest.first_label().unwrap_or("_"));
-                        let metavar = context.fresh_metavar(
-                            domain,
-                            span.clone(),
-                            ImplicitOrigin {
-                                func: func_label.clone(),
-                                binder,
-                            },
-                        );
-                        tele = rest.open(&[&metavar]);
-                        head_args.push((Plicity::Implicit, metavar));
+                    Some(&plicity @ (Plicity::Implicit | Plicity::Witness)) => {
+                        let arg = insert_auto_argument(
+                            context,
+                            plicity,
+                            &domain,
+                            rest.first_label(),
+                            &func_label,
+                            term,
+                        )?;
+                        tele = rest.open(&[&arg]);
+                        head_args.push((plicity, arg));
                     }
                     Some(Plicity::Explicit) => {
                         let label = context.fresh(rest.first_label());
@@ -1510,7 +1599,7 @@ fn insert_implicits_on_check(
                 },
             }
         }
-    });
+    })?;
 
     let body = Term::apply_marked(rebuilt, head_args);
 

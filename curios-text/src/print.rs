@@ -15,6 +15,7 @@ use {
 fn print_plicity(plicity: Plicity) -> Printer<'static> {
     match plicity {
         Plicity::Implicit => pure("@"),
+        Plicity::Witness => pure("use "),
         Plicity::Explicit => pure(""),
     }
 }

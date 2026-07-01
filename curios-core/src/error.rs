@@ -225,6 +225,64 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
+    /// A call supplies more `use`-arguments than the function has witness
+    /// binders (the `use` counterpart of `TooManyImplicits`).
+    TooManyWitnessArgs {
+        expected: usize,
+        got: usize,
+    },
+    /// A witness goal that resolution could not discharge: no matching local
+    /// `use` binder, no superclass projection, and no witness-table entry.
+    /// `func`/`binder` are the insertion provenance (the applied function and
+    /// the `use` binder the goal fills).
+    NoWitness {
+        goal: Box<Term>,
+        func: String,
+        binder: String,
+    },
+    /// Two witnesses registered under the same `(concept, head)` key — global
+    /// coherence admits exactly one witness per key, program-wide.
+    DuplicateWitness {
+        concept: String,
+        head: String,
+        first: String,
+        second: String,
+    },
+    /// Two distinct superclass projections of local `use` binders match a goal
+    /// at the same minimal depth — no principled tiebreak exists.
+    AmbiguousWitness {
+        goal: Box<Term>,
+        first: Box<Term>,
+        second: Box<Term>,
+    },
+    /// The superclass graph (concepts' `use`-marked fields) has a cycle.
+    CyclicSuperclass {
+        concept: String,
+    },
+    /// A witness's first concept parameter does not reduce to a rigid nominal
+    /// or primitive head — nothing to key the table entry on.
+    InvalidWitnessHead {
+        witness: String,
+        head: Box<Term>,
+    },
+    /// A witness's annotation does not elaborate to an application of a
+    /// registered concept.
+    NotAConcept {
+        witness: String,
+        found: Box<Term>,
+    },
+    /// A `use` premise of a witness applies its concept to something other
+    /// than the witness's own parameters — resolution through it would not be
+    /// structurally decreasing.
+    NonRegularWitnessPremise {
+        witness: String,
+        premise: Box<Term>,
+    },
+    /// A witness telescope declares an explicit parameter; nothing could
+    /// supply it at resolution time.
+    ExplicitWitnessParam {
+        witness: String,
+    },
     NatOverflow {
         value: BigUint,
     },
@@ -474,6 +532,75 @@ impl Error {
         Self::TooManyImplicits { expected, got }
     }
 
+    pub fn too_many_witness_args(expected: usize, got: usize) -> Self {
+        Self::TooManyWitnessArgs { expected, got }
+    }
+
+    pub fn no_witness<T: Into<Term>>(goal: T, func: String, binder: String) -> Self {
+        Self::NoWitness {
+            goal: Box::new(goal.into()),
+            func,
+            binder,
+        }
+    }
+
+    pub fn duplicate_witness(concept: String, head: String, first: String, second: String) -> Self {
+        Self::DuplicateWitness {
+            concept,
+            head,
+            first,
+            second,
+        }
+    }
+
+    pub fn ambiguous_witness<T: Into<Term>, U: Into<Term>, V: Into<Term>>(
+        goal: T,
+        first: U,
+        second: V,
+    ) -> Self {
+        Self::AmbiguousWitness {
+            goal: Box::new(goal.into()),
+            first: Box::new(first.into()),
+            second: Box::new(second.into()),
+        }
+    }
+
+    pub fn cyclic_superclass<N: Into<String>>(concept: N) -> Self {
+        Self::CyclicSuperclass {
+            concept: concept.into(),
+        }
+    }
+
+    pub fn invalid_witness_head<N: Into<String>, T: Into<Term>>(witness: N, head: T) -> Self {
+        Self::InvalidWitnessHead {
+            witness: witness.into(),
+            head: Box::new(head.into()),
+        }
+    }
+
+    pub fn not_a_concept<N: Into<String>, T: Into<Term>>(witness: N, found: T) -> Self {
+        Self::NotAConcept {
+            witness: witness.into(),
+            found: Box::new(found.into()),
+        }
+    }
+
+    pub fn non_regular_witness_premise<N: Into<String>, T: Into<Term>>(
+        witness: N,
+        premise: T,
+    ) -> Self {
+        Self::NonRegularWitnessPremise {
+            witness: witness.into(),
+            premise: Box::new(premise.into()),
+        }
+    }
+
+    pub fn explicit_witness_param<N: Into<String>>(witness: N) -> Self {
+        Self::ExplicitWitnessParam {
+            witness: witness.into(),
+        }
+    }
+
     pub fn nat_overflow(value: BigUint) -> Self {
         Self::NatOverflow { value }
     }
@@ -596,6 +723,19 @@ impl Error {
                 out.push(actual);
             }
             Self::MotiveIndexSlotNotBinder { slot } => out.push(slot),
+            Self::NoWitness { goal, .. } => out.push(goal),
+            Self::AmbiguousWitness {
+                goal,
+                first,
+                second,
+            } => {
+                out.push(goal);
+                out.push(first);
+                out.push(second);
+            }
+            Self::InvalidWitnessHead { head, .. } => out.push(head),
+            Self::NotAConcept { found, .. } => out.push(found),
+            Self::NonRegularWitnessPremise { premise, .. } => out.push(premise),
             _ => {}
         }
     }
@@ -801,6 +941,69 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "call supplies {got} '@' argument(s) but the function has only {expected} implicit parameter(s)"
+                )
+            }
+            Error::TooManyWitnessArgs { expected, got } => {
+                write!(
+                    f,
+                    "call supplies {got} 'use' argument(s) but the function has only {expected} 'use' parameter(s)"
+                )
+            }
+            Error::NoWitness { goal, func, binder } => {
+                write!(
+                    f,
+                    "no witness of {goal} found\n  needed by '{func}' for its 'use' binder '{binder}'"
+                )
+            }
+            Error::DuplicateWitness {
+                concept,
+                head,
+                first,
+                second,
+            } => {
+                write!(
+                    f,
+                    "duplicate witness of '{concept}' for head '{head}'\n  already provided by '{first}', re-declared by '{second}'\n  every concept-head pair has at most one witness, program-wide"
+                )
+            }
+            Error::AmbiguousWitness {
+                goal,
+                first,
+                second,
+            } => {
+                write!(
+                    f,
+                    "ambiguous witness of {goal}\n  both {first} and {second} match at the same superclass depth"
+                )
+            }
+            Error::CyclicSuperclass { concept } => {
+                write!(
+                    f,
+                    "concept '{concept}' participates in a superclass cycle ('use'-marked fields must form an acyclic graph)"
+                )
+            }
+            Error::InvalidWitnessHead { witness, head } => {
+                write!(
+                    f,
+                    "witness '{witness}' cannot be keyed: its concept's first parameter reduces to {head}\n  the head must be an inductive, a struct/record, or a primitive type"
+                )
+            }
+            Error::NotAConcept { witness, found } => {
+                write!(
+                    f,
+                    "witness '{witness}' does not witness a concept\n  its annotation elaborates to: {found}"
+                )
+            }
+            Error::NonRegularWitnessPremise { witness, premise } => {
+                write!(
+                    f,
+                    "witness '{witness}' has a non-regular premise: {premise}\n  every 'use' premise must apply its concept to variables bound by the witness's own parameters"
+                )
+            }
+            Error::ExplicitWitnessParam { witness } => {
+                write!(
+                    f,
+                    "witness '{witness}' declares an explicit parameter\n  witness parameters must be implicit ('@') or 'use' premises — nothing supplies explicit arguments during resolution"
                 )
             }
             Error::NatOverflow { value } => {

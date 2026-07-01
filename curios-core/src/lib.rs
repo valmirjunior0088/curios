@@ -39,6 +39,9 @@ pub use inductive::*;
 mod structure;
 pub use structure::*;
 
+mod concept;
+pub use concept::*;
+
 mod print;
 use print::*;
 
@@ -68,6 +71,9 @@ pub use error::*;
 
 mod typing;
 pub use typing::*;
+
+mod resolve;
+pub use resolve::*;
 
 #[cfg(test)]
 mod typing_tests;

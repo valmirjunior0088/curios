@@ -1,8 +1,9 @@
 use {
     super::{
         Context, Definition, Error, Inductive, InductiveParam, Item, Mode, Module, Structure,
-        Subterm, Telescope, Term, check, check_telescope_entries, drain_parked, elaborate, is_prop,
-        reduce_with, zonk, zonk_module,
+        Subterm, Telescope, Term, check, check_concept_registry, check_telescope_entries,
+        drain_parked, elaborate, finish_deferred_witnesses, is_prop, reduce_with, register_witness,
+        retry_deferred_witnesses, zonk, zonk_module,
     },
     std::collections::BTreeMap,
 };
@@ -171,6 +172,16 @@ fn elaborate_structure(context: &mut Context, name: &str) -> Result<(), Error> {
 /// rebuilt `Definition` flows on to `zonk`/`erase`.
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Definition, Error> {
     let type_ = check(context, &def.type_, Term::type_())?;
+
+    // A witness declaration registers into the program-wide table as soon as
+    // its signature is known — *before* its body elaborates, so a recursive
+    // witness (a `Show(Tree)` whose fields show subtrees) can resolve through
+    // its own entry.
+    if context.is_witness_declaration(&def.name) {
+        register_witness(context, &def.name, &type_)
+            .map_err(|error| error.at_opt(def.type_.span()))?;
+    }
+
     let body = check(context, &def.body, type_.clone())?;
 
     // Define the *rebuilt* body at the *rebuilt* type, not the lowered ones:
@@ -289,6 +300,18 @@ pub fn elaborate_module(
         context.register_structure(name, structure.clone());
     }
 
+    // Concept metadata and witness markers, alongside — witness *table*
+    // entries register per item (`elaborate_module_let`), once the elaborated
+    // head exists. With every concept present, the superclass graph can be
+    // validated up front.
+    for (name, concept) in &module.concepts {
+        context.register_concept(name, concept.clone());
+    }
+    for name in &module.witnesses {
+        context.mark_witness_declaration(name);
+    }
+    check_concept_registry(context)?;
+
     // Implicit-argument insertion mints metavariables during elaboration;
     // floor the counter above `to_core`'s (which returns the count alongside
     // the lowered module) so the id spaces never collide.
@@ -309,6 +332,10 @@ pub fn elaborate_module(
             Item::Let(def) => Item::Let(elaborate_module_let(context, def)?),
             Item::Rec(defs) => Item::Rec(elaborate_module_rec(context, defs)?),
         });
+        // Witness goals deferred on a missing table entry may be unblocked by
+        // a witness this item registered — retry them before the drain, so
+        // their solutions wake any constraints parked on them.
+        retry_deferred_witnesses(context)?;
         // Constraints parked during this item must resolve within it: drain
         // here so an unresolvable one is attributed to its own definition and
         // frozen frames do not accumulate across items (§8).
@@ -317,6 +344,9 @@ pub fn elaborate_module(
 
     context.set_island(String::new());
     let (body, body_type) = elaborate(context, &module.body, mode)?;
+    // The whole program has elaborated: a witness goal still deferred will
+    // never find a table entry — report it now.
+    finish_deferred_witnesses(context)?;
     drain_parked(context)?;
     let body_type = reduce_with(context, &body_type)?;
 
@@ -354,6 +384,8 @@ pub fn elaborate_module(
         items,
         inductives,
         structures,
+        concepts: module.concepts.clone(),
+        witnesses: module.witnesses.clone(),
         type_: module.type_.clone(),
         body,
     };
@@ -399,6 +431,9 @@ pub fn elaborate_and_zonk_with_prelude(
     for (name, structure) in &prelude.structures {
         context.register_structure(name, structure.clone());
     }
+    for (name, concept) in &prelude.concepts {
+        context.register_concept(name, concept.clone());
+    }
 
     let user_inductive_keys = module
         .inductives
@@ -418,14 +453,30 @@ pub fn elaborate_and_zonk_with_prelude(
     for name in &user_structure_keys {
         context.register_structure(name, module.structures[name].clone());
     }
+    for (name, concept) in &module.concepts {
+        if !prelude.concepts.contains_key(name) {
+            context.register_concept(name, concept.clone());
+        }
+    }
+    for name in &module.witnesses {
+        context.mark_witness_declaration(name);
+    }
+    check_concept_registry(context)?;
 
     // Replay the cached prelude into the persistent base frame: `define_assuming`
     // reproduces exactly the state `elaborate_module_let`/`_rec` leave behind
     // (assume the type, define the body), but with no re-checking — these terms
-    // are already elaborated.
+    // are already elaborated. A prelude witness re-registers its (already
+    // elaborated) signature into the witness table, which is per-elaboration
+    // state and not cached on the module.
     for item in &prelude.items {
         match item {
-            Item::Let(def) => context.define_assuming(&def.name, &def.type_, &def.body),
+            Item::Let(def) => {
+                context.define_assuming(&def.name, &def.type_, &def.body);
+                if prelude.witnesses.contains(&def.name) {
+                    register_witness(context, &def.name, &def.type_)?;
+                }
+            }
             Item::Rec(defs) => {
                 for def in defs {
                     context.define_assuming(&def.name, &def.type_, &def.body);
@@ -452,11 +503,13 @@ pub fn elaborate_and_zonk_with_prelude(
             Item::Let(def) => Item::Let(elaborate_module_let(context, def)?),
             Item::Rec(defs) => Item::Rec(elaborate_module_rec(context, defs)?),
         });
+        retry_deferred_witnesses(context)?;
         drain_parked(context)?;
     }
 
     context.set_island(String::new());
     let (body, body_type) = elaborate(context, &module.body, mode)?;
+    finish_deferred_witnesses(context)?;
     drain_parked(context)?;
     let body_type = reduce_with(context, &body_type)?;
 
@@ -484,10 +537,25 @@ pub fn elaborate_and_zonk_with_prelude(
 
     // Zonk only the user portion (the cached prelude is already zonked), then
     // splice: cached prelude prefix ++ zonked user items / registries.
+    let user_concepts = module
+        .concepts
+        .iter()
+        .filter(|(name, _)| !prelude.concepts.contains_key(*name))
+        .map(|(name, concept)| (name.clone(), concept.clone()))
+        .collect();
+    let user_witnesses = module
+        .witnesses
+        .iter()
+        .filter(|name| !prelude.witnesses.contains(*name))
+        .cloned()
+        .collect();
+
     let user_module = Module {
         items: user_items,
         inductives: user_inductives,
         structures: user_structures,
+        concepts: user_concepts,
+        witnesses: user_witnesses,
         type_: module.type_.clone(),
         body,
     };
@@ -500,11 +568,17 @@ pub fn elaborate_and_zonk_with_prelude(
     inductives.extend(user_module.inductives);
     let mut structures = prelude.structures.clone();
     structures.extend(user_module.structures);
+    let mut concepts = prelude.concepts.clone();
+    concepts.extend(user_module.concepts);
+    let mut witnesses = prelude.witnesses.clone();
+    witnesses.extend(user_module.witnesses);
 
     let module = Module {
         items,
         inductives,
         structures,
+        concepts,
+        witnesses,
         type_: user_module.type_,
         body: user_module.body,
     };

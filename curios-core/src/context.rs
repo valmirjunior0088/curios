@@ -1,5 +1,8 @@
 use {
-    super::{Bound, Goal, ImplicitOrigin, Inductive, Metavar, MetavarId, Structure, Term},
+    super::{
+        Bound, Concept, Goal, HeadKey, ImplicitOrigin, Inductive, Metavar, MetavarId,
+        MetavarOrigin, Structure, Term, Witness, WitnessOrigin,
+    },
     crate::time::Instant,
     curios_base::{Entropy, Span},
     std::{
@@ -56,6 +59,10 @@ pub struct FrozenFrame {
     pub refinements: Vec<(String, Term)>,
     pub refinement_projections: Vec<((Term, usize), Term)>,
     pub refinement_scrutinees: Vec<(Term, Term)>,
+    /// The `use`-plicity binders in scope at park time (a subset of
+    /// `assumptions`, in the same binding order). Witness resolution scans
+    /// these; a retry must see the same instance scope its origin saw.
+    pub witness_binders: Vec<(String, Term)>,
 }
 
 /// The work a parked problem will retry (§8).
@@ -73,6 +80,15 @@ pub enum ParkedWork {
         term: Term,
         expected: Term,
         placeholder: MetavarId,
+    },
+    /// A witness-resolution goal whose key type is not yet rigid: `slot` is
+    /// the metavariable standing in the omitted `use`-argument's place, `goal`
+    /// its (concept application) type. Woken when a watched metavariable
+    /// solves; resolution then retries under the frozen frame.
+    Witness {
+        slot: MetavarId,
+        goal: Term,
+        provenance: WitnessOrigin,
     },
 }
 
@@ -147,6 +163,27 @@ pub struct Context {
     // Struct declarations, keyed the same way — a flat monotonic store like
     // `inductives`. Consulted by `elaborate_struct`/`elaborate_proj`/`erase`.
     structures: BTreeMap<String, Structure>,
+    // Concept declarations, keyed by the concept's qualified name — a flat
+    // monotonic store like `structures` (which also holds each concept's
+    // record entry; this adds the resolution metadata).
+    concepts: BTreeMap<String, Concept>,
+    // The definition names `to_core` marked as witness declarations; each
+    // registers into `witness_table` when its signature elaborates
+    // (`elaborate_module_let` → `register_witness`).
+    witness_declarations: BTreeSet<String>,
+    // The program-wide witness table: one witness per (concept, head) key —
+    // global coherence, checked at registration.
+    witness_table: BTreeMap<(String, HeadKey), Witness>,
+    // The `use`-plicity binders currently in scope, in binding order (a
+    // subset of `local`), with frame boundaries in `witness_marks` —
+    // resolution's step-1/2 search space, scanned innermost-first.
+    witness_scope: Vec<(String, Term)>,
+    witness_marks: Vec<usize>,
+    // Witness goals whose key is rigid but has no table entry *yet*: a later
+    // item may register the missing witness (the table is program-wide while
+    // items elaborate in order), so these defer — retried after each item,
+    // reported as errors only when the whole module has been elaborated.
+    deferred_witnesses: Vec<ParkedGoal>,
     // The module whose item is currently being elaborated — the qualifier
     // prefix of that item's name (the root module is the empty string). Set by
     // `elaborate_module` per item; read by `elaborate_proj` for the struct
@@ -179,6 +216,12 @@ impl Context {
             next_metavar: Entropy::<MetavarId>::new(),
             inductives: BTreeMap::new(),
             structures: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witness_declarations: BTreeSet::new(),
+            witness_table: BTreeMap::new(),
+            witness_scope: Vec::new(),
+            witness_marks: Vec::new(),
+            deferred_witnesses: Vec::new(),
             island: String::new(),
             parked: Vec::new(),
             newly_solved: Vec::new(),
@@ -239,6 +282,7 @@ impl Context {
         self.refinement_projections.push(HashMap::new());
         self.refinement_scrutinees.push(HashMap::new());
         self.local_marks.push(self.local.len());
+        self.witness_marks.push(self.witness_scope.len());
     }
 
     fn leave_frame(&mut self) {
@@ -249,6 +293,8 @@ impl Context {
         let refinement_projections = self.refinement_projections.pop().unwrap();
         let refinement_scrutinees = self.refinement_scrutinees.pop().unwrap();
         self.local.truncate(self.local_marks.pop().unwrap());
+        self.witness_scope
+            .truncate(self.witness_marks.pop().unwrap());
 
         if !definitions.is_empty()
             || !refinements.is_empty()
@@ -281,6 +327,23 @@ impl Context {
             .last_mut()
             .unwrap()
             .insert(label, type_.clone());
+    }
+
+    /// Assume `label : type_` as a `use`-plicity binder: an ordinary
+    /// assumption that additionally joins the witness scope, where resolution
+    /// finds it (innermost-first).
+    pub fn assume_witness<A>(&mut self, label: A, type_: &Term)
+    where
+        A: Into<String>,
+    {
+        let label = label.into();
+        self.assume(label.as_str(), type_);
+        self.witness_scope.push((label, type_.clone()));
+    }
+
+    /// The `use`-plicity binders in scope, in binding order (innermost last).
+    pub fn witness_scope(&self) -> &[(String, Term)] {
+        &self.witness_scope
     }
 
     /// Replace the type of an existing assumption in place — the innermost
@@ -553,6 +616,73 @@ impl Context {
         self.structures.get(name)
     }
 
+    // === Concept & witness registries =======================================
+
+    /// Record a concept declaration's resolution metadata (its record shape is
+    /// registered separately, as an ordinary structure). Called once per
+    /// `concept` declaration when the module's registries are seeded.
+    pub fn register_concept<N>(&mut self, name: N, concept: Concept)
+    where
+        N: Into<String>,
+    {
+        self.concepts.insert(name.into(), concept);
+    }
+
+    /// Look up a concept by its qualified name.
+    pub fn concept(&self, name: &str) -> Option<&Concept> {
+        self.concepts.get(name)
+    }
+
+    /// The registered concepts, for whole-registry validation (superclass
+    /// acyclicity) at seed time.
+    pub fn concepts(&self) -> &BTreeMap<String, Concept> {
+        &self.concepts
+    }
+
+    /// Mark a definition name as a witness declaration; when its signature
+    /// elaborates, `elaborate_module` registers it into the witness table.
+    pub fn mark_witness_declaration<N: Into<String>>(&mut self, name: N) {
+        self.witness_declarations.insert(name.into());
+    }
+
+    pub fn is_witness_declaration(&self, name: &str) -> bool {
+        self.witness_declarations.contains(name)
+    }
+
+    /// The witness registered under `(concept, head)`, if any.
+    pub fn witness(&self, concept: &str, head: &HeadKey) -> Option<&Witness> {
+        self.witness_table.get(&(concept.to_string(), head.clone()))
+    }
+
+    /// Insert a witness under its key, returning the previous occupant's name
+    /// on a collision (the caller reports `DuplicateWitness`).
+    pub fn insert_witness(
+        &mut self,
+        concept: String,
+        head: HeadKey,
+        witness: Witness,
+    ) -> Option<String> {
+        match self.witness_table.get(&(concept.clone(), head.clone())) {
+            Some(existing) => Some(existing.name.clone()),
+            None => {
+                self.witness_table.insert((concept, head), witness);
+                None
+            }
+        }
+    }
+
+    /// Defer a witness goal whose key is rigid but has no table entry yet —
+    /// retried after later items register witnesses, reported only at the end
+    /// of the module.
+    pub fn defer_witness(&mut self, goal: ParkedGoal) {
+        self.deferred_witnesses.push(goal);
+    }
+
+    /// Take every deferred witness goal for a retry sweep.
+    pub fn take_deferred_witnesses(&mut self) -> Vec<ParkedGoal> {
+        mem::take(&mut self.deferred_witnesses)
+    }
+
     /// The module whose item is currently being elaborated (the qualifier
     /// prefix of its name; empty for the root). Used by the struct projection
     /// privacy check.
@@ -663,15 +793,39 @@ impl Context {
         span: Option<Span>,
         origin: ImplicitOrigin,
     ) -> Term {
+        self.fresh_metavar_marked(result, span, MetavarOrigin::Implicit(origin))
+            .1
+    }
+
+    /// Mint a metavariable for an omitted `use` argument — like
+    /// [`Context::fresh_metavar`] but carrying witness provenance, and
+    /// returning the id so the caller can register the resolution goal.
+    pub fn fresh_witness_metavar(
+        &mut self,
+        result: Term,
+        span: Option<Span>,
+        origin: WitnessOrigin,
+    ) -> (MetavarId, Term) {
+        self.fresh_metavar_marked(result, span, MetavarOrigin::Witness(origin))
+    }
+
+    fn fresh_metavar_marked(
+        &mut self,
+        result: Term,
+        span: Option<Span>,
+        origin: MetavarOrigin,
+    ) -> (MetavarId, Term) {
         let id = self.next_metavar.fresh();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);
         let metavar = Term::metavar_inserted(id, origin, spine);
 
-        match span {
+        let metavar = match span {
             Some(span) => metavar.with_span(span),
             None => metavar,
-        }
+        };
+
+        (id, metavar)
     }
 
     pub fn metavar_entry(&self, id: MetavarId) -> Option<&MetaEntry> {
@@ -772,6 +926,7 @@ impl Context {
             refinements: flatten_frames(&self.refinements),
             refinement_projections: flatten_frames(&self.refinement_projections),
             refinement_scrutinees: flatten_frames(&self.refinement_scrutinees),
+            witness_binders: self.witness_scope.clone(),
         }
     }
 
@@ -797,6 +952,11 @@ impl Context {
         for (canonical, value) in &frame.refinement_scrutinees {
             self.refine_scrutinee(canonical.clone(), value.clone());
         }
+
+        // The witness binders were already re-assumed by the loop above (they
+        // are a subset of `assumptions`); only the scope membership is
+        // restored here. The enclosing frame's mark truncates it on exit.
+        self.witness_scope.extend(frame.witness_binders.clone());
     }
 
     /// Park blocked work: freeze the live local frame around it and record
@@ -819,6 +979,11 @@ impl Context {
                 .filter(|id| self.metavar_solution(*id).is_none())
                 .collect(),
             ParkedWork::Checking { expected, .. } => expected
+                .metavars()
+                .into_iter()
+                .filter(|id| self.metavar_solution(*id).is_none())
+                .collect(),
+            ParkedWork::Witness { goal, .. } => goal
                 .metavars()
                 .into_iter()
                 .filter(|id| self.metavar_solution(*id).is_none())

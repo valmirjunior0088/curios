@@ -1,6 +1,6 @@
 use {
-    super::{Inductive, Structure, Term},
-    std::collections::BTreeMap,
+    super::{Concept, Inductive, Structure, Term},
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// A single top-level definition: `name` bound to `body` of declared `type_`.
@@ -46,6 +46,16 @@ pub struct Module {
     /// name. Carried on the module like `inductives` (and for the same reason):
     /// elaboration and erasure each seed their own `Context` from here on entry.
     pub structures: BTreeMap<String, Structure>,
+    /// Concept declarations' resolution metadata, keyed by the concept's
+    /// qualified name (each concept's record shape also lives in
+    /// `structures`). Seeded into the elaboration `Context` on entry; erasure
+    /// never consults it.
+    pub concepts: BTreeMap<String, Concept>,
+    /// The definition names that are witness declarations. Elaboration
+    /// registers each into the witness table when its signature elaborates —
+    /// carried as names (not keys) because the table key needs the
+    /// *elaborated* head, which only exists once elaboration runs.
+    pub witnesses: BTreeSet<String>,
     pub type_: Option<Term>,
     pub body: Term,
 }

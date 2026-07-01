@@ -1,9 +1,9 @@
 use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
-        InductiveParam, InductiveType, Item, Let, Match, Metavar, Module, MotivePattern,
-        MotiveSlot, Nat, Prim, Proj, Rec, Struct, StructType, Structure, Subterm, Telescope, Term,
-        Tuple, TupleType, Variant,
+        InductiveParam, InductiveType, Item, Let, Match, Metavar, MetavarOrigin, Module,
+        MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Struct, StructType, Structure, Subterm,
+        Telescope, Term, Tuple, TupleType, Variant,
     },
     std::sync::Arc,
 };
@@ -94,6 +94,10 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         items,
         inductives,
         structures,
+        // Concept metadata and witness markers carry no terms of their own
+        // (each concept's telescopes live in `structures`, zonked above).
+        concepts: module.concepts.clone(),
+        witnesses: module.witnesses.clone(),
         type_,
         body,
     })
@@ -124,13 +128,24 @@ fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
     if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
         let solution = context.metavar_solution(*id).ok_or_else(|| {
             // An unsolved metavariable the *elaborator* minted (an omitted
-            // implicit argument) is reported by the binder it filled — the
-            // provenance rides on the node itself — not as a bare hole: the
-            // user never wrote this metavariable, so a generic "cannot infer"
-            // would point at nothing they can see.
+            // implicit or witness argument) is reported by the binder it
+            // filled — the provenance rides on the node itself — not as a
+            // bare hole: the user never wrote this metavariable, so a generic
+            // "cannot infer" would point at nothing they can see.
             let error = match origin {
-                Some(origin) => {
+                Some(MetavarOrigin::Implicit(origin)) => {
                     Error::uninferred_implicit(origin.func.clone(), origin.binder.clone())
+                }
+                Some(MetavarOrigin::Witness(origin)) => {
+                    // The birth record's `result` is the goal type; display it
+                    // through whatever solutions landed, keeping the raw
+                    // spelling if holes survive.
+                    let goal = context
+                        .metavar_entry(*id)
+                        .map(|entry| entry.result.clone())
+                        .unwrap_or_else(Term::type_);
+                    let goal = zonk_term(context, &goal).unwrap_or(goal);
+                    Error::no_witness(goal, origin.func.clone(), origin.binder.clone())
                 }
                 None => Error::CannotInfer,
             };

@@ -661,9 +661,10 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                     Telescope::Cons(ty, rest) => {
                         let raw = rest.first_label();
                         let label = label_or(raw, depth + idx);
-                        // Plicity marks the name (`@x` = implicit).
+                        // Plicity marks the name (`@x` = implicit, `use x` = witness).
                         let mark = match plicities.get(idx) {
                             Some(Plicity::Implicit) => "@",
+                            Some(Plicity::Witness) => "use ",
                             _ => "",
                         };
                         let typed = print_term(ty, depth + total);
@@ -724,6 +725,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                     .zip(plicities)
                     .map(|(p, plicity)| match plicity {
                         Plicity::Implicit => flat([pure("@"), print_term(p, depth)]),
+                        Plicity::Witness => flat([pure("use "), print_term(p, depth)]),
                         Plicity::Explicit => print_term(p, depth),
                     })
                     .collect::<Vec<_>>(),

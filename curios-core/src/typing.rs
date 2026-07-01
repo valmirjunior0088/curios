@@ -158,6 +158,11 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
             expected,
             placeholder,
         } => return retry_checking(context, term, expected, placeholder, origin, frame),
+        super::ParkedWork::Witness {
+            slot,
+            goal,
+            provenance,
+        } => return super::retry_witness(context, slot, goal, provenance, origin, frame),
     };
 
     enum Retry {
@@ -275,6 +280,14 @@ pub fn drain_parked(context: &mut Context) -> Result<(), Error> {
                         display_mismatch(context, &goal.this, &goal.that)
                     }
                     super::ParkedWork::Checking { .. } => Error::CannotInfer,
+                    super::ParkedWork::Witness {
+                        goal, provenance, ..
+                    } => Error::no_witness(
+                        resolved_for_display(context, &goal),
+                        provenance.func,
+                        provenance.binder,
+                    )
+                    .at_opt(parked.origin.span()),
                 });
             }
             return Ok(());

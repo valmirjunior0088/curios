@@ -1,0 +1,121 @@
+//! Registry entries for concepts (record-shaped interfaces) and witnesses
+//! (their registered inhabitants) — the instance-argument machinery's flat
+//! stores, carried on the [`Module`](super::Module) and mirrored into the
+//! [`Context`](super::Context) exactly like `inductives`/`structures`.
+//!
+//! A concept lowers to an ordinary nominal record (its [`Structure`]
+//! (super::Structure) entry drives literals and projections); the [`Concept`]
+//! entry here adds what resolution needs on top: the field labels, the
+//! superclass mask, and the parameter telescope. A witness lowers to an
+//! ordinary top-level definition; its [`Witness`] entry keys that definition
+//! in the program-wide table under `(concept name, rigid head of the first
+//! parameter)`, the [`HeadKey`].
+
+use super::{Subterm, Telescope, Term};
+
+/// One concept declaration's registry entry.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Concept {
+    /// The declaration's parameter telescope, e.g. `(A : Type)` for
+    /// `concept Show(A : Type)`. Ends in `()` like a `Structure`'s.
+    pub params: Telescope<()>,
+    /// Field labels in declaration order — the positions witness struct
+    /// literals fill and method wrappers project.
+    pub fields: Vec<String>,
+    /// Superclass edges: `(field position, super concept qualified name)` for
+    /// each `use`-marked field. The graph over all concepts must be acyclic
+    /// (checked when the registries are seeded).
+    pub supers: Vec<(usize, String)>,
+}
+
+/// One registered witness: the qualified name of its backing definition and
+/// that definition's elaborated type `∀ tele. C(t₁, …)`. Resolution
+/// instantiates the telescope fresh at every use.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Witness {
+    pub name: String,
+    pub signature: Term,
+}
+
+/// The rigid head a witness is keyed on: the nominal (inductive or struct)
+/// qualified name, or a primitive type constructor. Parameters past the head
+/// are checked by unification at resolution time, not by the key.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HeadKey {
+    Nominal(String),
+    Nat,
+    Int,
+    Flt,
+    Bln,
+    Bin,
+    Io,
+    Arr,
+    Cell,
+}
+
+impl std::fmt::Display for HeadKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HeadKey::Nominal(name) => write!(f, "{name}"),
+            HeadKey::Nat => write!(f, "Nat"),
+            HeadKey::Int => write!(f, "Int"),
+            HeadKey::Flt => write!(f, "Flt"),
+            HeadKey::Bln => write!(f, "Bln"),
+            HeadKey::Bin => write!(f, "Bin"),
+            HeadKey::Io => write!(f, "Io"),
+            HeadKey::Arr => write!(f, "Arr"),
+            HeadKey::Cell => write!(f, "Cell"),
+        }
+    }
+}
+
+impl HeadKey {
+    /// The key of a term already in weak-head normal form, if its head is
+    /// rigid and nominal/primitive. A `Func` head is the higher-kinded case (a
+    /// type constructor like `Option` reduces to `λA. Option-normal-form`):
+    /// its *body* supplies the key, so `Monad(Option)` keys on `Option`.
+    /// `None` for anything else — variables, metavariables, Π/Σ types,
+    /// `Type`/`Prop` — which are not keyable.
+    pub fn of_whnf(term: &Term) -> Option<HeadKey> {
+        match &**term {
+            Subterm::InductiveType(inductive) => Some(HeadKey::Nominal(inductive.name.clone())),
+            Subterm::StructType(structure) => Some(HeadKey::Nominal(structure.name.clone())),
+            Subterm::Prim(prim) => {
+                use super::Prim;
+                match prim {
+                    Prim::NatType => Some(HeadKey::Nat),
+                    Prim::IntType => Some(HeadKey::Int),
+                    Prim::FltType => Some(HeadKey::Flt),
+                    Prim::BlnType => Some(HeadKey::Bln),
+                    Prim::BinType => Some(HeadKey::Bin),
+                    Prim::IoType => Some(HeadKey::Io),
+                    Prim::ArrType(_) => Some(HeadKey::Arr),
+                    Prim::CellType(_) => Some(HeadKey::Cell),
+                    _ => None,
+                }
+            }
+            // The higher-kinded head: the type-constructor function's body is
+            // the nominal normal form (`λA. InductiveType(Option, [A])`). The
+            // binders need not be opened — the name sits on the node.
+            Subterm::Func(func) => {
+                let mut telescope = &func.telescope;
+                while let Telescope::Cons(_, rest) = telescope {
+                    telescope = rest.body();
+                }
+                let Telescope::Done(body) = telescope else {
+                    unreachable!("telescope spine ends in Done");
+                };
+                match &***body {
+                    Subterm::InductiveType(inductive) => {
+                        Some(HeadKey::Nominal(inductive.name.clone()))
+                    }
+                    Subterm::StructType(structure) => {
+                        Some(HeadKey::Nominal(structure.name.clone()))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+}
