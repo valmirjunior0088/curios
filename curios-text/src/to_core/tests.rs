@@ -25,7 +25,7 @@ fn run_err(src: &str) -> String {
 fn lower_with_prelude(src: &str) -> Result<(), String> {
     super::to_core(
         &src.parse::<text::Entrypoint>().unwrap(),
-        &text::prelude(&text::NullLoader),
+        &text::prelude(&curios_abi::sys_io(), &text::NullLoader),
     )
     .map(|_| ())
     .map_err(|error| error.to_string())

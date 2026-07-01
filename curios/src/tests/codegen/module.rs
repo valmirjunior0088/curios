@@ -1,7 +1,4 @@
-use {
-    super::*,
-    crate::{cont, wire},
-};
+use {super::*, crate::cont};
 
 #[test]
 fn lowers_unreachable_tail_to_trap() {
@@ -388,7 +385,7 @@ fn lowers_and_runs_float_result() {
                     },
                 )],
                 tail: cont::Tail::Host(cont::HostTarget::Foreign {
-                    function: wire::HostFunction::Write,
+                    function: foreign_write(),
                     operands: vec![
                         cont::ValueName::from("STDOUT"),
                         cont::ValueName::from("str"),

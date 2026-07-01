@@ -5,13 +5,27 @@
 //! can depend on `curios-rt` without a cycle (`curios-rt` depends only on
 //! `curios-abi`).
 
-use crate::cont::{self, to_wasm};
+use {
+    crate::cont::{self, to_wasm},
+    crate::wire::{ForeignFunction, sys_io},
+    curios_rt::MockHost,
+    std::sync::Arc,
+};
 
 mod code;
 mod module;
 
+/// The `io_write` row of the builtin foreign store, for fixtures that
+/// hand-build host calls.
+pub fn foreign_write() -> Arc<ForeignFunction> {
+    sys_io()
+        .get("io_write")
+        .expect("sys_io defines io_write")
+        .clone()
+}
+
 pub fn printed(module: &cont::Module) -> String {
-    let (system, io) = curios_rt::MockHost::builder().build();
+    let (system, io) = MockHost::builder().build();
     crate::run_wasm(&to_wasm(module), system).expect("run failed");
     String::from_utf8(io.output()).unwrap()
 }
@@ -20,7 +34,7 @@ pub fn printed(module: &cont::Module) -> String {
 /// fixtures surface a computed `Nat` by exiting with it; the i31 payload crosses
 /// the exit code unsigned.
 pub fn i32_result(module: &cont::Module) -> i32 {
-    let (system, _io) = curios_rt::MockHost::builder().build();
+    let (system, _io) = MockHost::builder().build();
     crate::run_wasm(&to_wasm(module), system).expect("run failed")
 }
 
@@ -33,14 +47,14 @@ pub fn int_result(module: &cont::Module) -> i32 {
 /// Run `module` and decode the four little-endian bytes it writes to stdout as
 /// an `f32`. Fixtures surface a computed `Flt` via `Flt/to_le_bin`.
 pub fn f32_result(module: &cont::Module) -> f32 {
-    let (system, io) = curios_rt::MockHost::builder().build();
+    let (system, io) = MockHost::builder().build();
     crate::run_wasm(&to_wasm(module), system).expect("run failed");
     let bytes = io.output();
     f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
 }
 
 pub fn traps(module: &cont::Module) -> bool {
-    let (system, _io) = curios_rt::MockHost::builder().build();
+    let (system, _io) = MockHost::builder().build();
 
     crate::run_wasm(&to_wasm(module), system).is_err()
 }

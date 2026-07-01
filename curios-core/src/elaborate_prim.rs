@@ -1,6 +1,9 @@
-use super::{
-    Context, Error, ImplicitOrigin, Mode, Prim, Subterm, Term, elaborate, expect, reduce_with,
-    wire_term,
+use {
+    super::{
+        Context, Error, ImplicitOrigin, Mode, Prim, Subterm, Term, elaborate, expect, reduce_with,
+        wire_term,
+    },
+    std::sync::Arc,
 };
 
 /// Elaborate both operands of a homogeneous binary primitive at `operand`, then
@@ -281,36 +284,36 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let code = elaborate(context, code, Mode::Check(nat_type))?.0;
             (Prim::IoExit(type_.clone(), code), type_)
         }
-        // A table-described host call: each operand checks against its wire
+        // A store-described host call: each operand checks against its wire
         // type, and the result shape (unit, bare value, named record) is read
         // off the signature. The arity is an invariant of construction (the
         // prelude builds the argument list from the same signature).
         Prim::Foreign(function, args) => {
-            let signature = function.signature();
+            let signature = &function.signature;
 
             assert_eq!(
                 args.len(),
                 signature.params.len(),
                 "{} operand count does not match its signature",
-                function.name()
+                function.name
             );
 
             let mut elaborated = Vec::with_capacity(args.len());
-            for (arg, (_, wire_type)) in args.iter().zip(signature.params) {
-                elaborated.push(elaborate(context, arg, Mode::Check(wire_term(*wire_type)))?.0);
+            for (arg, (_, wire_type)) in args.iter().zip(&signature.params) {
+                elaborated.push(elaborate(context, arg, Mode::Check(wire_term(wire_type)))?.0);
             }
 
-            let result = match signature.results {
+            let result = match signature.results.as_slice() {
                 [] => Term::tuple_type_unit(),
-                [(_, wire_type)] => wire_term(*wire_type),
+                [(_, wire_type)] => wire_term(wire_type),
                 results => Term::tuple_type(
                     results
                         .iter()
-                        .map(|(label, wire_type)| (*label, wire_term(*wire_type))),
+                        .map(|(label, wire_type)| (label.as_str(), wire_term(wire_type))),
                 ),
             };
 
-            (Prim::Foreign(*function, elaborated), result)
+            (Prim::Foreign(Arc::clone(function), elaborated), result)
         }
         Prim::CellType(elem) => {
             let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;

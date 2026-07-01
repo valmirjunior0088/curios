@@ -1,6 +1,6 @@
 use {
-    curios_cont as cont, curios_core as core, curios_ersd as ersd, curios_text as text,
-    curios_wasm as wasm, std::time::Duration,
+    curios_abi::sys_io, curios_cont as cont, curios_core as core, curios_ersd as ersd,
+    curios_text as text, curios_wasm as wasm, std::time::Duration,
 };
 
 pub enum Stage<'a> {
@@ -37,8 +37,10 @@ fn build_prelude() -> core::Module {
         .parse::<text::Entrypoint>()
         .expect("the trivial prelude entrypoint parses");
 
-    let (module, metavars) = text::to_core(&entrypoint, &text::prelude(text::NullLoader))
-        .unwrap_or_else(|error| panic!("the embedded prelude failed to lower: {}", error.format()));
+    let (module, metavars) =
+        text::to_core(&entrypoint, &text::prelude(&sys_io(), text::NullLoader)).unwrap_or_else(
+            |error| panic!("the embedded prelude failed to lower: {}", error.format()),
+        );
 
     let mut context = core::Context::new(Duration::from_secs(300));
 
@@ -84,8 +86,13 @@ where
 {
     observe(Stage::Text(entrypoint));
 
-    let (lowered, metavars) =
-        text::to_core(entrypoint, &text::prelude(loader)).map_err(|error| error.format())?;
+    // The compilation's foreign store — today exactly the `/sys/Io` builtin
+    // set. The prelude mints the `/sys/Io` declarations from it; the rows ride
+    // the IR nodes from there, so no later stage needs the store itself.
+    let foreigns = sys_io();
+
+    let (lowered, metavars) = text::to_core(entrypoint, &text::prelude(&foreigns, loader))
+        .map_err(|error| error.format())?;
 
     observe(Stage::Core(&lowered));
 

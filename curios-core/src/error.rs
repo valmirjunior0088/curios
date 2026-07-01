@@ -31,7 +31,7 @@ pub enum ReduceError {
         span: Option<Span>,
     },
     IoAtTypeLevel {
-        kind: &'static str,
+        kind: String,
         span: Option<Span>,
     },
     /// A `Nat`/`Int` division whose divisor reduced to literal zero —
@@ -77,7 +77,7 @@ pub enum Error {
         end: usize,
     },
     IoAtTypeLevel {
-        kind: &'static str,
+        kind: String,
     },
     DivisionByZero {
         kind: &'static str,

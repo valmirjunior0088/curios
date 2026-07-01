@@ -1,20 +1,20 @@
 use {
     super::{Bound, Flt, Int, MetavarId, Nat, Subterm, Term, Var, Visit},
-    curios_abi::{HostFunction, WireType},
-    std::collections::BTreeSet,
+    curios_abi::{ForeignFunction, WireType},
+    std::{collections::BTreeSet, sync::Arc},
 };
 
 /// The core type a host-boundary [`WireType`] denotes — the one reading of the
-/// signature table shared by elaboration (operand checks, result records) and
+/// signature shared by elaboration (operand checks, result records) and
 /// erasure, so the two cannot disagree about what crosses the wire.
-pub fn wire_term(wire_type: WireType) -> Term {
+pub fn wire_term(wire_type: &WireType) -> Term {
     let prim = match wire_type {
         WireType::Nat => Prim::NatType,
         WireType::Int => Prim::IntType,
         WireType::Bln => Prim::BlnType,
         WireType::Bin => Prim::BinType,
         WireType::Io => Prim::IoType,
-        WireType::Arr(elem) => Prim::ArrType(wire_term(*elem)),
+        WireType::Arr(element) => Prim::ArrType(wire_term(element)),
     };
 
     Subterm::Prim(prim).into()
@@ -120,11 +120,11 @@ pub enum Prim {
     // (a, b) -> Bln: identity of two handles. The one pure operation on `Io` --
     // handles are opaque i31 tokens, so this erases to the `Nat` equality op.
     IoEql(Term, Term),
-    // A table-described host call: the function's `WireSignature` fixes the
+    // A store-described host call: the function's `WireSignature` fixes the
     // operand types checked at elaboration and the result shape (unit, bare
-    // value, or named record). Effectful, so opaque under reduction like every
-    // host op.
-    Foreign(HostFunction, Vec<Term>),
+    // value, or named record); its `Reduction` says how the call behaves at
+    // the type level (opaque for every effectful op, inert for `args`).
+    Foreign(Arc<ForeignFunction>, Vec<Term>),
     // `(@A : Type) -> Nat -> A`: polymorphic bottom. The type argument keeps the
     // kernel from naming `/std/False`; it is dropped at erasure.
     IoExit(Term, Term),
@@ -983,7 +983,7 @@ impl Prim {
             Prim::IoType => Prim::IoType,
             Prim::Io(token) => Prim::Io(*token),
             Prim::Foreign(function, args) => Prim::Foreign(
-                *function,
+                Arc::clone(function),
                 args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
             ),
             Prim::IoExit(type_, code) => traverse_binary(type_, code, visit, Prim::IoExit),

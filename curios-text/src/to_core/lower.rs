@@ -6,7 +6,7 @@ use {
     },
     curios_core as core,
     num_bigint::BigUint,
-    std::{cell::RefCell, collections::BTreeSet},
+    std::{cell::RefCell, collections::BTreeSet, sync::Arc},
 };
 
 pub struct Lower<'a, 'b> {
@@ -968,7 +968,7 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::Io(token) => core::Prim::Io(*token),
             Prim::IoEql(left, right) => core::Prim::io_eql(self.term(left)?, self.term(right)?),
             Prim::Foreign(function, args) => core::Prim::Foreign(
-                *function,
+                Arc::clone(function),
                 args.iter()
                     .map(|arg| self.term(arg))
                     .collect::<Result<_, _>>()?,

@@ -1,6 +1,10 @@
 use {
     super::{BlockName, ClsrName, FuncName, ValueName},
-    std::collections::{BTreeMap, BTreeSet},
+    curios_abi::ForeignFunction,
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -154,14 +158,14 @@ pub enum CallTarget {
 /// as the impure boundary of its enclosing region tree.
 #[derive(Debug, Clone)]
 pub enum HostTarget {
-    /// A table-described host call: `function`'s [`WireSignature`] fixes the
+    /// A store-described host call: `function`'s [`WireSignature`] fixes the
     /// operand order/types and the resume shape — `resume` takes one block
     /// parameter per signature result (the multi-result records arrive as
     /// parallel block parameters, exactly like the per-op variants did).
     ///
     /// [`WireSignature`]: curios_abi::WireSignature
     Foreign {
-        function: curios_abi::HostFunction,
+        function: Arc<ForeignFunction>,
         operands: Vec<ValueName>,
         resume: BlockName,
     },

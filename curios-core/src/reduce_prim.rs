@@ -4,9 +4,9 @@ use {
         Context, Flt, Int, Nat, Peel, Prim, ReduceError, Subterm, Term, normalize_concat, peel_bin,
         peel_first_byte, peel_first_elem,
     },
-    curios_abi::HostFunction,
+    curios_abi::Reduction,
     num_traits::{ToPrimitive, Zero},
-    std::cmp::Ordering,
+    std::{cmp::Ordering, sync::Arc},
 };
 
 /// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when
@@ -1372,17 +1372,21 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         Prim::IoType => Ok(Subterm::Prim(Prim::IoType)),
         Prim::Io(token) => Ok(Subterm::Prim(Prim::Io(*token))),
         Prim::IoExit(_, code) => Err(ReduceError::IoAtTypeLevel {
-            kind: "IoExit",
+            kind: "IoExit".to_string(),
             span: code.span(),
         }),
-        // A table-described host call never reduces at the type level — except
-        // `args`, the immutable argv snapshot, which stays inert (stuck-to-self,
-        // like `IoArgs` above) so a top-level `args : Arr(Bin)` value binding
-        // does not trip the IO guard; it becomes a host call only at erasure.
-        Prim::Foreign(function, args) => match function {
-            HostFunction::Args => Ok(Subterm::Prim(Prim::Foreign(*function, args.clone()))),
-            _ => Err(ReduceError::IoAtTypeLevel {
-                kind: function.name(),
+        // A store-described host call reduces (or refuses to) as its row says:
+        // an opaque call never reduces at the type level, while an inert one —
+        // `args`, the immutable argv snapshot — stays stuck-to-self so a
+        // top-level `args : Arr(Bin)` value binding does not trip the IO
+        // guard; it becomes a host call only at erasure.
+        Prim::Foreign(function, args) => match function.reduction {
+            Reduction::Inert => Ok(Subterm::Prim(Prim::Foreign(
+                Arc::clone(function),
+                args.clone(),
+            ))),
+            Reduction::Opaque => Err(ReduceError::IoAtTypeLevel {
+                kind: function.name.clone(),
                 span: args.first().and_then(|arg| arg.span()),
             }),
         },
@@ -1391,15 +1395,15 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             Ok(Subterm::Prim(Prim::cell_type(elem)))
         }
         Prim::Cell(_, init) => Err(ReduceError::IoAtTypeLevel {
-            kind: "Cell",
+            kind: "Cell".to_string(),
             span: init.span(),
         }),
         Prim::CellSet(_, cell, _) => Err(ReduceError::IoAtTypeLevel {
-            kind: "CellSet",
+            kind: "CellSet".to_string(),
             span: cell.span(),
         }),
         Prim::CellGet(_, cell) => Err(ReduceError::IoAtTypeLevel {
-            kind: "CellGet",
+            kind: "CellGet".to_string(),
             span: cell.span(),
         }),
     }

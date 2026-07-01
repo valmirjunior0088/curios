@@ -1,9 +1,11 @@
 use {
-    crate as cont, curios_abi as abi, curios_wasm as wasm,
+    crate as cont,
+    curios_abi::ForeignFunction,
+    curios_wasm as wasm,
     std::{
-        array,
-        cell::OnceCell,
+        cell::{OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap},
+        sync::Arc,
     },
 };
 
@@ -223,11 +225,12 @@ pub struct Table<'a> {
     arr_type: wasm::TypeName,
     cell_type: wasm::TypeName,
     io_exit: OnceCell<wasm::FuncName>,
-    // One cell per `HostFunction`, indexed by discriminant (`f as usize`).
-    // Same lazy used-tracking as the per-op cells: first reference during
-    // emission interns the name, `emit_sys_imports` then only declares the
-    // imports the program touched.
-    host_funcs: [OnceCell<wasm::FuncName>; abi::HostFunction::ALL.len()],
+    // The foreign functions the emitted code calls, keyed by import name.
+    // Same lazy used-tracking as the `io_exit` cell: the first call-site
+    // reference during emission records the function's row, and
+    // `emit_sys_imports` then declares exactly the recorded set (in name
+    // order — wasmtime links by name, so import order is cosmetic).
+    host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
     tpl_types: BTreeMap<usize, wasm::TypeName>,
     envr_types: BTreeMap<usize, wasm::TypeName>,
     clsr_types: BTreeMap<usize, wasm::TypeName>,
@@ -275,7 +278,7 @@ impl<'a> Table<'a> {
             arr_type: wasm::TypeName::from("arr"),
             cell_type: wasm::TypeName::from("cell"),
             io_exit: OnceCell::new(),
-            host_funcs: array::from_fn(|_| OnceCell::new()),
+            host_funcs: RefCell::new(BTreeMap::new()),
             tpl_types: {
                 let max = module
                     .consts()
@@ -381,15 +384,21 @@ impl<'a> Table<'a> {
         self.cell_type.clone()
     }
 
-    /// The interned import name of a table-described host function. First use
-    /// during emission marks it live; [`host_func_used`](Self::host_func_used)
-    /// reports that mark to `emit_sys_imports`.
-    pub fn host_func(&self, function: abi::HostFunction) -> &wasm::FuncName {
-        self.host_funcs[function as usize].get_or_init(|| wasm::FuncName::from(function.name()))
+    /// The import name of a store-described host function. First use during
+    /// emission records the function as live; [`host_funcs`](Self::host_funcs)
+    /// hands the recorded set to `emit_sys_imports`.
+    pub fn host_func(&self, function: &Arc<ForeignFunction>) -> wasm::FuncName {
+        self.host_funcs
+            .borrow_mut()
+            .entry(function.name.clone())
+            .or_insert_with(|| Arc::clone(function));
+
+        wasm::FuncName::from(function.name.as_str())
     }
 
-    pub fn host_func_used(&self, function: abi::HostFunction) -> bool {
-        self.host_funcs[function as usize].get().is_some()
+    /// The foreign functions the emitted code referenced, in import-name order.
+    pub fn host_funcs(&self) -> Vec<Arc<ForeignFunction>> {
+        self.host_funcs.borrow().values().cloned().collect()
     }
 
     pub fn io_exit_func(&self) -> &wasm::FuncName {

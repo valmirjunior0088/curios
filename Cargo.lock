@@ -458,6 +458,7 @@ dependencies = [
 name = "curios-pipeline"
 version = "0.2.1"
 dependencies = [
+ "curios-abi",
  "curios-cont",
  "curios-core",
  "curios-ersd",

@@ -8,7 +8,7 @@
 //! startup overhead.
 
 use {
-    curios::{core, text},
+    curios::{core, text, wire::sys_io},
     std::time::{Duration, Instant},
 };
 
@@ -46,8 +46,9 @@ fn time_check(label: &str, source: &str) {
         .expect("benchmark source parses");
 
     let start = Instant::now();
-    let (module, metavars) = text::to_core(&entrypoint, &text::prelude(&text::NullLoader))
-        .expect("benchmark source lowers");
+    let (module, metavars) =
+        text::to_core(&entrypoint, &text::prelude(&sys_io(), &text::NullLoader))
+            .expect("benchmark source lowers");
     let lowered = start.elapsed();
 
     let start = Instant::now();

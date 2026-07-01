@@ -1,6 +1,7 @@
 use {
     super::{BlockData, ClsrData, FieldData, Frame, FuncData, LocalData, Table},
-    crate as cont, curios_abi as abi,
+    crate as cont,
+    curios_abi::WireType,
     curios_base::Entropy,
     curios_wasm as wasm,
     std::{
@@ -50,12 +51,12 @@ pub enum LoadAs {
 /// site: `Nat`/`Bln` unbox their i31 carrier unsigned to a raw i32, `Int`
 /// unboxes signed (the `poll(2)` timeout convention), and the reference
 /// shapes cast to their concrete heap type (a handle is its `Bin` token).
-fn wire_load_as(wire_type: abi::WireType) -> LoadAs {
+fn wire_load_as(wire_type: &WireType) -> LoadAs {
     match wire_type {
-        abi::WireType::Nat | abi::WireType::Bln => LoadAs::Nat,
-        abi::WireType::Int => LoadAs::Int,
-        abi::WireType::Bin | abi::WireType::Io => LoadAs::Bin,
-        abi::WireType::Arr(_) => LoadAs::Arr,
+        WireType::Nat | WireType::Bln => LoadAs::Nat,
+        WireType::Int => LoadAs::Int,
+        WireType::Bin | WireType::Io => LoadAs::Bin,
+        WireType::Arr(_) => LoadAs::Arr,
     }
 }
 
@@ -622,21 +623,21 @@ impl<'a, 'b> Context<'a, 'b> {
                 operands,
                 resume,
             } => {
-                let signature = function.signature();
+                let signature = &function.signature;
 
                 debug_assert_eq!(
                     operands.len(),
                     signature.params.len(),
                     "{} operand count does not match its signature",
-                    function.name()
+                    function.name
                 );
 
-                for (operand, (_, wire_type)) in operands.iter().zip(signature.params) {
-                    output.extend(self.load_value_instrs(operand, wire_load_as(*wire_type)));
+                for (operand, (_, wire_type)) in operands.iter().zip(&signature.params) {
+                    output.extend(self.load_value_instrs(operand, wire_load_as(wire_type)));
                 }
 
                 output.push(wasm::Instr::Call {
-                    func_name: self.table().host_func(*function).clone(),
+                    func_name: self.table().host_func(function),
                 });
 
                 match signature.results.len() {

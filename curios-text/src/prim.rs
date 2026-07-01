@@ -1,6 +1,7 @@
 use {
     super::{Nat, Term},
-    curios_abi::HostFunction,
+    curios_abi::ForeignFunction,
+    std::sync::Arc,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -98,9 +99,9 @@ pub enum Prim {
     IoType,
     Io(u32),
     IoEql(Term, Term),
-    // A table-described host call; the prelude bakes it into the `/sys/Io`
+    // A store-described host call; the prelude bakes it into the `/sys/Io`
     // declaration whose parameters the argument terms name.
-    Foreign(HostFunction, Vec<Term>),
+    Foreign(Arc<ForeignFunction>, Vec<Term>),
     IoExit(Term, Term),
     CellType(Term),
     Cell(Term, Term),          // type, init

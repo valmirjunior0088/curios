@@ -1,4 +1,8 @@
-use {super::Term, curios_abi::HostFunction, std::collections::BTreeSet};
+use {
+    super::Term,
+    curios_abi::ForeignFunction,
+    std::{collections::BTreeSet, sync::Arc},
+};
 
 #[derive(Debug)]
 pub enum PurePrim {
@@ -88,9 +92,9 @@ pub enum PurePrim {
 
 #[derive(Debug)]
 pub enum HostPrim {
-    /// A table-described host call: the function's `WireSignature` fixes the
+    /// A store-described host call: the function's `WireSignature` fixes the
     /// operand order/types and how many results the continuation receives.
-    Foreign(HostFunction, Vec<Term>),
+    Foreign(Arc<ForeignFunction>, Vec<Term>),
     IoExit(Term),
 }
 

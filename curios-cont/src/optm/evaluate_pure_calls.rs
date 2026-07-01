@@ -254,7 +254,7 @@ fn materialise_snapshot(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {super::*, curios_abi::sys_io, std::sync::Arc};
 
     fn v(name: &str) -> ValueName {
         ValueName::from(name)
@@ -272,8 +272,10 @@ mod tests {
     }
 
     fn io_write(bytes: ValueName, resume: &str) -> Tail {
+        let function = Arc::clone(sys_io().get("io_write").expect("sys_io defines io_write"));
+
         Tail::Host(HostTarget::Foreign {
-            function: curios_abi::HostFunction::Write,
+            function,
             operands: vec![bytes.clone(), bytes],
             resume: b(resume),
         })

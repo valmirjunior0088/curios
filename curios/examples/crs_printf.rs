@@ -1,5 +1,5 @@
 use {
-    curios::{Stage, compile_entrypoint, core, text},
+    curios::{Stage, compile_entrypoint, core, text, wire::sys_io},
     std::time::{Duration, Instant},
 };
 
@@ -63,8 +63,9 @@ fn main() {
         .parse::<text::Entrypoint>()
         .expect("failed to parse ill-typed source");
 
-    let (module, metavars) = text::to_core(&entrypoint, &text::prelude(&text::NullLoader))
-        .expect("expected lowered module");
+    let (module, metavars) =
+        text::to_core(&entrypoint, &text::prelude(&sys_io(), &text::NullLoader))
+            .expect("expected lowered module");
     // Elaborating the module type-checks every top-level item, then the body
     // `printf("%d")("Alice")` — where the mismatch surfaces.
     let result = core::elaborate_module(

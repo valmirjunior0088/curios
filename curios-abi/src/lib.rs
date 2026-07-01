@@ -1,7 +1,7 @@
 //! The contract shared across the host/guest boundary: the numeric wire codes
 //! for `/sys/Io`'s status, poll-event, and open-mode tags, and the
-//! [`HostFunction`] table describing every host operation's import name and
-//! [`WireSignature`].
+//! [`ForeignStore`] of [`ForeignFunction`]s describing every host operation's
+//! import name and [`WireSignature`].
 //!
 //! Both ends cite these definitions: the runtime (`run::host`) when it lowers a
 //! `Status`/`Poll`/`Mode` to the wire and when it types the `env.*` imports,

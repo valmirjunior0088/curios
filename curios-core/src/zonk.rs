@@ -1,8 +1,11 @@
-use super::{
-    Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
-    InductiveParam, InductiveType, Item, Let, Match, Metavar, Module, MotivePattern, MotiveSlot,
-    Nat, Prim, Proj, Rec, Struct, StructType, Structure, Subterm, Telescope, Term, Tuple,
-    TupleType, Variant,
+use {
+    super::{
+        Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
+        InductiveParam, InductiveType, Item, Let, Match, Metavar, Module, MotivePattern,
+        MotiveSlot, Nat, Prim, Proj, Rec, Struct, StructType, Structure, Subterm, Telescope, Term,
+        Tuple, TupleType, Variant,
+    },
+    std::sync::Arc,
 };
 
 /// Substitute every solved metavariable in `term` by its (recursively zonked)
@@ -516,7 +519,9 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
             zonk_term(context, arr)?,
         ),
 
-        Prim::Foreign(function, args) => Prim::Foreign(*function, zonk_terms(context, args)?),
+        Prim::Foreign(function, args) => {
+            Prim::Foreign(Arc::clone(function), zonk_terms(context, args)?)
+        }
         Prim::IoExit(a, b) => Prim::IoExit(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::CellType(a) => Prim::CellType(zonk_term(context, a)?),
         Prim::Cell(a, b) => Prim::Cell(zonk_term(context, a)?, zonk_term(context, b)?),

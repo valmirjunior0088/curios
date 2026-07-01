@@ -90,7 +90,7 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 
 ## Host Interface (FFI)
 
-- [x] Signature-driven host-function table (`curios-abi`'s `HostFunction`/`WireSignature`): the `/sys/Io` prelude declarations, elaboration, wasm `env.*` imports, and runtime linker types all derive from one table — a generic `Foreign` node replaces the per-op enum variants in every IR
+- [x] Self-describing foreign-function store (`curios-abi`'s `ForeignFunction`/`WireSignature`/`ForeignStore`): the `/sys/Io` prelude declarations, elaboration, wasm `env.*` imports, and runtime linking all derive from one per-compilation store of named signature rows — the generic `Foreign` IR nodes carry the row itself, and the runtime links by pulling the module's imports from a name-keyed registry
 - [ ] Surface `foreign` declarations (user-visible FFI syntax)
 - [ ] Embedder-extensible host-function registry
 

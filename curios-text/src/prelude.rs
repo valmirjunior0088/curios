@@ -4,7 +4,8 @@ use {
         Name, Nat, NatLiteral, Plicity, Prim, Qualifier, Subterm, Term, TopItem, TopLet, TopMod,
         TopUse, TupleType, TupleTypeParam, UseGroup,
     },
-    curios_abi::{HostFunction, WireType, mode, poll, status},
+    curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status},
+    std::sync::Arc,
 };
 
 // The `sys` module is the home of every primitive type and operation. It is
@@ -176,48 +177,46 @@ fn pub_fn_marked(
 }
 
 /// The surface type a host-boundary [`WireType`] denotes — the prelude's
-/// reading of the signature table, mirrored by `core::wire_term` after
-/// lowering.
-fn wire_type(type_: WireType) -> Term {
+/// reading of the signature, mirrored by `core::wire_term` after lowering.
+fn wire_type(type_: &WireType) -> Term {
     match type_ {
         WireType::Nat => nat(),
         WireType::Int => int(),
         WireType::Bln => bln(),
         WireType::Bin => bin(),
         WireType::Io => io(),
-        WireType::Arr(elem) => arr_of(wire_type(*elem)),
+        WireType::Arr(element) => arr_of(wire_type(element)),
     }
 }
 
-/// A `/sys/Io` host-function declaration generated from the signature table:
+/// A `/sys/Io` host-function declaration generated from a foreign-store row:
 /// parameter names/types and the result shape (unit, bare type, named record)
 /// come off the `WireSignature`, and the body bakes the generic `Foreign` prim
 /// applied to the parameter names.
-fn host_fn(function: HostFunction) -> TopItem {
-    let signature = function.signature();
-    let (_, label) = function.path();
+fn host_fn(function: &Arc<ForeignFunction>) -> TopItem {
+    let signature = &function.signature;
 
-    let output = match signature.results {
+    let output = match signature.results.as_slice() {
         [] => unit(),
-        [(_, result)] => wire_type(*result),
+        [(_, result)] => wire_type(result),
         results => record(
             results
                 .iter()
-                .map(|(label, result)| (*label, wire_type(*result)))
+                .map(|(label, result)| (label.as_str(), wire_type(result)))
                 .collect(),
         ),
     };
 
     pub_fn(
-        label,
+        &function.label,
         signature
             .params
             .iter()
-            .map(|(param, type_)| (*param, wire_type(*type_)))
+            .map(|(param, type_)| (param.as_str(), wire_type(type_)))
             .collect(),
         output,
         prim(Prim::Foreign(
-            function,
+            Arc::clone(function),
             signature
                 .params
                 .iter()
@@ -476,7 +475,7 @@ fn cell_ops() -> Vec<TopItem> {
     ]
 }
 
-fn io_ops() -> Vec<TopItem> {
+fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
     let mut ops = vec![
         pub_let("stdin", io(), prim(Prim::Io(0))),
         pub_let("stdout", io(), prim(Prim::Io(1))),
@@ -489,12 +488,12 @@ fn io_ops() -> Vec<TopItem> {
         ),
     ];
 
-    // Every table-described host op, in `/sys/Io` prelude (= declaration) order.
-    // Each is a *function*, including the 0-arity clocks/args: a value binding
-    // would force-reduce its effectful prim body at definition (the bare prelude
-    // is lowered whole, so a top-level value `let` lands in `main`), while under
+    // Every store-described host op, in store (= declaration) order. Each is a
+    // *function*, including the 0-arity clocks/args: a value binding would
+    // force-reduce its effectful prim body at definition (the bare prelude is
+    // lowered whole, so a top-level value `let` lands in `main`), while under
     // the function abstraction it stays inert until called.
-    ops.extend(HostFunction::ALL.into_iter().map(host_fn));
+    ops.extend(foreigns.iter().map(host_fn));
 
     ops.extend([
         // `(@A : Type) -> Nat -> A`: exit never returns, so its result type is
@@ -552,8 +551,9 @@ fn io_ops() -> Vec<TopItem> {
 }
 
 // The `sys` module body of primitive types and operations, served to discovery by
-// `SysLoader` like any other loaded module.
-fn sys_module() -> Module {
+// `SysLoader` like any other loaded module. The host operations under `Io` come
+// off `foreigns` — the compilation's foreign store.
+fn sys_module(foreigns: &ForeignStore) -> Module {
     Module {
         items: vec![
             pub_mod("Nat", with_type(pub_let("Nat", type_(), nat()), nat_ops())),
@@ -566,7 +566,10 @@ fn sys_module() -> Module {
             pub_use("Bin"),
             pub_mod("Bln", with_type(pub_let("Bln", type_(), bln()), bln_ops())),
             pub_use("Bln"),
-            pub_mod("Io", with_type(pub_let("Io", type_(), io()), io_ops())),
+            pub_mod(
+                "Io",
+                with_type(pub_let("Io", type_(), io()), io_ops(foreigns)),
+            ),
             pub_use("Io"),
             pub_mod(
                 "Arr",
@@ -603,20 +606,17 @@ impl<L: Loader + ?Sized> Loader for &L {
 // Serves the `sys` module of primitives, delegating everything else to `inner`. `sys`
 // is built directly as `text` AST (never parsed); only `["sys"]` is ever asked for it.
 pub struct SysLoader<L> {
+    // `sys` is fixed once the foreign store is chosen, so [`prelude`] builds
+    // its AST when the loader is assembled and `load` hands out clones —
+    // discovery asks for it repeatedly per compile (§ loader cache).
+    module: Module,
     inner: L,
-}
-
-thread_local! {
-    // `sys` is the same on every load, so build its AST once per thread and hand
-    // out clones — discovery asks for it on every compile (§ loader cache). `Module`
-    // is not `Sync`, so this is thread-local rather than a `static`.
-    static SYS_MODULE: Module = sys_module();
 }
 
 impl<L: Loader> Loader for SysLoader<L> {
     fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
         if qualifier.iter().eq(["sys"]) {
-            return Ok(SYS_MODULE.with(Module::clone));
+            return Ok(self.module.clone());
         }
 
         self.inner.load(qualifier)
@@ -765,8 +765,12 @@ impl<L: Loader> Loader for SynLoader<L> {
 /// Wrap a loader so `sys`, `syn`, and `std` resolve from the binary and everything else
 /// falls through to `inner`. The wrapped loader also reports those roots from
 /// [`Loader::roots`], so `to_core` declares them at the entrypoint root automatically.
-pub fn prelude<L: Loader>(inner: L) -> impl Loader {
+/// `foreigns` is the compilation's foreign store — the host operations `/sys/Io`
+/// declares; today always `curios_abi::sys_io()`, created per compilation by the
+/// pipeline driver.
+pub fn prelude<L: Loader>(foreigns: &ForeignStore, inner: L) -> impl Loader {
     SysLoader {
+        module: sys_module(foreigns),
         inner: SynLoader {
             inner: StdLoader { inner },
         },

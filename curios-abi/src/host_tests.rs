@@ -1,23 +1,17 @@
 use {
-    super::{HostFunction, WireType},
+    super::{ForeignFunction, Reduction, WireSignature, WireType, sys_io},
     std::collections::BTreeSet,
 };
 
-/// `ALL` mirrors declaration order, so `f as usize` indexes per-function
-/// tables (the codegen symbol table relies on it).
-#[test]
-fn all_is_in_discriminant_order() {
-    for (index, function) in HostFunction::ALL.into_iter().enumerate() {
-        assert_eq!(function as usize, index, "{function:?} is out of order");
-    }
-}
-
-/// The 24 `env` import names, byte for byte — the wire ABI contract between
-/// the wasm emitter and the runtime linker. A mismatch here silently strands
-/// an import, so the whole list is pinned.
+/// The `/sys/Io` `env` import names, byte for byte and in declaration order —
+/// the wire ABI contract between the wasm emitter and the runtime linker. A
+/// mismatch here silently strands an import, so the whole list is pinned.
 #[test]
 fn names_are_the_wire_abi() {
-    let names = HostFunction::ALL.map(HostFunction::name);
+    let names = sys_io()
+        .iter()
+        .map(|function| function.name.clone())
+        .collect::<Vec<_>>();
 
     assert_eq!(
         names,
@@ -50,13 +44,15 @@ fn names_are_the_wire_abi() {
     );
 }
 
+/// Labels are the `/sys/Io` binding names, so they must be as unique as the
+/// import names (`register` already enforces name uniqueness; this pins the
+/// seed's labels too).
 #[test]
-fn names_and_paths_are_unique() {
-    let names: BTreeSet<_> = HostFunction::ALL.iter().map(|f| f.name()).collect();
-    let paths: BTreeSet<_> = HostFunction::ALL.iter().map(|f| f.path()).collect();
+fn labels_are_unique() {
+    let store = sys_io();
+    let labels: BTreeSet<_> = store.iter().map(|function| &function.label).collect();
 
-    assert_eq!(names.len(), HostFunction::ALL.len());
-    assert_eq!(paths.len(), HostFunction::ALL.len());
+    assert_eq!(labels.len(), store.len());
 }
 
 /// Result labels are the record fields the guest projects (`.status`,
@@ -64,28 +60,29 @@ fn names_and_paths_are_unique() {
 /// multi-result shapes are pinned.
 #[test]
 fn result_records_keep_their_labels() {
-    let labels = |f: HostFunction| -> Vec<&'static str> {
-        f.signature()
+    let store = sys_io();
+    let labels = |name: &str| -> Vec<String> {
+        store
+            .get(name)
+            .unwrap_or_else(|| panic!("sys_io lacks {name}"))
+            .signature
             .results
             .iter()
-            .map(|(label, _)| *label)
+            .map(|(label, _)| label.clone())
             .collect()
     };
 
-    assert_eq!(labels(HostFunction::Read), ["status", "bytes"]);
-    assert_eq!(labels(HostFunction::Write), ["status", "written"]);
-    assert_eq!(labels(HostFunction::Open), ["status", "handle"]);
-    assert_eq!(labels(HostFunction::Lookup), ["status", "handle"]);
-    assert_eq!(labels(HostFunction::Resolve), ["status", "addresses"]);
-    assert_eq!(labels(HostFunction::Socket), ["status", "handle"]);
-    assert_eq!(labels(HostFunction::Accept), ["status", "handle"]);
-    assert_eq!(labels(HostFunction::TlsServerConfig), ["status", "handle"]);
-    assert_eq!(
-        labels(HostFunction::ClockWall),
-        ["secs_hi", "secs_lo", "nanos"]
-    );
-    assert_eq!(labels(HostFunction::ClockMono), ["secs", "nanos"]);
-    assert_eq!(labels(HostFunction::Env), ["status", "value"]);
+    assert_eq!(labels("io_read"), ["status", "bytes"]);
+    assert_eq!(labels("io_write"), ["status", "written"]);
+    assert_eq!(labels("io_open"), ["status", "handle"]);
+    assert_eq!(labels("io_lookup"), ["status", "handle"]);
+    assert_eq!(labels("io_resolve"), ["status", "addresses"]);
+    assert_eq!(labels("io_socket"), ["status", "handle"]);
+    assert_eq!(labels("io_accept"), ["status", "handle"]);
+    assert_eq!(labels("io_tls_server_config"), ["status", "handle"]);
+    assert_eq!(labels("io_clock_wall"), ["secs_hi", "secs_lo", "nanos"]);
+    assert_eq!(labels("io_clock_mono"), ["secs", "nanos"]);
+    assert_eq!(labels("io_env"), ["status", "value"]);
 }
 
 /// Every signature is well-formed: single results ride a name too (the guest
@@ -93,24 +90,57 @@ fn result_records_keep_their_labels() {
 /// names are unique within a signature.
 #[test]
 fn signatures_are_well_formed() {
-    for function in HostFunction::ALL {
-        let signature = function.signature();
+    for function in sys_io().iter() {
+        let signature = &function.signature;
 
-        let params: BTreeSet<_> = signature.params.iter().map(|(name, _)| *name).collect();
+        let params: BTreeSet<_> = signature.params.iter().map(|(name, _)| name).collect();
         assert_eq!(
             params.len(),
             signature.params.len(),
-            "{function:?} repeats a parameter name"
+            "{} repeats a parameter name",
+            function.name
         );
 
-        for (_, type_) in signature.params.iter().chain(signature.results) {
+        for (_, type_) in signature.params.iter().chain(&signature.results) {
             if let WireType::Arr(element) = type_ {
                 assert!(
-                    !matches!(element, WireType::Arr(_)),
-                    "{function:?} nests Arr — no host op does, and codegen's \
-                     uniform Arr load would not distinguish the layers"
+                    !matches!(**element, WireType::Arr(_)),
+                    "{} nests Arr — no host op does, and codegen's uniform Arr \
+                     load would not distinguish the layers",
+                    function.name
                 );
             }
         }
     }
+}
+
+/// `args` is the one inert row (a snapshot of immutable host state); every
+/// other builtin is opaque under type-level reduction.
+#[test]
+fn only_args_is_inert() {
+    let inert = sys_io()
+        .iter()
+        .filter(|function| function.reduction == Reduction::Inert)
+        .map(|function| function.name.clone())
+        .collect::<Vec<_>>();
+
+    assert_eq!(inert, ["io_args"]);
+}
+
+/// The import name is the identity every stage links on, so a second row with
+/// the same name is a construction bug.
+#[test]
+#[should_panic(expected = "already registered")]
+fn register_rejects_a_duplicate_name() {
+    let mut store = sys_io();
+
+    store.register(ForeignFunction {
+        name: "io_read".to_string(),
+        label: "read_again".to_string(),
+        signature: WireSignature {
+            params: vec![],
+            results: vec![],
+        },
+        reduction: Reduction::Opaque,
+    });
 }

@@ -1,6 +1,8 @@
 use {
     super::{Context, ExprEmitter, Table},
-    crate as cont, curios_abi as abi, curios_wasm as wasm,
+    crate as cont,
+    curios_abi::WireType,
+    curios_wasm as wasm,
     std::iter,
 };
 
@@ -40,16 +42,14 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// type: scalars cross as raw `i32` (the call site unboxes the i31 carrier
     /// via `LoadAs::Nat`/`LoadAs::Int`), references as their concrete
     /// non-nullable heap type (a handle is its `Bin` token).
-    fn wire_param_type(&self, wire_type: abi::WireType) -> wasm::ValType {
+    fn wire_param_type(&self, wire_type: &WireType) -> wasm::ValType {
         match wire_type {
-            abi::WireType::Nat | abi::WireType::Bln | abi::WireType::Int => {
-                wasm::ValType::Num(wasm::NumType::I32)
-            }
-            abi::WireType::Bin | abi::WireType::Io => wasm::ValType::Ref(wasm::RefType {
+            WireType::Nat | WireType::Bln | WireType::Int => wasm::ValType::Num(wasm::NumType::I32),
+            WireType::Bin | WireType::Io => wasm::ValType::Ref(wasm::RefType {
                 is_nullable: false,
                 heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
             }),
-            abi::WireType::Arr(_) => wasm::ValType::Ref(wasm::RefType {
+            WireType::Arr(_) => wasm::ValType::Ref(wasm::RefType {
                 is_nullable: false,
                 heap_type: wasm::HeapType::Concrete(self.table.arr_type()),
             }),
@@ -60,9 +60,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// pre-boxed as i31 refs so they land directly in anyref block params
     /// (no host op returns an `Int` today; mapping it like `Nat` keeps the
     /// function total), references exactly as in parameter position.
-    fn wire_result_type(&self, wire_type: abi::WireType) -> wasm::ValType {
+    fn wire_result_type(&self, wire_type: &WireType) -> wasm::ValType {
         match wire_type {
-            abi::WireType::Nat | abi::WireType::Bln | abi::WireType::Int => {
+            WireType::Nat | WireType::Bln | WireType::Int => {
                 wasm::ValType::Ref(self.table.int_type(false))
             }
             reference => self.wire_param_type(reference),
@@ -100,30 +100,26 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_sys_imports(&mut self) {
         let i32_val = wasm::ValType::Num(wasm::NumType::I32);
 
-        // The table-described imports, in `ALL` (= `/sys/Io` prelude) order —
-        // only the functions whose call sites interned their table cell.
-        for function in abi::HostFunction::ALL {
-            if !self.table.host_func_used(function) {
-                continue;
-            }
-
-            let signature = function.signature();
+        // The store-described imports — exactly the functions whose call sites
+        // recorded themselves in the table, in import-name order.
+        for function in self.table.host_funcs() {
+            let signature = &function.signature;
 
             self.add_host_import(
-                function.name(),
-                wasm::TypeName::from(function.name()),
-                self.table.host_func(function).clone(),
+                &function.name,
+                wasm::TypeName::from(function.name.as_str()),
+                self.table.host_func(&function),
                 wasm::ResultType::from(
                     signature
                         .params
                         .iter()
-                        .map(|(_, wire_type)| self.wire_param_type(*wire_type)),
+                        .map(|(_, wire_type)| self.wire_param_type(wire_type)),
                 ),
                 wasm::ResultType::from(
                     signature
                         .results
                         .iter()
-                        .map(|(_, wire_type)| self.wire_result_type(*wire_type)),
+                        .map(|(_, wire_type)| self.wire_result_type(wire_type)),
                 ),
             );
         }
