@@ -634,13 +634,6 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::IoConnect(handle, addr) => print_binary("Io.connect ", handle, addr, depth),
         Prim::IoListen(handle, backlog) => print_binary("Io.listen ", handle, backlog, depth),
         Prim::IoAccept(handle) => print_unary("Io.accept ", handle, depth),
-        Prim::IoStartTls(handle, sni) => print_binary("Io.start_tls ", handle, sni, depth),
-        Prim::IoTlsServerConfig(cert, key) => {
-            print_binary("Io.tls_server_config ", cert, key, depth)
-        }
-        Prim::IoStartTlsServer(handle, cfg) => {
-            print_binary("Io.start_tls_server ", handle, cfg, depth)
-        }
         Prim::IoSetNonblocking(handle, on) => {
             print_binary("Io.set_nonblocking ", handle, on, depth)
         }

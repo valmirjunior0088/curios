@@ -232,9 +232,6 @@ pub struct Table<'a> {
     io_connect: OnceCell<wasm::FuncName>,
     io_listen: OnceCell<wasm::FuncName>,
     io_accept: OnceCell<wasm::FuncName>,
-    io_start_tls: OnceCell<wasm::FuncName>,
-    io_tls_server_config: OnceCell<wasm::FuncName>,
-    io_start_tls_server: OnceCell<wasm::FuncName>,
     io_set_nonblocking: OnceCell<wasm::FuncName>,
     io_set_recv_timeout: OnceCell<wasm::FuncName>,
     io_set_send_timeout: OnceCell<wasm::FuncName>,
@@ -308,9 +305,6 @@ impl<'a> Table<'a> {
             io_connect: OnceCell::new(),
             io_listen: OnceCell::new(),
             io_accept: OnceCell::new(),
-            io_start_tls: OnceCell::new(),
-            io_tls_server_config: OnceCell::new(),
-            io_start_tls_server: OnceCell::new(),
             io_set_nonblocking: OnceCell::new(),
             io_set_recv_timeout: OnceCell::new(),
             io_set_send_timeout: OnceCell::new(),
@@ -490,33 +484,6 @@ impl<'a> Table<'a> {
 
     pub fn io_accept_used(&self) -> bool {
         self.io_accept.get().is_some()
-    }
-
-    pub fn io_start_tls_func(&self) -> &wasm::FuncName {
-        self.io_start_tls
-            .get_or_init(|| wasm::FuncName::from("io_start_tls"))
-    }
-
-    pub fn io_start_tls_used(&self) -> bool {
-        self.io_start_tls.get().is_some()
-    }
-
-    pub fn io_tls_server_config_func(&self) -> &wasm::FuncName {
-        self.io_tls_server_config
-            .get_or_init(|| wasm::FuncName::from("io_tls_server_config"))
-    }
-
-    pub fn io_tls_server_config_used(&self) -> bool {
-        self.io_tls_server_config.get().is_some()
-    }
-
-    pub fn io_start_tls_server_func(&self) -> &wasm::FuncName {
-        self.io_start_tls_server
-            .get_or_init(|| wasm::FuncName::from("io_start_tls_server"))
-    }
-
-    pub fn io_start_tls_server_used(&self) -> bool {
-        self.io_start_tls_server.get().is_some()
     }
 
     pub fn io_lookup_func(&self) -> &wasm::FuncName {

@@ -101,9 +101,6 @@ pub enum HostPrim {
     IoConnect(Term, Term),
     IoListen(Term, Term),
     IoAccept(Term),
-    IoStartTls(Term, Term),
-    IoTlsServerConfig(Term, Term),
-    IoStartTlsServer(Term, Term),
     IoSetNonblocking(Term, Term),
     IoSetRecvTimeout(Term, Term),
     IoSetSendTimeout(Term, Term),
@@ -318,9 +315,6 @@ impl HostPrim {
             | IoLookup(a, b)
             | IoBind(a, b)
             | IoConnect(a, b)
-            | IoStartTls(a, b)
-            | IoTlsServerConfig(a, b)
-            | IoStartTlsServer(a, b)
             | IoListen(a, b)
             | IoSetNonblocking(a, b)
             | IoSetRecvTimeout(a, b)
@@ -344,9 +338,6 @@ impl HostPrim {
             | IoLookup(a, b)
             | IoBind(a, b)
             | IoConnect(a, b)
-            | IoStartTls(a, b)
-            | IoTlsServerConfig(a, b)
-            | IoStartTlsServer(a, b)
             | IoListen(a, b)
             | IoSetNonblocking(a, b)
             | IoSetRecvTimeout(a, b)

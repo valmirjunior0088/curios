@@ -736,42 +736,6 @@ impl<'a, 'b> Context<'a, 'b> {
 
                 self.host_single_resume(&mut output, resume);
             }
-            cont::HostTarget::IoStartTls {
-                handle,
-                sni,
-                resume,
-            } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
-                output.extend(self.load_value_instrs(sni, LoadAs::Bin));
-                output.push(wasm::Instr::Call {
-                    func_name: self.table().io_start_tls_func().clone(),
-                });
-
-                self.host_single_resume(&mut output, resume);
-            }
-            cont::HostTarget::IoTlsServerConfig { cert, key, resume } => {
-                output.extend(self.load_value_instrs(cert, LoadAs::Bin));
-                output.extend(self.load_value_instrs(key, LoadAs::Bin));
-                output.push(wasm::Instr::Call {
-                    func_name: self.table().io_tls_server_config_func().clone(),
-                });
-
-                // Two-result: resume defines the `{ status, handle }` record.
-                self.host_multi_resume(&mut output, resume, 2);
-            }
-            cont::HostTarget::IoStartTlsServer {
-                handle,
-                cfg,
-                resume,
-            } => {
-                output.extend(self.load_value_instrs(handle, LoadAs::Bin));
-                output.extend(self.load_value_instrs(cfg, LoadAs::Bin));
-                output.push(wasm::Instr::Call {
-                    func_name: self.table().io_start_tls_server_func().clone(),
-                });
-
-                self.host_single_resume(&mut output, resume);
-            }
             cont::HostTarget::IoListen {
                 handle,
                 backlog,

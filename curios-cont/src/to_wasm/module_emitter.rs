@@ -151,40 +151,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
-        if self.table.io_start_tls_used() {
-            // `(handle, sni) -> status` — the same shape as `io_connect`.
-            self.add_host_import(
-                "io_start_tls",
-                wasm::TypeName::from("io_start_tls"),
-                self.table.io_start_tls_func().clone(),
-                wasm::ResultType::from([bin_ref.clone(), bin_ref.clone()]),
-                wasm::ResultType::from([status_ref.clone()]),
-            );
-        }
-
-        if self.table.io_tls_server_config_used() {
-            // `(cert, key) -> (status, handle)` — like `io_socket`, with a
-            // second `Bin` operand.
-            self.add_host_import(
-                "io_tls_server_config",
-                wasm::TypeName::from("io_tls_server_config"),
-                self.table.io_tls_server_config_func().clone(),
-                wasm::ResultType::from([bin_ref.clone(), bin_ref.clone()]),
-                wasm::ResultType::from([status_ref.clone(), bin_ref.clone()]),
-            );
-        }
-
-        if self.table.io_start_tls_server_used() {
-            // `(handle, cfg) -> status`.
-            self.add_host_import(
-                "io_start_tls_server",
-                wasm::TypeName::from("io_start_tls_server"),
-                self.table.io_start_tls_server_func().clone(),
-                wasm::ResultType::from([bin_ref.clone(), bin_ref.clone()]),
-                wasm::ResultType::from([status_ref.clone()]),
-            );
-        }
-
         if self.table.io_close_used() {
             self.add_host_import(
                 "io_close",

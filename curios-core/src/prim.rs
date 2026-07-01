@@ -155,17 +155,6 @@ pub enum Prim {
     // The returned handle is an ordinary `Io` the read/write/close plumbing
     // serves, exactly like a `connect`ed socket.
     IoAccept(Term),
-    // (handle, sni) -> Nat status: upgrade a connected socket to a TLS client
-    // stream in place, running the handshake inline. The same handle then
-    // serves the read/write/close plumbing as an encrypted byte stream.
-    IoStartTls(Term, Term),
-    // (cert, key) -> { status, handle }: build an opaque server TLS config from
-    // a PEM certificate chain and key. The handle is a host-owned config token
-    // (no socket), consumed by `start_tls_server` and released by `close`.
-    IoTlsServerConfig(Term, Term),
-    // (handle, cfg) -> Nat status: upgrade an accepted socket to a TLS server
-    // stream in place using a config token, running the handshake inline.
-    IoStartTlsServer(Term, Term),
     // (handle, on) -> Nat status: set the handle's non-blocking flag (`on` is a
     // `Bln` riding the i31 carrier). fcntl O_NONBLOCK.
     IoSetNonblocking(Term, Term),
@@ -889,9 +878,6 @@ impl Prim {
             | Prim::IoSetRecvTimeout(a, b)
             | Prim::IoSetSendTimeout(a, b)
             | Prim::IoSetReuseaddr(a, b)
-            | Prim::IoStartTls(a, b)
-            | Prim::IoTlsServerConfig(a, b)
-            | Prim::IoStartTlsServer(a, b)
             | Prim::IoExit(a, b) => {
                 visit(a);
                 visit(b);
@@ -1104,13 +1090,6 @@ impl Prim {
             }
             Prim::IoAccept(handle) => Prim::IoAccept(visit.visit_subterm(handle)),
             Prim::IoConnect(handle, addr) => traverse_binary(handle, addr, visit, Prim::IoConnect),
-            Prim::IoStartTls(handle, sni) => traverse_binary(handle, sni, visit, Prim::IoStartTls),
-            Prim::IoTlsServerConfig(cert, key) => {
-                traverse_binary(cert, key, visit, Prim::IoTlsServerConfig)
-            }
-            Prim::IoStartTlsServer(handle, cfg) => {
-                traverse_binary(handle, cfg, visit, Prim::IoStartTlsServer)
-            }
             Prim::IoSetNonblocking(handle, on) => {
                 traverse_binary(handle, on, visit, Prim::IoSetNonblocking)
             }

@@ -991,15 +991,6 @@ impl<'a, 'b> Lower<'a, 'b> {
                 core::Prim::IoListen(self.term(handle)?, self.term(backlog)?)
             }
             Prim::IoAccept(handle) => core::Prim::IoAccept(self.term(handle)?),
-            Prim::IoStartTls(handle, sni) => {
-                core::Prim::IoStartTls(self.term(handle)?, self.term(sni)?)
-            }
-            Prim::IoTlsServerConfig(cert, key) => {
-                core::Prim::IoTlsServerConfig(self.term(cert)?, self.term(key)?)
-            }
-            Prim::IoStartTlsServer(handle, cfg) => {
-                core::Prim::IoStartTlsServer(self.term(handle)?, self.term(cfg)?)
-            }
             Prim::IoSetNonblocking(handle, on) => {
                 core::Prim::IoSetNonblocking(self.term(handle)?, self.term(on)?)
             }

@@ -681,62 +681,6 @@ pub fn lower_value_prim<'b>(
                 cont::Tail::Host(cont::HostTarget::IoAccept { handle, resume })
             }),
         ),
-        ersd::Prim::Host(ersd::HostPrim::IoStartTls(handle, sni)) => work.lower_value_name(
-            handle,
-            frame,
-            Cont::new(move |work, handle| {
-                work.lower_value_name(
-                    sni,
-                    frame,
-                    Cont::new(move |work, sni| {
-                        // `Io.start_tls` returns its status scalar; forward it straight.
-                        let resume = forward_resume(work, cont);
-
-                        cont::Tail::Host(cont::HostTarget::IoStartTls {
-                            handle,
-                            sni,
-                            resume,
-                        })
-                    }),
-                )
-            }),
-        ),
-        ersd::Prim::Host(ersd::HostPrim::IoTlsServerConfig(cert, key)) => work.lower_value_name(
-            cert,
-            frame,
-            Cont::new(move |work, cert| {
-                work.lower_value_name(
-                    key,
-                    frame,
-                    Cont::new(move |work, key| {
-                        // (status, handle) packs into `{ status, handle }`, like `IoSocket`.
-                        let resume = record_resume(work, 2, cont);
-
-                        cont::Tail::Host(cont::HostTarget::IoTlsServerConfig { cert, key, resume })
-                    }),
-                )
-            }),
-        ),
-        ersd::Prim::Host(ersd::HostPrim::IoStartTlsServer(handle, cfg)) => work.lower_value_name(
-            handle,
-            frame,
-            Cont::new(move |work, handle| {
-                work.lower_value_name(
-                    cfg,
-                    frame,
-                    Cont::new(move |work, cfg| {
-                        // `Io.start_tls_server` returns its status scalar; forward it straight.
-                        let resume = forward_resume(work, cont);
-
-                        cont::Tail::Host(cont::HostTarget::IoStartTlsServer {
-                            handle,
-                            cfg,
-                            resume,
-                        })
-                    }),
-                )
-            }),
-        ),
         ersd::Prim::Host(ersd::HostPrim::IoSetNonblocking(handle, on)) => work.lower_value_name(
             handle,
             frame,

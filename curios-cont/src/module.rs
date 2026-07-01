@@ -231,29 +231,6 @@ pub enum HostTarget {
         handle: ValueName,
         resume: BlockName,
     },
-    /// Upgrade connected socket `handle` to a TLS client stream in place using
-    /// the server name `sni` (a `Bin`). Returns the status scalar; `resume`
-    /// takes one block parameter.
-    IoStartTls {
-        handle: ValueName,
-        sni: ValueName,
-        resume: BlockName,
-    },
-    /// Build an opaque server TLS config from `cert` and `key` (both `Bin`).
-    /// Returns (status, handle); `resume` takes two block parameters.
-    IoTlsServerConfig {
-        cert: ValueName,
-        key: ValueName,
-        resume: BlockName,
-    },
-    /// Upgrade accepted socket `handle` to a TLS server stream in place using
-    /// the config token `cfg`. Returns the status scalar; `resume` takes one
-    /// block parameter.
-    IoStartTlsServer {
-        handle: ValueName,
-        cfg: ValueName,
-        resume: BlockName,
-    },
     /// Set socket `handle`'s non-blocking flag `on` (a `Bln`). Returns the
     /// status scalar; `resume` takes one block parameter.
     IoSetNonblocking {
@@ -333,9 +310,6 @@ impl HostTarget {
             | HostTarget::IoConnect { resume, .. }
             | HostTarget::IoListen { resume, .. }
             | HostTarget::IoAccept { resume, .. }
-            | HostTarget::IoStartTls { resume, .. }
-            | HostTarget::IoTlsServerConfig { resume, .. }
-            | HostTarget::IoStartTlsServer { resume, .. }
             | HostTarget::IoSetNonblocking { resume, .. }
             | HostTarget::IoSetRecvTimeout { resume, .. }
             | HostTarget::IoSetSendTimeout { resume, .. }
@@ -364,9 +338,6 @@ impl HostTarget {
             | HostTarget::IoConnect { resume, .. }
             | HostTarget::IoListen { resume, .. }
             | HostTarget::IoAccept { resume, .. }
-            | HostTarget::IoStartTls { resume, .. }
-            | HostTarget::IoTlsServerConfig { resume, .. }
-            | HostTarget::IoStartTlsServer { resume, .. }
             | HostTarget::IoSetNonblocking { resume, .. }
             | HostTarget::IoSetRecvTimeout { resume, .. }
             | HostTarget::IoSetSendTimeout { resume, .. }
@@ -398,9 +369,6 @@ impl HostTarget {
                 handle, backlog, ..
             } => vec![handle, backlog],
             HostTarget::IoAccept { handle, .. } => vec![handle],
-            HostTarget::IoStartTls { handle, sni, .. } => vec![handle, sni],
-            HostTarget::IoTlsServerConfig { cert, key, .. } => vec![cert, key],
-            HostTarget::IoStartTlsServer { handle, cfg, .. } => vec![handle, cfg],
             HostTarget::IoSetNonblocking { handle, on, .. } => vec![handle, on],
             HostTarget::IoSetRecvTimeout { handle, ms, .. } => vec![handle, ms],
             HostTarget::IoSetSendTimeout { handle, ms, .. } => vec![handle, ms],
@@ -438,9 +406,6 @@ impl HostTarget {
                 handle, backlog, ..
             } => vec![handle, backlog],
             HostTarget::IoAccept { handle, .. } => vec![handle],
-            HostTarget::IoStartTls { handle, sni, .. } => vec![handle, sni],
-            HostTarget::IoTlsServerConfig { cert, key, .. } => vec![cert, key],
-            HostTarget::IoStartTlsServer { handle, cfg, .. } => vec![handle, cfg],
             HostTarget::IoSetNonblocking { handle, on, .. } => vec![handle, on],
             HostTarget::IoSetRecvTimeout { handle, ms, .. } => vec![handle, ms],
             HostTarget::IoSetSendTimeout { handle, ms, .. } => vec![handle, ms],

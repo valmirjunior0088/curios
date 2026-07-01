@@ -4,7 +4,7 @@ use {
         Name, Nat, NatLiteral, Plicity, Prim, Qualifier, Subterm, Term, TopItem, TopLet, TopMod,
         TopUse, TupleType, TupleTypeParam, UseGroup,
     },
-    curios_abi as wire,
+    curios_abi::{HostFunction, WireType, mode, poll, status},
 };
 
 // The `sys` module is the home of every primitive type and operation. It is
@@ -27,7 +27,7 @@ fn nat() -> Term {
 
 // A `Nat` literal value term, built exactly as the parser builds one: `0` is
 // bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire
-// codes (`curios_abi::wire`) into the `/sys/Io` constant mirror.
+// codes (`curios_abi::{status, poll, mode}`) into the `/sys/Io` constant mirror.
 fn nat_lit(n: u32) -> Term {
     match n {
         0 => prim(Prim::Nat(Nat::Zero)),
@@ -173,6 +173,58 @@ fn pub_fn_marked(
             body,
         },
     })
+}
+
+/// The surface type a host-boundary [`WireType`] denotes — the prelude's
+/// reading of the signature table, mirrored by `core::wire_term` after
+/// lowering.
+fn wire_type(type_: WireType) -> Term {
+    match type_ {
+        WireType::Nat => nat(),
+        WireType::Int => int(),
+        WireType::Bln => bln(),
+        WireType::Bin => bin(),
+        WireType::Io => io(),
+        WireType::Arr(elem) => arr_of(wire_type(*elem)),
+    }
+}
+
+/// A `/sys/Io` host-function declaration generated from the signature table:
+/// parameter names/types and the result shape (unit, bare type, named record)
+/// come off the `WireSignature`, and the body bakes the generic `Foreign` prim
+/// applied to the parameter names.
+fn host_fn(function: HostFunction) -> TopItem {
+    let signature = function.signature();
+    let (_, label) = function.path();
+
+    let output = match signature.results {
+        [] => unit(),
+        [(_, result)] => wire_type(*result),
+        results => record(
+            results
+                .iter()
+                .map(|(label, result)| (*label, wire_type(*result)))
+                .collect(),
+        ),
+    };
+
+    pub_fn(
+        label,
+        signature
+            .params
+            .iter()
+            .map(|(param, type_)| (*param, wire_type(*type_)))
+            .collect(),
+        output,
+        prim(Prim::Foreign(
+            function,
+            signature
+                .params
+                .iter()
+                .map(|(param, _)| name(param))
+                .collect(),
+        )),
+    )
 }
 
 fn binary(label: &str, operand: Term, output: Term, ctor: fn(Term, Term) -> Prim) -> TopItem {
@@ -495,24 +547,9 @@ fn io_ops() -> Vec<TopItem> {
             record(vec![("status", nat()), ("handle", io())]),
             prim(Prim::IoAccept(name("h"))),
         ),
-        pub_fn(
-            "start_tls",
-            vec![("h", io()), ("sni", bin())],
-            nat(),
-            prim(Prim::IoStartTls(name("h"), name("sni"))),
-        ),
-        pub_fn(
-            "tls_server_config",
-            vec![("cert", bin()), ("key", bin())],
-            record(vec![("status", nat()), ("handle", io())]),
-            prim(Prim::IoTlsServerConfig(name("cert"), name("key"))),
-        ),
-        pub_fn(
-            "start_tls_server",
-            vec![("h", io()), ("cfg", io())],
-            nat(),
-            prim(Prim::IoStartTlsServer(name("h"), name("cfg"))),
-        ),
+        host_fn(HostFunction::StartTls),
+        host_fn(HostFunction::TlsServerConfig),
+        host_fn(HostFunction::StartTlsServer),
         pub_fn(
             "set_nonblocking",
             vec![("h", io()), ("on", bln())],
@@ -619,35 +656,35 @@ fn io_ops() -> Vec<TopItem> {
         pub_mod(
             "Status",
             vec![
-                pub_let("ok", nat(), nat_lit(wire::status::OK)),
-                pub_let("eof", nat(), nat_lit(wire::status::EOF)),
-                pub_let("not_found", nat(), nat_lit(wire::status::NOT_FOUND)),
+                pub_let("ok", nat(), nat_lit(status::OK)),
+                pub_let("eof", nat(), nat_lit(status::EOF)),
+                pub_let("not_found", nat(), nat_lit(status::NOT_FOUND)),
                 pub_let(
                     "permission_denied",
                     nat(),
-                    nat_lit(wire::status::PERMISSION_DENIED),
+                    nat_lit(status::PERMISSION_DENIED),
                 ),
-                pub_let("exists", nat(), nat_lit(wire::status::ALREADY_EXISTS)),
-                pub_let("refused", nat(), nat_lit(wire::status::CONNECTION_REFUSED)),
-                pub_let("would_block", nat(), nat_lit(wire::status::WOULD_BLOCK)),
-                pub_let("tls", nat(), nat_lit(wire::status::TLS_ERROR)),
+                pub_let("exists", nat(), nat_lit(status::ALREADY_EXISTS)),
+                pub_let("refused", nat(), nat_lit(status::CONNECTION_REFUSED)),
+                pub_let("would_block", nat(), nat_lit(status::WOULD_BLOCK)),
+                pub_let("tls", nat(), nat_lit(status::TLS_ERROR)),
             ],
         ),
         pub_mod(
             "Poll",
             vec![
-                pub_let("read", nat(), nat_lit(wire::poll::READ)),
-                pub_let("write", nat(), nat_lit(wire::poll::WRITE)),
-                pub_let("err", nat(), nat_lit(wire::poll::ERR)),
-                pub_let("hup", nat(), nat_lit(wire::poll::HUP)),
+                pub_let("read", nat(), nat_lit(poll::READ)),
+                pub_let("write", nat(), nat_lit(poll::WRITE)),
+                pub_let("err", nat(), nat_lit(poll::ERR)),
+                pub_let("hup", nat(), nat_lit(poll::HUP)),
             ],
         ),
         pub_mod(
             "Mode",
             vec![
-                pub_let("read", nat(), nat_lit(wire::mode::READ)),
-                pub_let("write", nat(), nat_lit(wire::mode::WRITE)),
-                pub_let("append", nat(), nat_lit(wire::mode::APPEND)),
+                pub_let("read", nat(), nat_lit(mode::READ)),
+                pub_let("write", nat(), nat_lit(mode::WRITE)),
+                pub_let("append", nat(), nat_lit(mode::APPEND)),
             ],
         ),
     ]
