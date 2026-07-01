@@ -1,11 +1,12 @@
 use {
     super::{Bound, Goal, ImplicitOrigin, Inductive, Metavar, MetavarId, Structure, Term},
+    crate::time::Instant,
     curios_base::{Entropy, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         mem,
         rc::Rc,
-        time::{Duration, Instant},
+        time::Duration,
     },
 };
 

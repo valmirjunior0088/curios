@@ -4,10 +4,8 @@ use {
         Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
         Three, Tuple, TupleType, Variant, Visit, check, convert_prim, reduce, unfold_rec,
     },
-    std::{
-        collections::{HashSet, VecDeque},
-        time::Instant,
-    },
+    crate::time::Instant,
+    std::collections::{HashSet, VecDeque},
 };
 
 /// The outcome of attempting to solve a metavariable against a candidate.

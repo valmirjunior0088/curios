@@ -12,8 +12,7 @@ pub use curios_cont as cont;
 
 pub use curios_wasm as wasm;
 
-mod driver;
-pub use driver::*;
+pub use curios_pipeline::*;
 
 mod compile;
 pub use compile::*;

@@ -3,8 +3,8 @@ use {
         Apply, Carrier, Cases, Context, Field, FreeMonoid, Func, Layer, Let, Match, Metavar, Nat,
         Prim, Proj, Rec, ReduceError, Struct, Subterm, Term, Tuple, Var, reduce_prim,
     },
+    crate::time::Instant,
     num_traits::ToPrimitive,
-    std::time::Instant,
 };
 
 enum Reduce {

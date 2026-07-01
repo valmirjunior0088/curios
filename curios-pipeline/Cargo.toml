@@ -1,0 +1,12 @@
+[package]
+name = "curios-pipeline"
+version.workspace = true
+edition.workspace = true
+description = "The curios pipeline: compile_entrypoint/typecheck_entrypoint driving text -> core -> ersd -> cont -> wasm"
+
+[dependencies]
+curios-text = { workspace = true }
+curios-core = { workspace = true }
+curios-ersd = { workspace = true }
+curios-cont = { workspace = true }
+curios-wasm = { workspace = true }

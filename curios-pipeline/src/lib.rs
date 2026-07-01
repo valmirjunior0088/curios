@@ -1,6 +1,6 @@
 use {
-    crate::{cont, core, ersd, text, wasm},
-    std::time::Duration,
+    curios_cont as cont, curios_core as core, curios_ersd as ersd, curios_text as text,
+    curios_wasm as wasm, std::time::Duration,
 };
 
 pub enum Stage<'a> {

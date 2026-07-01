@@ -1,3 +1,5 @@
+mod time;
+
 mod scope;
 pub use scope::*;
 

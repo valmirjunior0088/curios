@@ -1,0 +1,15 @@
+[package]
+name = "curios-js"
+version.workspace = true
+edition.workspace = true
+description = "The curios <-> JavaScript boundary: wasm-bindgen exports of the pure compile pipeline"
+
+# cdylib for wasm-pack; rlib so `cargo test -p curios-js` still has something to link against.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+curios-text = { workspace = true }
+curios-pipeline = { workspace = true }
+curios-wasm = { workspace = true }
+wasm-bindgen = { workspace = true }
