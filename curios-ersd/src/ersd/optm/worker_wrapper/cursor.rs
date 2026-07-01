@@ -7,7 +7,7 @@
 //! elements, turning an `O(n)` walk into `O(n²)`. But the suffix never needs to be
 //! materialised. A recursion whose buffer parameter `b` is recursed only as a
 //! drop-front suffix `slice(b, k, len b)` and otherwise read only through `len b`,
-//! `get b i`, and `slice b p q` (the [`suffix_view`](crate::ersd::optm::suffix_view)
+//! `get b i`, and `slice b p q` (the [`suffix_view`](curios_base::suffix_view)
 //! laws) can thread an integer `offset` over the original buffer instead:
 //!
 //! ```text

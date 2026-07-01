@@ -1,4 +1,5 @@
-use crate::{cont, ersd};
+use crate::ersd;
+use curios_cont::cont;
 
 pub fn unsupported_sync_rec_item(term: &ersd::Term) -> ! {
     panic!(

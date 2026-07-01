@@ -1,6 +1,6 @@
 //! The worker/wrapper engine: generalize a linear non-tail self-recursion into a
 //! thin wrapper around a tail-recursive *worker*, so the ordinary lowering plus
-//! [`convert_tail_recursion`](crate::cont::optm) turn the worker into a loop.
+//! [`convert_tail_recursion`](curios_cont::optm) turn the worker into a loop.
 //!
 //! A non-tail linear recursion `f(x) = E[ f(d(x)) ]` carries two independent costs,
 //! each addressed by an orthogonal, composable *change* over the original body:

@@ -1,11 +1,9 @@
 use {
     super::to_cont,
-    crate::{
-        cont,
-        ersd::{
-            Apply, Func, Let, Module, Name, NatMatch, Prim, PurePrim, Rec, Subterm, Term, Tuple,
-        },
+    crate::ersd::{
+        Apply, Func, Let, Module, Name, NatMatch, Prim, PurePrim, Rec, Subterm, Term, Tuple,
     },
+    curios_cont::cont,
     std::collections::BTreeMap,
 };
 

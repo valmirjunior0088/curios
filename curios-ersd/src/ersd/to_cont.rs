@@ -16,7 +16,8 @@ use lower_prim::*;
 mod rec;
 use rec::*;
 
-use crate::{cont, ersd};
+use crate::ersd;
+use curios_cont::cont;
 
 pub fn to_cont(erased: &ersd::Module) -> cont::Module {
     let mut cont_module = cont::Module::new();

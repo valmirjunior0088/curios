@@ -3,7 +3,9 @@ use {
         Backpatch, Cont, ContMany, Emit, Frame, FrameEntropy, RecBody, RegionBuilder,
         lower_pure_prim, lower_value_prim, rec_computed_order, unsupported_sync_rec_item,
     },
-    crate::{Entropy, cont, ersd},
+    crate::ersd,
+    curios_base::Entropy,
+    curios_cont::cont,
     std::collections::{BTreeMap, HashMap},
 };
 

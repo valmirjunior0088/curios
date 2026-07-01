@@ -3,7 +3,7 @@ use {
         Atom, CellPrim, Func, HostPrim, Item, Let, Match, Module, NatMatch, Prim, Proj, PurePrim,
         Rec, Subterm, Term, Tuple,
     },
-    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     std::fmt::{Display, Formatter, Result},
 };
 

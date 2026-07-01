@@ -1,5 +1,5 @@
 //! Ersd → Ersd optimization. A façade over its submodules, exposing one
-//! entrypoint that runs the whole pipeline (as [`crate::cont::optm`] does for
+//! entrypoint that runs the whole pipeline (as [`curios_cont::optm`] does for
 //! Cont):
 //!
 //! - [`call_graph`] — the [`CallGraph`] purity oracle: the top-level reference

@@ -6,7 +6,7 @@ pub mod text;
 
 pub mod core;
 
-pub mod ersd;
+pub use curios_ersd::ersd;
 
 pub use curios_cont::cont;
 

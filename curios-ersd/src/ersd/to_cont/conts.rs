@@ -1,4 +1,4 @@
-use {super::Work, crate::cont};
+use {super::Work, curios_cont::cont};
 
 type ContFn<'a> = Box<dyn FnOnce(&mut Work<'_, '_, '_>, cont::ValueName) -> cont::Tail + 'a>;
 

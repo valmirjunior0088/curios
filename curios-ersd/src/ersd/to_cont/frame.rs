@@ -1,7 +1,4 @@
-use {
-    crate::{Entropy, cont},
-    std::collections::HashMap,
-};
+use {curios_base::Entropy, curios_cont::cont, std::collections::HashMap};
 
 #[derive(Debug)]
 pub struct FrameEntropy {

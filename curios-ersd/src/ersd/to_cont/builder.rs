@@ -1,4 +1,4 @@
-use {super::FrameEntropy, crate::cont};
+use {super::FrameEntropy, curios_cont::cont};
 
 /// A region under construction together with access to the shared name supply.
 ///

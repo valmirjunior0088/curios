@@ -1,6 +1,7 @@
 use {
     super::{Cont, Frame, Work},
-    crate::{cont, ersd},
+    crate::ersd,
+    curios_cont::cont,
     num_bigint::BigUint,
 };
 
