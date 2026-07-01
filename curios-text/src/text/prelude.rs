@@ -4,7 +4,7 @@ use {
         Name, Nat, NatLiteral, Plicity, Prim, Qualifier, Subterm, Term, TopItem, TopLet, TopMod,
         TopUse, TupleType, TupleTypeParam, UseGroup,
     },
-    crate::wire,
+    curios_abi as wire,
 };
 
 // The `sys` module is the home of every primitive type and operation. It is
@@ -27,7 +27,7 @@ fn nat() -> Term {
 
 // A `Nat` literal value term, built exactly as the parser builds one: `0` is
 // bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire
-// codes (`crate::wire`) into the `/sys/Io` constant mirror.
+// codes (`curios_abi::wire`) into the `/sys/Io` constant mirror.
 fn nat_lit(n: u32) -> Term {
     match n {
         0 => prim(Prim::Nat(Nat::Zero)),
@@ -612,7 +612,7 @@ fn io_ops() -> Vec<TopItem> {
             name("A"),
             prim(Prim::IoExit(name("A"), name("n"))),
         ),
-        // The wire-code mirror: the guest counterpart of `crate::wire`, so the
+        // The wire-code mirror: the guest counterpart of `curios_abi::wire`, so the
         // standard library compares against named constants the host derives from
         // the same source. `read`/`write` already name ops here, so each family
         // is a sub-module.

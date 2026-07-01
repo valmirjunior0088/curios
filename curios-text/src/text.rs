@@ -1,4 +1,4 @@
-pub use super::core::{NumOp, Plicity};
+pub use curios_core::core::{NumOp, Plicity};
 
 mod error;
 pub use error::*;

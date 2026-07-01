@@ -1,6 +1,6 @@
 use {
     super::{LetSignature, Name, Plicity, Term, TupleTypeParam},
-    crate::Span,
+    curios_base::Span,
 };
 
 #[derive(Debug, Clone)]

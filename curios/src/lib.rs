@@ -2,7 +2,7 @@ pub use curios_base::*;
 
 pub use curios_abi as wire;
 
-pub mod text;
+pub use curios_text::text;
 
 pub use curios_core::core;
 

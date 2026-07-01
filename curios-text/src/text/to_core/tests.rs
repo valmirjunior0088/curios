@@ -1,5 +1,6 @@
 use {
-    crate::{core, text},
+    crate::text,
+    curios_core::core,
     std::{
         fs,
         path::{Path, PathBuf},

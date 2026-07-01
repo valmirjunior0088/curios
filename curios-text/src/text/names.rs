@@ -1,4 +1,4 @@
-use crate::Span;
+use curios_base::Span;
 
 // `Qualifier` is a canonical, resolved identity: a sequence of module segments
 // rooted at the module root. It is what the resolution tables key on.

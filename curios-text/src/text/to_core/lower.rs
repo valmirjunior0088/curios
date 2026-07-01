@@ -1,12 +1,10 @@
 use {
     super::Context,
-    crate::{
-        core,
-        text::{
-            ArrMatch, BinMatch, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch,
-            Prim, Subterm, Syn, Term,
-        },
+    crate::text::{
+        ArrMatch, BinMatch, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch,
+        Prim, Subterm, Syn, Term,
     },
+    curios_core::core,
     num_bigint::BigUint,
     std::{cell::RefCell, collections::BTreeSet},
 };

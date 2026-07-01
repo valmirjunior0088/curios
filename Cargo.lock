@@ -388,9 +388,8 @@ dependencies = [
  "curios-cont",
  "curios-core",
  "curios-ersd",
+ "curios-text",
  "curios-wasm",
- "num-bigint",
- "num-traits",
 ]
 
 [[package]]
@@ -461,6 +460,17 @@ dependencies = [
  "socket2",
  "wasmtime",
  "webpki-roots 0.26.11",
+]
+
+[[package]]
+name = "curios-text"
+version = "0.1.0"
+dependencies = [
+ "curios-abi",
+ "curios-base",
+ "curios-core",
+ "num-bigint",
+ "num-traits",
 ]
 
 [[package]]

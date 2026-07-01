@@ -7,7 +7,7 @@ use {
         Subterm, Syn, Term, TopCase, TopInductive, TopItem, TopLet, TopMod, TopStruct, TopUse,
         Tuple, TupleType, TupleTypeParam, UseGroup,
     },
-    crate::{
+    curios_base::{
         Source,
         parser::{
             Parser, ParserError, catch, fail, lazy, many0, many1, memoize, not_ahead,

@@ -1,6 +1,6 @@
 use {
     super::{Name, NumOp, Plicity, Prim, Radix},
-    crate::Span,
+    curios_base::Span,
     num_bigint::BigUint,
     std::{collections::BTreeMap, ops::Deref},
 };

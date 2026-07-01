@@ -1,9 +1,7 @@
 use {
     super::ModuleInfo,
-    crate::{
-        Entropy,
-        text::{Entrypoint, Error, GroupItem, Module, Name, Qualifier, TopItem, UseGroup},
-    },
+    crate::text::{Entrypoint, Error, GroupItem, Module, Name, Qualifier, TopItem, UseGroup},
+    curios_base::Entropy,
     std::{
         collections::{HashMap, HashSet},
         rc::Rc,

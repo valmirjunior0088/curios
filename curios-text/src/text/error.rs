@@ -1,5 +1,5 @@
 use {
-    crate::{Span, parser::ParserError},
+    curios_base::{Span, parser::ParserError},
     std::{fmt, io, path::PathBuf},
 };
 

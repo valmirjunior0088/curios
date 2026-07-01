@@ -8,7 +8,8 @@ mod interface;
 
 use {
     super::*,
-    crate::{Entropy, core, core::Bound},
+    curios_base::Entropy,
+    curios_core::core::{self, Bound},
     std::{
         cell::RefCell,
         collections::{BTreeMap, HashMap, HashSet},

@@ -1,9 +1,8 @@
 use {
     super::interface::PublicInterface,
-    crate::{
-        Entropy, core,
-        text::{Error, Name, Qualifier},
-    },
+    crate::text::{Error, Name, Qualifier},
+    curios_base::Entropy,
+    curios_core::core,
     std::collections::HashMap,
 };
 

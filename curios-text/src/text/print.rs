@@ -6,7 +6,7 @@ use {
         TopInductive, TopItem, TopLet, TopMod, TopStruct, TopUse, Tuple, TupleType, TupleTypeParam,
         UseGroup,
     },
-    crate::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_bigint::BigUint,
     num_traits::One,
     std::fmt::{Display, Formatter, Result},
