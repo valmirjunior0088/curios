@@ -1,0 +1,8 @@
+# Build-context excludes for `-f bench/Dockerfile` (paths are relative to the
+# repo root, the build context). Keeps the multi-GB target/ and .git/ out of the
+# context, and drops local build artifacts the image doesn't need.
+.git
+target
+**/.lake
+bench/bin
+*.wasm

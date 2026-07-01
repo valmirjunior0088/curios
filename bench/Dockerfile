@@ -1,0 +1,102 @@
+# Kitchen-sink benchmark image — every toolchain in one arm64 container.
+#
+# Build from the REPO ROOT (the build needs the curios sources):
+#   docker build --platform linux/arm64 -f bench/Dockerfile -t curios-bench .
+# Run on a single pinned core so the numbers are stable:
+#   docker run --rm --cpuset-cpus 0 curios-bench
+#   docker run --rm --cpuset-cpus 0 -e D_TREES=23 -e N_LCG=100000000 curios-bench
+#
+# Toolchains are installed the perf-correct way (flambda OCaml, fresh V8). Grain
+# ships no arm64 binary and its source build needs esy (also arm64-less), so its
+# wasm is cross-compiled in the amd64 stage below. The first build is heavy but
+# fully layer-cached. Spots flagged "VERIFY:" may need a version nudge.
+
+# --- Grain: compile .gr -> wasm in an amd64 stage ---------------------------
+# The official x64 binary runs emulated at build time (on Apple Silicon); the
+# wasm it emits is arch-neutral and runs on the final image's native arm64
+# wasmtime. This is the only way to get Grain output on arm64 (no arm64 binary,
+# and the source build needs esy, which has no arm64 release).
+FROM --platform=linux/amd64 debian:bookworm-slim AS grain
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -sSL -o /usr/local/bin/grain \
+      https://github.com/grain-lang/grain/releases/download/grain-v0.7.2/grain-linux-x64 \
+    && chmod +x /usr/local/bin/grain
+COPY bench/programs/lcg/lcg.gr     /w/lcg.gr
+COPY bench/programs/trees/trees.gr /w/trees.gr
+RUN cd /w \
+    && grain compile lcg.gr   -o lcg_grain.wasm \
+    && grain compile trees.gr -o trees_grain.wasm
+
+# --- main image (arm64) -----------------------------------------------------
+FROM rust:1-bookworm
+ENV DEBIAN_FRONTEND=noninteractive
+
+# --- system deps + opam (OCaml's package manager) ---------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      cmake git curl ca-certificates xz-utils bash m4 opam \
+    && rm -rf /var/lib/apt/lists/*
+
+# Rust wasm target (Rust appears in BOTH the native and the wasm section)
+RUN rustup target add wasm32-wasip1
+
+# --- Node.js via NodeSource (fresh V8; also drives AssemblyScript + Grain) ---
+# Debian's apt node is 18.x; NodeSource gives current LTS. Don't also apt node.
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- OCaml via opam, with a flambda switch (the perf-correct compiler) -------
+# apt's ocaml is 4.14 without flambda; flambda's inlining is worth ~10-30% on
+# this kind of code and is what the Benchmarks Game uses.
+# VERIFY: bump the version if 5.2.0+options isn't available in the opam repo.
+ENV OPAMROOTISOK=1 OPAMYES=1
+RUN opam init --bare --disable-sandboxing \
+    && opam switch create 5.2.0 ocaml-variants.5.2.0+options ocaml-option-flambda
+ENV PATH="/root/.opam/5.2.0/bin:${PATH}"
+
+# --- wasmtime: the shared engine for the wasm section -----------------------
+RUN curl -sSf https://wasmtime.dev/install.sh | bash
+ENV PATH="/root/.wasmtime/bin:${PATH}"
+
+# --- hyperfine: the timing harness ------------------------------------------
+RUN curl -sSL -o /tmp/hf.tar.gz \
+      https://github.com/sharkdp/hyperfine/releases/download/v1.20.0/hyperfine-v1.20.0-aarch64-unknown-linux-gnu.tar.gz \
+    && tar -xzf /tmp/hf.tar.gz -C /tmp \
+    && cp /tmp/hyperfine-*/hyperfine /usr/local/bin/ \
+    && rm -rf /tmp/hf.tar.gz /tmp/hyperfine-*
+
+# --- Lean 4 via elan (official installer; arm64 supported) ------------------
+RUN curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y
+ENV PATH="/root/.elan/bin:${PATH}"
+
+# --- AssemblyScript + WASI shim ---------------------------------------------
+# VERIFY: the shim's runtime surface (process.argv, console.log) against this asc.
+RUN npm install -g assemblyscript \
+    && mkdir -p /opt/as && cd /opt/as && npm init -y \
+    && npm install @assemblyscript/wasi-shim
+
+# --- Grain — handled by the amd64 `grain` stage above; its wasm is copied in
+#     near the end (no arm64 Grain toolchain exists).
+
+# --- Curios (built from the repo sources) -----------------------------------
+# Selective COPY so the local target/ dir never enters the build context.
+# Launcher first (make), then the compiler (vendored Binaryen via CMake — slow,
+# layer-cached afterward).
+WORKDIR /curios
+COPY Cargo.toml Cargo.lock Makefile ./
+COPY curios curios
+COPY curios-binaryen curios-binaryen
+COPY curios-runtime curios-runtime
+COPY curios-compiler curios-compiler
+RUN make curios-compiler/runtime \
+    && cargo build --release --package curios-compiler
+ENV PATH="/curios/target/release:${PATH}"
+
+# --- the benchmark harness --------------------------------------------------
+COPY bench bench
+WORKDIR /curios/bench
+# Grain wasm, precompiled in the amd64 stage (no arm64 Grain toolchain exists).
+COPY --from=grain /w/lcg_grain.wasm   prebuilt/lcg_grain.wasm
+COPY --from=grain /w/trees_grain.wasm prebuilt/trees_grain.wasm
+ENTRYPOINT ["bash", "entrypoint.sh"]

@@ -1,0 +1,6 @@
+name = "trees"
+defaultTargets = ["trees"]
+
+[[lean_exe]]
+name = "trees"
+root = "Trees"

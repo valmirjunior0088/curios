@@ -1,0 +1,6 @@
+name = "lcg"
+defaultTargets = ["lcg"]
+
+[[lean_exe]]
+name = "lcg"
+root = "Lcg"

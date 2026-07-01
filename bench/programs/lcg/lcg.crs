@@ -1,0 +1,24 @@
+-- lcg: iterate a small LCG `x = (75 * x) mod 65537` N times.
+-- Small constants keep every intermediate within Curios's i31 runtime integers.
+-- N is read from stdin (Curios's proven input path); everyone else reads argv.
+-- Pure integer ALU + a tail-recursive counted loop. Output matches all langs.
+use /std/{Io, Str, Nat, Option};
+
+rec loop(k : Nat, x : Nat) -> Nat =
+    match k : Nat
+    | 0 => x
+    | kp + 1; ih => loop(kp, 75 * x % 65537)
+    end;
+
+match Io/input() : {}
+| some(bytes) =>
+    match Str/of_bin(bytes) : {}
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)) : {}
+        | some(n) => Io/print(Str/concat(Nat/to_str(loop(n, 1)), "\n"))
+        | none() => Io/print("bad input\n")
+        end
+    | none() => Io/print("invalid utf-8\n")
+    end
+| none() => Io/print("no input\n")
+end

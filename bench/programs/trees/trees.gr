@@ -1,0 +1,35 @@
+// binary-trees: build a perfect tree of depth D with unique per-node payloads,
+// then sum them. Grain -> wasm (linear-memory reference-counting GC), on wasmtime.
+//
+// APIs verified against the grain-v0.7.2 stdlib; confirm `grain compile` at build.
+module Trees
+
+from "wasi/process" include Process
+from "array" include Array
+from "number" include Number
+from "result" include Result
+
+enum rec Tree {
+  Leaf(Number),
+  Node(Number, Tree, Tree),
+}
+
+let rec build = (d, v) => {
+  if (d == 0) {
+    Leaf(v)
+  } else {
+    Node(v, build(d - 1, v * 2), build(d - 1, v * 2 + 1))
+  }
+}
+
+let rec sumTree = (t) => {
+  match (t) {
+    Leaf(v) => v % 1000003,
+    Node(v, l, r) => (v + sumTree(l) + sumTree(r)) % 1000003,
+  }
+}
+
+let args = Result.unwrap(Process.argv())
+let s = args[Array.length(args) - 1]
+let d = Result.unwrap(Number.parseInt(s, 10))
+print(sumTree(build(d, 1)))
