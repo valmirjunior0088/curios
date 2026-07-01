@@ -5,7 +5,7 @@ use {
         Import, Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RecType,
         RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
     },
-    crate::{
+    curios_base::{
         Source,
         parser::{
             Parser, ParserError, catch, fail, many0, many1, pure, run_parser, take_eof, take_exact,

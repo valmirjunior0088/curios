@@ -385,6 +385,7 @@ version = "0.1.0"
 dependencies = [
  "curios-abi",
  "curios-base",
+ "curios-wasm",
  "num-bigint",
  "num-traits",
 ]
@@ -429,6 +430,13 @@ dependencies = [
  "socket2",
  "wasmtime",
  "webpki-roots 0.26.11",
+]
+
+[[package]]
+name = "curios-wasm"
+version = "0.1.0"
+dependencies = [
+ "curios-base",
 ]
 
 [[package]]

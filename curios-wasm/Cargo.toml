@@ -1,0 +1,8 @@
+[package]
+name = "curios-wasm"
+version.workspace = true
+edition.workspace = true
+description = "The curios wasm module model, parser, and binary writer/encoder"
+
+[dependencies]
+curios-base = { workspace = true }

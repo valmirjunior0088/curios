@@ -7,5 +7,6 @@ description.workspace = true
 [dependencies]
 curios-abi = { workspace = true }
 curios-base = { workspace = true }
+curios-wasm = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }

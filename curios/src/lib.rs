@@ -10,7 +10,7 @@ pub mod ersd;
 
 pub mod cont;
 
-pub mod wasm;
+pub use curios_wasm::wasm;
 
 mod driver;
 pub use driver::*;

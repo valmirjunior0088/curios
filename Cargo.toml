@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["curios-abi", "curios-base", "curios", "curios-binaryen", "curios-runtime", "curios-compiler"]
+members = ["curios-abi", "curios-base", "curios-wasm", "curios", "curios-binaryen", "curios-runtime", "curios-compiler"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,7 @@ description = "Work-in-progress functional dependently typed programming languag
 curios = { path = "curios" }
 curios-abi = { path = "curios-abi" }
 curios-base = { path = "curios-base" }
+curios-wasm = { path = "curios-wasm" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-runtime = { path = "curios-runtime" }
 curios-compiler = { path = "curios-compiler" }
