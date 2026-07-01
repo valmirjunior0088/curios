@@ -3,31 +3,29 @@ use {
         Backpatch, Cont, ContMany, Emit, Frame, FrameEntropy, RecBody, RegionBuilder,
         lower_pure_prim, lower_value_prim, rec_computed_order, unsupported_sync_rec_item,
     },
-    crate as ersd,
     curios_base::Entropy,
-    curios_cont as cont,
+    curios_cont::{
+        Argument, Block, BlockName, Clsr, ClsrName, Code, Data, JumpTarget, MatchTarget, Module,
+        Region, Tail, Value, ValueName,
+    },
     std::collections::{BTreeMap, HashMap},
 };
 
 #[derive(Debug)]
 pub struct Lowerer<'a> {
-    module: &'a mut cont::Module,
-    clsrs: Entropy<cont::ClsrName>,
+    module: &'a mut Module,
+    clsrs: Entropy<ClsrName>,
 }
 
 impl<'a> Lowerer<'a> {
-    pub fn new(module: &'a mut cont::Module) -> Self {
+    pub fn new(module: &'a mut Module) -> Self {
         Self {
             module,
-            clsrs: Entropy::<cont::ClsrName>::new(),
+            clsrs: Entropy::<ClsrName>::new(),
         }
     }
 
-    pub fn lower_module(
-        &mut self,
-        module: &ersd::Module,
-        frame: &Frame,
-    ) -> (cont::BlockName, cont::Region) {
+    pub fn lower_module(&mut self, module: &crate::Module, frame: &Frame) -> (BlockName, Region) {
         let (mut entry, resume) = FrameEntropy::new();
         let mut emit = Emit::new(&mut entry);
         let tail = Work {
@@ -50,7 +48,7 @@ pub struct Work<'a, 'm, 'e> {
 
 impl Work<'_, '_, '_> {
     /// Build a nested region with its own `Work`, sharing this work's `Lowerer` and name supply.
-    fn in_subregion(&mut self, build: impl FnOnce(&mut Work) -> cont::Tail) -> cont::Region {
+    fn in_subregion(&mut self, build: impl FnOnce(&mut Work) -> Tail) -> Region {
         let mut emit = self.emit.subregion();
         let tail = build(&mut Work {
             lowerer: &mut *self.lowerer,
@@ -62,21 +60,21 @@ impl Work<'_, '_, '_> {
 
     /// Allocate a fresh value in the current region. Thin accessor so the per-primitive lowering
     /// in `lower_prim` can emit values without reaching into the private `emit` field.
-    pub fn fresh(&mut self, value: cont::Value) -> cont::ValueName {
+    pub fn fresh(&mut self, value: Value) -> ValueName {
         self.emit.fresh(value)
     }
 
     /// Mint a fresh block name. The block isn't bound to the current region yet —
     /// the caller is expected to follow up with [`Self::add_resume_block`] (or
     /// equivalent) once the block's region is ready.
-    pub fn fresh_block(&mut self) -> cont::BlockName {
+    pub fn fresh_block(&mut self) -> BlockName {
         self.emit.fresh_block()
     }
 
     /// Mint a fresh value name without binding it to the current region. Used
     /// when the name is needed as a block parameter (bound by control flow) or
     /// passed to a continuation before the binding lands in some other region.
-    pub fn fresh_value(&mut self) -> cont::ValueName {
+    pub fn fresh_value(&mut self) -> ValueName {
         self.emit.fresh_value()
     }
 
@@ -87,25 +85,25 @@ impl Work<'_, '_, '_> {
     /// continuation's region against an outer `Cont`.
     pub fn add_resume_block(
         &mut self,
-        name: cont::BlockName,
-        params: Vec<cont::ValueName>,
-        build: impl FnOnce(&mut Work) -> cont::Tail,
+        name: BlockName,
+        params: Vec<ValueName>,
+        build: impl FnOnce(&mut Work) -> Tail,
     ) {
         let region = self.in_subregion(build);
-        self.emit.add_block(name, cont::Block { params, region });
+        self.emit.add_block(name, Block { params, region });
     }
 
     pub fn lower_closure(
         &mut self,
-        func: &ersd::Func,
+        func: &crate::Func,
         frame: &Frame,
-    ) -> (cont::ClsrName, Vec<cont::ValueName>) {
+    ) -> (ClsrName, Vec<ValueName>) {
         let clsr_name = self.lowerer.clsrs.fresh();
         let (mut entry, resume) = FrameEntropy::new();
         let mut clsr_frame = Frame::new();
 
-        // The candidate flag rides from the `ersd::Argument` straight into the
-        // `cont::Argument`, glued to the freshly-bound name.
+        // The candidate flag rides from the `crate::Argument` straight into the
+        // `Argument`, glued to the freshly-bound name.
         let fields = func
             .captures
             .iter()
@@ -113,7 +111,7 @@ impl Work<'_, '_, '_> {
                 let name = entry.fresh_value();
                 clsr_frame.push(capture.name.clone(), name.clone());
 
-                cont::Argument {
+                Argument {
                     name,
                     candidate: capture.candidate,
                 }
@@ -127,7 +125,7 @@ impl Work<'_, '_, '_> {
                 let name = entry.fresh_value();
                 clsr_frame.push(param.name.clone(), name.clone());
 
-                cont::Argument {
+                Argument {
                     name,
                     candidate: param.candidate,
                 }
@@ -144,7 +142,7 @@ impl Work<'_, '_, '_> {
 
         self.lowerer.module.add_clsr(
             clsr_name.clone(),
-            cont::Clsr {
+            Clsr {
                 fields,
                 params,
                 resume,
@@ -163,12 +161,12 @@ impl Work<'_, '_, '_> {
 
     /// Lower a `rec` group's bindings into `frame` synchronously (no resume blocks)
     /// and return the extended frame. Shared by local `Subterm::Rec` lowering and
-    /// the flat top-level `ersd::Item::Rec`, so it takes the `names` and `items`
-    /// directly rather than an `ersd::Rec` (whose `tail` it never used).
+    /// the flat top-level `crate::Item::Rec`, so it takes the `names` and `items`
+    /// directly rather than an `crate::Rec` (whose `tail` it never used).
     pub fn lower_letrec_bindings<'x>(
         &mut self,
         names: &[String],
-        items: impl IntoIterator<Item = &'x ersd::Term>,
+        items: impl IntoIterator<Item = &'x crate::Term>,
         frame: &Frame,
     ) -> Frame {
         let mut frame = frame.clone();
@@ -190,9 +188,9 @@ impl Work<'_, '_, '_> {
                     self.emit_backpatch(target, &backpatch);
                 }
                 None => match &**item {
-                    ersd::Subterm::Apply(_)
-                    | ersd::Subterm::Match(_)
-                    | ersd::Subterm::NatMatch(_) => unsupported_sync_rec_item(item),
+                    crate::Subterm::Apply(_)
+                    | crate::Subterm::Match(_)
+                    | crate::Subterm::NatMatch(_) => unsupported_sync_rec_item(item),
                     _ => self.lower_letrec_item(item, target, &frame),
                 },
             }
@@ -208,115 +206,103 @@ impl Work<'_, '_, '_> {
     /// heap object to allocate (or hoist) — unlike an empty tuple, the other
     /// "nothing" value, which is a real `array.new`. The value is never inspected,
     /// so sharing the carrier with `Nat 0` is immaterial.
-    fn erased(&mut self) -> cont::ValueName {
-        self.emit.fresh(cont::Value::Pure(cont::Data::Nat(0)))
+    fn erased(&mut self) -> ValueName {
+        self.emit.fresh(Value::Pure(Data::Nat(0)))
     }
 
-    pub fn lower_pure_name(&mut self, term: &ersd::Term, frame: &Frame) -> cont::ValueName {
+    pub fn lower_pure_name(&mut self, term: &crate::Term, frame: &Frame) -> ValueName {
         match &**term {
-            ersd::Subterm::Name(name) => frame.find(name.as_str()),
-            ersd::Subterm::Erased => self.erased(),
-            ersd::Subterm::Unreachable => {
+            crate::Subterm::Name(name) => frame.find(name.as_str()),
+            crate::Subterm::Erased => self.erased(),
+            crate::Subterm::Unreachable => {
                 panic!("unreachable Ersd term cannot be lowered in pure-name position")
             }
-            ersd::Subterm::Prim(ersd::Prim::Pure(pure)) => lower_pure_prim(self, pure, frame),
-            ersd::Subterm::Prim(ersd::Prim::Host(_)) => unreachable!(
+            crate::Subterm::Prim(crate::Prim::Pure(pure)) => lower_pure_prim(self, pure, frame),
+            crate::Subterm::Prim(crate::Prim::Host(_)) => unreachable!(
                 "host primitive reached pure-name context — pure-name lowering cannot \
                  construct the resume block required by Tail::Host"
             ),
-            ersd::Subterm::Prim(ersd::Prim::Cell(_)) => unreachable!(
+            crate::Subterm::Prim(crate::Prim::Cell(_)) => unreachable!(
                 "cell primitive reached pure-name context — pure-name lowering cannot \
                  construct the resume block required by Tail::Cell"
             ),
-            ersd::Subterm::Func(func) => {
+            crate::Subterm::Func(func) => {
                 let (clsr_name, captured_values) = self.lower_closure(func, frame);
 
-                self.emit.fresh(cont::Value::Pure(cont::Data::Clsr(
-                    clsr_name,
-                    captured_values,
-                )))
+                self.emit
+                    .fresh(Value::Pure(Data::Clsr(clsr_name, captured_values)))
             }
-            ersd::Subterm::Tuple(s) => {
+            crate::Subterm::Tuple(s) => {
                 let field_names = s
                     .fields
                     .iter()
                     .map(|f| self.lower_pure_name(f, frame))
                     .collect::<Vec<_>>();
 
-                self.emit
-                    .fresh(cont::Value::Pure(cont::Data::Tpl(field_names)))
+                self.emit.fresh(Value::Pure(Data::Tpl(field_names)))
             }
-            ersd::Subterm::Atom(atom) => self
-                .emit
-                .fresh(cont::Value::Pure(cont::Data::Nat(atom.index as u32))),
-            ersd::Subterm::Let(let_) => {
+            crate::Subterm::Atom(atom) => {
+                self.emit.fresh(Value::Pure(Data::Nat(atom.index as u32)))
+            }
+            crate::Subterm::Let(let_) => {
                 let body = self.lower_pure_name(&let_.body, frame);
                 let frame = frame.extended([(let_.name.clone(), body)]);
 
                 self.lower_pure_name(&let_.tail, &frame)
             }
-            ersd::Subterm::Rec(letrec) => {
+            crate::Subterm::Rec(letrec) => {
                 let frame = self.lower_letrec_bindings(&letrec.names, letrec.items.iter(), frame);
 
                 self.lower_pure_name(&letrec.tail, &frame)
             }
-            ersd::Subterm::Proj(proj) => {
+            crate::Subterm::Proj(proj) => {
                 let head = self.lower_pure_name(&proj.head, frame);
 
-                self.emit
-                    .fresh(cont::Value::Eval(cont::Code::TplGet(head, proj.index)))
+                self.emit.fresh(Value::Eval(Code::TplGet(head, proj.index)))
             }
-            ersd::Subterm::Apply(_) | ersd::Subterm::Match(_) | ersd::Subterm::NatMatch(_) => {
+            crate::Subterm::Apply(_) | crate::Subterm::Match(_) | crate::Subterm::NatMatch(_) => {
                 unsupported_sync_rec_item(term)
             }
         }
     }
 
-    pub fn lower_letrec_item(&mut self, term: &ersd::Term, target: cont::ValueName, frame: &Frame) {
+    pub fn lower_letrec_item(&mut self, term: &crate::Term, target: ValueName, frame: &Frame) {
         match &**term {
-            ersd::Subterm::Apply(_) | ersd::Subterm::Match(_) | ersd::Subterm::NatMatch(_) => {
+            crate::Subterm::Apply(_) | crate::Subterm::Match(_) | crate::Subterm::NatMatch(_) => {
                 unsupported_sync_rec_item(term)
             }
             _ => {
                 let value = self.lower_pure_name(term, frame);
-                self.emit.add_value(target, cont::Value::Alias(value));
+                self.emit.add_value(target, Value::Alias(value));
             }
         }
     }
 
-    pub fn lower_value_name(
-        &mut self,
-        term: &ersd::Term,
-        frame: &Frame,
-        cont: Cont<'_>,
-    ) -> cont::Tail {
+    pub fn lower_value_name(&mut self, term: &crate::Term, frame: &Frame, cont: Cont<'_>) -> Tail {
         match &**term {
-            ersd::Subterm::Name(name) => cont.call(self, frame.find(name.as_str())),
-            ersd::Subterm::Erased => {
+            crate::Subterm::Name(name) => cont.call(self, frame.find(name.as_str())),
+            crate::Subterm::Erased => {
                 let value = self.erased();
 
                 cont.call(self, value)
             }
-            ersd::Subterm::Unreachable => cont::Tail::Unreachable,
-            ersd::Subterm::Prim(prim) => lower_value_prim(self, prim, frame, cont),
-            ersd::Subterm::Func(func) => {
+            crate::Subterm::Unreachable => Tail::Unreachable,
+            crate::Subterm::Prim(prim) => lower_value_prim(self, prim, frame, cont),
+            crate::Subterm::Func(func) => {
                 let (clsr_name, captured_values) = self.lower_closure(func, frame);
-                let value = self.emit.fresh(cont::Value::Pure(cont::Data::Clsr(
-                    clsr_name,
-                    captured_values,
-                )));
-
-                cont.call(self, value)
-            }
-            ersd::Subterm::Tuple(s) => self.lower_struct(&s.fields, frame, vec![], cont),
-            ersd::Subterm::Atom(atom) => {
                 let value = self
                     .emit
-                    .fresh(cont::Value::Pure(cont::Data::Nat(atom.index as u32)));
+                    .fresh(Value::Pure(Data::Clsr(clsr_name, captured_values)));
 
                 cont.call(self, value)
             }
-            ersd::Subterm::Let(let_) => {
+            crate::Subterm::Tuple(s) => self.lower_struct(&s.fields, frame, vec![], cont),
+            crate::Subterm::Atom(atom) => {
+                let value = self.emit.fresh(Value::Pure(Data::Nat(atom.index as u32)));
+
+                cont.call(self, value)
+            }
+            crate::Subterm::Let(let_) => {
                 let name = let_.name.clone();
 
                 self.lower_value_name(
@@ -329,35 +315,33 @@ impl Work<'_, '_, '_> {
                     }),
                 )
             }
-            ersd::Subterm::Rec(letrec) => self.lower_rec(
+            crate::Subterm::Rec(letrec) => self.lower_rec(
                 &letrec.names,
                 letrec.items.iter(),
                 frame,
                 RecBody::new(move |work, frame| work.lower_value_name(&letrec.tail, frame, cont)),
             ),
-            ersd::Subterm::Proj(proj) => {
+            crate::Subterm::Proj(proj) => {
                 let index = proj.index;
 
                 self.lower_value_name(
                     &proj.head,
                     frame,
                     Cont::new(move |work, head| {
-                        let v = work
-                            .emit
-                            .fresh(cont::Value::Eval(cont::Code::TplGet(head, index)));
+                        let v = work.emit.fresh(Value::Eval(Code::TplGet(head, index)));
 
                         cont.call(work, v)
                     }),
                 )
             }
-            ersd::Subterm::Apply(_) | ersd::Subterm::Match(_) | ersd::Subterm::NatMatch(_) => {
+            crate::Subterm::Apply(_) | crate::Subterm::Match(_) | crate::Subterm::NatMatch(_) => {
                 let block = self.emit.fresh_block();
                 let param = self.emit.fresh_value();
                 let region = self.in_subregion(|work| cont.call(work, param.clone()));
 
                 self.emit.add_block(
                     block.clone(),
-                    cont::Block {
+                    Block {
                         params: vec![param],
                         region,
                     },
@@ -370,11 +354,11 @@ impl Work<'_, '_, '_> {
 
     pub fn lower_names<'b>(
         &mut self,
-        params: &'b [ersd::Term],
+        params: &'b [crate::Term],
         frame: &'b Frame,
-        mut names: Vec<cont::ValueName>,
+        mut names: Vec<ValueName>,
         cont: ContMany<'b>,
-    ) -> cont::Tail {
+    ) -> Tail {
         match params {
             [] => cont.call(self, names),
             [head, tail @ ..] => self.lower_value_name(
@@ -390,14 +374,14 @@ impl Work<'_, '_, '_> {
 
     fn lower_struct<'b>(
         &mut self,
-        fields: &'b [ersd::Term],
+        fields: &'b [crate::Term],
         frame: &'b Frame,
-        mut names: Vec<cont::ValueName>,
+        mut names: Vec<ValueName>,
         cont: Cont<'b>,
-    ) -> cont::Tail {
+    ) -> Tail {
         match fields {
             [] => {
-                let value = self.emit.fresh(cont::Value::Pure(cont::Data::Tpl(names)));
+                let value = self.emit.fresh(Value::Pure(Data::Tpl(names)));
 
                 cont.call(self, value)
             }
@@ -419,9 +403,9 @@ impl Work<'_, '_, '_> {
     /// genuinely self-referential one surfaces as a cycle in `rec_computed_order` and is
     /// rejected. Confining cyclic recursion to closures is what lets `tpl`/`arr` fields stay
     /// immutable.
-    pub fn plan_backpatch(&mut self, item: &ersd::Term, frame: &Frame) -> Option<Backpatch> {
+    pub fn plan_backpatch(&mut self, item: &crate::Term, frame: &Frame) -> Option<Backpatch> {
         match &**item {
-            ersd::Subterm::Func(func) => {
+            crate::Subterm::Func(func) => {
                 let (clsr, captures) = self.lower_closure(func, frame);
 
                 Some(Backpatch { clsr, captures })
@@ -430,10 +414,10 @@ impl Work<'_, '_, '_> {
         }
     }
 
-    pub fn emit_backpatch(&mut self, target: cont::ValueName, backpatch: &Backpatch) {
+    pub fn emit_backpatch(&mut self, target: ValueName, backpatch: &Backpatch) {
         self.emit.add_value(
             target,
-            cont::Value::Pure(cont::Data::Clsr(
+            Value::Pure(Data::Clsr(
                 backpatch.clsr.clone(),
                 backpatch.captures.clone(),
             )),
@@ -446,10 +430,10 @@ impl Work<'_, '_, '_> {
     pub fn lower_rec<'b>(
         &mut self,
         names: &'b [String],
-        items: impl IntoIterator<Item = &'b ersd::Term>,
+        items: impl IntoIterator<Item = &'b crate::Term>,
         frame: &Frame,
         body: RecBody<'b>,
-    ) -> cont::Tail {
+    ) -> Tail {
         let mut frame = frame.clone();
         let targets = names
             .iter()
@@ -461,8 +445,8 @@ impl Work<'_, '_, '_> {
             })
             .collect::<Vec<_>>();
 
-        let mut backpatches: Vec<(cont::ValueName, Backpatch)> = vec![];
-        let mut computed: Vec<(usize, cont::ValueName, &'b ersd::Term)> = vec![];
+        let mut backpatches: Vec<(ValueName, Backpatch)> = vec![];
+        let mut computed: Vec<(usize, ValueName, &'b crate::Term)> = vec![];
 
         for (index, (item, target)) in items.into_iter().zip(&targets).enumerate() {
             match self.plan_backpatch(item, &frame) {
@@ -520,10 +504,10 @@ impl Work<'_, '_, '_> {
 
     pub fn lower_rec_computed<'b>(
         &mut self,
-        computed: &'b [(cont::ValueName, &'b ersd::Term)],
+        computed: &'b [(ValueName, &'b crate::Term)],
         frame: &'b Frame,
         body: RecBody<'b>,
-    ) -> cont::Tail {
+    ) -> Tail {
         match computed {
             [] => body.call(self, frame),
             [(target, rhs), rest @ ..] => {
@@ -533,7 +517,7 @@ impl Work<'_, '_, '_> {
                     rhs,
                     frame,
                     Cont::new(move |work, result| {
-                        work.emit.add_value(target, cont::Value::Alias(result));
+                        work.emit.add_value(target, Value::Alias(result));
                         work.lower_rec_computed(rest, frame, body)
                     }),
                 )
@@ -541,15 +525,10 @@ impl Work<'_, '_, '_> {
         }
     }
 
-    pub fn lower_tail(
-        &mut self,
-        term: &ersd::Term,
-        frame: &Frame,
-        resume: &cont::BlockName,
-    ) -> cont::Tail {
+    pub fn lower_tail(&mut self, term: &crate::Term, frame: &Frame, resume: &BlockName) -> Tail {
         match &**term {
-            ersd::Subterm::Unreachable => cont::Tail::Unreachable,
-            ersd::Subterm::Apply(apply) => self.lower_value_name(
+            crate::Subterm::Unreachable => Tail::Unreachable,
+            crate::Subterm::Apply(apply) => self.lower_value_name(
                 &apply.head,
                 frame,
                 Cont::new(move |work, head| {
@@ -561,7 +540,7 @@ impl Work<'_, '_, '_> {
                     )
                 }),
             ),
-            ersd::Subterm::Match(m) => self.lower_value_name(
+            crate::Subterm::Match(m) => self.lower_value_name(
                 &m.head,
                 frame,
                 Cont::new(move |work, head| {
@@ -573,7 +552,7 @@ impl Work<'_, '_, '_> {
 
                         work.emit.add_block(
                             block.clone(),
-                            cont::Block {
+                            Block {
                                 params: vec![],
                                 region,
                             },
@@ -581,21 +560,21 @@ impl Work<'_, '_, '_> {
 
                         cases.insert(
                             i as u32,
-                            cont::JumpTarget {
+                            JumpTarget {
                                 target: block,
                                 params: vec![],
                             },
                         );
                     }
 
-                    cont::Tail::Match(cont::MatchTarget {
+                    Tail::Match(MatchTarget {
                         operand: head,
                         cases,
                         default: None,
                     })
                 }),
             ),
-            ersd::Subterm::NatMatch(ersd::NatMatch::Induction {
+            crate::Subterm::NatMatch(crate::NatMatch::Induction {
                 head: nat_head,
                 zero_case,
                 pred,
@@ -606,8 +585,8 @@ impl Work<'_, '_, '_> {
                 frame,
                 Cont::new(move |work, head| {
                     // Constants shared across the loop.
-                    let zero_nat = work.emit.fresh(cont::Value::Pure(cont::Data::Nat(0)));
-                    let one_nat = work.emit.fresh(cont::Value::Pure(cont::Data::Nat(1)));
+                    let zero_nat = work.emit.fresh(Value::Pure(Data::Nat(0)));
+                    let one_nat = work.emit.fresh(Value::Pure(Data::Nat(1)));
 
                     // Allocate block names up front so they can be referenced cross-block.
                     let loop_block_name = work.emit.fresh_block();
@@ -620,14 +599,12 @@ impl Work<'_, '_, '_> {
                     let pz = work.emit.fresh_value();
                     work.emit.add_block(
                         zero_resume_name.clone(),
-                        cont::Block {
+                        Block {
                             params: vec![pz.clone()],
-                            region: RegionBuilder::new().finish(cont::Tail::Jump(
-                                cont::JumpTarget {
-                                    target: loop_block_name.clone(),
-                                    params: vec![zero_nat, pz],
-                                },
-                            )),
+                            region: RegionBuilder::new().finish(Tail::Jump(JumpTarget {
+                                target: loop_block_name.clone(),
+                                params: vec![zero_nat, pz],
+                            })),
                         },
                     );
 
@@ -639,17 +616,17 @@ impl Work<'_, '_, '_> {
                     let acc = work.emit.fresh_value();
                     let loop_block_region = {
                         let mut sub = work.emit.subregion();
-                        let cmp = sub.fresh(cont::Value::Eval(cont::Code::NatEql(i.clone(), head)));
-                        sub.finish(cont::Tail::Match(cont::MatchTarget {
+                        let cmp = sub.fresh(Value::Eval(Code::NatEql(i.clone(), head)));
+                        sub.finish(Tail::Match(MatchTarget {
                             operand: cmp,
                             cases: BTreeMap::from([(
                                 0,
-                                cont::JumpTarget {
+                                JumpTarget {
                                     target: body_block_name.clone(),
                                     params: vec![i.clone(), acc.clone()],
                                 },
                             )]),
-                            default: Some(cont::JumpTarget {
+                            default: Some(JumpTarget {
                                 target: exit_block_name.clone(),
                                 params: vec![acc.clone()],
                             }),
@@ -657,7 +634,7 @@ impl Work<'_, '_, '_> {
                     };
                     work.emit.add_block(
                         loop_block_name.clone(),
-                        cont::Block {
+                        Block {
                             params: vec![i.clone(), acc.clone()],
                             region: loop_block_region,
                         },
@@ -677,9 +654,8 @@ impl Work<'_, '_, '_> {
 
                     let body_resume_region = {
                         let mut sub = work.emit.subregion();
-                        let i_prime =
-                            sub.fresh(cont::Value::Eval(cont::Code::NatAdd(i2.clone(), one_nat)));
-                        sub.finish(cont::Tail::Jump(cont::JumpTarget {
+                        let i_prime = sub.fresh(Value::Eval(Code::NatAdd(i2.clone(), one_nat)));
+                        sub.finish(Tail::Jump(JumpTarget {
                             target: loop_block_name,
                             params: vec![i_prime, acc_prime.clone()],
                         }))
@@ -691,7 +667,7 @@ impl Work<'_, '_, '_> {
                         let mut body = work.emit.subregion();
                         body.add_block(
                             body_resume_name.clone(),
-                            cont::Block {
+                            Block {
                                 params: vec![acc_prime],
                                 region: body_resume_region,
                             },
@@ -710,7 +686,7 @@ impl Work<'_, '_, '_> {
                     };
                     work.emit.add_block(
                         body_block_name,
-                        cont::Block {
+                        Block {
                             params: vec![i2, acc2],
                             region: body_region,
                         },
@@ -720,14 +696,12 @@ impl Work<'_, '_, '_> {
                     let acc_final = work.emit.fresh_value();
                     work.emit.add_block(
                         exit_block_name,
-                        cont::Block {
+                        Block {
                             params: vec![acc_final.clone()],
-                            region: RegionBuilder::new().finish(cont::Tail::Jump(
-                                cont::JumpTarget {
-                                    target: resume.clone(),
-                                    params: vec![acc_final],
-                                },
-                            )),
+                            region: RegionBuilder::new().finish(Tail::Jump(JumpTarget {
+                                target: resume.clone(),
+                                params: vec![acc_final],
+                            })),
                         },
                     );
 
@@ -735,7 +709,7 @@ impl Work<'_, '_, '_> {
                     work.lower_tail(zero_case, frame, &zero_resume_name)
                 }),
             ),
-            ersd::Subterm::NatMatch(ersd::NatMatch::Dispatch {
+            crate::Subterm::NatMatch(crate::NatMatch::Dispatch {
                 head: nm_head,
                 cases: nm_cases,
                 default: nm_default,
@@ -750,14 +724,14 @@ impl Work<'_, '_, '_> {
                         let region = work.in_subregion(|w| w.lower_tail(branch, frame, resume));
                         work.emit.add_block(
                             block.clone(),
-                            cont::Block {
+                            Block {
                                 params: vec![],
                                 region,
                             },
                         );
                         cases.insert(
                             *val,
-                            cont::JumpTarget {
+                            JumpTarget {
                                 target: block,
                                 params: vec![],
                             },
@@ -768,23 +742,23 @@ impl Work<'_, '_, '_> {
                     let region = work.in_subregion(|w| w.lower_tail(nm_default, frame, resume));
                     work.emit.add_block(
                         default_block.clone(),
-                        cont::Block {
+                        Block {
                             params: vec![],
                             region,
                         },
                     );
 
-                    cont::Tail::Match(cont::MatchTarget {
+                    Tail::Match(MatchTarget {
                         operand: head,
                         cases,
-                        default: Some(cont::JumpTarget {
+                        default: Some(JumpTarget {
                             target: default_block,
                             params: vec![],
                         }),
                     })
                 }),
             ),
-            ersd::Subterm::Let(let_) => {
+            crate::Subterm::Let(let_) => {
                 let name = let_.name.clone();
                 self.lower_value_name(
                     &let_.body,
@@ -795,7 +769,7 @@ impl Work<'_, '_, '_> {
                     }),
                 )
             }
-            ersd::Subterm::Rec(letrec) => self.lower_rec(
+            crate::Subterm::Rec(letrec) => self.lower_rec(
                 &letrec.names,
                 letrec.items.iter(),
                 frame,
@@ -814,19 +788,19 @@ impl Work<'_, '_, '_> {
     /// never the total — which is the whole point of the flat module (BUG.md).
     fn lower_module_items<'b>(
         &mut self,
-        items: &'b [ersd::Item],
-        body: &'b ersd::Term,
+        items: &'b [crate::Item],
+        body: &'b crate::Term,
         mut frame: Frame,
-        resume: &cont::BlockName,
-    ) -> cont::Tail {
+        resume: &BlockName,
+    ) -> Tail {
         let mut index = 0;
 
         while index < items.len() {
             match &items[index] {
                 // A `rec` group of only synchronous members (mutually-recursive
                 // functions — the common case) lowers in place, no recursion.
-                ersd::Item::Rec { names, items: defs }
-                    if defs.iter().all(ersd::Term::is_synchronous) =>
+                crate::Item::Rec { names, items: defs }
+                    if defs.iter().all(crate::Term::is_synchronous) =>
                 {
                     frame = self.lower_letrec_bindings(names, defs.iter(), &frame);
                     index += 1;
@@ -834,7 +808,7 @@ impl Work<'_, '_, '_> {
                 // A `rec` group with a computational member needs the CPS `lower_rec`
                 // (resume blocks per computed item, dependency-ordered); resume this
                 // loop for the remaining items inside its `RecBody`.
-                ersd::Item::Rec { names, items: defs } => {
+                crate::Item::Rec { names, items: defs } => {
                     let rest = &items[index + 1..];
                     let resume = resume.clone();
 
@@ -847,7 +821,7 @@ impl Work<'_, '_, '_> {
                         }),
                     );
                 }
-                ersd::Item::Let {
+                crate::Item::Let {
                     name,
                     body: let_body,
                 } if let_body.is_synchronous() => {
@@ -855,7 +829,7 @@ impl Work<'_, '_, '_> {
                     frame.push(name.clone(), value);
                     index += 1;
                 }
-                ersd::Item::Let {
+                crate::Item::Let {
                     name,
                     body: let_body,
                 } => {

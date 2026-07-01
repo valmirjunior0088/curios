@@ -16,19 +16,18 @@ use lower_prim::*;
 mod rec;
 use rec::*;
 
-use crate as ersd;
-use curios_cont as cont;
+use curios_cont::{Func, FuncName, Module};
 
-pub fn to_cont(erased: &ersd::Module) -> cont::Module {
-    let mut cont_module = cont::Module::new();
+pub fn to_cont(erased: &crate::Module) -> Module {
+    let mut cont_module = Module::new();
 
     let (resume, region) = Lowerer::new(&mut cont_module).lower_module(erased, &Frame::new());
 
-    let entry = cont::FuncName::from("main");
+    let entry = FuncName::from("main");
 
     cont_module.add_func(
         entry.clone(),
-        cont::Func {
+        Func {
             params: vec![],
             resume,
             region,

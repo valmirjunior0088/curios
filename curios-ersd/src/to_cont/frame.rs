@@ -1,37 +1,41 @@
-use {curios_base::Entropy, curios_cont as cont, std::collections::HashMap};
+use {
+    curios_base::Entropy,
+    curios_cont::{BlockName, ValueName},
+    std::collections::HashMap,
+};
 
 #[derive(Debug)]
 pub struct FrameEntropy {
-    values: Entropy<cont::ValueName>,
-    blocks: Entropy<cont::BlockName>,
+    values: Entropy<ValueName>,
+    blocks: Entropy<BlockName>,
 }
 
 impl FrameEntropy {
-    pub fn new() -> (Self, cont::BlockName) {
-        let blocks = Entropy::<cont::BlockName>::new();
+    pub fn new() -> (Self, BlockName) {
+        let blocks = Entropy::<BlockName>::new();
         let resume = blocks.fresh();
 
         (
             Self {
-                values: Entropy::<cont::ValueName>::new(),
+                values: Entropy::<ValueName>::new(),
                 blocks,
             },
             resume,
         )
     }
 
-    pub fn fresh_value(&mut self) -> cont::ValueName {
+    pub fn fresh_value(&mut self) -> ValueName {
         self.values.fresh()
     }
 
-    pub fn fresh_block(&mut self) -> cont::BlockName {
+    pub fn fresh_block(&mut self) -> BlockName {
         self.blocks.fresh()
     }
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct Frame {
-    bindings: HashMap<String, cont::ValueName>,
+    bindings: HashMap<String, ValueName>,
 }
 
 impl Frame {
@@ -39,20 +43,20 @@ impl Frame {
         Self::default()
     }
 
-    pub fn find(&self, name: &str) -> cont::ValueName {
+    pub fn find(&self, name: &str) -> ValueName {
         self.bindings
             .get(name)
             .cloned()
             .unwrap_or_else(|| panic!("`to_cont` lacks value `{name}`"))
     }
 
-    pub fn push(&mut self, name: String, value: cont::ValueName) {
+    pub fn push(&mut self, name: String, value: ValueName) {
         self.bindings.insert(name, value);
     }
 
     pub fn extended<I>(&self, bindings: I) -> Self
     where
-        I: IntoIterator<Item = (String, cont::ValueName)>,
+        I: IntoIterator<Item = (String, ValueName)>,
     {
         let mut frame = self.clone();
 

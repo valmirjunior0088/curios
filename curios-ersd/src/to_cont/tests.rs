@@ -1,13 +1,13 @@
 use {
     super::to_cont,
     crate::{Apply, Func, Let, Module, Name, NatMatch, Prim, PurePrim, Rec, Subterm, Term, Tuple},
-    curios_cont as cont,
+    curios_cont::{CallTarget, Data, MatchTarget, Tail, Value},
     std::collections::BTreeMap,
 };
 
 // These tests exercise the lowerer on whole erased *terms*; wrap each as the
 // entrypoint `body` of an item-less `Module` (the shape `to_cont` now takes).
-fn lower(term: Term) -> cont::Module {
+fn lower(term: Term) -> curios_cont::Module {
     to_cont(&Module {
         items: vec![],
         body: term,
@@ -41,7 +41,7 @@ fn lowers_tail_apply_as_indirect_call_to_resume() {
     let func = &module.funcs()[0].1;
     assert!(func.region.blocks.is_empty());
 
-    let cont::Tail::Call(cont::CallTarget::Indirect { resume, .. }) = &func.region.tail else {
+    let Tail::Call(CallTarget::Indirect { resume, .. }) = &func.region.tail else {
         panic!("expected indirect call in main tail");
     };
 
@@ -70,7 +70,7 @@ fn lowers_arr_into_main_region_value() {
 
     assert!(func.region.values.iter().any(|(_, value)| matches!(
         value,
-        cont::Value::Pure(cont::Data::Arr(elems)) if elems.len() == 2
+        Value::Pure(Data::Arr(elems)) if elems.len() == 2
     )));
 }
 
@@ -99,7 +99,7 @@ fn lowers_arr_with_apply_element_through_join_block() {
 
     assert!(block.region.values.iter().any(|(_, value)| matches!(
         value,
-        cont::Value::Pure(cont::Data::Arr(elems)) if elems.len() == 2
+        Value::Pure(Data::Arr(elems)) if elems.len() == 2
     )));
 }
 
@@ -126,7 +126,7 @@ fn lowers_apply_in_value_position_through_join_block() {
 
     assert_eq!(func.region.blocks.len(), 1);
 
-    let cont::Tail::Call(cont::CallTarget::Indirect { resume, .. }) = &func.region.tail else {
+    let Tail::Call(CallTarget::Indirect { resume, .. }) = &func.region.tail else {
         panic!("expected root indirect call");
     };
 
@@ -138,7 +138,7 @@ fn lowers_apply_in_value_position_through_join_block() {
             .region
             .values
             .iter()
-            .any(|(_, value)| matches!(value, cont::Value::Pure(cont::Data::Tpl(_))))
+            .any(|(_, value)| matches!(value, Value::Pure(Data::Tpl(_))))
     );
 }
 
@@ -156,7 +156,7 @@ fn lowers_nat_match_as_sparse_match() {
     let module = lower(term.into());
     let func = &module.funcs()[0].1;
 
-    let cont::Tail::Match(cont::MatchTarget { cases, default, .. }) = &func.region.tail else {
+    let Tail::Match(MatchTarget { cases, default, .. }) = &func.region.tail else {
         panic!("expected Tail::Match");
     };
 
@@ -171,9 +171,10 @@ fn lowers_bin_literal() {
     let module = lower(term.into());
 
     let func = &module.funcs()[0].1;
-    let has_bin = func.region.values.iter().any(|(_, value)| {
-        matches!(value, cont::Value::Pure(cont::Data::Bin(bytes)) if bytes == &[1, 2, 3])
-    });
+    let has_bin =
+        func.region.values.iter().any(
+            |(_, value)| matches!(value, Value::Pure(Data::Bin(bytes)) if bytes == &[1, 2, 3]),
+        );
 
     assert!(has_bin);
 }
@@ -239,7 +240,7 @@ fn lowers_cross_region_rec_through_resume_block() {
     assert!(!func.region.preallocs.is_empty());
 
     // `g`'s call leaves the region, so its fill lands in a resume block, not the entry region.
-    assert!(matches!(func.region.tail, cont::Tail::Call(_)));
+    assert!(matches!(func.region.tail, Tail::Call(_)));
     assert!(!func.region.blocks.is_empty());
 }
 

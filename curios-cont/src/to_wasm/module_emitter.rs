@@ -1,20 +1,23 @@
 use {
     super::{Context, ExprEmitter, Table},
-    crate as cont,
     curios_abi::WireType,
-    curios_wasm as wasm,
+    curios_wasm::{
+        ArrayType, CompType, DataName, DataSegment, Export, Expr, FieldType, Func, FuncName,
+        FuncType, Global, GlobalType, HeapType, Import, Instr, Module, Mutability, NumType,
+        PackedType, RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
+    },
     std::iter,
 };
 
 #[derive(Debug)]
 pub struct ModuleEmitter<'a, 'b> {
     table: &'a Table<'a>,
-    start_expr: wasm::Expr,
-    module: &'b mut wasm::Module,
+    start_expr: Expr,
+    module: &'b mut Module,
 }
 
 impl<'a, 'b> ModuleEmitter<'a, 'b> {
-    pub fn new(table: &'a Table<'a>, module: &'b mut wasm::Module) -> Self {
+    pub fn new(table: &'a Table<'a>, module: &'b mut Module) -> Self {
         Self {
             table,
             start_expr: Default::default(),
@@ -25,13 +28,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_bin_type(&mut self) {
         self.module.add_type(
             self.table.bin_type(),
-            wasm::SubType {
+            SubType {
                 is_final: true,
                 super_types: vec![],
-                comp_type: wasm::CompType::Array(wasm::ArrayType {
-                    field_type: wasm::FieldType {
-                        storage_type: wasm::StorageType::Packed(wasm::PackedType::I8),
-                        mutability: wasm::Mutability::Var,
+                comp_type: CompType::Array(ArrayType {
+                    field_type: FieldType {
+                        storage_type: StorageType::Packed(PackedType::I8),
+                        mutability: Mutability::Var,
                     },
                 }),
             },
@@ -42,16 +45,16 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// type: scalars cross as raw `i32` (the call site unboxes the i31 carrier
     /// via `LoadAs::Nat`/`LoadAs::Int`), references as their concrete
     /// non-nullable heap type (a handle is its `Bin` token).
-    fn wire_param_type(&self, wire_type: &WireType) -> wasm::ValType {
+    fn wire_param_type(&self, wire_type: &WireType) -> ValType {
         match wire_type {
-            WireType::Nat | WireType::Bln | WireType::Int => wasm::ValType::Num(wasm::NumType::I32),
-            WireType::Bin | WireType::Io => wasm::ValType::Ref(wasm::RefType {
+            WireType::Nat | WireType::Bln | WireType::Int => ValType::Num(NumType::I32),
+            WireType::Bin | WireType::Io => ValType::Ref(RefType {
                 is_nullable: false,
-                heap_type: wasm::HeapType::Concrete(self.table.bin_type()),
+                heap_type: HeapType::Concrete(self.table.bin_type()),
             }),
-            WireType::Arr(_) => wasm::ValType::Ref(wasm::RefType {
+            WireType::Arr(_) => ValType::Ref(RefType {
                 is_nullable: false,
-                heap_type: wasm::HeapType::Concrete(self.table.arr_type()),
+                heap_type: HeapType::Concrete(self.table.arr_type()),
             }),
         }
     }
@@ -60,10 +63,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// pre-boxed as i31 refs so they land directly in anyref block params
     /// (no host op returns an `Int` today; mapping it like `Nat` keeps the
     /// function total), references exactly as in parameter position.
-    fn wire_result_type(&self, wire_type: &WireType) -> wasm::ValType {
+    fn wire_result_type(&self, wire_type: &WireType) -> ValType {
         match wire_type {
             WireType::Nat | WireType::Bln | WireType::Int => {
-                wasm::ValType::Ref(self.table.int_type(false))
+                ValType::Ref(self.table.int_type(false))
             }
             reference => self.wire_param_type(reference),
         }
@@ -74,23 +77,23 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn add_host_import(
         &mut self,
         name: &str,
-        type_name: wasm::TypeName,
-        func_name: wasm::FuncName,
-        inputs: wasm::ResultType,
-        outputs: wasm::ResultType,
+        type_name: TypeName,
+        func_name: FuncName,
+        inputs: ResultType,
+        outputs: ResultType,
     ) {
         self.module.add_type(
             type_name.clone(),
-            wasm::SubType {
+            SubType {
                 is_final: true,
                 super_types: vec![],
-                comp_type: wasm::CompType::Func(wasm::FuncType { inputs, outputs }),
+                comp_type: CompType::Func(FuncType { inputs, outputs }),
             },
         );
         self.module.add_import(
             "env",
             name,
-            wasm::Import::Func {
+            Import::Func {
                 func_name,
                 type_name,
             },
@@ -98,7 +101,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     fn emit_sys_imports(&mut self) {
-        let i32_val = wasm::ValType::Num(wasm::NumType::I32);
+        let i32_val = ValType::Num(NumType::I32);
 
         // The store-described imports — exactly the functions whose call sites
         // recorded themselves in the table, in import-name order.
@@ -107,15 +110,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
             self.add_host_import(
                 &function.name,
-                wasm::TypeName::from(function.name.as_str()),
+                TypeName::from(function.name.as_str()),
                 self.table.host_func(&function),
-                wasm::ResultType::from(
+                ResultType::from(
                     signature
                         .params
                         .iter()
                         .map(|(_, wire_type)| self.wire_param_type(wire_type)),
                 ),
-                wasm::ResultType::from(
+                ResultType::from(
                     signature
                         .results
                         .iter()
@@ -127,10 +130,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         if self.table.io_exit_used() {
             self.add_host_import(
                 "io_exit",
-                wasm::TypeName::from("io_exit"),
+                TypeName::from("io_exit"),
                 self.table.io_exit_func().clone(),
-                wasm::ResultType::from([i32_val.clone()]),
-                wasm::ResultType::from([]),
+                ResultType::from([i32_val.clone()]),
+                ResultType::from([]),
             );
         }
     }
@@ -138,12 +141,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_arr_type(&mut self) {
         self.module.add_type(
             self.table.arr_type(),
-            wasm::SubType {
+            SubType {
                 is_final: true,
                 super_types: vec![],
-                comp_type: wasm::CompType::Array(wasm::ArrayType {
-                    field_type: wasm::FieldType {
-                        storage_type: wasm::StorageType::Val(self.table.top_type(true)),
+                comp_type: CompType::Array(ArrayType {
+                    field_type: FieldType {
+                        storage_type: StorageType::Val(self.table.top_type(true)),
                         mutability: self.table.arr_field_mutability(),
                     },
                 }),
@@ -154,16 +157,14 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_flt_type(&mut self) {
         self.module.add_type(
             self.table.flt_type(),
-            wasm::SubType {
+            SubType {
                 is_final: true,
                 super_types: vec![],
-                comp_type: wasm::CompType::Struct(wasm::StructType::from([(
+                comp_type: CompType::Struct(StructType::from([(
                     self.table.special_field(),
-                    wasm::FieldType {
-                        storage_type: wasm::StorageType::Val(wasm::ValType::Num(
-                            wasm::NumType::F32,
-                        )),
-                        mutability: wasm::Mutability::Const,
+                    FieldType {
+                        storage_type: StorageType::Val(ValType::Num(NumType::F32)),
+                        mutability: Mutability::Const,
                     },
                 )])),
             },
@@ -173,14 +174,14 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_cell_type(&mut self) {
         self.module.add_type(
             self.table.cell_type(),
-            wasm::SubType {
+            SubType {
                 is_final: true,
                 super_types: vec![],
-                comp_type: wasm::CompType::Struct(wasm::StructType::from([(
+                comp_type: CompType::Struct(StructType::from([(
                     self.table.special_field(),
-                    wasm::FieldType {
-                        storage_type: wasm::StorageType::Val(self.table.top_type(true)),
-                        mutability: wasm::Mutability::Var,
+                    FieldType {
+                        storage_type: StorageType::Val(self.table.top_type(true)),
+                        mutability: Mutability::Var,
                     },
                 )])),
             },
@@ -196,20 +197,18 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
             self.module.add_type(
                 type_name,
-                wasm::SubType {
+                SubType {
                     is_final: false,
                     super_types,
-                    comp_type: wasm::CompType::Struct(wasm::StructType::from((0..arity).map(
-                        |index| {
-                            (
-                                self.table.tpl_field(index),
-                                wasm::FieldType {
-                                    storage_type: wasm::StorageType::Val(self.table.top_type(true)),
-                                    mutability: self.table.tpl_field_mutability(),
-                                },
-                            )
-                        },
-                    ))),
+                    comp_type: CompType::Struct(StructType::from((0..arity).map(|index| {
+                        (
+                            self.table.tpl_field(index),
+                            FieldType {
+                                storage_type: StorageType::Val(self.table.top_type(true)),
+                                mutability: self.table.tpl_field_mutability(),
+                            },
+                        )
+                    }))),
                 },
             );
         }
@@ -219,20 +218,16 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         for (arity, type_name) in self.table.envr_types() {
             self.module.add_type(
                 type_name,
-                wasm::SubType {
+                SubType {
                     is_final: false,
                     super_types: vec![],
-                    comp_type: wasm::CompType::Struct(wasm::StructType::from([(
+                    comp_type: CompType::Struct(StructType::from([(
                         self.table.special_field(),
-                        wasm::FieldType {
-                            storage_type: wasm::StorageType::Val(wasm::ValType::Ref(
-                                wasm::RefType {
-                                    is_nullable: true,
-                                    heap_type: wasm::HeapType::Concrete(
-                                        self.table.find_clsr_type(arity),
-                                    ),
-                                },
-                            )),
+                        FieldType {
+                            storage_type: StorageType::Val(ValType::Ref(RefType {
+                                is_nullable: true,
+                                heap_type: HeapType::Concrete(self.table.find_clsr_type(arity)),
+                            })),
                             mutability: self.table.envr_special_mutability(arity),
                         },
                     )])),
@@ -245,21 +240,19 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         for data in self.table.clsrs() {
             self.module.add_type(
                 data.envr_type(),
-                wasm::SubType {
+                SubType {
                     is_final: true,
                     super_types: vec![self.table.find_envr_type(data.arity())],
-                    comp_type: wasm::CompType::Struct(wasm::StructType::from(
+                    comp_type: CompType::Struct(StructType::from(
                         iter::once((
                             self.table.special_field(),
-                            wasm::FieldType {
-                                storage_type: wasm::StorageType::Val(wasm::ValType::Ref(
-                                    wasm::RefType {
-                                        is_nullable: true,
-                                        heap_type: wasm::HeapType::Concrete(
-                                            self.table.find_clsr_type(data.arity()),
-                                        ),
-                                    },
-                                )),
+                            FieldType {
+                                storage_type: StorageType::Val(ValType::Ref(RefType {
+                                    is_nullable: true,
+                                    heap_type: HeapType::Concrete(
+                                        self.table.find_clsr_type(data.arity()),
+                                    ),
+                                })),
                                 // Must agree with the shared `envr/N` special field above.
                                 mutability: self.table.envr_special_mutability(data.arity()),
                             },
@@ -267,8 +260,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                         .chain(data.fields().map(|field_name| {
                             (
                                 field_name,
-                                wasm::FieldType {
-                                    storage_type: wasm::StorageType::Val(self.table.top_type(true)),
+                                FieldType {
+                                    storage_type: StorageType::Val(self.table.top_type(true)),
                                     // Payload captures are back-patched only when this closure
                                     // is itself a recursive shell; otherwise they're immutable.
                                     mutability: self.table.envr_payload_mutability(data.name()),
@@ -285,15 +278,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         for (arity, type_name) in self.table.clsr_types() {
             self.module.add_type(
                 type_name,
-                wasm::SubType {
+                SubType {
                     is_final: false,
                     super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from(
+                    comp_type: CompType::Func(FuncType {
+                        inputs: ResultType::from(
                             iter::once(self.table.top_type(false))
                                 .chain((0..arity).map(|_| self.table.top_type(false))),
                         ),
-                        outputs: wasm::ResultType::from([self.table.top_type(false)]),
+                        outputs: ResultType::from([self.table.top_type(false)]),
                     }),
                 },
             );
@@ -304,15 +297,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         for data in self.table.clsrs() {
             self.module.add_type(
                 data.clsr_type(),
-                wasm::SubType {
+                SubType {
                     is_final: true,
                     super_types: vec![self.table.find_clsr_type(data.arity())],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from(
+                    comp_type: CompType::Func(FuncType {
+                        inputs: ResultType::from(
                             iter::once(self.table.top_type(false))
                                 .chain((0..data.arity()).map(|_| self.table.top_type(false))),
                         ),
-                        outputs: wasm::ResultType::from([self.table.top_type(false)]),
+                        outputs: ResultType::from([self.table.top_type(false)]),
                     }),
                 },
             );
@@ -323,24 +316,22 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         for (arity, type_name) in self.table.func_types() {
             self.module.add_type(
                 type_name,
-                wasm::SubType {
+                SubType {
                     is_final: true,
                     super_types: vec![],
-                    comp_type: wasm::CompType::Func(wasm::FuncType {
-                        inputs: wasm::ResultType::from(
-                            (0..arity).map(|_| self.table.top_type(false)),
-                        ),
-                        outputs: wasm::ResultType::from([self.table.top_type(false)]),
+                    comp_type: CompType::Func(FuncType {
+                        inputs: ResultType::from((0..arity).map(|_| self.table.top_type(false))),
+                        outputs: ResultType::from([self.table.top_type(false)]),
                     }),
                 },
             );
         }
     }
 
-    fn emit_let_bin_data(&mut self, name: &'a cont::ValueName, bytes: &[u8]) {
+    fn emit_let_bin_data(&mut self, name: &'a crate::ValueName, bytes: &[u8]) {
         let bin_type = self.table.bin_type();
         let global_name = self.table.find_const(name);
-        let data_name = wasm::DataName::from(format!(
+        let data_name = DataName::from(format!(
             "{}${}",
             name.as_string(),
             self.module.datas().len()
@@ -348,45 +339,43 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         self.module.add_data(
             data_name.clone(),
-            wasm::DataSegment {
+            DataSegment {
                 bytes: bytes.to_vec(),
             },
         );
 
-        let mut init_expr: wasm::Expr = Default::default();
-        init_expr.push(wasm::Instr::I32Const { value: 0 });
-        init_expr.push(wasm::Instr::ArrayNewDefault {
+        let mut init_expr: Expr = Default::default();
+        init_expr.push(Instr::I32Const { value: 0 });
+        init_expr.push(Instr::ArrayNewDefault {
             type_name: bin_type.clone(),
         });
 
         self.module.add_global(
             global_name.clone(),
-            wasm::Global {
-                global_type: wasm::GlobalType {
-                    val_type: wasm::ValType::Ref(wasm::RefType {
+            Global {
+                global_type: GlobalType {
+                    val_type: ValType::Ref(RefType {
                         is_nullable: false,
-                        heap_type: wasm::HeapType::Concrete(bin_type.clone()),
+                        heap_type: HeapType::Concrete(bin_type.clone()),
                     }),
-                    mutability: wasm::Mutability::Var,
+                    mutability: Mutability::Var,
                 },
                 expr: init_expr,
             },
         );
 
-        self.module.add_export(
-            global_name.as_string(),
-            wasm::Export::Global(global_name.clone()),
-        );
+        self.module
+            .add_export(global_name.as_string(), Export::Global(global_name.clone()));
 
-        self.start_expr.push(wasm::Instr::I32Const { value: 0 });
-        self.start_expr.push(wasm::Instr::I32Const {
+        self.start_expr.push(Instr::I32Const { value: 0 });
+        self.start_expr.push(Instr::I32Const {
             value: bytes.len() as i32,
         });
-        self.start_expr.push(wasm::Instr::ArrayNewData {
+        self.start_expr.push(Instr::ArrayNewData {
             type_name: bin_type,
             data_name,
         });
-        self.start_expr.push(wasm::Instr::GlobalSet { global_name });
+        self.start_expr.push(Instr::GlobalSet { global_name });
     }
 
     /// Emit a module-level const. Every global is declared mutable so that
@@ -397,39 +386,39 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// `Bin` and aggregates declare a placeholder init and build the real value
     /// in the start function. `Bin` is special-cased via [`Self::emit_let_bin_data`]
     /// because its payload comes from a data segment.
-    fn emit_let_data(&mut self, name: &'a cont::ValueName, value: &'a cont::Data) {
+    fn emit_let_data(&mut self, name: &'a crate::ValueName, value: &'a crate::Data) {
         match value {
-            cont::Data::Bin(bytes) => {
+            crate::Data::Bin(bytes) => {
                 self.emit_let_bin_data(name, bytes);
             }
-            cont::Data::Nat(_) | cont::Data::Int(_) | cont::Data::Flt(_) => {
+            crate::Data::Nat(_) | crate::Data::Int(_) | crate::Data::Flt(_) => {
                 let mut expr = Default::default();
                 ExprEmitter::new(Context::new_const(self.table), self.module, &mut expr)
                     .emit_data(name, value);
                 self.module.add_global(
                     self.table.find_const(name),
-                    wasm::Global {
-                        global_type: wasm::GlobalType {
+                    Global {
+                        global_type: GlobalType {
                             val_type: self.table.top_type(false),
-                            mutability: wasm::Mutability::Var,
+                            mutability: Mutability::Var,
                         },
                         expr,
                     },
                 );
             }
-            cont::Data::Tpl(_) | cont::Data::Arr(_) | cont::Data::Clsr(_, _) => {
+            crate::Data::Tpl(_) | crate::Data::Arr(_) | crate::Data::Clsr(_, _) => {
                 let global_name = self.table.find_const(name);
 
-                let mut init_expr: wasm::Expr = Default::default();
-                init_expr.push(wasm::Instr::I32Const { value: 0 });
-                init_expr.push(wasm::Instr::RefI31);
+                let mut init_expr: Expr = Default::default();
+                init_expr.push(Instr::I32Const { value: 0 });
+                init_expr.push(Instr::RefI31);
 
                 self.module.add_global(
                     global_name.clone(),
-                    wasm::Global {
-                        global_type: wasm::GlobalType {
+                    Global {
+                        global_type: GlobalType {
                             val_type: self.table.top_type(false),
-                            mutability: wasm::Mutability::Var,
+                            mutability: Mutability::Var,
                         },
                         expr: init_expr,
                     },
@@ -441,12 +430,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     &mut self.start_expr,
                 )
                 .emit_data(name, value);
-                self.start_expr.push(wasm::Instr::GlobalSet { global_name });
+                self.start_expr.push(Instr::GlobalSet { global_name });
             }
         }
     }
 
-    fn emit_let_clsr(&mut self, name: &'a cont::ClsrName, clsr: &'a cont::Clsr) {
+    fn emit_let_clsr(&mut self, name: &'a crate::ClsrName, clsr: &'a crate::Clsr) {
         let mut locals = Default::default();
         let mut expr = Default::default();
 
@@ -459,7 +448,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         self.module.add_func(
             self.table.find_clsr(name).func_name(),
-            wasm::Func {
+            Func {
                 type_name: self.table.find_clsr(name).clsr_type(),
                 params: iter::once(self.table.special_local())
                     .chain(clsr.params.iter().map(|param| {
@@ -480,7 +469,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             .declare_func(self.table.find_clsr(name).func_name());
     }
 
-    fn emit_let_func(&mut self, name: &'a cont::FuncName, func: &'a cont::Func) {
+    fn emit_let_func(&mut self, name: &'a crate::FuncName, func: &'a crate::Func) {
         let mut locals = Default::default();
         let mut expr = Default::default();
 
@@ -493,7 +482,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         self.module.add_func(
             self.table.find_func(name).func_name(),
-            wasm::Func {
+            Func {
                 type_name: self.table.find_func_type(func.params.len()),
                 params: func
                     .params
@@ -511,7 +500,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    pub fn emit_module(&mut self, module: &'a cont::Module) {
+    pub fn emit_module(&mut self, module: &'a crate::Module) {
         self.emit_flt_type();
         self.emit_bin_type();
         self.emit_arr_type();
@@ -540,30 +529,30 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         if let Some(name) = module.entry() {
             let func_name = self.table.find_func(name).func_name();
             self.module
-                .add_export(func_name.as_string(), wasm::Export::Func(func_name));
+                .add_export(func_name.as_string(), Export::Func(func_name));
         }
 
         self.emit_sys_imports();
 
-        let start_type_name = wasm::TypeName::from("start");
+        let start_type_name = TypeName::from("start");
 
         self.module.add_type(
             start_type_name.clone(),
-            wasm::SubType {
+            SubType {
                 is_final: true,
                 super_types: vec![],
-                comp_type: wasm::CompType::Func(wasm::FuncType {
-                    inputs: wasm::ResultType::from([]),
-                    outputs: wasm::ResultType::from([]),
+                comp_type: CompType::Func(FuncType {
+                    inputs: ResultType::from([]),
+                    outputs: ResultType::from([]),
                 }),
             },
         );
 
-        let start_func_name = wasm::FuncName::from("start");
+        let start_func_name = FuncName::from("start");
 
         self.module.add_func(
             start_func_name.clone(),
-            wasm::Func {
+            Func {
                 type_name: start_type_name,
                 params: vec![],
                 locals: vec![],

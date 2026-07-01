@@ -1,49 +1,48 @@
 use {
     super::{Cont, Frame, Work},
-    crate as ersd,
     curios_abi::ForeignFunction,
-    curios_cont as cont,
+    curios_cont::{BlockName, CellTarget, Code, Data, HostTarget, Tail, Value, ValueName},
     num_bigint::BigUint,
     std::sync::Arc,
 };
 
 fn lower_pure_unary_code(
     work: &mut Work,
-    operand: &ersd::Term,
+    operand: &crate::Term,
     frame: &Frame,
-    code: impl FnOnce(cont::ValueName) -> cont::Code,
-) -> cont::ValueName {
+    code: impl FnOnce(ValueName) -> Code,
+) -> ValueName {
     let operand = work.lower_pure_name(operand, frame);
-    work.fresh(cont::Value::Eval(code(operand)))
+    work.fresh(Value::Eval(code(operand)))
 }
 
 fn lower_pure_binary_code(
     work: &mut Work,
-    left: &ersd::Term,
-    right: &ersd::Term,
+    left: &crate::Term,
+    right: &crate::Term,
     frame: &Frame,
-    code: impl FnOnce(cont::ValueName, cont::ValueName) -> cont::Code,
-) -> cont::ValueName {
+    code: impl FnOnce(ValueName, ValueName) -> Code,
+) -> ValueName {
     let left = work.lower_pure_name(left, frame);
     let right = work.lower_pure_name(right, frame);
-    work.fresh(cont::Value::Eval(code(left, right)))
+    work.fresh(Value::Eval(code(left, right)))
 }
 
 fn lower_pure_ternary_code(
     work: &mut Work,
-    first: &ersd::Term,
-    second: &ersd::Term,
-    third: &ersd::Term,
+    first: &crate::Term,
+    second: &crate::Term,
+    third: &crate::Term,
     frame: &Frame,
-    code: impl FnOnce(cont::ValueName, cont::ValueName, cont::ValueName) -> cont::Code,
-) -> cont::ValueName {
+    code: impl FnOnce(ValueName, ValueName, ValueName) -> Code,
+) -> ValueName {
     let first = work.lower_pure_name(first, frame);
     let second = work.lower_pure_name(second, frame);
     let third = work.lower_pure_name(third, frame);
-    work.fresh(cont::Value::Eval(code(first, second, third)))
+    work.fresh(Value::Eval(code(first, second, third)))
 }
 
-fn lower_pure_names(work: &mut Work, terms: &[ersd::Term], frame: &Frame) -> Vec<cont::ValueName> {
+fn lower_pure_names(work: &mut Work, terms: &[crate::Term], frame: &Frame) -> Vec<ValueName> {
     terms
         .iter()
         .map(|term| work.lower_pure_name(term, frame))
@@ -53,12 +52,12 @@ fn lower_pure_names(work: &mut Work, terms: &[ersd::Term], frame: &Frame) -> Vec
 /// A resume block that packs a host op's `arity` results into an `arity`-field
 /// record and feeds it to `cont`; returns the block name to plug into the
 /// `HostTarget`. Arity 0 yields unit, 2/3 the status records.
-fn record_resume<'b>(work: &mut Work, arity: usize, cont: Cont<'b>) -> cont::BlockName {
+fn record_resume<'b>(work: &mut Work, arity: usize, cont: Cont<'b>) -> BlockName {
     let resume = work.fresh_block();
     let fields = (0..arity).map(|_| work.fresh_value()).collect::<Vec<_>>();
 
     work.add_resume_block(resume.clone(), fields.clone(), move |inner| {
-        let record = inner.fresh(cont::Value::Pure(cont::Data::Tpl(fields)));
+        let record = inner.fresh(Value::Pure(Data::Tpl(fields)));
 
         cont.call(inner, record)
     });
@@ -67,7 +66,7 @@ fn record_resume<'b>(work: &mut Work, arity: usize, cont: Cont<'b>) -> cont::Blo
 }
 
 /// A resume block that forwards a host op's single result straight to `cont`.
-fn forward_resume<'b>(work: &mut Work, cont: Cont<'b>) -> cont::BlockName {
+fn forward_resume<'b>(work: &mut Work, cont: Cont<'b>) -> BlockName {
     let resume = work.fresh_block();
     let value = work.fresh_value();
     let value_clone = value.clone();
@@ -87,11 +86,11 @@ fn forward_resume<'b>(work: &mut Work, cont: Cont<'b>) -> cont::BlockName {
 fn lower_foreign<'b>(
     work: &mut Work,
     function: Arc<ForeignFunction>,
-    args: &'b [ersd::Term],
+    args: &'b [crate::Term],
     frame: &'b Frame,
-    mut operands: Vec<cont::ValueName>,
+    mut operands: Vec<ValueName>,
     cont: Cont<'b>,
-) -> cont::Tail {
+) -> Tail {
     match args {
         [] => {
             let resume = match function.signature.results.len() {
@@ -99,7 +98,7 @@ fn lower_foreign<'b>(
                 arity => record_resume(work, arity, cont),
             };
 
-            cont::Tail::Host(cont::HostTarget::Foreign {
+            Tail::Host(HostTarget::Foreign {
                 function,
                 operands,
                 resume,
@@ -118,16 +117,16 @@ fn lower_foreign<'b>(
 
 fn lower_unary_code<'b>(
     work: &mut Work,
-    operand: &'b ersd::Term,
+    operand: &'b crate::Term,
     frame: &'b Frame,
     cont: Cont<'b>,
-    code: impl FnOnce(cont::ValueName) -> cont::Code + 'b,
-) -> cont::Tail {
+    code: impl FnOnce(ValueName) -> Code + 'b,
+) -> Tail {
     work.lower_value_name(
         operand,
         frame,
         Cont::new(move |work, operand| {
-            let value = work.fresh(cont::Value::Eval(code(operand)));
+            let value = work.fresh(Value::Eval(code(operand)));
 
             cont.call(work, value)
         }),
@@ -136,12 +135,12 @@ fn lower_unary_code<'b>(
 
 fn lower_binary_code<'b>(
     work: &mut Work,
-    left: &'b ersd::Term,
-    right: &'b ersd::Term,
+    left: &'b crate::Term,
+    right: &'b crate::Term,
     frame: &'b Frame,
     cont: Cont<'b>,
-    code: impl FnOnce(cont::ValueName, cont::ValueName) -> cont::Code + 'b,
-) -> cont::Tail {
+    code: impl FnOnce(ValueName, ValueName) -> Code + 'b,
+) -> Tail {
     work.lower_value_name(
         left,
         frame,
@@ -150,7 +149,7 @@ fn lower_binary_code<'b>(
                 right,
                 frame,
                 Cont::new(move |work, right| {
-                    let value = work.fresh(cont::Value::Eval(code(left, right)));
+                    let value = work.fresh(Value::Eval(code(left, right)));
 
                     cont.call(work, value)
                 }),
@@ -161,13 +160,13 @@ fn lower_binary_code<'b>(
 
 fn lower_ternary_code<'b>(
     work: &mut Work,
-    first: &'b ersd::Term,
-    second: &'b ersd::Term,
-    third: &'b ersd::Term,
+    first: &'b crate::Term,
+    second: &'b crate::Term,
+    third: &'b crate::Term,
     frame: &'b Frame,
     cont: Cont<'b>,
-    code: impl FnOnce(cont::ValueName, cont::ValueName, cont::ValueName) -> cont::Code + 'b,
-) -> cont::Tail {
+    code: impl FnOnce(ValueName, ValueName, ValueName) -> Code + 'b,
+) -> Tail {
     work.lower_value_name(
         first,
         frame,
@@ -180,7 +179,7 @@ fn lower_ternary_code<'b>(
                         third,
                         frame,
                         Cont::new(move |work, third| {
-                            let value = work.fresh(cont::Value::Eval(code(first, second, third)));
+                            let value = work.fresh(Value::Eval(code(first, second, third)));
 
                             cont.call(work, value)
                         }),
@@ -193,14 +192,14 @@ fn lower_ternary_code<'b>(
 
 fn lower_lst<'b>(
     work: &mut Work,
-    elements: &'b [ersd::Term],
+    elements: &'b [crate::Term],
     frame: &'b Frame,
-    mut names: Vec<cont::ValueName>,
+    mut names: Vec<ValueName>,
     cont: Cont<'b>,
-) -> cont::Tail {
+) -> Tail {
     match elements {
         [] => {
-            let value = work.fresh(cont::Value::Pure(cont::Data::Arr(names)));
+            let value = work.fresh(Value::Pure(Data::Arr(names)));
 
             cont.call(work, value)
         }
@@ -217,14 +216,14 @@ fn lower_lst<'b>(
 
 fn lower_bin_concat<'b>(
     work: &mut Work,
-    operands: &'b [ersd::Term],
+    operands: &'b [crate::Term],
     frame: &'b Frame,
-    mut names: Vec<cont::ValueName>,
+    mut names: Vec<ValueName>,
     cont: Cont<'b>,
-) -> cont::Tail {
+) -> Tail {
     match operands {
         [] => {
-            let value = work.fresh(cont::Value::Eval(cont::Code::BinConcat(names)));
+            let value = work.fresh(Value::Eval(Code::BinConcat(names)));
 
             cont.call(work, value)
         }
@@ -241,14 +240,14 @@ fn lower_bin_concat<'b>(
 
 fn lower_arr_concat<'b>(
     work: &mut Work,
-    operands: &'b [ersd::Term],
+    operands: &'b [crate::Term],
     frame: &'b Frame,
-    mut names: Vec<cont::ValueName>,
+    mut names: Vec<ValueName>,
     cont: Cont<'b>,
-) -> cont::Tail {
+) -> Tail {
     match operands {
         [] => {
-            let value = work.fresh(cont::Value::Eval(cont::Code::ArrConcat(names)));
+            let value = work.fresh(Value::Eval(Code::ArrConcat(names)));
 
             cont.call(work, value)
         }
@@ -263,261 +262,261 @@ fn lower_arr_concat<'b>(
     }
 }
 
-pub fn lower_pure_prim(work: &mut Work, prim: &ersd::PurePrim, frame: &Frame) -> cont::ValueName {
+pub fn lower_pure_prim(work: &mut Work, prim: &crate::PurePrim, frame: &Frame) -> ValueName {
     match prim {
-        ersd::PurePrim::Nat(value) => work.fresh(cont::Value::Pure(cont::Data::Nat(*value))),
-        ersd::PurePrim::NatEql(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatEql)
+        crate::PurePrim::Nat(value) => work.fresh(Value::Pure(Data::Nat(*value))),
+        crate::PurePrim::NatEql(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatEql)
         }
-        ersd::PurePrim::NatNeq(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatNeq)
+        crate::PurePrim::NatNeq(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatNeq)
         }
-        ersd::PurePrim::NatAdd(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatAdd)
+        crate::PurePrim::NatAdd(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatAdd)
         }
-        ersd::PurePrim::NatSub(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatSub)
+        crate::PurePrim::NatSub(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatSub)
         }
-        ersd::PurePrim::NatMul(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatMul)
+        crate::PurePrim::NatMul(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatMul)
         }
-        ersd::PurePrim::NatLt(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatLt)
+        crate::PurePrim::NatLt(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatLt)
         }
-        ersd::PurePrim::NatDiv(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatDiv)
+        crate::PurePrim::NatDiv(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatDiv)
         }
-        ersd::PurePrim::NatRem(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatRem)
+        crate::PurePrim::NatRem(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatRem)
         }
-        ersd::PurePrim::NatGt(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatGt)
+        crate::PurePrim::NatGt(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatGt)
         }
-        ersd::PurePrim::NatLte(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatLte)
+        crate::PurePrim::NatLte(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatLte)
         }
-        ersd::PurePrim::NatGte(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatGte)
+        crate::PurePrim::NatGte(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatGte)
         }
-        ersd::PurePrim::NatAnd(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatAnd)
+        crate::PurePrim::NatAnd(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatAnd)
         }
-        ersd::PurePrim::NatOr(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatOr)
+        crate::PurePrim::NatOr(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatOr)
         }
-        ersd::PurePrim::NatXor(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatXor)
+        crate::PurePrim::NatXor(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatXor)
         }
-        ersd::PurePrim::NatShl(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatShl)
+        crate::PurePrim::NatShl(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatShl)
         }
-        ersd::PurePrim::NatShr(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::NatShr)
+        crate::PurePrim::NatShr(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::NatShr)
         }
-        ersd::PurePrim::Int(value) => work.fresh(cont::Value::Pure(cont::Data::Int(*value))),
-        ersd::PurePrim::Flt(value) => work.fresh(cont::Value::Pure(cont::Data::Flt(*value))),
-        ersd::PurePrim::IntEql(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntEql)
+        crate::PurePrim::Int(value) => work.fresh(Value::Pure(Data::Int(*value))),
+        crate::PurePrim::Flt(value) => work.fresh(Value::Pure(Data::Flt(*value))),
+        crate::PurePrim::IntEql(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntEql)
         }
-        ersd::PurePrim::IntNeq(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntNeq)
+        crate::PurePrim::IntNeq(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntNeq)
         }
-        ersd::PurePrim::IntAdd(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntAdd)
+        crate::PurePrim::IntAdd(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntAdd)
         }
-        ersd::PurePrim::IntSub(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntSub)
+        crate::PurePrim::IntSub(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntSub)
         }
-        ersd::PurePrim::IntMul(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntMul)
+        crate::PurePrim::IntMul(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntMul)
         }
-        ersd::PurePrim::IntDiv(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntDiv)
+        crate::PurePrim::IntDiv(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntDiv)
         }
-        ersd::PurePrim::IntRem(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntRem)
+        crate::PurePrim::IntRem(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntRem)
         }
-        ersd::PurePrim::IntLt(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntLt)
+        crate::PurePrim::IntLt(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntLt)
         }
-        ersd::PurePrim::IntGt(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntGt)
+        crate::PurePrim::IntGt(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntGt)
         }
-        ersd::PurePrim::IntLte(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntLte)
+        crate::PurePrim::IntLte(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntLte)
         }
-        ersd::PurePrim::IntGte(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntGte)
+        crate::PurePrim::IntGte(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntGte)
         }
-        ersd::PurePrim::IntAnd(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntAnd)
+        crate::PurePrim::IntAnd(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntAnd)
         }
-        ersd::PurePrim::IntOr(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntOr)
+        crate::PurePrim::IntOr(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntOr)
         }
-        ersd::PurePrim::IntXor(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntXor)
+        crate::PurePrim::IntXor(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntXor)
         }
-        ersd::PurePrim::IntShl(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntShl)
+        crate::PurePrim::IntShl(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntShl)
         }
-        ersd::PurePrim::IntShr(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::IntShr)
+        crate::PurePrim::IntShr(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::IntShr)
         }
-        ersd::PurePrim::FltAdd(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltAdd)
+        crate::PurePrim::FltAdd(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltAdd)
         }
-        ersd::PurePrim::FltSub(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltSub)
+        crate::PurePrim::FltSub(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltSub)
         }
-        ersd::PurePrim::FltMul(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltMul)
+        crate::PurePrim::FltMul(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltMul)
         }
-        ersd::PurePrim::FltDiv(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltDiv)
+        crate::PurePrim::FltDiv(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltDiv)
         }
-        ersd::PurePrim::FltRem(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltRem)
+        crate::PurePrim::FltRem(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltRem)
         }
-        ersd::PurePrim::FltEql(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltEql)
+        crate::PurePrim::FltEql(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltEql)
         }
-        ersd::PurePrim::FltNeq(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltNeq)
+        crate::PurePrim::FltNeq(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltNeq)
         }
-        ersd::PurePrim::FltLt(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltLt)
+        crate::PurePrim::FltLt(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltLt)
         }
-        ersd::PurePrim::FltGt(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltGt)
+        crate::PurePrim::FltGt(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltGt)
         }
-        ersd::PurePrim::FltLte(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltLte)
+        crate::PurePrim::FltLte(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltLte)
         }
-        ersd::PurePrim::FltGte(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltGte)
+        crate::PurePrim::FltGte(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltGte)
         }
-        ersd::PurePrim::FltMin(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltMin)
+        crate::PurePrim::FltMin(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltMin)
         }
-        ersd::PurePrim::FltMax(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::FltMax)
+        crate::PurePrim::FltMax(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::FltMax)
         }
-        ersd::PurePrim::FltNeg(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::FltNeg)
+        crate::PurePrim::FltNeg(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::FltNeg)
         }
-        ersd::PurePrim::FltAbs(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::FltAbs)
+        crate::PurePrim::FltAbs(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::FltAbs)
         }
-        ersd::PurePrim::FltSqrt(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::FltSqrt)
+        crate::PurePrim::FltSqrt(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::FltSqrt)
         }
-        ersd::PurePrim::FltFloor(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::FltFloor)
+        crate::PurePrim::FltFloor(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::FltFloor)
         }
-        ersd::PurePrim::FltCeil(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::FltCeil)
+        crate::PurePrim::FltCeil(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::FltCeil)
         }
-        ersd::PurePrim::FltTrunc(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::FltTrunc)
+        crate::PurePrim::FltTrunc(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::FltTrunc)
         }
-        ersd::PurePrim::FltNearest(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::FltNearest)
+        crate::PurePrim::FltNearest(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::FltNearest)
         }
-        ersd::PurePrim::FltToLeBin(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::FltToLeBin)
+        crate::PurePrim::FltToLeBin(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::FltToLeBin)
         }
-        ersd::PurePrim::NatToInt(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::NatToInt)
+        crate::PurePrim::NatToInt(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::NatToInt)
         }
-        ersd::PurePrim::NatToFlt(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::NatToFlt)
+        crate::PurePrim::NatToFlt(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::NatToFlt)
         }
-        ersd::PurePrim::IntToNat(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::IntToNat)
+        crate::PurePrim::IntToNat(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::IntToNat)
         }
-        ersd::PurePrim::IntToFlt(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::IntToFlt)
+        crate::PurePrim::IntToFlt(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::IntToFlt)
         }
-        ersd::PurePrim::FltToNat(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::FltToNat)
+        crate::PurePrim::FltToNat(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::FltToNat)
         }
-        ersd::PurePrim::FltToInt(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::FltToInt)
+        crate::PurePrim::FltToInt(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::FltToInt)
         }
-        ersd::PurePrim::Bin(bytes) => work.fresh(cont::Value::Pure(cont::Data::Bin(bytes.clone()))),
-        ersd::PurePrim::BinLen(bin) => lower_pure_unary_code(work, bin, frame, cont::Code::BinLen),
-        ersd::PurePrim::BinEql(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::BinEql)
+        crate::PurePrim::Bin(bytes) => work.fresh(Value::Pure(Data::Bin(bytes.clone()))),
+        crate::PurePrim::BinLen(bin) => lower_pure_unary_code(work, bin, frame, Code::BinLen),
+        crate::PurePrim::BinEql(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::BinEql)
         }
         // Handle identity is byte identity: the rep is bytes from here down.
-        ersd::PurePrim::IoEql(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, cont::Code::BinEql)
+        crate::PurePrim::IoEql(left, right) => {
+            lower_pure_binary_code(work, left, right, frame, Code::BinEql)
         }
-        ersd::PurePrim::BinGet(bin, idx) => {
-            lower_pure_binary_code(work, bin, idx, frame, cont::Code::BinGet)
+        crate::PurePrim::BinGet(bin, idx) => {
+            lower_pure_binary_code(work, bin, idx, frame, Code::BinGet)
         }
-        ersd::PurePrim::BinSlice(bin, start, end) => {
-            lower_pure_ternary_code(work, bin, start, end, frame, cont::Code::BinSlice)
+        crate::PurePrim::BinSlice(bin, start, end) => {
+            lower_pure_ternary_code(work, bin, start, end, frame, Code::BinSlice)
         }
-        ersd::PurePrim::BinAppend(bin, byte) => {
-            lower_pure_binary_code(work, bin, byte, frame, cont::Code::BinAppend)
+        crate::PurePrim::BinAppend(bin, byte) => {
+            lower_pure_binary_code(work, bin, byte, frame, Code::BinAppend)
         }
-        ersd::PurePrim::BinConcat(operands) => {
+        crate::PurePrim::BinConcat(operands) => {
             let names = lower_pure_names(work, operands, frame);
 
-            work.fresh(cont::Value::Eval(cont::Code::BinConcat(names)))
+            work.fresh(Value::Eval(Code::BinConcat(names)))
         }
-        ersd::PurePrim::BinFlatten(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::BinFlatten)
+        crate::PurePrim::BinFlatten(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::BinFlatten)
         }
-        ersd::PurePrim::Arr(elements) => {
+        crate::PurePrim::Arr(elements) => {
             let names = lower_pure_names(work, elements, frame);
 
-            work.fresh(cont::Value::Pure(cont::Data::Arr(names)))
+            work.fresh(Value::Pure(Data::Arr(names)))
         }
-        ersd::PurePrim::ArrLen(lst) => lower_pure_unary_code(work, lst, frame, cont::Code::ArrLen),
-        ersd::PurePrim::ArrGet(lst, idx) => {
-            lower_pure_binary_code(work, lst, idx, frame, cont::Code::ArrGet)
+        crate::PurePrim::ArrLen(lst) => lower_pure_unary_code(work, lst, frame, Code::ArrLen),
+        crate::PurePrim::ArrGet(lst, idx) => {
+            lower_pure_binary_code(work, lst, idx, frame, Code::ArrGet)
         }
-        ersd::PurePrim::ArrSlice(lst, start, end) => {
-            lower_pure_ternary_code(work, lst, start, end, frame, cont::Code::ArrSlice)
+        crate::PurePrim::ArrSlice(lst, start, end) => {
+            lower_pure_ternary_code(work, lst, start, end, frame, Code::ArrSlice)
         }
-        ersd::PurePrim::ArrAppend(lst, elem) => {
-            lower_pure_binary_code(work, lst, elem, frame, cont::Code::ArrAppend)
+        crate::PurePrim::ArrAppend(lst, elem) => {
+            lower_pure_binary_code(work, lst, elem, frame, Code::ArrAppend)
         }
-        ersd::PurePrim::ArrConcat(operands) => {
+        crate::PurePrim::ArrConcat(operands) => {
             let names = lower_pure_names(work, operands, frame);
 
-            work.fresh(cont::Value::Eval(cont::Code::ArrConcat(names)))
+            work.fresh(Value::Eval(Code::ArrConcat(names)))
         }
-        ersd::PurePrim::ArrFlatten(operand) => {
-            lower_pure_unary_code(work, operand, frame, cont::Code::ArrFlatten)
+        crate::PurePrim::ArrFlatten(operand) => {
+            lower_pure_unary_code(work, operand, frame, Code::ArrFlatten)
         }
-        ersd::PurePrim::ArrMap(src, f) => {
-            lower_pure_binary_code(work, src, f, frame, cont::Code::ArrMap)
+        crate::PurePrim::ArrMap(src, f) => {
+            lower_pure_binary_code(work, src, f, frame, Code::ArrMap)
         }
         // A handle erases to its host token bytes: the LE encoding of the token
         // integer, the same `BigUint::to_bytes_le` the runtime mints and keys on.
         // This is the lone spot in the pipeline that knows a handle is bytes.
-        ersd::PurePrim::Io(token) => work.fresh(cont::Value::Pure(cont::Data::Bin(
-            BigUint::from(*token).to_bytes_le(),
-        ))),
+        crate::PurePrim::Io(token) => {
+            work.fresh(Value::Pure(Data::Bin(BigUint::from(*token).to_bytes_le())))
+        }
     }
 }
 
 pub fn lower_value_prim<'b>(
     work: &mut Work,
-    prim: &'b ersd::Prim,
+    prim: &'b crate::Prim,
     frame: &'b Frame,
     cont: Cont<'b>,
-) -> cont::Tail {
+) -> Tail {
     match prim {
-        ersd::Prim::Pure(pure_prim) => lower_value_pure_prim(work, pure_prim, frame, cont),
-        ersd::Prim::Host(ersd::HostPrim::Foreign(function, args)) => {
+        crate::Prim::Pure(pure_prim) => lower_value_pure_prim(work, pure_prim, frame, cont),
+        crate::Prim::Host(crate::HostPrim::Foreign(function, args)) => {
             lower_foreign(work, Arc::clone(function), args, frame, Vec::new(), cont)
         }
-        ersd::Prim::Host(ersd::HostPrim::IoExit(code)) => work.lower_value_name(
+        crate::Prim::Host(crate::HostPrim::IoExit(code)) => work.lower_value_name(
             code,
             frame,
             Cont::new(move |work, code| {
@@ -525,19 +524,19 @@ pub fn lower_value_prim<'b>(
                 // code, kept only for the uniform shape (like `IoClose`).
                 let resume = record_resume(work, 0, cont);
 
-                cont::Tail::Host(cont::HostTarget::IoExit { code, resume })
+                Tail::Host(HostTarget::IoExit { code, resume })
             }),
         ),
-        ersd::Prim::Cell(ersd::CellPrim::New(init)) => work.lower_value_name(
+        crate::Prim::Cell(crate::CellPrim::New(init)) => work.lower_value_name(
             init,
             frame,
             Cont::new(move |work, init| {
                 let resume = forward_resume(work, cont);
 
-                cont::Tail::Cell(cont::CellTarget::New { init, resume })
+                Tail::Cell(CellTarget::New { init, resume })
             }),
         ),
-        ersd::Prim::Cell(ersd::CellPrim::Set(cell, value)) => work.lower_value_name(
+        crate::Prim::Cell(crate::CellPrim::Set(cell, value)) => work.lower_value_name(
             cell,
             frame,
             Cont::new(move |work, cell| {
@@ -547,7 +546,7 @@ pub fn lower_value_prim<'b>(
                     Cont::new(move |work, value| {
                         let resume = record_resume(work, 0, cont);
 
-                        cont::Tail::Cell(cont::CellTarget::Set {
+                        Tail::Cell(CellTarget::Set {
                             cell,
                             value,
                             resume,
@@ -556,13 +555,13 @@ pub fn lower_value_prim<'b>(
                 )
             }),
         ),
-        ersd::Prim::Cell(ersd::CellPrim::Get(cell)) => work.lower_value_name(
+        crate::Prim::Cell(crate::CellPrim::Get(cell)) => work.lower_value_name(
             cell,
             frame,
             Cont::new(move |work, cell| {
                 let resume = forward_resume(work, cont);
 
-                cont::Tail::Cell(cont::CellTarget::Get { cell, resume })
+                Tail::Cell(CellTarget::Get { cell, resume })
             }),
         ),
     }
@@ -570,258 +569,256 @@ pub fn lower_value_prim<'b>(
 
 fn lower_value_pure_prim<'b>(
     work: &mut Work,
-    prim: &'b ersd::PurePrim,
+    prim: &'b crate::PurePrim,
     frame: &'b Frame,
     cont: Cont<'b>,
-) -> cont::Tail {
+) -> Tail {
     match prim {
-        ersd::PurePrim::Nat(value) => {
-            let value = work.fresh(cont::Value::Pure(cont::Data::Nat(*value)));
+        crate::PurePrim::Nat(value) => {
+            let value = work.fresh(Value::Pure(Data::Nat(*value)));
 
             cont.call(work, value)
         }
         // A handle erases to its host token bytes (see the pure-position arm).
-        ersd::PurePrim::Io(token) => {
-            let value = work.fresh(cont::Value::Pure(cont::Data::Bin(
-                BigUint::from(*token).to_bytes_le(),
-            )));
+        crate::PurePrim::Io(token) => {
+            let value = work.fresh(Value::Pure(Data::Bin(BigUint::from(*token).to_bytes_le())));
 
             cont.call(work, value)
         }
-        ersd::PurePrim::NatEql(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatEql)
+        crate::PurePrim::NatEql(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatEql)
         }
-        ersd::PurePrim::NatAdd(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatAdd)
+        crate::PurePrim::NatAdd(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatAdd)
         }
-        ersd::PurePrim::NatSub(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatSub)
+        crate::PurePrim::NatSub(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatSub)
         }
-        ersd::PurePrim::NatMul(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatMul)
+        crate::PurePrim::NatMul(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatMul)
         }
-        ersd::PurePrim::NatLt(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatLt)
+        crate::PurePrim::NatLt(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatLt)
         }
-        ersd::PurePrim::NatNeq(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatNeq)
+        crate::PurePrim::NatNeq(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatNeq)
         }
-        ersd::PurePrim::NatDiv(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatDiv)
+        crate::PurePrim::NatDiv(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatDiv)
         }
-        ersd::PurePrim::NatRem(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatRem)
+        crate::PurePrim::NatRem(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatRem)
         }
-        ersd::PurePrim::NatGt(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatGt)
+        crate::PurePrim::NatGt(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatGt)
         }
-        ersd::PurePrim::NatLte(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatLte)
+        crate::PurePrim::NatLte(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatLte)
         }
-        ersd::PurePrim::NatGte(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatGte)
+        crate::PurePrim::NatGte(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatGte)
         }
-        ersd::PurePrim::NatAnd(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatAnd)
+        crate::PurePrim::NatAnd(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatAnd)
         }
-        ersd::PurePrim::NatOr(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatOr)
+        crate::PurePrim::NatOr(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatOr)
         }
-        ersd::PurePrim::NatXor(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatXor)
+        crate::PurePrim::NatXor(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatXor)
         }
-        ersd::PurePrim::NatShl(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatShl)
+        crate::PurePrim::NatShl(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatShl)
         }
-        ersd::PurePrim::NatShr(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::NatShr)
+        crate::PurePrim::NatShr(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::NatShr)
         }
-        ersd::PurePrim::Int(value) => {
-            let value = work.fresh(cont::Value::Pure(cont::Data::Int(*value)));
+        crate::PurePrim::Int(value) => {
+            let value = work.fresh(Value::Pure(Data::Int(*value)));
 
             cont.call(work, value)
         }
-        ersd::PurePrim::Flt(value) => {
-            let value = work.fresh(cont::Value::Pure(cont::Data::Flt(*value)));
+        crate::PurePrim::Flt(value) => {
+            let value = work.fresh(Value::Pure(Data::Flt(*value)));
 
             cont.call(work, value)
         }
-        ersd::PurePrim::IntEql(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntEql)
+        crate::PurePrim::IntEql(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntEql)
         }
-        ersd::PurePrim::IntAdd(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntAdd)
+        crate::PurePrim::IntAdd(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntAdd)
         }
-        ersd::PurePrim::IntSub(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntSub)
+        crate::PurePrim::IntSub(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntSub)
         }
-        ersd::PurePrim::IntMul(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntMul)
+        crate::PurePrim::IntMul(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntMul)
         }
-        ersd::PurePrim::IntNeq(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntNeq)
+        crate::PurePrim::IntNeq(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntNeq)
         }
-        ersd::PurePrim::IntDiv(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntDiv)
+        crate::PurePrim::IntDiv(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntDiv)
         }
-        ersd::PurePrim::IntRem(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntRem)
+        crate::PurePrim::IntRem(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntRem)
         }
-        ersd::PurePrim::IntLt(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntLt)
+        crate::PurePrim::IntLt(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntLt)
         }
-        ersd::PurePrim::IntGt(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntGt)
+        crate::PurePrim::IntGt(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntGt)
         }
-        ersd::PurePrim::IntLte(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntLte)
+        crate::PurePrim::IntLte(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntLte)
         }
-        ersd::PurePrim::IntGte(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntGte)
+        crate::PurePrim::IntGte(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntGte)
         }
-        ersd::PurePrim::IntAnd(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntAnd)
+        crate::PurePrim::IntAnd(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntAnd)
         }
-        ersd::PurePrim::IntOr(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntOr)
+        crate::PurePrim::IntOr(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntOr)
         }
-        ersd::PurePrim::IntXor(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntXor)
+        crate::PurePrim::IntXor(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntXor)
         }
-        ersd::PurePrim::IntShl(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntShl)
+        crate::PurePrim::IntShl(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntShl)
         }
-        ersd::PurePrim::IntShr(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::IntShr)
+        crate::PurePrim::IntShr(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::IntShr)
         }
-        ersd::PurePrim::FltAdd(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltAdd)
+        crate::PurePrim::FltAdd(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltAdd)
         }
-        ersd::PurePrim::FltSub(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltSub)
+        crate::PurePrim::FltSub(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltSub)
         }
-        ersd::PurePrim::FltMul(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltMul)
+        crate::PurePrim::FltMul(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltMul)
         }
-        ersd::PurePrim::FltDiv(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltDiv)
+        crate::PurePrim::FltDiv(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltDiv)
         }
-        ersd::PurePrim::FltRem(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltRem)
+        crate::PurePrim::FltRem(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltRem)
         }
-        ersd::PurePrim::FltEql(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltEql)
+        crate::PurePrim::FltEql(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltEql)
         }
-        ersd::PurePrim::FltNeq(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltNeq)
+        crate::PurePrim::FltNeq(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltNeq)
         }
-        ersd::PurePrim::FltLt(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltLt)
+        crate::PurePrim::FltLt(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltLt)
         }
-        ersd::PurePrim::FltGt(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltGt)
+        crate::PurePrim::FltGt(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltGt)
         }
-        ersd::PurePrim::FltLte(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltLte)
+        crate::PurePrim::FltLte(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltLte)
         }
-        ersd::PurePrim::FltGte(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltGte)
+        crate::PurePrim::FltGte(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltGte)
         }
-        ersd::PurePrim::FltMin(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltMin)
+        crate::PurePrim::FltMin(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltMin)
         }
-        ersd::PurePrim::FltMax(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::FltMax)
+        crate::PurePrim::FltMax(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::FltMax)
         }
-        ersd::PurePrim::FltNeg(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::FltNeg)
+        crate::PurePrim::FltNeg(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::FltNeg)
         }
-        ersd::PurePrim::FltAbs(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::FltAbs)
+        crate::PurePrim::FltAbs(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::FltAbs)
         }
-        ersd::PurePrim::FltSqrt(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::FltSqrt)
+        crate::PurePrim::FltSqrt(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::FltSqrt)
         }
-        ersd::PurePrim::FltFloor(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::FltFloor)
+        crate::PurePrim::FltFloor(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::FltFloor)
         }
-        ersd::PurePrim::FltCeil(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::FltCeil)
+        crate::PurePrim::FltCeil(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::FltCeil)
         }
-        ersd::PurePrim::FltTrunc(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::FltTrunc)
+        crate::PurePrim::FltTrunc(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::FltTrunc)
         }
-        ersd::PurePrim::FltNearest(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::FltNearest)
+        crate::PurePrim::FltNearest(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::FltNearest)
         }
-        ersd::PurePrim::FltToLeBin(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::FltToLeBin)
+        crate::PurePrim::FltToLeBin(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::FltToLeBin)
         }
-        ersd::PurePrim::NatToInt(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::NatToInt)
+        crate::PurePrim::NatToInt(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::NatToInt)
         }
-        ersd::PurePrim::IntToNat(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::IntToNat)
+        crate::PurePrim::IntToNat(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::IntToNat)
         }
-        ersd::PurePrim::IntToFlt(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::IntToFlt)
+        crate::PurePrim::IntToFlt(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::IntToFlt)
         }
-        ersd::PurePrim::NatToFlt(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::NatToFlt)
+        crate::PurePrim::NatToFlt(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::NatToFlt)
         }
-        ersd::PurePrim::FltToInt(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::FltToInt)
+        crate::PurePrim::FltToInt(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::FltToInt)
         }
-        ersd::PurePrim::FltToNat(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::FltToNat)
+        crate::PurePrim::FltToNat(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::FltToNat)
         }
-        ersd::PurePrim::Bin(bytes) => {
-            let value = work.fresh(cont::Value::Pure(cont::Data::Bin(bytes.clone())));
+        crate::PurePrim::Bin(bytes) => {
+            let value = work.fresh(Value::Pure(Data::Bin(bytes.clone())));
 
             cont.call(work, value)
         }
-        ersd::PurePrim::BinLen(bin) => lower_unary_code(work, bin, frame, cont, cont::Code::BinLen),
-        ersd::PurePrim::BinEql(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::BinEql)
+        crate::PurePrim::BinLen(bin) => lower_unary_code(work, bin, frame, cont, Code::BinLen),
+        crate::PurePrim::BinEql(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::BinEql)
         }
         // Handle identity is byte identity: the rep is bytes from here down.
-        ersd::PurePrim::IoEql(left, right) => {
-            lower_binary_code(work, left, right, frame, cont, cont::Code::BinEql)
+        crate::PurePrim::IoEql(left, right) => {
+            lower_binary_code(work, left, right, frame, cont, Code::BinEql)
         }
-        ersd::PurePrim::BinGet(bin, idx) => {
-            lower_binary_code(work, bin, idx, frame, cont, cont::Code::BinGet)
+        crate::PurePrim::BinGet(bin, idx) => {
+            lower_binary_code(work, bin, idx, frame, cont, Code::BinGet)
         }
-        ersd::PurePrim::BinSlice(bin, start, end) => {
-            lower_ternary_code(work, bin, start, end, frame, cont, cont::Code::BinSlice)
+        crate::PurePrim::BinSlice(bin, start, end) => {
+            lower_ternary_code(work, bin, start, end, frame, cont, Code::BinSlice)
         }
-        ersd::PurePrim::BinAppend(bin, byte) => {
-            lower_binary_code(work, bin, byte, frame, cont, cont::Code::BinAppend)
+        crate::PurePrim::BinAppend(bin, byte) => {
+            lower_binary_code(work, bin, byte, frame, cont, Code::BinAppend)
         }
-        ersd::PurePrim::BinConcat(operands) => {
+        crate::PurePrim::BinConcat(operands) => {
             lower_bin_concat(work, operands, frame, vec![], cont)
         }
-        ersd::PurePrim::BinFlatten(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::BinFlatten)
+        crate::PurePrim::BinFlatten(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::BinFlatten)
         }
-        ersd::PurePrim::Arr(elements) => lower_lst(work, elements, frame, vec![], cont),
-        ersd::PurePrim::ArrLen(lst) => lower_unary_code(work, lst, frame, cont, cont::Code::ArrLen),
-        ersd::PurePrim::ArrGet(lst, idx) => {
-            lower_binary_code(work, lst, idx, frame, cont, cont::Code::ArrGet)
+        crate::PurePrim::Arr(elements) => lower_lst(work, elements, frame, vec![], cont),
+        crate::PurePrim::ArrLen(lst) => lower_unary_code(work, lst, frame, cont, Code::ArrLen),
+        crate::PurePrim::ArrGet(lst, idx) => {
+            lower_binary_code(work, lst, idx, frame, cont, Code::ArrGet)
         }
-        ersd::PurePrim::ArrSlice(lst, start, end) => {
-            lower_ternary_code(work, lst, start, end, frame, cont, cont::Code::ArrSlice)
+        crate::PurePrim::ArrSlice(lst, start, end) => {
+            lower_ternary_code(work, lst, start, end, frame, cont, Code::ArrSlice)
         }
-        ersd::PurePrim::ArrAppend(lst, elem) => {
-            lower_binary_code(work, lst, elem, frame, cont, cont::Code::ArrAppend)
+        crate::PurePrim::ArrAppend(lst, elem) => {
+            lower_binary_code(work, lst, elem, frame, cont, Code::ArrAppend)
         }
-        ersd::PurePrim::ArrConcat(operands) => {
+        crate::PurePrim::ArrConcat(operands) => {
             lower_arr_concat(work, operands, frame, vec![], cont)
         }
-        ersd::PurePrim::ArrFlatten(operand) => {
-            lower_unary_code(work, operand, frame, cont, cont::Code::ArrFlatten)
+        crate::PurePrim::ArrFlatten(operand) => {
+            lower_unary_code(work, operand, frame, cont, Code::ArrFlatten)
         }
-        ersd::PurePrim::ArrMap(src, f) => {
-            lower_binary_code(work, src, f, frame, cont, cont::Code::ArrMap)
+        crate::PurePrim::ArrMap(src, f) => {
+            lower_binary_code(work, src, f, frame, cont, Code::ArrMap)
         }
     }
 }

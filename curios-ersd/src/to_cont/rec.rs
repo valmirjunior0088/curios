@@ -1,7 +1,6 @@
-use crate as ersd;
-use curios_cont as cont;
+use curios_cont::{ClsrName, ValueName};
 
-pub fn unsupported_sync_rec_item(term: &ersd::Term) -> ! {
+pub fn unsupported_sync_rec_item(term: &crate::Term) -> ! {
     panic!(
         "`to_cont` does not support a call-valued `rec` item in value position: \
          the following term reaches `Apply`/`Match`/`NatMatch` on its construction path \
@@ -71,6 +70,6 @@ pub fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usize> {
 /// back-patched (see `plan_backpatch`). Confining cyclic recursion to closures is what lets
 /// every `tpl`/`arr` wasm field stay immutable.
 pub struct Backpatch {
-    pub clsr: cont::ClsrName,
-    pub captures: Vec<cont::ValueName>,
+    pub clsr: ClsrName,
+    pub captures: Vec<ValueName>,
 }

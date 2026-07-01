@@ -1,4 +1,7 @@
-use {super::FrameEntropy, curios_cont as cont};
+use {
+    super::FrameEntropy,
+    curios_cont::{Block, BlockName, ClsrName, Region, Tail, Value, ValueName},
+};
 
 /// A region under construction together with access to the shared name supply.
 ///
@@ -23,43 +26,43 @@ impl<'s> Emit<'s> {
         Emit::new(&mut *self.state)
     }
 
-    pub fn fresh_value(&mut self) -> cont::ValueName {
+    pub fn fresh_value(&mut self) -> ValueName {
         self.state.fresh_value()
     }
 
-    pub fn fresh_block(&mut self) -> cont::BlockName {
+    pub fn fresh_block(&mut self) -> BlockName {
         self.state.fresh_block()
     }
 
     /// Bind `value` to a fresh name in this region and return that name.
-    pub fn fresh(&mut self, value: cont::Value) -> cont::ValueName {
+    pub fn fresh(&mut self, value: Value) -> ValueName {
         let name = self.state.fresh_value();
         self.builder.add_value(name.clone(), value);
 
         name
     }
 
-    pub fn add_prealloc(&mut self, name: cont::ValueName, clsr: cont::ClsrName) {
+    pub fn add_prealloc(&mut self, name: ValueName, clsr: ClsrName) {
         self.builder.add_prealloc(name, clsr);
     }
 
-    pub fn add_value(&mut self, name: cont::ValueName, value: cont::Value) {
+    pub fn add_value(&mut self, name: ValueName, value: Value) {
         self.builder.add_value(name, value);
     }
 
-    pub fn add_block(&mut self, name: cont::BlockName, block: cont::Block) {
+    pub fn add_block(&mut self, name: BlockName, block: Block) {
         self.builder.add_block(name, block);
     }
 
-    pub fn finish(self, tail: cont::Tail) -> cont::Region {
+    pub fn finish(self, tail: Tail) -> Region {
         self.builder.finish(tail)
     }
 }
 
 pub struct RegionBuilder {
-    preallocs: Vec<(cont::ValueName, cont::ClsrName)>,
-    values: Vec<(cont::ValueName, cont::Value)>,
-    blocks: Vec<(cont::BlockName, cont::Block)>,
+    preallocs: Vec<(ValueName, ClsrName)>,
+    values: Vec<(ValueName, Value)>,
+    blocks: Vec<(BlockName, Block)>,
 }
 
 impl RegionBuilder {
@@ -71,20 +74,20 @@ impl RegionBuilder {
         }
     }
 
-    pub fn add_prealloc(&mut self, name: cont::ValueName, clsr: cont::ClsrName) {
+    pub fn add_prealloc(&mut self, name: ValueName, clsr: ClsrName) {
         self.preallocs.push((name, clsr));
     }
 
-    pub fn add_value(&mut self, name: cont::ValueName, value: cont::Value) {
+    pub fn add_value(&mut self, name: ValueName, value: Value) {
         self.values.push((name, value));
     }
 
-    pub fn add_block(&mut self, name: cont::BlockName, block: cont::Block) {
+    pub fn add_block(&mut self, name: BlockName, block: Block) {
         self.blocks.push((name, block));
     }
 
-    pub fn finish(self, tail: cont::Tail) -> cont::Region {
-        cont::Region {
+    pub fn finish(self, tail: Tail) -> Region {
+        Region {
             preallocs: self.preallocs,
             values: self.values,
             blocks: self.blocks,

@@ -1,4 +1,4 @@
-use {super::*, curios_ersd as ersd, std::time::Duration};
+use {super::*, std::time::Duration};
 
 fn context() -> Context {
     Context::new(Duration::from_secs(1))
@@ -81,7 +81,8 @@ fn erase_func_captures_free_variables_before_opening_body() {
 
     let erased = erase(&mut context, &term, &type_).unwrap();
 
-    let ersd::Subterm::Func(ersd::Func { captures, .. }) = erased.into_subterm() else {
+    let curios_ersd::Subterm::Func(curios_ersd::Func { captures, .. }) = erased.into_subterm()
+    else {
         panic!("expected erased func");
     };
 

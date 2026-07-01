@@ -1,31 +1,34 @@
-use {
-    crate as text, curios_core as core,
-    std::{
-        fs,
-        path::{Path, PathBuf},
-        time::{SystemTime, UNIX_EPOCH},
-    },
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
-fn run(src: &str) -> core::Term {
-    let (module, _) =
-        super::to_core(&src.parse::<text::Entrypoint>().unwrap(), &text::NullLoader).unwrap();
+fn run(src: &str) -> curios_core::Term {
+    let (module, _) = super::to_core(
+        &src.parse::<crate::Entrypoint>().unwrap(),
+        &crate::NullLoader,
+    )
+    .unwrap();
 
     module.into_nested_term()
 }
 
 fn run_err(src: &str) -> String {
-    super::to_core(&src.parse::<text::Entrypoint>().unwrap(), &text::NullLoader)
-        .unwrap_err()
-        .to_string()
+    super::to_core(
+        &src.parse::<crate::Entrypoint>().unwrap(),
+        &crate::NullLoader,
+    )
+    .unwrap_err()
+    .to_string()
 }
 
 // Lower against the real prelude (so `sys` and `std` are served and rooted),
 // returning only success/error — the lens for the internal-root gate.
 fn lower_with_prelude(src: &str) -> Result<(), String> {
     super::to_core(
-        &src.parse::<text::Entrypoint>().unwrap(),
-        &text::prelude(&curios_abi::sys_io(), &text::NullLoader),
+        &src.parse::<crate::Entrypoint>().unwrap(),
+        &crate::prelude(&curios_abi::sys_io(), &crate::NullLoader),
     )
     .map(|_| ())
     .map_err(|error| error.to_string())
@@ -47,7 +50,7 @@ fn write_module(base: &Path, path: &str, source: &str) {
 
 #[test]
 fn no_items_simple_tail() {
-    assert_eq!(run("Type"), core::Term::type_());
+    assert_eq!(run("Type"), curios_core::Term::type_());
 }
 
 #[test]
@@ -57,11 +60,11 @@ fn single_let_binding() {
             let x : Type = Type;
             x
         "#),
-        core::Term::let_(
+        curios_core::Term::let_(
             "/x",
-            core::Term::type_(),
-            core::Term::type_(),
-            core::Term::var(core::Var::free("/x"))
+            curios_core::Term::type_(),
+            curios_core::Term::type_(),
+            curios_core::Term::var(curios_core::Var::free("/x"))
         ),
     );
 }
@@ -75,11 +78,11 @@ fn nested_module_binding_reference() {
             end
             Foo/f
         "#),
-        core::Term::let_(
+        curios_core::Term::let_(
             "/Foo/f",
-            core::Term::type_(),
-            core::Term::type_(),
-            core::Term::var(core::Var::free("/Foo/f"))
+            curios_core::Term::type_(),
+            curios_core::Term::type_(),
+            curios_core::Term::var(curios_core::Var::free("/Foo/f"))
         ),
     );
 }
@@ -93,11 +96,11 @@ fn module_named_after_type_resolves_by_qualified_path() {
             end
             Nat/double
         "#),
-        core::Term::let_(
+        curios_core::Term::let_(
             "/Nat/double",
-            core::Term::type_(),
-            core::Term::type_(),
-            core::Term::var(core::Var::free("/Nat/double"))
+            curios_core::Term::type_(),
+            curios_core::Term::type_(),
+            curios_core::Term::var(curios_core::Var::free("/Nat/double"))
         ),
     );
 }
@@ -114,11 +117,11 @@ fn use_shorthand_resolves_qualifier() {
             use Foo/{Bar};
             Bar/f
         "#),
-        core::Term::let_(
+        curios_core::Term::let_(
             "/Foo/Bar/f",
-            core::Term::type_(),
-            core::Term::type_(),
-            core::Term::var(core::Var::free("/Foo/Bar/f"))
+            curios_core::Term::type_(),
+            curios_core::Term::type_(),
+            curios_core::Term::var(curios_core::Var::free("/Foo/Bar/f"))
         ),
     );
 }
@@ -237,11 +240,11 @@ fn pub_use_exposes_qualifier() {
             end
             MyMod/Bar/f
         "#),
-        core::Term::let_(
+        curios_core::Term::let_(
             "/Foo/Bar/f",
-            core::Term::type_(),
-            core::Term::type_(),
-            core::Term::var(core::Var::free("/Foo/Bar/f"))
+            curios_core::Term::type_(),
+            curios_core::Term::type_(),
+            curios_core::Term::var(curios_core::Var::free("/Foo/Bar/f"))
         ),
     );
 }
@@ -281,11 +284,11 @@ fn use_of_pub_use_path_resolves_through_alias() {
             use /MyMod/{Bar};
             Bar/f
         "#),
-        core::Term::let_(
+        curios_core::Term::let_(
             "/Foo/Bar/f",
-            core::Term::type_(),
-            core::Term::type_(),
-            core::Term::var(core::Var::free("/Foo/Bar/f"))
+            curios_core::Term::type_(),
+            curios_core::Term::type_(),
+            curios_core::Term::var(curios_core::Var::free("/Foo/Bar/f"))
         ),
     );
 }
@@ -307,11 +310,11 @@ fn chained_pub_use_re_exports_transitively() {
             end
             C/X/f
         "#),
-        core::Term::let_(
+        curios_core::Term::let_(
             "/A/X/f",
-            core::Term::type_(),
-            core::Term::type_(),
-            core::Term::var(core::Var::free("/A/X/f"))
+            curios_core::Term::type_(),
+            curios_core::Term::type_(),
+            curios_core::Term::var(curios_core::Var::free("/A/X/f"))
         ),
     );
 }
@@ -336,11 +339,11 @@ fn chained_re_export_resolves_out_of_order() {
             end
             A/x
         "#),
-        core::Term::let_(
+        curios_core::Term::let_(
             "/C/x",
-            core::Term::type_(),
-            core::Term::type_(),
-            core::Term::var(core::Var::free("/C/x"))
+            curios_core::Term::type_(),
+            curios_core::Term::type_(),
+            curios_core::Term::var(curios_core::Var::free("/C/x"))
         ),
     );
 }
@@ -407,11 +410,11 @@ fn deep_facade_traversal_through_re_exported_module() {
             use /A/M/{x};
             x
         "#),
-        core::Term::let_(
+        curios_core::Term::let_(
             "/B/M/x",
-            core::Term::type_(),
-            core::Term::type_(),
-            core::Term::var(core::Var::free("/B/M/x"))
+            curios_core::Term::type_(),
+            curios_core::Term::type_(),
+            curios_core::Term::var(curios_core::Var::free("/B/M/x"))
         ),
     );
 }
@@ -432,11 +435,11 @@ fn re_exports_from_own_private_child() {
             use /Facade/{helper};
             helper
         "#),
-        core::Term::let_(
+        curios_core::Term::let_(
             "/Facade/Impl/helper",
-            core::Term::type_(),
-            core::Term::type_(),
-            core::Term::var(core::Var::free("/Facade/Impl/helper"))
+            curios_core::Term::type_(),
+            curios_core::Term::type_(),
+            curios_core::Term::var(curios_core::Var::free("/Facade/Impl/helper"))
         ),
     );
 }
@@ -994,15 +997,15 @@ fn use_glob_imports_all_public_bindings() {
             use /Foo/*;
             x
         "#),
-        core::Term::let_(
+        curios_core::Term::let_(
             "/Foo/x",
-            core::Term::type_(),
-            core::Term::type_(),
-            core::Term::let_(
+            curios_core::Term::type_(),
+            curios_core::Term::type_(),
+            curios_core::Term::let_(
                 "/Foo/y",
-                core::Term::type_(),
-                core::Term::type_(),
-                core::Term::var(core::Var::free("/Foo/x"))
+                curios_core::Term::type_(),
+                curios_core::Term::type_(),
+                curios_core::Term::var(curios_core::Var::free("/Foo/x"))
             )
         ),
     );
@@ -1101,9 +1104,9 @@ fn file_loader_prepares_sibling_modules_before_to_core() {
             pub mod B;
             A/y
         "#
-    .parse::<text::Entrypoint>()
+    .parse::<crate::Entrypoint>()
     .unwrap();
-    let loader = text::FileLoader::new(&base);
+    let loader = crate::FileLoader::new(&base);
 
     super::to_core(&entrypoint, &loader).unwrap();
 
@@ -1116,19 +1119,19 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
             pub mod A;
             Type
         "#
-    .parse::<text::Entrypoint>()
+    .parse::<crate::Entrypoint>()
     .unwrap();
 
     assert!(matches!(
-        super::to_core(&entrypoint, &text::NullLoader).unwrap_err(),
-        text::Error::Located { error, .. }
-            if matches!(error.as_ref(), text::Error::ModuleNotFound { path } if path == "/A")
+        super::to_core(&entrypoint, &crate::NullLoader).unwrap_err(),
+        crate::Error::Located { error, .. }
+            if matches!(error.as_ref(), crate::Error::ModuleNotFound { path } if path == "/A")
     ));
 }
 
 #[test]
 fn hole_lowers_to_metavar() {
-    assert_eq!(run("?"), core::Term::metavar(0));
+    assert_eq!(run("?"), curios_core::Term::metavar(0));
 }
 
 #[test]
@@ -1137,7 +1140,7 @@ fn distinct_holes_get_distinct_ids() {
     let term = run("(?, ?)");
     assert_eq!(
         term,
-        core::Term::tuple([core::Term::metavar(0), core::Term::metavar(1)]),
+        curios_core::Term::tuple([curios_core::Term::metavar(0), curios_core::Term::metavar(1)]),
     );
 }
 

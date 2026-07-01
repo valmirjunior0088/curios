@@ -9,7 +9,7 @@ mod interface;
 use {
     super::*,
     curios_base::Entropy,
-    curios_core::{self as core, Bound},
+    curios_core::Bound,
     std::{
         cell::RefCell,
         collections::{BTreeMap, HashMap, HashSet},
@@ -161,8 +161,8 @@ fn process_items(
     top_items: &[TopItem],
     context: &mut Context,
     flat_items: &mut Vec<FlatItem>,
-    inductives: &mut BTreeMap<String, core::Inductive>,
-    structures: &mut BTreeMap<String, core::Structure>,
+    inductives: &mut BTreeMap<String, curios_core::Inductive>,
+    structures: &mut BTreeMap<String, curios_core::Structure>,
     modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
     for top_item in top_items {
@@ -302,7 +302,7 @@ fn process_items(
                         let param_vars = u
                             .params
                             .iter()
-                            .map(|(_, n, _)| core::Term::var(core::Var::free(n)))
+                            .map(|(_, n, _)| curios_core::Term::var(curios_core::Var::free(n)))
                             .collect::<Vec<_>>();
 
                         // The head's index telescope. Unnamed entries get a
@@ -320,7 +320,7 @@ fn process_items(
 
                         let index_vars = index_tys
                             .iter()
-                            .map(|(n, _)| core::Term::var(core::Var::free(n)))
+                            .map(|(n, _)| curios_core::Term::var(curios_core::Var::free(n)))
                             .collect::<Vec<_>>();
 
                         // Registry entry: the parameter telescope plus each
@@ -353,14 +353,18 @@ fn process_items(
                                     .map(|t| lower.term(t))
                                     .collect::<Result<Vec<_>, Error>>()?;
 
-                                let telescope = core::Telescope::build(
+                                let telescope = curios_core::Telescope::build(
                                     param_tys_unmarked.iter().cloned().chain(fields),
-                                    core::Term::inductive_type(&name, param_vars.clone(), target),
+                                    curios_core::Term::inductive_type(
+                                        &name,
+                                        param_vars.clone(),
+                                        target,
+                                    ),
                                 );
 
                                 Ok((
-                                    core::Atom::from(c.label.as_str()),
-                                    core::InductiveParam { telescope },
+                                    curios_core::Atom::from(c.label.as_str()),
+                                    curios_core::InductiveParam { telescope },
                                 ))
                             })
                             .collect::<Result<BTreeMap<_, _>, Error>>()?;
@@ -372,9 +376,12 @@ fn process_items(
 
                         inductives.insert(
                             name.clone(),
-                            core::Inductive {
-                                params: core::Telescope::build(param_tys_unmarked.clone(), ()),
-                                indices: core::Telescope::build(
+                            curios_core::Inductive {
+                                params: curios_core::Telescope::build(
+                                    param_tys_unmarked.clone(),
+                                    (),
+                                ),
+                                indices: curios_core::Telescope::build(
                                     param_tys_unmarked
                                         .iter()
                                         .cloned()
@@ -386,7 +393,8 @@ fn process_items(
                             },
                         );
 
-                        let inductive = core::Term::inductive_type(&name, param_vars, index_vars);
+                        let inductive =
+                            curios_core::Term::inductive_type(&name, param_vars, index_vars);
 
                         // The type constructor is flat over params then
                         // indices: `Vec : (T : Type, n : Nat) -> Type`. Use
@@ -400,15 +408,18 @@ fn process_items(
                                 index_tys
                                     .iter()
                                     .cloned()
-                                    .map(|(n, t)| (core::Plicity::Explicit, n, t)),
+                                    .map(|(n, t)| (curios_core::Plicity::Explicit, n, t)),
                             )
                             .collect();
                         let (type_, body) = if binder_tys.is_empty() {
                             (result_sort, inductive)
                         } else {
                             (
-                                core::Term::func_type_marked(binder_tys.clone(), result_sort),
-                                core::Term::func(
+                                curios_core::Term::func_type_marked(
+                                    binder_tys.clone(),
+                                    result_sort,
+                                ),
+                                curios_core::Term::func(
                                     binder_tys.into_iter().map(|(_, n, t)| (n, t)),
                                     inductive,
                                 ),
@@ -441,7 +452,7 @@ fn process_items(
                         // the case's full terminal `T(A, ..., target...)`,
                         // elaborated as a name ref applied to the parameters
                         // and the target's index expressions.
-                        let output_args: Vec<(core::Plicity, Term)> = u
+                        let output_args: Vec<(curios_core::Plicity, Term)> = u
                             .params
                             .iter()
                             .map(|(p, n, _)| {
@@ -455,7 +466,7 @@ fn process_items(
                                 c.target
                                     .iter()
                                     .flatten()
-                                    .map(|t| (core::Plicity::Explicit, t.clone())),
+                                    .map(|t| (curios_core::Plicity::Explicit, t.clone())),
                             )
                             .collect();
                         let output_type: Term = if output_args.is_empty() {
@@ -478,7 +489,7 @@ fn process_items(
                             .params
                             .iter()
                             .map(|(_, n, t)| {
-                                Ok((core::Plicity::Implicit, n.clone(), lower.term(t)?))
+                                Ok((curios_core::Plicity::Implicit, n.clone(), lower.term(t)?))
                             })
                             .chain(c.payload.iter().enumerate().map(|(i, param)| {
                                 Ok((
@@ -492,32 +503,37 @@ fn process_items(
                         // proof/type payload params that `erase_variant` drops
                         // from the tuple — the constructor function's arity and its
                         // injected variant's arity stay in lockstep.
-                        let ctor_type = core::Term::func_type_marked(
+                        let ctor_type = curios_core::Term::func_type_marked(
                             param_tys.clone(),
                             lower.term(&output_type)?,
                         );
 
                         // Constructor body: (params..., _0, ...) => the variant's
                         // injection, a primitive `Variant` normal form.
-                        let args: Vec<core::Term> = c
+                        let args: Vec<curios_core::Term> = c
                             .payload
                             .iter()
                             .enumerate()
                             .map(|(i, param)| {
-                                core::Term::var(core::Var::free(payload_name(i, &param.label)))
+                                curios_core::Term::var(curios_core::Var::free(payload_name(
+                                    i,
+                                    &param.label,
+                                )))
                             })
                             .collect();
-                        let inject = core::Term::variant(
+                        let inject = curios_core::Term::variant(
                             context.prefixed(&u.label).join(),
                             u.params
                                 .iter()
-                                .map(|(_, n, _)| core::Term::var(core::Var::free(n))),
-                            core::Atom::from(c.label.as_str()),
+                                .map(|(_, n, _)| curios_core::Term::var(curios_core::Var::free(n))),
+                            curios_core::Atom::from(c.label.as_str()),
                             args,
                         );
                         // The lambda binds every parameter regardless of mark.
-                        let ctor_body =
-                            core::Term::func(param_tys.into_iter().map(|(_, n, t)| (n, t)), inject);
+                        let ctor_body = curios_core::Term::func(
+                            param_tys.into_iter().map(|(_, n, t)| (n, t)),
+                            inject,
+                        );
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             name: context.prefixed(&u.label).with(&c.label),
@@ -554,7 +570,7 @@ fn process_items(
                 let param_vars = s
                     .params
                     .iter()
-                    .map(|(_, n, _)| core::Term::var(core::Var::free(n)))
+                    .map(|(_, n, _)| curios_core::Term::var(curios_core::Var::free(n)))
                     .collect::<Vec<_>>();
 
                 // Field types, with declared or positional (`_i`) names so a
@@ -578,9 +594,9 @@ fn process_items(
 
                 structures.insert(
                     name.clone(),
-                    core::Structure {
-                        params: core::Telescope::build(param_tys_unmarked.clone(), ()),
-                        fields: core::Telescope::build(
+                    curios_core::Structure {
+                        params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
+                        fields: curios_core::Telescope::build(
                             param_tys_unmarked.iter().cloned().chain(field_tys),
                             (),
                         ),
@@ -594,13 +610,13 @@ fn process_items(
                 // body is the `StructType` normal form (the bare node when
                 // parameterless), so `Pair(Nat, Bin)` reduces to
                 // `StructType { Pair, [Nat, Bin] }`. No value constructor.
-                let struct_type = core::Term::struct_type(&name, param_vars);
+                let struct_type = curios_core::Term::struct_type(&name, param_vars);
                 let (type_, body) = if param_tys.is_empty() {
                     (result_sort, struct_type)
                 } else {
                     (
-                        core::Term::func_type_marked(param_tys.clone(), result_sort),
-                        core::Term::func(
+                        curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
+                        curios_core::Term::func(
                             param_tys.into_iter().map(|(_, n, t)| (n, t)),
                             struct_type,
                         ),
@@ -672,13 +688,13 @@ fn dep_nodes(
     node: usize,
     item: &FlatItem,
     declared: &[String],
-    inductives: &BTreeMap<String, core::Inductive>,
-    structures: &BTreeMap<String, core::Structure>,
+    inductives: &BTreeMap<String, curios_core::Inductive>,
+    structures: &BTreeMap<String, curios_core::Structure>,
     owner: &HashMap<String, usize>,
 ) -> HashSet<usize> {
     // An inductive's declaration is wider than its items: the registry entry's
     // constructor payload and target types are elaborated alongside the
-    // type-binding group (`core::elaborate_module_rec` rebuilds the registry
+    // type-binding group (`curios_core::elaborate_module_rec` rebuilds the registry
     // telescopes there), so a node declaring a registered name references
     // everything its registry entry does — those names live nowhere in the type
     // binding's own `type_`/`body`. Struct field types live in the registry too.
@@ -739,8 +755,8 @@ fn topological_order(nodes: &[usize], deps: &HashMap<usize, HashSet<usize>>) -> 
 fn prelude_permutation(
     items: &[FlatItem],
     prelude_nodes: &[usize],
-    inductives: &BTreeMap<String, core::Inductive>,
-    structures: &BTreeMap<String, core::Structure>,
+    inductives: &BTreeMap<String, curios_core::Inductive>,
+    structures: &BTreeMap<String, curios_core::Structure>,
 ) -> Vec<usize> {
     let owner = owner_of(items, prelude_nodes);
     let deps = prelude_nodes
@@ -768,8 +784,8 @@ fn prelude_permutation(
 
 fn order_flat_items(
     items: Vec<FlatItem>,
-    inductives: &BTreeMap<String, core::Inductive>,
-    structures: &BTreeMap<String, core::Structure>,
+    inductives: &BTreeMap<String, curios_core::Inductive>,
+    structures: &BTreeMap<String, curios_core::Structure>,
 ) -> Vec<FlatItem> {
     let count = items.len();
 
@@ -869,7 +885,7 @@ fn flat_item_free_vars(item: &FlatItem) -> HashSet<String> {
 /// its telescopes. Binder names (parameters, payload binders) are captured by
 /// `Telescope::build` and never appear here; the index types' references also
 /// live in the type binding's own signature, but are included for robustness.
-fn inductive_free_vars(inductive: &core::Inductive) -> HashSet<String> {
+fn inductive_free_vars(inductive: &curios_core::Inductive) -> HashSet<String> {
     inductive
         .params
         .free_vars()
@@ -889,7 +905,7 @@ fn inductive_free_vars(inductive: &core::Inductive) -> HashSet<String> {
 /// makes a struct's type-former node depend on the (e.g. primitive) types its
 /// fields mention — they live nowhere in the type-former's own body, which is
 /// just the `StructType` normal form.
-fn structure_free_vars(structure: &core::Structure) -> HashSet<String> {
+fn structure_free_vars(structure: &curios_core::Structure) -> HashSet<String> {
     structure
         .params
         .free_vars()
@@ -898,18 +914,20 @@ fn structure_free_vars(structure: &core::Structure) -> HashSet<String> {
         .collect()
 }
 
-fn flat_let_to_core(let_: FlatLet) -> core::Definition {
-    core::Definition {
+fn flat_let_to_core(let_: FlatLet) -> curios_core::Definition {
+    curios_core::Definition {
         name: let_.name.join(),
         type_: let_.type_,
         body: let_.body,
     }
 }
 
-fn flat_item_to_core(item: FlatItem) -> core::Item {
+fn flat_item_to_core(item: FlatItem) -> curios_core::Item {
     match item {
-        FlatItem::Let(let_) => core::Item::Let(flat_let_to_core(let_)),
-        FlatItem::Rec(items) => core::Item::Rec(items.into_iter().map(flat_let_to_core).collect()),
+        FlatItem::Let(let_) => curios_core::Item::Let(flat_let_to_core(let_)),
+        FlatItem::Rec(items) => {
+            curios_core::Item::Rec(items.into_iter().map(flat_let_to_core).collect())
+        }
     }
 }
 
@@ -926,14 +944,14 @@ fn declaration(label: &str) -> TopItem {
     })
 }
 
-/// Lower an [`Entrypoint`] to a [`core::Module`]. Also returns how many
+/// Lower an [`Entrypoint`] to a [`curios_core::Module`]. Also returns how many
 /// metavariable ids were minted for the module's holes: the floor
 /// `elaborate_module` needs so the ids it mints for implicit-argument
 /// insertion never collide with these.
 pub fn to_core(
     entrypoint: &Entrypoint,
     loader: &dyn Loader,
-) -> Result<(core::Module, usize), Error> {
+) -> Result<(curios_core::Module, usize), Error> {
     let roots = loader.roots();
 
     let entrypoint = &Entrypoint {
@@ -987,7 +1005,7 @@ pub fn to_core(
         .collect();
 
     Ok((
-        core::Module {
+        curios_core::Module {
             items,
             inductives,
             structures,

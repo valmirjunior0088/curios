@@ -1,5 +1,5 @@
 use {
-    curios_abi as wire,
+    curios_abi::{mode, poll, status},
     num_bigint::BigUint,
     rustix::event::PollFlags,
     std::{
@@ -75,10 +75,10 @@ impl Io {
 pub struct Poll(u32);
 
 impl Poll {
-    pub const READ: Self = Self(wire::poll::READ);
-    pub const WRITE: Self = Self(wire::poll::WRITE);
-    pub const ERR: Self = Self(wire::poll::ERR);
-    pub const HUP: Self = Self(wire::poll::HUP);
+    pub const READ: Self = Self(poll::READ);
+    pub const WRITE: Self = Self(poll::WRITE);
+    pub const ERR: Self = Self(poll::ERR);
+    pub const HUP: Self = Self(poll::HUP);
 
     /// The empty mask — no interest, or no readiness.
     pub const fn empty() -> Self {
@@ -188,14 +188,14 @@ impl Status {
     /// `Other(code)` lowers its carried errno raw.
     pub fn code(self) -> u32 {
         match self {
-            Status::Ok => wire::status::OK,
-            Status::Eof => wire::status::EOF,
-            Status::NotFound => wire::status::NOT_FOUND,
-            Status::PermissionDenied => wire::status::PERMISSION_DENIED,
-            Status::AlreadyExists => wire::status::ALREADY_EXISTS,
-            Status::ConnectionRefused => wire::status::CONNECTION_REFUSED,
-            Status::WouldBlock => wire::status::WOULD_BLOCK,
-            Status::TlsError => wire::status::TLS_ERROR,
+            Status::Ok => status::OK,
+            Status::Eof => status::EOF,
+            Status::NotFound => status::NOT_FOUND,
+            Status::PermissionDenied => status::PERMISSION_DENIED,
+            Status::AlreadyExists => status::ALREADY_EXISTS,
+            Status::ConnectionRefused => status::CONNECTION_REFUSED,
+            Status::WouldBlock => status::WOULD_BLOCK,
+            Status::TlsError => status::TLS_ERROR,
             Status::Other(code) => code,
         }
     }
@@ -237,9 +237,9 @@ impl Mode {
     /// of `Lift for Mode`.
     pub fn code(self) -> u32 {
         match self {
-            Mode::Read => wire::mode::READ,
-            Mode::Write => wire::mode::WRITE,
-            Mode::Append => wire::mode::APPEND,
+            Mode::Read => mode::READ,
+            Mode::Write => mode::WRITE,
+            Mode::Append => mode::APPEND,
         }
     }
 }

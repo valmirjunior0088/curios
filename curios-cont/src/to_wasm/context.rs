@@ -1,16 +1,15 @@
 use {
     super::{BlockData, ClsrData, FieldData, Frame, FuncData, LocalData, Table},
-    crate as cont,
     curios_abi::WireType,
     curios_base::Entropy,
-    curios_wasm as wasm,
+    curios_wasm::{BlockType, HeapType, Instr, LabelName, LocalName, RefType, TypeName, ValType},
     std::{
         collections::{BTreeMap, HashMap},
         iter,
     },
 };
 
-fn is_sequential_from_zero(cases: &BTreeMap<u32, cont::JumpTarget>) -> bool {
+fn is_sequential_from_zero(cases: &BTreeMap<u32, crate::JumpTarget>) -> bool {
     cases.keys().enumerate().all(|(i, &k)| k == i as u32)
 }
 
@@ -23,14 +22,14 @@ pub enum Context<'a, 'b> {
         table: &'a Table<'a>,
         data: &'a ClsrData<'a>,
         entropy: Entropy,
-        locals: &'b mut Vec<(wasm::LocalName, wasm::ValType)>,
+        locals: &'b mut Vec<(LocalName, ValType)>,
         frames: Vec<Frame<'a>>,
     },
     Func {
         table: &'a Table<'a>,
         data: &'a FuncData<'a>,
         entropy: Entropy,
-        locals: &'b mut Vec<(wasm::LocalName, wasm::ValType)>,
+        locals: &'b mut Vec<(LocalName, ValType)>,
         frames: Vec<Frame<'a>>,
     },
 }
@@ -39,7 +38,7 @@ pub enum Context<'a, 'b> {
 pub enum LoadAs {
     Null,
     NonNull,
-    Concrete(wasm::TypeName),
+    Concrete(TypeName),
     Nat,
     Int,
     Flt,
@@ -68,7 +67,7 @@ impl<'a, 'b> Context<'a, 'b> {
     pub fn new_clsr(
         table: &'a Table<'a>,
         data: &'a ClsrData<'a>,
-        locals: &'b mut Vec<(wasm::LocalName, wasm::ValType)>,
+        locals: &'b mut Vec<(LocalName, ValType)>,
     ) -> Self {
         Self::Clsr {
             table,
@@ -82,7 +81,7 @@ impl<'a, 'b> Context<'a, 'b> {
     pub fn new_func(
         table: &'a Table<'a>,
         data: &'a FuncData<'a>,
-        locals: &'b mut Vec<(wasm::LocalName, wasm::ValType)>,
+        locals: &'b mut Vec<(LocalName, ValType)>,
     ) -> Self {
         Self::Func {
             table,
@@ -99,14 +98,14 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn find_field(&self, value_name: &cont::ValueName) -> Option<FieldData> {
+    pub fn find_field(&self, value_name: &crate::ValueName) -> Option<FieldData> {
         match self {
             Self::Const { .. } | Self::Func { .. } => None,
             Self::Clsr { data, .. } => data.find_field(value_name),
         }
     }
 
-    pub fn params(&self) -> HashMap<&'a cont::ValueName, LocalData> {
+    pub fn params(&self) -> HashMap<&'a crate::ValueName, LocalData> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks params"),
             Self::Clsr { data, .. } => data
@@ -122,7 +121,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn is_resume(&self, block_name: &cont::BlockName) -> bool {
+    pub fn is_resume(&self, block_name: &crate::BlockName) -> bool {
         match self {
             Self::Const { .. } => false,
             Self::Clsr { data, .. } => data.is_resume(block_name),
@@ -130,7 +129,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn push_local(&mut self, string: &str, val_type: wasm::ValType) -> wasm::LocalName {
+    pub fn push_local(&mut self, string: &str, val_type: ValType) -> LocalName {
         match self {
             Self::Const { .. } => panic!("`Context` lacks locals"),
             Self::Clsr {
@@ -141,9 +140,9 @@ impl<'a, 'b> Context<'a, 'b> {
             } => {
                 let entropy = entropy.fresh();
                 let local_name = if string.is_empty() {
-                    wasm::LocalName::from(format!("{entropy}"))
+                    LocalName::from(format!("{entropy}"))
                 } else {
-                    wasm::LocalName::from(format!("{entropy}${string}"))
+                    LocalName::from(format!("{entropy}${string}"))
                 };
 
                 locals.push((local_name.clone(), val_type));
@@ -160,7 +159,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn leave_frame(&mut self) -> Vec<wasm::Instr> {
+    pub fn leave_frame(&mut self) -> Vec<Instr> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
             Self::Clsr { frames, .. } | Self::Func { frames, .. } => {
@@ -176,7 +175,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn find_local(&self, value_name: &cont::ValueName) -> Option<LocalData> {
+    pub fn find_local(&self, value_name: &crate::ValueName) -> Option<LocalData> {
         match self {
             Self::Const { .. } => None,
             Self::Clsr { frames, .. } | Self::Func { frames, .. } => {
@@ -191,7 +190,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn is_prealloc(&self, value_name: &cont::ValueName) -> bool {
+    pub fn is_prealloc(&self, value_name: &crate::ValueName) -> bool {
         match self {
             Self::Const { .. } => false,
             Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames
@@ -200,7 +199,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn find_block(&self, block_name: &cont::BlockName) -> &BlockData<'a> {
+    pub fn find_block(&self, block_name: &crate::BlockName) -> &BlockData<'a> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
             Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames
@@ -218,64 +217,64 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    fn load_as_instrs(&self, load_as: LoadAs, is_nullable: bool) -> Vec<wasm::Instr> {
+    fn load_as_instrs(&self, load_as: LoadAs, is_nullable: bool) -> Vec<Instr> {
         match load_as {
             LoadAs::Null => vec![],
             LoadAs::NonNull => match is_nullable {
-                true => vec![wasm::Instr::RefAsNonNull],
+                true => vec![Instr::RefAsNonNull],
                 false => vec![],
             },
             LoadAs::Concrete(type_name) => {
-                vec![wasm::Instr::RefCast {
-                    ref_type: wasm::RefType {
+                vec![Instr::RefCast {
+                    ref_type: RefType {
                         is_nullable: false,
-                        heap_type: wasm::HeapType::Concrete(type_name),
+                        heap_type: HeapType::Concrete(type_name),
                     },
                 }]
             }
             LoadAs::Nat => {
                 vec![
-                    wasm::Instr::RefCast {
+                    Instr::RefCast {
                         ref_type: self.table().int_type(false),
                     },
-                    wasm::Instr::I31GetU,
+                    Instr::I31GetU,
                 ]
             }
             LoadAs::Int => {
                 vec![
-                    wasm::Instr::RefCast {
+                    Instr::RefCast {
                         ref_type: self.table().int_type(false),
                     },
-                    wasm::Instr::I31GetS,
+                    Instr::I31GetS,
                 ]
             }
             LoadAs::Flt => {
                 vec![
-                    wasm::Instr::RefCast {
-                        ref_type: wasm::RefType {
+                    Instr::RefCast {
+                        ref_type: RefType {
                             is_nullable: false,
-                            heap_type: wasm::HeapType::Concrete(self.table().flt_type()),
+                            heap_type: HeapType::Concrete(self.table().flt_type()),
                         },
                     },
-                    wasm::Instr::StructGet {
+                    Instr::StructGet {
                         type_name: self.table().flt_type(),
                         field_name: self.table().special_field(),
                     },
                 ]
             }
             LoadAs::Bin => {
-                vec![wasm::Instr::RefCast {
-                    ref_type: wasm::RefType {
+                vec![Instr::RefCast {
+                    ref_type: RefType {
                         is_nullable: false,
-                        heap_type: wasm::HeapType::Concrete(self.table().bin_type()),
+                        heap_type: HeapType::Concrete(self.table().bin_type()),
                     },
                 }]
             }
             LoadAs::Arr => {
-                vec![wasm::Instr::RefCast {
-                    ref_type: wasm::RefType {
+                vec![Instr::RefCast {
+                    ref_type: RefType {
                         is_nullable: false,
-                        heap_type: wasm::HeapType::Concrete(self.table().arr_type()),
+                        heap_type: HeapType::Concrete(self.table().arr_type()),
                     },
                 }]
             }
@@ -284,23 +283,23 @@ impl<'a, 'b> Context<'a, 'b> {
 
     pub fn load_value_instrs(
         &self,
-        value_name: &'a cont::ValueName,
+        value_name: &'a crate::ValueName,
         load_as: LoadAs,
-    ) -> Vec<wasm::Instr> {
+    ) -> Vec<Instr> {
         let mut output = Vec::new();
 
         if let Some(field_data) = self.find_field(value_name) {
             output.extend([
-                wasm::Instr::LocalGet {
+                Instr::LocalGet {
                     local_name: self.table().special_local(),
                 },
-                wasm::Instr::RefCast {
-                    ref_type: wasm::RefType {
+                Instr::RefCast {
+                    ref_type: RefType {
                         is_nullable: false,
-                        heap_type: wasm::HeapType::Concrete(field_data.type_name()),
+                        heap_type: HeapType::Concrete(field_data.type_name()),
                     },
                 },
-                wasm::Instr::StructGet {
+                Instr::StructGet {
                     type_name: field_data.type_name(),
                     field_name: field_data.field_name(),
                 },
@@ -308,13 +307,13 @@ impl<'a, 'b> Context<'a, 'b> {
 
             output.extend(self.load_as_instrs(load_as, true));
         } else if let Some(local_data) = self.find_local(value_name) {
-            output.push(wasm::Instr::LocalGet {
+            output.push(Instr::LocalGet {
                 local_name: local_data.local_name,
             });
 
             output.extend(self.load_as_instrs(load_as, local_data.is_nullable));
         } else {
-            output.push(wasm::Instr::GlobalGet {
+            output.push(Instr::GlobalGet {
                 global_name: self.table().find_const(value_name),
             });
 
@@ -324,7 +323,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub fn jump_instrs(&self, target: &'a cont::JumpTarget) -> Vec<wasm::Instr> {
+    pub fn jump_instrs(&self, target: &'a crate::JumpTarget) -> Vec<Instr> {
         let mut output = Vec::new();
 
         for value_name in &target.params {
@@ -340,7 +339,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 );
             }
 
-            output.push(wasm::Instr::Return);
+            output.push(Instr::Return);
         } else {
             let block_data = self.find_block(&target.target);
             output.extend(block_data.enter(target.params.len()));
@@ -349,17 +348,17 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub fn match_instrs(&self, target: &'a cont::MatchTarget) -> Vec<wasm::Instr> {
+    pub fn match_instrs(&self, target: &'a crate::MatchTarget) -> Vec<Instr> {
         if target.cases.is_empty() && target.default.is_none() {
-            return vec![wasm::Instr::Unreachable];
+            return vec![Instr::Unreachable];
         }
 
         let default_instructions = match &target.default {
             Some(target) => self.jump_instrs(target),
-            None => vec![wasm::Instr::Unreachable],
+            None => vec![Instr::Unreachable],
         };
 
-        let sorted: Vec<(u32, &cont::JumpTarget)> =
+        let sorted: Vec<(u32, &crate::JumpTarget)> =
             target.cases.iter().map(|(&k, v)| (k, v)).collect();
 
         if is_sequential_from_zero(&target.cases) {
@@ -367,10 +366,10 @@ impl<'a, 'b> Context<'a, 'b> {
                 self.load_value_instrs(&target.operand, LoadAs::Nat)
                     .into_iter()
                     .chain([
-                        wasm::Instr::I32Eqz,
-                        wasm::Instr::If {
+                        Instr::I32Eqz,
+                        Instr::If {
                             label_name: self.table().special_label(),
-                            block_type: wasm::BlockType::Empty,
+                            block_type: BlockType::Empty,
                             then_instructions: self.jump_instrs(jump_target),
                             else_instructions: default_instructions,
                         },
@@ -382,18 +381,18 @@ impl<'a, 'b> Context<'a, 'b> {
                     .enumerate()
                     .map(|(index, (_, jump_target))| {
                         (
-                            wasm::LabelName::from(format!("case${index}")),
+                            LabelName::from(format!("case${index}")),
                             self.jump_instrs(jump_target),
                         )
                     })
                     .collect::<Vec<_>>();
 
-                let label_name = wasm::LabelName::from("tail");
+                let label_name = LabelName::from("tail");
 
                 let instructions = self
                     .load_value_instrs(&target.operand, LoadAs::Nat)
                     .into_iter()
-                    .chain([wasm::Instr::BrTable {
+                    .chain([Instr::BrTable {
                         label_names: label_names
                             .iter()
                             .map(|(label_name, _)| label_name.clone())
@@ -407,9 +406,9 @@ impl<'a, 'b> Context<'a, 'b> {
                     .chain([(label_name, default_instructions)])
                     .rev()
                     .fold(instructions, |instructions, (block_label, block_body)| {
-                        iter::once(wasm::Instr::Block {
+                        iter::once(Instr::Block {
                             label_name: block_label,
-                            block_type: wasm::BlockType::Empty,
+                            block_type: BlockType::Empty,
                             instructions,
                         })
                         .chain(block_body)
@@ -423,23 +422,23 @@ impl<'a, 'b> Context<'a, 'b> {
 
     fn binary_search_instrs(
         &self,
-        operand: &'a cont::ValueName,
-        cases: &[(u32, &'a cont::JumpTarget)],
-        default_instructions: Vec<wasm::Instr>,
-    ) -> Vec<wasm::Instr> {
+        operand: &'a crate::ValueName,
+        cases: &[(u32, &'a crate::JumpTarget)],
+        default_instructions: Vec<Instr>,
+    ) -> Vec<Instr> {
         match cases {
             [] => default_instructions,
             [(value, jump_target)] => self
                 .load_value_instrs(operand, LoadAs::Nat)
                 .into_iter()
                 .chain([
-                    wasm::Instr::I32Const {
+                    Instr::I32Const {
                         value: *value as i32,
                     },
-                    wasm::Instr::I32Eq,
-                    wasm::Instr::If {
-                        label_name: wasm::LabelName::from("eq"),
-                        block_type: wasm::BlockType::Empty,
+                    Instr::I32Eq,
+                    Instr::If {
+                        label_name: LabelName::from("eq"),
+                        block_type: BlockType::Empty,
                         then_instructions: self.jump_instrs(jump_target),
                         else_instructions: default_instructions,
                     },
@@ -454,13 +453,13 @@ impl<'a, 'b> Context<'a, 'b> {
                 self.load_value_instrs(operand, LoadAs::Nat)
                     .into_iter()
                     .chain([
-                        wasm::Instr::I32Const {
+                        Instr::I32Const {
                             value: pivot as i32,
                         },
-                        wasm::Instr::I32LtU,
-                        wasm::Instr::If {
-                            label_name: wasm::LabelName::from("lt"),
-                            block_type: wasm::BlockType::Empty,
+                        Instr::I32LtU,
+                        Instr::If {
+                            label_name: LabelName::from("lt"),
+                            block_type: BlockType::Empty,
                             then_instructions: left,
                             else_instructions: right,
                         },
@@ -472,10 +471,10 @@ impl<'a, 'b> Context<'a, 'b> {
 
     pub fn call_direct_instrs(
         &self,
-        target: &'a cont::FuncName,
-        params: &'a [cont::ValueName],
-        resume: &'a cont::BlockName,
-    ) -> Vec<wasm::Instr> {
+        target: &'a crate::FuncName,
+        params: &'a [crate::ValueName],
+        resume: &'a crate::BlockName,
+    ) -> Vec<Instr> {
         let mut output = Vec::new();
 
         if params.len() != self.table().find_func(target).arity() {
@@ -492,11 +491,11 @@ impl<'a, 'b> Context<'a, 'b> {
         }
 
         if self.is_resume(resume) {
-            output.push(wasm::Instr::ReturnCall {
+            output.push(Instr::ReturnCall {
                 func_name: self.table().find_func(target).func_name(),
             });
         } else {
-            output.push(wasm::Instr::Call {
+            output.push(Instr::Call {
                 func_name: self.table().find_func(target).func_name(),
             });
 
@@ -508,10 +507,10 @@ impl<'a, 'b> Context<'a, 'b> {
 
     pub fn call_indirect_instrs(
         &self,
-        target: &'a cont::ValueName,
-        params: &'a [cont::ValueName],
-        resume: &'a cont::BlockName,
-    ) -> Vec<wasm::Instr> {
+        target: &'a crate::ValueName,
+        params: &'a [crate::ValueName],
+        resume: &'a crate::BlockName,
+    ) -> Vec<Instr> {
         let mut output = Vec::new();
         let arity = params.len();
         let envr_type = self.table().find_envr_type(arity);
@@ -525,19 +524,19 @@ impl<'a, 'b> Context<'a, 'b> {
 
         output.extend(self.load_value_instrs(target, LoadAs::Concrete(envr_type.clone())));
 
-        output.push(wasm::Instr::StructGet {
+        output.push(Instr::StructGet {
             type_name: envr_type,
             field_name: self.table().special_field(),
         });
 
-        output.push(wasm::Instr::RefAsNonNull);
+        output.push(Instr::RefAsNonNull);
 
         if self.is_resume(resume) {
-            output.push(wasm::Instr::ReturnCallRef {
+            output.push(Instr::ReturnCallRef {
                 type_name: clsr_type,
             });
         } else {
-            output.push(wasm::Instr::CallRef {
+            output.push(Instr::CallRef {
                 type_name: clsr_type,
             });
 
@@ -548,23 +547,23 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub fn tail_instrs(&self, tail: &'a cont::Tail) -> Vec<wasm::Instr> {
+    pub fn tail_instrs(&self, tail: &'a crate::Tail) -> Vec<Instr> {
         match tail {
-            cont::Tail::Jump(target) => self.jump_instrs(target),
-            cont::Tail::Match(target) => self.match_instrs(target),
-            cont::Tail::Call(cont::CallTarget::Direct {
+            crate::Tail::Jump(target) => self.jump_instrs(target),
+            crate::Tail::Match(target) => self.match_instrs(target),
+            crate::Tail::Call(crate::CallTarget::Direct {
                 target,
                 params,
                 resume,
             }) => self.call_direct_instrs(target, params, resume),
-            cont::Tail::Call(cont::CallTarget::Indirect {
+            crate::Tail::Call(crate::CallTarget::Indirect {
                 target,
                 params,
                 resume,
             }) => self.call_indirect_instrs(target, params, resume),
-            cont::Tail::Host(host) => self.host_instrs(host),
-            cont::Tail::Cell(cell) => self.cell_instrs(cell),
-            cont::Tail::Unreachable => vec![wasm::Instr::Unreachable],
+            crate::Tail::Host(host) => self.host_instrs(host),
+            crate::Tail::Cell(cell) => self.cell_instrs(cell),
+            crate::Tail::Unreachable => vec![Instr::Unreachable],
         }
     }
 
@@ -573,8 +572,8 @@ impl<'a, 'b> Context<'a, 'b> {
     /// never be the bare-forwarder sentinel.
     fn host_multi_resume(
         &self,
-        output: &mut Vec<wasm::Instr>,
-        resume: &cont::BlockName,
+        output: &mut Vec<Instr>,
+        resume: &crate::BlockName,
         results: usize,
     ) {
         assert!(
@@ -587,9 +586,9 @@ impl<'a, 'b> Context<'a, 'b> {
     /// Resume after a host op whose single result already matches the
     /// function's anyref return shape: return it directly on the sentinel, else
     /// enter the resume block with one value.
-    fn host_single_resume(&self, output: &mut Vec<wasm::Instr>, resume: &cont::BlockName) {
+    fn host_single_resume(&self, output: &mut Vec<Instr>, resume: &crate::BlockName) {
         if self.is_resume(resume) {
-            output.push(wasm::Instr::Return);
+            output.push(Instr::Return);
         } else {
             output.extend(self.find_block(resume).enter(1));
         }
@@ -598,12 +597,12 @@ impl<'a, 'b> Context<'a, 'b> {
     /// Resume after a host op with no payload: materialise a unit for the
     /// single-value return sentinel, else enter the resume block with no
     /// values.
-    fn host_unit_resume(&self, output: &mut Vec<wasm::Instr>, resume: &cont::BlockName) {
+    fn host_unit_resume(&self, output: &mut Vec<Instr>, resume: &crate::BlockName) {
         if self.is_resume(resume) {
-            output.push(wasm::Instr::StructNew {
+            output.push(Instr::StructNew {
                 type_name: self.table().find_tpl_type(0),
             });
-            output.push(wasm::Instr::Return);
+            output.push(Instr::Return);
         } else {
             output.extend(self.find_block(resume).enter(0));
         }
@@ -614,11 +613,11 @@ impl<'a, 'b> Context<'a, 'b> {
     /// either fall through to the function's return (when the resume happens
     /// to be the sentinel) or set up the dispatcher and branch into the resume
     /// block.
-    pub fn host_instrs(&self, host: &'a cont::HostTarget) -> Vec<wasm::Instr> {
+    pub fn host_instrs(&self, host: &'a crate::HostTarget) -> Vec<Instr> {
         let mut output = Vec::new();
 
         match host {
-            cont::HostTarget::Foreign {
+            crate::HostTarget::Foreign {
                 function,
                 operands,
                 resume,
@@ -636,7 +635,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     output.extend(self.load_value_instrs(operand, wire_load_as(wire_type)));
                 }
 
-                output.push(wasm::Instr::Call {
+                output.push(Instr::Call {
                     func_name: self.table().host_func(function),
                 });
 
@@ -646,9 +645,9 @@ impl<'a, 'b> Context<'a, 'b> {
                     results => self.host_multi_resume(&mut output, resume, results),
                 }
             }
-            cont::HostTarget::IoExit { code, resume } => {
+            crate::HostTarget::IoExit { code, resume } => {
                 output.extend(self.load_value_instrs(code, LoadAs::Nat));
-                output.push(wasm::Instr::Call {
+                output.push(Instr::Call {
                     func_name: self.table().io_exit_func().clone(),
                 });
 
@@ -661,18 +660,18 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub fn cell_instrs(&self, cell: &'a cont::CellTarget) -> Vec<wasm::Instr> {
+    pub fn cell_instrs(&self, cell: &'a crate::CellTarget) -> Vec<Instr> {
         let mut output = Vec::new();
 
         match cell {
-            cont::CellTarget::New { init, resume } => {
+            crate::CellTarget::New { init, resume } => {
                 output.extend(self.load_value_instrs(init, LoadAs::NonNull));
-                output.push(wasm::Instr::StructNew {
+                output.push(Instr::StructNew {
                     type_name: self.table().cell_type(),
                 });
                 self.host_single_resume(&mut output, resume);
             }
-            cont::CellTarget::Set {
+            crate::CellTarget::Set {
                 cell,
                 value,
                 resume,
@@ -681,17 +680,17 @@ impl<'a, 'b> Context<'a, 'b> {
                     self.load_value_instrs(cell, LoadAs::Concrete(self.table().cell_type())),
                 );
                 output.extend(self.load_value_instrs(value, LoadAs::NonNull));
-                output.push(wasm::Instr::StructSet {
+                output.push(Instr::StructSet {
                     type_name: self.table().cell_type(),
                     field_name: self.table().special_field(),
                 });
                 self.host_unit_resume(&mut output, resume);
             }
-            cont::CellTarget::Get { cell, resume } => {
+            crate::CellTarget::Get { cell, resume } => {
                 output.extend(
                     self.load_value_instrs(cell, LoadAs::Concrete(self.table().cell_type())),
                 );
-                output.push(wasm::Instr::StructGet {
+                output.push(Instr::StructGet {
                     type_name: self.table().cell_type(),
                     field_name: self.table().special_field(),
                 });
@@ -704,18 +703,18 @@ impl<'a, 'b> Context<'a, 'b> {
 
     pub fn bloink_instrs(
         &self,
-        bloink_local: wasm::LocalName,
-        bloink_label: wasm::LabelName,
-        regions: Vec<(wasm::LabelName, Vec<wasm::Instr>)>,
-        tail: &'a cont::Tail,
-    ) -> Vec<wasm::Instr> {
-        let label_name = wasm::LabelName::from("tail");
+        bloink_local: LocalName,
+        bloink_label: LabelName,
+        regions: Vec<(LabelName, Vec<Instr>)>,
+        tail: &'a crate::Tail,
+    ) -> Vec<Instr> {
+        let label_name = LabelName::from("tail");
 
         let instructions = vec![
-            wasm::Instr::LocalGet {
+            Instr::LocalGet {
                 local_name: bloink_local.clone(),
             },
-            wasm::Instr::BrTable {
+            Instr::BrTable {
                 label_names: regions
                     .iter()
                     .map(|(block_label, _)| block_label.clone())
@@ -729,9 +728,9 @@ impl<'a, 'b> Context<'a, 'b> {
             .chain([(label_name, self.tail_instrs(tail))])
             .rev()
             .fold(instructions, |instructions, (block_label, block_body)| {
-                iter::once(wasm::Instr::Block {
+                iter::once(Instr::Block {
                     label_name: block_label.clone(),
-                    block_type: wasm::BlockType::Empty,
+                    block_type: BlockType::Empty,
                     instructions,
                 })
                 .chain(block_body)
@@ -739,16 +738,16 @@ impl<'a, 'b> Context<'a, 'b> {
             });
 
         vec![
-            wasm::Instr::I32Const { value: -1 },
-            wasm::Instr::LocalSet {
+            Instr::I32Const { value: -1 },
+            Instr::LocalSet {
                 local_name: bloink_local,
             },
-            wasm::Instr::Loop {
+            Instr::Loop {
                 label_name: bloink_label,
-                block_type: wasm::BlockType::Empty,
+                block_type: BlockType::Empty,
                 instructions,
             },
-            wasm::Instr::Unreachable,
+            Instr::Unreachable,
         ]
     }
 }

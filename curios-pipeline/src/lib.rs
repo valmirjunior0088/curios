@@ -1,58 +1,57 @@
-use {
-    curios_abi::sys_io, curios_cont as cont, curios_core as core, curios_ersd as ersd,
-    curios_text as text, curios_wasm as wasm, std::time::Duration,
-};
+use {curios_abi::sys_io, std::time::Duration};
 
 pub enum Stage<'a> {
-    Text(&'a text::Entrypoint),
-    Core(&'a core::Module),
-    Ersd(&'a ersd::Module),
-    ErsdOptm(&'a ersd::Module),
-    Cont(&'a cont::Module),
-    ContOptm(&'a cont::Module),
-    Wasm(&'a wasm::Module),
+    Text(&'a curios_text::Entrypoint),
+    Core(&'a curios_core::Module),
+    Ersd(&'a curios_ersd::Module),
+    ErsdOptm(&'a curios_ersd::Module),
+    Cont(&'a curios_cont::Module),
+    ContOptm(&'a curios_cont::Module),
+    Wasm(&'a curios_wasm::Module),
 }
 
 thread_local! {
     // The fixed `sys`/`syn`/`std` prelude, elaborated and zonked once per thread
     // and reused for every compile. Since the reachability prune no longer runs
-    // in `text::to_core`, every program lowers the *same* prelude prefix, so its
+    // in `curios_text::to_core`, every program lowers the *same* prelude prefix, so its
     // (expensive) type-checking is program-independent and cacheable — the whole
     // point of removing the prune. `Term` is not `Sync`, so this is thread-local
     // (like the loader's parse caches), built once per `cargo test` worker thread
     // rather than once per test. A malformed prelude is a compiler invariant, so
     // a failure here is a `panic!`.
-    static PRELUDE: core::Module = build_prelude();
+    static PRELUDE: curios_core::Module = build_prelude();
 }
 
 /// Elaborate the bare `sys`/`syn`/`std` prelude (no user code) once, to seed
 /// [`PRELUDE`]. Lowers a trivial entrypoint under the standard prelude loader —
 /// the embedded prelude is identical regardless of any inner loader — then
-/// elaborates and zonks it. The result is an ordinary (meta-free) `core::Module`
+/// elaborates and zonks it. The result is an ordinary (meta-free) `curios_core::Module`
 /// whose `items` are the whole prelude; its trivial `body`/`type_` go unused.
 /// A generous timeout: this is a one-time, per-thread cost amortized across
 /// every compile.
-fn build_prelude() -> core::Module {
+fn build_prelude() -> curios_core::Module {
     let entrypoint = "0"
-        .parse::<text::Entrypoint>()
+        .parse::<curios_text::Entrypoint>()
         .expect("the trivial prelude entrypoint parses");
 
-    let (module, metavars) =
-        text::to_core(&entrypoint, &text::prelude(&sys_io(), text::NullLoader)).unwrap_or_else(
-            |error| panic!("the embedded prelude failed to lower: {}", error.format()),
-        );
+    let (module, metavars) = curios_text::to_core(
+        &entrypoint,
+        &curios_text::prelude(&sys_io(), curios_text::NullLoader),
+    )
+    .unwrap_or_else(|error| panic!("the embedded prelude failed to lower: {}", error.format()));
 
-    let mut context = core::Context::new(Duration::from_secs(300));
+    let mut context = curios_core::Context::new(Duration::from_secs(300));
 
-    let (module, _) = core::elaborate_module(&mut context, &module, metavars, core::Mode::Infer)
-        .unwrap_or_else(|error| {
-            panic!(
-                "the embedded prelude failed to elaborate: {}",
-                error.format_with(&module)
-            )
-        });
+    let (module, _) =
+        curios_core::elaborate_module(&mut context, &module, metavars, curios_core::Mode::Infer)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "the embedded prelude failed to elaborate: {}",
+                    error.format_with(&module)
+                )
+            });
 
-    core::zonk_module(&context, &module).unwrap_or_else(|error| {
+    curios_core::zonk_module(&context, &module).unwrap_or_else(|error| {
         panic!(
             "the embedded prelude failed to zonk: {}",
             error.format_with(&module)
@@ -74,13 +73,13 @@ fn build_prelude() -> core::Module {
 ///
 /// The `sys`/`syn`/`std` prelude is not re-elaborated per call: the cached
 /// [`PRELUDE`] is replayed into the fresh context and only the user code is
-/// type-checked on top (see [`core::elaborate_and_zonk_with_prelude`]).
+/// type-checked on top (see [`curios_core::elaborate_and_zonk_with_prelude`]).
 fn elaborate_and_zonk<O>(
     timeout: Duration,
-    entrypoint: &text::Entrypoint,
-    loader: &dyn text::Loader,
+    entrypoint: &curios_text::Entrypoint,
+    loader: &dyn curios_text::Loader,
     observe: &mut O,
-) -> Result<(core::Module, core::Term), String>
+) -> Result<(curios_core::Module, curios_core::Term), String>
 where
     O: FnMut(Stage<'_>),
 {
@@ -91,27 +90,28 @@ where
     // the IR nodes from there, so no later stage needs the store itself.
     let foreigns = sys_io();
 
-    let (lowered, metavars) = text::to_core(entrypoint, &text::prelude(&foreigns, loader))
-        .map_err(|error| error.format())?;
+    let (lowered, metavars) =
+        curios_text::to_core(entrypoint, &curios_text::prelude(&foreigns, loader))
+            .map_err(|error| error.format())?;
 
     observe(Stage::Core(&lowered));
 
     let core_mode = match &lowered.type_ {
-        Some(type_) => core::Mode::Check(type_.clone()),
-        None => core::Mode::Infer,
+        Some(type_) => curios_core::Mode::Check(type_.clone()),
+        None => curios_core::Mode::Infer,
     };
 
     // Reuse the cached, pre-elaborated prelude: only the user items and the
     // entrypoint body are type-checked here, not the whole `sys`/`syn`/`std`
-    // prelude (the bulk of the work). See `core::elaborate_and_zonk_with_prelude`.
+    // prelude (the bulk of the work). See `curios_core::elaborate_and_zonk_with_prelude`.
     // The timed context is created *inside* `with` so the one-time, per-thread
     // prelude build (which `with` triggers on first access) does not count
     // against the caller's `timeout` — the deadline bounds only the user work.
     let (module, core_type) = PRELUDE
         .with(|prelude| {
-            let mut context = core::Context::new(timeout);
+            let mut context = curios_core::Context::new(timeout);
 
-            core::elaborate_and_zonk_with_prelude(
+            curios_core::elaborate_and_zonk_with_prelude(
                 &mut context,
                 prelude,
                 &lowered,
@@ -129,8 +129,8 @@ where
 /// the `erase → cont → optm → wasm` lowering that a type-check does not need.
 pub fn typecheck_entrypoint<O>(
     timeout: Duration,
-    entrypoint: &text::Entrypoint,
-    loader: &dyn text::Loader,
+    entrypoint: &curios_text::Entrypoint,
+    loader: &dyn curios_text::Loader,
     mut observe: O,
 ) -> Result<(), String>
 where
@@ -143,10 +143,10 @@ where
 
 pub fn compile_entrypoint<O>(
     timeout: Duration,
-    entrypoint: &text::Entrypoint,
-    loader: &dyn text::Loader,
+    entrypoint: &curios_text::Entrypoint,
+    loader: &dyn curios_text::Loader,
     mut observe: O,
-) -> Result<wasm::Module, String>
+) -> Result<curios_wasm::Module, String>
 where
     O: FnMut(Stage<'_>),
 {
@@ -156,30 +156,31 @@ where
     // is erased: there is no source-level prune, so std is type-checked in full on
     // every compile and its bugs surface instead of hiding behind an unreached
     // path.
-    let ersd_module = core::erase_module(&mut core::Context::new(timeout), &module, &core_type)
-        .map_err(|error| error.format_with(&module))?;
+    let ersd_module =
+        curios_core::erase_module(&mut curios_core::Context::new(timeout), &module, &core_type)
+            .map_err(|error| error.format_with(&module))?;
 
     observe(Stage::Ersd(&ersd_module));
 
     // *After* erase has type-checked everything, run the Ersd optimization
     // pipeline in place: drop the items the entrypoint cannot reach, then re-base
-    // self-recursion onto accumulators and offsets (see `ersd::optm`).
+    // self-recursion onto accumulators and offsets (see `curios_ersd::optm`).
     let mut ersd_optm_module = ersd_module;
-    ersd::optm::optimize(&mut ersd_optm_module);
+    curios_ersd::optm::optimize(&mut ersd_optm_module);
 
     observe(Stage::ErsdOptm(&ersd_optm_module));
 
-    let cont_module = ersd::to_cont(&ersd_optm_module);
+    let cont_module = curios_ersd::to_cont(&ersd_optm_module);
 
     observe(Stage::Cont(&cont_module));
 
-    // Run the Cont optimization pipeline in place (see `cont::optm`).
+    // Run the Cont optimization pipeline in place (see `curios_cont::optm`).
     let mut cont_optm_module = cont_module;
-    cont::optm::optimize(&mut cont_optm_module);
+    curios_cont::optm::optimize(&mut cont_optm_module);
 
     observe(Stage::ContOptm(&cont_optm_module));
 
-    let wasm_module = cont::to_wasm(&cont_optm_module);
+    let wasm_module = curios_cont::to_wasm(&cont_optm_module);
 
     observe(Stage::Wasm(&wasm_module));
 
@@ -193,14 +194,14 @@ mod tests {
     #[test]
     fn entrypoint_type_is_used_as_expected_type() {
         let entrypoint = "0"
-            .parse::<text::Entrypoint>()
+            .parse::<curios_text::Entrypoint>()
             .unwrap()
             .with_type("/std/Bln".parse().unwrap());
 
         let error = compile_entrypoint(
             Duration::from_secs(5),
             &entrypoint,
-            &text::NullLoader,
+            &curios_text::NullLoader,
             |_| {},
         )
         .unwrap_err();
@@ -208,8 +209,8 @@ mod tests {
         assert!(error.contains("type mismatch"));
     }
 
-    fn compile(source: &str, type_: Option<&str>) -> Result<wasm::Module, String> {
-        let entrypoint = source.parse::<text::Entrypoint>().unwrap();
+    fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, String> {
+        let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
 
         let entrypoint = match type_ {
             Some(type_) => entrypoint.with_type(type_.parse().unwrap()),
@@ -219,20 +220,20 @@ mod tests {
         compile_entrypoint(
             Duration::from_secs(5),
             &entrypoint,
-            &text::NullLoader,
+            &curios_text::NullLoader,
             |_| {},
         )
     }
 
     fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
-        let entrypoint = source.parse::<text::Entrypoint>().unwrap();
+        let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
         let mut ersd = String::new();
         let mut cont = String::new();
 
         compile_entrypoint(
             Duration::from_secs(5),
             &entrypoint,
-            &text::NullLoader,
+            &curios_text::NullLoader,
             |stage| match stage {
                 Stage::Ersd(stage) => ersd = format!("{stage}"),
                 Stage::Cont(stage) => cont = format!("{stage}"),
@@ -248,7 +249,7 @@ mod tests {
         // The exact case BUG.md calls out: a meta-free entrypoint (no holes) that
         // still pulls in the whole std/std prelude. Assembling and traversing the
         // old N-deep nested term overflowed the stack during construction and in
-        // every pass; the flat `core::Module`/`ersd::Module` representation lowers
+        // every pass; the flat `curios_core::Module`/`curios_ersd::Module` representation lowers
         // it end-to-end to wasm without overflow.
         let source = r#"
             let id(A : Type, a : A) -> A = a;
@@ -982,7 +983,7 @@ mod tests {
             end
             0
         "#;
-        let error = missing.parse::<text::Entrypoint>().unwrap_err();
+        let error = missing.parse::<curios_text::Entrypoint>().unwrap_err();
         assert!(
             format!("{error:?}").contains("must state its index target"),
             "unexpected error: {error:?}"
@@ -995,7 +996,7 @@ mod tests {
             end
             0
         "#;
-        let error = surplus.parse::<text::Entrypoint>().unwrap_err();
+        let error = surplus.parse::<curios_text::Entrypoint>().unwrap_err();
         assert!(
             format!("{error:?}").contains("declares no indices"),
             "unexpected error: {error:?}"
@@ -1009,7 +1010,7 @@ mod tests {
             end
             0
         "#;
-        let error = arity.parse::<text::Entrypoint>().unwrap_err();
+        let error = arity.parse::<curios_text::Entrypoint>().unwrap_err();
         assert!(
             format!("{error:?}").contains("but the head declares 1"),
             "unexpected error: {error:?}"
@@ -1218,11 +1219,11 @@ mod tests {
     // --- A: fast `check` (typecheck-only) ------------------------------------
 
     fn typecheck(source: &str) -> Result<(), String> {
-        let entrypoint = source.parse::<text::Entrypoint>().unwrap();
+        let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
         typecheck_entrypoint(
             Duration::from_secs(5),
             &entrypoint,
-            &text::NullLoader,
+            &curios_text::NullLoader,
             |_| {},
         )
     }

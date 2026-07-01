@@ -5,7 +5,6 @@ use {
         Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var,
         Variant, erase_prim, expect_prim_head, infer, is_prop, module_of, reduce_with, refine_head,
     },
-    curios_ersd as ersd,
     std::collections::BTreeMap,
 };
 
@@ -71,7 +70,11 @@ fn erasure_mask<B: Bound>(
     }
 }
 
-fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ersd::Term, Error> {
+fn erase_func(
+    context: &mut Context,
+    func: &Func,
+    expected: &Term,
+) -> Result<curios_ersd::Term, Error> {
     let Func { telescope } = func;
 
     let ft = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
@@ -154,7 +157,7 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
             .iter()
             .any(|name| dropped.contains(name));
         let erased_body = if dangles && is_erasable(context, &output_type)? {
-            ersd::Subterm::Erased.into()
+            curios_ersd::Subterm::Erased.into()
         } else {
             erased_body
         };
@@ -175,7 +178,7 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
             .map(|name| {
                 let type_ = infer(context, &Term::free_var(&name))?;
                 let candidate = is_candidate(context, &type_)?;
-                Ok(ersd::Argument { name, candidate })
+                Ok(curios_ersd::Argument { name, candidate })
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
@@ -185,10 +188,10 @@ fn erase_func(context: &mut Context, func: &Func, expected: &Term) -> Result<ers
     let params = param_names
         .into_iter()
         .zip(candidates)
-        .map(|(name, candidate)| ersd::Argument { name, candidate })
+        .map(|(name, candidate)| curios_ersd::Argument { name, candidate })
         .collect();
 
-    Ok(ersd::Subterm::Func(ersd::Func {
+    Ok(curios_ersd::Subterm::Func(curios_ersd::Func {
         captures,
         params,
         body: erased_body,
@@ -214,7 +217,7 @@ fn is_candidate(context: &mut Context, type_: &Term) -> Result<bool, Error> {
     })
 }
 
-fn erase_apply(context: &mut Context, apply: &Apply) -> Result<ersd::Term, Error> {
+fn erase_apply(context: &mut Context, apply: &Apply) -> Result<curios_ersd::Term, Error> {
     let Apply { head, params, .. } = apply;
 
     let head_type = infer(context, head)?;
@@ -251,7 +254,7 @@ fn erase_apply(context: &mut Context, apply: &Apply) -> Result<ersd::Term, Error
 
     let erased_head = erase(context, head, &head_type)?;
 
-    Ok(ersd::Subterm::Apply(ersd::Apply {
+    Ok(curios_ersd::Subterm::Apply(curios_ersd::Apply {
         head: erased_head,
         params: erased_params,
     })
@@ -268,9 +271,9 @@ fn erase_apply(context: &mut Context, apply: &Apply) -> Result<ersd::Term, Error
 /// like `Utf8/more` drags the tail `Bin` along: an O(n²) of per-step slices in
 /// `of_bin`. The slot stays (arity is fixed by the opaque mask); only its
 /// contents collapse.
-fn erase_kept(context: &mut Context, value: &Term, ty: &Term) -> Result<ersd::Term, Error> {
+fn erase_kept(context: &mut Context, value: &Term, ty: &Term) -> Result<curios_ersd::Term, Error> {
     match is_erasable(context, ty)? {
-        true => Ok(ersd::Subterm::Erased.into()),
+        true => Ok(curios_ersd::Subterm::Erased.into()),
         false => erase(context, value, ty),
     }
 }
@@ -288,7 +291,7 @@ fn erase_telescoped<B: Bound>(
     context: &mut Context,
     telescope: Telescope<B>,
     values: &[Term],
-) -> Result<Vec<ersd::Term>, Error> {
+) -> Result<Vec<curios_ersd::Term>, Error> {
     // The *drop* decision uses the signature mask (opaque-opened), so a payload
     // field's erasability matches the constructor's fixed arity even when a
     // polymorphic field is instantiated at a prop here.
@@ -311,7 +314,11 @@ fn erase_telescoped<B: Bound>(
     Ok(erased)
 }
 
-fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<ersd::Term, Error> {
+fn erase_tuple(
+    context: &mut Context,
+    tuple: &Tuple,
+    expected: &Term,
+) -> Result<curios_ersd::Term, Error> {
     let Tuple { fields, .. } = tuple;
 
     // Elaborate already checked this tuple against a tuple type of matching
@@ -335,7 +342,7 @@ fn erase_tuple(context: &mut Context, tuple: &Tuple, expected: &Term) -> Result<
     // on a drop having happened, so an ordinary 1-field tuple keeps its rep.
     Ok(match erased_fields.len() {
         1 if dropped_any => erased_fields.into_iter().next().expect("one field"),
-        _ => ersd::Subterm::Tuple(ersd::Tuple {
+        _ => curios_ersd::Subterm::Tuple(curios_ersd::Tuple {
             fields: erased_fields,
         })
         .into(),
@@ -351,7 +358,7 @@ fn erase_refined_case(
     motive: &Scope<Many>,
     scrutinee: &Term,
     body: &Term,
-) -> Result<ersd::Term, Error> {
+) -> Result<curios_ersd::Term, Error> {
     context.with_frame(|context| {
         refine_head(context, head, scrutinee)?;
         erase(context, body, &motive.open(&[scrutinee]))
@@ -364,7 +371,7 @@ fn erase_nat_match(
     motive: &Scope<Many>,
     zero_case: &Term,
     succ_case: &Scope<Two>,
-) -> Result<ersd::Term, Error> {
+) -> Result<curios_ersd::Term, Error> {
     let head_type = expect_prim_head(context, head, PrimHead::Nat)?;
 
     let erased_zero_case = erase(
@@ -392,12 +399,14 @@ fn erase_nat_match(
         let erased_default = erase(context, &peeled, &motive.open(&[head]))?;
         let erased_head = erase(context, head, &head_type)?;
 
-        return Ok(ersd::Subterm::NatMatch(ersd::NatMatch::Dispatch {
-            head: erased_head,
-            cases: BTreeMap::from([(0, erased_zero_case)]),
-            default: erased_default,
-        })
-        .into());
+        return Ok(
+            curios_ersd::Subterm::NatMatch(curios_ersd::NatMatch::Dispatch {
+                head: erased_head,
+                cases: BTreeMap::from([(0, erased_zero_case)]),
+                default: erased_default,
+            })
+            .into(),
+        );
     }
 
     let pred_label = context.fresh(succ_case.first_label());
@@ -421,14 +430,16 @@ fn erase_nat_match(
 
     let erased_head = erase(context, head, &head_type)?;
 
-    Ok(ersd::Subterm::NatMatch(ersd::NatMatch::Induction {
-        head: erased_head,
-        zero_case: erased_zero_case,
-        pred: pred_label,
-        ih: ih_label,
-        succ_case: erased_succ_case,
-    })
-    .into())
+    Ok(
+        curios_ersd::Subterm::NatMatch(curios_ersd::NatMatch::Induction {
+            head: erased_head,
+            zero_case: erased_zero_case,
+            pred: pred_label,
+            ih: ih_label,
+            succ_case: erased_succ_case,
+        })
+        .into(),
+    )
 }
 
 fn erase_switch(
@@ -437,7 +448,7 @@ fn erase_switch(
     motive: &Scope<Many>,
     cases: &BTreeMap<u32, Term>,
     default: &Term,
-) -> Result<ersd::Term, Error> {
+) -> Result<curios_ersd::Term, Error> {
     let head_type = expect_prim_head(context, head, PrimHead::Nat)?;
 
     let erased_cases = cases
@@ -451,15 +462,17 @@ fn erase_switch(
     let erased_default = erase(context, default, &motive.open(&[head]))?;
     let erased_head = erase(context, head, &head_type)?;
 
-    Ok(ersd::Subterm::NatMatch(ersd::NatMatch::Dispatch {
-        head: erased_head,
-        cases: erased_cases,
-        default: erased_default,
-    })
-    .into())
+    Ok(
+        curios_ersd::Subterm::NatMatch(curios_ersd::NatMatch::Dispatch {
+            head: erased_head,
+            cases: erased_cases,
+            default: erased_default,
+        })
+        .into(),
+    )
 }
 
-fn erase_match(context: &mut Context, m: &Match) -> Result<ersd::Term, Error> {
+fn erase_match(context: &mut Context, m: &Match) -> Result<curios_ersd::Term, Error> {
     let Match {
         head,
         motive,
@@ -572,7 +585,7 @@ fn erase_indexed_match(
     empty_case: &Term,
     cons_case: &Scope<Three>,
     carrier: IndexedCarrier<'_>,
-) -> Result<ersd::Term, Error> {
+) -> Result<curios_ersd::Term, Error> {
     let len_term = carrier.len(head);
     let one: Term = Subterm::Prim(Prim::Nat(Nat::new(1usize))).into();
 
@@ -613,7 +626,7 @@ fn erase_bln_match(
     motive: &Scope<Many>,
     false_case: &Term,
     true_case: &Term,
-) -> Result<ersd::Term, Error> {
+) -> Result<curios_ersd::Term, Error> {
     let head_type = expect_prim_head(context, head, PrimHead::Bln)?;
 
     let erased_false = erase_refined_case(
@@ -634,15 +647,17 @@ fn erase_bln_match(
 
     let erased_head = erase(context, head, &head_type)?;
 
-    Ok(ersd::Subterm::NatMatch(ersd::NatMatch::Dispatch {
-        head: erased_head,
-        cases: BTreeMap::from([(0, erased_false)]),
-        default: erased_true,
-    })
-    .into())
+    Ok(
+        curios_ersd::Subterm::NatMatch(curios_ersd::NatMatch::Dispatch {
+            head: erased_head,
+            cases: BTreeMap::from([(0, erased_false)]),
+            default: erased_true,
+        })
+        .into(),
+    )
 }
 
-fn erase_proj(context: &mut Context, proj: &Proj) -> Result<ersd::Term, Error> {
+fn erase_proj(context: &mut Context, proj: &Proj) -> Result<curios_ersd::Term, Error> {
     let Proj { head, field } = proj;
     // Labels are resolved by elaborate; erase runs strictly downstream.
     let Field::Index(index) = field else {
@@ -691,7 +706,7 @@ fn erase_proj(context: &mut Context, proj: &Proj) -> Result<ersd::Term, Error> {
         return erase(context, head, &head_type);
     }
 
-    Ok(ersd::Subterm::Proj(ersd::Proj {
+    Ok(curios_ersd::Subterm::Proj(curios_ersd::Proj {
         head: erase(context, head, &head_type)?,
         index: relevant_before,
     })
@@ -702,7 +717,7 @@ fn erase_proj(context: &mut Context, proj: &Proj) -> Result<ersd::Term, Error> {
 /// representation: a single allocation `(tag_index, payload...)` with the
 /// payload inlined after the tag. The tag's runtime
 /// index is the constructor's position in sorted (registry key) order.
-fn erase_variant(context: &mut Context, uc: &Variant) -> Result<ersd::Term, Error> {
+fn erase_variant(context: &mut Context, uc: &Variant) -> Result<curios_ersd::Term, Error> {
     let Variant {
         name,
         params,
@@ -727,17 +742,17 @@ fn erase_variant(context: &mut Context, uc: &Variant) -> Result<ersd::Term, Erro
     // inline after the tag. Erasable payload fields (a proof or a type) are
     // dropped from the tuple — sort-driven, read off each field's domain type.
     let mut fields = Vec::with_capacity(payload.len() + 1);
-    fields.push(ersd::Subterm::Atom(ersd::Atom { index }).into());
+    fields.push(curios_ersd::Subterm::Atom(curios_ersd::Atom { index }).into());
     fields.extend(erase_telescoped(context, telescope, payload)?);
 
-    Ok(ersd::Subterm::Tuple(ersd::Tuple { fields }).into())
+    Ok(curios_ersd::Subterm::Tuple(curios_ersd::Tuple { fields }).into())
 }
 
 /// Lower a struct value to its zero-cost runtime representation: a multi-field
 /// struct is a *tagless* tuple (one fewer field than the equivalent
 /// single-constructor inductive); a single-field struct (a newtype) is its bare
 /// field — no tuple, no tag, so it is byte-identical to the field's own type.
-fn erase_struct(context: &mut Context, s: &Struct) -> Result<ersd::Term, Error> {
+fn erase_struct(context: &mut Context, s: &Struct) -> Result<curios_ersd::Term, Error> {
     let Struct {
         name,
         params,
@@ -757,7 +772,7 @@ fn erase_struct(context: &mut Context, s: &Struct) -> Result<ersd::Term, Error> 
 
     Ok(match erased.len() {
         1 => erased.into_iter().next().expect("one field"),
-        _ => ersd::Subterm::Tuple(ersd::Tuple { fields: erased }).into(),
+        _ => curios_ersd::Subterm::Tuple(curios_ersd::Tuple { fields: erased }).into(),
     })
 }
 
@@ -804,7 +819,7 @@ fn erase_erasable_scrutinee_match(
     cases: &BTreeMap<Atom, Scope<Many>>,
     scrutinee: Scrutinee<'_>,
     pattern: Option<&MotivePattern>,
-) -> Result<ersd::Term, Error> {
+) -> Result<curios_ersd::Term, Error> {
     let Scrutinee {
         inductive,
         name,
@@ -878,7 +893,7 @@ fn erase_erasable_scrutinee_match(
         // elimination into data, as in `subst`'s `refl => v`) keeps its body.
         let dangles = body.free_names().iter().any(|name| labels.contains(name));
         if dangles && is_erasable(context, &expected)? {
-            return Ok(ersd::Subterm::Erased.into());
+            return Ok(curios_ersd::Subterm::Erased.into());
         }
         Ok(body)
     })
@@ -895,14 +910,14 @@ fn erase_inductive_match(
     motive: &Scope<Many>,
     cases: &BTreeMap<Atom, Scope<Many>>,
     pattern: Option<&MotivePattern>,
-) -> Result<ersd::Term, Error> {
+) -> Result<curios_ersd::Term, Error> {
     // A match with no arms is a vacuous elimination — of an empty inductive (`False`)
     // or of one whose every constructor inversion-clashes at the scrutinee's
     // indices. It is unreachable code that never inspects the scrutinee, which
     // elaborate placed in an erased position; erasing the head here would emit a
     // reference to an erased binder, so short-circuit to a trap.
     if cases.is_empty() {
-        return Ok(ersd::Subterm::Unreachable.into());
+        return Ok(curios_ersd::Subterm::Unreachable.into());
     }
 
     let head_type = infer(context, head)?;
@@ -957,7 +972,7 @@ fn erase_inductive_match(
             // still exists positionally, but reaching it is a compiler bug or
             // corrupted runtime tag, so lower it to a real trap.
             let Some(scope) = cases.get(tag) else {
-                return Ok(ersd::Subterm::Unreachable.into());
+                return Ok(curios_ersd::Subterm::Unreachable.into());
             };
 
             let telescope = inductive
@@ -1063,10 +1078,10 @@ fn erase_inductive_match(
                         let Some(slot) = runtime_slot[i] else {
                             return Ok(tail);
                         };
-                        Ok(ersd::Subterm::Let(ersd::Let {
+                        Ok(curios_ersd::Subterm::Let(curios_ersd::Let {
                             name: label.clone(),
-                            body: ersd::Subterm::Proj(ersd::Proj {
-                                head: ersd::Subterm::Name(ersd::Name::from(
+                            body: curios_ersd::Subterm::Proj(curios_ersd::Proj {
+                                head: curios_ersd::Subterm::Name(curios_ersd::Name::from(
                                     scrutinee_label.as_str(),
                                 ))
                                 .into(),
@@ -1083,12 +1098,13 @@ fn erase_inductive_match(
 
     // The head term is erased (and thus evaluated) exactly once, shared by
     // the tag dispatch and every arm's payload projections.
-    Ok(ersd::Subterm::Let(ersd::Let {
+    Ok(curios_ersd::Subterm::Let(curios_ersd::Let {
         name: scrutinee_label.clone(),
         body: erase(context, head, &head_type)?,
-        tail: ersd::Subterm::Match(ersd::Match {
-            head: ersd::Subterm::Proj(ersd::Proj {
-                head: ersd::Subterm::Name(ersd::Name::from(scrutinee_label.as_str())).into(),
+        tail: curios_ersd::Subterm::Match(curios_ersd::Match {
+            head: curios_ersd::Subterm::Proj(curios_ersd::Proj {
+                head: curios_ersd::Subterm::Name(curios_ersd::Name::from(scrutinee_label.as_str()))
+                    .into(),
                 index: 0,
             })
             .into(),
@@ -1099,7 +1115,11 @@ fn erase_inductive_match(
     .into())
 }
 
-fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd::Term, Error> {
+fn erase_let(
+    context: &mut Context,
+    let_: &Let,
+    expected: &Term,
+) -> Result<curios_ersd::Term, Error> {
     let Let {
         type_: body_type,
         body,
@@ -1117,7 +1137,7 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
         erase(context, &tail, expected)
     })?;
 
-    Ok(ersd::Subterm::Let(ersd::Let {
+    Ok(curios_ersd::Subterm::Let(curios_ersd::Let {
         name,
         body: erased_body,
         tail,
@@ -1125,7 +1145,11 @@ fn erase_let(context: &mut Context, let_: &Let, expected: &Term) -> Result<ersd:
     .into())
 }
 
-fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::Term, Error> {
+fn erase_rec(
+    context: &mut Context,
+    rec: &Rec,
+    expected: &Term,
+) -> Result<curios_ersd::Term, Error> {
     let Rec { items, tail } = rec;
 
     let names = tail
@@ -1162,28 +1186,28 @@ fn erase_rec(context: &mut Context, rec: &Rec, expected: &Term) -> Result<ersd::
             .map(|(type_, body)| erase(context, body, type_))
             .collect::<Result<Vec<_>, Error>>()?;
 
-        Ok(ersd::Rec {
+        Ok(curios_ersd::Rec {
             names,
             items: erased_items,
             tail: erase(context, &tail, expected)?,
         })
     })?;
 
-    Ok(ersd::Subterm::Rec(erased).into())
+    Ok(curios_ersd::Subterm::Rec(erased).into())
 }
 
-/// Erase a whole meta-free [`Module`] to an [`ersd::Module`] (§9). Each top-level
+/// Erase a whole meta-free [`Module`] to an [`curios_ersd::Module`] (§9). Each top-level
 /// item is erased and `define`d *cumulatively in the persistent base frame* (no
 /// `with_frame`), so later items, the entrypoint body, and the type annotations
 /// all reduce through the accumulated definitions; then the entrypoint `body` is
 /// erased against `expected`. The flat analogue of `erase_let`/`erase_rec`, minus
 /// the de Bruijn open/close — top-level cross-references are already free `Var`s,
-/// which erase to `ersd::Name`.
+/// which erase to `curios_ersd::Name`.
 pub fn erase_module(
     context: &mut Context,
     module: &Module,
     expected: &Term,
-) -> Result<ersd::Module, Error> {
+) -> Result<curios_ersd::Module, Error> {
     // Erase runs with its own `Context` (see `run::compile`); seed its
     // inductive registry from the module before any item consults it.
     for (name, inductive) in &module.inductives {
@@ -1216,7 +1240,7 @@ pub fn erase_module(
                 let body = erase(context, &def.body, &def.type_)?;
                 context.define_assuming(&def.name, &def.type_, &def.body);
 
-                items.push(ersd::Item::Let {
+                items.push(curios_ersd::Item::Let {
                     name: def.name.clone(),
                     body,
                 });
@@ -1237,7 +1261,7 @@ pub fn erase_module(
                     .map(|def| erase(context, &def.body, &def.type_))
                     .collect::<Result<Vec<_>, Error>>()?;
 
-                items.push(ersd::Item::Rec {
+                items.push(curios_ersd::Item::Rec {
                     names,
                     items: erased,
                 });
@@ -1249,10 +1273,14 @@ pub fn erase_module(
     context.set_island(String::new());
     let body = erase(context, &module.body, expected)?;
 
-    Ok(ersd::Module { items, body })
+    Ok(curios_ersd::Module { items, body })
 }
 
-pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {
+pub fn erase(
+    context: &mut Context,
+    term: &Term,
+    expected: &Term,
+) -> Result<curios_ersd::Term, Error> {
     // Attach this term's span to *any* error from erasing it. The dispatch lives
     // in `erase_subterm` so that its `?` short-circuits (e.g. a conversion
     // mismatch from `expect`) still flow through this wrapper rather than
@@ -1265,7 +1293,11 @@ pub fn erase(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd
     }
 }
 
-fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<ersd::Term, Error> {
+fn erase_subterm(
+    context: &mut Context,
+    term: &Term,
+    expected: &Term,
+) -> Result<curios_ersd::Term, Error> {
     match &**term {
         Subterm::Prim(prim) => erase_prim(context, term, prim, expected),
         Subterm::Match(m) => erase_match(context, m),
@@ -1276,7 +1308,7 @@ fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<
         | Subterm::FuncType(_)
         | Subterm::TupleType(_)
         | Subterm::InductiveType(_)
-        | Subterm::StructType(_) => Ok(ersd::Subterm::Erased.into()),
+        | Subterm::StructType(_) => Ok(curios_ersd::Subterm::Erased.into()),
         Subterm::Variant(uc) => erase_variant(context, uc),
         Subterm::Struct(s) => erase_struct(context, s),
         Subterm::Func(func) => erase_func(context, func, expected),
@@ -1285,7 +1317,9 @@ fn erase_subterm(context: &mut Context, term: &Term, expected: &Term) -> Result<
         Subterm::Proj(proj) => erase_proj(context, proj),
         Subterm::Let(let_) => erase_let(context, let_, expected),
         Subterm::Rec(lr) => erase_rec(context, lr, expected),
-        Subterm::Var(var) => Ok(ersd::Subterm::Name(ersd::Name::from(var.unwrap())).into()),
+        Subterm::Var(var) => {
+            Ok(curios_ersd::Subterm::Name(curios_ersd::Name::from(var.unwrap())).into())
+        }
         // Erase runs downstream of zonking, on a meta-free term (§9).
         Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erase"),
         // `elaborate` resolves every infix/numeric-literal node to a `Prim`.

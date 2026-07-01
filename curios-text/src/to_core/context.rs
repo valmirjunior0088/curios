@@ -2,15 +2,14 @@ use {
     super::interface::PublicInterface,
     crate::{Error, Name, Qualifier},
     curios_base::Entropy,
-    curios_core as core,
     std::collections::HashMap,
 };
 
 #[derive(Clone)]
 pub struct FlatLet {
     pub name: Qualifier,
-    pub type_: core::Term,
-    pub body: core::Term,
+    pub type_: curios_core::Term,
+    pub body: curios_core::Term,
 }
 
 #[derive(Clone)]
@@ -96,14 +95,14 @@ pub struct Context<'a> {
     qualifiers: HashMap<String, Qualifier>,
     bindings: HashMap<String, Qualifier>,
     // Shared, program-global metavariable-id counter. The whole program folds
-    // into one `core::Term`, so holes in different module bodies (each its own
+    // into one `curios_core::Term`, so holes in different module bodies (each its own
     // `Context` via `nested`) must draw from the same monotonic source. Shared
     // by reference (like `table`/`public`) and `Cell`-backed so it survives
     // `Lower`'s immutable `&Context` borrow.
     metavars: &'a Entropy,
     // Sibling counter for fresh continuation-binder names minted while desugaring
     // `let !`/`!` blocks. Threaded (not a process-global atomic) for determinism:
-    // `core::Scope`'s `PartialEq` compares binder *names*, so term-equality in
+    // `curios_core::Scope`'s `PartialEq` compares binder *names*, so term-equality in
     // tests must be order-stable.
     binders: &'a Entropy,
 }

@@ -1,6 +1,6 @@
 use {
     super::{Io, Mode, Poll},
-    curios_abi as wire,
+    curios_abi::mode,
     wasmtime::{Caller, Val},
 };
 
@@ -27,9 +27,9 @@ impl Lift for Io {
 impl Lift for Mode {
     fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(match params[0].unwrap_i32() as u32 {
-            wire::mode::READ => Mode::Read,
-            wire::mode::WRITE => Mode::Write,
-            wire::mode::APPEND => Mode::Append,
+            mode::READ => Mode::Read,
+            mode::WRITE => Mode::Write,
+            mode::APPEND => Mode::Append,
             tag => panic!("invalid open mode tag: {tag}"),
         })
     }
