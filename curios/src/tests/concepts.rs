@@ -316,3 +316,90 @@ fn all_out_concept_is_rejected() {
 
     assert!(error(source).contains("out"));
 }
+
+// The full higher-kinded chain: `Monad/bind(o, f)` parks its `Monad(?M)` goal
+// on the flex input, checking `o : Option(Nat)` against `?M(?A)` fires the
+// flex-apply imitation rule inside the conversion checker, and the committed
+// `?M := Option` wakes the parked goal, which the table resolves to the
+// prelude's `monad_option`. Also covers the cached-prelude replay of a
+// higher-kinded witness.
+#[test]
+fn prelude_monad_resolves_by_imitation() {
+    let source = r#"
+        use /std/{Nat, Io, Str, Option, Monad};
+        let o : Option(Nat) = Monad/bind(Option/some(20), (x) => Monad/pure(Nat/add(x, 1)));
+        Io/print(Nat/to_str(Option/unwrap_or(o, 0)))
+        "#;
+
+    assert_eq!(run(source), b"21");
+}
+
+// The Lst witness: bind is concat-map.
+#[test]
+fn prelude_monad_lst_binds() {
+    let source = r#"
+        use /std/{Nat, Io, Str, Lst, Monad};
+        let l : Lst(Nat) = Lst/cons(1, Lst/cons(2, Lst/nil()));
+        let doubled : Lst(Nat) = Monad/bind(l, (x) => Lst/cons(x, Lst/cons(x, Lst/nil())));
+        Io/print(Nat/to_str(Lst/len(doubled)))
+        "#;
+
+    assert_eq!(run(source), b"4");
+}
+
+// The monadic sugar promised by INSTANCE_ARGUMENTS: `let ! = Monad/bind;`
+// sequences through the concept method, each `e!` resolving its own witness.
+#[test]
+fn monadic_sugar_binds_through_the_concept() {
+    let source = r#"
+        use /std/{Nat, Io, Str, Option, Monad};
+        pub let chain(a : Option(Nat), b : Option(Nat)) -> Option(Nat) =
+            let ! = Monad/bind;
+            let x = a!;
+            let y = b!;
+            Monad/pure(Nat/add(x, y));
+        Io/print(Nat/to_str(Option/unwrap_or(chain(Option/some(20), Option/some(22)), 0)))
+        "#;
+
+    assert_eq!(run(source), b"42");
+}
+
+// A higher-kinded superclass: inside the generic function the goal
+// `Monad(M)` (M a bound variable) resolves through step 2's superclass
+// projection of the local `use MonadPlus(M)` binder.
+#[test]
+fn higher_kinded_superclass_projects() {
+    let source = r#"
+        use /std/{Nat, Io, Str, Option, Monad};
+        pub concept MonadPlus(M : (Type) -> Type) : Type {
+            use monad : Monad(M),
+            empty(@A : Type) -> M(A)
+        }
+        pub witness monad_plus_option : MonadPlus(Option) {
+            monad = Monad/monad_option,
+            empty(A) = Option/none()
+        }
+        pub let wrap(@M : (Type) -> Type, use MonadPlus(M), m : M(Nat)) -> M(Nat) =
+            Monad/bind(m, (x) => Monad/pure(x));
+        let o : Option(Nat) = wrap(Option/some(11));
+        Io/print(Nat/to_str(Option/unwrap_or(o, 0)))
+        "#;
+
+    assert_eq!(run(source), b"11");
+}
+
+// `Prim`-headed type constructors (`Arr`, `Cell`) carry their argument inside
+// the `Prim` node — deliberately outside the imitation rule's nominal-head
+// scope. `Monad/bind` over an `Arr` fails with the ordinary type mismatch at
+// its origin (no panic, no wrong solution).
+#[test]
+fn monad_over_prim_constructor_is_a_type_mismatch() {
+    let source = r#"
+        use /std/{Nat, Arr, Io, Str, Monad};
+        let a : Arr(Nat) = [|1|];
+        let b : Arr(Nat) = Monad/bind(a, (x) => a);
+        Io/print("done")
+        "#;
+
+    assert!(error(source).contains("mismatch"));
+}

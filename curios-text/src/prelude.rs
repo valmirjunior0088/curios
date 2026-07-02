@@ -657,6 +657,7 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Eql"], include_str!("../std/Eql.crs")),
     (&["std", "Ord"], include_str!("../std/Ord.crs")),
     (&["std", "Show"], include_str!("../std/Show.crs")),
+    (&["std", "Monad"], include_str!("../std/Monad.crs")),
     (&["std", "BigNat"], include_str!("../std/BigNat.crs")),
     (&["std", "Vec"], include_str!("../std/Vec.crs")),
     (&["std", "Eq"], include_str!("../std/Eq.crs")),

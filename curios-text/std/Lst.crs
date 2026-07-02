@@ -18,6 +18,12 @@ pub let rev(@A : Type, l : Lst(A)) -> Lst(A) =
         end;
     go(l, nil());
 
+pub rec append(@A : Type, a : Lst(A), b : Lst(A)) -> Lst(A) =
+    match a : Lst(A)
+    | nil() => b
+    | cons(x, tail) => cons(x, append(tail, b))
+    end;
+
 pub rec map(@A : Type, @B : Type, f : (A) -> B, l : Lst(A)) -> Lst(B) =
     match l : Lst(B)
     | nil() => nil()

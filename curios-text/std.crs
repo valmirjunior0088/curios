@@ -55,6 +55,9 @@ pub use Ord/{let Ord};
 pub mod Show;
 pub use Show/{let Show};
 
+pub mod Monad;
+pub use Monad/{let Monad};
+
 pub mod BigNat;
 pub use BigNat/{let BigNat};
 

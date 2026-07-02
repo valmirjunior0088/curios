@@ -1,0 +1,37 @@
+use /std/{Option, Lst};
+
+-- Monadic sequencing over a one-parameter type constructor. The parameter is
+-- higher-kinded: a goal like `Monad(?M)` parks until the flex-apply imitation
+-- rule pins `?M` from a concrete type such as `Option(Nat)`, then resolves
+-- against the witness keyed on that constructor.
+pub concept Monad(M : (Type) -> Type) : Type {
+    pure(@A : Type, A) -> M(A),
+    bind(@A : Type, @B : Type, M(A), (A) -> M(B)) -> M(B)
+}
+
+-- Lift the method wrappers (`Monad/pure`, `Monad/bind`) out of the concept's
+-- namespace to the module level, so `use /std/{Monad}` makes them resolve.
+pub use Monad/*;
+
+-- Witness fields bind every binder of the field's declared type, implicit
+-- type binders included — lambdas carry no plicities, so the spelled-out
+-- shape is the one that checks.
+pub witness monad_option : Monad(Option) {
+    pure(A, x) = Option/some(x),
+    bind(A, B, m, f) =
+        match m
+        | some(a) => f(a)
+        | none() => Option/none()
+        end
+}
+
+pub witness monad_lst : Monad(Lst) {
+    pure(A, x) = Lst/cons(x, Lst/nil()),
+    bind(A, B, m, f) =
+        rec go(rest : Lst(A)) -> Lst(B) =
+            match rest
+            | nil() => Lst/nil()
+            | cons(x, tail) => Lst/append(f(x), go(tail))
+            end;
+        go(m)
+}
