@@ -49,6 +49,24 @@ pub use Order/{let Order};
 pub mod Eql;
 pub use Eql/{let Eql};
 
+pub mod Add;
+pub use Add/{let Add};
+
+pub mod Sub;
+pub use Sub/{let Sub};
+
+pub mod Mul;
+pub use Mul/{let Mul};
+
+pub mod Div;
+pub use Div/{let Div};
+
+pub mod Rem;
+pub use Rem/{let Rem};
+
+pub mod Cmp;
+pub use Cmp/{let Cmp};
+
 pub mod Ord;
 pub use Ord/{let Ord};
 

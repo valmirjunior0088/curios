@@ -1,8 +1,9 @@
 use {
     super::{
-        Error, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, LetSignature, Loader, Module,
-        Name, Nat, NatLiteral, Plicity, Prim, Qualifier, Subterm, Term, TopItem, TopLet, TopMod,
-        TopUse, TupleType, TupleTypeParam, UseGroup,
+        ConceptField, ConceptParam, Error, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
+        LetSignature, Loader, Module, Name, Nat, NatLiteral, Plicity, Prim, Qualifier, Subterm,
+        Term, TopConcept, TopItem, TopLet, TopMod, TopUse, TopWitness, TupleType, TupleTypeParam,
+        UseGroup,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status},
     std::sync::Arc,
@@ -550,6 +551,152 @@ fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
     ops
 }
 
+// === Operator concepts and their primitive witnesses ========================
+//
+// Every infix operator except `&&`/`||` dispatches through one of these
+// concepts (`+` → `Add/add`, `==` → `Eql/eql`, `<` → `Cmp/lt`, …). They are
+// declared at the *top level* of `sys` — not in std surface files — so every
+// operator on every primitive type resolves the moment `sys` loads: std uses
+// infix pervasively, including type-level (`Lte`'s `a + 1` indices), and
+// sys-homed witnesses make that correct by construction, with no ordering
+// dependency between std files. Witness fields are eta-reduced references to
+// the named wrappers built above (`add = Nat/add` — the wrapper's type is
+// exactly the field type), so no infix appears in any witness body.
+
+// The binary-operator field signature `(A, A) -> output` over the concept's
+// parameter.
+fn operator_field_type(output: Term) -> Term {
+    let a = || FuncTypeParam {
+        plicity: Plicity::Explicit,
+        label: None,
+        type_: name("A"),
+    };
+    Subterm::FuncType(FuncType {
+        params: vec![a(), a()],
+        output,
+    })
+    .into()
+}
+
+// A single-parameter operator concept:
+// `pub concept Label(A : Type) : Type { field : (A, A) -> Out, … }`.
+fn operator_concept(label: &str, fields: Vec<(&str, Term)>) -> TopItem {
+    TopItem::Concept(TopConcept {
+        is_pub: true,
+        label: label.to_string(),
+        params: vec![ConceptParam {
+            plicity: Plicity::Explicit,
+            is_out: false,
+            label: "A".to_string(),
+            type_: type_(),
+        }],
+        result_sort: type_(),
+        fields: fields
+            .into_iter()
+            .map(|(label, output)| ConceptField {
+                is_super: false,
+                label: label.to_string(),
+                type_: operator_field_type(output),
+            })
+            .collect(),
+    })
+}
+
+// A primitive operator witness: `pub witness label : Concept(Head) { field =
+// Module/op, … }` — each field the named wrapper reference.
+fn operator_witness(
+    label: &str,
+    concept: &str,
+    head: Term,
+    fields: Vec<(&str, [&str; 2])>,
+) -> TopItem {
+    TopItem::Witness(TopWitness {
+        is_pub: true,
+        label: label.to_string(),
+        params: Vec::new(),
+        concept: Name::from([concept.to_string()]),
+        args: vec![head],
+        fields: fields
+            .into_iter()
+            .map(|(field, [module, op])| {
+                let value: Term =
+                    Subterm::Name(Name::from(vec![module.to_string(), op.to_string()])).into();
+                (field.to_string(), value)
+            })
+            .collect(),
+    })
+}
+
+// The full operator surface, at exact parity with the retired per-type
+// overload table: one witness per `(operator, primitive type)` pair it
+// accepted, plus `Eql(Bin)` (migrated from std — its wrapper is
+// sys-expressible). `&&`/`||` stay hardcoded on `Bln` and have no concept.
+fn operator_items() -> Vec<TopItem> {
+    let numeric = [
+        ("nat", nat as fn() -> Term, "Nat"),
+        ("int", int, "Int"),
+        ("flt", flt, "Flt"),
+    ];
+    let mut items = Vec::new();
+
+    for (concept, field) in [
+        ("Add", "add"),
+        ("Sub", "sub"),
+        ("Mul", "mul"),
+        ("Div", "div"),
+        ("Rem", "rem"),
+    ] {
+        items.push(operator_concept(concept, vec![(field, name("A"))]));
+        for (suffix, head, module) in numeric {
+            items.push(operator_witness(
+                &format!("{field}_{suffix}"),
+                concept,
+                head(),
+                vec![(field, [module, field])],
+            ));
+        }
+    }
+
+    items.push(operator_concept("Eql", vec![("eql", bln())]));
+    for (suffix, head, module) in [
+        ("nat", nat as fn() -> Term, "Nat"),
+        ("int", int, "Int"),
+        ("flt", flt, "Flt"),
+        ("bln", bln, "Bln"),
+        ("bin", bin, "Bin"),
+    ] {
+        items.push(operator_witness(
+            &format!("eql_{suffix}"),
+            "Eql",
+            head(),
+            vec![("eql", [module, "eql"])],
+        ));
+    }
+
+    // Four relations per witness: float NaN semantics make them non-derivable
+    // from one another, and `Bln` results keep `sys` free of any `Order`
+    // inductive (std's richer `Ord` stays separate).
+    items.push(operator_concept(
+        "Cmp",
+        vec![("lt", bln()), ("lte", bln()), ("gt", bln()), ("gte", bln())],
+    ));
+    for (suffix, head, module) in numeric {
+        items.push(operator_witness(
+            &format!("cmp_{suffix}"),
+            "Cmp",
+            head(),
+            vec![
+                ("lt", [module, "lt"]),
+                ("lte", [module, "lte"]),
+                ("gt", [module, "gt"]),
+                ("gte", [module, "gte"]),
+            ],
+        ));
+    }
+
+    items
+}
+
 // The `sys` module body of primitive types and operations, served to discovery by
 // `SysLoader` like any other loaded module. The host operations under `Io` come
 // off `foreigns` — the compilation's foreign store.
@@ -587,7 +734,10 @@ fn sys_module(foreigns: &ForeignStore) -> Module {
                 ),
             ),
             pub_use("Cell"),
-        ],
+        ]
+        .into_iter()
+        .chain(operator_items())
+        .collect(),
     }
 }
 
@@ -655,6 +805,12 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Lst"], include_str!("../std/Lst.crs")),
     (&["std", "Order"], include_str!("../std/Order.crs")),
     (&["std", "Eql"], include_str!("../std/Eql.crs")),
+    (&["std", "Add"], include_str!("../std/Add.crs")),
+    (&["std", "Sub"], include_str!("../std/Sub.crs")),
+    (&["std", "Mul"], include_str!("../std/Mul.crs")),
+    (&["std", "Div"], include_str!("../std/Div.crs")),
+    (&["std", "Rem"], include_str!("../std/Rem.crs")),
+    (&["std", "Cmp"], include_str!("../std/Cmp.crs")),
     (&["std", "Ord"], include_str!("../std/Ord.crs")),
     (&["std", "Show"], include_str!("../std/Show.crs")),
     (&["std", "Monad"], include_str!("../std/Monad.crs")),

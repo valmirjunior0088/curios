@@ -1,34 +1,15 @@
-use /std/{Nat, Int, Flt, Bln, Str, Bin};
+use /std/{Str};
 
--- Value-level equality, distinct from propositional `Eq` (`std/Eq.crs`).
--- Witnesses wrap the per-type comparison primitives.
-pub concept Eql(A : Type) : Type {
-    eql(A, A) -> Bln
-}
+-- Value-level equality, distinct from propositional `Eq` (`std/Eq.crs`). The
+-- concept and its primitive witnesses (`Nat`/`Int`/`Flt`/`Bln`/`Bin`) live in
+-- `/sys` — operators dispatch through them before any std file elaborates —
+-- and this module is the user-facing facade (the `std/Bln.crs` pattern).
+pub use /sys/{Eql};
+pub use /sys/Eql/{eql};
+pub use /sys/{eql_nat, eql_int, eql_flt, eql_bln, eql_bin};
 
--- Lift `Eql/eql` to the module level (see `Show`).
-pub use Eql/*;
-
-pub witness eql_nat : Eql(Nat) {
-    eql(a, b) = a == b
-}
-
-pub witness eql_int : Eql(Int) {
-    eql(a, b) = a == b
-}
-
-pub witness eql_flt : Eql(Flt) {
-    eql(a, b) = a == b
-}
-
-pub witness eql_bln : Eql(Bln) {
-    eql(a, b) = a == b
-}
-
+-- `Str` is a std record, which `/sys` cannot name — its witness lives here,
+-- beside its dependency.
 pub witness eql_str : Eql(Str) {
     eql(a, b) = Str/eql(a, b)
-}
-
-pub witness eql_bin : Eql(Bin) {
-    eql(a, b) = Bin/eql(a, b)
 }

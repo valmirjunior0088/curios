@@ -403,3 +403,41 @@ fn monad_over_prim_constructor_is_a_type_mismatch() {
 
     assert!(error(source).contains("mismatch"));
 }
+
+// The sys-homed operator concepts: `Add/add` resolves on a primitive type
+// through the `/sys` witness (also proving the cached-prelude replay path
+// registers the sys concepts and witnesses), on a user record through a user
+// witness, and in generic code through a local `use Add(A)` premise.
+#[test]
+fn sys_add_concept_resolves_everywhere() {
+    let source = r#"
+        use /std/{Nat, Io, Str, Add};
+        record Point : Type { x : Nat, y : Nat }
+        pub witness add_point : Add(Point) {
+            add(a, b) = Point { x = Nat/add(a.x, b.x), y = Nat/add(a.y, b.y) }
+        }
+        pub let double(@A : Type, use Add(A), v : A) -> A = Add/add(v, v);
+        let p : Point = double(Point { x = 3, y = 4 });
+        let n : Nat = Add/add(20, 1);
+        Io/print(Nat/to_str(Nat/add(p.x, n)))
+        "#;
+
+    assert_eq!(run(source), b"27");
+}
+
+// The migrated `Eql`: primitive witnesses now live in `/sys` (the std module
+// is a facade), `eql_str` stays std-side beside its `Str` dependency, and the
+// `Cmp` comparison concept resolves on every numeric type.
+#[test]
+fn sys_eql_and_cmp_resolve() {
+    let source = r#"
+        use /std/{Nat, Flt, Bln, Io, Str, Eql, Cmp};
+        let a : Bln = Eql/eql(2, 2);
+        let b : Bln = Eql/eql("abc", "abc");
+        let c : Bln = Cmp/lt(1.0, 2.0);
+        let d : Bln = Cmp/gte(3, 3);
+        Io/print(Bln/to_str(Bln/and(Bln/and(a, b), Bln/and(c, d))))
+        "#;
+
+    assert_eq!(run(source), b"true");
+}
