@@ -14,6 +14,7 @@ use {
 
 mod code;
 mod module;
+mod parity;
 
 /// The `io_write` row of the builtin foreign store, for fixtures that
 /// hand-build host calls.
