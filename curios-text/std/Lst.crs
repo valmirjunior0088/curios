@@ -1,6 +1,6 @@
 pub use /syn/{Lst};
 pub use /syn/Lst/{nil, cons};
-use /std/{Arr, Nat, Bln, Option};
+use /std/{Arr, Nat, Bln, Option, Monad};
 
 pub let len(@A : Type, l : Lst(A)) -> Nat =
     rec go(rest : Lst(A), acc : Nat) -> Nat =
@@ -77,3 +77,14 @@ pub let to_arr(@A : Type, l : Lst(A)) -> Arr(A) =
             (Arr/concat(left.0, right.0), right.1)
         end;
     (go(l, len(l))).0;
+
+pub witness monad_lst : Monad(Lst) {
+    pure(A, x) = cons(x, nil()),
+    bind(A, B, m, f) =
+        rec go(rest : Lst(A)) -> Lst(B) =
+            match rest
+            | nil() => nil()
+            | cons(x, tail) => append(f(x), go(tail))
+            end;
+        go(m)
+}

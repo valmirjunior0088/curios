@@ -397,7 +397,7 @@ fn higher_kinded_superclass_projects() {
             empty(@A : Type) -> M(A)
         }
         pub witness monad_plus_option : MonadPlus(Option) {
-            monad = Monad/monad_option,
+            monad = Option/monad_option,
             empty(A) = Option/none()
         }
         pub let wrap(@M : (Type) -> Type, use MonadPlus(M), m : M(Nat)) -> M(Nat) =
