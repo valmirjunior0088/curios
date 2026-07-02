@@ -768,7 +768,12 @@ fn check_dependent_fields(
     }
 }
 
-fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(Term, Term), Error> {
+fn elaborate_struct(
+    context: &mut Context,
+    s: &Struct,
+    term: &Term,
+    mode: &Mode,
+) -> Result<(Term, Term), Error> {
     let Struct {
         name,
         params,
@@ -823,6 +828,24 @@ fn elaborate_struct(context: &mut Context, s: &Struct, term: &Term) -> Result<(T
         };
         tele = rest.open(&[&arg]);
         resolved.push(arg);
+    }
+
+    // Seed omitted parameters from the checking expectation *before* the fields
+    // elaborate: a field checked against a type carrying an unsolved parameter
+    // metavariable can strand flex-flex constraints (e.g. a `match` tail's
+    // inferred motive against `Result({Nat, ?P}, Str)`) that nothing wakes.
+    // Only a same-named struct expectation seeds — anything else falls through
+    // to the dispatch-level `expect`, preserving implicit insertion and the
+    // ordinary mismatch diagnostics.
+    if let Mode::Check(expected) = mode
+        && let Subterm::StructType(StructType {
+            name: expected_name,
+            ..
+        }) = Term::unwrap_or_clone(reduce_with(context, expected)?)
+        && expected_name == *name
+    {
+        let seeded = Term::struct_type(name.clone(), resolved.clone());
+        expect(context, term, &seeded, expected)?;
     }
 
     // Instantiate the field telescope at the resolved parameters.
@@ -1721,7 +1744,7 @@ fn elaborate_subterm(
         Subterm::InductiveType(ut) => elaborate_inductive_type(context, ut)?,
         Subterm::Variant(uc) => elaborate_variant(context, uc, term)?,
         Subterm::StructType(st) => elaborate_struct_type(context, st, term)?,
-        Subterm::Struct(s) => elaborate_struct(context, s, term)?,
+        Subterm::Struct(s) => elaborate_struct(context, s, term, &mode)?,
     };
 
     if let Mode::Check(expected) = &mode {

@@ -21,15 +21,15 @@ let is_not_pct(byte : Nat) -> Bln =
     | _ => true
     end;
 
-rec parse_fmt : Parse(Fmt) = (input, pos) =>
+rec parse_fmt : Parse(Fmt) = Parse { run(input, pos) =
     match Nat/try_lt(pos, Bin/len(input))
     | none() => Result/success((pos, Fmt/nil()))
     | some(ok) =>
         match Bin/at(input, pos, ok) == '%'
-        | false => parse_lit(input, pos)
-        | true => parse_spec(input, pos)
+        | false => parse_lit.run(input, pos)
+        | true => parse_spec.run(input, pos)
         end
-    end
+    end }
 and parse_spec : Parse(Fmt) =
     Parse/or(
         let ! = Parse/bind;

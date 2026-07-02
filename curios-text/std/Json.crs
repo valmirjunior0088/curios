@@ -76,7 +76,7 @@ let is_num_byte(byte : Nat) -> Bln =
     end;
 
 let take_literal(literal : Str) -> Parse({}) =
-    (input, pos) =>
+    Parse { run(input, pos) =
         let lit = Str/to_bin(literal);
         let r =
             match Bin/len(lit) : {Nat, Bln}
@@ -98,7 +98,7 @@ let take_literal(literal : Str) -> Parse({}) =
         match r.1
         | true => Result/success((r.0, ()))
         | false => Result/failure("unexpected literal")
-        end;
+        end };
 
 let parse_null : Parse(Json) =
     Parse/map((_) => Json/null(), take_literal("null"));
@@ -110,15 +110,15 @@ let parse_false_val : Parse(Json) =
     Parse/map((_) => Json/bln(false), take_literal("false"));
 
 let parse_num : Parse(Json) =
-    (input, pos) =>
-        match Parse/take_while(is_num_byte)(input, pos)
+    Parse { run(input, pos) =
+        match Parse/take_while(is_num_byte).run(input, pos)
         | success(pair) =>
             match Flt/of_str(Option/unwrap_or(Str/of_bin(pair.1), ""))
             | some(value) => Result/success((pair.0, Json/num(value)))
             | none() => Result/failure("expected number")
             end
         | failure(msg) => Result/failure(msg)
-        end;
+        end };
 
 let is_not_string_special(byte : Nat) -> Bln =
     match byte
@@ -208,8 +208,8 @@ let symbol(b : Nat) -> Parse(Nat) =
     let _ = ws!;
     Parse/take_byte(b);
 
-pub rec decode : Parse(Json) = (input, pos) =>
-    match ws(input, pos)
+pub rec decode : Parse(Json) = Parse { run(input, pos) =
+    match ws.run(input, pos)
     | failure(msg) => Result/failure(msg)
     | success(skipped) =>
         let start = skipped.0;
@@ -217,16 +217,16 @@ pub rec decode : Parse(Json) = (input, pos) =>
         | none() => Result/failure("unexpected end of input")
         | some(ok) =>
             match Bin/at(input, start, ok)
-            | 'n' => parse_null(input, start)
-            | 't' => parse_true_val(input, start)
-            | 'f' => parse_false_val(input, start)
-            | '"' => parse_str_value(input, start)
-            | '[' => parse_arr(input, start)
-            | '{' => parse_obj(input, start)
-            | _ => parse_num(input, start)
+            | 'n' => parse_null.run(input, start)
+            | 't' => parse_true_val.run(input, start)
+            | 'f' => parse_false_val.run(input, start)
+            | '"' => parse_str_value.run(input, start)
+            | '[' => parse_arr.run(input, start)
+            | '{' => parse_obj.run(input, start)
+            | _ => parse_num.run(input, start)
             end
         end
-    end
+    end }
 and parse_arr : Parse(Json) =
     let ! = Parse/bind;
     let _ = symbol('[')!;

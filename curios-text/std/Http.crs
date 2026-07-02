@@ -128,11 +128,11 @@ pub record Response : Type {
 }
 
 let rest : Parse(Bin) =
-    (input, pos) =>
-        Result/success((Bin/len(input), Bin/slice(input, pos, Bin/len(input))));
+    Parse { run(input, pos) =
+        Result/success((Bin/len(input), Bin/slice(input, pos, Bin/len(input)))) };
 
 let guard_header : Parse({}) =
-    (input, pos) =>
+    Parse { run(input, pos) =
         match Nat/try_lt(pos, Bin/len(input))
         | none() => Result/failure("unexpected end of headers")
         | some(ok) =>
@@ -140,7 +140,7 @@ let guard_header : Parse({}) =
             | true => Result/failure("end of header block")
             | false => Result/success((pos, ()))
             end
-        end;
+        end };
 
 let header_line : Parse({Str, Str}) =
     let ! = Parse/bind;
@@ -153,9 +153,9 @@ let header_line : Parse({Str, Str}) =
     Parse/pure((Option/unwrap_or(Str/of_bin(name), ""), Str/trim(Option/unwrap_or(Str/of_bin(value), ""))));
 
 let take_n(n : Nat) -> Parse(Bin) =
-    (input, pos) =>
+    Parse { run(input, pos) =
         let stop = Nat/min(pos + n, Bin/len(input));
-        Result/success((stop, Bin/slice(input, pos, stop)));
+        Result/success((stop, Bin/slice(input, pos, stop))) };
 
 let content_length_of(headers : Lst({Str, Str})) -> Option(Nat) =
     match header_lookup(headers, "Content-Length") : Option(Nat)
