@@ -16,8 +16,8 @@ pub let buffer(h : Io) -> Buffer =
 pub let pure(@A : Type, a : A) -> Reader(A) =
     Reader { run(b) = (b, a) };
 
-pub let bind(@A : Type, @B : Type) -> (Reader(A), (A) -> Reader(B)) -> Reader(B) =
-    (m, f) => Reader { run(b) =
+pub let bind(@A : Type, @B : Type, m : Reader(A), f : (A) -> Reader(B)) -> Reader(B) =
+    Reader { run(b) =
         let p = m.run(b);
         f(p.1).run(p.0) };
 
@@ -47,5 +47,5 @@ pub rec read_line : Reader(Option(Bin)) =
 
 pub witness monad_reader : Monad(Reader) {
     pure(A, x) = pure(@A, x),
-    bind(A, B, m, f) = bind(@A, @B)(m, f)
+    bind(A, B, m, f) = bind(@A, @B, m, f)
 }

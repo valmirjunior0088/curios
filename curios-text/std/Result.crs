@@ -19,12 +19,11 @@ pub let map_failure(@A : Type, @E : Type, @F : Type, f : (E) -> F, r : Result(A,
     | failure(e) => Result/failure(f(e))
     end;
 
-pub let bind(@A : Type, @B : Type, @E : Type) -> (Result(A, E), (A) -> Result(B, E)) -> Result(B, E) =
-    (m, f) =>
-        match m
-        | success(a) => f(a)
-        | failure(e) => Result/failure(e)
-        end;
+pub let bind(@A : Type, @B : Type, @E : Type, m : Result(A, E), f : (A) -> Result(B, E)) -> Result(B, E) =
+    match m
+    | success(a) => f(a)
+    | failure(e) => Result/failure(e)
+    end;
 
 pub let unwrap_or(@A : Type, @E : Type, r : Result(A, E), default : A) -> A =
     match r

@@ -32,12 +32,11 @@ let Guard : Type =
 pub let pure(@A : Type, a : A) -> Task(A) =
     Task/done(a);
 
-pub rec bind(@A : Type, @B : Type) -> (Task(A), (A) -> Task(B)) -> Task(B) =
-    (m, f) =>
-        match m : Task(B)
-        | done(a) => f(a)
-        | step(p, k) => Task/step(p, () => bind(k(), f))
-        end;
+pub rec bind(@A : Type, @B : Type, m : Task(A), f : (A) -> Task(B)) -> Task(B) =
+    match m : Task(B)
+    | done(a) => f(a)
+    | step(p, k) => Task/step(p, () => bind(k(), f))
+    end;
 
 pub let map(@A : Type, @B : Type, f : (A) -> B, m : Task(A)) -> Task(B) =
     bind(m, (a) => pure(f(a)));
@@ -376,5 +375,5 @@ pub let race(@A : Type, tasks : Lst(() -> Task(A))) -> Task(A) =
 
 pub witness monad_task : Monad(Task) {
     pure(A, x) = pure(@A, x),
-    bind(A, B, m, f) = bind(@A, @B)(m, f)
+    bind(A, B, m, f) = bind(@A, @B, m, f)
 }

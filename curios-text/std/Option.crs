@@ -7,12 +7,11 @@ end
 
 pub use Option/*;
 
-pub let bind(@A : Type, @B : Type) -> (Option(A), (A) -> Option(B)) -> Option(B) =
-    (m, f) =>
-        match m
-        | some(a) => f(a)
-        | none() => Option/none()
-        end;
+pub let bind(@A : Type, @B : Type, m : Option(A), f : (A) -> Option(B)) -> Option(B) =
+    match m
+    | some(a) => f(a)
+    | none() => Option/none()
+    end;
 
 pub let map(@A : Type, @B : Type, f : (A) -> B, m : Option(A)) -> Option(B) =
     match m

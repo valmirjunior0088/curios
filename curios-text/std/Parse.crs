@@ -26,8 +26,8 @@ pub let map(@A : Type, @B : Type, f : (A) -> B, p : Parse(A)) -> Parse(B) =
         | failure(msg) => Result/failure(msg)
         end };
 
-pub let bind(@A : Type, @B : Type) -> (Parse(A), (A) -> Parse(B)) -> Parse(B) =
-    (p, f) => Parse { run(input, pos) =
+pub let bind(@A : Type, @B : Type, p : Parse(A), f : (A) -> Parse(B)) -> Parse(B) =
+    Parse { run(input, pos) =
         match p.run(input, pos)
         | success(pair) => f(pair.1).run(input, pair.0)
         | failure(msg) => Result/failure(msg)
@@ -134,5 +134,5 @@ pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(
 
 pub witness monad_parse : Monad(Parse) {
     pure(A, x) = pure(@A, x),
-    bind(A, B, m, f) = bind(@A, @B)(m, f)
+    bind(A, B, m, f) = bind(@A, @B, m, f)
 }
