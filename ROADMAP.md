@@ -32,7 +32,7 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 ## Type System
 
 - [x] Implicit arguments (`@`-marked binders)
-- [x] Instance arguments (ad-hoc polymorphism: `concept` declarations, anonymous `witness` declarations, the `use` binder plicity, deterministic witness resolution with local-scope, superclass-projection, and global-table steps; `use`-marked concept fields resolve by omission and fill explicitly with `use <term>` entries)
+- [x] Instance arguments (ad-hoc polymorphism: `concept` declarations, anonymous `satisfy` (witness) declarations, the `use` binder plicity, deterministic witness resolution with local-scope, superclass-projection, and global-table steps; `use`-marked concept fields resolve by omission and fill explicitly with `use <term>` entries)
   - [x] `Show`/`Eql`/`Ord`/`Monad` in the standard library
   - [x] Higher-kinded concepts (`Monad(M : (Type) -> Type)`, via the flex-apply imitation rule in `convert.rs`)
   - [x] Multi-parameter keying (tuple of input heads) and functional dependencies (`out` parameters)

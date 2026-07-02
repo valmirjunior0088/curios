@@ -159,7 +159,7 @@ The standard library under `curios-text/std/` is the reference for idiomatic cur
 - `@x : T` is an implicit (type-erased) parameter; ordinary `x : T` is explicit; `use T` is an anonymous **instance argument** filled by witness resolution.
 - **Concepts / witnesses / instance arguments** are the ad-hoc-polymorphism layer (see [SYNTAX.md](SYNTAX.md#concepts-witnesses-and-instance-arguments) for the surface syntax). The Rust-side implementation, file by file:
   - A `concept` lowers to a `record` plus a `Concept` registry entry (`curios-core/src/concept.rs`) and per-field method wrappers.
-  - A `witness` is anonymous (no name, no `pub` — a second instance of a key is an ordinary concept-typed `let` passed via `use <term>`) and lowers to a compiler-named definition (`witness#N`), registered in a program-wide table keyed by `(concept, tuple of the rigid heads of the concept's input parameters)`.
+  - A witness (declared with `satisfy`) is anonymous (no name, no `pub` — a second instance of a key is an ordinary concept-typed `let` passed via `use <term>`) and lowers to a compiler-named definition (`witness#N`), registered in a program-wide table keyed by `(concept, tuple of the rigid heads of the concept's input parameters)`.
   - A concept's `use`-marked (superclass) fields leave the positional sequence in every concept literal: omitted → resolved as a witness goal, explicitly filled with a `use <term>` entry (`elaborate_struct` in `curios-core/src/elaborate.rs`).
   - The `Plicity::Witness` binder is filled by the resolution engine in `curios-core/src/resolve.rs`; conversion and erasure stay plicity-blind.
   - Registries mirror the `inductives`/`structures` pattern: carried on `Module`, seeded into each `Context`.
