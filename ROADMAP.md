@@ -33,11 +33,11 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 
 - [x] Implicit arguments (`@`-marked binders)
 - [x] Instance arguments (ad-hoc polymorphism: `concept`/`witness` declarations, the `use` binder plicity, deterministic witness resolution with local-scope, superclass-projection, and global-table steps)
-  - [x] `Show`/`Eql`/`Ord` in the standard library
-  - [ ] Higher-kinded concepts (`Monad(M : (Type) -> Type)`): needs a flex-apply decomposition rule in `convert.rs` (`?M(?A) ≡ Option(Nat)`) so a metavariable applied to a spine can unify against a rigid nominal type
-  - [ ] Multi-parameter keying and non-first functional dependencies
+  - [x] `Show`/`Eql`/`Ord`/`Monad` in the standard library
+  - [x] Higher-kinded concepts (`Monad(M : (Type) -> Type)`, via the flex-apply imitation rule in `convert.rs`)
+  - [x] Multi-parameter keying (tuple of input heads) and functional dependencies (`out` parameters)
   - [ ] Orphan rule (deferred until a package ecosystem exists)
-  - [ ] Concept-based numeric operators (`Add`/`Mul`/`Cmp` with `/sys` witnesses)
+  - [x] Concept-based operators (every infix except `&&`/`||` dispatches through `Add`/`Sub`/`Mul`/`Div`/`Rem`/`Eql`/`Cmp` with `/sys` witnesses; primitive codegen unchanged)
 - [x] `struct`/`record` declarations (nominal types with representation-visibility control)
 - [x] Inductive types (`induct` declarations)
   - [x] Constructor registry & dependent eliminators
@@ -60,6 +60,7 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 - [x] Multi-parameter function syntax sugar
 - [x] Monadic sequencing syntax
 - [x] Field projection sugar (`.0`/`.label`; no destructuring-pattern binders)
+- [x] Function-field sugar in every field list (`name(params) -> T` in tuple types and `struct`/`record` declarations, `name(args) = body` in tuple and struct literals — the forms concept/witness bodies always had) and trailing commas in field lists
 - [ ] Struct spread/update syntax (`T { ..base, f = x }`)
 
 ## Optimizations

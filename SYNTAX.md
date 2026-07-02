@@ -37,11 +37,12 @@ Option/some(x)         -- qualified member
 
 **Function types (Π).** `(p : A, q : B) -> R`. Parameters may be unlabeled (`(A) -> B`) and may be marked implicit with `@` (`(@A : Type, x : A) -> A`). Dependent: later parameters and the result may mention earlier labels.
 
-**Tuple types (Σ).** `{ x : A, y : B }`, with later fields able to depend on earlier ones. Fields may be unlabeled (`{ A, B }`). The empty tuple type `{}` is the unit type.
+**Tuple types (Σ).** `{ x : A, y : B }`, with later fields able to depend on earlier ones. Fields may be unlabeled (`{ A, B }`). The empty tuple type `{}` is the unit type. A function-typed field may use the signature sugar `name(params) -> T` (shorthand for `name : (params) -> T`), and the last field may carry a trailing comma — both also apply to `struct`/`record` declarations, which share this field grammar.
 
 ```
 (@A : Type, x : A, y : A) -> Eq(x, y)   -- dependent Π with an implicit parameter
 { secs : Nat, nanos : Nat }             -- Σ / anonymous record type
+{ len(s : Str) -> Nat }                 -- signature sugar: len : (s : Str) -> Nat
 {}                                       -- unit type
 ```
 
@@ -93,7 +94,7 @@ pure(c)
 
 ## Operators
 
-Binary operators, overloaded across numeric types. Listed loosest to tightest binding; **all are left-associative** and **require surrounding whitespace** (`a + b`, not `a+b` — the space is also what separates the operator `-` from a glued literal sign).
+Binary operators. Listed loosest to tightest binding; **all are left-associative** and **require surrounding whitespace** (`a + b`, not `a+b` — the space is also what separates the operator `-` from a glued literal sign).
 
 | Precedence   | Operators                   |
 | ------------ | --------------------------- |
@@ -102,6 +103,8 @@ Binary operators, overloaded across numeric types. Listed loosest to tightest bi
 | 3            | `==` `!=` `<` `>` `<=` `>=` |
 | 4            | `+` `-`                     |
 | 5 (tightest) | `*` `/` `%`                 |
+
+Every operator except `&&`/`||` dispatches through a standard-library concept (see [Concepts](#concepts-witnesses-and-instance-arguments)): `+ - * / %` through `Add`/`Sub`/`Mul`/`Div`/`Rem`, `==`/`!=` through `Eql` (`!=` negates the result), and the comparisons through `Cmp`. Both operands must share one type; a bare integer literal defaults it to `Nat` (`Int` if signed). Primitive witnesses cover `Nat`/`Int`/`Flt` (plus `Eql` on `Bln`, `Bin`, and `Str`), and compile to the bare primitive instruction — declaring a witness (e.g. `witness add_point : Add(Point) { … }`) makes the operator work on your own type at no cost to the primitive cases. `&&`/`||` are control flow: hardcoded on `Bln` and not overloadable, like `if`/`match`.
 
 ## Binders
 
@@ -242,19 +245,24 @@ pub record Meters : Type { Nat }   -- newtype; project with `.0`; erases to the 
 pub struct Token : Type { Bin }    -- opaque: representation private to this module
 ```
 
-**Construction and projection.** Build with `Name { field = value, ... }` (or `Name(params) { ... }` when the type takes parameters); read fields with `.label` or `.0`.
+**Construction and projection.** Build with `Name { field = value, ... }` (or `Name(params) { ... }` when the type takes parameters); read fields with `.label` or `.0`. A function-valued field may use the definition sugar `name(args) = body` (shorthand for `name = (args) => body`), and the last field may carry a trailing comma — both also apply to tuple literals `(a = x, b = y)`.
 
 ```
 let p = Pair { fst = 1, snd = 2 };
 let sum = p.fst + p.snd;
 let fst = p.fst;                 -- bind a field via projection
+let api = Api { base = 3, bump(x) = x + 1 };   -- definition sugar
 ```
 
 ## Concepts, witnesses, and instance arguments
 
 Ad-hoc polymorphism is expressed with three constructs. A **concept** is a record-shaped interface; a **witness** is a registered inhabitant of a concept for a given type; a **`use` binder** is a third parameter plicity the elaborator fills by resolution rather than unification. `concept` and `witness` are contextual keywords — legal identifiers and path segments everywhere else, recognized only at item start (optionally after `pub`).
 
-**`concept`.** A concept lowers to an ordinary `record` (its representation is always public) plus a per-field method wrapper synthesized into the concept's namespace. Fields are signatures — `name : T`, or the function sugar `name(params) -> T` (desugaring to `name : (params) -> T`). A field prefixed with `use` is a **superclass** edge: its type must be a concept application, and an instance of the outer concept in scope yields the inner one by projection. The result sort (`Type` or `Prop`) is required; a `Prop` concept's witnesses erase entirely.
+**`concept`.** A concept lowers to an ordinary `record` (its representation is always public) plus a per-field method wrapper synthesized into the concept's namespace. Fields are signatures — `name : T`, or the function sugar `name(params) -> T` (shorthand for `name : (params) -> T`, the same sugar any record field admits). A field prefixed with `use` is a **superclass** edge: its type must be a concept application, and an instance of the outer concept in scope yields the inner one by projection. The result sort (`Type` or `Prop`) is required; a `Prop` concept's witnesses erase entirely. Concept and witness field lists admit a trailing comma, like every field list.
+
+A parameter marked with the contextual keyword `out` is an **output position** (a functional dependency): it is excluded from the witness key and pinned by whichever witness the input positions select. At least one parameter must be an input. `out` stays a valid identifier — the marker form needs a binder after it, so a parameter *named* `out` still parses.
+
+Parameters may be higher-kinded: `Monad(M : (Type) -> Type)` keys witnesses on the type *constructor* (`Lst`, `Option`), and the elaborator can infer an unapplied constructor argument from an applied occurrence (`Lst(A)` teaches it `M := Lst`).
 
 ```
 pub concept Show(A : Type) : Type {
@@ -264,6 +272,15 @@ pub concept Show(A : Type) : Type {
 pub concept Ord(A : Type) : Type {
     use eql : Eql(A),               -- superclass: an Ord(A) grants an Eql(A)
     cmp(A, A) -> Order
+}
+
+pub concept Convert(A : Type, out B : Type) : Type {
+    convert(A) -> B                 -- B is determined by the witness for A
+}
+
+pub concept Monad(M : (Type) -> Type) : Type {
+    pure(@A : Type, a : A) -> M(A),
+    bind(@A : Type, @B : Type, m : M(A), f : (A) -> M(B)) -> M(B)
 }
 ```
 
@@ -280,7 +297,7 @@ pub witness show_lst(@A : Type, use Show(A)) : Show(Lst(A)) {
 }
 ```
 
-Every concept–type pair has **at most one** witness, program-wide (global coherence, no orphan rule); a duplicate registration is a compile error wherever it is declared. Registration ignores `pub` — visibility governs the name, never table membership. A witness keys on the concept and the *rigid head* of its first parameter (an inductive, a struct, or a primitive type constructor); the remaining parameters are checked by unification at resolution time.
+Every concept–key pair has **at most one** witness, program-wide (global coherence, no orphan rule); a duplicate registration is a compile error wherever it is declared. Registration ignores `pub` — visibility governs the name, never table membership. A witness keys on the concept and the tuple of *rigid heads* of the concept's input parameters (each an inductive, a struct/record, or a primitive type constructor); `out` parameters are excluded from the key and pinned by the resolved witness, and everything else is checked by unification at resolution time.
 
 **`use` binders and arguments.** A `use` parameter is legal anywhere Π binders appear (function/`let`/`rec`/`witness` telescopes): `use (name :)? T`, optionally anonymous. It is filled by resolution at call sites and is in scope as an instance for the body. At a call site, `use <term>` supplies one explicitly, overriding table resolution; it sits alongside `@`-arguments and plain arguments.
 
@@ -292,7 +309,7 @@ join([1, 2, 3])                 -- resolves show_lst(show_nat)
 join(use my_dict, [1, 2, 3])    -- explicit override
 ```
 
-**Resolution** proceeds deterministically: local `use` binders innermost-first; then superclass projections of local binders, breadth-first by depth (two matches at the same minimal depth are ambiguous); then the global table, keyed by the concept and the first parameter's rigid head. A goal whose first parameter is still an unsolved metavariable waits until it is solved. The standard library provides `Show`, `Eql` (value-level equality — distinct from propositional `Eq`), and `Ord`, with witnesses for the primitive types.
+**Resolution** proceeds deterministically: local `use` binders innermost-first; then superclass projections of local binders, breadth-first by depth (two matches at the same minimal depth are ambiguous); then the global table, keyed by the concept and the input parameters' rigid heads. A goal with an unsolved metavariable in any input position waits until it is solved. The standard library provides `Show`, `Eql` (value-level equality — distinct from propositional `Eq`), `Ord`, `Monad`, and the operator concepts `Add`/`Sub`/`Mul`/`Div`/`Rem`/`Cmp` (see [Operators](#operators)), with witnesses for the primitive types.
 
 ## Proofs (Eq idioms)
 
