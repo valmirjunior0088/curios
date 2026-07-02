@@ -896,13 +896,16 @@ fn process_items(
                 let body: Term = Subterm::StructLit(StructLit {
                     head: witness.concept.clone(),
                     params: witness.args.clone(),
-                    fields: witness
-                        .fields
+                    entries: witness
+                        .entries
                         .iter()
-                        .map(|field| TupleField {
-                            label: Some(field.label.clone()),
-                            func_params: field.func_params.clone(),
-                            value: field.value.clone(),
+                        .map(|entry| match entry {
+                            WitnessEntry::Field(field) => StructLitEntry::Field(TupleField {
+                                label: Some(field.label.clone()),
+                                func_params: field.func_params.clone(),
+                                value: field.value.clone(),
+                            }),
+                            WitnessEntry::Use(term) => StructLitEntry::Use(term.clone()),
                         })
                         .collect(),
                 })

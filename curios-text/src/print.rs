@@ -3,9 +3,9 @@ use {
         Apply, ArrMatch, BinMatch, BlnMatch, ConceptField, ConceptParam, Entrypoint, Field, Func,
         FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let, LetSignature, Match,
         Module, Motive, Nat, NatLiteral, NatMatch, NumLit, Plicity, Prim, Proj, Radix, Rec,
-        StructLit, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem, TopLet, TopMod,
-        TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup,
-        WitnessField,
+        StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem,
+        TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_bigint::BigUint,
@@ -112,6 +112,14 @@ fn print_tuple_field(field: TupleField) -> Printer<'static> {
         ]),
         (Some(label), None) => flat([pure(label), pure(" = "), print_term(field.value)]),
         (None, _) => print_term(field.value),
+    }
+}
+
+/// A struct-literal entry: a `use <term>` fill or a plain field.
+fn print_struct_entry(entry: StructLitEntry) -> Printer<'static> {
+    match entry {
+        StructLitEntry::Field(field) => print_tuple_field(field),
+        StructLitEntry::Use(term) => flat([pure("use "), print_term(term)]),
     }
 }
 
@@ -391,7 +399,7 @@ fn print_term(term: Term) -> Printer<'static> {
         Subterm::StructLit(StructLit {
             head,
             params,
-            fields,
+            entries,
         }) => flat([
             pure(head.join()),
             if params.is_empty() {
@@ -404,7 +412,7 @@ fn print_term(term: Term) -> Printer<'static> {
                 ])
             },
             pure(" { "),
-            sep_flat(fields.into_iter().map(print_tuple_field), || pure(", ")),
+            sep_flat(entries.into_iter().map(print_struct_entry), || pure(", ")),
             pure(" }"),
         ]),
         Subterm::Match(match_) => match match_ {
@@ -953,16 +961,22 @@ fn print_top_witness(item: TopWitness) -> Printer<'static> {
         pure(" : "),
         app,
         pure(" { "),
-        sep_flat(item.fields.into_iter().map(print_witness_field), || {
+        sep_flat(item.entries.into_iter().map(print_witness_entry), || {
             pure(", ")
         }),
         pure(" }"),
     ])
 }
 
-/// A witness implementation field: `label = value`, or the definition sugar
-/// `label(params) = value` re-sugared from the retained parameter list.
-fn print_witness_field(field: WitnessField) -> Printer<'static> {
+/// A witness-body entry: a `use <term>` fill or an implementation field —
+/// `label = value`, or the definition sugar `label(params) = value` re-sugared
+/// from the retained parameter list.
+fn print_witness_entry(entry: WitnessEntry) -> Printer<'static> {
+    let field = match entry {
+        WitnessEntry::Use(term) => return flat([pure("use "), print_term(term)]),
+        WitnessEntry::Field(field) => field,
+    };
+
     match field.func_params {
         Some(params) => flat([
             pure(field.label),

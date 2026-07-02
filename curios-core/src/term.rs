@@ -345,35 +345,35 @@ impl Term {
             name: name.into(),
             params: params.into_iter().map(|p| p.into()).collect(),
             fields: fields.into_iter().map(|f| f.into()).collect(),
-            names: vec![],
+            entries: vec![],
         }))
     }
 
-    /// A struct literal carrying the written field names from `to_core`;
-    /// elaboration validates them positionally and rebuilds name-free, exactly
-    /// like `tuple_named`.
-    pub fn struct_named<N, I, P, J, T>(name: N, params: I, fields: J) -> Self
+    /// A struct literal carrying the written entry shapes from `to_core`;
+    /// elaboration validates them against the declared fields and rebuilds
+    /// entry-free, exactly like `tuple_named`.
+    pub fn struct_entries<N, I, P, J, T>(name: N, params: I, fields: J) -> Self
     where
         N: Into<String>,
         I: IntoIterator<Item = P>,
         P: Into<Term>,
-        J: IntoIterator<Item = (Option<String>, T)>,
+        J: IntoIterator<Item = (StructEntry, T)>,
         T: Into<Term>,
     {
-        let (mut names, fields): (Vec<_>, Vec<_>) = fields
+        let (mut entries, fields): (Vec<_>, Vec<_>) = fields
             .into_iter()
-            .map(|(name, term)| (name, term.into()))
+            .map(|(entry, term)| (entry, term.into()))
             .unzip();
 
-        if names.iter().all(Option::is_none) {
-            names = vec![];
+        if entries.iter().all(|e| *e == StructEntry::Field(None)) {
+            entries = vec![];
         }
 
         Self::from(Subterm::Struct(Struct {
             name: name.into(),
             params: params.into_iter().map(|p| p.into()).collect(),
             fields,
-            names,
+            entries,
         }))
     }
 
@@ -930,20 +930,32 @@ pub struct StructType {
     pub params: Vec<Term>,
 }
 
+/// One written struct-literal entry, parallel to [`Struct::fields`]: a plain
+/// positional field carrying its optional written label, or an explicit
+/// `use <term>` fill that pairs with the concept's next `use`-marked field
+/// position. Pre-elaboration metadata only, like written field names on
+/// [`Tuple`]; elaboration rebuilds the value entry-free.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum StructEntry {
+    Field(Option<String>),
+    Use,
+}
+
 /// A struct value as a primitive normal form (cf. [`Variant`], no tag).
 /// `name`/`params` are recoverable from the inferred type but stored
 /// redundantly so `convert` stays purely structural.
 ///
-/// `names` carries the literal's written field names from `to_core`, exactly
-/// as [`Tuple`] does: elaboration checks them positionally against the declared
-/// labels and rebuilds the value name-free. Empty means "no names written" —
-/// the invariant for every internally-built and post-elaboration struct.
+/// `entries` carries the literal's written entry shapes from `to_core`:
+/// elaboration checks plain fields positionally against the declared labels,
+/// pairs `use` entries with the concept's `use`-marked positions, and rebuilds
+/// the value entry-free. Empty means "all plain, no names written" — the
+/// invariant for every internally-built and post-elaboration struct.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Struct {
     pub name: String,
     pub params: Vec<Term>,
     pub fields: Vec<Term>,
-    pub names: Vec<Option<String>>,
+    pub entries: Vec<StructEntry>,
 }
 
 /// The unified eliminator: every match form shares a scrutinee and a motive
@@ -1597,12 +1609,12 @@ impl Bound for Subterm {
                 name,
                 params,
                 fields,
-                names,
+                entries,
             }) => Subterm::Struct(Struct {
                 name: name.clone(),
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
                 fields: fields.iter().map(|f| visit.visit_subterm(f)).collect(),
-                names: names.clone(),
+                entries: entries.clone(),
             }),
             Subterm::Match(Match {
                 head,

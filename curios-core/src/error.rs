@@ -190,6 +190,22 @@ pub enum Error {
         label: String,
         available: Vec<String>,
     },
+    /// A labeled assignment targets a concept's `use`-marked field, which
+    /// leaves the positional field sequence entirely.
+    AssignedUseField {
+        name: String,
+        label: String,
+    },
+    /// A `use <term>` entry in a literal whose head is not a concept.
+    UseEntryOutsideConcept {
+        name: String,
+    },
+    /// More `use <term>` entries than the concept has `use`-marked fields.
+    TooManyUseEntries {
+        name: String,
+        expected: usize,
+        got: usize,
+    },
     /// Projecting a field of a struct whose representation is private, from
     /// outside the declaring module (§7).
     PrivateField {
@@ -491,6 +507,25 @@ impl Error {
             name: name.into(),
             label,
             available,
+        }
+    }
+
+    pub fn assigned_use_field<N: Into<String>>(name: N, label: String) -> Self {
+        Self::AssignedUseField {
+            name: name.into(),
+            label,
+        }
+    }
+
+    pub fn use_entry_outside_concept<N: Into<String>>(name: N) -> Self {
+        Self::UseEntryOutsideConcept { name: name.into() }
+    }
+
+    pub fn too_many_use_entries<N: Into<String>>(name: N, expected: usize, got: usize) -> Self {
+        Self::TooManyUseEntries {
+            name: name.into(),
+            expected,
+            got,
         }
     }
 
@@ -910,6 +945,29 @@ impl fmt::Display for Error {
                     f,
                     "struct '{name}' has no field '{label}' at that position (fields in order: {})",
                     available.join(", ")
+                )
+            }
+            Error::AssignedUseField { name, label } => {
+                write!(
+                    f,
+                    "field '{label}' of concept '{name}' is a 'use' field; omit it to resolve by witness, or fill it with 'use <term>'"
+                )
+            }
+            Error::UseEntryOutsideConcept { name } => {
+                write!(
+                    f,
+                    "'use' entries are only legal in concept literals — struct '{name}' is not a concept"
+                )
+            }
+            Error::TooManyUseEntries {
+                name,
+                expected,
+                got,
+            } => {
+                write!(
+                    f,
+                    "literal supplies {got} 'use' entr{} but concept '{name}' has only {expected} 'use' field(s)",
+                    if *got == 1 { "y" } else { "ies" }
                 )
             }
             Error::PrivateField { name, field } => {

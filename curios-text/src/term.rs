@@ -261,17 +261,28 @@ pub struct Proj {
     pub field: Field,
 }
 
+/// One struct-literal entry: a plain field (the tuple-literal field grammar —
+/// `fst = a` or positional), or a `use <term>` fill for a concept's next
+/// `use`-marked field position (mirroring call-site witness arguments; only
+/// meaningful when the head is a concept, enforced at core elaboration).
+#[derive(Debug, Clone, PartialEq)]
+pub enum StructLitEntry {
+    Field(TupleField),
+    Use(Term),
+}
+
 /// A struct literal: a head naming the struct type (`Pair`, possibly applied —
 /// `Pair(Nat, Bin)` / `Pair(Nat, ?)` — to pin the parameters) followed by a
-/// brace of fields. `params` is the optionally-applied head arguments (empty
-/// for the bare-name head; holes appear as `?` terms). `fields` reuse the
-/// tuple-literal field grammar (`fst = a` or positional), validated positionally
-/// against the declared labels at core elaboration.
+/// brace of entries. `params` is the optionally-applied head arguments (empty
+/// for the bare-name head; holes appear as `?` terms). Plain entries are
+/// validated positionally against the declared non-`use` labels at core
+/// elaboration; a concept's `use`-marked fields are filled by `use <term>`
+/// entries or, when omitted, by witness resolution.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructLit {
     pub head: Name,
     pub params: Vec<Term>,
-    pub fields: Vec<TupleField>,
+    pub entries: Vec<StructLitEntry>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

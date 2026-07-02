@@ -4,9 +4,9 @@ use {
         Entrypoint, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm,
         InductiveMatch, Infix, Let, LetSignature, LoadError, Match, Module, Motive, Name, Nat,
         NatLiteral, NatMatch, NumLit, NumOp, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem,
-        StructLit, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem, TopLet, TopMod,
-        TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup,
-        WitnessField,
+        StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem,
+        TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
     },
     curios_base::{
         Source,
@@ -482,12 +482,23 @@ fn parse_tuple<'a>() -> Parser<'a, Term> {
     .map(Into::into)
 }
 
+// A struct-literal entry: a `use <term>` fill for a concept's `use`-marked
+// field (mirroring the call-site argument form — `use` is reserved, so it can
+// never begin a field label or value), or a plain field.
+fn parse_struct_entry<'a>() -> Parser<'a, StructLitEntry> {
+    catch(parse_keyword("use"))
+        .and_keep(lazy(parse_term))
+        .map(StructLitEntry::Use)
+        .or(parse_tuple_field().map(StructLitEntry::Field))
+}
+
 // A struct literal: `Name { … }` or `Name(args) { … }`. The trailing `{` inside
 // the `catch` is the commit point — it distinguishes the literal from a bare
 // name / name-application (no brace) and from a Σ-type `{ x : A }` (no head
-// name), so there is no grammar conflict. Fields reuse the tuple-value parser
-// (`= value` or positional); the head's arguments are plain terms (`@`-pinning
-// is not the struct idiom — the head type pins instead).
+// name), so there is no grammar conflict. Plain entries reuse the tuple-value
+// grammar (`= value` or positional) and `use <term>` fills a concept's
+// `use`-marked field; the head's arguments are plain terms (`@`-pinning is not
+// the struct idiom — the head type pins instead).
 fn parse_struct_lit<'a>() -> Parser<'a, Term> {
     catch(
         parse_name()
@@ -501,13 +512,13 @@ fn parse_struct_lit<'a>() -> Parser<'a, Term> {
             )
             .and_drop(parse_literal("{")),
     )
-    .and(sep_by0_trailing(parse_tuple_field, || parse_literal(",")))
+    .and(sep_by0_trailing(parse_struct_entry, || parse_literal(",")))
     .and_drop(parse_literal("}"))
-    .map(|((head, params), fields)| {
+    .map(|((head, params), entries)| {
         Subterm::StructLit(StructLit {
             head,
             params,
-            fields,
+            entries,
         })
         .into()
     })
@@ -1687,6 +1698,15 @@ fn parse_witness_field<'a>() -> Parser<'a, WitnessField> {
         })
 }
 
+// A witness-body entry: a `use <term>` fill for one of the concept's
+// `use`-marked fields, or an implementation field.
+fn parse_witness_entry<'a>() -> Parser<'a, WitnessEntry> {
+    catch(parse_keyword("use"))
+        .and_keep(lazy(parse_term))
+        .map(WitnessEntry::Use)
+        .or(parse_witness_field().map(WitnessEntry::Field))
+}
+
 fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("witness"))).flat_map(|(is_pub, ())| {
         parse_identifier()
@@ -1709,16 +1729,16 @@ fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
                 .or(pure(vec![])),
             )
             .and_drop(parse_literal("{"))
-            .and(sep_by0_trailing(parse_witness_field, || parse_literal(",")))
+            .and(sep_by0_trailing(parse_witness_entry, || parse_literal(",")))
             .and_drop(parse_literal("}"))
-            .map(move |((((label, params), concept), args), fields)| {
+            .map(move |((((label, params), concept), args), entries)| {
                 TopItem::Witness(TopWitness {
                     is_pub,
                     label: label.to_string(),
                     params,
                     concept,
                     args,
-                    fields,
+                    entries,
                 })
             })
     })

@@ -10,7 +10,8 @@ pub concept Ord(A : Type) : Type {
 -- Lift `Ord/eql` and `Ord/cmp` to the module level (see `Show`).
 pub use Ord/*;
 
+-- The superclass field is omitted: it resolves to the registered `Eql(Nat)`
+-- witness, the same way a call-site `use` slot would.
 pub witness ord_nat : Ord(Nat) {
-    eql = Eql/eql_nat,
     cmp(a, b) = Nat/compare(a, b)
 }

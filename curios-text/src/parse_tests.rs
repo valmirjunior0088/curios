@@ -1109,17 +1109,17 @@ fn parse_struct_literal_disambiguates_from_tuple_type() {
         Subterm::StructLit(StructLit {
             head: Name::from(["Pair".to_string()]),
             params: vec![],
-            fields: vec![
-                TupleField {
+            entries: vec![
+                StructLitEntry::Field(TupleField {
                     label: Some("fst".to_string()),
                     func_params: None,
                     value: name("a"),
-                },
-                TupleField {
+                }),
+                StructLitEntry::Field(TupleField {
                     label: Some("snd".to_string()),
                     func_params: None,
                     value: name("b"),
-                },
+                }),
             ],
         })
         .into()
@@ -1130,11 +1130,11 @@ fn parse_struct_literal_disambiguates_from_tuple_type() {
         Subterm::StructLit(StructLit {
             head: Name::from(["Str".to_string()]),
             params: vec![],
-            fields: vec![TupleField {
+            entries: vec![StructLitEntry::Field(TupleField {
                 label: None,
                 func_params: None,
                 value: name("raw"),
-            }],
+            })],
         })
         .into()
     );
@@ -1237,11 +1237,14 @@ fn parse_function_field_sugar_in_values() {
     assert!(params[0].1.is_some());
 
     let term = "Api { ping(x) = f(x) }".parse::<Term>().unwrap();
-    let Subterm::StructLit(StructLit { fields, .. }) = term.as_subterm() else {
+    let Subterm::StructLit(StructLit { entries, .. }) = term.as_subterm() else {
         panic!("expected a struct literal");
     };
-    assert_eq!(fields[0].label.as_deref(), Some("ping"));
-    assert!(fields[0].func_params.is_some());
+    let StructLitEntry::Field(field) = &entries[0] else {
+        panic!("expected a plain field entry");
+    };
+    assert_eq!(field.label.as_deref(), Some("ping"));
+    assert!(field.func_params.is_some());
 }
 
 #[test]
@@ -1287,7 +1290,8 @@ fn function_field_sugar_round_trips() {
     for source in [
         "record Api : Type { version : Nat, ping(x : Nat) -> Nat } u",
         "concept Ord(A : Type) : Type { use eql : Eql(A), cmp(A, A) -> Order } u",
-        "witness ord_nat : Ord(Nat) { eql = eql_nat, cmp(a, b) = f(a, b) } u",
+        "witness ord_nat : Ord(Nat) { use eql_nat, cmp(a, b) = f(a, b) } u",
+        "witness ord_nat : Ord(Nat) { cmp(a, b) = f(a, b) } u",
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(
@@ -1299,6 +1303,22 @@ fn function_field_sugar_round_trips() {
 }
 
 #[test]
+fn use_entries_are_struct_literal_only() {
+    // A `use <term>` entry parses in a struct literal (a concept literal by
+    // intent — non-concept heads are rejected at elaboration, not parse)...
+    let term = "Ord(Nat) { use my_eql, cmp = f }".parse::<Term>().unwrap();
+    let Subterm::StructLit(StructLit { entries, .. }) = term.as_subterm() else {
+        panic!("expected a struct literal");
+    };
+    assert!(matches!(entries[0], StructLitEntry::Use(_)));
+    assert!(matches!(entries[1], StructLitEntry::Field(_)));
+
+    // ...but not in a tuple literal: `use` is reserved, so the tuple parser
+    // cannot take it as a field, and the term fails to parse.
+    assert!("(use my_eql, 2)".parse::<Term>().is_err());
+}
+
+#[test]
 fn field_lists_admit_a_trailing_comma() {
     // Every brace/paren field list — Σ-types, struct/record declarations,
     // tuple literals, struct literals, concepts, witnesses — admits (and
@@ -1307,6 +1327,10 @@ fn field_lists_admit_a_trailing_comma() {
         ("{ x : Nat, y : Nat, }", "{ x : Nat, y : Nat }"),
         ("(a, b,)", "(a, b)"),
         ("Pair { fst = a, snd = b, }", "Pair { fst = a, snd = b }"),
+        (
+            "Ord(Nat) { use w, cmp = f, }",
+            "Ord(Nat) { use w, cmp = f }",
+        ),
     ] {
         assert_eq!(
             with.parse::<Term>().unwrap(),
@@ -1448,11 +1472,12 @@ fn out_stays_a_valid_parameter_name() {
 
 #[test]
 fn parse_witness_item() {
-    // A premised witness: an `@` binder, a `use` premise, and both field
-    // spellings (`eql = ...` and the definition sugar `cmp(a, b) = ...`).
+    // A premised witness: an `@` binder, a `use` premise, an explicit
+    // `use <term>` fill for the concept's superclass field, and the definition
+    // sugar (`cmp(a, b) = ...`).
     let source = "\
         witness ord_lst(@A : Type, use Ord(A)) : Ord(Lst(A)) { \
-            eql = eql_lst, \
+            use eql_lst, \
             cmp(a, b) = Order/lt() \
         } u";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
@@ -1471,19 +1496,22 @@ fn parse_witness_item() {
 
     // The definition-sugar field keeps its written parameter list; the value
     // slot holds the body, and only the struct-literal lowering builds the
-    // lambda (via `TupleField::desugared_value`).
-    assert_eq!(witness.fields.len(), 2);
-    assert_eq!(witness.fields[0].label, "eql");
-    assert_eq!(witness.fields[0].func_params, None);
-    assert_eq!(witness.fields[1].label, "cmp");
-    let params = witness.fields[1].func_params.as_ref().unwrap();
+    // lambda (via `TupleField::desugared_value`). The `use eql_lst` entry fills
+    // the concept's `use`-marked field without naming it.
+    assert_eq!(witness.entries.len(), 2);
+    let WitnessEntry::Use(fill) = &witness.entries[0] else {
+        panic!("expected a use fill");
+    };
+    assert!(matches!(fill.as_subterm(), Subterm::Name(_)));
+    let WitnessEntry::Field(cmp) = &witness.entries[1] else {
+        panic!("expected an implementation field");
+    };
+    assert_eq!(cmp.label, "cmp");
+    let params = cmp.func_params.as_ref().unwrap();
     assert_eq!(params.len(), 2);
     assert_eq!(params[0].0, "a");
     assert_eq!(params[1].0, "b");
-    assert!(matches!(
-        witness.fields[1].value.as_subterm(),
-        Subterm::Apply(_)
-    ));
+    assert!(matches!(cmp.value.as_subterm(), Subterm::Apply(_)));
 }
 
 #[test]

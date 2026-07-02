@@ -2,9 +2,9 @@ use {
     super::{
         Apply, Bound, Context, Error, Field, Flt, Func, FuncType, ImplicitOrigin, InductiveType,
         Infix, Int, Let, Metavar, MetavarId, Nat, NumLit, NumOp, ParkedWork, Plicity, Prim, Proj,
-        Rec, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
-        WitnessOrigin, attempt_witness_goal, check, elaborate_match, elaborate_prim, expect,
-        operator_concept, reduce_with, sort_term,
+        Rec, Struct, StructEntry, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var,
+        Variant, WitnessOrigin, attempt_witness_goal, check, elaborate_match, elaborate_prim,
+        expect, operator_concept, reduce_with, sort_term,
     },
     num_bigint::BigInt,
     num_traits::ToPrimitive,
@@ -743,6 +743,14 @@ fn elaborate_struct_type(
 /// solved by the field checks (and, in `Check` mode, the `expect` turnaround
 /// unifying the result `StructType` against the expected type) — and the fields
 /// are checked in declaration order through the (dependent) field telescope.
+/// Where one field position's value comes from: a written term to check, or —
+/// for a concept's `use`-marked field with no written fill — a witness goal to
+/// mint at the position's instantiated type.
+enum FieldSource<'a> {
+    Written(&'a Term),
+    Resolve { func: String, binder: String },
+}
+
 /// Check each positional field against its type in a dependent field telescope,
 /// pushing the elaborated fields onto `elaborated`. Shared by struct and tuple
 /// literal elaboration. The rest of the telescope is opened with the
@@ -750,20 +758,39 @@ fn elaborate_struct_type(
 /// label projections rebuilt positionally (and implicits inserted), whereas a
 /// raw `Field::Label` substituted into a later field type would panic once that
 /// type is reduced (e.g. `Task(b.A)` arising from a field typed `Task(A)` in
-/// `{ A : Type, t : Task(A) }`).
+/// `{ A : Type, t : Task(A) }`). A `Resolve` source mints a witness metavar
+/// plus an eagerly-attempted resolution goal — the `insert_auto_argument`
+/// pattern — anchored at `origin`, and the metavar threads the telescope like
+/// any elaborated field.
 fn check_dependent_fields(
     context: &mut Context,
     tele: Telescope<()>,
-    fields: &[Term],
+    sources: &[FieldSource],
+    origin: &Term,
     elaborated: &mut Vec<Term>,
 ) -> Result<(), Error> {
     match tele {
         Telescope::Done(_) => Ok(()),
         Telescope::Cons(ty, rest) => {
-            let head = check(context, &fields[0], ty)?;
+            let head = match &sources[0] {
+                FieldSource::Written(field) => check(context, field, ty)?,
+                FieldSource::Resolve { func, binder } => {
+                    let provenance = WitnessOrigin {
+                        func: func.clone(),
+                        binder: binder.clone(),
+                    };
+                    let (id, metavar) = context.fresh_witness_metavar(
+                        ty.clone(),
+                        origin.span(),
+                        provenance.clone(),
+                    );
+                    attempt_witness_goal(context, id, &ty, provenance, origin)?;
+                    metavar
+                }
+            };
             let rest = rest.open(&[&head]);
             elaborated.push(head);
-            check_dependent_fields(context, rest, &fields[1..], elaborated)
+            check_dependent_fields(context, rest, &sources[1..], origin, elaborated)
         }
     }
 }
@@ -778,7 +805,7 @@ fn elaborate_struct(
         name,
         params,
         fields,
-        names,
+        entries,
     } = s;
 
     let Some(structure) = context.structure(name).cloned() else {
@@ -851,26 +878,88 @@ fn elaborate_struct(
     // Instantiate the field telescope at the resolved parameters.
     let field_telescope = structure.fields_at(&resolved);
 
-    if fields.len() != field_telescope.len() {
+    // A concept's `use`-marked (superclass) fields leave the positional field
+    // sequence, exactly like witness slots at call sites: plain written fields
+    // pair with the plain positions, explicit `use <term>` entries pair with
+    // the `use` positions in declaration order (no skipping), and every
+    // remaining `use` position becomes a witness-resolution goal. Note the
+    // check order is telescope order, not written order — the same model as
+    // call-site witness arguments.
+    let use_positions: Vec<usize> = match context.concept(name) {
+        Some(concept) => concept.supers.iter().map(|(index, _)| *index).collect(),
+        None => Vec::new(),
+    };
+    debug_assert!(use_positions.windows(2).all(|w| w[0] < w[1]));
+
+    // Partition the written entries; an empty entry list is all-plain-unlabeled
+    // (the internal normal form).
+    let mut plain: Vec<(Option<&str>, &Term)> = Vec::new();
+    let mut fills: Vec<&Term> = Vec::new();
+    if entries.is_empty() {
+        plain.extend(fields.iter().map(|field| (None, field)));
+    } else {
+        for (entry, field) in entries.iter().zip(fields) {
+            match entry {
+                StructEntry::Field(label) => plain.push((label.as_deref(), field)),
+                StructEntry::Use => fills.push(field),
+            }
+        }
+    }
+
+    if !fills.is_empty() && context.concept(name).is_none() {
+        return Err(Error::use_entry_outside_concept(name.clone()));
+    }
+
+    if fills.len() > use_positions.len() {
+        return Err(Error::too_many_use_entries(
+            name.clone(),
+            use_positions.len(),
+            fills.len(),
+        ));
+    }
+
+    // A labeled assignment targeting a `use` field gets the dedicated
+    // diagnostic before positional validation can misreport it.
+    let labels = field_telescope.labels();
+    for (written, _) in &plain {
+        let Some(written) = written else { continue };
+        if use_positions
+            .iter()
+            .any(|&position| labels.get(position).copied() == Some(*written))
+        {
+            return Err(Error::assigned_use_field(
+                name.clone(),
+                (*written).to_string(),
+            ));
+        }
+    }
+
+    let plain_labels: Vec<&str> = labels
+        .iter()
+        .enumerate()
+        .filter(|(position, _)| !use_positions.contains(position))
+        .map(|(_, label)| *label)
+        .collect();
+
+    if plain.len() != plain_labels.len() {
         return Err(Error::wrong_number_of_fields(
             name.clone(),
-            field_telescope.len(),
-            fields.len(),
+            plain_labels.len(),
+            plain.len(),
         ));
     }
 
     // Written field names are checked positionally against the declared labels
     // and then dropped — the rebuilt literal is name-free. Reordering is not
     // supported: in a dependent telescope the written order is the check order.
-    let labels = field_telescope.labels();
-    for (position, written) in names.iter().enumerate() {
+    for (position, (written, _)) in plain.iter().enumerate() {
         let Some(written) = written else { continue };
-        let declared = labels.get(position).copied().unwrap_or_default();
-        if declared != written {
+        let declared = plain_labels.get(position).copied().unwrap_or_default();
+        if declared != *written {
             return Err(Error::unknown_struct_field(
                 name.clone(),
-                written.clone(),
-                labels
+                (*written).to_string(),
+                plain_labels
                     .iter()
                     .filter(|l| !l.is_empty())
                     .map(|l| l.to_string())
@@ -879,8 +968,31 @@ fn elaborate_struct(
         }
     }
 
-    let mut elaborated = Vec::with_capacity(fields.len());
-    check_dependent_fields(context, field_telescope, fields, &mut elaborated)?;
+    // Merge into one source per declared position: `use` positions consume the
+    // written fills first, then fall back to resolution; plain positions
+    // consume the plain values (counts validated above).
+    let mut plain_values = plain.iter().map(|(_, field)| *field);
+    let mut fill_values = fills.iter().copied();
+    let mut sources = Vec::with_capacity(field_telescope.len());
+    for position in 0..field_telescope.len() {
+        if use_positions.contains(&position) {
+            sources.push(match fill_values.next() {
+                Some(fill) => FieldSource::Written(fill),
+                None => FieldSource::Resolve {
+                    func: name.clone(),
+                    binder: binder_name(labels.get(position).copied().unwrap_or("_")),
+                },
+            });
+        } else {
+            let field = plain_values
+                .next()
+                .expect("plain field count was validated against the telescope");
+            sources.push(FieldSource::Written(field));
+        }
+    }
+
+    let mut elaborated = Vec::with_capacity(sources.len());
+    check_dependent_fields(context, field_telescope, &sources, term, &mut elaborated)?;
 
     Ok((
         Term::struct_(name, resolved.clone(), elaborated),
@@ -1489,8 +1601,9 @@ fn elaborate_tuple(
         }
     }
 
+    let sources: Vec<FieldSource> = fields.iter().map(FieldSource::Written).collect();
     let mut elaborated = Vec::with_capacity(fields.len());
-    check_dependent_fields(context, type_telescope, fields, &mut elaborated)?;
+    check_dependent_fields(context, type_telescope, &sources, term, &mut elaborated)?;
 
     Ok((Term::tuple(elaborated), expected))
 }

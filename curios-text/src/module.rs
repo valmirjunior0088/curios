@@ -188,6 +188,15 @@ pub struct WitnessField {
     pub value: Term,
 }
 
+/// One entry of a witness body: an implementation field, or a `use <term>`
+/// fill for one of the concept's `use`-marked (superclass) field positions —
+/// the same entry forms a concept struct literal admits.
+#[derive(Debug, Clone, PartialEq)]
+pub enum WitnessEntry {
+    Field(WitnessField),
+    Use(Term),
+}
+
 /// A `witness` declaration: a registered inhabitant of a concept. It desugars to
 /// an ordinary top-level definition `let name(tele) -> C(args) = C(args) { … }`
 /// (§4.3) and marks `name` for registration in the program-wide witness table.
@@ -201,7 +210,7 @@ pub struct TopWitness {
     pub params: Vec<FuncSugarParam>,
     pub concept: Name,
     pub args: Vec<Term>,
-    pub fields: Vec<WitnessField>,
+    pub entries: Vec<WitnessEntry>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

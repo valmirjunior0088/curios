@@ -3,7 +3,7 @@ use {
         ConceptField, ConceptParam, Error, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
         LetSignature, Loader, Module, Name, Nat, NatLiteral, Plicity, Prim, Qualifier, Subterm,
         Term, TopConcept, TopItem, TopLet, TopMod, TopUse, TopWitness, TupleType, TupleTypeParam,
-        UseGroup, WitnessField,
+        UseGroup, WitnessEntry, WitnessField,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status},
     std::sync::Arc,
@@ -618,12 +618,15 @@ fn operator_witness(
         params: Vec::new(),
         concept: Name::from([concept.to_string()]),
         args: vec![head],
-        fields: fields
+        entries: fields
             .into_iter()
-            .map(|(field, [module, op])| WitnessField {
-                label: field.to_string(),
-                func_params: None,
-                value: Subterm::Name(Name::from(vec![module.to_string(), op.to_string()])).into(),
+            .map(|(field, [module, op])| {
+                WitnessEntry::Field(WitnessField {
+                    label: field.to_string(),
+                    func_params: None,
+                    value: Subterm::Name(Name::from(vec![module.to_string(), op.to_string()]))
+                        .into(),
+                })
             })
             .collect(),
     })

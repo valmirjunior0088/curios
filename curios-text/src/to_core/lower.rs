@@ -2,7 +2,7 @@ use {
     super::Context,
     crate::{
         ArrMatch, BinMatch, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch,
-        Prim, Rec, Subterm, Syn, Term,
+        Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     num_bigint::BigUint,
     std::{cell::RefCell, collections::BTreeSet, sync::Arc},
@@ -123,15 +123,12 @@ impl<'a, 'b> Lower<'a, 'b> {
     // erased, so at runtime `Str` collapses to its `Bin` bytes — a literal costs
     // exactly what a `Bin` literal did.
     fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
-        curios_core::Term::struct_named(
+        curios_core::Term::struct_(
             "/syn/Str/Str",
             Vec::<curios_core::Term>::new(),
             [
-                (
-                    None,
-                    curios_core::Term::prim(curios_core::Prim::Bin(bytes.to_vec())),
-                ),
-                (None, self.utf8_derivation(bytes, Self::scan_lead())),
+                curios_core::Term::prim(curios_core::Prim::Bin(bytes.to_vec())),
+                self.utf8_derivation(bytes, Self::scan_lead()),
             ],
         )
     }
@@ -284,19 +281,28 @@ impl<'a, 'b> Lower<'a, 'b> {
             }
             // A struct literal lowers to a `curios_core::Struct` carrying the resolved
             // (qualified) struct name, the head parameters (empty → core
-            // elaboration mints metavariables), and the field values with their
-            // written names (validated positionally and dropped by elaborate).
-            // Construction privacy is enforced in core (`elaborate_struct`),
-            // alongside projection privacy.
-            Subterm::StructLit(lit) => curios_core::Term::struct_named(
+            // elaboration mints metavariables), and the written entries — plain
+            // field values with their names (validated positionally and dropped
+            // by elaborate) and `use <term>` fills for a concept's `use`-marked
+            // positions. Construction privacy is enforced in core
+            // (`elaborate_struct`), alongside projection privacy.
+            Subterm::StructLit(lit) => curios_core::Term::struct_entries(
                 self.resolve_name(&lit.head)?,
                 lit.params
                     .iter()
                     .map(|p| self.term(p))
                     .collect::<Result<Vec<_>, Error>>()?,
-                lit.fields
+                lit.entries
                     .iter()
-                    .map(|field| Ok((field.label.clone(), self.term(&field.desugared_value())?)))
+                    .map(|entry| match entry {
+                        StructLitEntry::Field(field) => Ok((
+                            curios_core::StructEntry::Field(field.label.clone()),
+                            self.term(&field.desugared_value())?,
+                        )),
+                        StructLitEntry::Use(term) => {
+                            Ok((curios_core::StructEntry::Use, self.term(term)?))
+                        }
+                    })
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Match(match_) => match match_ {
@@ -569,19 +575,27 @@ impl<'a, 'b> Lower<'a, 'b> {
                     Field::Label(label) => curios_core::Term::proj_label(head, label.clone()),
                 }
             }
-            // A struct literal's field values hoist their bangs into this
-            // region, exactly like a tuple's.
-            Subterm::StructLit(lit) => curios_core::Term::struct_named(
+            // A struct literal's entry values hoist their bangs into this
+            // region, exactly like a tuple's fields.
+            Subterm::StructLit(lit) => curios_core::Term::struct_entries(
                 self.resolve_name(&lit.head)?,
                 lit.params
                     .iter()
                     .map(|p| self.collect(p, binds))
                     .collect::<Result<Vec<_>, Error>>()?,
-                lit.fields
+                lit.entries
                     .iter()
-                    .map(|field| {
-                        let value = field.desugared_value();
-                        Ok((field.label.clone(), self.collect(&value, binds)?))
+                    .map(|entry| match entry {
+                        StructLitEntry::Field(field) => {
+                            let value = field.desugared_value();
+                            Ok((
+                                curios_core::StructEntry::Field(field.label.clone()),
+                                self.collect(&value, binds)?,
+                            ))
+                        }
+                        StructLitEntry::Use(term) => {
+                            Ok((curios_core::StructEntry::Use, self.collect(term, binds)?))
+                        }
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
             ),

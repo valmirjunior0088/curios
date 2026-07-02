@@ -85,7 +85,8 @@ fn explicit_use_argument_overrides() {
 // A superclass edge resolved by projection: inside `same`, the goal `Eql(A)`
 // has a bound-variable head (no table entry), so it is solved by projecting the
 // local `use Ord(A)` binder's superclass field `w.eql`. The `use Ord(A)` slot
-// itself resolves through the table to `ord_nat`.
+// itself resolves through the table to `ord_nat`, whose own omitted superclass
+// field resolves to `eql_nat` — no field names a witness anywhere.
 #[test]
 fn superclass_projection_resolves() {
     let source = r#"
@@ -101,7 +102,6 @@ fn superclass_projection_resolves() {
             eql(a, b) = a == b
         }
         pub witness ord_nat : Ord(Nat) {
-            eql = eql_nat,
             cmp(a, b) = Order/lt()
         }
         pub let same(@A : Type, use Ord(A), x : A, y : A) -> Bln = Eql/eql(x, y);
@@ -387,7 +387,9 @@ fn bang_works_in_monad_generic_code() {
 
 // A higher-kinded superclass: inside the generic function the goal
 // `Monad(M)` (M a bound variable) resolves through step 2's superclass
-// projection of the local `use MonadPlus(M)` binder.
+// projection of the local `use MonadPlus(M)` binder. The witness's own
+// omitted `monad` field resolves through the table to the std `Monad(Option)`
+// witness — a higher-kinded auto-fill.
 #[test]
 fn higher_kinded_superclass_projects() {
     let source = r#"
@@ -397,7 +399,6 @@ fn higher_kinded_superclass_projects() {
             empty(@A : Type) -> M(A)
         }
         pub witness monad_plus_option : MonadPlus(Option) {
-            monad = Option/monad_option,
             empty(A) = Option/none()
         }
         pub let wrap(@M : (Type) -> Type, use MonadPlus(M), m : M(Nat)) -> M(Nat) =
@@ -458,6 +459,151 @@ fn sys_eql_and_cmp_resolve() {
         let c : Bln = Cmp/lt(1.0, 2.0);
         let d : Bln = Cmp/gte(3, 3);
         Io/print(Bln/to_str(Bln/and(Bln/and(a, b), Bln/and(c, d))))
+        "#;
+
+    assert_eq!(run(source), b"true");
+}
+
+// An explicit `use <term>` fill in a concept literal overrides table
+// resolution for that field: the flipped equality rides inside the `Ord2`
+// value and projects back out, while the registered witness is untouched.
+#[test]
+fn use_entry_fills_a_concept_field_explicitly() {
+    let source = r#"
+        use /std/{Nat, Bln, Io, Str, Order};
+        pub concept Eq2(A : Type) : Type {
+            eq2(A, A) -> Bln
+        }
+        pub concept Ord2(A : Type) : Type {
+            use eq2 : Eq2(A),
+            cmp2(A, A) -> Order
+        }
+        pub witness eq2_nat : Eq2(Nat) {
+            eq2(a, b) = a == b
+        }
+        let flipped : Eq2(Nat) = Eq2(Nat) { eq2(a, b) = false };
+        let o : Ord2(Nat) = Ord2(Nat) { use flipped, cmp2(a, b) = Order/lt() };
+        Io/print(Bln/to_str(Eq2/eq2(use o.eq2, 1, 1)))
+        "#;
+
+    assert_eq!(run(source), b"false");
+}
+
+// A witness body is a concept literal, so `use <term>` fills its superclass
+// field there too.
+#[test]
+fn use_entry_fills_a_witness_superclass() {
+    let source = r#"
+        use /std/{Nat, Bln, Io, Str, Order};
+        pub concept Eq3(A : Type) : Type {
+            eq3(A, A) -> Bln
+        }
+        pub concept Ord3(A : Type) : Type {
+            use eq3 : Eq3(A),
+            cmp3(A, A) -> Order
+        }
+        pub witness ord3_nat : Ord3(Nat) {
+            use Eq3(Nat) { eq3(a, b) = a == b },
+            cmp3(a, b) = Order/lt()
+        }
+        pub let same(@A : Type, use Ord3(A), x : A, y : A) -> Bln = Eq3/eq3(x, y);
+        Io/print(Bln/to_str(same(2, 2)))
+        "#;
+
+    assert_eq!(run(source), b"true");
+}
+
+// A labeled assignment targeting a `use` field gets the dedicated diagnostic,
+// not a positional-label mismatch.
+#[test]
+fn labeled_fill_of_a_use_field_is_an_error() {
+    let source = r#"
+        use /std/{Nat, Bln, Io, Str, Order};
+        pub concept Eq4(A : Type) : Type {
+            eq4(A, A) -> Bln
+        }
+        pub concept Ord4(A : Type) : Type {
+            use eq4 : Eq4(A),
+            cmp4(A, A) -> Order
+        }
+        pub witness eq4_nat : Eq4(Nat) {
+            eq4(a, b) = a == b
+        }
+        pub witness ord4_nat : Ord4(Nat) {
+            eq4 = eq4_nat,
+            cmp4(a, b) = Order/lt()
+        }
+        Io/print("no")
+        "#;
+
+    let message = error(source);
+    assert!(message.contains("'eq4'"), "got: {message}");
+    assert!(message.contains("omit it to resolve"), "got: {message}");
+}
+
+// `use` entries are rejected outside concept literals, and surplus entries
+// are rejected against the concept's `use`-field count.
+#[test]
+fn misplaced_use_entries_are_errors() {
+    let non_concept = r#"
+        use /std/{Nat, Io, Str};
+        pub record Pair : Type { fst : Nat, snd : Nat }
+        let p = Pair { use 1, snd = 2 };
+        Io/print("no")
+        "#;
+    assert!(error(non_concept).contains("not a concept"));
+
+    let surplus = r#"
+        use /std/{Nat, Bln, Io, Str, Order};
+        pub concept Eq5(A : Type) : Type {
+            eq5(A, A) -> Bln
+        }
+        pub concept Ord5(A : Type) : Type {
+            use eq5 : Eq5(A),
+            cmp5(A, A) -> Order
+        }
+        pub witness eq5_nat : Eq5(Nat) {
+            eq5(a, b) = a == b
+        }
+        pub witness ord5_nat : Ord5(Nat) {
+            use eq5_nat,
+            use eq5_nat,
+            cmp5(a, b) = Order/lt()
+        }
+        Io/print("no")
+        "#;
+    assert!(error(surplus).contains("'use' entr"));
+}
+
+// An omitted superclass field inside a *premised* witness resolves through
+// the local `use` premise (resolution's local step), not the table: the
+// element equality is the premise's, threaded structurally.
+#[test]
+fn omitted_superclass_resolves_from_a_premise() {
+    let source = r#"
+        use /std/{Nat, Bln, Io, Str, Order, Lst};
+        pub concept Eq6(A : Type) : Type {
+            eq6(A, A) -> Bln
+        }
+        pub concept Ord6(A : Type) : Type {
+            use eq6 : Eq6(A),
+            cmp6(A, A) -> Order
+        }
+        pub witness eq6_nat : Eq6(Nat) {
+            eq6(a, b) = a == b
+        }
+        pub witness eq6_lst(@A : Type, use Eq6(A)) : Eq6(Lst(A)) {
+            eq6(a, b) = Lst/len(a) == Lst/len(b)
+        }
+        pub witness ord6_lst(@A : Type, use Ord6(A)) : Ord6(Lst(A)) {
+            cmp6(a, b) = Order/lt()
+        }
+        pub witness ord6_nat : Ord6(Nat) {
+            cmp6(a, b) = Order/lt()
+        }
+        pub let same(@A : Type, use Ord6(A), x : A, y : A) -> Bln = Eq6/eq6(x, y);
+        let l : Lst(Nat) = [1, 2];
+        Io/print(Bln/to_str(same(l, l)))
         "#;
 
     assert_eq!(run(source), b"true");

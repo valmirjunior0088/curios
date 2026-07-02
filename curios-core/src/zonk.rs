@@ -286,12 +286,12 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             name,
             params,
             fields,
-            names,
+            entries,
         }) => Subterm::Struct(Struct {
             name: name.clone(),
             params: zonk_terms(context, params)?,
             fields: zonk_terms(context, fields)?,
-            names: names.clone(),
+            entries: entries.clone(),
         }),
 
         Subterm::Match(Match {
