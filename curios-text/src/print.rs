@@ -1,11 +1,11 @@
 use {
     super::{
         Apply, ArrMatch, BinMatch, BlnMatch, ConceptField, ConceptParam, Entrypoint, Field, Func,
-        FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let, LetSignature, Match,
-        Module, Motive, Nat, NatLiteral, NatMatch, NumLit, Plicity, Prim, Proj, Radix, Rec,
-        StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem,
-        TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
-        TupleTypeParam, UseGroup, WitnessEntry,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let,
+        LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, NumLit, Plicity, Prim,
+        Proj, Radix, Rec, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept,
+        TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField,
+        TupleType, TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_bigint::BigUint,
@@ -88,6 +88,22 @@ fn print_func_type_param(param: FuncTypeParam) -> Printer<'static> {
         None => typed,
     };
     flat([print_plicity(param.plicity), body])
+}
+
+/// One function-sugar binder (a `let`/`rec`/`satisfy` telescope parameter). A
+/// `use` binder is anonymous — `use type`, no label; otherwise the plicity
+/// prefixes the name (`@x` = implicit).
+fn print_func_sugar_param(param: FuncSugarParam) -> Printer<'static> {
+    if param.plicity == Plicity::Witness {
+        flat([pure("use "), print_term(param.type_)])
+    } else {
+        flat([
+            print_plicity(param.plicity),
+            pure(param.label),
+            pure(" : "),
+            print_term(param.type_),
+        ])
+    }
 }
 
 /// One lambda parameter: the binder name with its optional domain annotation.
@@ -603,18 +619,9 @@ fn print_let_signature(signature: LetSignature) -> Printer<'static> {
             body,
         } => flat([
             pure("("),
-            sep_flat(
-                params.into_iter().map(|param| {
-                    // Plicity prefixes the name (`@x` = implicit).
-                    flat([
-                        print_plicity(param.plicity),
-                        pure(param.label),
-                        pure(" : "),
-                        print_term(param.type_),
-                    ])
-                }),
-                || pure(", "),
-            ),
+            sep_flat(params.into_iter().map(print_func_sugar_param), || {
+                pure(", ")
+            }),
             pure(") -> "),
             print_term(output),
             pure(" =\n"),
@@ -854,28 +861,21 @@ fn print_top_struct(item: TopStruct) -> Printer<'static> {
 }
 
 fn print_concept_field(field: ConceptField) -> Printer<'static> {
-    let marker = if field.is_super {
-        pure("use ")
-    } else {
-        pure("")
-    };
+    // A superclass field is anonymous: `use <type>`, no label.
+    if field.is_super {
+        return flat([pure("use "), print_term(field.type_)]);
+    }
     // The signature sugar `label(params) -> type` re-sugars from the retained
     // parameter list (never set on a super field).
     match field.func_params {
         Some(params) => flat([
-            marker,
             pure(field.label),
             pure("("),
             sep_flat(params.into_iter().map(print_func_type_param), || pure(", ")),
             pure(") -> "),
             print_term(field.type_),
         ]),
-        None => flat([
-            marker,
-            pure(field.label),
-            pure(" : "),
-            print_term(field.type_),
-        ]),
+        None => flat([pure(field.label), pure(" : "), print_term(field.type_)]),
     }
 }
 
@@ -927,17 +927,9 @@ fn print_top_witness(item: TopWitness) -> Printer<'static> {
     } else {
         flat([
             pure("("),
-            sep_flat(
-                item.params.into_iter().map(|param| {
-                    flat([
-                        print_plicity(param.plicity),
-                        pure(param.label),
-                        pure(" : "),
-                        print_term(param.type_),
-                    ])
-                }),
-                || pure(", "),
-            ),
+            sep_flat(item.params.into_iter().map(print_func_sugar_param), || {
+                pure(", ")
+            }),
             pure(")"),
         ])
     };

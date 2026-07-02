@@ -570,12 +570,23 @@ fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Er
             match labels.iter().position(|l| l == label) {
                 Some(index) => index,
                 None => {
+                    // A concept's superclass fields carry a minted internal
+                    // label and are not projectable by name — never surface
+                    // them among the available fields.
+                    let supers: Vec<usize> = match &*head_type {
+                        Subterm::StructType(StructType { name, .. }) => context
+                            .concept(name)
+                            .map(|concept| concept.supers.iter().map(|(i, _)| *i).collect())
+                            .unwrap_or_default(),
+                        _ => Vec::new(),
+                    };
                     return Err(Error::unknown_tuple_label(
                         label.clone(),
                         labels
                             .iter()
-                            .filter(|l| !l.is_empty())
-                            .map(|l| l.to_string())
+                            .enumerate()
+                            .filter(|(i, l)| !l.is_empty() && !supers.contains(i))
+                            .map(|(_, l)| l.to_string())
                             .collect(),
                     ));
                 }
@@ -918,22 +929,10 @@ fn elaborate_struct(
         ));
     }
 
-    // A labeled assignment targeting a `use` field gets the dedicated
-    // diagnostic before positional validation can misreport it.
+    // Superclass fields are anonymous, so no written label can target one: a
+    // labeled entry naming a former superclass is just an unknown field, caught
+    // by the positional validation below.
     let labels = field_telescope.labels();
-    for (written, _) in &plain {
-        let Some(written) = written else { continue };
-        if use_positions
-            .iter()
-            .any(|&position| labels.get(position).copied() == Some(*written))
-        {
-            return Err(Error::assigned_use_field(
-                name.clone(),
-                (*written).to_string(),
-            ));
-        }
-    }
-
     let plain_labels: Vec<&str> = labels
         .iter()
         .enumerate()
@@ -978,9 +977,12 @@ fn elaborate_struct(
         if use_positions.contains(&position) {
             sources.push(match fill_values.next() {
                 Some(fill) => FieldSource::Written(fill),
+                // A `use` position is an anonymous superclass field; its minted
+                // internal label must never surface, so the goal's provenance
+                // names it `_` (the goal itself already shows the concept).
                 None => FieldSource::Resolve {
                     func: name.clone(),
-                    binder: binder_name(labels.get(position).copied().unwrap_or("_")),
+                    binder: "_".to_string(),
                 },
             });
         } else {

@@ -604,7 +604,7 @@ fn operator_concept(label: &str, fields: Vec<(&str, Term)>) -> TopItem {
     })
 }
 
-// A primitive operator witness: `witness Concept(Head) { field =
+// A primitive operator witness: `satisfy Concept(Head) { field =
 // Module/op, … }` — each field the named wrapper reference.
 fn operator_witness(concept: &str, head: Term, fields: Vec<(&str, [&str; 2])>) -> TopItem {
     TopItem::Witness(TopWitness {

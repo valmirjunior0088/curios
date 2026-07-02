@@ -84,9 +84,10 @@ fn explicit_use_argument_overrides() {
 
 // A superclass edge resolved by projection: inside `same`, the goal `Eql(A)`
 // has a bound-variable head (no table entry), so it is solved by projecting the
-// local `use Ord(A)` binder's superclass field `w.eql`. The `use Ord(A)` slot
-// itself resolves through the table to `ord_nat`, whose own omitted superclass
-// field resolves to `eql_nat` — no field names a witness anywhere.
+// local `use Ord(A)` binder's (anonymous) superclass field, keyed by index. The
+// `use Ord(A)` slot itself resolves through the table to `ord_nat`, whose own
+// omitted superclass field resolves to `eql_nat` — no field names a witness
+// anywhere.
 #[test]
 fn superclass_projection_resolves() {
     let source = r#"
@@ -95,7 +96,7 @@ fn superclass_projection_resolves() {
             eql(A, A) -> Bln
         }
         pub concept Ord(A : Type) : Type {
-            use eql : Eql(A),
+            use Eql(A),
             cmp(A, A) -> Order
         }
         satisfy Eql(Nat) {
@@ -294,7 +295,7 @@ fn local_binder_pins_an_out_parameter() {
             convert(n) = Nat/to_str(n)
         }
         pub let ignore(@A : Type, x : A) -> Nat = 9;
-        pub let go(use w : Convert(Nat, Str), x : Nat) -> Nat = ignore(Convert/convert(x));
+        pub let go(use Convert(Nat, Str), x : Nat) -> Nat = ignore(Convert/convert(x));
         Io/print(Nat/to_str(go(1)))
         "#;
 
@@ -373,7 +374,7 @@ fn bang_works_in_monad_generic_code() {
     let source = r#"
         use /syn/{Monad};
         use /std/{Nat, Io, Str, Option, Lst};
-        pub let add_both(@M : (Type) -> Type, use m : Monad(M), a : M(Nat), b : M(Nat)) -> M(Nat) =
+        pub let add_both(@M : (Type) -> Type, use Monad(M), a : M(Nat), b : M(Nat)) -> M(Nat) =
             Monad/pure(a! + b!);
         let o : Option(Nat) = add_both(Option/some(20), Option/some(22));
         let l : Lst(Nat) = add_both([1, 2], [10]);
@@ -395,7 +396,7 @@ fn higher_kinded_superclass_projects() {
     let source = r#"
         use /std/{Nat, Io, Str, Option, Monad};
         pub concept MonadPlus(M : (Type) -> Type) : Type {
-            use monad : Monad(M),
+            use Monad(M),
             empty(@A : Type) -> M(A)
         }
         satisfy MonadPlus(Option) {
@@ -466,7 +467,10 @@ fn sys_eql_and_cmp_resolve() {
 
 // An explicit `use <term>` fill in a concept literal overrides table
 // resolution for that field: the flipped equality rides inside the `Ord2`
-// value and projects back out, while the registered witness is untouched.
+// value, while the registered witness is untouched. The superclass field is
+// anonymous, so the override is observed by resolution — with `o` in instance
+// scope, the omitted `Eq2(Nat)` goal projects its superclass (the flipped
+// equality), taking precedence over the global table.
 #[test]
 fn use_entry_fills_a_concept_field_explicitly() {
     let source = r#"
@@ -475,7 +479,7 @@ fn use_entry_fills_a_concept_field_explicitly() {
             eq2(A, A) -> Bln
         }
         pub concept Ord2(A : Type) : Type {
-            use eq2 : Eq2(A),
+            use Eq2(A),
             cmp2(A, A) -> Order
         }
         satisfy Eq2(Nat) {
@@ -483,7 +487,8 @@ fn use_entry_fills_a_concept_field_explicitly() {
         }
         let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
         let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
-        Io/print(Bln/to_str(Eq2/eq2(use o.eq2, 1, 1)))
+        pub let observe(use Ord2(Nat)) -> Bln = Eq2/eq2(1, 1);
+        Io/print(Bln/to_str(observe(use o)))
         "#;
 
     assert_eq!(run(source), b"false");
@@ -499,7 +504,7 @@ fn use_entry_fills_a_witness_superclass() {
             eq3(A, A) -> Bln
         }
         pub concept Ord3(A : Type) : Type {
-            use eq3 : Eq3(A),
+            use Eq3(A),
             cmp3(A, A) -> Order
         }
         satisfy Ord3(Nat) {
@@ -513,32 +518,30 @@ fn use_entry_fills_a_witness_superclass() {
     assert_eq!(run(source), b"true");
 }
 
-// A labeled assignment targeting a `use` field gets the dedicated diagnostic,
-// not a positional-label mismatch.
+// A superclass field is anonymous, so its concept's former field name is not a
+// label: assigning it is a plain unknown-field error, with no special `use`-field
+// diagnostic (`Eql`'s superclass is reached by resolution, never by name).
 #[test]
-fn labeled_fill_of_a_use_field_is_an_error() {
+fn labeled_fill_of_a_former_superclass_is_unknown() {
     let source = r#"
         use /std/{Nat, Bln, Io, Str, Order};
         pub concept Eq4(A : Type) : Type {
             eq4(A, A) -> Bln
         }
         pub concept Ord4(A : Type) : Type {
-            use eq4 : Eq4(A),
+            use Eq4(A),
             cmp4(A, A) -> Order
         }
         satisfy Eq4(Nat) {
             eq4(a, b) = a == b
         }
-        satisfy Ord4(Nat) {
-            eq4 = Eq4 { eq4(a, b) = a == b },
-            cmp4(a, b) = Order/lt()
-        }
+        let bad : Ord4(Nat) = Ord4 { eq4 = Eq4 { eq4(a, b) = a == b } };
         Io/print("no")
         "#;
 
     let message = error(source);
     assert!(message.contains("'eq4'"), "got: {message}");
-    assert!(message.contains("omit it to resolve"), "got: {message}");
+    assert!(message.contains("no field"), "got: {message}");
 }
 
 // `use` entries are rejected outside concept literals, and surplus entries
@@ -559,7 +562,7 @@ fn misplaced_use_entries_are_errors() {
             eq5(A, A) -> Bln
         }
         pub concept Ord5(A : Type) : Type {
-            use eq5 : Eq5(A),
+            use Eq5(A),
             cmp5(A, A) -> Order
         }
         satisfy Eq5(Nat) {
@@ -586,7 +589,7 @@ fn omitted_superclass_resolves_from_a_premise() {
             eq6(A, A) -> Bln
         }
         pub concept Ord6(A : Type) : Type {
-            use eq6 : Eq6(A),
+            use Eq6(A),
             cmp6(A, A) -> Order
         }
         satisfy Eq6(Nat) {

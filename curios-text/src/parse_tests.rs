@@ -1289,7 +1289,7 @@ fn function_field_sugar_round_trips() {
 
     for source in [
         "record Api : Type { version : Nat, ping(x : Nat) -> Nat } u",
-        "concept Ord(A : Type) : Type { use eql : Eql(A), cmp(A, A) -> Order } u",
+        "concept Ord(A : Type) : Type { use Eql(A), cmp(A, A) -> Order } u",
         "satisfy Ord(Nat) { use eql_nat, cmp(a, b) = f(a, b) } u",
         "satisfy Ord(Nat) { cmp(a, b) = f(a, b) } u",
     ] {
@@ -1395,7 +1395,7 @@ fn parse_concept_item() {
     // undoes the sugar), and a plain `name : T` field.
     let source = "\
         concept Ord(A : Type) : Type { \
-            use eql : Eql(A), \
+            use Eql(A), \
             cmp(A, A) -> Order, \
             top : A \
         } u";
@@ -1408,9 +1408,10 @@ fn parse_concept_item() {
     assert_eq!(concept.params.len(), 1);
     assert_eq!(concept.fields.len(), 3);
 
-    // The `use` field is a superclass edge.
+    // The `use` field is a superclass edge — anonymous, so its label is empty
+    // (lowering mints an internal `_superN`).
     assert!(concept.fields[0].is_super);
-    assert_eq!(concept.fields[0].label, "eql");
+    assert_eq!(concept.fields[0].label, "");
     assert_eq!(concept.fields[0].func_params, None);
 
     // The sugar field keeps its written parameter list; the annotation slot
@@ -1515,13 +1516,12 @@ fn parse_witness_item() {
 
 #[test]
 fn parse_use_parameter_forms() {
-    // A `use` Π-binder, named and anonymous, alongside `@` and plain binders.
-    let TopItem::Let(item) =
-        &"pub let f(@A : Type, use w : Show(A), use Eql(A), x : A) -> A = x; u"
-            .parse::<Entrypoint>()
-            .unwrap()
-            .module
-            .items[0]
+    // Two anonymous `use` Π-binders, alongside `@` and plain binders.
+    let TopItem::Let(item) = &"pub let f(@A : Type, use Show(A), use Eql(A), x : A) -> A = x; u"
+        .parse::<Entrypoint>()
+        .unwrap()
+        .module
+        .items[0]
     else {
         panic!("expected a let");
     };
@@ -1531,7 +1531,7 @@ fn parse_use_parameter_forms() {
     assert_eq!(params.len(), 4);
     assert_eq!(params[0].plicity, Plicity::Implicit);
     assert_eq!(params[1].plicity, Plicity::Witness);
-    assert_eq!(params[1].label, "w");
+    assert_eq!(params[1].label, "_"); // anonymous
     assert_eq!(params[2].plicity, Plicity::Witness);
     assert_eq!(params[2].label, "_"); // anonymous
     assert_eq!(params[3].plicity, Plicity::Explicit);
@@ -1554,12 +1554,12 @@ fn concept_witness_use_round_trip() {
     // print → re-parse cycle unchanged.
     for source in [
         "concept Show(A : Type) : Type { show : A } u",
-        "pub concept Ord(A : Type) : Type { use eql : Eql(A), cmp : A } u",
+        "pub concept Ord(A : Type) : Type { use Eql(A), cmp : A } u",
         "concept Convert(A : Type, out B : Type) : Type { convert : A } u",
         "satisfy Show(Nat) { show = f } u",
-        "satisfy(@A : Type, use w : Show(A)) Show(Lst(A)) { show = g } u",
+        "satisfy(@A : Type, use Show(A)) Show(Lst(A)) { show = g } u",
         "f(use dict, x)",
-        "(@A : Type, use w : Show(A), x : A) -> A",
+        "(@A : Type, use Show(A), x : A) -> A",
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(

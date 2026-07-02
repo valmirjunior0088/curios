@@ -91,7 +91,7 @@ let parser : Parse(Nat) =
     Parse/pure(a + b);
 ```
 
-The standard library ships `Monad` witnesses for `Option`, `Lst`, `Task`, `Parse`, and `Reader`; declaring `satisfy Monad(M) { … }` makes `!` work with your own type. Inside monad-generic code a local `use m : Monad(M)` binder resolves the sites, so generic do-notation works too.
+The standard library ships `Monad` witnesses for `Option`, `Lst`, `Task`, `Parse`, and `Reader`; declaring `satisfy Monad(M) { … }` makes `!` work with your own type. Inside monad-generic code a local `use Monad(M)` binder resolves the sites, so generic do-notation works too.
 
 ## Operators
 
@@ -261,7 +261,7 @@ let api = Api { base = 3, bump(x) = x + 1 };   -- definition sugar
 
 Ad-hoc polymorphism is expressed with three constructs. A **concept** is a record-shaped interface; a **witness** is a registered inhabitant of a concept for a given type; a **`use` binder** is a third parameter plicity the elaborator fills by resolution rather than unification. `concept` and `satisfy` are contextual keywords — legal identifiers and path segments everywhere else, recognized only at item start (`concept` optionally after `pub`; a witness is anonymous, so `pub` does not apply).
 
-**`concept`.** A concept lowers to an ordinary `record` (its representation is always public) plus a per-field method wrapper synthesized into the concept's namespace. Fields are signatures — `name : T`, or the function sugar `name(params) -> T` (shorthand for `name : (params) -> T`, the same sugar any record field admits). A field prefixed with `use` is a **superclass** edge: its type must be a concept application, and an instance of the outer concept in scope yields the inner one by projection. The result sort (`Type` or `Prop`) is required; a `Prop` concept's witnesses erase entirely. Concept and witness field lists admit a trailing comma, like every field list.
+**`concept`.** A concept lowers to an ordinary `record` (its representation is always public) plus a method wrapper synthesized into the concept's namespace for each non-`use` field. Fields are signatures — `name : T`, or the function sugar `name(params) -> T` (shorthand for `name : (params) -> T`, the same sugar any record field admits). A field prefixed with `use` is a **superclass** edge — anonymous, and given no wrapper: its type must be a concept application, and an instance of the outer concept in scope yields the inner one by resolution. The result sort (`Type` or `Prop`) is required; a `Prop` concept's witnesses erase entirely. Concept and witness field lists admit a trailing comma, like every field list.
 
 A parameter marked with the contextual keyword `out` is an **output position** (a functional dependency): it is excluded from the witness key and pinned by whichever witness the input positions select. At least one parameter must be an input. `out` stays a valid identifier — the marker form needs a binder after it, so a parameter *named* `out` still parses.
 
@@ -273,7 +273,7 @@ pub concept Show(A : Type) : Type {
 }
 
 pub concept Ord(A : Type) : Type {
-    use eql : Eql(A),               -- superclass: an Ord(A) grants an Eql(A)
+    use Eql(A),                     -- superclass: an Ord(A) grants an Eql(A)
     cmp(A, A) -> Order
 }
 
@@ -302,9 +302,9 @@ satisfy(@A : Type, use Show(A)) Show(Lst(A)) {
 
 Every concept–key pair has **at most one** witness, program-wide (global coherence, no orphan rule); a duplicate registration is a compile error wherever it is declared — module visibility never scopes the table, only names, and a witness has none. A witness keys on the concept and the tuple of *rigid heads* of the concept's input parameters (each an inductive, a struct/record, or a primitive type constructor); `out` parameters are excluded from the key and pinned by the resolved witness, and everything else is checked by unification at resolution time. For a *second* instance of the same key — a descending order, a case-insensitive equality — declare an ordinary value of the concept type (`let desc : Ord(Nat) = Ord { cmp(a, b) = … };`) and pass it where wanted with `use desc`.
 
-**`use` fields in concept literals.** A concept's `use`-marked (superclass) fields leave the positional field sequence in every literal of that concept — witness bodies included — exactly as witness slots leave the argument list at call sites. An omitted `use` field becomes a resolution goal (local binders first, then the table); an explicit fill is the entry form `use <term>`, pairing with the `use`-marked positions in declaration order. A labeled assignment to a `use` field (`eql = w`) is an error, as is a `use` entry in a non-concept literal. So `satisfy Ord(Nat) { cmp(a, b) = … }` resolves its `Eql(Nat)` superclass from the table, a premised `satisfy(@A : Type, use Ord(A)) Ord(Lst(A)) { … }` resolves its superclass from the premise, and `Ord { use my_eql, cmp(a, b) = … }` overrides explicitly.
+**`use` fields in concept literals.** A concept's `use`-marked (superclass) fields leave the positional field sequence in every literal of that concept — witness bodies included — exactly as witness slots leave the argument list at call sites. An omitted `use` field becomes a resolution goal (local binders first, then the table); an explicit fill is the entry form `use <term>`, pairing with the `use`-marked positions in declaration order. A `use` field has no label to assign by — it is either omitted or filled positionally with `use <term>` — and a `use` entry in a non-concept literal is an error. So `satisfy Ord(Nat) { cmp(a, b) = … }` resolves its `Eql(Nat)` superclass from the table, a premised `satisfy(@A : Type, use Ord(A)) Ord(Lst(A)) { … }` resolves its superclass from the premise, and `Ord { use my_eql, cmp(a, b) = … }` overrides explicitly.
 
-**`use` binders and arguments.** A `use` parameter is legal anywhere Π binders appear (function/`let`/`rec`/`satisfy` telescopes): `use (name :)? T`, optionally anonymous. It is filled by resolution at call sites and is in scope as an instance for the body. At a call site, `use <term>` supplies one explicitly, overriding table resolution; it sits alongside `@`-arguments and plain arguments.
+**`use` binders and arguments.** A `use` parameter is legal anywhere Π binders appear (function/`let`/`rec`/`satisfy` telescopes): `use T`, always anonymous — an instance is reached by resolution, never by name. It is filled by resolution at call sites and joins the instance scope for the body. At a call site, `use <term>` supplies one explicitly, overriding table resolution; it sits alongside `@`-arguments and plain arguments.
 
 ```
 pub let join(@A : Type, use Show(A), l : Lst(A)) -> Str =

@@ -356,7 +356,7 @@ fn pub_concept_with_private_superclass_is_rejected() {
                 h(A) -> Bln
             }
             pub concept Loud(A : Type) : Type {
-                use hidden : Hidden(A),
+                use Hidden(A),
                 l(A) -> Bln
             }
         end

@@ -531,21 +531,16 @@ fn parse_plicity<'a>() -> Parser<'a, Plicity> {
         .or(pure(Plicity::Explicit))
 }
 
-// A `use` Π-binder: `use (name ":")? term`. A named form binds `name` for the
-// rest of the type; an anonymous form binds nothing nameable (`_`) but still
-// joins the instance scope. `use` is a reserved word, so there is no ambiguity
-// with an ordinary binder name.
+// A `use` Π-binder: `use term`. Always anonymous — it binds nothing nameable
+// (`_`) but joins the instance scope; an instance is reached by resolution,
+// never by name. `use` is a reserved word, so there is no ambiguity with an
+// ordinary binder name.
 fn parse_use_func_type_param<'a>() -> Parser<'a, FuncTypeParam> {
     catch(parse_keyword("use"))
-        .and_keep(
-            catch(parse_identifier().and_drop(parse_literal(":")))
-                .map(|label: &str| Some(label.to_string()))
-                .or(pure(None))
-                .and(lazy(parse_term)),
-        )
-        .map(|(label, type_)| FuncTypeParam {
+        .and_keep(lazy(parse_term))
+        .map(|type_| FuncTypeParam {
             plicity: Plicity::Witness,
-            label,
+            label: None,
             type_,
         })
 }
@@ -913,19 +908,15 @@ fn parse_rec<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// A `use` binder in function-definition sugar (`let`/`rec`/`witness` telescopes):
-// `use (name ":")? term`. An anonymous form binds `_` (lowering mints a fresh
-// name); the binder joins the instance scope either way.
+// A `use` binder in function-definition sugar (`let`/`rec`/`satisfy` telescopes):
+// `use term`. Always anonymous — it binds `_` (lowering mints a fresh name) and
+// joins the instance scope; an instance is reached by resolution, never by name.
 fn parse_use_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
     catch(parse_keyword("use"))
-        .and_keep(
-            catch(parse_binder().and_drop(parse_literal(":")))
-                .or(pure("_".to_string()))
-                .and(lazy(parse_term)),
-        )
-        .map(|(label, type_)| FuncSugarParam {
+        .and_keep(lazy(parse_term))
+        .map(|type_| FuncSugarParam {
             plicity: Plicity::Witness,
-            label,
+            label: "_".to_string(),
             type_,
         })
 }
@@ -1600,18 +1591,14 @@ fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
 // `use`-prefixed field is a superclass edge — its type must be a concept
 // application, checked at lowering.
 fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
-    let super_field = catch(
-        parse_keyword("use")
-            .and_keep(parse_identifier())
-            .and_drop(parse_literal(":")),
-    )
-    .and(lazy(parse_term))
-    .map(|(label, type_): (&str, Term)| ConceptField {
-        is_super: true,
-        label: label.to_string(),
-        func_params: None,
-        type_,
-    });
+    let super_field = catch(parse_keyword("use"))
+        .and_keep(lazy(parse_term))
+        .map(|type_| ConceptField {
+            is_super: true,
+            label: String::new(),
+            func_params: None,
+            type_,
+        });
 
     let plain_or_sugar = parse_identifier()
         .and(

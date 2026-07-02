@@ -808,16 +808,36 @@ fn process_items(
                     });
                 }
 
-                // Field types, lowered under the parameter scope (concept fields
-                // are always named, so the label is the binder for later fields).
-                // The signature sugar `f(params) -> T` is undone here.
+                // Superclass fields are anonymous in the surface syntax; mint a
+                // unique internal label per super so the record telescope and the
+                // registry's field list stay well-formed. The name is never
+                // surfaced — a superclass is reached by resolution, keyed by
+                // index, and never projected or wrapped by name.
+                let field_labels = concept
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, field)| {
+                        if field.is_super {
+                            format!("_super{i}")
+                        } else {
+                            field.label.clone()
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                // Field types, lowered under the parameter scope (a method field's
+                // label is the binder for later fields; a super field's minted
+                // label is inert). The signature sugar `f(params) -> T` is undone
+                // here.
                 let field_tys = {
                     let lower = Lower::new(context);
                     concept
                         .fields
                         .iter()
-                        .map(|field| {
-                            Ok((field.label.clone(), lower.term(&field.desugared_type())?))
+                        .zip(&field_labels)
+                        .map(|(field, label)| {
+                            Ok((label.clone(), lower.term(&field.desugared_type())?))
                         })
                         .collect::<Result<Vec<_>, Error>>()?
                 };
@@ -863,7 +883,7 @@ fn process_items(
                     .map(|(idx, field)| {
                         let head = concept_app_head(&field.type_).ok_or_else(|| {
                             Error::MalformedSuperField {
-                                label: field.label.clone(),
+                                concept: concept.label.clone(),
                             }
                         })?;
                         Ok((idx, resolve_concept_head(context, &head)?))
@@ -874,7 +894,7 @@ fn process_items(
                     name.clone(),
                     curios_core::Concept {
                         params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
-                        fields: concept.fields.iter().map(|f| f.label.clone()).collect(),
+                        fields: field_labels.clone(),
                         supers,
                         inputs,
                     },
@@ -899,12 +919,14 @@ fn process_items(
                     body,
                 }));
 
-                // Method wrappers: for each field `f : F` at index `idx`,
+                // Method wrappers: for each *method* field `f : F`,
                 //   pub let C/f(@p₁ : P₁, …, use w : C(p₁, …)) -> F = w.f;
                 // Built as surface AST and lowered through `Lower`, so binder
-                // scoping and de-Bruijn capture are handled uniformly.
+                // scoping and de-Bruijn capture are handled uniformly. Superclass
+                // fields are anonymous and get no wrapper: an instance of the
+                // outer concept already yields the inner one by resolution.
                 let concept_app = concept_application(&concept.label, &concept.params);
-                for field in &concept.fields {
+                for field in concept.fields.iter().filter(|field| !field.is_super) {
                     let mut params = concept
                         .params
                         .iter()

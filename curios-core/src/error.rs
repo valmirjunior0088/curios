@@ -190,12 +190,6 @@ pub enum Error {
         label: String,
         available: Vec<String>,
     },
-    /// A labeled assignment targets a concept's `use`-marked field, which
-    /// leaves the positional field sequence entirely.
-    AssignedUseField {
-        name: String,
-        label: String,
-    },
     /// A `use <term>` entry in a literal whose head is not a concept.
     UseEntryOutsideConcept {
         name: String,
@@ -507,13 +501,6 @@ impl Error {
             name: name.into(),
             label,
             available,
-        }
-    }
-
-    pub fn assigned_use_field<N: Into<String>>(name: N, label: String) -> Self {
-        Self::AssignedUseField {
-            name: name.into(),
-            label,
         }
     }
 
@@ -945,12 +932,6 @@ impl fmt::Display for Error {
                     f,
                     "struct '{name}' has no field '{label}' at that position (fields in order: {})",
                     available.join(", ")
-                )
-            }
-            Error::AssignedUseField { name, label } => {
-                write!(
-                    f,
-                    "field '{label}' of concept '{name}' is a 'use' field; omit it to resolve by witness, or fill it with 'use <term>'"
                 )
             }
             Error::UseEntryOutsideConcept { name } => {

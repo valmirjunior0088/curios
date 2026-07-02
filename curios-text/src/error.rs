@@ -57,9 +57,10 @@ pub enum Error {
         label: String,
     },
     /// A `use`-marked concept field's type is not a concept application (a path,
-    /// optionally applied). Only such a type names a superclass edge.
+    /// optionally applied). Only such a type names a superclass edge. Superclass
+    /// fields are anonymous, so the enclosing concept identifies the offender.
     MalformedSuperField {
-        label: String,
+        concept: String,
     },
     /// A concept declaration marks every parameter `out`, leaving an empty
     /// witness key — at least one input position is required.
@@ -159,10 +160,10 @@ impl fmt::Display for Error {
             Error::CyclicReExport { label } => {
                 write!(f, "cyclic re-export with no concrete target: {label}")
             }
-            Error::MalformedSuperField { label } => {
+            Error::MalformedSuperField { concept } => {
                 write!(
                     f,
-                    "the `use` field `{label}` must have a concept-application type"
+                    "concept `{concept}` has a `use` field whose type is not a concept application"
                 )
             }
             Error::ConceptWithoutInputs { label } => {
