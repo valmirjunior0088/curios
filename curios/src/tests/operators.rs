@@ -302,3 +302,119 @@ fn infix_mismatched_operand_types_are_rejected() {
     "#;
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
+
+// === Concept-dispatched operators (one path, no overload table) =============
+
+// `+` on a user record resolves the user's `Add` witness — the operator
+// surface is witness-governed.
+#[test]
+fn infix_add_on_a_user_record_resolves_its_witness() {
+    assert_eq!(
+        run(r#"
+            use /std/{Nat, Io, Str, Add};
+            record Point : Type { x : Nat, y : Nat }
+            pub witness add_point : Add(Point) {
+                add(a, b) = Point { x = a.x + b.x, y = a.y + b.y }
+            }
+            let p : Point = Point { x = 3, y = 4 };
+            let q : Point = p + p;
+            Io/write(Io/stdout, Str/to_bin(Nat/to_str(q.y)))
+        "#),
+        b"8"
+    );
+}
+
+// In generic code, `x + x` resolves against the local `use Add(A)` premise
+// (resolution step 1) — no extra machinery.
+#[test]
+fn infix_resolves_against_a_local_use_premise() {
+    assert_eq!(
+        run(r#"
+            use /std/{Nat, Io, Str, Add};
+            pub let double(@A : Type, use Add(A), x : A) -> A = x + x;
+            Io/write(Io/stdout, Str/to_bin(Nat/to_str(double(21))))
+        "#),
+        b"42"
+    );
+}
+
+// `==` on `Str` resolves the std-side `eql_str` witness — impossible under
+// the old per-type overload table.
+#[test]
+fn infix_equality_works_on_str() {
+    assert_eq!(
+        run(r#"
+            use /std/{Bln, Io, Str};
+            Io/write(Io/stdout, Str/to_bin(Bln/to_str("abc" == "abc")))
+        "#),
+        b"true"
+    );
+}
+
+// An operator at a type with no witness is a missing-witness diagnostic —
+// the single operator error vocabulary (`operator ... not defined` survives
+// only for `&&`/`||`).
+#[test]
+fn infix_without_witness_reports_no_witness() {
+    let (system, _io) = MockHost::builder().build();
+    let source = r#"
+        use /std/{Bln, Io, Str};
+        let b : Bln = true + false;
+        Io/write(Io/stdout, Str/to_bin(Bln/to_str(b)))
+    "#;
+    let error = crate::run_text(Duration::from_secs(10), source, system)
+        .expect_err("Add(Bln) has no witness");
+    assert!(error.contains("no witness"), "unexpected error: {error}");
+}
+
+// A literal mixed with a witnessed user type still errors on the literal:
+// `p` pins the operand type to `Point`, and `1` has no `Point` realization.
+#[test]
+fn infix_literal_against_a_user_type_is_rejected() {
+    let (system, _io) = MockHost::builder().build();
+    let source = r#"
+        use /std/{Nat, Io, Str, Add};
+        record Point : Type { x : Nat, y : Nat }
+        pub witness add_point : Add(Point) {
+            add(a, b) = Point { x = a.x + b.x, y = a.y + b.y }
+        }
+        let p : Point = Point { x = 1, y = 2 };
+        let q : Point = p + 1;
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(q.x)))
+    "#;
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
+// Type-level operators: `a + 1` in `Lte`'s constructor indices elaborates to
+// a witness projection that must reduce during conversion checking, and the
+// two spellings (the index's and this call site's) stay convertible across
+// items.
+#[test]
+fn type_level_operator_indices_stay_convertible() {
+    assert_eq!(
+        run(r#"
+            use /std/{Nat, Io, Str};
+            pub let step(@a : Nat, @b : Nat, p : Nat/Lte(a, b)) -> Nat/Lte(a + 1, b + 1) =
+                Nat/Lte/s(p);
+            let base : Nat/Lte(0, 1) = Nat/Lte/z();
+            let bumped : Nat/Lte(1, 2) = step(base);
+            Io/write(Io/stdout, Str/to_bin("ok"))
+        "#),
+        b"ok"
+    );
+}
+
+// `!=` is the xor-negated equality (no `BlnNot` prim); on `Bin` both `==`
+// and `!=` newly resolve through the migrated sys witness.
+#[test]
+fn infix_equality_works_on_bin() {
+    assert_eq!(
+        run(r#"
+            use /std/{Bln, Bin, Io, Str};
+            let a : Bin = Str/to_bin("xy");
+            let b : Bin = Str/to_bin("xz");
+            Io/write(Io/stdout, Str/to_bin(Bln/to_str(a != b)))
+        "#),
+        b"true"
+    );
+}

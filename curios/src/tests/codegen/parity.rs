@@ -37,12 +37,22 @@ fn normalized_cont_optm(source: &str) -> String {
     )
     .expect("parity source compiles");
 
-    dump.chars()
-        .map(|c| if c.is_ascii_digit() { '#' } else { c })
-        .collect::<String>()
-        // Collapse counter-length differences (`%v9` vs `%v10`).
-        .replace("##", "#")
-        .replace("##", "#")
+    // Collapse every digit run to one `#`, so counter-length differences
+    // (`%v9` vs `%v100`) normalize away.
+    let mut normalized = String::with_capacity(dump.len());
+    let mut in_digits = false;
+    for c in dump.chars() {
+        if c.is_ascii_digit() {
+            if !in_digits {
+                normalized.push('#');
+            }
+            in_digits = true;
+        } else {
+            normalized.push(c);
+            in_digits = false;
+        }
+    }
+    normalized
 }
 
 /// `Add/add(x, 1)` at `Nat` — dictionary resolved from the sys witness —

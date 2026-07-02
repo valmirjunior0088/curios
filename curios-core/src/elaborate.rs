@@ -1,10 +1,10 @@
 use {
     super::{
         Apply, Bound, Context, Error, Field, Flt, Func, FuncType, ImplicitOrigin, InductiveType,
-        Infix, Int, Let, Metavar, MetavarId, Nat, NumLit, ParkedWork, Plicity, Prim, Proj, Rec,
-        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
+        Infix, Int, Let, Metavar, MetavarId, Nat, NumLit, NumOp, ParkedWork, Plicity, Prim, Proj,
+        Rec, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
         WitnessOrigin, attempt_witness_goal, check, elaborate_match, elaborate_prim, expect,
-        reduce_with, sort_term,
+        operator_concept, reduce_with, sort_term,
     },
     num_bigint::BigInt,
     num_traits::ToPrimitive,
@@ -1129,15 +1129,25 @@ fn infix_default_type(infix: &Infix) -> Prim {
     }
 }
 
-/// Resolve an overloaded infix operator ([`Infix`]) to a concrete scalar
-/// primitive. A fresh operand-type metavar `?T` is pinned by the non-literal
-/// operands first (or, for arithmetic operators, by the expected result type),
-/// then defaulted from the operand literals if nothing constrains it; only then
-/// are the literal operands checked — against a `?T` that is already concrete,
-/// so they never force it to their own default. That ordering is what lets
-/// `1 + flt` resolve to `Flt` rather than a `Nat`/`Flt` mismatch. The operator
-/// then dispatches through [`NumOp::prim_for`]; the node never survives
-/// elaboration — the rebuilt term is the concrete `Prim` application.
+/// Elaborate an infix operator ([`Infix`]) as a concept method call. A fresh
+/// operand-type metavar `?T` is pinned by the non-literal operands first (or,
+/// for arithmetic operators, by the expected result type), then defaulted from
+/// the operand literals if nothing constrains it; only then are the literal
+/// operands checked — against a `?T` that is already concrete, so they never
+/// force it to their own default. That ordering is what lets `1 + flt` resolve
+/// to `Flt` rather than a `Nat`/`Flt` mismatch.
+///
+/// Dispatch is then **one path**: every operator except `&&`/`||` desugars to
+/// a projection of a witness of its `/sys` concept ([`operator_concept`]) —
+/// `a + b` ≙ `Add/add(a, b)`, primitives included, resolved by the same
+/// engine that fills `use` slots (so `no witness of Add(Point)` is the single
+/// error vocabulary, and what an operator means at a type is entirely a
+/// question of which witnesses exist). `&&`/`||` stay hardcoded on `Bln`:
+/// short-circuit operators are control flow, not overloads. `!=` rebuilds as
+/// `BlnXor(Eql/eql(a, b), true)` — no `BlnNot` prim exists. The node never
+/// survives elaboration; witness projections over the statically-known
+/// primitive witnesses collapse back to bare `Prim` code in the backend (see
+/// the codegen parity tests).
 fn elaborate_infix(
     context: &mut Context,
     infix: &Infix,
@@ -1186,24 +1196,76 @@ fn elaborate_infix(
         right = Some(elaborate(context, &infix.right, Mode::Check(operand_type.clone()))?.0);
     }
 
-    let head = Term::unwrap_or_clone(reduce_with(context, &operand_type)?);
-    let build = match infix.op.prim_for(&head) {
-        Some(build) => build,
-        None => {
+    let left = left.unwrap();
+    let right = right.unwrap();
+
+    // `&&`/`||`: hardcoded to the `Bln` short-circuit primitives, the one
+    // deliberate exception to concept dispatch.
+    let Some((concept_name, field_name)) = operator_concept(infix.op) else {
+        let head = Term::unwrap_or_clone(reduce_with(context, &operand_type)?);
+        if !matches!(head, Subterm::Prim(Prim::BlnType)) {
             return Err(Error::operator_undefined(
                 infix.op.symbol().to_string(),
                 head,
             ));
         }
+        let build = match infix.op {
+            NumOp::And => Prim::BlnAnd,
+            _ => Prim::BlnOr,
+        };
+        let rebuilt = Term::prim(build(left, right));
+        if let Mode::Check(expected) = &mode {
+            expect(context, term, &bln_type, expected)?;
+        }
+        return Ok((rebuilt, bln_type));
+    };
+
+    // The concept registry entry — absent only in an exotic embedding that
+    // elaborates without the sys prelude, where the operator has nothing to
+    // dispatch through.
+    let Some(concept) = context.concept(concept_name).cloned() else {
+        let head = Term::unwrap_or_clone(reduce_with(context, &operand_type)?);
+        return Err(Error::operator_undefined(
+            infix.op.symbol().to_string(),
+            head,
+        ));
+    };
+
+    // Projection is positional over the *instantiated* field telescope
+    // (`Structure::fields_at` peels the leading parameter binders, exactly as
+    // `elaborate_proj` resolves a label), so the method's position among the
+    // concept's fields is the index — no parameter offset.
+    let projection_index = concept
+        .fields
+        .iter()
+        .position(|field| field == field_name)
+        .expect("the sys operator concepts declare their table fields");
+
+    // Mint and attempt the witness goal exactly like an omitted `use`
+    // argument: it resolves, parks on a flex operand type, or defers to a
+    // later witness registration, and a definite miss reports
+    // `no witness of Add(Point)` — the single operator error vocabulary.
+    let goal = Term::struct_type(concept_name, vec![operand_type.clone()]);
+    let provenance = WitnessOrigin {
+        func: infix.op.symbol().to_string(),
+        binder: field_name.to_string(),
+    };
+    let (slot, witness) =
+        context.fresh_witness_metavar(goal.clone(), term.span(), provenance.clone());
+    attempt_witness_goal(context, slot, &goal, provenance, term)?;
+
+    let call = Term::apply(Term::proj(witness, projection_index), [left, right]);
+    // No `BlnNot` prim exists; `!=` is the xor-negated equality.
+    let rebuilt = match infix.op {
+        NumOp::Neq => Term::prim(Prim::BlnXor(call, Term::prim(Prim::Bln(true)))),
+        _ => call,
     };
 
     let result_type = if infix.op.result_is_bln() {
         bln_type
     } else {
-        head.into()
+        operand_type
     };
-
-    let rebuilt = Term::prim(build(left.unwrap(), right.unwrap()));
 
     if let Mode::Check(expected) = &mode {
         expect(context, term, &result_type, expected)?;

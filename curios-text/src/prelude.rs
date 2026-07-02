@@ -772,11 +772,17 @@ impl<L: Loader> Loader for SysLoader<L> {
         self.inner.load(qualifier)
     }
 
+    // `sys` comes *first*: root order is flat-item lowering order, which is
+    // the topological-sort tiebreak — and nothing references witness items by
+    // name, so only their position gets the sys operator witnesses emitted
+    // (and registered) before any std item that uses infix elaborates.
+    // Type-level operator uses (`a + 1` in an inductive index) park
+    // conversion goals that must resolve within their own item, so witness
+    // deferral cannot paper over a late-sorted witness there.
     fn roots(&self) -> Vec<String> {
-        self.inner
-            .roots()
+        ["sys".to_string()]
             .into_iter()
-            .chain(["sys".to_string()])
+            .chain(self.inner.roots())
             .collect()
     }
 }

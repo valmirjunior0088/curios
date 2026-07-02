@@ -747,10 +747,11 @@ pub enum Plicity {
     Witness,
 }
 
-/// A fixed, overloaded infix operator. The surface parser maps an operator
-/// symbol (with its precedence) onto one of these; elaboration resolves it to a
-/// concrete scalar primitive once the operand type is known (`elaborate_infix`).
-/// Both `NumOp` and the [`Infix`]/[`NumLit`] nodes are *elaboration-transient*:
+/// A fixed infix operator. The surface parser maps an operator symbol (with
+/// its precedence) onto one of these; elaboration dispatches it through its
+/// `/sys` operator concept once the operand type is known (`elaborate_infix`,
+/// `operator_concept`). Both `NumOp` and the [`Infix`]/[`NumLit`] nodes are
+/// *elaboration-transient*:
 /// born in `to_core`, consumed by `elaborate` (replaced with a `Prim` term), so
 /// they never reach reduce/convert/zonk/erase.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -798,63 +799,12 @@ impl NumOp {
             NumOp::Eql | NumOp::Neq | NumOp::Lt | NumOp::Gt | NumOp::Lte | NumOp::Gte
         )
     }
-
-    /// Resolve the operator to the concrete primitive constructor for an operand
-    /// type whose whnf head is `type_head`. `None` when no primitive realizes
-    /// this operator at that type — `%` on `Flt`, `!=` on `Bln`, or any
-    /// arithmetic/`&&`/`||` outside its supported scalar set — which the caller
-    /// turns into an "operator not defined for type" error.
-    pub fn prim_for(self, type_head: &Subterm) -> Option<fn(Term, Term) -> Prim> {
-        let Subterm::Prim(prim) = type_head else {
-            return None;
-        };
-
-        Some(match (self, prim) {
-            (NumOp::Add, Prim::NatType) => Prim::NatAdd,
-            (NumOp::Add, Prim::IntType) => Prim::IntAdd,
-            (NumOp::Add, Prim::FltType) => Prim::FltAdd,
-            (NumOp::Sub, Prim::NatType) => Prim::NatSub,
-            (NumOp::Sub, Prim::IntType) => Prim::IntSub,
-            (NumOp::Sub, Prim::FltType) => Prim::FltSub,
-            (NumOp::Mul, Prim::NatType) => Prim::NatMul,
-            (NumOp::Mul, Prim::IntType) => Prim::IntMul,
-            (NumOp::Mul, Prim::FltType) => Prim::FltMul,
-            (NumOp::Div, Prim::NatType) => Prim::NatDiv,
-            (NumOp::Div, Prim::IntType) => Prim::IntDiv,
-            (NumOp::Div, Prim::FltType) => Prim::FltDiv,
-            (NumOp::Rem, Prim::NatType) => Prim::NatRem,
-            (NumOp::Rem, Prim::IntType) => Prim::IntRem,
-            (NumOp::Rem, Prim::FltType) => Prim::FltRem,
-            (NumOp::Eql, Prim::NatType) => Prim::NatEql,
-            (NumOp::Eql, Prim::IntType) => Prim::IntEql,
-            (NumOp::Eql, Prim::FltType) => Prim::FltEql,
-            (NumOp::Eql, Prim::BlnType) => Prim::BlnEql,
-            (NumOp::Neq, Prim::NatType) => Prim::NatNeq,
-            (NumOp::Neq, Prim::IntType) => Prim::IntNeq,
-            (NumOp::Neq, Prim::FltType) => Prim::FltNeq,
-            (NumOp::Neq, Prim::BlnType) => Prim::BlnNeq,
-            (NumOp::Lt, Prim::NatType) => Prim::NatLt,
-            (NumOp::Lt, Prim::IntType) => Prim::IntLt,
-            (NumOp::Lt, Prim::FltType) => Prim::FltLt,
-            (NumOp::Gt, Prim::NatType) => Prim::NatGt,
-            (NumOp::Gt, Prim::IntType) => Prim::IntGt,
-            (NumOp::Gt, Prim::FltType) => Prim::FltGt,
-            (NumOp::Lte, Prim::NatType) => Prim::NatLte,
-            (NumOp::Lte, Prim::IntType) => Prim::IntLte,
-            (NumOp::Lte, Prim::FltType) => Prim::FltLte,
-            (NumOp::Gte, Prim::NatType) => Prim::NatGte,
-            (NumOp::Gte, Prim::IntType) => Prim::IntGte,
-            (NumOp::Gte, Prim::FltType) => Prim::FltGte,
-            (NumOp::And, Prim::BlnType) => Prim::BlnAnd,
-            (NumOp::Or, Prim::BlnType) => Prim::BlnOr,
-            _ => return None,
-        })
-    }
 }
 
 /// An unresolved infix application `left <op> right`. Elaboration infers a
-/// shared operand type for the two sides and dispatches `op` to the matching
-/// scalar primitive ([`NumOp::prim_for`]); the node never survives elaboration.
+/// shared operand type for the two sides and rebuilds the node as a concept
+/// method call (`a + b` ≙ `Add/add(a, b)`; `&&`/`||` alone are hardcoded on
+/// `Bln` — see `elaborate_infix`); the node never survives elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Infix {
     pub op: NumOp,
