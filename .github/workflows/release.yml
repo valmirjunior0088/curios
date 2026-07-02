@@ -104,6 +104,9 @@ jobs:
       - name: Build docs
         run: cargo doc --workspace --no-deps
 
+      - name: Add docs root redirect
+        run: echo '<!DOCTYPE html><meta http-equiv="refresh" content="0; url=curios/index.html">' > target/doc/index.html
+
       - name: Archive docs
         run: tar -czf curios-docs.tar.gz -C target/doc .
 
