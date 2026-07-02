@@ -248,3 +248,22 @@ fn nonproductive_inner_rec_in_type_position_is_preempted() {
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(1), source, system).is_err());
 }
+
+// The flex-apply imitation rule: an implicit higher-kinded binder `@M` is
+// inferred from an argument's concrete type — `?M(?A) ≡ Lst(Nat)` commits
+// `?M := (A) => Lst(A)` and `?A := Nat` — where previously only the explicit
+// `apply_m(@Lst, l)` spelling checked.
+#[test]
+fn higher_kinded_implicit_infers_by_imitation() {
+    let source = r#"
+        use /std/{Nat, Lst, Io, Str};
+        pub let apply_m(@M : (Type) -> Type, @A : Type, x : M(A)) -> M(A) = x;
+        let l : Lst(Nat) = Lst/cons(1, Lst/cons(2, Lst/nil()));
+        let k : Lst(Nat) = apply_m(l);
+        Io/print(Nat/to_str(Lst/len(k)))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"2");
+}

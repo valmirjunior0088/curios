@@ -1189,6 +1189,154 @@ impl Convert {
         Ok(Solved::Done)
     }
 
+    /// Park a goal from inside a structural arm: remove it from `history` (so
+    /// a retry after fresh progress is not skipped as already-handled) and
+    /// push it to `blocked`. Returns `Ok(true)` — a blocked goal is undecided,
+    /// never a mismatch.
+    fn block(&mut self, goal: Goal) -> Result<bool, ReduceError> {
+        self.history.remove(&goal);
+        self.blocked.push(goal);
+        Ok(true)
+    }
+
+    /// Flex-apply imitation — the restricted higher-order rule: for
+    /// `?m(a₁ … aₖ) ≡ T(p̄ ++ ī)` where `T` is a nominal (inductive or struct)
+    /// type constructor, commit the *imitation* solution
+    /// `?m := λx₁…xₖ. T(x₁, …, xₖ)` and equate arguments pairwise. This is
+    /// what unifies `?M(?A) ≡ Option(Nat)` for higher-kinded concepts — the
+    /// same commitment Lean's first-order approximation and Agda's
+    /// constructor-headed unification make.
+    ///
+    /// Deliberate v1 restrictions (cf. the guards in `solve`):
+    /// - exact arity only — `ā.len()` must equal `params.len() + indices.len()`;
+    ///   partial application is future work;
+    /// - imitation only — the constant (`?m := λ_. T(b̄)`) and projection
+    ///   (`?m := λx. x`) solutions are never produced;
+    /// - nominal rigid heads only — `Prim`-headed constructors (`Arr`, `Cell`)
+    ///   carry their argument inside the `Prim` node and never reach here;
+    /// - flex–flex stays blocked (dispatched before the structural match);
+    /// - a rejected or postponed guess *blocks* the goal, never hard-fails it:
+    ///   refuting the imitation does not prove the equation unsatisfiable (a
+    ///   constant solution could still exist), and blocking preserves the
+    ///   drain's retry semantics — a permanently blocked goal surfaces as a
+    ///   type mismatch at its origin.
+    ///
+    /// The callers' arms fire for *any* `Apply` against a nominal type; the
+    /// unsolved-bare-metavariable-head test lives here, and its else branch
+    /// reproduces the `eta_expand_neutral` fallthrough these pairs took before
+    /// this rule existed.
+    fn imitate_flex_apply(
+        &mut self,
+        context: &mut Context,
+        flex: Apply,
+        rigid: Term,
+        rigid_raw: &Term,
+        goal: Goal,
+    ) -> Result<bool, ReduceError> {
+        let Some(metavar) = Self::as_metavar(&flex.head).cloned() else {
+            return self.eta_expand_neutral(context, goal.this, goal.that, goal.type_);
+        };
+
+        let (name, rigid_params, rigid_indices) = match &*rigid {
+            Subterm::InductiveType(inductive) => (
+                inductive.name.clone(),
+                inductive.params.clone(),
+                Some(inductive.indices.clone()),
+            ),
+            // Struct types carry no indices.
+            Subterm::StructType(structure) => {
+                (structure.name.clone(), structure.params.clone(), None)
+            }
+            _ => unreachable!("the callers pass a nominal rigid side"),
+        };
+        let arity = rigid_params.len() + rigid_indices.as_ref().map_or(0, Vec::len);
+
+        if flex.params.len() != arity {
+            return self.block(goal);
+        }
+
+        // The candidate's binders come from `?m`'s frozen birth type, which
+        // must itself reduce to a function type of the same arity. Peeling
+        // opens each binder as a free variable of its own label (elaborated
+        // labels are entropy-fresh), so dependent domains stay well-scoped.
+        let Some(entry) = context.metavar_entry(metavar.id) else {
+            return self.block(goal);
+        };
+        let result = reduce(context, entry.result.clone())?;
+        let Subterm::FuncType(func_type) = &*result else {
+            return self.block(goal);
+        };
+        if func_type.plicities.len() != arity {
+            return self.block(goal);
+        }
+
+        let mut domains: Vec<(String, Term)> = Vec::with_capacity(arity);
+        let mut telescope = func_type.telescope.clone();
+        for _ in 0..arity {
+            let Telescope::Cons(ty, rest) = telescope else {
+                unreachable!("plicities parallel the telescope");
+            };
+            let label = rest.first_label().unwrap_or("_").to_string();
+            telescope = rest.open(&[&Term::free_var(&label)]);
+            domains.push((label, ty.clone()));
+        }
+
+        // The candidate body mirrors the rigid node's params/indices split —
+        // `elaborate_inductive_type` re-checks the node against the full
+        // telescope during re-validation and rejects a wrong split.
+        let binder_vars = domains
+            .iter()
+            .map(|(label, _)| Term::free_var(label))
+            .collect::<Vec<_>>();
+        let (param_vars, index_vars) = binder_vars.split_at(rigid_params.len());
+        let body = match &rigid_indices {
+            Some(_) => Term::inductive_type(
+                &name,
+                param_vars.iter().cloned(),
+                index_vars.iter().cloned(),
+            ),
+            None => Term::struct_type(&name, param_vars.iter().cloned()),
+        };
+        let candidate = Term::func(domains.clone(), body);
+
+        // The invariant `solve_refinement_free` protects, upheld here by hand
+        // (the committed solution is the built candidate, not the rigid side
+        // itself): a solution must not be derived from a spelling that holds
+        // only under counterfactual match-arm refinements. When refinements
+        // are live and the unrefined spelling differs, the nominal shape may
+        // be the refinement's doing — postpone rather than commit.
+        if context.has_refinements() {
+            let suppressed = context
+                .with_suppressed_refinements(|context| reduce(context, rigid_raw.clone()))?;
+            if suppressed != rigid {
+                return self.block(goal);
+            }
+        }
+
+        // `solve` supplies the occurs check, the embedded-metavariable guard,
+        // the spine inversion and scope check (against `?m`'s own birth
+        // spine), and re-validation: the candidate is `check`ed against the
+        // frozen birth type under the birth context, which is what rejects an
+        // ill-kinded imitation before it commits.
+        match self.solve(context, &metavar, &candidate)? {
+            Solved::Done => {}
+            Solved::Postponed | Solved::Failed => return self.block(goal),
+        }
+
+        // Equate arguments pairwise, at the candidate telescope's domains
+        // (mirroring `compare_apply`'s recovered argument types).
+        let rigid_args = rigid_params
+            .into_iter()
+            .chain(rigid_indices.into_iter().flatten());
+        for ((flex_arg, rigid_arg), (_, domain)) in
+            flex.params.into_iter().zip(rigid_args).zip(domains)
+        {
+            self.enqueue(domain, flex_arg, rigid_arg);
+        }
+
+        Ok(true)
+    }
+
     /// Solve flex–rigid with a *refinement-free* candidate. The drain reduces
     /// goals under the live frame, where counterfactual match-arm refinements
     /// apply — sound for discharging a goal, but not for committing a
@@ -1432,6 +1580,26 @@ impl Convert {
                     let tail = unfold_rec(context, rec);
                     self.enqueue(type_, other.into(), tail);
                     true
+                }
+                // Flex-apply imitation: a stuck application against a nominal
+                // type constructor. The unsolved-metavariable-head guard (and
+                // the `eta_expand_neutral` fallthrough for every other
+                // `Apply`) lives inside `imitate_flex_apply`.
+                (Subterm::Apply(apply), Subterm::InductiveType(rigid)) => {
+                    let rigid: Term = Subterm::InductiveType(rigid).into();
+                    self.imitate_flex_apply(context, apply, rigid, &that_raw, goal.clone())?
+                }
+                (Subterm::InductiveType(rigid), Subterm::Apply(apply)) => {
+                    let rigid: Term = Subterm::InductiveType(rigid).into();
+                    self.imitate_flex_apply(context, apply, rigid, &this_raw, goal.clone())?
+                }
+                (Subterm::Apply(apply), Subterm::StructType(rigid)) => {
+                    let rigid: Term = Subterm::StructType(rigid).into();
+                    self.imitate_flex_apply(context, apply, rigid, &that_raw, goal.clone())?
+                }
+                (Subterm::StructType(rigid), Subterm::Apply(apply)) => {
+                    let rigid: Term = Subterm::StructType(rigid).into();
+                    self.imitate_flex_apply(context, apply, rigid, &this_raw, goal.clone())?
                 }
                 (this_n, that_n) => {
                     self.eta_expand_neutral(context, this_n.into(), that_n.into(), type_)?

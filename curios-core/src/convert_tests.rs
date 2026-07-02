@@ -1138,3 +1138,177 @@ fn eta_at_unit_trusts_the_goal_type_label() {
         Ok(true)
     );
 }
+
+// === Flex-apply imitation (higher-kinded metavariables) =====================
+
+/// Register a `Lst`-shaped inductive: one parameter, no indices.
+fn register_lst(context: &mut Context) {
+    context.register_inductive(
+        "Lst",
+        Inductive {
+            params: Telescope::build([("A", Term::type_())], ()),
+            indices: Telescope::build([("A", Term::type_())], ()),
+            constructors: BTreeMap::new(),
+            result_sort: Term::type_(),
+        },
+    );
+}
+
+/// Register a `Vec`-shaped inductive: one parameter, one `Nat` index.
+fn register_vec(context: &mut Context) {
+    context.register_inductive(
+        "Vec",
+        Inductive {
+            params: Telescope::build([("T", Term::type_())], ()),
+            indices: Telescope::build([("T", Term::type_()), ("n", Term::prim(Prim::NatType))], ()),
+            constructors: BTreeMap::new(),
+            result_sort: Term::type_(),
+        },
+    );
+}
+
+/// The kind `(Type) -> Type`.
+fn type_to_type() -> Term {
+    Term::func_type([("A", Term::type_())], Term::type_())
+}
+
+#[test]
+fn imitation_solves_flex_apply_against_inductive() {
+    let mut context = context();
+    register_lst(&mut context);
+    context.birth_metavar(MetavarId(0), Vec::new(), type_to_type());
+
+    // ?0(Nat) ≟ Lst(Nat)  — commits ?0 := λA. Lst(A).
+    let flex = Term::apply(Term::metavar(0), [nat_type()]);
+    let rigid = Term::inductive_type("Lst", [nat_type()], Vec::<Term>::new());
+    assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+
+    // The committed solution is the imitation, not the constant: applied to a
+    // different argument it yields Lst of *that* argument.
+    let at_bln = Term::apply(Term::metavar(0), [Term::prim(Prim::BlnType)]);
+    let lst_bln = Term::inductive_type("Lst", [Term::prim(Prim::BlnType)], Vec::<Term>::new());
+    assert_eq!(conv(&mut context, &at_bln, &lst_bln), Ok(true));
+}
+
+#[test]
+fn imitation_is_symmetric() {
+    let mut context = context();
+    register_lst(&mut context);
+    context.birth_metavar(MetavarId(0), Vec::new(), type_to_type());
+
+    // Rigid on the left, stuck application on the right.
+    let flex = Term::apply(Term::metavar(0), [nat_type()]);
+    let rigid = Term::inductive_type("Lst", [nat_type()], Vec::<Term>::new());
+    assert_eq!(conv(&mut context, &rigid, &flex), Ok(true));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+}
+
+#[test]
+fn imitation_equates_arguments_pairwise() {
+    let mut context = context();
+    register_lst(&mut context);
+    context.birth_metavar(MetavarId(0), Vec::new(), type_to_type());
+    context.birth_metavar(MetavarId(1), Vec::new(), Term::type_());
+
+    // ?0(?1) ≟ Lst(Nat) — the imitation solves ?0, the pairwise equation ?1.
+    let flex = Term::apply(Term::metavar(0), [Term::metavar(1)]);
+    let rigid = Term::inductive_type("Lst", [nat_type()], Vec::<Term>::new());
+    assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+    assert_eq!(context.metavar_solution(MetavarId(1)), Some(&nat_type()));
+}
+
+#[test]
+fn imitation_splits_params_and_indices() {
+    let mut context = context();
+    register_vec(&mut context);
+    context.birth_metavar(
+        MetavarId(0),
+        Vec::new(),
+        Term::func_type(
+            [("T", Term::type_()), ("n", Term::prim(Prim::NatType))],
+            Term::type_(),
+        ),
+    );
+
+    // ?0(Nat, 3) ≟ Vec(Nat, 3) — arity 2 = 1 param + 1 index; the candidate's
+    // body must mirror the rigid node's split or re-validation rejects it.
+    let flex = Term::apply(Term::metavar(0), [nat_type(), nat(3)]);
+    let rigid = Term::inductive_type("Vec", [nat_type()], [nat(3)]);
+    assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+
+    let at_two = Term::apply(Term::metavar(0), [Term::prim(Prim::BlnType), nat(2)]);
+    let vec_two = Term::inductive_type("Vec", [Term::prim(Prim::BlnType)], [nat(2)]);
+    assert_eq!(conv(&mut context, &at_two, &vec_two), Ok(true));
+}
+
+#[test]
+fn imitation_solves_against_struct_type() {
+    let mut context = context();
+    context.register_structure(
+        "Pair",
+        Structure {
+            params: Telescope::build([("A", Term::type_()), ("B", Term::type_())], ()),
+            fields: Telescope::build([("A", Term::type_()), ("B", Term::type_())], ()),
+            result_sort: Term::type_(),
+            module: String::new(),
+            rep_public: true,
+        },
+    );
+    context.birth_metavar(
+        MetavarId(0),
+        Vec::new(),
+        Term::func_type([("A", Term::type_()), ("B", Term::type_())], Term::type_()),
+    );
+
+    let flex = Term::apply(Term::metavar(0), [nat_type(), nat_type()]);
+    let rigid = Term::struct_type("Pair", [nat_type(), nat_type()]);
+    assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+}
+
+#[test]
+fn imitation_arity_mismatch_blocks() {
+    let mut context = context();
+    register_vec(&mut context);
+    context.birth_metavar(MetavarId(0), Vec::new(), type_to_type());
+
+    // ?0(Nat) ≟ Vec(Nat, 3) — apply arity 1 against constructor arity 2:
+    // v1 has no partial-application solutions, so the goal blocks (it is not
+    // provably unequal — a constant solution could exist).
+    let flex = Term::apply(Term::metavar(0), [nat_type()]);
+    let rigid = Term::inductive_type("Vec", [nat_type()], [nat(3)]);
+    let outcome = convert_outcome(&mut context, &Term::type_(), &flex, &rigid);
+    assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
+}
+
+#[test]
+fn imitation_non_function_birth_type_blocks() {
+    let mut context = context();
+    register_lst(&mut context);
+    // ?0's frozen type is not a function type: no candidate can be built.
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_());
+
+    let flex = Term::apply(Term::metavar(0), [nat_type()]);
+    let rigid = Term::inductive_type("Lst", [nat_type()], Vec::<Term>::new());
+    let outcome = convert_outcome(&mut context, &Term::type_(), &flex, &rigid);
+    assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
+}
+
+#[test]
+fn imitation_leaves_rigid_apply_pairs_alone() {
+    let mut context = context();
+    register_lst(&mut context);
+    context.assume("f", &type_to_type());
+
+    // A *rigid* stuck application against a nominal type is not the imitation
+    // case: the guard falls back to the neutral path, which cannot equate
+    // them — a definite mismatch, exactly as before the rule existed.
+    let stuck = Term::apply(Term::free_var("f"), [nat_type()]);
+    let rigid = Term::inductive_type("Lst", [nat_type()], Vec::<Term>::new());
+    assert_eq!(conv(&mut context, &stuck, &rigid), Ok(false));
+}
