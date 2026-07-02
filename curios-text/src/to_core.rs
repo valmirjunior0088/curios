@@ -347,10 +347,14 @@ fn process_items(
             }
             TopItem::Let(let_item) => {
                 let lower = Lower::new(context);
+                let type_ = lower.term(&let_item.signature.type_())?;
+                if let_item.is_pub {
+                    context.check_public_interface(&let_item.label, &type_)?;
+                }
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&let_item.label),
-                    type_: lower.term(&let_item.signature.type_())?,
+                    type_,
                     body: lower.value(&let_item.signature.body())?,
                 }));
             }
@@ -359,10 +363,14 @@ fn process_items(
                     .iter()
                     .map(|let_item| {
                         let lower = Lower::new(context);
+                        let type_ = lower.term(&let_item.signature.type_())?;
+                        if let_item.is_pub {
+                            context.check_public_interface(&let_item.label, &type_)?;
+                        }
 
                         Ok(FlatLet {
                             name: context.prefixed(&let_item.label),
-                            type_: lower.term(&let_item.signature.type_())?,
+                            type_,
                             body: lower.value(&let_item.signature.body())?,
                         })
                     })
@@ -523,6 +531,9 @@ fn process_items(
                                 ),
                             )
                         };
+                        if u.is_pub {
+                            context.check_public_interface(&u.label, &type_)?;
+                        }
 
                         Ok(FlatLet {
                             name: context.prefixed(&u.label),
@@ -605,6 +616,14 @@ fn process_items(
                             param_tys.clone(),
                             lower.term(&output_type)?,
                         );
+                        // A constructor is exactly as visible as its inductive:
+                        // a pub inductive's payload types are interface.
+                        if u.is_pub {
+                            context.check_public_interface(
+                                &format!("{}/{}", u.label, c.label),
+                                &ctor_type,
+                            )?;
+                        }
 
                         // Constructor body: (params..., _0, ...) => the variant's
                         // injection, a primitive `Variant` normal form.
@@ -683,6 +702,21 @@ fn process_items(
                         Ok((n, lower.term(&param.desugared_type())?))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
+
+                // A pub struct's parameter types are interface; its field
+                // types are interface only when the representation is visible
+                // (`record`) — hidden fields are already fenced by the island
+                // model, so a private helper type inside them is fine.
+                if s.is_pub {
+                    for (_, _, ty) in &param_tys {
+                        context.check_public_interface(&s.label, ty)?;
+                    }
+                    if s.rep_pub {
+                        for (_, ty) in &field_tys {
+                            context.check_public_interface(&s.label, ty)?;
+                        }
+                    }
+                }
 
                 // Registry entry: the parameter telescope, and the full field
                 // telescope (parameter binders first — field types may mention
@@ -792,6 +826,17 @@ fn process_items(
                     let lower = Lower::new(context);
                     lower.term(&concept.result_sort)?
                 };
+
+                // A concept's representation is always public, so a pub
+                // concept's parameter and field types are all interface.
+                if concept.is_pub {
+                    for (_, _, ty) in &param_tys {
+                        context.check_public_interface(&concept.label, ty)?;
+                    }
+                    for (_, ty) in &field_tys {
+                        context.check_public_interface(&concept.label, ty)?;
+                    }
+                }
 
                 // The record shape drives struct literals and projections.
                 structures.insert(

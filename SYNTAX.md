@@ -183,6 +183,8 @@ end
 
 A module is a sequence of items; an entrypoint file is items followed by a final term. Every item except `use`/`mod` headers may be prefixed with `pub` to export it.
 
+**Private items stay out of public interfaces.** A `pub` item's declared signature must only mention items that are themselves publicly reachable: the annotation of a `pub let`/`rec`, a `pub concept`'s parameter and field types (superclasses included), a `pub induct`'s parameter, index, and constructor payload types, and a `pub struct`/`record`'s parameter types (plus field types when the representation is public — a `struct`'s hidden fields are not interface). Violations are a compile error naming both items. Bodies are exempt — a public function may call private helpers freely — which also means a transparent type alias (`pub let X : Type = <private>`) can still leak definitionally; the check covers declared signatures.
+
 **`let` / `rec`.** Top-level definitions. Unlike local `let`, the type is **required** (function sugar or `: T =`). `rec ... and ...` defines mutually-recursive groups.
 
 ```

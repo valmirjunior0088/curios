@@ -66,6 +66,14 @@ pub enum Error {
     ConceptWithoutInputs {
         label: String,
     },
+    /// A `pub` item's declared signature references an item that is not itself
+    /// publicly reachable. Cross-module references are vetted during
+    /// resolution; this closes the two privately-resolvable paths (the item's
+    /// own module and its own private child modules).
+    PrivateItemInPublicInterface {
+        item: String,
+        referent: String,
+    },
     /// A postfix `!` was reached through a *type* lowering (an annotation, a
     /// motive, a Π/Σ component): types have no region to hoist the action to.
     BangInTypePosition,
@@ -120,6 +128,10 @@ impl fmt::Display for Error {
             ),
             Error::BindingNotFound { binding } => write!(f, "binding not found: {binding}"),
             Error::PrivateBinding { binding } => write!(f, "private binding: {binding}"),
+            Error::PrivateItemInPublicInterface { item, referent } => write!(
+                f,
+                "public item '{item}' exposes private item '{referent}' in its signature\n  mark '{referent}' pub, or make '{item}' private"
+            ),
             Error::QualifierConflict { qualifier } => {
                 write!(
                     f,

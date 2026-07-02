@@ -123,6 +123,7 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 - [x] CI pipeline (fmt/check/clippy/test)
 - [x] Multi-platform release automation (Linux x86_64/aarch64, macOS aarch64 native binaries + wasm playground bundle, via tag-triggered GitHub Releases)
 - [x] Module system
+  - [x] Private-item-in-public-interface check (signature-only; hidden `struct` fields exempt)
 - [x] Browser playground
 - [ ] Developer tooling
   - [ ] Code formatter

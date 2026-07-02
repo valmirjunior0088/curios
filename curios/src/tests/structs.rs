@@ -294,3 +294,140 @@ fn function_field_sugar_runs_end_to_end() {
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"8");
 }
+
+// A `pub` item's signature may not expose a private sibling: the reference
+// resolves through lexical scope (no publicness walk), so a dedicated
+// interface audit closes the gap.
+#[test]
+fn pub_signature_exposing_private_sibling_is_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        mod M
+            use /std/{Nat};
+            struct Secret : Type { Nat }
+            pub let f(s : Secret) -> Nat = 1;
+        end
+        Io/print("no")
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    assert!(
+        error.contains("exposes private item '/M/Secret'"),
+        "unexpected error: {error}"
+    );
+}
+
+// The other privately-resolvable path: an item inside the module's own
+// private child (the head segment resolves lexically, so resolution never
+// checked the child's visibility).
+#[test]
+fn pub_signature_exposing_private_child_module_is_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        mod M
+            mod Inner
+                use /std/{Nat};
+                pub record T : Type { n : Nat }
+            end
+            use Inner/{T};
+            pub let g(t : T) -> T = t;
+        end
+        Io/print("no")
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    assert!(
+        error.contains("exposes private item '/M/Inner'"),
+        "unexpected error: {error}"
+    );
+}
+
+// A pub concept's field types are interface (its representation is always
+// public), superclass edges included.
+#[test]
+fn pub_concept_with_private_superclass_is_rejected() {
+    let source = r#"
+        use /std/{Nat, Bln, Io};
+        mod M
+            use /std/{Bln};
+            concept Hidden(A : Type) : Type {
+                h(A) -> Bln
+            }
+            pub concept Loud(A : Type) : Type {
+                use hidden : Hidden(A),
+                l(A) -> Bln
+            }
+        end
+        Io/print("no")
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    assert!(
+        error.contains("exposes private item '/M/Hidden'"),
+        "unexpected error: {error}"
+    );
+}
+
+// A pub inductive's constructors are its interface: a private payload type is
+// rejected (the `Task`/`Pause` shape).
+#[test]
+fn pub_inductive_with_private_payload_type_is_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        mod M
+            induct Secret : Type
+            | mk()
+            end
+            pub induct Box : Type
+            | wrap(Secret)
+            end
+        end
+        Io/print("no")
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    assert!(
+        error.contains("exposes private item '/M/Secret'"),
+        "unexpected error: {error}"
+    );
+}
+
+// A `struct` hides its representation, so its field types are NOT interface —
+// a private helper type inside is legal; a `record`'s fields are interface.
+#[test]
+fn hidden_struct_fields_are_not_interface_but_record_fields_are() {
+    let hidden = r#"
+        use /std/{Nat, Io};
+        mod M
+            use /std/{Nat};
+            record Secret : Type { n : Nat }
+            pub struct Opaque : Type { Secret }
+            pub let mk() -> Opaque = Opaque { Secret { n = 1 } };
+        end
+        let o = M/mk();
+        Io/print("ok")
+        "#;
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), hidden, system).expect("expected result");
+    assert_eq!(io.output(), b"ok");
+
+    let exposed = r#"
+        use /std/{Nat, Io};
+        mod M
+            use /std/{Nat};
+            record Secret : Type { n : Nat }
+            pub record Open : Type { s : Secret }
+        end
+        Io/print("no")
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    let error = crate::run_text(Duration::from_secs(10), exposed, system).unwrap_err();
+    assert!(
+        error.contains("exposes private item '/M/Secret'"),
+        "unexpected error: {error}"
+    );
+}

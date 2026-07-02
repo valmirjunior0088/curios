@@ -164,6 +164,76 @@ impl<'a> Context<'a> {
         &self.bindings
     }
 
+    /// A `pub` item's declared signature must not reference an item that is
+    /// not itself publicly reachable. Cross-module references were already
+    /// vetted by resolution (every module hop and the final binding walk the
+    /// public tables), so the only privately-resolvable references a lowered
+    /// signature can carry are (1) the item's own module's bindings (lexical
+    /// scope) and (2) items inside the item's own child modules (the head
+    /// segment resolves lexically). Those are what this audits: `signature` is
+    /// the item's lowered type, whose free variables are exactly its resolved
+    /// global references.
+    pub fn check_public_interface(
+        &self,
+        item: &str,
+        signature: &curios_core::Term,
+    ) -> Result<(), Error> {
+        for reference in signature.free_vars() {
+            // Only canonical (absolute) names refer to module items; bare
+            // names are local binders or unresolved (reported later by core).
+            let Some(path) = reference.strip_prefix('/') else {
+                continue;
+            };
+            let segments: Vec<&str> = path.split('/').collect();
+            let Some((label, parents)) = segments.split_last() else {
+                continue;
+            };
+
+            // Skip foreign referents: only names at or below the current
+            // module can have resolved through a private path.
+            let prefix = self.prefix.segments();
+            if parents.len() < prefix.len()
+                || parents.iter().zip(prefix).any(|(a, b)| *a != b.as_str())
+            {
+                continue;
+            }
+
+            // Every child-module hop below the current module must be public...
+            let mut module = self.prefix.clone();
+            let mut referent = None;
+            for hop in &parents[prefix.len()..] {
+                if referent.is_none()
+                    && self.table.get(&module).and_then(|info| info.get_child(hop)) == Some(false)
+                {
+                    referent = Some(module.with(hop).join());
+                }
+                module = module.with(hop);
+            }
+
+            // ...and so must the binding itself. Namespaces without a module
+            // table entry (constructor and concept-method namespaces) share
+            // their parent's visibility, which the hop walk already covered.
+            if referent.is_none()
+                && self
+                    .table
+                    .get(&module)
+                    .and_then(|info| info.get_binding(label))
+                    == Some(false)
+            {
+                referent = Some(reference.clone());
+            }
+
+            if let Some(referent) = referent {
+                return Err(Error::PrivateItemInPublicInterface {
+                    item: self.prefixed(item).join(),
+                    referent,
+                });
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn insert_scope(&mut self, qualifier: String, name: Qualifier) -> Result<(), Error> {
         if self.qualifiers.contains_key(&qualifier) {
             return Err(Error::QualifierConflict { qualifier });
