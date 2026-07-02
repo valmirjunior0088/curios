@@ -82,15 +82,16 @@ rec go(rest : Lst(A), acc : Nat) -> Nat =
 go(l, 0)
 ```
 
-**`let !` (do-notation).** `let ! = <bind>;` introduces monadic binding for the rest of the block, where `<bind>` is an atomic term denoting a binary bind (`(M A, (A) -> M B) -> M B`). Each subsequent `e!` is desugared through it. There is no `end` — the block ends with the enclosing term.
+**Postfix `!` (do-notation).** A trailing `!` on an atomic term extracts the result of a monadic action: `e!` hoists `e` to the top of its enclosing *region* and sequences it through the `Monad` concept (each site desugars to `/syn/Monad/bind(e, continuation)`, and the action's type resolves the witness — see [Concepts](#concepts-witnesses-and-instance-arguments)). Every value body is a region; a lambda body, match arm, or `rec` item starts a fresh one, and a `let` tail continues the region after the binder. No header or `end` is needed; a `!` in a type is an error, and `!` is not parsed inside `!=`.
 
 ```
-let ! = Parse/bind;
-let c = take_char()!;        -- `!` sequences through the chosen bind
-pure(c)
+let parser : Parse(Nat) =
+    let a = Parse/any_byte!;     -- Monad(Parse) resolved from the action's type
+    let b = Parse/any_byte!;
+    Parse/pure(a + b);
 ```
 
-**Postfix `!`.** Outside the `let ! =` header, a trailing `!` on an atomic term is the bang operator (`x!`). It is not parsed inside `!=`.
+The standard library ships `Monad` witnesses for `Option`, `Lst`, `Task`, `Parse`, and `Reader`; declaring `witness monad_m : Monad(M) { … }` makes `!` work with your own type. Inside monad-generic code a local `use m : Monad(M)` binder resolves the sites, so generic do-notation works too.
 
 ## Operators
 
@@ -309,7 +310,7 @@ join([1, 2, 3])                 -- resolves show_lst(show_nat)
 join(use my_dict, [1, 2, 3])    -- explicit override
 ```
 
-**Resolution** proceeds deterministically: local `use` binders innermost-first; then superclass projections of local binders, breadth-first by depth (two matches at the same minimal depth are ambiguous); then the global table, keyed by the concept and the input parameters' rigid heads. A goal with an unsolved metavariable in any input position waits until it is solved. The standard library provides `Show`, `Eql` (value-level equality — distinct from propositional `Eq`), `Ord`, `Monad`, and the operator concepts `Add`/`Sub`/`Mul`/`Div`/`Rem`/`Cmp` (see [Operators](#operators)), with witnesses for the primitive types.
+**Resolution** proceeds deterministically: local `use` binders innermost-first; then superclass projections of local binders, breadth-first by depth (two matches at the same minimal depth are ambiguous); then the global table, keyed by the concept and the input parameters' rigid heads. A goal with an unsolved metavariable in any input position waits until it is solved. The standard library provides `Show`, `Eql` (value-level equality — distinct from propositional `Eq`), `Ord`, `Monad`, and the operator concepts `Add`/`Sub`/`Mul`/`Div`/`Rem`/`Cmp` (see [Operators](#operators)), with witnesses for the primitive types. `Monad` itself is homed in `/syn` — it is what the postfix `!` desugars to — and `/std/Monad` is the user-facing facade, with the container witnesses beside it in `/std`.
 
 ## Proofs (Eq idioms)
 

@@ -58,7 +58,7 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 ## Syntax Sugar
 
 - [x] Multi-parameter function syntax sugar
-- [x] Monadic sequencing syntax
+- [x] Monadic sequencing syntax (postfix `!`, dispatched through the `/syn/Monad` concept — no `let !` header; every value body is a region)
 - [x] Field projection sugar (`.0`/`.label`; no destructuring-pattern binders)
 - [x] Function-field sugar in every field list (`name(params) -> T` in tuple types and `struct`/`record` declarations, `name(args) = body` in tuple and struct literals — the forms concept/witness bodies always had) and trailing commas in field lists
 - [ ] Struct spread/update syntax (`T { ..base, f = x }`)
