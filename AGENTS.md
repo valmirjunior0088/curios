@@ -73,7 +73,6 @@ then, in curios itself:
 | `curios-base/src/{span,entropy,macros,suffix_view}.rs` | Foundational utilities shared by every stage                                                                                               |
 | `curios-abi/src/{lib,host}.rs`                   | Host↔guest contract: wire ABI constants and the `ForeignFunction`/`ForeignStore` host-op rows (`sys_io()` seed)                                  |
 | `curios-text/{std,syn}/`                         | curios standard / support libraries (`*.crs`), indexed by `curios-text/{std,syn}.crs`                                                            |
-| `curios/examples/`                               | Runnable examples that execute (`parse_*`, `inline_*`, `crs_*`, `bench_parse`, `bench_check`)                                                    |
 | `curios-binaryen/src/`                           | FFI bindings to vendored Binaryen (`sys.rs`); `optimize(bytes)`; `build.rs` links it                                                             |
 | `curios-binaryen/binaryen/`                      | Vendored Binaryen C++ source (do not edit — see Gotchas)                                                                                         |
 | `curios-rt/src/`                                 | wasmtime engine + host stack (`run_bytes`, `instantiate`, `shared_engine`); OS + mock hosts                                                      |
@@ -172,7 +171,7 @@ The standard library under `curios-text/std/` is the reference for idiomatic cur
 - `record` exposes its representation (construct/project directly); `struct` keeps it private to the module — touch it only via exported helpers, or you hit a `PrivateRepresentation` error.
 - A `pub` item's declared signature may not mention a private item (`PrivateItemInPublicInterface`, checked in `to_core` via `Context::check_public_interface` — signatures only, bodies exempt; a `struct`'s hidden field types are not interface).
 
-To run or test `.crs` code, use the CLI (`cargo run --package curios -- run …`) or one of the runnable examples in `curios/examples/` (`cargo run --package curios --example crs_eq`; the `crs_*` and `parse_*` examples drive `.crs` programs through the pipeline).
+To run or test `.crs` code, use the CLI (`cargo run --package curios -- run …`), which drives a `.crs` program through the pipeline.
 
 ## Gotchas
 
