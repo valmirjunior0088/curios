@@ -12,6 +12,6 @@ pub use Ord/*;
 
 -- The superclass field is omitted: it resolves to the registered `Eql(Nat)`
 -- witness, the same way a call-site `use` slot would.
-witness : Ord(Nat) {
+witness Ord(Nat) {
     cmp(a, b) = Nat/compare(a, b)
 }

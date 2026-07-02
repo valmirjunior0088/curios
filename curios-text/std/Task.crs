@@ -372,7 +372,7 @@ pub let select(@A : Type, tasks : Lst(() -> Task(A))) -> Task({Nat, A}) =
 pub let race(@A : Type, tasks : Lst(() -> Task(A))) -> Task(A) =
     bind(select(tasks), (w) => pure(w.1));
 
-witness : Monad(Task) {
+witness Monad(Task) {
     pure(A, x) = pure(@A, x),
     bind(A, B, m, f) = bind(@A, @B, m, f)
 }

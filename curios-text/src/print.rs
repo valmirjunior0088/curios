@@ -956,7 +956,7 @@ fn print_top_witness(item: TopWitness) -> Printer<'static> {
     flat([
         pure("witness"),
         params,
-        pure(" : "),
+        pure(" "),
         app,
         pure(" { "),
         sep_flat(item.entries.into_iter().map(print_witness_entry), || {

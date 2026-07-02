@@ -1707,9 +1707,11 @@ fn parse_witness_entry<'a>() -> Parser<'a, WitnessEntry> {
         .or(parse_witness_field().map(WitnessEntry::Field))
 }
 
-// A witness declaration is anonymous: `witness (params)? : Concept(args) { … }`.
+// A witness declaration is anonymous: `witness (params)? Concept(args) { … }`.
 // The keyword is the commit point, exactly as before — nothing else at item
-// position begins with `witness`.
+// position begins with `witness`. No separator sits between the optional
+// telescope and the concept: the telescope is a parenthesized group and the
+// concept is a name, so the two never run together.
 fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
     catch(parse_keyword("witness")).flat_map(|()| {
         catch(
@@ -1718,7 +1720,6 @@ fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
                 .and_drop(parse_literal(")")),
         )
         .or(pure(vec![]))
-        .and_drop(parse_literal(":"))
         .and(parse_name())
         .and(
             catch(

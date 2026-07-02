@@ -45,7 +45,7 @@ pub rec read_line : Reader(Option(Bin)) =
             end
         end };
 
-witness : Monad(Reader) {
+witness Monad(Reader) {
     pure(A, x) = pure(@A, x),
     bind(A, B, m, f) = bind(@A, @B, m, f)
 }

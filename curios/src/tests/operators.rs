@@ -313,7 +313,7 @@ fn infix_add_on_a_user_record_resolves_its_witness() {
         run(r#"
             use /std/{Nat, Io, Str, Add};
             record Point : Type { x : Nat, y : Nat }
-            witness : Add(Point) {
+            witness Add(Point) {
                 add(a, b) = Point { x = a.x + b.x, y = a.y + b.y }
             }
             let p : Point = Point { x = 3, y = 4 };
@@ -375,7 +375,7 @@ fn infix_literal_against_a_user_type_is_rejected() {
     let source = r#"
         use /std/{Nat, Io, Str, Add};
         record Point : Type { x : Nat, y : Nat }
-        witness : Add(Point) {
+        witness Add(Point) {
             add(a, b) = Point { x = a.x + b.x, y = a.y + b.y }
         }
         let p : Point = Point { x = 1, y = 2 };

@@ -1290,8 +1290,8 @@ fn function_field_sugar_round_trips() {
     for source in [
         "record Api : Type { version : Nat, ping(x : Nat) -> Nat } u",
         "concept Ord(A : Type) : Type { use eql : Eql(A), cmp(A, A) -> Order } u",
-        "witness : Ord(Nat) { use eql_nat, cmp(a, b) = f(a, b) } u",
-        "witness : Ord(Nat) { cmp(a, b) = f(a, b) } u",
+        "witness Ord(Nat) { use eql_nat, cmp(a, b) = f(a, b) } u",
+        "witness Ord(Nat) { cmp(a, b) = f(a, b) } u",
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(
@@ -1349,8 +1349,8 @@ fn field_lists_admit_a_trailing_comma() {
             "concept Show(A : Type) : Type { show(A) -> Str } u",
         ),
         (
-            "witness : Show(Nat) { show = Nat/to_str, } u",
-            "witness : Show(Nat) { show = Nat/to_str } u",
+            "witness Show(Nat) { show = Nat/to_str, } u",
+            "witness Show(Nat) { show = Nat/to_str } u",
         ),
     ] {
         assert_eq!(
@@ -1476,7 +1476,7 @@ fn parse_witness_item() {
     // `use <term>` fill for the concept's superclass field, and the definition
     // sugar (`cmp(a, b) = ...`).
     let source = "\
-        witness(@A : Type, use Ord(A)) : Ord(Lst(A)) { \
+        witness(@A : Type, use Ord(A)) Ord(Lst(A)) { \
             use eql_lst, \
             cmp(a, b) = Order/lt() \
         } u";
@@ -1556,8 +1556,8 @@ fn concept_witness_use_round_trip() {
         "concept Show(A : Type) : Type { show : A } u",
         "pub concept Ord(A : Type) : Type { use eql : Eql(A), cmp : A } u",
         "concept Convert(A : Type, out B : Type) : Type { convert : A } u",
-        "witness : Show(Nat) { show = f } u",
-        "witness(@A : Type, use w : Show(A)) : Show(Lst(A)) { show = g } u",
+        "witness Show(Nat) { show = f } u",
+        "witness(@A : Type, use w : Show(A)) Show(Lst(A)) { show = g } u",
         "f(use dict, x)",
         "(@A : Type, use w : Show(A), x : A) -> A",
     ] {
