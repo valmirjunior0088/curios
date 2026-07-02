@@ -1,10 +1,10 @@
 use {
     super::{
-        Apply, ArrMatch, BinMatch, BlnMatch, ConceptField, Entrypoint, Field, Func, FuncType,
-        GroupItem, InductiveMatch, Infix, Let, LetBang, LetSignature, Match, Module, Motive, Nat,
-        NatLiteral, NatMatch, NumLit, Plicity, Prim, Proj, Radix, Rec, StructLit, Subterm, Syn,
-        Term, TopCase, TopConcept, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse,
-        TopWitness, Tuple, TupleType, TupleTypeParam, UseGroup,
+        Apply, ArrMatch, BinMatch, BlnMatch, ConceptField, ConceptParam, Entrypoint, Field, Func,
+        FuncType, GroupItem, InductiveMatch, Infix, Let, LetBang, LetSignature, Match, Module,
+        Motive, Nat, NatLiteral, NatMatch, NumLit, Plicity, Prim, Proj, Radix, Rec, StructLit,
+        Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem, TopLet, TopMod, TopStruct,
+        TopUse, TopWitness, Tuple, TupleType, TupleTypeParam, UseGroup,
     },
     curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_bigint::BigUint,
@@ -844,12 +844,38 @@ fn print_concept_field(field: ConceptField) -> Printer<'static> {
     ])
 }
 
+// Concept parameters print like an inductive's, plus the `out` marker —
+// which `print_top_inductive_params` cannot carry, hence the dedicated
+// printer.
+fn print_top_concept_params(params: Vec<ConceptParam>) -> Printer<'static> {
+    if params.is_empty() {
+        return pure("");
+    }
+
+    flat([
+        pure("("),
+        sep_flat(
+            params.into_iter().map(|param| {
+                flat([
+                    if param.is_out { pure("out ") } else { pure("") },
+                    print_plicity(param.plicity),
+                    pure(param.label),
+                    pure(" : "),
+                    print_term(param.type_),
+                ])
+            }),
+            || pure(", "),
+        ),
+        pure(")"),
+    ])
+}
+
 fn print_top_concept(item: TopConcept) -> Printer<'static> {
     flat([
         print_pub(item.is_pub),
         pure("concept "),
         pure(item.label),
-        print_top_inductive_params(item.params),
+        print_top_concept_params(item.params),
         pure(" : "),
         print_term(item.result_sort),
         pure(" { "),

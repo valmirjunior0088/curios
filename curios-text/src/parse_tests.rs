@@ -1246,6 +1246,39 @@ fn parse_concept_item() {
 }
 
 #[test]
+fn parse_concept_out_parameter() {
+    // `out` marks an output position; unmarked parameters are inputs.
+    let source = "concept Convert(A : Type, out B : Type) : Type { convert(A) -> B } u";
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    let TopItem::Concept(concept) = &entrypoint.module.items[0] else {
+        panic!("expected a concept declaration");
+    };
+
+    assert_eq!(concept.params.len(), 2);
+    assert!(!concept.params[0].is_out);
+    assert_eq!(concept.params[0].label, "A");
+    assert!(concept.params[1].is_out);
+    assert_eq!(concept.params[1].label, "B");
+}
+
+#[test]
+fn out_stays_a_valid_parameter_name() {
+    // The marker needs a binder after it, so `out : Type` is a parameter
+    // *named* `out`, and `out out : Type` is an `out`-marked one named `out`.
+    let source = "concept Weird(out : Type, out out : Type) : Type { get : out } u";
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    let TopItem::Concept(concept) = &entrypoint.module.items[0] else {
+        panic!("expected a concept declaration");
+    };
+
+    assert_eq!(concept.params.len(), 2);
+    assert!(!concept.params[0].is_out);
+    assert_eq!(concept.params[0].label, "out");
+    assert!(concept.params[1].is_out);
+    assert_eq!(concept.params[1].label, "out");
+}
+
+#[test]
 fn parse_witness_item() {
     // A premised witness: an `@` binder, a `use` premise, and both field
     // spellings (`eql = ...` and the definition sugar `cmp(a, b) = ...`).
@@ -1317,6 +1350,7 @@ fn concept_witness_use_round_trip() {
     for source in [
         "concept Show(A : Type) : Type { show : A } u",
         "pub concept Ord(A : Type) : Type { use eql : Eql(A), cmp : A } u",
+        "concept Convert(A : Type, out B : Type) : Type { convert : A } u",
         "witness show_nat : Show(Nat) { show = f } u",
         "pub witness show_lst(@A : Type, use w : Show(A)) : Show(Lst(A)) { show = g } u",
         "f(use dict, x)",

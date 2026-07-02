@@ -128,15 +128,28 @@ pub struct ConceptField {
     pub type_: Term,
 }
 
+/// One concept parameter: a `record`-style binder plus the `out` polarity
+/// marker. An `out`-marked parameter is an output position — excluded from
+/// the witness key and pinned by the resolved witness (functional
+/// dependencies); unmarked parameters are inputs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConceptParam {
+    pub plicity: Plicity,
+    pub is_out: bool,
+    pub label: String,
+    pub type_: Term,
+}
+
 /// A `concept` declaration: a record-shaped interface. It lowers to a nominal
 /// `record` (representation public) plus a concept-registry entry and, into its
 /// own namespace, one method-wrapper `let` per field (§4.1). `params` are
-/// written exactly like a `record`'s; the result sort is `Type` or `Prop`.
+/// written like a `record`'s, each optionally `out`-marked; the result sort is
+/// `Type` or `Prop`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopConcept {
     pub is_pub: bool,
     pub label: String,
-    pub params: Vec<(Plicity, String, Term)>,
+    pub params: Vec<ConceptParam>,
     pub result_sort: Term,
     pub fields: Vec<ConceptField>,
 }

@@ -1,11 +1,11 @@
 use {
     super::{
-        Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, ConceptField, Entrypoint, Field,
-        Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm, InductiveMatch,
-        Infix, Let, LetBang, LetSignature, LoadError, Match, Module, Motive, Name, Nat, NatLiteral,
-        NatMatch, NumLit, NumOp, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem, StructLit,
-        Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem, TopLet, TopMod, TopStruct,
-        TopUse, TopWitness, Tuple, TupleType, TupleTypeParam, UseGroup,
+        Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, ConceptField, ConceptParam,
+        Entrypoint, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm,
+        InductiveMatch, Infix, Let, LetBang, LetSignature, LoadError, Match, Module, Motive, Name,
+        Nat, NatLiteral, NatMatch, NumLit, NumOp, Plicity, Prim, Proj, Qualifier, Radix, Rec,
+        RecItem, StructLit, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem, TopLet,
+        TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleType, TupleTypeParam, UseGroup,
     },
     curios_base::{
         Source,
@@ -1572,13 +1572,34 @@ fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
     super_field.or(plain_or_sugar)
 }
 
+// A concept parameter: an inductive-style `@?name : type` binder, optionally
+// prefixed by the contextual `out` marker (an output position — excluded from
+// the witness key, pinned by the resolved witness). `out` stays a valid
+// parameter name: the marker form needs a binder after it, so when what
+// follows `out` fails to parse as a binder (`out : Type`), the whole thing
+// re-parses as a parameter named `out`.
+fn parse_concept_param<'a>() -> Parser<'a, ConceptParam> {
+    let build = |is_out| {
+        move |(plicity, label, type_): (Plicity, String, Term)| ConceptParam {
+            plicity,
+            is_out,
+            label,
+            type_,
+        }
+    };
+
+    catch(parse_keyword("out").and_keep(parse_inductive_param()))
+        .map(build(true))
+        .or(parse_inductive_param().map(build(false)))
+}
+
 fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("concept"))).flat_map(|(is_pub, ())| {
         parse_identifier()
             .and(
                 catch(
                     parse_literal("(")
-                        .and_keep(sep_by0(parse_inductive_param, || parse_literal(",")))
+                        .and_keep(sep_by0(parse_concept_param, || parse_literal(",")))
                         .and_drop(parse_literal(")")),
                 )
                 .or(pure(vec![])),

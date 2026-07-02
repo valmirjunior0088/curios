@@ -61,6 +61,11 @@ pub enum Error {
     MalformedSuperField {
         label: String,
     },
+    /// A concept declaration marks every parameter `out`, leaving an empty
+    /// witness key — at least one input position is required.
+    ConceptWithoutInputs {
+        label: String,
+    },
     /// A postfix `!` appeared outside any `let !` body, so there is no bind
     /// function to sequence it with.
     BangWithoutBind,
@@ -146,6 +151,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "the `use` field `{label}` must have a concept-application type"
+                )
+            }
+            Error::ConceptWithoutInputs { label } => {
+                write!(
+                    f,
+                    "concept `{label}` marks every parameter `out`; at least one input parameter is required to key witnesses on"
                 )
             }
             Error::BangWithoutBind => {
