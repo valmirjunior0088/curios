@@ -124,17 +124,23 @@ fn curried_function() {
 }
 
 #[test]
-fn let_bang_identity_monad_sequences_bangs() {
-    // A minimal Identity monad over `std/Nat`: `bind(m, f) = f(m)`. The compiler is
-    // monad-agnostic — `let ! = bind;` applies the binary `bind` to `(action, cont)`
-    // per `!` site — so the sugar `add(a!, b!)` threads each banged value through a
-    // fresh continuation and evaluates to `add(a, b)`.
+fn bang_dispatches_through_a_user_monad_witness() {
+    // A user-declared Identity monad: `Box(A)` wraps a value, its witness's
+    // `bind` just applies the continuation. Each `!` desugars to
+    // `/syn/Monad/bind(action, cont)`; the action's `Box(Nat)` type pins
+    // `M := Box` (flex-apply imitation) and resolves `monad_box` — the same
+    // path a std monad takes, exercised end-to-end on a user type.
     let source = r#"
-        let bind : (std/Nat, (std/Nat) -> std/Nat) -> std/Nat = (m, f) => f(m);
-        let a : std/Nat = 3;
-        let b : std/Nat = 4;
-        let result : std/Nat = let ! = bind; std/Nat/add(a!, b!);
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(result)))
+        use /std/{Nat, Io, Str, Monad};
+        pub record Box(A : Type) : Type { unbox : A }
+        pub witness monad_box : Monad(Box) {
+            pure(A, x) = Box { unbox = x },
+            bind(A, B, m, f) = f(m.unbox)
+        }
+        let a : Box(Nat) = Box { unbox = 3 };
+        let b : Box(Nat) = Box { unbox = 4 };
+        let result : Box(Nat) = Monad/pure(Nat/add(a!, b!));
+        Io/print(Nat/to_str(result.unbox))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -143,11 +149,9 @@ fn let_bang_identity_monad_sequences_bangs() {
 }
 
 #[test]
-fn let_bang_std_parse_threads_bangs_left_to_right() {
-    // The real `std/Parse` monad. `let ! = Parse/bind;` partially applies the curried
-    // bind, fixing its leading `Type` arguments with `?` holes — and because the bind is
-    // re-elaborated per `!` site, each site mints its own holes (solved by inference).
-    // `Parse/bind` stays in head position, so no annotations are needed.
+fn bang_std_parse_threads_bangs_left_to_right() {
+    // The real `std/Parse` monad, sequenced with bare `!` — each site resolves
+    // the `Monad(Parse)` witness from the action's type.
     // Two `any_byte!`s read consecutive bytes; using a *non-commutative* `Nat/sub`
     // pins the evaluation order: on "BA" the first byte is 'B' (66) and the second
     // 'A' (65), so the result is 66 - 65 = 1 (the reversed order would saturate to 0).
@@ -155,7 +159,6 @@ fn let_bang_std_parse_threads_bangs_left_to_right() {
         use /std/{Parse, Nat, Result, Io};
 
         let parser : Parse/Parse(Nat) =
-            let ! = Parse/bind;
             Parse/pure(Nat/sub(Parse/any_byte!, Parse/any_byte!));
 
         match Parse/run(parser, /std/Str/to_bin("BA")) : {}
@@ -177,21 +180,20 @@ fn let_bang_std_parse_threads_bangs_left_to_right() {
 }
 
 #[test]
-fn let_bang_region_mixes_action_types() {
+fn bang_region_mixes_action_types() {
     // A single region sequences two actions of *different* payload types: a
-    // `Parse(Bin)` (`take_while`) and a `Parse(Nat)` (`any_byte`). This works only
-    // because `let ! = Parse/bind;` is re-elaborated per `!` site, so each site gets
-    // its own holes (`?A := Bin` for the first, `?A := Nat` for the second). A single
-    // shared bind value would force one `A` and reject this. On "AB": `take_while(is_a)`
-    // reads "A" (stops at 'B'), then `any_byte` reads 'B' (66); `Bin/append("A", 66)`
-    // is "AB".
+    // `Parse(Bin)` (`take_while`) and a `Parse(Nat)` (`any_byte`). Each `!`
+    // site elaborates its own `/syn/Monad/bind` application with fresh
+    // implicits (`?A := Bin` for the first, `?A := Nat` for the second), while
+    // the shared continuation typing forces one monad for the region. On "AB":
+    // `take_while(is_a)` reads "A" (stops at 'B'), then `any_byte` reads 'B'
+    // (66); `Bin/append("A", 66)` is "AB".
     let source = r#"
         use /std/{Parse, Nat, Bin, Bln, Result, Io, Str};
 
         let is_a : (Nat) -> Bln = (b) => match b : Bln | 'A' => true | _ => false end;
 
         let parser : Parse/Parse(Bin) =
-            let ! = Parse/bind;
             Parse/pure(Bin/append(Parse/take_while(is_a)!, Parse/any_byte!));
 
         match Parse/run(parser, /std/Str/to_bin("AB")) : {}

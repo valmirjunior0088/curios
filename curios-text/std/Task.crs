@@ -339,7 +339,6 @@ let cancel_all(ts : Lst(Token)) -> {} =
 pub let join_all(@A : Type, tasks : Lst(() -> Task(A))) -> Task(Arr(A)) =
     let ta = Lst/to_arr(tasks);
     rec go(i : Nat) -> Task(Lst(A)) =
-        let ! = bind;
         match Nat/try_lt(i, Arr/len(ta)) : Task(Lst(A))
         | none() => pure(Lst/nil(@A))
         | some(ok) =>
@@ -355,7 +354,6 @@ pub let select(@A : Type, tasks : Lst(() -> Task(A))) -> Task({Nat, A}) =
         let ta = Lst/to_arr(tasks);
         let winner : Future({Nat, A}) = new_future(@{Nat, A});
         rec arm(i : Nat) -> Task(Lst(Token)) =
-            let ! = bind;
             match Nat/try_lt(i, Arr/len(ta)) : Task(Lst(Token))
             | none() => pure(Lst/nil(@Token))
             | some(ok) =>
@@ -364,7 +362,6 @@ pub let select(@A : Type, tasks : Lst(() -> Task(A))) -> Task({Nat, A}) =
                 let rest = arm(i + 1)!;
                 pure(Lst/cons(t, rest))
             end;
-        let ! = bind;
         let tokens = arm(0)!;
         let w = await(winner)!;
         let _ = cancel_all(tokens);

@@ -150,7 +150,6 @@ fn std_io_read_line_sequences_lines() {
     let source = r#"
         use /std/{Io, Reader, Option, Bin, Str};
         let program : Reader({}) =
-            let ! = Reader/bind;
             let first = Reader/read_line!;
             let second = Reader/read_line!;
             match first : Reader({})
@@ -178,7 +177,6 @@ fn std_io_read_line_signals_eof_with_none() {
     let source = r#"
         use /std/{Io, Reader, Option};
         let program : Reader({}) =
-            let ! = Reader/bind;
             let first = Reader/read_line!;
             let second = Reader/read_line!;
             match second : Reader({})
@@ -200,7 +198,6 @@ fn std_io_read_line_spans_refills() {
     let source = r#"
         use /std/{Io, Reader, Option, Bin, Nat};
         let program : Reader({}) =
-            let ! = Reader/bind;
             let line = Reader/read_line!;
             match line : Reader({})
             | some(bytes) => Reader/pure(Io/print(Nat/to_str(Bin/len(bytes))))

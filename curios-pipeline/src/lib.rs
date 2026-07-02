@@ -496,10 +496,10 @@ mod tests {
         // The curried `bind` shape: `(@A, @B) -> (M A, A -> M B) -> M B`.
         // Applying it directly to plain arguments saturates the all-implicit
         // telescope with fresh metavariables and re-targets the arguments at
-        // the next telescope — both through a direct call and the `let !`
-        // sugar (which desugars to exactly that call).
+        // the next telescope — both through a direct call and the `!` sugar
+        // (which sequences through the user's `Monad(Id)` witness).
         let source = r#"
-            use /std/{Nat};
+            use /std/{Nat, Monad};
             induct Id(A : Type) : Type
             | wrap(A)
             end
@@ -508,11 +508,18 @@ mod tests {
                     match m : Id(B)
                     | wrap(x) => f(x)
                     end;
+            witness monad_id : Monad(Id) {
+                pure(A, x) = Id/wrap(x),
+                bind(A, B, m, f) = bind(@A, @B)(m, f)
+            }
             let direct = bind(Id/wrap(1), (x) => Id/wrap(Nat/succ(x)));
-            let sugared =
-                let ! = bind;
+            -- The lambda body is its own region root: the `!` sequences inside
+            -- it instead of hoisting into the entrypoint tail (which returns a
+            -- bare `Nat`, not an `Id`).
+            let sugared_block = () =>
                 let v = Id/wrap(3)!;
                 Id/wrap(v);
+            let sugared = sugared_block();
             match sugared : Nat
             | wrap(value) =>
                 match direct : Nat
@@ -1073,11 +1080,11 @@ mod tests {
 
     #[test]
     fn continuation_postpones_until_the_result_type_pins_its_codomain() {
-        // A `let ! = Parse/bind;` block whose tail is `Parse/pure((x, x))` — a *bare
-        // tuple*, checkable only against a known tuple type. The expected type reaches
+        // A `!` region whose tail is `Parse/pure((x, x))` — a *bare tuple*,
+        // checkable only against a known tuple type. The expected type reaches
         // the tail solely through each bind's result metavar `?B`, which the turnaround
         // solves *after* the continuation is checked. Elaboration must postpone the
-        // continuation lambda (its codomain `Parse(?B)` carries a result metavar) until
+        // continuation lambda (its codomain `M(?B)` carries a result metavar) until
         // `expect` grounds `?B` against the concrete `Parse({ Nat, Nat })`, then re-check
         // it. Guards the codomain arm of `blocked_on_metavar`; without it the tail fails
         // "introduced a tuple where the expected type is not a tuple type".
@@ -1085,7 +1092,6 @@ mod tests {
             use /std/{Parse};
             use /std/{Nat};
             let pair : Parse({ Nat, Nat }) =
-                let ! = Parse/bind;
                 let x = Parse/any_byte!;
                 Parse/pure((x, x));
             pair
@@ -1098,7 +1104,6 @@ mod tests {
         // tuple is rejected — graceful degradation, no new acceptance.
         let unpinned = r#"
             use /std/{Parse};
-            let ! = Parse/bind;
             let x = Parse/any_byte!;
             Parse/pure((x, x))
         "#;

@@ -964,39 +964,11 @@ fn name(label: &str) -> Term {
 }
 
 #[test]
-fn parse_let_bang() {
-    // `let ! = <bind>; <body>`: an atomic bind term, then a full-term body that runs
-    // to the end of the region (no `end` terminator). Here the bind is a bare name.
-    assert_eq!(
-        "let ! = bind; body".parse::<Term>().unwrap(),
-        Subterm::LetBang(LetBang {
-            bind: name("bind"),
-            body: name("body"),
-        })
-        .into()
-    );
-}
-
-#[test]
-fn parse_let_bang_partial_application_holes() {
-    // The bind is typically a partial application carrying `?` holes (e.g.
-    // `Parse/bind`'s leading `Type` args); they elaborate to fresh metavariables per
-    // `!` site. Atomic maximal-munch ends the bind at `)`, before the `;`.
-    assert_eq!(
-        "let ! = Parse/bind(?, ?); body".parse::<Term>().unwrap(),
-        Subterm::LetBang(LetBang {
-            bind: Subterm::Apply(Apply {
-                head: Subterm::Name(Name::from(["Parse".to_string(), "bind".to_string()])).into(),
-                params: vec![
-                    (Plicity::Explicit, Subterm::Hole.into()),
-                    (Plicity::Explicit, Subterm::Hole.into()),
-                ],
-            })
-            .into(),
-            body: name("body"),
-        })
-        .into()
-    );
+fn let_bang_is_no_longer_grammar() {
+    // The `let ! = <bind>;` header is gone: `!` sequences through the `Monad`
+    // concept without one. `!` is not a binder identifier, so the old form is a
+    // parse error rather than a `let`.
+    assert!("let ! = bind; body".parse::<Term>().is_err());
 }
 
 #[test]
@@ -1099,15 +1071,8 @@ fn bang_binds_tighter_than_projection() {
 }
 
 #[test]
-fn let_bang_and_bang_round_trip() {
-    for source in [
-        "let ! = bind; body",
-        "let ! = Parse/bind(?, ?); body",
-        "f(x!, y!)",
-        "p.0!",
-        "x!.0",
-        "let x = e!; x",
-    ] {
+fn bang_round_trips() {
+    for source in ["f(x!, y!)", "p.0!", "x!.0", "let x = e!; x"] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
             term.to_string().parse::<Term>().unwrap(),

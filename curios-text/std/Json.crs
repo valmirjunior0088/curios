@@ -128,7 +128,6 @@ let is_not_string_special(byte : Nat) -> Bln =
     end;
 
 let hex_digit : Parse(Nat) =
-    let ! = Parse/bind;
     let byte = Parse/any_byte!;
     match Char/of_hex_digit(byte) : Parse(Nat)
     | some(v) => Parse/pure(v)
@@ -136,7 +135,6 @@ let hex_digit : Parse(Nat) =
     end;
 
 let hex4 : Parse(Nat) =
-    let ! = Parse/bind;
     let a = hex_digit!;
     let b = hex_digit!;
     let c = hex_digit!;
@@ -144,7 +142,6 @@ let hex4 : Parse(Nat) =
     Parse/pure(a * 0x1000 + b * 0x100 + c * 0x10 + d);
 
 let parse_unicode : Parse(Bin) =
-    let ! = Parse/bind;
     let hi = hex4!;
     match hi >= 0xD800 && hi <= 0xDBFF : Parse(Bin)
     | true =>
@@ -156,7 +153,6 @@ let parse_unicode : Parse(Bin) =
     end;
 
 let parse_str_escape : Parse(Bin) =
-    let ! = Parse/bind;
     let _ = Parse/take_byte('\\')!;
     let byte = Parse/any_byte!;
     match byte : Parse(Bin)
@@ -179,7 +175,6 @@ let parse_str_body : Parse(Lst(Bin)) =
     Parse/many0(Parse/or(parse_str_escape, parse_str_segment));
 
 let parse_raw_str : Parse(Str) =
-    let ! = Parse/bind;
     let _ = Parse/take_byte('"')!;
     let chunks = parse_str_body!;
     let _ = Parse/take_byte('"')!;
@@ -204,7 +199,6 @@ let ws : Parse({}) =
     Parse/map((_) => (), Parse/take_while(is_ws));
 
 let symbol(b : Nat) -> Parse(Nat) =
-    let ! = Parse/bind;
     let _ = ws!;
     Parse/take_byte(b);
 
@@ -228,19 +222,16 @@ pub rec decode : Parse(Json) = Parse { run(input, pos) =
         end
     end }
 and parse_arr : Parse(Json) =
-    let ! = Parse/bind;
     let _ = symbol('[')!;
     let elems = Parse/sep_by0(decode, symbol(','))!;
     let _ = symbol(']')!;
     Parse/pure(Json/arr(elems))
 and parse_obj : Parse(Json) =
-    let ! = Parse/bind;
     let _ = symbol('{')!;
     let pairs = Parse/sep_by0(parse_pair, symbol(','))!;
     let _ = symbol('}')!;
     Parse/pure(Json/obj(pairs))
 and parse_pair : Parse({Str, Json}) =
-    let ! = Parse/bind;
     let _ = ws!;
     let key = parse_raw_str!;
     let _ = symbol(':')!;

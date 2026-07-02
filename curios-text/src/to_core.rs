@@ -346,7 +346,7 @@ fn process_items(
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&let_item.label),
                     type_: lower.term(&let_item.signature.type_())?,
-                    body: lower.term(&let_item.signature.body())?,
+                    body: lower.value(&let_item.signature.body())?,
                 }));
             }
             TopItem::Rec(ls) => {
@@ -358,7 +358,7 @@ fn process_items(
                         Ok(FlatLet {
                             name: context.prefixed(&let_item.label),
                             type_: lower.term(&let_item.signature.type_())?,
-                            body: lower.term(&let_item.signature.body())?,
+                            body: lower.value(&let_item.signature.body())?,
                         })
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
@@ -884,7 +884,7 @@ fn process_items(
                     flat_items.push(FlatItem::Let(FlatLet {
                         name: context.prefixed(&concept.label).with(&field.label),
                         type_: lower.term(&signature.type_())?,
-                        body: lower.term(&signature.body())?,
+                        body: lower.value(&signature.body())?,
                     }));
                 }
             }
@@ -925,7 +925,7 @@ fn process_items(
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&witness.label),
                     type_: lower.term(&signature.type_())?,
-                    body: lower.term(&signature.body())?,
+                    body: lower.value(&signature.body())?,
                 }));
                 witnesses.insert(context.prefixed(&witness.label).join());
             }
@@ -1297,7 +1297,7 @@ pub fn to_core(
         .as_ref()
         .map(|type_| lower.term(type_))
         .transpose()?;
-    let tail = lower.term(&entrypoint.tail)?;
+    let tail = lower.value(&entrypoint.tail)?;
 
     // Emit the program as a flat list of named top-level definitions rather than
     // folding it into one N-deep nested `let`/`rec` term (BUG.md). Cross-references

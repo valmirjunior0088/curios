@@ -2,7 +2,7 @@ use {
     super::Context,
     crate::{
         ArrMatch, BinMatch, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch,
-        Prim, Subterm, Syn, Term,
+        Prim, Rec, Subterm, Syn, Term,
     },
     num_bigint::BigUint,
     std::{cell::RefCell, collections::BTreeSet, sync::Arc},
@@ -22,13 +22,6 @@ pub struct Lower<'a, 'b> {
 /// One elaborated arm of a single-level core inductive match: the constructor tag,
 /// its payload binder names, and the (already-lowered) body.
 type InductiveCase = (curios_core::Atom, Vec<String>, curios_core::Term);
-
-/// The active bind of a `let !` region: an atomic term denoting a binary bind
-/// `(M A, A -> M B) -> M B`. [`Lower::instantiate`] re-elaborates `term` (so its
-/// `?` holes are fresh per `!` site) and applies it to `(action, continuation)`.
-struct Bind<'t> {
-    term: &'t Term,
-}
 
 impl<'a, 'b> Lower<'a, 'b> {
     pub fn new(context: &'a Context<'b>) -> Self {
@@ -75,6 +68,16 @@ impl<'a, 'b> Lower<'a, 'b> {
     /// wildcard `_` rides along but is ignored by [`Self::scoped`].
     fn param_names(params: &[(String, Option<Term>)]) -> Vec<String> {
         params.iter().map(|(name, _)| name.clone()).collect()
+    }
+
+    /// Lowers a *value* body — a top-level `let`/`rec` body, a witness field,
+    /// or the entrypoint tail. Every value body is a region root: each `!` in
+    /// it hoists here (never past a boundary — a lambda body, match arm, or
+    /// `rec` item re-roots) and is rewired through `/syn/Monad/bind`, whose
+    /// `use` binder resolves the `Monad` witness per site. Types go through
+    /// [`Self::term`], where `!` is rejected.
+    pub fn value(&self, term: &Term) -> Result<curios_core::Term, Error> {
+        self.region(term)
     }
 
     pub fn term(&self, term: &Term) -> Result<curios_core::Term, Error> {
@@ -445,64 +448,81 @@ impl<'a, 'b> Lower<'a, 'b> {
                     ))
                 })?
             }
-            // `let !` opens a monadic block. The body is desugared (eliminating every
-            // `Bang`) into ordinary core terms by re-elaborating the bind and applying
-            // it to `(action, continuation)` per `!` site. See `region`/`instantiate`.
-            Subterm::LetBang(let_bang) => {
-                let bind = Bind {
-                    term: &let_bang.bind,
-                };
-                self.region(&let_bang.body, &bind)?
-            }
-            // A bang outside any `let !` body has no continuation to hoist to.
-            Subterm::Bang(_) => return Err(Error::BangWithoutBind),
+            // A bang here was reached through a *type* lowering (an annotation,
+            // a motive, a Π/Σ component): types have no region to hoist to.
+            // Value bodies enter through `value`/`region`, which eliminates
+            // every `Bang` before this arm could see it.
+            Subterm::Bang(_) => return Err(Error::BangInTypePosition),
         })
     }
 
-    /// Desugars `term` as a single **region** under the active `bind`. A region
-    /// is a stretch of a `let !` body that shares one continuation; each `!` in it
-    /// hoists to the top of the region, never past a boundary (lambda body, match
-    /// arm, nested `let !`). Boundaries re-root a region.
-    fn region(&self, term: &Term, bind: &Bind) -> Result<curios_core::Term, Error> {
+    /// Desugars `term` as a single **region**. A region is a stretch of a value
+    /// body that shares one continuation; each `!` in it hoists to the top of
+    /// the region, never past a boundary (lambda body, match arm, `rec` item).
+    /// Boundaries re-root a region. Every hoisted action is sequenced through
+    /// `/syn/Monad/bind` — see `wrap`.
+    fn region(&self, term: &Term) -> Result<curios_core::Term, Error> {
         match term.as_subterm() {
             // A `let`'s bound expression evaluates in place (its bangs hoist to
             // this region); the tail continues the same region (a bang there
             // hoists after `x` is bound, not above the `let`).
             Subterm::Let(let_) => {
                 let mut binds = Vec::new();
-                let let_term = self.build_let(let_, bind, &mut binds)?;
-                self.wrap(binds, let_term, bind)
+                let let_term = self.build_let(let_, &mut binds)?;
+                self.wrap(binds, let_term)
             }
             // The scrutinee evaluates before branching (its bangs hoist here);
             // each arm is its own region (branch-local effects).
             Subterm::Match(match_) => {
                 let mut binds = Vec::new();
-                let match_term = self.match_region(match_, bind, &mut binds)?;
-                self.wrap(binds, match_term, bind)
+                let match_term = self.match_region(match_, &mut binds)?;
+                self.wrap(binds, match_term)
             }
-            // A lambda re-roots the region (same bind, lexically in scope).
+            // A lambda re-roots the region.
             Subterm::Func(func) => {
-                let body = self.scoped(Self::param_names(&func.params), || {
-                    self.region(&func.body, bind)
-                })?;
+                let body =
+                    self.scoped(Self::param_names(&func.params), || self.region(&func.body))?;
                 let (params, body) = self.lower_func_params(&func.params, body)?;
                 Ok(curios_core::Term::func(params, body))
             }
-            // A nested `let !` switches the bind and desugars independently.
-            Subterm::LetBang(let_bang) => {
-                let inner = Bind {
-                    term: &let_bang.bind,
-                };
-                self.region(&let_bang.body, &inner)
-            }
+            // A `rec`'s item bodies are their own regions (hoisting an action
+            // out of a recursive binding would change how often it runs); the
+            // tail continues like a `let` tail.
+            Subterm::Rec(rec) => self.build_rec(rec),
             // Spine forms (atomic / apply / tuple / proj): collect bangs in
             // left-to-right evaluation order, then wrap.
             _ => {
                 let mut binds = Vec::new();
-                let body = self.collect(term, bind, &mut binds)?;
-                self.wrap(binds, body, bind)
+                let body = self.collect(term, &mut binds)?;
+                self.wrap(binds, body)
             }
         }
+    }
+
+    /// Builds the core `rec` for a `rec` inside a value body: item types are
+    /// types, item bodies are fresh region roots, and the tail continues as its
+    /// own region (a bang there hoists after the bindings, not above them).
+    fn build_rec(&self, rec: &Rec) -> Result<curios_core::Term, Error> {
+        let labels = rec
+            .items
+            .iter()
+            .map(|it| it.label.clone())
+            .collect::<Vec<_>>();
+        self.scoped(labels, || {
+            Ok(curios_core::Term::rec(
+                rec.items
+                    .iter()
+                    .map(|it| {
+                        Ok((
+                            it.label.clone(),
+                            self.term(&it.signature.type_())?,
+                            self.region(&it.signature.body())?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?,
+                self.region(&rec.tail)?,
+            ))
+        })
     }
 
     /// Walks a non-boundary expression, elaborating to core and accumulating each
@@ -512,25 +532,24 @@ impl<'a, 'b> Lower<'a, 'b> {
     fn collect(
         &self,
         term: &Term,
-        bind: &Bind,
         binds: &mut Vec<(String, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
         Ok(match term.as_subterm() {
             Subterm::Bang(action) => {
                 // The action is itself desugared first, so its inner bangs
                 // evaluate before this one (left-to-right).
-                let action = self.collect(action, bind, binds)?;
+                let action = self.collect(action, binds)?;
                 let name = self.context.fresh_binder();
                 let var = curios_core::Term::var(curios_core::Var::free(name.clone()));
                 binds.push((name, action));
                 var
             }
             Subterm::Apply(apply) => curios_core::Term::apply_marked(
-                self.collect(&apply.head, bind, binds)?,
+                self.collect(&apply.head, binds)?,
                 apply
                     .params
                     .iter()
-                    .map(|(plicity, p)| Ok((*plicity, self.collect(p, bind, binds)?)))
+                    .map(|(plicity, p)| Ok((*plicity, self.collect(p, binds)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Tuple(tuple) => curios_core::Term::tuple_named(
@@ -539,12 +558,12 @@ impl<'a, 'b> Lower<'a, 'b> {
                     .iter()
                     .map(|field| {
                         let value = field.desugared_value();
-                        Ok((field.label.clone(), self.collect(&value, bind, binds)?))
+                        Ok((field.label.clone(), self.collect(&value, binds)?))
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Proj(proj) => {
-                let head = self.collect(&proj.head, bind, binds)?;
+                let head = self.collect(&proj.head, binds)?;
                 match &proj.field {
                     Field::Index(index) => curios_core::Term::proj(head, *index),
                     Field::Label(label) => curios_core::Term::proj_label(head, label.clone()),
@@ -556,13 +575,13 @@ impl<'a, 'b> Lower<'a, 'b> {
                 self.resolve_name(&lit.head)?,
                 lit.params
                     .iter()
-                    .map(|p| self.collect(p, bind, binds))
+                    .map(|p| self.collect(p, binds))
                     .collect::<Result<Vec<_>, Error>>()?,
                 lit.fields
                     .iter()
                     .map(|field| {
                         let value = field.desugared_value();
-                        Ok((field.label.clone(), self.collect(&value, bind, binds)?))
+                        Ok((field.label.clone(), self.collect(&value, binds)?))
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
@@ -570,33 +589,45 @@ impl<'a, 'b> Lower<'a, 'b> {
             // exactly like an application's arguments.
             Subterm::Infix(infix) => curios_core::Term::infix(
                 infix.op,
-                self.collect(&infix.left, bind, binds)?,
-                self.collect(&infix.right, bind, binds)?,
+                self.collect(&infix.left, binds)?,
+                self.collect(&infix.right, binds)?,
             ),
+            // A list literal's elements hoist their bangs into this region,
+            // like an application's arguments (the cons-spine they desugar to).
+            Subterm::Syn(Syn::Lst(elems)) => {
+                let mut spine = Self::syn_call("/syn/Lst/Lst/nil", []);
+                let elems = elems
+                    .iter()
+                    .map(|elem| self.collect(elem, binds))
+                    .collect::<Result<Vec<_>, Error>>()?;
+                for elem in elems.into_iter().rev() {
+                    spine = Self::syn_call("/syn/Lst/Lst/cons", [elem, spine]);
+                }
+                spine
+            }
             // A `let`/`match` sub-expression hoists its bound-expression /
             // scrutinee bangs into the enclosing region (this `binds`).
-            Subterm::Let(let_) => self.build_let(let_, bind, binds)?,
-            Subterm::Match(match_) => self.match_region(match_, bind, binds)?,
-            // A lambda is a value and a nested `let !` is independent: neither
-            // hoists anything outward, so desugar each as its own region.
-            Subterm::Func(_) | Subterm::LetBang(_) => self.region(term, bind)?,
+            Subterm::Let(let_) => self.build_let(let_, binds)?,
+            Subterm::Match(match_) => self.match_region(match_, binds)?,
+            // A lambda is a value and a `rec` binds recursively: neither hoists
+            // anything outward, so desugar each as its own region.
+            Subterm::Func(_) | Subterm::Rec(_) => self.region(term)?,
             // Leaves elaborate normally. A `Bang` reachable here (e.g. nested in a
             // type position) hits `self.term`'s `Bang` arm and is rejected.
             _ => self.term(term)?,
         })
     }
 
-    /// Builds `let x = value; tail` for a `let` inside a `let !` region,
-    /// collecting the bound expression's bangs into `binds` and desugaring the
-    /// tail as the continuation of the same region.
+    /// Builds `let x = value; tail` for a `let` inside a region, collecting the
+    /// bound expression's bangs into `binds` and desugaring the tail as the
+    /// continuation of the same region.
     fn build_let(
         &self,
         let_: &Let,
-        bind: &Bind,
         binds: &mut Vec<(String, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
-        let value = self.collect(&let_.signature.body(), bind, binds)?;
-        let tail = self.scoped([let_.binder.clone()], || self.region(&let_.tail, bind))?;
+        let value = self.collect(&let_.signature.body(), binds)?;
+        let tail = self.scoped([let_.binder.clone()], || self.region(&let_.tail))?;
         let type_ = self.term(&let_.signature.type_())?;
         Ok(curios_core::Term::let_(
             self.pattern_binder_name(&let_.binder),
@@ -636,26 +667,25 @@ impl<'a, 'b> Lower<'a, 'b> {
         }
     }
 
-    /// Desugars a `match` inside a `let !` region: the scrutinee's bangs are
-    /// collected into `binds` (hoisted out — the scrutinee runs unconditionally),
-    /// while each arm is desugared as its own region (branch-local effects). This
+    /// Desugars a `match` inside a region: the scrutinee's bangs are collected
+    /// into `binds` (hoisted out — the scrutinee runs unconditionally), while
+    /// each arm is desugared as its own region (branch-local effects). This
     /// mirrors the `Match` arm of `subterm`, swapping `self.term` for `collect`
     /// on heads and `region` on arm bodies.
     fn match_region(
         &self,
         match_: &Match,
-        bind: &Bind,
         binds: &mut Vec<(String, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
         Ok(match match_ {
             Match::Bln(bm) => {
                 let (label, body) = self.motive_parts(&bm.motive)?;
                 curios_core::Term::bln_match(
-                    self.collect(&bm.head, bind, binds)?,
+                    self.collect(&bm.head, binds)?,
                     label,
                     body,
-                    self.region(&bm.false_case, bind)?,
-                    self.region(&bm.true_case, bind)?,
+                    self.region(&bm.false_case)?,
+                    self.region(&bm.true_case)?,
                 )
             }
             Match::Nat(NatMatch::Induction {
@@ -668,14 +698,14 @@ impl<'a, 'b> Lower<'a, 'b> {
             }) => {
                 let (label, body) = self.motive_parts(motive)?;
                 curios_core::Term::nat_match(
-                    self.collect(head, bind, binds)?,
+                    self.collect(head, binds)?,
                     label,
                     body,
-                    self.region(zero_case, bind)?,
+                    self.region(zero_case)?,
                     pred_label.clone(),
                     ih_label.clone(),
                     self.scoped([pred_label.clone(), ih_label.clone()], || {
-                        self.region(succ_case, bind)
+                        self.region(succ_case)
                     })?,
                 )
             }
@@ -687,27 +717,27 @@ impl<'a, 'b> Lower<'a, 'b> {
             }) => {
                 let (label, motive_body) = self.motive_parts(motive)?;
                 curios_core::Term::switch(
-                    self.collect(head, bind, binds)?,
+                    self.collect(head, binds)?,
                     label,
                     motive_body,
                     cases
                         .iter()
-                        .map(|(&nat, body)| Ok((nat, self.region(body, bind)?)))
+                        .map(|(&nat, body)| Ok((nat, self.region(body)?)))
                         .collect::<Result<Vec<_>, Error>>()?,
-                    self.region(default, bind)?,
+                    self.region(default)?,
                 )
             }
             Match::Inductive(um) => {
                 // Mirrors the `Match::Inductive` arm of `subterm` (see there), swapping
                 // `collect` on the head and `region` on the arm bodies (branch-local
                 // effects).
-                let head = self.collect(&um.head, bind, binds)?;
+                let head = self.collect(&um.head, binds)?;
                 let arms = um
                     .arms
                     .iter()
                     .map(|arm| {
                         let names = arm.args.clone();
-                        let body = self.scoped(names, || self.region(&arm.body, bind))?;
+                        let body = self.scoped(names, || self.region(&arm.body))?;
                         Ok((arm.tag.clone(), arm.args.clone(), body))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
@@ -724,17 +754,17 @@ impl<'a, 'b> Lower<'a, 'b> {
             }) => {
                 let (label, body) = self.motive_parts(motive)?;
                 curios_core::Term::arr_match(
-                    self.collect(head, bind, binds)?,
+                    self.collect(head, binds)?,
                     curios_core::Term::metavar(self.context.fresh_metavar()),
                     label,
                     body,
-                    self.region(empty_case, bind)?,
+                    self.region(empty_case)?,
                     head_label.clone(),
                     tail_label.clone(),
                     ih_label.clone(),
                     self.scoped(
                         [head_label.clone(), tail_label.clone(), ih_label.clone()],
-                        || self.region(cons_case, bind),
+                        || self.region(cons_case),
                     )?,
                 )
             }
@@ -749,32 +779,36 @@ impl<'a, 'b> Lower<'a, 'b> {
             }) => {
                 let (label, body) = self.motive_parts(motive)?;
                 curios_core::Term::bin_match(
-                    self.collect(head, bind, binds)?,
+                    self.collect(head, binds)?,
                     label,
                     body,
-                    self.region(empty_case, bind)?,
+                    self.region(empty_case)?,
                     head_label.clone(),
                     tail_label.clone(),
                     ih_label.clone(),
                     self.scoped(
                         [head_label.clone(), tail_label.clone(), ih_label.clone()],
-                        || self.region(cons_case, bind),
+                        || self.region(cons_case),
                     )?,
                 )
             }
         })
     }
 
-    /// Wraps `body` in one instantiation of the bind template per collected bang.
+    /// Wraps `body` in one `/syn/Monad/bind` application per collected bang.
     /// The first-collected bang (`binds[0]`) becomes the outermost bind, preserving
     /// left-to-right evaluation order. Continuation lambdas are built with
     /// `curios_core::Term::func` over the gensym'd free name, whose `capture` closes it
     /// robustly under nesting; the domain is a fresh hole, inference-solved.
+    /// Elaborating each application inserts fresh implicits and a fresh `use`
+    /// witness slot per `!` site: the action's type pins the constructor (via
+    /// the flex-apply imitation rule), which resolves the `Monad` witness — so a
+    /// region can sequence actions of differing result types, and different
+    /// regions can use different monads.
     fn wrap(
         &self,
         binds: Vec<(String, curios_core::Term)>,
         body: curios_core::Term,
-        bind: &Bind,
     ) -> Result<curios_core::Term, Error> {
         binds
             .into_iter()
@@ -782,26 +816,10 @@ impl<'a, 'b> Lower<'a, 'b> {
             .try_fold(body, |acc, (name, action)| {
                 let domain = curios_core::Term::metavar(self.context.fresh_metavar());
                 let cont = curios_core::Term::func([(name, domain)], acc);
-                self.instantiate(bind, action, cont)
+                // The already-resolved core name: module `/syn/Monad`, concept
+                // namespace `Monad`, method wrapper `bind`.
+                Ok(Self::syn_call("/syn/Monad/Monad/bind", [action, cont]))
             })
-    }
-
-    /// Instantiates the bind for one `!` site: re-elaborate the bind term, then apply
-    /// it to `(action, cont)`. The term is re-elaborated each call, so its `?` holes
-    /// get *fresh* metavariables — a region can therefore sequence actions of
-    /// differing result types. Because the result keeps the bind's own head (e.g.
-    /// `Parse/bind`) in head position — never a bare lambda — it synthesizes without
-    /// annotations.
-    fn instantiate(
-        &self,
-        bind: &Bind,
-        action: curios_core::Term,
-        cont: curios_core::Term,
-    ) -> Result<curios_core::Term, Error> {
-        Ok(curios_core::Term::apply(
-            self.term(bind.term)?,
-            [action, cont],
-        ))
     }
 
     /// Splits an optional match motive into its `(label, body)` for the core

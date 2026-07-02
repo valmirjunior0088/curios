@@ -347,14 +347,14 @@ fn prelude_monad_lst_binds() {
     assert_eq!(run(source), b"4");
 }
 
-// The monadic sugar promised by INSTANCE_ARGUMENTS: `let ! = Monad/bind;`
-// sequences through the concept method, each `e!` resolving its own witness.
+// The monadic sugar: each `e!` desugars to `/syn/Monad/bind(e, cont)`, whose
+// `use` binder resolves the `Monad` witness from the action's type — no
+// header, no imports needed for the dispatch itself.
 #[test]
 fn monadic_sugar_binds_through_the_concept() {
     let source = r#"
         use /std/{Nat, Io, Str, Option, Monad};
         pub let chain(a : Option(Nat), b : Option(Nat)) -> Option(Nat) =
-            let ! = Monad/bind;
             let x = a!;
             let y = b!;
             Monad/pure(Nat/add(x, y));
@@ -362,6 +362,27 @@ fn monadic_sugar_binds_through_the_concept() {
         "#;
 
     assert_eq!(run(source), b"42");
+}
+
+// Generic do-notation: `!` inside a function that is generic over the monad.
+// Each site's `Monad(M)` goal (M a bound variable) resolves against the local
+// `use` binder — impossible with a concrete bind function, and the payoff of
+// dispatching `!` through the concept.
+#[test]
+fn bang_works_in_monad_generic_code() {
+    let source = r#"
+        use /syn/{Monad};
+        use /std/{Nat, Io, Str, Option, Lst};
+        pub let add_both(@M : (Type) -> Type, use m : Monad(M), a : M(Nat), b : M(Nat)) -> M(Nat) =
+            Monad/pure(a! + b!);
+        let o : Option(Nat) = add_both(Option/some(20), Option/some(22));
+        let l : Lst(Nat) = add_both([1, 2], [10]);
+        Io/print(Str/concat(
+            Nat/to_str(Option/unwrap_or(o, 0)),
+            Nat/to_str(Lst/len(l))))
+        "#;
+
+    assert_eq!(run(source), b"422");
 }
 
 // A higher-kinded superclass: inside the generic function the goal

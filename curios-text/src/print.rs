@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, ArrMatch, BinMatch, BlnMatch, ConceptField, ConceptParam, Entrypoint, Field, Func,
-        FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let, LetBang, LetSignature,
-        Match, Module, Motive, Nat, NatLiteral, NatMatch, NumLit, Plicity, Prim, Proj, Radix, Rec,
+        FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let, LetSignature, Match,
+        Module, Motive, Nat, NatLiteral, NatMatch, NumLit, Plicity, Prim, Proj, Radix, Rec,
         StructLit, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem, TopLet, TopMod,
         TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup,
         WitnessField,
@@ -555,12 +555,6 @@ fn print_term(term: Term) -> Printer<'static> {
                 print_term(tail),
             ])
         }
-        Subterm::LetBang(LetBang { bind, body }) => flat([
-            pure("let ! = "),
-            print_term(bind),
-            pure(";\n"),
-            print_term(body),
-        ]),
         Subterm::Bang(term) => flat([pure("("), print_term(term), pure(")!")]),
         Subterm::Infix(Infix { op, left, right }) => flat([
             print_term(left),

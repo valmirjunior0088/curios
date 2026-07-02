@@ -392,21 +392,6 @@ pub struct Rec {
     pub tail: Term,
 }
 
-/// A `let ! = <bind>; <body>` block: monadic do-notation. `bind` is an atomic term
-/// denoting a binary bind `(M A, A -> M B) -> M B` — typically a reference like
-/// `Parse/bind`. The `to_core` pass re-elaborates `bind` at each `!` site — minting
-/// fresh holes, so a region can mix action types — and applies it to the action and
-/// continuation, keeping the bind's head in head position (synthesizable without
-/// annotations). `body` sequences effects via the postfix `!` and runs to the end of
-/// the enclosing term (no `end`), like a `let` tail. Both this and [`Subterm::Bang`]
-/// exist only between parsing and the `to_core` pass, which eliminates them before
-/// core elaboration.
-#[derive(Debug, Clone, PartialEq)]
-pub struct LetBang {
-    pub bind: Term,
-    pub body: Term,
-}
-
 /// A surface infix application `left <op> right`, produced by the
 /// precedence-climbing parser. Lowered verbatim to a `core::Infix` and resolved
 /// to a concrete scalar primitive during elaboration (the operand types are not
@@ -446,10 +431,13 @@ pub enum Subterm {
     Match(Match),
     Let(Let),
     Rec(Rec),
-    LetBang(LetBang),
     /// A postfix bang `e!`: extracts the result of monadic action `e` inline.
-    /// The operand is the action whose result is bound. Only meaningful inside a
-    /// [`LetBang`] body; a stray `Bang` is rejected during desugaring.
+    /// The operand is the action whose result is bound. The `to_core` pass hoists
+    /// each bang to the top of its enclosing region (a value body, re-rooted at
+    /// lambda bodies, match arms, and `rec` items) and sequences it through
+    /// `/syn/Monad/bind`, whose `use` binder resolves the `Monad` witness from
+    /// the action's type. Exists only between parsing and `to_core`, which
+    /// eliminates it before core elaboration; a bang in a type is rejected.
     Bang(Term),
     Name(Name),
     /// A surface hole `?`: a placeholder elaborated to a fresh metavariable.

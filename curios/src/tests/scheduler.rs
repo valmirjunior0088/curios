@@ -36,7 +36,6 @@ fn task_bind_reads_and_echoes() {
         r#"
         use /std/{Task, Io};
         let prog : Task({}) =
-            let ! = Task/bind;
             let r = Task/read(Io/stdin, 1024)!;
             match r : Task({})
             | chunk(bytes) =>
@@ -66,7 +65,6 @@ fn block_on_returns_a_typed_value_and_awaits_a_spawned_child() {
         r#"
         use /std/{Task, Io, Str, Nat};
         let root : Task(Nat) =
-            let ! = Task/bind;
             let f = Task/spawn(() =>
                 Task/bind(Task/wait(Io/stdin, 1), (_) =>
                     let w = Io/write(Io/stdout, Str/to_bin("child;"));
@@ -94,7 +92,6 @@ fn join_all_runs_children_concurrently_and_collects_in_order() {
         r#"
         use /std/{Task, Io, Str, Nat, Arr};
         let main : Task({}) =
-            let ! = Task/bind;
             let rs = Task/join_all([
                 () =>
                     let w = Io/write(Io/stdout, Str/to_bin("a;"));
@@ -123,7 +120,6 @@ fn map_transforms_a_tasks_result() {
         r#"
         use /std/{Task, Io, Str, Nat};
         let main : Task({}) =
-            let ! = Task/bind;
             let s = Task/map(Nat/to_str, Task/pure(42))!;
             let w = Io/write(Io/stdout, Str/to_bin(s));
             Task/pure(());
@@ -149,7 +145,6 @@ fn race_returns_the_first_and_runs_a_cancelled_losers_finalizer() {
         r#"
         use /std/{Task, Io, Str, Nat};
         let main : Task({}) =
-            let ! = Task/bind;
             let v = Task/race([
                 () =>
                     let x = Io/write(Io/stdout, Str/to_bin("fast;"));
@@ -241,7 +236,6 @@ fn finalizer_runs_for_a_child_parked_on_an_unfulfilled_future() {
         r#"
         use /std/{Task, Io, Str};
         let main : Task({}) =
-            let ! = Task/bind;
             let f : Task/Future({}) = Task/new_future(@{});
             let started = Task/go(() =>
                 Task/using(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bin("released;")); (),
@@ -268,7 +262,6 @@ fn an_acquired_finalizer_runs_when_the_fiber_completes() {
         r#"
         use /std/{Task, Io, Str};
         let main : Task({}) =
-            let ! = Task/bind;
             let _ = Task/acquire(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bin("closed;")); ())!;
             let _ = Io/write(Io/stdout, Str/to_bin("body;"));
             Task/pure(());
@@ -293,7 +286,6 @@ fn manual_release_runs_a_finalizer_once_and_completion_does_not_repeat_it() {
         r#"
         use /std/{Task, Io, Str};
         let main : Task({}) =
-            let ! = Task/bind;
             let _ = Task/acquire(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bin("closed;")); ())!;
             let _ = Io/write(Io/stdout, Str/to_bin("body;"));
             let _ = Task/release(Io/stdin)!;

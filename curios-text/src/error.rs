@@ -66,9 +66,9 @@ pub enum Error {
     ConceptWithoutInputs {
         label: String,
     },
-    /// A postfix `!` appeared outside any `let !` body, so there is no bind
-    /// function to sequence it with.
-    BangWithoutBind,
+    /// A postfix `!` was reached through a *type* lowering (an annotation, a
+    /// motive, a Π/Σ component): types have no region to hoist the action to.
+    BangInTypePosition,
     /// The annotated motive form `(x : T(...)) => P` is only meaningful on a
     /// inductive scrutinee — `Bln` and `Nat` matches take `: P` or `: (x) => P`.
     AnnotatedMotiveNotInductive,
@@ -159,8 +159,8 @@ impl fmt::Display for Error {
                     "concept `{label}` marks every parameter `out`; at least one input parameter is required to key witnesses on"
                 )
             }
-            Error::BangWithoutBind => {
-                write!(f, "postfix `!` used outside a `let !` block")
+            Error::BangInTypePosition => {
+                write!(f, "postfix `!` is not allowed inside a type")
             }
             Error::AnnotatedMotiveNotInductive => {
                 write!(

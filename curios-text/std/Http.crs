@@ -107,7 +107,6 @@ pub record Status : Type {
 }
 
 pub let status_line : Parse(Status) =
-    let ! = Parse/bind;
     let version = Parse/take_while(until(' '))!;
     let _ = Parse/take_byte(' ')!;
     let digits = Parse/take_while(Char/is_digit)!;
@@ -143,7 +142,6 @@ let guard_header : Parse({}) =
         end };
 
 let header_line : Parse({Str, Str}) =
-    let ! = Parse/bind;
     let _ = guard_header!;
     let name = Parse/take_while(until(':'))!;
     let _ = Parse/take_byte(':')!;
@@ -170,7 +168,6 @@ let body_parser(headers : Lst({Str, Str})) -> Parse(Bin) =
     end;
 
 pub let decode : Parse(Response) =
-    let ! = Parse/bind;
     let status = status_line!;
     let headers = Parse/many0(header_line)!;
     let _ = Parse/take_byte('\r')!;

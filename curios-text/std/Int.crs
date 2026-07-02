@@ -16,7 +16,6 @@ pub let of_str(s : Str) -> Option(Int) =
     match Str/len(s) == 0
     | true => Option/none()
     | false =>
-        let ! = Option/bind;
         let first = Str/get(s, 0)!;
         let digits =
             match first == '+' || first == '-'

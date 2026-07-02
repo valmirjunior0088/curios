@@ -154,7 +154,6 @@ fn bare_tuple_continuation_tail_infers() {
         let pairer : Parse({ Nat, Nat }) =
             Parse/bind(Parse/any_byte, (a) => Parse/pure((a, a)));
         rec with_sugar : Parse({ Nat, Nat }) =
-            let ! = Parse/bind;
             let a = Parse/any_byte!;
             Parse/pure((a, 0));
         match Parse/run(pairer, /std/Str/to_bin("hi"))

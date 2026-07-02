@@ -200,7 +200,6 @@ fn str_get_indexes_codepoints_of_every_width() {
 fn str_at_reads_codepoints_with_the_proof() {
     let source = r#"
         use /std/{Str, Nat, Io, Option};
-        let ! = Option/bind;
         match Str/of_bin(\61\e2\82\ac\f0\9f\98\80) : {}
         | some(s) =>
             let out =

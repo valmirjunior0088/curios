@@ -216,7 +216,6 @@ let exp_factor_of(s : Str, e_pos : Nat, len : Nat) -> Option(Flt) =
     end;
 
 pub let of_str(s : Str) -> Option(Flt) =
-    let ! = Option/bind;
     match Str/len(s) == 0
     | true => Option/none()
     | false =>

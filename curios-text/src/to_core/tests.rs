@@ -1145,8 +1145,27 @@ fn distinct_holes_get_distinct_ids() {
 }
 
 #[test]
-fn bang_outside_let_bang_is_rejected() {
-    // A postfix `!` with no enclosing `let !` has no bind to sequence it, so the
-    // desugarer rejects it rather than emitting a dangling continuation.
-    assert!(run_err("x!").contains("outside a `let !` block"));
+fn bang_desugars_through_syn_monad_bind() {
+    // Every value body is a region root: `x!` hoists to it and sequences
+    // through the `/syn/Monad/bind` wrapper (core name `/syn/Monad/Monad/bind`)
+    // applied to the action and the continuation over a gensym'd binder. The
+    // witness slot and implicits are inserted during core elaboration.
+    let expected = curios_core::Term::apply(
+        curios_core::Term::var(curios_core::Var::free("/syn/Monad/Monad/bind")),
+        [
+            curios_core::Term::var(curios_core::Var::free("x")),
+            curios_core::Term::func(
+                [("#0".to_string(), curios_core::Term::metavar(0))],
+                curios_core::Term::var(curios_core::Var::free("#0")),
+            ),
+        ],
+    );
+    assert_eq!(run("x!"), expected);
+}
+
+#[test]
+fn bang_in_a_type_is_rejected() {
+    // Types have no region to hoist an action to, so a `!` in an annotation is
+    // rejected during desugaring.
+    assert!(run_err("let a : e! = x; a").contains("not allowed inside a type"));
 }

@@ -2,11 +2,11 @@ use {
     super::{
         Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, ConceptField, ConceptParam,
         Entrypoint, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm,
-        InductiveMatch, Infix, Let, LetBang, LetSignature, LoadError, Match, Module, Motive, Name,
-        Nat, NatLiteral, NatMatch, NumLit, NumOp, Plicity, Prim, Proj, Qualifier, Radix, Rec,
-        RecItem, StructLit, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem, TopLet,
-        TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam,
-        UseGroup, WitnessField,
+        InductiveMatch, Infix, Let, LetSignature, LoadError, Match, Module, Motive, Name, Nat,
+        NatLiteral, NatMatch, NumLit, NumOp, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem,
+        StructLit, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem, TopLet, TopMod,
+        TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup,
+        WitnessField,
     },
     curios_base::{
         Source,
@@ -1101,24 +1101,6 @@ fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
     )
 }
 
-// A `let ! = <bind>; <body>` do-notation block. `<bind>` is an *atomic* term
-// denoting a binary bind `(M A, A -> M B) -> M B` (e.g. the partially-applied
-// `Parse/bind(?, ?)`); it is re-elaborated per `!` site, so its `?` holes get fresh
-// metavariables each time, and the desugarer applies it to `(action, continuation)`
-// there — keeping the bind's own head (e.g. `Parse/bind`) in head position, so it
-// needs no annotation. No `end`: the block ends where the enclosing term ends (like
-// a `let`/`rec` tail). The leading `let !` is committed once matched, so a plain
-// `let x` backtracks cleanly.
-fn parse_let_bang<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("let").and_keep(parse_literal("!")))
-        .and_keep(parse_literal("="))
-        .and_keep(parse_atomic_term())
-        .and_drop(parse_literal(";"))
-        .and(lazy(parse_term))
-        .map(|(bind, body)| Subterm::LetBang(LetBang { bind, body }))
-        .map(Into::into)
-}
-
 // The fixed set of overloaded infix operators, recognised by maximal munch
 // (two-character symbols before their one-character prefixes).
 fn parse_num_op<'a>() -> Parser<'a, NumOp> {
@@ -1209,8 +1191,7 @@ fn parse_term<'a>() -> Parser<'a, Term> {
 
 fn parse_term_inner<'a>() -> Parser<'a, Term> {
     with_span(
-        parse_let_bang()
-            .or(parse_rec())
+        parse_rec()
             .or(parse_let())
             .or(parse_match())
             .or(parse_func_type())
