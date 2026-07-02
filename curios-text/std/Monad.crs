@@ -1,17 +1,12 @@
 use /std/{Option, Lst};
 
--- Monadic sequencing over a one-parameter type constructor. The parameter is
--- higher-kinded: a goal like `Monad(?M)` parks until the flex-apply imitation
--- rule pins `?M` from a concrete type such as `Option(Nat)`, then resolves
--- against the witness keyed on that constructor.
-pub concept Monad(M : (Type) -> Type) : Type {
-    pure(@A : Type, A) -> M(A),
-    bind(@A : Type, @B : Type, M(A), (A) -> M(B)) -> M(B)
-}
-
--- Lift the method wrappers (`Monad/pure`, `Monad/bind`) out of the concept's
--- namespace to the module level, so `use /std/{Monad}` makes them resolve.
-pub use Monad/*;
+-- The concept lives in `/syn` — the `!` operator desugars to
+-- `/syn/Monad/bind`, so it must be resolvable without imports — and this
+-- module is the user-facing facade (the `std/Eql.crs` pattern). Witnesses
+-- stay in `/std`: here for the pervasive containers, and in `Task.crs` /
+-- `Parse.crs` / `Reader.crs` beside those monads.
+pub use /syn/{Monad};
+pub use /syn/Monad/{pure, bind};
 
 -- Witness fields bind every binder of the field's declared type, implicit
 -- type binders included — lambdas carry no plicities, so the spelled-out

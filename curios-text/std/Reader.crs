@@ -1,4 +1,4 @@
-use /std/{Io, Bin, Nat, Option};
+use /std/{Io, Bin, Nat, Option, Monad};
 
 pub let Buffer : Type =
     {Io, Bin};
@@ -44,3 +44,8 @@ pub rec read_line : Reader(Option(Bin)) =
             | error(_) => flush()
             end
         end };
+
+pub witness monad_reader : Monad(Reader) {
+    pure(A, x) = pure(@A, x),
+    bind(A, B, m, f) = bind(@A, @B)(m, f)
+}

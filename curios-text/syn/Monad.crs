@@ -1,0 +1,17 @@
+-- Monadic sequencing over a one-parameter type constructor. The concept is
+-- homed here because the `!` operator desugars to `/syn/Monad/bind` — the
+-- name must be resolvable without imports, like the other desugaring targets.
+-- Witnesses live in `/std`, beside the types they cover; this module holds
+-- only what the compiler emits references to.
+--
+-- The parameter is higher-kinded: a goal like `Monad(?M)` parks until the
+-- flex-apply imitation rule pins `?M` from a concrete type such as
+-- `Option(Nat)`, then resolves against the witness keyed on that constructor.
+pub concept Monad(M : (Type) -> Type) : Type {
+    pure(@A : Type, A) -> M(A),
+    bind(@A : Type, @B : Type, M(A), (A) -> M(B)) -> M(B)
+}
+
+-- Lift the method wrappers (`Monad/pure`, `Monad/bind`) out of the concept's
+-- namespace to the module level, so `/syn/Monad/bind` names the wrapper.
+pub use Monad/*;

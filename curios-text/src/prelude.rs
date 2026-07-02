@@ -890,6 +890,7 @@ const SYN: &[(&[&str], &str)] = &[
     (&["syn"], include_str!("../syn.crs")),
     (&["syn", "Str"], include_str!("../syn/Str.crs")),
     (&["syn", "Lst"], include_str!("../syn/Lst.crs")),
+    (&["syn", "Monad"], include_str!("../syn/Monad.crs")),
 ];
 
 // Serves the embedded `syn` modules, delegating everything else to `inner`.

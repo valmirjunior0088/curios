@@ -1,4 +1,4 @@
-use /std/{Io, Bin, Nat, Bln, Arr, Lst, Option, Result, Cell};
+use /std/{Io, Bin, Nat, Bln, Arr, Lst, Option, Result, Cell, Monad};
 
 induct Pause : Type
 | wait(Io, Nat)
@@ -373,3 +373,8 @@ pub let select(@A : Type, tasks : Lst(() -> Task(A))) -> Task({Nat, A}) =
 
 pub let race(@A : Type, tasks : Lst(() -> Task(A))) -> Task(A) =
     bind(select(tasks), (w) => pure(w.1));
+
+pub witness monad_task : Monad(Task) {
+    pure(A, x) = pure(@A, x),
+    bind(A, B, m, f) = bind(@A, @B)(m, f)
+}
