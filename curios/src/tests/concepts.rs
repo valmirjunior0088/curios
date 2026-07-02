@@ -191,3 +191,48 @@ fn duplicate_witness_is_an_error() {
 
     assert!(error(source).to_lowercase().contains("witness"));
 }
+
+// Multi-parameter concepts key on the tuple of every input head: two
+// witnesses may share a first head as long as the full input tuple differs,
+// and each resolves once both parameters are pinned.
+#[test]
+fn multi_param_witnesses_share_a_first_head() {
+    let source = r#"
+        use /std/{Nat, Bln, Io, Str};
+        pub concept Into(A : Type, B : Type) : Type {
+            into(A) -> B
+        }
+        pub witness into_nat_str : Into(Nat, Str) {
+            into(n) = Nat/to_str(n)
+        }
+        pub witness into_nat_bln : Into(Nat, Bln) {
+            into(n) = Nat/eql(n, 1)
+        }
+        let s : Str = Into/into(2);
+        let b : Bln = Into/into(2);
+        Io/print(Bln/to_str(b))
+        "#;
+
+    assert_eq!(run(source), b"false");
+}
+
+// Without an `out` marker every parameter is an input, so a goal whose second
+// parameter is never pinned parks on the flex input and surfaces as an error
+// at the end of the module — no accidental output inference from the witness.
+#[test]
+fn open_input_parameter_does_not_infer_from_the_witness() {
+    let source = r#"
+        use /std/{Nat, Io, Str};
+        pub concept Into(A : Type, B : Type) : Type {
+            into(A) -> B
+        }
+        pub witness into_nat_str : Into(Nat, Str) {
+            into(n) = Nat/to_str(n)
+        }
+        pub let discard(@A : Type, x : A) -> Nat = 0;
+        Io/print(Nat/to_str(discard(Into/into(1))))
+        "#;
+
+    let message = error(source).to_lowercase();
+    assert!(message.contains("witness") || message.contains("infer"));
+}

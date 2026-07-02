@@ -6,10 +6,10 @@
 //! A concept lowers to an ordinary nominal record (its [`Structure`]
 //! (super::Structure) entry drives literals and projections); the [`Concept`]
 //! entry here adds what resolution needs on top: the field labels, the
-//! superclass mask, and the parameter telescope. A witness lowers to an
-//! ordinary top-level definition; its [`Witness`] entry keys that definition
-//! in the program-wide table under `(concept name, rigid head of the first
-//! parameter)`, the [`HeadKey`].
+//! superclass mask, the parameter telescope, and the input mask. A witness
+//! lowers to an ordinary top-level definition; its [`Witness`] entry keys that
+//! definition in the program-wide table under `(concept name, tuple of the
+//! rigid heads of the input parameters)`, the [`WitnessKey`] of [`HeadKey`]s.
 
 use super::{Subterm, Telescope, Term};
 
@@ -26,6 +26,12 @@ pub struct Concept {
     /// each `use`-marked field. The graph over all concepts must be acyclic
     /// (checked when the registries are seeded).
     pub supers: Vec<(usize, String)>,
+    /// The parameter positions witnesses key on, in declaration order — every
+    /// position not marked `out` in the declaration. A concept without `out`
+    /// markers has `inputs = [0, 1, …, n-1]`; `out` positions are excluded
+    /// from the key and pinned by the witness's terminal unification instead
+    /// (functional dependencies).
+    pub inputs: Vec<usize>,
 }
 
 /// One registered witness: the qualified name of its backing definition and
@@ -37,8 +43,32 @@ pub struct Witness {
     pub signature: Term,
 }
 
-/// The rigid head a witness is keyed on: the nominal (inductive or struct)
-/// qualified name, or a primitive type constructor. Parameters past the head
+/// The tuple of rigid heads a witness is keyed on: one [`HeadKey`] per input
+/// position of its concept, in declaration order. Displays bare for arity one
+/// (`Nat`) and as a tuple otherwise (`(Nat, Str)`).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WitnessKey(pub Vec<HeadKey>);
+
+impl std::fmt::Display for WitnessKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0.as_slice() {
+            [single] => write!(f, "{single}"),
+            heads => {
+                write!(f, "(")?;
+                for (index, head) in heads.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{head}")?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
+/// One rigid head inside a [`WitnessKey`]: the nominal (inductive or struct)
+/// qualified name, or a primitive type constructor. Parameters past the heads
 /// are checked by unification at resolution time, not by the key.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HeadKey {

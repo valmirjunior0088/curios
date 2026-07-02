@@ -240,11 +240,11 @@ pub enum Error {
         func: String,
         binder: String,
     },
-    /// Two witnesses registered under the same `(concept, head)` key — global
+    /// Two witnesses registered under the same `(concept, key)` — global
     /// coherence admits exactly one witness per key, program-wide.
     DuplicateWitness {
         concept: String,
-        head: String,
+        key: super::WitnessKey,
         first: String,
         second: String,
     },
@@ -259,10 +259,12 @@ pub enum Error {
     CyclicSuperclass {
         concept: String,
     },
-    /// A witness's first concept parameter does not reduce to a rigid nominal
-    /// or primitive head — nothing to key the table entry on.
+    /// A witness's concept parameter at an input `position` (0-based) does
+    /// not reduce to a rigid nominal or primitive head — nothing to key the
+    /// table entry on.
     InvalidWitnessHead {
         witness: String,
+        position: usize,
         head: Box<Term>,
     },
     /// A witness's annotation does not elaborate to an application of a
@@ -544,10 +546,15 @@ impl Error {
         }
     }
 
-    pub fn duplicate_witness(concept: String, head: String, first: String, second: String) -> Self {
+    pub fn duplicate_witness(
+        concept: String,
+        key: super::WitnessKey,
+        first: String,
+        second: String,
+    ) -> Self {
         Self::DuplicateWitness {
             concept,
-            head,
+            key,
             first,
             second,
         }
@@ -571,9 +578,14 @@ impl Error {
         }
     }
 
-    pub fn invalid_witness_head<N: Into<String>, T: Into<Term>>(witness: N, head: T) -> Self {
+    pub fn invalid_witness_head<N: Into<String>, T: Into<Term>>(
+        witness: N,
+        position: usize,
+        head: T,
+    ) -> Self {
         Self::InvalidWitnessHead {
             witness: witness.into(),
+            position,
             head: Box::new(head.into()),
         }
     }
@@ -957,13 +969,17 @@ impl fmt::Display for Error {
             }
             Error::DuplicateWitness {
                 concept,
-                head,
+                key,
                 first,
                 second,
             } => {
+                let noun = match key.0.len() {
+                    1 => "head",
+                    _ => "key",
+                };
                 write!(
                     f,
-                    "duplicate witness of '{concept}' for head '{head}'\n  already provided by '{first}', re-declared by '{second}'\n  every concept-head pair has at most one witness, program-wide"
+                    "duplicate witness of '{concept}' for {noun} '{key}'\n  already provided by '{first}', re-declared by '{second}'\n  every concept-{noun} pair has at most one witness, program-wide"
                 )
             }
             Error::AmbiguousWitness {
@@ -982,10 +998,15 @@ impl fmt::Display for Error {
                     "concept '{concept}' participates in a superclass cycle ('use'-marked fields must form an acyclic graph)"
                 )
             }
-            Error::InvalidWitnessHead { witness, head } => {
+            Error::InvalidWitnessHead {
+                witness,
+                position,
+                head,
+            } => {
                 write!(
                     f,
-                    "witness '{witness}' cannot be keyed: its concept's first parameter reduces to {head}\n  the head must be an inductive, a struct/record, or a primitive type"
+                    "witness '{witness}' cannot be keyed: its concept's parameter {n} reduces to {head}\n  every input parameter's head must be an inductive, a struct/record, or a primitive type",
+                    n = position + 1
                 )
             }
             Error::NotAConcept { witness, found } => {

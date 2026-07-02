@@ -801,6 +801,7 @@ fn process_items(
                         params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: concept.fields.iter().map(|f| f.label.clone()).collect(),
                         supers,
+                        inputs: (0..concept.params.len()).collect(),
                     },
                 );
 

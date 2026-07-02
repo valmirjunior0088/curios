@@ -42,6 +42,9 @@ pub use structure::*;
 mod concept;
 pub use concept::*;
 
+#[cfg(test)]
+mod concept_tests;
+
 mod print;
 use print::*;
 

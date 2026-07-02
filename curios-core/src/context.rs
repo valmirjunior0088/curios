@@ -1,7 +1,7 @@
 use {
     super::{
-        Bound, Concept, Goal, HeadKey, ImplicitOrigin, Inductive, Metavar, MetavarId,
-        MetavarOrigin, Structure, Term, Witness, WitnessOrigin,
+        Bound, Concept, Goal, ImplicitOrigin, Inductive, Metavar, MetavarId, MetavarOrigin,
+        Structure, Term, Witness, WitnessKey, WitnessOrigin,
     },
     crate::time::Instant,
     curios_base::{Entropy, Span},
@@ -171,9 +171,9 @@ pub struct Context {
     // registers into `witness_table` when its signature elaborates
     // (`elaborate_module_let` → `register_witness`).
     witness_declarations: BTreeSet<String>,
-    // The program-wide witness table: one witness per (concept, head) key —
-    // global coherence, checked at registration.
-    witness_table: BTreeMap<(String, HeadKey), Witness>,
+    // The program-wide witness table: one witness per (concept, input-head
+    // tuple) key — global coherence, checked at registration.
+    witness_table: BTreeMap<(String, WitnessKey), Witness>,
     // The `use`-plicity binders currently in scope, in binding order (a
     // subset of `local`), with frame boundaries in `witness_marks` —
     // resolution's step-1/2 search space, scanned innermost-first.
@@ -649,9 +649,9 @@ impl Context {
         self.witness_declarations.contains(name)
     }
 
-    /// The witness registered under `(concept, head)`, if any.
-    pub fn witness(&self, concept: &str, head: &HeadKey) -> Option<&Witness> {
-        self.witness_table.get(&(concept.to_string(), head.clone()))
+    /// The witness registered under `(concept, key)`, if any.
+    pub fn witness(&self, concept: &str, key: &WitnessKey) -> Option<&Witness> {
+        self.witness_table.get(&(concept.to_string(), key.clone()))
     }
 
     /// Insert a witness under its key, returning the previous occupant's name
@@ -659,13 +659,13 @@ impl Context {
     pub fn insert_witness(
         &mut self,
         concept: String,
-        head: HeadKey,
+        key: WitnessKey,
         witness: Witness,
     ) -> Option<String> {
-        match self.witness_table.get(&(concept.clone(), head.clone())) {
+        match self.witness_table.get(&(concept.clone(), key.clone())) {
             Some(existing) => Some(existing.name.clone()),
             None => {
-                self.witness_table.insert((concept, head), witness);
+                self.witness_table.insert((concept, key), witness);
                 None
             }
         }
