@@ -84,11 +84,40 @@ jobs:
           name: curios-wasm
           path: curios-wasm.tar.gz
 
+  build-docs:
+    name: Build docs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: docs
+
+      - name: Build runtime launcher
+        run: make curios/runtime
+
+      - name: Build docs
+        run: cargo doc --workspace --no-deps
+
+      - name: Archive docs
+        run: tar -czf curios-docs.tar.gz -C target/doc .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: curios-docs
+          path: curios-docs.tar.gz
+
   release:
     name: Create release
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    needs: [build, build-wasm]
+    needs: [build, build-wasm, build-docs]
 
     permissions:
       contents: write
@@ -106,6 +135,7 @@ jobs:
           mv artifacts/curios-linux-aarch64/curios curios-linux-aarch64
           mv artifacts/curios-macos-aarch64/curios curios-macos-aarch64
           mv artifacts/curios-wasm/curios-wasm.tar.gz curios-wasm.tar.gz
+          mv artifacts/curios-docs/curios-docs.tar.gz curios-docs.tar.gz
 
       - name: Create release
         env:
@@ -117,4 +147,5 @@ jobs:
             curios-linux-x86_64 \
             curios-linux-aarch64 \
             curios-macos-aarch64 \
-            curios-wasm.tar.gz
+            curios-wasm.tar.gz \
+            curios-docs.tar.gz
