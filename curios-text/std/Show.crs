@@ -10,23 +10,23 @@ pub concept Show(A : Type) : Type {
 -- module level, so `use /std/{Show}` makes `Show/show` resolve.
 pub use Show/*;
 
-witness Show(Nat) {
+satisfy Show(Nat) {
     show(n) = Nat/to_str(n)
 }
 
-witness Show(Int) {
+satisfy Show(Int) {
     show(n) = Int/to_str(n)
 }
 
-witness Show(Flt) {
+satisfy Show(Flt) {
     show(f) = Flt/to_str(f)
 }
 
-witness Show(Bln) {
+satisfy Show(Bln) {
     show(b) = Bln/to_str(b)
 }
 
 -- A `Str` shows as itself.
-witness Show(Str) {
+satisfy Show(Str) {
     show(s) = s
 }

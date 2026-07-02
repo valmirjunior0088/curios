@@ -9,6 +9,6 @@ pub use /sys/Eql/{eql};
 
 -- `Str` is a std record, which `/sys` cannot name — its witness lives here,
 -- beside its dependency.
-witness Eql(Str) {
+satisfy Eql(Str) {
     eql(a, b) = Str/eql(a, b)
 }

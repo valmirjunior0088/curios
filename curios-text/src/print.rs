@@ -954,7 +954,7 @@ fn print_top_witness(item: TopWitness) -> Printer<'static> {
     };
 
     flat([
-        pure("witness"),
+        pure("satisfy"),
         params,
         pure(" "),
         app,
