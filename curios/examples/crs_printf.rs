@@ -1,5 +1,5 @@
 use {
-    curios::{Stage, compile_entrypoint, core, text, wire::sys_io},
+    curios::{Stage, compile_entrypoint, core, text, abi::sys_io},
     std::time::{Duration, Instant},
 };
 

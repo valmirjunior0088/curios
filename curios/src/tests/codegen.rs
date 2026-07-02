@@ -7,7 +7,7 @@
 
 use {
     crate::cont::{self, to_wasm},
-    crate::wire::{ForeignFunction, sys_io},
+    crate::abi::{ForeignFunction, sys_io},
     curios_rt::MockHost,
     std::sync::Arc,
 };

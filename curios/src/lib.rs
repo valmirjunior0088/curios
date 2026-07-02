@@ -1,6 +1,6 @@
 pub use curios_base::*;
 
-pub use curios_abi as wire;
+pub use curios_abi as abi;
 
 pub use curios_text as text;
 
