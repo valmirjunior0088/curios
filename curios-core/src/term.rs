@@ -50,7 +50,6 @@ impl Term {
         }
     }
 
-    /// Returns the span attached to this term, if any.
     pub fn span(&self) -> Option<Span> {
         self.span.clone()
     }

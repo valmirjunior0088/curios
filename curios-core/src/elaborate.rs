@@ -736,13 +736,6 @@ fn elaborate_struct_type(
     Ok((Term::struct_type(name, elaborated), structure.result_sort))
 }
 
-/// Type a struct literal against its registry entry (§3.3). The struct's `name`
-/// makes it self-describing, so this synthesizes (like `elaborate_variant`,
-/// not the purely-checked `elaborate_tuple`): the parameters come from the
-/// written head — a bare-name head mints one fresh metavariable per parameter,
-/// solved by the field checks (and, in `Check` mode, the `expect` turnaround
-/// unifying the result `StructType` against the expected type) — and the fields
-/// are checked in declaration order through the (dependent) field telescope.
 /// Where one field position's value comes from: a written term to check, or —
 /// for a concept's `use`-marked field with no written fill — a witness goal to
 /// mint at the position's instantiated type.
@@ -795,6 +788,13 @@ fn check_dependent_fields(
     }
 }
 
+/// Type a struct literal against its registry entry (§3.3). The struct's `name`
+/// makes it self-describing, so this synthesizes (like `elaborate_variant`,
+/// not the purely-checked `elaborate_tuple`): the parameters come from the
+/// written head — a bare-name head mints one fresh metavariable per parameter,
+/// solved by the field checks (and, in `Check` mode, the `expect` turnaround
+/// unifying the result `StructType` against the expected type) — and the fields
+/// are checked in declaration order through the (dependent) field telescope.
 fn elaborate_struct(
     context: &mut Context,
     s: &Struct,
@@ -1651,19 +1651,6 @@ fn elaborate_metavar(
     }
 }
 
-/// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated*
-/// types. `to_core` records the declaration's lowered spellings, and a lowered
-/// type must never leak into later reduction: implicit insertion saturates
-/// applications during elaboration, and an under-applied index type (e.g.
-/// `Eq(0, 0)` against `Eq`'s 3-ary type constructor) would open a telescope at
-/// the wrong arity the first time `reduce` meets the registry copy.
-///
-/// Called from `elaborate_module_rec` after the group's signatures are
-/// reassumed rebuilt and *before* any body is checked — index types may
-/// mention the group's own members (resolved through the assumed signatures),
-/// and the type-constructor bodies' `InductiveType` nodes check their arguments
-/// against this very telescope. A name with no registry entry is an ordinary
-/// binding; no-op.
 /// Walk a (params-first) telescope, checking each binder's type against `Type`
 /// under the earlier binders (fresh-gensym, assume), and return the rebuilt
 /// `(label, type)` entries alongside the telescope's terminal — opened under

@@ -17,7 +17,9 @@
 
 use {super::*, std::fmt::Display};
 
-/// The function a closure is lifted to ([`closure_lifting`](super::closure_lifting)).
+/// The function a closure is lifted to ([`closure_lifting`](super::closure_lifting)):
+/// a pure function of the closure's name, so every call site and every lifting
+/// pass agree on one target without sharing state.
 pub fn lifted(clsr: &ClsrName) -> FuncName {
     FuncName::from(format!("{clsr}@lifted"))
 }
@@ -80,13 +82,17 @@ pub fn thread_suffix(index: usize) -> String {
     format!("@thread#{index}")
 }
 
-/// An interned module const ([`hoist_literals`](super::hoist_literals)).
+/// An interned module const ([`hoist_literals`](super::hoist_literals)): `kind`
+/// groups related literals under one counter, and `index` is probed upward
+/// until the candidate doesn't collide with an already-taken name.
 pub fn hoisted_const(kind: &str, index: usize) -> ValueName {
     ValueName::from(format!("lit@{kind}#{index}"))
 }
 
 /// A materialised interpretation result
-/// ([`evaluate_pure_calls`](super::evaluate_pure_calls)).
+/// ([`evaluate_pure_calls`](super::evaluate_pure_calls)): named from a fresh
+/// per-pass counter, so each constant folded out of a pure call gets its own
+/// binding even when several fold in the same pass.
 pub fn eval_result(index: usize) -> ValueName {
     ValueName::from(format!("v@eval#{index}"))
 }

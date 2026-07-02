@@ -108,7 +108,7 @@ impl OsHost {
     }
 
     /// Mint a fresh handle for `resource` under the table lock (see
-    /// [`OsTable::mint`]).
+    /// [`Table::mint`]).
     fn mint(&self, resource: OsResource) -> Io {
         self.table.lock().unwrap().mint(resource)
     }

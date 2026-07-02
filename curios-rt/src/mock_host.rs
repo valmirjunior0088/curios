@@ -159,7 +159,7 @@ impl MockHost {
     }
 
     /// Mint a fresh handle for `resource` under the table lock (see
-    /// [`MockTable::mint`]).
+    /// [`Table::mint`]).
     fn mint(&self, resource: MockResource) -> Io {
         self.table.lock().unwrap().mint(resource)
     }

@@ -169,9 +169,10 @@ pub enum Status {
     AlreadyExists,
     /// A `connect` was actively refused — no listener at the target host:port.
     ConnectionRefused,
-    /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). No
-    /// Phase-1 caller sets `NONBLOCK`, so it is never observed yet; the `/std`
-    /// scheduler consumes it once the readiness model lands.
+    /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`).
+    /// Produced once a handle has been switched to non-blocking mode by
+    /// `Task/nonblocking` (`/std/Task.crs`); `/std`'s scheduler matches on it to
+    /// reschedule the read/write instead of treating it as a real failure.
     WouldBlock,
     /// A TLS upgrade (`start_tls`/`start_tls_server`) or server-config build
     /// failed: an unparseable certificate/key, an invalid SNI, or a failed

@@ -8,6 +8,19 @@ use {
     std::collections::BTreeMap,
 };
 
+/// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated*
+/// types. `to_core` records the declaration's lowered spellings, and a lowered
+/// type must never leak into later reduction: implicit insertion saturates
+/// applications during elaboration, and an under-applied index type (e.g.
+/// `Eq(0, 0)` against `Eq`'s 3-ary type constructor) would open a telescope at
+/// the wrong arity the first time `reduce` meets the registry copy.
+///
+/// Called from `elaborate_module_rec` after the group's signatures are
+/// reassumed rebuilt and *before* any body is checked — index types may
+/// mention the group's own members (resolved through the assumed signatures),
+/// and the type-constructor bodies' `InductiveType` nodes check their arguments
+/// against this very telescope. A name with no registry entry is an ordinary
+/// binding; no-op.
 fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), Error> {
     let Some(inductive) = context.inductive(name).cloned() else {
         return Ok(());
@@ -586,13 +599,10 @@ pub fn elaborate_and_zonk_with_prelude(
     Ok((module, body_type))
 }
 
-/// The module of a flat item: its name's qualifier prefix (`Foo/Bar` for
-/// `Foo/Bar/f`; the empty string for a root-level `f`). The struct projection
-/// privacy check compares this against the struct's declaring module.
 /// The module an item belongs to: the qualifier prefix of its fully-qualified
-/// name (everything before the last `/`; the root module is the empty string).
-/// The flat `Module` stores no separate module field — the name is the source
-/// of truth. Used to set the per-item `island` for the struct privacy check (§7),
+/// name (`Foo/Bar` for `Foo/Bar/f`; the empty string for a root-level `f`). The
+/// flat `Module` stores no separate module field — the name is the source of
+/// truth. Used to set the per-item `island` for the struct privacy check (§7),
 /// in both `elaborate_module` and `erase_module`.
 pub fn module_of(name: &str) -> &str {
     match name.rfind('/') {

@@ -108,8 +108,9 @@ pub struct FuncType {
 pub struct Func {
     /// Each parameter is a binder name with an optional domain annotation. `None`
     /// is the surface `(x) => …` form, sugar for `(x : _) => …`; it lowers to a
-    /// hole (`to_core::elaborate`), solved against the expected function type when
-    /// the lambda is checked, or synthesized from the annotation when inferred.
+    /// hole, solved by [`curios_core::elaborate`] against the expected function
+    /// type when the lambda is checked, or synthesized from the annotation when
+    /// inferred.
     pub params: Vec<(String, Option<Term>)>,
     pub body: Term,
 }
