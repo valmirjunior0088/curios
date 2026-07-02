@@ -6,8 +6,8 @@
 //! `curios-abi`).
 
 use {
-    crate::cont::{self, to_wasm},
     crate::abi::{ForeignFunction, sys_io},
+    crate::cont::{self, to_wasm},
     curios_rt::MockHost,
     std::sync::Arc,
 };

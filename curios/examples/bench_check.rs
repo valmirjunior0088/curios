@@ -8,7 +8,7 @@
 //! startup overhead.
 
 use {
-    curios::{core, text, abi::sys_io},
+    curios::{abi::sys_io, core, text},
     std::time::{Duration, Instant},
 };
 
