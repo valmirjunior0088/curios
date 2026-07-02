@@ -250,23 +250,26 @@ impl<'a, 'b> Lower<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             // A dependent Σ-type: each field type sees the preceding fields'
-            // labels, so they lower under a progressively-extended scope.
+            // labels, so they lower under a progressively-extended scope. The
+            // signature sugar `f(params) -> T` is undone here.
             Subterm::TupleType(tt) => {
                 let mut seen = Vec::new();
                 let mut fields = Vec::with_capacity(tt.fields.len());
                 for param in &tt.fields {
-                    let lowered = self.scoped(seen.clone(), || self.term(&param.type_))?;
+                    let type_ = param.desugared_type();
+                    let lowered = self.scoped(seen.clone(), || self.term(&type_))?;
                     let name = param.label.clone().unwrap_or_default();
                     seen.push(name.clone());
                     fields.push((name, lowered));
                 }
                 curios_core::Term::tuple_type(fields)
             }
+            // The definition sugar `f(params) = value` is undone here.
             Subterm::Tuple(tuple) => curios_core::Term::tuple_named(
                 tuple
                     .fields
                     .iter()
-                    .map(|(name, field)| Ok((name.clone(), self.term(field)?)))
+                    .map(|field| Ok((field.label.clone(), self.term(&field.desugared_value())?)))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Proj(proj) => {
@@ -290,7 +293,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?,
                 lit.fields
                     .iter()
-                    .map(|(name, field)| Ok((name.clone(), self.term(field)?)))
+                    .map(|field| Ok((field.label.clone(), self.term(&field.desugared_value())?)))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Match(match_) => match match_ {
@@ -534,7 +537,10 @@ impl<'a, 'b> Lower<'a, 'b> {
                 tuple
                     .fields
                     .iter()
-                    .map(|(name, f)| Ok((name.clone(), self.collect(f, bind, binds)?)))
+                    .map(|field| {
+                        let value = field.desugared_value();
+                        Ok((field.label.clone(), self.collect(&value, bind, binds)?))
+                    })
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Proj(proj) => {
@@ -554,7 +560,10 @@ impl<'a, 'b> Lower<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?,
                 lit.fields
                     .iter()
-                    .map(|(name, field)| Ok((name.clone(), self.collect(field, bind, binds)?)))
+                    .map(|field| {
+                        let value = field.desugared_value();
+                        Ok((field.label.clone(), self.collect(&value, bind, binds)?))
+                    })
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             // An infix operator's operands hoist their bangs into this region,

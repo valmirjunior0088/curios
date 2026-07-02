@@ -274,3 +274,23 @@ fn type_struct_distinct_values_not_convertible() {
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
+
+// The function-field sugar, end to end: `label(params) -> T` in a record
+// declaration and a Σ-type, `label(params) = body` in a struct literal and a
+// tuple literal. The parser keeps the sugar in the AST; `to_core` undoes it —
+// this pins the lowering, not just the grammar.
+#[test]
+fn function_field_sugar_runs_end_to_end() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub record Api : Type { base : Nat, bump(x : Nat) -> Nat }
+        let api : Api = Api { base = 3, bump(x) = x + 1 };
+        let pair : { seed : Nat, twice(x : Nat) -> Nat } =
+            (seed = api.bump(api.base), twice(x) = x + x);
+        Io/print(Nat/to_str(pair.twice(pair.seed)))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"8");
+}

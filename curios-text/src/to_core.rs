@@ -667,14 +667,15 @@ fn process_items(
                     .collect::<Vec<_>>();
 
                 // Field types, with declared or positional (`_i`) names so a
-                // later field type can depend on an earlier field.
+                // later field type can depend on an earlier field. The
+                // signature sugar `f(params) -> T` is undone here.
                 let field_tys = s
                     .fields
                     .iter()
                     .enumerate()
                     .map(|(i, param)| {
                         let n = param.label.clone().unwrap_or_else(|| format!("_{i}"));
-                        Ok((n, lower.term(&param.type_)?))
+                        Ok((n, lower.term(&param.desugared_type())?))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
@@ -770,12 +771,15 @@ fn process_items(
 
                 // Field types, lowered under the parameter scope (concept fields
                 // are always named, so the label is the binder for later fields).
+                // The signature sugar `f(params) -> T` is undone here.
                 let field_tys = {
                     let lower = Lower::new(context);
                     concept
                         .fields
                         .iter()
-                        .map(|field| Ok((field.label.clone(), lower.term(&field.type_)?)))
+                        .map(|field| {
+                            Ok((field.label.clone(), lower.term(&field.desugared_type())?))
+                        })
                         .collect::<Result<Vec<_>, Error>>()?
                 };
 
@@ -868,7 +872,7 @@ fn process_items(
 
                     let signature = LetSignature::Func {
                         params,
-                        output: field.type_.clone(),
+                        output: field.desugared_type(),
                         body: Subterm::Proj(Proj {
                             head: Subterm::Name(Name::from(vec!["w".to_string()])).into(),
                             field: Field::Label(field.label.clone()),
@@ -895,7 +899,11 @@ fn process_items(
                     fields: witness
                         .fields
                         .iter()
-                        .map(|(label, value)| (Some(label.clone()), value.clone()))
+                        .map(|field| TupleField {
+                            label: Some(field.label.clone()),
+                            func_params: field.func_params.clone(),
+                            value: field.value.clone(),
+                        })
                         .collect(),
                 })
                 .into();

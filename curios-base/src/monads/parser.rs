@@ -550,6 +550,64 @@ where
     })
 }
 
+/// Like [`sep_by0`], but admits (and drops) one trailing separator: a
+/// separator followed by a failed item parse ends the list with the separator
+/// consumed instead of failing, so `{ a, b, }` parses like `{ a, b }`.
+pub fn sep_by0_trailing<'a, T, S, F, G>(mut f: F, mut g: G) -> Parser<'a, Vec<T>>
+where
+    T: 'a,
+    S: 'a,
+    F: FnMut() -> Parser<'a, T> + 'a,
+    G: FnMut() -> Parser<'a, S> + 'a,
+{
+    Parser::new(move |state| {
+        let offset = state.offset;
+
+        let (item, mut state) = match f().parse(state) {
+            Ok(output) => output,
+            Err(error) if error.is_uncaught(state) => return Err(error),
+            Err(_) => return Ok((Vec::new(), state)),
+        };
+
+        if offset == state.offset {
+            panic!("Infinite repetition");
+        }
+
+        let mut items = vec![item];
+
+        loop {
+            let next_state = match g().parse(state) {
+                Ok((_, next_state)) if state.offset == next_state.offset => {
+                    panic!("Infinite repetition")
+                }
+                Ok((_, next_state)) => next_state,
+                Err(error) if error.is_uncaught(state) => return Err(error),
+                Err(_) => break,
+            };
+
+            let offset = next_state.offset;
+            match f().parse(next_state) {
+                Ok((item, next_state)) => {
+                    if offset == next_state.offset {
+                        panic!("Infinite repetition");
+                    }
+
+                    items.push(item);
+                    state = next_state;
+                }
+                Err(error) if error.is_uncaught(next_state) => return Err(error),
+                // The separator was trailing: keep it consumed, end the list.
+                Err(_) => {
+                    state = next_state;
+                    break;
+                }
+            }
+        }
+
+        Ok((items, state))
+    })
+}
+
 pub fn sep_by1<'a, T, S, F, G>(mut f: F, mut g: G) -> Parser<'a, Vec<T>>
 where
     T: 'a,

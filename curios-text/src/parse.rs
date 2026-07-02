@@ -5,14 +5,15 @@ use {
         InductiveMatch, Infix, Let, LetBang, LetSignature, LoadError, Match, Module, Motive, Name,
         Nat, NatLiteral, NatMatch, NumLit, NumOp, Plicity, Prim, Proj, Qualifier, Radix, Rec,
         RecItem, StructLit, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem, TopLet,
-        TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleType, TupleTypeParam, UseGroup,
+        TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam,
+        UseGroup, WitnessField,
     },
     curios_base::{
         Source,
         parser::{
             Parser, ParserError, catch, fail, lazy, many0, many1, memoize, not_ahead,
-            preceded_by_space, pure, run_parser, sep_by0, sep_by1, spanned, take_eof, take_exact,
-            take_n, take_while,
+            preceded_by_space, pure, run_parser, sep_by0, sep_by0_trailing, sep_by1, spanned,
+            take_eof, take_exact, take_n, take_while,
         },
     },
     num_bigint::BigUint,
@@ -361,21 +362,48 @@ fn parse_parens<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal(")"))
 }
 
-// A Σ-type / struct-declaration field: an optional label and the field type.
-// Shared by tuple types and `struct` decls.
+// A Σ-type / struct-declaration field: an optional label and the field type,
+// or the signature sugar `label(params) -> type` — kept as written in the AST
+// node (`func_params`); `to_core` undoes the sugar. Shared by tuple types and
+// `struct` decls. The sugared catch spans through `->`, so a positional field
+// that merely starts with an application (`f(x)`) backtracks cleanly.
 fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
-    catch(parse_identifier().and_drop(parse_literal(":")))
+    catch(
+        parse_identifier()
+            .and(
+                parse_literal("(")
+                    .and_keep(sep_by0(parse_func_type_param, || parse_literal(",")))
+                    .and_drop(parse_literal(")")),
+            )
+            .and_drop(parse_literal("->")),
+    )
+    .and(lazy(parse_term))
+    .map(
+        |((label, params), output): ((&str, Vec<FuncTypeParam>), Term)| TupleTypeParam {
+            label: Some(label.to_string()),
+            func_params: Some(params),
+            type_: output,
+        },
+    )
+    .or(catch(parse_identifier().and_drop(parse_literal(":")))
         .and(lazy(parse_term))
         .map(|(label, type_): (&str, Term)| TupleTypeParam {
             label: Some(label.to_string()),
+            func_params: None,
             type_,
-        })
-        .or(lazy(parse_term).map(|type_| TupleTypeParam { label: None, type_ }))
+        }))
+    .or(lazy(parse_term).map(|type_| TupleTypeParam {
+        label: None,
+        func_params: None,
+        type_,
+    }))
 }
 
 fn parse_tuple_type<'a>() -> Parser<'a, Term> {
     catch(parse_literal("{"))
-        .and_keep(sep_by0(parse_tuple_type_field, || parse_literal(",")))
+        .and_keep(sep_by0_trailing(parse_tuple_type_field, || {
+            parse_literal(",")
+        }))
         .and_drop(parse_literal("}"))
         .map(|fields| {
             Subterm::TupleType(TupleType {
@@ -385,29 +413,69 @@ fn parse_tuple_type<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_tuple_field<'a>() -> Parser<'a, (Option<String>, Term)> {
-    catch(parse_identifier().and_drop(parse_literal("=")))
+// A parsed labeled-field prefix: the label and, for the definition sugar, the
+// written lambda-parameter list.
+type TupleFieldPrefix = (String, Option<Vec<(String, Option<Term>)>>);
+
+// The committing prefix of a labeled tuple/struct-literal field: `label =` or
+// the definition sugar `label(params) =`. The caller wraps it in `catch`, so a
+// positional field that merely starts with an identifier or an application
+// backtracks cleanly.
+fn parse_tuple_field_prefix<'a>() -> Parser<'a, TupleFieldPrefix> {
+    parse_identifier()
+        .and(
+            catch(
+                parse_literal("(")
+                    .and_keep(sep_by0(parse_func_param, || parse_literal(",")))
+                    .and_drop(parse_literal(")")),
+            )
+            .map(Some)
+            .or(pure(None)),
+        )
+        .and_drop(parse_literal("="))
+        .map(|(label, func_params): (&str, _)| (label.to_string(), func_params))
+}
+
+// A tuple-literal / struct-literal field: `label = value`, the definition
+// sugar `label(params) = value` — kept as written in the AST node
+// (`func_params`); `to_core` undoes the sugar — or a positional value.
+fn parse_tuple_field<'a>() -> Parser<'a, TupleField> {
+    catch(parse_tuple_field_prefix())
         .and(lazy(parse_term))
-        .map(|(name, term): (&str, Term)| (Some(name.to_string()), term))
-        .or(lazy(parse_term).map(|term| (None, term)))
+        .map(|((label, func_params), value)| TupleField {
+            label: Some(label),
+            func_params,
+            value,
+        })
+        .or(lazy(parse_term).map(|value| TupleField {
+            label: None,
+            func_params: None,
+            value,
+        }))
 }
 
 fn parse_tuple<'a>() -> Parser<'a, Term> {
     // Two committing prefixes distinguish a tuple literal from a parenthesized
     // term: a first field followed by a comma (`(x,` / `(a = 1,`), or a named
-    // first field alone (`(a = 1)` — the `=` already disambiguates, so the
-    // one-element form needs no trailing comma).
+    // first field alone (`(a = 1)` / `(f(x) = e)` — the `=` already
+    // disambiguates, so the one-element form needs no trailing comma).
     catch(
         parse_literal("(")
             .and_keep(parse_tuple_field())
             .and_drop(parse_literal(",")),
     )
-    .and(sep_by0(parse_tuple_field, || parse_literal(",")))
+    .and(sep_by0_trailing(parse_tuple_field, || parse_literal(",")))
     .map(|(first, rest)| iter::once(first).chain(rest).collect::<Vec<_>>())
     .or(
-        catch(parse_literal("(").and_keep(parse_identifier().and_drop(parse_literal("="))))
+        catch(parse_literal("(").and_keep(parse_tuple_field_prefix()))
             .and(lazy(parse_term))
-            .map(|(name, term): (&str, Term)| vec![(Some(name.to_string()), term)]),
+            .map(|((label, func_params), value)| {
+                vec![TupleField {
+                    label: Some(label),
+                    func_params,
+                    value,
+                }]
+            }),
     )
     .and_drop(parse_literal(")"))
     .map(|fields| Subterm::Tuple(Tuple { fields }))
@@ -433,7 +501,7 @@ fn parse_struct_lit<'a>() -> Parser<'a, Term> {
             )
             .and_drop(parse_literal("{")),
     )
-    .and(sep_by0(parse_tuple_field, || parse_literal(",")))
+    .and(sep_by0_trailing(parse_tuple_field, || parse_literal(",")))
     .and_drop(parse_literal("}"))
     .map(|((head, params), fields)| {
         Subterm::StructLit(StructLit {
@@ -1517,7 +1585,9 @@ fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
             .and(parse_literal(":").and_keep(parse_sort()))
             // Representation visibility comes from the keyword, not an inner `pub`.
             .and_drop(parse_literal("{"))
-            .and(sep_by0(parse_tuple_type_field, || parse_literal(",")))
+            .and(sep_by0_trailing(parse_tuple_type_field, || {
+                parse_literal(",")
+            }))
             .and_drop(parse_literal("}"))
             .map(move |(((label, params), result_sort), fields)| {
                 TopItem::Struct(TopStruct {
@@ -1533,9 +1603,10 @@ fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
 }
 
 // A concept field: `use? label : term`, or the signature sugar
-// `label(params) -> term`, desugared here to `label : (params) -> term`
-// (mirroring top-level `let`'s function sugar). A `use`-prefixed field is a
-// superclass edge — its type must be a concept application, checked at lowering.
+// `label(params) -> term` — kept as written in the AST node (`func_params`);
+// `to_core` undoes the sugar (mirroring top-level `let`'s function sugar). A
+// `use`-prefixed field is a superclass edge — its type must be a concept
+// application, checked at lowering.
 fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
     let super_field = catch(
         parse_keyword("use")
@@ -1546,6 +1617,7 @@ fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
     .map(|(label, type_): (&str, Term)| ConceptField {
         is_super: true,
         label: label.to_string(),
+        func_params: None,
         type_,
     });
 
@@ -1558,14 +1630,15 @@ fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
                     .and_drop(parse_literal("->")),
             )
             .and(lazy(parse_term))
-            .map(|(params, output): (Vec<FuncTypeParam>, Term)| {
-                Subterm::FuncType(FuncType { params, output }).into()
-            })
-            .or(catch(parse_literal(":")).and_keep(lazy(parse_term))),
+            .map(|(params, output): (Vec<FuncTypeParam>, Term)| (Some(params), output))
+            .or(catch(parse_literal(":"))
+                .and_keep(lazy(parse_term))
+                .map(|type_| (None, type_))),
         )
-        .map(|(label, type_): (&str, Term)| ConceptField {
+        .map(|(label, (func_params, type_)): (&str, _)| ConceptField {
             is_super: false,
             label: label.to_string(),
+            func_params,
             type_,
         });
 
@@ -1606,7 +1679,7 @@ fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
             )
             .and(parse_literal(":").and_keep(parse_sort()))
             .and_drop(parse_literal("{"))
-            .and(sep_by0(parse_concept_field, || parse_literal(",")))
+            .and(sep_by0_trailing(parse_concept_field, || parse_literal(",")))
             .and_drop(parse_literal("}"))
             .map(move |(((label, params), result_sort), fields)| {
                 TopItem::Concept(TopConcept {
@@ -1620,24 +1693,17 @@ fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
     })
 }
 
-// A witness field: `label = term`, or the definition sugar `label(params) = term`,
-// desugared here to `label = (params) => term`.
-fn parse_witness_field<'a>() -> Parser<'a, (String, Term)> {
-    parse_identifier()
-        .and(
-            catch(
-                parse_literal("(")
-                    .and_keep(sep_by0(parse_func_param, || parse_literal(",")))
-                    .and_drop(parse_literal(")"))
-                    .and_drop(parse_literal("=")),
-            )
-            .and(lazy(parse_term))
-            .map(|(params, body): (Vec<(String, Option<Term>)>, Term)| {
-                Subterm::Func(Func { params, body }).into()
-            })
-            .or(catch(parse_literal("=")).and_keep(lazy(parse_term))),
-        )
-        .map(|(label, term): (&str, Term)| (label.to_string(), term))
+// A witness field: `label = term`, or the definition sugar
+// `label(params) = term` — the tuple-field grammar with the label mandatory,
+// kept as written in the AST node (`func_params`); `to_core` undoes the sugar.
+fn parse_witness_field<'a>() -> Parser<'a, WitnessField> {
+    catch(parse_tuple_field_prefix())
+        .and(lazy(parse_term))
+        .map(|((label, func_params), value)| WitnessField {
+            label,
+            func_params,
+            value,
+        })
 }
 
 fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
@@ -1662,7 +1728,7 @@ fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
                 .or(pure(vec![])),
             )
             .and_drop(parse_literal("{"))
-            .and(sep_by0(parse_witness_field, || parse_literal(",")))
+            .and(sep_by0_trailing(parse_witness_field, || parse_literal(",")))
             .and_drop(parse_literal("}"))
             .map(move |((((label, params), concept), args), fields)| {
                 TopItem::Witness(TopWitness {

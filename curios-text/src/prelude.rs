@@ -3,7 +3,7 @@ use {
         ConceptField, ConceptParam, Error, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
         LetSignature, Loader, Module, Name, Nat, NatLiteral, Plicity, Prim, Qualifier, Subterm,
         Term, TopConcept, TopItem, TopLet, TopMod, TopUse, TopWitness, TupleType, TupleTypeParam,
-        UseGroup,
+        UseGroup, WitnessField,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status},
     std::sync::Arc,
@@ -70,6 +70,7 @@ fn record(fields: Vec<(&str, Term)>) -> Term {
             .into_iter()
             .map(|(label, type_)| TupleTypeParam {
                 label: Some(label.to_string()),
+                func_params: None,
                 type_,
             })
             .collect(),
@@ -596,6 +597,7 @@ fn operator_concept(label: &str, fields: Vec<(&str, Term)>) -> TopItem {
             .map(|(label, output)| ConceptField {
                 is_super: false,
                 label: label.to_string(),
+                func_params: None,
                 type_: operator_field_type(output),
             })
             .collect(),
@@ -618,10 +620,10 @@ fn operator_witness(
         args: vec![head],
         fields: fields
             .into_iter()
-            .map(|(field, [module, op])| {
-                let value: Term =
-                    Subterm::Name(Name::from(vec![module.to_string(), op.to_string()])).into();
-                (field.to_string(), value)
+            .map(|(field, [module, op])| WitnessField {
+                label: field.to_string(),
+                func_params: None,
+                value: Subterm::Name(Name::from(vec![module.to_string(), op.to_string()])).into(),
             })
             .collect(),
     })

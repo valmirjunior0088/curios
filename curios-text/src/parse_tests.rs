@@ -550,10 +550,11 @@ fn parse_named_tuple_single_needs_no_trailing_comma() {
     assert_eq!(
         "(a = x)".parse::<Term>().unwrap(),
         Term::from(Subterm::Tuple(Tuple {
-            fields: vec![(
-                Some("a".to_string()),
-                Subterm::Name(Name::from(["x".to_string()])).into()
-            )],
+            fields: vec![TupleField {
+                label: Some("a".to_string()),
+                func_params: None,
+                value: Subterm::Name(Name::from(["x".to_string()])).into(),
+            }],
         }))
     );
     // A bare parenthesized name stays a parenthesized term, not a tuple.
@@ -569,11 +570,16 @@ fn parse_named_tuple_mixed_fields() {
         "(a = x, y)".parse::<Term>().unwrap(),
         Term::from(Subterm::Tuple(Tuple {
             fields: vec![
-                (
-                    Some("a".to_string()),
-                    Subterm::Name(Name::from(["x".to_string()])).into()
-                ),
-                (None, Subterm::Name(Name::from(["y".to_string()])).into()),
+                TupleField {
+                    label: Some("a".to_string()),
+                    func_params: None,
+                    value: Subterm::Name(Name::from(["x".to_string()])).into(),
+                },
+                TupleField {
+                    label: None,
+                    func_params: None,
+                    value: Subterm::Name(Name::from(["y".to_string()])).into(),
+                },
             ],
         }))
     );
@@ -600,7 +606,11 @@ fn parse_one_tuple() {
     assert_eq!(
         "(x,)".parse::<Term>().unwrap(),
         Term::from(Subterm::Tuple(Tuple {
-            fields: vec![(None, Subterm::Name(Name::from(["x".to_string()])).into())],
+            fields: vec![TupleField {
+                label: None,
+                func_params: None,
+                value: Subterm::Name(Name::from(["x".to_string()])).into(),
+            }],
         }))
     );
 }
@@ -1135,8 +1145,16 @@ fn parse_struct_literal_disambiguates_from_tuple_type() {
             head: Name::from(["Pair".to_string()]),
             params: vec![],
             fields: vec![
-                (Some("fst".to_string()), name("a")),
-                (Some("snd".to_string()), name("b")),
+                TupleField {
+                    label: Some("fst".to_string()),
+                    func_params: None,
+                    value: name("a"),
+                },
+                TupleField {
+                    label: Some("snd".to_string()),
+                    func_params: None,
+                    value: name("b"),
+                },
             ],
         })
         .into()
@@ -1147,7 +1165,11 @@ fn parse_struct_literal_disambiguates_from_tuple_type() {
         Subterm::StructLit(StructLit {
             head: Name::from(["Str".to_string()]),
             params: vec![],
-            fields: vec![(None, name("raw"))],
+            fields: vec![TupleField {
+                label: None,
+                func_params: None,
+                value: name("raw"),
+            }],
         })
         .into()
     );
@@ -1189,6 +1211,177 @@ fn struct_round_trips() {
 }
 
 #[test]
+fn parse_function_field_sugar_in_types() {
+    // The signature sugar `label(params) -> T` is admitted by every Σ-type-
+    // shaped field list — tuple types and struct/record declarations — and is
+    // kept as written: the AST node carries the parameter list (`func_params`)
+    // and the output type; `to_core` undoes the sugar.
+    let term = "{ len(s : Str) -> Nat, x : Nat }".parse::<Term>().unwrap();
+    let Subterm::TupleType(TupleType { fields }) = term.as_subterm() else {
+        panic!("expected a tuple type");
+    };
+    assert_eq!(fields.len(), 2);
+    assert_eq!(fields[0].label.as_deref(), Some("len"));
+    let params = fields[0].func_params.as_ref().unwrap();
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].label.as_deref(), Some("s"));
+    assert!(matches!(fields[0].type_.as_subterm(), Subterm::Name(_)));
+    assert!(matches!(
+        fields[0].desugared_type().as_subterm(),
+        Subterm::FuncType(_)
+    ));
+    assert_eq!(fields[1].func_params, None);
+
+    let entrypoint = "record Api : Type { version : Nat, ping(x : Nat) -> Nat } u"
+        .parse::<Entrypoint>()
+        .unwrap();
+    let TopItem::Struct(s) = &entrypoint.module.items[0] else {
+        panic!("expected a record declaration");
+    };
+    assert_eq!(s.fields[0].func_params, None);
+    assert!(s.fields[1].func_params.is_some());
+}
+
+#[test]
+fn parse_function_field_sugar_in_values() {
+    // The definition sugar `label(params) = body` is admitted by every
+    // tuple-shaped field list — tuple literals and struct literals — and is
+    // kept as written: the AST node carries the parameter list (`func_params`)
+    // and the body; `to_core` undoes the sugar.
+    let term = "(bump(x) = f(x), 3)".parse::<Term>().unwrap();
+    let Subterm::Tuple(Tuple { fields }) = term.as_subterm() else {
+        panic!("expected a tuple literal");
+    };
+    assert_eq!(fields.len(), 2);
+    assert_eq!(fields[0].label.as_deref(), Some("bump"));
+    assert_eq!(fields[0].func_params, Some(vec![("x".to_string(), None)]),);
+    assert!(matches!(fields[0].value.as_subterm(), Subterm::Apply(_)));
+    assert!(matches!(
+        fields[0].desugared_value().as_subterm(),
+        Subterm::Func(_)
+    ));
+
+    // The one-element form needs no trailing comma — the `=` disambiguates.
+    let term = "(bump(x : Nat) = f(x))".parse::<Term>().unwrap();
+    let Subterm::Tuple(Tuple { fields }) = term.as_subterm() else {
+        panic!("expected a tuple literal");
+    };
+    assert_eq!(fields.len(), 1);
+    let params = fields[0].func_params.as_ref().unwrap();
+    assert_eq!(params[0].0, "x");
+    assert!(params[0].1.is_some());
+
+    let term = "Api { ping(x) = f(x) }".parse::<Term>().unwrap();
+    let Subterm::StructLit(StructLit { fields, .. }) = term.as_subterm() else {
+        panic!("expected a struct literal");
+    };
+    assert_eq!(fields[0].label.as_deref(), Some("ping"));
+    assert!(fields[0].func_params.is_some());
+}
+
+#[test]
+fn positional_fields_that_start_like_the_sugar_backtrack() {
+    // A positional application field is not the sugar: without `->` / `=` the
+    // sugared alternative backtracks and the field re-parses as a term.
+    let term = "{ Lst(Nat), Nat }".parse::<Term>().unwrap();
+    let Subterm::TupleType(TupleType { fields }) = term.as_subterm() else {
+        panic!("expected a tuple type");
+    };
+    assert_eq!(fields[0].label, None);
+    assert_eq!(fields[0].func_params, None);
+    assert!(matches!(fields[0].type_.as_subterm(), Subterm::Apply(_)));
+
+    let term = "(f(x), y)".parse::<Term>().unwrap();
+    let Subterm::Tuple(Tuple { fields }) = term.as_subterm() else {
+        panic!("expected a tuple literal");
+    };
+    assert_eq!(fields[0].label, None);
+    assert_eq!(fields[0].func_params, None);
+    assert!(matches!(fields[0].value.as_subterm(), Subterm::Apply(_)));
+}
+
+#[test]
+fn function_field_sugar_round_trips() {
+    // The retained sugar survives print → re-parse unchanged in every
+    // position: Σ-types, record declarations, tuple literals (incl. the
+    // one-element form), struct literals, concepts, and witnesses.
+    for source in [
+        "{ len(s : Str) -> Nat, x : Nat }",
+        "(bump(x) = f(x), 3)",
+        "(bump(x : Nat) = f(x))",
+        "Api { ping(x) = f(x) }",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "term round-trip failed for {source:?}"
+        );
+    }
+
+    for source in [
+        "record Api : Type { version : Nat, ping(x : Nat) -> Nat } u",
+        "concept Ord(A : Type) : Type { use eql : Eql(A), cmp(A, A) -> Order } u",
+        "witness ord_nat : Ord(Nat) { eql = eql_nat, cmp(a, b) = f(a, b) } u",
+    ] {
+        let entrypoint = source.parse::<Entrypoint>().unwrap();
+        assert_eq!(
+            entrypoint.to_string().parse::<Entrypoint>().unwrap(),
+            entrypoint,
+            "item round-trip failed for {source:?}"
+        );
+    }
+}
+
+#[test]
+fn field_lists_admit_a_trailing_comma() {
+    // Every brace/paren field list — Σ-types, struct/record declarations,
+    // tuple literals, struct literals, concepts, witnesses — admits (and
+    // drops) one trailing comma after its last field.
+    for (with, without) in [
+        ("{ x : Nat, y : Nat, }", "{ x : Nat, y : Nat }"),
+        ("(a, b,)", "(a, b)"),
+        ("Pair { fst = a, snd = b, }", "Pair { fst = a, snd = b }"),
+    ] {
+        assert_eq!(
+            with.parse::<Term>().unwrap(),
+            without.parse::<Term>().unwrap(),
+            "trailing comma changed the parse of {with:?}"
+        );
+    }
+
+    for (with, without) in [
+        (
+            "record Foo : Type { x : Type, } u",
+            "record Foo : Type { x : Type } u",
+        ),
+        (
+            "concept Show(A : Type) : Type { show(A) -> Str, } u",
+            "concept Show(A : Type) : Type { show(A) -> Str } u",
+        ),
+        (
+            "witness show_nat : Show(Nat) { show = Nat/to_str, } u",
+            "witness show_nat : Show(Nat) { show = Nat/to_str } u",
+        ),
+    ] {
+        assert_eq!(
+            with.parse::<Entrypoint>().unwrap(),
+            without.parse::<Entrypoint>().unwrap(),
+            "trailing comma changed the parse of {with:?}"
+        );
+    }
+
+    // A one-element positional tuple's comma stays significant, and a lone or
+    // doubled comma stays rejected.
+    assert!(matches!(
+        "(x,)".parse::<Term>().unwrap().as_subterm(),
+        Subterm::Tuple(_)
+    ));
+    assert!("{ , }".parse::<Term>().is_err());
+    assert!("(a,,)".parse::<Term>().is_err());
+}
+
+#[test]
 fn inductive_match_round_trips() {
     // Constructor-arm rows survive print → re-parse: distinct tags, a nullary
     // `nil()`, and a wildcard payload binder.
@@ -1209,7 +1402,8 @@ fn inductive_match_round_trips() {
 #[test]
 fn parse_concept_item() {
     // Fields: a `use` superclass edge, the signature sugar `cmp(A, A) -> Order`
-    // (desugared to `cmp : (A, A) -> Order`), and a plain `name : T` field.
+    // (kept as written — `func_params` carries the parameter list; `to_core`
+    // undoes the sugar), and a plain `name : T` field.
     let source = "\
         concept Ord(A : Type) : Type { \
             use eql : Eql(A), \
@@ -1228,17 +1422,26 @@ fn parse_concept_item() {
     // The `use` field is a superclass edge.
     assert!(concept.fields[0].is_super);
     assert_eq!(concept.fields[0].label, "eql");
+    assert_eq!(concept.fields[0].func_params, None);
 
-    // The sugar field desugars to a function-type annotation.
+    // The sugar field keeps its written parameter list; the annotation slot
+    // holds the output type, and only `desugared_type` builds the Π-type.
     assert!(!concept.fields[1].is_super);
     assert_eq!(concept.fields[1].label, "cmp");
+    let params = concept.fields[1].func_params.as_ref().unwrap();
+    assert_eq!(params.len(), 2);
     assert!(matches!(
         concept.fields[1].type_.as_subterm(),
+        Subterm::Name(_)
+    ));
+    assert!(matches!(
+        concept.fields[1].desugared_type().as_subterm(),
         Subterm::FuncType(_)
     ));
 
     // The plain field keeps its written type.
     assert_eq!(concept.fields[2].label, "top");
+    assert_eq!(concept.fields[2].func_params, None);
     assert!(matches!(
         concept.fields[2].type_.as_subterm(),
         Subterm::Name(_)
@@ -1301,11 +1504,21 @@ fn parse_witness_item() {
     assert_eq!(witness.params[0].plicity, Plicity::Implicit);
     assert_eq!(witness.params[1].plicity, Plicity::Witness);
 
-    // The definition-sugar field desugars to a lambda.
+    // The definition-sugar field keeps its written parameter list; the value
+    // slot holds the body, and only the struct-literal lowering builds the
+    // lambda (via `TupleField::desugared_value`).
     assert_eq!(witness.fields.len(), 2);
-    assert_eq!(witness.fields[0].0, "eql");
-    assert_eq!(witness.fields[1].0, "cmp");
-    assert!(matches!(witness.fields[1].1.as_subterm(), Subterm::Func(_)));
+    assert_eq!(witness.fields[0].label, "eql");
+    assert_eq!(witness.fields[0].func_params, None);
+    assert_eq!(witness.fields[1].label, "cmp");
+    let params = witness.fields[1].func_params.as_ref().unwrap();
+    assert_eq!(params.len(), 2);
+    assert_eq!(params[0].0, "a");
+    assert_eq!(params[1].0, "b");
+    assert!(matches!(
+        witness.fields[1].value.as_subterm(),
+        Subterm::Apply(_)
+    ));
 }
 
 #[test]

@@ -1,10 +1,11 @@
 use {
     super::{
         Apply, ArrMatch, BinMatch, BlnMatch, ConceptField, ConceptParam, Entrypoint, Field, Func,
-        FuncType, GroupItem, InductiveMatch, Infix, Let, LetBang, LetSignature, Match, Module,
-        Motive, Nat, NatLiteral, NatMatch, NumLit, Plicity, Prim, Proj, Radix, Rec, StructLit,
-        Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem, TopLet, TopMod, TopStruct,
-        TopUse, TopWitness, Tuple, TupleType, TupleTypeParam, UseGroup,
+        FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let, LetBang, LetSignature,
+        Match, Module, Motive, Nat, NatLiteral, NatMatch, NumLit, Plicity, Prim, Proj, Radix, Rec,
+        StructLit, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem, TopLet, TopMod,
+        TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup,
+        WitnessField,
     },
     curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_bigint::BigUint,
@@ -79,10 +80,38 @@ fn print_flt(value: f32) -> Printer<'static> {
     pure(string)
 }
 
-fn print_named_field((name, field): (Option<String>, Term)) -> Printer<'static> {
-    match name {
-        Some(name) => flat([pure(name), pure(" = "), print_term(field)]),
-        None => print_term(field),
+/// One Π-binder, as in a function type: `@?label : type` (the label optional).
+fn print_func_type_param(param: FuncTypeParam) -> Printer<'static> {
+    let typed = print_term(param.type_);
+    let body = match param.label {
+        Some(label) => flat([pure(label), pure(" : "), typed]),
+        None => typed,
+    };
+    flat([print_plicity(param.plicity), body])
+}
+
+/// One lambda parameter: the binder name with its optional domain annotation.
+fn print_func_param((name, annotation): (String, Option<Term>)) -> Printer<'static> {
+    match annotation {
+        Some(ty) => flat([pure(name), pure(" : "), print_term(ty)]),
+        None => pure(name),
+    }
+}
+
+/// A tuple-literal / struct-literal field: positional, `label = value`, or the
+/// definition sugar `label(params) = value` re-sugared from the retained
+/// parameter list.
+fn print_tuple_field(field: TupleField) -> Printer<'static> {
+    match (field.label, field.func_params) {
+        (Some(label), Some(params)) => flat([
+            pure(label),
+            pure("("),
+            sep_flat(params.into_iter().map(print_func_param), || pure(", ")),
+            pure(") = "),
+            print_term(field.value),
+        ]),
+        (Some(label), None) => flat([pure(label), pure(" = "), print_term(field.value)]),
+        (None, _) => print_term(field.value),
     }
 }
 
@@ -93,12 +122,19 @@ fn print_labeled((label, ty): (Option<String>, Term)) -> Printer<'static> {
     }
 }
 
-/// A Σ-type / struct field.
+/// A Σ-type / struct field: positional, `label : type`, or the signature sugar
+/// `label(params) -> type` re-sugared from the retained parameter list.
 fn print_field(param: TupleTypeParam) -> Printer<'static> {
-    let typed = print_term(param.type_);
-    match param.label {
-        Some(label) => flat([pure(label), pure(" : "), typed]),
-        None => typed,
+    match (param.label, param.func_params) {
+        (Some(label), Some(params)) => flat([
+            pure(label),
+            pure("("),
+            sep_flat(params.into_iter().map(print_func_type_param), || pure(", ")),
+            pure(") -> "),
+            print_term(param.type_),
+        ]),
+        (Some(label), None) => flat([pure(label), pure(" : "), print_term(param.type_)]),
+        (None, _) => print_term(param.type_),
     }
 }
 
@@ -305,32 +341,13 @@ fn print_term(term: Term) -> Printer<'static> {
         ]),
         Subterm::FuncType(FuncType { params, output }) => flat([
             pure("("),
-            sep_flat(
-                params.into_iter().map(|param| {
-                    // Plicity prefixes the name (`@x` = implicit).
-                    let typed = print_term(param.type_);
-                    let body = match param.label {
-                        Some(label) => flat([pure(label), pure(" : "), typed]),
-                        None => typed,
-                    };
-                    flat([print_plicity(param.plicity), body])
-                }),
-                || pure(", "),
-            ),
+            sep_flat(params.into_iter().map(print_func_type_param), || pure(", ")),
             pure(") -> "),
             print_term(output),
         ]),
         Subterm::Func(Func { params, body }) => flat([
             pure("("),
-            sep_flat(
-                params
-                    .into_iter()
-                    .map(|(name, annotation)| match annotation {
-                        Some(ty) => flat([pure(name), pure(" : "), print_term(ty)]),
-                        None => pure(name),
-                    }),
-                || pure(", "),
-            ),
+            sep_flat(params.into_iter().map(print_func_param), || pure(", ")),
             pure(") =>\n"),
             indent(print_term(body)),
         ]),
@@ -351,13 +368,15 @@ fn print_term(term: Term) -> Printer<'static> {
         }
         Subterm::Tuple(Tuple { fields }) => {
             if fields.len() == 1 {
-                let (name, field) = fields.into_iter().next().unwrap();
-                let trailer = if name.is_some() { ")" } else { ",)" };
-                flat([pure("("), print_named_field((name, field)), pure(trailer)])
+                let field = fields.into_iter().next().unwrap();
+                // A labeled one-element tuple needs no trailing comma — the
+                // `=` already disambiguates it from a parenthesized term.
+                let trailer = if field.label.is_some() { ")" } else { ",)" };
+                flat([pure("("), print_tuple_field(field), pure(trailer)])
             } else {
                 flat([
                     pure("("),
-                    sep_flat(fields.into_iter().map(print_named_field), || pure(", ")),
+                    sep_flat(fields.into_iter().map(print_tuple_field), || pure(", ")),
                     pure(")"),
                 ])
             }
@@ -385,7 +404,7 @@ fn print_term(term: Term) -> Printer<'static> {
                 ])
             },
             pure(" { "),
-            sep_flat(fields.into_iter().map(print_named_field), || pure(", ")),
+            sep_flat(fields.into_iter().map(print_tuple_field), || pure(", ")),
             pure(" }"),
         ]),
         Subterm::Match(match_) => match match_ {
@@ -708,6 +727,7 @@ fn print_top_inductive_case(case: TopCase) -> Printer<'static> {
                 print_plicity(param.plicity),
                 print_field(TupleTypeParam {
                     label: param.label,
+                    func_params: None,
                     type_: param.type_,
                 }),
             ])
@@ -832,16 +852,29 @@ fn print_top_struct(item: TopStruct) -> Printer<'static> {
 }
 
 fn print_concept_field(field: ConceptField) -> Printer<'static> {
-    flat([
-        if field.is_super {
-            pure("use ")
-        } else {
-            pure("")
-        },
-        pure(field.label),
-        pure(" : "),
-        print_term(field.type_),
-    ])
+    let marker = if field.is_super {
+        pure("use ")
+    } else {
+        pure("")
+    };
+    // The signature sugar `label(params) -> type` re-sugars from the retained
+    // parameter list (never set on a super field).
+    match field.func_params {
+        Some(params) => flat([
+            marker,
+            pure(field.label),
+            pure("("),
+            sep_flat(params.into_iter().map(print_func_type_param), || pure(", ")),
+            pure(") -> "),
+            print_term(field.type_),
+        ]),
+        None => flat([
+            marker,
+            pure(field.label),
+            pure(" : "),
+            print_term(field.type_),
+        ]),
+    }
 }
 
 // Concept parameters print like an inductive's, plus the `out` marker —
@@ -926,14 +959,26 @@ fn print_top_witness(item: TopWitness) -> Printer<'static> {
         pure(" : "),
         app,
         pure(" { "),
-        sep_flat(
-            item.fields
-                .into_iter()
-                .map(|(label, body)| flat([pure(label), pure(" = "), print_term(body)])),
-            || pure(", "),
-        ),
+        sep_flat(item.fields.into_iter().map(print_witness_field), || {
+            pure(", ")
+        }),
         pure(" }"),
     ])
+}
+
+/// A witness implementation field: `label = value`, or the definition sugar
+/// `label(params) = value` re-sugared from the retained parameter list.
+fn print_witness_field(field: WitnessField) -> Printer<'static> {
+    match field.func_params {
+        Some(params) => flat([
+            pure(field.label),
+            pure("("),
+            sep_flat(params.into_iter().map(print_func_param), || pure(", ")),
+            pure(") = "),
+            print_term(field.value),
+        ]),
+        None => flat([pure(field.label), pure(" = "), print_term(field.value)]),
+    }
 }
 
 fn print_top_item(item: TopItem) -> Printer<'static> {

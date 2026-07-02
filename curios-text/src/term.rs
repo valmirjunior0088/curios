@@ -74,7 +74,28 @@ pub struct FuncTypeParam {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleTypeParam {
     pub label: Option<String>,
+    /// `Some` for the signature sugar `label(params) -> type_` — the written
+    /// parameter list, kept verbatim so the printer round-trips it. `to_core`
+    /// undoes the sugar, lowering the field as `label : (params) -> type_`
+    /// (see [`TupleTypeParam::desugared_type`]). Always paired with a label.
+    pub func_params: Option<Vec<FuncTypeParam>>,
     pub type_: Term,
+}
+
+impl TupleTypeParam {
+    /// The field's type with the signature sugar undone: the written type when
+    /// the field is plain, the Π-type `(params) -> type_` when it was written
+    /// `label(params) -> type_`.
+    pub fn desugared_type(&self) -> Term {
+        match &self.func_params {
+            Some(params) => Subterm::FuncType(FuncType {
+                params: params.clone(),
+                output: self.type_.clone(),
+            })
+            .into(),
+            None => self.type_.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -107,12 +128,40 @@ pub struct TupleType {
     pub fields: Vec<TupleTypeParam>,
 }
 
-/// Tuple literal fields may carry a name annotation (`(status = 0, handle = h)`);
-/// names are checked positionally against the expected tuple type's labels at
+/// One tuple-literal / struct-literal field as written: an optional name
+/// annotation (`(status = 0, handle = h)`) and the field value. Names are
+/// checked positionally against the expected tuple type's labels at
 /// elaboration and never survive past it.
 #[derive(Debug, Clone, PartialEq)]
+pub struct TupleField {
+    pub label: Option<String>,
+    /// `Some` for the definition sugar `label(params) = value` — the written
+    /// parameter list, kept verbatim so the printer round-trips it. `to_core`
+    /// undoes the sugar, lowering the field as `label = (params) => value`
+    /// (see [`TupleField::desugared_value`]). Always paired with a label.
+    pub func_params: Option<Vec<(String, Option<Term>)>>,
+    pub value: Term,
+}
+
+impl TupleField {
+    /// The field's value with the definition sugar undone: the written value
+    /// when the field is plain, the lambda `(params) => value` when it was
+    /// written `label(params) = value`.
+    pub fn desugared_value(&self) -> Term {
+        match &self.func_params {
+            Some(params) => Subterm::Func(Func {
+                params: params.clone(),
+                body: self.value.clone(),
+            })
+            .into(),
+            None => self.value.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Tuple {
-    pub fields: Vec<(Option<String>, Term)>,
+    pub fields: Vec<TupleField>,
 }
 
 /// A match's motive ladder — one grammar growing, the binder parenthesized
@@ -222,7 +271,7 @@ pub struct Proj {
 pub struct StructLit {
     pub head: Name,
     pub params: Vec<Term>,
-    pub fields: Vec<(Option<String>, Term)>,
+    pub fields: Vec<TupleField>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
