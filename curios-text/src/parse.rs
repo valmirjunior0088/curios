@@ -1707,40 +1707,38 @@ fn parse_witness_entry<'a>() -> Parser<'a, WitnessEntry> {
         .or(parse_witness_field().map(WitnessEntry::Field))
 }
 
+// A witness declaration is anonymous: `witness (params)? : Concept(args) { … }`.
+// The keyword is the commit point, exactly as before — nothing else at item
+// position begins with `witness`.
 fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("witness"))).flat_map(|(is_pub, ())| {
-        parse_identifier()
-            .and(
-                catch(
-                    parse_literal("(")
-                        .and_keep(sep_by0(parse_func_sugar_param, || parse_literal(",")))
-                        .and_drop(parse_literal(")")),
-                )
-                .or(pure(vec![])),
+    catch(parse_keyword("witness")).flat_map(|()| {
+        catch(
+            parse_literal("(")
+                .and_keep(sep_by0(parse_func_sugar_param, || parse_literal(",")))
+                .and_drop(parse_literal(")")),
+        )
+        .or(pure(vec![]))
+        .and_drop(parse_literal(":"))
+        .and(parse_name())
+        .and(
+            catch(
+                parse_literal("(")
+                    .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+                    .and_drop(parse_literal(")")),
             )
-            .and_drop(parse_literal(":"))
-            .and(parse_name())
-            .and(
-                catch(
-                    parse_literal("(")
-                        .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
-                        .and_drop(parse_literal(")")),
-                )
-                .or(pure(vec![])),
-            )
-            .and_drop(parse_literal("{"))
-            .and(sep_by0_trailing(parse_witness_entry, || parse_literal(",")))
-            .and_drop(parse_literal("}"))
-            .map(move |((((label, params), concept), args), entries)| {
-                TopItem::Witness(TopWitness {
-                    is_pub,
-                    label: label.to_string(),
-                    params,
-                    concept,
-                    args,
-                    entries,
-                })
+            .or(pure(vec![])),
+        )
+        .and_drop(parse_literal("{"))
+        .and(sep_by0_trailing(parse_witness_entry, || parse_literal(",")))
+        .and_drop(parse_literal("}"))
+        .map(move |(((params, concept), args), entries)| {
+            TopItem::Witness(TopWitness {
+                params,
+                concept,
+                args,
+                entries,
             })
+        })
     })
 }
 

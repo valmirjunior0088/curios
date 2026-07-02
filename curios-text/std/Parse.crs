@@ -132,7 +132,7 @@ pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(
             go(Lst/cons(rp.1, Lst/nil()), rp.0)
         end };
 
-pub witness monad_parse : Monad(Parse) {
+witness : Monad(Parse) {
     pure(A, x) = pure(@A, x),
     bind(A, B, m, f) = bind(@A, @B, m, f)
 }

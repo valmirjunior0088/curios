@@ -604,17 +604,10 @@ fn operator_concept(label: &str, fields: Vec<(&str, Term)>) -> TopItem {
     })
 }
 
-// A primitive operator witness: `pub witness label : Concept(Head) { field =
+// A primitive operator witness: `witness : Concept(Head) { field =
 // Module/op, … }` — each field the named wrapper reference.
-fn operator_witness(
-    label: &str,
-    concept: &str,
-    head: Term,
-    fields: Vec<(&str, [&str; 2])>,
-) -> TopItem {
+fn operator_witness(concept: &str, head: Term, fields: Vec<(&str, [&str; 2])>) -> TopItem {
     TopItem::Witness(TopWitness {
-        is_pub: true,
-        label: label.to_string(),
         params: Vec::new(),
         concept: Name::from([concept.to_string()]),
         args: vec![head],
@@ -637,11 +630,7 @@ fn operator_witness(
 // accepted, plus `Eql(Bin)` (migrated from std — its wrapper is
 // sys-expressible). `&&`/`||` stay hardcoded on `Bln` and have no concept.
 fn operator_items() -> Vec<TopItem> {
-    let numeric = [
-        ("nat", nat as fn() -> Term, "Nat"),
-        ("int", int, "Int"),
-        ("flt", flt, "Flt"),
-    ];
+    let numeric = [(nat as fn() -> Term, "Nat"), (int, "Int"), (flt, "Flt")];
     let mut items = Vec::new();
 
     for (concept, field) in [
@@ -652,9 +641,8 @@ fn operator_items() -> Vec<TopItem> {
         ("Rem", "rem"),
     ] {
         items.push(operator_concept(concept, vec![(field, name("A"))]));
-        for (suffix, head, module) in numeric {
+        for (head, module) in numeric {
             items.push(operator_witness(
-                &format!("{field}_{suffix}"),
                 concept,
                 head(),
                 vec![(field, [module, field])],
@@ -663,15 +651,14 @@ fn operator_items() -> Vec<TopItem> {
     }
 
     items.push(operator_concept("Eql", vec![("eql", bln())]));
-    for (suffix, head, module) in [
-        ("nat", nat as fn() -> Term, "Nat"),
-        ("int", int, "Int"),
-        ("flt", flt, "Flt"),
-        ("bln", bln, "Bln"),
-        ("bin", bin, "Bin"),
+    for (head, module) in [
+        (nat as fn() -> Term, "Nat"),
+        (int, "Int"),
+        (flt, "Flt"),
+        (bln, "Bln"),
+        (bin, "Bin"),
     ] {
         items.push(operator_witness(
-            &format!("eql_{suffix}"),
             "Eql",
             head(),
             vec![("eql", [module, "eql"])],
@@ -685,9 +672,8 @@ fn operator_items() -> Vec<TopItem> {
         "Cmp",
         vec![("lt", bln()), ("lte", bln()), ("gt", bln()), ("gte", bln())],
     ));
-    for (suffix, head, module) in numeric {
+    for (head, module) in numeric {
         items.push(operator_witness(
-            &format!("cmp_{suffix}"),
             "Cmp",
             head(),
             vec![

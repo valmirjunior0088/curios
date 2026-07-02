@@ -91,7 +91,7 @@ let parser : Parse(Nat) =
     Parse/pure(a + b);
 ```
 
-The standard library ships `Monad` witnesses for `Option`, `Lst`, `Task`, `Parse`, and `Reader`; declaring `witness monad_m : Monad(M) { … }` makes `!` work with your own type. Inside monad-generic code a local `use m : Monad(M)` binder resolves the sites, so generic do-notation works too.
+The standard library ships `Monad` witnesses for `Option`, `Lst`, `Task`, `Parse`, and `Reader`; declaring `witness : Monad(M) { … }` makes `!` work with your own type. Inside monad-generic code a local `use m : Monad(M)` binder resolves the sites, so generic do-notation works too.
 
 ## Operators
 
@@ -105,7 +105,7 @@ Binary operators. Listed loosest to tightest binding; **all are left-associative
 | 4            | `+` `-`                     |
 | 5 (tightest) | `*` `/` `%`                 |
 
-Every operator except `&&`/`||` dispatches through a standard-library concept (see [Concepts](#concepts-witnesses-and-instance-arguments)): `+ - * / %` through `Add`/`Sub`/`Mul`/`Div`/`Rem`, `==`/`!=` through `Eql` (`!=` negates the result), and the comparisons through `Cmp`. Both operands must share one type; a bare integer literal defaults it to `Nat` (`Int` if signed). Primitive witnesses cover `Nat`/`Int`/`Flt` (plus `Eql` on `Bln`, `Bin`, and `Str`), and compile to the bare primitive instruction — declaring a witness (e.g. `witness add_point : Add(Point) { … }`) makes the operator work on your own type at no cost to the primitive cases. `&&`/`||` are control flow: hardcoded on `Bln` and not overloadable, like `if`/`match`.
+Every operator except `&&`/`||` dispatches through a standard-library concept (see [Concepts](#concepts-witnesses-and-instance-arguments)): `+ - * / %` through `Add`/`Sub`/`Mul`/`Div`/`Rem`, `==`/`!=` through `Eql` (`!=` negates the result), and the comparisons through `Cmp`. Both operands must share one type; a bare integer literal defaults it to `Nat` (`Int` if signed). Primitive witnesses cover `Nat`/`Int`/`Flt` (plus `Eql` on `Bln`, `Bin`, and `Str`), and compile to the bare primitive instruction — declaring a witness (e.g. `witness : Add(Point) { … }`) makes the operator work on your own type at no cost to the primitive cases. `&&`/`||` are control flow: hardcoded on `Bln` and not overloadable, like `if`/`match`.
 
 ## Binders
 
@@ -257,7 +257,7 @@ let api = Api { base = 3, bump(x) = x + 1 };   -- definition sugar
 
 ## Concepts, witnesses, and instance arguments
 
-Ad-hoc polymorphism is expressed with three constructs. A **concept** is a record-shaped interface; a **witness** is a registered inhabitant of a concept for a given type; a **`use` binder** is a third parameter plicity the elaborator fills by resolution rather than unification. `concept` and `witness` are contextual keywords — legal identifiers and path segments everywhere else, recognized only at item start (optionally after `pub`).
+Ad-hoc polymorphism is expressed with three constructs. A **concept** is a record-shaped interface; a **witness** is a registered inhabitant of a concept for a given type; a **`use` binder** is a third parameter plicity the elaborator fills by resolution rather than unification. `concept` and `witness` are contextual keywords — legal identifiers and path segments everywhere else, recognized only at item start (`concept` optionally after `pub`; a witness is anonymous, so `pub` does not apply).
 
 **`concept`.** A concept lowers to an ordinary `record` (its representation is always public) plus a per-field method wrapper synthesized into the concept's namespace. Fields are signatures — `name : T`, or the function sugar `name(params) -> T` (shorthand for `name : (params) -> T`, the same sugar any record field admits). A field prefixed with `use` is a **superclass** edge: its type must be a concept application, and an instance of the outer concept in scope yields the inner one by projection. The result sort (`Type` or `Prop`) is required; a `Prop` concept's witnesses erase entirely. Concept and witness field lists admit a trailing comma, like every field list.
 
@@ -285,22 +285,22 @@ pub concept Monad(M : (Type) -> Type) : Type {
 }
 ```
 
-**`witness`.** A witness desugars to an ordinary top-level definition `let name(tele) -> C(args) = C(args) { … }`; the field block is a struct literal, so field coverage and labels are checked for free. Fields are implementations — `name = body`, or the definition sugar `name(args) = body`. The name is mandatory (it appears in diagnostics and explicit overrides). The telescope admits only `@` and `use` parameters — an explicit binder is illegal, since nothing supplies it at resolution time.
+**`witness`.** A witness is anonymous — `witness (tele)? : C(args) { … }` — because nothing ever needs to name one: dispatch reaches it through resolution, an explicit override at a call site takes any concept-typed value, and diagnostics identify it by concept, key, and declaring module. It desugars to a compiler-named top-level definition `let witness#N(tele) -> C(args) = C(args) { … }`; the body is a struct literal, so field coverage and labels are checked for free. Fields are implementations — `name = body`, or the definition sugar `name(args) = body`. The telescope admits only `@` and `use` parameters — an explicit binder is illegal, since nothing supplies it at resolution time.
 
 ```
-pub witness show_nat : Show(Nat) {
+witness : Show(Nat) {
     show(n) = Nat/to_str(n)
 }
 
 -- A premised witness: the `use Show(A)` premise is resolved recursively.
-pub witness show_lst(@A : Type, use Show(A)) : Show(Lst(A)) {
+witness(@A : Type, use Show(A)) : Show(Lst(A)) {
     show(l) = Lst/fold(l, "", (x, acc) => Str/concat(acc, Show/show(x)))
 }
 ```
 
-Every concept–key pair has **at most one** witness, program-wide (global coherence, no orphan rule); a duplicate registration is a compile error wherever it is declared. Registration ignores `pub` — visibility governs the name, never table membership. A witness keys on the concept and the tuple of *rigid heads* of the concept's input parameters (each an inductive, a struct/record, or a primitive type constructor); `out` parameters are excluded from the key and pinned by the resolved witness, and everything else is checked by unification at resolution time.
+Every concept–key pair has **at most one** witness, program-wide (global coherence, no orphan rule); a duplicate registration is a compile error wherever it is declared — module visibility never scopes the table, only names, and a witness has none. A witness keys on the concept and the tuple of *rigid heads* of the concept's input parameters (each an inductive, a struct/record, or a primitive type constructor); `out` parameters are excluded from the key and pinned by the resolved witness, and everything else is checked by unification at resolution time. For a *second* instance of the same key — a descending order, a case-insensitive equality — declare an ordinary value of the concept type (`let desc : Ord(Nat) = Ord { cmp(a, b) = … };`) and pass it where wanted with `use desc`.
 
-**`use` fields in concept literals.** A concept's `use`-marked (superclass) fields leave the positional field sequence in every literal of that concept — witness bodies included — exactly as witness slots leave the argument list at call sites. An omitted `use` field becomes a resolution goal (local binders first, then the table); an explicit fill is the entry form `use <term>`, pairing with the `use`-marked positions in declaration order. A labeled assignment to a `use` field (`eql = w`) is an error, as is a `use` entry in a non-concept literal. So `witness ord_nat : Ord(Nat) { cmp(a, b) = … }` resolves its `Eql(Nat)` superclass from the table, a premised `witness ord_lst(@A : Type, use Ord(A)) : Ord(Lst(A)) { … }` resolves its superclass from the premise, and `Ord(Nat) { use my_eql, cmp(a, b) = … }` overrides explicitly.
+**`use` fields in concept literals.** A concept's `use`-marked (superclass) fields leave the positional field sequence in every literal of that concept — witness bodies included — exactly as witness slots leave the argument list at call sites. An omitted `use` field becomes a resolution goal (local binders first, then the table); an explicit fill is the entry form `use <term>`, pairing with the `use`-marked positions in declaration order. A labeled assignment to a `use` field (`eql = w`) is an error, as is a `use` entry in a non-concept literal. So `witness : Ord(Nat) { cmp(a, b) = … }` resolves its `Eql(Nat)` superclass from the table, a premised `witness(@A : Type, use Ord(A)) : Ord(Lst(A)) { … }` resolves its superclass from the premise, and `Ord { use my_eql, cmp(a, b) = … }` overrides explicitly.
 
 **`use` binders and arguments.** A `use` parameter is legal anywhere Π binders appear (function/`let`/`rec`/`witness` telescopes): `use (name :)? T`, optionally anonymous. It is filled by resolution at call sites and is in scope as an instance for the body. At a call site, `use <term>` supplies one explicitly, overriding table resolution; it sits alongside `@`-arguments and plain arguments.
 
@@ -308,7 +308,7 @@ Every concept–key pair has **at most one** witness, program-wide (global coher
 pub let join(@A : Type, use Show(A), l : Lst(A)) -> Str =
     Lst/fold(l, "", (x, acc) => Str/concat(acc, Show/show(x)));
 
-join([1, 2, 3])                 -- resolves show_lst(show_nat)
+join([1, 2, 3])                 -- resolves the Lst witness over the Nat witness
 join(use my_dict, [1, 2, 3])    -- explicit override
 ```
 

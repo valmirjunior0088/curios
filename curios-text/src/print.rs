@@ -954,9 +954,7 @@ fn print_top_witness(item: TopWitness) -> Printer<'static> {
     };
 
     flat([
-        print_pub(item.is_pub),
-        pure("witness "),
-        pure(item.label),
+        pure("witness"),
         params,
         pure(" : "),
         app,

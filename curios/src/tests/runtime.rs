@@ -133,7 +133,7 @@ fn bang_dispatches_through_a_user_monad_witness() {
     let source = r#"
         use /std/{Nat, Io, Str, Monad};
         pub record Box(A : Type) : Type { unbox : A }
-        pub witness monad_box : Monad(Box) {
+        witness : Monad(Box) {
             pure(A, x) = Box { unbox = x },
             bind(A, B, m, f) = f(m.unbox)
         }

@@ -508,7 +508,7 @@ mod tests {
                     match m : Id(B)
                     | wrap(x) => f(x)
                     end;
-            witness monad_id : Monad(Id) {
+            witness : Monad(Id) {
                 pure(A, x) = Id/wrap(x),
                 bind(A, B, m, f) = bind(@A, @B)(m, f)
             }

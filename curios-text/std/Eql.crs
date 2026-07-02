@@ -6,10 +6,9 @@ use /std/{Str};
 -- and this module is the user-facing facade (the `std/Bln.crs` pattern).
 pub use /sys/{Eql};
 pub use /sys/Eql/{eql};
-pub use /sys/{eql_nat, eql_int, eql_flt, eql_bln, eql_bin};
 
 -- `Str` is a std record, which `/sys` cannot name — its witness lives here,
 -- beside its dependency.
-pub witness eql_str : Eql(Str) {
+witness : Eql(Str) {
     eql(a, b) = Str/eql(a, b)
 }

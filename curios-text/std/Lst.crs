@@ -78,7 +78,7 @@ pub let to_arr(@A : Type, l : Lst(A)) -> Arr(A) =
         end;
     (go(l, len(l))).0;
 
-pub witness monad_lst : Monad(Lst) {
+witness : Monad(Lst) {
     pure(A, x) = cons(x, nil()),
     bind(A, B, m, f) =
         rec go(rest : Lst(A)) -> Lst(B) =

@@ -1035,9 +1035,17 @@ impl fmt::Display for Error {
                     1 => "head",
                     _ => "key",
                 };
+                // Witnesses are anonymous; their compiler names encode the
+                // declaring module, which is the useful coordinate.
+                let module = |name: &str| match name.rsplit_once('/') {
+                    Some(("", _)) | None => "the entry module".to_string(),
+                    Some((module, _)) => format!("module '{module}'"),
+                };
                 write!(
                     f,
-                    "duplicate witness of '{concept}' for {noun} '{key}'\n  already provided by '{first}', re-declared by '{second}'\n  every concept-{noun} pair has at most one witness, program-wide"
+                    "duplicate witness of '{concept}' for {noun} '{key}'\n  one is declared in {}, another in {}\n  every concept-{noun} pair has at most one witness, program-wide",
+                    module(first),
+                    module(second)
                 )
             }
             Error::AmbiguousWitness {

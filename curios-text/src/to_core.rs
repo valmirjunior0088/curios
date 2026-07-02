@@ -156,8 +156,9 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
                 info.insert_child(c.label.clone(), c.is_pub)?;
                 info.insert_binding(c.label.clone(), c.is_pub)?;
             }
-            // A witness declares one binding (its backing definition), like a `let`.
-            TopItem::Witness(w) => info.insert_binding(w.label.clone(), w.is_pub)?,
+            // A witness is anonymous: it declares no binding and occupies no
+            // lexical scope — its backing definition gets a compiler name.
+            TopItem::Witness(_) => {}
             _ => {}
         }
     }
@@ -272,13 +273,17 @@ fn process_items(
                 context.insert_scope(c.label.clone(), context.prefixed(&c.label))?;
                 context.insert_binding(c.label.clone(), context.prefixed(&c.label))?;
             }
-            // A witness declares its backing definition's binding, like a `let`.
-            TopItem::Witness(w) => {
-                context.insert_binding(w.label.clone(), context.prefixed(&w.label))?
-            }
+            // A witness is anonymous — no binding, no scope entry.
+            TopItem::Witness(_) => {}
             _ => {}
         }
     }
+
+    // Anonymous witnesses get deterministic compiler names — `witness#N` by
+    // per-module declaration ordinal, under the module prefix. Determinism
+    // matters (the cached-prelude replay compares by name); the `#` sigil is
+    // illegal in source identifiers, so no user name can collide.
+    let mut witness_ordinal = 0usize;
 
     for top_item in top_items {
         match top_item {
@@ -888,10 +893,13 @@ fn process_items(
                     }));
                 }
             }
-            // A witness desugars to an ordinary definition
-            //   let w(tele) -> C(args) = C(args) { f = e, … };
-            // and marks `w` for registration in the program-wide witness table.
+            // A witness desugars to an ordinary compiler-named definition
+            //   let witness#N(tele) -> C(args) = C(args) { f = e, … };
+            // and marks it for registration in the program-wide witness table.
             TopItem::Witness(witness) => {
+                let label = format!("witness#{witness_ordinal}");
+                witness_ordinal += 1;
+
                 let concept_app = witness_concept_application(&witness.concept, &witness.args);
                 let body: Term = Subterm::StructLit(StructLit {
                     head: witness.concept.clone(),
@@ -926,11 +934,11 @@ fn process_items(
 
                 let lower = Lower::new(context);
                 flat_items.push(FlatItem::Let(FlatLet {
-                    name: context.prefixed(&witness.label),
+                    name: context.prefixed(&label),
                     type_: lower.term(&signature.type_())?,
                     body: lower.value(&signature.body())?,
                 }));
-                witnesses.insert(context.prefixed(&witness.label).join());
+                witnesses.insert(context.prefixed(&label).join());
             }
         }
     }

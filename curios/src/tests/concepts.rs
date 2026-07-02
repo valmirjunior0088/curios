@@ -25,7 +25,7 @@ fn concept_witness_resolves_through_wrapper() {
         pub concept Show(A : Type) : Type {
             show(A) -> Str
         }
-        pub witness show_nat : Show(Nat) {
+        witness : Show(Nat) {
             show(n) = Nat/to_str(n)
         }
         let n : Nat = 42;
@@ -46,10 +46,10 @@ fn premised_witness_resolves_recursively() {
         pub concept Show(A : Type) : Type {
             show(A) -> Str
         }
-        pub witness show_nat : Show(Nat) {
+        witness : Show(Nat) {
             show(n) = Nat/to_str(n)
         }
-        pub witness show_lst(@A : Type, use Show(A)) : Show(Lst(A)) {
+        witness(@A : Type, use Show(A)) : Show(Lst(A)) {
             show(l) =
                 Lst/fold(l, "[", (x, acc) => Str/concat(acc, Show/show(x)))
         }
@@ -70,7 +70,7 @@ fn explicit_use_argument_overrides() {
         pub concept Show(A : Type) : Type {
             show(A) -> Str
         }
-        pub witness show_nat : Show(Nat) {
+        witness : Show(Nat) {
             show(n) = Nat/to_str(n)
         }
         let parens : Show(Nat) =
@@ -98,10 +98,10 @@ fn superclass_projection_resolves() {
             use eql : Eql(A),
             cmp(A, A) -> Order
         }
-        pub witness eql_nat : Eql(Nat) {
+        witness : Eql(Nat) {
             eql(a, b) = a == b
         }
-        pub witness ord_nat : Ord(Nat) {
+        witness : Ord(Nat) {
             cmp(a, b) = Order/lt()
         }
         pub let same(@A : Type, use Ord(A), x : A, y : A) -> Bln = Eql/eql(x, y);
@@ -120,7 +120,7 @@ fn missing_witness_is_an_error() {
         pub concept Show(A : Type) : Type {
             show(A) -> Str
         }
-        pub witness show_nat : Show(Nat) {
+        witness : Show(Nat) {
             show(n) = Nat/to_str(n)
         }
         let b : Bln = true;
@@ -179,10 +179,10 @@ fn duplicate_witness_is_an_error() {
         pub concept Show(A : Type) : Type {
             show(A) -> Str
         }
-        pub witness show_nat : Show(Nat) {
+        witness : Show(Nat) {
             show(n) = Nat/to_str(n)
         }
-        pub witness show_nat_again : Show(Nat) {
+        witness : Show(Nat) {
             show(n) = Nat/to_str(n)
         }
         let n : Nat = 1;
@@ -202,10 +202,10 @@ fn multi_param_witnesses_share_a_first_head() {
         pub concept Into(A : Type, B : Type) : Type {
             into(A) -> B
         }
-        pub witness into_nat_str : Into(Nat, Str) {
+        witness : Into(Nat, Str) {
             into(n) = Nat/to_str(n)
         }
-        pub witness into_nat_bln : Into(Nat, Bln) {
+        witness : Into(Nat, Bln) {
             into(n) = Nat/eql(n, 1)
         }
         let s : Str = Into/into(2);
@@ -226,7 +226,7 @@ fn open_input_parameter_does_not_infer_from_the_witness() {
         pub concept Into(A : Type, B : Type) : Type {
             into(A) -> B
         }
-        pub witness into_nat_str : Into(Nat, Str) {
+        witness : Into(Nat, Str) {
             into(n) = Nat/to_str(n)
         }
         pub let discard(@A : Type, x : A) -> Nat = 0;
@@ -247,7 +247,7 @@ fn out_parameter_is_inferred_from_the_witness() {
         pub concept Convert(A : Type, out B : Type) : Type {
             convert(A) -> B
         }
-        pub witness convert_nat_str : Convert(Nat, Str) {
+        witness : Convert(Nat, Str) {
             convert(n) = Nat/to_str(n)
         }
         pub let ignore(@A : Type, x : A) -> Nat = 7;
@@ -267,10 +267,10 @@ fn fundep_violation_is_a_duplicate_witness_error() {
         pub concept Convert(A : Type, out B : Type) : Type {
             convert(A) -> B
         }
-        pub witness convert_nat_str : Convert(Nat, Str) {
+        witness : Convert(Nat, Str) {
             convert(n) = Nat/to_str(n)
         }
-        pub witness convert_nat_bln : Convert(Nat, Bln) {
+        witness : Convert(Nat, Bln) {
             convert(n) = Nat/eql(n, 1)
         }
         let s : Str = Convert/convert(1);
@@ -290,7 +290,7 @@ fn local_binder_pins_an_out_parameter() {
         pub concept Convert(A : Type, out B : Type) : Type {
             convert(A) -> B
         }
-        pub witness convert_nat_str : Convert(Nat, Str) {
+        witness : Convert(Nat, Str) {
             convert(n) = Nat/to_str(n)
         }
         pub let ignore(@A : Type, x : A) -> Nat = 9;
@@ -398,7 +398,7 @@ fn higher_kinded_superclass_projects() {
             use monad : Monad(M),
             empty(@A : Type) -> M(A)
         }
-        pub witness monad_plus_option : MonadPlus(Option) {
+        witness : MonadPlus(Option) {
             empty(A) = Option/none()
         }
         pub let wrap(@M : (Type) -> Type, use MonadPlus(M), m : M(Nat)) -> M(Nat) =
@@ -435,7 +435,7 @@ fn sys_add_concept_resolves_everywhere() {
     let source = r#"
         use /std/{Nat, Io, Str, Add};
         record Point : Type { x : Nat, y : Nat }
-        pub witness add_point : Add(Point) {
+        witness : Add(Point) {
             add(a, b) = Point { x = Nat/add(a.x, b.x), y = Nat/add(a.y, b.y) }
         }
         pub let double(@A : Type, use Add(A), v : A) -> A = Add/add(v, v);
@@ -478,11 +478,11 @@ fn use_entry_fills_a_concept_field_explicitly() {
             use eq2 : Eq2(A),
             cmp2(A, A) -> Order
         }
-        pub witness eq2_nat : Eq2(Nat) {
+        witness : Eq2(Nat) {
             eq2(a, b) = a == b
         }
-        let flipped : Eq2(Nat) = Eq2(Nat) { eq2(a, b) = false };
-        let o : Ord2(Nat) = Ord2(Nat) { use flipped, cmp2(a, b) = Order/lt() };
+        let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
+        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
         Io/print(Bln/to_str(Eq2/eq2(use o.eq2, 1, 1)))
         "#;
 
@@ -502,8 +502,8 @@ fn use_entry_fills_a_witness_superclass() {
             use eq3 : Eq3(A),
             cmp3(A, A) -> Order
         }
-        pub witness ord3_nat : Ord3(Nat) {
-            use Eq3(Nat) { eq3(a, b) = a == b },
+        witness : Ord3(Nat) {
+            use Eq3 { eq3(a, b) = a == b },
             cmp3(a, b) = Order/lt()
         }
         pub let same(@A : Type, use Ord3(A), x : A, y : A) -> Bln = Eq3/eq3(x, y);
@@ -526,11 +526,11 @@ fn labeled_fill_of_a_use_field_is_an_error() {
             use eq4 : Eq4(A),
             cmp4(A, A) -> Order
         }
-        pub witness eq4_nat : Eq4(Nat) {
+        witness : Eq4(Nat) {
             eq4(a, b) = a == b
         }
-        pub witness ord4_nat : Ord4(Nat) {
-            eq4 = eq4_nat,
+        witness : Ord4(Nat) {
+            eq4 = Eq4 { eq4(a, b) = a == b },
             cmp4(a, b) = Order/lt()
         }
         Io/print("no")
@@ -562,12 +562,12 @@ fn misplaced_use_entries_are_errors() {
             use eq5 : Eq5(A),
             cmp5(A, A) -> Order
         }
-        pub witness eq5_nat : Eq5(Nat) {
+        witness : Eq5(Nat) {
             eq5(a, b) = a == b
         }
-        pub witness ord5_nat : Ord5(Nat) {
-            use eq5_nat,
-            use eq5_nat,
+        witness : Ord5(Nat) {
+            use Eq5 { eq5(a, b) = a == b },
+            use Eq5 { eq5(a, b) = a == b },
             cmp5(a, b) = Order/lt()
         }
         Io/print("no")
@@ -589,16 +589,16 @@ fn omitted_superclass_resolves_from_a_premise() {
             use eq6 : Eq6(A),
             cmp6(A, A) -> Order
         }
-        pub witness eq6_nat : Eq6(Nat) {
+        witness : Eq6(Nat) {
             eq6(a, b) = a == b
         }
-        pub witness eq6_lst(@A : Type, use Eq6(A)) : Eq6(Lst(A)) {
+        witness(@A : Type, use Eq6(A)) : Eq6(Lst(A)) {
             eq6(a, b) = Lst/len(a) == Lst/len(b)
         }
-        pub witness ord6_lst(@A : Type, use Ord6(A)) : Ord6(Lst(A)) {
+        witness(@A : Type, use Ord6(A)) : Ord6(Lst(A)) {
             cmp6(a, b) = Order/lt()
         }
-        pub witness ord6_nat : Ord6(Nat) {
+        witness : Ord6(Nat) {
             cmp6(a, b) = Order/lt()
         }
         pub let same(@A : Type, use Ord6(A), x : A, y : A) -> Bln = Eq6/eq6(x, y);

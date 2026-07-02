@@ -197,16 +197,17 @@ pub enum WitnessEntry {
     Use(Term),
 }
 
-/// A `witness` declaration: a registered inhabitant of a concept. It desugars to
-/// an ordinary top-level definition `let name(tele) -> C(args) = C(args) { … }`
-/// (§4.3) and marks `name` for registration in the program-wide witness table.
-/// The telescope admits only `@` and `use` parameters (explicit binders are
-/// rejected at lowering); `concept`/`args` are the witnessed concept application,
-/// reused verbatim as the struct-literal head.
+/// A `witness` declaration: a registered inhabitant of a concept. Witnesses
+/// are anonymous — they are only ever reached through resolution (or an
+/// explicit `use <term>` carrying an ordinary value), so there is no name and
+/// no `pub`. The declaration desugars to a compiler-named top-level definition
+/// `let witness#N(tele) -> C(args) = C(args) { … }` (§4.3) registered in the
+/// program-wide witness table; diagnostics identify it by concept, key, and
+/// declaring module. The telescope admits only `@` and `use` parameters
+/// (explicit binders are rejected at lowering); `concept`/`args` are the
+/// witnessed concept application, reused verbatim as the struct-literal head.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopWitness {
-    pub is_pub: bool,
-    pub label: String,
     pub params: Vec<FuncSugarParam>,
     pub concept: Name,
     pub args: Vec<Term>,
