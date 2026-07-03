@@ -1839,3 +1839,278 @@ fn single_block_region_lowers_without_dispatch_loop() {
         "dispatcher seed not removed:\n{wat}",
     );
 }
+
+/// A 100k-deep append chain (a left spine of `bin/node`s) reads back through
+/// the *iterative* force walk — a recursive force would overflow the wasm
+/// stack orders of magnitude earlier. `len` answers without forcing; the
+/// final `get` forces once, exercising the worklist's grow-by-doubling path.
+#[test]
+fn forces_deep_rope_chains_iteratively() {
+    let mut module = cont::Module::new();
+    module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+
+    module.add_const(cont::ValueName::from("DEPTH"), cont::Data::Nat(100_000));
+    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
+    module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
+    module.add_const(cont::ValueName::from("EMPTY"), cont::Data::Bin(vec![]));
+
+    module.add_func(
+        cont::FuncName::from("main"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                preallocs: vec![],
+                values: vec![],
+                blocks: vec![
+                    (
+                        cont::BlockName::from("step"),
+                        cont::Block {
+                            params: vec![cont::ValueName::from("i"), cont::ValueName::from("acc")],
+                            region: cont::Region {
+                                preallocs: vec![],
+                                values: vec![],
+                                blocks: vec![],
+                                tail: cont::Tail::Match(cont::MatchTarget {
+                                    operand: cont::ValueName::from("i"),
+                                    cases: std::collections::BTreeMap::from([(
+                                        0,
+                                        cont::JumpTarget {
+                                            target: cont::BlockName::from("read"),
+                                            params: vec![cont::ValueName::from("acc")],
+                                        },
+                                    )]),
+                                    default: Some(cont::JumpTarget {
+                                        target: cont::BlockName::from("grow"),
+                                        params: vec![
+                                            cont::ValueName::from("i"),
+                                            cont::ValueName::from("acc"),
+                                        ],
+                                    }),
+                                }),
+                            },
+                        },
+                    ),
+                    (
+                        cont::BlockName::from("grow"),
+                        cont::Block {
+                            params: vec![cont::ValueName::from("j"), cont::ValueName::from("cur")],
+                            region: cont::Region {
+                                preallocs: vec![],
+                                values: vec![
+                                    (
+                                        cont::ValueName::from("next_i"),
+                                        cont::Value::Eval(cont::Code::NatSub(
+                                            cont::ValueName::from("j"),
+                                            cont::ValueName::from("ONE"),
+                                        )),
+                                    ),
+                                    (
+                                        cont::ValueName::from("next_acc"),
+                                        cont::Value::Eval(cont::Code::BinAppend(
+                                            cont::ValueName::from("cur"),
+                                            cont::ValueName::from("SEVEN"),
+                                        )),
+                                    ),
+                                ],
+                                blocks: vec![],
+                                tail: cont::Tail::Jump(cont::JumpTarget {
+                                    target: cont::BlockName::from("step"),
+                                    params: vec![
+                                        cont::ValueName::from("next_i"),
+                                        cont::ValueName::from("next_acc"),
+                                    ],
+                                }),
+                            },
+                        },
+                    ),
+                    (
+                        cont::BlockName::from("read"),
+                        cont::Block {
+                            params: vec![cont::ValueName::from("built")],
+                            region: cont::Region {
+                                preallocs: vec![],
+                                values: vec![
+                                    (
+                                        cont::ValueName::from("len"),
+                                        cont::Value::Eval(cont::Code::BinLen(
+                                            cont::ValueName::from("built"),
+                                        )),
+                                    ),
+                                    (
+                                        cont::ValueName::from("idx"),
+                                        cont::Value::Eval(cont::Code::NatSub(
+                                            cont::ValueName::from("len"),
+                                            cont::ValueName::from("ONE"),
+                                        )),
+                                    ),
+                                    (
+                                        cont::ValueName::from("byte"),
+                                        cont::Value::Eval(cont::Code::BinGet(
+                                            cont::ValueName::from("built"),
+                                            cont::ValueName::from("idx"),
+                                        )),
+                                    ),
+                                ],
+                                blocks: vec![],
+                                tail: cont::Tail::Host(cont::HostTarget::IoExit {
+                                    code: cont::ValueName::from("byte"),
+                                    resume: cont::BlockName::from("r"),
+                                }),
+                            },
+                        },
+                    ),
+                ],
+                tail: cont::Tail::Jump(cont::JumpTarget {
+                    target: cont::BlockName::from("step"),
+                    params: vec![
+                        cont::ValueName::from("DEPTH"),
+                        cont::ValueName::from("EMPTY"),
+                    ],
+                }),
+            },
+        },
+    );
+
+    assert_eq!(i32_result(&module), 7);
+}
+
+/// Reads after a concat hit the memoized payload: the first `get` forces and
+/// caches, the second reads the cache, and `len` never forces at all. Pins
+/// the read-after-concat roundtrip: 2 + 4 + 5 = 11.
+#[test]
+fn rereads_a_concat_through_the_memo() {
+    let mut module = cont::Module::new();
+    module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+
+    module.add_const(cont::ValueName::from("B1"), cont::Data::Bin(vec![1, 2]));
+    module.add_const(cont::ValueName::from("B2"), cont::Data::Bin(vec![3, 4, 5]));
+    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
+    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+
+    module.add_func(
+        cont::FuncName::from("main"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                preallocs: vec![],
+                values: vec![
+                    (
+                        cont::ValueName::from("cat"),
+                        cont::Value::Eval(cont::Code::BinConcat(vec![
+                            cont::ValueName::from("B1"),
+                            cont::ValueName::from("B2"),
+                        ])),
+                    ),
+                    (
+                        cont::ValueName::from("a"),
+                        cont::Value::Eval(cont::Code::BinGet(
+                            cont::ValueName::from("cat"),
+                            cont::ValueName::from("ONE"),
+                        )),
+                    ),
+                    (
+                        cont::ValueName::from("b"),
+                        cont::Value::Eval(cont::Code::BinGet(
+                            cont::ValueName::from("cat"),
+                            cont::ValueName::from("THREE"),
+                        )),
+                    ),
+                    (
+                        cont::ValueName::from("len"),
+                        cont::Value::Eval(cont::Code::BinLen(cont::ValueName::from("cat"))),
+                    ),
+                    (
+                        cont::ValueName::from("ab"),
+                        cont::Value::Eval(cont::Code::NatAdd(
+                            cont::ValueName::from("a"),
+                            cont::ValueName::from("b"),
+                        )),
+                    ),
+                    (
+                        cont::ValueName::from("sum"),
+                        cont::Value::Eval(cont::Code::NatAdd(
+                            cont::ValueName::from("ab"),
+                            cont::ValueName::from("len"),
+                        )),
+                    ),
+                ],
+                blocks: vec![],
+                tail: cont::Tail::Host(cont::HostTarget::IoExit {
+                    code: cont::ValueName::from("sum"),
+                    resume: cont::BlockName::from("r"),
+                }),
+            },
+        },
+    );
+
+    assert_eq!(i32_result(&module), 11);
+}
+
+/// A never-read rope crosses the host boundary directly: the wire force at
+/// the `io_write` call site flattens the node tree, so the host sees the
+/// plain payload bytes.
+#[test]
+fn writes_an_unforced_rope_to_the_host() {
+    let mut module = cont::Module::new();
+    module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+
+    module.add_const(
+        cont::ValueName::from("B1"),
+        cont::Data::Bin(b"hel".to_vec()),
+    );
+    module.add_const(cont::ValueName::from("B2"), cont::Data::Bin(b"lo".to_vec()));
+
+    module.add_func(
+        cont::FuncName::from("main"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                preallocs: vec![],
+                values: vec![(
+                    cont::ValueName::from("cat"),
+                    cont::Value::Eval(cont::Code::BinConcat(vec![
+                        cont::ValueName::from("B1"),
+                        cont::ValueName::from("B2"),
+                    ])),
+                )],
+                blocks: vec![(
+                    cont::BlockName::from("io_done"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("io_status"),
+                            cont::ValueName::from("io_written"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![],
+                            blocks: vec![],
+                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                target: cont::BlockName::from("r"),
+                                params: vec![cont::ValueName::from("io_status")],
+                            }),
+                        },
+                    },
+                )],
+                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                    function: foreign_write(),
+                    operands: vec![
+                        cont::ValueName::from("STDOUT"),
+                        cont::ValueName::from("cat"),
+                    ],
+                    resume: cont::BlockName::from("io_done"),
+                }),
+            },
+        },
+    );
+
+    assert_eq!(printed(&module), "hello");
+}

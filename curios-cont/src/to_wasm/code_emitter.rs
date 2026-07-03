@@ -1127,7 +1127,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             ),
             crate::Code::FltToLeBin(operand) => {
                 // Reinterpret the f32 as its IEEE-754 bit pattern and split it into
-                // the four little-endian bytes. The `bin` array is `i8`-packed, so
+                // the four little-endian bytes. The `$bytes` payload is `i8`-packed, so
                 // `array.new_fixed` truncates each shifted i32 to its low byte --
                 // byte-for-byte `f32::to_le_bytes`, with no host round-trip.
                 let bits_local = self

@@ -661,3 +661,32 @@ fn cell_two_cells_are_distinct() {
         b"7",
     );
 }
+
+#[test]
+fn accumulation_loops_are_linear_by_construction() {
+    // The rope representation's whole promise: a naive 100k-step `Bin/concat`
+    // accumulation loop is O(n) with no optimizer recognition anywhere — each
+    // step is one node allocation, and the single read at the end forces once.
+    // The pre-rope representation copied the accumulator per step (Θ(n²), tens
+    // of minutes at this size); a regression fails on the timeout. The final
+    // slice + print also pins the force → memo → host-write path end to end.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(60),
+        r#"
+        use /std/{Io, Bin, Nat, Str};
+        rec go(i : Nat, acc : Bin) -> Bin =
+            match i
+            | 0 => acc
+            | k + 1; ih => go(k, Bin/concat(acc, Str/to_bin("0123456789")))
+            end;
+        let built = go(100000, \\);
+        let head = Bin/slice(built, 0, 10);
+        let _ = Io/write(Io/stdout, head);
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Bin/len(built))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"01234567891000000");
+}
