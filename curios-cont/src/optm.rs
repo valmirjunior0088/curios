@@ -34,10 +34,6 @@
 //! - [`loop_invariant_motion`] — moves a loop header's invariant computations
 //!   and allocations out to the entering region, once per entry instead of
 //!   per iteration.
-//! - [`append_builder`] — turns an `acc = concat(acc, piece)` loop into a
-//!   parts-collecting one (append a reference per step, flatten once at each
-//!   exit), and fuses straight-line concat chains — the Θ(n²)-copy string
-//!   builds become Θ(n).
 //! - [`function_inlining`] — splices a callee's body into its call sites; a
 //!   single-call-site rule unfolds any-sized callees once, and a size-bounded
 //!   multi-site rule dissolves small callees (e.g. the primitive wrappers)
@@ -110,9 +106,6 @@ pub use loops::*;
 
 mod loop_invariant_motion;
 pub use loop_invariant_motion::*;
-
-mod append_builder;
-pub use append_builder::*;
 
 mod function_inlining;
 pub use function_inlining::*;
@@ -274,20 +267,14 @@ pub fn optimize(module: &mut Module) {
     fold_constants(module);
 
     // 6.5. Optimize the settled loops. Inlining left the converted loops in
-    //      their final shape: chain fusion collapses the unrolled straight-line
-    //      concat towers partial evaluation exposed, the builder rewrite turns
-    //      the accumulator-concat loops into parts collection with one flatten
-    //      per exit, invariant motion pulls per-iteration work (and the
-    //      invariant closure rebuilds) out to the loop entries, and the settle
-    //      round collapses what the rewrites exposed. Runs before literal
-    //      hoisting so hoisted *closed* data continues on to a module const.
-    //      The jump threading first: the freshly inlined loop steps leave
-    //      their results behind single-predecessor resume blocks, and the
-    //      builder recognizes a step only as a local binding.
+    //      their final shape: invariant motion pulls per-iteration work (and
+    //      the invariant closure rebuilds) out to the loop entries, and the
+    //      settle round collapses what the rewrites exposed. Runs before
+    //      literal hoisting so hoisted *closed* data continues on to a module
+    //      const. The jump threading first: the freshly inlined loop steps
+    //      leave their results behind single-predecessor resume blocks.
     thread_jumps(module);
     propagate_copies(module);
-    fuse_concat_chains(module);
-    build_append_loops(module);
     hoist_loop_invariants(module);
     propagate_copies(module);
     fold_constants(module);

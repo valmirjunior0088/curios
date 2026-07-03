@@ -14,8 +14,7 @@ use {
 /// parameters — the entry edge passes a known closure and every back edge
 /// passes the parameter through unchanged — so the indirect calls through them
 /// sit behind a parameter [`closure_lifting`](super::closure_lifting) cannot
-/// resolve, and the loop body never devirtualizes, never inlines, and never
-/// exposes its `concat` step to [`append_builder`](super::append_builder).
+/// resolve, and the loop body never devirtualizes and never inlines.
 ///
 /// In φ terms: `p = φ(v, p, p, …)` is `p = v`. The analysis is a Kleene
 /// fixpoint from "unknown": for each block parameter slot, collect the slot's

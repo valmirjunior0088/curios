@@ -103,16 +103,3 @@ pub fn eval_result(index: usize) -> ValueName {
 pub fn slice_offset(index: usize) -> ValueName {
     ValueName::from(format!("v@slice#{index}"))
 }
-
-/// The parts array seeded at a builder loop's entry edge
-/// ([`append_builder`](super::append_builder)): named from a per-pass counter,
-/// one per rewritten entry edge.
-pub fn builder_seed(index: usize) -> ValueName {
-    ValueName::from(format!("parts@builder#{index}"))
-}
-
-/// The flattened accumulator materialised where a builder loop's parts array
-/// escapes ([`append_builder`](super::append_builder)).
-pub fn builder_flat(index: usize) -> ValueName {
-    ValueName::from(format!("whole@builder#{index}"))
-}
