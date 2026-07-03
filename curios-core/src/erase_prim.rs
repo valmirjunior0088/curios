@@ -224,11 +224,6 @@ pub fn erase_prim(
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(pure(curios_ersd::PurePrim::BinConcat(erased)))
         }
-        Prim::BinFlatten(operand) => {
-            let outer_type = arr_type(bin_type());
-            let operand = erase(context, operand, &outer_type)?;
-            Ok(pure(curios_ersd::PurePrim::BinFlatten(operand)))
-        }
         Prim::ArrType(_) => Ok(curios_ersd::Subterm::Erased.into()),
         Prim::Arr(elems) => {
             // Elaborate already checked this literal against an array type (§9);
@@ -284,11 +279,6 @@ pub fn erase_prim(
                 .map(|e| erase(context, e, &expected_list_type))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(pure(curios_ersd::PurePrim::ArrConcat(erased)))
-        }
-        Prim::ArrFlatten(type_, operand) => {
-            let outer_type = arr_type(arr_type(type_.clone()));
-            let operand = erase(context, operand, &outer_type)?;
-            Ok(pure(curios_ersd::PurePrim::ArrFlatten(operand)))
         }
         Prim::ArrMap(a, b, f, arr) => {
             let f_type = Term::func_type([("x", a.clone())], b.clone());

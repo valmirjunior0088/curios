@@ -121,15 +121,7 @@ pub let slice(s : Str, x : Nat, y : Nat) -> Str =
     take_n(y - x, drop_n(x, s));
 
 pub let flatten(parts : Lst(Str)) -> Str =
-    let pa = Lst/to_arr(parts);
-    Str {
-        bytes = Bin/flatten(Arr/map(to_bin, pa)),
-        valid =
-            match pa : (p) => Valid(Bin/flatten(Arr/map(to_bin, p)))
-            | [||] => Utf8/stop()
-            | h, ..t; ih => concat_closed(@to_bin(h), @Bin/flatten(Arr/map(to_bin, t)), h.valid, ih)
-            end
-    };
+    Lst/fold(parts, "", (p, acc) => concat(acc, p));
 
 pub let eql(a : Str, b : Str) -> Bln =
     Bin/eql(to_bin(a), to_bin(b));

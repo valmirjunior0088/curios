@@ -75,14 +75,12 @@ pub enum PurePrim {
     BinSlice(Term, Term, Term),
     BinAppend(Term, Term),
     BinConcat(Vec<Term>),
-    BinFlatten(Term),
     Arr(Vec<Term>),
     ArrLen(Term),
     ArrGet(Term, Term),
     ArrSlice(Term, Term, Term),
     ArrAppend(Term, Term),
     ArrConcat(Vec<Term>),
-    ArrFlatten(Term),
     // `ArrMap(src, f)`: map closure `f` over `src`, an O(n) fill. `f` is a
     // closure value; codegen emits one alloc + a fill loop applying `f` per slot.
     ArrMap(Term, Term),
@@ -155,8 +153,7 @@ impl PurePrim {
             Nat(_) | Int(_) | Flt(_) | Bin(_) | Io(_) => vec![],
             NatToInt(a) | NatToFlt(a) | IntToNat(a) | IntToFlt(a) | FltToNat(a) | FltToLeBin(a)
             | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a) | FltFloor(a) | FltCeil(a)
-            | FltTrunc(a) | FltNearest(a) | BinLen(a) | ArrLen(a) | BinFlatten(a)
-            | ArrFlatten(a) => vec![a],
+            | FltTrunc(a) | FltNearest(a) | BinLen(a) | ArrLen(a) => vec![a],
             NatEql(a, b)
             | NatNeq(a, b)
             | NatAdd(a, b)
@@ -221,8 +218,7 @@ impl PurePrim {
             Nat(_) | Int(_) | Flt(_) | Bin(_) | Io(_) => vec![],
             NatToInt(a) | NatToFlt(a) | IntToNat(a) | IntToFlt(a) | FltToNat(a) | FltToLeBin(a)
             | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a) | FltFloor(a) | FltCeil(a)
-            | FltTrunc(a) | FltNearest(a) | BinLen(a) | ArrLen(a) | BinFlatten(a)
-            | ArrFlatten(a) => vec![a],
+            | FltTrunc(a) | FltNearest(a) | BinLen(a) | ArrLen(a) => vec![a],
             NatEql(a, b)
             | NatNeq(a, b)
             | NatAdd(a, b)

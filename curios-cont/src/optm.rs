@@ -178,8 +178,7 @@ use {super::*, curios_base::Entropy};
 ///    specialized closures at every site. A settle round follows, and only then
 ///    does map simplification run: by here a field-projection closure like the
 ///    newtype `to_bin` has been forwarded down to the bare identity, so an
-///    `Arr.map` by it collapses to an alias its consumers see through (fusing
-///    `Bin.flatten(Arr.map(to_bin, xs))` to `Bin.flatten(xs)`). A second
+///    `Arr.map` by it collapses to an alias its consumers see through. A second
 ///    known-tag threading round then catches the joins the new splices exposed.
 /// 7. **Hoist constants.** Every bytestring and closed aggregate becomes a
 ///    shared module const, built once at startup instead of per execution.

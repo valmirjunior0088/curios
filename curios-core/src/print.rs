@@ -604,7 +604,6 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 || pure(", "),
             ),
         ]),
-        Prim::BinFlatten(operand) => print_unary("Bin.flatten ", operand, depth),
         Prim::ArrType(elem) => print_unary("Arr ", elem, depth),
         Prim::Arr(elems) => flat([
             pure("[|"),
@@ -649,7 +648,6 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 || pure(", "),
             ),
         ]),
-        Prim::ArrFlatten(ty, operand) => print_binary("Arr.flatten ", ty, operand, depth),
         Prim::ArrMap(a, b, f, arr) => flat([
             pure("Arr.map "),
             print_term(a, depth),

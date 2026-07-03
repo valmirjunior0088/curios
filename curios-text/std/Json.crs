@@ -39,9 +39,8 @@ let escape_byte(byte : Nat) -> Bin =
 
 let encode_str(s : Str) -> Str =
     let body =
-        Bin/flatten(Lst/to_arr(Lst/rev(
-            Bin/fold(Str/to_bin(s), Lst/nil(@Bin), (byte, acc) =>
-                Lst/cons(escape_byte(byte), acc)))));
+        Bin/fold(Str/to_bin(s), \\, (byte, acc) =>
+            Bin/concat(acc, escape_byte(byte)));
     Str/concat(Str/concat("\"", Option/unwrap_or(Str/of_bin(body), "")), "\"");
 
 pub rec encode(v : Json) -> Str =
@@ -178,7 +177,7 @@ let parse_raw_str : Parse(Str) =
     let _ = Parse/take_byte('"')!;
     let chunks = parse_str_body!;
     let _ = Parse/take_byte('"')!;
-    match Str/of_bin(Bin/flatten(Lst/to_arr(chunks))) : Parse(Str)
+    match Str/of_bin(Bin/flatten(chunks)) : Parse(Str)
     | some(s) => Parse/pure(s)
     | none() => Parse/fail("invalid UTF-8 in string")
     end;

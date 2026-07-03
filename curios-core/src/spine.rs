@@ -292,8 +292,8 @@ pub fn peel_arr(left: &Prim, right: &Prim) -> Option<Peel> {
 /// the monoid's literals and juxtaposition; `BinSlice` rides in as a measured
 /// `Window` (a length-`hi - lo` chunk whose contents are symbolic), so adjacent
 /// slices of one base fuse and equal slices cancel; `BinAppend` rides in as its base
-/// followed by the appended byte. Only `BinFlatten` stays an opaque symbolic chunk
-/// left to the caller's own (structural) comparison.
+/// followed by the appended byte. Any other producer stays an opaque symbolic
+/// chunk left to the caller's own (structural) comparison.
 fn bin_valued(prim: &Prim) -> bool {
     matches!(
         prim,
@@ -315,8 +315,8 @@ fn byte_as_u8(term: &Term) -> Option<u8> {
 /// The `Arr` analogue of [`bin_valued`]: `Arr` and `ArrConcat` carry the monoid's
 /// literals and juxtaposition, `ArrSlice` rides in as a measured `Window` (like
 /// `BinSlice`), and `ArrAppend` rides in as its base followed by a length-1 literal
-/// run — so `append(xs, e) ≡ concat(xs, single(e))`. `ArrFlatten` stays an opaque
-/// chunk left to the caller's comparison.
+/// run — so `append(xs, e) ≡ concat(xs, single(e))`. Any other producer stays an
+/// opaque chunk left to the caller's comparison.
 fn arr_valued(prim: &Prim) -> bool {
     matches!(
         prim,

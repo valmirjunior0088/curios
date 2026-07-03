@@ -102,7 +102,6 @@ pub enum Prim {
     BinSlice(Term, Term, Term),
     BinAppend(Term, Term),
     BinConcat(Vec<Term>),
-    BinFlatten(Term),
     ArrType(Term),
     Arr(Vec<Term>),
     ArrLen(Term, Term),
@@ -110,10 +109,9 @@ pub enum Prim {
     ArrSlice(Term, Term, Term, Term),
     ArrAppend(Term, Term, Term),
     ArrConcat(Term, Vec<Term>),
-    ArrFlatten(Term, Term),
     // (@A, @B, f : (A) -> B, arr : Arr(A)) -> Arr(B): a structural map. Opaque
-    // under reduction (a stuck chunk like `ArrFlatten`), so it never unfolds a
-    // literal spine during type-checking. Erases to a single O(n) fill loop.
+    // under reduction on a symbolic operand, so it never unfolds a variable
+    // during type-checking. Erases to a single O(n) fill loop.
     ArrMap(Term, Term, Term, Term),
     IoType,
     Io(u32),
@@ -572,13 +570,6 @@ impl Prim {
         Self::BinConcat(operands.into_iter().map(|e| e.into()).collect())
     }
 
-    pub fn bin_flatten<A>(array: A) -> Self
-    where
-        A: Into<Term>,
-    {
-        Self::BinFlatten(array.into())
-    }
-
     pub fn arr<I, A>(items: I) -> Self
     where
         I: IntoIterator<Item = A>,
@@ -640,14 +631,6 @@ impl Prim {
             type_.into(),
             operands.into_iter().map(|e| e.into()).collect(),
         )
-    }
-
-    pub fn arr_flatten<T, A>(type_: T, array: A) -> Self
-    where
-        T: Into<Term>,
-        A: Into<Term>,
-    {
-        Self::ArrFlatten(type_.into(), array.into())
     }
 
     pub fn arr_map<A, B, F, R>(a: A, b: B, f: F, arr: R) -> Self
@@ -730,7 +713,6 @@ impl Prim {
             | Prim::FltTrunc(t)
             | Prim::FltNearest(t)
             | Prim::BinLen(t)
-            | Prim::BinFlatten(t)
             | Prim::ArrType(t) => visit(t),
 
             Prim::IoEql(a, b)
@@ -788,7 +770,6 @@ impl Prim {
             | Prim::BinGet(a, b)
             | Prim::BinAppend(a, b)
             | Prim::ArrLen(a, b)
-            | Prim::ArrFlatten(a, b)
             | Prim::IoExit(a, b) => {
                 visit(a);
                 visit(b);
@@ -949,7 +930,6 @@ impl Prim {
             Prim::BinConcat(operands) => {
                 Prim::BinConcat(operands.iter().map(|e| visit.visit_subterm(e)).collect())
             }
-            Prim::BinFlatten(operand) => Prim::BinFlatten(visit.visit_subterm(operand)),
             Prim::ArrType(elem) => Prim::ArrType(visit.visit_subterm(elem)),
             Prim::Arr(elems) => Prim::Arr(elems.iter().map(|e| visit.visit_subterm(e)).collect()),
             Prim::ArrLen(ty, list) => traverse_binary(ty, list, visit, Prim::ArrLen),
@@ -973,7 +953,6 @@ impl Prim {
                 visit.visit_subterm(ty),
                 operands.iter().map(|e| visit.visit_subterm(e)).collect(),
             ),
-            Prim::ArrFlatten(ty, operand) => traverse_binary(ty, operand, visit, Prim::ArrFlatten),
             Prim::ArrMap(a, b, f, arr) => Prim::ArrMap(
                 visit.visit_subterm(a),
                 visit.visit_subterm(b),

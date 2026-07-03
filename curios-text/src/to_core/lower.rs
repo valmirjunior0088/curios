@@ -1160,7 +1160,6 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::BinConcat(left, right) => {
                 curios_core::Prim::bin_concat([self.term(left)?, self.term(right)?])
             }
-            Prim::BinFlatten(operand) => curios_core::Prim::bin_flatten(self.term(operand)?),
             Prim::ArrType(inner) => curios_core::Prim::arr_type(self.term(inner)?),
             Prim::Arr(elems) => {
                 curios_core::Prim::Arr(elems.iter().map(|elem| self.term(elem)).collect::<Result<
@@ -1186,9 +1185,6 @@ impl<'a, 'b> Lower<'a, 'b> {
             }
             Prim::ArrConcat(ty, left, right) => {
                 curios_core::Prim::arr_concat(self.term(ty)?, [self.term(left)?, self.term(right)?])
-            }
-            Prim::ArrFlatten(ty, operand) => {
-                curios_core::Prim::arr_flatten(self.term(ty)?, self.term(operand)?)
             }
             Prim::ArrMap(a, b, f, arr) => curios_core::Prim::arr_map(
                 self.term(a)?,

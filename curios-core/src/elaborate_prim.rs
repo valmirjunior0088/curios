@@ -193,11 +193,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             }
             (Prim::BinConcat(elaborated), bin_type)
         }
-        Prim::BinFlatten(operand) => {
-            let outer_type = arr_type(bin_type.clone());
-            let operand = elaborate(context, operand, Mode::Check(outer_type))?.0;
-            (Prim::BinFlatten(operand), bin_type)
-        }
         Prim::ArrType(elem) => {
             let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;
             (Prim::ArrType(elem), Term::type_())
@@ -256,13 +251,6 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                 elaborated.push(elaborate(context, operand, Mode::Check(list_type.clone()))?.0);
             }
             (Prim::ArrConcat(type_, elaborated), list_type)
-        }
-        Prim::ArrFlatten(type_, operand) => {
-            let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
-            let list_type = arr_type(type_.clone());
-            let outer_type = arr_type(list_type.clone());
-            let operand = elaborate(context, operand, Mode::Check(outer_type))?.0;
-            (Prim::ArrFlatten(type_, operand), list_type)
         }
         Prim::ArrMap(a, b, f, arr) => {
             let a = elaborate(context, a, Mode::Check(Term::type_()))?.0;

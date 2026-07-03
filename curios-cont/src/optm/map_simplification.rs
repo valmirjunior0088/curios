@@ -13,10 +13,10 @@ use {
 /// is unobservable and the binding collapses to a plain alias.
 ///
 /// The alias is what lets the rest of the pipeline see through the map: copy
-/// propagation threads the source into the map's consumers — which is what fuses
-/// `Bin/flatten(Arr/map(to_bin, xs))` into `Bin/flatten(xs)` once the newtype
-/// projection `to_bin` has erased to the identity — and dead-code elimination
-/// then drops the now-unreferenced closure value and its lifted function.
+/// propagation threads the source into the map's consumers once the newtype
+/// projection (`to_bin` and friends) has erased to the identity, and dead-code
+/// elimination then drops the now-unreferenced closure value and its lifted
+/// function.
 pub fn simplify_maps(module: &mut Module) {
     let identity = collect_identity_closures(module);
 

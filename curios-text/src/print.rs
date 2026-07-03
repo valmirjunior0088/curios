@@ -301,7 +301,6 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::BinSlice(bin, start, end) => print_prim_call("Bin.slice", vec![bin, start, end]),
         Prim::BinAppend(bin, byte) => print_prim_call("Bin.append", vec![bin, byte]),
         Prim::BinConcat(left, right) => print_prim_call("Bin.concat", vec![left, right]),
-        Prim::BinFlatten(operand) => print_prim_call("Bin.flatten", vec![operand]),
         Prim::ArrType(elem) => print_prim_call("Arr", vec![elem]),
         Prim::Arr(elems) => flat([
             pure("[|"),
@@ -317,7 +316,6 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         }
         Prim::ArrAppend(ty, list, elem) => print_prim_call("Arr.append", vec![ty, list, elem]),
         Prim::ArrConcat(ty, left, right) => print_prim_call("Arr.concat", vec![ty, left, right]),
-        Prim::ArrFlatten(ty, operand) => print_prim_call("Arr.flatten", vec![ty, operand]),
         Prim::ArrMap(a, b, f, arr) => print_prim_call("Arr.map", vec![a, b, f, arr]),
         Prim::IoType => pure("Io"),
         Prim::Io(token) => pure(format!("Io({token})")),

@@ -500,7 +500,6 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
             zonk_term(context, c)?,
         ),
         Prim::BinConcat(terms) => Prim::BinConcat(zonk_terms(context, terms)?),
-        Prim::BinFlatten(t) => Prim::BinFlatten(zonk_term(context, t)?),
 
         Prim::ArrType(t) => Prim::ArrType(zonk_term(context, t)?),
         Prim::Arr(elems) => Prim::Arr(zonk_terms(context, elems)?),
@@ -523,9 +522,6 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         ),
         Prim::ArrConcat(ty, operands) => {
             Prim::ArrConcat(zonk_term(context, ty)?, zonk_terms(context, operands)?)
-        }
-        Prim::ArrFlatten(ty, operand) => {
-            Prim::ArrFlatten(zonk_term(context, ty)?, zonk_term(context, operand)?)
         }
         Prim::ArrMap(a, b, f, arr) => Prim::ArrMap(
             zonk_term(context, a)?,

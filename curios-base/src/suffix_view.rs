@@ -11,7 +11,7 @@
 //! ```
 //!
 //! These are the canonical re-base laws. A consumer that is *not* one of the three
-//! — a closure call, a host write, `concat`/`append`/`flatten`/`eql`, a bare return
+//! — a closure call, a host write, `concat`/`append`/`eql`, a bare return
 //! — makes the slice *escape*, so the copy stays. Soundness rides on aggregate
 //! immutability: `b[s + j] == slice(b, s, e)[j]` for every in-bounds access.
 //!

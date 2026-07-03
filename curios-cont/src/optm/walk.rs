@@ -250,9 +250,7 @@ macro_rules! walk_code_operands {
             | FltToLeBin(a)
             | FltToInt(a)
             | BinLen(a)
-            | BinFlatten(a)
             | ArrLen(a)
-            | ArrFlatten(a)
             | TplGet(a, _) => $sink.value_use(a),
 
             // Variadic operands.

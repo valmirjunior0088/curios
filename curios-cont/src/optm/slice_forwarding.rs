@@ -22,7 +22,7 @@ use {
 /// Rewriting each consumer this way drops the slice's last use; the now-dead
 /// pure slice is reclaimed by the dead-code sweep that follows, turning the
 /// quadratic fold linear. A consumer that is *not* one of the three suffix reads —
-/// a closure call, a host write, `concat`/`append`/`flatten`/`eql` — keeps the
+/// a closure call, a host write, `concat`/`append`/`eql` — keeps the
 /// slice, so an escaping tail still materialises exactly once (the irreducible
 /// cost). The `slice(slice(..))` rule re-bases through to the deepest buffer, so a
 /// chain of sub-slices collapses to a single re-based access in one pass.

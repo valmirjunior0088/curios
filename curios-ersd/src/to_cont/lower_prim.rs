@@ -467,9 +467,6 @@ pub fn lower_pure_prim(work: &mut Work, prim: &crate::PurePrim, frame: &Frame) -
 
             work.fresh(Value::Eval(Code::BinConcat(names)))
         }
-        crate::PurePrim::BinFlatten(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::BinFlatten)
-        }
         crate::PurePrim::Arr(elements) => {
             let names = lower_pure_names(work, elements, frame);
 
@@ -489,9 +486,6 @@ pub fn lower_pure_prim(work: &mut Work, prim: &crate::PurePrim, frame: &Frame) -
             let names = lower_pure_names(work, operands, frame);
 
             work.fresh(Value::Eval(Code::ArrConcat(names)))
-        }
-        crate::PurePrim::ArrFlatten(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::ArrFlatten)
         }
         crate::PurePrim::ArrMap(src, f) => {
             lower_pure_binary_code(work, src, f, frame, Code::ArrMap)
@@ -797,9 +791,6 @@ fn lower_value_pure_prim<'b>(
         crate::PurePrim::BinConcat(operands) => {
             lower_bin_concat(work, operands, frame, vec![], cont)
         }
-        crate::PurePrim::BinFlatten(operand) => {
-            lower_unary_code(work, operand, frame, cont, Code::BinFlatten)
-        }
         crate::PurePrim::Arr(elements) => lower_lst(work, elements, frame, vec![], cont),
         crate::PurePrim::ArrLen(lst) => lower_unary_code(work, lst, frame, cont, Code::ArrLen),
         crate::PurePrim::ArrGet(lst, idx) => {
@@ -813,9 +804,6 @@ fn lower_value_pure_prim<'b>(
         }
         crate::PurePrim::ArrConcat(operands) => {
             lower_arr_concat(work, operands, frame, vec![], cont)
-        }
-        crate::PurePrim::ArrFlatten(operand) => {
-            lower_unary_code(work, operand, frame, cont, Code::ArrFlatten)
         }
         crate::PurePrim::ArrMap(src, f) => {
             lower_binary_code(work, src, f, frame, cont, Code::ArrMap)

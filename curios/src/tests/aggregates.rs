@@ -37,8 +37,8 @@ fn arr_map_fills_every_slot() {
 #[test]
 fn arr_map_distributes_over_cons() {
     // The eliminator rule that lets `Arr/map` stand in for a structural `foldr` in
-    // proofs (`to_bins = Arr/map(to_bin)` feeding `/syn/Str/flatten`): for a
-    // SYMBOLIC tail `t`, `map f (x :: t) ≡ f x :: map f t` *definitionally*. `refl`
+    // proofs: for a SYMBOLIC tail `t`, `map f (x :: t) ≡ f x :: map f t`
+    // *definitionally*. `refl`
     // checks only because `reduce` distributes the map over the `concat` spine and
     // maps the singleton literal — the same peel the native `Arr` eliminator does,
     // so it reduces under induction without unfolding a symbolic array.

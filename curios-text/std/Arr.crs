@@ -1,6 +1,6 @@
 pub use /sys/{Arr};
-pub use /sys/Arr/{len, slice, append, concat, flatten, map};
-use /std/{Nat, Option, Eq};
+pub use /sys/Arr/{len, slice, append, concat, map};
+use /std/{Lst, Nat, Option, Eq};
 
 pub let at(@T : Type, a : Arr(T), i : Nat, ok : Nat/Lt(i, len(a))) -> T =
     /sys/Arr/get(a, i);
@@ -10,6 +10,9 @@ pub let get(@T : Type, a : Arr(T), i : Nat) -> Option(T) =
     | true => Option/some(/sys/Arr/get(a, i))
     | false => Option/none()
     end;
+
+pub let flatten(@T : Type, parts : Lst(Arr(T))) -> Arr(T) =
+    Lst/fold(parts, [||], (a, acc) => concat(acc, a));
 
 pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
     let n = len(arr);

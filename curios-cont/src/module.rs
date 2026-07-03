@@ -98,13 +98,11 @@ pub enum Code {
     BinSlice(ValueName, ValueName, ValueName),
     BinAppend(ValueName, ValueName),
     BinConcat(Vec<ValueName>),
-    BinFlatten(ValueName),
     ArrLen(ValueName),
     ArrGet(ValueName, ValueName),
     ArrSlice(ValueName, ValueName, ValueName),
     ArrAppend(ValueName, ValueName),
     ArrConcat(Vec<ValueName>),
-    ArrFlatten(ValueName),
     // `ArrMap(src, f)`: map closure `f` over array `src` into a fresh array of
     // the same length. Codegen allocates once and fills with a single loop that
     // applies `f` (inline when statically known, else `call_indirect`) per slot.

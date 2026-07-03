@@ -365,7 +365,6 @@ fn bin_ops() -> Vec<TopItem> {
             prim(Prim::BinAppend(name("b"), name("x"))),
         ),
         binary("concat", bin(), bin(), Prim::BinConcat),
-        unary("flatten", arr_of(bin()), bin(), Prim::BinFlatten),
     ]
 }
 
@@ -420,15 +419,6 @@ fn arr_ops() -> Vec<TopItem> {
             ],
             arr_of(name("T")),
             prim(Prim::ArrConcat(name("T"), name("a"), name("b"))),
-        ),
-        pub_fn_marked(
-            "flatten",
-            vec![
-                (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", arr_of(arr_of(name("T")))),
-            ],
-            arr_of(name("T")),
-            prim(Prim::ArrFlatten(name("T"), name("a"))),
         ),
         pub_fn_marked(
             "map",

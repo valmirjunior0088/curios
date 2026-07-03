@@ -305,7 +305,7 @@ fn reduce_nat_compare(
 }
 
 /// The free-monoid product structure of a reduced carrier value, the view a monoid
-/// homomorphism (`len`/`flatten`) distributes over: a literal run of generators `L`
+/// homomorphism (`len`/`map`) distributes over: a literal run of generators `L`
 /// (bytes for `Bin`, elements for `Arr`), an n-ary `Concat` of operands to recurse
 /// on, an `Append` of a base and one appended generator, or an `Opaque` node (a
 /// variable / slice) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
@@ -337,12 +337,12 @@ fn arr_shape(value: Term) -> Shape<Term> {
 }
 
 /// The shared driver for a free-monoid homomorphism `h` — the one place its
-/// distribution law lives, so a carrier physically cannot forget a case (the gap that
-/// once let `flatten` skip `append`). A literal run maps via `literal`; a
+/// distribution law lives, so a carrier physically cannot forget a case. A literal
+/// run maps via `literal`; a
 /// concatenation recurses `h` over its operands and folds the images with `combine`;
 /// an append combines `h(base)` with the appended generator via `append`; an opaque
 /// value stays neutral, rebuilt by `node` (which also builds `h(sub)` to recurse).
-/// `len`, `flatten`, and `map` differ only in those four slots. The built image is
+/// `len` and `map` differ only in those four slots. The built image is
 /// reduced, so the homomorphism is eager.
 fn reduce_homomorphism<L>(
     context: &mut Context,
@@ -1118,20 +1118,6 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 |kept| Subterm::Prim(Prim::BinConcat(kept)),
             ))
         }
-        // `flatten` is the homomorphism from the outer `Arr` into the inner `Bin`
-        // monoid: a literal of inner `Bin`s concatenates (merging literal parts,
-        // keeping symbolic ones), and it distributes over the outer concat/append.
-        Prim::BinFlatten(operand) => {
-            let operand = reduce(context, operand.clone())?;
-            reduce_homomorphism(
-                context,
-                arr_shape(operand),
-                |parts| Term::prim(Prim::bin_concat(parts)),
-                |images| Term::prim(Prim::bin_concat(images)),
-                |base_flat, generator| Term::prim(Prim::bin_concat(vec![base_flat, generator])),
-                |sub| Term::prim(Prim::bin_flatten(sub)),
-            )
-        }
         Prim::ArrType(elem) => {
             let elem = reduce(context, elem.clone())?;
             Ok(Subterm::Prim(Prim::arr_type(elem)))
@@ -1318,27 +1304,11 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 |kept| Subterm::Prim(Prim::arr_concat(type_, kept)),
             ))
         }
-        // The `Arr`-into-`Arr` twin of `BinFlatten`: same homomorphism, inner monoid
-        // is `Arr(T)` carrying its element type.
-        Prim::ArrFlatten(type_, operand) => {
-            let type_ = reduce(context, type_.clone())?;
-            let operand = reduce(context, operand.clone())?;
-            reduce_homomorphism(
-                context,
-                arr_shape(operand),
-                |parts| Term::prim(Prim::arr_concat(type_.clone(), parts)),
-                |images| Term::prim(Prim::arr_concat(type_.clone(), images)),
-                |base_flat, generator| {
-                    Term::prim(Prim::arr_concat(type_.clone(), vec![base_flat, generator]))
-                },
-                |sub| Term::prim(Prim::arr_flatten(type_.clone(), sub)),
-            )
-        }
         // `map`: the eliminator homomorphism. The literal case applies `f`
         // elementwise; the spine cases distribute (`map f (concat segs) =
         // concat (map f segs)`, `map f (append b x) = append (map f b) (f x)`) — the
-        // same normal form a structural `foldr (\x ih. f x :: ih) []` produces, so the
-        // `/syn/Str` `flatten` proof still reduces. A symbolic array stays neutral (the
+        // same normal form a structural `foldr (\x ih. f x :: ih) []` produces, so
+        // map-based proofs still reduce. A symbolic array stays neutral (the
         // `Opaque` case), so there is no unfold of a variable.
         Prim::ArrMap(a, b, f, arr) => {
             let a = reduce(context, a.clone())?;
