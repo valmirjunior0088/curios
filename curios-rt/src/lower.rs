@@ -117,9 +117,9 @@ impl Lower for Vec<u8> {
     }
 }
 
-/// `Arr(Nat)`: `poll`'s parallel `revents` masks, lowered as an array of
-/// i31-boxed bits. Same uniform `Arr` shape as `Vec<Vec<u8>>` below (anyref
-/// elements over the codegen's `arr_type`), only the elements are i31s rather
+/// `Lst(Nat)`: `poll`'s parallel `revents` masks, lowered as an array of
+/// i31-boxed bits. Same uniform `Lst` shape as `Vec<Vec<u8>>` below (anyref
+/// elements over the codegen's `lst_type`), only the elements are i31s rather
 /// than `Bin`s — the outbound dual of `lift.rs`'s `lift_i31_array`.
 impl Lower for Vec<Poll> {
     fn lower(
@@ -155,9 +155,9 @@ impl Lower for Vec<Poll> {
     }
 }
 
-/// `Arr(Bin)`: an array of `anyref` whose elements are `Bin`s (`i8` arrays). The
+/// `Lst(Bin)`: an array of `anyref` whose elements are `Bin`s (`i8` arrays). The
 /// outer element type `(mut (ref null any))` matches the codegen's uniform
-/// `arr_type`, so the array's runtime type is the one downstream `ref.cast`s
+/// `lst_type`, so the array's runtime type is the one downstream `ref.cast`s
 /// expect.
 impl Lower for Vec<Vec<u8>> {
     fn lower(

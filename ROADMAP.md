@@ -27,7 +27,7 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
   - [x] `Int`
   - [x] `Flt`
   - [x] `Bin`
-  - [x] `Arr`
+  - [x] `Lst`
 
 ## Type System
 
@@ -151,6 +151,6 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 - [x] Reader combinator (`std/Reader`)
 - [x] Proof-carrying UTF-8 string decoding (`std/Str`, `std/Char`)
 - [x] Parser-combinator library (`std/Parse`)
-- [x] Core collections (`std/Arr` and its helpers, length-indexed `std/Vec`)
+- [x] Core collections (`std/Lst` and its helpers, length-indexed `std/Vec`)
 - [x] Equality and ordering (`std/Eq`, `std/Order`)
 - [x] Foundational proof/logic types (`std/True`, `std/False`)

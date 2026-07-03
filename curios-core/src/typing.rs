@@ -62,7 +62,7 @@ pub fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
 
 /// Best-effort display form for a mismatch report: substitute the solutions
 /// that have landed, so the message names the actual disagreement rather than
-/// the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize)
+/// the metavariables it lstived wrapped in, then deep-[`normalize`](super::normalize)
 /// the result so a stuck concept-method projection standing in an index
 /// position collapses to the value it denotes (`Vec(Nat, (sys/witness#0).0(0, 1))`
 /// → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery.
@@ -186,7 +186,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
                 Outcome::Converts => Retry::Converts,
                 // Report through whatever solutions have landed: the normalized
                 // sides name the actual disagreement, not the metavariables it
-                // arrived wrapped in — and, deep-normalized, no stuck operator
+                // lstived wrapped in — and, deep-normalized, no stuck operator
                 // witness machinery in an index (see `resolved_for_display`).
                 Outcome::Mismatch => Retry::Mismatch(
                     super::normalize(context, goal.this.clone())?,

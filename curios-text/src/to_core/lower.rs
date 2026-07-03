@@ -1,7 +1,7 @@
 use {
     super::Context,
     crate::{
-        ArrMatch, BinMatch, Error, Field, Let, Match, Motive, Name, Nat, NatLiteral, NatMatch,
+        BinMatch, Error, Field, Let, LstMatch, Match, Motive, Name, Nat, NatLiteral, NatMatch,
         Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     num_bigint::BigUint,
@@ -357,7 +357,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                         .collect::<Result<Vec<_>, Error>>()?;
                     self.inductive_rows(head, &um.motive, arms)?
                 }
-                Match::Arr(ArrMatch {
+                Match::Lst(LstMatch {
                     head,
                     motive,
                     empty_case,
@@ -369,7 +369,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                     let (label, body) = self.motive_parts(motive)?;
                     // The element type is type-directed (read off the scrutinee
                     // during elaboration), so lowering leaves it a hole.
-                    curios_core::Term::arr_match(
+                    curios_core::Term::lst_match(
                         self.term(head)?,
                         curios_core::Term::metavar(self.context.fresh_metavar()),
                         label,
@@ -595,12 +595,12 @@ impl<'a, 'b> Lower<'a, 'b> {
             ),
             // An array literal's elements hoist their bangs into this region,
             // like an application's arguments.
-            Subterm::Prim(Prim::Arr(elems)) => {
+            Subterm::Prim(Prim::Lst(elems)) => {
                 let elems = elems
                     .iter()
                     .map(|elem| self.collect(elem, binds))
                     .collect::<Result<Vec<_>, Error>>()?;
-                curios_core::Term::prim(curios_core::Prim::Arr(elems))
+                curios_core::Term::prim(curios_core::Prim::Lst(elems))
             }
             // A `let`/`match` sub-expression hoists its bound-expression /
             // scrutinee bangs into the enclosing region (this `binds`).
@@ -740,7 +740,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?;
                 self.inductive_rows(head, &um.motive, arms)?
             }
-            Match::Arr(ArrMatch {
+            Match::Lst(LstMatch {
                 head,
                 motive,
                 empty_case,
@@ -750,7 +750,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                 cons_case,
             }) => {
                 let (label, body) = self.motive_parts(motive)?;
-                curios_core::Term::arr_match(
+                curios_core::Term::lst_match(
                     self.collect(head, binds)?,
                     curios_core::Term::metavar(self.context.fresh_metavar()),
                     label,
@@ -1143,37 +1143,37 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::BinConcat(left, right) => {
                 curios_core::Prim::bin_concat([self.term(left)?, self.term(right)?])
             }
-            Prim::ArrType(inner) => curios_core::Prim::arr_type(self.term(inner)?),
-            Prim::Arr(elems) => {
-                curios_core::Prim::Arr(elems.iter().map(|elem| self.term(elem)).collect::<Result<
+            Prim::LstType(inner) => curios_core::Prim::lst_type(self.term(inner)?),
+            Prim::Lst(elems) => {
+                curios_core::Prim::Lst(elems.iter().map(|elem| self.term(elem)).collect::<Result<
                     Vec<_>,
                     Error,
                 >>(
                 )?)
             }
-            Prim::ArrLen(ty, inner) => {
-                curios_core::Prim::arr_len(self.term(ty)?, self.term(inner)?)
+            Prim::LstLen(ty, inner) => {
+                curios_core::Prim::lst_len(self.term(ty)?, self.term(inner)?)
             }
-            Prim::ArrGet(ty, list, index) => {
-                curios_core::Prim::arr_get(self.term(ty)?, self.term(list)?, self.term(index)?)
+            Prim::LstGet(ty, list, index) => {
+                curios_core::Prim::lst_get(self.term(ty)?, self.term(list)?, self.term(index)?)
             }
-            Prim::ArrSlice(ty, list, start, end) => curios_core::Prim::arr_slice(
+            Prim::LstSlice(ty, list, start, end) => curios_core::Prim::lst_slice(
                 self.term(ty)?,
                 self.term(list)?,
                 self.term(start)?,
                 self.term(end)?,
             ),
-            Prim::ArrAppend(ty, list, elem) => {
-                curios_core::Prim::arr_append(self.term(ty)?, self.term(list)?, self.term(elem)?)
+            Prim::LstAppend(ty, list, elem) => {
+                curios_core::Prim::lst_append(self.term(ty)?, self.term(list)?, self.term(elem)?)
             }
-            Prim::ArrConcat(ty, left, right) => {
-                curios_core::Prim::arr_concat(self.term(ty)?, [self.term(left)?, self.term(right)?])
+            Prim::LstConcat(ty, left, right) => {
+                curios_core::Prim::lst_concat(self.term(ty)?, [self.term(left)?, self.term(right)?])
             }
-            Prim::ArrMap(a, b, f, arr) => curios_core::Prim::arr_map(
+            Prim::LstMap(a, b, f, lst) => curios_core::Prim::lst_map(
                 self.term(a)?,
                 self.term(b)?,
                 self.term(f)?,
-                self.term(arr)?,
+                self.term(lst)?,
             ),
             Prim::CellType(inner) => curios_core::Prim::cell_type(self.term(inner)?),
             Prim::Cell(type_, init) => {

@@ -14,7 +14,7 @@ pub fn wire_term(wire_type: &WireType) -> Term {
         WireType::Bln => Prim::BlnType,
         WireType::Bin => Prim::BinType,
         WireType::Io => Prim::IoType,
-        WireType::Arr(element) => Prim::ArrType(wire_term(element)),
+        WireType::Lst(element) => Prim::LstType(wire_term(element)),
     };
 
     Subterm::Prim(prim).into()
@@ -102,17 +102,17 @@ pub enum Prim {
     BinSlice(Term, Term, Term),
     BinAppend(Term, Term),
     BinConcat(Vec<Term>),
-    ArrType(Term),
-    Arr(Vec<Term>),
-    ArrLen(Term, Term),
-    ArrGet(Term, Term, Term),
-    ArrSlice(Term, Term, Term, Term),
-    ArrAppend(Term, Term, Term),
-    ArrConcat(Term, Vec<Term>),
-    // (@A, @B, f : (A) -> B, arr : Arr(A)) -> Arr(B): a structural map. Opaque
+    LstType(Term),
+    Lst(Vec<Term>),
+    LstLen(Term, Term),
+    LstGet(Term, Term, Term),
+    LstSlice(Term, Term, Term, Term),
+    LstAppend(Term, Term, Term),
+    LstConcat(Term, Vec<Term>),
+    // (@A, @B, f : (A) -> B, lst : Lst(A)) -> Lst(B): a structural map. Opaque
     // under reduction on a symbolic operand, so it never unfolds a variable
     // during type-checking. Erases to a single O(n) fill loop.
-    ArrMap(Term, Term, Term, Term),
+    LstMap(Term, Term, Term, Term),
     IoType,
     Io(u32),
     // (a, b) -> Bln: identity of two handles. The one pure operation on `Io` --
@@ -570,77 +570,77 @@ impl Prim {
         Self::BinConcat(operands.into_iter().map(|e| e.into()).collect())
     }
 
-    pub fn arr<I, A>(items: I) -> Self
+    pub fn lst<I, A>(items: I) -> Self
     where
         I: IntoIterator<Item = A>,
         A: Into<Term>,
     {
-        Self::Arr(items.into_iter().map(Into::into).collect())
+        Self::Lst(items.into_iter().map(Into::into).collect())
     }
 
-    pub fn arr_type<T>(elem: T) -> Self
+    pub fn lst_type<T>(elem: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::ArrType(elem.into())
+        Self::LstType(elem.into())
     }
 
-    pub fn arr_len<T, L>(type_: T, list: L) -> Self
+    pub fn lst_len<T, L>(type_: T, list: L) -> Self
     where
         T: Into<Term>,
         L: Into<Term>,
     {
-        Self::ArrLen(type_.into(), list.into())
+        Self::LstLen(type_.into(), list.into())
     }
 
-    pub fn arr_get<T, L, I>(type_: T, list: L, index: I) -> Self
+    pub fn lst_get<T, L, I>(type_: T, list: L, index: I) -> Self
     where
         T: Into<Term>,
         L: Into<Term>,
         I: Into<Term>,
     {
-        Self::ArrGet(type_.into(), list.into(), index.into())
+        Self::LstGet(type_.into(), list.into(), index.into())
     }
 
-    pub fn arr_slice<T, L, S, E>(type_: T, list: L, start: S, end: E) -> Self
+    pub fn lst_slice<T, L, S, E>(type_: T, list: L, start: S, end: E) -> Self
     where
         T: Into<Term>,
         L: Into<Term>,
         S: Into<Term>,
         E: Into<Term>,
     {
-        Self::ArrSlice(type_.into(), list.into(), start.into(), end.into())
+        Self::LstSlice(type_.into(), list.into(), start.into(), end.into())
     }
 
-    pub fn arr_append<T, L, E>(type_: T, list: L, elem: E) -> Self
+    pub fn lst_append<T, L, E>(type_: T, list: L, elem: E) -> Self
     where
         T: Into<Term>,
         L: Into<Term>,
         E: Into<Term>,
     {
-        Self::ArrAppend(type_.into(), list.into(), elem.into())
+        Self::LstAppend(type_.into(), list.into(), elem.into())
     }
 
-    pub fn arr_concat<T, O>(type_: T, operands: O) -> Self
+    pub fn lst_concat<T, O>(type_: T, operands: O) -> Self
     where
         T: Into<Term>,
         O: IntoIterator,
         O::Item: Into<Term>,
     {
-        Self::ArrConcat(
+        Self::LstConcat(
             type_.into(),
             operands.into_iter().map(|e| e.into()).collect(),
         )
     }
 
-    pub fn arr_map<A, B, F, R>(a: A, b: B, f: F, arr: R) -> Self
+    pub fn lst_map<A, B, F, R>(a: A, b: B, f: F, lst: R) -> Self
     where
         A: Into<Term>,
         B: Into<Term>,
         F: Into<Term>,
         R: Into<Term>,
     {
-        Self::ArrMap(a.into(), b.into(), f.into(), arr.into())
+        Self::LstMap(a.into(), b.into(), f.into(), lst.into())
     }
 
     pub fn cell_type<T>(elem: T) -> Self
@@ -713,7 +713,7 @@ impl Prim {
             | Prim::FltTrunc(t)
             | Prim::FltNearest(t)
             | Prim::BinLen(t)
-            | Prim::ArrType(t) => visit(t),
+            | Prim::LstType(t) => visit(t),
 
             Prim::IoEql(a, b)
             | Prim::NatEql(a, b)
@@ -769,19 +769,19 @@ impl Prim {
             | Prim::BinEql(a, b)
             | Prim::BinGet(a, b)
             | Prim::BinAppend(a, b)
-            | Prim::ArrLen(a, b)
+            | Prim::LstLen(a, b)
             | Prim::IoExit(a, b) => {
                 visit(a);
                 visit(b);
             }
 
-            Prim::BinSlice(a, b, c) | Prim::ArrGet(a, b, c) | Prim::ArrAppend(a, b, c) => {
+            Prim::BinSlice(a, b, c) | Prim::LstGet(a, b, c) | Prim::LstAppend(a, b, c) => {
                 visit(a);
                 visit(b);
                 visit(c);
             }
 
-            Prim::ArrSlice(a, b, c, d) | Prim::ArrMap(a, b, c, d) => {
+            Prim::LstSlice(a, b, c, d) | Prim::LstMap(a, b, c, d) => {
                 visit(a);
                 visit(b);
                 visit(c);
@@ -790,8 +790,8 @@ impl Prim {
 
             Prim::Foreign(_, args) => args.iter().for_each(&mut *visit),
 
-            Prim::BinConcat(terms) | Prim::Arr(terms) => terms.iter().for_each(&mut *visit),
-            Prim::ArrConcat(ty, terms) => {
+            Prim::BinConcat(terms) | Prim::Lst(terms) => terms.iter().for_each(&mut *visit),
+            Prim::LstConcat(ty, terms) => {
                 visit(ty);
                 terms.iter().for_each(&mut *visit);
             }
@@ -829,7 +829,7 @@ impl Prim {
     }
 
     // Recurse into every operand `Term` so a construction nested inside a primitive
-    // (e.g. `Arr(Str)`'s element type) still contributes its head name. Prims own no
+    // (e.g. `Lst(Str)`'s element type) still contributes its head name. Prims own no
     // head names of their own.
     pub fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
         self.for_each_operand(&mut |term| term.collect_construction_names(names));
@@ -930,34 +930,34 @@ impl Prim {
             Prim::BinConcat(operands) => {
                 Prim::BinConcat(operands.iter().map(|e| visit.visit_subterm(e)).collect())
             }
-            Prim::ArrType(elem) => Prim::ArrType(visit.visit_subterm(elem)),
-            Prim::Arr(elems) => Prim::Arr(elems.iter().map(|e| visit.visit_subterm(e)).collect()),
-            Prim::ArrLen(ty, list) => traverse_binary(ty, list, visit, Prim::ArrLen),
-            Prim::ArrGet(ty, list, index) => Prim::ArrGet(
+            Prim::LstType(elem) => Prim::LstType(visit.visit_subterm(elem)),
+            Prim::Lst(elems) => Prim::Lst(elems.iter().map(|e| visit.visit_subterm(e)).collect()),
+            Prim::LstLen(ty, list) => traverse_binary(ty, list, visit, Prim::LstLen),
+            Prim::LstGet(ty, list, index) => Prim::LstGet(
                 visit.visit_subterm(ty),
                 visit.visit_subterm(list),
                 visit.visit_subterm(index),
             ),
-            Prim::ArrSlice(ty, list, start, end) => Prim::ArrSlice(
+            Prim::LstSlice(ty, list, start, end) => Prim::LstSlice(
                 visit.visit_subterm(ty),
                 visit.visit_subterm(list),
                 visit.visit_subterm(start),
                 visit.visit_subterm(end),
             ),
-            Prim::ArrAppend(ty, list, elem) => Prim::ArrAppend(
+            Prim::LstAppend(ty, list, elem) => Prim::LstAppend(
                 visit.visit_subterm(ty),
                 visit.visit_subterm(list),
                 visit.visit_subterm(elem),
             ),
-            Prim::ArrConcat(ty, operands) => Prim::ArrConcat(
+            Prim::LstConcat(ty, operands) => Prim::LstConcat(
                 visit.visit_subterm(ty),
                 operands.iter().map(|e| visit.visit_subterm(e)).collect(),
             ),
-            Prim::ArrMap(a, b, f, arr) => Prim::ArrMap(
+            Prim::LstMap(a, b, f, lst) => Prim::LstMap(
                 visit.visit_subterm(a),
                 visit.visit_subterm(b),
                 visit.visit_subterm(f),
-                visit.visit_subterm(arr),
+                visit.visit_subterm(lst),
             ),
             Prim::IoType => Prim::IoType,
             Prim::Io(token) => Prim::Io(*token),

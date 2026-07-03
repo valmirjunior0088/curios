@@ -1,5 +1,5 @@
 //! The fixed runtime heap-type shapes every emitted module declares: the data
-//! representations (`Flt`, `Bin`, `Arr`, `Cell`) whose structure is
+//! representations (`Flt`, `Bin`, `Lst`, `Cell`) whose structure is
 //! program-independent, unlike the per-program families (`tpl/N`, closures,
 //! environments, `func/N`) the emitter derives from the module. Kept in one
 //! file, exported at the crate root, so each shape has a single spelling —
@@ -11,8 +11,8 @@
 //!
 //! # The rope representation
 //!
-//! `Bin` and `Arr` are *ropes*: a three-shape tagged union behind a non-final
-//! struct base (`$bin` / `$arr`, fields `tag` + `len`). A `leaf` holds a flat
+//! `Bin` and `Lst` are *ropes*: a three-shape tagged union behind a non-final
+//! struct base (`$bin` / `$lst`, fields `tag` + `len`). A `leaf` holds a flat
 //! payload array (`$bytes` / `$elems`); a `node` holds two children plus a
 //! memoization `cache`; a `sub` is a window — a `base` rope plus an `offset`.
 //! The cost model this buys:
@@ -78,7 +78,7 @@ pub fn bytes_sub_type() -> SubType {
     }
 }
 
-/// `$elems` — an `Arr` rope's flat element payload, and the host-boundary
+/// `$elems` — an `Lst` rope's flat element payload, and the host-boundary
 /// shape: `array (mut <top>)`. The element field stays mutable regardless of
 /// cyclicity: payloads are built with `array.new_default` + per-element
 /// `array.set`, so it must be writable.
@@ -112,7 +112,7 @@ fn ref_field(type_name: TypeName, is_nullable: bool, mutability: Mutability) -> 
     }
 }
 
-/// A rope base (`$bin` / `$arr`) — the non-final struct every carrier ref is
+/// A rope base (`$bin` / `$lst`) — the non-final struct every carrier ref is
 /// cast to: `struct (field $tag (i32)) (field $len (i32))`. `tag` is 0 for a
 /// leaf, 1 for a node, 2 for a sub; `len` is the carrier's element count, so
 /// `len` and the tag dispatch never force.
@@ -127,7 +127,7 @@ pub fn rope_base_sub_type(tag_field: FieldName, len_field: FieldName) -> SubType
     }
 }
 
-/// A rope leaf (`$bin/leaf` / `$arr/leaf`) — final, subtype of the base: adds
+/// A rope leaf (`$bin/leaf` / `$lst/leaf`) — final, subtype of the base: adds
 /// the flat payload (`$bytes` / `$elems`).
 pub fn rope_leaf_sub_type(
     base_type: TypeName,
@@ -150,7 +150,7 @@ pub fn rope_leaf_sub_type(
     }
 }
 
-/// A rope node (`$bin/node` / `$arr/node`) — final, subtype of the base: adds
+/// A rope node (`$bin/node` / `$lst/node`) — final, subtype of the base: adds
 /// two children and the memoization `cache`. All three are mutable and
 /// nullable: forcing writes the flat payload into `cache` and nulls the
 /// children, releasing the tree while the memo stays live.
@@ -179,7 +179,7 @@ pub fn rope_node_sub_type(
     }
 }
 
-/// A rope sub (`$bin/sub` / `$arr/sub`) — final, subtype of the base: a
+/// A rope sub (`$bin/sub` / `$lst/sub`) — final, subtype of the base: a
 /// window into a `base` rope starting at `offset`. All fields are immutable;
 /// the invariant that makes windows read-through is *representational*: a
 /// `sub`'s base is always flat-available (a leaf, or a node whose `cache` is

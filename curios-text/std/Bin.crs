@@ -1,6 +1,6 @@
 pub use /sys/{Bin};
 pub use /sys/Bin/{len, eql, slice, append, concat};
-use /std/{Arr, Nat, Bln, Option, Eq};
+use /std/{Lst, Nat, Bln, Option, Eq};
 
 pub let at(b : Bin, i : Nat, ok : Nat/Lt(i, len(b))) -> Nat =
     /sys/Bin/get(b, i);
@@ -14,8 +14,8 @@ pub let get(b : Bin, i : Nat) -> Option(Nat) =
 pub let cons(head : Nat, tail : Bin) -> Bin =
     concat(append(\\, head), tail);
 
-pub let flatten(parts : Arr(Bin)) -> Bin =
-    Arr/fold(parts, \\, (b, acc) => concat(acc, b));
+pub let flatten(parts : Lst(Bin)) -> Bin =
+    Lst/fold(parts, \\, (b, acc) => concat(acc, b));
 
 pub let fold(@A : Type, b : Bin, init : A, f : (Nat, A) -> A) -> A =
     let n = len(b);
@@ -43,6 +43,6 @@ pub let find_index(b : Bin, pred : (Nat) -> Bln) -> Option(Nat) =
             end);
     r.1;
 
-pub let join(sep : Bin, parts : Arr(Bin)) -> Bin =
-    Arr/balanced(Arr/len(parts), \\, (i) => Option/unwrap_or(Arr/get(parts, i), \\),
+pub let join(sep : Bin, parts : Lst(Bin)) -> Bin =
+    Lst/balanced(Lst/len(parts), \\, (i) => Option/unwrap_or(Lst/get(parts, i), \\),
         (l, r) => concat(concat(l, sep), r));

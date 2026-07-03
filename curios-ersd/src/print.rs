@@ -138,20 +138,20 @@ fn print_pure_prim<'a>(prim: &'a PurePrim) -> Printer<'a> {
             pure("Bin.concat "),
             sep_flat(operands.iter().map(|t| print_term(t)), || pure(", ")),
         ]),
-        PurePrim::Arr(elems) => flat([
+        PurePrim::Lst(elems) => flat([
             pure("["),
             sep_flat(elems.iter().map(|t| print_term(t)), || pure(", ")),
             pure("]"),
         ]),
-        PurePrim::ArrLen(t) => print_unary("Arr.len", t),
-        PurePrim::ArrGet(list, index) => print_binary("Arr.get", list, index),
-        PurePrim::ArrSlice(list, start, end) => print_ternary("Arr.slice", list, start, end),
-        PurePrim::ArrAppend(list, elem) => print_binary("Arr.append", list, elem),
-        PurePrim::ArrConcat(operands) => flat([
-            pure("Arr.concat "),
+        PurePrim::LstLen(t) => print_unary("Lst.len", t),
+        PurePrim::LstGet(list, index) => print_binary("Lst.get", list, index),
+        PurePrim::LstSlice(list, start, end) => print_ternary("Lst.slice", list, start, end),
+        PurePrim::LstAppend(list, elem) => print_binary("Lst.append", list, elem),
+        PurePrim::LstConcat(operands) => flat([
+            pure("Lst.concat "),
             sep_flat(operands.iter().map(|t| print_term(t)), || pure(", ")),
         ]),
-        PurePrim::ArrMap(src, f) => print_binary("Arr.map", src, f),
+        PurePrim::LstMap(src, f) => print_binary("Lst.map", src, f),
         PurePrim::Io(token) => pure(format!("Io({token})")),
         PurePrim::IoEql(left, right) => print_binary("Io.eql", left, right),
     }

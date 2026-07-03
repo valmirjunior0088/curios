@@ -417,7 +417,7 @@ fn elaborate_apply(
 /// lambda whose expected *domain*, reduces to one. (A lambda only needs its domain
 /// known: the body, which may project the parameter, can't be checked against an
 /// unknown domain; its codomain may stay a metavar. An array literal borrows its
-/// element type from `expected`, so it needs the expected head — `Arr _` — to be
+/// element type from `expected`, so it needs the expected head — `Lst _` — to be
 /// known.) Synthesizable forms return `false`: they have a turnaround of their own
 /// and must run eagerly so their solutions feed the result unification.
 fn blocked_on_metavar(
@@ -428,7 +428,7 @@ fn blocked_on_metavar(
     expected_ground: bool,
 ) -> Result<bool, Error> {
     let is_lambda = matches!(&**arg, Subterm::Func(_));
-    let is_arr = matches!(&**arg, Subterm::Prim(Prim::Arr(_)));
+    let is_arr = matches!(&**arg, Subterm::Prim(Prim::Lst(_)));
     let is_tuple = matches!(&**arg, Subterm::Tuple(_));
     if !is_lambda && !is_arr && !is_tuple {
         return Ok(false);
@@ -1698,14 +1698,14 @@ fn check_args_against<B: Bound>(
 /// Implicit-eta on the check turnaround. A reference whose type leads with an
 /// implicit binder, checked against a concrete *explicit* function type, has its
 /// leading implicits inserted as metavariables and is eta-expanded over the
-/// remaining explicit binders — so a bare `Arr/concat` is accepted where
-/// `(Arr B, Arr B) -> Arr B` is expected, instead of demanding
+/// remaining explicit binders — so a bare `Lst/concat` is accepted where
+/// `(Lst B, Lst B) -> Lst B` is expected, instead of demanding
 /// `(l, r) => concat(l, r)`. Implicit insertion is otherwise an application-site
 /// mechanism (`elaborate_apply`); this is the one extension into value position.
 /// Producing a full lambda (rather than a partial application) keeps erase/CPS
 /// untouched: the output is an ordinary closure over a saturated call.
 ///
-/// Fires only for `Var`/`Proj` heads against a ground explicit-arrow expectation;
+/// Fires only for `Var`/`Proj` heads against a ground explicit-lstow expectation;
 /// every other shape returns the term unchanged for the ordinary `expect`. The
 /// expected-not-implicit gate preserves polymorphic-value assignment
 /// (`let f : (@z : A) -> … = …` keeps its implicit). It is purely additive: when

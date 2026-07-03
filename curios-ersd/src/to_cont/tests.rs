@@ -56,7 +56,7 @@ fn lowers_arr_into_main_region_value() {
         tail: Subterm::Let(Let {
             name: "b".into(),
             body: Subterm::Prim(Prim::Pure(PurePrim::Nat(2))).into(),
-            tail: Subterm::Prim(Prim::Pure(PurePrim::Arr(vec![
+            tail: Subterm::Prim(Prim::Pure(PurePrim::Lst(vec![
                 Subterm::Name(Name::from("a")).into(),
                 Subterm::Name(Name::from("b")).into(),
             ])))
@@ -70,13 +70,13 @@ fn lowers_arr_into_main_region_value() {
 
     assert!(func.region.values.iter().any(|(_, value)| matches!(
         value,
-        Value::Pure(Data::Arr(elems)) if elems.len() == 2
+        Value::Pure(Data::Lst(elems)) if elems.len() == 2
     )));
 }
 
 #[test]
 fn lowers_arr_with_apply_element_through_join_block() {
-    let term = Subterm::Prim(Prim::Pure(PurePrim::Arr(vec![
+    let term = Subterm::Prim(Prim::Pure(PurePrim::Lst(vec![
         Subterm::Apply(Apply {
             head: Subterm::Func(Func {
                 captures: vec![],
@@ -99,7 +99,7 @@ fn lowers_arr_with_apply_element_through_join_block() {
 
     assert!(block.region.values.iter().any(|(_, value)| matches!(
         value,
-        Value::Pure(Data::Arr(elems)) if elems.len() == 2
+        Value::Pure(Data::Lst(elems)) if elems.len() == 2
     )));
 }
 
@@ -185,7 +185,7 @@ fn rejects_mutually_referential_tuples() {
     // `rec x = (y, 1) and y = (2, x)`: genuinely self-referential data. Tuples are lowered as
     // computed items now (not prealloc'd shells), so the x→y→x cycle is caught by
     // `rec_computed_order` and rejected — cyclic recursion is confined to closures, which is
-    // what keeps `tpl`/`arr` fields immutable.
+    // what keeps `tpl`/`lst` fields immutable.
     let term = Subterm::Rec(Rec {
         names: vec!["x".into(), "y".into()],
         items: vec![

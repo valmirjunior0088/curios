@@ -1,4 +1,4 @@
-//! The free-monoid destructors. `Nat`, `Bin`, and `Arr` are the native primitives
+//! The free-monoid destructors. `Nat`, `Bin`, and `Lst` are the native primitives
 //! that are free monoids on their generators (the unary unit, bytes, elements).
 //! Their structural eliminator (`Cases::FreeMonoid`) reduces by a one-step decode —
 //! peel the empty identity or a single leading generator off the scrutinee — and
@@ -7,12 +7,12 @@
 //! representation again. The eliminator-side analogue of `spine::peel_prim`: a new
 //! free-monoid carrier is one `FreeMonoid` variant and its `uncons` arm.
 //!
-//! For `Bin` and `Arr`, the same front decode also feeds the operation level:
-//! `Bin/get`/`Bin/slice` and `Arr/get`/`Arr/slice` peel one generator at a time via
+//! For `Bin` and `Lst`, the same front decode also feeds the operation level:
+//! `Bin/get`/`Bin/slice` and `Lst/get`/`Lst/slice` peel one generator at a time via
 //! `peel_first_byte`/`peel_first_elem`. Each carrier's two destructors share one
 //! structural traversal (`peel_front`, `peel_front_arr`); `Bin` reflects the peeled
 //! head two ways — a `Nat` byte for the eliminator, a one-byte `Bin` chunk for the
-//! operations — while `Arr`'s head is the element term for both.
+//! operations — while `Lst`'s head is the element term for both.
 
 use {
     super::{Nat, Prim, Subterm, Term},
@@ -22,7 +22,7 @@ use {
 /// The one-step decode of a free-monoid scrutinee — a carrier's signature functor
 /// made concrete. `Empty` is the identity form (`\\`, `[]`, `0`); `Cons` peels a
 /// generator: its `head` is the payload reflected into the element type — a `Nat`
-/// byte for `Bin`, the element term itself for `Arr`, and `None` for `Nat`, whose
+/// byte for `Bin`, the element term itself for `Lst`, and `None` for `Nat`, whose
 /// unary successor carries no payload — over the symbolic tail the induction
 /// hypothesis recurses on; `Stuck` is a scrutinee exposing neither form (a variable,
 /// a non-cons symbolic concatenation), where the eliminator rebuilds.
@@ -33,8 +33,8 @@ pub enum Layer {
 }
 
 /// A native primitive that is the free monoid on a generator set, named by its
-/// generator: `Unary` is `Nat` on the unit, `Bin` is `Bin` on its bytes, `Arr` is
-/// `Arr` on its elements. A closed set — the value-level twin of the `Carrier` the
+/// generator: `Unary` is `Nat` on the unit, `Bin` is `Bin` on its bytes, `Lst` is
+/// `Lst` on its elements. A closed set — the value-level twin of the `Carrier` the
 /// eliminator already carries (`reduce` maps one to the other). `uncons` is the only
 /// seam the structural eliminator needs; the recursion scheme around it is
 /// carrier-generic and lives in `reduce`.
@@ -46,7 +46,7 @@ pub enum FreeMonoid {
     /// eliminator as a `Nat`.
     Bin,
     /// The free monoid on its elements. Its generator is the element term itself.
-    Arr,
+    Lst,
 }
 
 impl FreeMonoid {
@@ -56,7 +56,7 @@ impl FreeMonoid {
         match self {
             FreeMonoid::Unary => Self::uncons_unary(scrutinee),
             FreeMonoid::Bin => Self::uncons_bin(scrutinee),
-            FreeMonoid::Arr => Self::uncons_arr(scrutinee),
+            FreeMonoid::Lst => Self::uncons_arr(scrutinee),
         }
     }
 
@@ -100,13 +100,13 @@ impl FreeMonoid {
         let term = scrutinee.into();
 
         match peel_front_arr(&term) {
-            ArrFront::Empty => Layer::Empty,
+            LstFront::Empty => Layer::Empty,
             // The peeled element is the eliminator's head generator directly.
-            ArrFront::Cons { head, tail } => Layer::Cons {
+            LstFront::Cons { head, tail } => Layer::Cons {
                 head: Some(head),
                 tail,
             },
-            ArrFront::Opaque => Layer::Stuck(Term::unwrap_or_clone(term)),
+            LstFront::Opaque => Layer::Stuck(Term::unwrap_or_clone(term)),
         }
     }
 }
@@ -218,40 +218,40 @@ pub fn peel_first_byte(bin: &Term) -> Option<(Term, Term)> {
     }
 }
 
-/// One step of the `Arr` front decode — the element-typed analogue of [`Front`].
+/// One step of the `Lst` front decode — the element-typed analogue of [`Front`].
 /// `Empty` is the identity (`[]`); `Cons` peels the leading element and the residual
 /// tail; `Opaque` is a value exposing no leading element (a variable, a slice, an
-/// append). Unlike `Bin`, the head needs no reflection — an `Arr` generator IS its
+/// append). Unlike `Bin`, the head needs no reflection — an `Lst` generator IS its
 /// element term, used directly by both the eliminator and the operations.
-enum ArrFront {
+enum LstFront {
     Empty,
     Cons { head: Term, tail: Term },
     Opaque,
 }
 
-/// The structural traversal shared by both `Arr` destructors ([`FreeMonoid::uncons`]
-/// for the eliminator, [`peel_first_elem`] for `Arr/get`/`Arr/slice`) — the
+/// The structural traversal shared by both `Lst` destructors ([`FreeMonoid::uncons`]
+/// for the eliminator, [`peel_first_elem`] for `Lst/get`/`Lst/slice`) — the
 /// element-typed twin of [`peel_front`]. Peel the leading element off an
 /// already-reduced value: a literal run yields its first element; a symbolic cons
 /// `concat([h], t)` yields `h` off its leading non-empty literal segment, the
-/// residual elements rejoining the rest exactly as `ArrConcat` collapses them. The
+/// residual elements rejoining the rest exactly as `LstConcat` collapses them. The
 /// empty array is `Empty`; anything else (a variable, a slice, an append) is `Opaque`.
-fn peel_front_arr(arr: &Term) -> ArrFront {
-    match &**arr {
-        Subterm::Prim(Prim::Arr(elems)) => match elems.split_first() {
-            None => ArrFront::Empty,
-            Some((head, rest)) => ArrFront::Cons {
+fn peel_front_arr(lst: &Term) -> LstFront {
+    match &**lst {
+        Subterm::Prim(Prim::Lst(elems)) => match elems.split_first() {
+            None => LstFront::Empty,
+            Some((head, rest)) => LstFront::Cons {
                 head: head.clone(),
-                tail: Subterm::Prim(Prim::Arr(rest.to_vec())).into(),
+                tail: Subterm::Prim(Prim::Lst(rest.to_vec())).into(),
             },
         },
         // A symbolic cons: decode the head off the leading non-empty literal segment;
         // its remaining elements stay ahead of the rest.
-        Subterm::Prim(Prim::ArrConcat(elem, segments)) => match segments.split_first() {
+        Subterm::Prim(Prim::LstConcat(elem, segments)) => match segments.split_first() {
             Some((first, rest)) if is_nonempty_arr_literal(first) => {
                 let mut lead = match &**first {
-                    Subterm::Prim(Prim::Arr(elems)) => elems.clone(),
-                    _ => unreachable!("guard checked a non-empty `Arr` literal lead segment"),
+                    Subterm::Prim(Prim::Lst(elems)) => elems.clone(),
+                    _ => unreachable!("guard checked a non-empty `Lst` literal lead segment"),
                 };
 
                 let head = lead.remove(0);
@@ -259,33 +259,33 @@ fn peel_front_arr(arr: &Term) -> ArrFront {
                 let mut segments = Vec::with_capacity(rest.len() + 1);
 
                 if !lead.is_empty() {
-                    segments.push(Subterm::Prim(Prim::Arr(lead)).into());
+                    segments.push(Subterm::Prim(Prim::Lst(lead)).into());
                 }
 
                 segments.extend(rest.iter().cloned());
 
                 let tail = match segments.len() {
-                    0 => Subterm::Prim(Prim::Arr(vec![])).into(),
+                    0 => Subterm::Prim(Prim::Lst(vec![])).into(),
                     1 => segments.into_iter().next().unwrap(),
-                    _ => Subterm::Prim(Prim::ArrConcat(elem.clone(), segments)).into(),
+                    _ => Subterm::Prim(Prim::LstConcat(elem.clone(), segments)).into(),
                 };
-                ArrFront::Cons { head, tail }
+                LstFront::Cons { head, tail }
             }
-            _ => ArrFront::Opaque,
+            _ => LstFront::Opaque,
         },
-        _ => ArrFront::Opaque,
+        _ => LstFront::Opaque,
     }
 }
 
-/// Split the first element off a reduced `Arr` value, returning the head element and
-/// the residual tail — the element-typed twin of [`peel_first_byte`]. Lets `Arr/get`
-/// and `Arr/slice` peel a symbolic cons one element at a time, exactly as `Bin/get`/
+/// Split the first element off a reduced `Lst` value, returning the head element and
+/// the residual tail — the element-typed twin of [`peel_first_byte`]. Lets `Lst/get`
+/// and `Lst/slice` peel a symbolic cons one element at a time, exactly as `Bin/get`/
 /// `Bin/slice` walk a byte at a time. `None` for the empty array or an opaque
 /// symbolic value, where no first element is statically exposed.
-pub fn peel_first_elem(arr: &Term) -> Option<(Term, Term)> {
-    match peel_front_arr(arr) {
-        ArrFront::Cons { head, tail } => Some((head, tail)),
-        ArrFront::Empty | ArrFront::Opaque => None,
+pub fn peel_first_elem(lst: &Term) -> Option<(Term, Term)> {
+    match peel_front_arr(lst) {
+        LstFront::Cons { head, tail } => Some((head, tail)),
+        LstFront::Empty | LstFront::Opaque => None,
     }
 }
 
@@ -295,15 +295,15 @@ fn is_empty_bin(term: &Term) -> bool {
     matches!(&**term, Subterm::Prim(Prim::Bin(bytes)) if bytes.is_empty())
 }
 
-// `cons` injects an element at the front as the singleton literal `[h]`; the `Arr`
+// `cons` injects an element at the front as the singleton literal `[h]`; the `Lst`
 // eliminator recognizes a non-empty literal lead segment to decode a symbolic cons.
 fn is_nonempty_arr_literal(term: &Term) -> bool {
-    matches!(&**term, Subterm::Prim(Prim::Arr(elems)) if !elems.is_empty())
+    matches!(&**term, Subterm::Prim(Prim::Lst(elems)) if !elems.is_empty())
 }
 
 /// The free monoid's normalising *product* — the constructor dual of
 /// [`FreeMonoid::uncons`] (the destructor) — shared verbatim by `BinConcat` and
-/// `ArrConcat` reduction. Collapse a concatenation's already-reduced `operands` to
+/// `LstConcat` reduction. Collapse a concatenation's already-reduced `operands` to
 /// a normal form under the unit and associativity laws: drop the empty identity
 /// (`\\`, `[]`), merge adjacent literal runs into one literal, and collapse a lone
 /// surviving operand to itself (an `n`-ary concat of one *is* that one). `literal`

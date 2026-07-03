@@ -20,8 +20,8 @@
 //!   sub's window without forcing (the invariant above makes that O(1)), or
 //!   via `force` on a node.
 //!
-//! The `arr/bin` variants are the host boundary's deep forms: an `Arr(Bin)` /
-//! `Arr(Io)` wire value carries `Bin`-shaped *elements*, which the host lifts
+//! The `lst/bin` variants are the host boundary's deep forms: an `Lst(Bin)` /
+//! `Lst(Io)` wire value carries `Bin`-shaped *elements*, which the host lifts
 //! and lowers as raw `$bytes` — so params force each element too, and results
 //! wrap each element back.
 
@@ -679,7 +679,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// ```
     ///
     /// `Bin` elements are packed bytes (`array.get_u`, an `i32` result);
-    /// `Arr` elements are the top type (`array.get`).
+    /// `Lst` elements are the top type (`array.get`).
     pub fn emit_read_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
         let packed = rope.payload == self.table.bytes_type();
 
@@ -790,7 +790,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$arr/bin/force (ref $arr) -> (ref $elems)`: force the outer rope, then
+    /// `$lst/bin/force (ref $lst) -> (ref $elems)`: force the outer rope, then
     /// force every element through `$bin/force` into a *fresh* payload (the
     /// shallow force of a leaf answers its live payload, which must not be
     /// element-rewritten in place).
@@ -818,7 +818,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let instrs = vec![
             get(&r),
             Instr::Call {
-                func_name: self.table.arr_force_func(),
+                func_name: self.table.lst_force_func(),
             },
             set(&flat),
             get(&flat),
@@ -872,7 +872,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
         self.add_helper(
             func_name,
-            vec![(r, concrete_val(self.table.arr_type(), false))],
+            vec![(r, concrete_val(self.table.lst_type(), false))],
             concrete_val(elems, false),
             locals,
             instrs,
@@ -902,13 +902,13 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$arr/bin/wrap (ref $elems) -> (ref $arr)`: wrap each raw `$bytes`
+    /// `$lst/bin/wrap (ref $elems) -> (ref $lst)`: wrap each raw `$bytes`
     /// element into a `$bin/leaf` in place — the host-built array is fresh,
-    /// nothing else aliases it — then the outer array into an `$arr/leaf`.
+    /// nothing else aliases it — then the outer array into an `$lst/leaf`.
     pub fn emit_arr_bin_wrap_func(&mut self, func_name: FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
-        let arr = self.table.arr_rope();
+        let lst = self.table.lst_rope();
 
         let e = LocalName::from("e");
         let idx = LocalName::from("idx");
@@ -976,14 +976,14 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             get(&count),
             get(&e),
             Instr::StructNew {
-                type_name: arr.leaf.clone(),
+                type_name: lst.leaf.clone(),
             },
         ];
 
         self.add_helper(
             func_name,
             vec![(e, concrete_val(elems, false))],
-            concrete_val(arr.base.clone(), false),
+            concrete_val(lst.base.clone(), false),
             locals,
             instrs,
         );

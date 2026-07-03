@@ -1,4 +1,4 @@
-use /std/{Io, Bin, Nat, Bln, Arr, Option, Result, Cell, Monad};
+use /std/{Io, Bin, Nat, Bln, Lst, Option, Result, Cell, Monad};
 
 -- Public because `Task/step` carries a `Pause` payload: a pub inductive's
 -- constructors are its interface, so everything they mention must be pub too.
@@ -128,7 +128,7 @@ pub let drain(read : (Nat) -> Task(Io/Read)) -> Task(Bin) =
     go(\\);
 
 pub induct Fut(A : Type) : Type
-| pending(Arr(Waker))
+| pending(Lst(Waker))
 | ready(A)
 end
 
@@ -136,10 +136,10 @@ pub let Future(A : Type) -> Type =
     Cell(Fut(A));
 
 pub let new_future(@A : Type) -> Future(A) =
-    Cell/new(Fut/pending(@A, Arr/nil(@Waker)));
+    Cell/new(Fut/pending(@A, Lst/nil(@Waker)));
 
-let wake_all(ws : Arr(Waker)) -> {} =
-    Arr/each(ws, (w) => w());
+let wake_all(ws : Lst(Waker)) -> {} =
+    Lst/each(ws, (w) => w());
 
 pub let fulfill(@A : Type, f : Future(A), a : A) -> {} =
     match Cell/get(f) : {}
@@ -153,13 +153,13 @@ pub rec await(@A : Type, f : Future(A)) -> Task(A) =
     match Cell/get(f) : Task(A)
     | ready(a) => pure(a)
     | pending(ws) =>
-        bind(park((w) => Cell/set(f, Fut/pending(@A, Arr/cons(w, ws)))), (_) => await(f))
+        bind(park((w) => Cell/set(f, Fut/pending(@A, Lst/cons(w, ws)))), (_) => await(f))
     end;
 
 record Job : Type {
     resume : Fiber,
     token : Token,
-    fins : Arr(Guard)
+    fins : Lst(Guard)
 }
 
 let Slot : Type =
@@ -170,32 +170,32 @@ record Parked : Type {
     interest : Nat,
     resume : Fiber,
     token : Token,
-    fins : Arr(Guard)
+    fins : Lst(Guard)
 }
 
-let run_fins(gs : Arr(Guard)) -> {} =
-    Arr/each(gs, (g) => g.1());
+let run_fins(gs : Lst(Guard)) -> {} =
+    Lst/each(gs, (g) => g.1());
 
-let release_guard(h : Io, gs : Arr(Guard)) -> Arr(Guard) =
-    rec each(rest : Arr(Guard)) -> Arr(Guard) =
-        match rest : Arr(Guard)
-        | [] => Arr/nil(@Guard)
+let release_guard(h : Io, gs : Lst(Guard)) -> Lst(Guard) =
+    rec each(rest : Lst(Guard)) -> Lst(Guard) =
+        match rest : Lst(Guard)
+        | [] => Lst/nil(@Guard)
         | g, ..more =>
-            match /sys/Io/eql(g.0, h) : Arr(Guard)
+            match /sys/Io/eql(g.0, h) : Lst(Guard)
             | true => let _ = g.1(); more
-            | false => Arr/cons(g, each(more))
+            | false => Lst/cons(g, each(more))
             end
         end;
     each(gs);
 
-let drain_jobs(js : Arr(Job)) -> {} =
-    Arr/each(js, (j) => run_fins(j.fins));
+let drain_jobs(js : Lst(Job)) -> {} =
+    Lst/each(js, (j) => run_fins(j.fins));
 
-let drain_parked(ps : Arr(Parked)) -> {} =
-    Arr/each(ps, (p) => run_fins(p.fins));
+let drain_parked(ps : Lst(Parked)) -> {} =
+    Lst/each(ps, (p) => run_fins(p.fins));
 
-let drain_slots(ss : Arr(Slot)) -> {} =
-    rec each(rest : Arr(Slot)) -> {} =
+let drain_slots(ss : Lst(Slot)) -> {} =
+    rec each(rest : Lst(Slot)) -> {} =
         match rest : {}
         | [] => ()
         | s, ..more =>
@@ -206,17 +206,17 @@ let drain_slots(ss : Arr(Slot)) -> {} =
         end;
     each(ss);
 
-let sweep_parked(ss : Arr(Slot)) -> Arr(Slot) =
-    rec each(rest : Arr(Slot)) -> Arr(Slot) =
-        match rest : Arr(Slot)
-        | [] => Arr/nil(@Slot)
+let sweep_parked(ss : Lst(Slot)) -> Lst(Slot) =
+    rec each(rest : Lst(Slot)) -> Lst(Slot) =
+        match rest : Lst(Slot)
+        | [] => Lst/nil(@Slot)
         | s, ..more =>
-            match Cell/get(s) : Arr(Slot)
+            match Cell/get(s) : Lst(Slot)
             | none() => each(more)
             | some(j) =>
-                match Cell/get(j.token) : Arr(Slot)
+                match Cell/get(j.token) : Lst(Slot)
                 | true => let _ = run_fins(j.fins); let _ = Cell/set(s, Option/none(@Job)); each(more)
-                | false => Arr/cons(s, each(more))
+                | false => Lst/cons(s, each(more))
                 end
             end
         end;
@@ -225,36 +225,36 @@ let sweep_parked(ss : Arr(Slot)) -> Arr(Slot) =
 let is_ready(results : Nat, interest : Nat) -> Bln =
     Nat/and(results, Nat/or(Nat/or(interest, /sys/Io/Poll/err), /sys/Io/Poll/hup)) > 0;
 
-let poll_ready(blocked : Arr(Parked)) -> {Arr(Job), Arr(Parked)} =
-    let handles = Arr/map((p : Parked) => p.handle, blocked);
-    let events = Arr/map((p : Parked) => p.interest, blocked);
+let poll_ready(blocked : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
+    let handles = Lst/map((p : Parked) => p.handle, blocked);
+    let events = Lst/map((p : Parked) => p.interest, blocked);
     let results = /sys/Io/poll(handles, events, -1);
-    rec walk(rest : Arr(Parked), i : Nat, woken : Arr(Job), still : Arr(Parked)) -> {Arr(Job), Arr(Parked)} =
-        match rest : {Arr(Job), Arr(Parked)}
+    rec walk(rest : Lst(Parked), i : Nat, woken : Lst(Job), still : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
+        match rest : {Lst(Job), Lst(Parked)}
         | [] => (woken, still)
         | p, ..tail =>
-            match Cell/get(p.token) : {Arr(Job), Arr(Parked)}
+            match Cell/get(p.token) : {Lst(Job), Lst(Parked)}
             | true => let _ = run_fins(p.fins); walk(tail, i + 1, woken, still)
             | false =>
-                match is_ready(/sys/Arr/get(results, i), p.interest) : {Arr(Job), Arr(Parked)}
-                | true => walk(tail, i + 1, Arr/cons(Job { resume = p.resume, token = p.token, fins = p.fins }, woken), still)
-                | false => walk(tail, i + 1, woken, Arr/cons(p, still))
+                match is_ready(/sys/Lst/get(results, i), p.interest) : {Lst(Job), Lst(Parked)}
+                | true => walk(tail, i + 1, Lst/cons(Job { resume = p.resume, token = p.token, fins = p.fins }, woken), still)
+                | false => walk(tail, i + 1, woken, Lst/cons(p, still))
                 end
             end
         end;
-    walk(blocked, 0, Arr/nil(@Job), Arr/nil(@Parked));
+    walk(blocked, 0, Lst/nil(@Job), Lst/nil(@Parked));
 
 pub let block_on(@A : Type, root : Task(A)) -> A =
-    let runq : Cell(Arr(Job)) = Cell/new(Arr/nil(@Job));
-    let blocked : Cell(Arr(Parked)) = Cell/new(Arr/nil(@Parked));
-    let parked : Cell(Arr(Slot)) = Cell/new(Arr/nil(@Slot));
+    let runq : Cell(Lst(Job)) = Cell/new(Lst/nil(@Job));
+    let blocked : Cell(Lst(Parked)) = Cell/new(Lst/nil(@Parked));
+    let parked : Cell(Lst(Slot)) = Cell/new(Lst/nil(@Slot));
     let result : Cell(Option(A)) = Cell/new(Option/none(@A));
     let enqueue = (j : Job) =>
-        Cell/set(runq, Arr/cons(j, Cell/get(runq)));
+        Cell/set(runq, Lst/cons(j, Cell/get(runq)));
     let _ = enqueue(Job {
         resume = () => bind(root, (a) => let _ = Cell/set(result, Option/some(@A, a)); pure(())),
         token = Cell/new(false),
-        fins = Arr/nil(@Guard)
+        fins = Lst/nil(@Guard)
     });
     rec serve(job : Job) -> {} =
         match Cell/get(job.token) : {}
@@ -265,13 +265,13 @@ pub let block_on(@A : Type, root : Task(A)) -> A =
             | step(p, k) =>
                 match p : {}
                 | wait(h, ev) =>
-                    Cell/set(blocked, Arr/cons(Parked { handle = h, interest = ev, resume = k, token = job.token, fins = job.fins }, Cell/get(blocked)))
+                    Cell/set(blocked, Lst/cons(Parked { handle = h, interest = ev, resume = k, token = job.token, fins = job.fins }, Cell/get(blocked)))
                 | fork(child, ct) =>
                     let _ = enqueue(Job { resume = k, token = job.token, fins = job.fins });
-                    enqueue(Job { resume = child, token = ct, fins = Arr/nil(@Guard) })
+                    enqueue(Job { resume = child, token = ct, fins = Lst/nil(@Guard) })
                 | park(reg) =>
                     let slot : Slot = Cell/new(Option/some(@Job, Job { resume = k, token = job.token, fins = job.fins }));
-                    let _ = Cell/set(parked, Arr/cons(slot, Cell/get(parked)));
+                    let _ = Cell/set(parked, Lst/cons(slot, Cell/get(parked)));
                     let wake = () =>
                         match Cell/get(slot) : {}
                         | none() => ()
@@ -279,7 +279,7 @@ pub let block_on(@A : Type, root : Task(A)) -> A =
                         end;
                     reg(wake)
                 | acquire(h, fin) =>
-                    serve(Job { resume = k, token = job.token, fins = Arr/cons((h, fin), job.fins) })
+                    serve(Job { resume = k, token = job.token, fins = Lst/cons((h, fin), job.fins) })
                 | release(h) =>
                     serve(Job { resume = k, token = job.token, fins = release_guard(h, job.fins) })
                 | defer() =>
@@ -300,7 +300,7 @@ pub let block_on(@A : Type, root : Task(A)) -> A =
             match Cell/get(runq) : A
             | [] =>
                 let _ = Cell/set(parked, sweep_parked(Cell/get(parked)));
-                match Arr/len(Cell/get(blocked)) == 0 : A
+                match Lst/len(Cell/get(blocked)) == 0 : A
                 | false =>
                     let split = poll_ready(Cell/get(blocked));
                     let _ = Cell/set(runq, split.0);
@@ -334,39 +334,39 @@ pub let spawn(@A : Type, body : () -> Task(A)) -> Task(Handle(A)) =
 pub let cancel(t : Token) -> {} =
     Cell/set(t, true);
 
-let cancel_all(ts : Arr(Token)) -> {} =
-    Arr/each(ts, cancel);
+let cancel_all(ts : Lst(Token)) -> {} =
+    Lst/each(ts, cancel);
 
-pub let join_all(@A : Type, tasks : Arr(() -> Task(A))) -> Task(Arr(A)) =
-    rec go(i : Nat) -> Task(Arr(A)) =
-        match Nat/try_lt(i, Arr/len(tasks)) : Task(Arr(A))
-        | none() => pure(Arr/nil(@A))
+pub let join_all(@A : Type, tasks : Lst(() -> Task(A))) -> Task(Lst(A)) =
+    rec go(i : Nat) -> Task(Lst(A)) =
+        match Nat/try_lt(i, Lst/len(tasks)) : Task(Lst(A))
+        | none() => pure(Lst/nil(@A))
         | some(ok) =>
-            let h = spawn(Arr/at(tasks, i, ok))!;
+            let h = spawn(Lst/at(tasks, i, ok))!;
             let rest = go(i + 1)!;
             let a = await(h.result)!;
-            pure(Arr/cons(a, rest))
+            pure(Lst/cons(a, rest))
         end;
     go(0);
 
-pub let select(@A : Type, tasks : Arr(() -> Task(A))) -> Task({Nat, A}) =
+pub let select(@A : Type, tasks : Lst(() -> Task(A))) -> Task({Nat, A}) =
     defer(() =>
         let winner : Future({Nat, A}) = new_future(@{Nat, A});
-        rec arm(i : Nat) -> Task(Arr(Token)) =
-            match Nat/try_lt(i, Arr/len(tasks)) : Task(Arr(Token))
-            | none() => pure(Arr/nil(@Token))
+        rec arm(i : Nat) -> Task(Lst(Token)) =
+            match Nat/try_lt(i, Lst/len(tasks)) : Task(Lst(Token))
+            | none() => pure(Lst/nil(@Token))
             | some(ok) =>
                 let t : Token = Cell/new(false);
-                let _ = fork_with(() => bind((Arr/at(tasks, i, ok))(), (a) => let _ = fulfill(winner, (i, a)); pure(())), t)!;
+                let _ = fork_with(() => bind((Lst/at(tasks, i, ok))(), (a) => let _ = fulfill(winner, (i, a)); pure(())), t)!;
                 let rest = arm(i + 1)!;
-                pure(Arr/cons(t, rest))
+                pure(Lst/cons(t, rest))
             end;
         let tokens = arm(0)!;
         let w = await(winner)!;
         let _ = cancel_all(tokens);
         pure(w));
 
-pub let race(@A : Type, tasks : Arr(() -> Task(A))) -> Task(A) =
+pub let race(@A : Type, tasks : Lst(() -> Task(A))) -> Task(A) =
     bind(select(tasks), (w) => pure(w.1));
 
 satisfy Monad(Task) {

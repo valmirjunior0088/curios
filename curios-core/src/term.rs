@@ -526,7 +526,7 @@ impl Term {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn arr_match<H, M, EL, EC, HL, TL, IL, CC>(
+    pub fn lst_match<H, M, EL, EC, HL, TL, IL, CC>(
         head: H,
         elem: EL,
         motive_label: Option<&str>,
@@ -555,7 +555,7 @@ impl Term {
             head: head.into(),
             motive: Self::motive_scope(motive_label, motive.into()),
             cases: Cases::FreeMonoid {
-                carrier: Carrier::Arr {
+                carrier: Carrier::Lst {
                     elem: elem.into(),
                     empty_case: empty_case.into(),
                     cons_case: Scope::close(
@@ -1015,9 +1015,9 @@ pub enum Cases {
         cases: BTreeMap<Atom, Scope<Many>>,
         pattern: Option<MotivePattern>,
     },
-    /// Structural induction on a native free-monoid primitive (`Nat`/`Arr`/
+    /// Structural induction on a native free-monoid primitive (`Nat`/`Lst`/
     /// `Bin`): the `carrier` selects the primitive and carries both its parameters
-    /// (`Arr`'s element type) and its two arms — an identity arm plus a cons arm
+    /// (`Lst`'s element type) and its two arms — an identity arm plus a cons arm
     /// binding the head generator (absent for `Nat`, whose unary generator carries
     /// no payload), the tail, and the induction hypothesis at the tail.
     FreeMonoid { carrier: Carrier },
@@ -1025,10 +1025,10 @@ pub enum Cases {
 
 /// The native free-monoid primitive a `Cases::FreeMonoid` eliminates, with its
 /// type parameters and its two eliminator arms. `Nat` is the free monoid on one
-/// (payload-less) generator; `Bin` carries none; `Arr` carries its element
+/// (payload-less) generator; `Bin` carries none; `Lst` carries its element
 /// type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose
 /// arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih),
-/// `Scope<Three>` for `Bin`/`Arr` (head, tail, ih).
+/// `Scope<Three>` for `Bin`/`Lst` (head, tail, ih).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Carrier {
     Nat {
@@ -1039,7 +1039,7 @@ pub enum Carrier {
         empty_case: Term,
         cons_case: Scope<Three>,
     },
-    Arr {
+    Lst {
         elem: Term,
         empty_case: Term,
         cons_case: Scope<Three>,
@@ -1353,7 +1353,7 @@ impl Subterm {
                             empty_case.collect_construction_names(names);
                             cons_case.body().collect_construction_names(names);
                         }
-                        Carrier::Arr {
+                        Carrier::Lst {
                             elem,
                             empty_case,
                             cons_case,
@@ -1457,7 +1457,7 @@ impl Subterm {
                                 empty_case,
                                 cons_case,
                             } => empty_case.any_metavar(pred) || cons_case.body().any_metavar(pred),
-                            Carrier::Arr {
+                            Carrier::Lst {
                                 elem,
                                 empty_case,
                                 cons_case,
@@ -1672,11 +1672,11 @@ impl Bound for Subterm {
                                 empty_case: visit.visit_subterm(empty_case),
                                 cons_case: visit.visit_scope(cons_case),
                             },
-                            Carrier::Arr {
+                            Carrier::Lst {
                                 elem,
                                 empty_case,
                                 cons_case,
-                            } => Carrier::Arr {
+                            } => Carrier::Lst {
                                 elem: visit.visit_subterm(elem),
                                 empty_case: visit.visit_subterm(empty_case),
                                 cons_case: visit.visit_scope(cons_case),
@@ -1795,7 +1795,7 @@ impl Bound for Subterm {
                         empty_case,
                         cons_case,
                     } => empty_case.reach().max(cons_case.reach()),
-                    Carrier::Arr {
+                    Carrier::Lst {
                         elem,
                         empty_case,
                         cons_case,

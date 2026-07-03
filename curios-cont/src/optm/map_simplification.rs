@@ -3,10 +3,10 @@ use {
     std::collections::{HashMap, HashSet},
 };
 
-/// Map simplification: rewrite an `Arr.map` whose closure is provably the
+/// Map simplification: rewrite an `Lst.map` whose closure is provably the
 /// identity into a copy of its source.
 ///
-/// `Arr/map` is a primitive that codegen lowers to an opaque O(n) fill loop, so
+/// `Lst/map` is a primitive that codegen lowers to an opaque O(n) fill loop, so
 /// every reasoning pass otherwise treats it as a black box that uses both its
 /// source and its closure. When the closure is the identity, the map yields an
 /// array equal to its source; arrays are immutable here, so the fresh allocation
@@ -110,7 +110,7 @@ fn rewrite_maps(
 ) {
     for (_, value) in &mut region.values {
         let source = match value {
-            Value::Eval(Code::ArrMap(source, f))
+            Value::Eval(Code::LstMap(source, f))
                 if clsrs.get(f).is_some_and(|clsr| identity.contains(clsr)) =>
             {
                 source.clone()
@@ -186,8 +186,8 @@ mod tests {
                 region: Region {
                     preallocs: vec![],
                     values: vec![
-                        (v("arr"), Value::Pure(Data::Arr(vec![]))),
-                        (v("mapped"), Value::Eval(Code::ArrMap(v("arr"), v("fn")))),
+                        (v("lst"), Value::Pure(Data::Lst(vec![]))),
+                        (v("mapped"), Value::Eval(Code::LstMap(v("lst"), v("fn")))),
                     ],
                     blocks: vec![],
                     tail: Tail::Jump(JumpTarget {
@@ -212,7 +212,7 @@ mod tests {
         simplify_maps(&mut module);
 
         match mapped_binding(&module) {
-            Value::Alias(source) => assert_eq!(source, &v("arr")),
+            Value::Alias(source) => assert_eq!(source, &v("lst")),
             other => panic!("expected alias to source, got {other:?}"),
         }
     }
@@ -224,8 +224,8 @@ mod tests {
         simplify_maps(&mut module);
 
         match mapped_binding(&module) {
-            Value::Eval(Code::ArrMap(source, f)) => {
-                assert_eq!((source, f), (&v("arr"), &v("fn")));
+            Value::Eval(Code::LstMap(source, f)) => {
+                assert_eq!((source, f), (&v("lst"), &v("fn")));
             }
             other => panic!("expected the map to survive, got {other:?}"),
         }

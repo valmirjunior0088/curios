@@ -161,13 +161,13 @@ fn elaborate_arr_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // `Arr` carries an element type the eliminator must read off the scrutinee
+    // `Lst` carries an element type the eliminator must read off the scrutinee
     // (unlike `Nat`, whose carrier is parameterless) — infer the head, then
-    // demand its type is `Arr(elem)`.
+    // demand its type is `Lst(elem)`.
     let (head_elaborated, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
     let elem = match &*head_type {
-        Subterm::Prim(Prim::ArrType(elem)) => elem.clone(),
+        Subterm::Prim(Prim::LstType(elem)) => elem.clone(),
         _ => return Err(Error::not_arr_type(head_type)),
     };
 
@@ -179,7 +179,7 @@ fn elaborate_arr_match(
     // Refine the scrutinee to its value in each arm (as `Nat`/`Bln`/`Switch`
     // already do), so a hypothesis whose type mentions the scrutinee reduces at
     // the arm's value without a hand-written convoy.
-    let empty_value: Term = Subterm::Prim(Prim::Arr(vec![])).into();
+    let empty_value: Term = Subterm::Prim(Prim::Lst(vec![])).into();
     let empty_elaborated = context.with_frame(|context| {
         refine_head(context, &head_elaborated, &empty_value)?;
         check(context, empty_case, motive.open(&[&empty_value]))
@@ -196,10 +196,10 @@ fn elaborate_arr_match(
 
         // The cons value `head :: tail`, encoded as the monoid operation on a
         // singleton and the tail (no separate prepend primitive).
-        let cons_value: Term = Subterm::Prim(Prim::ArrConcat(
+        let cons_value: Term = Subterm::Prim(Prim::LstConcat(
             elem.clone(),
             vec![
-                Subterm::Prim(Prim::Arr(vec![Term::free_var(&head_label)])).into(),
+                Subterm::Prim(Prim::Lst(vec![Term::free_var(&head_label)])).into(),
                 Term::free_var(&tail_label),
             ],
         ))
@@ -228,7 +228,7 @@ fn elaborate_arr_match(
         head: head_elaborated,
         motive,
         cases: Cases::FreeMonoid {
-            carrier: Carrier::Arr {
+            carrier: Carrier::Lst {
                 elem,
                 empty_case: empty_elaborated,
                 cons_case: cons_elaborated,
@@ -250,7 +250,7 @@ fn elaborate_bin_match(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     // `Bin` is a parameterless carrier (like `Nat`/`Bln`), so the scrutinee's type
-    // is just `Bin` — no element type to read off the head as `Arr` needs.
+    // is just `Bin` — no element type to read off the head as `Lst` needs.
     let (head_elaborated, head_type) = elaborate_prim_head(context, head, PrimHead::Bin)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
@@ -414,7 +414,7 @@ pub fn elaborate_match(
         } => elaborate_nat_match(context, head, motive, empty_case, cons_case, term, mode),
         Cases::FreeMonoid {
             carrier:
-                Carrier::Arr {
+                Carrier::Lst {
                     empty_case,
                     cons_case,
                     ..

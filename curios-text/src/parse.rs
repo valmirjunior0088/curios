@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, ArrMatch, BinMatch, BlnMatch, CasePayloadParam, ConceptField, ConceptParam,
-        Entrypoint, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm,
-        InductiveMatch, Infix, Let, LetSignature, LoadError, Match, Module, Motive, Name, Nat,
+        Apply, BinMatch, BlnMatch, CasePayloadParam, ConceptField, ConceptParam, Entrypoint, Field,
+        Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm, InductiveMatch,
+        Infix, Let, LetSignature, LoadError, LstMatch, Match, Module, Motive, Name, Nat,
         NatLiteral, NatMatch, NumLit, NumOp, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem,
         StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem,
         TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
@@ -314,13 +314,13 @@ fn parse_bin_literal<'a>() -> Parser<'a, Term> {
 }
 
 // An array literal `[e0, e1, …]` (empty `[]`) — the native contiguous-sequence
-// sibling of the `Bin` literal `\\`. Builds a `Prim::Arr` directly (the element
+// sibling of the `Bin` literal `\\`. Builds a `Prim::Lst` directly (the element
 // type is an implicit the literal cannot name; core elaboration infers it).
 fn parse_arr_literal<'a>() -> Parser<'a, Term> {
     catch(parse_literal("["))
         .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
         .and_drop(parse_literal("]"))
-        .map(|elems| Subterm::Prim(Prim::Arr(elems.into_iter().collect())))
+        .map(|elems| Subterm::Prim(Prim::Lst(elems.into_iter().collect())))
         .map(Into::into)
 }
 
@@ -792,7 +792,7 @@ fn parse_inductive_match<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// The `| [] =>` identity arm of an `Arr` fold (the empty-array literal).
+// The `| [] =>` identity arm of an `Lst` fold (the empty-array literal).
 fn parse_arr_empty_branch<'a>() -> Parser<'a, Term> {
     parse_literal("|")
         .and_drop(parse_literal("[]"))
@@ -801,7 +801,7 @@ fn parse_arr_empty_branch<'a>() -> Parser<'a, Term> {
 }
 
 // The `| head, ..tail; ih =>` cons arm of a native-inductive fold. Carrier-neutral
-// (`Arr` and `Bin` share it); only the empty arm's literal selects the carrier. The
+// (`Lst` and `Bin` share it); only the empty arm's literal selects the carrier. The
 // `,` separates the peeled head from the rest `tail`; the `;` sets `ih` (the
 // recursive result on `tail`) apart from the scrutinee's shape. A plain
 // case-split needs no induction hypothesis, so `; ih` may be omitted — the
@@ -830,7 +830,7 @@ fn parse_arr_match<'a>() -> Parser<'a, Term> {
         .and_drop(parse_keyword("end"))
         .map(
             |((head, motive), (empty_case, ((head_label, tail_label, ih_label), cons_case)))| {
-                Subterm::Match(Match::Arr(ArrMatch {
+                Subterm::Match(Match::Lst(LstMatch {
                     head,
                     motive,
                     empty_case,

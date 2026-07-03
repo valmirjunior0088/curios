@@ -87,7 +87,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 is_nullable: false,
                 heap_type: HeapType::Concrete(self.table.bytes_type()),
             }),
-            WireType::Arr(_) => ValType::Ref(RefType {
+            WireType::Lst(_) => ValType::Ref(RefType {
                 is_nullable: false,
                 heap_type: HeapType::Concrete(self.table.elems_type()),
             }),
@@ -173,9 +173,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// The `Arr` mirror of [`emit_bin_types`](Self::emit_bin_types).
+    /// The `Lst` mirror of [`emit_bin_types`](Self::emit_bin_types).
     fn emit_arr_types(&mut self) {
-        let rope = self.table.arr_rope();
+        let rope = self.table.lst_rope();
 
         self.module.add_type(
             rope.payload.clone(),
@@ -439,7 +439,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     /// Emit a module-level const. Every global is declared mutable so that
-    /// aggregate (`Tpl`/`Arr`/`Clsr`) consts can `global.get` their dependencies
+    /// aggregate (`Tpl`/`Lst`/`Clsr`) consts can `global.get` their dependencies
     /// inside the start function — wasm constant expressions can only read
     /// immutable globals. Scalars (`Nat`/`Int`/`Flt`) keep a self-contained
     /// const initializer (mutability is harmless when the init is constant);
@@ -466,7 +466,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     },
                 );
             }
-            crate::Data::Tpl(_) | crate::Data::Arr(_) | crate::Data::Clsr(_, _) => {
+            crate::Data::Tpl(_) | crate::Data::Lst(_) | crate::Data::Clsr(_, _) => {
                 let global_name = self.table.find_const(name);
 
                 let mut init_expr: Expr = Default::default();
@@ -568,12 +568,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
 
-        if self.table.arr_bin_force_used() {
-            ropes.emit_arr_bin_force_func(self.table.arr_bin_force_func());
+        if self.table.lst_bin_force_used() {
+            ropes.emit_arr_bin_force_func(self.table.lst_bin_force_func());
         }
 
-        if self.table.arr_bin_wrap_used() {
-            ropes.emit_arr_bin_wrap_func(self.table.arr_bin_wrap_func());
+        if self.table.lst_bin_wrap_used() {
+            ropes.emit_arr_bin_wrap_func(self.table.lst_bin_wrap_func());
         }
 
         if self.table.bin_slice_used() {
@@ -584,11 +584,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
-        if self.table.arr_slice_used() {
+        if self.table.lst_slice_used() {
             ropes.emit_slice_func(
-                &self.table.arr_rope(),
-                self.table.arr_slice_func(),
-                self.table.arr_force_func(),
+                &self.table.lst_rope(),
+                self.table.lst_slice_func(),
+                self.table.lst_force_func(),
             );
         }
 
@@ -600,11 +600,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
-        if self.table.arr_read_used() {
+        if self.table.lst_read_used() {
             ropes.emit_read_func(
-                &self.table.arr_rope(),
-                self.table.arr_read_func(),
-                self.table.arr_force_func(),
+                &self.table.lst_rope(),
+                self.table.lst_read_func(),
+                self.table.lst_force_func(),
             );
         }
 
@@ -612,16 +612,16 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_force_func(&self.table.bin_rope(), self.table.bin_force_func());
         }
 
-        if self.table.arr_force_used() {
-            ropes.emit_force_func(&self.table.arr_rope(), self.table.arr_force_func());
+        if self.table.lst_force_used() {
+            ropes.emit_force_func(&self.table.lst_rope(), self.table.lst_force_func());
         }
 
         if self.table.bin_wrap_used() {
             ropes.emit_wrap_func(&self.table.bin_rope(), self.table.bin_wrap_func());
         }
 
-        if self.table.arr_wrap_used() {
-            ropes.emit_wrap_func(&self.table.arr_rope(), self.table.arr_wrap_func());
+        if self.table.lst_wrap_used() {
+            ropes.emit_wrap_func(&self.table.lst_rope(), self.table.lst_wrap_func());
         }
     }
 

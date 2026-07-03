@@ -372,8 +372,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         src: &'a crate::ValueName,
         f: &'a crate::ValueName,
     ) {
-        let rope = self.context.table().arr_rope();
-        let force = self.context.table().arr_force_func();
+        let rope = self.context.table().lst_rope();
+        let force = self.context.table().lst_force_func();
         let elems_ref = RefType {
             is_nullable: false,
             heap_type: HeapType::Concrete(rope.payload.clone()),
@@ -398,7 +398,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         let map_step = LabelName::from(format!("{}_map_step", result_local));
 
         // selems = force(src); count = selems.len
-        self.emit_instrs(self.force_instrs(src, LoadAs::Arr, force));
+        self.emit_instrs(self.force_instrs(src, LoadAs::Lst, force));
         self.emit_instr(Instr::LocalSet {
             local_name: selems_local.clone(),
         });
@@ -1352,39 +1352,39 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 let rope = self.context.table().bin_rope();
                 self.emit_rope_concat(&result_local, operands, LoadAs::Bin, &rope);
             }
-            crate::Code::ArrLen(lst) => {
-                let rope = self.context.table().arr_rope();
+            crate::Code::LstLen(lst) => {
+                let rope = self.context.table().lst_rope();
                 self.emit_unary_op(
                     &result_local,
                     lst,
-                    LoadAs::Arr,
+                    LoadAs::Lst,
                     self.rope_get(&rope, &rope.len_field),
                     WrapAs::I31,
                 );
             }
-            crate::Code::ArrGet(lst, idx) => {
-                let read = self.context.table().arr_read_func();
-                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Arr));
+            crate::Code::LstGet(lst, idx) => {
+                let read = self.context.table().lst_read_func();
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Lst));
                 self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Nat));
                 self.emit_instr(Instr::Call { func_name: read });
                 self.emit_instr(Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            crate::Code::ArrSlice(lst, start, end) => {
-                let slice = self.context.table().arr_slice_func();
-                self.emit_rope_slice(&result_local, lst, start, end, LoadAs::Arr, slice);
+            crate::Code::LstSlice(lst, start, end) => {
+                let slice = self.context.table().lst_slice_func();
+                self.emit_rope_slice(&result_local, lst, start, end, LoadAs::Lst, slice);
             }
-            crate::Code::ArrAppend(lst, elem) => {
-                let rope = self.context.table().arr_rope();
+            crate::Code::LstAppend(lst, elem) => {
+                let rope = self.context.table().lst_rope();
                 let elem_instrs = self.context.load_value_instrs(elem, LoadAs::Null);
-                self.emit_rope_append(&result_local, lst, elem_instrs, LoadAs::Arr, &rope);
+                self.emit_rope_append(&result_local, lst, elem_instrs, LoadAs::Lst, &rope);
             }
-            crate::Code::ArrConcat(operands) => {
-                let rope = self.context.table().arr_rope();
-                self.emit_rope_concat(&result_local, operands, LoadAs::Arr, &rope);
+            crate::Code::LstConcat(operands) => {
+                let rope = self.context.table().lst_rope();
+                self.emit_rope_concat(&result_local, operands, LoadAs::Lst, &rope);
             }
-            crate::Code::ArrMap(src, f) => self.emit_map(&result_local, src, f),
+            crate::Code::LstMap(src, f) => self.emit_map(&result_local, src, f),
             crate::Code::TplGet(tuple, index) => {
                 let tpl_n_type = self.context.table().find_tpl_type(*index + 1);
                 let field_name = self.context.table().tpl_field(*index);

@@ -19,12 +19,12 @@ pub enum ReduceError {
         end: usize,
         span: Option<Span>,
     },
-    ArrGetOutOfBounds {
+    LstGetOutOfBounds {
         len: usize,
         index: usize,
         span: Option<Span>,
     },
-    ArrSliceOutOfRange {
+    LstSliceOutOfRange {
         len: usize,
         start: usize,
         end: usize,
@@ -67,11 +67,11 @@ pub enum Error {
         start: usize,
         end: usize,
     },
-    ArrGetOutOfBounds {
+    LstGetOutOfBounds {
         len: usize,
         index: usize,
     },
-    ArrSliceOutOfRange {
+    LstSliceOutOfRange {
         len: usize,
         start: usize,
         end: usize,
@@ -861,7 +861,7 @@ impl fmt::Display for Error {
                 write!(f, "expected Bool but got {head_type}")
             }
             Error::NotArrType { head_type } => {
-                write!(f, "expected Arr but got {head_type}")
+                write!(f, "expected Lst but got {head_type}")
             }
             Error::NotBinType { head_type } => {
                 write!(f, "expected Bin but got {head_type}")
@@ -1122,13 +1122,13 @@ impl fmt::Display for Error {
                     "Bin.slice range {start}..{end} out of range (length {len})"
                 )
             }
-            Error::ArrGetOutOfBounds { len, index } => {
-                write!(f, "Arr.get index {index} out of bounds (length {len})")
+            Error::LstGetOutOfBounds { len, index } => {
+                write!(f, "Lst.get index {index} out of bounds (length {len})")
             }
-            Error::ArrSliceOutOfRange { len, start, end } => {
+            Error::LstSliceOutOfRange { len, start, end } => {
                 write!(
                     f,
-                    "Arr.slice range {start}..{end} out of range (length {len})"
+                    "Lst.slice range {start}..{end} out of range (length {len})"
                 )
             }
             Error::IoAtTypeLevel { kind } => {
@@ -1157,15 +1157,15 @@ impl ReduceError {
                 end,
                 span,
             } => Error::BinSliceOutOfRange { len, start, end }.at_opt(span),
-            Self::ArrGetOutOfBounds { len, index, span } => {
-                Error::ArrGetOutOfBounds { len, index }.at_opt(span)
+            Self::LstGetOutOfBounds { len, index, span } => {
+                Error::LstGetOutOfBounds { len, index }.at_opt(span)
             }
-            Self::ArrSliceOutOfRange {
+            Self::LstSliceOutOfRange {
                 len,
                 start,
                 end,
                 span,
-            } => Error::ArrSliceOutOfRange { len, start, end }.at_opt(span),
+            } => Error::LstSliceOutOfRange { len, start, end }.at_opt(span),
             Self::IoAtTypeLevel { kind, span } => Error::IoAtTypeLevel { kind }.at_opt(span),
             Self::DivisionByZero { kind, span } => Error::DivisionByZero { kind }.at_opt(span),
         }

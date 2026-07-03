@@ -4,10 +4,10 @@ use {
 };
 
 pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, ReduceError> {
-    // Two `Bin`/`Arr` values are the free monoid on their bytes/elements: peel the
+    // Two `Bin`/`Lst` values are the free monoid on their bytes/elements: peel the
     // longest common prefix (`core::spine`). `Stuck` falls through to the
     // structural arms below, which compare like-shaped symbolic operands (slices,
-    // appends) and `Arr` element runs the peel leaves opaque — so the peel only
+    // appends) and `Lst` element runs the peel leaves opaque — so the peel only
     // ever strengthens conversion, never weakens it.
     if let Some(peel) = peel_bin(&this, &that).or_else(|| peel_arr(&this, &that)) {
         match peel {
@@ -115,7 +115,7 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
         | (Prim::FltToNat(this), Prim::FltToNat(that))
         | (Prim::FltToInt(this), Prim::FltToInt(that))
         | (Prim::BinLen(this), Prim::BinLen(that))
-        | (Prim::ArrType(this), Prim::ArrType(that))
+        | (Prim::LstType(this), Prim::LstType(that))
         | (Prim::CellType(this), Prim::CellType(that)) => {
             cmp.enqueue(Term::type_(), this, that);
 
@@ -132,8 +132,8 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
             Ok(true)
         }
         (
-            Prim::ArrSlice(this_ty, this_list, this_start, this_end),
-            Prim::ArrSlice(that_ty, that_list, that_start, that_end),
+            Prim::LstSlice(this_ty, this_list, this_start, this_end),
+            Prim::LstSlice(that_ty, that_list, that_start, that_end),
         ) => {
             cmp.enqueue(Term::type_(), this_ty, that_ty);
             cmp.enqueue(Term::type_(), this_list, that_list);
@@ -143,8 +143,8 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
             Ok(true)
         }
         (
-            Prim::ArrGet(this_ty, this_list, this_index),
-            Prim::ArrGet(that_ty, that_list, that_index),
+            Prim::LstGet(this_ty, this_list, this_index),
+            Prim::LstGet(that_ty, that_list, that_index),
         ) => {
             cmp.enqueue(Term::type_(), this_ty, that_ty);
             cmp.enqueue(Term::type_(), this_list, that_list);
@@ -152,15 +152,15 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
 
             Ok(true)
         }
-        (Prim::ArrLen(this_ty, this_list), Prim::ArrLen(that_ty, that_list)) => {
+        (Prim::LstLen(this_ty, this_list), Prim::LstLen(that_ty, that_list)) => {
             cmp.enqueue(Term::type_(), this_ty, that_ty);
             cmp.enqueue(Term::type_(), this_list, that_list);
 
             Ok(true)
         }
         (
-            Prim::ArrAppend(this_ty, this_list, this_elem),
-            Prim::ArrAppend(that_ty, that_list, that_elem),
+            Prim::LstAppend(this_ty, this_list, this_elem),
+            Prim::LstAppend(that_ty, that_list, that_elem),
         ) => {
             cmp.enqueue(Term::type_(), this_ty, that_ty);
             cmp.enqueue(Term::type_(), this_list, that_list);
@@ -168,7 +168,7 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
 
             Ok(true)
         }
-        (Prim::Arr(this_ops), Prim::Arr(that_ops))
+        (Prim::Lst(this_ops), Prim::Lst(that_ops))
         | (Prim::BinConcat(this_ops), Prim::BinConcat(that_ops)) => {
             if this_ops.len() != that_ops.len() {
                 return Ok(false);
@@ -180,7 +180,7 @@ pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, R
 
             Ok(true)
         }
-        (Prim::ArrConcat(this_ty, this_ops), Prim::ArrConcat(that_ty, that_ops)) => {
+        (Prim::LstConcat(this_ty, this_ops), Prim::LstConcat(that_ty, that_ops)) => {
             if this_ops.len() != that_ops.len() {
                 return Ok(false);
             }

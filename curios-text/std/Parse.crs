@@ -1,4 +1,4 @@
-use /std/{Result, Nat, Bin, Str, Bln, Arr, Monad};
+use /std/{Result, Nat, Bin, Str, Bln, Lst, Monad};
 
 -- A parser is nominal (not a bare function type) so it has a rigid head:
 -- witness resolution keys on it (`Monad(Parse)`) and the elaborator can
@@ -98,25 +98,25 @@ pub let take_while(pred : (Nat) -> Bln) -> Parse(Bin) =
             end;
         Result/success((r.0, Bin/slice(input, pos, r.0))) };
 
-pub let many0(@A : Type, p : Parse(A)) -> Parse(Arr(A)) =
+pub let many0(@A : Type, p : Parse(A)) -> Parse(Lst(A)) =
     Parse { run(input, pos) =
-        rec go(acc : Arr(A), cur : Nat) -> Result({Nat, Arr(A)}, Str) =
+        rec go(acc : Lst(A), cur : Nat) -> Result({Nat, Lst(A)}, Str) =
             match p.run(input, cur)
             | failure(_) => Result/success((cur, acc))
             | success(pair) =>
                 match pair.0 == cur
                 | true => Result/success((cur, acc))
-                | false => go(Arr/append(acc, pair.1), pair.0)
+                | false => go(Lst/append(acc, pair.1), pair.0)
                 end
             end;
         go([], pos) };
 
-pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(Arr(A)) =
+pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(Lst(A)) =
     Parse { run(input, pos) =
         match elem.run(input, pos)
         | failure(_) => Result/success((pos, []))
         | success(rp) =>
-            rec go(acc : Arr(A), cur : Nat) -> Result({Nat, Arr(A)}, Str) =
+            rec go(acc : Lst(A), cur : Nat) -> Result({Nat, Lst(A)}, Str) =
                 match sep.run(input, cur)
                 | failure(_) => Result/success((cur, acc))
                 | success(sp) =>
@@ -125,7 +125,7 @@ pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(
                     | success(tp) =>
                         match tp.0 == cur
                         | true => Result/success((cur, acc))
-                        | false => go(Arr/append(acc, tp.1), tp.0)
+                        | false => go(Lst/append(acc, tp.1), tp.0)
                         end
                     end
                 end;

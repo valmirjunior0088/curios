@@ -52,7 +52,7 @@ fn print_data<'a>(value: &'a Data) -> Printer<'a> {
                 .map(|b| format!("\\{:02x}", b))
                 .collect::<String>(),
         ),
-        Data::Arr(elems) => flat([pure("["), print_value_names(elems), pure("]")]),
+        Data::Lst(elems) => flat([pure("["), print_value_names(elems), pure("]")]),
         Data::Tpl(elems) => flat([pure("("), print_value_names(elems), pure(")")]),
         Data::Clsr(target, fields) => flat([
             print_clsr_name(target),
@@ -167,10 +167,10 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::BinConcat(operands) => {
             flat([pure("Bin.concat"), pure(" "), print_value_names(operands)])
         }
-        Code::ArrLen(lst) => print_unary("Arr.len", lst),
-        Code::ArrGet(lst, idx) => print_binary("Arr.get", lst, idx),
-        Code::ArrSlice(lst, start, end) => flat([
-            pure("Arr.slice"),
+        Code::LstLen(lst) => print_unary("Lst.len", lst),
+        Code::LstGet(lst, idx) => print_binary("Lst.get", lst, idx),
+        Code::LstSlice(lst, start, end) => flat([
+            pure("Lst.slice"),
             pure(" "),
             print_value_name(lst),
             pure(", "),
@@ -178,11 +178,11 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             pure(", "),
             print_value_name(end),
         ]),
-        Code::ArrAppend(lst, elem) => print_binary("Arr.append", lst, elem),
-        Code::ArrConcat(operands) => {
-            flat([pure("Arr.concat"), pure(" "), print_value_names(operands)])
+        Code::LstAppend(lst, elem) => print_binary("Lst.append", lst, elem),
+        Code::LstConcat(operands) => {
+            flat([pure("Lst.concat"), pure(" "), print_value_names(operands)])
         }
-        Code::ArrMap(src, f) => print_binary("Arr.map", src, f),
+        Code::LstMap(src, f) => print_binary("Lst.map", src, f),
         Code::TplGet(tuple, index) => flat([
             pure("Tpl.get "),
             print_value_name(tuple),

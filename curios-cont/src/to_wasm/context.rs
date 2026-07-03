@@ -43,7 +43,7 @@ pub enum LoadAs {
     Int,
     Flt,
     Bin,
-    Arr,
+    Lst,
 }
 
 /// How a host-import operand of the given wire type is loaded at the call
@@ -56,7 +56,7 @@ fn wire_load_as(wire_type: &WireType) -> LoadAs {
         WireType::Nat | WireType::Bln => LoadAs::Nat,
         WireType::Int => LoadAs::Int,
         WireType::Bin | WireType::Io => LoadAs::Bin,
-        WireType::Arr(_) => LoadAs::Arr,
+        WireType::Lst(_) => LoadAs::Lst,
     }
 }
 
@@ -271,11 +271,11 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 }]
             }
-            LoadAs::Arr => {
+            LoadAs::Lst => {
                 vec![Instr::RefCast {
                     ref_type: RefType {
                         is_nullable: false,
-                        heap_type: HeapType::Concrete(self.table().arr_type()),
+                        heap_type: HeapType::Concrete(self.table().lst_type()),
                     },
                 }]
             }
@@ -611,14 +611,14 @@ impl<'a, 'b> Context<'a, 'b> {
 
     /// The rope→wire step for one host argument: a reference param crosses as
     /// its flat payload, so the loaded rope is forced first — deeply for
-    /// `Arr(Bin)`/`Arr(Io)`, whose *elements* the host lifts as raw `$bytes`.
+    /// `Lst(Bin)`/`Lst(Io)`, whose *elements* the host lifts as raw `$bytes`.
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<Instr> {
         let force = match wire_type {
             WireType::Nat | WireType::Bln | WireType::Int => return vec![],
             WireType::Bin | WireType::Io => self.table().bin_force_func(),
-            WireType::Arr(inner) => match **inner {
-                WireType::Bin | WireType::Io => self.table().arr_bin_force_func(),
-                _ => self.table().arr_force_func(),
+            WireType::Lst(inner) => match **inner {
+                WireType::Bin | WireType::Io => self.table().lst_bin_force_func(),
+                _ => self.table().lst_force_func(),
             },
         };
 
@@ -627,14 +627,14 @@ impl<'a, 'b> Context<'a, 'b> {
 
     /// The wire→rope step for one host result: a reference re-enters as a
     /// host-built flat payload and is wrapped into a fresh leaf — deeply for
-    /// `Arr(Bin)`, whose elements the host lowered as raw `$bytes`.
+    /// `Lst(Bin)`, whose elements the host lowered as raw `$bytes`.
     fn wire_wrap_instrs(&self, wire_type: &WireType) -> Vec<Instr> {
         let wrap = match wire_type {
             WireType::Nat | WireType::Bln | WireType::Int => return vec![],
             WireType::Bin | WireType::Io => self.table().bin_wrap_func(),
-            WireType::Arr(inner) => match **inner {
-                WireType::Bin | WireType::Io => self.table().arr_bin_wrap_func(),
-                _ => self.table().arr_wrap_func(),
+            WireType::Lst(inner) => match **inner {
+                WireType::Bin | WireType::Io => self.table().lst_bin_wrap_func(),
+                _ => self.table().lst_wrap_func(),
             },
         };
 

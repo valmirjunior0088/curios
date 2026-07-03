@@ -192,7 +192,7 @@ impl OsResolver {
                     let job = match receiver.lock().unwrap().recv() {
                         Ok(job) => job,
                         // The sender is gone (the host was dropped): no more work
-                        // will ever arrive, so the worker exits.
+                        // will ever lstive, so the worker exits.
                         Err(_) => break,
                     };
 

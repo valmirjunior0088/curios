@@ -13,7 +13,7 @@ pub enum Data {
     Int(i32),
     Flt(f32),
     Bin(Vec<u8>),
-    Arr(Vec<ValueName>),
+    Lst(Vec<ValueName>),
     Tpl(Vec<ValueName>),
     Clsr(ClsrName, Vec<ValueName>),
 }
@@ -98,15 +98,15 @@ pub enum Code {
     BinSlice(ValueName, ValueName, ValueName),
     BinAppend(ValueName, ValueName),
     BinConcat(Vec<ValueName>),
-    ArrLen(ValueName),
-    ArrGet(ValueName, ValueName),
-    ArrSlice(ValueName, ValueName, ValueName),
-    ArrAppend(ValueName, ValueName),
-    ArrConcat(Vec<ValueName>),
-    // `ArrMap(src, f)`: map closure `f` over array `src` into a fresh array of
+    LstLen(ValueName),
+    LstGet(ValueName, ValueName),
+    LstSlice(ValueName, ValueName, ValueName),
+    LstAppend(ValueName, ValueName),
+    LstConcat(Vec<ValueName>),
+    // `LstMap(src, f)`: map closure `f` over array `src` into a fresh array of
     // the same length. Codegen allocates once and fills with a single loop that
     // applies `f` (inline when statically known, else `call_indirect`) per slot.
-    ArrMap(ValueName, ValueName),
+    LstMap(ValueName, ValueName),
     TplGet(ValueName, usize),
 }
 
@@ -158,7 +158,7 @@ pub enum CallTarget {
 pub enum HostTarget {
     /// A store-described host call: `function`'s [`WireSignature`] fixes the
     /// operand order/types and the resume shape — `resume` takes one block
-    /// parameter per signature result (the multi-result records arrive as
+    /// parameter per signature result (the multi-result records lstive as
     /// parallel block parameters, exactly like the per-op variants did).
     ///
     /// [`WireSignature`]: curios_abi::WireSignature
@@ -272,7 +272,7 @@ pub enum Tail {
 pub struct Region {
     /// Closure shells reserved before their captures are filled, so a self- or
     /// mutually-recursive capture can name the shell. Only closures need this; cyclic
-    /// tuples/arrays are rejected upstream (`to_cont`), which keeps `tpl`/`arr` immutable.
+    /// tuples/arrays are rejected upstream (`to_cont`), which keeps `tpl`/`lst` immutable.
     pub preallocs: Vec<(ValueName, ClsrName)>,
     pub values: Vec<(ValueName, Value)>,
     pub blocks: Vec<(BlockName, Block)>,

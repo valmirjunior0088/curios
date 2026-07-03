@@ -90,7 +90,7 @@ fn join_all_runs_children_concurrently_and_collects_in_order() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Task, Io, Str, Nat, Arr};
+        use /std/{Task, Io, Str, Nat, Lst};
         let main : Task({}) =
             let rs = Task/join_all([
                 () =>
@@ -100,7 +100,7 @@ fn join_all_runs_children_concurrently_and_collects_in_order() {
                     let w = Io/write(Io/stdout, Str/to_bin("b;"));
                     Task/pure(2)
             ])!;
-            let s = Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(/std/Option/unwrap_or(Arr/get(rs, 0), 0), /std/Option/unwrap_or(Arr/get(rs, 1), 0)))));
+            let s = Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(/std/Option/unwrap_or(Lst/get(rs, 0), 0), /std/Option/unwrap_or(Lst/get(rs, 1), 0)))));
             Task/pure(());
         Task/run(main)
         "#,
@@ -301,7 +301,7 @@ fn manual_release_runs_a_finalizer_once_and_completion_does_not_repeat_it() {
 
 #[test]
 fn heterogeneous_existential_task_list_through_a_generic_map() {
-    // An `Arr` of existential-boxed tasks of DIFFERENT result types, mapped by a
+    // An `Lst` of existential-boxed tasks of DIFFERENT result types, mapped by a
     // generic HOF whose body does an indirect closure call on a continuation
     // pulled out of the box. The arity-1 closure definition is inlined away by
     // the specializer, leaving the `call_ref` with no surviving definition — the
@@ -310,20 +310,20 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Str, Nat, Arr};
+        use /std/{Io, Str, Nat, Lst};
         induct Susp(A : Type) : Type
         | now(A)
         | later(() -> Susp(A))
         end
         let Box : Type = { A : Type, t : Susp(A) };
-        let boxes : Arr(Box) =
+        let boxes : Lst(Box) =
             [(Nat, Susp/now(7)), ({}, Susp/now(()))];
-        let stepped = Arr/map((b : Box) =>
+        let stepped = Lst/map((b : Box) =>
             match b.t : Box
             | now(a) => (b.A, Susp/now(a))
             | later(k) => (b.A, k())
             end, boxes);
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Arr/len(stepped))))
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Lst/len(stepped))))
         "#,
         system,
     )

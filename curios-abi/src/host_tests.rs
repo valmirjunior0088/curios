@@ -102,10 +102,10 @@ fn signatures_are_well_formed() {
         );
 
         for (_, type_) in signature.params.iter().chain(&signature.results) {
-            if let WireType::Arr(element) = type_ {
+            if let WireType::Lst(element) = type_ {
                 assert!(
-                    !matches!(**element, WireType::Arr(_)),
-                    "{} nests Arr — no host op does, and codegen's uniform Arr \
+                    !matches!(**element, WireType::Lst(_)),
+                    "{} nests Lst — no host op does, and codegen's uniform Lst \
                      load would not distinguish the layers",
                     function.name
                 );

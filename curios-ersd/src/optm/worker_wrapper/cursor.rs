@@ -1,7 +1,7 @@
 //! The argument-side change: thread an integer cursor over a fixed base buffer in
 //! place of a re-slicing recursion.
 //!
-//! The `Bin`/`Arr` eliminators erase to a `Nat` loop on the buffer's length, so a
+//! The `Bin`/`Lst` eliminators erase to a `Nat` loop on the buffer's length, so a
 //! hand-rolled front-to-back walk advances by *re-slicing*: each step recurses on
 //! `slice(b, k, len b)`, the tail after the head. That slice copies the remaining
 //! elements, turning an `O(n)` walk into `O(n²)`. But the suffix never needs to be
@@ -127,13 +127,13 @@ fn legible(term: &Term, name: &str, base: &str, index: usize, carrier: Carrier) 
         subterm if is_base_len(subterm, base, carrier) => true,
         Subterm::Prim(Prim::Pure(prim)) => match (carrier, prim) {
             (Carrier::Bin, PurePrim::BinGet(buffer, place))
-            | (Carrier::Arr, PurePrim::ArrGet(buffer, place))
+            | (Carrier::Lst, PurePrim::LstGet(buffer, place))
                 if is_named(buffer, base) =>
             {
                 legible(place, name, base, index, carrier)
             }
             (Carrier::Bin, PurePrim::BinSlice(buffer, from, upto))
-            | (Carrier::Arr, PurePrim::ArrSlice(buffer, from, upto))
+            | (Carrier::Lst, PurePrim::LstSlice(buffer, from, upto))
                 if is_named(buffer, base) =>
             {
                 legible(from, name, base, index, carrier)
@@ -184,7 +184,7 @@ fn rewrite(term: &mut Term, ctx: &Lower, base: &str, offset: &str, index: usize,
         Subterm::Prim(Prim::Pure(prim)) => match (carrier, &mut *prim) {
             // `get base i` becomes `get base (offset + i)`.
             (Carrier::Bin, PurePrim::BinGet(buffer, place))
-            | (Carrier::Arr, PurePrim::ArrGet(buffer, place))
+            | (Carrier::Lst, PurePrim::LstGet(buffer, place))
                 if is_named(buffer, base) =>
             {
                 rewrite(place, ctx, base, offset, index, carrier);
@@ -192,7 +192,7 @@ fn rewrite(term: &mut Term, ctx: &Lower, base: &str, offset: &str, index: usize,
             }
             // `slice base p q` becomes `slice base (offset + p) (offset + q)`.
             (Carrier::Bin, PurePrim::BinSlice(buffer, from, upto))
-            | (Carrier::Arr, PurePrim::ArrSlice(buffer, from, upto))
+            | (Carrier::Lst, PurePrim::LstSlice(buffer, from, upto))
                 if is_named(buffer, base) =>
             {
                 rewrite(from, ctx, base, offset, index, carrier);
@@ -265,7 +265,7 @@ fn shift(place: &mut Term, offset: &str) {
 fn is_base_len(subterm: &Subterm, base: &str, carrier: Carrier) -> bool {
     match (carrier, subterm) {
         (Carrier::Bin, Subterm::Prim(Prim::Pure(PurePrim::BinLen(buffer))))
-        | (Carrier::Arr, Subterm::Prim(Prim::Pure(PurePrim::ArrLen(buffer)))) => {
+        | (Carrier::Lst, Subterm::Prim(Prim::Pure(PurePrim::LstLen(buffer)))) => {
             is_named(buffer, base)
         }
         _ => false,
@@ -276,7 +276,7 @@ fn is_base_len(subterm: &Subterm, base: &str, carrier: Carrier) -> bool {
 fn slice_carrier(term: &Term) -> Option<Carrier> {
     match term.as_subterm() {
         Subterm::Prim(Prim::Pure(PurePrim::BinSlice(..))) => Some(Carrier::Bin),
-        Subterm::Prim(Prim::Pure(PurePrim::ArrSlice(..))) => Some(Carrier::Arr),
+        Subterm::Prim(Prim::Pure(PurePrim::LstSlice(..))) => Some(Carrier::Lst),
         _ => None,
     }
 }
@@ -285,7 +285,7 @@ fn slice_carrier(term: &Term) -> Option<Carrier> {
 fn is_drop_front(term: &Term, base: &str, carrier: Carrier) -> bool {
     match (carrier, term.as_subterm()) {
         (Carrier::Bin, Subterm::Prim(Prim::Pure(PurePrim::BinSlice(buffer, _, upto))))
-        | (Carrier::Arr, Subterm::Prim(Prim::Pure(PurePrim::ArrSlice(buffer, _, upto)))) => {
+        | (Carrier::Lst, Subterm::Prim(Prim::Pure(PurePrim::LstSlice(buffer, _, upto)))) => {
             is_named(buffer, base) && is_base_len(upto.as_subterm(), base, carrier)
         }
         _ => false,
@@ -296,7 +296,7 @@ fn is_drop_front(term: &Term, base: &str, carrier: Carrier) -> bool {
 fn slice_start(term: &Term) -> &Term {
     match term.as_subterm() {
         Subterm::Prim(Prim::Pure(PurePrim::BinSlice(_, from, _)))
-        | Subterm::Prim(Prim::Pure(PurePrim::ArrSlice(_, from, _))) => from,
+        | Subterm::Prim(Prim::Pure(PurePrim::LstSlice(_, from, _))) => from,
         _ => unreachable!("a drop-front slot is a slice"),
     }
 }
@@ -308,7 +308,7 @@ fn into_slice_start(term: Term, carrier: Carrier) -> Term {
     };
     match (carrier, slice) {
         (Carrier::Bin, PurePrim::BinSlice(_, from, _))
-        | (Carrier::Arr, PurePrim::ArrSlice(_, from, _)) => from,
+        | (Carrier::Lst, PurePrim::LstSlice(_, from, _)) => from,
         _ => unreachable!("a drop-front slot is a carrier slice"),
     }
 }

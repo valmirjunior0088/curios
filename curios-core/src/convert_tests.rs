@@ -191,13 +191,13 @@ fn convert_prim_nat_to_int_recurses_into_operand() {
 fn convert_prim_arr_compares_element_wise() {
     let mut context = context();
 
-    let this = Subterm::Prim(Prim::arr(vec![
+    let this = Subterm::Prim(Prim::lst(vec![
         Subterm::Prim(Prim::Nat(Nat::new(1usize))),
         Subterm::Prim(Prim::Nat(Nat::new(2usize))),
     ]))
     .into();
 
-    let that = Subterm::Prim(Prim::arr(vec![
+    let that = Subterm::Prim(Prim::lst(vec![
         Subterm::Prim(Prim::Nat(Nat::new(1usize))),
         Subterm::Prim(Prim::Nat(Nat::new(2usize))),
     ]))
@@ -210,9 +210,9 @@ fn convert_prim_arr_compares_element_wise() {
 fn convert_prim_arr_rejects_different_lengths() {
     let mut context = context();
 
-    let this = Subterm::Prim(Prim::arr(vec![Subterm::Prim(Prim::Nat(Nat::new(1usize)))])).into();
+    let this = Subterm::Prim(Prim::lst(vec![Subterm::Prim(Prim::Nat(Nat::new(1usize)))])).into();
 
-    let that = Subterm::Prim(Prim::arr(vec![
+    let that = Subterm::Prim(Prim::lst(vec![
         Subterm::Prim(Prim::Nat(Nat::new(1usize))),
         Subterm::Prim(Prim::Nat(Nat::new(2usize))),
     ]))
@@ -976,7 +976,7 @@ fn solve_abstracts_a_reduced_spelling_occurrence() {
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
     );
-    // `z + 1` successor-peels under reduction, and the candidate side arrives
+    // `z + 1` successor-peels under reduction, and the candidate side lstives
     // reduced — each subject contributes both spellings, so the occurrence
     // still abstracts, and the round-trip verification accepts the pair by
     // definitional (not syntactic) equality.
@@ -1318,11 +1318,11 @@ fn imitation_solves_flex_apply_against_prim_former() {
     let mut context = context();
     context.birth_metavar(MetavarId(0), Vec::new(), type_to_type());
 
-    // ?0(?1) ≟ Arr(Nat) — the imitation solves ?0 := λT. Arr(T), the pairwise
-    // equation ?1 := Nat. This is what pins `M := Arr` for `Monad(Arr)`.
+    // ?0(?1) ≟ Lst(Nat) — the imitation solves ?0 := λT. Lst(T), the pairwise
+    // equation ?1 := Nat. This is what pins `M := Lst` for `Monad(Lst)`.
     context.birth_metavar(MetavarId(1), Vec::new(), Term::type_());
     let flex = Term::apply(Term::metavar(0), [Term::metavar(1)]);
-    let rigid = Term::prim(Prim::ArrType(nat_type()));
+    let rigid = Term::prim(Prim::LstType(nat_type()));
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
     assert_eq!(context.metavar_solution(MetavarId(1)), Some(&nat_type()));

@@ -47,8 +47,8 @@ fn io_type() -> Term {
     prim_type(Prim::IoType)
 }
 
-fn arr_type(elem: Term) -> Term {
-    Subterm::Prim(Prim::ArrType(elem)).into()
+fn lst_type(elem: Term) -> Term {
+    Subterm::Prim(Prim::LstType(elem)).into()
 }
 
 fn pure(prim: curios_ersd::PurePrim) -> curios_ersd::Term {
@@ -224,68 +224,68 @@ pub fn erase_prim(
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(pure(curios_ersd::PurePrim::BinConcat(erased)))
         }
-        Prim::ArrType(_) => Ok(curios_ersd::Subterm::Erased.into()),
-        Prim::Arr(elems) => {
+        Prim::LstType(_) => Ok(curios_ersd::Subterm::Erased.into()),
+        Prim::Lst(elems) => {
             // Elaborate already checked this literal against an array type (§9);
             // the element type is re-derived here only to lower the elements.
             let elem_type = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
-                Subterm::Prim(Prim::ArrType(elem_type)) => elem_type,
+                Subterm::Prim(Prim::LstType(elem_type)) => elem_type,
                 _ => unreachable!("erase: array literal checked against non-array type"),
             };
             let erased_elems = elems
                 .iter()
                 .map(|e| erase(context, e, &elem_type))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(pure(curios_ersd::PurePrim::Arr(erased_elems)))
+            Ok(pure(curios_ersd::PurePrim::Lst(erased_elems)))
         }
-        Prim::ArrLen(type_, list) => {
-            let expected_list_type = arr_type(type_.clone());
+        Prim::LstLen(type_, list) => {
+            let expected_list_type = lst_type(type_.clone());
             let list_erased = erase(context, list, &expected_list_type)?;
-            Ok(pure(curios_ersd::PurePrim::ArrLen(list_erased)))
+            Ok(pure(curios_ersd::PurePrim::LstLen(list_erased)))
         }
-        Prim::ArrGet(type_, list, index) => {
-            let expected_list_type = arr_type(type_.clone());
+        Prim::LstGet(type_, list, index) => {
+            let expected_list_type = lst_type(type_.clone());
             let list_erased = erase(context, list, &expected_list_type)?;
             let index_erased = erase(context, index, &nat_type())?;
-            Ok(pure(curios_ersd::PurePrim::ArrGet(
+            Ok(pure(curios_ersd::PurePrim::LstGet(
                 list_erased,
                 index_erased,
             )))
         }
-        Prim::ArrSlice(type_, list, start, end) => {
-            let expected_list_type = arr_type(type_.clone());
+        Prim::LstSlice(type_, list, start, end) => {
+            let expected_list_type = lst_type(type_.clone());
             let list_erased = erase(context, list, &expected_list_type)?;
             let start_erased = erase(context, start, &nat_type())?;
             let end_erased = erase(context, end, &nat_type())?;
-            Ok(pure(curios_ersd::PurePrim::ArrSlice(
+            Ok(pure(curios_ersd::PurePrim::LstSlice(
                 list_erased,
                 start_erased,
                 end_erased,
             )))
         }
-        Prim::ArrAppend(type_, list, elem) => {
-            let expected_list_type = arr_type(type_.clone());
+        Prim::LstAppend(type_, list, elem) => {
+            let expected_list_type = lst_type(type_.clone());
             let list_erased = erase(context, list, &expected_list_type)?;
             let elem_erased = erase(context, elem, type_)?;
-            Ok(pure(curios_ersd::PurePrim::ArrAppend(
+            Ok(pure(curios_ersd::PurePrim::LstAppend(
                 list_erased,
                 elem_erased,
             )))
         }
-        Prim::ArrConcat(type_, operands) => {
-            let expected_list_type = arr_type(type_.clone());
+        Prim::LstConcat(type_, operands) => {
+            let expected_list_type = lst_type(type_.clone());
             let erased = operands
                 .iter()
                 .map(|e| erase(context, e, &expected_list_type))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(pure(curios_ersd::PurePrim::ArrConcat(erased)))
+            Ok(pure(curios_ersd::PurePrim::LstConcat(erased)))
         }
-        Prim::ArrMap(a, b, f, arr) => {
+        Prim::LstMap(a, b, f, lst) => {
             let f_type = Term::func_type([("x", a.clone())], b.clone());
             let f_erased = erase(context, f, &f_type)?;
-            let arr_ty = arr_type(a.clone());
-            let arr_erased = erase(context, arr, &arr_ty)?;
-            Ok(pure(curios_ersd::PurePrim::ArrMap(arr_erased, f_erased)))
+            let lst_ty = lst_type(a.clone());
+            let lst_erased = erase(context, lst, &lst_ty)?;
+            Ok(pure(curios_ersd::PurePrim::LstMap(lst_erased, f_erased)))
         }
         Prim::IoType => Ok(curios_ersd::Subterm::Erased.into()),
         &Prim::Io(token) => Ok(pure(curios_ersd::PurePrim::Io(token))),

@@ -423,16 +423,16 @@ mod tests {
         prim(PurePrim::BinSlice(buffer, from, upto))
     }
 
-    fn arr_len(buffer: Term) -> Term {
-        prim(PurePrim::ArrLen(buffer))
+    fn lst_len(buffer: Term) -> Term {
+        prim(PurePrim::LstLen(buffer))
     }
 
-    fn arr_get(buffer: Term, index: Term) -> Term {
-        prim(PurePrim::ArrGet(buffer, index))
+    fn lst_get(buffer: Term, index: Term) -> Term {
+        prim(PurePrim::LstGet(buffer, index))
     }
 
-    fn arr_slice(buffer: Term, from: Term, upto: Term) -> Term {
-        prim(PurePrim::ArrSlice(buffer, from, upto))
+    fn lst_slice(buffer: Term, from: Term, upto: Term) -> Term {
+        prim(PurePrim::LstSlice(buffer, from, upto))
     }
 
     fn add(left: Term, right: Term) -> Term {
@@ -451,7 +451,7 @@ mod tests {
         Subterm::Prim(Prim::Cell(CellPrim::Get(cell))).into()
     }
 
-    /// `Nat.match head | 0 => zero | _ => default` — the shape a `Bin`/`Arr` length
+    /// `Nat.match head | 0 => zero | _ => default` — the shape a `Bin`/`Lst` length
     /// fold erases to.
     fn nat_match(head: Term, zero: Term, default: Term) -> Term {
         Subterm::NatMatch(NatMatch::Dispatch {
@@ -596,13 +596,13 @@ mod tests {
         // xs))` — both axes at once: the cursor threads an offset over `xs` and the
         // accumulator absorbs the `get`, so the drop-front slice disappears.
         let body = nat_match(
-            arr_len(name_term("xs")),
+            lst_len(name_term("xs")),
             nat(0),
             add(
-                arr_get(name_term("xs"), nat(0)),
+                lst_get(name_term("xs"), nat(0)),
                 call(
                     "sum",
-                    vec![arr_slice(name_term("xs"), nat(1), arr_len(name_term("xs")))],
+                    vec![lst_slice(name_term("xs"), nat(1), lst_len(name_term("xs")))],
                 ),
             ),
         );
@@ -618,7 +618,7 @@ mod tests {
             "expected a threaded accumulator:\n{printed}"
         );
         assert!(
-            !printed.contains("Arr.slice"),
+            !printed.contains("Lst.slice"),
             "the drop-front slice should be gone:\n{printed}"
         );
     }

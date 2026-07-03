@@ -10,7 +10,7 @@ use {
 /// Slice forwarding: re-base an aggregate access made through a slice onto the
 /// slice's underlying buffer, so the slice never has to be materialised.
 ///
-/// The free-monoid recursors for `Arr`/`Bin` are erased to a `Nat` loop over the
+/// The free-monoid recursors for `Lst`/`Bin` are erased to a `Nat` loop over the
 /// aggregate's length (`core::erase`), and the cons arm recovers its *tail* by
 /// re-slicing the original buffer at every step: `tail := slice(xs, len - i, len)`.
 /// A slice is an `array.new` + `array.copy` (`cont::to_wasm`), so a fold that
@@ -142,11 +142,11 @@ fn forward_eval(name: &ValueName, code: Code, ctx: &mut ForwardCtx) -> Value {
 /// three reads it performs. Anything else is left for the caller to pass through.
 fn classify(code: &Code) -> Option<(ValueName, Carrier, SuffixRead<ValueName>)> {
     Some(match code {
-        Code::ArrLen(operand) => (operand.clone(), Carrier::Arr, SuffixRead::Len),
+        Code::LstLen(operand) => (operand.clone(), Carrier::Lst, SuffixRead::Len),
         Code::BinLen(operand) => (operand.clone(), Carrier::Bin, SuffixRead::Len),
-        Code::ArrGet(operand, index) => (
+        Code::LstGet(operand, index) => (
             operand.clone(),
-            Carrier::Arr,
+            Carrier::Lst,
             SuffixRead::Get(index.clone()),
         ),
         Code::BinGet(operand, index) => (
@@ -154,9 +154,9 @@ fn classify(code: &Code) -> Option<(ValueName, Carrier, SuffixRead<ValueName>)> 
             Carrier::Bin,
             SuffixRead::Get(index.clone()),
         ),
-        Code::ArrSlice(operand, start, end) => (
+        Code::LstSlice(operand, start, end) => (
             operand.clone(),
-            Carrier::Arr,
+            Carrier::Lst,
             SuffixRead::Slice(start.clone(), end.clone()),
         ),
         Code::BinSlice(operand, start, end) => (
@@ -214,14 +214,14 @@ fn rebased_index(base: &ValueName, index: &ValueName, ctx: &mut ForwardCtx) -> V
 
 fn rebuild_slice(carrier: Carrier, base: ValueName, start: ValueName, end: ValueName) -> Code {
     match carrier {
-        Carrier::Arr => Code::ArrSlice(base, start, end),
+        Carrier::Lst => Code::LstSlice(base, start, end),
         Carrier::Bin => Code::BinSlice(base, start, end),
     }
 }
 
 fn rebuild_get(carrier: Carrier, base: ValueName, index: ValueName) -> Code {
     match carrier {
-        Carrier::Arr => Code::ArrGet(base, index),
+        Carrier::Lst => Code::LstGet(base, index),
         Carrier::Bin => Code::BinGet(base, index),
     }
 }
@@ -268,10 +268,10 @@ mod tests {
 
     #[test]
     fn len_of_a_slice_becomes_the_window_width() {
-        // xs : Arr, s, e : Nat ; w = slice(xs, s, e) ; n = len(w)
+        // xs : Lst, s, e : Nat ; w = slice(xs, s, e) ; n = len(w)
         let mut module = module_with(vec![
-            (v("w"), Value::Eval(Code::ArrSlice(v("xs"), v("s"), v("e")))),
-            (v("n"), Value::Eval(Code::ArrLen(v("w")))),
+            (v("w"), Value::Eval(Code::LstSlice(v("xs"), v("s"), v("e")))),
+            (v("n"), Value::Eval(Code::LstLen(v("w")))),
         ]);
 
         forward_slices(&mut module);
@@ -288,8 +288,8 @@ mod tests {
     fn get_through_a_slice_rebases_onto_the_base() {
         // w = slice(xs, s, e) ; x = get(w, j)  ⟶  off = s + j ; x = get(xs, off)
         let mut module = module_with(vec![
-            (v("w"), Value::Eval(Code::ArrSlice(v("xs"), v("s"), v("e")))),
-            (v("x"), Value::Eval(Code::ArrGet(v("w"), v("j")))),
+            (v("w"), Value::Eval(Code::LstSlice(v("xs"), v("s"), v("e")))),
+            (v("x"), Value::Eval(Code::LstGet(v("w"), v("j")))),
         ]);
 
         forward_slices(&mut module);
@@ -304,7 +304,7 @@ mod tests {
             other => panic!("expected an `s + j` offset, got {other:?}"),
         }
         match &body[2].1 {
-            Value::Eval(Code::ArrGet(base, offset)) => {
+            Value::Eval(Code::LstGet(base, offset)) => {
                 assert_eq!((base, offset), (&v("xs"), offset_name));
             }
             other => panic!("expected get(xs, off), got {other:?}"),
@@ -316,9 +316,9 @@ mod tests {
         // w = slice(xs, s, e) ; u = slice(w, p, q) ; y = get(u, k)
         // u re-bases onto xs, and y forwards straight through it to xs.
         let mut module = module_with(vec![
-            (v("w"), Value::Eval(Code::ArrSlice(v("xs"), v("s"), v("e")))),
-            (v("u"), Value::Eval(Code::ArrSlice(v("w"), v("p"), v("q")))),
-            (v("y"), Value::Eval(Code::ArrGet(v("u"), v("k")))),
+            (v("w"), Value::Eval(Code::LstSlice(v("xs"), v("s"), v("e")))),
+            (v("u"), Value::Eval(Code::LstSlice(v("w"), v("p"), v("q")))),
+            (v("y"), Value::Eval(Code::LstGet(v("u"), v("k")))),
         ]);
 
         forward_slices(&mut module);
@@ -327,7 +327,7 @@ mod tests {
         let inner = body(&module)
             .iter()
             .find_map(|(name, value)| match value {
-                Value::Eval(Code::ArrSlice(base, ..)) if name == &v("u") => Some(base.clone()),
+                Value::Eval(Code::LstSlice(base, ..)) if name == &v("u") => Some(base.clone()),
                 _ => None,
             })
             .expect("u survives as a slice of the base");
@@ -335,7 +335,7 @@ mod tests {
 
         // ...and the final get reads `xs`, not any intermediate window.
         match &body(&module).last().unwrap().1 {
-            Value::Eval(Code::ArrGet(base, _)) => assert_eq!(base, &v("xs")),
+            Value::Eval(Code::LstGet(base, _)) => assert_eq!(base, &v("xs")),
             other => panic!("expected get(xs, _), got {other:?}"),
         }
     }
@@ -344,7 +344,7 @@ mod tests {
     fn a_bin_access_does_not_forward_through_an_arr_slice() {
         // Carriers never cross in well-typed code; guard against it anyway.
         let mut module = module_with(vec![
-            (v("w"), Value::Eval(Code::ArrSlice(v("xs"), v("s"), v("e")))),
+            (v("w"), Value::Eval(Code::LstSlice(v("xs"), v("s"), v("e")))),
             (v("x"), Value::Eval(Code::BinGet(v("w"), v("j")))),
         ]);
 
@@ -361,14 +361,14 @@ mod tests {
     #[test]
     fn a_non_slice_access_is_left_alone() {
         let mut module = module_with(vec![
-            (v("xs"), Value::Pure(Data::Arr(vec![]))),
-            (v("n"), Value::Eval(Code::ArrLen(v("xs")))),
+            (v("xs"), Value::Pure(Data::Lst(vec![]))),
+            (v("n"), Value::Eval(Code::LstLen(v("xs")))),
         ]);
 
         forward_slices(&mut module);
 
         match &body(&module).last().unwrap().1 {
-            Value::Eval(Code::ArrLen(operand)) => assert_eq!(operand, &v("xs")),
+            Value::Eval(Code::LstLen(operand)) => assert_eq!(operand, &v("xs")),
             other => panic!("expected len(xs) untouched, got {other:?}"),
         }
     }

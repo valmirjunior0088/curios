@@ -41,10 +41,10 @@ pub trait EvalEnv {
     fn int(&self, name: &ValueName) -> Option<i32>;
     fn flt(&self, name: &ValueName) -> Option<f32>;
     fn bin(&self, name: &ValueName) -> Option<&[u8]>;
-    fn arr(&self, name: &ValueName) -> Option<&[Self::Elem]>;
+    fn lst(&self, name: &ValueName) -> Option<&[Self::Elem]>;
     fn tpl(&self, name: &ValueName) -> Option<&[Self::Elem]>;
 
-    /// The element handle for an operand name — `ArrAppend` appends by reference.
+    /// The element handle for an operand name — `LstAppend` appends by reference.
     fn elem(&self, name: &ValueName) -> Option<Self::Elem>;
 
     /// The scalar behind an element handle, if it is one (`Nat`/`Int`/`Flt` —
@@ -84,9 +84,9 @@ impl EvalEnv for Lits {
         }
     }
 
-    fn arr(&self, name: &ValueName) -> Option<&[ValueName]> {
+    fn lst(&self, name: &ValueName) -> Option<&[ValueName]> {
         match self.get(name)? {
-            Data::Arr(elems) => Some(elems),
+            Data::Lst(elems) => Some(elems),
             _ => None,
         }
     }

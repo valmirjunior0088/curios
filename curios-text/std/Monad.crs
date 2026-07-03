@@ -1,7 +1,7 @@
 -- The concept lives in `/syn` — the `!` operator desugars to
 -- `/syn/Monad/bind`, so it must be resolvable without imports — and this
 -- module is the user-facing facade (the `std/Eql.crs` pattern). Witnesses
--- live beside their monads: `Option.crs`, `Arr.crs`, `Task.crs`,
+-- live beside their monads: `Option.crs`, `Lst.crs`, `Task.crs`,
 -- `Parse.crs`, `Reader.crs`.
 pub use /syn/{Monad};
 pub use /syn/Monad/{pure, bind};

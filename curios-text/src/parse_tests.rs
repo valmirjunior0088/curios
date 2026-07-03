@@ -424,13 +424,13 @@ fn bare_type_names_parse_as_names() {
 #[test]
 fn parse_use_brace_group() {
     assert_eq!(
-        "use /std/{Bin, Arr};".parse::<Module>().unwrap().items,
+        "use /std/{Bin, Lst};".parse::<Module>().unwrap().items,
         vec![TopItem::Use(TopUse {
             is_pub: false,
             name: Name::new(true, Qualifier::from(["std".to_string()])),
             group: UseGroup::Named(vec![
                 GroupItem::Both("Bin".to_string()),
-                GroupItem::Both("Arr".to_string()),
+                GroupItem::Both("Lst".to_string()),
             ]),
         })]
     );
@@ -439,7 +439,7 @@ fn parse_use_brace_group() {
 #[test]
 fn parse_use_brace_group_kinds() {
     assert_eq!(
-        "use /std/{mod Bin, let Nat, Arr};"
+        "use /std/{mod Bin, let Nat, Lst};"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -449,7 +449,7 @@ fn parse_use_brace_group_kinds() {
             group: UseGroup::Named(vec![
                 GroupItem::Mod("Bin".to_string()),
                 GroupItem::Let("Nat".to_string()),
-                GroupItem::Both("Arr".to_string()),
+                GroupItem::Both("Lst".to_string()),
             ]),
         })]
     );

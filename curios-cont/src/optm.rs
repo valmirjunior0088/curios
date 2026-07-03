@@ -50,7 +50,7 @@
 //!   captures, finishing type erasure.
 //! - [`dead_code_elimination`] — drops unused bindings and unreachable
 //!   functions, closures, and consts.
-//! - [`map_simplification`] — collapses an `Arr.map` by the identity closure to
+//! - [`map_simplification`] — collapses an `Lst.map` by the identity closure to
 //!   an alias of its source, letting copy propagation and dead-code elimination
 //!   see through the otherwise-opaque map primitive.
 //! - [`slice_forwarding`] — re-bases `len`/`get`/`slice` of a slice onto the
@@ -178,7 +178,7 @@ use {super::*, curios_base::Entropy};
 ///    specialized closures at every site. A settle round follows, and only then
 ///    does map simplification run: by here a field-projection closure like the
 ///    newtype `to_bin` has been forwarded down to the bare identity, so an
-///    `Arr.map` by it collapses to an alias its consumers see through. A second
+///    `Lst.map` by it collapses to an alias its consumers see through. A second
 ///    known-tag threading round then catches the joins the new splices exposed.
 /// 7. **Hoist constants.** Every bytestring and closed aggregate becomes a
 ///    shared module const, built once at startup instead of per execution.

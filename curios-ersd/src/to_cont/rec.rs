@@ -68,7 +68,7 @@ pub fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usize> {
 /// Only closures need a shell: tuples and arrays are *not* prealloc'd — they lower as
 /// computed items, so a cyclic one is rejected by [`rec_computed_order`] rather than
 /// back-patched (see `plan_backpatch`). Confining cyclic recursion to closures is what lets
-/// every `tpl`/`arr` wasm field stay immutable.
+/// every `tpl`/`lst` wasm field stay immutable.
 pub struct Backpatch {
     pub clsr: ClsrName,
     pub captures: Vec<ValueName>,

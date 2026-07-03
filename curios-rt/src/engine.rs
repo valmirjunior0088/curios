@@ -36,7 +36,7 @@ pub fn shared_engine() -> &'static Engine {
 /// the same derivation `cont`'s wasm emitter applies to the module's import
 /// section, so the two ends cannot drift (and wasmtime validates them against
 /// each other at instantiation). Scalar params cross raw `i32`, scalar results
-/// pre-boxed as i31 refs; `Bin`/`Io` are the concrete i8-array, `Arr` the
+/// pre-boxed as i31 refs; `Bin`/`Io` are the concrete i8-array, `Lst` the
 /// anyref-element array — wasmtime-universe mirrors of curios-cont's
 /// `bytes_sub_type`/`elems_sub_type` (the flat rope payloads every reference
 /// crosses the boundary as); keep the two ends in sync.
@@ -45,14 +45,14 @@ pub fn shared_engine() -> &'static Engine {
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
     let bin_array = ArrayType::new(engine, FieldType::new(Mutability::Var, StorageType::I8));
     let bin_ref = ValType::Ref(RefType::new(false, HeapType::ConcreteArray(bin_array)));
-    let arr_array = ArrayType::new(
+    let lst_array = ArrayType::new(
         engine,
         FieldType::new(
             Mutability::Var,
             StorageType::ValType(ValType::Ref(RefType::new(true, HeapType::Any))),
         ),
     );
-    let arr_ref = ValType::Ref(RefType::new(false, HeapType::ConcreteArray(arr_array)));
+    let lst_ref = ValType::Ref(RefType::new(false, HeapType::ConcreteArray(lst_array)));
     let i31_ref = ValType::Ref(RefType::new(false, HeapType::I31));
 
     let val_type = |wire_type: &WireType, is_result: bool| match wire_type {
@@ -61,7 +61,7 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
             false => ValType::I32,
         },
         WireType::Bin | WireType::Io => bin_ref.clone(),
-        WireType::Arr(_) => arr_ref.clone(),
+        WireType::Lst(_) => lst_ref.clone(),
     };
 
     let signature = &function.signature;

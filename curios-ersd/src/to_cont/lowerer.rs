@@ -401,7 +401,7 @@ impl Work<'_, '_, '_> {
     /// Everything else — including tuples and arrays — is "computed": lowered via
     /// `lower_value_name` in dependency order. A non-cyclic aggregate then builds directly; a
     /// genuinely self-referential one surfaces as a cycle in `rec_computed_order` and is
-    /// rejected. Confining cyclic recursion to closures is what lets `tpl`/`arr` fields stay
+    /// rejected. Confining cyclic recursion to closures is what lets `tpl`/`lst` fields stay
     /// immutable.
     pub fn plan_backpatch(&mut self, item: &crate::Term, frame: &Frame) -> Option<Backpatch> {
         match &**item {

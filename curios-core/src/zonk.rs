@@ -325,11 +325,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                             empty_case: zonk_term(context, empty_case)?,
                             cons_case: cons_case.map_body(|b| zonk_term(context, b))?,
                         },
-                        Carrier::Arr {
+                        Carrier::Lst {
                             elem,
                             empty_case,
                             cons_case,
-                        } => Carrier::Arr {
+                        } => Carrier::Lst {
                             elem: zonk_term(context, elem)?,
                             empty_case: zonk_term(context, empty_case)?,
                             cons_case: cons_case.map_body(|b| zonk_term(context, b))?,
@@ -501,33 +501,33 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         ),
         Prim::BinConcat(terms) => Prim::BinConcat(zonk_terms(context, terms)?),
 
-        Prim::ArrType(t) => Prim::ArrType(zonk_term(context, t)?),
-        Prim::Arr(elems) => Prim::Arr(zonk_terms(context, elems)?),
-        Prim::ArrLen(a, b) => Prim::ArrLen(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::ArrGet(a, b, c) => Prim::ArrGet(
+        Prim::LstType(t) => Prim::LstType(zonk_term(context, t)?),
+        Prim::Lst(elems) => Prim::Lst(zonk_terms(context, elems)?),
+        Prim::LstLen(a, b) => Prim::LstLen(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::LstGet(a, b, c) => Prim::LstGet(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
         ),
-        Prim::ArrAppend(a, b, c) => Prim::ArrAppend(
+        Prim::LstAppend(a, b, c) => Prim::LstAppend(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
         ),
-        Prim::ArrSlice(a, b, c, d) => Prim::ArrSlice(
+        Prim::LstSlice(a, b, c, d) => Prim::LstSlice(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
             zonk_term(context, d)?,
         ),
-        Prim::ArrConcat(ty, operands) => {
-            Prim::ArrConcat(zonk_term(context, ty)?, zonk_terms(context, operands)?)
+        Prim::LstConcat(ty, operands) => {
+            Prim::LstConcat(zonk_term(context, ty)?, zonk_terms(context, operands)?)
         }
-        Prim::ArrMap(a, b, f, arr) => Prim::ArrMap(
+        Prim::LstMap(a, b, f, lst) => Prim::LstMap(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, f)?,
-            zonk_term(context, arr)?,
+            zonk_term(context, lst)?,
         ),
 
         Prim::Foreign(function, args) => {

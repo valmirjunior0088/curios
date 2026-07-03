@@ -61,15 +61,15 @@ fn normalized_cont_optm(source: &str) -> String {
 #[test]
 fn concept_method_call_matches_direct_primitive_codegen() {
     let through_concept = r#"
-        use /std/{Nat, Arr, Io, Str, Add, Proc};
+        use /std/{Nat, Lst, Io, Str, Add, Proc};
         pub let bump(x : Nat) -> Nat = Add/add(x, 1);
-        let n : Nat = Arr/len(Proc/args());
+        let n : Nat = Lst/len(Proc/args());
         Io/print(Nat/to_str(bump(n)))
         "#;
     let direct = r#"
-        use /std/{Nat, Arr, Io, Str, Proc};
+        use /std/{Nat, Lst, Io, Str, Proc};
         pub let bump(x : Nat) -> Nat = Nat/add(x, 1);
-        let n : Nat = Arr/len(Proc/args());
+        let n : Nat = Lst/len(Proc/args());
         Io/print(Nat/to_str(bump(n)))
         "#;
 
@@ -84,15 +84,15 @@ fn concept_method_call_matches_direct_primitive_codegen() {
 #[test]
 fn concept_comparison_matches_direct_primitive_codegen() {
     let through_concept = r#"
-        use /std/{Nat, Bln, Arr, Io, Str, Cmp, Proc};
+        use /std/{Nat, Bln, Lst, Io, Str, Cmp, Proc};
         pub let small(x : Nat) -> Bln = Cmp/lt(x, 10);
-        let n : Nat = Arr/len(Proc/args());
+        let n : Nat = Lst/len(Proc/args());
         Io/print(Bln/to_str(small(n)))
         "#;
     let direct = r#"
-        use /std/{Nat, Bln, Arr, Io, Str, Proc};
+        use /std/{Nat, Bln, Lst, Io, Str, Proc};
         pub let small(x : Nat) -> Bln = Nat/lt(x, 10);
-        let n : Nat = Arr/len(Proc/args());
+        let n : Nat = Lst/len(Proc/args());
         Io/print(Bln/to_str(small(n)))
         "#;
 

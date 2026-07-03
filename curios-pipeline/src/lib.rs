@@ -1026,18 +1026,18 @@ mod tests {
 
     #[test]
     fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
-        // `Arr/map((pair) => pair.0, xs)`: the inserted implicit `?A` is the
-        // lambda's domain *and* `xs`'s element type, but `xs : Arr(?A)` is checked
+        // `Lst/map((pair) => pair.0, xs)`: the inserted implicit `?A` is the
+        // lambda's domain *and* `xs`'s element type, but `xs : Lst(?A)` is checked
         // after the lambda. Elaboration must postpone the lambda (its domain is an
         // unsolved metavar, and its body projects `pair.0`) until `xs` pins `?A`,
         // then re-check it. Guards the lambda-domain arm of `blocked_on_metavar`;
         // without it this fails "projected from a non-tuple". Checked at the
         // type-check level — the inference is the point, not lowering.
         let source = r#"
-            use /std/{Arr};
+            use /std/{Lst};
             use /std/{Nat};
-            let first(xs : Arr({ Nat, Nat })) -> Arr(Nat) =
-                Arr/map((pair) => pair.0, xs);
+            let first(xs : Lst({ Nat, Nat })) -> Lst(Nat) =
+                Lst/map((pair) => pair.0, xs);
             first
         "#;
 
@@ -1046,20 +1046,20 @@ mod tests {
 
     #[test]
     fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
-        // `pick([], Arr/concat)`: the inserted implicit `?A` is the empty array's
+        // `pick([], Lst/concat)`: the inserted implicit `?A` is the empty array's
         // type *and* `combine`'s domain. The empty-array literal `[]` borrows its
         // element type from the expected (check-only intro), so against the bare
         // metavar `?A` it cannot elaborate. Elaboration must postpone it until the
-        // sibling `Arr/concat` grounds `?A := Arr(?T)`, then re-check — at which
-        // point the `Arr(Nat)` result pins `?T`. Exercises the array arm of
+        // sibling `Lst/concat` grounds `?A := Lst(?T)`, then re-check — at which
+        // point the `Lst(Nat)` result pins `?T`. Exercises the array arm of
         // `blocked_on_metavar`; without it this fails "type mismatch" eagerly.
         let source = r#"
-            use /std/{Arr};
+            use /std/{Lst};
             use /std/{Nat};
             let pick(@A : Type, fallback : A, combine : (A, A) -> A) -> A =
                 combine(fallback, fallback);
-            let go : Arr(Nat) =
-                pick([], Arr/concat);
+            let go : Lst(Nat) =
+                pick([], Lst/concat);
             go
         "#;
 
@@ -1069,7 +1069,7 @@ mod tests {
         // the postponed `[]` re-checks against a bare metavar and is rejected —
         // graceful degradation, no new acceptance.
         let unpinned = r#"
-            use /std/{Arr};
+            use /std/{Lst};
             let id(@A : Type, x : A) -> A = x;
             let bad = id([]);
             bad
@@ -1121,9 +1121,9 @@ mod tests {
         // projection-only arity and panicked "`Table` lacks tuple type for arity `1`".
         // Guards folding projection (`index + 1`) and prealloc arities into that scan.
         let source = r#"
-            use /std/{Arr};
+            use /std/{Lst};
             use /std/{Nat};
-            Arr/map(@{ Nat, Nat }, @Nat, (pair) => pair.0, [])
+            Lst/map(@{ Nat, Nat }, @Nat, (pair) => pair.0, [])
         "#;
 
         assert!(compile(source, None).is_ok());
@@ -1131,18 +1131,18 @@ mod tests {
 
     #[test]
     fn bare_polymorphic_function_inserts_implicits_in_value_position() {
-        // Passing a bare `Arr/concat : (@T, Arr T, Arr T) -> Arr T` where an
-        // explicit `(Arr Nat, Arr Nat) -> Arr Nat` is expected: the check
+        // Passing a bare `Lst/concat : (@T, Lst T, Lst T) -> Lst T` where an
+        // explicit `(Lst Nat, Lst Nat) -> Lst Nat` is expected: the check
         // turnaround (`insert_implicits_on_check`) inserts the implicit `@T` and
         // eta-expands over the explicit binders, so no hand-written
         // `(l, r) => concat(l, r)` wrapper is needed. Lowers end-to-end — the
         // eta-expansion is an ordinary closure over a saturated call.
         let source = r#"
-            use /std/{Arr};
+            use /std/{Lst};
             use /std/{Nat};
-            let pairwise(f : (Arr(Nat), Arr(Nat)) -> Arr(Nat), a : Arr(Nat)) -> Arr(Nat) =
+            let pairwise(f : (Lst(Nat), Lst(Nat)) -> Lst(Nat), a : Lst(Nat)) -> Lst(Nat) =
                 f(a, a);
-            pairwise(Arr/concat, [1])
+            pairwise(Lst/concat, [1])
         "#;
 
         assert!(compile(source, None).is_ok());
@@ -1156,9 +1156,9 @@ mod tests {
         // the expected-not-implicit gate this would wrongly eta-expand and fail to
         // convert against the implicit-leading annotation.
         let source = r#"
-            use /std/{Arr};
+            use /std/{Lst};
             use /std/{Nat};
-            let g : (@T : Type, Arr(T), Arr(T)) -> Arr(T) = Arr/concat;
+            let g : (@T : Type, Lst(T), Lst(T)) -> Lst(T) = Lst/concat;
             g(@Nat, [1], [2])
         "#;
 

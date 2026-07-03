@@ -1,9 +1,9 @@
 use {
     super::{
-        Apply, ArrMatch, BinMatch, BlnMatch, ConceptField, ConceptParam, Entrypoint, Field, Func,
+        Apply, BinMatch, BlnMatch, ConceptField, ConceptParam, Entrypoint, Field, Func,
         FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let,
-        LetSignature, Match, Module, Motive, Nat, NatLiteral, NatMatch, NumLit, Plicity, Prim,
-        Proj, Radix, Rec, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept,
+        LetSignature, LstMatch, Match, Module, Motive, Nat, NatLiteral, NatMatch, NumLit, Plicity,
+        Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept,
         TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField,
         TupleType, TupleTypeParam, UseGroup, WitnessEntry,
     },
@@ -301,22 +301,22 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::BinSlice(bin, start, end) => print_prim_call("Bin.slice", vec![bin, start, end]),
         Prim::BinAppend(bin, byte) => print_prim_call("Bin.append", vec![bin, byte]),
         Prim::BinConcat(left, right) => print_prim_call("Bin.concat", vec![left, right]),
-        Prim::ArrType(elem) => print_prim_call("Arr", vec![elem]),
-        Prim::Arr(elems) => flat([
+        Prim::LstType(elem) => print_prim_call("Lst", vec![elem]),
+        Prim::Lst(elems) => flat([
             pure("["),
             sep_flat(elems.into_iter().map(|operand| print_term(operand)), || {
                 pure(", ")
             }),
             pure("]"),
         ]),
-        Prim::ArrLen(ty, operand) => print_prim_call("Arr.len", vec![ty, operand]),
-        Prim::ArrGet(ty, list, index) => print_prim_call("Arr.get", vec![ty, list, index]),
-        Prim::ArrSlice(ty, list, start, end) => {
-            print_prim_call("Arr.slice", vec![ty, list, start, end])
+        Prim::LstLen(ty, operand) => print_prim_call("Lst.len", vec![ty, operand]),
+        Prim::LstGet(ty, list, index) => print_prim_call("Lst.get", vec![ty, list, index]),
+        Prim::LstSlice(ty, list, start, end) => {
+            print_prim_call("Lst.slice", vec![ty, list, start, end])
         }
-        Prim::ArrAppend(ty, list, elem) => print_prim_call("Arr.append", vec![ty, list, elem]),
-        Prim::ArrConcat(ty, left, right) => print_prim_call("Arr.concat", vec![ty, left, right]),
-        Prim::ArrMap(a, b, f, arr) => print_prim_call("Arr.map", vec![a, b, f, arr]),
+        Prim::LstAppend(ty, list, elem) => print_prim_call("Lst.append", vec![ty, list, elem]),
+        Prim::LstConcat(ty, left, right) => print_prim_call("Lst.concat", vec![ty, left, right]),
+        Prim::LstMap(a, b, f, lst) => print_prim_call("Lst.map", vec![a, b, f, lst]),
         Prim::IoType => pure("Io"),
         Prim::Io(token) => pure(format!("Io({token})")),
         Prim::IoEql(left, right) => print_prim_call("Io.eql", vec![left, right]),
@@ -498,7 +498,7 @@ fn print_term(term: Term) -> Printer<'static> {
                 ),
                 pure("\nend"),
             ]),
-            Match::Arr(ArrMatch {
+            Match::Lst(LstMatch {
                 head,
                 motive,
                 empty_case,

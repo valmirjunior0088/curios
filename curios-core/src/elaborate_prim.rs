@@ -49,14 +49,14 @@ fn infer_bin(context: &mut Context, bin: &Term) -> Result<Term, Error> {
     }
 }
 
-fn arr_type(elem: Term) -> Term {
-    Subterm::Prim(Prim::ArrType(elem)).into()
+fn lst_type(elem: Term) -> Term {
+    Subterm::Prim(Prim::LstType(elem)).into()
 }
 
-/// Check every element of an `Arr` literal against an already-determined element
+/// Check every element of an `Lst` literal against an already-determined element
 /// type, returning the rebuilt elements. Shared by the two ways the element type
 /// is fixed: borrowed from `expected` when checking, or a fresh metavar when
-/// inferring (see [`elaborate_prim`] and [`synth_prim`]'s `Arr` arm).
+/// inferring (see [`elaborate_prim`] and [`synth_prim`]'s `Lst` arm).
 fn check_arr_elems(
     context: &mut Context,
     elems: &[Term],
@@ -193,74 +193,74 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             }
             (Prim::BinConcat(elaborated), bin_type)
         }
-        Prim::ArrType(elem) => {
+        Prim::LstType(elem) => {
             let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;
-            (Prim::ArrType(elem), Term::type_())
+            (Prim::LstType(elem), Term::type_())
         }
         // Inferring: the element type is unknown, so mint a fresh metavar — the
         // implicit `@T` a `nil`/`cons` constructor would insert — which the elements
         // solve (an empty `[]` leaves it for a later unification to ground, exactly
-        // as the old `Arr/nil()` did). Checking goes through `elaborate_prim`, which
+        // as the old `Lst/nil()` did). Checking goes through `elaborate_prim`, which
         // borrows the concrete element type from `expected` before reaching here.
-        Prim::Arr(elems) => {
+        Prim::Lst(elems) => {
             let elem_type = context.fresh_metavar(
                 Term::type_(),
                 None,
                 ImplicitOrigin {
-                    func: "Arr".to_string(),
+                    func: "Lst".to_string(),
                     binder: "T".to_string(),
                 },
             );
             let elaborated = check_arr_elems(context, elems, &elem_type)?;
-            (Prim::Arr(elaborated), arr_type(elem_type))
+            (Prim::Lst(elaborated), lst_type(elem_type))
         }
-        Prim::ArrLen(type_, list) => {
+        Prim::LstLen(type_, list) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
-            let list_type = arr_type(type_.clone());
+            let list_type = lst_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type))?.0;
-            (Prim::ArrLen(type_, list), nat_type)
+            (Prim::LstLen(type_, list), nat_type)
         }
-        Prim::ArrGet(type_, list, index) => {
+        Prim::LstGet(type_, list, index) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
-            let list_type = arr_type(type_.clone());
+            let list_type = lst_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type))?.0;
             let index = elaborate(context, index, Mode::Check(nat_type))?.0;
             let output = type_.clone();
-            (Prim::ArrGet(type_, list, index), output)
+            (Prim::LstGet(type_, list, index), output)
         }
-        Prim::ArrSlice(type_, list, start, end) => {
+        Prim::LstSlice(type_, list, start, end) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
-            let list_type = arr_type(type_.clone());
+            let list_type = lst_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type.clone()))?.0;
             let start = elaborate(context, start, Mode::Check(nat_type.clone()))?.0;
             let end = elaborate(context, end, Mode::Check(nat_type))?.0;
-            (Prim::ArrSlice(type_, list, start, end), list_type)
+            (Prim::LstSlice(type_, list, start, end), list_type)
         }
-        Prim::ArrAppend(type_, list, elem) => {
+        Prim::LstAppend(type_, list, elem) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
-            let list_type = arr_type(type_.clone());
+            let list_type = lst_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type.clone()))?.0;
             let elem = elaborate(context, elem, Mode::Check(type_.clone()))?.0;
-            (Prim::ArrAppend(type_, list, elem), list_type)
+            (Prim::LstAppend(type_, list, elem), list_type)
         }
-        Prim::ArrConcat(type_, operands) => {
+        Prim::LstConcat(type_, operands) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
-            let list_type = arr_type(type_.clone());
+            let list_type = lst_type(type_.clone());
             let mut elaborated = Vec::with_capacity(operands.len());
             for operand in operands {
                 elaborated.push(elaborate(context, operand, Mode::Check(list_type.clone()))?.0);
             }
-            (Prim::ArrConcat(type_, elaborated), list_type)
+            (Prim::LstConcat(type_, elaborated), list_type)
         }
-        Prim::ArrMap(a, b, f, arr) => {
+        Prim::LstMap(a, b, f, lst) => {
             let a = elaborate(context, a, Mode::Check(Term::type_()))?.0;
             let b = elaborate(context, b, Mode::Check(Term::type_()))?.0;
             let f_type = Term::func_type([("x", a.clone())], b.clone());
             let f = elaborate(context, f, Mode::Check(f_type))?.0;
-            let arr_a = arr_type(a.clone());
-            let arr = elaborate(context, arr, Mode::Check(arr_a))?.0;
-            let arr_b = arr_type(b.clone());
-            (Prim::ArrMap(a, b, f, arr), arr_b)
+            let lst_a = lst_type(a.clone());
+            let lst = elaborate(context, lst, Mode::Check(lst_a))?.0;
+            let lst_b = lst_type(b.clone());
+            (Prim::LstMap(a, b, f, lst), lst_b)
         }
         Prim::IoType => (prim.clone(), Term::type_()),
         Prim::Io(_) => (prim.clone(), io_type),
@@ -336,20 +336,20 @@ pub fn elaborate_prim(
     prim: &Prim,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // `Arr` is bidirectional. Checking against a concrete `Arr(T)`, it borrows
+    // `Lst` is bidirectional. Checking against a concrete `Lst(T)`, it borrows
     // the element type from `expected` — definitional, so each element is
     // checked against the known type (better errors, and numeric element
     // literals pick the right numeric type). Any other expected shape — a
     // stuck `?M(?A)` awaiting the flex-apply imitation included — falls
     // through to `synth_prim`, which mints a fresh element-type metavar; the
-    // check-after-infer unification then equates `Arr(?T)` with the expected
-    // type (pinning `?M := Arr`, or reporting the genuine mismatch).
-    if let (Prim::Arr(elems), Mode::Check(expected)) = (prim, &mode)
-        && let Subterm::Prim(Prim::ArrType(elem_type)) = &*reduce_with(context, expected)?
+    // check-after-infer unification then equates `Lst(?T)` with the expected
+    // type (pinning `?M := Lst`, or reporting the genuine mismatch).
+    if let (Prim::Lst(elems), Mode::Check(expected)) = (prim, &mode)
+        && let Subterm::Prim(Prim::LstType(elem_type)) = &*reduce_with(context, expected)?
     {
         let elaborated = check_arr_elems(context, elems, elem_type)?;
 
-        return Ok((Term::prim(Prim::Arr(elaborated)), expected.clone()));
+        return Ok((Term::prim(Prim::Lst(elaborated)), expected.clone()));
     }
 
     let (prim, type_) = synth_prim(context, prim)?;

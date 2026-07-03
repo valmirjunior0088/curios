@@ -290,7 +290,7 @@ impl Convert {
         self.pending.push_back(Goal { type_, this, that });
     }
 
-    /// Enqueue the bodies of two arity-3 cons arms (`Bin`/`Arr`) for comparison,
+    /// Enqueue the bodies of two arity-3 cons arms (`Bin`/`Lst`) for comparison,
     /// opened under shared fresh binders for `(head, tail, ih)`.
     fn compare_cons_three(
         &mut self,
@@ -769,12 +769,12 @@ impl Convert {
                     Ok(true)
                 }
                 (
-                    Carrier::Arr {
+                    Carrier::Lst {
                         elem: this_elem,
                         empty_case: this_empty,
                         cons_case: this_cons,
                     },
-                    Carrier::Arr {
+                    Carrier::Lst {
                         elem: that_elem,
                         empty_case: that_empty,
                         cons_case: that_cons,
@@ -1047,7 +1047,7 @@ impl Convert {
         // entry embedding a metavariable, or equal to another entry, stays
         // ambiguous, and the candidate may not depend on it. Each subject
         // contributes both its spellings — as written, and as the reducer
-        // exposes it at a whnf position (the candidate's root arrives reduced
+        // exposes it at a whnf position (the candidate's root lstives reduced
         // while deep positions do not) — except a reduced form that is a bare
         // variable, which would collide with the renaming machinery.
         let mut subjects = Vec::new();
@@ -1201,7 +1201,7 @@ impl Convert {
 
     /// Flex-apply imitation — the restricted higher-order rule: for
     /// `?m(a₁ … aₖ) ≡ T(p̄ ++ ī)` where `T` is a nominal (inductive or struct)
-    /// type constructor or a unary primitive type former (`Arr`, `Cell`),
+    /// type constructor or a unary primitive type former (`Lst`, `Cell`),
     /// commit the *imitation* solution
     /// `?m := λx₁…xₖ. T(x₁, …, xₖ)` and equate arguments pairwise. This is
     /// what unifies `?M(?A) ≡ Option(Nat)` for higher-kinded concepts — the
@@ -1214,7 +1214,7 @@ impl Convert {
     /// - imitation only — the constant (`?m := λ_. T(b̄)`) and projection
     ///   (`?m := λx. x`) solutions are never produced;
     /// - rigid heads only — nominal constructors and the unary primitive
-    ///   formers (`Arr`, `Cell`), whose argument rides inside the `Prim` node;
+    ///   formers (`Lst`, `Cell`), whose argument rides inside the `Prim` node;
     /// - flex–flex stays blocked (dispatched before the structural match);
     /// - a rejected or postponed guess *blocks* the goal, never hard-fails it:
     ///   refuting the imitation does not prove the equation unsatisfiable (a
@@ -1267,10 +1267,10 @@ impl Convert {
             }
             // The unary primitive type formers: their argument rides inside
             // the `Prim` node, so the imitation body rebuilds the node over
-            // the binder (`?m := λT. Arr(T)` for `?m(?A) ≡ Arr(Nat)`).
-            Subterm::Prim(Prim::ArrType(elem)) => (
+            // the binder (`?m := λT. Lst(T)` for `?m(?A) ≡ Lst(Nat)`).
+            Subterm::Prim(Prim::LstType(elem)) => (
                 vec![elem.clone()],
-                Box::new(|vars| Term::prim(Prim::ArrType(vars[0].clone()))),
+                Box::new(|vars| Term::prim(Prim::LstType(vars[0].clone()))),
             ),
             Subterm::Prim(Prim::CellType(elem)) => (
                 vec![elem.clone()],
@@ -1622,13 +1622,13 @@ impl Convert {
                 }
                 (
                     Subterm::Apply(apply),
-                    Subterm::Prim(rigid @ (Prim::ArrType(_) | Prim::CellType(_))),
+                    Subterm::Prim(rigid @ (Prim::LstType(_) | Prim::CellType(_))),
                 ) => {
                     let rigid: Term = Subterm::Prim(rigid).into();
                     self.imitate_flex_apply(context, apply, rigid, &that_raw, goal.clone())?
                 }
                 (
-                    Subterm::Prim(rigid @ (Prim::ArrType(_) | Prim::CellType(_))),
+                    Subterm::Prim(rigid @ (Prim::LstType(_) | Prim::CellType(_))),
                     Subterm::Apply(apply),
                 ) => {
                     let rigid: Term = Subterm::Prim(rigid).into();

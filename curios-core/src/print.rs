@@ -213,7 +213,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
                         collect_labels(empty_case, out);
                         scope(out, cons_case);
                     }
-                    Carrier::Arr {
+                    Carrier::Lst {
                         elem,
                         empty_case,
                         cons_case,
@@ -604,25 +604,25 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 || pure(", "),
             ),
         ]),
-        Prim::ArrType(elem) => print_unary("Arr ", elem, depth),
-        Prim::Arr(elems) => flat([
+        Prim::LstType(elem) => print_unary("Lst ", elem, depth),
+        Prim::Lst(elems) => flat([
             pure("["),
             sep_flat(elems.into_iter().map(move |e| print_term(e, depth)), || {
                 pure(", ")
             }),
             pure("]"),
         ]),
-        Prim::ArrLen(ty, list) => print_binary("Arr.len ", ty, list, depth),
-        Prim::ArrGet(ty, list, index) => flat([
-            pure("Arr.get "),
+        Prim::LstLen(ty, list) => print_binary("Lst.len ", ty, list, depth),
+        Prim::LstGet(ty, list, index) => flat([
+            pure("Lst.get "),
             print_term(ty, depth),
             pure(" "),
             print_term(list, depth),
             pure(" "),
             print_term(index, depth),
         ]),
-        Prim::ArrSlice(ty, list, start, end) => flat([
-            pure("Arr.slice "),
+        Prim::LstSlice(ty, list, start, end) => flat([
+            pure("Lst.slice "),
             print_term(ty, depth),
             pure(" "),
             print_term(list, depth),
@@ -631,16 +631,16 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(end, depth),
         ]),
-        Prim::ArrAppend(ty, list, elem) => flat([
-            pure("Arr.append "),
+        Prim::LstAppend(ty, list, elem) => flat([
+            pure("Lst.append "),
             print_term(ty, depth),
             pure(" "),
             print_term(list, depth),
             pure(" "),
             print_term(elem, depth),
         ]),
-        Prim::ArrConcat(ty, operands) => flat([
-            pure("Arr.concat "),
+        Prim::LstConcat(ty, operands) => flat([
+            pure("Lst.concat "),
             print_term(ty, depth),
             pure(" "),
             sep_flat(
@@ -648,15 +648,15 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 || pure(", "),
             ),
         ]),
-        Prim::ArrMap(a, b, f, arr) => flat([
-            pure("Arr.map "),
+        Prim::LstMap(a, b, f, lst) => flat([
+            pure("Lst.map "),
             print_term(a, depth),
             pure(" "),
             print_term(b, depth),
             pure(" "),
             print_term(f, depth),
             pure(" "),
-            print_term(arr, depth),
+            print_term(lst, depth),
         ]),
         Prim::IoType => pure("Io"),
         Prim::Io(token) => pure(format!("Io({token})")),
@@ -940,7 +940,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 Cases::FreeMonoid { carrier } => match carrier {
                     Carrier::Nat { .. } => "Nat.fold ",
                     Carrier::Bin { .. } => "Bin.fold ",
-                    Carrier::Arr { .. } => "Arr.fold ",
+                    Carrier::Lst { .. } => "Lst.fold ",
                 },
             };
 
@@ -1015,7 +1015,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         .collect::<Vec<_>>(),
                 ),
                 Cases::FreeMonoid { carrier } => {
-                    // The cons arm of `Bin`/`Arr` binds `head, ..tail; ih`; shared
+                    // The cons arm of `Bin`/`Lst` binds `head, ..tail; ih`; shared
                     // rendering for both three-binder carriers.
                     let cons_three = |cons_case: Scope<Three>| {
                         let ((head_label, tail_label, ih_label), cons_case) =
@@ -1034,7 +1034,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
 
                     // Per carrier: the identity arm's literal, its body, and the cons
                     // arm — which binds `(predecessor, ih)` for the head-less unary
-                    // `Nat`, and `(head, tail), ih` for `Bin`/`Arr`.
+                    // `Nat`, and `(head, tail), ih` for `Bin`/`Lst`.
                     let (empty_lit, empty_case, cons_arm) = match carrier {
                         Carrier::Nat {
                             empty_case,
@@ -1056,7 +1056,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                             empty_case,
                             cons_case,
                         } => ("\n| \\\\ =>\n", empty_case, cons_three(cons_case)),
-                        Carrier::Arr {
+                        Carrier::Lst {
                             empty_case,
                             cons_case,
                             ..

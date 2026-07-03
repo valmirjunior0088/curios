@@ -10,7 +10,7 @@ use {
 
 /// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when
 /// it is still symbolic or too large to fit. The shared decode behind the
-/// `Bin`/`Arr` `get`/`slice` bounds.
+/// `Bin`/`Lst` `get`/`slice` bounds.
 fn as_index(term: &Term) -> Option<usize> {
     term.as_nat().and_then(|n| n.to_big_uint()?.to_usize())
 }
@@ -243,7 +243,7 @@ pub fn from_ordering(ordering: Ordering) -> Comparison {
 /// into the shared-inner shortcut). It decides ONLY where the answer is forced and
 /// is `Stuck` otherwise — a sound partial decision procedure, the shared body of
 /// the whole comparison family. (The `lt` partner of the `Unary` eliminator's
-/// successor peel; for `Bin`/`Arr` the same `Comparison` shape would recurse via
+/// successor peel; for `Bin`/`Lst` the same `Comparison` shape would recurse via
 /// `uncons`.)
 ///
 /// Returns the operands with their shared successor floor peeled off, so an
@@ -306,7 +306,7 @@ fn reduce_nat_compare(
 
 /// The free-monoid product structure of a reduced carrier value, the view a monoid
 /// homomorphism (`len`/`map`) distributes over: a literal run of generators `L`
-/// (bytes for `Bin`, elements for `Arr`), an n-ary `Concat` of operands to recurse
+/// (bytes for `Bin`, elements for `Lst`), an n-ary `Concat` of operands to recurse
 /// on, an `Append` of a base and one appended generator, or an `Opaque` node (a
 /// variable / slice) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
 enum Shape<L> {
@@ -326,12 +326,12 @@ fn bin_shape(value: Term) -> Shape<u8> {
     }
 }
 
-/// Classify a reduced `Arr` value into its product shape (generators are elements).
-fn arr_shape(value: Term) -> Shape<Term> {
+/// Classify a reduced `Lst` value into its product shape (generators are elements).
+fn lst_shape(value: Term) -> Shape<Term> {
     match Term::unwrap_or_clone(value) {
-        Subterm::Prim(Prim::Arr(elems)) => Shape::Literal(elems),
-        Subterm::Prim(Prim::ArrConcat(_, operands)) => Shape::Concat(operands),
-        Subterm::Prim(Prim::ArrAppend(_, base, elem)) => Shape::Append(base, elem),
+        Subterm::Prim(Prim::Lst(elems)) => Shape::Literal(elems),
+        Subterm::Prim(Prim::LstConcat(_, operands)) => Shape::Concat(operands),
+        Subterm::Prim(Prim::LstAppend(_, base, elem)) => Shape::Append(base, elem),
         other => Shape::Opaque(other.into()),
     }
 }
@@ -1118,23 +1118,23 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 |kept| Subterm::Prim(Prim::BinConcat(kept)),
             ))
         }
-        Prim::ArrType(elem) => {
+        Prim::LstType(elem) => {
             let elem = reduce(context, elem.clone())?;
-            Ok(Subterm::Prim(Prim::arr_type(elem)))
+            Ok(Subterm::Prim(Prim::lst_type(elem)))
         }
-        Prim::Arr(elems) => {
+        Prim::Lst(elems) => {
             let elems = elems
                 .iter()
                 .map(|e| reduce(context, e.clone()))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(Subterm::Prim(Prim::Arr(elems)))
+            Ok(Subterm::Prim(Prim::Lst(elems)))
         }
-        Prim::ArrLen(type_, list) => {
+        Prim::LstLen(type_, list) => {
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
             reduce_homomorphism(
                 context,
-                arr_shape(list),
+                lst_shape(list),
                 |run| Term::prim(Prim::Nat(Nat::new(run.len()))),
                 nat_sum,
                 |base_len, _| {
@@ -1143,20 +1143,20 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                         base_len,
                     ))
                 },
-                |sub| Term::prim(Prim::arr_len(type_.clone(), sub)),
+                |sub| Term::prim(Prim::lst_len(type_.clone(), sub)),
             )
         }
-        Prim::ArrGet(type_, list, index) => {
+        Prim::LstGet(type_, list, index) => {
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
             let index_reduced = reduce(context, index.clone())?;
             let i = as_index(&index_reduced);
             // A concrete index into a literal run.
-            if let (Subterm::Prim(Prim::Arr(elems)), Some(i)) = (&*list, i) {
+            if let (Subterm::Prim(Prim::Lst(elems)), Some(i)) = (&*list, i) {
                 let len = elems.len();
                 return match elems.get(i).cloned().map(Term::unwrap_or_clone) {
                     Some(elem) => Ok(elem),
-                    None => Err(ReduceError::ArrGetOutOfBounds {
+                    None => Err(ReduceError::LstGetOutOfBounds {
                         len,
                         index: i,
                         span: index.span(),
@@ -1164,7 +1164,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 };
             }
             // A get over a cons spine peels one element per `0`/`succ` index step,
-            // the `Arr` twin of `BinGet`'s byte peel:
+            // the `Lst` twin of `BinGet`'s byte peel:
             //   `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
             if let Some((head, tail)) = peel_first_elem(&list) {
                 match &*index_reduced {
@@ -1172,52 +1172,52 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                     Subterm::Prim(Prim::Nat(Nat::Succ(..))) => {
                         let one = Term::prim(Prim::Nat(Nat::new(1usize)));
                         let prev = Term::prim(Prim::nat_sub(index_reduced.clone(), one));
-                        return reduce(context, Term::prim(Prim::arr_get(type_, tail, prev)))
+                        return reduce(context, Term::prim(Prim::lst_get(type_, tail, prev)))
                             .map(Term::unwrap_or_clone);
                     }
                     _ => {}
                 }
             }
-            Ok(Subterm::Prim(Prim::arr_get(type_, list, index_reduced)))
+            Ok(Subterm::Prim(Prim::lst_get(type_, list, index_reduced)))
         }
-        Prim::ArrSlice(type_, list, start, end) => {
+        Prim::LstSlice(type_, list, start, end) => {
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
             let start_reduced = reduce(context, start.clone())?;
             let end_reduced = reduce(context, end.clone())?;
             // The full slice is the identity: `slice(a, 0, len a) = a`. Sound even for
-            // a symbolic `a` — `0..len` is always in range — the `Arr` twin of
-            // `BinSlice`'s full-window identity, letting a full-length `Arr/slice`
+            // a symbolic `a` — `0..len` is always in range — the `Lst` twin of
+            // `BinSlice`'s full-window identity, letting a full-length `Lst/slice`
             // reduce to its base instead of copying.
             if matches!(&*start_reduced, Subterm::Prim(Prim::Nat(Nat::Zero)))
-                && matches!(&*end_reduced, Subterm::Prim(Prim::ArrLen(_, whole)) if *whole == list)
+                && matches!(&*end_reduced, Subterm::Prim(Prim::LstLen(_, whole)) if *whole == list)
             {
                 return Ok(Term::unwrap_or_clone(list));
             }
             // The empty slice is empty: `slice(a, i, i) = []`. Sound for a symbolic
             // `a` — an empty range yields no elements regardless — and the base case
-            // the cons peel below bottoms out on (the `Arr` twin of `BinSlice`'s
+            // the cons peel below bottoms out on (the `Lst` twin of `BinSlice`'s
             // empty-slice identity).
             if start_reduced == end_reduced {
-                return Ok(Subterm::Prim(Prim::Arr(Vec::new())));
+                return Ok(Subterm::Prim(Prim::Lst(Vec::new())));
             }
             // A nested slice reassociates: `slice(slice(a, p, q), i, j) =
             // slice(a, p + i, p + j)`. Sound for the in-range bounds real call sites
-            // produce — the `Arr` twin of `BinSlice`'s window reassociation — so a
+            // produce — the `Lst` twin of `BinSlice`'s window reassociation — so a
             // slice of a slice over a symbolic base collapses to one slice.
-            if let Subterm::Prim(Prim::ArrSlice(_inner_ty, inner, p, _q)) = &*list {
+            if let Subterm::Prim(Prim::LstSlice(_inner_ty, inner, p, _q)) = &*list {
                 let lo = Term::prim(Prim::nat_add(p.clone(), start_reduced.clone()));
                 let hi = Term::prim(Prim::nat_add(p.clone(), end_reduced.clone()));
-                let flattened = Term::prim(Prim::arr_slice(type_.clone(), inner.clone(), lo, hi));
+                let flattened = Term::prim(Prim::lst_slice(type_.clone(), inner.clone(), lo, hi));
                 return reduce(context, flattened).map(Term::unwrap_or_clone);
             }
             let s = as_index(&start_reduced);
             let e = as_index(&end_reduced);
             // A concrete slice of a literal run.
-            if let (Subterm::Prim(Prim::Arr(elems)), Some(s), Some(e)) = (&*list, s, e) {
+            if let (Subterm::Prim(Prim::Lst(elems)), Some(s), Some(e)) = (&*list, s, e) {
                 return match elems.get(s..e) {
-                    Some(slice) => Ok(Subterm::Prim(Prim::Arr(slice.to_vec()))),
-                    None => Err(ReduceError::ArrSliceOutOfRange {
+                    Some(slice) => Ok(Subterm::Prim(Prim::Lst(slice.to_vec()))),
+                    None => Err(ReduceError::LstSliceOutOfRange {
                         len: elems.len(),
                         start: s,
                         end: e,
@@ -1226,7 +1226,7 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                 };
             }
             // A slice over a cons spine peels one element per `0`/`succ` boundary
-            // step, the `Arr` twin of `BinSlice`'s byte peel:
+            // step, the `Lst` twin of `BinSlice`'s byte peel:
             //   `slice(cons(h, t), 0, succ e) = [h] ++ slice(t, 0, e)`  and
             //   `slice(cons(h, t), succ s, e) = slice(t, s - 1, e - 1)`.
             if let Some((head, tail)) = peel_first_elem(&list) {
@@ -1240,18 +1240,18 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                         Subterm::Prim(Prim::Nat(Nat::Succ(..))),
                     ) => {
                         let zero = Term::prim(Prim::Nat(Nat::Zero));
-                        let rest = Term::prim(Prim::arr_slice(
+                        let rest = Term::prim(Prim::lst_slice(
                             type_.clone(),
                             tail,
                             zero,
                             dec(&end_reduced),
                         ));
-                        let head_singleton: Term = Subterm::Prim(Prim::Arr(vec![head])).into();
-                        let consed = Term::prim(Prim::arr_concat(type_, [head_singleton, rest]));
+                        let head_singleton: Term = Subterm::Prim(Prim::Lst(vec![head])).into();
+                        let consed = Term::prim(Prim::lst_concat(type_, [head_singleton, rest]));
                         return reduce(context, consed).map(Term::unwrap_or_clone);
                     }
                     (Subterm::Prim(Prim::Nat(Nat::Succ(..))), _) => {
-                        let sliced = Term::prim(Prim::arr_slice(
+                        let sliced = Term::prim(Prim::lst_slice(
                             type_,
                             tail,
                             dec(&start_reduced),
@@ -1262,46 +1262,46 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
                     _ => {}
                 }
             }
-            Ok(Subterm::Prim(Prim::arr_slice(
+            Ok(Subterm::Prim(Prim::lst_slice(
                 type_,
                 list,
                 start_reduced,
                 end_reduced,
             )))
         }
-        Prim::ArrAppend(type_, list, elem) => {
+        Prim::LstAppend(type_, list, elem) => {
             let type_ = reduce(context, type_.clone())?;
             let list = reduce(context, list.clone())?;
             let elem = reduce(context, elem.clone())?;
             Ok(match Term::unwrap_or_clone(list) {
-                Subterm::Prim(Prim::Arr(mut elems)) => {
+                Subterm::Prim(Prim::Lst(mut elems)) => {
                     elems.push(elem);
-                    Subterm::Prim(Prim::Arr(elems))
+                    Subterm::Prim(Prim::Lst(elems))
                 }
-                list => Subterm::Prim(Prim::arr_append(type_, list, elem)),
+                list => Subterm::Prim(Prim::lst_append(type_, list, elem)),
             })
         }
-        Prim::ArrConcat(type_, operands) => {
+        Prim::LstConcat(type_, operands) => {
             let type_ = reduce(context, type_.clone())?;
             let reduced: Vec<Term> = operands
                 .iter()
                 .map(|e| reduce(context, e.clone()))
                 .collect::<Result<_, _>>()?;
-            // The `Arr` twin of `BinConcat` normalisation: drop the empty array (so
+            // The `Lst` twin of `BinConcat` normalisation: drop the empty array (so
             // `concat([], a)`/`concat(a, [])` collapse to `a`), merge adjacent literal
             // runs, collapse a lone operand — the definitional partner of `peel_arr`'s
             // `[]`-handling (`core::spine`); see `normalize_concat`.
             fn literal(operand: &Term) -> Option<&[Term]> {
                 match &**operand {
-                    Subterm::Prim(Prim::Arr(elems)) => Some(elems.as_slice()),
+                    Subterm::Prim(Prim::Lst(elems)) => Some(elems.as_slice()),
                     _ => None,
                 }
             }
             Ok(normalize_concat(
                 reduced,
                 literal,
-                |elems| Subterm::Prim(Prim::Arr(elems)),
-                |kept| Subterm::Prim(Prim::arr_concat(type_, kept)),
+                |elems| Subterm::Prim(Prim::Lst(elems)),
+                |kept| Subterm::Prim(Prim::lst_concat(type_, kept)),
             ))
         }
         // `map`: the eliminator homomorphism. The literal case applies `f`
@@ -1310,31 +1310,31 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
         // same normal form a structural `foldr (\x ih. f x :: ih) []` produces, so
         // map-based proofs still reduce. A symbolic array stays neutral (the
         // `Opaque` case), so there is no unfold of a variable.
-        Prim::ArrMap(a, b, f, arr) => {
+        Prim::LstMap(a, b, f, lst) => {
             let a = reduce(context, a.clone())?;
             let b = reduce(context, b.clone())?;
             let f = reduce(context, f.clone())?;
-            let arr = reduce(context, arr.clone())?;
+            let lst = reduce(context, lst.clone())?;
             reduce_homomorphism(
                 context,
-                arr_shape(arr),
+                lst_shape(lst),
                 |elems| {
-                    Term::prim(Prim::Arr(
+                    Term::prim(Prim::Lst(
                         elems
                             .into_iter()
                             .map(|x| Term::apply(f.clone(), [x]))
                             .collect(),
                     ))
                 },
-                |images| Term::prim(Prim::arr_concat(b.clone(), images)),
+                |images| Term::prim(Prim::lst_concat(b.clone(), images)),
                 |base_map, generator| {
-                    Term::prim(Prim::arr_append(
+                    Term::prim(Prim::lst_append(
                         b.clone(),
                         base_map,
                         Term::apply(f.clone(), [generator]),
                     ))
                 },
-                |sub| Term::prim(Prim::arr_map(a.clone(), b.clone(), f.clone(), sub)),
+                |sub| Term::prim(Prim::lst_map(a.clone(), b.clone(), f.clone(), sub)),
             )
         }
         // The handle type and handle tokens are inert values, like `Nat`/`Nat(_)`.

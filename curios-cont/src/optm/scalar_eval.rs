@@ -23,7 +23,7 @@ use super::*;
 /// What [`eval_scalar`] produces: a scalar or bytestring, owned outright. A
 /// dedicated carrier rather than [`Data`], whose aggregate variants hold
 /// `ValueName`s an interpreter frame could never resolve — results that carry
-/// elements travel as [`Evaluated::Arr`]/[`Evaluated::Elem`] instead, so the
+/// elements travel as [`Evaluated::Lst`]/[`Evaluated::Elem`] instead, so the
 /// aggregate case is unrepresentable here by construction.
 pub enum Scalar {
     Nat(u32),
@@ -86,8 +86,8 @@ impl Scalar {
 pub enum Evaluated<E> {
     /// A scalar or bytestring, owned outright.
     Scalar(Scalar),
-    /// A fresh array of environment elements (`Arr` concat/slice/append).
-    Arr(Vec<E>),
+    /// A fresh array of environment elements (`Lst` concat/slice/append).
+    Lst(Vec<E>),
     /// A forwarded element — a projection out of a known aggregate whose target
     /// is not an inlinable scalar.
     Elem(E),
@@ -118,15 +118,15 @@ pub fn project<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
 
     match code {
         TplGet(t, index) => env.tpl(t)?.get(*index).map(|elem| forward(elem, env)),
-        ArrGet(a, i) => env
-            .arr(a)?
+        LstGet(a, i) => env
+            .lst(a)?
             .get(env.nat(i)? as usize)
             .map(|elem| forward(elem, env)),
         BinGet(b, i) => env
             .bin(b)?
             .get(env.nat(i)? as usize)
             .map(|byte| Evaluated::Scalar(Scalar::Nat(*byte as u32))),
-        ArrLen(a) => fits31u(env.arr(a)?.len() as u64).map(|n| Evaluated::Scalar(Scalar::Nat(n))),
+        LstLen(a) => fits31u(env.lst(a)?.len() as u64).map(|n| Evaluated::Scalar(Scalar::Nat(n))),
         BinLen(b) => fits31u(env.bin(b)?.len() as u64).map(|n| Evaluated::Scalar(Scalar::Nat(n))),
         _ => None,
     }
@@ -151,23 +151,23 @@ pub fn eval<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
     use Code::*;
 
     match code {
-        // `Arr` builders — total given in-bounds literal indices; they yield a
+        // `Lst` builders — total given in-bounds literal indices; they yield a
         // fresh array of elements, so they cascade through further projection
         // and concatenation.
-        ArrConcat(operands) => {
+        LstConcat(operands) => {
             let mut elems = Vec::new();
             for name in operands {
-                elems.extend_from_slice(env.arr(name)?);
+                elems.extend_from_slice(env.lst(name)?);
             }
-            Some(Evaluated::Arr(elems))
+            Some(Evaluated::Lst(elems))
         }
-        ArrSlice(a, start, end) => {
-            arr_slice(env.arr(a)?, env.nat(start)?, env.nat(end)?).map(Evaluated::Arr)
+        LstSlice(a, start, end) => {
+            lst_slice(env.lst(a)?, env.nat(start)?, env.nat(end)?).map(Evaluated::Lst)
         }
-        ArrAppend(a, elem) => {
-            let mut elems = env.arr(a)?.to_vec();
+        LstAppend(a, elem) => {
+            let mut elems = env.lst(a)?.to_vec();
             elems.push(env.elem(elem)?);
-            Some(Evaluated::Arr(elems))
+            Some(Evaluated::Lst(elems))
         }
 
         // Everything else yields an owned scalar or bytestring.
@@ -316,7 +316,7 @@ fn eval_scalar<E: EvalEnv>(code: &Code, env: &E) -> Option<Scalar> {
             Some(Scalar::Bin(bytes))
         }
 
-        // Aggregate *projection* is handled in `project`; the `Arr` builders are
+        // Aggregate *projection* is handled in `project`; the `Lst` builders are
         // handled in `eval` (their results carry elements, not owned data); `Io`
         // has no `Code` form. Anything unsupported is left untouched.
         _ => None,
@@ -332,7 +332,7 @@ fn wrap31s(value: i32) -> i32 {
 
 /// `elems[start..end]` as a fresh element list, preserving the elements, when the
 /// bounds are in range; an out-of-range slice traps, so it is left unfolded.
-fn arr_slice<E: Clone>(elems: &[E], start: u32, end: u32) -> Option<Vec<E>> {
+fn lst_slice<E: Clone>(elems: &[E], start: u32, end: u32) -> Option<Vec<E>> {
     let (start, end) = (start as usize, end as usize);
     (start <= end && end <= elems.len()).then(|| elems[start..end].to_vec())
 }

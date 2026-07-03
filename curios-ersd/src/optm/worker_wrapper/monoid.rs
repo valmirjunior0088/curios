@@ -93,7 +93,7 @@ enum Monoid {
     IntMul,
     IntOr,
     BinAppend,
-    ArrAppend,
+    LstAppend,
 }
 
 impl Monoid {
@@ -105,7 +105,7 @@ impl Monoid {
             Monoid::IntAdd | Monoid::IntOr => PurePrim::Int(0),
             Monoid::IntMul => PurePrim::Int(1),
             Monoid::BinAppend => PurePrim::Bin(Vec::new()),
-            Monoid::ArrAppend => PurePrim::Arr(Vec::new()),
+            Monoid::LstAppend => PurePrim::Lst(Vec::new()),
         };
         Subterm::Prim(Prim::Pure(prim)).into()
     }
@@ -113,7 +113,7 @@ impl Monoid {
     /// Whether the operator commutes. The two append monoids do not, which limits
     /// where their addend may sit (see [`scan_tail`]).
     fn commutative(self) -> bool {
-        !matches!(self, Monoid::BinAppend | Monoid::ArrAppend)
+        !matches!(self, Monoid::BinAppend | Monoid::LstAppend)
     }
 
     /// `left ⊕ right` for this monoid.
@@ -126,7 +126,7 @@ impl Monoid {
             Monoid::IntMul => PurePrim::IntMul(left, right),
             Monoid::IntOr => PurePrim::IntOr(left, right),
             Monoid::BinAppend => PurePrim::BinAppend(left, right),
-            Monoid::ArrAppend => PurePrim::ArrAppend(left, right),
+            Monoid::LstAppend => PurePrim::LstAppend(left, right),
         };
         Subterm::Prim(Prim::Pure(prim)).into()
     }
@@ -141,7 +141,7 @@ impl Monoid {
             | (Monoid::IntMul, PurePrim::IntMul(l, r))
             | (Monoid::IntOr, PurePrim::IntOr(l, r))
             | (Monoid::BinAppend, PurePrim::BinAppend(l, r))
-            | (Monoid::ArrAppend, PurePrim::ArrAppend(l, r)) => Ok((l, r)),
+            | (Monoid::LstAppend, PurePrim::LstAppend(l, r)) => Ok((l, r)),
             (_, other) => Err(other),
         }
     }
@@ -158,7 +158,7 @@ fn monoid_combine(prim: &PurePrim) -> Option<(Monoid, &Term, &Term)> {
         PurePrim::IntMul(l, r) => (Monoid::IntMul, l, r),
         PurePrim::IntOr(l, r) => (Monoid::IntOr, l, r),
         PurePrim::BinAppend(l, r) => (Monoid::BinAppend, l, r),
-        PurePrim::ArrAppend(l, r) => (Monoid::ArrAppend, l, r),
+        PurePrim::LstAppend(l, r) => (Monoid::LstAppend, l, r),
         _ => return None,
     })
 }

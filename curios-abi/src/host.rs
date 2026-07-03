@@ -54,7 +54,7 @@ pub enum WireType {
     Bln,
     Bin,
     Io,
-    Arr(Box<WireType>),
+    Lst(Box<WireType>),
 }
 
 /// The signature of one foreign function: named operands and named results.
@@ -151,8 +151,8 @@ impl ForeignStore {
     }
 }
 
-fn arr(element: WireType) -> WireType {
-    WireType::Arr(Box::new(element))
+fn lst(element: WireType) -> WireType {
+    WireType::Lst(Box::new(element))
 }
 
 fn slots(slots: Vec<(&str, WireType)>) -> Vec<(String, WireType)> {
@@ -199,7 +199,7 @@ pub fn sys_io() -> ForeignStore {
             "io_resolve",
             "resolve",
             vec![("handle", WireType::Io)],
-            vec![("status", WireType::Nat), ("addresses", arr(WireType::Bin))],
+            vec![("status", WireType::Nat), ("addresses", lst(WireType::Bin))],
         ),
         (
             "io_socket",
@@ -277,11 +277,11 @@ pub fn sys_io() -> ForeignStore {
             "io_poll",
             "poll",
             vec![
-                ("handles", arr(WireType::Io)),
-                ("events", arr(WireType::Nat)),
+                ("handles", lst(WireType::Io)),
+                ("events", lst(WireType::Nat)),
                 ("timeout", WireType::Int),
             ],
-            vec![("revents", arr(WireType::Nat))],
+            vec![("revents", lst(WireType::Nat))],
         ),
         ("io_close", "close", vec![("h", WireType::Io)], vec![]),
         (
@@ -310,7 +310,7 @@ pub fn sys_io() -> ForeignStore {
             "io_args",
             "args",
             vec![],
-            vec![("argv", arr(WireType::Bin))],
+            vec![("argv", lst(WireType::Bin))],
         ),
         (
             "io_env",

@@ -1,5 +1,5 @@
-pub mod Arr;
-pub use Arr/{let Arr};
+pub mod Lst;
+pub use Lst/{let Lst};
 
 pub mod Cell;
 pub use Cell/{let Cell};

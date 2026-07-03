@@ -1,6 +1,6 @@
 pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
-use /std/{Char, Nat, Bin, Bln, Arr, Option, True, False};
+use /std/{Char, Nat, Bin, Bln, Lst, Option, True, False};
 
 
 rec seq(@s : Scan, @a : Bin, @b : Bin, va : Utf8(s, a), vb : Valid(b))
@@ -120,8 +120,8 @@ let take_n(n : Nat, s : Str) -> Str =
 pub let slice(s : Str, x : Nat, y : Nat) -> Str =
     take_n(y - x, drop_n(x, s));
 
-pub let flatten(parts : Arr(Str)) -> Str =
-    Arr/fold(parts, "", (p, acc) => concat(acc, p));
+pub let flatten(parts : Lst(Str)) -> Str =
+    Lst/fold(parts, "", (p, acc) => concat(acc, p));
 
 pub let eql(a : Str, b : Str) -> Bln =
     Bin/eql(to_bin(a), to_bin(b));
@@ -133,7 +133,7 @@ pub let eql_ci(a : Str, b : Str) -> Bln =
     Bin/eql(lower_bytes(to_bin(a)), lower_bytes(to_bin(b)));
 
 pub let repeat(s : Str, n : Nat) -> Str =
-    Arr/balanced(n, "", (i) => s, (l, r) => concat(l, r));
+    Lst/balanced(n, "", (i) => s, (l, r) => concat(l, r));
 
 pub rec bad_uninhabited(@x : Bin, w : Utf8(Scan/bad(), x)) -> False =
     match w : (w : Utf8(q, y)) => False
@@ -320,8 +320,8 @@ pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Nat =
     go(Scan/lead(), s.bytes, s.valid, i,
         lte_succ_of_lt(i, count_w(Scan/lead(), s.bytes), ok));
 
-pub let join(sep : Str, parts : Arr(Str)) -> Str =
-    Arr/balanced(Arr/len(parts), "", (i) => Option/unwrap_or(Arr/get(parts, i), ""),
+pub let join(sep : Str, parts : Lst(Str)) -> Str =
+    Lst/balanced(Lst/len(parts), "", (i) => Option/unwrap_or(Lst/get(parts, i), ""),
         (l, r) => concat(concat(l, sep), r));
 
 let trim_bounds(s : Str) -> {Nat, Nat} =

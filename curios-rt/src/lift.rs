@@ -98,8 +98,8 @@ impl Lift for Vec<u8> {
     }
 }
 
-/// Read an `Arr(Nat)`/`Arr(Io)` host-import argument: a `params[0]` anyref array
-/// whose elements are i31-boxed scalars (the module's uniform `Arr` shape, not
+/// Read an `Lst(Nat)`/`Lst(Io)` host-import argument: a `params[0]` anyref array
+/// whose elements are i31-boxed scalars (the module's uniform `Lst` shape, not
 /// `Bin`'s packed `i8`). The inbound dual of `lower.rs`'s `Vec<u32>` lowering.
 fn lift_i31_array(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<u32>, wasmtime::Error> {
     let Val::AnyRef(Some(anyref)) = param else {
@@ -123,7 +123,7 @@ fn lift_i31_array(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<u32>, 
         .collect()
 }
 
-/// `Arr(Nat)` lifts to the per-handle interest masks — `poll`'s `events` array.
+/// `Lst(Nat)` lifts to the per-handle interest masks — `poll`'s `events` array.
 impl Lift for Vec<Poll> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(lift_i31_array(caller, &params[0])?
@@ -133,9 +133,9 @@ impl Lift for Vec<Poll> {
     }
 }
 
-/// Read an `Arr(Bin)` host-import argument: a `params[0]` anyref array whose
+/// Read an `Lst(Bin)` host-import argument: a `params[0]` anyref array whose
 /// elements are themselves `Bin`s (i8 arrays). The inbound dual of `lower.rs`'s
-/// `Vec<Vec<u8>>` lowering; `Arr(Io)` rides this shape now that a handle is bytes.
+/// `Vec<Vec<u8>>` lowering; `Lst(Io)` rides this shape now that a handle is bytes.
 fn lift_bin_array(
     caller: &mut Caller<'_, ()>,
     param: &Val,
@@ -159,7 +159,7 @@ fn lift_bin_array(
         .collect()
 }
 
-/// `Arr(Io)` lifts each token through the same stdio/handle classification a
+/// `Lst(Io)` lifts each token through the same stdio/handle classification a
 /// single `Io` does — `poll`'s `handles` array.
 impl Lift for Vec<Io> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {

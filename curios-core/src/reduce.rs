@@ -276,7 +276,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             }))))
         }
 
-        // Structural induction on a native free-monoid primitive (`Nat`/`Bin`/`Arr`).
+        // Structural induction on a native free-monoid primitive (`Nat`/`Bin`/`Lst`).
         // The carrier-specific one-step decode lives in `FreeMonoid::uncons` (the
         // eliminator-side analogue of `spine::peel_prim`); this driver is the shared
         // catamorphism over it. An identity `Layer` takes the empty arm; a cons
@@ -289,7 +289,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             let layer = match &carrier {
                 Carrier::Nat { .. } => FreeMonoid::Unary,
                 Carrier::Bin { .. } => FreeMonoid::Bin,
-                Carrier::Arr { .. } => FreeMonoid::Arr,
+                Carrier::Lst { .. } => FreeMonoid::Lst,
             }
             .uncons(scrutinee);
 
@@ -297,7 +297,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                 Layer::Empty => Ok(Reduce::Continue(match carrier {
                     Carrier::Nat { empty_case, .. }
                     | Carrier::Bin { empty_case, .. }
-                    | Carrier::Arr { empty_case, .. } => empty_case,
+                    | Carrier::Lst { empty_case, .. } => empty_case,
                 })),
                 Layer::Cons { head, tail } => {
                     let ih: Term = Subterm::Match(Match {
@@ -313,9 +313,9 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                     // the unary `Nat`), then the tail and the induction hypothesis.
                     Ok(Reduce::Continue(match &carrier {
                         Carrier::Nat { cons_case, .. } => cons_case.open(&[&tail, &ih]),
-                        Carrier::Bin { cons_case, .. } | Carrier::Arr { cons_case, .. } => {
+                        Carrier::Bin { cons_case, .. } | Carrier::Lst { cons_case, .. } => {
                             cons_case.open(&[
-                                head.as_ref().expect("Bin/Arr cons layer carries a head"),
+                                head.as_ref().expect("Bin/Lst cons layer carries a head"),
                                 &tail,
                                 &ih,
                             ])

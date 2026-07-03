@@ -426,7 +426,7 @@ fn erase_nat_match(
     // non-tail-recursive caller that re-recurses on the peeled tail (e.g.
     // `/std/Str/count_w`) re-runs the whole fold at every level: the loop fires a
     // fresh recursion each of its n iterations, all discarded but the last, so
-    // O(n) work becomes O(2^n). The `Arr`/`Bin` eliminators desugar through here
+    // O(n) work becomes O(2^n). The `Lst`/`Bin` eliminators desugar through here
     // (their `Nat` succ arm threads `ih` iff the cons arm did), so this covers
     // them too.
     if !succ_case.uses(1) {
@@ -537,7 +537,7 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<curios_ersd::Term, Er
         } => erase_nat_match(context, head, motive, empty_case, cons_case),
         Cases::FreeMonoid {
             carrier:
-                Carrier::Arr {
+                Carrier::Lst {
                     elem,
                     empty_case,
                     cons_case,
@@ -548,7 +548,7 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<curios_ersd::Term, Er
             motive,
             empty_case,
             cons_case,
-            IndexedCarrier::Arr { elem },
+            IndexedCarrier::Lst { elem },
         ),
         Cases::FreeMonoid {
             carrier:
@@ -567,7 +567,7 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<curios_ersd::Term, Er
     }
 }
 
-/// A borrowed view of the length-indexed carriers (`Arr`/`Bin`) — the eliminator's
+/// A borrowed view of the length-indexed carriers (`Lst`/`Bin`) — the eliminator's
 /// "cons binds a head" axis, which cross-cuts the has-element axis the structural
 /// traversals carve `Carrier` on. Local to `erase` because this is the only place
 /// that axis matters: it bundles the carrier-specific reads behind one parameter so
@@ -575,16 +575,16 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<curios_ersd::Term, Er
 /// variants, so those reads need no unreachable arm.
 #[derive(Clone, Copy)]
 enum IndexedCarrier<'a> {
-    Arr { elem: &'a Term },
+    Lst { elem: &'a Term },
     Bin,
 }
 
 impl IndexedCarrier<'_> {
-    /// The length of `head` (`Arr`/`Bin` are length-indexed).
+    /// The length of `head` (`Lst`/`Bin` are length-indexed).
     fn len(self, head: &Term) -> Term {
         match self {
-            IndexedCarrier::Arr { elem } => {
-                Subterm::Prim(Prim::ArrLen(elem.clone(), head.clone())).into()
+            IndexedCarrier::Lst { elem } => {
+                Subterm::Prim(Prim::LstLen(elem.clone(), head.clone())).into()
             }
             IndexedCarrier::Bin => Subterm::Prim(Prim::BinLen(head.clone())).into(),
         }
@@ -593,8 +593,8 @@ impl IndexedCarrier<'_> {
     /// The element of `head` at `index`.
     fn get(self, head: &Term, index: Term) -> Term {
         match self {
-            IndexedCarrier::Arr { elem } => {
-                Subterm::Prim(Prim::ArrGet(elem.clone(), head.clone(), index)).into()
+            IndexedCarrier::Lst { elem } => {
+                Subterm::Prim(Prim::LstGet(elem.clone(), head.clone(), index)).into()
             }
             IndexedCarrier::Bin => Subterm::Prim(Prim::BinGet(head.clone(), index)).into(),
         }
@@ -603,15 +603,15 @@ impl IndexedCarrier<'_> {
     /// The sub-slice `head[lo .. hi]`.
     fn slice(self, head: &Term, lo: Term, hi: Term) -> Term {
         match self {
-            IndexedCarrier::Arr { elem } => {
-                Subterm::Prim(Prim::ArrSlice(elem.clone(), head.clone(), lo, hi)).into()
+            IndexedCarrier::Lst { elem } => {
+                Subterm::Prim(Prim::LstSlice(elem.clone(), head.clone(), lo, hi)).into()
             }
             IndexedCarrier::Bin => Subterm::Prim(Prim::BinSlice(head.clone(), lo, hi)).into(),
         }
     }
 }
 
-/// Desugar a length-indexed sequence induction (`Arr`/`Bin`) to `Nat` induction
+/// Desugar a length-indexed sequence induction (`Lst`/`Bin`) to `Nat` induction
 /// on the carrier's length, reusing `erase_nat_match` and so the `Nat` loop emitter
 /// wholesale (no new ersd/cont machinery). The structural fold is a `foldr`, so the
 /// loop walks the buffer back-to-front: at `Nat`-step `pred = i` the original cons

@@ -1,4 +1,4 @@
-use /std/{Bin, Str, Nat, Bln, Io, Result, Option, Time, Arr, Task};
+use /std/{Bin, Str, Nat, Bln, Io, Result, Option, Time, Lst, Task};
 
 pub record Settings : Type {
     connect_timeout : Option(Time/Duration),
@@ -43,7 +43,7 @@ let resolve_addr(host : Str, port : Nat) -> Task(Result(Bin, Io/Error)) =
                 let a = /sys/Io/resolve(r.handle);
                 match a.status == /sys/Io/Status/ok : Task(Result(Bin, Io/Error))
                 | false => Task/pure(Result/failure(Io/error_of(a.status)))
-                | true => Task/pure(Result/success(Option/unwrap_or(Arr/get(a.addresses, 0), \\)))
+                | true => Task/pure(Result/success(Option/unwrap_or(Lst/get(a.addresses, 0), \\)))
                 end))
     end;
 

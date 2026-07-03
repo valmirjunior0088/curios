@@ -52,7 +52,7 @@ pub enum Snapshot {
     Int(i32),
     Flt(f32),
     Bin(Rc<Vec<u8>>),
-    Arr(Rc<Vec<Snapshot>>),
+    Lst(Rc<Vec<Snapshot>>),
     Tpl(Rc<Vec<Snapshot>>),
     Clsr(ClsrName, Rc<RefCell<Vec<Snapshot>>>),
 }
@@ -61,7 +61,7 @@ pub type Frame = HashMap<ValueName, Snapshot>;
 
 /// The frame is the interpreter's [`EvalEnv`]: scalar lookups read snapshots, and an
 /// aggregate's elements are themselves snapshots — so the shared evaluator's
-/// projections and `Arr` builders work directly on runtime values, with no
+/// projections and `Lst` builders work directly on runtime values, with no
 /// projection of the frame into a name-keyed literal map.
 impl EvalEnv for Frame {
     type Elem = Snapshot;
@@ -94,9 +94,9 @@ impl EvalEnv for Frame {
         }
     }
 
-    fn arr(&self, name: &ValueName) -> Option<&[Snapshot]> {
+    fn lst(&self, name: &ValueName) -> Option<&[Snapshot]> {
         match self.get(name)? {
-            Snapshot::Arr(elems) => Some(elems),
+            Snapshot::Lst(elems) => Some(elems),
             _ => None,
         }
     }
@@ -287,11 +287,11 @@ impl<'a> Interp<'a> {
             // Delegate to `scalar_eval` — the same wasm-faithful arithmetic and
             // aggregate logic the constant folder uses, so traps line up. The
             // frame is the environment directly: an aggregate's elements are
-            // snapshots, so projections and `Arr` builders work on any element,
+            // snapshots, so projections and `Lst` builders work on any element,
             // not just scalars.
             Value::Eval(code) => Some(match simplify(code, frame)? {
                 Evaluated::Scalar(scalar) => scalar.snapshot(),
-                Evaluated::Arr(elems) => Snapshot::Arr(Rc::new(elems)),
+                Evaluated::Lst(elems) => Snapshot::Lst(Rc::new(elems)),
                 Evaluated::Elem(snap) => snap,
             }),
         }
@@ -410,7 +410,7 @@ pub fn materialise_data(data: &Data, frame: &Frame) -> Option<Snapshot> {
         Data::Int(i) => Snapshot::Int(*i),
         Data::Flt(f) => Snapshot::Flt(*f),
         Data::Bin(bytes) => Snapshot::Bin(Rc::new(bytes.clone())),
-        Data::Arr(elems) => Snapshot::Arr(Rc::new(resolve_names(elems, frame)?)),
+        Data::Lst(elems) => Snapshot::Lst(Rc::new(resolve_names(elems, frame)?)),
         Data::Tpl(elems) => Snapshot::Tpl(Rc::new(resolve_names(elems, frame)?)),
         Data::Clsr(c, captures) => Snapshot::Clsr(
             c.clone(),

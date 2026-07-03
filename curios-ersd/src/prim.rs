@@ -75,15 +75,15 @@ pub enum PurePrim {
     BinSlice(Term, Term, Term),
     BinAppend(Term, Term),
     BinConcat(Vec<Term>),
-    Arr(Vec<Term>),
-    ArrLen(Term),
-    ArrGet(Term, Term),
-    ArrSlice(Term, Term, Term),
-    ArrAppend(Term, Term),
-    ArrConcat(Vec<Term>),
-    // `ArrMap(src, f)`: map closure `f` over `src`, an O(n) fill. `f` is a
+    Lst(Vec<Term>),
+    LstLen(Term),
+    LstGet(Term, Term),
+    LstSlice(Term, Term, Term),
+    LstAppend(Term, Term),
+    LstConcat(Vec<Term>),
+    // `LstMap(src, f)`: map closure `f` over `src`, an O(n) fill. `f` is a
     // closure value; codegen emits one alloc + a fill loop applying `f` per slot.
-    ArrMap(Term, Term),
+    LstMap(Term, Term),
     Io(u32),
     IoEql(Term, Term),
 }
@@ -153,7 +153,7 @@ impl PurePrim {
             Nat(_) | Int(_) | Flt(_) | Bin(_) | Io(_) => vec![],
             NatToInt(a) | NatToFlt(a) | IntToNat(a) | IntToFlt(a) | FltToNat(a) | FltToLeBin(a)
             | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a) | FltFloor(a) | FltCeil(a)
-            | FltTrunc(a) | FltNearest(a) | BinLen(a) | ArrLen(a) => vec![a],
+            | FltTrunc(a) | FltNearest(a) | BinLen(a) | LstLen(a) => vec![a],
             NatEql(a, b)
             | NatNeq(a, b)
             | NatAdd(a, b)
@@ -203,11 +203,11 @@ impl PurePrim {
             | IoEql(a, b)
             | BinGet(a, b)
             | BinAppend(a, b)
-            | ArrGet(a, b)
-            | ArrAppend(a, b)
-            | ArrMap(a, b) => vec![a, b],
-            BinSlice(a, b, c) | ArrSlice(a, b, c) => vec![a, b, c],
-            BinConcat(operands) | ArrConcat(operands) | Arr(operands) => operands.iter().collect(),
+            | LstGet(a, b)
+            | LstAppend(a, b)
+            | LstMap(a, b) => vec![a, b],
+            BinSlice(a, b, c) | LstSlice(a, b, c) => vec![a, b, c],
+            BinConcat(operands) | LstConcat(operands) | Lst(operands) => operands.iter().collect(),
         }
     }
 
@@ -218,7 +218,7 @@ impl PurePrim {
             Nat(_) | Int(_) | Flt(_) | Bin(_) | Io(_) => vec![],
             NatToInt(a) | NatToFlt(a) | IntToNat(a) | IntToFlt(a) | FltToNat(a) | FltToLeBin(a)
             | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a) | FltFloor(a) | FltCeil(a)
-            | FltTrunc(a) | FltNearest(a) | BinLen(a) | ArrLen(a) => vec![a],
+            | FltTrunc(a) | FltNearest(a) | BinLen(a) | LstLen(a) => vec![a],
             NatEql(a, b)
             | NatNeq(a, b)
             | NatAdd(a, b)
@@ -268,11 +268,11 @@ impl PurePrim {
             | IoEql(a, b)
             | BinGet(a, b)
             | BinAppend(a, b)
-            | ArrGet(a, b)
-            | ArrAppend(a, b)
-            | ArrMap(a, b) => vec![a, b],
-            BinSlice(a, b, c) | ArrSlice(a, b, c) => vec![a, b, c],
-            BinConcat(operands) | ArrConcat(operands) | Arr(operands) => {
+            | LstGet(a, b)
+            | LstAppend(a, b)
+            | LstMap(a, b) => vec![a, b],
+            BinSlice(a, b, c) | LstSlice(a, b, c) => vec![a, b, c],
+            BinConcat(operands) | LstConcat(operands) | Lst(operands) => {
                 operands.iter_mut().collect()
             }
         }

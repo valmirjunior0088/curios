@@ -50,7 +50,7 @@ fn lowers_and_runs_arr_len() {
     module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
     module.add_const(
         cont::ValueName::from("LST"),
-        cont::Data::Arr(vec![
+        cont::Data::Lst(vec![
             cont::ValueName::from("THREE"),
             cont::ValueName::from("SEVEN"),
         ]),
@@ -65,7 +65,7 @@ fn lowers_and_runs_arr_len() {
                 preallocs: vec![],
                 values: vec![(
                     cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::ArrLen(cont::ValueName::from("LST"))),
+                    cont::Value::Eval(cont::Code::LstLen(cont::ValueName::from("LST"))),
                 )],
                 blocks: vec![],
                 tail: cont::Tail::Host(cont::HostTarget::IoExit {
@@ -91,7 +91,7 @@ fn lowers_and_runs_arr_get() {
     module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
     module.add_const(
         cont::ValueName::from("LST"),
-        cont::Data::Arr(vec![
+        cont::Data::Lst(vec![
             cont::ValueName::from("THREE"),
             cont::ValueName::from("SEVEN"),
         ]),
@@ -106,7 +106,7 @@ fn lowers_and_runs_arr_get() {
                 preallocs: vec![],
                 values: vec![(
                     cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::ArrGet(
+                    cont::Value::Eval(cont::Code::LstGet(
                         cont::ValueName::from("LST"),
                         cont::ValueName::from("ONE"),
                     )),
@@ -137,7 +137,7 @@ fn lowers_and_runs_arr_slice() {
     module.add_const(cont::ValueName::from("THREE_IDX"), cont::Data::Nat(3));
     module.add_const(
         cont::ValueName::from("LST"),
-        cont::Data::Arr(vec![
+        cont::Data::Lst(vec![
             cont::ValueName::from("THREE"),
             cont::ValueName::from("SEVEN"),
             cont::ValueName::from("FIVE"),
@@ -154,7 +154,7 @@ fn lowers_and_runs_arr_slice() {
                 values: vec![
                     (
                         cont::ValueName::from("slice"),
-                        cont::Value::Eval(cont::Code::ArrSlice(
+                        cont::Value::Eval(cont::Code::LstSlice(
                             cont::ValueName::from("LST"),
                             cont::ValueName::from("ONE"),
                             cont::ValueName::from("THREE_IDX"),
@@ -162,7 +162,7 @@ fn lowers_and_runs_arr_slice() {
                     ),
                     (
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::ArrLen(cont::ValueName::from("slice"))),
+                        cont::Value::Eval(cont::Code::LstLen(cont::ValueName::from("slice"))),
                     ),
                 ],
                 blocks: vec![],
@@ -189,11 +189,11 @@ fn lowers_and_runs_arr_concat() {
     module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
     module.add_const(
         cont::ValueName::from("LST1"),
-        cont::Data::Arr(vec![cont::ValueName::from("ONE")]),
+        cont::Data::Lst(vec![cont::ValueName::from("ONE")]),
     );
     module.add_const(
         cont::ValueName::from("LST2"),
-        cont::Data::Arr(vec![
+        cont::Data::Lst(vec![
             cont::ValueName::from("TWO"),
             cont::ValueName::from("THREE"),
         ]),
@@ -209,14 +209,14 @@ fn lowers_and_runs_arr_concat() {
                 values: vec![
                     (
                         cont::ValueName::from("concat"),
-                        cont::Value::Eval(cont::Code::ArrConcat(vec![
+                        cont::Value::Eval(cont::Code::LstConcat(vec![
                             cont::ValueName::from("LST1"),
                             cont::ValueName::from("LST2"),
                         ])),
                     ),
                     (
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::ArrLen(cont::ValueName::from("concat"))),
+                        cont::Value::Eval(cont::Code::LstLen(cont::ValueName::from("concat"))),
                     ),
                 ],
                 blocks: vec![],
@@ -1481,7 +1481,7 @@ fn lowers_and_runs_arr_append() {
     module.add_const(cont::ValueName::from("NINE"), cont::Data::Nat(9));
     module.add_const(
         cont::ValueName::from("LST"),
-        cont::Data::Arr(vec![
+        cont::Data::Lst(vec![
             cont::ValueName::from("THREE"),
             cont::ValueName::from("SEVEN"),
         ]),
@@ -1498,14 +1498,14 @@ fn lowers_and_runs_arr_append() {
                 values: vec![
                     (
                         cont::ValueName::from("appended"),
-                        cont::Value::Eval(cont::Code::ArrAppend(
+                        cont::Value::Eval(cont::Code::LstAppend(
                             cont::ValueName::from("LST"),
                             cont::ValueName::from("NINE"),
                         )),
                     ),
                     (
                         cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::ArrGet(
+                        cont::Value::Eval(cont::Code::LstGet(
                             cont::ValueName::from("appended"),
                             cont::ValueName::from("TWO"),
                         )),

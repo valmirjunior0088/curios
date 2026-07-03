@@ -94,18 +94,18 @@ fn erase_func_captures_free_variables_before_opening_body() {
 fn erase_arr_nat_type_literal_len_and_get() {
     let mut context = context();
 
-    let arr_nat = Subterm::Prim(Prim::arr_type(Subterm::Prim(Prim::NatType))).into();
-    erase(&mut context, &arr_nat, &Term::type_()).unwrap();
+    let lst_nat = Subterm::Prim(Prim::lst_type(Subterm::Prim(Prim::NatType))).into();
+    erase(&mut context, &lst_nat, &Term::type_()).unwrap();
 
-    let literal = Subterm::Prim(Prim::arr(vec![
+    let literal = Subterm::Prim(Prim::lst(vec![
         Subterm::Prim(Prim::Nat(Nat::new(1usize))),
         Subterm::Prim(Prim::Nat(Nat::new(2usize))),
     ]))
     .into();
-    erase(&mut context, &literal, &arr_nat).unwrap();
+    erase(&mut context, &literal, &lst_nat).unwrap();
 
-    context.assume("xs", &arr_nat);
-    let len = Subterm::Prim(Prim::arr_len(
+    context.assume("xs", &lst_nat);
+    let len = Subterm::Prim(Prim::lst_len(
         Subterm::Prim(Prim::NatType),
         Term::free_var("xs"),
     ))
@@ -115,7 +115,7 @@ fn erase_arr_nat_type_literal_len_and_get() {
         Subterm::Prim(Prim::NatType).into()
     );
 
-    let get = Subterm::Prim(Prim::arr_get(
+    let get = Subterm::Prim(Prim::lst_get(
         Subterm::Prim(Prim::NatType),
         Term::free_var("xs"),
         Subterm::Prim(Prim::Nat(Nat::new(0usize))),
@@ -220,18 +220,18 @@ fn erase_nat_match_dispatches_to_named_case() {
 fn erase_lst_append() {
     let mut context = context();
 
-    let arr_nat = Subterm::Prim(Prim::arr_type(Subterm::Prim(Prim::NatType))).into();
-    context.assume("xs", &arr_nat);
+    let lst_nat = Subterm::Prim(Prim::lst_type(Subterm::Prim(Prim::NatType))).into();
+    context.assume("xs", &lst_nat);
     context.assume("n", &Subterm::Prim(Prim::NatType).into());
 
-    let append = Subterm::Prim(Prim::arr_append(
+    let append = Subterm::Prim(Prim::lst_append(
         Subterm::Prim(Prim::NatType),
         Term::free_var("xs"),
         Term::free_var("n"),
     ))
     .into();
-    assert_eq!(infer(&mut context, &append).unwrap(), arr_nat);
-    erase(&mut context, &append, &arr_nat).unwrap();
+    assert_eq!(infer(&mut context, &append).unwrap(), lst_nat);
+    erase(&mut context, &append, &lst_nat).unwrap();
 }
 
 #[test]
@@ -273,15 +273,15 @@ fn erase_bin_concat() {
 fn erase_arr_concat() {
     let mut context = context();
 
-    let arr_nat = Subterm::Prim(Prim::arr_type(Subterm::Prim(Prim::NatType))).into();
-    context.assume("xs", &arr_nat);
-    context.assume("ys", &arr_nat);
+    let lst_nat = Subterm::Prim(Prim::lst_type(Subterm::Prim(Prim::NatType))).into();
+    context.assume("xs", &lst_nat);
+    context.assume("ys", &lst_nat);
 
-    let concat = Subterm::Prim(Prim::arr_concat(
+    let concat = Subterm::Prim(Prim::lst_concat(
         Subterm::Prim(Prim::NatType),
         [Term::free_var("xs"), Term::free_var("ys")],
     ))
     .into();
 
-    erase(&mut context, &concat, &arr_nat).unwrap();
+    erase(&mut context, &concat, &lst_nat).unwrap();
 }

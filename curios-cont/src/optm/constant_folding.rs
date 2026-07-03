@@ -7,14 +7,14 @@ use super::*;
 ///
 /// ## Aggregate projection forwarding
 ///
-/// `Tpl`/`Arr`/`Bin` are immutable once built (the IR has no field-store op), so a
+/// `Tpl`/`Lst`/`Bin` are immutable once built (the IR has no field-store op), so a
 /// projection out of a *known* aggregate can be resolved at compile time:
 ///
-/// - `TplGet(t, i)` / `ArrGet(a, i)` where the aggregate is a literal (and, for
-///   `ArrGet`, the index is too) forward the `i`-th element. A scalar element
+/// - `TplGet(t, i)` / `LstGet(a, i)` where the aggregate is a literal (and, for
+///   `LstGet`, the index is too) forward the `i`-th element. A scalar element
 ///   becomes a `Pure` literal (so it cascades through further folds); any other
 ///   element is forwarded by name as a `Value::Alias`, avoiding a copy.
-/// - `ArrLen`/`BinLen` fold to the literal length; `BinGet` to the literal byte.
+/// - `LstLen`/`BinLen` fold to the literal length; `BinGet` to the literal byte.
 /// - Out-of-bounds access would trap at runtime, so it is left unfolded.
 ///
 /// Once every projection of an aggregate is forwarded, the aggregate itself goes
@@ -45,7 +45,7 @@ use super::*;
 ///
 /// Beyond arithmetic, the same evaluator covers shifts, rotates, and bit scans
 /// (`Nat` and `Int`), the bitwise `Int` ops, `Flt` min/max/nearest, every numeric
-/// conversion, bytewise equality, and the `Bin`/`Arr` slice and append builders —
+/// conversion, bytewise equality, and the `Bin`/`Lst` slice and append builders —
 /// each mirroring its lowering, including 31-bit wrapping and the value-dependent
 /// traps. Only `*ToStr` (a runtime formatter) and `Io` are deliberately left out.
 ///
@@ -88,7 +88,7 @@ fn fold_region(region: &mut Region, lits: &Lits) -> bool {
         {
             *value = match replacement {
                 Evaluated::Scalar(scalar) => Value::Pure(scalar.into()),
-                Evaluated::Arr(elems) => Value::Pure(Data::Arr(elems)),
+                Evaluated::Lst(elems) => Value::Pure(Data::Lst(elems)),
                 Evaluated::Elem(source) => Value::Alias(source),
             };
             changed = true;
@@ -377,15 +377,15 @@ mod tests {
     fn folds_arr_concat_preserving_element_references() {
         let data = folded(
             vec![
-                (v("a"), Value::Pure(Data::Arr(vec![v("x"), v("y")]))),
-                (v("b"), Value::Pure(Data::Arr(vec![v("z")]))),
-                (v("c"), Value::Eval(Code::ArrConcat(vec![v("a"), v("b")]))),
+                (v("a"), Value::Pure(Data::Lst(vec![v("x"), v("y")]))),
+                (v("b"), Value::Pure(Data::Lst(vec![v("z")]))),
+                (v("c"), Value::Eval(Code::LstConcat(vec![v("a"), v("b")]))),
             ],
             "c",
         );
         match data {
-            Data::Arr(elems) => assert_eq!(elems, vec![v("x"), v("y"), v("z")]),
-            other => panic!("expected arr, got {other:?}"),
+            Data::Lst(elems) => assert_eq!(elems, vec![v("x"), v("y"), v("z")]),
+            other => panic!("expected lst, got {other:?}"),
         }
     }
 
@@ -435,11 +435,11 @@ mod tests {
         let source = forwarded(
             vec![
                 (
-                    v("arr"),
-                    Value::Pure(Data::Arr(vec![v("x"), v("y"), v("z")])),
+                    v("lst"),
+                    Value::Pure(Data::Lst(vec![v("x"), v("y"), v("z")])),
                 ),
                 (v("i"), Value::Pure(Data::Nat(2))),
-                (v("w"), Value::Eval(Code::ArrGet(v("arr"), v("i")))),
+                (v("w"), Value::Eval(Code::LstGet(v("lst"), v("i")))),
             ],
             "w",
         );
@@ -448,17 +448,17 @@ mod tests {
 
     #[test]
     fn folds_arr_and_bin_len() {
-        let arr_len = folded(
+        let lst_len = folded(
             vec![
                 (
-                    v("arr"),
-                    Value::Pure(Data::Arr(vec![v("x"), v("y"), v("z")])),
+                    v("lst"),
+                    Value::Pure(Data::Lst(vec![v("x"), v("y"), v("z")])),
                 ),
-                (v("n"), Value::Eval(Code::ArrLen(v("arr")))),
+                (v("n"), Value::Eval(Code::LstLen(v("lst")))),
             ],
             "n",
         );
-        assert!(matches!(arr_len, Data::Nat(3)));
+        assert!(matches!(lst_len, Data::Nat(3)));
 
         let bin_len = folded(
             vec![
@@ -487,9 +487,9 @@ mod tests {
     fn does_not_fold_out_of_bounds_access() {
         stays_eval(
             vec![
-                (v("arr"), Value::Pure(Data::Arr(vec![v("x")]))),
+                (v("lst"), Value::Pure(Data::Lst(vec![v("x")]))),
                 (v("i"), Value::Pure(Data::Nat(5))),
-                (v("w"), Value::Eval(Code::ArrGet(v("arr"), v("i")))),
+                (v("w"), Value::Eval(Code::LstGet(v("lst"), v("i")))),
             ],
             "w",
         );
@@ -499,8 +499,8 @@ mod tests {
     fn does_not_fold_projection_with_non_literal_index() {
         stays_eval(
             vec![
-                (v("arr"), Value::Pure(Data::Arr(vec![v("x"), v("y")]))),
-                (v("w"), Value::Eval(Code::ArrGet(v("arr"), v("i")))),
+                (v("lst"), Value::Pure(Data::Lst(vec![v("x"), v("y")]))),
+                (v("w"), Value::Eval(Code::LstGet(v("lst"), v("i")))),
             ],
             "w",
         );
@@ -804,16 +804,16 @@ mod tests {
     fn folds_arr_slice_preserving_references() {
         let data = folded(
             vec![
-                (v("a"), Value::Pure(Data::Arr(vec![v("x"), v("y"), v("z")]))),
+                (v("a"), Value::Pure(Data::Lst(vec![v("x"), v("y"), v("z")]))),
                 (v("s"), Value::Pure(Data::Nat(1))),
                 (v("e"), Value::Pure(Data::Nat(3))),
-                (v("r"), Value::Eval(Code::ArrSlice(v("a"), v("s"), v("e")))),
+                (v("r"), Value::Eval(Code::LstSlice(v("a"), v("s"), v("e")))),
             ],
             "r",
         );
         match data {
-            Data::Arr(elems) => assert_eq!(elems, vec![v("y"), v("z")]),
-            other => panic!("expected arr, got {other:?}"),
+            Data::Lst(elems) => assert_eq!(elems, vec![v("y"), v("z")]),
+            other => panic!("expected lst, got {other:?}"),
         }
     }
 
@@ -852,14 +852,14 @@ mod tests {
         // The appended element need not be a literal; it is kept by name.
         let data = folded(
             vec![
-                (v("a"), Value::Pure(Data::Arr(vec![v("x"), v("y")]))),
-                (v("r"), Value::Eval(Code::ArrAppend(v("a"), v("z")))),
+                (v("a"), Value::Pure(Data::Lst(vec![v("x"), v("y")]))),
+                (v("r"), Value::Eval(Code::LstAppend(v("a"), v("z")))),
             ],
             "r",
         );
         match data {
-            Data::Arr(elems) => assert_eq!(elems, vec![v("x"), v("y"), v("z")]),
-            other => panic!("expected arr, got {other:?}"),
+            Data::Lst(elems) => assert_eq!(elems, vec![v("x"), v("y"), v("z")]),
+            other => panic!("expected lst, got {other:?}"),
         }
     }
 }

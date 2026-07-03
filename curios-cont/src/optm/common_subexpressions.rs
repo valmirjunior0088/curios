@@ -22,13 +22,13 @@ use {
 /// - *Scope is execution order.* A region's `values` run before control enters
 ///   any of its `blocks`, so an earlier binding on the current path has always
 ///   been evaluated when the duplicate would have run — including the trapping
-///   ops (`NatDiv`, `ArrGet`): if the first occurrence traps, the duplicate was
+///   ops (`NatDiv`, `LstGet`): if the first occurrence traps, the duplicate was
 ///   never reached, and if it didn't, the duplicate can't.
 /// - *Values are pure.* Effects live only at tail position, and every `Code`
-///   op except `ArrMap` is deterministic in its operands. `ArrMap` invokes a
+///   op except `LstMap` is deterministic in its operands. `LstMap` invokes a
 ///   closure — whose region may end in an effectful tail — so it is never
 ///   keyed. Aggregates are immutable and the language has no pointer equality,
-///   so deduplicating a `Tpl`/`Arr`/`Clsr` construction is unobservable;
+///   so deduplicating a `Tpl`/`Lst`/`Clsr` construction is unobservable;
 ///   prealloc shells are the one exception (their identity matters while their
 ///   captures are backpatched) and are skipped on both sides of a match.
 ///
@@ -151,7 +151,7 @@ fn dedup_region(
 }
 
 /// The binding's value-number, or `None` when the value must not participate:
-/// an `ArrMap` (its closure may be effectful), a scalar or bytestring literal
+/// an `LstMap` (its closure may be effectful), a scalar or bytestring literal
 /// (constant folding and literal hoisting own those), or an aggregate that
 /// names a prealloc shell.
 fn value_key(
@@ -167,7 +167,7 @@ fn value_key(
 }
 
 fn code_key(code: &Code, resolved: &HashMap<ValueName, ValueName>) -> Option<Key> {
-    if matches!(code, Code::ArrMap(..)) {
+    if matches!(code, Code::LstMap(..)) {
         return None;
     }
 
@@ -194,7 +194,7 @@ fn data_key(
         // Scalars and bytestrings are already interned by constant folding and
         // literal hoisting; keying them here would only duplicate that work.
         Data::Nat(_) | Data::Int(_) | Data::Flt(_) | Data::Bin(_) => return None,
-        Data::Arr(elems) | Data::Tpl(elems) => (None, elems),
+        Data::Lst(elems) | Data::Tpl(elems) => (None, elems),
         Data::Clsr(clsr, captures) => (Some(clsr.clone()), captures),
     };
 
@@ -491,16 +491,16 @@ mod tests {
 
     #[test]
     fn never_keys_arr_map() {
-        // ArrMap invokes a closure whose region may end in an effectful tail.
+        // LstMap invokes a closure whose region may end in an effectful tail.
         let mut module = func(region(
             vec![
-                (v("v0"), Value::Pure(Data::Arr(vec![]))),
+                (v("v0"), Value::Pure(Data::Lst(vec![]))),
                 (
                     v("v1"),
                     Value::Pure(Data::Clsr(ClsrName::from("c0"), vec![])),
                 ),
-                (v("v2"), Value::Eval(Code::ArrMap(v("v0"), v("v1")))),
-                (v("v3"), Value::Eval(Code::ArrMap(v("v0"), v("v1")))),
+                (v("v2"), Value::Eval(Code::LstMap(v("v0"), v("v1")))),
+                (v("v3"), Value::Eval(Code::LstMap(v("v0"), v("v1")))),
             ],
             jump("b0", vec![v("v2"), v("v3")]),
         ));
@@ -509,7 +509,7 @@ mod tests {
 
         assert!(matches!(
             &main_region(&module).values[3].1,
-            Value::Eval(Code::ArrMap(..))
+            Value::Eval(Code::LstMap(..))
         ));
     }
 }

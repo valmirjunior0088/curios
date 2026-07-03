@@ -216,11 +216,11 @@ fn std_io_read_line_spans_refills() {
 
 #[test]
 fn proc_args_indexes_the_argv_snapshot() {
-    // argv crosses as a host-built `Arr(Bin)`; indexing it round-trips one entry.
+    // argv crosses as a host-built `Lst(Bin)`; indexing it round-trips one entry.
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     crate::run_text(
         Duration::from_secs(10),
-        r#"std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/Arr/get(/std/Proc/args(), 1), \\))"#,
+        r#"std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/Lst/get(/std/Proc/args(), 1), \\))"#,
         system,
     )
     .expect("expected result");

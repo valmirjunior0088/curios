@@ -78,12 +78,12 @@ fn record(fields: Vec<(&str, Term)>) -> Term {
     .into()
 }
 
-fn arr_of(elem: Term) -> Term {
-    prim(Prim::ArrType(elem))
+fn lst_of(elem: Term) -> Term {
+    prim(Prim::LstType(elem))
 }
 
 // A single-argument function type `(domain) -> output`, for higher-order
-// primitives (the `f` of `Arr/map`).
+// primitives (the `f` of `Lst/map`).
 fn fn_of(domain: Term, output: Term) -> Term {
     Subterm::FuncType(FuncType {
         params: vec![FuncTypeParam {
@@ -187,7 +187,7 @@ fn wire_type(type_: &WireType) -> Term {
         WireType::Bln => bln(),
         WireType::Bin => bin(),
         WireType::Io => io(),
-        WireType::Arr(element) => arr_of(wire_type(element)),
+        WireType::Lst(element) => lst_of(wire_type(element)),
     }
 }
 
@@ -368,57 +368,57 @@ fn bin_ops() -> Vec<TopItem> {
     ]
 }
 
-fn arr_ops() -> Vec<TopItem> {
+fn lst_ops() -> Vec<TopItem> {
     vec![
         pub_fn_marked(
             "len",
             vec![
                 (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", arr_of(name("T"))),
+                (Plicity::Explicit, "a", lst_of(name("T"))),
             ],
             nat(),
-            prim(Prim::ArrLen(name("T"), name("a"))),
+            prim(Prim::LstLen(name("T"), name("a"))),
         ),
         pub_fn_marked(
             "get",
             vec![
                 (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", arr_of(name("T"))),
+                (Plicity::Explicit, "a", lst_of(name("T"))),
                 (Plicity::Explicit, "i", nat()),
             ],
             name("T"),
-            prim(Prim::ArrGet(name("T"), name("a"), name("i"))),
+            prim(Prim::LstGet(name("T"), name("a"), name("i"))),
         ),
         pub_fn_marked(
             "slice",
             vec![
                 (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", arr_of(name("T"))),
+                (Plicity::Explicit, "a", lst_of(name("T"))),
                 (Plicity::Explicit, "s", nat()),
                 (Plicity::Explicit, "e", nat()),
             ],
-            arr_of(name("T")),
-            prim(Prim::ArrSlice(name("T"), name("a"), name("s"), name("e"))),
+            lst_of(name("T")),
+            prim(Prim::LstSlice(name("T"), name("a"), name("s"), name("e"))),
         ),
         pub_fn_marked(
             "append",
             vec![
                 (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", arr_of(name("T"))),
+                (Plicity::Explicit, "a", lst_of(name("T"))),
                 (Plicity::Explicit, "x", name("T")),
             ],
-            arr_of(name("T")),
-            prim(Prim::ArrAppend(name("T"), name("a"), name("x"))),
+            lst_of(name("T")),
+            prim(Prim::LstAppend(name("T"), name("a"), name("x"))),
         ),
         pub_fn_marked(
             "concat",
             vec![
                 (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", arr_of(name("T"))),
-                (Plicity::Explicit, "b", arr_of(name("T"))),
+                (Plicity::Explicit, "a", lst_of(name("T"))),
+                (Plicity::Explicit, "b", lst_of(name("T"))),
             ],
-            arr_of(name("T")),
-            prim(Prim::ArrConcat(name("T"), name("a"), name("b"))),
+            lst_of(name("T")),
+            prim(Prim::LstConcat(name("T"), name("a"), name("b"))),
         ),
         pub_fn_marked(
             "map",
@@ -426,10 +426,10 @@ fn arr_ops() -> Vec<TopItem> {
                 (Plicity::Implicit, "A", type_()),
                 (Plicity::Implicit, "B", type_()),
                 (Plicity::Explicit, "f", fn_of(name("A"), name("B"))),
-                (Plicity::Explicit, "a", arr_of(name("A"))),
+                (Plicity::Explicit, "a", lst_of(name("A"))),
             ],
-            arr_of(name("B")),
-            prim(Prim::ArrMap(name("A"), name("B"), name("f"), name("a"))),
+            lst_of(name("B")),
+            prim(Prim::LstMap(name("A"), name("B"), name("f"), name("a"))),
         ),
     ]
 }
@@ -701,13 +701,13 @@ fn sys_module(foreigns: &ForeignStore) -> Module {
             ),
             pub_use("Io"),
             pub_mod(
-                "Arr",
+                "Lst",
                 with_type(
-                    pub_fn("Arr", vec![("T", type_())], type_(), arr_of(name("T"))),
-                    arr_ops(),
+                    pub_fn("Lst", vec![("T", type_())], type_(), lst_of(name("T"))),
+                    lst_ops(),
                 ),
             ),
-            pub_use("Arr"),
+            pub_use("Lst"),
             pub_mod(
                 "Cell",
                 with_type(
@@ -775,7 +775,7 @@ impl<L: Loader> Loader for SysLoader<L> {
 // being well-formed is a compiler invariant, so a parse failure is a `panic!`.
 const STD: &[(&[&str], &str)] = &[
     (&["std"], include_str!("../std.crs")),
-    (&["std", "Arr"], include_str!("../std/Arr.crs")),
+    (&["std", "Lst"], include_str!("../std/Lst.crs")),
     (&["std", "Cell"], include_str!("../std/Cell.crs")),
     (&["std", "Bin"], include_str!("../std/Bin.crs")),
     (&["std", "Nat"], include_str!("../std/Nat.crs")),

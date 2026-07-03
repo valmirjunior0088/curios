@@ -82,8 +82,8 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 },
             ]),
-            crate::Data::Arr(elems) => {
-                let rope = self.context.table().arr_rope();
+            crate::Data::Lst(elems) => {
+                let rope = self.context.table().lst_rope();
 
                 // A literal is a leaf: tag 0, the static length, the payload.
                 self.emit_instr(Instr::I32Const { value: 0 });
@@ -272,7 +272,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             // `new_default` + per-field `struct.set` backpatch path. Tuples and arrays are never
             // prealloc'd (cyclic ones are rejected in `to_cont`), so they always build directly.
             match value {
-                crate::Value::Pure(value @ (crate::Data::Arr(_) | crate::Data::Tpl(_))) => {
+                crate::Value::Pure(value @ (crate::Data::Lst(_) | crate::Data::Tpl(_))) => {
                     self.declare_local(value_name);
                     self.emit_let_pure(value_name, value);
                 }

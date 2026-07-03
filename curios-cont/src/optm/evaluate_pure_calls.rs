@@ -208,7 +208,7 @@ fn materialise_snapshot(
         Snapshot::Int(i) => Data::Int(*i),
         Snapshot::Flt(f) => Data::Flt(*f),
         Snapshot::Bin(bytes) => Data::Bin((**bytes).clone()),
-        Snapshot::Arr(elems) => {
+        Snapshot::Lst(elems) => {
             let key = Rc::as_ptr(elems) as *const ();
             if !visited.insert(key) {
                 return None;
@@ -218,7 +218,7 @@ fn materialise_snapshot(
                 .map(|e| materialise_snapshot(e, counter, out, visited))
                 .collect();
             visited.remove(&key);
-            Data::Arr(names?)
+            Data::Lst(names?)
         }
         Snapshot::Tpl(elems) => {
             let key = Rc::as_ptr(elems) as *const ();

@@ -122,7 +122,7 @@ fn flt_to_str_matches_rust_shortest_format() {
         .join(", ");
     let source = format!(
         r#"
-        use /std/{{Io, Str, Flt, Arr}};
+        use /std/{{Io, Str, Flt, Lst}};
         Io/print(Str/join("|", [{array}]))
         "#
     );

@@ -25,7 +25,7 @@ fn lowers_unreachable_tail_to_trap() {
 }
 
 // Cyclic tuples/arrays are intentionally unrepresentable: `Region::preallocs` only holds
-// closure shells now (cyclic data is rejected in `to_cont`), which keeps every `tpl`/`arr`
+// closure shells now (cyclic data is rejected in `to_cont`), which keeps every `tpl`/`lst`
 // wasm field immutable. Mutual recursion is exercised through closures below.
 
 #[test]

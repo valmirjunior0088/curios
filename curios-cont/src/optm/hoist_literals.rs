@@ -8,14 +8,14 @@ use {
 ///
 /// An inline `Value::Pure(Data::…)` aggregate rebuilds its allocation **every time
 /// the binding executes** — `array.new_data` for a `Bin`, `array.new_fixed` for an
-/// `Arr`, `struct.new` for a `Tpl`/`Clsr` (`cont/to_wasm/expr_emitter.rs`). The same
+/// `Lst`, `struct.new` for a `Tpl`/`Clsr` (`cont/to_wasm/expr_emitter.rs`). The same
 /// value emitted as a module const runs that allocation **once** in the `start`
 /// function and stashes it in a global, so every use is a cheap shared `global.get`
 /// (`cont/to_wasm/module_emitter.rs`). For a constant in a loop, a closure body, or
 /// any hot path, that turns a per-execution allocation into a one-time init.
 ///
 /// This hoists every **bytestring** and every **closed aggregate/closure** — an
-/// `Arr`/`Tpl`/`Clsr` all of whose elements (or captures) are themselves constants,
+/// `Lst`/`Tpl`/`Clsr` all of whose elements (or captures) are themselves constants,
 /// transitively. Closedness is the constraint because a const aggregate's elements
 /// are emitted as `global.get` of other consts (`cont/to_wasm/context.rs`), with no
 /// inline-scalar path: hoisting one aggregate lifts its whole constant sub-DAG —
@@ -158,7 +158,7 @@ fn collect_entry_points(
 fn is_entry_point(data: &Data) -> bool {
     matches!(
         data,
-        Data::Bin(_) | Data::Arr(_) | Data::Tpl(_) | Data::Clsr(..)
+        Data::Bin(_) | Data::Lst(_) | Data::Tpl(_) | Data::Clsr(..)
     )
 }
 
@@ -216,7 +216,7 @@ fn lower_data(
         Data::Int(value) => Data::Int(*value),
         Data::Flt(value) => Data::Flt(*value),
         Data::Bin(bytes) => Data::Bin(bytes.clone()),
-        Data::Arr(elems) => Data::Arr(lower_children(elems, defs, interner, memo, stack)?),
+        Data::Lst(elems) => Data::Lst(lower_children(elems, defs, interner, memo, stack)?),
         Data::Tpl(elems) => Data::Tpl(lower_children(elems, defs, interner, memo, stack)?),
         Data::Clsr(clsr, captures) => Data::Clsr(
             clsr.clone(),
@@ -253,7 +253,7 @@ enum ConstKey {
     Int(i32),
     Flt(u32),
     Bin(Vec<u8>),
-    Arr(Vec<ValueName>),
+    Lst(Vec<ValueName>),
     Tpl(Vec<ValueName>),
     Clsr(ClsrName, Vec<ValueName>),
 }
@@ -267,7 +267,7 @@ fn key_of(data: &Data) -> ConstKey {
         Data::Int(value) => ConstKey::Int(*value),
         Data::Flt(value) => ConstKey::Flt(value.to_bits()),
         Data::Bin(bytes) => ConstKey::Bin(bytes.clone()),
-        Data::Arr(elems) => ConstKey::Arr(elems.clone()),
+        Data::Lst(elems) => ConstKey::Lst(elems.clone()),
         Data::Tpl(elems) => ConstKey::Tpl(elems.clone()),
         Data::Clsr(clsr, captures) => ConstKey::Clsr(clsr.clone(), captures.clone()),
     }
@@ -334,7 +334,7 @@ fn kind_of(data: &Data) -> &'static str {
         Data::Int(_) => "int",
         Data::Flt(_) => "flt",
         Data::Bin(_) => "bin",
-        Data::Arr(_) => "arr",
+        Data::Lst(_) => "lst",
         Data::Tpl(_) => "tpl",
         Data::Clsr(..) => "clsr",
     }
@@ -522,7 +522,7 @@ mod tests {
         let mut module = main_func(region(
             vec![
                 (v("a"), Value::Pure(Data::Nat(7))),
-                (v("inner"), Value::Pure(Data::Arr(vec![v("a")]))),
+                (v("inner"), Value::Pure(Data::Lst(vec![v("a")]))),
                 (v("t"), Value::Pure(Data::Tpl(vec![v("inner")]))),
             ],
             vec![],
@@ -532,10 +532,10 @@ mod tests {
 
         assert_eq!(
             const_names(&module),
-            vec!["lit@nat#0", "lit@arr#0", "lit@tpl#0"]
+            vec!["lit@nat#0", "lit@lst#0", "lit@tpl#0"]
         );
         let values = &main_region(&module).values;
-        assert_eq!(alias(&values[1].1), &v("lit@arr#0"));
+        assert_eq!(alias(&values[1].1), &v("lit@lst#0"));
         assert_eq!(alias(&values[2].1), &v("lit@tpl#0"));
     }
 

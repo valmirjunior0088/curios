@@ -1,7 +1,7 @@
 //! The suffix-view algebra, shared by the two passes that re-base aggregate
 //! access through a slice onto the underlying buffer.
 //!
-//! A `Bin`/`Arr` slice is semantically a copy, but it is only ever *read* through
+//! A `Bin`/`Lst` slice is semantically a copy, but it is only ever *read* through
 //! three primitives, and each reads through to the base in `O(1)`:
 //!
 //! ```text
@@ -29,14 +29,14 @@
 //!   applies them to *local* consumers, an unmatched one simply keeping the slice
 //!   for the dead-code sweep.
 
-/// The buffer carrier a suffix view threads over: `Bin` or `Arr`. Selects which
+/// The buffer carrier a suffix view threads over: `Bin` or `Lst`. Selects which
 /// `len`/`get`/`slice` primitives are recognised and emitted; a consumer only
 /// forwards through a slice of its own carrier, though well-typed code never mixes
 /// them.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Carrier {
     Bin,
-    Arr,
+    Lst,
 }
 
 /// A read of a (possibly-sliced) carrier buffer, generic over the index

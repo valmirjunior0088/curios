@@ -1,15 +1,15 @@
 use {super::run, curios_rt::MockHost, std::time::Duration};
 
 #[test]
-fn arr_match_is_a_foldr() {
-    // Native `Arr` induction (slice 1): the `| [] | (h, t), ih` eliminator,
+fn lst_match_is_a_foldr() {
+    // Native `Lst` induction (slice 1): the `| [] | (h, t), ih` eliminator,
     // erased by desugaring to `Nat`-induction on the length and reusing the loop.
     // `f(h, ih) = ih * 10 + h` is non-commutative, so the result distinguishes a
     // structural `foldr` (head is the *first* element, ih is the fold of the tail)
     // from a reversed walk: `[1,2,3,4]` folds to `4321`, not `1234`.
     let source = r#"
-        use /std/{Io, Str, Nat, Arr};
-        let xs : Arr(Nat) = [1, 2, 3, 4];
+        use /std/{Io, Str, Nat, Lst};
+        let xs : Lst(Nat) = [1, 2, 3, 4];
         let digits : Nat =
             match xs : Nat
             | [] => 0
@@ -21,31 +21,31 @@ fn arr_match_is_a_foldr() {
 }
 
 #[test]
-fn arr_map_fills_every_slot() {
-    // `Arr/map` erases to a single O(n) fill loop (`emit_map`): size the result
+fn lst_map_fills_every_slot() {
+    // `Lst/map` erases to a single O(n) fill loop (`emit_map`): size the result
     // from `src.len`, allocate once, then write `f(src[i])` into slot `i` via an
     // inline closure `call_ref`. A non-identity `f` (`+1`) over `[10, 20, 30]` must
     // fill *every* slot, not just one: `get(_, 0) + get(_, 2)` = 11 + 31 = 42.
     let source = r#"
-        use /std/{Io, Str, Nat, Arr, Option};
-        let xs : Arr(Nat) = Arr/map((n) => Nat/add(n, 1), [10, 20, 30]);
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Option/unwrap_or(Arr/get(xs, 0), 0), Option/unwrap_or(Arr/get(xs, 2), 0)))))
+        use /std/{Io, Str, Nat, Lst, Option};
+        let xs : Lst(Nat) = Lst/map((n) => Nat/add(n, 1), [10, 20, 30]);
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Option/unwrap_or(Lst/get(xs, 0), 0), Option/unwrap_or(Lst/get(xs, 2), 0)))))
         "#;
     assert_eq!(run(source), b"42");
 }
 
 #[test]
-fn arr_map_distributes_over_cons() {
-    // The eliminator rule that lets `Arr/map` stand in for a structural `foldr` in
+fn lst_map_distributes_over_cons() {
+    // The eliminator rule that lets `Lst/map` stand in for a structural `foldr` in
     // proofs: for a SYMBOLIC tail `t`, `map f (x :: t) ≡ f x :: map f t`
     // *definitionally*. `refl`
     // checks only because `reduce` distributes the map over the `concat` spine and
-    // maps the singleton literal — the same peel the native `Arr` eliminator does,
+    // maps the singleton literal — the same peel the native `Lst` eliminator does,
     // so it reduces under induction without unfolding a symbolic array.
     let source = r#"
-        use /std/{Io, Str, Eq, Nat, Arr};
-        let step(f : (Nat) -> Nat, x : Nat, t : Arr(Nat))
-            -> Eq(Arr/map(f, Arr/concat([x], t)), Arr/concat([f(x)], Arr/map(f, t))) =
+        use /std/{Io, Str, Eq, Nat, Lst};
+        let step(f : (Nat) -> Nat, x : Nat, t : Lst(Nat))
+            -> Eq(Lst/map(f, Lst/concat([x], t)), Lst/concat([f(x)], Lst/map(f, t))) =
             Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
@@ -55,9 +55,9 @@ fn arr_map_distributes_over_cons() {
 #[test]
 fn bin_match_is_a_foldr() {
     // Native `Bin` induction (slice 2): the `| \\ | (h, t), ih` eliminator, erased
-    // exactly like `Arr` — `Nat`-induction on the byte length, reusing the loop.
+    // exactly like `Lst` — `Nat`-induction on the byte length, reusing the loop.
     // The leading byte `h` is reflected as a `Nat`. Same non-commutative `foldr`
-    // probe as `arr_match_is_a_foldr`: the bytes `\01\02\03\04` fold to `4321`, not
+    // probe as `lst_match_is_a_foldr`: the bytes `\01\02\03\04` fold to `4321`, not
     // `1234`, pinning head = first byte and ih = fold of the tail.
     let source = r#"
         use /std/{Io, Str, Nat, Bin};
@@ -150,32 +150,32 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
 }
 
 #[test]
-fn arr_slice_is_a_monoid_citizen() {
-    // The `Arr` mirror of `bin_slice_is_a_monoid_citizen`: `Arr/slice` now rides the
+fn lst_slice_is_a_monoid_citizen() {
+    // The `Lst` mirror of `bin_slice_is_a_monoid_citizen`: `Lst/slice` now rides the
     // free-monoid spine as a measured `Window` (`core::spine`), so `split` fuses two
     // adjacent windows of one base across their seam — the convert-level capability —
     // while `empty` and `full` exercise the reduce-level slice identities.
     let source = r#"
-        use /std/{Io, Str, Eq, Arr, Nat};
-        let split(@T : Type, a : Arr(T), s : Nat, m : Nat, e : Nat)
-            -> Eq(Arr/concat(Arr/slice(a, s, m), Arr/slice(a, m, e)), Arr/slice(a, s, e)) =
+        use /std/{Io, Str, Eq, Lst, Nat};
+        let split(@T : Type, a : Lst(T), s : Nat, m : Nat, e : Nat)
+            -> Eq(Lst/concat(Lst/slice(a, s, m), Lst/slice(a, m, e)), Lst/slice(a, s, e)) =
             Eq/refl();
-        let empty(@T : Type, a : Arr(T), i : Nat) -> Eq(Arr/slice(a, i, i), []) = Eq/refl();
-        let full(@T : Type, a : Arr(T)) -> Eq(Arr/slice(a, 0, Arr/len(a)), a) = Eq/refl();
+        let empty(@T : Type, a : Lst(T), i : Nat) -> Eq(Lst/slice(a, i, i), []) = Eq/refl();
+        let full(@T : Type, a : Lst(T)) -> Eq(Lst/slice(a, 0, Lst/len(a)), a) = Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
 
 #[test]
-fn arr_append_is_concat_with_a_single() {
-    // `Arr/append` now rides the spine as `base ++ [e]` (`core::spine`), so it
+fn lst_append_is_concat_with_a_single() {
+    // `Lst/append` now rides the spine as `base ++ [e]` (`core::spine`), so it
     // converts to the `concat`-with-`single` form by `refl` even for a symbolic base
     // and element — `append(xs, y) ≡ concat(xs, single(y))`.
     let source = r#"
-        use /std/{Io, Str, Eq, Arr};
-        let law(@T : Type, xs : Arr(T), y : T)
-            -> Eq(Arr/concat(xs, [y]), Arr/append(xs, y)) =
+        use /std/{Io, Str, Eq, Lst};
+        let law(@T : Type, xs : Lst(T), y : T)
+            -> Eq(Lst/concat(xs, [y]), Lst/append(xs, y)) =
             Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
@@ -184,7 +184,7 @@ fn arr_append_is_concat_with_a_single() {
 
 #[test]
 fn bin_append_is_concat_with_a_single_byte() {
-    // The `Bin` twin of `arr_append_is_concat_with_a_single`: `Bin/append` rides the
+    // The `Bin` twin of `lst_append_is_concat_with_a_single`: `Bin/append` rides the
     // spine as `base ++ b`, so it converts to the `concat`-with-a-one-byte form by
     // `refl` even for a symbolic base and a symbolic byte.
     let source = r#"
@@ -198,14 +198,14 @@ fn bin_append_is_concat_with_a_single_byte() {
 }
 
 #[test]
-fn arr_slice_window_seam_mismatch_is_rejected() {
-    // The dual of `bin_slice_window_seam_mismatch_is_rejected`: two `Arr` windows
+fn lst_slice_window_seam_mismatch_is_rejected() {
+    // The dual of `bin_slice_window_seam_mismatch_is_rejected`: two `Lst` windows
     // whose seam does not meet must NOT fuse, so the concat is not convertible to the
     // single slice and the `refl` is rejected.
     let source = r#"
-        use /std/{Io, Str, Eq, Arr, Nat};
-        let bad(@T : Type, a : Arr(T), s : Nat, m : Nat, n : Nat, e : Nat)
-            -> Eq(Arr/concat(Arr/slice(a, s, m), Arr/slice(a, n, e)), Arr/slice(a, s, e)) =
+        use /std/{Io, Str, Eq, Lst, Nat};
+        let bad(@T : Type, a : Lst(T), s : Nat, m : Nat, n : Nat, e : Nat)
+            -> Eq(Lst/concat(Lst/slice(a, s, m), Lst/slice(a, n, e)), Lst/slice(a, s, e)) =
             Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
@@ -276,21 +276,21 @@ fn nat_sub_peels_a_successor_spine() {
 }
 
 #[test]
-fn arr_concat_is_a_free_monoid() {
-    // `peel_arr` (core::spine) makes `Arr` a free monoid on its elements, the twin
+fn lst_concat_is_a_free_monoid() {
+    // `peel_arr` (core::spine) makes `Lst` a free monoid on its elements, the twin
     // of `bin_concat_is_a_free_monoid`: `concat` associates, the empty array `[]`
     // is its identity, and a literal run re-segments freely — all by `refl` for
     // SYMBOLIC arrays (and elements), which `reduce` cannot fold. `convert` peels
-    // the two `ArrConcat`s to a common normal form.
+    // the two `LstConcat`s to a common normal form.
     let source = r#"
-        use /std/{Io, Str, Eq, Arr};
-        let assoc(@T : Type, a : Arr(T), b : Arr(T), c : Arr(T))
-            -> Eq(Arr/concat(a, Arr/concat(b, c)), Arr/concat(Arr/concat(a, b), c)) =
+        use /std/{Io, Str, Eq, Lst};
+        let assoc(@T : Type, a : Lst(T), b : Lst(T), c : Lst(T))
+            -> Eq(Lst/concat(a, Lst/concat(b, c)), Lst/concat(Lst/concat(a, b), c)) =
             Eq/refl();
-        let left_id(@T : Type, a : Arr(T)) -> Eq(Arr/concat([], a), a) = Eq/refl();
-        let right_id(@T : Type, a : Arr(T)) -> Eq(Arr/concat(a, []), a) = Eq/refl();
-        let resegment(@T : Type, a : T, b : T, c : Arr(T))
-            -> Eq(Arr/concat([a, b], c), Arr/concat([a], Arr/concat([b], c))) =
+        let left_id(@T : Type, a : Lst(T)) -> Eq(Lst/concat([], a), a) = Eq/refl();
+        let right_id(@T : Type, a : Lst(T)) -> Eq(Lst/concat(a, []), a) = Eq/refl();
+        let resegment(@T : Type, a : T, b : T, c : Lst(T))
+            -> Eq(Lst/concat([a, b], c), Lst/concat([a], Lst/concat([b], c))) =
             Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
@@ -298,15 +298,15 @@ fn arr_concat_is_a_free_monoid() {
 }
 
 #[test]
-fn arr_concat_length_clash_is_rejected() {
-    // Unlike `Bin`, an `Arr` element disagreement is NOT a clash (elements are
+fn lst_concat_length_clash_is_rejected() {
+    // Unlike `Bin`, an `Lst` element disagreement is NOT a clash (elements are
     // terms that may be convertible) — but a literal *length* mismatch still is:
     // `[x, y]` and `[x]` peel their shared head and leave one side longer, a
     // definite `Clash`, so the `refl` is rejected. Exercises `peel_arr`'s clash
     // against the empty identity (the element-mismatch case instead defers to the
     // structural arm, kept sound by `Stuck` fall-through).
     let source = r#"
-        use /std/{Io, Str, Eq, Arr};
+        use /std/{Io, Str, Eq, Lst};
         let bad(@T : Type, x : T, y : T) -> Eq([x, y], [x]) = Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
@@ -396,11 +396,11 @@ fn indexed_vec_append_executes() {
 }
 
 #[test]
-fn arr_fold_sums_elements() {
+fn lst_fold_sums_elements() {
     let source = r#"
-        use /std/{Io, Str, Nat, Arr};
-        let xs : Arr(Nat) = [10, 20, 30];
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Arr/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))
+        use /std/{Io, Str, Nat, Lst};
+        let xs : Lst(Nat) = [10, 20, 30];
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Lst/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))
         "#;
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");

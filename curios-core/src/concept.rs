@@ -79,7 +79,7 @@ pub enum HeadKey {
     Bln,
     Bin,
     Io,
-    Arr,
+    Lst,
     Cell,
 }
 
@@ -93,7 +93,7 @@ impl std::fmt::Display for HeadKey {
             HeadKey::Bln => write!(f, "Bln"),
             HeadKey::Bin => write!(f, "Bin"),
             HeadKey::Io => write!(f, "Io"),
-            HeadKey::Arr => write!(f, "Arr"),
+            HeadKey::Lst => write!(f, "Lst"),
             HeadKey::Cell => write!(f, "Cell"),
         }
     }
@@ -113,8 +113,8 @@ impl HeadKey {
             Subterm::Prim(prim) => Self::of_prim(prim),
             // The higher-kinded head: the type-constructor function's body is
             // the normal form the applied constructor would reduce to (`λA.
-            // InductiveType(Option, [A])`, or `λT. ArrType(T)` for a primitive
-            // former like `/sys/Arr`). The binders need not be opened — the
+            // InductiveType(Option, [A])`, or `λT. LstType(T)` for a primitive
+            // former like `/sys/Lst`). The binders need not be opened — the
             // name/former sits on the node.
             Subterm::Func(func) => {
                 let mut telescope = &func.telescope;
@@ -150,7 +150,7 @@ impl HeadKey {
             Prim::BlnType => Some(HeadKey::Bln),
             Prim::BinType => Some(HeadKey::Bin),
             Prim::IoType => Some(HeadKey::Io),
-            Prim::ArrType(_) => Some(HeadKey::Arr),
+            Prim::LstType(_) => Some(HeadKey::Lst),
             Prim::CellType(_) => Some(HeadKey::Cell),
             _ => None,
         }

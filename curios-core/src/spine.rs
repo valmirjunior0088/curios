@@ -1,11 +1,11 @@
 //! The free-monoid peel shared by inversion (`invert`) and conversion
 //! (`convert`). A primitive whose values are a literal run of generators over a
-//! symbolic tail — a `Nat` count, a `Bin` byte run, an `Arr` element run —
+//! symbolic tail — a `Nat` count, a `Bin` byte run, an `Lst` element run —
 //! reduces two values by stripping their longest common literal head; the
 //! residual tails go back to the caller's own recursion. `Bln`/`Int` are the
 //! degenerate, zero-generator spines. The point of the seam: a new instance is
 //! one `peel_prim` arm and nothing else — the drivers, the `Peel` vocabulary,
-//! and the termination argument are shared, and `Bin`/`Arr` further share the
+//! and the termination argument are shared, and `Bin`/`Lst` further share the
 //! `peel_prefix` step itself (they differ only in element type and whether a
 //! stalled literal head is a clash).
 
@@ -39,7 +39,7 @@ pub fn peel_prim(left: &Prim, right: &Prim) -> Option<Peel> {
         // Finite scalars are the degenerate (zero-generator) spines: no tail.
         (Prim::Bln(actual), Prim::Bln(target)) => Some(decide(actual == target)),
         (Prim::Int(actual), Prim::Int(target)) => Some(decide(actual == target)),
-        // `Bin`/`Arr` are the free monoids on their bytes/elements: peel the
+        // `Bin`/`Lst` are the free monoids on their bytes/elements: peel the
         // longest common prefix (each returns `None` for the other's shapes).
         _ => peel_bin(left, right).or_else(|| peel_arr(left, right)),
     }
@@ -80,7 +80,7 @@ pub fn peel_nat(actual: &Nat, target: &Nat) -> Peel {
 }
 
 /// One segment of a flattened free-monoid value: a run of consecutive literal
-/// elements — concrete bytes (`Bin`) or terms (`Arr`) — a `Window` into a base
+/// elements — concrete bytes (`Bin`) or terms (`Lst`) — a `Window` into a base
 /// value (a `Bin/slice(base, lo, hi)`: contents symbolic, but length `hi - lo`
 /// statically known as a `Nat` term), or an opaque symbolic chunk (a variable, an
 /// append: anything whose contents *and* length are unknown). A value is a
@@ -100,7 +100,7 @@ enum Atom<E> {
 /// matched one-for-one and whole symbolic chunks that are syntactically identical
 /// — leaving each list at its residual tail. Reports whether anything was peeled,
 /// so the caller knows it made progress (and a `Continue` cannot loop). Literal
-/// elements compare by `==`: exact for `Bin`'s bytes, *syntactic* for `Arr`'s
+/// elements compare by `==`: exact for `Bin`'s bytes, *syntactic* for `Lst`'s
 /// terms — hence `peel_arr` must not read a stalled literal head as a clash.
 fn peel_prefix<E: PartialEq>(left: &mut VecDeque<Atom<E>>, right: &mut VecDeque<Atom<E>>) -> bool {
     let mut peeled = false;
@@ -251,25 +251,25 @@ pub fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
     })
 }
 
-/// `Arr` is the free monoid on its elements — the same peel as `peel_bin`, with
+/// `Lst` is the free monoid on its elements — the same peel as `peel_bin`, with
 /// two differences. Its literal runs hold *terms*, not decided bytes, so two
 /// leading runs whose heads disagree are NOT a clash (the elements may still be
 /// convertible): the peel defers, and the caller's structural element-wise
 /// comparison settles it. And its concatenation carries an element type, recovered
-/// here to rebuild a residual `ArrConcat`. A leftover literal run against the empty
+/// here to rebuild a residual `LstConcat`. A leftover literal run against the empty
 /// identity (`[x] ~ []`) is still a definite length clash, as in `peel_bin`.
 pub fn peel_arr(left: &Prim, right: &Prim) -> Option<Peel> {
-    if !arr_valued(left) || !arr_valued(right) {
+    if !lst_valued(left) || !lst_valued(right) {
         return None;
     }
 
-    // The element type for a rebuilt `ArrConcat` residual — present whenever a side
-    // is itself an `ArrConcat`, which is exactly when a multi-segment residual (the
-    // only thing that rebuilds an `ArrConcat`) can arise.
-    let elem = arr_elem(left).or_else(|| arr_elem(right));
+    // The element type for a rebuilt `LstConcat` residual — present whenever a side
+    // is itself an `LstConcat`, which is exactly when a multi-segment residual (the
+    // only thing that rebuilds an `LstConcat`) can arise.
+    let elem = lst_elem(left).or_else(|| lst_elem(right));
 
-    let mut left = arr_atoms(left);
-    let mut right = arr_atoms(right);
+    let mut left = lst_atoms(left);
+    let mut right = lst_atoms(right);
     let peeled = peel_prefix(&mut left, &mut right);
 
     Some(match (left.front(), right.front()) {
@@ -312,25 +312,25 @@ fn byte_as_u8(term: &Term) -> Option<u8> {
     }
 }
 
-/// The `Arr` analogue of [`bin_valued`]: `Arr` and `ArrConcat` carry the monoid's
-/// literals and juxtaposition, `ArrSlice` rides in as a measured `Window` (like
-/// `BinSlice`), and `ArrAppend` rides in as its base followed by a length-1 literal
+/// The `Lst` analogue of [`bin_valued`]: `Lst` and `LstConcat` carry the monoid's
+/// literals and juxtaposition, `LstSlice` rides in as a measured `Window` (like
+/// `BinSlice`), and `LstAppend` rides in as its base followed by a length-1 literal
 /// run — so `append(xs, e) ≡ concat(xs, single(e))`. Any other producer stays an
 /// opaque chunk left to the caller's comparison.
-fn arr_valued(prim: &Prim) -> bool {
+fn lst_valued(prim: &Prim) -> bool {
     matches!(
         prim,
-        Prim::Arr(_) | Prim::ArrConcat(_, _) | Prim::ArrSlice(..) | Prim::ArrAppend(..)
+        Prim::Lst(_) | Prim::LstConcat(_, _) | Prim::LstSlice(..) | Prim::LstAppend(..)
     )
 }
 
-/// The element type carried by an `ArrConcat`, `ArrSlice`, or `ArrAppend`, for
-/// rebuilding residuals (every atom of an `Arr(T)` value shares `T`, so one suffices
-/// for the whole list). `None` for a bare `Arr` literal, which rebuilds as a single
+/// The element type carried by an `LstConcat`, `LstSlice`, or `LstAppend`, for
+/// rebuilding residuals (every atom of an `Lst(T)` value shares `T`, so one suffices
+/// for the whole list). `None` for a bare `Lst` literal, which rebuilds as a single
 /// run that never needs it.
-fn arr_elem(prim: &Prim) -> Option<Term> {
+fn lst_elem(prim: &Prim) -> Option<Term> {
     match prim {
-        Prim::ArrConcat(elem, _) | Prim::ArrSlice(elem, ..) | Prim::ArrAppend(elem, ..) => {
+        Prim::LstConcat(elem, _) | Prim::LstSlice(elem, ..) | Prim::LstAppend(elem, ..) => {
             Some(elem.clone())
         }
         _ => None,
@@ -384,19 +384,19 @@ fn bin_collect_term(term: &Term, out: &mut Vec<Atom<u8>>) {
     }
 }
 
-/// Flatten an `Arr` value to its segment list — the [`bin_atoms`] decomposition
+/// Flatten an `Lst` value to its segment list — the [`bin_atoms`] decomposition
 /// over element terms rather than bytes.
-fn arr_atoms(prim: &Prim) -> VecDeque<Atom<Term>> {
+fn lst_atoms(prim: &Prim) -> VecDeque<Atom<Term>> {
     let mut out = Vec::new();
-    arr_collect_prim(prim, &mut out);
+    lst_collect_prim(prim, &mut out);
     out.into()
 }
 
-fn arr_collect_prim(prim: &Prim, out: &mut Vec<Atom<Term>>) {
+fn lst_collect_prim(prim: &Prim, out: &mut Vec<Atom<Term>>) {
     match prim {
-        Prim::Arr(elems) => push(out, Atom::Literal(elems.clone())),
-        Prim::ArrConcat(_, operands) => operands.iter().for_each(|op| arr_collect_term(op, out)),
-        Prim::ArrSlice(_, base, lo, hi) => push(
+        Prim::Lst(elems) => push(out, Atom::Literal(elems.clone())),
+        Prim::LstConcat(_, operands) => operands.iter().for_each(|op| lst_collect_term(op, out)),
+        Prim::LstSlice(_, base, lo, hi) => push(
             out,
             Atom::Window {
                 base: base.clone(),
@@ -407,17 +407,17 @@ fn arr_collect_prim(prim: &Prim, out: &mut Vec<Atom<Term>>) {
         // `append(base, e) = base ++ [e]`: decode the base, then the appended element
         // as a length-1 literal run, so it merges with an abutting run and unifies
         // with `concat(base, single(e))`.
-        Prim::ArrAppend(_, base, elem) => {
-            arr_collect_term(base, out);
+        Prim::LstAppend(_, base, elem) => {
+            lst_collect_term(base, out);
             push(out, Atom::Literal(vec![elem.clone()]));
         }
         other => push(out, Atom::Symbolic(Term::prim(other.clone()))),
     }
 }
 
-fn arr_collect_term(term: &Term, out: &mut Vec<Atom<Term>>) {
+fn lst_collect_term(term: &Term, out: &mut Vec<Atom<Term>>) {
     match &**term {
-        Subterm::Prim(prim) => arr_collect_prim(prim, out),
+        Subterm::Prim(prim) => lst_collect_prim(prim, out),
         _ => push(out, Atom::Symbolic(term.clone())),
     }
 }
@@ -439,22 +439,22 @@ fn reassemble_bin(atoms: VecDeque<Atom<u8>>) -> Term {
     }
 }
 
-/// Rebuild an `Arr` term from a residual segment list — [`reassemble_bin`] over
-/// element runs, restoring the element type `Arr`'s `ArrConcat`/`ArrSlice` carry.
+/// Rebuild an `Lst` term from a residual segment list — [`reassemble_bin`] over
+/// element runs, restoring the element type `Lst`'s `LstConcat`/`LstSlice` carry.
 /// `elem` is `Some` whenever the residual has more than one segment or holds a slice
 /// window — both can only come from an input carrying the element type.
 fn reassemble_arr(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
     fn into_term(atom: Atom<Term>, elem: &Option<Term>) -> Term {
         match atom {
-            Atom::Literal(elems) => Term::prim(Prim::Arr(elems)),
+            Atom::Literal(elems) => Term::prim(Prim::Lst(elems)),
             // A slice window rebuilds with the value's element type, threaded through
-            // `elem` (every atom of an `Arr(T)` shares `T`).
+            // `elem` (every atom of an `Lst(T)` shares `T`).
             Atom::Window { base, lo, hi } => {
                 let elem = elem
                     .clone()
-                    .expect("an Arr slice window carries its element type via `elem`");
+                    .expect("an Lst slice window carries its element type via `elem`");
 
-                Term::prim(Prim::arr_slice(elem, base, lo, hi))
+                Term::prim(Prim::lst_slice(elem, base, lo, hi))
             }
             Atom::Symbolic(term) => term,
         }
@@ -467,9 +467,9 @@ fn reassemble_arr(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
                 .into_iter()
                 .map(|atom| into_term(atom, &elem))
                 .collect::<Vec<Term>>();
-            let elem = elem.expect("a multi-segment Arr residual implies an ArrConcat operand");
+            let elem = elem.expect("a multi-segment Lst residual implies an LstConcat operand");
 
-            Term::prim(Prim::ArrConcat(elem, parts))
+            Term::prim(Prim::LstConcat(elem, parts))
         }
     }
 }

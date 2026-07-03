@@ -153,7 +153,7 @@ fn reduce_flt_mul_computes() {
 fn reduce_lst_get_returns_element_at_index() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::arr(vec![
+    let list = Subterm::Prim(Prim::lst(vec![
         Subterm::Prim(Prim::Nat(Nat::new(10usize))),
         Subterm::Prim(Prim::Nat(Nat::new(20usize))),
         Subterm::Prim(Prim::Nat(Nat::new(30usize))),
@@ -162,7 +162,7 @@ fn reduce_lst_get_returns_element_at_index() {
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::arr_get(
+            Subterm::Prim(Prim::lst_get(
                 Subterm::Prim(Prim::NatType),
                 list.clone(),
                 Subterm::Prim(Prim::Nat(Nat::new(0usize)))
@@ -174,7 +174,7 @@ fn reduce_lst_get_returns_element_at_index() {
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::arr_get(
+            Subterm::Prim(Prim::lst_get(
                 Subterm::Prim(Prim::NatType),
                 list,
                 Subterm::Prim(Prim::Nat(Nat::new(2usize)))
@@ -189,19 +189,19 @@ fn reduce_lst_get_returns_element_at_index() {
 fn reduce_lst_get_errors_on_out_of_bounds() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::arr(vec![Subterm::Prim(Prim::Nat(Nat::new(1usize)))]));
+    let list = Subterm::Prim(Prim::lst(vec![Subterm::Prim(Prim::Nat(Nat::new(1usize)))]));
 
     assert!(matches!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::arr_get(
+            Subterm::Prim(Prim::lst_get(
                 Subterm::Prim(Prim::NatType),
                 list,
                 Subterm::Prim(Prim::Nat(Nat::new(1usize))),
             ))
             .into(),
         ),
-        Err(ReduceError::ArrGetOutOfBounds {
+        Err(ReduceError::LstGetOutOfBounds {
             len: 1,
             index: 1,
             ..
@@ -245,7 +245,7 @@ fn reduce_bin_append_truncates_byte_to_low_eight_bits() {
 fn reduce_lst_append_adds_element() {
     let mut context = context();
 
-    let list = Subterm::Prim(Prim::arr(vec![
+    let list = Subterm::Prim(Prim::lst(vec![
         Subterm::Prim(Prim::Nat(Nat::new(10usize))),
         Subterm::Prim(Prim::Nat(Nat::new(20usize))),
     ]));
@@ -253,14 +253,14 @@ fn reduce_lst_append_adds_element() {
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::arr_append(
+            Subterm::Prim(Prim::lst_append(
                 Subterm::Prim(Prim::NatType),
                 list,
                 Subterm::Prim(Prim::Nat(Nat::new(30usize)))
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::arr(vec![
+        Ok(Subterm::Prim(Prim::lst(vec![
             Subterm::Prim(Prim::Nat(Nat::new(10usize))),
             Subterm::Prim(Prim::Nat(Nat::new(20usize))),
             Subterm::Prim(Prim::Nat(Nat::new(30usize))),
@@ -723,25 +723,25 @@ mod prim {
     }
 
     // `cons(7, xs) = [7] ++ xs` over a symbolic tail `xs` — the symbolic cons
-    // `Arr/get` and `Arr/slice` previously could not peel (they folded only literal
+    // `Lst/get` and `Lst/slice` previously could not peel (they folded only literal
     // arrays), now decoded one element at a time like their `Bin` twins.
-    fn arr_cons_seven(xs: &Term) -> Term {
-        Term::prim(Prim::arr_concat(
+    fn lst_cons_seven(xs: &Term) -> Term {
+        Term::prim(Prim::lst_concat(
             Term::prim(Prim::NatType),
-            [Term::prim(Prim::Arr(vec![lit(7)])), xs.clone()],
+            [Term::prim(Prim::Lst(vec![lit(7)])), xs.clone()],
         ))
     }
 
     #[test]
-    fn arr_get_peels_symbolic_cons() {
+    fn lst_get_peels_symbolic_cons() {
         let mut context = context();
-        let cons = arr_cons_seven(&Term::free_var("xs"));
+        let cons = lst_cons_seven(&Term::free_var("xs"));
 
         // `get(cons(7, xs), 0) = 7`.
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::arr_get(
+                Term::prim(Prim::lst_get(
                     Term::prim(Prim::NatType),
                     cons.clone(),
                     lit(0)
@@ -754,50 +754,50 @@ mod prim {
         assert!(matches!(
             reduced(
                 &mut context,
-                Term::prim(Prim::arr_get(Term::prim(Prim::NatType), cons, lit(1)))
+                Term::prim(Prim::lst_get(Term::prim(Prim::NatType), cons, lit(1)))
             ),
-            Subterm::Prim(Prim::ArrGet(..)),
+            Subterm::Prim(Prim::LstGet(..)),
         ));
     }
 
     #[test]
-    fn arr_slice_peels_symbolic_cons() {
+    fn lst_slice_peels_symbolic_cons() {
         let mut context = context();
-        let cons = arr_cons_seven(&Term::free_var("xs"));
+        let cons = lst_cons_seven(&Term::free_var("xs"));
 
         // `slice(cons(7, xs), 0, 1) = [7] ++ slice(xs, 0, 0) = [7]`.
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::arr_slice(
+                Term::prim(Prim::lst_slice(
                     Term::prim(Prim::NatType),
                     cons.clone(),
                     lit(0),
                     lit(1)
                 ))
             ),
-            Subterm::Prim(Prim::Arr(vec![lit(7)])),
+            Subterm::Prim(Prim::Lst(vec![lit(7)])),
         );
 
         // `slice(cons(7, xs), 1, 1) = []` — the empty-slice identity.
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::arr_slice(
+                Term::prim(Prim::lst_slice(
                     Term::prim(Prim::NatType),
                     cons,
                     lit(1),
                     lit(1)
                 ))
             ),
-            Subterm::Prim(Prim::Arr(Vec::new())),
+            Subterm::Prim(Prim::Lst(Vec::new())),
         );
     }
 
-    // `Arr/len` distributes over the monoid like `Bin/len`: a symbolic cons or
+    // `Lst/len` distributes over the monoid like `Bin/len`: a symbolic cons or
     // append reduces its length to a `succ` spine instead of stalling.
     #[test]
-    fn arr_len_distributes_over_cons_and_append() {
+    fn lst_len_distributes_over_cons_and_append() {
         let mut context = context();
         let xs = Term::free_var("xs");
         // `1 + len(xs)`, the shape both symbolic cases reduce to.
@@ -806,7 +806,7 @@ mod prim {
                 context,
                 Term::prim(Prim::nat_add(
                     lit(1),
-                    Term::prim(Prim::arr_len(Term::prim(Prim::NatType), xs.clone())),
+                    Term::prim(Prim::lst_len(Term::prim(Prim::NatType), xs.clone())),
                 )),
             )
         };
@@ -815,9 +815,9 @@ mod prim {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::arr_len(
+                Term::prim(Prim::lst_len(
                     Term::prim(Prim::NatType),
-                    Term::prim(Prim::Arr(vec![lit(1), lit(2), lit(3)]))
+                    Term::prim(Prim::Lst(vec![lit(1), lit(2), lit(3)]))
                 )),
             ),
             Subterm::Prim(Prim::Nat(Nat::new(3usize))),
@@ -827,16 +827,16 @@ mod prim {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::arr_len(
+                Term::prim(Prim::lst_len(
                     Term::prim(Prim::NatType),
-                    arr_cons_seven(&xs)
+                    lst_cons_seven(&xs)
                 ))
             ),
             succ_len(&mut context),
         );
 
         // `len(append(xs, 9)) = 1 + len(xs)`.
-        let appended = Term::prim(Prim::arr_append(
+        let appended = Term::prim(Prim::lst_append(
             Term::prim(Prim::NatType),
             xs.clone(),
             lit(9),
@@ -844,23 +844,23 @@ mod prim {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::arr_len(Term::prim(Prim::NatType), appended))
+                Term::prim(Prim::lst_len(Term::prim(Prim::NatType), appended))
             ),
             succ_len(&mut context),
         );
     }
 
     // The full slice is the identity even over a symbolic array: `slice(xs, 0, len
-    // xs) = xs` (the `Arr` twin of `BinSlice`'s full-window identity).
+    // xs) = xs` (the `Lst` twin of `BinSlice`'s full-window identity).
     #[test]
-    fn arr_slice_full_window_is_identity() {
+    fn lst_slice_full_window_is_identity() {
         let mut context = context();
         let xs = Term::free_var("xs");
-        let len = Term::prim(Prim::arr_len(Term::prim(Prim::NatType), xs.clone()));
+        let len = Term::prim(Prim::lst_len(Term::prim(Prim::NatType), xs.clone()));
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::arr_slice(
+                Term::prim(Prim::lst_slice(
                     Term::prim(Prim::NatType),
                     xs.clone(),
                     lit(0),
@@ -922,20 +922,20 @@ mod prim {
         ));
     }
 
-    // A nested `Arr/slice` reassociates to one slice over the base, even when the
-    // base is symbolic: `slice(slice(xs, 1, 5), 0, 2) = slice(xs, 1, 3)` (the `Arr`
+    // A nested `Lst/slice` reassociates to one slice over the base, even when the
+    // base is symbolic: `slice(slice(xs, 1, 5), 0, 2) = slice(xs, 1, 3)` (the `Lst`
     // twin of `BinSlice`'s window reassociation).
     #[test]
-    fn arr_slice_reassociates_nested() {
+    fn lst_slice_reassociates_nested() {
         let mut context = context();
         let xs = Term::free_var("xs");
-        let inner = Term::prim(Prim::arr_slice(
+        let inner = Term::prim(Prim::lst_slice(
             Term::prim(Prim::NatType),
             xs.clone(),
             lit(1),
             lit(5),
         ));
-        let outer = Term::prim(Prim::arr_slice(
+        let outer = Term::prim(Prim::lst_slice(
             Term::prim(Prim::NatType),
             inner,
             lit(0),
@@ -945,7 +945,7 @@ mod prim {
             reduced(&mut context, outer),
             reduced(
                 &mut context,
-                Term::prim(Prim::arr_slice(
+                Term::prim(Prim::lst_slice(
                     Term::prim(Prim::NatType),
                     xs.clone(),
                     lit(1),

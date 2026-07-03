@@ -25,11 +25,11 @@ use {super::*, std::collections::HashSet};
 /// - **Trap point**: between the end of `R.values` and the header's first
 ///   value there is only the entry jump — effects live exclusively at tails,
 ///   and `R`'s tail *is* that jump — so a hoisted trapping op (`NatDiv`,
-///   `ArrGet`) traps at an observably identical point, on iteration one.
+///   `LstGet`) traps at an observably identical point, on iteration one.
 ///
 /// Only the header's straight line is scanned; its nested blocks are
 /// conditional per iteration and moving them would be speculation. What
-/// hoists: `Value::Eval` (except `ArrMap`, which invokes a possibly-effectful
+/// hoists: `Value::Eval` (except `LstMap`, which invokes a possibly-effectful
 /// closure) and every allocating `Value::Pure` — aggregates, bytestrings, and
 /// boxed floats — whose operands are all loop-invariant. `Nat`/`Int` literals
 /// are immediates, not allocations, and stay put; prealloc shells' fills stay
@@ -95,15 +95,15 @@ fn hoist_in_region(region: &mut Region) {
 
 fn is_invariant(value: &Value, varying: &HashSet<ValueName>) -> bool {
     let movable = match value {
-        // Copy propagation owns aliases; ArrMap invokes a closure whose region
+        // Copy propagation owns aliases; LstMap invokes a closure whose region
         // may end in an effectful tail.
-        Value::Alias(_) | Value::Eval(Code::ArrMap(..)) => false,
+        Value::Alias(_) | Value::Eval(Code::LstMap(..)) => false,
         Value::Eval(_) => true,
         Value::Pure(data) => match data {
             // Immediates — nothing saved by moving them.
             Data::Nat(_) | Data::Int(_) => false,
             // Everything else allocates per execution.
-            Data::Flt(_) | Data::Bin(_) | Data::Arr(_) | Data::Tpl(_) | Data::Clsr(..) => true,
+            Data::Flt(_) | Data::Bin(_) | Data::Lst(_) | Data::Tpl(_) | Data::Clsr(..) => true,
         },
     };
 

@@ -291,7 +291,7 @@ fn decide_edge(block: &Block, args: &[ValueName], lits: &Lits) -> Option<Decisio
             Value::Alias(source) => env.get(source).cloned(),
             Value::Eval(code) => simplify(code, &env).and_then(|evaluated| match evaluated {
                 Evaluated::Scalar(scalar) => Some(scalar.into()),
-                Evaluated::Arr(elems) => Some(Data::Arr(elems)),
+                Evaluated::Lst(elems) => Some(Data::Lst(elems)),
                 Evaluated::Elem(source) => env.get(&source).cloned(),
             }),
         };
@@ -659,7 +659,7 @@ mod tests {
         let a0 = block(
             vec![],
             region(
-                vec![(v("r0"), Value::Eval(Code::ArrGet(v("arr"), v("i"))))],
+                vec![(v("r0"), Value::Eval(Code::LstGet(v("lst"), v("i"))))],
                 vec![],
                 jump("J", vec![v("r0")]),
             ),
@@ -957,7 +957,7 @@ mod tests {
         let a0 = block(
             vec![],
             region(
-                vec![(v("f0"), Value::Eval(Code::ArrGet(v("table"), v("i"))))],
+                vec![(v("f0"), Value::Eval(Code::LstGet(v("table"), v("i"))))],
                 vec![],
                 jump("J", vec![v("f0")]),
             ),

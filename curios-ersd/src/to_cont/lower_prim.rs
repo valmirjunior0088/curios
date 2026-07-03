@@ -199,7 +199,7 @@ fn lower_lst<'b>(
 ) -> Tail {
     match elements {
         [] => {
-            let value = work.fresh(Value::Pure(Data::Arr(names)));
+            let value = work.fresh(Value::Pure(Data::Lst(names)));
 
             cont.call(work, value)
         }
@@ -247,7 +247,7 @@ fn lower_arr_concat<'b>(
 ) -> Tail {
     match operands {
         [] => {
-            let value = work.fresh(Value::Eval(Code::ArrConcat(names)));
+            let value = work.fresh(Value::Eval(Code::LstConcat(names)));
 
             cont.call(work, value)
         }
@@ -467,28 +467,28 @@ pub fn lower_pure_prim(work: &mut Work, prim: &crate::PurePrim, frame: &Frame) -
 
             work.fresh(Value::Eval(Code::BinConcat(names)))
         }
-        crate::PurePrim::Arr(elements) => {
+        crate::PurePrim::Lst(elements) => {
             let names = lower_pure_names(work, elements, frame);
 
-            work.fresh(Value::Pure(Data::Arr(names)))
+            work.fresh(Value::Pure(Data::Lst(names)))
         }
-        crate::PurePrim::ArrLen(lst) => lower_pure_unary_code(work, lst, frame, Code::ArrLen),
-        crate::PurePrim::ArrGet(lst, idx) => {
-            lower_pure_binary_code(work, lst, idx, frame, Code::ArrGet)
+        crate::PurePrim::LstLen(lst) => lower_pure_unary_code(work, lst, frame, Code::LstLen),
+        crate::PurePrim::LstGet(lst, idx) => {
+            lower_pure_binary_code(work, lst, idx, frame, Code::LstGet)
         }
-        crate::PurePrim::ArrSlice(lst, start, end) => {
-            lower_pure_ternary_code(work, lst, start, end, frame, Code::ArrSlice)
+        crate::PurePrim::LstSlice(lst, start, end) => {
+            lower_pure_ternary_code(work, lst, start, end, frame, Code::LstSlice)
         }
-        crate::PurePrim::ArrAppend(lst, elem) => {
-            lower_pure_binary_code(work, lst, elem, frame, Code::ArrAppend)
+        crate::PurePrim::LstAppend(lst, elem) => {
+            lower_pure_binary_code(work, lst, elem, frame, Code::LstAppend)
         }
-        crate::PurePrim::ArrConcat(operands) => {
+        crate::PurePrim::LstConcat(operands) => {
             let names = lower_pure_names(work, operands, frame);
 
-            work.fresh(Value::Eval(Code::ArrConcat(names)))
+            work.fresh(Value::Eval(Code::LstConcat(names)))
         }
-        crate::PurePrim::ArrMap(src, f) => {
-            lower_pure_binary_code(work, src, f, frame, Code::ArrMap)
+        crate::PurePrim::LstMap(src, f) => {
+            lower_pure_binary_code(work, src, f, frame, Code::LstMap)
         }
         // A handle erases to its host token bytes: the LE encoding of the token
         // integer, the same `BigUint::to_bytes_le` the runtime mints and keys on.
@@ -791,22 +791,22 @@ fn lower_value_pure_prim<'b>(
         crate::PurePrim::BinConcat(operands) => {
             lower_bin_concat(work, operands, frame, vec![], cont)
         }
-        crate::PurePrim::Arr(elements) => lower_lst(work, elements, frame, vec![], cont),
-        crate::PurePrim::ArrLen(lst) => lower_unary_code(work, lst, frame, cont, Code::ArrLen),
-        crate::PurePrim::ArrGet(lst, idx) => {
-            lower_binary_code(work, lst, idx, frame, cont, Code::ArrGet)
+        crate::PurePrim::Lst(elements) => lower_lst(work, elements, frame, vec![], cont),
+        crate::PurePrim::LstLen(lst) => lower_unary_code(work, lst, frame, cont, Code::LstLen),
+        crate::PurePrim::LstGet(lst, idx) => {
+            lower_binary_code(work, lst, idx, frame, cont, Code::LstGet)
         }
-        crate::PurePrim::ArrSlice(lst, start, end) => {
-            lower_ternary_code(work, lst, start, end, frame, cont, Code::ArrSlice)
+        crate::PurePrim::LstSlice(lst, start, end) => {
+            lower_ternary_code(work, lst, start, end, frame, cont, Code::LstSlice)
         }
-        crate::PurePrim::ArrAppend(lst, elem) => {
-            lower_binary_code(work, lst, elem, frame, cont, Code::ArrAppend)
+        crate::PurePrim::LstAppend(lst, elem) => {
+            lower_binary_code(work, lst, elem, frame, cont, Code::LstAppend)
         }
-        crate::PurePrim::ArrConcat(operands) => {
+        crate::PurePrim::LstConcat(operands) => {
             lower_arr_concat(work, operands, frame, vec![], cont)
         }
-        crate::PurePrim::ArrMap(src, f) => {
-            lower_binary_code(work, src, f, frame, cont, Code::ArrMap)
+        crate::PurePrim::LstMap(src, f) => {
+            lower_binary_code(work, src, f, frame, cont, Code::LstMap)
         }
     }
 }

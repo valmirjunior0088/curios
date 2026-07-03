@@ -74,7 +74,7 @@ pub fn walk_value_uses(value: &Value, sink: &mut impl Sink) {
 fn walk_data(data: &Data, sink: &mut impl Sink) {
     match data {
         Data::Nat(_) | Data::Int(_) | Data::Flt(_) | Data::Bin(_) => {}
-        Data::Arr(elems) | Data::Tpl(elems) => walk_uses(elems, sink),
+        Data::Lst(elems) | Data::Tpl(elems) => walk_uses(elems, sink),
         Data::Clsr(clsr, captures) => {
             sink.clsr_ref(clsr);
             walk_uses(captures, sink);
@@ -212,15 +212,15 @@ macro_rules! walk_code_operands {
             | BinEql(a, b)
             | BinGet(a, b)
             | BinAppend(a, b)
-            | ArrGet(a, b)
-            | ArrAppend(a, b)
-            | ArrMap(a, b) => {
+            | LstGet(a, b)
+            | LstAppend(a, b)
+            | LstMap(a, b) => {
                 $sink.value_use(a);
                 $sink.value_use(b);
             }
 
             // Ternary operands.
-            BinSlice(a, b, c) | ArrSlice(a, b, c) => {
+            BinSlice(a, b, c) | LstSlice(a, b, c) => {
                 $sink.value_use(a);
                 $sink.value_use(b);
                 $sink.value_use(c);
@@ -250,11 +250,11 @@ macro_rules! walk_code_operands {
             | FltToLeBin(a)
             | FltToInt(a)
             | BinLen(a)
-            | ArrLen(a)
+            | LstLen(a)
             | TplGet(a, _) => $sink.value_use(a),
 
             // Variadic operands.
-            BinConcat(operands) | ArrConcat(operands) => {
+            BinConcat(operands) | LstConcat(operands) => {
                 for name in operands {
                     $sink.value_use(name);
                 }
@@ -327,7 +327,7 @@ fn walk_value_mut(value: &mut Value, sink: &mut impl SinkMut) {
 fn walk_data_mut(data: &mut Data, sink: &mut impl SinkMut) {
     match data {
         Data::Nat(_) | Data::Int(_) | Data::Flt(_) | Data::Bin(_) => {}
-        Data::Arr(elems) | Data::Tpl(elems) => walk_uses_mut(elems, sink),
+        Data::Lst(elems) | Data::Tpl(elems) => walk_uses_mut(elems, sink),
         Data::Clsr(_, captures) => walk_uses_mut(captures, sink),
     }
 }
