@@ -301,7 +301,7 @@ fn manual_release_runs_a_finalizer_once_and_completion_does_not_repeat_it() {
 
 #[test]
 fn heterogeneous_existential_task_list_through_a_generic_map() {
-    // A `Lst` of existential-boxed tasks of DIFFERENT result types, mapped by a
+    // An `Arr` of existential-boxed tasks of DIFFERENT result types, mapped by a
     // generic HOF whose body does an indirect closure call on a continuation
     // pulled out of the box. The arity-1 closure definition is inlined away by
     // the specializer, leaving the `call_ref` with no surviving definition — the
@@ -310,22 +310,20 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Str, Nat, Lst};
+        use /std/{Io, Str, Nat, Arr};
         induct Susp(A : Type) : Type
         | now(A)
         | later(() -> Susp(A))
         end
         let Box : Type = { A : Type, t : Susp(A) };
-        let boxes : Lst(Box) =
-            Lst/cons((Nat, Susp/now(7)),
-            Lst/cons(({}, Susp/now(())),
-            Lst/nil()));
-        let stepped = Lst/map((b : Box) =>
+        let boxes : Arr(Box) =
+            [(Nat, Susp/now(7)), ({}, Susp/now(()))];
+        let stepped = Arr/map((b : Box) =>
             match b.t : Box
             | now(a) => (b.A, Susp/now(a))
             | later(k) => (b.A, k())
             end, boxes);
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Lst/len(stepped))))
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Arr/len(stepped))))
         "#,
         system,
     )

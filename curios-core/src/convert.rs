@@ -1,7 +1,7 @@
 use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, InductiveType, Match,
-        Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
+        Metavar, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
         Three, Tuple, TupleType, Variant, Visit, check, convert_prim, reduce, unfold_rec,
     },
     crate::time::Instant,
@@ -1201,7 +1201,8 @@ impl Convert {
 
     /// Flex-apply imitation — the restricted higher-order rule: for
     /// `?m(a₁ … aₖ) ≡ T(p̄ ++ ī)` where `T` is a nominal (inductive or struct)
-    /// type constructor, commit the *imitation* solution
+    /// type constructor or a unary primitive type former (`Arr`, `Cell`),
+    /// commit the *imitation* solution
     /// `?m := λx₁…xₖ. T(x₁, …, xₖ)` and equate arguments pairwise. This is
     /// what unifies `?M(?A) ≡ Option(Nat)` for higher-kinded concepts — the
     /// same commitment Lean's first-order approximation and Agda's
@@ -1212,8 +1213,8 @@ impl Convert {
     ///   partial application is future work;
     /// - imitation only — the constant (`?m := λ_. T(b̄)`) and projection
     ///   (`?m := λx. x`) solutions are never produced;
-    /// - nominal rigid heads only — `Prim`-headed constructors (`Arr`, `Cell`)
-    ///   carry their argument inside the `Prim` node and never reach here;
+    /// - rigid heads only — nominal constructors and the unary primitive
+    ///   formers (`Arr`, `Cell`), whose argument rides inside the `Prim` node;
     /// - flex–flex stays blocked (dispatched before the structural match);
     /// - a rejected or postponed guess *blocks* the goal, never hard-fails it:
     ///   refuting the imitation does not prove the equation unsatisfiable (a
@@ -1237,19 +1238,47 @@ impl Convert {
             return self.eta_expand_neutral(context, goal.this, goal.that, goal.type_);
         };
 
-        let (name, rigid_params, rigid_indices) = match &*rigid {
-            Subterm::InductiveType(inductive) => (
-                inductive.name.clone(),
-                inductive.params.clone(),
-                Some(inductive.indices.clone()),
-            ),
+        type MkBody = Box<dyn Fn(&[Term]) -> Term>;
+        let (rigid_args, mk_body): (Vec<Term>, MkBody) = match &*rigid {
+            Subterm::InductiveType(inductive) => {
+                let name = inductive.name.clone();
+                let n_params = inductive.params.len();
+                let args = inductive
+                    .params
+                    .iter()
+                    .chain(&inductive.indices)
+                    .cloned()
+                    .collect();
+                (
+                    args,
+                    Box::new(move |vars| {
+                        let (params, indices) = vars.split_at(n_params);
+                        Term::inductive_type(&name, params.iter().cloned(), indices.iter().cloned())
+                    }),
+                )
+            }
             // Struct types carry no indices.
             Subterm::StructType(structure) => {
-                (structure.name.clone(), structure.params.clone(), None)
+                let name = structure.name.clone();
+                (
+                    structure.params.clone(),
+                    Box::new(move |vars| Term::struct_type(&name, vars.iter().cloned())),
+                )
             }
-            _ => unreachable!("the callers pass a nominal rigid side"),
+            // The unary primitive type formers: their argument rides inside
+            // the `Prim` node, so the imitation body rebuilds the node over
+            // the binder (`?m := λT. Arr(T)` for `?m(?A) ≡ Arr(Nat)`).
+            Subterm::Prim(Prim::ArrType(elem)) => (
+                vec![elem.clone()],
+                Box::new(|vars| Term::prim(Prim::ArrType(vars[0].clone()))),
+            ),
+            Subterm::Prim(Prim::CellType(elem)) => (
+                vec![elem.clone()],
+                Box::new(|vars| Term::prim(Prim::CellType(vars[0].clone()))),
+            ),
+            _ => unreachable!("the callers pass a nominal or prim-former rigid side"),
         };
-        let arity = rigid_params.len() + rigid_indices.as_ref().map_or(0, Vec::len);
+        let arity = rigid_args.len();
 
         if flex.params.len() != arity {
             return self.block(goal);
@@ -1281,22 +1310,15 @@ impl Convert {
             domains.push((label, ty.clone()));
         }
 
-        // The candidate body mirrors the rigid node's params/indices split —
-        // `elaborate_inductive_type` re-checks the node against the full
-        // telescope during re-validation and rejects a wrong split.
+        // The candidate body mirrors the rigid node's shape (for an inductive,
+        // its params/indices split — `elaborate_inductive_type` re-checks the
+        // node against the full telescope during re-validation and rejects a
+        // wrong split).
         let binder_vars = domains
             .iter()
             .map(|(label, _)| Term::free_var(label))
             .collect::<Vec<_>>();
-        let (param_vars, index_vars) = binder_vars.split_at(rigid_params.len());
-        let body = match &rigid_indices {
-            Some(_) => Term::inductive_type(
-                &name,
-                param_vars.iter().cloned(),
-                index_vars.iter().cloned(),
-            ),
-            None => Term::struct_type(&name, param_vars.iter().cloned()),
-        };
+        let body = mk_body(&binder_vars);
         let candidate = Term::func(domains.clone(), body);
 
         // The invariant `solve_refinement_free` protects, upheld here by hand
@@ -1325,9 +1347,6 @@ impl Convert {
 
         // Equate arguments pairwise, at the candidate telescope's domains
         // (mirroring `compare_apply`'s recovered argument types).
-        let rigid_args = rigid_params
-            .into_iter()
-            .chain(rigid_indices.into_iter().flatten());
         for ((flex_arg, rigid_arg), (_, domain)) in
             flex.params.into_iter().zip(rigid_args).zip(domains)
         {
@@ -1599,6 +1618,20 @@ impl Convert {
                 }
                 (Subterm::StructType(rigid), Subterm::Apply(apply)) => {
                     let rigid: Term = Subterm::StructType(rigid).into();
+                    self.imitate_flex_apply(context, apply, rigid, &this_raw, goal.clone())?
+                }
+                (
+                    Subterm::Apply(apply),
+                    Subterm::Prim(rigid @ (Prim::ArrType(_) | Prim::CellType(_))),
+                ) => {
+                    let rigid: Term = Subterm::Prim(rigid).into();
+                    self.imitate_flex_apply(context, apply, rigid, &that_raw, goal.clone())?
+                }
+                (
+                    Subterm::Prim(rigid @ (Prim::ArrType(_) | Prim::CellType(_))),
+                    Subterm::Apply(apply),
+                ) => {
+                    let rigid: Term = Subterm::Prim(rigid).into();
                     self.imitate_flex_apply(context, apply, rigid, &this_raw, goal.clone())?
                 }
                 (this_n, that_n) => {

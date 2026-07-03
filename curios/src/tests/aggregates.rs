@@ -9,10 +9,10 @@ fn arr_match_is_a_foldr() {
     // from a reversed walk: `[1,2,3,4]` folds to `4321`, not `1234`.
     let source = r#"
         use /std/{Io, Str, Nat, Arr};
-        let xs : Arr(Nat) = [|1, 2, 3, 4|];
+        let xs : Arr(Nat) = [1, 2, 3, 4];
         let digits : Nat =
             match xs : Nat
-            | [||] => 0
+            | [] => 0
             | h, ..t; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(digits)))
@@ -28,7 +28,7 @@ fn arr_map_fills_every_slot() {
     // fill *every* slot, not just one: `get(_, 0) + get(_, 2)` = 11 + 31 = 42.
     let source = r#"
         use /std/{Io, Str, Nat, Arr, Option};
-        let xs : Arr(Nat) = Arr/map((n) => Nat/add(n, 1), [|10, 20, 30|]);
+        let xs : Arr(Nat) = Arr/map((n) => Nat/add(n, 1), [10, 20, 30]);
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Option/unwrap_or(Arr/get(xs, 0), 0), Option/unwrap_or(Arr/get(xs, 2), 0)))))
         "#;
     assert_eq!(run(source), b"42");
@@ -45,7 +45,7 @@ fn arr_map_distributes_over_cons() {
     let source = r#"
         use /std/{Io, Str, Eq, Nat, Arr};
         let step(f : (Nat) -> Nat, x : Nat, t : Arr(Nat))
-            -> Eq(Arr/map(f, Arr/concat([|x|], t)), Arr/concat([|f(x)|], Arr/map(f, t))) =
+            -> Eq(Arr/map(f, Arr/concat([x], t)), Arr/concat([f(x)], Arr/map(f, t))) =
             Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
@@ -160,7 +160,7 @@ fn arr_slice_is_a_monoid_citizen() {
         let split(@T : Type, a : Arr(T), s : Nat, m : Nat, e : Nat)
             -> Eq(Arr/concat(Arr/slice(a, s, m), Arr/slice(a, m, e)), Arr/slice(a, s, e)) =
             Eq/refl();
-        let empty(@T : Type, a : Arr(T), i : Nat) -> Eq(Arr/slice(a, i, i), [||]) = Eq/refl();
+        let empty(@T : Type, a : Arr(T), i : Nat) -> Eq(Arr/slice(a, i, i), []) = Eq/refl();
         let full(@T : Type, a : Arr(T)) -> Eq(Arr/slice(a, 0, Arr/len(a)), a) = Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
@@ -175,7 +175,7 @@ fn arr_append_is_concat_with_a_single() {
     let source = r#"
         use /std/{Io, Str, Eq, Arr};
         let law(@T : Type, xs : Arr(T), y : T)
-            -> Eq(Arr/concat(xs, [|y|]), Arr/append(xs, y)) =
+            -> Eq(Arr/concat(xs, [y]), Arr/append(xs, y)) =
             Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
@@ -287,10 +287,10 @@ fn arr_concat_is_a_free_monoid() {
         let assoc(@T : Type, a : Arr(T), b : Arr(T), c : Arr(T))
             -> Eq(Arr/concat(a, Arr/concat(b, c)), Arr/concat(Arr/concat(a, b), c)) =
             Eq/refl();
-        let left_id(@T : Type, a : Arr(T)) -> Eq(Arr/concat([||], a), a) = Eq/refl();
-        let right_id(@T : Type, a : Arr(T)) -> Eq(Arr/concat(a, [||]), a) = Eq/refl();
+        let left_id(@T : Type, a : Arr(T)) -> Eq(Arr/concat([], a), a) = Eq/refl();
+        let right_id(@T : Type, a : Arr(T)) -> Eq(Arr/concat(a, []), a) = Eq/refl();
         let resegment(@T : Type, a : T, b : T, c : Arr(T))
-            -> Eq(Arr/concat([|a, b|], c), Arr/concat([|a|], Arr/concat([|b|], c))) =
+            -> Eq(Arr/concat([a, b], c), Arr/concat([a], Arr/concat([b], c))) =
             Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
@@ -307,7 +307,7 @@ fn arr_concat_length_clash_is_rejected() {
     // structural arm, kept sound by `Stuck` fall-through).
     let source = r#"
         use /std/{Io, Str, Eq, Arr};
-        let bad(@T : Type, x : T, y : T) -> Eq([|x, y|], [|x|]) = Eq/refl();
+        let bad(@T : Type, x : T, y : T) -> Eq([x, y], [x]) = Eq/refl();
         Io/write(Io/stdout, Str/to_bin("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
@@ -399,7 +399,7 @@ fn indexed_vec_append_executes() {
 fn arr_fold_sums_elements() {
     let source = r#"
         use /std/{Io, Str, Nat, Arr};
-        let xs : Arr(Nat) = [|10, 20, 30|];
+        let xs : Arr(Nat) = [10, 20, 30];
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(Arr/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))
         "#;
     let (system, io) = MockHost::builder().build();

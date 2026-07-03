@@ -199,7 +199,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         }
         // Inferring: the element type is unknown, so mint a fresh metavar — the
         // implicit `@T` a `nil`/`cons` constructor would insert — which the elements
-        // solve (an empty `[||]` leaves it for a later unification to ground, exactly
+        // solve (an empty `[]` leaves it for a later unification to ground, exactly
         // as the old `Arr/nil()` did). Checking goes through `elaborate_prim`, which
         // borrows the concrete element type from `expected` before reaching here.
         Prim::Arr(elems) => {
@@ -336,18 +336,18 @@ pub fn elaborate_prim(
     prim: &Prim,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // `Arr` is bidirectional. Checking, it borrows the concrete element type from
-    // `expected` — definitional, so each element is checked against the known type
-    // (better errors, and numeric element literals pick the right numeric type).
-    // Inferring, it falls through to `synth_prim`, which mints a fresh element-type
-    // metavar instead — mirroring how a `Lst` literal synthesizes its element type.
-    if let (Prim::Arr(elems), Mode::Check(expected)) = (prim, &mode) {
-        let elem_type = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
-            Subterm::Prim(Prim::ArrType(elem_type)) => elem_type,
-            other => return Err(Error::type_mismatch(other, expected.clone())),
-        };
-
-        let elaborated = check_arr_elems(context, elems, &elem_type)?;
+    // `Arr` is bidirectional. Checking against a concrete `Arr(T)`, it borrows
+    // the element type from `expected` — definitional, so each element is
+    // checked against the known type (better errors, and numeric element
+    // literals pick the right numeric type). Any other expected shape — a
+    // stuck `?M(?A)` awaiting the flex-apply imitation included — falls
+    // through to `synth_prim`, which mints a fresh element-type metavar; the
+    // check-after-infer unification then equates `Arr(?T)` with the expected
+    // type (pinning `?M := Arr`, or reporting the genuine mismatch).
+    if let (Prim::Arr(elems), Mode::Check(expected)) = (prim, &mode)
+        && let Subterm::Prim(Prim::ArrType(elem_type)) = &*reduce_with(context, expected)?
+    {
+        let elaborated = check_arr_elems(context, elems, elem_type)?;
 
         return Ok((Term::prim(Prim::Arr(elaborated)), expected.clone()));
     }

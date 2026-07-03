@@ -790,7 +790,6 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Char"], include_str!("../std/Char.crs")),
     (&["std", "Result"], include_str!("../std/Result.crs")),
     (&["std", "Option"], include_str!("../std/Option.crs")),
-    (&["std", "Lst"], include_str!("../std/Lst.crs")),
     (&["std", "Order"], include_str!("../std/Order.crs")),
     (&["std", "Eql"], include_str!("../std/Eql.crs")),
     (&["std", "Add"], include_str!("../std/Add.crs")),
@@ -869,7 +868,6 @@ impl<L: Loader> Loader for StdLoader<L> {
 const SYN: &[(&[&str], &str)] = &[
     (&["syn"], include_str!("../syn.crs")),
     (&["syn", "Str"], include_str!("../syn/Str.crs")),
-    (&["syn", "Lst"], include_str!("../syn/Lst.crs")),
     (&["syn", "Monad"], include_str!("../syn/Monad.crs")),
 ];
 

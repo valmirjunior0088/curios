@@ -313,23 +313,13 @@ fn parse_bin_literal<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_lst_literal<'a>() -> Parser<'a, Term> {
+// An array literal `[e0, e1, …]` (empty `[]`) — the native contiguous-sequence
+// sibling of the `Bin` literal `\\`. Builds a `Prim::Arr` directly (the element
+// type is an implicit the literal cannot name; core elaboration infers it).
+fn parse_arr_literal<'a>() -> Parser<'a, Term> {
     catch(parse_literal("["))
         .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
         .and_drop(parse_literal("]"))
-        .map(|elems| Subterm::Syn(Syn::Lst(elems.into_iter().collect())))
-        .map(Into::into)
-}
-
-// An array literal `[|e0, e1, …|]` (empty `[||]`) — the native contiguous-sequence
-// sibling of the `Bin` literal `\\`, distinct from the linked-list literal `[…]`.
-// Builds a `Prim::Arr` directly (the element type is an implicit the literal cannot
-// name; core elaboration infers it). Tried before `parse_lst_literal` so the `[|`
-// digraph wins over a bare `[`.
-fn parse_arr_literal<'a>() -> Parser<'a, Term> {
-    catch(parse_literal("[|"))
-        .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
-        .and_drop(parse_literal("|]"))
         .map(|elems| Subterm::Prim(Prim::Arr(elems.into_iter().collect())))
         .map(Into::into)
 }
@@ -353,7 +343,6 @@ fn parse_prim<'a>() -> Parser<'a, Term> {
         .or(parse_string_literal())
         .or(parse_bin_literal())
         .or(parse_arr_literal())
-        .or(parse_lst_literal())
 }
 
 fn parse_parens<'a>() -> Parser<'a, Term> {
@@ -803,10 +792,10 @@ fn parse_inductive_match<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// The `| [||] =>` identity arm of an `Arr` fold (the empty-array literal).
+// The `| [] =>` identity arm of an `Arr` fold (the empty-array literal).
 fn parse_arr_empty_branch<'a>() -> Parser<'a, Term> {
     parse_literal("|")
-        .and_drop(parse_literal("[||]"))
+        .and_drop(parse_literal("[]"))
         .and_drop(parse_literal("=>"))
         .and_keep(lazy(parse_term))
 }
@@ -814,22 +803,24 @@ fn parse_arr_empty_branch<'a>() -> Parser<'a, Term> {
 // The `| head, ..tail; ih =>` cons arm of a native-inductive fold. Carrier-neutral
 // (`Arr` and `Bin` share it); only the empty arm's literal selects the carrier. The
 // `,` separates the peeled head from the rest `tail`; the `;` sets `ih` (the
-// recursive result on `tail`) apart from the scrutinee's shape.
+// recursive result on `tail`) apart from the scrutinee's shape. A plain
+// case-split needs no induction hypothesis, so `; ih` may be omitted — the
+// binder defaults to `_`.
 fn parse_cons_branch<'a>() -> Parser<'a, ((String, String, String), Term)> {
     parse_literal("|")
         .and_keep(parse_identifier())
         .and_drop(parse_literal(","))
         .and_drop(parse_literal(".."))
         .and(parse_identifier())
-        .and_drop(parse_literal(";"))
-        .and(parse_identifier())
+        .and(
+            catch(parse_literal(";").and_keep(parse_identifier()))
+                .map(str::to_string)
+                .or(pure("_".to_string())),
+        )
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
         .map(|(((head, tail), ih), cons_case)| {
-            (
-                (head.to_string(), tail.to_string(), ih.to_string()),
-                cons_case,
-            )
+            ((head.to_string(), tail.to_string(), ih), cons_case)
         })
 }
 

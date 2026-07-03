@@ -1046,8 +1046,8 @@ mod tests {
 
     #[test]
     fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
-        // `pick([||], Arr/concat)`: the inserted implicit `?A` is the empty array's
-        // type *and* `combine`'s domain. The empty-array literal `[||]` borrows its
+        // `pick([], Arr/concat)`: the inserted implicit `?A` is the empty array's
+        // type *and* `combine`'s domain. The empty-array literal `[]` borrows its
         // element type from the expected (check-only intro), so against the bare
         // metavar `?A` it cannot elaborate. Elaboration must postpone it until the
         // sibling `Arr/concat` grounds `?A := Arr(?T)`, then re-check — at which
@@ -1059,19 +1059,19 @@ mod tests {
             let pick(@A : Type, fallback : A, combine : (A, A) -> A) -> A =
                 combine(fallback, fallback);
             let go : Arr(Nat) =
-                pick([||], Arr/concat);
+                pick([], Arr/concat);
             go
         "#;
 
         assert!(typecheck(source).is_ok());
 
         // With no sibling to ground the element type and no result type to pin it,
-        // the postponed `[||]` re-checks against a bare metavar and is rejected —
+        // the postponed `[]` re-checks against a bare metavar and is rejected —
         // graceful degradation, no new acceptance.
         let unpinned = r#"
             use /std/{Arr};
             let id(@A : Type, x : A) -> A = x;
-            let bad = id([||]);
+            let bad = id([]);
             bad
         "#;
 
@@ -1123,7 +1123,7 @@ mod tests {
         let source = r#"
             use /std/{Arr};
             use /std/{Nat};
-            Arr/map(@{ Nat, Nat }, @Nat, (pair) => pair.0, [||])
+            Arr/map(@{ Nat, Nat }, @Nat, (pair) => pair.0, [])
         "#;
 
         assert!(compile(source, None).is_ok());
@@ -1142,7 +1142,7 @@ mod tests {
             use /std/{Nat};
             let pairwise(f : (Arr(Nat), Arr(Nat)) -> Arr(Nat), a : Arr(Nat)) -> Arr(Nat) =
                 f(a, a);
-            pairwise(Arr/concat, [|1|])
+            pairwise(Arr/concat, [1])
         "#;
 
         assert!(compile(source, None).is_ok());
@@ -1159,7 +1159,7 @@ mod tests {
             use /std/{Arr};
             use /std/{Nat};
             let g : (@T : Type, Arr(T), Arr(T)) -> Arr(T) = Arr/concat;
-            g(@Nat, [|1|], [|2|])
+            g(@Nat, [1], [2])
         "#;
 
         assert!(compile(source, None).is_ok());

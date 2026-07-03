@@ -40,9 +40,6 @@ pub use Result/{let Result};
 pub mod Option;
 pub use Option/{let Option};
 
-pub mod Lst;
-pub use Lst/{let Lst};
-
 pub mod Order;
 pub use Order/{let Order};
 

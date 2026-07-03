@@ -177,24 +177,11 @@ impl<'a, 'b> Lower<'a, 'b> {
         }
     }
 
-    // A list literal `[e0, e1, …]` desugars to a `/syn/Lst/Lst` cons-spine
-    // `cons(e0, cons(e1, … nil()))`. The element type is an implicit the literal
-    // can't name; elaboration inserts it (a metavar) and solves it from the
-    // elements or the expected type — exactly as a hand-written `Lst/cons` would.
-    fn lst_literal(&self, elems: &[Term]) -> Result<curios_core::Term, Error> {
-        let mut spine = Self::syn_call("/syn/Lst/Lst/nil", []);
-        for elem in elems.iter().rev() {
-            spine = Self::syn_call("/syn/Lst/Lst/cons", [self.term(elem)?, spine]);
-        }
-        Ok(spine)
-    }
-
     // A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter
     // rather than lowered to a core primitive.
     fn syn_literal(&self, syn: &Syn) -> Result<curios_core::Term, Error> {
         match syn {
             Syn::Str(string) => Ok(self.str_literal(string.as_bytes())),
-            Syn::Lst(elems) => self.lst_literal(elems),
         }
     }
 
@@ -606,18 +593,14 @@ impl<'a, 'b> Lower<'a, 'b> {
                 self.collect(&infix.left, binds)?,
                 self.collect(&infix.right, binds)?,
             ),
-            // A list literal's elements hoist their bangs into this region,
-            // like an application's arguments (the cons-spine they desugar to).
-            Subterm::Syn(Syn::Lst(elems)) => {
-                let mut spine = Self::syn_call("/syn/Lst/Lst/nil", []);
+            // An array literal's elements hoist their bangs into this region,
+            // like an application's arguments.
+            Subterm::Prim(Prim::Arr(elems)) => {
                 let elems = elems
                     .iter()
                     .map(|elem| self.collect(elem, binds))
                     .collect::<Result<Vec<_>, Error>>()?;
-                for elem in elems.into_iter().rev() {
-                    spine = Self::syn_call("/syn/Lst/Lst/cons", [elem, spine]);
-                }
-                spine
+                curios_core::Term::prim(curios_core::Prim::Arr(elems))
             }
             // A `let`/`match` sub-expression hoists its bound-expression /
             // scrutinee bangs into the enclosing region (this `binds`).

@@ -1,8 +1,5 @@
 pub mod Str;
 pub use Str/{let Str};
 
-pub mod Lst;
-pub use Lst/{let Lst};
-
 pub mod Monad;
 pub use Monad/{let Monad};

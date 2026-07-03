@@ -1,6 +1,6 @@
 pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte, neg, abs, sqrt, floor, ceil, trunc, nearest, to_nat, to_int, to_le_bin};
-use /std/{Nat, Int, Str, Bln, Option, Bin, Lst, Order, BigNat};
+use /std/{Nat, Int, Str, Bln, Option, Bin, Arr, Order, BigNat};
 
 let pow2(k : Nat) -> BigNat =
     BigNat/mul_pow2(BigNat/of_nat(1), k);
@@ -29,7 +29,7 @@ rec scale_down(r : BigNat, mp : BigNat, mm : BigNat, s : BigNat, k : Int) -> {Bi
     | false => (r, mp, mm, k)
     end;
 
-rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bln) -> Lst(Nat) =
+rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bln) -> Arr(Nat) =
     let r10 = BigNat/mul_small(r, 10);
     let mp10 = BigNat/mul_small(mp, 10);
     let mm10 = BigNat/mul_small(mm, 10);
@@ -47,7 +47,7 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bln) -> Ls
         | false => BigNat/gt(BigNat/add(rem, mp10), s)
         end;
     match low || high
-    | false => Lst/cons(d, generate(rem, s, mp10, mm10, even))
+    | false => Arr/cons(d, generate(rem, s, mp10, mm10, even))
     | true =>
         let last =
             match low
@@ -62,33 +62,30 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bln) -> Ls
                     end
                 end
             end;
-        Lst/cons(last, Lst/nil())
+        [last]
     end;
 
-rec digits_to_str(ds : Lst(Nat)) -> Str =
-    match ds
-    | nil() => ""
-    | cons(h, t) => Str/concat(Nat/to_str(h), digits_to_str(t))
-    end;
+let digits_to_str(ds : Arr(Nat)) -> Str =
+    Arr/fold(ds, "", (d, acc) => Str/concat(acc, Nat/to_str(d)));
 
-rec normalize(ds : Lst(Nat)) -> {Lst(Nat), Bln} =
+rec normalize(ds : Arr(Nat)) -> {Arr(Nat), Bln} =
     match ds
-    | nil() => (Lst/nil(), false)
-    | cons(h, t) =>
-        match t
-        | nil() =>
+    | [] => ([], false)
+    | h, ..t =>
+        match Arr/len(t) == 0
+        | true =>
             match h == 10
-            | true => (Lst/cons(0, Lst/nil()), true)
-            | false => (Lst/cons(h, Lst/nil()), false)
+            | true => ([0], true)
+            | false => ([h], false)
             end
-        | cons(_, _) =>
+        | false =>
             let rest = normalize(t);
             match rest.1
-            | false => (Lst/cons(h, rest.0), false)
+            | false => (Arr/cons(h, rest.0), false)
             | true =>
                 match h == 9
-                | true => (Lst/cons(0, rest.0), true)
-                | false => (Lst/cons(h + 1, rest.0), false)
+                | true => (Arr/cons(0, rest.0), true)
+                | false => (Arr/cons(h + 1, rest.0), false)
                 end
             end
         end
@@ -154,7 +151,7 @@ let render(f_mant : Nat, exp_field : Nat, even : Bln) -> Str =
     let digits = generate(down.0, s1, down.1, down.2, even);
     let norm = normalize(digits);
     match norm.1
-    | true => layout(digits_to_str(Lst/cons(1, norm.0)), down.3 + 1)
+    | true => layout(digits_to_str(Arr/cons(1, norm.0)), down.3 + 1)
     | false => layout(digits_to_str(norm.0), down.3)
     end;
 

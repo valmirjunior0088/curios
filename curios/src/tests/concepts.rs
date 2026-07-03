@@ -35,25 +35,25 @@ fn concept_witness_resolves_through_wrapper() {
     assert_eq!(run(source), b"42");
 }
 
-// A premised witness: `show_lst` needs a `Show(A)` to show its elements. The
+// A premised witness: `show_arr` needs a `Show(A)` to show its elements. The
 // resolver instantiates its telescope — `@A := ?B` with premise goal
-// `Show(?B)` — unifies `Show(Lst(?B)) ≡ Show(Lst(Nat))` to solve `?B := Nat`,
+// `Show(?B)` — unifies `Show(Arr(?B)) ≡ Show(Arr(Nat))` to solve `?B := Nat`,
 // then resolves the premise to `show_nat`.
 #[test]
 fn premised_witness_resolves_recursively() {
     let source = r#"
-        use /std/{Nat, Io, Str, Lst};
+        use /std/{Nat, Io, Str, Arr};
         pub concept Show(A : Type) : Type {
             show(A) -> Str
         }
         satisfy Show(Nat) {
             show(n) = Nat/to_str(n)
         }
-        satisfy(@A : Type, use Show(A)) Show(Lst(A)) {
+        satisfy(@A : Type, use Show(A)) Show(Arr(A)) {
             show(l) =
-                Lst/fold(l, "[", (x, acc) => Str/concat(acc, Show/show(x)))
+                Arr/fold(l, "[", (x, acc) => Str/concat(acc, Show/show(x)))
         }
-        let l : Lst(Nat) = [1, 2, 3];
+        let l : Arr(Nat) = [1, 2, 3];
         Io/print(Show/show(l))
         "#;
 
@@ -335,14 +335,14 @@ fn prelude_monad_resolves_by_imitation() {
     assert_eq!(run(source), b"21");
 }
 
-// The Lst witness: bind is concat-map.
+// The Arr witness: bind is concat-map.
 #[test]
-fn prelude_monad_lst_binds() {
+fn prelude_monad_arr_binds() {
     let source = r#"
-        use /std/{Nat, Io, Str, Lst, Monad};
-        let l : Lst(Nat) = Lst/cons(1, Lst/cons(2, Lst/nil()));
-        let doubled : Lst(Nat) = Monad/bind(l, (x) => Lst/cons(x, Lst/cons(x, Lst/nil())));
-        Io/print(Nat/to_str(Lst/len(doubled)))
+        use /std/{Nat, Io, Str, Arr, Monad};
+        let l : Arr(Nat) = [1, 2];
+        let doubled : Arr(Nat) = Monad/bind(l, (x) => [x, x]);
+        Io/print(Nat/to_str(Arr/len(doubled)))
         "#;
 
     assert_eq!(run(source), b"4");
@@ -373,14 +373,14 @@ fn monadic_sugar_binds_through_the_concept() {
 fn bang_works_in_monad_generic_code() {
     let source = r#"
         use /syn/{Monad};
-        use /std/{Nat, Io, Str, Option, Lst};
+        use /std/{Nat, Io, Str, Option, Arr};
         pub let add_both(@M : (Type) -> Type, use Monad(M), a : M(Nat), b : M(Nat)) -> M(Nat) =
             Monad/pure(a! + b!);
         let o : Option(Nat) = add_both(Option/some(20), Option/some(22));
-        let l : Lst(Nat) = add_both([1, 2], [10]);
+        let l : Arr(Nat) = add_both([1, 2], [10]);
         Io/print(Str/concat(
             Nat/to_str(Option/unwrap_or(o, 0)),
-            Nat/to_str(Lst/len(l))))
+            Nat/to_str(Arr/len(l))))
         "#;
 
     assert_eq!(run(source), b"422");
@@ -412,19 +412,19 @@ fn higher_kinded_superclass_projects() {
 }
 
 // `Prim`-headed type constructors (`Arr`, `Cell`) carry their argument inside
-// the `Prim` node — deliberately outside the imitation rule's nominal-head
-// scope. `Monad/bind` over an `Arr` fails with the ordinary type mismatch at
-// its origin (no panic, no wrong solution).
+// the `Prim` node; the imitation rule rebuilds the node over the binder
+// (`?M := λT. Arr(T)`), so `Monad/bind` over an `Arr` pins the witness from
+// the action's type like any nominal constructor would.
 #[test]
-fn monad_over_prim_constructor_is_a_type_mismatch() {
+fn monad_over_prim_constructor_resolves_by_imitation() {
     let source = r#"
         use /std/{Nat, Arr, Io, Str, Monad};
-        let a : Arr(Nat) = [|1|];
+        let a : Arr(Nat) = [1];
         let b : Arr(Nat) = Monad/bind(a, (x) => a);
-        Io/print("done")
+        Io/print(Nat/to_str(Arr/len(b)))
         "#;
 
-    assert!(error(source).contains("mismatch"));
+    assert_eq!(run(source), b"1");
 }
 
 // The sys-homed operator concepts: `Add/add` resolves on a primitive type
@@ -584,7 +584,7 @@ fn misplaced_use_entries_are_errors() {
 #[test]
 fn omitted_superclass_resolves_from_a_premise() {
     let source = r#"
-        use /std/{Nat, Bln, Io, Str, Order, Lst};
+        use /std/{Nat, Bln, Io, Str, Order, Arr};
         pub concept Eq6(A : Type) : Type {
             eq6(A, A) -> Bln
         }
@@ -595,17 +595,17 @@ fn omitted_superclass_resolves_from_a_premise() {
         satisfy Eq6(Nat) {
             eq6(a, b) = a == b
         }
-        satisfy(@A : Type, use Eq6(A)) Eq6(Lst(A)) {
-            eq6(a, b) = Lst/len(a) == Lst/len(b)
+        satisfy(@A : Type, use Eq6(A)) Eq6(Arr(A)) {
+            eq6(a, b) = Arr/len(a) == Arr/len(b)
         }
-        satisfy(@A : Type, use Ord6(A)) Ord6(Lst(A)) {
+        satisfy(@A : Type, use Ord6(A)) Ord6(Arr(A)) {
             cmp6(a, b) = Order/lt()
         }
         satisfy Ord6(Nat) {
             cmp6(a, b) = Order/lt()
         }
         pub let same(@A : Type, use Ord6(A), x : A, y : A) -> Bln = Eq6/eq6(x, y);
-        let l : Lst(Nat) = [1, 2];
+        let l : Arr(Nat) = [1, 2];
         Io/print(Bln/to_str(same(l, l)))
         "#;
 

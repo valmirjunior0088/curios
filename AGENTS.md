@@ -155,7 +155,7 @@ The standard library under `curios-text/std/` is the reference for idiomatic cur
 
 [SYNTAX.md](SYNTAX.md) covers every construct with examples (and `curios-text/src/parse.rs` is the ultimate source of truth). A few essentials that are easy to trip on from memory:
 
-- Names are path-qualified with `/`: `Option/none`, `/std/Lst`, `/syn/Lst`; a leading `/` is absolute.
+- Names are path-qualified with `/`: `Option/none`, `/std/Arr`, `/syn/Str`; a leading `/` is absolute.
 - `@x : T` is an implicit (type-erased) parameter; ordinary `x : T` is explicit; `use T` is an anonymous **instance argument** filled by witness resolution.
 - **Concepts / witnesses / instance arguments** are the ad-hoc-polymorphism layer (see [SYNTAX.md](SYNTAX.md#concepts-witnesses-and-instance-arguments) for the surface syntax). The Rust-side implementation, file by file:
   - A `concept` lowers to a `record` plus a `Concept` registry entry (`curios-core/src/concept.rs`) and per-field method wrappers.

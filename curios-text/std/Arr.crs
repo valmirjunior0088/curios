@@ -1,6 +1,12 @@
 pub use /sys/{Arr};
 pub use /sys/Arr/{len, slice, append, concat, map};
-use /std/{Lst, Nat, Option, Eq};
+use /std/{Nat, Bln, Option, Eq, Monad};
+
+pub let nil(@A : Type) -> Arr(A) =
+    [];
+
+pub let cons(@A : Type, x : A, l : Arr(A)) -> Arr(A) =
+    concat([x], l);
 
 pub let at(@T : Type, a : Arr(T), i : Nat, ok : Nat/Lt(i, len(a))) -> T =
     /sys/Arr/get(a, i);
@@ -11,8 +17,8 @@ pub let get(@T : Type, a : Arr(T), i : Nat) -> Option(T) =
     | false => Option/none()
     end;
 
-pub let flatten(@T : Type, parts : Lst(Arr(T))) -> Arr(T) =
-    Lst/fold(parts, [||], (a, acc) => concat(acc, a));
+pub let flatten(@T : Type, parts : Arr(Arr(T))) -> Arr(T) =
+    fold(parts, [], (a, acc) => concat(acc, a));
 
 pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A =
     let n = len(arr);
@@ -25,6 +31,23 @@ pub let fold(@T : Type, @A : Type, arr : Arr(T), init : A, f : (T, A) -> A) -> A
                 inv)
         end;
     go(n, 0, init, Eq/refl());
+
+pub let each(@T : Type, arr : Arr(T), f : (T) -> {}) -> {} =
+    fold(arr, (), (x, acc) => f(x));
+
+pub let find(@T : Type, arr : Arr(T), pred : (T) -> Bln) -> Option(T) =
+    let n = len(arr);
+    rec go(i : Nat) -> Option(T) =
+        match i < n
+        | false => Option/none()
+        | true =>
+            let x = /sys/Arr/get(arr, i);
+            match pred(x)
+            | true => Option/some(x)
+            | false => go(i + 1)
+            end
+        end;
+    go(0);
 
 pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (A, A) -> A) -> A =
     rec go(lo : Nat, hi : Nat) -> A =
@@ -39,3 +62,8 @@ pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (
             combine(go(lo, mid), go(mid, hi))
         end;
     go(0, n);
+
+satisfy Monad(Arr) {
+    pure(A, x) = [x],
+    bind(A, B, m, f) = fold(m, [], (x, acc) => concat(acc, f(x)))
+}

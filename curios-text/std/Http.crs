@@ -1,4 +1,4 @@
-use /std/{Bin, Str, Nat, Bln, Char, Lst, Parse, Result, Option, Tcp, Io, Task};
+use /std/{Bin, Str, Nat, Bln, Char, Arr, Parse, Result, Option, Tcp, Io, Task};
 
 pub induct Method : Type
 | get()
@@ -21,7 +21,7 @@ pub record Request : Type {
     host : Str,
     port : Nat,
     path : Str,
-    headers : Lst({Str, Str}),
+    headers : Arr({Str, Str}),
     body : Bin,
     settings : Tcp/Settings
 }
@@ -76,8 +76,8 @@ pub let post_tls(host : Str, port : Nat, path : Str, body : Bin) -> Request =
 let until(target : Nat) -> (Nat) -> Bln =
     (byte) => Bln/not(byte == target);
 
-let header_lookup(headers : Lst({Str, Str}), name : Str) -> Option(Str) =
-    Option/map((pair) => pair.1, Lst/find(headers, (pair) => Str/eql_ci(pair.0, name)));
+let header_lookup(headers : Arr({Str, Str}), name : Str) -> Option(Str) =
+    Option/map((pair) => pair.1, Arr/find(headers, (pair) => Str/eql_ci(pair.0, name)));
 
 let render_header(pair : {Str, Str}) -> Str =
     Str/flatten([pair.0, ": ", pair.1, "\r\n"]);
@@ -95,7 +95,7 @@ pub let render(request : Request) -> Bin =
             "Host: ", request.host, "\r\n",
             "Connection: close\r\n",
             content_length(request.body),
-            Str/flatten(Lst/map(render_header, request.headers)),
+            Str/flatten(Arr/map(render_header, request.headers)),
             "\r\n"
         ])),
         request.body);
@@ -122,7 +122,7 @@ pub let status_line : Parse(Status) =
 
 pub record Response : Type {
     status : Status,
-    headers : Lst({Str, Str}),
+    headers : Arr({Str, Str}),
     body : Bin
 }
 
@@ -155,13 +155,13 @@ let take_n(n : Nat) -> Parse(Bin) =
         let stop = Nat/min(pos + n, Bin/len(input));
         Result/success((stop, Bin/slice(input, pos, stop))) };
 
-let content_length_of(headers : Lst({Str, Str})) -> Option(Nat) =
+let content_length_of(headers : Arr({Str, Str})) -> Option(Nat) =
     match header_lookup(headers, "Content-Length") : Option(Nat)
     | some(value) => Nat/of_str(value)
     | none() => Option/none()
     end;
 
-let body_parser(headers : Lst({Str, Str})) -> Parse(Bin) =
+let body_parser(headers : Arr({Str, Str})) -> Parse(Bin) =
     match content_length_of(headers) : Parse(Bin)
     | some(n) => take_n(n)
     | none() => rest

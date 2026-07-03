@@ -1,12 +1,12 @@
-use /std/{Bin, Str, Bln, Char, Flt, Nat, Parse, Result, Option, Lst};
+use /std/{Bin, Str, Bln, Char, Flt, Nat, Parse, Result, Option, Arr};
 
 pub induct Json : Type
 | null()
 | bln(Bln)
 | num(Flt)
 | str(Str)
-| arr(Lst(Json))
-| obj(Lst({Str, Json}))
+| arr(Arr(Json))
+| obj(Arr({Str, Json}))
 end
 
 pub use Json/*;
@@ -51,11 +51,11 @@ pub rec encode(v : Json) -> Str =
     | str(s) => encode_str(s)
     | arr(xs) =>
         Str/concat(Str/concat("[",
-            Str/join(",", Lst/map(encode, xs))), "]")
+            Str/join(",", Arr/map(encode, xs))), "]")
     | obj(ps) =>
         Str/concat(Str/concat("{",
-            Str/join(",", Lst/map(
-                (pair) => Str/concat(Str/concat(encode_str(pair.0), ":"), encode(pair.1)),
+            Str/join(",", Arr/map(
+                (pair : {Str, Json}) => Str/concat(Str/concat(encode_str(pair.0), ":"), encode(pair.1)),
                 ps))),
             "}")
     end;
@@ -170,7 +170,7 @@ let parse_str_escape : Parse(Bin) =
 let parse_str_segment : Parse(Bin) =
     Parse/take_while(is_not_string_special);
 
-let parse_str_body : Parse(Lst(Bin)) =
+let parse_str_body : Parse(Arr(Bin)) =
     Parse/many0(Parse/or(parse_str_escape, parse_str_segment));
 
 let parse_raw_str : Parse(Str) =

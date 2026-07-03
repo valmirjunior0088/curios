@@ -151,6 +151,6 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 - [x] Reader combinator (`std/Reader`)
 - [x] Proof-carrying UTF-8 string decoding (`std/Str`, `std/Char`)
 - [x] Parser-combinator library (`std/Parse`)
-- [x] Core collections (`std/Lst`, length-indexed `std/Vec`, `std/Arr` helpers)
+- [x] Core collections (`std/Arr` and its helpers, length-indexed `std/Vec`)
 - [x] Equality and ordering (`std/Eq`, `std/Order`)
 - [x] Foundational proof/logic types (`std/True`, `std/False`)

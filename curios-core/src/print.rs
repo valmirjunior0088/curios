@@ -606,11 +606,11 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         ]),
         Prim::ArrType(elem) => print_unary("Arr ", elem, depth),
         Prim::Arr(elems) => flat([
-            pure("[|"),
+            pure("["),
             sep_flat(elems.into_iter().map(move |e| print_term(e, depth)), || {
                 pure(", ")
             }),
-            pure("|]"),
+            pure("]"),
         ]),
         Prim::ArrLen(ty, list) => print_binary("Arr.len ", ty, list, depth),
         Prim::ArrGet(ty, list, index) => flat([
@@ -1060,7 +1060,7 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                             empty_case,
                             cons_case,
                             ..
-                        } => ("\n| [||] =>\n", empty_case, cons_three(cons_case)),
+                        } => ("\n| [] =>\n", empty_case, cons_three(cons_case)),
                     };
                     flat([
                         pure(empty_lit),

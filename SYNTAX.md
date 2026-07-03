@@ -10,7 +10,7 @@ Comments run from `--` to end of line; there are no block comments. Whitespace i
 
 Identifiers are runs of alphanumeric characters and `_`. The reserved keywords are `let`, `match`, `rec`, `mod`, `use`, `pub`, `end`, `false`, `true`, `induct`, `struct`, `record` (plus the contextual `and`, and the sort words `Type` and `Prop`). A keyword may not appear as a path segment.
 
-**Paths.** Names are segments joined by `/`. A leading `/` makes the path absolute (rooted at the module tree); otherwise it is relative to the current scope. Examples: `Nat` (relative), `Option/none` (member of `Option`), `/std/Lst` (absolute), `/sys/Io` (the primitives module). `_` is a valid identifier character, so `to_str` and `is_none` are single segments.
+**Paths.** Names are segments joined by `/`. A leading `/` makes the path absolute (rooted at the module tree); otherwise it is relative to the current scope. Examples: `Nat` (relative), `Option/none` (member of `Option`), `/std/Arr` (absolute), `/sys/Io` (the primitives module). `_` is a valid identifier character, so `to_str` and `is_none` are single segments.
 
 ```
 -- this is a comment
@@ -27,8 +27,7 @@ Option/some(x)         -- qualified member
 | Char               | `'c'`, `'\n'`, `'\''`                   | A fixed `Nat` codepoint (monomorphic). Escapes: `\n \t \r \\ \'`.                                                                                                                                                      |
 | String             | `"hi"`, `"a\tb\n"`                      | A `Str`. Escapes: `\n \t \r \\ \"`.                                                                                                                                                                                    |
 | Bytestring (`Bin`) | `\48\69`, `\\`                          | Each byte is `\` followed by exactly two hex digits. The empty bytestring is `\\`.                                                                                                                                     |
-| List               | `[]`, `[1, 2, 3]`                       | Sugar producing a `Lst` (a linked cons-spine).                                                                                                                                                                         |
-| Array (`Arr`)      | `[\|\|]`, `[\|1, 2, 3\|]`               | The native contiguous sequence. Element-type-checked: it borrows `Arr(T)`'s `T` from the expected type, and a non-empty literal can also synthesize `T` from its elements — but a bare empty `[\|\|]` with no expected type cannot, so annotate it (`[\|\|] : Arr(Nat)`). |
+| Array (`Arr`)      | `[]`, `[1, 2, 3]`                       | The native contiguous sequence. Element-type-checked: it borrows `Arr(T)`'s `T` from the expected type, and a non-empty literal can also synthesize `T` from its elements — but a bare empty `[]` with no expected type cannot, so annotate it (`[] : Arr(Nat)`). |
 | Boolean            | `true`, `false`                         | Keywords.                                                                                                                                                                                                              |
 
 ## Types and sorts
@@ -74,10 +73,10 @@ body_using_the_bindings
 **`rec`.** Locally-scoped recursive definitions; types are required. Mutually-recursive groups are joined with `and`:
 
 ```
-rec go(rest : Lst(A), acc : Nat) -> Nat =
+rec go(rest : Arr(A), acc : Nat) -> Nat =
     match rest
-    | nil()        => acc
-    | cons(_, tail) => go(tail, acc + 1)
+    | []        => acc
+    | _, ..tail => go(tail, acc + 1)
     end;
 go(l, 0)
 ```
@@ -91,7 +90,7 @@ let parser : Parse(Nat) =
     Parse/pure(a + b);
 ```
 
-The standard library ships `Monad` witnesses for `Option`, `Lst`, `Task`, `Parse`, and `Reader`; declaring `satisfy Monad(M) { … }` makes `!` work with your own type. Inside monad-generic code a local `use Monad(M)` binder resolves the sites, so generic do-notation works too.
+The standard library ships `Monad` witnesses for `Option`, `Arr`, `Task`, `Parse`, and `Reader`; declaring `satisfy Monad(M) { … }` makes `!` work with your own type. Inside monad-generic code a local `use Monad(M)` binder resolves the sites, so generic do-notation works too.
 
 ## Operators
 
@@ -161,11 +160,11 @@ match d
 end
 ```
 
-**`Arr` fold** (empty arm uses the empty-array literal `[||]`; the cons arm `head, ..tail; ih` peels the leading element `head` off the rest `tail`, with `ih` the fold of `tail`):
+**`Arr` fold** (empty arm uses the empty-array literal `[]`; the cons arm `head, ..tail; ih` peels the leading element `head` off the rest `tail`, with `ih` the fold of `tail` — a plain case-split may omit `; ih`):
 
 ```
 match a
-| [||]              => base
+| []                => base
 | head, ..tail; ih  => step(head, ih)
 end
 ```
@@ -194,7 +193,7 @@ pub let map(@A : Type, @B : Type, f : (A) -> B, m : Option(A)) -> Option(B) =
     | none()  => Option/none()
     end;
 
-pub rec len(@A : Type, l : Lst(A)) -> Nat = ...;
+pub rec len(@A : Type, l : Arr(A)) -> Nat = ...;
 ```
 
 **`mod`.** A submodule, either inline (`pub mod Name ... end`) or file-backed (`pub mod Name;`, loaded from `Name.crs`). The `std.crs` / `syn.crs` index files are just lists of file-backed `mod` declarations plus re-exports.
@@ -212,7 +211,7 @@ end
 use /std/{Bln, Nat};             -- import several names
 pub use Option/*;                -- re-export everything (e.g. constructors)
 pub use Arr/{let Arr};           -- re-export only the value `Arr`
-use /syn/Lst/{nil, cons};        -- import specific members
+use /syn/Str/{classify, step};   -- import specific members
 ```
 
 **`induct`.** An inductive type. After the name come optional parameters `(p : T)` (mark with `@` to make them implicit at the type constructor; they are always implicit at value constructors). A **required** `: Sort` declares the result sort — `Type` or `Prop` — written `: Sort` for a plain type or `: (indices) -> Sort` to also declare an index telescope. Each case is `| name(payload)` with an optional `: (targets)` stating its index instantiation — required exactly when the type is indexed. Mutually-recursive families join with `and`; the block ends with `end`.
@@ -265,7 +264,7 @@ Ad-hoc polymorphism is expressed with three constructs. A **concept** is a recor
 
 A parameter marked with the contextual keyword `out` is an **output position** (a functional dependency): it is excluded from the witness key and pinned by whichever witness the input positions select. At least one parameter must be an input. `out` stays a valid identifier — the marker form needs a binder after it, so a parameter *named* `out` still parses.
 
-Parameters may be higher-kinded: `Monad(M : (Type) -> Type)` keys witnesses on the type *constructor* (`Lst`, `Option`), and the elaborator can infer an unapplied constructor argument from an applied occurrence (`Lst(A)` teaches it `M := Lst`).
+Parameters may be higher-kinded: `Monad(M : (Type) -> Type)` keys witnesses on the type *constructor* (`Arr`, `Option`), and the elaborator can infer an unapplied constructor argument from an applied occurrence (`Arr(A)` teaches it `M := Arr`).
 
 ```
 pub concept Show(A : Type) : Type {
@@ -295,26 +294,26 @@ satisfy Show(Nat) {
 }
 
 -- A premised witness: the `use Show(A)` premise is resolved recursively.
-satisfy(@A : Type, use Show(A)) Show(Lst(A)) {
-    show(l) = Lst/fold(l, "", (x, acc) => Str/concat(acc, Show/show(x)))
+satisfy(@A : Type, use Show(A)) Show(Arr(A)) {
+    show(l) = Arr/fold(l, "", (x, acc) => Str/concat(acc, Show/show(x)))
 }
 ```
 
 Every concept–key pair has **at most one** witness, program-wide (global coherence, no orphan rule); a duplicate registration is a compile error wherever it is declared — module visibility never scopes the table, only names, and a witness has none. A witness keys on the concept and the tuple of *rigid heads* of the concept's input parameters (each an inductive, a struct/record, or a primitive type constructor); `out` parameters are excluded from the key and pinned by the resolved witness, and everything else is checked by unification at resolution time. For a *second* instance of the same key — a descending order, a case-insensitive equality — declare an ordinary value of the concept type (`let desc : Ord(Nat) = Ord { cmp(a, b) = … };`) and pass it where wanted with `use desc`.
 
-**`use` fields in concept literals.** A concept's `use`-marked (superclass) fields leave the positional field sequence in every literal of that concept — witness bodies included — exactly as witness slots leave the argument list at call sites. An omitted `use` field becomes a resolution goal (local binders first, then the table); an explicit fill is the entry form `use <term>`, pairing with the `use`-marked positions in declaration order. A `use` field has no label to assign by — it is either omitted or filled positionally with `use <term>` — and a `use` entry in a non-concept literal is an error. So `satisfy Ord(Nat) { cmp(a, b) = … }` resolves its `Eql(Nat)` superclass from the table, a premised `satisfy(@A : Type, use Ord(A)) Ord(Lst(A)) { … }` resolves its superclass from the premise, and `Ord { use my_eql, cmp(a, b) = … }` overrides explicitly.
+**`use` fields in concept literals.** A concept's `use`-marked (superclass) fields leave the positional field sequence in every literal of that concept — witness bodies included — exactly as witness slots leave the argument list at call sites. An omitted `use` field becomes a resolution goal (local binders first, then the table); an explicit fill is the entry form `use <term>`, pairing with the `use`-marked positions in declaration order. A `use` field has no label to assign by — it is either omitted or filled positionally with `use <term>` — and a `use` entry in a non-concept literal is an error. So `satisfy Ord(Nat) { cmp(a, b) = … }` resolves its `Eql(Nat)` superclass from the table, a premised `satisfy(@A : Type, use Ord(A)) Ord(Arr(A)) { … }` resolves its superclass from the premise, and `Ord { use my_eql, cmp(a, b) = … }` overrides explicitly.
 
 **`use` binders and arguments.** A `use` parameter is legal anywhere Π binders appear (function/`let`/`rec`/`satisfy` telescopes): `use T`, always anonymous — an instance is reached by resolution, never by name. It is filled by resolution at call sites and joins the instance scope for the body. At a call site, `use <term>` supplies one explicitly, overriding table resolution; it sits alongside `@`-arguments and plain arguments.
 
 ```
-pub let join(@A : Type, use Show(A), l : Lst(A)) -> Str =
-    Lst/fold(l, "", (x, acc) => Str/concat(acc, Show/show(x)));
+pub let join(@A : Type, use Show(A), l : Arr(A)) -> Str =
+    Arr/fold(l, "", (x, acc) => Str/concat(acc, Show/show(x)));
 
-join([1, 2, 3])                 -- resolves the Lst witness over the Nat witness
+join([1, 2, 3])                 -- resolves the Arr witness over the Nat witness
 join(use my_dict, [1, 2, 3])    -- explicit override
 ```
 
-**Resolution** proceeds deterministically: local `use` binders innermost-first; then superclass projections of local binders, breadth-first by depth (two matches at the same minimal depth are ambiguous); then the global table, keyed by the concept and the input parameters' rigid heads. A goal with an unsolved metavariable in any input position waits until it is solved. The standard library provides `Show`, `Eql` (value-level equality — distinct from propositional `Eq`), `Ord`, `Monad`, and the operator concepts `Add`/`Sub`/`Mul`/`Div`/`Rem`/`Cmp` (see [Operators](#operators)), with witnesses for the primitive types. `Monad` itself is homed in `/syn` — it is what the postfix `!` desugars to — and `/std/Monad` is the user-facing facade; each monad's witness lives beside its type (`/std/Option`, `/std/Lst`, `/std/Task`, `/std/Parse`, `/std/Reader`).
+**Resolution** proceeds deterministically: local `use` binders innermost-first; then superclass projections of local binders, breadth-first by depth (two matches at the same minimal depth are ambiguous); then the global table, keyed by the concept and the input parameters' rigid heads. A goal with an unsolved metavariable in any input position waits until it is solved. The standard library provides `Show`, `Eql` (value-level equality — distinct from propositional `Eq`), `Ord`, `Monad`, and the operator concepts `Add`/`Sub`/`Mul`/`Div`/`Rem`/`Cmp` (see [Operators](#operators)), with witnesses for the primitive types. `Monad` itself is homed in `/syn` — it is what the postfix `!` desugars to — and `/std/Monad` is the user-facing facade; each monad's witness lives beside its type (`/std/Option`, `/std/Arr`, `/std/Task`, `/std/Parse`, `/std/Reader`).
 
 ## Proofs (Eq idioms)
 

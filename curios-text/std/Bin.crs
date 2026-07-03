@@ -1,6 +1,6 @@
 pub use /sys/{Bin};
 pub use /sys/Bin/{len, eql, slice, append, concat};
-use /std/{Arr, Lst, Nat, Bln, Option, Eq};
+use /std/{Arr, Nat, Bln, Option, Eq};
 
 pub let at(b : Bin, i : Nat, ok : Nat/Lt(i, len(b))) -> Nat =
     /sys/Bin/get(b, i);
@@ -14,8 +14,8 @@ pub let get(b : Bin, i : Nat) -> Option(Nat) =
 pub let cons(head : Nat, tail : Bin) -> Bin =
     concat(append(\\, head), tail);
 
-pub let flatten(parts : Lst(Bin)) -> Bin =
-    Lst/fold(parts, \\, (b, acc) => concat(acc, b));
+pub let flatten(parts : Arr(Bin)) -> Bin =
+    Arr/fold(parts, \\, (b, acc) => concat(acc, b));
 
 pub let fold(@A : Type, b : Bin, init : A, f : (Nat, A) -> A) -> A =
     let n = len(b);

@@ -218,7 +218,7 @@ pub struct BlnMatch {
     pub true_case: Term,
 }
 
-/// Structural induction on an `Arr`: an `| [||] =>` identity arm and a
+/// Structural induction on an `Arr`: an `| [] =>` identity arm and a
 /// `| head, ..tail; ih =>` cons arm. The surface analogue of `NatMatch::Induction`
 /// for the native free-monoid primitives (the empty literal selects the carrier).
 #[derive(Debug, Clone, PartialEq)]
@@ -466,11 +466,9 @@ pub enum Subterm {
 }
 
 /// The literals the lowerer desugars to a `/syn` construction: a string becomes
-/// a proof-carrying `/syn/Str` value, a list a `/syn/Lst` cons-spine. Held as a
-/// dedicated [`Subterm`] variant (not a `Prim`) because the result is a core
-/// term, never a core primitive.
+/// a proof-carrying `/syn/Str` value. Held as a dedicated [`Subterm`] variant
+/// (not a `Prim`) because the result is a core term, never a core primitive.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Syn {
     Str(String),
-    Lst(Vec<Term>),
 }

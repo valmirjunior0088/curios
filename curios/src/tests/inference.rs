@@ -175,13 +175,13 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
     // behind a placeholder metavariable, and the outer annotation's pin wakes
     // it. Before ParkedWork::Checking this was a NotATupleType error.
     let source = r#"
-        use /std/{Nat, Lst, Io};
-        let mk(@A : Type, a : A) -> Lst(A) = Lst/cons(a, Lst/nil());
-        let use_(@B : Type, l : Lst(B)) -> Lst(B) = l;
-        let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
+        use /std/{Nat, Arr, Io};
+        let mk(@A : Type, a : A) -> Arr(A) = [a];
+        let use_(@B : Type, l : Arr(B)) -> Arr(B) = l;
+        let v : Arr({ Nat, Nat }) = use_(mk((1, 2)));
         match v : {}
-        | nil() => ()
-        | cons(p, rest) => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(p.1))); ()
+        | [] => ()
+        | p, ..rest => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(p.1))); ()
         end
         "#;
 
@@ -249,17 +249,17 @@ fn nonproductive_inner_rec_in_type_position_is_preempted() {
 }
 
 // The flex-apply imitation rule: an implicit higher-kinded binder `@M` is
-// inferred from an argument's concrete type — `?M(?A) ≡ Lst(Nat)` commits
-// `?M := (A) => Lst(A)` and `?A := Nat` — where previously only the explicit
-// `apply_m(@Lst, l)` spelling checked.
+// inferred from an argument's concrete type — `?M(?A) ≡ Arr(Nat)` commits
+// `?M := (A) => Arr(A)` and `?A := Nat` — where previously only the explicit
+// `apply_m(@Arr, l)` spelling checked.
 #[test]
 fn higher_kinded_implicit_infers_by_imitation() {
     let source = r#"
-        use /std/{Nat, Lst, Io, Str};
+        use /std/{Nat, Arr, Io, Str};
         pub let apply_m(@M : (Type) -> Type, @A : Type, x : M(A)) -> M(A) = x;
-        let l : Lst(Nat) = Lst/cons(1, Lst/cons(2, Lst/nil()));
-        let k : Lst(Nat) = apply_m(l);
-        Io/print(Nat/to_str(Lst/len(k)))
+        let l : Arr(Nat) = [1, 2];
+        let k : Arr(Nat) = apply_m(l);
+        Io/print(Nat/to_str(Arr/len(k)))
         "#;
 
     let (system, io) = MockHost::builder().build();

@@ -303,11 +303,11 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::BinConcat(left, right) => print_prim_call("Bin.concat", vec![left, right]),
         Prim::ArrType(elem) => print_prim_call("Arr", vec![elem]),
         Prim::Arr(elems) => flat([
-            pure("[|"),
+            pure("["),
             sep_flat(elems.into_iter().map(|operand| print_term(operand)), || {
                 pure(", ")
             }),
-            pure("|]"),
+            pure("]"),
         ]),
         Prim::ArrLen(ty, operand) => print_prim_call("Arr.len", vec![ty, operand]),
         Prim::ArrGet(ty, list, index) => print_prim_call("Arr.get", vec![ty, list, index]),
@@ -354,13 +354,6 @@ fn print_term(term: Term) -> Printer<'static> {
                 })
                 .collect::<String>()
         )),
-        Subterm::Syn(Syn::Lst(elems)) => flat([
-            pure("["),
-            sep_flat(elems.into_iter().map(|operand| print_term(operand)), || {
-                pure(", ")
-            }),
-            pure("]"),
-        ]),
         Subterm::FuncType(FuncType { params, output }) => flat([
             pure("("),
             sep_flat(params.into_iter().map(print_func_type_param), || pure(", ")),
@@ -517,7 +510,7 @@ fn print_term(term: Term) -> Printer<'static> {
                 pure("match "),
                 print_term(head),
                 print_motive(motive),
-                pure("\n| [||] =>\n"),
+                pure("\n| [] =>\n"),
                 indent(print_term(empty_case)),
                 pure("\n| "),
                 pure(head_label),

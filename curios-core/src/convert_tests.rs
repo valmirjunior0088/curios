@@ -1312,3 +1312,18 @@ fn imitation_leaves_rigid_apply_pairs_alone() {
     let rigid = Term::inductive_type("Lst", [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &stuck, &rigid), Ok(false));
 }
+
+#[test]
+fn imitation_solves_flex_apply_against_prim_former() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), type_to_type());
+
+    // ?0(?1) ≟ Arr(Nat) — the imitation solves ?0 := λT. Arr(T), the pairwise
+    // equation ?1 := Nat. This is what pins `M := Arr` for `Monad(Arr)`.
+    context.birth_metavar(MetavarId(1), Vec::new(), Term::type_());
+    let flex = Term::apply(Term::metavar(0), [Term::metavar(1)]);
+    let rigid = Term::prim(Prim::ArrType(nat_type()));
+    assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+    assert_eq!(context.metavar_solution(MetavarId(1)), Some(&nat_type()));
+}
