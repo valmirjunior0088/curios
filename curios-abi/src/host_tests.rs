@@ -1,5 +1,5 @@
 use {
-    super::{ForeignFunction, Reduction, WireSignature, WireType, sys_io},
+    super::{ForeignFunction, WireSignature, WireType, sys_io},
     std::collections::BTreeSet,
 };
 
@@ -114,19 +114,6 @@ fn signatures_are_well_formed() {
     }
 }
 
-/// `args` is the one inert row (a snapshot of immutable host state); every
-/// other builtin is opaque under type-level reduction.
-#[test]
-fn only_args_is_inert() {
-    let inert = sys_io()
-        .iter()
-        .filter(|function| function.reduction == Reduction::Inert)
-        .map(|function| function.name.clone())
-        .collect::<Vec<_>>();
-
-    assert_eq!(inert, ["io_args"]);
-}
-
 /// The import name is the identity every stage links on, so a second row with
 /// the same name is a construction bug.
 #[test]
@@ -141,6 +128,5 @@ fn register_rejects_a_duplicate_name() {
             params: vec![],
             results: vec![],
         },
-        reduction: Reduction::Opaque,
     });
 }

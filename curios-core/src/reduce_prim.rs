@@ -4,9 +4,8 @@ use {
         Context, Flt, Int, Nat, Peel, Prim, ReduceError, Subterm, Term, normalize_concat, peel_bin,
         peel_first_byte, peel_first_elem,
     },
-    curios_abi::Reduction,
     num_traits::{ToPrimitive, Zero},
-    std::{cmp::Ordering, sync::Arc},
+    std::cmp::Ordering,
 };
 
 /// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when
@@ -1375,21 +1374,13 @@ pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, Reduce
             kind: "IoExit".to_string(),
             span: code.span(),
         }),
-        // A store-described host call reduces (or refuses to) as its row says:
-        // an opaque call never reduces at the type level, while an inert one —
-        // `args`, the immutable argv snapshot — stays stuck-to-self so a
-        // top-level `args : Arr(Bin)` value binding does not trip the IO
-        // guard; it becomes a host call only at erasure.
-        Prim::Foreign(function, args) => match function.reduction {
-            Reduction::Inert => Ok(Subterm::Prim(Prim::Foreign(
-                Arc::clone(function),
-                args.clone(),
-            ))),
-            Reduction::Opaque => Err(ReduceError::IoAtTypeLevel {
-                kind: function.name.clone(),
-                span: args.first().and_then(|arg| arg.span()),
-            }),
-        },
+        // A store-described host call never reduces at the type level — the
+        // effect cannot happen at compile time; it becomes a host call only
+        // at erasure.
+        Prim::Foreign(function, args) => Err(ReduceError::IoAtTypeLevel {
+            kind: function.name.clone(),
+            span: args.first().and_then(|arg| arg.span()),
+        }),
         Prim::CellType(elem) => {
             let elem = reduce(context, elem.clone())?;
             Ok(Subterm::Prim(Prim::cell_type(elem)))

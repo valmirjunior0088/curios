@@ -493,8 +493,9 @@ fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
     // Every store-described host op, in store (= declaration) order. Each is a
     // *function*, including the 0-arity clocks/args: a value binding would
     // force-reduce its effectful prim body at definition (the bare prelude is
-    // lowered whole, so a top-level value `let` lands in `main`), while under
-    // the function abstraction it stays inert until called.
+    // lowered whole, so a top-level value `let` lands in `main`) and trip the
+    // IO-at-type-level guard, while under the function abstraction the prim
+    // stays unevaluated until called.
     ops.extend(foreigns.iter().map(host_fn));
 
     ops.extend([

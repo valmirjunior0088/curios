@@ -122,8 +122,8 @@ pub enum Prim {
     IoEql(Term, Term),
     // A store-described host call: the function's `WireSignature` fixes the
     // operand types checked at elaboration and the result shape (unit, bare
-    // value, or named record); its `Reduction` says how the call behaves at
-    // the type level (opaque for every effectful op, inert for `args`).
+    // value, or named record). Effectful, so reducing one at the type level
+    // is an error; it becomes a host call only at erasure.
     Foreign(Arc<ForeignFunction>, Vec<Term>),
     // `(@A : Type) -> Nat -> A`: polymorphic bottom. The type argument keeps the
     // kernel from naming `/std/False`; it is dropped at erasure.

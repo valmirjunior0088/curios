@@ -3,9 +3,10 @@
 //!
 //! A [`ForeignFunction`] is one host call, and it is self-describing: its
 //! `name` is the wasm `env` import string (the wire-level ABI contract between
-//! the emitter and the runtime linker), its [`WireSignature`] names the
-//! operands and results and gives each a [`WireType`], and its [`Reduction`]
-//! says what the call does under type-level reduction. The IR nodes carry the
+//! the emitter and the runtime linker), and its [`WireSignature`] names the
+//! operands and results and gives each a [`WireType`]. Every host call is
+//! effectful, so reducing one at the type level is always an error — the
+//! effect cannot happen at compile time. The IR nodes carry the
 //! function as an `Arc`, so every stage reads what it needs straight off the
 //! node instead of keeping an independently hand-written spelling in lockstep:
 //!
@@ -59,21 +60,6 @@ pub struct WireSignature {
     pub results: Vec<(String, WireType)>,
 }
 
-/// What a foreign call does under type-level reduction. Every call is
-/// effectful at runtime; this only decides how the *kernel* treats one that
-/// shows up while a type is being computed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Reduction {
-    /// Reducing the call at the type level is an error — the effect cannot
-    /// happen at compile time. Every host op but `args` is this.
-    Opaque,
-    /// The call is stuck-to-self: it reduces to itself like an inert value, and
-    /// becomes a host call only at erasure. For snapshots of immutable host
-    /// state — `args`, whose result is fixed for the whole process — so a
-    /// top-level value binding does not trip the IO guard.
-    Inert,
-}
-
 /// One foreign (host-provided) function. `name` is the `env` import string —
 /// the wire ABI shared by the wasm emitter and the runtime linker; never
 /// change one without changing what the other end expects (the unit tests
@@ -84,7 +70,6 @@ pub struct ForeignFunction {
     pub name: String,
     pub label: String,
     pub signature: WireSignature,
-    pub reduction: Reduction,
 }
 
 impl ForeignFunction {
@@ -158,35 +143,174 @@ impl ForeignStore {
     }
 }
 
+fn arr(element: WireType) -> WireType {
+    WireType::Arr(Box::new(element))
+}
+
+fn slots(slots: Vec<(&str, WireType)>) -> Vec<(String, WireType)> {
+    slots
+        .into_iter()
+        .map(|(name, type_)| (name.to_string(), type_))
+        .collect()
+}
+
 /// The `/sys/Io` builtin store: every host operation the standard library
 /// consumes, in prelude (= declaration) order. Parameter names match the
 /// `/sys/Io` declarations; result labels are the record fields the guest
 /// projects. The runtime seeds its implementations from the same rows, so the
 /// two ends cannot drift.
 pub fn sys_io() -> ForeignStore {
-    use {
-        Reduction::{Inert, Opaque},
-        WireType::{Bin, Bln, Int, Io, Nat},
-    };
-
-    fn arr(element: WireType) -> WireType {
-        WireType::Arr(Box::new(element))
-    }
-
-    fn slots(slots: &[(&str, WireType)]) -> Vec<(String, WireType)> {
-        slots
-            .iter()
-            .map(|(name, type_)| (name.to_string(), type_.clone()))
-            .collect()
-    }
-
     let mut store = ForeignStore::new();
 
-    let mut define = |name: &str,
-                      label: &str,
-                      params: &[(&str, WireType)],
-                      results: &[(&str, WireType)],
-                      reduction: Reduction| {
+    for (name, label, params, results) in [
+        (
+            "io_read",
+            "read",
+            vec![("h", WireType::Io), ("n", WireType::Nat)],
+            vec![("status", WireType::Nat), ("bytes", WireType::Bin)],
+        ),
+        (
+            "io_write",
+            "write",
+            vec![("h", WireType::Io), ("b", WireType::Bin)],
+            vec![("status", WireType::Nat), ("written", WireType::Nat)],
+        ),
+        (
+            "io_open",
+            "open",
+            vec![("path", WireType::Bin), ("mode", WireType::Nat)],
+            vec![("status", WireType::Nat), ("handle", WireType::Io)],
+        ),
+        (
+            "io_lookup",
+            "lookup",
+            vec![("host", WireType::Bin), ("port", WireType::Nat)],
+            vec![("status", WireType::Nat), ("handle", WireType::Io)],
+        ),
+        (
+            "io_resolve",
+            "resolve",
+            vec![("handle", WireType::Io)],
+            vec![("status", WireType::Nat), ("addresses", arr(WireType::Bin))],
+        ),
+        (
+            "io_socket",
+            "socket",
+            vec![("addr", WireType::Bin)],
+            vec![("status", WireType::Nat), ("handle", WireType::Io)],
+        ),
+        (
+            "io_bind",
+            "bind",
+            vec![("h", WireType::Io), ("addr", WireType::Bin)],
+            vec![("status", WireType::Nat)],
+        ),
+        (
+            "io_connect",
+            "connect",
+            vec![("h", WireType::Io), ("addr", WireType::Bin)],
+            vec![("status", WireType::Nat)],
+        ),
+        (
+            "io_listen",
+            "listen",
+            vec![("h", WireType::Io), ("backlog", WireType::Nat)],
+            vec![("status", WireType::Nat)],
+        ),
+        (
+            "io_accept",
+            "accept",
+            vec![("h", WireType::Io)],
+            vec![("status", WireType::Nat), ("handle", WireType::Io)],
+        ),
+        (
+            "io_start_tls",
+            "start_tls",
+            vec![("h", WireType::Io), ("sni", WireType::Bin)],
+            vec![("status", WireType::Nat)],
+        ),
+        (
+            "io_tls_server_config",
+            "tls_server_config",
+            vec![("cert", WireType::Bin), ("key", WireType::Bin)],
+            vec![("status", WireType::Nat), ("handle", WireType::Io)],
+        ),
+        (
+            "io_start_tls_server",
+            "start_tls_server",
+            vec![("h", WireType::Io), ("cfg", WireType::Io)],
+            vec![("status", WireType::Nat)],
+        ),
+        (
+            "io_set_nonblocking",
+            "set_nonblocking",
+            vec![("h", WireType::Io), ("on", WireType::Bln)],
+            vec![("status", WireType::Nat)],
+        ),
+        (
+            "io_set_recv_timeout",
+            "set_recv_timeout",
+            vec![("h", WireType::Io), ("ms", WireType::Nat)],
+            vec![("status", WireType::Nat)],
+        ),
+        (
+            "io_set_send_timeout",
+            "set_send_timeout",
+            vec![("h", WireType::Io), ("ms", WireType::Nat)],
+            vec![("status", WireType::Nat)],
+        ),
+        (
+            "io_set_reuseaddr",
+            "set_reuseaddr",
+            vec![("h", WireType::Io), ("on", WireType::Bln)],
+            vec![("status", WireType::Nat)],
+        ),
+        (
+            "io_poll",
+            "poll",
+            vec![
+                ("handles", arr(WireType::Io)),
+                ("events", arr(WireType::Nat)),
+                ("timeout", WireType::Int),
+            ],
+            vec![("revents", arr(WireType::Nat))],
+        ),
+        ("io_close", "close", vec![("h", WireType::Io)], vec![]),
+        (
+            "io_clock_wall",
+            "clock_wall",
+            vec![],
+            vec![
+                ("secs_hi", WireType::Nat),
+                ("secs_lo", WireType::Nat),
+                ("nanos", WireType::Nat),
+            ],
+        ),
+        (
+            "io_clock_mono",
+            "clock_mono",
+            vec![],
+            vec![("secs", WireType::Nat), ("nanos", WireType::Nat)],
+        ),
+        (
+            "io_random",
+            "random",
+            vec![("n", WireType::Nat)],
+            vec![("bytes", WireType::Bin)],
+        ),
+        (
+            "io_args",
+            "args",
+            vec![],
+            vec![("argv", arr(WireType::Bin))],
+        ),
+        (
+            "io_env",
+            "env",
+            vec![("name", WireType::Bin)],
+            vec![("status", WireType::Nat), ("value", WireType::Bin)],
+        ),
+    ] {
         store.register(ForeignFunction {
             name: name.to_string(),
             label: label.to_string(),
@@ -194,166 +318,8 @@ pub fn sys_io() -> ForeignStore {
                 params: slots(params),
                 results: slots(results),
             },
-            reduction,
         });
-    };
-
-    define(
-        "io_read",
-        "read",
-        &[("h", Io), ("n", Nat)],
-        &[("status", Nat), ("bytes", Bin)],
-        Opaque,
-    );
-    define(
-        "io_write",
-        "write",
-        &[("h", Io), ("b", Bin)],
-        &[("status", Nat), ("written", Nat)],
-        Opaque,
-    );
-    define(
-        "io_open",
-        "open",
-        &[("path", Bin), ("mode", Nat)],
-        &[("status", Nat), ("handle", Io)],
-        Opaque,
-    );
-    define(
-        "io_lookup",
-        "lookup",
-        &[("host", Bin), ("port", Nat)],
-        &[("status", Nat), ("handle", Io)],
-        Opaque,
-    );
-    define(
-        "io_resolve",
-        "resolve",
-        &[("handle", Io)],
-        &[("status", Nat), ("addresses", arr(Bin))],
-        Opaque,
-    );
-    define(
-        "io_socket",
-        "socket",
-        &[("addr", Bin)],
-        &[("status", Nat), ("handle", Io)],
-        Opaque,
-    );
-    define(
-        "io_bind",
-        "bind",
-        &[("h", Io), ("addr", Bin)],
-        &[("status", Nat)],
-        Opaque,
-    );
-    define(
-        "io_connect",
-        "connect",
-        &[("h", Io), ("addr", Bin)],
-        &[("status", Nat)],
-        Opaque,
-    );
-    define(
-        "io_listen",
-        "listen",
-        &[("h", Io), ("backlog", Nat)],
-        &[("status", Nat)],
-        Opaque,
-    );
-    define(
-        "io_accept",
-        "accept",
-        &[("h", Io)],
-        &[("status", Nat), ("handle", Io)],
-        Opaque,
-    );
-    define(
-        "io_start_tls",
-        "start_tls",
-        &[("h", Io), ("sni", Bin)],
-        &[("status", Nat)],
-        Opaque,
-    );
-    define(
-        "io_tls_server_config",
-        "tls_server_config",
-        &[("cert", Bin), ("key", Bin)],
-        &[("status", Nat), ("handle", Io)],
-        Opaque,
-    );
-    define(
-        "io_start_tls_server",
-        "start_tls_server",
-        &[("h", Io), ("cfg", Io)],
-        &[("status", Nat)],
-        Opaque,
-    );
-    define(
-        "io_set_nonblocking",
-        "set_nonblocking",
-        &[("h", Io), ("on", Bln)],
-        &[("status", Nat)],
-        Opaque,
-    );
-    define(
-        "io_set_recv_timeout",
-        "set_recv_timeout",
-        &[("h", Io), ("ms", Nat)],
-        &[("status", Nat)],
-        Opaque,
-    );
-    define(
-        "io_set_send_timeout",
-        "set_send_timeout",
-        &[("h", Io), ("ms", Nat)],
-        &[("status", Nat)],
-        Opaque,
-    );
-    define(
-        "io_set_reuseaddr",
-        "set_reuseaddr",
-        &[("h", Io), ("on", Bln)],
-        &[("status", Nat)],
-        Opaque,
-    );
-    define(
-        "io_poll",
-        "poll",
-        &[("handles", arr(Io)), ("events", arr(Nat)), ("timeout", Int)],
-        &[("revents", arr(Nat))],
-        Opaque,
-    );
-    define("io_close", "close", &[("h", Io)], &[], Opaque);
-    define(
-        "io_clock_wall",
-        "clock_wall",
-        &[],
-        &[("secs_hi", Nat), ("secs_lo", Nat), ("nanos", Nat)],
-        Opaque,
-    );
-    define(
-        "io_clock_mono",
-        "clock_mono",
-        &[],
-        &[("secs", Nat), ("nanos", Nat)],
-        Opaque,
-    );
-    define(
-        "io_random",
-        "random",
-        &[("n", Nat)],
-        &[("bytes", Bin)],
-        Opaque,
-    );
-    define("io_args", "args", &[], &[("argv", arr(Bin))], Inert);
-    define(
-        "io_env",
-        "env",
-        &[("name", Bin)],
-        &[("status", Nat), ("value", Bin)],
-        Opaque,
-    );
+    }
 
     store
 }
