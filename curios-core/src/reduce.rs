@@ -1,7 +1,8 @@
 use {
     super::{
-        Apply, Carrier, Cases, Context, Field, FreeMonoid, Func, Layer, Let, Match, Metavar, Nat,
-        Prim, Proj, Rec, ReduceError, Struct, Subterm, Term, Tuple, Var, reduce_prim,
+        Apply, Carrier, Cases, Context, Field, FreeMonoid, Func, FuncType, InductiveType, Layer,
+        Let, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType,
+        Subterm, Telescope, Term, Tuple, TupleType, Var, Variant, reduce_prim,
     },
     crate::time::Instant,
     num_traits::ToPrimitive,
@@ -403,4 +404,156 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
             }
         }
     })
+}
+
+/// Reduce `term` to a deep normal form for **diagnostic display**: every
+/// position is taken to weak-head normal form and its sub-terms recursively
+/// normalized, opening the type-former binders (`FuncType`/`Func`/`TupleType`)
+/// under fresh variables.
+///
+/// `reduce` alone stops at the head: an inductive type's indices are not
+/// sub-reduced, so a concept-method projection standing in an index position —
+/// `Vec(Nat, Add/add(0, 1))`, spelled `Vec(Nat, (sys/witness#0).0(0, 1))` once
+/// resolution has picked the primitive witness — survives verbatim into a
+/// type-mismatch message. Normalizing the index collapses it to the value it
+/// denotes (`Vec(Nat, 1)`), or, when an operand is symbolic, to the underlying
+/// operator primitive (`Vec(Nat, n + m)`) the printer spells infix.
+///
+/// Display-only and best-effort: the result is never fed back into the kernel,
+/// and a preemption (the reduce deadline) propagates so callers can fall back
+/// to the un-normalized spelling. The binder-heavy stuck forms (`Rec`, `Match`)
+/// keep their WHNF shape rather than being reduced under their own binders —
+/// they seldom carry the arithmetic this targets, and opening every case arm
+/// buys a diagnostic nothing.
+pub fn normalize(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+    let reduced = reduce(context, term)?;
+    let span = reduced.span();
+
+    let inner = match Term::unwrap_or_clone(reduced) {
+        Subterm::Apply(Apply {
+            head,
+            params,
+            plicities,
+        }) => Subterm::Apply(Apply {
+            head: normalize(context, head)?,
+            params: normalize_each(context, params)?,
+            plicities,
+        }),
+        Subterm::Proj(Proj { head, field }) => Subterm::Proj(Proj {
+            head: normalize(context, head)?,
+            field,
+        }),
+        Subterm::InductiveType(InductiveType {
+            name,
+            params,
+            indices,
+        }) => Subterm::InductiveType(InductiveType {
+            name,
+            params: normalize_each(context, params)?,
+            indices: normalize_each(context, indices)?,
+        }),
+        Subterm::StructType(StructType { name, params }) => Subterm::StructType(StructType {
+            name,
+            params: normalize_each(context, params)?,
+        }),
+        Subterm::Variant(Variant {
+            name,
+            params,
+            tag,
+            payload,
+        }) => Subterm::Variant(Variant {
+            name,
+            params: normalize_each(context, params)?,
+            tag,
+            payload: normalize_each(context, payload)?,
+        }),
+        Subterm::Struct(Struct {
+            name,
+            params,
+            fields,
+            entries,
+        }) => Subterm::Struct(Struct {
+            name,
+            params: normalize_each(context, params)?,
+            fields: normalize_each(context, fields)?,
+            entries,
+        }),
+        Subterm::Tuple(Tuple { fields, names }) => Subterm::Tuple(Tuple {
+            fields: normalize_each(context, fields)?,
+            names,
+        }),
+        Subterm::FuncType(FuncType {
+            telescope,
+            plicities,
+        }) => Subterm::FuncType(FuncType {
+            telescope: normalize_telescope(context, telescope)?,
+            plicities,
+        }),
+        Subterm::Func(Func { telescope }) => Subterm::Func(Func {
+            telescope: normalize_telescope(context, telescope)?,
+        }),
+        Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {
+            telescope: normalize_tuple_telescope(context, telescope)?,
+        }),
+        Subterm::Metavar(Metavar { id, spine, origin }) => Subterm::Metavar(Metavar {
+            id,
+            spine: normalize_each(context, spine.to_vec())?.into(),
+            origin,
+        }),
+        // Leaves (`Type`/`Prop`/`Var`/`Prim`, the last already carrying reduced
+        // operands) and the binder-heavy stuck forms (`Let`/`Rec`/`Match`) keep
+        // their weak-head normal shape.
+        other => other,
+    };
+
+    Ok(match span {
+        Some(span) => Term::spanned(span, inner),
+        None => Term::from(inner),
+    })
+}
+
+fn normalize_each(context: &mut Context, terms: Vec<Term>) -> Result<Vec<Term>, ReduceError> {
+    terms.into_iter().map(|t| normalize(context, t)).collect()
+}
+
+/// Normalize a function/Π telescope (`Func`/`FuncType`): each parameter type,
+/// then the body opened under a fresh variable and re-closed under its label —
+/// the display-side counterpart of [`convert`]'s `compare_func_type` walk.
+fn normalize_telescope(
+    context: &mut Context,
+    telescope: Telescope<Term>,
+) -> Result<Telescope<Term>, ReduceError> {
+    match telescope {
+        Telescope::Done(body) => Ok(Telescope::Done(Box::new(normalize(context, *body)?))),
+        Telescope::Cons(ty, rest) => {
+            let ty = normalize(context, ty)?;
+            let label = context.fresh(rest.first_label());
+            let inner = normalize_telescope(context, rest.open(&[&Term::free_var(&label)]))?;
+            Ok(Telescope::Cons(
+                ty,
+                Scope::close(One, &[label.as_str()], inner),
+            ))
+        }
+    }
+}
+
+/// Normalize a Σ telescope (`TupleType`): its field types, opening each field's
+/// binder under a fresh variable exactly like [`normalize_telescope`]. The
+/// `Done` body is `()`, carrying nothing to reduce.
+fn normalize_tuple_telescope(
+    context: &mut Context,
+    telescope: Telescope<()>,
+) -> Result<Telescope<()>, ReduceError> {
+    match telescope {
+        Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
+        Telescope::Cons(ty, rest) => {
+            let ty = normalize(context, ty)?;
+            let label = context.fresh(rest.first_label());
+            let inner = normalize_tuple_telescope(context, rest.open(&[&Term::free_var(&label)]))?;
+            Ok(Telescope::Cons(
+                ty,
+                Scope::close(One, &[label.as_str()], inner),
+            ))
+        }
+    }
 }

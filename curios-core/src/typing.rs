@@ -1,6 +1,6 @@
 use super::{
-    Context, Error, Field, Many, MetavarId, Mode, Prim, PrimHead, Proj, Scope, Subterm, Term,
-    elaborate,
+    Context, Error, Field, Many, MetavarId, Mode, Outcome, Prim, PrimHead, Proj, Scope, Subterm,
+    Term, elaborate,
 };
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
@@ -62,15 +62,22 @@ pub fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
 
 /// Best-effort display form for a mismatch report: substitute the solutions
 /// that have landed, so the message names the actual disagreement rather than
-/// the metavariables it arrived wrapped in. An unsolved metavariable makes
-/// `zonk` fail, in which case the raw spelling is kept.
-fn resolved_for_display(context: &Context, term: &Term) -> Term {
-    super::zonk(context, term).unwrap_or_else(|_| term.clone())
+/// the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize)
+/// the result so a stuck concept-method projection standing in an index
+/// position collapses to the value it denotes (`Vec(Nat, (sys/witness#0).0(0, 1))`
+/// → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery.
+/// An unsolved metavariable makes `zonk` fail, in which case the raw spelling
+/// is kept; a normalization that preempts falls back to the merely-zonked form.
+fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
+    let Ok(zonked) = super::zonk(context, term) else {
+        return term.clone();
+    };
+    super::normalize(context, zonked.clone()).unwrap_or(zonked)
 }
 
 /// A `type_mismatch` error naming both sides in their best-effort display
 /// form (see [`resolved_for_display`]).
-fn display_mismatch(context: &Context, this: &Term, that: &Term) -> Error {
+fn display_mismatch(context: &mut Context, this: &Term, that: &Term) -> Error {
     Error::type_mismatch(
         resolved_for_display(context, this),
         resolved_for_display(context, that),
@@ -99,13 +106,13 @@ pub fn expect(
         })?;
 
     match outcome {
-        super::Outcome::Converts => retry_parked(context),
-        super::Outcome::Mismatch => Err(display_mismatch(context, inferred, expected)),
+        Outcome::Converts => retry_parked(context),
+        Outcome::Mismatch => Err(display_mismatch(context, inferred, expected)),
         // Undecided: blocked on unsolved metavariables. Park the goals to be
         // retried when a watched metavariable is solved (§8) and succeed
         // provisionally — unless conversion is currently a yes/no oracle, in
         // which case undecided must stay a mismatch.
-        super::Outcome::Blocked(goals) => {
+        Outcome::Blocked(goals) => {
             if context.parking_suppressed() {
                 return Err(display_mismatch(context, inferred, expected));
             }
@@ -176,15 +183,16 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
 
         Ok(
             match super::convert_outcome(context, &goal.type_, &goal.this, &goal.that)? {
-                super::Outcome::Converts => Retry::Converts,
-                // Report through whatever solutions have landed: the reduced
+                Outcome::Converts => Retry::Converts,
+                // Report through whatever solutions have landed: the normalized
                 // sides name the actual disagreement, not the metavariables it
-                // arrived wrapped in.
-                super::Outcome::Mismatch => Retry::Mismatch(
-                    super::reduce(context, goal.this.clone())?,
-                    super::reduce(context, goal.that.clone())?,
+                // arrived wrapped in — and, deep-normalized, no stuck operator
+                // witness machinery in an index (see `resolved_for_display`).
+                Outcome::Mismatch => Retry::Mismatch(
+                    super::normalize(context, goal.this.clone())?,
+                    super::normalize(context, goal.that.clone())?,
                 ),
-                super::Outcome::Blocked(goals) => Retry::Blocked(goals),
+                Outcome::Blocked(goals) => Retry::Blocked(goals),
             },
         )
     });

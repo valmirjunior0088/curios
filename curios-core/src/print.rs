@@ -433,48 +433,99 @@ fn print_unary(name: &'static str, inner: Term, depth: usize) -> Printer<'static
     flat([pure(name), print_term(inner, depth)])
 }
 
+/// The surface infix symbol an operator primitive prints as, or `None` for a
+/// primitive with no infix spelling — the bitwise ops, conversions, `min`/`max`,
+/// and the `Bln.xor` that `!=` desugars through. Exactly the operators the
+/// surface language spells infix ([`NumOp::symbol`](super::NumOp::symbol)); the
+/// concept-dispatched arithmetic/comparison operators plus the two hardcoded
+/// `Bln` short-circuits.
+fn infix_symbol(prim: &Prim) -> Option<&'static str> {
+    Some(match prim {
+        Prim::NatAdd(..) | Prim::IntAdd(..) | Prim::FltAdd(..) => "+",
+        Prim::NatSub(..) | Prim::IntSub(..) | Prim::FltSub(..) => "-",
+        Prim::NatMul(..) | Prim::IntMul(..) | Prim::FltMul(..) => "*",
+        Prim::NatDiv(..) | Prim::IntDiv(..) | Prim::FltDiv(..) => "/",
+        Prim::NatRem(..) | Prim::IntRem(..) | Prim::FltRem(..) => "%",
+        Prim::NatEql(..)
+        | Prim::IntEql(..)
+        | Prim::FltEql(..)
+        | Prim::BlnEql(..)
+        | Prim::BinEql(..)
+        | Prim::IoEql(..) => "==",
+        Prim::NatNeq(..) | Prim::IntNeq(..) | Prim::FltNeq(..) | Prim::BlnNeq(..) => "!=",
+        Prim::NatLt(..) | Prim::IntLt(..) | Prim::FltLt(..) => "<",
+        Prim::NatGt(..) | Prim::IntGt(..) | Prim::FltGt(..) => ">",
+        Prim::NatLte(..) | Prim::IntLte(..) | Prim::FltLte(..) => "<=",
+        Prim::NatGte(..) | Prim::IntGte(..) | Prim::FltGte(..) => ">=",
+        Prim::BlnAnd(..) => "&&",
+        Prim::BlnOr(..) => "||",
+        _ => return None,
+    })
+}
+
+/// Render an operator primitive as `left <symbol> right`, each operand
+/// parenthesized when it is itself an infix operator so nesting stays
+/// unambiguous — `(a + b) * c`, never `a + b * c`.
+fn print_infix(symbol: &'static str, left: Term, right: Term, depth: usize) -> Printer<'static> {
+    flat([
+        print_operand(left, depth),
+        pure(format!(" {symbol} ")),
+        print_operand(right, depth),
+    ])
+}
+
+/// An operand of [`print_infix`], wrapped in parentheses when it too prints as
+/// an infix operator (a nested operator primitive or a residual `Infix` node);
+/// self-delimiting operands (variables, literals, applications) print bare.
+fn print_operand(term: Term, depth: usize) -> Printer<'static> {
+    let parenthesize = match &*term {
+        Subterm::Prim(prim) => infix_symbol(prim).is_some(),
+        Subterm::Infix(_) => true,
+        _ => false,
+    };
+
+    if parenthesize {
+        flat([pure("("), print_term(term, depth), pure(")")])
+    } else {
+        print_term(term, depth)
+    }
+}
+
 fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
     match prim {
         Prim::BlnType => pure("Bln"),
         Prim::Bln(false) => pure("false"),
         Prim::Bln(true) => pure("true"),
-        Prim::BlnAnd(l, r) => print_binary("Bln.and ", l, r, depth),
-        Prim::BlnOr(l, r) => print_binary("Bln.or ", l, r, depth),
+        Prim::BlnAnd(l, r) => print_infix("&&", l, r, depth),
+        Prim::BlnOr(l, r) => print_infix("||", l, r, depth),
         Prim::BlnXor(l, r) => print_binary("Bln.xor ", l, r, depth),
-        Prim::BlnEql(l, r) => print_binary("Bln.eql ", l, r, depth),
-        Prim::BlnNeq(l, r) => print_binary("Bln.neq ", l, r, depth),
+        Prim::BlnEql(l, r) => print_infix("==", l, r, depth),
+        Prim::BlnNeq(l, r) => print_infix("!=", l, r, depth),
         Prim::NatType => pure("Nat"),
         Prim::Nat(Nat::Zero) => pure("0"),
+        // A successor over a symbolic tail is that tail plus its literal floor —
+        // spelled infix (`n + 1`, `(n + m) + 3`) to match the operator prims, its
+        // tail parenthesized when it too is an operator. A successor over `0` is a
+        // plain numeral (`{spine}`).
         Prim::Nat(Nat::Succ(spine, inner)) => match inner.as_ref() {
             Subterm::Prim(Prim::Nat(Nat::Zero)) => pure(format!("{spine}")),
-            inner => {
-                if spine == num_bigint::BigUint::from(1usize) {
-                    flat([
-                        pure("Nat.succ("),
-                        print_term(inner.clone().into(), depth),
-                        pure(")"),
-                    ])
-                } else {
-                    flat([
-                        pure(format!("Nat.succ({spine}, ")),
-                        print_term(inner.clone().into(), depth),
-                        pure(")"),
-                    ])
-                }
-            }
+            _ => flat([
+                print_operand(inner.clone(), depth),
+                pure(format!(" + {spine}")),
+            ]),
         },
-        Prim::NatEql(l, r) => print_binary("Nat.eql ", l, r, depth),
-        Prim::IoEql(l, r) => print_binary("Io.eql ", l, r, depth),
-        Prim::NatNeq(l, r) => print_binary("Nat.neq ", l, r, depth),
-        Prim::NatAdd(l, r) => print_binary("Nat.add ", l, r, depth),
-        Prim::NatSub(l, r) => print_binary("Nat.sub ", l, r, depth),
-        Prim::NatMul(l, r) => print_binary("Nat.mul ", l, r, depth),
-        Prim::NatLt(l, r) => print_binary("Nat.lt ", l, r, depth),
-        Prim::NatDiv(l, r) => print_binary("Nat.div ", l, r, depth),
-        Prim::NatRem(l, r) => print_binary("Nat.rem ", l, r, depth),
-        Prim::NatGt(l, r) => print_binary("Nat.gt ", l, r, depth),
-        Prim::NatLte(l, r) => print_binary("Nat.lte ", l, r, depth),
-        Prim::NatGte(l, r) => print_binary("Nat.gte ", l, r, depth),
+        Prim::NatEql(l, r) => print_infix("==", l, r, depth),
+        Prim::IoEql(l, r) => print_infix("==", l, r, depth),
+        Prim::NatNeq(l, r) => print_infix("!=", l, r, depth),
+        Prim::NatAdd(l, r) => print_infix("+", l, r, depth),
+        Prim::NatSub(l, r) => print_infix("-", l, r, depth),
+        Prim::NatMul(l, r) => print_infix("*", l, r, depth),
+        Prim::NatLt(l, r) => print_infix("<", l, r, depth),
+        Prim::NatDiv(l, r) => print_infix("/", l, r, depth),
+        Prim::NatRem(l, r) => print_infix("%", l, r, depth),
+        Prim::NatGt(l, r) => print_infix(">", l, r, depth),
+        Prim::NatLte(l, r) => print_infix("<=", l, r, depth),
+        Prim::NatGte(l, r) => print_infix(">=", l, r, depth),
         Prim::NatAnd(l, r) => print_binary("Nat.and ", l, r, depth),
         Prim::NatOr(l, r) => print_binary("Nat.or ", l, r, depth),
         Prim::NatXor(l, r) => print_binary("Nat.xor ", l, r, depth),
@@ -482,17 +533,17 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::NatShr(l, r) => print_binary("Nat.shr ", l, r, depth),
         Prim::IntType => pure("Int"),
         Prim::Int(value) => pure(format!("{value:+}")),
-        Prim::IntEql(l, r) => print_binary("Int.eql ", l, r, depth),
-        Prim::IntNeq(l, r) => print_binary("Int.neq ", l, r, depth),
-        Prim::IntAdd(l, r) => print_binary("Int.add ", l, r, depth),
-        Prim::IntSub(l, r) => print_binary("Int.sub ", l, r, depth),
-        Prim::IntMul(l, r) => print_binary("Int.mul ", l, r, depth),
-        Prim::IntDiv(l, r) => print_binary("Int.div ", l, r, depth),
-        Prim::IntRem(l, r) => print_binary("Int.rem ", l, r, depth),
-        Prim::IntLt(l, r) => print_binary("Int.lt ", l, r, depth),
-        Prim::IntGt(l, r) => print_binary("Int.gt ", l, r, depth),
-        Prim::IntLte(l, r) => print_binary("Int.lte ", l, r, depth),
-        Prim::IntGte(l, r) => print_binary("Int.gte ", l, r, depth),
+        Prim::IntEql(l, r) => print_infix("==", l, r, depth),
+        Prim::IntNeq(l, r) => print_infix("!=", l, r, depth),
+        Prim::IntAdd(l, r) => print_infix("+", l, r, depth),
+        Prim::IntSub(l, r) => print_infix("-", l, r, depth),
+        Prim::IntMul(l, r) => print_infix("*", l, r, depth),
+        Prim::IntDiv(l, r) => print_infix("/", l, r, depth),
+        Prim::IntRem(l, r) => print_infix("%", l, r, depth),
+        Prim::IntLt(l, r) => print_infix("<", l, r, depth),
+        Prim::IntGt(l, r) => print_infix(">", l, r, depth),
+        Prim::IntLte(l, r) => print_infix("<=", l, r, depth),
+        Prim::IntGte(l, r) => print_infix(">=", l, r, depth),
         Prim::IntAnd(l, r) => print_binary("Int.and ", l, r, depth),
         Prim::IntOr(l, r) => print_binary("Int.or ", l, r, depth),
         Prim::IntXor(l, r) => print_binary("Int.xor ", l, r, depth),
@@ -500,17 +551,17 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::IntShr(l, r) => print_binary("Int.shr ", l, r, depth),
         Prim::FltType => pure("Flt"),
         Prim::Flt(flt) => print_flt(flt),
-        Prim::FltAdd(l, r) => print_binary("Flt.add ", l, r, depth),
-        Prim::FltSub(l, r) => print_binary("Flt.sub ", l, r, depth),
-        Prim::FltMul(l, r) => print_binary("Flt.mul ", l, r, depth),
-        Prim::FltDiv(l, r) => print_binary("Flt.div ", l, r, depth),
-        Prim::FltRem(l, r) => print_binary("Flt.rem ", l, r, depth),
-        Prim::FltEql(l, r) => print_binary("Flt.eql ", l, r, depth),
-        Prim::FltNeq(l, r) => print_binary("Flt.neq ", l, r, depth),
-        Prim::FltLt(l, r) => print_binary("Flt.lt ", l, r, depth),
-        Prim::FltGt(l, r) => print_binary("Flt.gt ", l, r, depth),
-        Prim::FltLte(l, r) => print_binary("Flt.lte ", l, r, depth),
-        Prim::FltGte(l, r) => print_binary("Flt.gte ", l, r, depth),
+        Prim::FltAdd(l, r) => print_infix("+", l, r, depth),
+        Prim::FltSub(l, r) => print_infix("-", l, r, depth),
+        Prim::FltMul(l, r) => print_infix("*", l, r, depth),
+        Prim::FltDiv(l, r) => print_infix("/", l, r, depth),
+        Prim::FltRem(l, r) => print_infix("%", l, r, depth),
+        Prim::FltEql(l, r) => print_infix("==", l, r, depth),
+        Prim::FltNeq(l, r) => print_infix("!=", l, r, depth),
+        Prim::FltLt(l, r) => print_infix("<", l, r, depth),
+        Prim::FltGt(l, r) => print_infix(">", l, r, depth),
+        Prim::FltLte(l, r) => print_infix("<=", l, r, depth),
+        Prim::FltGte(l, r) => print_infix(">=", l, r, depth),
         Prim::FltMin(l, r) => print_binary("Flt.min ", l, r, depth),
         Prim::FltMax(l, r) => print_binary("Flt.max ", l, r, depth),
         Prim::FltNeg(i) => print_unary("Flt.neg ", i, depth),

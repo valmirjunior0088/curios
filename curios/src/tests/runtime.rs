@@ -430,6 +430,51 @@ fn diagnostic_shortens_global_names() {
     );
 }
 
+// A mismatch report deep-normalizes both sides: the arithmetic in an index
+// position is elaborated as concept-method dispatch (`+` ≙ `Add/add`), which,
+// once resolution picks the primitive `Nat` witness, would otherwise surface as
+// the compiler-internal `(sys/witness#N).0(0, 1)`. Normalizing collapses the
+// literal case to its value (`1`), leaving no witness machinery in the message.
+#[test]
+fn diagnostic_collapses_witness_dispatch_in_index() {
+    let source = r#"
+        use /std/{Nat, Vec};
+        let bad(@n : Nat) -> Vec(Nat, n) = Vec/cons(0, Vec/nil());
+        bad
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    assert!(
+        error.contains("inferred: Vec(Nat, 1)"),
+        "witness dispatch not collapsed to its value: {error}"
+    );
+    assert!(
+        !error.contains("witness"),
+        "internal witness name leaked: {error}"
+    );
+}
+
+// The residual symbolic arithmetic a normalized index keeps is spelled in
+// surface infix form, not the internal `Nat.add`/`Nat.succ` primitive spelling:
+// the `n + m` and `n + 1` the source would have written.
+#[test]
+fn diagnostic_spells_index_arithmetic_infix() {
+    let source = r#"
+        use /std/{Nat, Vec};
+        let bad(@n : Nat, @m : Nat, v : Vec(Nat, n), w : Vec(Nat, m)) -> Vec(Nat, n) =
+            Vec/cons(0, Vec/append(v, w));
+        bad
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    assert!(
+        error.contains("inferred: Vec(Nat, (n + m) + 1)"),
+        "index arithmetic not spelled infix: {error}"
+    );
+}
+
 // A struct type is nominal: it never converts with a structural tuple type of
 // the same fields.
 #[test]
