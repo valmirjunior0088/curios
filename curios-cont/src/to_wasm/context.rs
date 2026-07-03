@@ -49,7 +49,8 @@ pub enum LoadAs {
 /// How a host-import operand of the given wire type is loaded at the call
 /// site: `Nat`/`Bln` unbox their i31 carrier unsigned to a raw i32, `Int`
 /// unboxes signed (the `poll(2)` timeout convention), and the reference
-/// shapes cast to their concrete heap type (a handle is its `Bin` token).
+/// shapes cast to their rope base type (a handle is its `Bin` token) — the
+/// force step to the flat wire payload follows in `wire_force_instrs`.
 fn wire_load_as(wire_type: &WireType) -> LoadAs {
     match wire_type {
         WireType::Nat | WireType::Bln => LoadAs::Nat,
@@ -608,6 +609,38 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
+    /// The rope→wire step for one host argument: a reference param crosses as
+    /// its flat payload, so the loaded rope is forced first — deeply for
+    /// `Arr(Bin)`/`Arr(Io)`, whose *elements* the host lifts as raw `$bytes`.
+    fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<Instr> {
+        let force = match wire_type {
+            WireType::Nat | WireType::Bln | WireType::Int => return vec![],
+            WireType::Bin | WireType::Io => self.table().force_bin_func(),
+            WireType::Arr(inner) => match **inner {
+                WireType::Bin | WireType::Io => self.table().force_arr_bin_func(),
+                _ => self.table().force_arr_func(),
+            },
+        };
+
+        vec![Instr::Call { func_name: force }]
+    }
+
+    /// The wire→rope step for one host result: a reference re-enters as a
+    /// host-built flat payload and is wrapped into a fresh leaf — deeply for
+    /// `Arr(Bin)`, whose elements the host lowered as raw `$bytes`.
+    fn wire_wrap_instrs(&self, wire_type: &WireType) -> Vec<Instr> {
+        let wrap = match wire_type {
+            WireType::Nat | WireType::Bln | WireType::Int => return vec![],
+            WireType::Bin | WireType::Io => self.table().wrap_bin_func(),
+            WireType::Arr(inner) => match **inner {
+                WireType::Bin | WireType::Io => self.table().wrap_arr_bin_func(),
+                _ => self.table().wrap_arr_func(),
+            },
+        };
+
+        vec![Instr::Call { func_name: wrap }]
+    }
+
     /// Emit a host primitive call in tail position, then branch to its resume.
     /// Models `call_direct_instrs`: load operands, call the host import, then
     /// either fall through to the function's return (when the resume happens
@@ -633,11 +666,28 @@ impl<'a, 'b> Context<'a, 'b> {
 
                 for (operand, (_, wire_type)) in operands.iter().zip(&signature.params) {
                     output.extend(self.load_value_instrs(operand, wire_load_as(wire_type)));
+                    output.extend(self.wire_force_instrs(wire_type));
                 }
 
                 output.push(Instr::Call {
                     func_name: self.table().host_func(function),
                 });
+
+                // Wrap a reference result back into a rope. Only the *final*
+                // result may be a reference: an earlier one would sit under
+                // later stack values, and rewrapping it would need juggling
+                // through locals. Every host signature keeps references last.
+                for (_, wire_type) in signature.results.iter().rev().skip(1) {
+                    debug_assert!(
+                        matches!(wire_type, WireType::Nat | WireType::Bln | WireType::Int),
+                        "{} carries a reference result before its last",
+                        function.name
+                    );
+                }
+
+                if let Some((_, wire_type)) = signature.results.last() {
+                    output.extend(self.wire_wrap_instrs(wire_type));
+                }
 
                 match signature.results.len() {
                     0 => self.host_unit_resume(&mut output, resume),

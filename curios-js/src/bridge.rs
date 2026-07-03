@@ -1,7 +1,8 @@
 //! The Bin bridge: a tiny GC module giving JavaScript accessors over the
-//! compiler's `Bin` heap type. JS cannot touch wasm-GC arrays directly, so the
-//! harness instantiates this module and reads/builds byte strings through its
-//! exports. It declares [`curios_cont::bin_sub_type`] verbatim — wasm-GC
+//! compiler's `$bytes` heap type — the flat payload every `Bin` crosses the
+//! host boundary as. JS cannot touch wasm-GC arrays directly, so the harness
+//! instantiates this module and reads/builds byte strings through its
+//! exports. It declares [`curios_cont::bytes_sub_type`] verbatim — wasm-GC
 //! canonicalizes structural types, so the refs it produces and consumes are
 //! interchangeable with a compiled program's, no matter that the two modules
 //! were instantiated separately.
@@ -14,14 +15,14 @@ use {
     wasm_bindgen::prelude::*,
 };
 
-/// The bridge as a `curios_wasm::Module`: the canonical `bin` type plus the
+/// The bridge as a `curios_wasm::Module`: the canonical `bytes` type plus the
 /// four accessor exports (`bin_len`, `bin_get`, `bin_new`, `bin_set`). Each
 /// accessor body is its parameters' `local.get`s followed by one array op.
 pub fn bridge_module() -> Module {
     let mut module = Module::new("bridge");
 
-    let bin = TypeName::from("bin");
-    module.add_type(bin.clone(), curios_cont::bin_sub_type());
+    let bin = TypeName::from("bytes");
+    module.add_type(bin.clone(), curios_cont::bytes_sub_type());
 
     let bin_ref = ValType::Ref(RefType {
         is_nullable: false,

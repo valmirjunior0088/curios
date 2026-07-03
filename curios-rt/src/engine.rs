@@ -38,7 +38,8 @@ pub fn shared_engine() -> &'static Engine {
 /// each other at instantiation). Scalar params cross raw `i32`, scalar results
 /// pre-boxed as i31 refs; `Bin`/`Io` are the concrete i8-array, `Arr` the
 /// anyref-element array — wasmtime-universe mirrors of curios-cont's
-/// `bin_sub_type`/`arr_sub_type`; keep the two ends in sync.
+/// `bytes_sub_type`/`elems_sub_type` (the flat rope payloads every reference
+/// crosses the boundary as); keep the two ends in sync.
 ///
 /// [`WireSignature`]: curios_abi::WireSignature
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {

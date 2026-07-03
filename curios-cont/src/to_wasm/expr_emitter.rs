@@ -83,15 +83,24 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 },
             ]),
             crate::Data::Arr(elems) => {
-                let arr_type = self.context.table().arr_type();
+                let rope = self.context.table().arr_rope();
+
+                // A literal is a leaf: tag 0, the static length, the payload.
+                self.emit_instr(Instr::I32Const { value: 0 });
+                self.emit_instr(Instr::I32Const {
+                    value: elems.len() as i32,
+                });
 
                 for elem in elems {
                     self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Null));
                 }
 
                 self.emit_instr(Instr::ArrayNewFixed {
-                    type_name: arr_type,
+                    type_name: rope.payload,
                     length: elems.len() as u32,
+                });
+                self.emit_instr(Instr::StructNew {
+                    type_name: rope.leaf,
                 });
             }
             crate::Data::Tpl(elems) => {
@@ -106,7 +115,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 });
             }
             crate::Data::Bin(bytes) => {
-                let bin_type = self.context.table().bin_type();
+                let rope = self.context.table().bin_rope();
                 let data_name = DataName::from(format!(
                     "{}${}",
                     value_name.as_string(),
@@ -118,13 +127,21 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                         bytes: bytes.clone(),
                     },
                 );
+                // A literal is a leaf: tag 0, the static length, the payload.
+                self.emit_instr(Instr::I32Const { value: 0 });
+                self.emit_instr(Instr::I32Const {
+                    value: bytes.len() as i32,
+                });
                 self.emit_instr(Instr::I32Const { value: 0 });
                 self.emit_instr(Instr::I32Const {
                     value: bytes.len() as i32,
                 });
                 self.emit_instr(Instr::ArrayNewData {
-                    type_name: bin_type,
+                    type_name: rope.payload,
                     data_name,
+                });
+                self.emit_instr(Instr::StructNew {
+                    type_name: rope.leaf,
                 });
             }
             crate::Data::Clsr(target, fields) => {

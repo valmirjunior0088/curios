@@ -16,6 +16,9 @@ use expr_emitter::*;
 mod module_emitter;
 use module_emitter::*;
 
+mod rope_emitter;
+use rope_emitter::*;
+
 mod types;
 pub use types::*;
 

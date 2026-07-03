@@ -1,7 +1,9 @@
 //! End-to-end tests of curios-js's Bin bridge: the encoded module must be
 //! valid wasm, its accessors must work, and — the point of the whole scheme —
-//! its `bin` type must canonicalize with the `Bin` type of a compiled
-//! program, so refs flow between the two instances.
+//! its `bytes` type must canonicalize with the `$bytes` payload type of a
+//! compiled program, so refs flow between the two instances. A program-side
+//! `Bin` is a rope (`$bin/leaf` / `$bin/node` structs); what crosses to a
+//! host — and thus to the bridge — is always the forced flat payload.
 
 use {
     crate::cont::{self, to_wasm},
@@ -66,10 +68,14 @@ fn bridge_accessors_roundtrip() {
     }
 }
 
-/// The canonicalization proof: a compiled program's `Bin` result, produced in
-/// a separate instance, reads back through the bridge's accessors. If the two
-/// `array (mut i8)` declarations ever diverged, the `bin_len`/`bin_get` calls
-/// below would fail wasmtime's dynamic type check.
+/// The canonicalization proof: a compiled program's `Bin` payload, produced
+/// in a separate instance, reads back through the bridge's accessors. If the
+/// two `array (mut i8)` declarations ever diverged, the `bin_len`/`bin_get`
+/// calls below would fail wasmtime's dynamic type check.
+///
+/// `main` answers the rope value itself (a `$bin/leaf` here — a literal is
+/// always a leaf), so the test projects its payload field first: the same
+/// flat array a host call's forced parameter would carry across the wire.
 #[test]
 fn program_bins_flow_through_the_bridge() {
     let mut program = cont::Module::new();
@@ -101,7 +107,17 @@ fn program_bins_flow_through_the_bridge() {
     let program = instantiate(&mut store, &crate::wasm::to_bytes(&to_wasm(&program)));
 
     let main = export(&mut store, &program, crate::abi::MAIN_EXPORT);
-    let bin = call(&mut store, &main, &[]);
+    let rope = call(&mut store, &main, &[]);
+
+    // Project the leaf's payload (field 2: tag, len, bytes).
+    let Val::AnyRef(Some(rope)) = &rope else {
+        panic!("expected a non-null rope result");
+    };
+    let leaf = rope
+        .as_struct(&store)
+        .expect("rope result is unrooted")
+        .expect("expected a struct rope result");
+    let bin = leaf.field(&mut store, 2).expect("leaf lacks a payload");
 
     let bin_len = export(&mut store, &bridge, "bin_len");
     let bin_get = export(&mut store, &bridge, "bin_get");

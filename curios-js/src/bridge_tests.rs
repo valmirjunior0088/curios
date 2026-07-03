@@ -7,13 +7,13 @@ fn func_arity(sub_type: &SubType) -> (usize, usize) {
     }
 }
 
-/// The bridge's `bin` declaration is the compiler's, verbatim — the premise
+/// The bridge's `bytes` declaration is the compiler's, verbatim — the premise
 /// of the whole canonicalization scheme.
 #[test]
-fn bin_type_is_the_compilers() {
+fn bytes_type_is_the_compilers() {
     assert_eq!(
-        super::bridge_module().get_type(&TypeName::from("bin")),
-        Some(&curios_cont::bin_sub_type())
+        super::bridge_module().get_type(&TypeName::from("bytes")),
+        Some(&curios_cont::bytes_sub_type())
     );
 }
 

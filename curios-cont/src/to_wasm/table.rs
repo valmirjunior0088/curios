@@ -34,6 +34,24 @@ impl FieldData {
     }
 }
 
+/// The name bundle for one rope carrier (`Bin` or `Arr`): the base struct the
+/// emitter casts carrier refs to, its `leaf`/`node` subtypes, the flat payload
+/// array, and every field name — one handle to thread through the op emitters
+/// so `Bin` and `Arr` share their lowering code.
+#[derive(Debug, Clone)]
+pub struct RopeData {
+    pub base: TypeName,
+    pub leaf: TypeName,
+    pub node: TypeName,
+    pub payload: TypeName,
+    pub tag_field: FieldName,
+    pub len_field: FieldName,
+    pub payload_field: FieldName,
+    pub left_field: FieldName,
+    pub right_field: FieldName,
+    pub cache_field: FieldName,
+}
+
 #[derive(Debug, Clone)]
 pub struct ClsrData<'a> {
     name: &'a crate::ClsrName,
@@ -213,8 +231,24 @@ pub struct Table<'a> {
     flt_type: TypeName,
     bin_type: TypeName,
     arr_type: TypeName,
+    bytes_type: TypeName,
+    elems_type: TypeName,
+    bin_leaf_type: TypeName,
+    bin_node_type: TypeName,
+    arr_leaf_type: TypeName,
+    arr_node_type: TypeName,
     cell_type: TypeName,
     io_exit: OnceCell<FuncName>,
+    // The shared rope helpers, minted lazily like `io_exit`: the first call
+    // site recorded during emission names the function, and the module
+    // emitter then adds exactly the recorded set after the program's own
+    // functions (see `emit_rope_funcs`).
+    force_bin: OnceCell<FuncName>,
+    force_arr: OnceCell<FuncName>,
+    force_arr_bin: OnceCell<FuncName>,
+    wrap_bin: OnceCell<FuncName>,
+    wrap_arr: OnceCell<FuncName>,
+    wrap_arr_bin: OnceCell<FuncName>,
     // The foreign functions the emitted code calls, keyed by import name.
     // Same lazy used-tracking as the `io_exit` cell: the first call-site
     // reference during emission records the function's row, and
@@ -266,8 +300,20 @@ impl<'a> Table<'a> {
             flt_type: TypeName::from("flt"),
             bin_type: TypeName::from("bin"),
             arr_type: TypeName::from("arr"),
+            bytes_type: TypeName::from("bytes"),
+            elems_type: TypeName::from("elems"),
+            bin_leaf_type: TypeName::from("bin/leaf"),
+            bin_node_type: TypeName::from("bin/node"),
+            arr_leaf_type: TypeName::from("arr/leaf"),
+            arr_node_type: TypeName::from("arr/node"),
             cell_type: TypeName::from("cell"),
             io_exit: OnceCell::new(),
+            force_bin: OnceCell::new(),
+            force_arr: OnceCell::new(),
+            force_arr_bin: OnceCell::new(),
+            wrap_bin: OnceCell::new(),
+            wrap_arr: OnceCell::new(),
+            wrap_arr_bin: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
             tpl_types: {
                 let max = module
@@ -365,6 +411,46 @@ impl<'a> Table<'a> {
         self.arr_type.clone()
     }
 
+    pub fn bytes_type(&self) -> TypeName {
+        self.bytes_type.clone()
+    }
+
+    pub fn elems_type(&self) -> TypeName {
+        self.elems_type.clone()
+    }
+
+    /// The `Bin` rope's name bundle.
+    pub fn bin_rope(&self) -> RopeData {
+        RopeData {
+            base: self.bin_type.clone(),
+            leaf: self.bin_leaf_type.clone(),
+            node: self.bin_node_type.clone(),
+            payload: self.bytes_type.clone(),
+            tag_field: FieldName::from("tag"),
+            len_field: FieldName::from("len"),
+            payload_field: FieldName::from("bytes"),
+            left_field: FieldName::from("left"),
+            right_field: FieldName::from("right"),
+            cache_field: FieldName::from("cache"),
+        }
+    }
+
+    /// The `Arr` rope's name bundle.
+    pub fn arr_rope(&self) -> RopeData {
+        RopeData {
+            base: self.arr_type.clone(),
+            leaf: self.arr_leaf_type.clone(),
+            node: self.arr_node_type.clone(),
+            payload: self.elems_type.clone(),
+            tag_field: FieldName::from("tag"),
+            len_field: FieldName::from("len"),
+            payload_field: FieldName::from("elems"),
+            left_field: FieldName::from("left"),
+            right_field: FieldName::from("right"),
+            cache_field: FieldName::from("cache"),
+        }
+    }
+
     pub fn cell_type(&self) -> TypeName {
         self.cell_type.clone()
     }
@@ -392,6 +478,81 @@ impl<'a> Table<'a> {
 
     pub fn io_exit_used(&self) -> bool {
         self.io_exit.get().is_some()
+    }
+
+    /// `$bin/force (ref $bin) -> (ref $bytes)`: flatten a `Bin` rope to its
+    /// payload, memoizing in the entry node. First use marks it for emission.
+    pub fn force_bin_func(&self) -> FuncName {
+        self.force_bin
+            .get_or_init(|| FuncName::from("bin/force"))
+            .clone()
+    }
+
+    pub fn force_bin_used(&self) -> bool {
+        self.force_bin.get().is_some()
+    }
+
+    /// `$arr/force (ref $arr) -> (ref $elems)`: the `Arr` mirror of
+    /// [`force_bin_func`](Self::force_bin_func).
+    pub fn force_arr_func(&self) -> FuncName {
+        self.force_arr
+            .get_or_init(|| FuncName::from("arr/force"))
+            .clone()
+    }
+
+    pub fn force_arr_used(&self) -> bool {
+        self.force_arr.get().is_some()
+    }
+
+    /// `$arr/bin/force (ref $arr) -> (ref $elems)`: force an `Arr(Bin)` /
+    /// `Arr(Io)` host argument *deeply* — the outer rope to a fresh payload
+    /// whose every element is itself forced to `$bytes`, the element shape
+    /// the host lifts.
+    pub fn force_arr_bin_func(&self) -> FuncName {
+        self.force_arr_bin
+            .get_or_init(|| FuncName::from("arr/bin/force"))
+            .clone()
+    }
+
+    pub fn force_arr_bin_used(&self) -> bool {
+        self.force_arr_bin.get().is_some()
+    }
+
+    /// `$bin/wrap (ref $bytes) -> (ref $bin)`: wrap a host-built flat payload
+    /// into a fresh leaf on re-entry.
+    pub fn wrap_bin_func(&self) -> FuncName {
+        self.wrap_bin
+            .get_or_init(|| FuncName::from("bin/wrap"))
+            .clone()
+    }
+
+    pub fn wrap_bin_used(&self) -> bool {
+        self.wrap_bin.get().is_some()
+    }
+
+    /// `$arr/wrap (ref $elems) -> (ref $arr)`: the `Arr` mirror of
+    /// [`wrap_bin_func`](Self::wrap_bin_func), for scalar-element results.
+    pub fn wrap_arr_func(&self) -> FuncName {
+        self.wrap_arr
+            .get_or_init(|| FuncName::from("arr/wrap"))
+            .clone()
+    }
+
+    pub fn wrap_arr_used(&self) -> bool {
+        self.wrap_arr.get().is_some()
+    }
+
+    /// `$arr/bin/wrap (ref $elems) -> (ref $arr)`: wrap an `Arr(Bin)` host
+    /// result *deeply* — each raw `$bytes` element into a leaf (in place; the
+    /// host-built array is fresh), then the outer array.
+    pub fn wrap_arr_bin_func(&self) -> FuncName {
+        self.wrap_arr_bin
+            .get_or_init(|| FuncName::from("arr/bin/wrap"))
+            .clone()
+    }
+
+    pub fn wrap_arr_bin_used(&self) -> bool {
+        self.wrap_arr_bin.get().is_some()
     }
 
     pub fn tpl_types(&self) -> impl Iterator<Item = (usize, TypeName)> {

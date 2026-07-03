@@ -1,5 +1,8 @@
 use {
-    super::{Context, ExprEmitter, Table, arr_sub_type, bin_sub_type, cell_sub_type, flt_sub_type},
+    super::{
+        Context, ExprEmitter, RopeEmitter, Table, bytes_sub_type, cell_sub_type, elems_sub_type,
+        flt_sub_type, rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type,
+    },
     curios_abi::WireType,
     curios_wasm::{
         CompType, DataName, DataSegment, Export, Expr, FieldType, Func, FuncName, FuncType, Global,
@@ -25,8 +28,41 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    fn emit_bin_type(&mut self) {
-        self.module.add_type(self.table.bin_type(), bin_sub_type());
+    /// The `Bin` rope family: the flat `$bytes` payload (the host-boundary
+    /// shape), the `$bin` base, and its `leaf`/`node` subtypes. Each is its
+    /// own singleton recursion group — `$bytes` must canonicalize equal to
+    /// the type curios-js's bridge declares standalone, and a subtype may
+    /// reference any *earlier* group.
+    fn emit_bin_types(&mut self) {
+        let rope = self.table.bin_rope();
+
+        self.module.add_type(rope.payload.clone(), bytes_sub_type());
+        self.module.add_type(
+            rope.base.clone(),
+            rope_base_sub_type(rope.tag_field.clone(), rope.len_field.clone()),
+        );
+        self.module.add_type(
+            rope.leaf.clone(),
+            rope_leaf_sub_type(
+                rope.base.clone(),
+                rope.tag_field.clone(),
+                rope.len_field.clone(),
+                rope.payload_field.clone(),
+                rope.payload.clone(),
+            ),
+        );
+        self.module.add_type(
+            rope.node.clone(),
+            rope_node_sub_type(
+                rope.base.clone(),
+                rope.tag_field,
+                rope.len_field,
+                rope.left_field,
+                rope.right_field,
+                rope.cache_field,
+                rope.payload,
+            ),
+        );
     }
 
     /// The wasm-level type of a host-import *parameter* of the given wire
@@ -38,11 +74,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             WireType::Nat | WireType::Bln | WireType::Int => ValType::Num(NumType::I32),
             WireType::Bin | WireType::Io => ValType::Ref(RefType {
                 is_nullable: false,
-                heap_type: HeapType::Concrete(self.table.bin_type()),
+                heap_type: HeapType::Concrete(self.table.bytes_type()),
             }),
             WireType::Arr(_) => ValType::Ref(RefType {
                 is_nullable: false,
-                heap_type: HeapType::Concrete(self.table.arr_type()),
+                heap_type: HeapType::Concrete(self.table.elems_type()),
             }),
         }
     }
@@ -126,10 +162,39 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    fn emit_arr_type(&mut self) {
+    /// The `Arr` mirror of [`emit_bin_types`](Self::emit_bin_types).
+    fn emit_arr_types(&mut self) {
+        let rope = self.table.arr_rope();
+
         self.module.add_type(
-            self.table.arr_type(),
-            arr_sub_type(self.table.top_type(true)),
+            rope.payload.clone(),
+            elems_sub_type(self.table.top_type(true)),
+        );
+        self.module.add_type(
+            rope.base.clone(),
+            rope_base_sub_type(rope.tag_field.clone(), rope.len_field.clone()),
+        );
+        self.module.add_type(
+            rope.leaf.clone(),
+            rope_leaf_sub_type(
+                rope.base.clone(),
+                rope.tag_field.clone(),
+                rope.len_field.clone(),
+                rope.payload_field.clone(),
+                rope.payload.clone(),
+            ),
+        );
+        self.module.add_type(
+            rope.node.clone(),
+            rope_node_sub_type(
+                rope.base.clone(),
+                rope.tag_field,
+                rope.len_field,
+                rope.left_field,
+                rope.right_field,
+                rope.cache_field,
+                rope.payload,
+            ),
         );
     }
 
@@ -288,7 +353,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     fn emit_let_bin_data(&mut self, name: &'a crate::ValueName, bytes: &[u8]) {
-        let bin_type = self.table.bin_type();
+        let rope = self.table.bin_rope();
         let global_name = self.table.find_const(name);
         let data_name = DataName::from(format!(
             "{}${}",
@@ -303,10 +368,18 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             },
         );
 
+        // The placeholder init is an empty leaf — a wasm constant expression
+        // cannot read a data segment (or call), so the real payload is built
+        // in the start function below.
         let mut init_expr: Expr = Default::default();
         init_expr.push(Instr::I32Const { value: 0 });
+        init_expr.push(Instr::I32Const { value: 0 });
+        init_expr.push(Instr::I32Const { value: 0 });
         init_expr.push(Instr::ArrayNewDefault {
-            type_name: bin_type.clone(),
+            type_name: rope.payload.clone(),
+        });
+        init_expr.push(Instr::StructNew {
+            type_name: rope.leaf.clone(),
         });
 
         self.module.add_global(
@@ -315,7 +388,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 global_type: GlobalType {
                     val_type: ValType::Ref(RefType {
                         is_nullable: false,
-                        heap_type: HeapType::Concrete(bin_type.clone()),
+                        heap_type: HeapType::Concrete(rope.base),
                     }),
                     mutability: Mutability::Var,
                 },
@@ -330,9 +403,16 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.start_expr.push(Instr::I32Const {
             value: bytes.len() as i32,
         });
+        self.start_expr.push(Instr::I32Const { value: 0 });
+        self.start_expr.push(Instr::I32Const {
+            value: bytes.len() as i32,
+        });
         self.start_expr.push(Instr::ArrayNewData {
-            type_name: bin_type,
+            type_name: rope.payload,
             data_name,
+        });
+        self.start_expr.push(Instr::StructNew {
+            type_name: rope.leaf,
         });
         self.start_expr.push(Instr::GlobalSet { global_name });
     }
@@ -459,10 +539,42 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
+    /// Add the rope helpers the emitted code referenced. The deep host-boundary
+    /// forms go first: *building* their bodies references the shallow helpers
+    /// through the table, so the shallow used-flags are settled before they
+    /// are read.
+    fn emit_rope_funcs(&mut self) {
+        let mut ropes = RopeEmitter::new(self.table, self.module);
+
+        if self.table.force_arr_bin_used() {
+            ropes.emit_force_arr_bin_func(self.table.force_arr_bin_func());
+        }
+
+        if self.table.wrap_arr_bin_used() {
+            ropes.emit_wrap_arr_bin_func(self.table.wrap_arr_bin_func());
+        }
+
+        if self.table.force_bin_used() {
+            ropes.emit_force_func(&self.table.bin_rope(), self.table.force_bin_func());
+        }
+
+        if self.table.force_arr_used() {
+            ropes.emit_force_func(&self.table.arr_rope(), self.table.force_arr_func());
+        }
+
+        if self.table.wrap_bin_used() {
+            ropes.emit_wrap_func(&self.table.bin_rope(), self.table.wrap_bin_func());
+        }
+
+        if self.table.wrap_arr_used() {
+            ropes.emit_wrap_func(&self.table.arr_rope(), self.table.wrap_arr_func());
+        }
+    }
+
     pub fn emit_module(&mut self, module: &'a crate::Module) {
         self.emit_flt_type();
-        self.emit_bin_type();
-        self.emit_arr_type();
+        self.emit_bin_types();
+        self.emit_arr_types();
         self.emit_cell_type();
         self.emit_tpl_types();
         self.emit_clsr_arity_types();
@@ -491,6 +603,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 .add_export(func_name.as_string(), Export::Func(func_name));
         }
 
+        self.emit_rope_funcs();
         self.emit_sys_imports();
 
         let start_type_name = TypeName::from("start");
