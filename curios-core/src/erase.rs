@@ -365,6 +365,40 @@ fn erase_refined_case(
     })
 }
 
+/// Alias a non-variable scrutinee before its match is erased: erase the head
+/// exactly once, re-run the erasure over a fresh variable defined as the head
+/// (`define_assuming`, so dependent typing inside the arms still unfolds it),
+/// and wrap the result in the binding `let alias = head`. Without this, the
+/// projections a match substitutes into its arms (`pred := head - 1`, an
+/// indexed carrier's `get`/`slice`) re-erase the head term — re-executing an
+/// effectful scrutinee once per use site. The inductive path enforces the same
+/// rule with its `scrutinee` let.
+fn erase_aliased_match<F>(
+    context: &mut Context,
+    head: &Term,
+    head_type: &Term,
+    erase_over: F,
+) -> Result<curios_ersd::Term, Error>
+where
+    F: FnOnce(&mut Context, &Term) -> Result<curios_ersd::Term, Error>,
+{
+    let label = context.fresh(Some("scrutinee"));
+    let erased_head = erase(context, head, head_type)?;
+    let var = Term::free_var(&label);
+
+    let tail = context.with_frame(|context| {
+        context.define_assuming(&label, head_type, head);
+        erase_over(context, &var)
+    })?;
+
+    Ok(curios_ersd::Subterm::Let(curios_ersd::Let {
+        name: label,
+        body: erased_head,
+        tail,
+    })
+    .into())
+}
+
 fn erase_nat_match(
     context: &mut Context,
     head: &Term,
@@ -373,6 +407,12 @@ fn erase_nat_match(
     succ_case: &Scope<Two>,
 ) -> Result<curios_ersd::Term, Error> {
     let head_type = expect_prim_head(context, head, PrimHead::Nat)?;
+
+    if !matches!(&**head, Subterm::Var(_)) {
+        return erase_aliased_match(context, head, &head_type, |context, var| {
+            erase_nat_match(context, var, motive, zero_case, succ_case)
+        });
+    }
 
     let erased_zero_case = erase(
         context,
@@ -586,6 +626,15 @@ fn erase_indexed_match(
     cons_case: &Scope<Three>,
     carrier: IndexedCarrier<'_>,
 ) -> Result<curios_ersd::Term, Error> {
+    if !matches!(&**head, Subterm::Var(_)) {
+        let head_type = infer(context, head)?;
+        let head_type = reduce_with(context, &head_type)?;
+
+        return erase_aliased_match(context, head, &head_type, |context, var| {
+            erase_indexed_match(context, var, motive, empty_case, cons_case, carrier)
+        });
+    }
+
     let len_term = carrier.len(head);
     let one: Term = Subterm::Prim(Prim::Nat(Nat::new(1usize))).into();
 
