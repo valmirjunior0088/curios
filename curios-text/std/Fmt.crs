@@ -66,5 +66,5 @@ rec go_with(T : Type, finish : (Str) -> T, f : Fmt, acc : Str) -> format_type_wi
 pub let format(s : Str) -> format_type_with(Str, parse(s)) =
     go_with(Str, (x) => x, parse(s), "");
 
-pub let printf(s : Str) -> format_type_with({}, parse(s)) =
+pub let print(s : Str) -> format_type_with({}, parse(s)) =
     go_with({}, (x) => Io/print(x), parse(s), "");

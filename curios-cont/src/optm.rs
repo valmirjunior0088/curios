@@ -140,7 +140,7 @@ use {super::*, curios_base::Entropy};
 /// 5. **Partially evaluate pure calls.** The gap inlining cannot close: a
 ///    statically-pure `Direct` callee with all-literal arguments is interpreted
 ///    at compile time and replaced by its materialised result — dissolving
-///    recursive callees (the parser combinator in `examples/crs_printf.rs`)
+///    recursive callees (`std/Fmt`'s format-string parser combinator)
 ///    single-site inlining can never reach. A settle round follows.
 /// 6. **Shed recursion residue, then dissolve residual wrappers.** A
 ///    dead-argument round first drops the self-fed arguments the converted

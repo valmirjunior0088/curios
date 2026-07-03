@@ -322,8 +322,8 @@ mod tests {
 
     #[test]
     fn projection_through_a_stuck_inductive_payload_lowers() {
-        // `Fmt/printf`'s return type is `format_type_with({}, parse(s))`, so
-        // erasing `printf` evaluates `parse(s)` at compile time with a *symbolic*
+        // `Fmt/print`'s return type is `format_type_with({}, parse(s))`, so
+        // erasing `print` evaluates `parse(s)` at compile time with a *symbolic*
         // `s`. The `Parse` combinator's result is a `Result` inductive whose
         // discriminant is therefore stuck, and the inlined `success` payload is
         // reached by a projection. `erase` must lower that projection through the
@@ -332,7 +332,7 @@ mod tests {
         // `projectable_at`; without it this panics `erase: projected a non-tuple`.
         let source = r#"
             use /std/{Fmt, Bin};
-            Fmt/printf("%s is %d")
+            Fmt/print("%s is %d")
         "#;
 
         assert!(compile(source, None).is_ok());

@@ -301,9 +301,9 @@ fn folds_constant_arg_through_let_function() {
 }
 
 #[test]
-fn printf_partial_evaluation_reduces_residual() {
+fn fmt_print_partial_evaluation_reduces_residual() {
     // End-to-end smoke for §2 (`evaluate_pure_calls`) and §3 (size-bounded
-    // multi-site inlining) on `Fmt/printf("%s is %d")(name)(30)`. §2 interprets
+    // multi-site inlining) on `Fmt/print("%s is %d")(name)(30)`. §2 interprets
     // pure sub-bodies of the parser combinator at compile time; §3 then
     // dissolves the residual primitive wrappers at every call site (including the
     // `Str/of_bin` validation guarding the runtime `%s` argument). Together they
@@ -325,7 +325,7 @@ fn printf_partial_evaluation_reduces_residual() {
         match Io/read(Io/stdin, 1024) : {}
         | chunk(bytes) =>
             match Str/of_bin(bytes) : {}
-            | some(s) => Fmt/printf("%s is %d")(Str/trim(s))(30)
+            | some(s) => Fmt/print("%s is %d")(Str/trim(s))(30)
             | none() => Io/print("invalid input")
             end
         | eof() => Io/print("invalid input")

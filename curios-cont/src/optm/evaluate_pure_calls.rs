@@ -2,7 +2,7 @@
 //!
 //! `constant_folding` reduces `Value::Eval(code)` against literals in the *same*
 //! region; `inline_calls` is single-call-site, so it cannot reach a recursive
-//! callee — which is what the parser combinator in `examples/crs_printf.rs`
+//! callee — which is what `std/Fmt`'s format-string parser combinator
 //! collapses to after early DCE and inlining. This pass closes that gap: when a
 //! `Direct` call's target is **pure** (no `Io`/`*ToStr`, no `Indirect` calls, no
 //! impure callees, transitively) and every argument is a literal, the call is
