@@ -335,55 +335,23 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
-    /// Lower a rope slice: force the source, copy the window into a fresh
-    /// payload built in `result_local`, then wrap it as a leaf in place.
-    #[allow(clippy::too_many_arguments)]
+    /// Lower a rope slice: one call to the shared `slice` helper — an O(1)
+    /// window (`sub`) over the source, with the bounds trap and the
+    /// read-through invariant maintained inside the helper.
     fn emit_rope_slice(
         &mut self,
         result_local: &LocalName,
-        value_name: &'a crate::ValueName,
         carrier: &'a crate::ValueName,
         start: &'a crate::ValueName,
         end: &'a crate::ValueName,
         load: LoadAs,
-        rope: &RopeData,
-        force_func: curios_wasm::FuncName,
+        slice_func: curios_wasm::FuncName,
     ) {
-        self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Nat));
-        self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
-        self.emit_instr(Instr::I32Sub);
-        self.emit_instr(Instr::ArrayNewDefault {
-            type_name: rope.payload.clone(),
-        });
-        self.emit_instr(Instr::LocalSet {
-            local_name: result_local.clone(),
-        });
-
-        self.emit_instrs(
-            self.context
-                .load_value_instrs(value_name, LoadAs::Concrete(rope.payload.clone())),
-        );
-        self.emit_instr(Instr::I32Const { value: 0 });
-        self.emit_instrs(self.force_instrs(carrier, load, force_func));
+        self.emit_instrs(self.context.load_value_instrs(carrier, load));
         self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
         self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Nat));
-        self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
-        self.emit_instr(Instr::I32Sub);
-        self.emit_instr(Instr::ArrayCopy {
-            source_name: rope.payload.clone(),
-            target_name: rope.payload.clone(),
-        });
-
-        self.emit_instr(Instr::I32Const { value: 0 });
-        self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Nat));
-        self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
-        self.emit_instr(Instr::I32Sub);
-        self.emit_instrs(
-            self.context
-                .load_value_instrs(value_name, LoadAs::Concrete(rope.payload.clone())),
-        );
-        self.emit_instr(Instr::StructNew {
-            type_name: rope.leaf.clone(),
+        self.emit_instr(Instr::Call {
+            func_name: slice_func,
         });
         self.emit_instr(Instr::LocalSet {
             local_name: result_local.clone(),
@@ -405,7 +373,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         f: &'a crate::ValueName,
     ) {
         let rope = self.context.table().arr_rope();
-        let force = self.context.table().force_arr_func();
+        let force = self.context.table().arr_force_func();
         let elems_ref = RefType {
             is_nullable: false,
             heap_type: HeapType::Concrete(rope.payload.clone()),
@@ -1223,7 +1191,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             crate::Code::BinEql(left, right) => {
                 let rope = self.context.table().bin_rope();
-                let force = self.context.table().force_bin_func();
+                let force = self.context.table().bin_force_func();
 
                 let lbytes_local = self.context.push_local(
                     "lbytes",
@@ -1362,31 +1330,18 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
             }
             crate::Code::BinGet(bin, idx) => {
-                let force = self.context.table().force_bin_func();
-                let bytes_type = self.context.table().bytes_type();
-                self.emit_instrs(self.force_instrs(bin, LoadAs::Bin, force));
+                let read = self.context.table().bin_read_func();
+                self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
                 self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Nat));
-                self.emit_instr(Instr::ArrayGetU {
-                    type_name: bytes_type,
-                });
+                self.emit_instr(Instr::Call { func_name: read });
                 self.emit_instr(Instr::RefI31);
                 self.emit_instr(Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
             crate::Code::BinSlice(bin, start, end) => {
-                let rope = self.context.table().bin_rope();
-                let force = self.context.table().force_bin_func();
-                self.emit_rope_slice(
-                    &result_local,
-                    value_name,
-                    bin,
-                    start,
-                    end,
-                    LoadAs::Bin,
-                    &rope,
-                    force,
-                );
+                let slice = self.context.table().bin_slice_func();
+                self.emit_rope_slice(&result_local, bin, start, end, LoadAs::Bin, slice);
             }
             crate::Code::BinAppend(bin, byte) => {
                 let rope = self.context.table().bin_rope();
@@ -1408,30 +1363,17 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 );
             }
             crate::Code::ArrGet(lst, idx) => {
-                let force = self.context.table().force_arr_func();
-                let elems_type = self.context.table().elems_type();
-                self.emit_instrs(self.force_instrs(lst, LoadAs::Arr, force));
+                let read = self.context.table().arr_read_func();
+                self.emit_instrs(self.context.load_value_instrs(lst, LoadAs::Arr));
                 self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Nat));
-                self.emit_instr(Instr::ArrayGet {
-                    type_name: elems_type,
-                });
+                self.emit_instr(Instr::Call { func_name: read });
                 self.emit_instr(Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
             crate::Code::ArrSlice(lst, start, end) => {
-                let rope = self.context.table().arr_rope();
-                let force = self.context.table().force_arr_func();
-                self.emit_rope_slice(
-                    &result_local,
-                    value_name,
-                    lst,
-                    start,
-                    end,
-                    LoadAs::Arr,
-                    &rope,
-                    force,
-                );
+                let slice = self.context.table().arr_slice_func();
+                self.emit_rope_slice(&result_local, lst, start, end, LoadAs::Arr, slice);
             }
             crate::Code::ArrAppend(lst, elem) => {
                 let rope = self.context.table().arr_rope();

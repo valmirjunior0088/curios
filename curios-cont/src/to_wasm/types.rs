@@ -11,23 +11,32 @@
 //!
 //! # The rope representation
 //!
-//! `Bin` and `Arr` are *ropes*: a two-shape tagged union behind a non-final
+//! `Bin` and `Arr` are *ropes*: a three-shape tagged union behind a non-final
 //! struct base (`$bin` / `$arr`, fields `tag` + `len`). A `leaf` holds a flat
 //! payload array (`$bytes` / `$elems`); a `node` holds two children plus a
-//! memoization `cache`. The cost model this buys:
+//! memoization `cache`; a `sub` is a window — a `base` rope plus an `offset`.
+//! The cost model this buys:
 //!
 //! - `concat`/`append` are O(1): one `node` allocation, no copying.
 //! - `len` is O(1): every shape carries it.
-//! - The first *read* (`get`, `slice`, `eql` on equal lengths, `map`, a host
+//! - `slice` is O(1): one `sub` allocation over the source (collapsing a
+//!   sub-of-sub, so windows never stack). A `sub`'s base is always
+//!   *flat-available* — a leaf or an already-cached node (slicing an uncached
+//!   node forces it first, which memoizes) — so `get` reads straight through
+//!   a window without forcing or copying.
+//! - The first *whole-value read* (`eql` on equal lengths, `map`, a host
 //!   call) forces the rope — one O(n) fill into a fresh flat payload, memoized
 //!   in the entry node's `cache` (its children are then nulled, releasing the
-//!   tree). Later reads are O(1) to reach the payload.
-//! - The documented hazard: *alternating* append and read re-forces per read
-//!   (the new node above a cached one is uncached), which is quadratic. Build
-//!   fully, then read.
+//!   tree). Later reads are O(1) to reach the payload. (A `sub` is not
+//!   memoized: forcing one is a single window copy of exactly its own size.)
+//! - The documented hazard: *alternating* append and whole-value reads
+//!   re-forces per read (the new node above a cached one is uncached), which
+//!   is quadratic. Build fully, then read.
 //!
-//! Naive accumulation loops are therefore O(n) by construction — there is no
-//! compile-time recognition anywhere.
+//! Naive accumulation loops are therefore O(n) by construction, and so are
+//! head/tail peel loops (`get` head + `slice` tail): the first peel forces
+//! once, every later peel is an O(1) window over the settled payload. There
+//! is no compile-time recognition anywhere.
 //!
 //! The host ABI is untouched by the rope: payloads cross the boundary as the
 //! flat `$bytes`/`$elems` arrays (params are forced before the call, results
@@ -105,8 +114,8 @@ fn ref_field(type_name: TypeName, is_nullable: bool, mutability: Mutability) -> 
 
 /// A rope base (`$bin` / `$arr`) — the non-final struct every carrier ref is
 /// cast to: `struct (field $tag (i32)) (field $len (i32))`. `tag` is 0 for a
-/// leaf, 1 for a node; `len` is the carrier's element count, so `len` and the
-/// tag dispatch never force.
+/// leaf, 1 for a node, 2 for a sub; `len` is the carrier's element count, so
+/// `len` and the tag dispatch never force.
 pub fn rope_base_sub_type(tag_field: FieldName, len_field: FieldName) -> SubType {
     SubType {
         is_final: false,
@@ -166,6 +175,31 @@ pub fn rope_node_sub_type(
             ),
             (right_field, ref_field(base_type, true, Mutability::Var)),
             (cache_field, ref_field(payload_type, true, Mutability::Var)),
+        ])),
+    }
+}
+
+/// A rope sub (`$bin/sub` / `$arr/sub`) — final, subtype of the base: a
+/// window into a `base` rope starting at `offset`. All fields are immutable;
+/// the invariant that makes windows read-through is *representational*: a
+/// `sub`'s base is always flat-available (a leaf, or a node whose `cache` is
+/// already set), enforced by the only constructor, the emitted `slice`
+/// helper.
+pub fn rope_sub_sub_type(
+    base_type: TypeName,
+    tag_field: FieldName,
+    len_field: FieldName,
+    base_field: FieldName,
+    offset_field: FieldName,
+) -> SubType {
+    SubType {
+        is_final: true,
+        super_types: vec![base_type.clone()],
+        comp_type: CompType::Struct(StructType::from([
+            (tag_field, i32_const_field()),
+            (len_field, i32_const_field()),
+            (base_field, ref_field(base_type, false, Mutability::Const)),
+            (offset_field, i32_const_field()),
         ])),
     }
 }

@@ -1,15 +1,24 @@
 //! The shared rope helper functions — the only module-level functions the
 //! emitter mints beyond the program's own (everything else is inlined at its
-//! use site). Two families:
+//! use site). Four families:
 //!
 //! - `$<carrier>/force` flattens a rope to its payload array: the leaf answers
-//!   its payload, a cached node answers its cache, and an uncached node fills
+//!   its payload, a cached node answers its cache, and everything else fills
 //!   a fresh payload by an *iterative* tree walk (an explicit `$elems`
 //!   worklist, grown by doubling), so a 100k-deep concat chain never touches
-//!   the wasm call stack. Only the entry node memoizes — intermediates are
-//!   usually garbage the moment the walk passes them.
+//!   the wasm call stack. Only an entry *node* memoizes — intermediates are
+//!   usually garbage the moment the walk passes them, and a sub's fill is a
+//!   single window copy of exactly its own size.
 //! - `$<carrier>/wrap` boxes a host-built flat payload into a fresh leaf on
 //!   re-entry.
+//! - `$<carrier>/slice` builds the O(1) window: bounds-check, the trivial
+//!   windows answer an empty leaf or the rope itself, a sub collapses (so
+//!   windows never stack), and an uncached node base is forced first — which
+//!   memoizes — so every `sub` in existence has a *flat-available* base (a
+//!   leaf or a cached node).
+//! - `$<carrier>/read` answers one element: off a leaf payload, *through* a
+//!   sub's window without forcing (the invariant above makes that O(1)), or
+//!   via `force` on a node.
 //!
 //! The `arr/bin` variants are the host boundary's deep forms: an `Arr(Bin)` /
 //! `Arr(Io)` wire value carries `Bin`-shaped *elements*, which the host lifts
@@ -90,7 +99,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     fn add_helper(
         &mut self,
         func_name: FuncName,
-        param: (LocalName, ValType),
+        params: Vec<(LocalName, ValType)>,
         result: ValType,
         locals: Vec<(LocalName, ValType)>,
         instrs: Vec<Instr>,
@@ -103,7 +112,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                 is_final: true,
                 super_types: vec![],
                 comp_type: CompType::Func(FuncType {
-                    inputs: ResultType::from([param.1]),
+                    inputs: ResultType::from(params.iter().map(|(_, val_type)| val_type.clone())),
                     outputs: ResultType::from([result]),
                 }),
             },
@@ -113,7 +122,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             func_name,
             Func {
                 type_name,
-                params: vec![param.0],
+                params: params.into_iter().map(|(name, _)| name).collect(),
                 locals,
                 expr: instrs.into(),
             },
@@ -123,18 +132,24 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// `$<carrier>/force (ref <base>) -> (ref <payload>)`.
     ///
     /// ```wat
-    /// if r.tag == 0            → r.payload            ;; leaf
-    /// if r.cache != null       → r.cache              ;; already forced
+    /// if r.tag == 0                  → r.payload      ;; leaf
+    /// if r.tag == 1 && r.cache != null → r.cache      ;; already forced
     /// out   := array.new_default <payload> r.len
     /// stack := array.new_default $elems 32            ;; explicit worklist
     /// cur   := r
     /// loop:                                           ;; per leaf-like chunk
     ///   descend: while cur is an uncached node,
     ///     push cur.right (growing the stack by doubling), cur := cur.left
-    ///   copy the chunk (leaf payload or node cache) into out at offset
+    ///   copy the chunk — a leaf payload, a node cache, or a sub's window
+    ///   over its flat-available base — into out at offset
     ///   pop cur from the stack; repeat until empty
-    /// r.cache := out; r.left := null; r.right := null ;; memoize, release tree
+    /// if r.tag == 1:                                  ;; memoize, release tree
+    ///   r.cache := out; r.left := null; r.right := null
     /// ```
+    ///
+    /// An entry *sub* is not memoized (its fields are immutable): its fill is
+    /// one window copy of exactly its own size, so there is nothing quadratic
+    /// to fence off.
     pub fn emit_force_func(&mut self, rope: &RopeData, func_name: FuncName) {
         let elems = self.table.elems_type();
 
@@ -147,6 +162,9 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let offset = LocalName::from("offset");
         let cur = LocalName::from("cur");
         let payload = LocalName::from("payload");
+        let src_off = LocalName::from("src_off");
+        let count = LocalName::from("count");
+        let sb = LocalName::from("sb");
 
         let i32_val = ValType::Num(NumType::I32);
         let locals = vec![
@@ -158,6 +176,9 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             (offset.clone(), i32_val.clone()),
             (cur.clone(), concrete_val(rope.base.clone(), true)),
             (payload.clone(), concrete_val(rope.payload.clone(), true)),
+            (src_off.clone(), i32_val.clone()),
+            (count.clone(), i32_val.clone()),
+            (sb.clone(), concrete_val(rope.base.clone(), true)),
         ];
 
         let mut instrs = Vec::new();
@@ -180,23 +201,34 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             },
         ]);
 
-        // Cached node: answer the memo.
+        // Cached node: answer the memo. (A sub skips straight to the walk.)
         instrs.extend([
             get(&r),
-            cast(&rope.node),
-            set(&node),
-            get(&node),
-            field_get(&rope.node, &rope.cache_field),
-            Instr::RefIsNull,
-            Instr::I32Eqz,
+            field_get(&rope.base, &rope.tag_field),
+            Instr::I32Const { value: 1 },
+            Instr::I32Eq,
             Instr::If {
-                label_name: LabelName::from("cached"),
+                label_name: LabelName::from("entry_node"),
                 block_type: BlockType::Empty,
                 then_instructions: vec![
+                    get(&r),
+                    cast(&rope.node),
+                    set(&node),
                     get(&node),
                     field_get(&rope.node, &rope.cache_field),
-                    Instr::RefAsNonNull,
-                    Instr::Return,
+                    Instr::RefIsNull,
+                    Instr::I32Eqz,
+                    Instr::If {
+                        label_name: LabelName::from("cached"),
+                        block_type: BlockType::Empty,
+                        then_instructions: vec![
+                            get(&node),
+                            field_get(&rope.node, &rope.cache_field),
+                            Instr::RefAsNonNull,
+                            Instr::Return,
+                        ],
+                        else_instructions: vec![],
+                    },
                 ],
                 else_instructions: vec![],
             },
@@ -220,10 +252,11 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         ]);
 
         // The descent body: classify `cur`, either resolving a leaf-like
-        // payload (exit to `$emit`) or pushing right and descending left.
+        // chunk — payload + source window — (exit to `$emit`) or pushing
+        // right and descending left.
         let descend_label = LabelName::from("descend");
         let mut descend = vec![
-            // Leaf: payload = cur.payload.
+            // Leaf: the whole payload.
             get(&cur),
             field_get(&rope.base, &rope.tag_field),
             Instr::I32Eqz,
@@ -235,13 +268,65 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                     cast(&rope.leaf),
                     field_get(&rope.leaf, &rope.payload_field),
                     set(&payload),
+                    Instr::I32Const { value: 0 },
+                    set(&src_off),
+                    get(&payload),
+                    Instr::ArrayLen,
+                    set(&count),
                     Instr::Br {
                         label_name: LabelName::from("emit"),
                     },
                 ],
                 else_instructions: vec![],
             },
-            // Cached node: payload = cur.cache.
+            // Sub: its window over the base's flat payload — a leaf's payload
+            // or a cached node's cache (non-null by the slice invariant; the
+            // null trap in `array.copy` is its enforcement).
+            get(&cur),
+            field_get(&rope.base, &rope.tag_field),
+            Instr::I32Const { value: 2 },
+            Instr::I32Eq,
+            Instr::If {
+                label_name: LabelName::from("at_sub"),
+                block_type: BlockType::Empty,
+                then_instructions: vec![
+                    get(&cur),
+                    cast(&rope.sub),
+                    field_get(&rope.sub, &rope.base_field),
+                    set(&sb),
+                    get(&cur),
+                    cast(&rope.sub),
+                    field_get(&rope.sub, &rope.offset_field),
+                    set(&src_off),
+                    get(&cur),
+                    field_get(&rope.base, &rope.len_field),
+                    set(&count),
+                    get(&sb),
+                    field_get(&rope.base, &rope.tag_field),
+                    Instr::I32Eqz,
+                    Instr::If {
+                        label_name: LabelName::from("sub_base"),
+                        block_type: BlockType::Empty,
+                        then_instructions: vec![
+                            get(&sb),
+                            cast(&rope.leaf),
+                            field_get(&rope.leaf, &rope.payload_field),
+                            set(&payload),
+                        ],
+                        else_instructions: vec![
+                            get(&sb),
+                            cast(&rope.node),
+                            field_get(&rope.node, &rope.cache_field),
+                            set(&payload),
+                        ],
+                    },
+                    Instr::Br {
+                        label_name: LabelName::from("emit"),
+                    },
+                ],
+                else_instructions: vec![],
+            },
+            // Cached node: the whole cache.
             get(&cur),
             cast(&rope.node),
             field_get(&rope.node, &rope.cache_field),
@@ -255,6 +340,11 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                     cast(&rope.node),
                     field_get(&rope.node, &rope.cache_field),
                     set(&payload),
+                    Instr::I32Const { value: 0 },
+                    set(&src_off),
+                    get(&payload),
+                    Instr::ArrayLen,
+                    set(&count),
                     Instr::Br {
                         label_name: LabelName::from("emit"),
                     },
@@ -330,20 +420,18 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                         instructions: descend,
                     }],
                 },
-                // array.copy out[offset..] <- payload[0..len(payload)]
+                // array.copy out[offset..] <- payload[src_off..src_off+count]
                 get(&out),
                 get(&offset),
                 get(&payload),
-                Instr::I32Const { value: 0 },
-                get(&payload),
-                Instr::ArrayLen,
+                get(&src_off),
+                get(&count),
                 Instr::ArrayCopy {
                     source_name: rope.payload.clone(),
                     target_name: rope.payload.clone(),
                 },
                 get(&offset),
-                get(&payload),
-                Instr::ArrayLen,
+                get(&count),
                 Instr::I32Add,
                 set(&offset),
                 // Pop the next pending subtree; fall out when empty.
@@ -372,25 +460,331 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             ],
         });
 
-        // Memoize the entry node and release its tree.
+        // Memoize a node entry and release its tree (`node` was set at entry
+        // exactly when the tag is 1); a sub entry has nowhere to memoize.
         instrs.extend([
-            get(&node),
-            get(&out),
-            field_set(&rope.node, &rope.cache_field),
-            get(&node),
-            null(&rope.base),
-            field_set(&rope.node, &rope.left_field),
-            get(&node),
-            null(&rope.base),
-            field_set(&rope.node, &rope.right_field),
+            get(&r),
+            field_get(&rope.base, &rope.tag_field),
+            Instr::I32Const { value: 1 },
+            Instr::I32Eq,
+            Instr::If {
+                label_name: LabelName::from("memoize"),
+                block_type: BlockType::Empty,
+                then_instructions: vec![
+                    get(&node),
+                    get(&out),
+                    field_set(&rope.node, &rope.cache_field),
+                    get(&node),
+                    null(&rope.base),
+                    field_set(&rope.node, &rope.left_field),
+                    get(&node),
+                    null(&rope.base),
+                    field_set(&rope.node, &rope.right_field),
+                ],
+                else_instructions: vec![],
+            },
             get(&out),
             Instr::RefAsNonNull,
         ]);
 
         self.add_helper(
             func_name,
-            (r, concrete_val(rope.base.clone(), false)),
+            vec![(r, concrete_val(rope.base.clone(), false))],
             concrete_val(rope.payload.clone(), false),
+            locals,
+            instrs,
+        );
+    }
+
+    /// `$<carrier>/slice (ref <base>, i32, i32) -> (ref <base>)`.
+    ///
+    /// ```wat
+    /// if s > e || e > r.len   → unreachable            ;; the eager bounds trap
+    /// n := e - s
+    /// if n == 0               → fresh empty leaf
+    /// if s == 0 && n == r.len → r                      ;; whole-window alias
+    /// if r.tag == 2           → sub{2, n, r.base, r.offset + s}   ;; collapse
+    /// if r.tag == 1 && r.cache == null → call force(r) (drop)     ;; memoizes
+    /// sub{2, n, r, s}
+    /// ```
+    ///
+    /// The node arm's force is what maintains the read-through invariant:
+    /// every `sub` base is flat-available from birth, and stays so (a cache is
+    /// written once, never cleared).
+    pub fn emit_slice_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
+        let r = LocalName::from("r");
+        let s = LocalName::from("s");
+        let e = LocalName::from("e");
+        let n = LocalName::from("n");
+
+        let i32_val = ValType::Num(NumType::I32);
+        let locals = vec![(n.clone(), i32_val.clone())];
+
+        let mut instrs = Vec::new();
+
+        // Bounds: the pre-window trap `slice` always had (an out-of-range
+        // window must not become a deferred — or never-taken — trap).
+        instrs.extend([
+            get(&s),
+            get(&e),
+            Instr::I32GtU,
+            get(&e),
+            get(&r),
+            field_get(&rope.base, &rope.len_field),
+            Instr::I32GtU,
+            Instr::I32Or,
+            Instr::If {
+                label_name: LabelName::from("bounds"),
+                block_type: BlockType::Empty,
+                then_instructions: vec![Instr::Unreachable],
+                else_instructions: vec![],
+            },
+        ]);
+
+        // n = e - s; the empty window is a fresh empty leaf.
+        instrs.extend([
+            get(&e),
+            get(&s),
+            Instr::I32Sub,
+            set(&n),
+            get(&n),
+            Instr::I32Eqz,
+            Instr::If {
+                label_name: LabelName::from("empty"),
+                block_type: BlockType::Empty,
+                then_instructions: vec![
+                    Instr::I32Const { value: 0 },
+                    Instr::I32Const { value: 0 },
+                    Instr::I32Const { value: 0 },
+                    Instr::ArrayNewDefault {
+                        type_name: rope.payload.clone(),
+                    },
+                    Instr::StructNew {
+                        type_name: rope.leaf.clone(),
+                    },
+                    Instr::Return,
+                ],
+                else_instructions: vec![],
+            },
+        ]);
+
+        // The whole window is the rope itself.
+        instrs.extend([
+            get(&s),
+            Instr::I32Eqz,
+            get(&n),
+            get(&r),
+            field_get(&rope.base, &rope.len_field),
+            Instr::I32Eq,
+            Instr::I32And,
+            Instr::If {
+                label_name: LabelName::from("whole"),
+                block_type: BlockType::Empty,
+                then_instructions: vec![get(&r), Instr::Return],
+                else_instructions: vec![],
+            },
+        ]);
+
+        // A sub collapses onto its own base, so windows never stack.
+        instrs.extend([
+            get(&r),
+            field_get(&rope.base, &rope.tag_field),
+            Instr::I32Const { value: 2 },
+            Instr::I32Eq,
+            Instr::If {
+                label_name: LabelName::from("collapse"),
+                block_type: BlockType::Empty,
+                then_instructions: vec![
+                    Instr::I32Const { value: 2 },
+                    get(&n),
+                    get(&r),
+                    cast(&rope.sub),
+                    field_get(&rope.sub, &rope.base_field),
+                    get(&r),
+                    cast(&rope.sub),
+                    field_get(&rope.sub, &rope.offset_field),
+                    get(&s),
+                    Instr::I32Add,
+                    Instr::StructNew {
+                        type_name: rope.sub.clone(),
+                    },
+                    Instr::Return,
+                ],
+                else_instructions: vec![],
+            },
+        ]);
+
+        // An uncached node is forced first — memoized in place — so the sub
+        // below reads through its cache.
+        instrs.extend([
+            get(&r),
+            field_get(&rope.base, &rope.tag_field),
+            Instr::I32Const { value: 1 },
+            Instr::I32Eq,
+            Instr::If {
+                label_name: LabelName::from("node"),
+                block_type: BlockType::Empty,
+                then_instructions: vec![
+                    get(&r),
+                    cast(&rope.node),
+                    field_get(&rope.node, &rope.cache_field),
+                    Instr::RefIsNull,
+                    Instr::If {
+                        label_name: LabelName::from("settle"),
+                        block_type: BlockType::Empty,
+                        then_instructions: vec![
+                            get(&r),
+                            Instr::Call {
+                                func_name: force_func,
+                            },
+                            Instr::Drop,
+                        ],
+                        else_instructions: vec![],
+                    },
+                ],
+                else_instructions: vec![],
+            },
+        ]);
+
+        instrs.extend([
+            Instr::I32Const { value: 2 },
+            get(&n),
+            get(&r),
+            get(&s),
+            Instr::StructNew {
+                type_name: rope.sub.clone(),
+            },
+        ]);
+
+        self.add_helper(
+            func_name,
+            vec![
+                (r, concrete_val(rope.base.clone(), false)),
+                (s, i32_val.clone()),
+                (e, i32_val),
+            ],
+            concrete_val(rope.base.clone(), false),
+            locals,
+            instrs,
+        );
+    }
+
+    /// `$<carrier>/read (ref <base>, i32) -> <element>`.
+    ///
+    /// ```wat
+    /// if r.tag == 0 → r.payload[i]                    ;; leaf
+    /// if r.tag == 2 →                                 ;; sub: read through
+    ///   (r.base.tag == 0 ? r.base.payload : r.base.cache)[r.offset + i]
+    /// force(r)[i]                                     ;; node (memoized)
+    /// ```
+    ///
+    /// `Bin` elements are packed bytes (`array.get_u`, an `i32` result);
+    /// `Arr` elements are the top type (`array.get`).
+    pub fn emit_read_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
+        let packed = rope.payload == self.table.bytes_type();
+
+        let r = LocalName::from("r");
+        let i = LocalName::from("i");
+        let p = LocalName::from("p");
+        let j = LocalName::from("j");
+        let sb = LocalName::from("sb");
+
+        let i32_val = ValType::Num(NumType::I32);
+        let locals = vec![
+            (p.clone(), concrete_val(rope.payload.clone(), true)),
+            (j.clone(), i32_val.clone()),
+            (sb.clone(), concrete_val(rope.base.clone(), true)),
+        ];
+
+        let get_elem = if packed {
+            Instr::ArrayGetU {
+                type_name: rope.payload.clone(),
+            }
+        } else {
+            Instr::ArrayGet {
+                type_name: rope.payload.clone(),
+            }
+        };
+
+        let result = if packed {
+            i32_val.clone()
+        } else {
+            self.table.top_type(true)
+        };
+
+        let instrs = vec![
+            get(&i),
+            set(&j),
+            get(&r),
+            field_get(&rope.base, &rope.tag_field),
+            Instr::I32Eqz,
+            Instr::If {
+                label_name: LabelName::from("leaf"),
+                block_type: BlockType::Empty,
+                then_instructions: vec![
+                    get(&r),
+                    cast(&rope.leaf),
+                    field_get(&rope.leaf, &rope.payload_field),
+                    set(&p),
+                ],
+                else_instructions: vec![
+                    get(&r),
+                    field_get(&rope.base, &rope.tag_field),
+                    Instr::I32Const { value: 2 },
+                    Instr::I32Eq,
+                    Instr::If {
+                        label_name: LabelName::from("sub"),
+                        block_type: BlockType::Empty,
+                        then_instructions: vec![
+                            get(&r),
+                            cast(&rope.sub),
+                            field_get(&rope.sub, &rope.offset_field),
+                            get(&i),
+                            Instr::I32Add,
+                            set(&j),
+                            get(&r),
+                            cast(&rope.sub),
+                            field_get(&rope.sub, &rope.base_field),
+                            set(&sb),
+                            get(&sb),
+                            field_get(&rope.base, &rope.tag_field),
+                            Instr::I32Eqz,
+                            Instr::If {
+                                label_name: LabelName::from("sub_base"),
+                                block_type: BlockType::Empty,
+                                then_instructions: vec![
+                                    get(&sb),
+                                    cast(&rope.leaf),
+                                    field_get(&rope.leaf, &rope.payload_field),
+                                    set(&p),
+                                ],
+                                else_instructions: vec![
+                                    get(&sb),
+                                    cast(&rope.node),
+                                    field_get(&rope.node, &rope.cache_field),
+                                    set(&p),
+                                ],
+                            },
+                        ],
+                        else_instructions: vec![
+                            get(&r),
+                            Instr::Call {
+                                func_name: force_func,
+                            },
+                            set(&p),
+                        ],
+                    },
+                ],
+            },
+            get(&p),
+            get(&j),
+            get_elem,
+        ];
+
+        self.add_helper(
+            func_name,
+            vec![(r, concrete_val(rope.base.clone(), false)), (i, i32_val)],
+            result,
             locals,
             instrs,
         );
@@ -400,7 +794,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// force every element through `$bin/force` into a *fresh* payload (the
     /// shallow force of a leaf answers its live payload, which must not be
     /// element-rewritten in place).
-    pub fn emit_force_arr_bin_func(&mut self, func_name: FuncName) {
+    pub fn emit_arr_bin_force_func(&mut self, func_name: FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
 
@@ -424,7 +818,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let instrs = vec![
             get(&r),
             Instr::Call {
-                func_name: self.table.force_arr_func(),
+                func_name: self.table.arr_force_func(),
             },
             set(&flat),
             get(&flat),
@@ -457,7 +851,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                         },
                         cast(&bin.base),
                         Instr::Call {
-                            func_name: self.table.force_bin_func(),
+                            func_name: self.table.bin_force_func(),
                         },
                         Instr::ArraySet {
                             type_name: elems.clone(),
@@ -478,7 +872,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
         self.add_helper(
             func_name,
-            (r, concrete_val(self.table.arr_type(), false)),
+            vec![(r, concrete_val(self.table.arr_type(), false))],
             concrete_val(elems, false),
             locals,
             instrs,
@@ -501,7 +895,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
         self.add_helper(
             func_name,
-            (b, concrete_val(rope.payload.clone(), false)),
+            vec![(b, concrete_val(rope.payload.clone(), false))],
             concrete_val(rope.base.clone(), false),
             vec![],
             instrs,
@@ -511,7 +905,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// `$arr/bin/wrap (ref $elems) -> (ref $arr)`: wrap each raw `$bytes`
     /// element into a `$bin/leaf` in place — the host-built array is fresh,
     /// nothing else aliases it — then the outer array into an `$arr/leaf`.
-    pub fn emit_wrap_arr_bin_func(&mut self, func_name: FuncName) {
+    pub fn emit_arr_bin_wrap_func(&mut self, func_name: FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
         let arr = self.table.arr_rope();
@@ -588,7 +982,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
         self.add_helper(
             func_name,
-            (e, concrete_val(elems, false)),
+            vec![(e, concrete_val(elems, false))],
             concrete_val(arr.base.clone(), false),
             locals,
             instrs,

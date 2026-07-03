@@ -663,6 +663,29 @@ fn cell_two_cells_are_distinct() {
 }
 
 #[test]
+fn match_reads_an_effectful_scrutinee_once() {
+    // Erasure aliases a non-variable scrutinee before projecting: the `k`
+    // binder below is `head - 1` over the *alias*, not a re-erased
+    // `Cell/get(c) - 1` — which would re-read the cell after the arm's
+    // `Cell/set`, making `k` 0 - 1 (monus) = 0 and `x` 1 instead of 5.
+    assert_eq!(
+        run(r#"
+            use /std/{Cell, Io, Nat, Str};
+            let n : Nat = 5;
+            let c = Cell/new(n);
+            let x = match Cell/get(c)
+                | 0 => 0
+                | k + 1; ih =>
+                    let _ = Cell/set(c, 0);
+                    k + 1
+                end;
+            Io/print(Nat/to_str(x))
+        "#),
+        b"5",
+    );
+}
+
+#[test]
 fn accumulation_loops_are_linear_by_construction() {
     // The rope representation's whole promise: a naive 100k-step `Bin/concat`
     // accumulation loop is O(n) with no optimizer recognition anywhere — each
@@ -689,4 +712,48 @@ fn accumulation_loops_are_linear_by_construction() {
     )
     .expect("expected result");
     assert_eq!(io.output(), b"01234567891000000");
+}
+
+#[test]
+fn peel_loops_are_linear_by_construction() {
+    // The window (`sub`) shape's whole promise, the consumption-side mirror of
+    // `accumulation_loops_are_linear_by_construction`: a naive head/tail peel
+    // over 100k bytes is O(n) with no optimizer recognition anywhere — the
+    // first read forces once, then every tail is an O(1) collapsed window and
+    // every head an O(1) read-through. The tail escapes through a `Cell` each
+    // step, so no compile-time pass (worker_wrapper's cursor, slice
+    // forwarding) can rescue it: a copying slice would be Θ(n²) and fail on
+    // the timeout. Matching directly on `Cell/get(c)` also leans on erasure's
+    // scrutinee alias — the cell must be read once per match, not once per
+    // projection (the head read lands *after* the `Cell/set` otherwise).
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(60),
+        r#"
+        use /std/{Io, Bin, Nat, Str, Cell};
+        rec build(i : Nat, acc : Bin) -> Bin =
+            match i
+            | 0 => acc
+            | k + 1; ih => build(k, Bin/concat(acc, Str/to_bin("0123456789")))
+            end;
+        let built = build(10000, \\);
+        let c = Cell/new(built);
+        rec drain(fuel : Nat, acc : Nat) -> Nat =
+            match fuel
+            | 0 => acc
+            | f + 1; ih =>
+                match Cell/get(c)
+                | \\ => acc
+                | h, ..t; ih2 =>
+                    let _ = Cell/set(c, t);
+                    drain(f, acc + (h - 48))
+                end
+            end;
+        let total = drain(Bin/len(built) + 1, 0);
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(total)))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"450000");
 }

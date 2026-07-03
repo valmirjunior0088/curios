@@ -2,6 +2,7 @@ use {
     super::{
         Context, ExprEmitter, RopeEmitter, Table, bytes_sub_type, cell_sub_type, elems_sub_type,
         flt_sub_type, rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type,
+        rope_sub_sub_type,
     },
     curios_abi::WireType,
     curios_wasm::{
@@ -55,12 +56,22 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             rope.node.clone(),
             rope_node_sub_type(
                 rope.base.clone(),
-                rope.tag_field,
-                rope.len_field,
+                rope.tag_field.clone(),
+                rope.len_field.clone(),
                 rope.left_field,
                 rope.right_field,
                 rope.cache_field,
                 rope.payload,
+            ),
+        );
+        self.module.add_type(
+            rope.sub.clone(),
+            rope_sub_sub_type(
+                rope.base,
+                rope.tag_field,
+                rope.len_field,
+                rope.base_field,
+                rope.offset_field,
             ),
         );
     }
@@ -188,12 +199,22 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             rope.node.clone(),
             rope_node_sub_type(
                 rope.base.clone(),
-                rope.tag_field,
-                rope.len_field,
+                rope.tag_field.clone(),
+                rope.len_field.clone(),
                 rope.left_field,
                 rope.right_field,
                 rope.cache_field,
                 rope.payload,
+            ),
+        );
+        self.module.add_type(
+            rope.sub.clone(),
+            rope_sub_sub_type(
+                rope.base,
+                rope.tag_field,
+                rope.len_field,
+                rope.base_field,
+                rope.offset_field,
             ),
         );
     }
@@ -539,35 +560,68 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// Add the rope helpers the emitted code referenced. The deep host-boundary
-    /// forms go first: *building* their bodies references the shallow helpers
-    /// through the table, so the shallow used-flags are settled before they
-    /// are read.
+    /// Add the rope helpers the emitted code referenced. Helpers whose bodies
+    /// call other helpers go first: *building* a body references its callees
+    /// through the table, so the callee used-flags must settle before they
+    /// are read — deep host-boundary forms, then `slice`/`read` (whose node
+    /// arms call `force`), then `force`/`wrap`.
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
 
-        if self.table.force_arr_bin_used() {
-            ropes.emit_force_arr_bin_func(self.table.force_arr_bin_func());
+        if self.table.arr_bin_force_used() {
+            ropes.emit_arr_bin_force_func(self.table.arr_bin_force_func());
         }
 
-        if self.table.wrap_arr_bin_used() {
-            ropes.emit_wrap_arr_bin_func(self.table.wrap_arr_bin_func());
+        if self.table.arr_bin_wrap_used() {
+            ropes.emit_arr_bin_wrap_func(self.table.arr_bin_wrap_func());
         }
 
-        if self.table.force_bin_used() {
-            ropes.emit_force_func(&self.table.bin_rope(), self.table.force_bin_func());
+        if self.table.bin_slice_used() {
+            ropes.emit_slice_func(
+                &self.table.bin_rope(),
+                self.table.bin_slice_func(),
+                self.table.bin_force_func(),
+            );
         }
 
-        if self.table.force_arr_used() {
-            ropes.emit_force_func(&self.table.arr_rope(), self.table.force_arr_func());
+        if self.table.arr_slice_used() {
+            ropes.emit_slice_func(
+                &self.table.arr_rope(),
+                self.table.arr_slice_func(),
+                self.table.arr_force_func(),
+            );
         }
 
-        if self.table.wrap_bin_used() {
-            ropes.emit_wrap_func(&self.table.bin_rope(), self.table.wrap_bin_func());
+        if self.table.bin_read_used() {
+            ropes.emit_read_func(
+                &self.table.bin_rope(),
+                self.table.bin_read_func(),
+                self.table.bin_force_func(),
+            );
         }
 
-        if self.table.wrap_arr_used() {
-            ropes.emit_wrap_func(&self.table.arr_rope(), self.table.wrap_arr_func());
+        if self.table.arr_read_used() {
+            ropes.emit_read_func(
+                &self.table.arr_rope(),
+                self.table.arr_read_func(),
+                self.table.arr_force_func(),
+            );
+        }
+
+        if self.table.bin_force_used() {
+            ropes.emit_force_func(&self.table.bin_rope(), self.table.bin_force_func());
+        }
+
+        if self.table.arr_force_used() {
+            ropes.emit_force_func(&self.table.arr_rope(), self.table.arr_force_func());
+        }
+
+        if self.table.bin_wrap_used() {
+            ropes.emit_wrap_func(&self.table.bin_rope(), self.table.bin_wrap_func());
+        }
+
+        if self.table.arr_wrap_used() {
+            ropes.emit_wrap_func(&self.table.arr_rope(), self.table.arr_wrap_func());
         }
     }
 

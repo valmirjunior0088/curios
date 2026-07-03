@@ -615,10 +615,10 @@ impl<'a, 'b> Context<'a, 'b> {
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<Instr> {
         let force = match wire_type {
             WireType::Nat | WireType::Bln | WireType::Int => return vec![],
-            WireType::Bin | WireType::Io => self.table().force_bin_func(),
+            WireType::Bin | WireType::Io => self.table().bin_force_func(),
             WireType::Arr(inner) => match **inner {
-                WireType::Bin | WireType::Io => self.table().force_arr_bin_func(),
-                _ => self.table().force_arr_func(),
+                WireType::Bin | WireType::Io => self.table().arr_bin_force_func(),
+                _ => self.table().arr_force_func(),
             },
         };
 
@@ -631,10 +631,10 @@ impl<'a, 'b> Context<'a, 'b> {
     fn wire_wrap_instrs(&self, wire_type: &WireType) -> Vec<Instr> {
         let wrap = match wire_type {
             WireType::Nat | WireType::Bln | WireType::Int => return vec![],
-            WireType::Bin | WireType::Io => self.table().wrap_bin_func(),
+            WireType::Bin | WireType::Io => self.table().bin_wrap_func(),
             WireType::Arr(inner) => match **inner {
-                WireType::Bin | WireType::Io => self.table().wrap_arr_bin_func(),
-                _ => self.table().wrap_arr_func(),
+                WireType::Bin | WireType::Io => self.table().arr_bin_wrap_func(),
+                _ => self.table().arr_wrap_func(),
             },
         };
 
