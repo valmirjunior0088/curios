@@ -12,6 +12,9 @@
 //! - [`scalar_eval`] — the wasm-faithful `Code` evaluator both folding and
 //!   interpretation share, generic over an [`EvalEnv`].
 //! - [`copy_propagation`] — eliminates `let x = y` renames.
+//! - [`common_subexpressions`] — rebinds a duplicate pure computation (or
+//!   aggregate construction) as an alias of its first occurrence on the same
+//!   region path, for copy propagation to collapse.
 //! - [`constant_folding`] — evaluates primitive ops on literal operands.
 //! - [`evaluate_pure_calls`] — interprets pure-callee direct/indirect calls
 //!   whose arguments are all literal, replacing them with the materialised
@@ -26,11 +29,23 @@
 //! - [`tail_recursion`] — rewrites a function whose every direct self-call is
 //!   a tail call into a loop (a header block plus backward jumps), taking it
 //!   out of the direct-call cycles that exclude it from inlining.
+//! - [`loops`] — the shared loop-shape recognizer over the headers
+//!   `tail_recursion` mints (and inlining splices intact).
+//! - [`loop_invariant_motion`] — moves a loop header's invariant computations
+//!   and allocations out to the entering region, once per entry instead of
+//!   per iteration.
+//! - [`append_builder`] — turns an `acc = concat(acc, piece)` loop into a
+//!   parts-collecting one (append a reference per step, flatten once at each
+//!   exit), and fuses straight-line concat chains — the Θ(n²)-copy string
+//!   builds become Θ(n).
 //! - [`function_inlining`] — splices a callee's body into its call sites; a
 //!   single-call-site rule unfolds any-sized callees once, and a size-bounded
 //!   multi-site rule dissolves small callees (e.g. the primitive wrappers)
 //!   at every site.
 //! - [`jump_threading`] — merges single-predecessor blocks into their predecessor.
+//! - [`jump_argument_propagation`] — substitutes a block parameter that every
+//!   edge feeds the same single value (`p = φ(v, p, …)` is `p = v`), exposing
+//!   the closures loops thread as parameters to lifting and inlining.
 //! - [`tag_threading`] — threads a jump through the tail its known argument
 //!   already decides, specializing the join block per edge: a `Match` whose arm
 //!   the edge picks, or an `Indirect` call whose callee the edge fixes to a
@@ -63,6 +78,9 @@ pub use scalar_eval::*;
 mod copy_propagation;
 pub use copy_propagation::*;
 
+mod common_subexpressions;
+pub use common_subexpressions::*;
+
 mod constant_folding;
 pub use constant_folding::*;
 
@@ -87,11 +105,23 @@ pub use closure_lifting::*;
 mod tail_recursion;
 pub use tail_recursion::*;
 
+mod loops;
+pub use loops::*;
+
+mod loop_invariant_motion;
+pub use loop_invariant_motion::*;
+
+mod append_builder;
+pub use append_builder::*;
+
 mod function_inlining;
 pub use function_inlining::*;
 
 mod jump_threading;
 pub use jump_threading::*;
+
+mod jump_argument_propagation;
+pub use jump_argument_propagation::*;
 
 mod tag_threading;
 pub use tag_threading::*;
@@ -129,8 +159,10 @@ use {super::*, curios_base::Entropy};
 ///    lifting) are all tail calls into a loop, removing it from the cycles
 ///    inlining refuses. Then single-site inlining splices each remaining
 ///    callee into its one call site; jump threading dissolves the leftover
-///    continuation blocks; a settle round (copy propagation + folding) collapses
-///    the literal arguments now sitting next to the primitive ops they feed.
+///    continuation blocks; common-subexpression elimination rebinds the
+///    duplicate computations the splices juxtaposed as aliases; a settle round
+///    (copy propagation + folding) collapses those aliases and the literal
+///    arguments now sitting next to the primitive ops they feed.
 /// 4. **Thread decided matches.** Inlining left constructor-then-eliminate
 ///    chains joined at multi-predecessor match blocks folding cannot decide
 ///    (the `Result` re-wrap in every parser combinator): known-tag threading
@@ -160,7 +192,8 @@ use {super::*, curios_base::Entropy};
 ///    shared module const, built once at startup instead of per execution.
 /// 8. **Final cleanup.** Folding's decided matches and forwarded projections
 ///    left alias bindings and single-predecessor arms behind: a second jump
-///    threading and a final copy propagation collapse them, dead-argument
+///    threading, a last common-subexpression round over the merged straight
+///    lines, and a final copy propagation collapse them, dead-argument
 ///    elimination finishes type erasure, and dead-code elimination — last, so
 ///    it sees everything — reclaims the unreferenced bindings, aggregates,
 ///    closures, and untaken arms.
@@ -193,6 +226,7 @@ pub fn optimize(module: &mut Module) {
     convert_tail_recursion(module);
     inline_calls_with(module, &entropy);
     thread_jumps(module);
+    eliminate_common_subexpressions(module);
     propagate_copies(module);
     fold_constants(module);
 
@@ -222,6 +256,11 @@ pub fn optimize(module: &mut Module) {
     thread_decided_dispatch(module);
     thread_jumps(module);
     propagate_copies(module);
+    // A converted loop threads its case closures around as header parameters
+    // — entry passes a known closure, back edges pass the parameter through —
+    // hiding them from lifting. Argument propagation substitutes them out, so
+    // the lift round below devirtualizes the loop's indirect calls too.
+    propagate_jump_arguments(module);
     // Threading monomorphized any closure-returning-match join (the erased
     // proof-convoy residue): the callee is now a single known closure per edge,
     // so a lift round rewrites the indirect call to a direct one, a dead-code
@@ -230,14 +269,36 @@ pub fn optimize(module: &mut Module) {
     lift_closures(module);
     eliminate_dead_code(module);
     inline_calls_with(module, &entropy);
+    eliminate_common_subexpressions(module);
     propagate_copies(module);
     fold_constants(module);
+
+    // 6.5. Optimize the settled loops. Inlining left the converted loops in
+    //      their final shape: chain fusion collapses the unrolled straight-line
+    //      concat towers partial evaluation exposed, the builder rewrite turns
+    //      the accumulator-concat loops into parts collection with one flatten
+    //      per exit, invariant motion pulls per-iteration work (and the
+    //      invariant closure rebuilds) out to the loop entries, and the settle
+    //      round collapses what the rewrites exposed. Runs before literal
+    //      hoisting so hoisted *closed* data continues on to a module const.
+    //      The jump threading first: the freshly inlined loop steps leave
+    //      their results behind single-predecessor resume blocks, and the
+    //      builder recognizes a step only as a local binding.
+    thread_jumps(module);
+    propagate_copies(module);
+    fuse_concat_chains(module);
+    build_append_loops(module);
+    hoist_loop_invariants(module);
+    propagate_copies(module);
+    fold_constants(module);
+    eliminate_dead_code(module);
 
     // 7. Hoist constants.
     hoist_literals(module);
 
     // 8. Final cleanup.
     thread_jumps(module);
+    eliminate_common_subexpressions(module);
     propagate_copies(module);
     eliminate_dead_arguments(module);
     eliminate_dead_code(module);

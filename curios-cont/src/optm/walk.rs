@@ -318,6 +318,21 @@ pub fn walk_region_mut(region: &mut Region, sink: &mut impl SinkMut) {
     }
 }
 
+/// Offer a single `Value`'s operands for rewriting — the mutable mirror of
+/// [`walk_value_uses`], exposed so a pass can substitute within one region's
+/// own straight line without recursing into its nested blocks (see
+/// [`append_builder`](super::append_builder)).
+pub fn walk_value_uses_mut(value: &mut Value, sink: &mut impl SinkMut) {
+    walk_value_mut(value, sink);
+}
+
+/// Offer a single `Tail`'s operands for rewriting — the mutable mirror of
+/// [`walk_tail`], with the same one-region-at-a-time motivation as
+/// [`walk_value_uses_mut`].
+pub fn walk_tail_uses_mut(tail: &mut Tail, sink: &mut impl SinkMut) {
+    walk_tail_mut(tail, sink);
+}
+
 fn walk_value_mut(value: &mut Value, sink: &mut impl SinkMut) {
     match value {
         Value::Pure(data) => walk_data_mut(data, sink),
