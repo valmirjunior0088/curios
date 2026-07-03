@@ -1,5 +1,5 @@
 use {
-    curios_abi::{mode, poll, status},
+    curios_abi::{mode, poll, status, stdio},
     num_bigint::BigUint,
     rustix::event::PollFlags,
     std::{
@@ -22,9 +22,9 @@ pub enum Io {
 
 impl Io {
     /// The well-known stdio handle tokens minted by the `/sys/Io` prelude.
-    pub const STDIN: u32 = 0;
-    pub const STDOUT: u32 = 1;
-    pub const STDERR: u32 = 2;
+    pub const STDIN: u32 = stdio::STDIN;
+    pub const STDOUT: u32 = stdio::STDOUT;
+    pub const STDERR: u32 = stdio::STDERR;
     /// The first handle token a host mints, one past the stdio tokens so a minted
     /// file or socket handle never collides with stdin/stdout/stderr; each host
     /// counts up from here with an unbounded `BigUint`.

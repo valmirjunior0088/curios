@@ -1,10 +1,10 @@
 use {
-    super::{Context, ExprEmitter, Table},
+    super::{Context, ExprEmitter, Table, arr_sub_type, bin_sub_type, cell_sub_type, flt_sub_type},
     curios_abi::WireType,
     curios_wasm::{
-        ArrayType, CompType, DataName, DataSegment, Export, Expr, FieldType, Func, FuncName,
-        FuncType, Global, GlobalType, HeapType, Import, Instr, Module, Mutability, NumType,
-        PackedType, RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
+        CompType, DataName, DataSegment, Export, Expr, FieldType, Func, FuncName, FuncType, Global,
+        GlobalType, HeapType, Import, Instr, Module, Mutability, NumType, RefType, ResultType,
+        StorageType, StructType, SubType, TypeName, ValType,
     },
     std::iter,
 };
@@ -26,19 +26,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     fn emit_bin_type(&mut self) {
-        self.module.add_type(
-            self.table.bin_type(),
-            SubType {
-                is_final: true,
-                super_types: vec![],
-                comp_type: CompType::Array(ArrayType {
-                    field_type: FieldType {
-                        storage_type: StorageType::Packed(PackedType::I8),
-                        mutability: Mutability::Var,
-                    },
-                }),
-            },
-        );
+        self.module.add_type(self.table.bin_type(), bin_sub_type());
     }
 
     /// The wasm-level type of a host-import *parameter* of the given wire
@@ -91,7 +79,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             },
         );
         self.module.add_import(
-            "env",
+            curios_abi::NAMESPACE,
             name,
             Import::Func {
                 func_name,
@@ -141,50 +129,21 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_arr_type(&mut self) {
         self.module.add_type(
             self.table.arr_type(),
-            SubType {
-                is_final: true,
-                super_types: vec![],
-                comp_type: CompType::Array(ArrayType {
-                    field_type: FieldType {
-                        storage_type: StorageType::Val(self.table.top_type(true)),
-                        mutability: self.table.arr_field_mutability(),
-                    },
-                }),
-            },
+            arr_sub_type(self.table.top_type(true)),
         );
     }
 
     fn emit_flt_type(&mut self) {
         self.module.add_type(
             self.table.flt_type(),
-            SubType {
-                is_final: true,
-                super_types: vec![],
-                comp_type: CompType::Struct(StructType::from([(
-                    self.table.special_field(),
-                    FieldType {
-                        storage_type: StorageType::Val(ValType::Num(NumType::F32)),
-                        mutability: Mutability::Const,
-                    },
-                )])),
-            },
+            flt_sub_type(self.table.special_field()),
         );
     }
 
     fn emit_cell_type(&mut self) {
         self.module.add_type(
             self.table.cell_type(),
-            SubType {
-                is_final: true,
-                super_types: vec![],
-                comp_type: CompType::Struct(StructType::from([(
-                    self.table.special_field(),
-                    FieldType {
-                        storage_type: StorageType::Val(self.table.top_type(true)),
-                        mutability: Mutability::Var,
-                    },
-                )])),
-            },
+            cell_sub_type(self.table.special_field(), self.table.top_type(true)),
         );
     }
 

@@ -30,6 +30,14 @@ use std::{
     sync::Arc,
 };
 
+/// The wasm import namespace every host function is declared under.
+pub const NAMESPACE: &str = "env";
+
+/// The exported entrypoint the runtime invokes. `cont`'s wasm emitter names
+/// every function `func/<name>` and exports the entry — always `main` — under
+/// that scheme.
+pub const MAIN_EXPORT: &str = "func/main";
+
 /// The type of one value crossing the host boundary. The whole vocabulary is
 /// six shapes; everything a host op consumes or produces is one of them.
 ///

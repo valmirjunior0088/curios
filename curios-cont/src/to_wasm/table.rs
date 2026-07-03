@@ -123,6 +123,9 @@ pub struct FuncData<'a> {
 impl<'a> FuncData<'a> {
     pub fn new(func_name: &'a crate::FuncName, func: &'a crate::Func) -> Self {
         Self {
+            // The `func/` prefix is why the exported entrypoint is
+            // `curios_abi::MAIN_EXPORT` (`func/main`): the entry is always
+            // `main`, and the export reuses the function's emitted name.
             func_name: FuncName::from(format!("func/{}", func_name)),
             params: func
                 .params
@@ -431,13 +434,6 @@ impl<'a> Table<'a> {
     pub fn tpl_field_mutability(&self) -> Mutability {
         // Tuples are never cyclic (rejected in `to_cont`), so they are never back-patched.
         self.field_mutability(false)
-    }
-
-    pub fn arr_field_mutability(&self) -> Mutability {
-        // Arrays stay mutable regardless of cyclicity: their primitives (append/concat/slice)
-        // build results with `array.new_default` + per-element `array.set`, so the element
-        // field must be writable. Only tuples and closures gain immutable fields here.
-        self.field_mutability(true)
     }
 
     pub fn envr_special_mutability(&self, arity: usize) -> Mutability {

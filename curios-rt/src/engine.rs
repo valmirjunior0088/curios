@@ -37,7 +37,8 @@ pub fn shared_engine() -> &'static Engine {
 /// section, so the two ends cannot drift (and wasmtime validates them against
 /// each other at instantiation). Scalar params cross raw `i32`, scalar results
 /// pre-boxed as i31 refs; `Bin`/`Io` are the concrete i8-array, `Arr` the
-/// anyref-element array.
+/// anyref-element array — wasmtime-universe mirrors of curios-cont's
+/// `bin_sub_type`/`arr_sub_type`; keep the two ends in sync.
 ///
 /// [`WireSignature`]: curios_abi::WireSignature
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
@@ -145,7 +146,7 @@ impl ForeignImpls {
 
         linker
             .func_new(
-                "env",
+                curios_abi::NAMESPACE,
                 name,
                 host_func_type(engine, function),
                 move |caller, params, results| trampoline(caller, params, results),
@@ -361,11 +362,12 @@ pub fn instantiate<H: Host + Send + Sync + 'static>(
     // defined, so only the functions the program calls are wired and a demand
     // the registry cannot meet is a named error.
     for import in module.imports() {
-        if import.module() != "env" {
+        if import.module() != curios_abi::NAMESPACE {
             return Err(format!(
-                "the module imports {}.{}, but host imports all live in env",
+                "the module imports {}.{}, but host imports all live in {}",
                 import.module(),
-                import.name()
+                import.name(),
+                curios_abi::NAMESPACE
             ));
         }
 
@@ -377,14 +379,19 @@ pub fn instantiate<H: Host + Send + Sync + 'static>(
                 let io_exit_type = FuncType::new(engine, [ValType::I32], []);
 
                 linker
-                    .func_new("env", "io_exit", io_exit_type, move |_caller, params, _| {
-                        let code = match params.first() {
-                            Some(wasmtime::Val::I32(code)) => *code,
-                            _ => 0,
-                        };
+                    .func_new(
+                        curios_abi::NAMESPACE,
+                        "io_exit",
+                        io_exit_type,
+                        move |_caller, params, _| {
+                            let code = match params.first() {
+                                Some(wasmtime::Val::I32(code)) => *code,
+                                _ => 0,
+                            };
 
-                        Err(wasmtime::Error::from(ExitTrap(code)))
-                    })
+                            Err(wasmtime::Error::from(ExitTrap(code)))
+                        },
+                    )
                     .map_err(|error| format!("failed to define io_exit: {error}"))?;
             }
             name => impls.link(&mut linker, engine, name)?,
@@ -398,8 +405,8 @@ pub fn instantiate<H: Host + Send + Sync + 'static>(
         .map_err(|error| format!("failed to instantiate module: {error}"))?;
 
     let function = instance
-        .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main")
-        .map_err(|error| format!("failed to access func/main: {error}"))?;
+        .get_typed_func::<(), Rooted<AnyRef>>(&mut store, curios_abi::MAIN_EXPORT)
+        .map_err(|error| format!("failed to access {}: {error}", curios_abi::MAIN_EXPORT))?;
 
     match function.call(&mut store, ()) {
         Ok(_) => Ok(0),

@@ -125,6 +125,7 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 - [x] Module system
   - [x] Private-item-in-public-interface check (signature-only; hidden `struct` fields exempt)
 - [x] Browser playground
+  - [x] Run harness owned by `curios-js` (`run`/`bridge_bytes`/`abi`, derived from `curios-abi`/`curios-cont`)
 - [ ] Developer tooling
   - [ ] Code formatter
   - [ ] Terminal REPL

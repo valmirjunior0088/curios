@@ -40,31 +40,31 @@ pub enum ValType {
     Ref(RefType),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum PackedType {
     I8,
     I16,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum StorageType {
     Val(ValType),
     Packed(PackedType),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Mutability {
     Const,
     Var,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct FieldType {
     pub storage_type: StorageType,
     pub mutability: Mutability,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ResultType {
     pub val_types: Vec<ValType>,
 }
@@ -86,7 +86,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct FuncType {
     pub inputs: ResultType,
     pub outputs: ResultType,
@@ -102,12 +102,12 @@ impl FuncType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ArrayType {
     pub field_type: FieldType,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct StructType {
     pub fields: Vec<(FieldName, FieldType)>,
 }
@@ -129,14 +129,14 @@ impl StructType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum CompType {
     Func(FuncType),
     Array(ArrayType),
     Struct(StructType),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct SubType {
     pub is_final: bool,
     pub super_types: Vec<TypeName>,

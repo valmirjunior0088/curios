@@ -1,6 +1,7 @@
-//! The numeric wire codes for `/sys/Io`'s status, poll-event, and open-mode
-//! tags. Each set is mirrored by a guest-side declaration; the runtime cites
-//! these constants when it lowers a `Status`/`Poll`/`Mode` to the wire.
+//! The numeric wire codes for `/sys/Io`'s status, poll-event, open-mode, and
+//! stdio-handle tags. Each set is mirrored by a guest-side declaration; the
+//! runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to
+//! the wire, and both ends cite [`stdio`] for the well-known handle tokens.
 
 /// Status codes of failable IO ops, mirrored by the guest's `/sys/Io/Status` and
 /// decoded into `/std/Io/Error`. `Other` carries an OS errno raw, so it has no
@@ -30,4 +31,13 @@ pub mod mode {
     pub const READ: u32 = 0;
     pub const WRITE: u32 = 1;
     pub const APPEND: u32 = 2;
+}
+
+/// The well-known stdio handle tokens minted by the `/sys/Io` prelude. A
+/// handle's wire encoding is the little-endian bytes of its token (see
+/// curios-rt's `Io::encode`), so STDIN encodes to the empty byte string.
+pub mod stdio {
+    pub const STDIN: u32 = 0;
+    pub const STDOUT: u32 = 1;
+    pub const STDERR: u32 = 2;
 }

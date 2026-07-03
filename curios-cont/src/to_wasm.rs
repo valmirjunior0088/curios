@@ -16,6 +16,9 @@ use expr_emitter::*;
 mod module_emitter;
 use module_emitter::*;
 
+mod types;
+pub use types::*;
+
 use curios_wasm::Module;
 
 pub fn to_wasm(cont_module: &crate::Module) -> Module {

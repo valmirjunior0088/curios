@@ -5,7 +5,7 @@ use {
         Term, TopConcept, TopItem, TopLet, TopMod, TopUse, TopWitness, TupleType, TupleTypeParam,
         UseGroup, WitnessEntry, WitnessField,
     },
-    curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status},
+    curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status, stdio},
     std::sync::Arc,
 };
 
@@ -479,9 +479,9 @@ fn cell_ops() -> Vec<TopItem> {
 
 fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
     let mut ops = vec![
-        pub_let("stdin", io(), prim(Prim::Io(0))),
-        pub_let("stdout", io(), prim(Prim::Io(1))),
-        pub_let("stderr", io(), prim(Prim::Io(2))),
+        pub_let("stdin", io(), prim(Prim::Io(stdio::STDIN))),
+        pub_let("stdout", io(), prim(Prim::Io(stdio::STDOUT))),
+        pub_let("stderr", io(), prim(Prim::Io(stdio::STDERR))),
         pub_fn(
             "eql",
             vec![("a", io()), ("b", io())],
