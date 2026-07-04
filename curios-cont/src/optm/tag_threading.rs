@@ -104,6 +104,13 @@ use {
 /// - **Host and call *resumes*** — the resume edge is the call protocol, not a
 ///   jump.
 /// - **Loops** — see termination above.
+/// - **Oversized clones** — a decided edge whose specialized clone measures
+///   over [`TAG_THREAD_BUDGET`] is declined: the join stays shared rather than
+///   duplicating a large decision subtree per edge (nested joins would clone
+///   what earlier threads already cloned, multiplying it). The exception is a
+///   join whose *every* predecessor edge is a deciding `Jump` — threading them
+///   all leaves the original unreferenced for dead-code elimination, so the
+///   clones are net-neutral and the budget does not apply.
 pub fn thread_decided_dispatch(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         thread_tree(&mut func.region);
@@ -112,6 +119,15 @@ pub fn thread_decided_dispatch(module: &mut Module) {
         thread_tree(&mut clsr.region);
     }
 }
+
+/// A specialized clone larger than this many region items ([`harvest::region_size`]:
+/// values + preallocs + one per tail, recursively) is declined unless the join is
+/// net-neutral (see [`net_neutral_targets`]). Deliberately larger than function
+/// inlining's Tier 2 threshold — a clone here is already pruned to one arm, and
+/// the typical `Result` re-wrap join sits well under this — while still refusing
+/// the multi-hundred-item decision trees (the UTF-8 classifier) whose per-edge
+/// duplication motivated the budget.
+const TAG_THREAD_BUDGET: usize = 24;
 
 /// Thread one edge at a time, re-harvesting literals and candidates after each
 /// splice (a spliced clone can expose the next decidable edge of a chain).
@@ -122,7 +138,13 @@ fn thread_tree(region: &mut Region) {
         let lits = literals(region);
         let candidates = deciding_blocks(region);
 
-        if candidates.is_empty() || !thread_first(region, &lits, &candidates, &mut counter) {
+        if candidates.is_empty() {
+            break;
+        }
+
+        let neutral = net_neutral_targets(region, &candidates, &lits);
+
+        if !thread_first(region, &lits, &candidates, &neutral, &mut counter) {
             break;
         }
     }
@@ -211,37 +233,89 @@ fn in_jump_cycle(start: &BlockName, graph: &JumpGraph) -> bool {
 
 // --- Threading ----------------------------------------------------------------
 
-/// Find the first `Jump` tail whose target's match its arguments decide, splice
-/// the specialized clone there, and report whether anything changed.
+/// The candidate blocks whose every predecessor edge is a `Jump` this pass
+/// decides. Only tails reference blocks, so threading all such edges leaves the
+/// original block unreferenced for dead-code elimination — the clones replace it
+/// rather than adding to it, and [`TAG_THREAD_BUDGET`] does not apply. A
+/// predecessor of any other kind (a match arm, a call/host/cell resume) is an
+/// edge threading never removes, so the original survives and every clone is
+/// pure growth.
+fn net_neutral_targets(
+    region: &Region,
+    candidates: &HashMap<BlockName, Block>,
+    lits: &Lits,
+) -> HashSet<BlockName> {
+    let mut neutral: HashSet<BlockName> = candidates.keys().cloned().collect();
+    prune_undecided_targets(region, candidates, lits, &mut neutral);
+    neutral
+}
+
+fn prune_undecided_targets(
+    region: &Region,
+    candidates: &HashMap<BlockName, Block>,
+    lits: &Lits,
+    neutral: &mut HashSet<BlockName>,
+) {
+    match &region.tail {
+        Tail::Jump(jump) => {
+            if neutral.contains(&jump.target)
+                && let Some(block) = candidates.get(&jump.target)
+                && decide_edge(block, &jump.params, lits).is_none()
+            {
+                neutral.remove(&jump.target);
+            }
+        }
+        tail => {
+            for target in tail_targets(tail) {
+                neutral.remove(target);
+            }
+        }
+    }
+
+    for (_, block) in &region.blocks {
+        prune_undecided_targets(&block.region, candidates, lits, neutral);
+    }
+}
+
+/// Find the first `Jump` tail whose target's match its arguments decide and
+/// whose specialized clone fits the budget (or is net-neutral), splice the
+/// clone there, and report whether anything changed. A declined edge does not
+/// report a change — the fixed-point loop above would spin forever — and does
+/// not consume a suffix number; the search continues past it.
 fn thread_first(
     region: &mut Region,
     lits: &Lits,
     candidates: &HashMap<BlockName, Block>,
+    neutral: &HashSet<BlockName>,
     counter: &mut usize,
 ) -> bool {
     let decided = if let Tail::Jump(jump) = &region.tail
         && let Some(block) = candidates.get(&jump.target)
     {
         decide_edge(block, &jump.params, lits)
-            .map(|decision| (block, jump.params.clone(), decision))
+            .map(|decision| (block, jump.target.clone(), jump.params.clone(), decision))
     } else {
         None
     };
 
-    if let Some((block, args, decision)) = decided {
-        *counter += 1;
-        splice_decided(
-            region,
-            block,
-            &args,
-            decision,
-            &mangle::thread_suffix(*counter),
-        );
-        return true;
+    if let Some((block, target, args, decision)) = decided {
+        let clone = decided_clone(block, decision);
+
+        if harvest::region_size(&clone) <= TAG_THREAD_BUDGET || neutral.contains(&target) {
+            *counter += 1;
+            splice_decided(
+                region,
+                block,
+                clone,
+                &args,
+                &mangle::thread_suffix(*counter),
+            );
+            return true;
+        }
     }
 
     for (_, block) in &mut region.blocks {
-        if thread_first(&mut block.region, lits, candidates, counter) {
+        if thread_first(&mut block.region, lits, candidates, neutral, counter) {
             return true;
         }
     }
@@ -309,25 +383,30 @@ fn decide_edge(block: &Block, args: &[ValueName], lits: &Lits) -> Option<Decisio
     }
 }
 
-/// Splice a clone of `block`, specialized to the `decision`, into `host` (whose
-/// tail is the jump being threaded): bind each parameter to its argument, keep
-/// the whole prelude (its traps must survive), and freshen every bound name with
-/// `suffix`. A decided `Match` has its tail replaced by the taken arm and the
-/// untaken arms pruned; a devirtualized call keeps its indirect tail, now with a
-/// monomorphic (parameter-aliased) callee.
-fn splice_decided(
-    host: &mut Region,
-    block: &Block,
-    args: &[ValueName],
-    decision: Decision,
-    suffix: &str,
-) {
+/// Build the region [`splice_decided`] splices: a clone of the candidate's,
+/// specialized to the `decision`. A decided `Match` has its tail replaced by
+/// the taken arm and the untaken arms pruned; a devirtualized call keeps its
+/// indirect tail, now monomorphic once the parameter alias lands. Built before
+/// committing so the budget measures exactly what would be spliced.
+fn decided_clone(block: &Block, decision: Decision) -> Region {
     let mut clone = block.region.clone();
     if let Decision::Arm(arm) = decision {
         clone.tail = Tail::Jump(arm);
     }
     prune_unreachable_blocks(&mut clone);
+    clone
+}
 
+/// Splice `clone` (from [`decided_clone`]) into `host` (whose tail is the jump
+/// being threaded): bind each parameter to its argument, keep the whole prelude
+/// (its traps must survive), and freshen every bound name with `suffix`.
+fn splice_decided(
+    host: &mut Region,
+    block: &Block,
+    mut clone: Region,
+    args: &[ValueName],
+    suffix: &str,
+) {
     let mut bound = harvest::bound_values(&block.region);
     bound.extend(block.params.iter().cloned());
     let bound_blocks = harvest::bound_blocks(&block.region);
@@ -857,6 +936,153 @@ mod tests {
             other => panic!("expected the default arm selected, got {other:?}"),
         }
         assert!(!has_block(a0, "s0@thread#1"));
+    }
+
+    /// An arm padded past [`TAG_THREAD_BUDGET`], so a clone containing it can
+    /// never fit the budget.
+    fn padded_arm(param: &str) -> Block {
+        let values = (0..=TAG_THREAD_BUDGET)
+            .map(|i| (v(&format!("pad{i}")), Value::Pure(Data::Nat(i as u32))))
+            .collect();
+        block(vec![], region(values, vec![], jump("rm", vec![v(param)])))
+    }
+
+    /// A join over `padded_arm`: tag 0 selects the oversized arm.
+    fn oversized_join(param: &str) -> Block {
+        block(
+            vec![v(param)],
+            region(
+                vec![(v("tag"), Value::Eval(Code::TplGet(v(param), 0)))],
+                vec![(b("s0"), padded_arm(param))],
+                match_tail("tag", vec![(0, "s0")]),
+            ),
+        )
+    }
+
+    /// An entry block whose edge decides tag 0 with a literal constructor.
+    fn deciding_entry(name_prefix: &str, join: &str) -> Block {
+        let t = format!("{name_prefix}t");
+        let r = format!("{name_prefix}r");
+        block(
+            vec![],
+            region(
+                vec![
+                    (v(&t), Value::Pure(Data::Nat(0))),
+                    (v(&r), Value::Pure(Data::Tpl(vec![v(&t)]))),
+                ],
+                vec![],
+                jump(join, vec![v(&r)]),
+            ),
+        )
+    }
+
+    /// An entry block whose edge carries a computed (undecidable) argument.
+    fn computed_entry(join: &str) -> Block {
+        block(
+            vec![],
+            region(
+                vec![(v("rX"), Value::Eval(Code::LstGet(v("lst"), v("i"))))],
+                vec![],
+                jump(join, vec![v("rX")]),
+            ),
+        )
+    }
+
+    #[test]
+    fn declines_an_oversized_clone() {
+        // a0's edge decides, but the taken arm is padded past the budget, and
+        // the computed edge keeps J referenced forever — cloning would be pure
+        // growth, so the splice is declined and the join stays shared.
+        let top = region(
+            vec![],
+            vec![
+                (b("a0"), deciding_entry("a0", "J")),
+                (b("aX"), computed_entry("J")),
+                (b("J"), oversized_join("x")),
+            ],
+            match_tail("c", vec![(0, "a0"), (1, "aX")]),
+        );
+
+        let result = run(top);
+
+        let a0 = &block_named(&result, "a0").region;
+        match &a0.tail {
+            Tail::Jump(target) => assert_eq!(target.target, b("J")),
+            other => panic!("expected the oversized splice declined, got {other:?}"),
+        }
+        assert!(a0.blocks.is_empty());
+    }
+
+    #[test]
+    fn threads_an_oversized_clone_when_every_edge_decides() {
+        // Same oversized join, but now *every* predecessor edge decides:
+        // threading them all leaves J for dead-code elimination, so the clones
+        // are net-neutral and the budget does not apply.
+        let top = region(
+            vec![],
+            vec![
+                (b("a0"), deciding_entry("a0", "J")),
+                (b("a1"), deciding_entry("a1", "J")),
+                (b("J"), oversized_join("x")),
+            ],
+            match_tail("c", vec![(0, "a0"), (1, "a1")]),
+        );
+
+        let result = run(top);
+
+        let a0 = &block_named(&result, "a0").region;
+        match &a0.tail {
+            Tail::Jump(target) => assert_eq!(target.target, b("s0@thread#1")),
+            other => panic!("expected the net-neutral splice committed, got {other:?}"),
+        }
+        assert!(has_block(a0, "s0@thread#1"));
+
+        let a1 = &block_named(&result, "a1").region;
+        match &a1.tail {
+            Tail::Jump(target) => assert_eq!(target.target, b("s0@thread#2")),
+            other => panic!("expected the second edge threaded too, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_declined_edge_does_not_consume_a_suffix() {
+        // The search reaches the declined oversized edge (a0 → J) before the
+        // small threadable one (a1 → K); the first *committed* splice must
+        // still get suffix #1.
+        let k0 = block(vec![], region(vec![], vec![], jump("rm", vec![v("y")])));
+        let join_k = block(
+            vec![v("y")],
+            region(
+                vec![(v("tagK"), Value::Eval(Code::TplGet(v("y"), 0)))],
+                vec![(b("k0"), k0)],
+                match_tail("tagK", vec![(0, "k0")]),
+            ),
+        );
+        let top = region(
+            vec![],
+            vec![
+                (b("a0"), deciding_entry("a0", "J")),
+                (b("aX"), computed_entry("J")),
+                (b("a1"), deciding_entry("a1", "K")),
+                (b("J"), oversized_join("x")),
+                (b("K"), join_k),
+            ],
+            match_tail("c", vec![(0, "a0"), (1, "aX"), (2, "a1")]),
+        );
+
+        let result = run(top);
+
+        let a0 = &block_named(&result, "a0").region;
+        match &a0.tail {
+            Tail::Jump(target) => assert_eq!(target.target, b("J")),
+            other => panic!("expected the oversized edge declined, got {other:?}"),
+        }
+
+        let a1 = &block_named(&result, "a1").region;
+        match &a1.tail {
+            Tail::Jump(target) => assert_eq!(target.target, b("k0@thread#1")),
+            other => panic!("expected the small join threaded with suffix #1, got {other:?}"),
+        }
     }
 
     fn indirect(target: &str, args: Vec<ValueName>, resume: &str) -> Tail {

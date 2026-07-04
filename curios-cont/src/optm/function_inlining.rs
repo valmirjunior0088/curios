@@ -205,21 +205,10 @@ fn pick_callee(
         .map(|(name, _)| (name.clone(), Tier::Multi))
 }
 
-/// Count the items in a function's region tree: every value and prealloc
-/// binding, plus one per tail. Cheap, monotonic, and tracks emitted code size
-/// closely enough to gate Tier 2 inlining.
+/// Count the items in a function's region tree — [`harvest::region_size`]
+/// over its body — to gate Tier 2 inlining.
 fn body_size(func: &Func) -> usize {
-    fn region_size(region: &Region) -> usize {
-        region.values.len()
-            + region.preallocs.len()
-            + 1
-            + region
-                .blocks
-                .iter()
-                .map(|(_, block)| region_size(&block.region))
-                .sum::<usize>()
-    }
-    region_size(&func.region)
+    harvest::region_size(&func.region)
 }
 
 /// The direct-call graph over `Func`s: each function's `Tail::Call(Direct)`

@@ -88,6 +88,21 @@ fn collect_bound_values(region: &Region, bound: &mut HashSet<ValueName>) {
     }
 }
 
+/// Count the items in a region tree: every value and prealloc binding, plus
+/// one per tail, recursively through nested blocks. Cheap, monotonic, and
+/// tracks emitted code size closely enough to gate size-bounded duplication —
+/// Tier 2 multi-site inlining and tag-threading clones share it.
+pub fn region_size(region: &Region) -> usize {
+    region.values.len()
+        + region.preallocs.len()
+        + 1
+        + region
+            .blocks
+            .iter()
+            .map(|(_, block)| region_size(&block.region))
+            .sum::<usize>()
+}
+
 /// Every block name *defined* in a region tree — the block-name mirror of
 /// [`bound_values`]. A block reference not in this set points outside the
 /// tree (an enclosing-scope block or a resume sentinel).
