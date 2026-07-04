@@ -71,3 +71,6 @@ pub let format(s : Str) -> format_type_with(Str, parse(s)) =
 
 pub let print(s : Str) -> format_type_with({}, parse(s)) =
     go_with({}, (x) => Io/print(x), parse(s), "");
+
+pub let print_err(s : Str) -> format_type_with({}, parse(s)) =
+    go_with({}, (x) => Io/print_err(x), parse(s), "");

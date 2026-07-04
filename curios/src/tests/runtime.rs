@@ -415,6 +415,26 @@ fn fmt_print_runtime_args_specializes_spine() {
 }
 
 #[test]
+fn fmt_print_err_formats_to_stderr() {
+    // Same staging as `Fmt/print`, routed through `Io/print_err`. MockIo
+    // captures stdout and stderr concatenated in write order, so the ordering
+    // also shows the stderr write really happened between the stdout ones.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Fmt, Io};
+        let a = Io/print("before;");
+        let b = Fmt/print_err("%s: %d;")("code")(3);
+        Io/print("after")
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"before;code: 3;after");
+}
+
+#[test]
 fn fmt_print_constant_args_collapses_at_ersd() {
     // The fully-constant case: every input to `Fmt/print` is a literal, so the
     // ersd `evaluate` pass runs the *entire* program at compile time and
