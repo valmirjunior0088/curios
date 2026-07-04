@@ -349,14 +349,69 @@ fn fmt_print_partial_evaluation_reduces_residual() {
 
     let funcs = cont_optm_funcs.expect("Stage::ContOptm observed");
     assert!(
-        funcs <= 13,
-        "expected at most 13 residual funcs after partial evaluation and \
-         size-bounded multi-site inlining, got {funcs}",
+        funcs <= 10,
+        "expected at most 10 residual funcs after ersd staging and cont \
+         partial evaluation, got {funcs}",
     );
 
     let (system, io) = MockHost::builder().stdin_lines(["Alice"]).build();
     crate::run_wasm(&wasm_module, system).expect("execution succeeded");
     assert_eq!(io.output(), b"Alice is 30");
+}
+
+#[test]
+fn fmt_print_runtime_args_specializes_spine() {
+    // The mixed case: a literal format string with runtime hole arguments.
+    // The ersd `evaluate` pass folds the parse to a constant `Fmt` spine, and
+    // `specialize` unrolls `go_with` over it — the ersd-optm module carries
+    // the minted spine items and neither the format-string parser nor the
+    // generic fold survives to codegen.
+    let source = r#"
+        use /std/{Str, Io, Bin, Fmt};
+
+        match Io/read(Io/stdin, 1024) : {}
+        | chunk(bytes) =>
+            match Str/of_bin(bytes) : {}
+            | some(s) => Fmt/print("%s is %d")(Str/trim(s))(30)
+            | none() => Io/print("invalid input")
+            end
+        | eof() => Io/print("invalid input")
+        | error(_) => Io/print("invalid input")
+        end
+        "#;
+
+    let entrypoint = source
+        .parse::<crate::text::Entrypoint>()
+        .expect("failed to parse source")
+        .with_type("()".parse().unwrap());
+
+    let mut ersd_optm = None;
+
+    let wasm_module = crate::compile_entrypoint(
+        Duration::from_secs(15),
+        &entrypoint,
+        &crate::text::NullLoader,
+        |stage| {
+            if let crate::Stage::ErsdOptm(module) = stage {
+                ersd_optm = Some(format!("{module}"));
+            }
+        },
+    )
+    .expect("compile succeeded");
+
+    let ersd = ersd_optm.expect("Stage::ErsdOptm observed");
+    assert!(
+        ersd.contains("#/std/Fmt/go_with@s0("),
+        "expected the spine-specialized fold called, got:\n{ersd}",
+    );
+    assert!(
+        !ersd.contains("parse_fmt") && !ersd.contains("rec #/std/Fmt/go_with ="),
+        "expected the parser and the generic fold pruned, got:\n{ersd}",
+    );
+
+    let (system, io) = MockHost::builder().stdin_lines(["Bob"]).build();
+    crate::run_wasm(&wasm_module, system).expect("execution succeeded");
+    assert_eq!(io.output(), b"Bob is 30");
 }
 
 #[test]

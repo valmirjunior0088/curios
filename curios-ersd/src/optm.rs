@@ -16,6 +16,9 @@
 //!   data, closures with baked captures, and tail-effect residuals replace the
 //!   computations the type checker already evaluated (`Fmt/parse` of a format
 //!   string literal, and everything downstream of it).
+//! - [`specialize`] — unrolls a recursive function over a literal constructor
+//!   spine `evaluate` produced, one minted first-order item per spine node
+//!   (`go_with` over a constant format spine becomes a straight chain).
 //! - [`worker_wrapper`] — the worker/wrapper engine: generalizes a linear non-tail
 //!   self-recursion into a tail-recursive worker behind a thin wrapper, composing a
 //!   result-side monoid accumulator and an argument-side suffix cursor.
@@ -30,6 +33,9 @@ pub use prune::*;
 
 mod evaluate;
 pub use evaluate::*;
+
+mod specialize;
+pub use specialize::*;
 
 mod worker_wrapper;
 pub use worker_wrapper::*;
@@ -51,6 +57,10 @@ pub fn optimize(module: &mut Module) {
     // closures, or tail-effect residuals. A literal format string's parse (and
     // its UTF-8 revalidation) happens here instead of at runtime.
     evaluate_closed_terms(module);
+
+    // Unroll the recursions the fold above left applied to constant spines
+    // (`go_with` over a parsed format string), one first-order item per node.
+    specialize_literal_spines(module);
 
     // The folds above drop the last references into whole subsystems (the
     // `Parse` combinator web behind a folded `Fmt/parse`); sweep again so the
