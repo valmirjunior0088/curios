@@ -61,6 +61,14 @@ pub fn capture_param(param: &ValueName, index: usize) -> ValueName {
     ValueName::from(format!("{param}@cap#{index}"))
 }
 
+/// A specialized clone's rebuilt tuple element, when the baked shape is a witness
+/// dictionary ([`specialize_calls`](super::specialize_calls)). Distinct from
+/// [`capture_param`]'s `@cap#`, so a tuple element and a closure capture minted from
+/// the same base never collide.
+pub fn element_param(param: &ValueName, index: usize) -> ValueName {
+    ValueName::from(format!("{param}@elem#{index}"))
+}
+
 /// The loop header block a converted self-tail-recursive function jumps to
 /// ([`tail_recursion`](super::tail_recursion)). One per body: conversion
 /// consumes every self-call, so a body is never converted twice.

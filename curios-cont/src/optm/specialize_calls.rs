@@ -5,14 +5,17 @@ use {
 
 /// Closure specialization — monomorphization on first-class-function arguments.
 ///
-/// Type-directed erasure flagged every parameter whose pre-erasure type was a
-/// function, a `Type`, or unit as a specialization *candidate* (`Argument::candidate`)
-/// — each a compile-time-constant shape. This pass uses that flag to clone a function
-/// per distinct shape passed into a candidate position, baking the shape into the
-/// clone so the abstract parameter becomes a statically-known value: a known closure
-/// (captures threaded through), or unit (the erasure of a `Type`/unit argument,
-/// baked as the constant `{}`). The closure case below is the motivating one; unit
-/// is the same machinery with nothing to thread.
+/// Type-directed erasure flagged every parameter whose pre-erasure type erases to a
+/// bakeable shape — a function, a `Type`, unit, or a record thereof — as a
+/// specialization *candidate* (`Argument::candidate`). This pass uses that flag to
+/// clone a function per distinct shape passed into a candidate position, baking the
+/// shape into the clone so the abstract parameter becomes a statically-known value: a
+/// known closure (captures threaded through), unit (the erasure of a `Type`/unit
+/// argument, baked as the constant `{}`), or a tuple of these — a **witness
+/// dictionary** — rebuilt from its recursively-baked elements. The closure case below
+/// is the motivating one; unit threads nothing, and a tuple recurses element by
+/// element (its `Tpl.get`s then fold to the known elements, devirtualizing each
+/// projected method).
 ///
 /// ```text
 ///   Clsr c { fields:[e], params:[x], .. }       // captures one env value
@@ -155,15 +158,21 @@ struct Specializer<'a> {
     changed: bool,
 }
 
-/// The compile-time value a candidate position resolved to — the two shapes erasure
+/// The compile-time value a candidate position resolved to — the shapes erasure
 /// leaves at a candidate parameter:
 ///
 /// - a known closure, baked by identity with its captures threaded through;
-/// - unit (`{}`), the erasure of a `Type` or unit argument, baked as a constant.
+/// - unit (`{}`), the erasure of a `Type` or unit argument, baked as a constant;
+/// - a tuple of these (a witness dictionary), baked by rebuilding it element by element.
 #[derive(Clone, PartialEq)]
 enum Shape {
     Clsr(ClsrName),
     Unit,
+    /// A record witness (a many-method concept's dictionary): a tuple of the
+    /// element shapes, baked by rebuilding the tuple from its recursively-baked
+    /// elements. `Tpl.get` of the rebuilt tuple then folds to a known element
+    /// (constant_folding), devirtualizing each projected method.
+    Tpl(Vec<Shape>),
 }
 
 impl std::fmt::Display for Shape {
@@ -171,6 +180,16 @@ impl std::fmt::Display for Shape {
         match self {
             Shape::Clsr(clsr) => write!(formatter, "{clsr}"),
             Shape::Unit => write!(formatter, "unit"),
+            Shape::Tpl(shapes) => {
+                write!(formatter, "(")?;
+                for (index, shape) in shapes.iter().enumerate() {
+                    if index > 0 {
+                        write!(formatter, ",")?;
+                    }
+                    write!(formatter, "{shape}")?;
+                }
+                write!(formatter, ")")
+            }
         }
     }
 }
@@ -264,10 +283,12 @@ fn clsr_bodies(module: &Module) -> HashMap<ClsrName, Clsr> {
 // --- Site rewriting ---------------------------------------------------------
 
 /// The statically-known value a name is bound to. A closure carries the captures to
-/// thread at the call site; unit carries nothing.
+/// thread at the call site; unit carries nothing; a tuple carries its element names
+/// (each itself a known value), so a witness dictionary resolves element by element.
 enum KnownValue {
     Clsr(ClsrName, Vec<ValueName>),
     Unit,
+    Tpl(Vec<ValueName>),
 }
 
 /// Maps a value name to the compile-time value it is statically bound to.
@@ -353,7 +374,7 @@ impl Specializer<'_> {
 
         let resolved: Vec<(usize, Shape, Vec<ValueName>)> = positions
             .iter()
-            .filter_map(|&index| resolve(known.get(captures.get(index)?)?, index, scope))
+            .filter_map(|&index| resolve(known, captures.get(index)?, index, scope))
             .collect();
 
         if resolved.is_empty() {
@@ -403,7 +424,7 @@ impl Specializer<'_> {
         // nothing for unit).
         let resolved: Vec<(usize, Shape, Vec<ValueName>)> = positions
             .iter()
-            .filter_map(|&index| resolve(known.get(&params[index])?, index, scope))
+            .filter_map(|&index| resolve(known, params.get(index)?, index, scope))
             .collect();
 
         if resolved.is_empty() {
@@ -444,16 +465,40 @@ impl Specializer<'_> {
 /// unspecialized (the site keeps referring to the closure by name). Unit threads
 /// nothing, so it is always in scope.
 fn resolve(
-    known: &KnownValue,
+    known: &Known,
+    name: &ValueName,
     index: usize,
     scope: &HashSet<ValueName>,
 ) -> Option<(usize, Shape, Vec<ValueName>)> {
-    match known {
+    let (shape, captures) = resolve_shape(known, name, scope)?;
+    Some((index, shape, captures))
+}
+
+/// Resolve a name to its bakeable `(Shape, threaded-captures)`, or `None` if it is
+/// not a statically-known value or any of its leaf-closure captures is out of scope.
+/// Recurses into a known tuple, flattening its elements' captures in field order —
+/// the same order [`bake_shape`] threads them, so call-site splices line up.
+fn resolve_shape(
+    known: &Known,
+    name: &ValueName,
+    scope: &HashSet<ValueName>,
+) -> Option<(Shape, Vec<ValueName>)> {
+    match known.get(name)? {
         KnownValue::Clsr(clsr, captures) => captures
             .iter()
             .all(|capture| scope.contains(capture))
-            .then(|| (index, Shape::Clsr(clsr.clone()), captures.clone())),
-        KnownValue::Unit => Some((index, Shape::Unit, vec![])),
+            .then(|| (Shape::Clsr(clsr.clone()), captures.clone())),
+        KnownValue::Unit => Some((Shape::Unit, vec![])),
+        KnownValue::Tpl(fields) => {
+            let mut shapes = Vec::new();
+            let mut captures = Vec::new();
+            for field in fields {
+                let (shape, element_captures) = resolve_shape(known, field, scope)?;
+                shapes.push(shape);
+                captures.extend(element_captures);
+            }
+            Some((Shape::Tpl(shapes), captures))
+        }
     }
 }
 
@@ -492,9 +537,10 @@ fn sync_preallocs(region: &mut Region, respecialized: &HashMap<ValueName, ClsrNa
 }
 
 /// Collect every binding to a bakeable compile-time value — a `let v = c{captures}`
-/// closure or a `let v = {}` unit — in the tree. Names are unique within a body and
-/// scoping is lexical, so a single tree-wide map is sound: a call can only name a
-/// value that is actually in scope at the call.
+/// closure, a `let v = {}` unit, or a `let v = (…)` tuple (a witness dictionary) — in
+/// the tree. Names are unique within a body and scoping is lexical, so a single
+/// tree-wide map is sound: a call can only name a value that is actually in scope at
+/// the call.
 fn known_values(region: &Region) -> Known {
     let mut known = Known::new();
     collect_known(region, &mut known);
@@ -512,6 +558,9 @@ fn collect_known(region: &Region, known: &mut Known) {
             }
             Value::Pure(Data::Tpl(fields)) if fields.is_empty() => {
                 known.insert(name.clone(), KnownValue::Unit);
+            }
+            Value::Pure(Data::Tpl(fields)) => {
+                known.insert(name.clone(), KnownValue::Tpl(fields.clone()));
             }
             _ => {}
         }
@@ -593,28 +642,68 @@ fn specialize_arguments(
     let mut rebinds = Vec::new();
 
     for (index, arg) in base_args.iter().enumerate() {
-        let rebind = match resolved.get(&index) {
-            None => {
-                args.push(arg.clone());
-                continue;
+        match resolved.get(&index) {
+            None => args.push(arg.clone()),
+            Some(shape) => {
+                let (threaded, binds) = bake_shape(&arg.name, shape, fields);
+                args.extend(threaded);
+                rebinds.extend(binds);
             }
-            Some(Shape::Clsr(clsr)) => {
-                let arity = fields.get(clsr).expect("specialized closure present").len();
-                let captures: Vec<ValueName> = (0..arity)
-                    .map(|field| mangle::capture_param(&arg.name, field))
-                    .collect();
-
-                // The threaded captures are plain non-candidate arguments.
-                args.extend(captures.iter().cloned().map(Argument::from));
-                Value::Pure(Data::Clsr((*clsr).clone(), captures))
-            }
-            Some(Shape::Unit) => Value::Pure(Data::Tpl(vec![])),
-        };
-
-        rebinds.push((arg.name.clone(), rebind));
+        }
     }
 
     (args, rebinds)
+}
+
+/// Reconstruct a baked shape at `target`: the threaded capture parameters the clone
+/// takes, and the rebinds that rebuild the value ahead of its first use — a known
+/// closure from its threaded captures, unit as `{}`, or a tuple from its
+/// recursively-baked elements. The rebinds are ordered so every dependency precedes
+/// its use (a tuple's elements before the tuple), and the *last* one binds `target`;
+/// auxiliary tuple elements get names derived from it. Threaded-param order matches
+/// [`resolve_shape`]'s capture flattening, so the clone's leading parameters line up
+/// with the captures spliced at each call site.
+fn bake_shape(
+    target: &ValueName,
+    shape: &Shape,
+    fields: &HashMap<ClsrName, Vec<Argument>>,
+) -> (Vec<Argument>, Vec<(ValueName, Value)>) {
+    match shape {
+        Shape::Clsr(clsr) => {
+            let arity = fields.get(clsr).expect("specialized closure present").len();
+            let captures: Vec<ValueName> = (0..arity)
+                .map(|field| mangle::capture_param(target, field))
+                .collect();
+
+            // The threaded captures are plain non-candidate arguments.
+            let threaded = captures.iter().cloned().map(Argument::from).collect();
+            let rebind = (
+                target.clone(),
+                Value::Pure(Data::Clsr(clsr.clone(), captures)),
+            );
+            (threaded, vec![rebind])
+        }
+        Shape::Unit => (
+            vec![],
+            vec![(target.clone(), Value::Pure(Data::Tpl(vec![])))],
+        ),
+        Shape::Tpl(shapes) => {
+            let mut threaded = Vec::new();
+            let mut rebinds = Vec::new();
+            let mut elements = Vec::new();
+
+            for (index, shape) in shapes.iter().enumerate() {
+                let element = mangle::element_param(target, index);
+                let (element_threaded, element_rebinds) = bake_shape(&element, shape, fields);
+                threaded.extend(element_threaded);
+                rebinds.extend(element_rebinds);
+                elements.push(element);
+            }
+
+            rebinds.push((target.clone(), Value::Pure(Data::Tpl(elements))));
+            (threaded, rebinds)
+        }
+    }
 }
 
 /// Prepend the rebinds to a clone of the base region's values, so each dropped

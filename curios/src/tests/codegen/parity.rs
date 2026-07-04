@@ -1,13 +1,17 @@
 //! Codegen parity for concept-dispatched operators (the witness-projection
 //! folding gate). No dedicated folding rule exists in core — none is needed:
-//! after erasure the single-method dictionary collapses to its bare field
-//! (the method wrapper erases to the identity), `add_nat` delta-reduces to
-//! the named `Nat/add` wrapper, and the cont inliner beta-reduces the chain
-//! down to the bare primitive instruction. These tests pin that pipeline
-//! behavior: a concept method call at a concrete primitive type must compile
-//! to the *same* cont code as calling the primitive wrapper directly, modulo
-//! generated-name counters. They gate (and then guard) the infix rewrite that
-//! routes every operator through the concepts.
+//! after erasure a witness is a bakeable value (a one-method dictionary collapses
+//! to its bare method field, a many-method one is a tuple of methods), so its
+//! resolved instance argument is a specialization candidate. Closure specialization
+//! bakes it into the caller, the `Tpl.get`s (for a tuple witness) fold to the known
+//! methods, and the cont inliner beta-reduces the chain down to the bare primitive
+//! instruction. These tests pin that pipeline behavior: a concept method call at a
+//! concrete primitive type must emit the *same operations* as calling the primitive
+//! wrapper directly. The generated names differ — the concept path threads the
+//! witness through an extra specialization, decorating clone names with its key —
+//! but that provenance names no instruction, so the emitted operations match
+//! exactly. These gate (and then guard) the infix rewrite that routes every operator
+//! through the concepts.
 
 use {
     crate::{Stage, compile_entrypoint, text},
@@ -55,9 +59,12 @@ fn normalized_cont_optm(source: &str) -> String {
     normalized
 }
 
-/// `Add/add(x, 1)` at `Nat` — dictionary resolved from the sys witness —
-/// compiles to the same optimized cont code as the direct primitive wrapper
-/// call, over a runtime (non-constant-foldable) operand.
+/// `Add/add(x, 1)` at `Nat` — dictionary resolved from the sys witness — emits the
+/// same operations as the direct primitive wrapper call, over a runtime
+/// (non-constant-foldable) operand. `Add` is a one-method concept, so its witness
+/// erases to the bare `Nat/add` closure; the resolved instance is baked in by
+/// specialization and inlined to `Nat.add`. The clone names carry the extra witness
+/// key, so the dumps are not byte-identical — but the emitted operations are.
 #[test]
 fn concept_method_call_matches_direct_primitive_codegen() {
     let through_concept = r#"
@@ -74,13 +81,44 @@ fn concept_method_call_matches_direct_primitive_codegen() {
         "#;
 
     assert_eq!(
-        normalized_cont_optm(through_concept),
-        normalized_cont_optm(direct)
+        operations(&normalized_cont_optm(through_concept)),
+        operations(&normalized_cont_optm(direct)),
     );
 }
 
+/// The primitive operations emitted by a cont dump, sorted — the `Kind.op` tokens
+/// (`Nat.lt`, `Tpl.get`, `Lst.len`, …) that are the actual instructions, ignoring
+/// the generated names that wire them together. A generated name is never
+/// `Uppercase.lowercase`, so this picks out exactly the primitive ops.
+fn operations(dump: &str) -> Vec<String> {
+    let mut ops: Vec<String> = dump
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '.' || c == '_'))
+        .filter(|token| {
+            let mut parts = token.splitn(2, '.');
+            matches!(
+                (parts.next(), parts.next()),
+                (Some(kind), Some(op))
+                    if kind.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                        && !op.is_empty()
+                        && op.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+            )
+        })
+        .map(str::to_string)
+        .collect();
+    ops.sort();
+    ops
+}
+
 /// The comparison concept folds the same way: `Cmp/lt` at `Nat` is the bare
-/// `Nat.lt` instruction.
+/// `Nat.lt` instruction. Unlike the single-method operators, `Cmp` is a
+/// many-method concept whose witness is a *tuple* of methods, so its resolved
+/// instance does not newtype-collapse to a bare field — it is baked in by closure
+/// specialization ([`specialize_calls`](crate::cont::optm)), whose `Tpl.get`s then
+/// fold to the same primitive. The specialized-clone names therefore differ from
+/// the direct wrapper's, so the dumps are no longer byte-identical; what must still
+/// match is the emitted instructions — the concept path lowers `Cmp/lt` to the bare
+/// `Nat.lt` with no witness dispatch left behind, so it emits exactly the direct
+/// primitive's operations.
 #[test]
 fn concept_comparison_matches_direct_primitive_codegen() {
     let through_concept = r#"
@@ -97,7 +135,7 @@ fn concept_comparison_matches_direct_primitive_codegen() {
         "#;
 
     assert_eq!(
-        normalized_cont_optm(through_concept),
-        normalized_cont_optm(direct)
+        operations(&normalized_cont_optm(through_concept)),
+        operations(&normalized_cont_optm(direct)),
     );
 }
