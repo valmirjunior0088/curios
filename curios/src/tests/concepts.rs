@@ -611,3 +611,69 @@ fn omitted_superclass_resolves_from_a_premise() {
 
     assert_eq!(run(source), b"true");
 }
+
+// A spread in a concept literal *copies* the anonymous superclass field from
+// the base rather than re-resolving it: `o` carries the flipped (always
+// false) equality, and the update must preserve it — table resolution would
+// find the registered `Eq2(Nat)` and answer true.
+#[test]
+fn concept_literal_spread_copies_superclass() {
+    let source = r#"
+        use /std/{Nat, Bln, Io, Str, Order};
+        pub concept Eq2(A : Type) : Type {
+            eq2(A, A) -> Bln
+        }
+        pub concept Ord2(A : Type) : Type {
+            use Eq2(A),
+            cmp2(A, A) -> Order
+        }
+        satisfy Eq2(Nat) {
+            eq2(a, b) = a == b
+        }
+        let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
+        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
+        let o2 : Ord2(Nat) = Ord2 { ..o, cmp2(a, b) = Order/gt() };
+        pub let observe(use Ord2(Nat)) -> Bln = Eq2/eq2(1, 1);
+        Io/print(Bln/to_str(observe(use o2)))
+        "#;
+
+    assert_eq!(run(source), b"false");
+}
+
+// An explicit `use <term>` entry after the spread still overrides the
+// superclass, while the plain fields copy across.
+#[test]
+fn concept_literal_spread_use_override() {
+    let source = r#"
+        use /std/{Nat, Bln, Io, Str, Order};
+        pub concept Eq2(A : Type) : Type {
+            eq2(A, A) -> Bln
+        }
+        pub concept Ord2(A : Type) : Type {
+            use Eq2(A),
+            cmp2(A, A) -> Order
+        }
+        let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
+        let straight : Eq2(Nat) = Eq2 { eq2(a, b) = true };
+        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
+        let o2 : Ord2(Nat) = Ord2 { ..o, use straight };
+        pub let observe(use Ord2(Nat)) -> Bln = Eq2/eq2(1, 1);
+        Io/print(Bln/to_str(observe(use o2)))
+        "#;
+
+    assert_eq!(run(source), b"true");
+}
+
+// A `use` entry after a spread is still only legal in concept literals.
+#[test]
+fn concept_literal_spread_use_on_non_concept_rejected() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
+        let bad = Pair { ..p, use 1 };
+        Io/print("no")
+        "#;
+
+    assert!(error(source).contains("not a concept"));
+}

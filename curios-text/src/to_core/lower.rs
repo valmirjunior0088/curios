@@ -270,8 +270,9 @@ impl<'a, 'b> Lower<'a, 'b> {
             // (qualified) struct name, the head parameters (empty → core
             // elaboration mints metavariables), and the written entries — plain
             // field values with their names (validated positionally and dropped
-            // by elaborate) and `use <term>` fills for a concept's `use`-marked
-            // positions. Construction privacy is enforced in core
+            // by elaborate), `use <term>` fills for a concept's `use`-marked
+            // positions, and a `..base` spread carrying its base. Construction
+            // privacy and spread shape are enforced in core
             // (`elaborate_struct`), alongside projection privacy.
             Subterm::StructLit(lit) => curios_core::Term::struct_entries(
                 self.resolve_name(&lit.head)?,
@@ -288,6 +289,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                         )),
                         StructLitEntry::Use(term) => {
                             Ok((curios_core::StructEntry::Use, self.term(term)?))
+                        }
+                        StructLitEntry::Spread(term) => {
+                            Ok((curios_core::StructEntry::Spread, self.term(term)?))
                         }
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
@@ -582,6 +586,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                         }
                         StructLitEntry::Use(term) => {
                             Ok((curios_core::StructEntry::Use, self.collect(term, binds)?))
+                        }
+                        StructLitEntry::Spread(term) => {
+                            Ok((curios_core::StructEntry::Spread, self.collect(term, binds)?))
                         }
                     })
                     .collect::<Result<Vec<_>, Error>>()?,

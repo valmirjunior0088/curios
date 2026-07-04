@@ -1165,6 +1165,11 @@ fn struct_round_trips() {
         "Pair(Nat, Bin) { fst = a, snd = b }",
         "Pair(Nat, ?) { fst = a, snd = b }",
         "Str { raw }",
+        "Pair { ..p }",
+        "Pair { ..p, snd = b }",
+        "Pair(Nat, ?) { ..p, fst = a }",
+        "Ord(Nat) { ..o, use my_eql }",
+        "Api { ..a, ping(x) = f(x) }",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
@@ -1316,6 +1321,39 @@ fn use_entries_are_struct_literal_only() {
     // ...but not in a tuple literal: `use` is reserved, so the tuple parser
     // cannot take it as a field, and the term fails to parse.
     assert!("(use my_eql, 2)".parse::<Term>().is_err());
+}
+
+#[test]
+fn spread_entries_are_struct_literal_only() {
+    // A `..base` spread parses as a struct-literal entry, on any head shape.
+    let term = "Pair { ..p, snd = b }".parse::<Term>().unwrap();
+    let Subterm::StructLit(StructLit { entries, .. }) = term.as_subterm() else {
+        panic!("expected a struct literal");
+    };
+    assert!(matches!(entries[0], StructLitEntry::Spread(_)));
+    assert!(matches!(entries[1], StructLitEntry::Field(_)));
+
+    let term = "Pair(Nat, Bin) { ..p }".parse::<Term>().unwrap();
+    let Subterm::StructLit(StructLit {
+        params, entries, ..
+    }) = term.as_subterm()
+    else {
+        panic!("expected a struct literal");
+    };
+    assert_eq!(params.len(), 2);
+    assert!(matches!(entries[0], StructLitEntry::Spread(_)));
+
+    // A misplaced spread still parses — position and multiplicity are
+    // rejected at elaboration, not parse (like non-concept `use` entries).
+    let term = "Pair { fst = a, ..p }".parse::<Term>().unwrap();
+    let Subterm::StructLit(StructLit { entries, .. }) = term.as_subterm() else {
+        panic!("expected a struct literal");
+    };
+    assert!(matches!(entries[1], StructLitEntry::Spread(_)));
+
+    // No tuple spread: `..` is not a term prefix, so the tuple parser
+    // cannot take it as a field, and the term fails to parse.
+    assert!("(..p, 2)".parse::<Term>().is_err());
 }
 
 #[test]

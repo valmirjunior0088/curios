@@ -200,6 +200,31 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
+    /// A `..` spread entry written anywhere but first in the literal.
+    SpreadNotFirst {
+        name: String,
+    },
+    /// More than one `..` spread entry in one literal.
+    MultipleSpreads {
+        name: String,
+    },
+    /// The base of a `..` spread is not a value of the literal's own struct.
+    SpreadBaseTypeMismatch {
+        name: String,
+        found: Box<Term>,
+    },
+    /// An unlabeled override after a `..` spread — gaps make positions
+    /// ambiguous, so every override must name its field.
+    UnlabeledSpreadOverride {
+        name: String,
+    },
+    /// Overrides after a `..` spread must be an order-preserving subsequence
+    /// of the declared fields; `label` is repeated or out of place.
+    SpreadOverrideOutOfOrder {
+        name: String,
+        label: String,
+        order: Vec<String>,
+    },
     /// Projecting a field of a struct whose representation is private, from
     /// outside the declaring module (§7).
     PrivateField {
@@ -516,6 +541,37 @@ impl Error {
         }
     }
 
+    pub fn spread_not_first<N: Into<String>>(name: N) -> Self {
+        Self::SpreadNotFirst { name: name.into() }
+    }
+
+    pub fn multiple_spreads<N: Into<String>>(name: N) -> Self {
+        Self::MultipleSpreads { name: name.into() }
+    }
+
+    pub fn spread_base_type_mismatch<N: Into<String>, T: Into<Term>>(name: N, found: T) -> Self {
+        Self::SpreadBaseTypeMismatch {
+            name: name.into(),
+            found: Box::new(found.into()),
+        }
+    }
+
+    pub fn unlabeled_spread_override<N: Into<String>>(name: N) -> Self {
+        Self::UnlabeledSpreadOverride { name: name.into() }
+    }
+
+    pub fn spread_override_out_of_order<N: Into<String>>(
+        name: N,
+        label: String,
+        order: Vec<String>,
+    ) -> Self {
+        Self::SpreadOverrideOutOfOrder {
+            name: name.into(),
+            label,
+            order,
+        }
+    }
+
     pub fn private_field<N: Into<String>, F: Into<String>>(name: N, field: F) -> Self {
         Self::PrivateField {
             name: name.into(),
@@ -750,6 +806,7 @@ impl Error {
                 out.push(expected)
             }
             Self::NotAStructType { found } => out.push(found),
+            Self::SpreadBaseTypeMismatch { found, .. } => out.push(found),
             Self::MatchCaseMissing { term, .. } => out.push(term),
             Self::UnboundVariable { term } => out.push(term),
             Self::MotiveParamMismatch { written, actual } => {
@@ -949,6 +1006,37 @@ impl fmt::Display for Error {
                     f,
                     "literal supplies {got} 'use' entr{} but concept '{name}' has only {expected} 'use' field(s)",
                     if *got == 1 { "y" } else { "ies" }
+                )
+            }
+            Error::SpreadNotFirst { name } => {
+                write!(
+                    f,
+                    "a '..' spread must be the first entry of the '{name}' literal"
+                )
+            }
+            Error::MultipleSpreads { name } => {
+                write!(
+                    f,
+                    "a struct literal takes at most one '..' spread, but the '{name}' literal has more"
+                )
+            }
+            Error::SpreadBaseTypeMismatch { name, found } => {
+                write!(
+                    f,
+                    "the '..' base of a '{name}' literal must itself be a '{name}'\n  found: {found}"
+                )
+            }
+            Error::UnlabeledSpreadOverride { name } => {
+                write!(
+                    f,
+                    "overrides after a '..' spread must be labeled ('field = value') in the '{name}' literal"
+                )
+            }
+            Error::SpreadOverrideOutOfOrder { name, label, order } => {
+                write!(
+                    f,
+                    "overrides after a '..' spread must follow '{name}''s declared field order ({}); '{label}' is repeated or out of place",
+                    order.join(", ")
                 )
             }
             Error::PrivateField { name, field } => {

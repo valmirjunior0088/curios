@@ -930,14 +930,18 @@ pub struct StructType {
 }
 
 /// One written struct-literal entry, parallel to [`Struct::fields`]: a plain
-/// positional field carrying its optional written label, or an explicit
+/// positional field carrying its optional written label, an explicit
 /// `use <term>` fill that pairs with the concept's next `use`-marked field
-/// position. Pre-elaboration metadata only, like written field names on
-/// [`Tuple`]; elaboration rebuilds the value entry-free.
+/// position, or a `..base` spread whose paired term is the base to copy the
+/// unwritten fields from (riding in `fields` keeps it visible to every term
+/// traversal). A `Spread`, if present, is `entries[0]` — enforced at
+/// elaboration, not by construction. Pre-elaboration metadata only, like
+/// written field names on [`Tuple`]; elaboration rebuilds the value entry-free.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum StructEntry {
     Field(Option<String>),
     Use,
+    Spread,
 }
 
 /// A struct value as a primitive normal form (cf. [`Variant`], no tag).

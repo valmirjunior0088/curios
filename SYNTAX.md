@@ -249,11 +249,15 @@ pub struct Token : Type { Bin }    -- opaque: representation private to this mod
 
 **Construction and projection.** Build with `Name { field = value, ... }` (or `Name(params) { ... }` when the type takes parameters); read fields with `.label` or `.0`. A function-valued field may use the definition sugar `name(args) = body` (shorthand for `name = (args) => body`), and the last field may carry a trailing comma — both also apply to tuple literals `(a = x, b = y)`.
 
+**Spread/update.** `Name { ..base, field = value, … }` copies `base` — which must itself be a `Name` — replacing the named fields. The spread must be the first entry and at most one is allowed; every override must be labeled, and overrides follow the declared field order (an order-preserving subsequence — written order stays check order, as everywhere). `Name { ..base }` is the identity copy, and the head may re-pin parameters so an update can change them — every copied field is checked against the new instantiation, so overriding a field that a copied field's type depends on is a type error unless the dependent field is overridden consistently too. There is no tuple spread.
+
 ```
 let p = Pair { fst = 1, snd = 2 };
 let sum = p.fst + p.snd;
 let fst = p.fst;                 -- bind a field via projection
 let api = Api { base = 3, bump(x) = x + 1 };   -- definition sugar
+let q = Pair { ..p, snd = 9 };                 -- update: fst copied from p
+let r : Pair(Str, Nat) = Pair { ..p, fst = "x" };   -- parameter-changing update
 ```
 
 ## Concepts, witnesses, and instance arguments
@@ -301,7 +305,7 @@ satisfy(@A : Type, use Show(A)) Show(Lst(A)) {
 
 Every concept–key pair has **at most one** witness, program-wide (global coherence, no orphan rule); a duplicate registration is a compile error wherever it is declared — module visibility never scopes the table, only names, and a witness has none. A witness keys on the concept and the tuple of *rigid heads* of the concept's input parameters (each an inductive, a struct/record, or a primitive type constructor); `out` parameters are excluded from the key and pinned by the resolved witness, and everything else is checked by unification at resolution time. For a *second* instance of the same key — a descending order, a case-insensitive equality — declare an ordinary value of the concept type (`let desc : Ord(Nat) = Ord { cmp(a, b) = … };`) and pass it where wanted with `use desc`.
 
-**`use` fields in concept literals.** A concept's `use`-marked (superclass) fields leave the positional field sequence in every literal of that concept — witness bodies included — exactly as witness slots leave the argument list at call sites. An omitted `use` field becomes a resolution goal (local binders first, then the table); an explicit fill is the entry form `use <term>`, pairing with the `use`-marked positions in declaration order. A `use` field has no label to assign by — it is either omitted or filled positionally with `use <term>` — and a `use` entry in a non-concept literal is an error. So `satisfy Ord(Nat) { cmp(a, b) = … }` resolves its `Eql(Nat)` superclass from the table, a premised `satisfy(@A : Type, use Ord(A)) Ord(Lst(A)) { … }` resolves its superclass from the premise, and `Ord { use my_eql, cmp(a, b) = … }` overrides explicitly.
+**`use` fields in concept literals.** A concept's `use`-marked (superclass) fields leave the positional field sequence in every literal of that concept — witness bodies included — exactly as witness slots leave the argument list at call sites. An omitted `use` field becomes a resolution goal (local binders first, then the table); an explicit fill is the entry form `use <term>`, pairing with the `use`-marked positions in declaration order. A `use` field has no label to assign by — it is either omitted or filled positionally with `use <term>` — and a `use` entry in a non-concept literal is an error. So `satisfy Ord(Nat) { cmp(a, b) = … }` resolves its `Eql(Nat)` superclass from the table, a premised `satisfy(@A : Type, use Ord(A)) Ord(Lst(A)) { … }` resolves its superclass from the premise, and `Ord { use my_eql, cmp(a, b) = … }` overrides explicitly. In a spread literal, `..base` *copies* the superclass fields from the base rather than re-resolving them; an explicit `use <term>` entry after the spread still overrides one.
 
 **`use` binders and arguments.** A `use` parameter is legal anywhere Π binders appear (function/`let`/`rec`/`satisfy` telescopes): `use T`, always anonymous — an instance is reached by resolution, never by name. It is filled by resolution at call sites and joins the instance scope for the body. At a call site, `use <term>` supplies one explicitly, overriding table resolution; it sits alongside `@`-arguments and plain arguments.
 

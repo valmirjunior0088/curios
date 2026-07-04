@@ -471,13 +471,18 @@ fn parse_tuple<'a>() -> Parser<'a, Term> {
     .map(Into::into)
 }
 
-// A struct-literal entry: a `use <term>` fill for a concept's `use`-marked
-// field (mirroring the call-site argument form — `use` is reserved, so it can
-// never begin a field label or value), or a plain field.
+// A struct-literal entry: a `..base` spread (no term begins with `..` — a
+// leading-dot float has a single dot — so the prefix commits), a `use <term>`
+// fill for a concept's `use`-marked field (mirroring the call-site argument
+// form — `use` is reserved, so it can never begin a field label or value), or
+// a plain field. Spread position and multiplicity are core elaboration's job.
 fn parse_struct_entry<'a>() -> Parser<'a, StructLitEntry> {
-    catch(parse_keyword("use"))
+    catch(parse_literal(".."))
         .and_keep(lazy(parse_term))
-        .map(StructLitEntry::Use)
+        .map(StructLitEntry::Spread)
+        .or(catch(parse_keyword("use"))
+            .and_keep(lazy(parse_term))
+            .map(StructLitEntry::Use))
         .or(parse_tuple_field().map(StructLitEntry::Field))
 }
 

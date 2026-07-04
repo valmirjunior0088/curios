@@ -131,11 +131,13 @@ fn print_tuple_field(field: TupleField) -> Printer<'static> {
     }
 }
 
-/// A struct-literal entry: a `use <term>` fill or a plain field.
+/// A struct-literal entry: a `..base` spread, a `use <term>` fill, or a
+/// plain field.
 fn print_struct_entry(entry: StructLitEntry) -> Printer<'static> {
     match entry {
         StructLitEntry::Field(field) => print_tuple_field(field),
         StructLitEntry::Use(term) => flat([pure("use "), print_term(term)]),
+        StructLitEntry::Spread(term) => flat([pure(".."), print_term(term)]),
     }
 }
 

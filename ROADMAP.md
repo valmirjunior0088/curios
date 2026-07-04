@@ -61,7 +61,7 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 - [x] Monadic sequencing syntax (postfix `!`, dispatched through the `/syn/Monad` concept — no `let !` header; every value body is a region)
 - [x] Field projection sugar (`.0`/`.label`; no destructuring-pattern binders)
 - [x] Function-field sugar in every field list (`name(params) -> T` in tuple types and `struct`/`record` declarations, `name(args) = body` in tuple and struct literals — the forms concept/witness bodies always had) and trailing commas in field lists
-- [ ] Struct spread/update syntax (`T { ..base, f = x }`)
+- [x] Struct spread/update syntax (`T { ..base, f = x }` — one leading spread; labeled, declaration-ordered overrides; unwritten fields copied from the base, concept superclass fields included, overridable with `use <term>`; no tuple spread)
 
 ## Optimizations
 
