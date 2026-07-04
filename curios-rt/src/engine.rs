@@ -25,6 +25,11 @@ pub fn shared_engine() -> &'static Engine {
         config.wasm_function_references(true);
         config.wasm_gc(true);
         config.wasm_tail_call(true);
+        // The collector is left at `Collector::Auto`: the workspace `wasmtime`
+        // dependency compiles in only `gc-copying`, so `Auto` resolves to the
+        // copying (semi-space) collector — bump-allocation with an in-wasm fast
+        // path, so `struct.new`/`array.new` no longer round-trip through the
+        // `gc_alloc_raw` libcall the deferred-reference-counting collector requires.
 
         Engine::new(&config).expect("failed to create wasm engine")
     });
