@@ -1,5 +1,5 @@
 //! Runtime-only curios engine: deserialize a precompiled module and run it on an
-//! embedded wasmtime, wiring the `env.io_*` host imports. This crate never names
+//! embedded wasmtime, wiring the `sys.io_*` host imports. This crate never names
 //! Cranelift or Binaryen — JIT and precompilation live in `curios`, which
 //! reuses [`shared_engine`], [`instantiate`], and [`run_bytes`] from here.
 

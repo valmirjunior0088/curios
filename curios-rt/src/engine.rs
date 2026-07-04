@@ -146,13 +146,18 @@ impl ForeignImpls {
             .foreigns
             .get(name)
             .zip(self.trampolines.get(name))
-            .ok_or_else(|| format!("no host implementation registered for env.{name}"))?;
+            .ok_or_else(|| {
+                format!(
+                    "no host implementation registered for {}.{name}",
+                    curios_abi::NAMESPACE_SYS
+                )
+            })?;
 
         let trampoline = Arc::clone(trampoline);
 
         linker
             .func_new(
-                curios_abi::NAMESPACE,
+                curios_abi::NAMESPACE_SYS,
                 name,
                 host_func_type(engine, function),
                 move |caller, params, results| trampoline(caller, params, results),
@@ -368,39 +373,51 @@ pub fn instantiate<H: Host + Send + Sync + 'static>(
     // defined, so only the functions the program calls are wired and a demand
     // the registry cannot meet is a named error.
     for import in module.imports() {
-        if import.module() != curios_abi::NAMESPACE {
-            return Err(format!(
-                "the module imports {}.{}, but host imports all live in {}",
-                import.module(),
-                import.name(),
-                curios_abi::NAMESPACE
-            ));
-        }
+        match import.module() {
+            curios_abi::NAMESPACE_SYS => match import.name() {
+                // `exit` never returns: it traps with the code, which the
+                // caller below catches. A registry trampoline cannot trap, so
+                // it is wired directly, outside the store.
+                "io_exit" => {
+                    let io_exit_type = FuncType::new(engine, [ValType::I32], []);
 
-        match import.name() {
-            // `exit` never returns: it traps with the code, which the caller
-            // below catches. A registry trampoline cannot trap, so it is wired
-            // directly, outside the store.
-            "io_exit" => {
-                let io_exit_type = FuncType::new(engine, [ValType::I32], []);
+                    linker
+                        .func_new(
+                            curios_abi::NAMESPACE_SYS,
+                            "io_exit",
+                            io_exit_type,
+                            move |_caller, params, _| {
+                                let code = match params.first() {
+                                    Some(wasmtime::Val::I32(code)) => *code,
+                                    _ => 0,
+                                };
 
-                linker
-                    .func_new(
-                        curios_abi::NAMESPACE,
-                        "io_exit",
-                        io_exit_type,
-                        move |_caller, params, _| {
-                            let code = match params.first() {
-                                Some(wasmtime::Val::I32(code)) => *code,
-                                _ => 0,
-                            };
-
-                            Err(wasmtime::Error::from(ExitTrap(code)))
-                        },
-                    )
-                    .map_err(|error| format!("failed to define io_exit: {error}"))?;
+                                Err(wasmtime::Error::from(ExitTrap(code)))
+                            },
+                        )
+                        .map_err(|error| format!("failed to define io_exit: {error}"))?;
+                }
+                name => impls.link(&mut linker, engine, name)?,
+            },
+            // No embedder can supply `env`-tier bindings yet — that's
+            // `ForeignBindings` (a later milestone); until then, a module that
+            // declares its own `foreign` function cannot run.
+            curios_abi::NAMESPACE_ENV => {
+                return Err(format!(
+                    "the module imports {}.{}, but this host provides no foreign bindings",
+                    import.module(),
+                    import.name()
+                ));
             }
-            name => impls.link(&mut linker, engine, name)?,
+            namespace => {
+                return Err(format!(
+                    "the module imports {}.{}, but host imports live in {} or {}",
+                    namespace,
+                    import.name(),
+                    curios_abi::NAMESPACE_SYS,
+                    curios_abi::NAMESPACE_ENV
+                ));
+            }
         }
     }
 

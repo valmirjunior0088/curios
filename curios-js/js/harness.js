@@ -21,8 +21,8 @@ export class ExitSignal extends Error {
  * Run a compiled program. `config` carries:
  * - `program`, `bridge`: the module bytes (the program from `compile`, the
  *   bridge from `bridge_bytes`);
- * - `namespace`, `mainExport`, `importNames`, `status`, `stdio`: the ABI
- *   facts from `abi`;
+ * - `sysNamespace`, `envNamespace`, `mainExport`, `importNames`, `status`,
+ *   `stdio`: the ABI facts from `abi`;
  * - `hooks`: optional `{ onStdout?, onStderr? }` streaming callbacks, each
  *   receiving a `Uint8Array` per write.
  *
@@ -190,8 +190,13 @@ export async function run(config) {
   });
 
   try {
+    // Nothing supplies `env`-tier (user `foreign` declaration) bindings yet —
+    // that's `ForeignBindings` (a later milestone) — so a program that
+    // declares its own foreign function fails to instantiate here with a
+    // clear missing-import error.
     const { instance } = await WebAssembly.instantiate(config.program, {
-      [config.namespace]: env,
+      [config.sysNamespace]: env,
+      [config.envNamespace]: {},
     });
 
     instance.exports[config.mainExport]();

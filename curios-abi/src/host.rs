@@ -2,36 +2,48 @@
 //! operation, from which each consumer derives its own view of the boundary.
 //!
 //! A [`ForeignFunction`] is one host call, and it is self-describing: its
-//! `name` is the wasm `env` import string (the wire-level ABI contract between
-//! the emitter and the runtime linker), and its [`WireSignature`] names the
-//! operands and results and gives each a [`WireType`]. Every host call is
-//! effectful, so reducing one at the type level is always an error — the
-//! effect cannot happen at compile time. The IR nodes carry the
-//! function as an `Arc`, so every stage reads what it needs straight off the
-//! node instead of keeping an independently hand-written spelling in lockstep:
+//! `name` is the wasm import string (under [`NAMESPACE_SYS`] for a builtin,
+//! [`NAMESPACE_ENV`] for a user's own `foreign` declaration — the wire-level
+//! ABI contract between the emitter and the runtime linker), and its
+//! [`WireSignature`] names the operands and results and gives each a
+//! [`WireType`]. Every host call is effectful, so reducing one at the type
+//! level is always an error — the effect cannot happen at compile time. The
+//! IR nodes carry the function as an `Arc`, so every stage reads what it needs
+//! straight off the node instead of keeping an independently hand-written
+//! spelling in lockstep:
 //!
-//! - the `/sys/Io` prelude declaration (surface parameter types and the named
-//!   result record the guest projects),
+//! - the `/sys/Io` prelude declaration, or a user's own `foreign` declaration
+//!   (surface parameter types and the named result record the guest projects),
 //! - the core elaborator's operand checks and result type,
-//! - the wasm emitter's `env.*` import types and call-site operand loads,
+//! - the wasm emitter's `sys.*`/`env.*` import types and call-site operand loads,
 //! - the runtime linker's `wasmtime::FuncType`s.
 //!
-//! A [`ForeignStore`] is the set of foreign functions one compilation
-//! declares. Today the only seed is [`sys_io`] — the `/sys/Io` builtins,
-//! consumable only by the standard library — created per compilation by the
-//! pipeline driver; user-declared foreign functions are future work. `exit` is
-//! deliberately absent from the store: it traps rather than returns and its
-//! guest type is the polymorphic bottom `(@A : Type) -> Nat -> A`, which a
-//! first-order [`WireSignature`] cannot express, so it stays a hardcoded
-//! primitive.
+//! A [`ForeignStore`] is the set of foreign functions declared under one
+//! tier. [`sys_io`] seeds the fixed `/sys/Io` builtin tier, consumable only by
+//! the standard library, created per compilation by the pipeline driver; a
+//! second store, accumulated from a program's own `foreign` declarations
+//! (`curios_text::prelude::foreign_signature`), holds the `env` tier. The two
+//! are never merged — which store a row lives in is what fixes its wasm
+//! namespace, not a field on the row. `exit` is deliberately absent from
+//! either store: it traps rather than returns and its guest type is the
+//! polymorphic bottom `(@A : Type) -> Nat -> A`, which a first-order
+//! [`WireSignature`] cannot express, so it stays a hardcoded primitive.
 
 use std::{
     hash::{Hash, Hasher},
     sync::Arc,
 };
 
-/// The wasm import namespace every host function is declared under.
-pub const NAMESPACE: &str = "env";
+/// The wasm import namespace the fixed `/sys/Io` builtins are declared under.
+pub const NAMESPACE_SYS: &str = "sys";
+
+/// The wasm import namespace every user-declared `foreign` function is
+/// declared under — flat, not per-module.
+pub const NAMESPACE_ENV: &str = "env";
+
+/// Reserved for a future `/syn` host boundary; `/syn` declares no foreign
+/// functions today, so nothing imports under this namespace yet.
+pub const NAMESPACE_SYN: &str = "syn";
 
 /// The exported entrypoint the runtime invokes. `cont`'s wasm emitter names
 /// every function `func/<name>` and exports the entry — always `main` — under
@@ -68,7 +80,7 @@ pub struct WireSignature {
     pub results: Vec<(String, WireType)>,
 }
 
-/// One foreign (host-provided) function. `name` is the `env` import string —
+/// One foreign (host-provided) function. `name` is the wasm import string —
 /// the wire ABI shared by the wasm emitter and the runtime linker; never
 /// change one without changing what the other end expects (the unit tests
 /// snapshot the `/sys/Io` set). `label` is the binding name the function

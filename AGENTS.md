@@ -56,7 +56,7 @@ then, in curios itself:
   → run on wasmtime via curios-rt::run_bytes  (or bundle into an executable)
 ```
 
-`curios-binaryen/binaryen/` is vendored C++ (the Binaryen wasm optimizer), linked via FFI from `curios-binaryen/src/` to optimize emitted wasm. The wasmtime engine + host stack live in `curios-rt/src/` (`run_bytes` deserializes a `.cwasm` and runs it; `instantiate` wires the `env.io_*` host imports).
+`curios-binaryen/binaryen/` is vendored C++ (the Binaryen wasm optimizer), linked via FFI from `curios-binaryen/src/` to optimize emitted wasm. The wasmtime engine + host stack live in `curios-rt/src/` (`run_bytes` deserializes a `.cwasm` and runs it; `instantiate` wires the `sys.io_*` host imports).
 
 ## Where things live
 

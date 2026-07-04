@@ -107,10 +107,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// Declare a host import: a final func type plus an `("env", name)` import
-    /// bound to `func_name`.
+    /// Declare a host import: a final func type plus a `(namespace, name)`
+    /// import bound to `func_name`.
     fn add_host_import(
         &mut self,
+        namespace: &str,
         name: &str,
         type_name: TypeName,
         func_name: FuncName,
@@ -126,7 +127,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             },
         );
         self.module.add_import(
-            curios_abi::NAMESPACE,
+            namespace,
             name,
             Import::Func {
                 func_name,
@@ -138,12 +139,24 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_sys_imports(&mut self) {
         let i32_val = ValType::Num(NumType::I32);
 
+        // `sys_io` is the fixed, developer-controlled set of `/sys/Io`
+        // builtins; a host function whose import name isn't one of its rows is
+        // a user's own `foreign` declaration. This is the only place codegen
+        // needs the distinction, so it's drawn fresh here rather than threaded
+        // in from the pipeline.
+        let sys_foreigns = curios_abi::sys_io();
+
         // The store-described imports — exactly the functions whose call sites
         // recorded themselves in the table, in import-name order.
         for function in self.table.host_funcs() {
             let signature = &function.signature;
+            let namespace = match sys_foreigns.get(&function.name) {
+                Some(_) => curios_abi::NAMESPACE_SYS,
+                None => curios_abi::NAMESPACE_ENV,
+            };
 
             self.add_host_import(
+                namespace,
                 &function.name,
                 TypeName::from(function.name.as_str()),
                 self.table.host_func(&function),
@@ -164,6 +177,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         if self.table.io_exit_used() {
             self.add_host_import(
+                curios_abi::NAMESPACE_SYS,
                 "io_exit",
                 TypeName::from("io_exit"),
                 self.table.io_exit_func().clone(),

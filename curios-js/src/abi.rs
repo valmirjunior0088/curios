@@ -37,8 +37,13 @@ pub(crate) fn abi_object() -> Object {
 
     set(
         &object,
-        "namespace",
-        &JsValue::from_str(curios_abi::NAMESPACE),
+        "sysNamespace",
+        &JsValue::from_str(curios_abi::NAMESPACE_SYS),
+    );
+    set(
+        &object,
+        "envNamespace",
+        &JsValue::from_str(curios_abi::NAMESPACE_ENV),
     );
     set(
         &object,
@@ -80,8 +85,8 @@ pub(crate) fn abi_object() -> Object {
     object
 }
 
-/// The host/guest contract as a JS object: `namespace`, `mainExport`,
-/// `importNames`, and the `status`/`stdio` code tables.
+/// The host/guest contract as a JS object: `sysNamespace`, `envNamespace`,
+/// `mainExport`, `importNames`, and the `status`/`stdio` code tables.
 #[wasm_bindgen]
 pub fn abi() -> JsValue {
     abi_object().into()

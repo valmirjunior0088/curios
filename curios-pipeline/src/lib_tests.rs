@@ -61,6 +61,36 @@ fn foreign_declaration_produces_a_wasm_import() {
     );
 }
 
+#[test]
+fn sys_and_foreign_calls_import_under_separate_namespaces() {
+    // Must actually call both — an unreferenced declaration is pruned before
+    // codegen ever sees it (see the note above).
+    let module = compile(
+        r#"
+            foreign frobnicate : (Nat) -> Nat;
+            let _ = /std/Io/write(/std/Io/stdout, \00);
+            frobnicate(5)
+        "#,
+        None,
+    )
+    .unwrap();
+
+    let imports = module.imports();
+
+    assert!(
+        imports
+            .iter()
+            .any(|(namespace, name, _)| namespace == "sys" && name == "io_write"),
+        "expected a sys.io_write import, got {imports:?}"
+    );
+    assert!(
+        imports
+            .iter()
+            .any(|(namespace, name, _)| namespace == "env" && name == "frobnicate"),
+        "expected an env.frobnicate import, got {imports:?}"
+    );
+}
+
 fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
     let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
     let mut ersd = String::new();
