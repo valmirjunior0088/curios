@@ -8,6 +8,7 @@ mod interface;
 
 use {
     super::*,
+    curios_abi::ForeignStore,
     curios_base::Entropy,
     curios_core::Bound,
     std::{
@@ -159,6 +160,9 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
             // A witness is anonymous: it declares no binding and occupies no
             // lexical scope — its backing definition gets a compiler name.
             TopItem::Witness(_) => {}
+            // A `foreign` declaration is an ordinary binding, like a `let` —
+            // it has no body of its own, but it is called the same way.
+            TopItem::Foreign(f) => info.insert_binding(f.label.clone(), f.is_pub)?,
             _ => {}
         }
     }
@@ -243,6 +247,7 @@ fn process_items(
     structures: &mut BTreeMap<String, curios_core::Structure>,
     concepts: &mut BTreeMap<String, curios_core::Concept>,
     witnesses: &mut BTreeSet<String>,
+    foreigns: &mut ForeignStore,
     modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
     for top_item in top_items {
@@ -275,6 +280,9 @@ fn process_items(
             }
             // A witness is anonymous — no binding, no scope entry.
             TopItem::Witness(_) => {}
+            TopItem::Foreign(f) => {
+                context.insert_binding(f.label.clone(), context.prefixed(&f.label))?
+            }
             _ => {}
         }
     }
@@ -297,6 +305,7 @@ fn process_items(
                         structures,
                         concepts,
                         witnesses,
+                        foreigns,
                         modules,
                     )?;
                 }
@@ -314,6 +323,7 @@ fn process_items(
                         structures,
                         concepts,
                         witnesses,
+                        foreigns,
                         modules,
                     )?;
                 }
@@ -356,6 +366,25 @@ fn process_items(
                     name: context.prefixed(&let_item.label),
                     type_,
                     body: lower.value(&let_item.signature.body())?,
+                }));
+            }
+            TopItem::Foreign(f) => {
+                // All FFI-specific bookkeeping (the `ForeignFunction`, its
+                // registration, and `host_fn`'s wire-typed signature shape)
+                // stays inside `prelude`; from here a `foreign` declaration
+                // lowers exactly like an ordinary `TopItem::Let`.
+                let signature = foreign_signature(f, foreigns)?;
+
+                let lower = Lower::new(context);
+                let type_ = lower.term(&signature.type_())?;
+                if f.is_pub {
+                    context.check_public_interface(&f.label, &type_)?;
+                }
+
+                flat_items.push(FlatItem::Let(FlatLet {
+                    name: context.prefixed(&f.label),
+                    type_,
+                    body: lower.value(&signature.body())?,
                 }));
             }
             TopItem::Rec(ls) => {
@@ -1329,7 +1358,7 @@ fn declaration(label: &str) -> TopItem {
 pub fn to_core(
     entrypoint: &Entrypoint,
     loader: &dyn Loader,
-) -> Result<(curios_core::Module, usize), Error> {
+) -> Result<(curios_core::Module, usize, ForeignStore), Error> {
     let roots = loader.roots();
 
     let entrypoint = &Entrypoint {
@@ -1357,6 +1386,11 @@ pub fn to_core(
     // `concept`/`witness` items lower.
     let mut concepts = BTreeMap::new();
     let mut witnesses = BTreeSet::new();
+    // `foreign` declarations found anywhere in this compilation's module graph
+    // (discovery above is already exhaustive over it) — separate from, and
+    // never merged with, the built-in `sys_io()` store the caller's prelude
+    // loader was built from.
+    let mut foreigns = ForeignStore::new();
 
     process_items(
         &entrypoint.module.items,
@@ -1366,6 +1400,7 @@ pub fn to_core(
         &mut structures,
         &mut concepts,
         &mut witnesses,
+        &mut foreigns,
         &modules,
     )?;
 
@@ -1399,6 +1434,7 @@ pub fn to_core(
             body: tail,
         },
         metavars.count(),
+        foreigns,
     ))
 }
 

@@ -32,17 +32,20 @@ pub fn run_wasm<H: Host + Send + Sync + 'static>(
 }
 
 /// Compile an already-parsed entrypoint under `loader` and run it.
+///
+/// Drops any `foreign` declarations' [`ForeignStore`](curios_abi::ForeignStore)
+/// — this is the fused compile-and-run convenience path with no point to hand
+/// it back to the caller; an embedder with `foreign` declarations to satisfy
+/// calls [`compile_entrypoint`] directly instead.
 pub fn run_entrypoint<H: Host + Send + Sync + 'static>(
     timeout: Duration,
     entrypoint: &text::Entrypoint,
     loader: &dyn text::Loader,
     host: H,
 ) -> Result<(), String> {
-    run_wasm(
-        &compile_entrypoint(timeout, entrypoint, loader, |_| {})?,
-        host,
-    )
-    .map(|_| ())
+    let (module, _foreigns) = compile_entrypoint(timeout, entrypoint, loader, |_| {})?;
+
+    run_wasm(&module, host).map(|_| ())
 }
 
 /// Parse `source` (no external modules) and run it.

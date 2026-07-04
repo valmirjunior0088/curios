@@ -2,8 +2,8 @@ use {
     super::{
         ConceptField, ConceptParam, Error, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
         LetSignature, Loader, Module, Name, Nat, NatLiteral, Plicity, Prim, Qualifier, Subterm,
-        Term, TopConcept, TopItem, TopLet, TopMod, TopUse, TopWitness, TupleType, TupleTypeParam,
-        UseGroup, WitnessEntry, WitnessField,
+        Term, TopConcept, TopForeign, TopItem, TopLet, TopMod, TopUse, TopWitness, TupleType,
+        TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status, stdio},
     std::sync::Arc,
@@ -160,8 +160,18 @@ fn pub_fn_marked(
     output: Term,
     body: Term,
 ) -> TopItem {
+    fn_marked(true, label, params, output, body)
+}
+
+fn fn_marked(
+    is_pub: bool,
+    label: &str,
+    params: Vec<(Plicity, &str, Term)>,
+    output: Term,
+    body: Term,
+) -> TopItem {
     TopItem::Let(TopLet {
-        is_pub: true,
+        is_pub,
         label: label.to_string(),
         signature: LetSignature::Func {
             params: params
@@ -191,11 +201,13 @@ fn wire_type(type_: &WireType) -> Term {
     }
 }
 
-/// A `/sys/Io` host-function declaration generated from a foreign-store row:
-/// parameter names/types and the result shape (unit, bare type, named record)
-/// come off the `WireSignature`, and the body bakes the generic `Foreign` prim
-/// applied to the parameter names.
-fn host_fn(function: &Arc<ForeignFunction>) -> TopItem {
+/// A host-function declaration generated from a foreign-store row: parameter
+/// names/types and the result shape (unit, bare type, named record) come off
+/// the `WireSignature`, and the body bakes the generic `Foreign` prim applied
+/// to the parameter names. Used both for `/sys/Io`'s rows (always `pub`) and,
+/// via [`foreign_signature`], for a user's own `foreign` declaration (`is_pub`
+/// follows what they wrote).
+fn host_fn(function: &Arc<ForeignFunction>, is_pub: bool) -> TopItem {
     let signature = &function.signature;
 
     let output = match signature.results.as_slice() {
@@ -209,12 +221,13 @@ fn host_fn(function: &Arc<ForeignFunction>) -> TopItem {
         ),
     };
 
-    pub_fn(
+    fn_marked(
+        is_pub,
         &function.label,
         signature
             .params
             .iter()
-            .map(|(param, type_)| (param.as_str(), wire_type(type_)))
+            .map(|(param, type_)| (Plicity::Explicit, param.as_str(), wire_type(type_)))
             .collect(),
         output,
         prim(Prim::Foreign(
@@ -226,6 +239,38 @@ fn host_fn(function: &Arc<ForeignFunction>) -> TopItem {
                 .collect(),
         )),
     )
+}
+
+/// Handle one user-written `foreign` declaration: register its
+/// [`ForeignFunction`] into the compilation's (non-`sys_io`) foreign store,
+/// and return the ordinary [`LetSignature`] `to_core` lowers it as — wire-type
+/// bookkeeping and `host_fn`'s shape stay internal to this module, so `to_core`
+/// only ever deals with the same `LetSignature` it already knows how to lower
+/// for a plain `TopItem::Let`.
+pub fn foreign_signature(
+    declaration: &TopForeign,
+    foreigns: &mut ForeignStore,
+) -> Result<LetSignature, Error> {
+    if foreigns.get(&declaration.label).is_some() {
+        return Err(Error::DuplicateForeignDeclaration {
+            label: declaration.label.clone(),
+        });
+    }
+
+    let function = ForeignFunction {
+        name: declaration.label.clone(),
+        label: declaration.label.clone(),
+        signature: declaration.signature.clone(),
+    };
+
+    foreigns.register(function.clone());
+
+    let TopItem::Let(TopLet { signature, .. }) = host_fn(&Arc::new(function), declaration.is_pub)
+    else {
+        unreachable!("host_fn always returns a TopItem::Let");
+    };
+
+    Ok(signature)
 }
 
 fn binary(label: &str, operand: Term, output: Term, ctor: fn(Term, Term) -> Prim) -> TopItem {
@@ -486,7 +531,7 @@ fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
     // lowered whole, so a top-level value `let` lands in `main`) and trip the
     // IO-at-type-level guard, while under the function abstraction the prim
     // stays unevaluated until called.
-    ops.extend(foreigns.iter().map(host_fn));
+    ops.extend(foreigns.iter().map(|function| host_fn(function, true)));
 
     ops.extend([
         // `(@A : Type) -> Nat -> A`: exit never returns, so its result type is

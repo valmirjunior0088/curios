@@ -274,7 +274,7 @@ fn proc_exit_halts_with_code() {
     .parse::<crate::text::Entrypoint>()
     .expect("failed to parse source");
 
-    let module = crate::compile_entrypoint(
+    let (module, _foreigns) = crate::compile_entrypoint(
         Duration::from_secs(10),
         &entrypoint,
         &crate::text::NullLoader,

@@ -5,9 +5,10 @@ use {
         InductiveMatch, Infix, Let, LetSignature, LoadError, LstEntry, LstMatch, Match, Module,
         Motive, Name, Nat, NatLiteral, NatMatch, NumLit, NumOp, Plicity, Prim, Proj, Qualifier,
         Radix, Rec, RecItem, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept,
-        TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField,
-        TupleType, TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
+        TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple,
+        TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
     },
+    curios_abi::{WireSignature, WireType},
     curios_base::{
         Source,
         parser::{
@@ -25,7 +26,7 @@ const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
     "let", "match", "rec", "mod", "use", "pub", "end", "false", "true", "induct", "struct",
-    "record",
+    "record", "foreign",
 ];
 
 fn parse_whitespace<'a>() -> Parser<'a, ()> {
@@ -1368,6 +1369,72 @@ fn parse_top_let<'a>() -> Parser<'a, TopItem> {
     })
 }
 
+// One of the six wire shapes, by its own closed grammar — not an ordinary
+// curios type, so this needs no name resolution: `Nat`/`Int`/`Bln`/`Bin`/`Io`
+// are literal keywords here, and `Lst(T)` recurses on the same grammar.
+fn parse_wire_type<'a>() -> Parser<'a, WireType> {
+    parse_identifier().flat_map(|name| match name {
+        "Nat" => pure(WireType::Nat),
+        "Int" => pure(WireType::Int),
+        "Bln" => pure(WireType::Bln),
+        "Bin" => pure(WireType::Bin),
+        "Io" => pure(WireType::Io),
+        "Lst" => catch(parse_literal("("))
+            .and_keep(lazy(parse_wire_type))
+            .and_drop(parse_literal(")"))
+            .map(|element| WireType::Lst(Box::new(element))),
+        other => fail(format!(
+            "expected a wire type (Nat, Int, Bln, Bin, Io, or Lst(...)), found '{other}'"
+        )),
+    })
+}
+
+// `(T, T, ...) -> T` (a foreign function) or a bare `T` (a zero-argument
+// foreign, like `sys_io`'s `io_clock_wall`). Params carry no surface label —
+// `a0`, `a1`, … name them positionally; the single result is unnamed (`_`),
+// since a `foreign` declaration has no surface syntax for a named record
+// result the way `/sys/Io`'s Rust-side rows do.
+fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
+    catch(
+        parse_literal("(")
+            .and_keep(sep_by0(parse_wire_type, || parse_literal(",")))
+            .and_drop(parse_literal(")"))
+            .and_drop(parse_literal("->")),
+    )
+    .and(lazy(parse_wire_type))
+    .map(|(params, output)| WireSignature {
+        params: params
+            .into_iter()
+            .enumerate()
+            .map(|(index, type_)| (format!("a{index}"), type_))
+            .collect(),
+        results: vec![("_".to_string(), output)],
+    })
+    .or(parse_wire_type().map(|output| WireSignature {
+        params: vec![],
+        results: vec![("_".to_string(), output)],
+    }))
+}
+
+// `foreign name : T;` — a name and a wire signature with no body, bound to a
+// host-provided implementation at link time. Mirrors `parse_top_let`, but ends
+// after the signature instead of parsing `= body`.
+fn parse_top_foreign<'a>() -> Parser<'a, TopItem> {
+    catch(parse_pub().and(parse_keyword("foreign"))).flat_map(|(is_pub, ())| {
+        parse_identifier()
+            .and_drop(parse_literal(":"))
+            .and(parse_wire_signature())
+            .and_drop(parse_literal(";"))
+            .map(move |(label, signature)| {
+                TopItem::Foreign(TopForeign {
+                    is_pub,
+                    label: label.to_string(),
+                    signature,
+                })
+            })
+    })
+}
+
 fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("rec")))
         .flat_map(|(is_pub, ())| {
@@ -1867,6 +1934,7 @@ fn parse_top_item<'a>() -> Parser<'a, TopItem> {
         .or(parse_top_inductive())
         .or(parse_top_struct())
         .or(parse_top_rec())
+        .or(parse_top_foreign())
 }
 
 impl Module {

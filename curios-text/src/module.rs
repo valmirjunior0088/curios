@@ -55,6 +55,18 @@ pub struct TopLet {
     pub signature: LetSignature,
 }
 
+/// A `foreign` declaration: a name and a wire signature, bound to a
+/// host-provided implementation at link time rather than a curios definition.
+/// `signature` is parsed directly as a [`WireSignature`] (`(Nat, Bin) -> Nat`)
+/// — a closed grammar of the six wire shapes, not an ordinary curios type —
+/// so there is no name resolution to do and no `= body` form.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopForeign {
+    pub is_pub: bool,
+    pub label: String,
+    pub signature: curios_abi::WireSignature,
+}
+
 /// One payload binder of an `induct` case. The name is optional (`success(A)`
 /// stays positional); it is required when a later payload type or the case
 /// target mentions the binder. `plicity` is the `@`-on-the-name mark (implicit
@@ -224,6 +236,7 @@ pub enum TopItem {
     Struct(TopStruct),
     Concept(TopConcept),
     Witness(TopWitness),
+    Foreign(TopForeign),
 }
 
 #[derive(Debug, Clone, PartialEq)]

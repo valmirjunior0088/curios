@@ -24,7 +24,7 @@ fn optimizes_to_a_smaller_valid_module() {
         .parse::<text::Entrypoint>()
         .expect("failed to parse source");
 
-    let module = compile_entrypoint(
+    let (module, _foreigns) = compile_entrypoint(
         Duration::from_secs(60),
         &entrypoint,
         &text::NullLoader,

@@ -4,9 +4,10 @@ use {
         FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let,
         LetSignature, LstEntry, LstMatch, Match, Module, Motive, Nat, NatLiteral, NatMatch, NumLit,
         Plicity, Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase,
-        TopConcept, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple,
-        TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
+        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness,
+        Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
     },
+    curios_abi::{WireSignature, WireType},
     curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_bigint::BigUint,
     num_traits::One,
@@ -734,6 +735,54 @@ fn print_top_let(item: TopLet) -> Printer<'static> {
     ])
 }
 
+fn print_wire_type(type_: WireType) -> Printer<'static> {
+    match type_ {
+        WireType::Nat => pure("Nat"),
+        WireType::Int => pure("Int"),
+        WireType::Bln => pure("Bln"),
+        WireType::Bin => pure("Bin"),
+        WireType::Io => pure("Io"),
+        WireType::Lst(element) => flat([pure("Lst("), print_wire_type(*element), pure(")")]),
+    }
+}
+
+// `parse_wire_signature` only ever produces exactly one, unnamed (`_`)
+// result — `foreign` has no surface syntax for `/sys/Io`'s named-record
+// results — so the sole result is always present.
+fn print_wire_signature(signature: WireSignature) -> Printer<'static> {
+    let WireSignature { params, results } = signature;
+    let output = results
+        .into_iter()
+        .next()
+        .expect("foreign has one result")
+        .1;
+
+    if params.is_empty() {
+        return print_wire_type(output);
+    }
+
+    flat([
+        pure("("),
+        sep_flat(
+            params.into_iter().map(|(_, type_)| print_wire_type(type_)),
+            || pure(", "),
+        ),
+        pure(") -> "),
+        print_wire_type(output),
+    ])
+}
+
+fn print_top_foreign(item: TopForeign) -> Printer<'static> {
+    flat([
+        print_pub(item.is_pub),
+        pure("foreign "),
+        pure(item.label),
+        pure(" : "),
+        print_wire_signature(item.signature),
+        pure(";"),
+    ])
+}
+
 fn print_top_rec(items: Vec<TopLet>) -> Printer<'static> {
     let mut iter = items.into_iter();
     let first = iter.next().unwrap();
@@ -1045,6 +1094,7 @@ fn print_top_item(item: TopItem) -> Printer<'static> {
         TopItem::Struct(s) => print_top_struct(s),
         TopItem::Concept(c) => print_top_concept(c),
         TopItem::Witness(w) => print_top_witness(w),
+        TopItem::Foreign(f) => print_top_foreign(f),
     }
 }
 

@@ -39,7 +39,10 @@ pub fn compile_file(
 ) -> Result<wasm::Module, String> {
     let (entrypoint, loader) = load(input_path)?;
 
+    // The CLI doesn't yet expose a way to supply `foreign` implementations,
+    // so its `ForeignStore` is dropped here.
     compile_entrypoint(timeout, &entrypoint, &loader, stage_printer(print))
+        .map(|(module, _foreigns)| module)
 }
 
 /// Type-check `input_path` only (the fast `check` path), printing any requested

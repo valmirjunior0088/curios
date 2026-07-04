@@ -85,6 +85,13 @@ pub enum Error {
         label: String,
         cause: Box<LoadError>,
     },
+    /// Two `foreign` declarations share a name. Unlike an ordinary private
+    /// `let`, a `foreign` declaration names a global wasm import — shadowing
+    /// is not safe even when neither declaration is `pub`, so this is checked
+    /// independently of [`Error::DuplicatePublicDeclaration`].
+    DuplicateForeignDeclaration {
+        label: String,
+    },
     Located {
         span: Span,
         error: Box<Error>,
@@ -183,6 +190,9 @@ impl fmt::Display for Error {
             }
             Error::ModuleLoadFailed { label, cause } => {
                 write!(f, "failed to load module {label}:\n{}", cause.format())
+            }
+            Error::DuplicateForeignDeclaration { label } => {
+                write!(f, "duplicate foreign declaration: {label}")
             }
             Error::Located { error, .. } => write!(f, "{error}"),
         }

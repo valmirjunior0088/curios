@@ -1,4 +1,7 @@
-use super::*;
+use {
+    super::*,
+    curios_abi::{WireSignature, WireType},
+};
 
 #[test]
 fn parse_rec_func_and_apply() {
@@ -240,6 +243,107 @@ fn parse_top_let_without_pub() {
             },
         })]
     );
+}
+
+#[test]
+fn parse_top_foreign_without_pub() {
+    assert_eq!(
+        "foreign frobnicate : (Nat, Bin) -> Nat;"
+            .parse::<Module>()
+            .unwrap()
+            .items,
+        vec![TopItem::Foreign(TopForeign {
+            is_pub: false,
+            label: "frobnicate".to_string(),
+            signature: WireSignature {
+                params: vec![
+                    ("a0".to_string(), WireType::Nat),
+                    ("a1".to_string(), WireType::Bin),
+                ],
+                results: vec![("_".to_string(), WireType::Nat)],
+            },
+        })]
+    );
+}
+
+#[test]
+fn parse_top_foreign_with_pub() {
+    assert_eq!(
+        "pub foreign frobnicate : (Nat, Bin) -> Nat;"
+            .parse::<Module>()
+            .unwrap()
+            .items,
+        vec![TopItem::Foreign(TopForeign {
+            is_pub: true,
+            label: "frobnicate".to_string(),
+            signature: WireSignature {
+                params: vec![
+                    ("a0".to_string(), WireType::Nat),
+                    ("a1".to_string(), WireType::Bin),
+                ],
+                results: vec![("_".to_string(), WireType::Nat)],
+            },
+        })]
+    );
+}
+
+#[test]
+fn parse_top_foreign_zero_arg() {
+    assert_eq!(
+        "foreign clock : Nat;".parse::<Module>().unwrap().items,
+        vec![TopItem::Foreign(TopForeign {
+            is_pub: false,
+            label: "clock".to_string(),
+            signature: WireSignature {
+                params: vec![],
+                results: vec![("_".to_string(), WireType::Nat)],
+            },
+        })]
+    );
+}
+
+#[test]
+fn parse_top_foreign_nested_lst() {
+    assert_eq!(
+        "foreign frobnicate : (Lst(Lst(Nat))) -> Bln;"
+            .parse::<Module>()
+            .unwrap()
+            .items,
+        vec![TopItem::Foreign(TopForeign {
+            is_pub: false,
+            label: "frobnicate".to_string(),
+            signature: WireSignature {
+                params: vec![(
+                    "a0".to_string(),
+                    WireType::Lst(Box::new(WireType::Lst(Box::new(WireType::Nat)))),
+                )],
+                results: vec![("_".to_string(), WireType::Bln)],
+            },
+        })]
+    );
+}
+
+#[test]
+fn parse_top_foreign_rejects_non_wire_type() {
+    assert!("foreign frobnicate : Bool;".parse::<Module>().is_err());
+}
+
+#[test]
+fn foreign_declaration_round_trips() {
+    for source in [
+        "foreign frobnicate : (Nat, Bin) -> Nat;",
+        "pub foreign frobnicate : (Nat, Bin) -> Nat;",
+        "foreign clock : Nat;",
+        "foreign frobnicate : (Lst(Lst(Nat))) -> Bln;",
+    ] {
+        let module = source.parse::<Module>().unwrap();
+
+        assert_eq!(
+            module.to_string().parse::<Module>().unwrap(),
+            module,
+            "round-trip failed for {source:?}"
+        );
+    }
 }
 
 #[test]

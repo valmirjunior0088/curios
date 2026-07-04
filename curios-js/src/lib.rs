@@ -40,7 +40,10 @@ pub fn compile(source: &str) -> Result<Vec<u8>, String> {
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
 
-    let module = compile_entrypoint(TIMEOUT, &entrypoint, &NullLoader, |_| {})?;
+    // TODO(Milestone 3): also expose the returned `ForeignStore`'s names to
+    // JS, mirroring `import_names()`, so a caller can supply `foreign`
+    // implementations.
+    let (module, _foreigns) = compile_entrypoint(TIMEOUT, &entrypoint, &NullLoader, |_| {})?;
 
     Ok(curios_wasm::to_bytes(&module))
 }

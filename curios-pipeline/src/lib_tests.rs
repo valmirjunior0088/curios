@@ -35,6 +35,30 @@ fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, Str
         &curios_text::NullLoader,
         |_| {},
     )
+    .map(|(module, _foreigns)| module)
+}
+
+#[test]
+fn foreign_declaration_produces_a_wasm_import() {
+    // Must actually call `frobnicate` — an unreferenced declaration is
+    // pruned by `curios_ersd::optm` before codegen ever sees it.
+    let module = compile(
+        r#"
+            foreign frobnicate : (Nat, Bin) -> Nat;
+            frobnicate(5, \00\01)
+        "#,
+        None,
+    )
+    .unwrap();
+
+    assert!(
+        module
+            .imports()
+            .iter()
+            .any(|(namespace, name, _)| namespace == "env" && name == "frobnicate"),
+        "expected an env.frobnicate import, got {:?}",
+        module.imports()
+    );
 }
 
 fn compile_printed_stages(source: &str) -> Result<(String, String), String> {

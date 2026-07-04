@@ -1,4 +1,7 @@
-use {curios_abi::sys_io, std::time::Duration};
+use {
+    curios_abi::{ForeignStore, sys_io},
+    std::time::Duration,
+};
 
 pub enum Stage<'a> {
     Text(&'a curios_text::Entrypoint),
@@ -34,7 +37,10 @@ fn build_prelude() -> curios_core::Module {
         .parse::<curios_text::Entrypoint>()
         .expect("the trivial prelude entrypoint parses");
 
-    let (module, metavars) = curios_text::to_core(
+    // The trivial entrypoint declares no `foreign` items, so the harvested
+    // store is always empty here — this is the fixed `sys`/`syn`/`std`
+    // prelude, cached independently of any user compilation.
+    let (module, metavars, _foreigns) = curios_text::to_core(
         &entrypoint,
         &curios_text::prelude(&sys_io(), curios_text::NullLoader),
     )
@@ -79,19 +85,22 @@ fn elaborate_and_zonk<O>(
     entrypoint: &curios_text::Entrypoint,
     loader: &dyn curios_text::Loader,
     observe: &mut O,
-) -> Result<(curios_core::Module, curios_core::Term), String>
+) -> Result<(curios_core::Module, curios_core::Term, ForeignStore), String>
 where
     O: FnMut(Stage<'_>),
 {
     observe(Stage::Text(entrypoint));
 
-    // The compilation's foreign store — today exactly the `/sys/Io` builtin
-    // set. The prelude mints the `/sys/Io` declarations from it; the rows ride
-    // the IR nodes from there, so no later stage needs the store itself.
-    let foreigns = sys_io();
+    // The built-in `/sys/Io` store: the prelude mints the `/sys/Io`
+    // declarations from it, and the rows ride the IR nodes from there, so no
+    // later stage needs *this* store back. `to_core` separately harvests any
+    // user-declared `foreign` items into its own store as it walks the
+    // program's module graph, returned below — the two are never merged into
+    // one (see `curios-abi::host`'s store-per-provenance note).
+    let sys_foreigns = sys_io();
 
-    let (lowered, metavars) =
-        curios_text::to_core(entrypoint, &curios_text::prelude(&foreigns, loader))
+    let (lowered, metavars, user_foreigns) =
+        curios_text::to_core(entrypoint, &curios_text::prelude(&sys_foreigns, loader))
             .map_err(|error| error.format())?;
 
     observe(Stage::Core(&lowered));
@@ -121,7 +130,7 @@ where
         })
         .map_err(|error| error.format_with(&lowered))?;
 
-    Ok((module, core_type))
+    Ok((module, core_type, user_foreigns))
 }
 
 /// Type-check an entrypoint and stop — the fast path for `check`. Runs only
@@ -146,11 +155,12 @@ pub fn compile_entrypoint<O>(
     entrypoint: &curios_text::Entrypoint,
     loader: &dyn curios_text::Loader,
     mut observe: O,
-) -> Result<curios_wasm::Module, String>
+) -> Result<(curios_wasm::Module, ForeignStore), String>
 where
     O: FnMut(Stage<'_>),
 {
-    let (module, core_type) = elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
+    let (module, core_type, foreigns) =
+        elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
 
     // The whole elaborated module (the entire `sys`/`syn`/`std` prelude included)
     // is erased: there is no source-level prune, so std is type-checked in full on
@@ -184,7 +194,7 @@ where
 
     observe(Stage::Wasm(&wasm_module));
 
-    Ok(wasm_module)
+    Ok((wasm_module, foreigns))
 }
 
 #[cfg(test)]

@@ -335,7 +335,7 @@ fn fmt_print_partial_evaluation_reduces_residual() {
 
     let mut cont_optm_funcs: Option<usize> = None;
 
-    let wasm_module = crate::compile_entrypoint(
+    let (wasm_module, _foreigns) = crate::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
         &crate::text::NullLoader,
@@ -387,7 +387,7 @@ fn fmt_print_runtime_args_specializes_spine() {
 
     let mut ersd_optm = None;
 
-    let wasm_module = crate::compile_entrypoint(
+    let (wasm_module, _foreigns) = crate::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
         &crate::text::NullLoader,
@@ -456,7 +456,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     let mut ersd_optm = None;
     let mut cont_optm_funcs = None;
 
-    let wasm_module = crate::compile_entrypoint(
+    let (wasm_module, _foreigns) = crate::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
         &crate::text::NullLoader,
