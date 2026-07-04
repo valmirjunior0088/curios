@@ -89,16 +89,14 @@ let content_length(body : Bin) -> Str =
     end;
 
 pub let render(request : Request) -> Bin =
-    Bin/concat(
-        Str/to_bin(Str/flatten([
-            method_str(request.method), " ", request.path, " HTTP/1.1\r\n",
-            "Host: ", request.host, "\r\n",
-            "Connection: close\r\n",
-            content_length(request.body),
-            Str/flatten(Lst/map(render_header, request.headers)),
-            "\r\n"
-        ])),
-        request.body);
+    \..Str/to_bin(Str/flatten([
+        method_str(request.method), " ", request.path, " HTTP/1.1\r\n",
+        "Host: ", request.host, "\r\n",
+        "Connection: close\r\n",
+        content_length(request.body),
+        Str/flatten(Lst/map(render_header, request.headers)),
+        "\r\n"
+    ]))\..request.body;
 
 pub record Status : Type {
     version : Str,

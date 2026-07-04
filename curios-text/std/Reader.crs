@@ -39,7 +39,7 @@ pub rec read_line : Reader(Option(Bin)) =
                 | false => ((b.0, \\), Option/some(b.1))
                 end;
             match Io/read(b.0, 4096) : {Buffer, Option(Bin)}
-            | chunk(bytes) => read_line.run((b.0, Bin/concat(b.1, bytes)))
+            | chunk(bytes) => read_line.run((b.0, \..b.1\..bytes))
             | eof() => flush()
             | error(_) => flush()
             end

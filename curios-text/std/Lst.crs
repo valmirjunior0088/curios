@@ -6,7 +6,7 @@ pub let nil(@A : Type) -> Lst(A) =
     [];
 
 pub let cons(@A : Type, x : A, l : Lst(A)) -> Lst(A) =
-    concat([x], l);
+    [x, ..l];
 
 pub let at(@T : Type, a : Lst(T), i : Nat, ok : Nat/Lt(i, len(a))) -> T =
     /sys/Lst/get(a, i);
@@ -18,7 +18,7 @@ pub let get(@T : Type, a : Lst(T), i : Nat) -> Option(T) =
     end;
 
 pub let flatten(@T : Type, parts : Lst(Lst(T))) -> Lst(T) =
-    fold(parts, [], (a, acc) => concat(acc, a));
+    fold(parts, [], (a, acc) => [..acc, ..a]);
 
 pub let fold(@T : Type, @A : Type, l : Lst(T), init : A, f : (T, A) -> A) -> A =
     let n = len(l);
@@ -65,5 +65,5 @@ pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (
 
 satisfy Monad(Lst) {
     pure(A, x) = [x],
-    bind(A, B, m, f) = fold(m, [], (x, acc) => concat(acc, f(x)))
+    bind(A, B, m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)])
 }

@@ -121,7 +121,7 @@ pub let drain(read : (Nat) -> Task(Io/Read)) -> Task(Bin) =
     rec go(acc : Bin) -> Task(Bin) =
         bind(read(4096), (r) =>
             match r : Task(Bin)
-            | chunk(bytes) => go(Bin/concat(acc, bytes))
+            | chunk(bytes) => go(\..acc\..bytes)
             | eof() => pure(acc)
             | error(_) => pure(acc)
             end);
@@ -267,10 +267,10 @@ pub let block_on(@A : Type, root : Task(A)) -> A =
                 | wait(h, ev) =>
                     Cell/set(blocked, Lst/cons(Parked { handle = h, interest = ev, resume = k, token = job.token, fins = job.fins }, Cell/get(blocked)))
                 | fork(child, ct) =>
-                    let _ = enqueue(Job { resume = k, token = job.token, fins = job.fins });
+                    let _ = enqueue(Job { ..job, resume = k });
                     enqueue(Job { resume = child, token = ct, fins = Lst/nil(@Guard) })
                 | park(reg) =>
-                    let slot : Slot = Cell/new(Option/some(@Job, Job { resume = k, token = job.token, fins = job.fins }));
+                    let slot : Slot = Cell/new(Option/some(@Job, Job { ..job, resume = k }));
                     let _ = Cell/set(parked, Lst/cons(slot, Cell/get(parked)));
                     let wake = () =>
                         match Cell/get(slot) : {}
@@ -279,11 +279,11 @@ pub let block_on(@A : Type, root : Task(A)) -> A =
                         end;
                     reg(wake)
                 | acquire(h, fin) =>
-                    serve(Job { resume = k, token = job.token, fins = Lst/cons((h, fin), job.fins) })
+                    serve(Job { ..job, resume = k, fins = Lst/cons((h, fin), job.fins) })
                 | release(h) =>
-                    serve(Job { resume = k, token = job.token, fins = release_guard(h, job.fins) })
+                    serve(Job { ..job, resume = k, fins = release_guard(h, job.fins) })
                 | defer() =>
-                    serve(Job { resume = k, token = job.token, fins = job.fins })
+                    serve(Job { ..job, resume = k })
                 end
             end
         end;

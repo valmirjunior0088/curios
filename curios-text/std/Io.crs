@@ -90,7 +90,7 @@ pub let input() -> Option(Bin) =
         | true =>
             match Option/unwrap_or(Bin/get(r.bytes, 0), 0) == '\n' : Option(Bin)
             | true => Option/some(acc)
-            | false => go(Bin/concat(acc, r.bytes))
+            | false => go(\..acc\..r.bytes)
             end
         end;
     go(\\);

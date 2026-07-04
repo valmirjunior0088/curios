@@ -4,14 +4,14 @@ use /std/{Char, Nat, Bin, Bln, Lst, Option, True, False};
 
 
 rec seq(@s : Scan, @a : Bin, @b : Bin, va : Utf8(s, a), vb : Valid(b))
-    -> Utf8(s, Bin/concat(a, b)) =
-    match va : (w : Utf8(q, x)) => Utf8(q, Bin/concat(x, b))
+    -> Utf8(s, \..a\..b) =
+    match va : (w : Utf8(q, x)) => Utf8(q, \..x\..b)
     | stop() => vb
-    | more(c, st, t, rest) => Utf8/more(c, st, Bin/concat(t, b), seq(rest, vb))
+    | more(c, st, t, rest) => Utf8/more(c, st, \..t\..b, seq(rest, vb))
     end;
 
 let concat_closed(@a : Bin, @b : Bin, va : Valid(a), vb : Valid(b))
-    -> Valid(Bin/concat(a, b)) =
+    -> Valid(\..a\..b) =
     seq(va, vb);
 
 let check(b : Bin) -> ((s : Scan) -> Option(Utf8(s, b))) =
@@ -39,7 +39,7 @@ pub let of_bin(b : Bin) -> Option(Str) =
     end;
 
 pub let concat(a : Str, b : Str) -> Str =
-    Str { bytes = Bin/concat(a.bytes, b.bytes),
+    Str { bytes = \..a.bytes\..b.bytes,
           valid = concat_closed(@a.bytes, @b.bytes, a.valid, b.valid) };
 
 rec drop_width(n : Nat, s : Scan, b : Bin) -> Nat =

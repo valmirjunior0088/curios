@@ -39,8 +39,7 @@ let escape_byte(byte : Nat) -> Bin =
 
 let encode_str(s : Str) -> Str =
     let body =
-        Bin/fold(Str/to_bin(s), \\, (byte, acc) =>
-            Bin/concat(acc, escape_byte(byte)));
+        Bin/fold(Str/to_bin(s), \\, (byte, acc) => \..acc\..escape_byte(byte));
     Str/concat(Str/concat("\"", Option/unwrap_or(Str/of_bin(body), "")), "\"");
 
 pub rec encode(v : Json) -> Str =

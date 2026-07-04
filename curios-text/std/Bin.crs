@@ -12,10 +12,10 @@ pub let get(b : Bin, i : Nat) -> Option(Nat) =
     end;
 
 pub let cons(head : Nat, tail : Bin) -> Bin =
-    concat(append(\\, head), tail);
+    \..append(\\, head)\..tail;
 
 pub let flatten(parts : Lst(Bin)) -> Bin =
-    Lst/fold(parts, \\, (b, acc) => concat(acc, b));
+    Lst/fold(parts, \\, (b, acc) => \..acc\..b);
 
 pub let fold(@A : Type, b : Bin, init : A, f : (Nat, A) -> A) -> A =
     let n = len(b);
@@ -45,4 +45,4 @@ pub let find_index(b : Bin, pred : (Nat) -> Bln) -> Option(Nat) =
 
 pub let join(sep : Bin, parts : Lst(Bin)) -> Bin =
     Lst/balanced(Lst/len(parts), \\, (i) => Option/unwrap_or(Lst/get(parts, i), \\),
-        (l, r) => concat(concat(l, sep), r));
+        (l, r) => \..l\..sep\..r);
