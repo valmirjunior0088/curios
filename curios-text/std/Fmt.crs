@@ -1,4 +1,4 @@
-use /std/{Bin, Str, Nat, Parse, Io, Bln, Result};
+use /std/{Bin, Str, Nat, Option, Io, Bln};
 
 pub induct Fmt : Type
 | nil()
@@ -15,45 +15,48 @@ pub rec format_type_with(T: Type, f: Fmt) -> Type =
     | nat(rest) => (Nat) -> format_type_with(T, rest)
     end;
 
-let is_not_pct(byte : Nat) -> Bln =
-    match byte
-    | '%' => false
-    | _ => true
+-- `parse` receives a valid `Str` and splits at ASCII '%', so the sliced
+-- segment is always valid UTF-8; the `none` arm is unreachable in practice.
+let flush(bytes : Bin, start : Nat, stop : Nat, rest : Fmt) -> Fmt =
+    match Str/of_bin(Bin/slice(bytes, start, stop))
+    | some(piece) => Fmt/lit(piece, rest)
+    | none() => Fmt/nil()
     end;
 
-rec parse_fmt : Parse(Fmt) = Parse { run(input, pos) =
-    match Nat/try_lt(pos, Bin/len(input))
-    | none() => Result/success((pos, Fmt/nil()))
+-- First-order on purpose: no combinator records, no local closures — every
+-- call is direct, so the compiler can run a literal format string's parse at
+-- compile time (and a runtime format string doesn't drag in /std/Parse).
+rec parse_at(bytes : Bin, pos : Nat) -> Fmt =
+    match Nat/try_lt(pos, Bin/len(bytes))
+    | none() => Fmt/nil()
     | some(ok) =>
-        match Bin/at(input, pos, ok) == '%'
-        | false => parse_lit.run(input, pos)
-        | true => parse_spec.run(input, pos)
+        match Bin/at(bytes, pos, ok) == '%'
+        | true => parse_spec_at(bytes, pos + 1)
+        | false => parse_lit_at(bytes, pos, pos + 1)
         end
-    end }
-and parse_spec : Parse(Fmt) =
-    Parse/or(
-        let _ = Parse/take_byte('%')!;
-        let byte = Parse/any_byte!;
-        let rest = parse_fmt!;
-        match byte : Parse(Fmt)
-        | 's' => Parse/pure(Fmt/str(rest))
-        | 'd' => Parse/pure(Fmt/nat(rest))
-        | _ => Parse/pure(rest)
-        end,
-        Parse/map((_) => Fmt/lit("%", Fmt/nil()), Parse/take_byte('%')))
-and parse_lit : Parse(Fmt) =
-    let bytes = Parse/take_while(is_not_pct)!;
-    let rest = parse_fmt!;
-    match Str/of_bin(bytes) : Parse(Fmt)
-    | some(piece) => Parse/pure(Fmt/lit(piece, rest))
-    | none() => Parse/fail("invalid UTF-8 in format string")
+    end
+and parse_spec_at(bytes : Bin, pos : Nat) -> Fmt =
+    match Nat/try_lt(pos, Bin/len(bytes))
+    | none() => Fmt/lit("%", Fmt/nil())
+    | some(ok) =>
+        match Bin/at(bytes, pos, ok)
+        | 's' => Fmt/str(parse_at(bytes, pos + 1))
+        | 'd' => Fmt/nat(parse_at(bytes, pos + 1))
+        | _ => parse_at(bytes, pos + 1)
+        end
+    end
+and parse_lit_at(bytes : Bin, start : Nat, pos : Nat) -> Fmt =
+    match Nat/try_lt(pos, Bin/len(bytes))
+    | none() => flush(bytes, start, pos, Fmt/nil())
+    | some(ok) =>
+        match Bin/at(bytes, pos, ok) == '%'
+        | true => flush(bytes, start, pos, parse_spec_at(bytes, pos + 1))
+        | false => parse_lit_at(bytes, start, pos + 1)
+        end
     end;
 
 pub let parse(s : Str) -> Fmt =
-    match Parse/run(parse_fmt, Str/to_bin(s))
-    | success(value) => value
-    | failure(_) => Fmt/nil()
-    end;
+    parse_at(Str/to_bin(s), 0);
 
 rec go_with(T : Type, finish : (Str) -> T, f : Fmt, acc : Str) -> format_type_with(T, f) =
     match f : (f) => format_type_with(T, f)
