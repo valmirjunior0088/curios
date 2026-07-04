@@ -92,6 +92,8 @@ COPY curios-cont curios-cont
 COPY curios-ersd curios-ersd
 COPY curios-core curios-core
 COPY curios-text curios-text
+COPY curios-pipeline curios-pipeline
+COPY curios-js curios-js
 COPY curios curios
 COPY curios-binaryen curios-binaryen
 COPY curios-rt curios-rt
