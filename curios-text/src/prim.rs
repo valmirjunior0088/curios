@@ -4,6 +4,29 @@ use {
     std::sync::Arc,
 };
 
+/// One entry of a list literal `[a, ..xs, b]` — a plain element, or a
+/// `..`-spread whose term contributes a whole `Lst` run. Lowering groups
+/// consecutive elements into literal chunks and splices the spreads with the
+/// n-ary `Lst/concat`; a spread-free literal lowers to a plain `Lst` exactly
+/// as before.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LstEntry {
+    Elem(Term),
+    Spread(Term),
+}
+
+/// One segment of a `Bin` literal `\00\..bytes\01` — a run of literal bytes,
+/// or a `\..`-spread whose term contributes a whole `Bin` run. The literal is
+/// a single whitespace-free lexical unit; a spread operand is a glued name
+/// path (projections included) or a parenthesized term.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BinSegment {
+    /// A run of literal bytes. Invariant (maintained by the parser): never
+    /// empty, and never adjacent to another `Bytes` run.
+    Bytes(Vec<u8>),
+    Spread(Term),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Prim {
     BlnType,
@@ -79,7 +102,7 @@ pub enum Prim {
     FltToLeBin(Term),
     FltToInt(Term),
     BinType,
-    Bin(Vec<u8>),
+    Bin(Vec<BinSegment>),
     BinLen(Term),
     BinEql(Term, Term),
     BinGet(Term, Term),
@@ -87,7 +110,7 @@ pub enum Prim {
     BinAppend(Term, Term),
     BinConcat(Term, Term),
     LstType(Term),
-    Lst(Vec<Term>),
+    Lst(Vec<LstEntry>),
     LstLen(Term, Term),
     LstGet(Term, Term, Term),
     LstSlice(Term, Term, Term, Term),

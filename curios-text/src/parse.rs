@@ -1,12 +1,12 @@
 use {
     super::{
-        Apply, BinMatch, BlnMatch, CasePayloadParam, ConceptField, ConceptParam, Entrypoint, Field,
-        Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm, InductiveMatch,
-        Infix, Let, LetSignature, LoadError, LstMatch, Match, Module, Motive, Name, Nat,
-        NatLiteral, NatMatch, NumLit, NumOp, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem,
-        StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopInduct, TopItem,
-        TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
-        TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
+        Apply, BinMatch, BinSegment, BlnMatch, CasePayloadParam, ConceptField, ConceptParam,
+        Entrypoint, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm,
+        InductiveMatch, Infix, Let, LetSignature, LoadError, LstEntry, LstMatch, Match, Module,
+        Motive, Name, Nat, NatLiteral, NatMatch, NumLit, NumOp, Plicity, Prim, Proj, Qualifier,
+        Radix, Rec, RecItem, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept,
+        TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField,
+        TupleType, TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
     },
     curios_base::{
         Source,
@@ -45,13 +45,33 @@ fn parse_literal<'a>(expected: &'static str) -> Parser<'a, ()> {
     take_exact(expected).and_drop(parse_whitespace())
 }
 
-fn parse_identifier<'a>() -> Parser<'a, &'a str> {
-    take_while(|char| CHARACTERS.contains(&char) || char.is_alphanumeric())
-        .flat_map(|identifier| match identifier.is_empty() {
+// The identifier characters alone, consuming no whitespace — the building
+// block of the tight (whitespace-free) positions like a `Bin` literal's
+// `\..` spread operand.
+fn parse_identifier_raw<'a>() -> Parser<'a, &'a str> {
+    take_while(|char| CHARACTERS.contains(&char) || char.is_alphanumeric()).flat_map(|identifier| {
+        match identifier.is_empty() {
             true => fail("Expected identifier"),
             false => pure(identifier),
-        })
-        .and_drop(parse_whitespace())
+        }
+    })
+}
+
+fn parse_identifier<'a>() -> Parser<'a, &'a str> {
+    parse_identifier_raw().and_drop(parse_whitespace())
+}
+
+fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> Parser<'a, Name> {
+    match segments
+        .iter()
+        .any(|segment| KEYWORDS.contains(&segment.as_str()))
+    {
+        true => fail(format!(
+            "path '{}' contains a reserved keyword",
+            segments.join("/")
+        )),
+        false => pure(Name::new(is_abs, Qualifier::from(segments))),
+    }
 }
 
 fn parse_name<'a>() -> Parser<'a, Name> {
@@ -68,16 +88,32 @@ fn parse_name<'a>() -> Parser<'a, Name> {
                     .map(str::to_string)
                     .collect::<Vec<_>>();
 
-                match segments
-                    .iter()
-                    .any(|segment| KEYWORDS.contains(&segment.as_str()))
-                {
-                    true => fail(format!(
-                        "path '{}' contains a reserved keyword",
-                        segments.join("/")
-                    )),
-                    false => pure(Name::new(is_abs, Qualifier::from(segments))),
-                }
+                name_from_segments(is_abs, segments)
+            }),
+    )
+    .map(|(span, name)| name.with_span(span))
+}
+
+// A strictly glued name path — no whitespace anywhere, not even trailing. The
+// tight sibling of [`parse_name`] (whose segments each eat trailing
+// whitespace, so `Foo /bar` is the path `Foo/bar` there), used where the
+// surrounding grammar is whitespace-sensitive: a `Bin` literal's `\..` spread
+// operand.
+fn parse_name_raw<'a>() -> Parser<'a, Name> {
+    spanned(
+        catch(take_exact("/"))
+            .map(|()| true)
+            .or(pure(false))
+            .and(parse_identifier_raw().and(many0(|| {
+                catch(take_exact("/").and_keep(parse_identifier_raw()))
+            })))
+            .flat_map(|(is_abs, (first, rest))| {
+                let segments = iter::once(first)
+                    .chain(rest)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>();
+
+                name_from_segments(is_abs, segments)
             }),
     )
     .map(|(span, name)| name.with_span(span))
@@ -156,13 +192,13 @@ fn parse_char_lit<'a>() -> Parser<'a, Term> {
     .map(Into::into)
 }
 
-fn parse_usize<'a>() -> Parser<'a, usize> {
-    take_while(|char: char| char.is_ascii_digit())
-        .flat_map(|digits| match digits.parse::<usize>() {
+fn parse_usize_raw<'a>() -> Parser<'a, usize> {
+    take_while(|char: char| char.is_ascii_digit()).flat_map(|digits| {
+        match digits.parse::<usize>() {
             Ok(value) => pure(value),
             Err(_) => fail("expected usize"),
-        })
-        .and_drop(parse_whitespace())
+        }
+    })
 }
 
 fn parse_radix<'a>(prefix: &'static str, radix: u32, tag: Radix) -> Parser<'a, NatLiteral> {
@@ -304,23 +340,95 @@ fn parse_string_literal<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
+// A `Bin` spread operand under the TIGHT rule: it must end without consuming
+// any whitespace, so the segment loop can require the next segment to begin
+// immediately with `\` (`\..xs \01` ends the literal at `xs`). The operand is
+// an atomic term in glued form: a name path or a parenthesized term, followed
+// by glued suffixes — projections, calls, `!` (`\..hdr.bytes`, `\..f(x)`,
+// `\..read()!`). Self-delimiting parts (a call's argument list, the parens
+// form) admit interior whitespace freely; only the operand's edges are tight,
+// with every closing delimiter matched raw. Anything else — an infix chain, a
+// lambda — takes the parenthesized form.
+fn parse_bin_spread_operand<'a>() -> Parser<'a, Term> {
+    with_span(
+        parse_name_raw()
+            .map(|name| Term::from(Subterm::Name(name)))
+            .or(take_exact("(")
+                .and_drop(parse_whitespace())
+                .and_keep(lazy(parse_term))
+                .and_drop(take_exact(")")))
+            .and(many0(parse_suffix_raw))
+            .map(|(head, suffixes)| apply_suffixes(head, suffixes)),
+    )
+}
+
+// One segment of a `Bin` literal: a literal byte, or a `\..` spread. Adjacent
+// bytes are coalesced into `BinSegment::Bytes` runs by the literal parser.
+enum RawBinSegment {
+    Byte(u8),
+    Spread(Term),
+}
+
+fn parse_bin_segment<'a>() -> Parser<'a, RawBinSegment> {
+    catch(parse_hex_byte())
+        .map(RawBinSegment::Byte)
+        // Committed after `\..`: an operand failure is fatal (no inner
+        // `catch`), so the error points at the segment rather than at
+        // whatever the surrounding grammar makes of the leftovers.
+        .or(catch(take_exact("\\..")).and_keep(
+            parse_bin_spread_operand()
+                .map_err("Expected a glued name or parenthesized term after '\\..'")
+                .map(RawBinSegment::Spread),
+        ))
+}
+
+fn coalesce_bin_segments(raw: Vec<RawBinSegment>) -> Vec<BinSegment> {
+    let mut segments = Vec::new();
+
+    for segment in raw {
+        match segment {
+            RawBinSegment::Byte(byte) => match segments.last_mut() {
+                Some(BinSegment::Bytes(run)) => run.push(byte),
+                _ => segments.push(BinSegment::Bytes(vec![byte])),
+            },
+            RawBinSegment::Spread(term) => segments.push(BinSegment::Spread(term)),
+        }
+    }
+
+    segments
+}
+
+// A `Bin` literal: `\\` (empty), or one-or-more glued segments — `\HH` bytes
+// and `\..operand` spreads. One whitespace-free lexical unit: after a spread
+// operand the literal continues only when the very next character is `\`.
 fn parse_bin_literal<'a>() -> Parser<'a, Term> {
     catch(take_exact("\\\\"))
-        .map(|()| Vec::<u8>::new())
-        .or(catch(many1(parse_hex_byte)))
+        .map(|()| Vec::new())
+        .or(catch(many1(parse_bin_segment)).map(coalesce_bin_segments))
         .and_drop(parse_whitespace())
-        .map(|bytes| Subterm::Prim(Prim::Bin(bytes)))
+        .map(|segments| Subterm::Prim(Prim::Bin(segments)))
         .map(Into::into)
 }
 
-// An array literal `[e0, e1, …]` (empty `[]`) — the native contiguous-sequence
-// sibling of the `Bin` literal `\\`. Builds a `Prim::Lst` directly (the element
-// type is an implicit the literal cannot name; core elaboration infers it).
+// One entry of an array literal: a `..` spread contributing a whole list, or
+// a plain element. Unlike the `Bin` literal, brackets and commas delimit, so
+// spreads take full terms and `[.. xs]` may be spaced (as in struct spread).
+fn parse_lst_entry<'a>() -> Parser<'a, LstEntry> {
+    catch(parse_literal(".."))
+        .and_keep(lazy(parse_term))
+        .map(LstEntry::Spread)
+        .or(lazy(parse_term).map(LstEntry::Elem))
+}
+
+// An array literal `[e0, ..rest, e1, …]` (empty `[]`) — the native
+// contiguous-sequence sibling of the `Bin` literal `\\`. Builds a `Prim::Lst`
+// directly (the element type is an implicit the literal cannot name; core
+// elaboration infers it); spreads splice in place, any position and count.
 fn parse_arr_literal<'a>() -> Parser<'a, Term> {
     catch(parse_literal("["))
-        .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+        .and_keep(sep_by0(parse_lst_entry, || parse_literal(",")))
         .and_drop(parse_literal("]"))
-        .map(|elems| Subterm::Prim(Prim::Lst(elems.into_iter().collect())))
+        .map(|entries| Subterm::Prim(Prim::Lst(entries)))
         .map(Into::into)
 }
 
@@ -1003,15 +1111,22 @@ fn parse_let<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-fn parse_proj_suffix<'a>() -> Parser<'a, Field> {
+// A glued `.index`/`.label` projection, consuming no whitespace — usable both
+// as an ordinary term suffix (via the whitespace-eating [`parse_proj_suffix`])
+// and inside the tight `Bin`-literal spread operand.
+fn parse_proj_suffix_raw<'a>() -> Parser<'a, Field> {
     catch(
         take_exact(".").and_keep(
-            parse_usize()
+            parse_usize_raw()
                 .map(Field::Index)
-                .or(parse_identifier().map(|label| Field::Label(label.to_string())))
+                .or(parse_identifier_raw().map(|label| Field::Label(label.to_string())))
                 .map_err("Expected field index or label after '.'"),
         ),
     )
+}
+
+fn parse_proj_suffix<'a>() -> Parser<'a, Field> {
+    parse_proj_suffix_raw().and_drop(parse_whitespace())
 }
 
 enum Suffix {
@@ -1045,6 +1160,31 @@ fn parse_suffix<'a>() -> Parser<'a, Suffix> {
                 .and_drop(parse_whitespace()),
         )
         .map(|()| Suffix::Bang))
+}
+
+// [`parse_suffix`] in glued form for the tight positions: no whitespace is
+// consumed after a suffix, so the caller can see whether the next characters
+// touch. A call's argument list is self-delimiting, so its interior stays
+// whitespace-friendly — only the closing `)` is matched raw.
+fn parse_suffix_raw<'a>() -> Parser<'a, Suffix> {
+    parse_proj_suffix_raw()
+        .map(Suffix::Proj)
+        .or(catch(take_exact("("))
+            .and_drop(parse_whitespace())
+            .and_keep(sep_by0(parse_apply_argument, || parse_literal(",")))
+            .and_drop(take_exact(")"))
+            .map(Suffix::Apply))
+        .or(catch(take_exact("!").and_drop(not_ahead("="))).map(|()| Suffix::Bang))
+}
+
+fn apply_suffixes(head: Term, suffixes: Vec<Suffix>) -> Term {
+    suffixes
+        .into_iter()
+        .fold(head, |head, suffix| match suffix {
+            Suffix::Proj(field) => Subterm::Proj(Proj { head, field }).into(),
+            Suffix::Apply(params) => Subterm::Apply(Apply { head, params }).into(),
+            Suffix::Bang => Subterm::Bang(head).into(),
+        })
 }
 
 fn parse_empty_tuple<'a>() -> Parser<'a, Term> {
@@ -1087,15 +1227,7 @@ fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
             .or(parse_parens())
             .or(parse_name().map(|n| Subterm::Name(n).into()))
             .and(many0(parse_suffix))
-            .map(|(head, suffixes): (Term, _)| {
-                suffixes
-                    .into_iter()
-                    .fold(head, |head, suffix| match suffix {
-                        Suffix::Proj(field) => Subterm::Proj(Proj { head, field }).into(),
-                        Suffix::Apply(params) => Subterm::Apply(Apply { head, params }).into(),
-                        Suffix::Bang => Subterm::Bang(head).into(),
-                    })
-            }),
+            .map(|(head, suffixes): (Term, _)| apply_suffixes(head, suffixes)),
     )
 }
 

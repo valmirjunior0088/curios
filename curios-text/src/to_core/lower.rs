@@ -1,8 +1,8 @@
 use {
     super::Context,
     crate::{
-        BinMatch, Error, Field, Let, LstMatch, Match, Motive, Name, Nat, NatLiteral, NatMatch,
-        Prim, Rec, StructLitEntry, Subterm, Syn, Term,
+        BinMatch, BinSegment, Error, Field, Let, LstEntry, LstMatch, Match, Motive, Name, Nat,
+        NatLiteral, NatMatch, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     num_bigint::BigUint,
     std::{cell::RefCell, collections::BTreeSet, sync::Arc},
@@ -600,15 +600,16 @@ impl<'a, 'b> Lower<'a, 'b> {
                 self.collect(&infix.left, binds)?,
                 self.collect(&infix.right, binds)?,
             ),
-            // An array literal's elements hoist their bangs into this region,
-            // like an application's arguments.
-            Subterm::Prim(Prim::Lst(elems)) => {
-                let elems = elems
-                    .iter()
-                    .map(|elem| self.collect(elem, binds))
-                    .collect::<Result<Vec<_>, Error>>()?;
-                curios_core::Term::prim(curios_core::Prim::Lst(elems))
-            }
+            // An array literal's elements and spread operands hoist their
+            // bangs into this region, like an application's arguments.
+            Subterm::Prim(Prim::Lst(entries)) => curios_core::Term::prim(
+                self.lower_lst_literal(entries, |term| self.collect(term, binds))?,
+            ),
+            // A `Bin` literal's spread operands hoist likewise (a spread-free
+            // `Bin` has no subterms and lowers unchanged).
+            Subterm::Prim(Prim::Bin(segments)) => curios_core::Term::prim(
+                self.lower_bin_literal(segments, |term| self.collect(term, binds))?,
+            ),
             // A `let`/`match` sub-expression hoists its bound-expression /
             // scrutinee bangs into the enclosing region (this `binds`).
             Subterm::Let(let_) => self.build_let(let_, binds)?,
@@ -937,6 +938,90 @@ impl<'a, 'b> Lower<'a, 'b> {
         self.inductive_match(head, motive, cases)
     }
 
+    /// Lowers a list literal's entries. A spread-free literal lowers to a
+    /// plain `Lst` — exactly the pre-spread lowering, `[]` included. With
+    /// spreads, consecutive elements group into `Lst` literal chunks and the
+    /// whole literal becomes an n-ary `LstConcat`; its element-type slot is a
+    /// fresh metavar (an implicit the literal cannot name), solved by
+    /// elaboration — bidirectionally from the expected type when checking
+    /// (see the `LstConcat` case in `curios_core`'s `elaborate_prim`).
+    /// `lower` is the per-term lowering — [`Self::term`] on the plain path,
+    /// the bang-collector on the region path — so both share this grouping.
+    fn lower_lst_literal(
+        &self,
+        entries: &[LstEntry],
+        mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Prim, Error> {
+        let mut operands = Vec::new();
+        let mut run = Vec::new();
+
+        for entry in entries {
+            match entry {
+                LstEntry::Elem(term) => run.push(lower(term)?),
+                LstEntry::Spread(term) => {
+                    if !run.is_empty() {
+                        operands.push(curios_core::Term::prim(curios_core::Prim::Lst(
+                            std::mem::take(&mut run),
+                        )));
+                    }
+
+                    operands.push(lower(term)?);
+                }
+            }
+        }
+
+        if operands.is_empty() {
+            return Ok(curios_core::Prim::Lst(run));
+        }
+
+        if !run.is_empty() {
+            operands.push(curios_core::Term::prim(curios_core::Prim::Lst(run)));
+        }
+
+        Ok(curios_core::Prim::LstConcat(
+            curios_core::Term::metavar(self.context.fresh_metavar()),
+            operands,
+        ))
+    }
+
+    /// The `Bin` sibling of [`Self::lower_lst_literal`]: a spread-free literal
+    /// lowers to a plain `Bin`, and spreads splice their byte runs into an
+    /// n-ary `BinConcat` (no element-type slot — the bytes are `Bin`'s own).
+    fn lower_bin_literal(
+        &self,
+        segments: &[BinSegment],
+        mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Prim, Error> {
+        if segments
+            .iter()
+            .all(|segment| matches!(segment, BinSegment::Bytes(_)))
+        {
+            // Zero or one run in practice (the parser coalesces); flattening
+            // keeps this robust for hand-built literals too.
+            let bytes = segments
+                .iter()
+                .flat_map(|segment| match segment {
+                    BinSegment::Bytes(run) => run.iter().copied(),
+                    BinSegment::Spread(_) => unreachable!("all segments are byte runs"),
+                })
+                .collect();
+
+            return Ok(curios_core::Prim::Bin(bytes));
+        }
+
+        let operands = segments
+            .iter()
+            .map(|segment| match segment {
+                BinSegment::Bytes(run) => {
+                    Ok(curios_core::Term::prim(curios_core::Prim::Bin(run.clone())))
+                }
+                BinSegment::Spread(term) => lower(term),
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        Ok(curios_core::Prim::BinConcat(operands))
+    }
+
     pub fn prim(&self, prim: &Prim) -> Result<curios_core::Prim, Error> {
         Ok(match prim {
             Prim::BlnType => curios_core::Prim::BlnType,
@@ -1132,8 +1217,8 @@ impl<'a, 'b> Lower<'a, 'b> {
             Prim::FltToNat(inner) => curios_core::Prim::flt_to_nat(self.term(inner)?),
             Prim::FltToInt(inner) => curios_core::Prim::flt_to_int(self.term(inner)?),
             Prim::BinType => curios_core::Prim::BinType,
-            // `\hex` is a raw byte sequence.
-            Prim::Bin(bytes) => curios_core::Prim::Bin(bytes.clone()),
+            // `\hex` is a raw byte sequence; `\..` segments splice other `Bin`s.
+            Prim::Bin(segments) => self.lower_bin_literal(segments, |term| self.term(term))?,
             Prim::BinLen(inner) => curios_core::Prim::bin_len(self.term(inner)?),
             Prim::BinEql(left, right) => {
                 curios_core::Prim::bin_eql(self.term(left)?, self.term(right)?)
@@ -1151,13 +1236,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                 curios_core::Prim::bin_concat([self.term(left)?, self.term(right)?])
             }
             Prim::LstType(inner) => curios_core::Prim::lst_type(self.term(inner)?),
-            Prim::Lst(elems) => {
-                curios_core::Prim::Lst(elems.iter().map(|elem| self.term(elem)).collect::<Result<
-                    Vec<_>,
-                    Error,
-                >>(
-                )?)
-            }
+            Prim::Lst(entries) => self.lower_lst_literal(entries, |term| self.term(term))?,
             Prim::LstLen(ty, inner) => {
                 curios_core::Prim::lst_len(self.term(ty)?, self.term(inner)?)
             }

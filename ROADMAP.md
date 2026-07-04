@@ -62,6 +62,7 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 - [x] Field projection sugar (`.0`/`.label`; no destructuring-pattern binders)
 - [x] Function-field sugar in every field list (`name(params) -> T` in tuple types and `struct`/`record` declarations, `name(args) = body` in tuple and struct literals — the forms concept/witness bodies always had) and trailing commas in field lists
 - [x] Struct spread/update syntax (`T { ..base, f = x }` — one leading spread; labeled, declaration-ordered overrides; unwritten fields copied from the base, concept superclass fields included, overridable with `use <term>`; no tuple spread)
+- [x] List/bytestring spread syntax (`[a, ..xs, b]`, `\00\..bytes\01` — positional splices, any position/count, desugared to the n-ary concat prims; `Bin` literals stay whitespace-free with glued atomic operands; no tuple/string spread)
 
 ## Optimizations
 

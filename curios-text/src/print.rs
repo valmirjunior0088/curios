@@ -1,17 +1,66 @@
 use {
     super::{
-        Apply, BinMatch, BlnMatch, ConceptField, ConceptParam, Entrypoint, Field, Func,
+        Apply, BinMatch, BinSegment, BlnMatch, ConceptField, ConceptParam, Entrypoint, Field, Func,
         FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let,
-        LetSignature, LstMatch, Match, Module, Motive, Nat, NatLiteral, NatMatch, NumLit, Plicity,
-        Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept,
-        TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField,
-        TupleType, TupleTypeParam, UseGroup, WitnessEntry,
+        LetSignature, LstEntry, LstMatch, Match, Module, Motive, Nat, NatLiteral, NatMatch, NumLit,
+        Plicity, Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase,
+        TopConcept, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple,
+        TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
     num_bigint::BigUint,
     num_traits::One,
     std::fmt::{Display, Formatter, Result},
 };
+
+/// A `Bin` spread operand under the TIGHT grammar: a suffix chain —
+/// projections, calls, `!` — bottoming out at a `Name` re-parses
+/// unparenthesized, but only printed GLUED (`hdr.bytes`, `f(x)`, `read()!`):
+/// `print_term`'s `(head).field` projection and `(term)!` bang forms would
+/// end the literal at their `)`. Anything else is wrapped in parens, matching
+/// the `\..(term)` operand form.
+fn print_bin_spread_operand(term: Term) -> Printer<'static> {
+    fn is_bare(term: &Term) -> bool {
+        match term.as_subterm() {
+            Subterm::Name(_) => true,
+            Subterm::Proj(Proj { head, .. }) => is_bare(head),
+            Subterm::Apply(Apply { head, .. }) => is_bare(head),
+            Subterm::Bang(inner) => is_bare(inner),
+            _ => false,
+        }
+    }
+
+    fn print_bare(term: Term) -> Printer<'static> {
+        match term.into_subterm() {
+            Subterm::Name(name) => pure(name.join()),
+            Subterm::Proj(Proj { head, field }) => flat([
+                print_bare(head),
+                pure(match field {
+                    Field::Index(index) => format!(".{index}"),
+                    Field::Label(label) => format!(".{label}"),
+                }),
+            ]),
+            Subterm::Apply(Apply { head, params }) => flat([
+                print_bare(head),
+                pure("("),
+                sep_flat(
+                    params
+                        .into_iter()
+                        .map(|(plicity, param)| flat([print_plicity(plicity), print_term(param)])),
+                    || pure(", "),
+                ),
+                pure(")"),
+            ]),
+            Subterm::Bang(inner) => flat([print_bare(inner), pure("!")]),
+            _ => unreachable!("guarded by is_bare"),
+        }
+    }
+
+    match is_bare(&term) {
+        true => print_bare(term),
+        false => flat([pure("("), print_term(term), pure(")")]),
+    }
+}
 
 fn print_plicity(plicity: Plicity) -> Printer<'static> {
     match plicity {
@@ -291,12 +340,22 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::FltToNat(operand) => print_prim_call("Flt.to_nat", vec![operand]),
         Prim::FltToInt(operand) => print_prim_call("Flt.to_int", vec![operand]),
         Prim::BinType => pure("Bin"),
-        Prim::Bin(bytes) => pure(
-            bytes
-                .iter()
-                .map(|byte| format!("\\{:02x}", byte))
-                .collect::<String>(),
-        ),
+        Prim::Bin(segments) => match segments.is_empty() {
+            true => pure("\\\\"),
+            false => flat(segments.into_iter().map(|segment| {
+                match segment {
+                    BinSegment::Bytes(bytes) => pure(
+                        bytes
+                            .iter()
+                            .map(|byte| format!("\\{:02x}", byte))
+                            .collect::<String>(),
+                    ),
+                    BinSegment::Spread(operand) => {
+                        flat([pure("\\.."), print_bin_spread_operand(operand)])
+                    }
+                }
+            })),
+        },
         Prim::BinLen(operand) => print_prim_call("Bin.len", vec![operand]),
         Prim::BinEql(left, right) => print_prim_call("Bin.eql", vec![left, right]),
         Prim::BinGet(bin, index) => print_prim_call("Bin.get", vec![bin, index]),
@@ -304,11 +363,15 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::BinAppend(bin, byte) => print_prim_call("Bin.append", vec![bin, byte]),
         Prim::BinConcat(left, right) => print_prim_call("Bin.concat", vec![left, right]),
         Prim::LstType(elem) => print_prim_call("Lst", vec![elem]),
-        Prim::Lst(elems) => flat([
+        Prim::Lst(entries) => flat([
             pure("["),
-            sep_flat(elems.into_iter().map(|operand| print_term(operand)), || {
-                pure(", ")
-            }),
+            sep_flat(
+                entries.into_iter().map(|entry| match entry {
+                    LstEntry::Elem(term) => print_term(term),
+                    LstEntry::Spread(term) => flat([pure(".."), print_term(term)]),
+                }),
+                || pure(", "),
+            ),
             pure("]"),
         ]),
         Prim::LstLen(ty, operand) => print_prim_call("Lst.len", vec![ty, operand]),

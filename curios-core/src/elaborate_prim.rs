@@ -352,6 +352,31 @@ pub fn elaborate_prim(
         return Ok((Term::prim(Prim::Lst(elaborated)), expected.clone()));
     }
 
+    // `LstConcat` mirrors `Lst`'s bidirectionality — and must, because the
+    // lowering of a spread list literal `[a, ..xs, b]` mints a fresh metavar
+    // for the element-type slot. Checking against a concrete `Lst(T)`, solve
+    // the slot against `expected` FIRST (`expect` unifies `Lst(slot)` with
+    // it), so the operands — the literal chunks especially — elaborate
+    // against the known element type instead of default-solving it from the
+    // first element. Any other expected shape falls through to `synth_prim`,
+    // exactly as for `Lst`.
+    if let (Prim::LstConcat(type_slot, operands), Mode::Check(expected)) = (prim, &mode)
+        && let Subterm::Prim(Prim::LstType(_)) = &*reduce_with(context, expected)?
+    {
+        let type_slot = elaborate(context, type_slot, Mode::Check(Term::type_()))?.0;
+        expect(context, term, &lst_type(type_slot.clone()), expected)?;
+
+        let mut elaborated = Vec::with_capacity(operands.len());
+        for operand in operands {
+            elaborated.push(elaborate(context, operand, Mode::Check(expected.clone()))?.0);
+        }
+
+        return Ok((
+            Term::prim(Prim::LstConcat(type_slot, elaborated)),
+            expected.clone(),
+        ));
+    }
+
     let (prim, type_) = synth_prim(context, prim)?;
 
     if let Mode::Check(expected) = &mode {

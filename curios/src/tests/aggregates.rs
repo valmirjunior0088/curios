@@ -408,6 +408,169 @@ fn lst_fold_sums_elements() {
 }
 
 #[test]
+fn lst_spread_concats_segments() {
+    // `[1, ..xs, 4]` splices `xs` between the literal runs. The non-commutative
+    // foldr probe (see `lst_match_is_a_foldr`) distinguishes the spliced order
+    // `[1, 2, 3, 4]` from any permutation or grouping artifact.
+    let source = r#"
+        use /std/{Io, Str, Nat, Lst};
+        let xs : Lst(Nat) = [2, 3];
+        let ys : Lst(Nat) = [1, ..xs, 4];
+        let digits : Nat =
+            match ys : Nat
+            | [] => 0
+            | h, ..t; ih => Nat/add(Nat/mul(ih, 10), h)
+            end;
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(digits)))
+        "#;
+    assert_eq!(run(source), b"4321");
+}
+
+#[test]
+fn lst_spread_identity_and_multi() {
+    // `[..xs]` is an identity copy (reduction collapses the lone operand), and
+    // spreads repeat: `[..ys, ..ys]` doubles the sequence in written order.
+    let source = r#"
+        use /std/{Io, Str, Nat, Lst};
+        let xs : Lst(Nat) = [2, 3];
+        let ys : Lst(Nat) = [..xs];
+        let zs : Lst(Nat) = [..ys, ..ys];
+        let digits : Nat =
+            match zs : Nat
+            | [] => 0
+            | h, ..t; ih => Nat/add(Nat/mul(ih, 10), h)
+            end;
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(digits)))
+        "#;
+    assert_eq!(run(source), b"3232");
+}
+
+#[test]
+fn lst_spread_borrows_expected_element_type() {
+    // The `LstConcat` bidirectionality case in `elaborate_prim`: checking
+    // `[1, ..xs]` against `Lst(Int)` must solve the lowering-minted element
+    // slot from the expected type BEFORE the literal chunk elaborates, so the
+    // unsigned `1` lands at `Int`. Without the borrow, `1` would default-solve
+    // the slot to `Nat` and this program would be rejected.
+    let source = r#"
+        use /std/{Io, Str, Nat, Int, Lst};
+        let xs : Lst(Int) = [-1, +2];
+        let ys : Lst(Int) = [1, ..xs];
+        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Lst/len(ys))))
+        "#;
+    assert_eq!(run(source), b"3");
+}
+
+#[test]
+fn lst_spread_of_non_list_is_rejected() {
+    // A spread operand must itself be a list of the element type — `..2` in a
+    // `Lst(Nat)` literal is an ordinary type mismatch (Nat vs Lst(Nat)).
+    let source = r#"
+        use /std/{Io, Str, Nat, Lst};
+        let bad : Lst(Nat) = [1, ..2];
+        Io/write(Io/stdout, Str/to_bin("unreachable"))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
+#[test]
+fn lst_spread_element_type_clash_is_rejected() {
+    let source = r#"
+        use /std/{Io, Str, Nat, Lst};
+        let ss : Lst(Str) = ["a"];
+        let bad : Lst(Nat) = [..ss];
+        Io/write(Io/stdout, Str/to_bin("unreachable"))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
+#[test]
+fn lst_spread_operand_hoists_bangs() {
+    // A bang inside a spread operand hoists into the enclosing region exactly
+    // like one inside a plain element — the literal is collected, not sealed.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Task, Io, Str, Nat, Lst};
+        let prog : Task({}) =
+            let ys : Lst(Nat) = [1, ..Task/pure([2, 3])!, 4];
+            let digits : Nat =
+                match ys : Nat
+                | [] => 0
+                | h, ..t; ih => Nat/add(Nat/mul(ih, 10), h)
+                end;
+            let wrote = Io/write(Io/stdout, Str/to_bin(Nat/to_str(digits)));
+            Task/pure(());
+        Task/block_on(prog)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"4321");
+}
+
+#[test]
+fn bin_spread_concats_segments() {
+    // `\01\..b\04` splices the bytes of `b` between the literal runs, and the
+    // glued suffix chain admits a call operand (`\..Bin/slice(...)`).
+    let source = r#"
+        use /std/{Io, Nat, Bin};
+        let b : Bin = \02\03;
+        Io/write(Io/stdout, \01\..b\04\..Bin/slice(b, 1, 2))
+        "#;
+    assert_eq!(run(source), b"\x01\x02\x03\x04\x03");
+}
+
+#[test]
+fn bin_spread_identity_and_multi() {
+    let source = r#"
+        use /std/{Io, Bin};
+        let b : Bin = \48\65;
+        let c : Bin = \..b;
+        Io/write(Io/stdout, \..c\..c)
+        "#;
+    assert_eq!(run(source), b"HeHe");
+}
+
+#[test]
+fn bin_spread_of_non_bin_is_rejected() {
+    // A spread operand must itself be a `Bin` — a list is an ordinary type
+    // mismatch.
+    let source = r#"
+        use /std/{Io, Str, Nat, Lst, Bin};
+        let xs : Lst(Nat) = [1, 2];
+        let bad : Bin = \00\..xs;
+        Io/write(Io/stdout, Str/to_bin("unreachable"))
+        "#;
+    let (system, _io) = MockHost::builder().build();
+    assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+}
+
+#[test]
+fn bin_spread_operand_hoists_bangs() {
+    // The `Bin` sibling of `lst_spread_operand_hoists_bangs`, through the
+    // dedicated `Prim::Bin` collect arm — the glued `!` binds to the operand.
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Task, Io, Bin};
+        let prog : Task({}) =
+            let out : Bin = \3e\..Task/pure(\68\69)!\3c;
+            let wrote = Io/write(Io/stdout, out);
+            Task/pure(());
+        Task/block_on(prog)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b">hi<");
+}
+
+#[test]
 fn bin_fold_sums_bytes() {
     let source = r#"
         use /std/{Io, Str, Nat, Bin};

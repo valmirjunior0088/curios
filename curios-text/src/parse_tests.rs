@@ -1357,6 +1357,154 @@ fn spread_entries_are_struct_literal_only() {
 }
 
 #[test]
+fn lst_literal_spread_entries() {
+    let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
+    let nat = |n: usize| -> Term {
+        Subterm::NumLit(NumLit {
+            magnitude: n.into(),
+            radix: Radix::Dec,
+            signed: false,
+            negative: false,
+        })
+        .into()
+    };
+
+    // Spreads splice anywhere, any count; plain elements stay `Elem`.
+    assert_eq!(
+        "[1, ..xs, 2]".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Lst(vec![
+            LstEntry::Elem(nat(1)),
+            LstEntry::Spread(name("xs")),
+            LstEntry::Elem(nat(2)),
+        ]))
+        .into()
+    );
+    assert_eq!(
+        "[..xs, ..ys]".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Lst(vec![
+            LstEntry::Spread(name("xs")),
+            LstEntry::Spread(name("ys")),
+        ]))
+        .into()
+    );
+
+    // Brackets delimit, so a list spread takes a full (spaceable) term.
+    assert_eq!(
+        "[.. xs]".parse::<Term>().unwrap(),
+        "[..xs]".parse::<Term>().unwrap()
+    );
+}
+
+#[test]
+fn bin_literal_spread_segments() {
+    let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
+
+    // Bytes coalesce into runs around the spread segments.
+    assert_eq!(
+        r"\00\..xs\01".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(vec![
+            BinSegment::Bytes(vec![0x00]),
+            BinSegment::Spread(name("xs")),
+            BinSegment::Bytes(vec![0x01]),
+        ]))
+        .into()
+    );
+    assert_eq!(
+        r"\00\01\..x\02\03".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(vec![
+            BinSegment::Bytes(vec![0x00, 0x01]),
+            BinSegment::Spread(name("x")),
+            BinSegment::Bytes(vec![0x02, 0x03]),
+        ]))
+        .into()
+    );
+
+    // The glued operand admits projections and absolute paths.
+    assert_eq!(
+        r"\..hdr.bytes".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(vec![BinSegment::Spread(
+            Subterm::Proj(Proj {
+                head: name("hdr"),
+                field: Field::Label("bytes".to_string()),
+            })
+            .into()
+        )]))
+        .into()
+    );
+    let term = r"\../std/x".parse::<Term>().unwrap();
+    let Subterm::Prim(Prim::Bin(segments)) = term.as_subterm() else {
+        panic!("expected a Bin literal");
+    };
+    let BinSegment::Spread(operand) = &segments[0] else {
+        panic!("expected a spread segment");
+    };
+    assert!(matches!(operand.as_subterm(), Subterm::Name(name) if name.is_abs()));
+
+    // A call is atomic: its argument list is self-delimiting, so it glues
+    // without parens — interior whitespace included — and the literal
+    // continues at the raw closing paren. A glued `!` binds to the operand.
+    let term = r"\..f( x , y )\01".parse::<Term>().unwrap();
+    let Subterm::Prim(Prim::Bin(segments)) = term.as_subterm() else {
+        panic!("expected a Bin literal");
+    };
+    assert!(
+        matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Apply(_)))
+    );
+    assert!(matches!(&segments[1], BinSegment::Bytes(bytes) if bytes == &vec![0x01]));
+    let term = r"\..read()!\01".parse::<Term>().unwrap();
+    let Subterm::Prim(Prim::Bin(segments)) = term.as_subterm() else {
+        panic!("expected a Bin literal");
+    };
+    assert!(
+        matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Bang(_)))
+    );
+
+    // A parenthesized operand takes a full term (interior whitespace is
+    // invisible), for the non-atomic shapes — and admits glued suffixes.
+    let term = r"\..( f(x) )\01".parse::<Term>().unwrap();
+    let Subterm::Prim(Prim::Bin(segments)) = term.as_subterm() else {
+        panic!("expected a Bin literal");
+    };
+    assert!(
+        matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Apply(_)))
+    );
+    assert!(matches!(&segments[1], BinSegment::Bytes(bytes) if bytes == &vec![0x01]));
+
+    // The empty literal stays `\\`, an empty segment list.
+    assert_eq!(
+        r"\\".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(vec![])).into()
+    );
+
+    // TIGHT: the literal is one whitespace-free lexical unit. A spaced byte
+    // after an operand is not part of the literal (and strands as trailing
+    // junk here), and the operand itself must be glued to the `\..`.
+    assert!(r"\..xs \01".parse::<Term>().is_err());
+    assert!(r"\.. xs".parse::<Term>().is_err());
+    // A reserved keyword is not a name, glued or otherwise.
+    assert!(r"\..use".parse::<Term>().is_err());
+}
+
+#[test]
+fn lst_and_bin_spreads_round_trip() {
+    // String equality pins the printer's canonical (tight, glued) forms —
+    // including `\\` for the empty Bin literal.
+    for source in [
+        "[1, ..xs, 2]",
+        "[..xs]",
+        r"\00\..xs\01",
+        r"\..hdr.bytes",
+        r"\../std/x",
+        r"\..f(x)",
+        r"\..Reader/read_line!.bytes",
+        r"\..(x + y)",
+        r"\\",
+    ] {
+        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+    }
+}
+
+#[test]
 fn field_lists_admit_a_trailing_comma() {
     // Every brace/paren field list — Σ-types, struct/record declarations,
     // tuple literals, struct literals, concepts, witnesses — admits (and
