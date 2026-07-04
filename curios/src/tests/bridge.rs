@@ -52,17 +52,20 @@ fn bridge_accessors_roundtrip() {
         bin_set
             .call(
                 &mut store,
-                &[bin.clone(), Val::I32(index as i32), Val::I32(value)],
+                &[bin, Val::I32(index as i32), Val::I32(value)],
                 &mut [],
             )
             .expect("bin_set failed");
     }
 
-    assert_eq!(call(&mut store, &bin_len, &[bin.clone()]).unwrap_i32(), 3);
+    assert_eq!(
+        call(&mut store, &bin_len, std::slice::from_ref(&bin)).unwrap_i32(),
+        3
+    );
 
     for (index, value) in [7, 8, 9].into_iter().enumerate() {
         assert_eq!(
-            call(&mut store, &bin_get, &[bin.clone(), Val::I32(index as i32)]).unwrap_i32(),
+            call(&mut store, &bin_get, &[bin, Val::I32(index as i32)]).unwrap_i32(),
             value
         );
     }
@@ -122,11 +125,14 @@ fn program_bins_flow_through_the_bridge() {
     let bin_len = export(&mut store, &bridge, "bin_len");
     let bin_get = export(&mut store, &bridge, "bin_get");
 
-    assert_eq!(call(&mut store, &bin_len, &[bin.clone()]).unwrap_i32(), 3);
+    assert_eq!(
+        call(&mut store, &bin_len, std::slice::from_ref(&bin)).unwrap_i32(),
+        3
+    );
 
     for (index, value) in [7, 8, 9].into_iter().enumerate() {
         assert_eq!(
-            call(&mut store, &bin_get, &[bin.clone(), Val::I32(index as i32)]).unwrap_i32(),
+            call(&mut store, &bin_get, &[bin, Val::I32(index as i32)]).unwrap_i32(),
             value
         );
     }
