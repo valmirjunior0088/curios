@@ -66,7 +66,7 @@ rec go_with(T : Type, finish : (Str) -> T, f : Fmt, acc : Str) -> format_type_wi
     | nat(rest) => (n) => go_with(T, finish, rest, Str/concat(acc, Nat/to_str(n)))
     end;
 
-pub let format(s : Str) -> format_type_with(Str, parse(s)) =
+pub let render(s : Str) -> format_type_with(Str, parse(s)) =
     go_with(Str, (x) => x, parse(s), "");
 
 pub let print(s : Str) -> format_type_with({}, parse(s)) =
