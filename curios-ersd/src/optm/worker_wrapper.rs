@@ -32,14 +32,11 @@ mod cursor;
 mod monoid;
 
 use {
-    super::CallGraph,
+    super::{CallGraph, rewrite::refresh_captures},
     crate::{Apply, Argument, Func, Item, Module, Name, Prim, PurePrim, Rec, Subterm, Term},
     cursor::SliceCursor,
     monoid::MonoidAccumulator,
-    std::{
-        collections::{HashMap, HashSet},
-        iter, mem,
-    },
+    std::{collections::HashMap, iter, mem},
 };
 
 /// Introduce worker/wrapper transforms across the module, in place.
@@ -234,44 +231,6 @@ fn try_transform(name: &str, term: &mut Term, graph: &CallGraph) -> bool {
     // variables; the wrapper recomputes too, dropping its now-unused self-ref.
     refresh_captures(term, &introduced);
     true
-}
-
-/// Recompute the captures of every `Func` in `term`, bottom-up: a closure's
-/// captures are exactly its body's free names minus its parameters. Candidate flags
-/// are preserved from each closure's prior captures, and the `introduced` names
-/// (the worker and the threaded parameters) carry the flags the transform assigns.
-/// Bottom-up order matters: an outer body's free names depend on its inner
-/// closures' freshly-fixed captures.
-fn refresh_captures(term: &mut Term, introduced: &HashMap<String, bool>) {
-    for child in subterms_mut(term) {
-        refresh_captures(child, introduced);
-    }
-
-    if let Subterm::Func(func) = term.as_subterm_mut() {
-        let mut candidate = func
-            .captures
-            .iter()
-            .map(|capture| (capture.name.clone(), capture.candidate))
-            .collect::<HashMap<String, bool>>();
-        candidate.extend(introduced.iter().map(|(name, cand)| (name.clone(), *cand)));
-
-        let params = func
-            .params
-            .iter()
-            .map(|param| param.name.as_str())
-            .collect::<HashSet<&str>>();
-
-        func.captures = func
-            .body
-            .free_names()
-            .into_iter()
-            .filter(|name| !params.contains(name.as_str()))
-            .map(|name| Argument {
-                candidate: candidate.get(&name).copied().unwrap_or(false),
-                name,
-            })
-            .collect();
-    }
 }
 
 /// A tail call to the worker: its original (already-rewritten) arguments, then one

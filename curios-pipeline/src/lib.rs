@@ -871,6 +871,9 @@ mod tests {
 
     #[test]
     fn impossible_inductive_arm_lowers_to_unreachable() {
+        // The element is a lambda parameter so the scrutinee stays runtime —
+        // a fully-constant vector would be folded whole by ersd's `evaluate`
+        // pass, and the pruned arm would never reach the lowering this pins.
         let source = r#"
             use /std/{Nat, Bin};
             induct Vec(T : Type) : (n : Nat) -> Type
@@ -881,8 +884,7 @@ mod tests {
                 match v : T
                 | cons(j, x, xs) => x
                 end;
-            let v : Vec(Bin, 1) = Vec/cons(/std/Str/to_bin("a"), Vec/nil());
-            first(v)
+            (b : Bin) => first(Vec/cons(b, Vec/nil()))
         "#;
 
         let (ersd, cont) = compile_printed_stages(source).unwrap();

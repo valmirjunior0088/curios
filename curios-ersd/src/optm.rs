@@ -7,8 +7,15 @@
 //! - the shared slice re-base laws (`Carrier`/`SuffixRead`) live in
 //!   `curios_base::suffix_view`, read here by `worker_wrapper` and by `cont`'s
 //!   `slice_forwarding`.
+//! - `rewrite` — shared term utilities (ordered child traversal, path lookup,
+//!   deep copy, capture refresh) for the passes that plan against an immutable
+//!   module and rewrite it after.
 //! - [`prune`] — drops the items the entrypoint cannot reach, so only the
 //!   program's actual slice is lowered.
+//! - [`evaluate`] — folds closed subterms by big-step interpretation: constant
+//!   data, closures with baked captures, and tail-effect residuals replace the
+//!   computations the type checker already evaluated (`Fmt/parse` of a format
+//!   string literal, and everything downstream of it).
 //! - [`worker_wrapper`] — the worker/wrapper engine: generalizes a linear non-tail
 //!   self-recursion into a tail-recursive worker behind a thin wrapper, composing a
 //!   result-side monoid accumulator and an argument-side suffix cursor.
@@ -16,8 +23,13 @@
 mod call_graph;
 pub use call_graph::*;
 
+mod rewrite;
+
 mod prune;
 pub use prune::*;
+
+mod evaluate;
+pub use evaluate::*;
 
 mod worker_wrapper;
 pub use worker_wrapper::*;
@@ -33,6 +45,16 @@ pub fn optimize(module: &mut Module) {
     // through lifting, specialization, and inlining on every compile. It runs
     // first (after erase has type-checked everything) so the passes below only
     // ever walk the reachable subset.
+    prune_unreachable(module);
+
+    // Fold what the compiler can already run: closed calls evaluate to data,
+    // closures, or tail-effect residuals. A literal format string's parse (and
+    // its UTF-8 revalidation) happens here instead of at runtime.
+    evaluate_closed_terms(module);
+
+    // The folds above drop the last references into whole subsystems (the
+    // `Parse` combinator web behind a folded `Fmt/parse`); sweep again so the
+    // passes below — and `to_cont` — never see them.
     prune_unreachable(module);
 
     // Wrap each linear non-tail self-recursion (e.g. `Str/len`'s `count_w`) in a

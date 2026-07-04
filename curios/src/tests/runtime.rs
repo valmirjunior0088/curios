@@ -302,23 +302,18 @@ fn folds_constant_arg_through_let_function() {
 
 #[test]
 fn fmt_print_partial_evaluation_reduces_residual() {
-    // End-to-end smoke for §2 (`evaluate_pure_calls`) and §3 (size-bounded
-    // multi-site inlining) on `Fmt/print("%s is %d")(name)(30)`. §2 interprets
-    // pure sub-bodies of the parser combinator at compile time; §3 then
-    // dissolves the residual primitive wrappers at every call site (including the
-    // `Str/of_bin` validation guarding the runtime `%s` argument). Together they
-    // collapse the post-§1 residue (≈14 funcs) down to a handful — the assert pins
-    // a comfortable upper bound while leaving headroom for legitimate std/Fmt drift.
-    // Proof-carrying `Str` routes both runtime paths through recursive, unfoldable
-    // validators: the `%d` (`Nat/to_str`) path through its decimal digit producer
-    // (digit/single_digit/Str/concat), and the `%s` (`Str/trim`) path through the
-    // codepoint-peeling proof-carrying `slice` (drop_n/take_n/drop1/take1/tl_proof).
-    // Both carry their UTF-8 proof and can't be folded even for a constant, so a
-    // handful of extra residual funcs over the pre-`/syn/Str` baseline are expected.
-    // The shared `classify` (the single UTF-8 layout source consumed by both the
-    // validator `step` and the runtime decoder) now has two reachable call sites, so
-    // size-bounded multi-site inlining keeps it as one residual func rather than
-    // folding it into a sole caller — one extra func, the intended cost of the dedup.
+    // End-to-end residue guard for the staging stack on
+    // `Fmt/print("%s is %d")(name)(30)` with a *runtime* `%s` argument. The
+    // ersd `evaluate` pass folds the closed prefix — the format-string parse
+    // (Parse combinators and the segment UTF-8 revalidation included) runs at
+    // compile time and `Fmt/print(lit)` reifies as the curried hole-filling
+    // closure over a constant `Fmt` spine. What stays runtime is exactly the
+    // runtime work: `go_with` over the spine, the `%s` path (`Str/trim` and
+    // the stdin UTF-8 validation through `classify`), and the `%d` path
+    // (`Nat/to_str`'s digit producer); cont's `evaluate_pure_calls` and
+    // size-bounded multi-site inlining then dissolve the wrappers around
+    // those. The assert pins a comfortable upper bound on the residual funcs
+    // while leaving headroom for legitimate std/Fmt drift.
     let source = r#"
         use /std/{Str, Io, Bin, Fmt};
 
@@ -362,6 +357,62 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     let (system, io) = MockHost::builder().stdin_lines(["Alice"]).build();
     crate::run_wasm(&wasm_module, system).expect("execution succeeded");
     assert_eq!(io.output(), b"Alice is 30");
+}
+
+#[test]
+fn fmt_print_constant_args_collapses_at_ersd() {
+    // The fully-constant case: every input to `Fmt/print` is a literal, so the
+    // ersd `evaluate` pass runs the *entire* program at compile time and
+    // residualizes the one effect boundary — the ersd-optm module's body is a
+    // single `#/std/Io/print(<final bytes>)` call, the `Parse` combinator web
+    // and `Fmt`'s parser are pruned, and only the `Io/print` → `Io/write`
+    // plumbing reaches codegen.
+    let source = r#"
+        use /std/{Fmt};
+
+        Fmt/print("x = %d, s = %s\n")(42)("hello")
+        "#;
+
+    let entrypoint = source
+        .parse::<crate::text::Entrypoint>()
+        .expect("failed to parse source")
+        .with_type("()".parse().unwrap());
+
+    let mut ersd_optm = None;
+    let mut cont_optm_funcs = None;
+
+    let wasm_module = crate::compile_entrypoint(
+        Duration::from_secs(15),
+        &entrypoint,
+        &crate::text::NullLoader,
+        |stage| match stage {
+            crate::Stage::ErsdOptm(module) => ersd_optm = Some(format!("{module}")),
+            crate::Stage::ContOptm(module) => cont_optm_funcs = Some(module.funcs().len()),
+            _ => {}
+        },
+    )
+    .expect("compile succeeded");
+
+    let ersd = ersd_optm.expect("Stage::ErsdOptm observed");
+    // "x = 42, s = hello\n", already formatted, as the residual call's operand.
+    assert!(
+        ersd.contains("#/std/Io/print(\\78\\20\\3d\\20\\34\\32\\2c\\20\\73\\20\\3d\\20\\68\\65\\6c\\6c\\6f\\0a)"),
+        "expected the folded print residual, got:\n{ersd}",
+    );
+    assert!(
+        !ersd.contains("/std/Fmt/") && !ersd.contains("/std/Parse/"),
+        "expected the parser web pruned, got:\n{ersd}",
+    );
+
+    let funcs = cont_optm_funcs.expect("Stage::ContOptm observed");
+    assert!(
+        funcs <= 4,
+        "expected the constant program to collapse to the write loop, got {funcs} funcs",
+    );
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_wasm(&wasm_module, system).expect("execution succeeded");
+    assert_eq!(io.output(), b"x = 42, s = hello\n");
 }
 
 #[test]
