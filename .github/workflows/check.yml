@@ -69,7 +69,7 @@ jobs:
         run: cargo test --all-targets --all-features
 
   wasm:
-    name: Run `wasm-pack`
+    name: Build curios-js (wasm)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -80,7 +80,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-unknown-unknown
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-      - name: Run wasm-pack
-        run: wasm-pack build curios-js --release --target web
+      - name: Install wasm-bindgen-cli
+        run: |
+          version=$(grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
+          cargo install wasm-bindgen-cli --version "$version" --locked
+      - name: Build curios-js
+        run: cargo build --release --target wasm32-unknown-unknown --package curios-js
+      - name: Run wasm-bindgen
+        run: wasm-bindgen --target web --out-dir curios-js/dist target/wasm32-unknown-unknown/release/curios_js.wasm

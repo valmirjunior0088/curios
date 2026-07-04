@@ -4,3 +4,4 @@
 /.antigravitycli
 /*.wasm
 /curios/runtime
+/curios-js/dist

@@ -15,6 +15,14 @@ use {
     wasm_bindgen::prelude::*,
 };
 
+/// One accessor's name, parameters, outputs, and array op.
+type Accessor = (
+    &'static str,
+    Vec<(&'static str, ValType)>,
+    Vec<ValType>,
+    Instr,
+);
+
 /// The bridge as a `curios_wasm::Module`: the canonical `bytes` type plus the
 /// four accessor exports (`bin_len`, `bin_get`, `bin_new`, `bin_set`). Each
 /// accessor body is its parameters' `local.get`s followed by one array op.
@@ -22,15 +30,17 @@ pub fn bridge_module() -> Module {
     let mut module = Module::new("bridge");
 
     let bin = TypeName::from("bytes");
+
     module.add_type(bin.clone(), curios_cont::bytes_sub_type());
 
     let bin_ref = ValType::Ref(RefType {
         is_nullable: false,
         heap_type: HeapType::Concrete(bin.clone()),
     });
+
     let i32_val = ValType::Num(NumType::I32);
 
-    let accessors: [(&str, Vec<(&str, ValType)>, Vec<ValType>, Instr); 4] = [
+    let accessors: [Accessor; 4] = [
         (
             "bin_len",
             vec![("b", bin_ref.clone())],

@@ -69,14 +69,19 @@ jobs:
         with:
           key: wasm32-unknown-unknown
 
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Install wasm-bindgen-cli
+        run: |
+          version=$(grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
+          cargo install wasm-bindgen-cli --version "$version" --locked
 
-      - name: Build
-        run: wasm-pack build curios-js --release --target web
+      - name: Build curios-js
+        run: cargo build --release --target wasm32-unknown-unknown --package curios-js
+
+      - name: Run wasm-bindgen
+        run: wasm-bindgen --target web --out-dir curios-js/dist target/wasm32-unknown-unknown/release/curios_js.wasm
 
       - name: Archive package
-        run: tar -czf curios-wasm.tar.gz -C curios-js/pkg .
+        run: tar -czf curios-wasm.tar.gz -C curios-js/dist .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
