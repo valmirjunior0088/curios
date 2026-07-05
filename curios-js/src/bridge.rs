@@ -26,7 +26,7 @@ type Accessor = (
 /// The bridge as a `curios_wasm::Module`: the canonical `bytes` type plus the
 /// four accessor exports (`bin_len`, `bin_get`, `bin_new`, `bin_set`). Each
 /// accessor body is its parameters' `local.get`s followed by one array op.
-pub fn bridge_module() -> Module {
+pub(crate) fn bridge_module() -> Module {
     let mut module = Module::new("bridge");
 
     let bin = TypeName::from("bytes");

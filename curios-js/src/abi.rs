@@ -11,7 +11,7 @@ use {
 /// The import names of every store-described host operation, in store order.
 /// The harness builds its `env` import object from exactly this roster, so a
 /// new `sys_io` row that lacks a browser implementation fails loudly.
-pub fn import_names() -> Vec<String> {
+pub(crate) fn import_names() -> Vec<String> {
     sys_io()
         .iter()
         .map(|function| function.name.clone())
