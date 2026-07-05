@@ -4,3 +4,6 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Foundational utilities shared across the curios pipeline: spans, entropy, the name! macro, parser/printer monads, and the slice suffix-view laws"
+
+[lints]
+workspace = true

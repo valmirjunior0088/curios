@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 description = "Wasm optimization for curios via a prebuilt Binaryen release"
 
+[lints]
+workspace = true
+
 [dependencies]
 
 [build-dependencies]

@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 description = "The curios pipeline: compile_entrypoint/typecheck_entrypoint driving text -> core -> ersd -> cont -> wasm"
 
+[lints]
+workspace = true
+
 [dependencies]
 curios-abi = { workspace = true }
 curios-text = { workspace = true }

@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 description = "The curios erased IR: ersd->ersd optimization and lowering to continuations"
 
+[lints]
+workspace = true
+
 [dependencies]
 curios-abi = { workspace = true }
 curios-base = { workspace = true }

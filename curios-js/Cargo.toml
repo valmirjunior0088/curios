@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 description = "The curios <-> JavaScript boundary: wasm-bindgen exports of the pipeline plus the browser run harness"
 
+[lints]
+workspace = true
+
 # cdylib for the wasm-bindgen build; rlib so `cargo test -p curios-js` still has something to link against.
 [lib]
 crate-type = ["cdylib", "rlib"]

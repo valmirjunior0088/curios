@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 description = "Runtime-only curios engine (deserialize + host stack) and the launcher stub"
 
+[lints]
+workspace = true
+
 # Lib (the engine/host API, reused by curios) + bin (the launcher stub).
 # Declares no compile-ish feature and never names Cranelift or Binaryen: building
 # `-p curios-rt` yields a slim, runtime-only launcher.

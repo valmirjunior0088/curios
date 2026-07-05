@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 description = "The curios core language: elaboration, typing, reduction, conversion, and erasure"
 
+[lints]
+workspace = true
+
 [dependencies]
 curios-abi = { workspace = true }
 curios-base = { workspace = true }

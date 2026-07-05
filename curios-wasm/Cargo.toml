@@ -5,5 +5,8 @@ edition.workspace = true
 license.workspace = true
 description = "The curios wasm module model, parser, and binary writer/encoder"
 
+[lints]
+workspace = true
+
 [dependencies]
 curios-base = { workspace = true }
