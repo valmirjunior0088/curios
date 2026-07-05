@@ -159,7 +159,7 @@ impl TupleField {
             Some(params) => Subterm::Func(Func {
                 params: params
                     .iter()
-                    .map(|(name, ty)| (Pattern::Binder(name.clone()), ty.clone()))
+                    .map(|(name, ty)| (Pattern::Binder(Some(name.clone())), ty.clone()))
                     .collect(),
                 body: self.value.clone(),
             })
@@ -183,7 +183,14 @@ pub struct Tuple {
 /// a tuple/struct value always has exactly one shape.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
-    Binder(String),
+    /// `None` only for a function-sugar `use` parameter, which has no source
+    /// binder position at all — genuinely anonymous, not a user-spelled `_`.
+    /// Lowering mints a fresh internal name for it directly; `Some("_")` (a
+    /// user actually typing the wildcard) goes through the same gensym path
+    /// but is a distinct case, kept apart so an anonymous `use` binder lowers
+    /// its Π-type binder as truly unlabeled (see [`LetSignature::type_`])
+    /// rather than as a Π-binder spelled `"_"`.
+    Binder(Option<String>),
     Tuple(Vec<PatternField>),
     Struct {
         head: String,
@@ -258,6 +265,9 @@ pub struct BlnMatch {
 /// `| [head, ..tail]; ih =>` cons arm, mirroring the `Lst` literal's own
 /// bracket-and-comma shape. The surface analogue of `NatMatch::Induction` for
 /// the native free-monoid primitives (the empty literal selects the carrier).
+/// `ih_label` is `None` when `; ih` is omitted — a plain case-split with no
+/// induction hypothesis at all, not a user-spelled placeholder name; lowering
+/// mints a fresh internal name for it directly.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LstMatch {
     pub head: Term,
@@ -265,7 +275,7 @@ pub struct LstMatch {
     pub empty_case: Term,
     pub head_label: String,
     pub tail_label: String,
-    pub ih_label: String,
+    pub ih_label: Option<String>,
     pub cons_case: Term,
 }
 
@@ -274,6 +284,7 @@ pub struct LstMatch {
 /// `Bin` literal's own backslash-delimited shape, whose `head` is the leading
 /// byte (a `Nat`) and `tail` the rest. The `Bin` analogue of [`LstMatch`];
 /// `Bin` carries no element type, so there is no carrier parameter to read off.
+/// `ih_label` is `None` when `; ih` is omitted, exactly as in [`LstMatch`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct BinMatch {
     pub head: Term,
@@ -281,7 +292,7 @@ pub struct BinMatch {
     pub empty_case: Term,
     pub head_label: String,
     pub tail_label: String,
-    pub ih_label: String,
+    pub ih_label: Option<String>,
     pub cons_case: Term,
 }
 
@@ -406,7 +417,7 @@ impl LetSignature {
                     .map(|param| FuncTypeParam {
                         plicity: param.plicity,
                         label: match &param.label {
-                            Pattern::Binder(name) => Some(name.clone()),
+                            Pattern::Binder(name) => name.clone(),
                             Pattern::Tuple(_) | Pattern::Struct { .. } => None,
                         },
                         type_: param.type_.clone(),

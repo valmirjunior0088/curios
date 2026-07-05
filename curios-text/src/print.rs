@@ -194,6 +194,15 @@ fn print_struct_entry(entry: StructLitEntry) -> Printer<'static> {
 /// A tuple-pattern / struct-pattern field: positional or `label = pattern` —
 /// the literal mirror of `print_tuple_field`, with `Term` replaced by
 /// `Pattern` (no definition-sugar form; a pattern field is never a function).
+/// The optional `; ih` tail of an `Lst`/`Bin` fold's cons arm — `None` prints
+/// nothing at all (a plain case-split), matching how it was written.
+fn print_cons_ih(ih_label: Option<String>) -> Printer<'static> {
+    match ih_label {
+        Some(ih_label) => flat([pure("; "), pure(ih_label)]),
+        None => pure(""),
+    }
+}
+
 fn print_pattern_field(field: PatternField) -> Printer<'static> {
     match field.label {
         Some(label) => flat([pure(label), pure(" = "), print_pattern(field.value)]),
@@ -206,7 +215,11 @@ fn print_pattern_field(field: PatternField) -> Printer<'static> {
 /// with `Term` replaced by `Pattern`.
 fn print_pattern(pattern: Pattern) -> Printer<'static> {
     match pattern {
-        Pattern::Binder(name) => pure(name),
+        Pattern::Binder(Some(name)) => pure(name),
+        // Only a function-sugar `use` parameter (`Plicity::Witness`) has no
+        // source binder at all — and that path never calls `print_pattern`
+        // (see `print_func_sugar_param`), so this is unreachable.
+        Pattern::Binder(None) => unreachable!("an anonymous binder has no pattern to print"),
         Pattern::Tuple(fields) => {
             if fields.len() == 1 {
                 let field = fields.into_iter().next().unwrap();
@@ -630,8 +643,8 @@ fn print_term(term: Term) -> Printer<'static> {
                 pure(head_label),
                 pure(", .."),
                 pure(tail_label),
-                pure("]; "),
-                pure(ih_label),
+                pure("]"),
+                print_cons_ih(ih_label),
                 pure(" =>\n"),
                 indent(print_term(cons_case)),
                 pure("\nend"),
@@ -654,8 +667,7 @@ fn print_term(term: Term) -> Printer<'static> {
                 pure(head_label),
                 pure("\\.."),
                 pure(tail_label),
-                pure("; "),
-                pure(ih_label),
+                print_cons_ih(ih_label),
                 pure(" =>\n"),
                 indent(print_term(cons_case)),
                 pure("\nend"),

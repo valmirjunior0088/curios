@@ -364,6 +364,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                     cons_case,
                 }) => {
                     let (label, body) = self.motive_parts(motive)?;
+                    let head_label = self.pattern_binder_name(head_label);
+                    let tail_label = self.pattern_binder_name(tail_label);
+                    let ih_label = self.cons_ih_name(ih_label);
                     // The element type is type-directed (read off the scrutinee
                     // during elaboration), so lowering leaves it a hole.
                     curios_core::Term::lst_match(
@@ -375,10 +378,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                         head_label.clone(),
                         tail_label.clone(),
                         ih_label.clone(),
-                        self.scoped(
-                            [head_label.clone(), tail_label.clone(), ih_label.clone()],
-                            || self.term(cons_case),
-                        )?,
+                        self.scoped([head_label, tail_label, ih_label], || self.term(cons_case))?,
                     )
                 }
                 Match::Bin(BinMatch {
@@ -391,6 +391,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                     cons_case,
                 }) => {
                     let (label, body) = self.motive_parts(motive)?;
+                    let head_label = self.pattern_binder_name(head_label);
+                    let tail_label = self.pattern_binder_name(tail_label);
+                    let ih_label = self.cons_ih_name(ih_label);
                     curios_core::Term::bin_match(
                         self.term(head)?,
                         label,
@@ -399,10 +402,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                         head_label.clone(),
                         tail_label.clone(),
                         ih_label.clone(),
-                        self.scoped(
-                            [head_label.clone(), tail_label.clone(), ih_label.clone()],
-                            || self.term(cons_case),
-                        )?,
+                        self.scoped([head_label, tail_label, ih_label], || self.term(cons_case))?,
                     )
                 }
             },
@@ -654,7 +654,10 @@ impl<'a, 'b> Lower<'a, 'b> {
                 None => curios_core::Term::metavar(self.context.fresh_metavar()),
             };
             match pattern {
-                Pattern::Binder(name) => lowered.push((self.pattern_binder_name(name), domain)),
+                Pattern::Binder(Some(name)) => {
+                    lowered.push((self.pattern_binder_name(name), domain))
+                }
+                Pattern::Binder(None) => lowered.push((self.context.fresh_binder(), domain)),
                 Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                     let synthetic = self.context.fresh_binder();
                     body = self.lower_pattern_fields(fields, &synthetic, body);
@@ -687,8 +690,11 @@ impl<'a, 'b> Lower<'a, 'b> {
         tail: curios_core::Term,
     ) -> curios_core::Term {
         match pattern {
-            Pattern::Binder(name) => {
+            Pattern::Binder(Some(name)) => {
                 curios_core::Term::let_(self.pattern_binder_name(name), type_, value, tail)
+            }
+            Pattern::Binder(None) => {
+                curios_core::Term::let_(self.context.fresh_binder(), type_, value, tail)
             }
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 let synthetic = self.context.fresh_binder();
@@ -739,7 +745,9 @@ impl<'a, 'b> Lower<'a, 'b> {
     /// nested tuple/struct fields in field order.
     fn pattern_names(pattern: &Pattern) -> Vec<String> {
         match pattern {
-            Pattern::Binder(name) => vec![name.clone()],
+            Pattern::Binder(Some(name)) => vec![name.clone()],
+            // No source name at all — nothing to shadow-track.
+            Pattern::Binder(None) => vec![],
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => fields
                 .iter()
                 .flat_map(|field| Self::pattern_names(&field.value))
@@ -753,6 +761,17 @@ impl<'a, 'b> Lower<'a, 'b> {
         match name {
             "_" => self.context.fresh_binder(),
             name => name.to_string(),
+        }
+    }
+
+    /// An `Lst`/`Bin` cons arm's induction-hypothesis binder name: an omitted
+    /// `; ih` (`None` — there is no source name at all) mints a fresh internal
+    /// name directly; a written one gets the same wildcard-safe treatment as
+    /// [`Self::pattern_binder_name`].
+    fn cons_ih_name(&self, ih_label: &Option<String>) -> String {
+        match ih_label {
+            Some(name) => self.pattern_binder_name(name),
+            None => self.context.fresh_binder(),
         }
     }
 
@@ -842,6 +861,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                 cons_case,
             }) => {
                 let (label, body) = self.motive_parts(motive)?;
+                let head_label = self.pattern_binder_name(head_label);
+                let tail_label = self.pattern_binder_name(tail_label);
+                let ih_label = self.cons_ih_name(ih_label);
                 curios_core::Term::lst_match(
                     self.collect(head, binds)?,
                     curios_core::Term::metavar(self.context.fresh_metavar()),
@@ -851,10 +873,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                     head_label.clone(),
                     tail_label.clone(),
                     ih_label.clone(),
-                    self.scoped(
-                        [head_label.clone(), tail_label.clone(), ih_label.clone()],
-                        || self.region(cons_case),
-                    )?,
+                    self.scoped([head_label, tail_label, ih_label], || {
+                        self.region(cons_case)
+                    })?,
                 )
             }
             Match::Bin(BinMatch {
@@ -867,6 +888,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                 cons_case,
             }) => {
                 let (label, body) = self.motive_parts(motive)?;
+                let head_label = self.pattern_binder_name(head_label);
+                let tail_label = self.pattern_binder_name(tail_label);
+                let ih_label = self.cons_ih_name(ih_label);
                 curios_core::Term::bin_match(
                     self.collect(head, binds)?,
                     label,
@@ -875,10 +899,9 @@ impl<'a, 'b> Lower<'a, 'b> {
                     head_label.clone(),
                     tail_label.clone(),
                     ih_label.clone(),
-                    self.scoped(
-                        [head_label.clone(), tail_label.clone(), ih_label.clone()],
-                        || self.region(cons_case),
-                    )?,
+                    self.scoped([head_label, tail_label, ih_label], || {
+                        self.region(cons_case)
+                    })?,
                 )
             }
         })

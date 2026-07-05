@@ -961,13 +961,13 @@ fn process_items(
                         .iter()
                         .map(|p| FuncSugarParam {
                             plicity: Plicity::Implicit,
-                            label: Pattern::Binder(p.label.clone()),
+                            label: Pattern::Binder(Some(p.label.clone())),
                             type_: p.type_.clone(),
                         })
                         .collect::<Vec<_>>();
                     params.push(FuncSugarParam {
                         plicity: Plicity::Witness,
-                        label: Pattern::Binder("w".to_string()),
+                        label: Pattern::Binder(Some("w".to_string())),
                         type_: concept_app.clone(),
                     });
 

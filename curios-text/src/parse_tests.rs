@@ -25,7 +25,7 @@ fn parse_rec_func_and_apply() {
                         .into(),
                     ),
                     body: Subterm::Func(Func {
-                        params: vec![(Pattern::Binder("x".to_string()), None)],
+                        params: vec![(Pattern::Binder(Some("x".to_string())), None)],
                         body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
@@ -388,7 +388,7 @@ fn parse_top_rec_mixed_pub() {
                         .into(),
                     ),
                     body: Subterm::Func(Func {
-                        params: vec![(Pattern::Binder("x".to_string()), None)],
+                        params: vec![(Pattern::Binder(Some("x".to_string())), None)],
                         body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
@@ -981,7 +981,7 @@ fn parse_local_let_without_type() {
     assert_eq!(
         "let x = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            binder: Pattern::Binder("x".to_string()),
+            binder: Pattern::Binder(Some("x".to_string())),
             signature: LetSignature::Name {
                 type_: None,
                 body: Subterm::Type.into(),
@@ -997,7 +997,7 @@ fn parse_local_let_with_type_still_works() {
     assert_eq!(
         "let x : Type = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            binder: Pattern::Binder("x".to_string()),
+            binder: Pattern::Binder(Some("x".to_string())),
             signature: LetSignature::Name {
                 type_: Some(Subterm::Type.into()),
                 body: Subterm::Type.into(),
@@ -1013,7 +1013,10 @@ fn parse_func_with_annotation() {
     assert_eq!(
         "(x : Type) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
-            params: vec![(Pattern::Binder("x".to_string()), Some(Subterm::Type.into()))],
+            params: vec![(
+                Pattern::Binder(Some("x".to_string())),
+                Some(Subterm::Type.into())
+            )],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
         .into()
@@ -1027,8 +1030,11 @@ fn parse_func_with_mixed_annotations() {
         "(x : Type, y) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
             params: vec![
-                (Pattern::Binder("x".to_string()), Some(Subterm::Type.into())),
-                (Pattern::Binder("y".to_string()), None),
+                (
+                    Pattern::Binder(Some("x".to_string())),
+                    Some(Subterm::Type.into())
+                ),
+                (Pattern::Binder(Some("y".to_string())), None),
             ],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
@@ -1041,7 +1047,7 @@ fn parse_func_without_annotation_still_works() {
     assert_eq!(
         "(x) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
-            params: vec![(Pattern::Binder("x".to_string()), None)],
+            params: vec![(Pattern::Binder(Some("x".to_string())), None)],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
         .into()
@@ -1104,7 +1110,7 @@ fn parse_bang_in_let_binding() {
     assert_eq!(
         "let x = e!; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            binder: Pattern::Binder("x".to_string()),
+            binder: Pattern::Binder(Some("x".to_string())),
             signature: LetSignature::Name {
                 type_: None,
                 body: Subterm::Bang(name("e")).into(),
@@ -1852,9 +1858,9 @@ fn parse_use_parameter_forms() {
     assert_eq!(params.len(), 4);
     assert_eq!(params[0].plicity, Plicity::Implicit);
     assert_eq!(params[1].plicity, Plicity::Witness);
-    assert_eq!(params[1].label, Pattern::Binder("_".to_string())); // anonymous
+    assert_eq!(params[1].label, Pattern::Binder(None)); // anonymous
     assert_eq!(params[2].plicity, Plicity::Witness);
-    assert_eq!(params[2].label, Pattern::Binder("_".to_string())); // anonymous
+    assert_eq!(params[2].label, Pattern::Binder(None)); // anonymous
     assert_eq!(params[3].plicity, Plicity::Explicit);
 }
 

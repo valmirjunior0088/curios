@@ -773,7 +773,7 @@ fn parse_pattern<'a>() -> Parser<'a, Pattern> {
         .or(catch(parse_literal("("))
             .and_keep(lazy(parse_pattern))
             .and_drop(parse_literal(")")))
-        .or(parse_binder().map(Pattern::Binder))
+        .or(parse_binder().map(|name| Pattern::Binder(Some(name))))
 }
 
 // A match-arm constructor pattern `tag(x, …)` — `nil()` for the nullary case.
@@ -1021,18 +1021,22 @@ fn parse_arr_empty_branch<'a>() -> Parser<'a, Term> {
 
 // The `; ih =>` tail shared by both carriers' cons arms: `;` sets the
 // induction hypothesis apart from the scrutinee's shape. A plain case-split
-// needs no induction hypothesis, so `; ih` may be omitted — the binder
-// defaults to `_`.
-fn parse_cons_ih<'a>() -> Parser<'a, String> {
+// needs no induction hypothesis, so `; ih` may be omitted — `None`, not a
+// placeholder name; lowering mints a fresh internal name for it directly.
+fn parse_cons_ih<'a>() -> Parser<'a, Option<String>> {
     catch(parse_literal(";").and_keep(parse_identifier()))
-        .map(str::to_string)
-        .or(pure("_".to_string()))
+        .map(|name| Some(name.to_string()))
+        .or(pure(None))
 }
+
+// A cons arm's three binder names: the peeled `head`, the rest `tail`, and
+// the optional induction hypothesis `ih` (`None` when `; ih` is omitted).
+type ConsLabels = (String, String, Option<String>);
 
 // The `| [head, ..tail]; ih =>` cons arm of an `Lst` fold. Mirrors the `Lst`
 // literal's own bracket-and-comma shape (`parse_arr_literal`): `head` is the
 // peeled leading element, `tail` the rest.
-fn parse_lst_cons_branch<'a>() -> Parser<'a, ((String, String, String), Term)> {
+fn parse_lst_cons_branch<'a>() -> Parser<'a, (ConsLabels, Term)> {
     parse_literal("|")
         .and_drop(parse_literal("["))
         .and_keep(parse_identifier())
@@ -1051,7 +1055,7 @@ fn parse_lst_cons_branch<'a>() -> Parser<'a, ((String, String, String), Term)> {
 // The `| \head\..tail; ih =>` cons arm of a `Bin` fold. Mirrors the `Bin`
 // literal's own backslash-delimited shape (`parse_bin_literal`): `head` is
 // the leading byte, `tail` the rest.
-fn parse_bin_cons_branch<'a>() -> Parser<'a, ((String, String, String), Term)> {
+fn parse_bin_cons_branch<'a>() -> Parser<'a, (ConsLabels, Term)> {
     parse_literal("|")
         .and_drop(parse_literal("\\"))
         .and_keep(parse_identifier())
@@ -1142,14 +1146,15 @@ fn parse_rec<'a>() -> Parser<'a, Term> {
 }
 
 // A `use` binder in function-definition sugar (`let`/`rec`/`satisfy` telescopes):
-// `use term`. Always anonymous — it binds `_` (lowering mints a fresh name) and
-// joins the instance scope; an instance is reached by resolution, never by name.
+// `use term`. Always anonymous — there is no source binder position at all
+// (lowering mints a fresh name directly) and joins the instance scope; an
+// instance is reached by resolution, never by name.
 fn parse_use_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
     catch(parse_keyword("use"))
         .and_keep(lazy(parse_term))
         .map(|type_| FuncSugarParam {
             plicity: Plicity::Witness,
-            label: Pattern::Binder("_".to_string()),
+            label: Pattern::Binder(None),
             type_,
         })
 }

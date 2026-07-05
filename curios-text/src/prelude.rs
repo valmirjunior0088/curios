@@ -178,7 +178,7 @@ fn fn_marked(
                 .into_iter()
                 .map(|(p, n, t)| FuncSugarParam {
                     plicity: p,
-                    label: Pattern::Binder(n.to_string()),
+                    label: Pattern::Binder(Some(n.to_string())),
                     type_: t,
                 })
                 .collect(),
