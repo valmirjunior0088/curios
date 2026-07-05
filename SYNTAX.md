@@ -196,6 +196,13 @@ pub let map(@A : Type, @B : Type, f : (A) -> B, m : Option(A)) -> Option(B) =
 pub rec len(@A : Type, l : Lst(A)) -> Nat = ...;
 ```
 
+**`foreign`.** A binding implemented by the embedder rather than by curios code — the user-facing FFI boundary. The type is a **wire signature**: `(T, ...) -> T` or a bare `T` for a zero-argument foreign (mirroring `sys_io`'s own `io_clock_wall`-style ops), where each `T` is one of the six wire types `Nat`, `Int`, `Bln`, `Bin`, `Io`, `Lst(T)` — not an arbitrary curios `Type`, since these are exactly the shapes that can cross the host boundary. The name is both the binding and the wasm import name, imported under the flat `env` namespace; an embedder supplies an implementation via `curios-rt::ForeignBindings` (native) or `hooks.foreign` (the JS harness).
+
+```
+foreign frobnicate : (Nat, Bin) -> Nat;
+pub foreign log : (Bin) -> Nat;
+```
+
 **`mod`.** A submodule, either inline (`pub mod Name ... end`) or file-backed (`pub mod Name;`, loaded from `Name.crs`). The `std.crs` / `syn.crs` index files are just lists of file-backed `mod` declarations plus re-exports.
 
 ```

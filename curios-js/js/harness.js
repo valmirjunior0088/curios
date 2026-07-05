@@ -153,21 +153,21 @@ export async function run(config) {
     io_env: () => [config.status.NOT_FOUND, emptyBin()],
   };
 
-  const env = {};
+  const sysEnv = {};
 
   for (const name of config.importNames) {
     const implementation = implementations[name];
 
     if (!implementation) {
-      throw new Error(`no browser implementation for env.${name}`);
+      throw new Error(`no browser implementation for sys.${name}`);
     }
 
-    env[name] = implementation;
+    sysEnv[name] = implementation;
   }
 
   // `exit` is a hardcoded primitive at every end (see curios-abi's module
   // doc), so its import name is spelled directly here too.
-  env.io_exit = (code) => {
+  sysEnv.io_exit = (code) => {
     throw new ExitSignal(code);
   };
 
@@ -207,7 +207,7 @@ export async function run(config) {
 
   try {
     const { instance } = await WebAssembly.instantiate(config.program, {
-      [config.sysNamespace]: env,
+      [config.sysNamespace]: sysEnv,
       [config.envNamespace]: foreignEnv,
     });
 
