@@ -1,13 +1,13 @@
 use {
     super::{
-        Apply, BinMatch, BinSegment, BlnMatch, CasePayloadParam, ConceptField, ConceptParam,
-        Entrypoint, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let,
-        LetSignature, LoadError, LstEntry, LstMatch, Match, MatchPattern, MatchPatternField,
-        MatrixArm, MatrixMatch, Module, Motive, Name, Nat, NatLiteral, NatMatch, NumLit, NumOp,
-        Pattern, PatternField, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem, StructLit,
-        StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
-        TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
-        TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
+        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, CasePayloadParam, ConceptField,
+        ConceptParam, Entrypoint, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
+        Infix, Let, LetSignature, LoadError, LstEntry, LstMatch, LstPattern, Match, MatchPattern,
+        MatchPatternField, MatrixArm, MatrixMatch, Module, Motive, Name, Nat, NatLiteral, NatMatch,
+        NatPattern, NumLit, NumOp, Pattern, PatternField, Plicity, Prim, Proj, Qualifier, Radix,
+        Rec, RecItem, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept,
+        TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple,
+        TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{
@@ -847,16 +847,127 @@ fn parse_ctor_match_pattern<'a>() -> Parser<'a, MatchPattern> {
         )
 }
 
+// A nested `Bln` leaf: `true` or `false`. Tried as dedicated keywords before
+// the generic `Binder` fallback in `parse_match_pattern` — `parse_binder`
+// doesn't itself reject keyword text, mirroring the same precedent already
+// used for `Bln` literals at term level (see the `Subterm::Prim(Prim::Bln)`
+// case above).
+fn parse_bln_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    catch(parse_keyword("false"))
+        .map(|()| MatchPattern::Bln(false))
+        .or(catch(parse_keyword("true")).map(|()| MatchPattern::Bln(true)))
+}
+
+// The `0` leaf of a nested `Nat` pattern — mirrors `parse_nat_match`'s own
+// zero-case check.
+fn parse_nat_zero_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    catch(parse_nat().flat_map(|lit| match lit {
+        NatLiteral::Number(n, _) if n.is_zero() => pure(MatchPattern::Nat(NatPattern::Zero)),
+        _ => fail("expected 0 as a nested Nat zero pattern"),
+    }))
+}
+
+// The `pred + 1; ih` leaf of a nested `Nat` pattern. `ih` is mandatory here
+// (no optional-ih alternative), mirroring `parse_nat_match`'s own asymmetry
+// against the `Lst`/`Bin` cons leaves below. Tried after `Ctor` and before
+// the generic `Binder` fallback in `parse_match_pattern`: it shares a
+// leading identifier with both, so `Binder` would otherwise silently
+// swallow every `name+1;ih` input before this ever gets a chance to commit.
+// A space is required on each side of `+` (mirroring `parse_infix_op`'s own
+// space-sensitivity, via the same `preceded_by_space`/`require_space`
+// primitives and a `take_exact` operator token that doesn't itself eat
+// trailing whitespace) — `pred+1` sets this apart visually from a plain
+// binder in a way `pred + 1` doesn't need help with.
+fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    catch(
+        parse_identifier()
+            .and_drop(preceded_by_space())
+            .and_drop(take_exact("+"))
+            .and_drop(require_space())
+            .and_drop(parse_literal("1"))
+            .and_drop(parse_literal(";")),
+    )
+    .and(parse_identifier())
+    .map(|(pred_label, ih_label): (&str, &str)| {
+        MatchPattern::Nat(NatPattern::Succ {
+            pred_label: pred_label.to_string(),
+            ih_label: ih_label.to_string(),
+        })
+    })
+}
+
+// The `[]` leaf of a nested `Lst` pattern.
+fn parse_lst_nil_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    catch(parse_literal("[]")).map(|()| MatchPattern::Lst(LstPattern::Nil))
+}
+
+// The `[head, ..tail][; ih]` leaf of a nested `Lst` pattern — mirrors
+// `parse_lst_cons_branch` minus the leading `|` and trailing `=> body`.
+fn parse_lst_cons_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    catch(
+        parse_literal("[")
+            .and_keep(parse_identifier())
+            .and_drop(parse_literal(","))
+            .and_drop(parse_literal("..")),
+    )
+    .and(parse_identifier())
+    .and_drop(parse_literal("]"))
+    .and(parse_cons_ih())
+    .map(|((head, tail), ih_label)| {
+        MatchPattern::Lst(LstPattern::Cons {
+            head_label: head.to_string(),
+            tail_label: tail.to_string(),
+            ih_label,
+        })
+    })
+}
+
+// The `\\` leaf of a nested `Bin` pattern (the empty bytestring literal).
+fn parse_bin_end_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    catch(parse_literal("\\\\")).map(|()| MatchPattern::Bin(BinPattern::End))
+}
+
+// The `\head\..tail[; ih]` leaf of a nested `Bin` pattern — mirrors
+// `parse_bin_cons_branch` minus the leading `|` and trailing `=> body`.
+fn parse_bin_byte_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    catch(
+        parse_literal("\\")
+            .and_keep(parse_identifier())
+            .and_drop(parse_literal("\\"))
+            .and_drop(parse_literal("..")),
+    )
+    .and(parse_identifier())
+    .and(parse_cons_ih())
+    .map(|((head, tail), ih_label)| {
+        MatchPattern::Bin(BinPattern::Byte {
+            head_label: head.to_string(),
+            tail_label: tail.to_string(),
+            ih_label,
+        })
+    })
+}
+
 // A match-arm pattern: a plain binder, an inductive constructor applied to
-// (possibly nested) sub-patterns, a tuple pattern, or a struct pattern — see
-// `MatchPattern`. Struct and constructor forms are tried before the
-// bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple`
-// first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some`
-// in `some(x)`) would otherwise be consumed by the binder case before the
-// disambiguating `{`/`(` is ever seen.
+// (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one
+// of the `Bln`/`Nat`/`Lst`/`Bin` literal leaves — see `MatchPattern`. Struct
+// and constructor forms are tried before the bare-name case for the same
+// reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier
+// prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would
+// otherwise be consumed by the binder case before the disambiguating
+// `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of
+// their prefixes — `[`, `\`, a digit, `true`/`false` — overlap `Tuple`'s
+// `(`) and, for `NatSucc` specifically, before `Binder` (see its own doc
+// comment).
 fn parse_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     parse_struct_match_pattern()
         .or(parse_ctor_match_pattern())
+        .or(parse_bln_match_pattern())
+        .or(parse_nat_zero_match_pattern())
+        .or(parse_nat_succ_match_pattern())
+        .or(parse_lst_nil_match_pattern())
+        .or(parse_lst_cons_match_pattern())
+        .or(parse_bin_end_match_pattern())
+        .or(parse_bin_byte_match_pattern())
         .or(parse_tuple_match_pattern())
         .or(catch(parse_literal("("))
             .and_keep(lazy(parse_match_pattern))

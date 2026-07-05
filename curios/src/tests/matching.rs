@@ -223,6 +223,157 @@ fn matrix_match_rejects_dependent_motive_on_tuple_head() {
     );
 }
 
+// A `Nat` literal leaf (`0`/`n + 1; ih`) nested inside a constructor payload.
+#[test]
+fn nested_nat_pattern_dispatches_by_shape() {
+    let source = r#"
+        use /std/{Option, Nat, Io};
+        let f(o : Option(Nat)) -> Nat =
+            match o
+            | some(0) => 0
+            | some(n + 1; ih) => n
+            | none() => 1
+            end;
+        Io/print(Nat/to_str(f(Option/some(3))))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"2");
+}
+
+// An `Lst` literal leaf (`[]`/`[h, ..t]`) nested inside a tuple field.
+#[test]
+fn nested_lst_pattern_dispatches_by_shape() {
+    let source = r#"
+        use /std/{Nat, Lst, Io};
+        let f(p : { Nat, Lst(Nat) }) -> Nat =
+            match p
+            | (x, []) => x
+            | (x, [h, ..t]) => h
+            end;
+        Io/print(Nat/to_str(f((0, [7, 8]))))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"7");
+}
+
+// A `Bin` literal leaf (`\\`/`\h\..t`) nested inside a tuple field.
+#[test]
+fn nested_bin_pattern_dispatches_by_shape() {
+    let source = r#"
+        use /std/{Nat, Bin, Str, Io};
+        let f(p : { Nat, Bin }) -> Nat =
+            match p
+            | (x, \\) => x
+            | (x, \h\..t) => h
+            end;
+        Io/print(Nat/to_str(f((0, Str/to_bin("A")))))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"65");
+}
+
+// A `Bln` literal leaf (`true`/`false`) nested inside a constructor payload —
+// two full rows, since a bare top-level `true`/`false` would otherwise be
+// swallowed by the separate flat `parse_bln_match` before ever reaching the
+// matrix grammar.
+#[test]
+fn nested_bln_pattern_dispatches_by_shape() {
+    let source = r#"
+        use /std/{Bln, Nat, Io};
+        pub induct Pair(A : Type, B : Type) : Type
+        | pair(A, B)
+        end
+        let f(p : Pair(Bln, Nat)) -> Nat =
+            match p
+            | pair(true, y) => y
+            | pair(false, y) => y + 1
+            end;
+        Io/print(Nat/to_str(f(Pair/pair(false, 4))))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"5");
+}
+
+// A nested `Nat` pattern column missing its `0` case entirely — reachable
+// only through the matrix grammar (the flat two-branch `parse_nat_match`
+// can't even express incompleteness, since it requires both cases up
+// front). These four hardcoded carriers have no core-side exhaustiveness
+// mechanism to fall back on, unlike an ordinary constructor tag.
+#[test]
+fn matrix_match_rejects_incomplete_nat_pattern() {
+    let source = r#"
+        use /std/{Nat, Io};
+        let f(n : Nat) -> Nat =
+            match n
+            | n2 + 1; ih => n2
+            end;
+        Io/print(Nat/to_str(f(3)))
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    assert!(
+        error.contains("both of its cases"),
+        "unexpected error: {error}"
+    );
+}
+
+// A dependent motive is legal on a top-level `Nat` head too, not just a
+// `Ctor` head — `BlnMatch`/`NatMatch::Induction`/`LstMatch`/`BinMatch` all
+// already support the full motive ladder flat today. The arms are written
+// succ-case-first: written zero-then-succ (in that literal order) is valid
+// input to the pre-existing flat `parse_nat_match` grammar too, which would
+// swallow the source before it ever reached the matrix compiler — Path A
+// gives rows no priority order, so reordering doesn't change the meaning,
+// only which parser accepts it.
+#[test]
+fn matrix_match_allows_dependent_motive_on_nat_head() {
+    let source = r#"
+        use /std/{Nat, Io};
+        let f(n : Nat) -> Nat =
+            match n : (m) => Nat
+            | m + 1; ih => m
+            | 0 => 0
+            end;
+        Io/print(Nat/to_str(f(3)))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"2");
+}
+
+// Regression test mirroring `flat_option_match_lowers_without_synthetic_indirection`:
+// a single, non-nested `some(0)`/`some(n + 1; ih)`/`none()` match must lower
+// and run correctly end-to-end, exercising `compile_ctor`'s and
+// `compile_nat`'s single-row fast paths together — guarding against
+// reintroducing the erasure hint-compounding bug for the new carrier leaves.
+#[test]
+fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
+    let source = r#"
+        use /std/{Option, Nat, Io};
+        let f(o : Option(Nat)) -> Nat =
+            match o
+            | some(0) => 0
+            | some(n + 1; ih) => n
+            | none() => 1
+            end;
+        Io/print(Nat/to_str(f(Option/some(1))))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"0");
+}
+
 #[test]
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"

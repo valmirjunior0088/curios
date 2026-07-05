@@ -1,12 +1,12 @@
 use {
     super::{
-        Apply, BinMatch, BinSegment, BlnMatch, ConceptField, ConceptParam, Entrypoint, Field, Func,
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetSignature, LstEntry,
-        LstMatch, Match, MatchPattern, MatchPatternField, MatrixMatch, Module, Motive, Nat,
-        NatLiteral, NatMatch, NumLit, Pattern, PatternField, Plicity, Prim, Proj, Radix, Rec,
-        StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct,
-        TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
-        TupleTypeParam, UseGroup, WitnessEntry,
+        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, ConceptField, ConceptParam, Entrypoint,
+        Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetSignature,
+        LstEntry, LstMatch, LstPattern, Match, MatchPattern, MatchPatternField, MatrixMatch,
+        Module, Motive, Nat, NatLiteral, NatMatch, NatPattern, NumLit, Pattern, PatternField,
+        Plicity, Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase,
+        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness,
+        Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
@@ -284,6 +284,38 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer<'static> {
                 pure(", ")
             }),
             pure(" }"),
+        ]),
+        MatchPattern::Bln(false) => pure("false"),
+        MatchPattern::Bln(true) => pure("true"),
+        MatchPattern::Nat(NatPattern::Zero) => pure("0"),
+        MatchPattern::Nat(NatPattern::Succ {
+            pred_label,
+            ih_label,
+        }) => flat([pure(pred_label), pure(" + 1; "), pure(ih_label)]),
+        MatchPattern::Lst(LstPattern::Nil) => pure("[]"),
+        MatchPattern::Lst(LstPattern::Cons {
+            head_label,
+            tail_label,
+            ih_label,
+        }) => flat([
+            pure("["),
+            pure(head_label),
+            pure(", .."),
+            pure(tail_label),
+            pure("]"),
+            print_cons_ih(ih_label),
+        ]),
+        MatchPattern::Bin(BinPattern::End) => pure("\\\\"),
+        MatchPattern::Bin(BinPattern::Byte {
+            head_label,
+            tail_label,
+            ih_label,
+        }) => flat([
+            pure("\\"),
+            pure(head_label),
+            pure("\\.."),
+            pure(tail_label),
+            print_cons_ih(ih_label),
         ]),
     }
 }

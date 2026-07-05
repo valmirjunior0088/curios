@@ -1,14 +1,15 @@
 use {
     super::Context,
     crate::{
-        BinMatch, BinSegment, Error, Field, Let, LstEntry, LstMatch, Match, MatchPattern,
-        MatrixArm, Motive, Name, Nat, NatLiteral, NatMatch, Pattern, PatternField, Prim, Rec,
-        StructLitEntry, Subterm, Syn, Term,
+        BinMatch, BinPattern, BinSegment, Error, Field, Let, LstEntry, LstMatch, LstPattern, Match,
+        MatchPattern, MatrixArm, Motive, Name, Nat, NatLiteral, NatMatch, NatPattern, Pattern,
+        PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     num_bigint::BigUint,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
+        mem,
         sync::Arc,
     },
 };
@@ -1063,10 +1064,11 @@ impl<'a, 'b> Lower<'a, 'b> {
             return self.inductive_match(head, motive, Vec::new());
         }
 
-        let all_ctor = arms
-            .iter()
-            .all(|arm| matches!(arm.pattern, MatchPattern::Ctor { .. }));
-        if !all_ctor
+        let homogeneous_dispatch = arms[0].pattern.is_dispatchable()
+            && arms
+                .iter()
+                .all(|arm| mem::discriminant(&arm.pattern) == mem::discriminant(&arms[0].pattern));
+        if !homogeneous_dispatch
             && matches!(
                 motive,
                 Some(Motive::Scrutinee { .. } | Motive::Annotated { .. })
@@ -1163,6 +1165,47 @@ impl<'a, 'b> Lower<'a, 'b> {
                     return Err(Error::MatrixInconsistentShape);
                 }
                 self.compile_fields(columns, rows, leaf)
+            }
+            // The four hardcoded-carrier leaves. `Nat`/`Lst`/`Bin` each nest
+            // their own two-case sub-pattern (`NatPattern::{Zero,Succ}` and
+            // friends), so matching the outer variant alone already treats
+            // both sub-cases as one shape here — no separate classifier
+            // needed (see `is_dispatchable`'s doc comment).
+            MatchPattern::Bln(_) => {
+                if rows
+                    .iter()
+                    .any(|row| !matches!(row.patterns[0], MatchPattern::Bln(_)))
+                {
+                    return Err(Error::MatrixInconsistentShape);
+                }
+                self.compile_bln(columns, rows, top_motive, leaf)
+            }
+            MatchPattern::Nat(_) => {
+                if rows
+                    .iter()
+                    .any(|row| !matches!(row.patterns[0], MatchPattern::Nat(_)))
+                {
+                    return Err(Error::MatrixInconsistentShape);
+                }
+                self.compile_nat(columns, rows, top_motive, leaf)
+            }
+            MatchPattern::Lst(_) => {
+                if rows
+                    .iter()
+                    .any(|row| !matches!(row.patterns[0], MatchPattern::Lst(_)))
+                {
+                    return Err(Error::MatrixInconsistentShape);
+                }
+                self.compile_lst(columns, rows, top_motive, leaf)
+            }
+            MatchPattern::Bin(_) => {
+                if rows
+                    .iter()
+                    .any(|row| !matches!(row.patterns[0], MatchPattern::Bin(_)))
+                {
+                    return Err(Error::MatrixInconsistentShape);
+                }
+                self.compile_bin(columns, rows, top_motive, leaf)
             }
             MatchPattern::Binder(_) => unreachable!("handled above"),
         }
@@ -1280,6 +1323,340 @@ impl<'a, 'b> Lower<'a, 'b> {
         }
 
         self.inductive_match(scrutinee, top_motive.unwrap_or(&None), cases)
+    }
+
+    /// Groups rows into `Bln`'s two literal shapes and emits
+    /// [`curios_core::Term::bln_match`] directly — never `inductive_match`
+    /// (`Cases::Bln` is its own hardcoded core node, not a tag dispatch; see
+    /// this module's own notes on hardcoded-primitive carriers). `Bln`
+    /// carries no payload at all, so — unlike [`Self::compile_ctor`] — there
+    /// is no single-row/multi-row naming discipline needed here.
+    ///
+    /// Unlike a user inductive (whose omitted tags `compile_ctor` defers to
+    /// `inductive_match`'s Rung-C vacuity inversion), `Cases::Bln` has no
+    /// core-side exhaustiveness escape hatch (`elaborate_bln_match`) — both
+    /// groups must be present here, checked eagerly before recursing on
+    /// either.
+    fn compile_bln(
+        &self,
+        mut columns: Vec<curios_core::Term>,
+        rows: Vec<MatrixRow<'_>>,
+        top_motive: Option<&Option<Motive>>,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        let scrutinee = columns.remove(0);
+        let rest = columns;
+
+        let mut false_rows = Vec::new();
+        let mut true_rows = Vec::new();
+        for mut row in rows {
+            let MatchPattern::Bln(value) = row.patterns.remove(0) else {
+                unreachable!("every row classified as Bln")
+            };
+            match value {
+                false => false_rows.push(row),
+                true => true_rows.push(row),
+            }
+        }
+
+        if false_rows.is_empty() || true_rows.is_empty() {
+            return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Bln" });
+        }
+
+        let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
+        let false_case = self.compile(rest.clone(), false_rows, None, leaf)?;
+        let true_case = self.compile(rest, true_rows, None, leaf)?;
+
+        Ok(curios_core::Term::bln_match(
+            scrutinee,
+            label,
+            motive_body,
+            false_case,
+            true_case,
+        ))
+    }
+
+    /// Groups rows into `NatZero`/`NatSucc` — the nested-pattern counterpart
+    /// of `NatMatch::Induction`'s own `0`/`n+1; ih` arms — and emits
+    /// [`curios_core::Term::nat_match`] directly.
+    ///
+    /// Mirrors [`Self::compile_ctor`]'s single-row/multi-row naming
+    /// discipline exactly, for the same reason: `curios-core`'s erasure pass
+    /// reads a `Nat` succ arm's stored binder labels as naming hints too
+    /// (`erase_nat_match`, the same `Context::fresh` hint-compounding
+    /// mechanism `erase_inductive_match` has) — unconditionally minting a
+    /// synthetic name here would resurrect the exact regression class
+    /// `compile_ctor`'s fast path exists to avoid. A `NatSucc` group of
+    /// exactly one row therefore reuses that row's own written
+    /// `pred_label`/`ih_label` directly; only a group with more than one row
+    /// mints synthetic names.
+    ///
+    /// `pred`/`ih` are always plain binder names, never a further
+    /// sub-pattern (deep peeling stays out of scope), so — unlike a
+    /// constructor argument slot — the multi-row case never needs a new
+    /// column for them at all: each row's own written name is just bound to
+    /// one shared synthetic variable via `row.binds`, exactly like
+    /// [`Self::compile`]'s own all-`Binder`-column-retirement path.
+    ///
+    /// Both groups must be present — `Cases::FreeMonoid` has no vacuity
+    /// escape hatch either (same point as [`Self::compile_bln`]'s doc
+    /// comment). Checking this eagerly, before recursing on either group,
+    /// also avoids indexing into an empty `rows` slice or a misleading
+    /// [`Error::MatrixDuplicateRow`] from [`Self::compile`]'s base case.
+    fn compile_nat(
+        &self,
+        mut columns: Vec<curios_core::Term>,
+        rows: Vec<MatrixRow<'_>>,
+        top_motive: Option<&Option<Motive>>,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        let scrutinee = columns.remove(0);
+        let rest = columns;
+
+        let mut zero_rows = Vec::new();
+        let mut succ_rows: Vec<(String, String, MatrixRow<'_>)> = Vec::new();
+        for mut row in rows {
+            match row.patterns.remove(0) {
+                MatchPattern::Nat(NatPattern::Zero) => zero_rows.push(row),
+                MatchPattern::Nat(NatPattern::Succ {
+                    pred_label,
+                    ih_label,
+                }) => succ_rows.push((pred_label.clone(), ih_label.clone(), row)),
+                _ => unreachable!("every row classified as Nat"),
+            }
+        }
+
+        if zero_rows.is_empty() || succ_rows.is_empty() {
+            return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Nat" });
+        }
+
+        let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
+        let zero_case = self.compile(rest.clone(), zero_rows, None, leaf)?;
+
+        let (pred_label, ih_label, succ_case) = if succ_rows.len() == 1 {
+            let (pred_name, ih_name, row) = succ_rows.pop().unwrap();
+            let pred_bound = self.pattern_binder_name(&pred_name);
+            let ih_bound = self.pattern_binder_name(&ih_name);
+            let succ_case = self.scoped([pred_bound.clone(), ih_bound.clone()], || {
+                self.compile(rest, vec![row], None, leaf)
+            })?;
+            (pred_bound, ih_bound, succ_case)
+        } else {
+            let pred_synth = self.context.fresh_binder();
+            let ih_synth = self.context.fresh_binder();
+            let sub_rows = succ_rows
+                .into_iter()
+                .map(|(pred_name, ih_name, mut row)| {
+                    row.binds.push((
+                        pred_name,
+                        curios_core::Term::var(curios_core::Var::free(pred_synth.clone())),
+                    ));
+                    row.binds.push((
+                        ih_name,
+                        curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
+                    ));
+                    row
+                })
+                .collect();
+            let succ_case = self.compile(rest, sub_rows, None, leaf)?;
+            (pred_synth, ih_synth, succ_case)
+        };
+
+        Ok(curios_core::Term::nat_match(
+            scrutinee,
+            label,
+            motive_body,
+            zero_case,
+            pred_label,
+            ih_label,
+            succ_case,
+        ))
+    }
+
+    /// Groups rows into `LstNil`/`LstCons` and emits
+    /// [`curios_core::Term::lst_match`] directly. Structurally identical to
+    /// [`Self::compile_nat`] but with three names (`head`/`tail`/optional
+    /// `ih`) instead of two, reusing [`Self::cons_ih_name`] for the
+    /// single-row case's `ih` (already handles "written name → bound,
+    /// omitted → fresh" correctly). In the multi-row case, a row whose own
+    /// `ih_label` was `None` never references any ih name, so no bind is
+    /// pushed for it — only rows that wrote `; ih` get one, sharing the one
+    /// synthetic `ih` variable the emitted core node itself always needs.
+    fn compile_lst(
+        &self,
+        mut columns: Vec<curios_core::Term>,
+        rows: Vec<MatrixRow<'_>>,
+        top_motive: Option<&Option<Motive>>,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        let scrutinee = columns.remove(0);
+        let rest = columns;
+
+        let mut nil_rows = Vec::new();
+        let mut cons_rows: Vec<(String, String, Option<String>, MatrixRow<'_>)> = Vec::new();
+        for mut row in rows {
+            match row.patterns.remove(0) {
+                MatchPattern::Lst(LstPattern::Nil) => nil_rows.push(row),
+                MatchPattern::Lst(LstPattern::Cons {
+                    head_label,
+                    tail_label,
+                    ih_label,
+                }) => cons_rows.push((
+                    head_label.clone(),
+                    tail_label.clone(),
+                    ih_label.clone(),
+                    row,
+                )),
+                _ => unreachable!("every row classified as Lst"),
+            }
+        }
+
+        if nil_rows.is_empty() || cons_rows.is_empty() {
+            return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Lst" });
+        }
+
+        let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
+        let empty_case = self.compile(rest.clone(), nil_rows, None, leaf)?;
+
+        let (head_label, tail_label, ih_label, cons_case) = if cons_rows.len() == 1 {
+            let (head_name, tail_name, ih_name, row) = cons_rows.pop().unwrap();
+            let head_bound = self.pattern_binder_name(&head_name);
+            let tail_bound = self.pattern_binder_name(&tail_name);
+            let ih_bound = self.cons_ih_name(&ih_name);
+            let cons_case = self.scoped(
+                [head_bound.clone(), tail_bound.clone(), ih_bound.clone()],
+                || self.compile(rest, vec![row], None, leaf),
+            )?;
+            (head_bound, tail_bound, ih_bound, cons_case)
+        } else {
+            let head_synth = self.context.fresh_binder();
+            let tail_synth = self.context.fresh_binder();
+            let ih_synth = self.context.fresh_binder();
+            let sub_rows = cons_rows
+                .into_iter()
+                .map(|(head_name, tail_name, ih_name, mut row)| {
+                    row.binds.push((
+                        head_name,
+                        curios_core::Term::var(curios_core::Var::free(head_synth.clone())),
+                    ));
+                    row.binds.push((
+                        tail_name,
+                        curios_core::Term::var(curios_core::Var::free(tail_synth.clone())),
+                    ));
+                    if let Some(ih_name) = ih_name {
+                        row.binds.push((
+                            ih_name,
+                            curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
+                        ));
+                    }
+                    row
+                })
+                .collect();
+            let cons_case = self.compile(rest, sub_rows, None, leaf)?;
+            (head_synth, tail_synth, ih_synth, cons_case)
+        };
+
+        Ok(curios_core::Term::lst_match(
+            scrutinee,
+            curios_core::Term::metavar(self.context.fresh_metavar()),
+            label,
+            motive_body,
+            empty_case,
+            head_label,
+            tail_label,
+            ih_label,
+            cons_case,
+        ))
+    }
+
+    /// Groups rows into `BinEnd`/`BinByte` and emits
+    /// [`curios_core::Term::bin_match`] directly — identical to
+    /// [`Self::compile_lst`] minus the `elem` metavar argument `Lst` needs
+    /// for its polymorphic element type (`Bin` has none).
+    fn compile_bin(
+        &self,
+        mut columns: Vec<curios_core::Term>,
+        rows: Vec<MatrixRow<'_>>,
+        top_motive: Option<&Option<Motive>>,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        let scrutinee = columns.remove(0);
+        let rest = columns;
+
+        let mut end_rows = Vec::new();
+        let mut byte_rows: Vec<(String, String, Option<String>, MatrixRow<'_>)> = Vec::new();
+        for mut row in rows {
+            match row.patterns.remove(0) {
+                MatchPattern::Bin(BinPattern::End) => end_rows.push(row),
+                MatchPattern::Bin(BinPattern::Byte {
+                    head_label,
+                    tail_label,
+                    ih_label,
+                }) => byte_rows.push((
+                    head_label.clone(),
+                    tail_label.clone(),
+                    ih_label.clone(),
+                    row,
+                )),
+                _ => unreachable!("every row classified as Bin"),
+            }
+        }
+
+        if end_rows.is_empty() || byte_rows.is_empty() {
+            return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Bin" });
+        }
+
+        let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
+        let empty_case = self.compile(rest.clone(), end_rows, None, leaf)?;
+
+        let (head_label, tail_label, ih_label, cons_case) = if byte_rows.len() == 1 {
+            let (head_name, tail_name, ih_name, row) = byte_rows.pop().unwrap();
+            let head_bound = self.pattern_binder_name(&head_name);
+            let tail_bound = self.pattern_binder_name(&tail_name);
+            let ih_bound = self.cons_ih_name(&ih_name);
+            let cons_case = self.scoped(
+                [head_bound.clone(), tail_bound.clone(), ih_bound.clone()],
+                || self.compile(rest, vec![row], None, leaf),
+            )?;
+            (head_bound, tail_bound, ih_bound, cons_case)
+        } else {
+            let head_synth = self.context.fresh_binder();
+            let tail_synth = self.context.fresh_binder();
+            let ih_synth = self.context.fresh_binder();
+            let sub_rows = byte_rows
+                .into_iter()
+                .map(|(head_name, tail_name, ih_name, mut row)| {
+                    row.binds.push((
+                        head_name,
+                        curios_core::Term::var(curios_core::Var::free(head_synth.clone())),
+                    ));
+                    row.binds.push((
+                        tail_name,
+                        curios_core::Term::var(curios_core::Var::free(tail_synth.clone())),
+                    ));
+                    if let Some(ih_name) = ih_name {
+                        row.binds.push((
+                            ih_name,
+                            curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
+                        ));
+                    }
+                    row
+                })
+                .collect();
+            let cons_case = self.compile(rest, sub_rows, None, leaf)?;
+            (head_synth, tail_synth, ih_synth, cons_case)
+        };
+
+        Ok(curios_core::Term::bin_match(
+            scrutinee,
+            label,
+            motive_body,
+            empty_case,
+            head_label,
+            tail_label,
+            ih_label,
+            cons_case,
+        ))
     }
 
     /// Explodes a `Tuple`/`Struct` column into one new leftmost column per

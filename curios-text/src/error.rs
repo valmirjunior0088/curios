@@ -82,11 +82,12 @@ pub enum Error {
     /// inductive scrutinee — `Bln` and `Nat` matches take `: P` or `: (x) => P`.
     AnnotatedMotiveNotInductive,
     /// A dependent motive (`(x) => P` or the annotated type-pattern form) was
-    /// written on a match whose head does not dispatch on a constructor tag
-    /// directly — every arm matches a tuple/struct, or is a plain binder.
-    /// There is no core `Match` node for such a head to attach the motive
-    /// to; only a match whose every top-level arm pattern is a constructor
-    /// tag can carry a dependent motive.
+    /// written on a match whose head does not dispatch on a single tag or
+    /// literal shape directly — every arm matches a tuple/struct, is a
+    /// plain binder, or arms disagree on which carrier (`Ctor`/`Bln`/`Nat`/
+    /// `Lst`/`Bin`) they dispatch on. There is no core `Match` node for such
+    /// a head to attach the motive to; only a match whose every top-level
+    /// arm shares one dispatchable shape can carry a dependent motive.
     MatrixMotiveRequiresCtorHead,
     /// Two match-arm rows write incompatible shapes for the same column —
     /// mixing a plain binder with a concrete constructor/tuple/struct shape
@@ -101,6 +102,15 @@ pub enum Error {
     /// constructor tag. Every arm must be reachable and distinct; "Path A"
     /// gives arms no priority order to break the tie with.
     MatrixDuplicateRow,
+    /// A nested `Bln`/`Nat`/`Lst`/`Bin` leaf-pattern column split without
+    /// both of its required cases present. Unlike an ordinary constructor
+    /// tag (whose omission the matrix compiler defers entirely to
+    /// `inductive_match`'s vacuity inversion), these four hardcoded
+    /// carriers have no core-side exhaustiveness mechanism — the matrix
+    /// compiler must enforce completeness itself.
+    MatrixIncompleteCarrierMatch {
+        carrier: &'static str,
+    },
     ModuleLoadFailed {
         label: String,
         cause: Box<LoadError>,
@@ -211,7 +221,7 @@ impl fmt::Display for Error {
             Error::MatrixMotiveRequiresCtorHead => {
                 write!(
                     f,
-                    "a dependent motive is only legal when every arm matches a constructor tag directly"
+                    "a dependent motive is only legal when every arm dispatches on the same kind of tag/literal directly"
                 )
             }
             Error::MatrixInconsistentShape => {
@@ -224,6 +234,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "duplicate or overlapping match arm: every arm must be reachable and distinct"
+                )
+            }
+            Error::MatrixIncompleteCarrierMatch { carrier } => {
+                write!(
+                    f,
+                    "a nested `{carrier}` pattern column must cover both of its cases"
                 )
             }
             Error::ModuleLoadFailed { label, cause } => {

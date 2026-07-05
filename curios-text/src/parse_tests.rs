@@ -1754,6 +1754,20 @@ fn matrix_match_round_trips() {
          | (none(), some(y)) => h(y)\n\
          | (none(), none()) => d\n\
          end",
+        // Nat literal leaves nested inside a constructor payload.
+        "match o | some(0) => y | some(n + 1; ih) => y | none() => y end",
+        // Lst literal leaves nested inside a tuple field, with and without
+        // the optional induction hypothesis.
+        "match p | (x, []) => x | (x, [h, ..t]) => h end",
+        "match p | (x, [h, ..t]; ih) => h | (x, []) => x end",
+        // Bin literal leaves nested inside a constructor payload.
+        r#"match o | some(\\) => y | some(\h\..t) => y | none() => y end"#,
+        r#"match o | some(\h\..t; ih) => y | some(\\) => y | none() => y end"#,
+        // Bln literal leaves nested inside a constructor payload — two full
+        // rows, since a bare top-level `true`/`false` would otherwise be
+        // swallowed by the separate flat `parse_bln_match` before ever
+        // reaching this grammar.
+        "match p | pair(true, y) => y | pair(false, y) => y end",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
@@ -1762,6 +1776,26 @@ fn matrix_match_round_trips() {
             "matrix match round-trip failed for {source:?}"
         );
     }
+}
+
+// A nested `Nat` succ pattern requires a space on each side of `+` (mirrors
+// `parse_infix_requires_spaces_and_disambiguates_signs`'s own operator
+// spacing rule). A glued `n+1` is not recognized as `NatPattern::Succ` at
+// all — it falls through to a plain `Binder("n")`, leaving `+1; ih` as
+// trailing garbage the arm grammar rejects, a parse error rather than a
+// silent reinterpretation.
+#[test]
+fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
+    assert!(
+        "match o | some(n + 1; ih) => n | some(0) => n | none() => n end"
+            .parse::<Term>()
+            .is_ok()
+    );
+    assert!(
+        "match o | some(n+1; ih) => n | some(0) => n | none() => n end"
+            .parse::<Term>()
+            .is_err()
+    );
 }
 
 #[test]
