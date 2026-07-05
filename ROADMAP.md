@@ -154,5 +154,6 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
 - [x] Proof-carrying UTF-8 string decoding (`std/Str`, `std/Char`)
 - [x] Parser-combinator library (`std/Parse`)
 - [x] Core collections (`std/Lst` and its helpers, length-indexed `std/Vec`)
+- [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bin` keys — same entries, same shape — with injective key encodings via its `Key` concept)
 - [x] Equality and ordering (`std/Eq`, `std/Order`)
 - [x] Foundational proof/logic types (`std/True`, `std/False`)

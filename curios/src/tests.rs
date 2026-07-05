@@ -16,6 +16,7 @@ mod erasure;
 mod foreign;
 mod inference;
 mod io;
+mod map;
 mod matching;
 mod network;
 mod operators;

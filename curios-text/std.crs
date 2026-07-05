@@ -79,6 +79,9 @@ pub use BigNat/{let BigNat};
 pub mod Vec;
 pub use Vec/{let Vec};
 
+pub mod Map;
+pub use Map/{let Map};
+
 pub mod Eq;
 pub use Eq/{let Eq};
 

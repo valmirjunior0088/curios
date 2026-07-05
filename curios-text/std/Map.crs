@@ -1,0 +1,227 @@
+-- A persistent key-value map: a crit-bit Patricia trie over the bytes of a
+-- `Bin` key. The shape of the trie is a function of its key set alone -- no
+-- insertion-order or rebalancing history -- so two maps holding the same
+-- entries are structurally identical values (canonical by construction).
+-- Keys of other types go through the `Key` concept, whose `to_bin` encoding
+-- must be injective.
+--
+-- Each `fork` stores the index of the first bit at which its two subtrees'
+-- keys differ, in an extended bit stream that makes every key prefix-free:
+-- byte `g` of a key contributes nine bits, at position `g * 9` a `1` marker
+-- meaning "a byte is present here", then the byte's own bits most significant
+-- first; positions past the end of the key read `0`. The marker orders a key
+-- strictly after every proper prefix of it, so `fold`/`entries`/`keys` visit
+-- keys in ascending lexicographic byte order. Along any root-to-leaf path the
+-- stored bit indices strictly increase, and a fork's index is the *first*
+-- position at which its two sides differ -- the invariants that pin the shape.
+
+use /std/{Bin, Nat, Bln, Str, Lst, Option};
+
+induct Node(V : Type) : Type
+| leaf(key : Bin, value : V)
+| fork(crit : Nat, zero : Node(V), one : Node(V))
+end
+
+pub struct Map(V : Type) : Type {
+    size : Nat,
+    root : Option(Node(V))
+}
+
+-- An injective encoding of a key type into the `Bin` the trie stores.
+-- Witnesses here cover `Bin` (identity), `Str` (its UTF-8 bytes), and `Nat`
+-- (big-endian bytes without leading zeros).
+pub concept Key(K : Type) : Type {
+    to_bin(K) -> Bin
+}
+
+satisfy Key(Bin) {
+    to_bin(b) = b
+}
+
+satisfy Key(Str) {
+    to_bin(s) = Str/to_bin(s)
+}
+
+satisfy Key(Nat) {
+    to_bin(n) =
+        rec go(x : Nat) -> Bin =
+            match x
+            | 0 => \\
+            | _ => Bin/append(go(x / 256), x % 256)
+            end;
+        go(n)
+}
+
+-- Bit `j` of `k`'s extended stream.
+let bit(k : Bin, j : Nat) -> Nat =
+    let g = j / 9;
+    let o = j % 9;
+    match g < Bin/len(k)
+    | false => 0
+    | true =>
+        match o
+        | 0 => 1
+        | _ => Nat/and(Nat/shr(/sys/Bin/get(k, g), 8 - o), 1)
+        end
+    end;
+
+-- The first extended-stream position at which two distinct keys differ.
+let crit(a : Bin, b : Bin) -> Nat =
+    rec bits(x : Nat, y : Nat, g : Nat, o : Nat) -> Nat =
+        match Nat/and(Nat/shr(x, 8 - o), 1) == Nat/and(Nat/shr(y, 8 - o), 1)
+        | true => bits(x, y, g, o + 1)
+        | false => g * 9 + o
+        end;
+    rec bytes(g : Nat) -> Nat =
+        match g < Bin/len(a) && g < Bin/len(b)
+        | false => g * 9
+        | true =>
+            let x = /sys/Bin/get(a, g);
+            let y = /sys/Bin/get(b, g);
+            match x == y
+            | true => bytes(g + 1)
+            | false => bits(x, y, g, 1)
+            end
+        end;
+    bytes(0);
+
+-- The entry whose key shares the longest guiding-bit path with `k`: the only
+-- candidate `k` can equal, and the reference against which a new key's
+-- critical position is computed.
+rec lookup(@V : Type, t : Node(V), k : Bin) -> {Bin, V} =
+    match t
+    | leaf(k0, v0) => (k0, v0)
+    | fork(c, z, o) =>
+        match bit(k, c)
+        | 0 => lookup(z, k)
+        | _ => lookup(o, k)
+        end
+    end;
+
+-- Rewrite the value at `k`'s leaf, which is known to be present.
+rec replace(@V : Type, t : Node(V), k : Bin, v : V) -> Node(V) =
+    match t
+    | leaf(k0, v0) => Node/leaf(k, v)
+    | fork(c, z, o) =>
+        match bit(k, c)
+        | 0 => Node/fork(c, replace(z, k, v), o)
+        | _ => Node/fork(c, z, replace(o, k, v))
+        end
+    end;
+
+-- Wedge a fresh leaf for `k` against the subtree `t` at stream position `c`,
+-- on the side named by `b` (`k`'s bit at `c`).
+let wedge(@V : Type, c : Nat, b : Nat, k : Bin, v : V, t : Node(V)) -> Node(V) =
+    match b
+    | 0 => Node/fork(c, Node/leaf(k, v), t)
+    | _ => Node/fork(c, t, Node/leaf(k, v))
+    end;
+
+-- Insert `k` (known absent) whose first difference from the trie's keys is at
+-- position `c`: descend while the stored indices sit below `c`, then wedge.
+rec insert(@V : Type, t : Node(V), c : Nat, b : Nat, k : Bin, v : V) -> Node(V) =
+    match t
+    | leaf(k0, v0) => wedge(c, b, k, v, Node/leaf(k0, v0))
+    | fork(tc, z, o) =>
+        match tc < c
+        | true =>
+            match bit(k, tc)
+            | 0 => Node/fork(tc, insert(z, c, b, k, v), o)
+            | _ => Node/fork(tc, z, insert(o, c, b, k, v))
+            end
+        | false => wedge(c, b, k, v, Node/fork(tc, z, o))
+        end
+    end;
+
+-- Remove `k`'s leaf, which is known to be present; a fork left with one side
+-- collapses to it, so the canonical shape is restored on the way out.
+rec remove(@V : Type, t : Node(V), k : Bin) -> Option(Node(V)) =
+    match t
+    | leaf(k0, v0) => Option/none()
+    | fork(c, z, o) =>
+        match bit(k, c)
+        | 0 =>
+            match remove(z, k)
+            | none() => Option/some(o)
+            | some(z2) => Option/some(Node/fork(c, z2, o))
+            end
+        | _ =>
+            match remove(o, k)
+            | none() => Option/some(z)
+            | some(o2) => Option/some(Node/fork(c, z, o2))
+            end
+        end
+    end;
+
+pub let empty(@V : Type) -> Map(V) =
+    Map { size = 0, root = Option/none() };
+
+pub let len(@V : Type, m : Map(V)) -> Nat =
+    m.size;
+
+pub let get(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Option(V) =
+    let k = Key/to_bin(key);
+    match m.root
+    | none() => Option/none()
+    | some(n) =>
+        let hit = lookup(n, k);
+        match Bin/eql(hit.0, k)
+        | true => Option/some(hit.1)
+        | false => Option/none()
+        end
+    end;
+
+pub let has(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Bln =
+    Option/is_some(get(m, key));
+
+pub let set(@K : Type, @V : Type, use Key(K), m : Map(V), key : K, v : V) -> Map(V) =
+    let k = Key/to_bin(key);
+    match m.root
+    | none() => Map { size = 1, root = Option/some(Node/leaf(k, v)) }
+    | some(n) =>
+        let hit = lookup(n, k);
+        match Bin/eql(hit.0, k)
+        | true => Map { size = m.size, root = Option/some(replace(n, k, v)) }
+        | false =>
+            let c = crit(k, hit.0);
+            Map { size = m.size + 1, root = Option/some(insert(n, c, bit(k, c), k, v)) }
+        end
+    end;
+
+pub let del(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Map(V) =
+    let k = Key/to_bin(key);
+    match m.root
+    | none() => m
+    | some(n) =>
+        let hit = lookup(n, k);
+        match Bin/eql(hit.0, k)
+        | true => Map { size = m.size - 1, root = remove(n, k) }
+        | false => m
+        end
+    end;
+
+-- Entries in ascending lexicographic key order (the zero side of every fork
+-- holds the smaller keys, and a prefix sorts before its extensions).
+pub let fold(@V : Type, @A : Type, m : Map(V), init : A, f : (Bin, V, A) -> A) -> A =
+    match m.root
+    | none() => init
+    | some(n) =>
+        rec go(t : Node(V), acc : A) -> A =
+            match t
+            | leaf(k, v) => f(k, v, acc)
+            | fork(c, z, o) => go(o, go(z, acc))
+            end;
+        go(n, init)
+    end;
+
+pub let entries(@V : Type, m : Map(V)) -> Lst({Bin, V}) =
+    fold(m, [], (k, v, acc) => [..acc, (k, v)]);
+
+pub let keys(@V : Type, m : Map(V)) -> Lst(Bin) =
+    fold(m, [], (k, _, acc) => [..acc, k]);
+
+pub let values(@V : Type, m : Map(V)) -> Lst(V) =
+    fold(m, [], (_, v, acc) => [..acc, v]);
+
+pub let of(@K : Type, @V : Type, use Key(K), l : Lst({K, V})) -> Map(V) =
+    Lst/fold(l, empty(), (kv, acc) => set(acc, kv.0, kv.1));
