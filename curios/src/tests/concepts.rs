@@ -464,12 +464,12 @@ fn monad_over_prim_constructor_resolves_by_imitation() {
     assert_eq!(run(source), b"1");
 }
 
-// The sys-homed operator concepts: `Add/add` resolves on a primitive type
-// through the `/sys` witness (also proving the cached-prelude replay path
-// registers the sys concepts and witnesses), on a user record through a user
-// witness, and in generic code through a local `use Add(A)` premise.
+// The syn-homed operator concepts: `Add/add` resolves on a primitive type
+// through the `/std` witness (also proving the cached-prelude replay path
+// registers the syn concepts and std witnesses), on a user record through a
+// user witness, and in generic code through a local `use Add(A)` premise.
 #[test]
-fn sys_add_concept_resolves_everywhere() {
+fn syn_add_concept_resolves_everywhere() {
     let source = r#"
         use /std/{Nat, Io, Str, Add};
         record Point : Type { x : Nat, y : Nat }

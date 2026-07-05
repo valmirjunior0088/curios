@@ -1,3 +1,2 @@
--- Facade over the `/sys` operator concept behind `%` (see `std/Eql.crs`).
-pub use /sys/{Rem};
-pub use /sys/Rem/{rem};
+pub use /syn/{Rem};
+pub use /syn/Rem/{rem};

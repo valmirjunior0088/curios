@@ -1,5 +1,40 @@
+use /sys/{Bln};
+
+pub concept Add(A : Type) : Type {
+    add(A, A) -> A
+}
+
+pub concept Sub(A : Type) : Type {
+    sub(A, A) -> A
+}
+
+pub concept Mul(A : Type) : Type {
+    mul(A, A) -> A
+}
+
+pub concept Div(A : Type) : Type {
+    div(A, A) -> A
+}
+
+pub concept Rem(A : Type) : Type {
+    rem(A, A) -> A
+}
+
+pub concept Eql(A : Type) : Type {
+    eql(A, A) -> Bln
+}
+
+pub concept Cmp(A : Type) : Type {
+    lt(A, A) -> Bln,
+    lte(A, A) -> Bln,
+    gt(A, A) -> Bln,
+    gte(A, A) -> Bln
+}
+
+pub concept Monad(M : (Type) -> Type) : Type {
+    pure(@A : Type, A) -> M(A),
+    bind(@A : Type, @B : Type, M(A), (A) -> M(B)) -> M(B)
+}
+
 pub mod Str;
 pub use Str/{let Str};
-
-pub mod Monad;
-pub use Monad/{let Monad};

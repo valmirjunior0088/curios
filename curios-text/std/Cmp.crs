@@ -1,5 +1,2 @@
--- Facade over the `/sys` operator concept behind `<`/`<=`/`>`/`>=` (see
--- `std/Eql.crs`). Each relation returns `Bln`; std's `Ord` (whose `cmp`
--- returns the `Order` inductive) is the richer, separate concept.
-pub use /sys/{Cmp};
-pub use /sys/Cmp/{lt, lte, gt, gte};
+pub use /syn/{Cmp};
+pub use /syn/Cmp/{lt, lte, gt, gte};

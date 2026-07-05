@@ -1,14 +1,2 @@
-use /std/{Str};
-
--- Value-level equality, distinct from propositional `Eq` (`std/Eq.crs`). The
--- concept and its primitive witnesses (`Nat`/`Int`/`Flt`/`Bln`/`Bin`) live in
--- `/sys` — operators dispatch through them before any std file elaborates —
--- and this module is the user-facing facade (the `std/Bln.crs` pattern).
-pub use /sys/{Eql};
-pub use /sys/Eql/{eql};
-
--- `Str` is a std record, which `/sys` cannot name — its witness lives here,
--- beside its dependency.
-satisfy Eql(Str) {
-    eql(a, b) = Str/eql(a, b)
-}
+pub use /syn/{Eql};
+pub use /syn/Eql/{eql};

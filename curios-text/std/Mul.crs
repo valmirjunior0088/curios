@@ -1,3 +1,2 @@
--- Facade over the `/sys` operator concept behind `*` (see `std/Eql.crs`).
-pub use /sys/{Mul};
-pub use /sys/Mul/{mul};
+pub use /syn/{Mul};
+pub use /syn/Mul/{mul};

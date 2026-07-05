@@ -1,3 +1,2 @@
--- Facade over the `/sys` operator concept behind `+` (see `std/Eql.crs`).
-pub use /sys/{Add};
-pub use /sys/Add/{add};
+pub use /syn/{Add};
+pub use /syn/Add/{add};

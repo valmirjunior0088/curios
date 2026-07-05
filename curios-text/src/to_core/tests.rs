@@ -1147,11 +1147,11 @@ fn distinct_holes_get_distinct_ids() {
 #[test]
 fn bang_desugars_through_syn_monad_bind() {
     // Every value body is a region root: `x!` hoists to it and sequences
-    // through the `/syn/Monad/bind` wrapper (core name `/syn/Monad/Monad/bind`)
-    // applied to the action and the continuation over a gensym'd binder. The
-    // witness slot and implicits are inserted during core elaboration.
+    // through the `/syn/Monad/bind` wrapper applied to the action and the
+    // continuation over a gensym'd binder. The witness slot and implicits are
+    // inserted during core elaboration.
     let expected = curios_core::Term::apply(
-        curios_core::Term::var(curios_core::Var::free("/syn/Monad/Monad/bind")),
+        curios_core::Term::var(curios_core::Var::free("/syn/Monad/bind")),
         [
             curios_core::Term::var(curios_core::Var::free("x")),
             curios_core::Term::func(

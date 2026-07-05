@@ -1,3 +1,2 @@
--- Facade over the `/sys` operator concept behind `/` (see `std/Eql.crs`).
-pub use /sys/{Div};
-pub use /sys/Div/{div};
+pub use /syn/{Div};
+pub use /syn/Div/{div};

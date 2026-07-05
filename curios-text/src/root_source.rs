@@ -61,18 +61,21 @@ impl RootSource {
     /// Discovery synthesizes a `pub mod <label>;` declaration for each, so
     /// they are loaded and resolvable without the entrypoint declaring them.
     ///
-    /// `sys` comes first: root order is flat-item lowering order, which is
-    /// the topological-sort tiebreak — and nothing references witness items
-    /// by name, so only their position gets the sys operator witnesses
-    /// emitted (and registered) before any std item that uses infix
-    /// elaborates. `std` before `syn` matches the historical decorator-chain
-    /// composition order and is otherwise arbitrary (`std` and `syn`
+    /// Privilege order: root order is flat-item lowering order, which is the
+    /// topological-sort tiebreak. `sys` (the primitives) comes first; `syn`
+    /// (the names the compiler emits — the operator concepts, the
+    /// string-literal and `!` desugaring targets) precedes `std` so those
+    /// names lower before the library code that elaborates against them. The
+    /// operator *witnesses* live at the head of `std`'s own index (nothing
+    /// references witness items by name, so only position registers them
+    /// before the pervasively-infix std/syn items); a goal that still
+    /// elaborates early defers to their later registration. `std` and `syn`
     /// genuinely cross-reference each other — see `to_core::order_flat_items`'s
-    /// doc comment — so nothing but this tiebreak depends on their relative
-    /// order).
+    /// doc comment — so genuine name dependencies reorder regardless of this
+    /// tiebreak.
     pub fn roots(&self) -> Vec<&'static str> {
         match self {
-            RootSource::Prelude { base, .. } => ["sys", "std", "syn"]
+            RootSource::Prelude { base, .. } => ["sys", "syn", "std"]
                 .into_iter()
                 .chain(base.roots())
                 .collect(),

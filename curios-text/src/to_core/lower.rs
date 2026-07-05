@@ -936,9 +936,9 @@ impl<'a, 'b> Lower<'a, 'b> {
             .try_fold(body, |acc, (name, action)| {
                 let domain = curios_core::Term::metavar(self.context.fresh_metavar());
                 let cont = curios_core::Term::func([(name, domain)], acc);
-                // The already-resolved core name: module `/syn/Monad`, concept
-                // namespace `Monad`, method wrapper `bind`.
-                Ok(Self::syn_call("/syn/Monad/Monad/bind", [action, cont]))
+                // The already-resolved core name: the `Monad` concept at
+                // `/syn`'s top level, method wrapper `bind`.
+                Ok(Self::syn_call("/syn/Monad/bind", [action, cont]))
             })
     }
 

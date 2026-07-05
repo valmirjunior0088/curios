@@ -1,6 +1,37 @@
 pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte, neg, abs, sqrt, floor, ceil, trunc, nearest, to_nat, to_int, to_le_bin};
-use /std/{Nat, Int, Str, Bln, Option, Bin, Lst, Order, BigNat};
+use /std/{Nat, Int, Str, Bln, Option, Bin, Lst, Order, BigNat, Add, Sub, Mul, Div, Rem, Eql, Cmp};
+
+satisfy Add(Flt) {
+    add(a, b) = /sys/Flt/add(a, b)
+}
+
+satisfy Sub(Flt) {
+    sub(a, b) = /sys/Flt/sub(a, b)
+}
+
+satisfy Mul(Flt) {
+    mul(a, b) = /sys/Flt/mul(a, b)
+}
+
+satisfy Div(Flt) {
+    div(a, b) = /sys/Flt/div(a, b)
+}
+
+satisfy Rem(Flt) {
+    rem(a, b) = /sys/Flt/rem(a, b)
+}
+
+satisfy Eql(Flt) {
+    eql(a, b) = /sys/Flt/eql(a, b)
+}
+
+satisfy Cmp(Flt) {
+    lt(a, b) = /sys/Flt/lt(a, b),
+    lte(a, b) = /sys/Flt/lte(a, b),
+    gt(a, b) = /sys/Flt/gt(a, b),
+    gte(a, b) = /sys/Flt/gte(a, b)
+}
 
 let pow2(k : Nat) -> BigNat =
     BigNat/mul_pow2(BigNat/of_nat(1), k);

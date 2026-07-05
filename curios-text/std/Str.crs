@@ -1,6 +1,6 @@
 pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
-use /std/{Char, Nat, Bin, Bln, Lst, Option, True, False};
+use /std/{Char, Nat, Bin, Bln, Lst, Option, True, False, Eql};
 
 
 rec seq(@s : Scan, @a : Bin, @b : Bin, va : Utf8(s, a), vb : Valid(b))
@@ -125,6 +125,10 @@ pub let flatten(parts : Lst(Str)) -> Str =
 
 pub let eql(a : Str, b : Str) -> Bln =
     Bin/eql(to_bin(a), to_bin(b));
+
+satisfy Eql(Str) {
+    eql(a, b) = eql(a, b)
+}
 
 let lower_bytes(b : Bin) -> Bin =
     Bin/fold(b, \\, (byte, acc) => Bin/append(acc, Char/to_lower(byte)));

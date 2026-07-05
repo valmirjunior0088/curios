@@ -1,48 +1,3 @@
-pub mod Lst;
-pub use Lst/{let Lst};
-
-pub mod Cell;
-pub use Cell/{let Cell};
-
-pub mod Bin;
-pub use Bin/{let Bin};
-
-pub mod Nat;
-pub use Nat/{let Nat};
-
-pub mod Int;
-pub use Int/{let Int};
-
-pub mod Bln;
-pub use Bln/{let Bln};
-
-pub mod Io;
-pub use Io/{let Io};
-
-pub mod Reader;
-pub use Reader/{let Reader};
-
-pub mod File;
-pub use File/{let File};
-
-pub mod Tcp;
-
-pub mod Task;
-pub use Task/{let Task};
-
-pub mod Http;
-
-pub mod Char;
-
-pub mod Result;
-pub use Result/{let Result};
-
-pub mod Option;
-pub use Option/{let Option};
-
-pub mod Order;
-pub use Order/{let Order};
-
 pub mod Eql;
 pub use Eql/{let Eql};
 
@@ -63,6 +18,52 @@ pub use Rem/{let Rem};
 
 pub mod Cmp;
 pub use Cmp/{let Cmp};
+
+pub mod Nat;
+pub use Nat/{let Nat};
+
+pub mod Int;
+pub use Int/{let Int};
+
+pub mod Flt;
+pub use Flt/{let Flt};
+
+pub mod Bln;
+pub use Bln/{let Bln};
+
+pub mod Bin;
+pub use Bin/{let Bin};
+
+pub mod Lst;
+pub use Lst/{let Lst};
+
+pub mod Cell;
+pub use Cell/{let Cell};
+
+pub mod Io;
+pub use Io/{let Io};
+
+pub mod Reader;
+pub use Reader/{let Reader};
+
+pub mod File;
+pub use File/{let File};
+
+pub mod Tcp;
+
+pub mod Task;
+pub use Task/{let Task};
+
+pub mod Char;
+
+pub mod Result;
+pub use Result/{let Result};
+
+pub mod Option;
+pub use Option/{let Option};
+
+pub mod Order;
+pub use Order/{let Order};
 
 pub mod Ord;
 pub use Ord/{let Ord};
@@ -91,14 +92,13 @@ pub use False/{let False};
 pub mod True;
 pub use True/{let True};
 
-pub mod Flt;
-pub use Flt/{let Flt};
-
 pub mod Str;
 pub use Str/{let Str};
 
 pub mod Parse;
 pub use Parse/{let Parse};
+
+pub mod Http;
 
 pub mod Json;
 pub use Json/{let Json};

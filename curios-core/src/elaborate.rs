@@ -1489,7 +1489,7 @@ fn infix_default_type(infix: &Infix) -> Prim {
 /// to `Flt` rather than a `Nat`/`Flt` mismatch.
 ///
 /// Dispatch is then **one path**: every operator except `&&`/`||` desugars to
-/// a projection of a witness of its `/sys` concept ([`operator_concept`]) —
+/// a projection of a witness of its `/syn` concept ([`operator_concept`]) —
 /// `a + b` ≙ `Add/add(a, b)`, primitives included, resolved by the same
 /// engine that fills `use` slots (so `no witness of Add(Point)` is the single
 /// error vocabulary, and what an operator means at a type is entirely a
@@ -1572,7 +1572,7 @@ fn elaborate_infix(
     };
 
     // The concept registry entry — absent only in an exotic embedding that
-    // elaborates without the sys prelude, where the operator has nothing to
+    // elaborates without the embedded prelude, where the operator has nothing to
     // dispatch through.
     let Some(concept) = context.concept(concept_name).cloned() else {
         let head = Term::unwrap_or_clone(reduce_with(context, &operand_type)?);
@@ -1590,7 +1590,7 @@ fn elaborate_infix(
         .fields
         .iter()
         .position(|field| field == field_name)
-        .expect("the sys operator concepts declare their table fields");
+        .expect("the syn operator concepts declare their table fields");
 
     // Mint and attempt the witness goal exactly like an omitted `use`
     // argument: it resolves, parks on a flex operand type, or defers to a
