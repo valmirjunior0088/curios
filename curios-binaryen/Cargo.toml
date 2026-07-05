@@ -3,9 +3,12 @@ name = "curios-binaryen"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Wasm optimization for curios via the vendored Binaryen library"
+description = "Wasm optimization for curios via a prebuilt Binaryen release"
 
 [dependencies]
 
 [build-dependencies]
-cmake = { version = "0.1.54" }
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+sha2 = "0.10"
+tar = "0.4"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

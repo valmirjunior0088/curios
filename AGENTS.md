@@ -15,7 +15,7 @@ The repo is a **Cargo workspace** (virtual manifest at the root) of twelve crate
 - **`curios-ersd`** — the erased IR (post type-erasure): ersd→ersd optimization (`optm/`) and lowering to CPS (`to_cont/`).
 - **`curios-core`** — the core language: elaboration, typing, reduction, conversion, inductives, erasure, zonking.
 - **`curios-text`** — the surface syntax: lexer/parser, lowering to core (`to_core/`), plus the embedded standard library (`curios-text/std/`, `curios-text/syn/`).
-- **`curios-binaryen`** — FFI to the vendored Binaryen optimizer (`curios-binaryen/binaryen/`).
+- **`curios-binaryen`** — FFI to Binaryen, linked from a prebuilt release fetched by `build.rs` (no vendored source).
 - **`curios-pipeline`** — the pure pipeline driver: `compile_entrypoint`/`typecheck_entrypoint`/`Stage`, chaining `text` → `core` → `ersd` → `cont` → `wasm` with no runtime/Binaryen/CLI dependencies. Extracted from `curios` so a wasm32 build of the compiler doesn't have to drag those in.
 - **`curios-js`** — the curios ↔ JavaScript boundary: `wasm-bindgen` exports of `curios-pipeline` (`compile`, `typecheck`) plus the browser run harness (`run`, with `bridge_bytes`/`abi` as its exported building blocks; the JS host itself ships as the wasm-bindgen snippet `curios-js/js/harness.js`), built for `wasm32-unknown-unknown` with `cargo build` + `wasm-bindgen-cli --target web` for a browser playground (no `wasm-pack`, no `wasm-opt` — see Gotchas). Everything the harness knows about the host boundary derives from `curios-abi` and `curios-cont`, so it cannot drift from the compiler or runtime.
 - **`curios-rt`** — runtime-only engine (lib) + the launcher stub (bin `curios-rt`). Deserializes a precompiled module and runs it on wasmtime; **never** links Cranelift or Binaryen. Depends only on `curios-abi` (for the wire constants), not on `curios` — that's what keeps it slim and lets `curios` depend back on it without a cycle.
@@ -56,7 +56,7 @@ then, in curios itself:
   → run on wasmtime via curios-rt::run_bytes  (or bundle into an executable)
 ```
 
-`curios-binaryen/binaryen/` is vendored C++ (the Binaryen wasm optimizer), linked via FFI from `curios-binaryen/src/` to optimize emitted wasm. The wasmtime engine + host stack live in `curios-rt/src/` (`run_bytes` deserializes a `.cwasm` and runs it; `instantiate` wires the `sys.io_*` host imports and, via the required `ForeignBindings` argument, any `env.*` bindings an embedder supplies for the program's own `foreign` declarations).
+`curios-binaryen/build.rs` fetches a prebuilt Binaryen release (static lib + `binaryen-c.h`), linked via FFI from `curios-binaryen/src/` to optimize emitted wasm. The wasmtime engine + host stack live in `curios-rt/src/` (`run_bytes` deserializes a `.cwasm` and runs it; `instantiate` wires the `sys.io_*` host imports and, via the required `ForeignBindings` argument, any `env.*` bindings an embedder supplies for the program's own `foreign` declarations).
 
 ## Where things live
 
@@ -73,8 +73,8 @@ then, in curios itself:
 | `curios-base/src/{span,entropy,macros,suffix_view}.rs` | Foundational utilities shared by every stage                                                                                               |
 | `curios-abi/src/{lib,host}.rs`                   | Host↔guest contract: wire ABI constants and the `ForeignFunction`/`ForeignStore` host-op rows (`sys_io()` seed)                                  |
 | `curios-text/{std,syn}/`                         | curios standard / support libraries (`*.crs`), indexed by `curios-text/{std,syn}.crs`                                                            |
-| `curios-binaryen/src/`                           | FFI bindings to vendored Binaryen (`sys.rs`); `optimize(bytes)`; `build.rs` links it                                                             |
-| `curios-binaryen/binaryen/`                      | Vendored Binaryen C++ source (do not edit — see Gotchas)                                                                                         |
+| `curios-binaryen/src/`                           | FFI bindings to Binaryen (`sys.rs`); `optimize(bytes)`                                                                                            |
+| `curios-binaryen/build.rs`                       | Downloads, verifies, and links a prebuilt Binaryen release (no vendored source — see Gotchas)                                                    |
 | `curios-rt/src/`                                 | wasmtime engine + host stack (`run_bytes`, `instantiate`, `shared_engine`); OS + mock hosts                                                      |
 | `curios-rt/src/bundle.rs`                        | Bundled-executable footer format (`append_payload`/`extract_payload`), shared by bundler + launcher                                              |
 | `curios-rt/src/main.rs`                          | The launcher stub (bin `curios-rt`): reads its appended `.cwasm` tail and runs it                                                                |
@@ -109,7 +109,7 @@ Documentation lives in several places, each with a different audience and job. W
 
 ```sh
 make curios/runtime                  # build the slim launcher, place it for embedding
-cargo build --package curios         # the CLI (Binaryen C++ build on first run)
+cargo build --package curios         # the CLI (downloads a prebuilt Binaryen release on first run)
 cargo run   --package curios -- <args> # invoke the CLI
 cargo test --workspace --all-targets --all-features
 ```
@@ -124,7 +124,7 @@ There are **no Cargo features** on the workspace crates. The JIT/Cranelift split
 - `curios` adds the `cranelift` feature to its own `wasmtime` dependency and depends on `curios-binaryen`. Feature unification makes Cranelift available throughout a `curios` build (and a `--workspace` build), so the `curios-rt` _bin_ produced by a `--workspace` build is **not** the slim one. This is why `make curios/runtime` builds the launcher with an isolated `cargo build --release --package curios-rt` _before_ the compiler and copies it to `curios/runtime`: building it alone keeps Cranelift out. Do not hand-build the launcher via `--workspace` and expect it to be slim — it will be the fat (Cranelift-linked) one.
 - The done bar lists no separate `cargo check --package curios-rt`: the isolated `cargo build --release --package curios-rt` that `make curios/runtime` runs already proves the runtime-only configuration compiles — something `--workspace --all-features` cannot do, since feature unification pulls Cranelift in.
 
-Building `curios-binaryen` compiles a large C++ project via CMake on first build — expect minutes, not seconds, and a C++ toolchain + CMake on the machine. Anything depending on it (`curios-binaryen`, `curios`, the whole `--workspace`) pays that cost once; the pipeline-stage crates (`curios-text`, `curios-core`, `curios-ersd`, `curios-cont`, `curios-wasm`) and `curios-rt` on their own do not.
+Building `curios-binaryen` downloads a prebuilt Binaryen static library on first build (see Gotchas) — a network fetch, not a C++ compile, and no C++ toolchain/CMake needed on the machine. Anything depending on it (`curios-binaryen`, `curios`, the whole `--workspace`) pays that cost once; the pipeline-stage crates (`curios-text`, `curios-core`, `curios-ersd`, `curios-cont`, `curios-wasm`) and `curios-rt` on their own do not.
 
 ## The done bar
 
@@ -175,7 +175,7 @@ To run or test `.crs` code, use the CLI (`cargo run --package curios -- run …`
 
 ## Gotchas
 
-- **Never edit `curios-binaryen/binaryen/`.** It is vendored upstream source, used unpatched. The re-vendoring procedure (which files to copy, how to bump the tag) is documented at the top of `curios-binaryen/build.rs`. Changes belong in `curios-binaryen/src/`, not the vendored tree.
+- **`curios-binaryen` has no vendored source.** `build.rs` downloads a prebuilt Binaryen static library + `binaryen-c.h` from the project's GitHub releases into `$OUT_DIR`, verified against a pinned sha256 table. If the download fails (offline, firewalled), the build error prints the release URL, checksum, and exact `$OUT_DIR` path to place the file at by hand. To bump the Binaryen version, update `VERSION` and the checksum table at the top of `build.rs`.
 - **Keep the slim launcher slim.** `cargo build --package curios-rt` must stay free of Cranelift and Binaryen; keep any new runtime dependency out of that crate's graph. A change can pass `--workspace --all-features` and still break `--package curios-rt` (or vice versa) — run both. For the full mechanism see [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher).
 - **The codegen tests live in `curios/src/tests/codegen/`.** They execute emitted wasm, which needs the runtime (`curios-rt`); `curios-rt` depends only on `curios-abi`, not on `curios`, so `curios` depending on `curios-rt` is not a cycle — that's what lets these tests live alongside the rest of the integration suite instead of in a separate crate.
 - **Generated `.wasm` files** are gitignored (`/*.wasm`); don't commit build output.
