@@ -29,9 +29,12 @@
 //! polymorphic bottom `(@A : Type) -> Nat -> A`, which a first-order
 //! [`WireSignature`] cannot express, so it stays a hardcoded primitive.
 
-use std::{
-    hash::{Hash, Hasher},
-    sync::Arc,
+use {
+    crate::RootId,
+    std::{
+        hash::{Hash, Hasher},
+        sync::Arc,
+    },
 };
 
 /// The wasm import namespace the fixed `/sys/Io` builtins are declared under.
@@ -84,19 +87,24 @@ pub struct WireSignature {
 /// the wire ABI shared by the wasm emitter and the runtime linker; never
 /// change one without changing what the other end expects (the unit tests
 /// snapshot the `/sys/Io` set). `label` is the binding name the function
-/// surfaces under in the guest.
+/// surfaces under in the guest. `root` is the compilation root that declared
+/// it (`RootId::SYS` for every [`sys_io`] row) — consulted by codegen instead
+/// of re-deriving "is this a `/sys/Io` builtin?" by rebuilding [`sys_io`] and
+/// testing membership.
 #[derive(Debug, Clone)]
 pub struct ForeignFunction {
     pub name: String,
     pub label: String,
     pub signature: WireSignature,
+    pub root: RootId,
 }
 
 // Identity is the import name: a [`ForeignStore`] never holds two functions
 // with one name (`register` enforces it), so the name determines the whole
 // row. This keeps term-level equality and hashing O(1) instead of walking the
 // signature — and makes rows from *different* stores with the same content
-// compare equal, so a cached prelude term matches a freshly minted one.
+// compare equal, so a cached prelude term matches a freshly minted one. `root`
+// is deliberately excluded: it is provenance, not identity.
 impl PartialEq for ForeignFunction {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
@@ -328,6 +336,7 @@ pub fn sys_io() -> ForeignStore {
                 params: slots(params),
                 results: slots(results),
             },
+            root: RootId::SYS,
         });
     }
 

@@ -69,6 +69,19 @@ impl RootId {
 
 /// A root's privilege tier — replaces the old `INTERNAL_ROOTS`/`PRIVILEGED_ROOTS`
 /// string-literal allowlists with a field carried on the root itself.
+///
+/// This tier, and every `RootId`-comparison it feeds (the orphan rule,
+/// [`RootId::kind`]'s match, every `root: RootId` field on a registry entry),
+/// already generalizes cleanly to more than one `Ordinary` root — nothing
+/// here enumerates roots, it only compares ids. **Before a package manager
+/// introduces a second `Ordinary` root, revisit two things that do not yet
+/// generalize:** [`RootId::of_segment`]'s hardcoded match falls back to
+/// [`RootId::ENTRY`] for any segment it doesn't recognize, so a package
+/// mounted under its own name would silently collide with the entry program
+/// instead of getting its own id — it needs to become a lookup against a real
+/// per-compilation roster. And [`Root`] itself — the descriptor this scheme
+/// was designed to hand a future roster — is not constructed anywhere today;
+/// it is dormant scaffolding, not a wired-up mechanism.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RootKind {
     /// Reachable only from a privileged root — `sys` today. Discoverable (so

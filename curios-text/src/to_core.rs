@@ -374,7 +374,8 @@ fn process_items(
                 // registration, and `host_fn`'s wire-typed signature shape)
                 // stays inside `prelude`; from here a `foreign` declaration
                 // lowers exactly like an ordinary `TopItem::Let`.
-                let signature = foreign_signature(f, foreigns)?;
+                let root = root_id_of_qualifier(&context.prefixed(&f.label));
+                let signature = foreign_signature(f, foreigns, root)?;
 
                 let lower = Lower::new(context);
                 let type_ = lower.term(&signature.type_())?;

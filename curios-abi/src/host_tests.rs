@@ -1,5 +1,5 @@
 use {
-    super::{ForeignFunction, WireSignature, WireType, sys_io},
+    super::{ForeignFunction, RootId, WireSignature, WireType, sys_io},
     std::collections::BTreeSet,
 };
 
@@ -128,5 +128,31 @@ fn register_rejects_a_duplicate_name() {
             params: vec![],
             results: vec![],
         },
+        root: RootId::SYS,
     });
+}
+
+/// Every `sys_io` row is stamped with the internal root — the fixed
+/// substrate `emit_sys_imports` reads instead of re-deriving membership by
+/// rebuilding this same store.
+#[test]
+fn sys_io_rows_are_stamped_with_the_sys_root() {
+    assert!(sys_io().iter().all(|function| function.root == RootId::SYS));
+}
+
+/// Two [`ForeignFunction`]s with the same name but different `root` still
+/// compare equal — identity is the import name alone, `root` is provenance.
+#[test]
+fn equality_ignores_root() {
+    let base = |root| ForeignFunction {
+        name: "frobnicate".to_string(),
+        label: "frobnicate".to_string(),
+        signature: WireSignature {
+            params: vec![],
+            results: vec![],
+        },
+        root,
+    };
+
+    assert_eq!(base(RootId::SYS), base(RootId::ENTRY));
 }

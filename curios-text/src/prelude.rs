@@ -5,7 +5,7 @@ use {
         Subterm, Term, TopConcept, TopForeign, TopItem, TopLet, TopMod, TopUse, TopWitness,
         TupleType, TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
     },
-    curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status, stdio},
+    curios_abi::{ForeignFunction, ForeignStore, RootId, WireType, mode, poll, status, stdio},
     std::sync::Arc,
 };
 
@@ -246,10 +246,13 @@ fn host_fn(function: &Arc<ForeignFunction>, is_pub: bool) -> TopItem {
 /// and return the ordinary [`LetSignature`] `to_core` lowers it as — wire-type
 /// bookkeeping and `host_fn`'s shape stay internal to this module, so `to_core`
 /// only ever deals with the same `LetSignature` it already knows how to lower
-/// for a plain `TopItem::Let`.
+/// for a plain `TopItem::Let`. `root` is the declaring root (the caller's
+/// current position while walking the module tree), stamped onto the row like
+/// every other registry entry.
 pub fn foreign_signature(
     declaration: &TopForeign,
     foreigns: &mut ForeignStore,
+    root: RootId,
 ) -> Result<LetSignature, Error> {
     if foreigns.get(&declaration.label).is_some() {
         return Err(Error::DuplicateForeignDeclaration {
@@ -261,6 +264,7 @@ pub fn foreign_signature(
         name: declaration.label.clone(),
         label: declaration.label.clone(),
         signature: declaration.signature.clone(),
+        root,
     };
 
     foreigns.register(function.clone());

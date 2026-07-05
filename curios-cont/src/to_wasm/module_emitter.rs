@@ -139,20 +139,17 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_sys_imports(&mut self) {
         let i32_val = ValType::Num(NumType::I32);
 
-        // `sys_io` is the fixed, developer-controlled set of `/sys/Io`
-        // builtins; a host function whose import name isn't one of its rows is
-        // a user's own `foreign` declaration. This is the only place codegen
-        // needs the distinction, so it's drawn fresh here rather than threaded
-        // in from the pipeline.
-        let sys_foreigns = curios_abi::sys_io();
-
         // The store-described imports — exactly the functions whose call sites
-        // recorded themselves in the table, in import-name order.
+        // recorded themselves in the table, in import-name order. Each
+        // function's own `root` (stamped at declaration time — see
+        // `curios_abi::ForeignFunction`) says whether it's a `/sys/Io` builtin
+        // or a user's own `foreign` declaration, so codegen no longer needs to
+        // rebuild `sys_io()` and re-derive that by name lookup.
         for function in self.table.host_funcs() {
             let signature = &function.signature;
-            let namespace = match sys_foreigns.get(&function.name) {
-                Some(_) => curios_abi::NAMESPACE_SYS,
-                None => curios_abi::NAMESPACE_ENV,
+            let namespace = match function.root == curios_abi::RootId::SYS {
+                true => curios_abi::NAMESPACE_SYS,
+                false => curios_abi::NAMESPACE_ENV,
             };
 
             self.add_host_import(
