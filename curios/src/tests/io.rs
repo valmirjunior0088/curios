@@ -280,7 +280,7 @@ fn proc_exit_halts_with_code() {
     let (module, _foreigns) = crate::compile_entrypoint(
         Duration::from_secs(10),
         &entrypoint,
-        &crate::text::NullLoader,
+        crate::text::RootSource::None,
         |_| {},
     )
     .expect("compile succeeded");

@@ -42,7 +42,7 @@ fn build_prelude() -> curios_core::Module {
     // prelude, cached independently of any user compilation.
     let (module, metavars, _foreigns) = curios_text::to_core(
         &entrypoint,
-        &curios_text::prelude(&sys_io(), curios_text::NullLoader),
+        &curios_text::prelude(&sys_io(), curios_text::RootSource::None),
     )
     .unwrap_or_else(|error| panic!("the embedded prelude failed to lower: {}", error.format()));
 
@@ -83,7 +83,7 @@ fn build_prelude() -> curios_core::Module {
 fn elaborate_and_zonk<O>(
     timeout: Duration,
     entrypoint: &curios_text::Entrypoint,
-    loader: &dyn curios_text::Loader,
+    loader: curios_text::RootSource,
     observe: &mut O,
 ) -> Result<(curios_core::Module, curios_core::Term, ForeignStore), String>
 where
@@ -139,7 +139,7 @@ where
 pub fn typecheck_entrypoint<O>(
     timeout: Duration,
     entrypoint: &curios_text::Entrypoint,
-    loader: &dyn curios_text::Loader,
+    loader: curios_text::RootSource,
     mut observe: O,
 ) -> Result<(), String>
 where
@@ -153,7 +153,7 @@ where
 pub fn compile_entrypoint<O>(
     timeout: Duration,
     entrypoint: &curios_text::Entrypoint,
-    loader: &dyn curios_text::Loader,
+    loader: curios_text::RootSource,
     mut observe: O,
 ) -> Result<(curios_wasm::Module, ForeignStore), String>
 where

@@ -81,14 +81,14 @@ impl Resolved {
         }
     }
 
-    fn for_entrypoint(entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<Self, Error> {
+    fn for_entrypoint(entrypoint: &Entrypoint, loader: &RootSource) -> Result<Self, Error> {
         let mut resolved = Self::new();
         resolved.resolve(entrypoint, loader)?;
 
         Ok(resolved)
     }
 
-    fn resolve(&mut self, entrypoint: &Entrypoint, loader: &dyn Loader) -> Result<(), Error> {
+    fn resolve(&mut self, entrypoint: &Entrypoint, loader: &RootSource) -> Result<(), Error> {
         self.discover(&entrypoint.module.items, &Qualifier::empty(), loader)
     }
 
@@ -100,7 +100,7 @@ impl Resolved {
         &mut self,
         items: &[TopItem],
         prefix: &Qualifier,
-        loader: &dyn Loader,
+        loader: &RootSource,
     ) -> Result<(), Error> {
         self.table.insert(prefix.clone(), scan_module_info(items)?);
 
@@ -1373,10 +1373,11 @@ fn flat_item_to_core(item: FlatItem) -> curios_core::Item {
     }
 }
 
-// A bodyless `pub mod <label>;` declaration. We synthesize one per `Loader::roots`
-// entry and prepend it to the entrypoint, so a loader's root modules (`sys`, `std`)
-// are discovered, interfaced, and resolvable exactly as if the entrypoint declared
-// them — without every entrypoint having to.
+// A bodyless `pub mod <label>;` declaration. We synthesize one per
+// `RootSource::roots` entry and prepend it to the entrypoint, so a root
+// source's root modules (`sys`, `std`) are discovered, interfaced, and
+// resolvable exactly as if the entrypoint declared them — without every
+// entrypoint having to.
 fn declaration(label: &str) -> TopItem {
     TopItem::Mod(TopMod {
         span: None,
@@ -1392,7 +1393,7 @@ fn declaration(label: &str) -> TopItem {
 /// insertion never collide with these.
 pub fn to_core(
     entrypoint: &Entrypoint,
-    loader: &dyn Loader,
+    loader: &RootSource,
 ) -> Result<(curios_core::Module, usize, ForeignStore), Error> {
     let roots = loader.roots();
 
@@ -1400,7 +1401,7 @@ pub fn to_core(
         module: Module {
             items: roots
                 .iter()
-                .map(|label| declaration(label))
+                .map(|&label| declaration(label))
                 .chain(entrypoint.module.items.iter().cloned())
                 .collect(),
         },

@@ -20,7 +20,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     let (module, foreigns) = crate::compile_entrypoint(
         Duration::from_secs(10),
         &source,
-        &crate::text::NullLoader,
+        crate::text::RootSource::None,
         |_| {},
     )
     .expect("compile succeeded");

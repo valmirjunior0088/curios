@@ -44,7 +44,7 @@ pub fn run_wasm<H: Host + Send + Sync + 'static>(
 pub fn run_entrypoint<H: Host + Send + Sync + 'static>(
     timeout: Duration,
     entrypoint: &text::Entrypoint,
-    loader: &dyn text::Loader,
+    loader: text::RootSource,
     host: H,
 ) -> Result<(), String> {
     let (module, _foreigns) = compile_entrypoint(timeout, entrypoint, loader, |_| {})?;
@@ -62,7 +62,7 @@ pub fn run<H: Host + Send + Sync + 'static>(
         .parse::<text::Entrypoint>()
         .map_err(|error| error.format())?;
 
-    run_entrypoint(timeout, &entrypoint, &text::NullLoader, host)
+    run_entrypoint(timeout, &entrypoint, text::RootSource::None, host)
 }
 
 /// Alias of [`run`] used by the integration suite.
@@ -74,12 +74,13 @@ pub fn run_text<H: Host + Send + Sync + 'static>(
     run(timeout, source, host)
 }
 
-/// Open a `.crs` entrypoint at `path`, paired with a [`text::FileLoader`] rooted
-/// at its parent directory — the standard way to resolve a program's imports
-/// relative to the file it lives in.
-pub fn load(path: &Path) -> Result<(text::Entrypoint, text::FileLoader), String> {
+/// Open a `.crs` entrypoint at `path`, paired with a [`text::RootSource::FileSystem`]
+/// rooted at its parent directory — the standard way to resolve a program's
+/// imports relative to the file it lives in.
+pub fn load(path: &Path) -> Result<(text::Entrypoint, text::RootSource), String> {
     let entrypoint = text::Entrypoint::from_path(path).map_err(|error| error.format())?;
-    let loader = text::FileLoader::new(path.parent().unwrap_or(Path::new(".")));
+    let loader =
+        text::RootSource::FileSystem(path.parent().unwrap_or(Path::new(".")).to_path_buf());
 
     Ok((entrypoint, loader))
 }
@@ -92,5 +93,5 @@ pub fn run_file<H: Host + Send + Sync + 'static>(
 ) -> Result<(), String> {
     let (entrypoint, loader) = load(path)?;
 
-    run_entrypoint(timeout, &entrypoint, &loader, host)
+    run_entrypoint(timeout, &entrypoint, loader, host)
 }

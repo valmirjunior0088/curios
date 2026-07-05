@@ -1,7 +1,7 @@
 use {
     super::{
         ConceptField, ConceptParam, Error, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
-        LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern, Plicity, Prim, Qualifier,
+        LetSignature, Module, Name, Nat, NatLiteral, Pattern, Plicity, Prim, Qualifier, RootSource,
         Subterm, Term, TopConcept, TopForeign, TopItem, TopLet, TopMod, TopUse, TopWitness,
         TupleType, TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
     },
@@ -724,9 +724,9 @@ fn operator_items() -> Vec<TopItem> {
     items
 }
 
-// The `sys` module body of primitive types and operations, served to discovery by
-// `SysLoader` like any other loaded module. The host operations under `Io` come
-// off `foreigns` — the compilation's foreign store.
+// The `sys` module body of primitive types and operations, served to discovery
+// like any other loaded module (see [`load_embedded`]). The host operations
+// under `Io` come off `foreigns` — the compilation's foreign store.
 fn sys_module(foreigns: &ForeignStore) -> Module {
     Module {
         items: vec![
@@ -765,52 +765,6 @@ fn sys_module(foreigns: &ForeignStore) -> Module {
         .into_iter()
         .chain(operator_items())
         .collect(),
-    }
-}
-
-// A `&L` is itself a `Loader`, so a `&dyn Loader` can be nested inside the prelude
-// decorators (which take their inner loader by value) without lifetime gymnastics.
-impl<L: Loader + ?Sized> Loader for &L {
-    fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
-        (**self).load(qualifier)
-    }
-
-    fn roots(&self) -> Vec<String> {
-        (**self).roots()
-    }
-}
-
-// Serves the `sys` module of primitives, delegating everything else to `inner`. `sys`
-// is built directly as `text` AST (never parsed); only `["sys"]` is ever asked for it.
-pub struct SysLoader<L> {
-    // `sys` is fixed once the foreign store is chosen, so [`prelude`] builds
-    // its AST when the loader is assembled and `load` hands out clones —
-    // discovery asks for it repeatedly per compile (§ loader cache).
-    module: Module,
-    inner: L,
-}
-
-impl<L: Loader> Loader for SysLoader<L> {
-    fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
-        if qualifier.iter().eq(["sys"]) {
-            return Ok(self.module.clone());
-        }
-
-        self.inner.load(qualifier)
-    }
-
-    // `sys` comes *first*: root order is flat-item lowering order, which is
-    // the topological-sort tiebreak — and nothing references witness items by
-    // name, so only their position gets the sys operator witnesses emitted
-    // (and registered) before any std item that uses infix elaborates.
-    // Type-level operator uses (`a + 1` in an inductive index) park
-    // conversion goals that must resolve within their own item, so witness
-    // deferral cannot paper over a late-sorted witness there.
-    fn roots(&self) -> Vec<String> {
-        ["sys".to_string()]
-            .into_iter()
-            .chain(self.inner.roots())
-            .collect()
     }
 }
 
@@ -861,11 +815,6 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Proc"], include_str!("../std/Proc.crs")),
 ];
 
-// Serves the embedded `std` modules, delegating everything else to `inner`.
-pub struct StdLoader<L> {
-    inner: L,
-}
-
 thread_local! {
     // Parse every embedded `std` module once per thread; `load` then hands out
     // clones. `std` being well-formed is a compiler invariant, so a parse failure
@@ -882,44 +831,19 @@ thread_local! {
         .collect();
 }
 
-impl<L: Loader> Loader for StdLoader<L> {
-    fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
-        let path = qualifier.iter().collect::<Vec<_>>();
-
-        if let Some(index) = STD.iter().position(|(segments, _)| path == **segments) {
-            return Ok(STD_MODULES.with(|modules| modules[index].clone()));
-        }
-
-        self.inner.load(qualifier)
-    }
-
-    fn roots(&self) -> Vec<String> {
-        self.inner
-            .roots()
-            .into_iter()
-            .chain(["std".to_string()])
-            .collect()
-    }
-}
-
 // The `syn` library: modules the compiler's desugaring targets, kept alongside the
 // compiler (`syn/*.crs`) and embedded in the binary. Unlike `sys`, `syn` is *not*
-// internal (it is absent from `to_core::INTERNAL_ROOTS`): desugaring emits absolute
-// `/syn/…` references, so the names must be resolvable like any ordinary library —
-// they are not walled from user code. `syn` is privileged
-// (`to_core::PRIVILEGED_ROOTS`) so it may reach the `/sys` primitives, and in
-// practice it is consumed through `/std` re-exports. Well-formedness is a compiler
-// invariant, so a parse failure is a `panic!`.
+// internal (`RootId::SYN`'s kind is `Privileged`, not `Internal` — see
+// `curios_abi::RootKind`): desugaring emits absolute `/syn/…` references, so the
+// names must be resolvable like any ordinary library — they are not walled from
+// user code. `syn` is still privileged, so it may reach the `/sys` primitives, and
+// in practice it is consumed through `/std` re-exports. Well-formedness is a
+// compiler invariant, so a parse failure is a `panic!`.
 const SYN: &[(&[&str], &str)] = &[
     (&["syn"], include_str!("../syn.crs")),
     (&["syn", "Str"], include_str!("../syn/Str.crs")),
     (&["syn", "Monad"], include_str!("../syn/Monad.crs")),
 ];
-
-// Serves the embedded `syn` modules, delegating everything else to `inner`.
-pub struct SynLoader<L> {
-    inner: L,
-}
 
 thread_local! {
     // Parse every embedded `syn` module once per thread; `load` hands out clones.
@@ -934,37 +858,37 @@ thread_local! {
         .collect();
 }
 
-impl<L: Loader> Loader for SynLoader<L> {
-    fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
-        let path = qualifier.iter().collect::<Vec<_>>();
+/// The three privileged roots' fixed content, matched by full qualifier —
+/// `sys` (a single AST value built once per compile) then the embedded
+/// `std`/`syn` tables (each parsed once per thread; see `STD_MODULES`/
+/// `SYN_MODULES`). `None` falls through to whatever [`RootSource`] wraps
+/// this one. Shared by every [`RootSource::Prelude`] value, so it lives here
+/// (alongside the tables it reads) rather than in `root_source`.
+pub(crate) fn load_embedded(sys: &Module, qualifier: &Qualifier) -> Option<Module> {
+    let path = qualifier.iter().collect::<Vec<_>>();
 
-        if let Some(index) = SYN.iter().position(|(segments, _)| path == **segments) {
-            return Ok(SYN_MODULES.with(|modules| modules[index].clone()));
-        }
-
-        self.inner.load(qualifier)
+    if path == ["sys"] {
+        return Some(sys.clone());
+    }
+    if let Some(index) = STD.iter().position(|(segments, _)| path == **segments) {
+        return Some(STD_MODULES.with(|modules| modules[index].clone()));
+    }
+    if let Some(index) = SYN.iter().position(|(segments, _)| path == **segments) {
+        return Some(SYN_MODULES.with(|modules| modules[index].clone()));
     }
 
-    fn roots(&self) -> Vec<String> {
-        self.inner
-            .roots()
-            .into_iter()
-            .chain(["syn".to_string()])
-            .collect()
-    }
+    None
 }
 
-/// Wrap a loader so `sys`, `syn`, and `std` resolve from the binary and everything else
-/// falls through to `inner`. The wrapped loader also reports those roots from
-/// [`Loader::roots`], so `to_core` declares them at the entrypoint root automatically.
-/// `foreigns` is the compilation's foreign store — the host operations `/sys/Io`
-/// declares; today always `curios_abi::sys_io()`, created per compilation by the
-/// pipeline driver.
-pub fn prelude<L: Loader>(foreigns: &ForeignStore, inner: L) -> impl Loader {
-    SysLoader {
-        module: sys_module(foreigns),
-        inner: SynLoader {
-            inner: StdLoader { inner },
-        },
+/// Wrap a root source so `sys`, `syn`, and `std` resolve from the binary and
+/// everything else falls through to `base`. The wrapped source also reports
+/// those roots from [`RootSource::roots`], so `to_core` declares them at the
+/// entrypoint root automatically. `foreigns` is the compilation's foreign
+/// store — the host operations `/sys/Io` declares; today always
+/// `curios_abi::sys_io()`, created per compilation by the pipeline driver.
+pub fn prelude(foreigns: &ForeignStore, base: RootSource) -> RootSource {
+    RootSource::Prelude {
+        sys: sys_module(foreigns),
+        base: Box::new(base),
     }
 }

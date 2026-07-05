@@ -24,7 +24,7 @@ pub use harness::*;
 
 use {
     curios_pipeline::{compile_entrypoint, typecheck_entrypoint},
-    curios_text::{Entrypoint, NullLoader},
+    curios_text::{Entrypoint, RootSource},
     js_sys::{Array, Object, Reflect, Uint8Array},
     std::time::Duration,
     wasm_bindgen::prelude::*,
@@ -33,8 +33,8 @@ use {
 /// Generous but bounded: a playground compile should never hang the tab.
 const TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Compile `source` (no external module imports — see `NullLoader`) to a
-/// `{ bytes, foreignNames }` object, or a formatted error string on
+/// Compile `source` (no external module imports — see `RootSource::None`) to
+/// a `{ bytes, foreignNames }` object, or a formatted error string on
 /// parse/type/lowering failure. `bytes` is the wasm module; `foreignNames` is
 /// the `env`-tier import roster the program's own `foreign` declarations
 /// require — a caller supplies them via `run`'s `hooks.foreign`.
@@ -44,7 +44,7 @@ pub fn compile(source: &str) -> Result<Object, String> {
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
 
-    let (module, foreigns) = compile_entrypoint(TIMEOUT, &entrypoint, &NullLoader, |_| {})?;
+    let (module, foreigns) = compile_entrypoint(TIMEOUT, &entrypoint, RootSource::None, |_| {})?;
 
     let object = Object::new();
 
@@ -76,5 +76,5 @@ pub fn typecheck(source: &str) -> Result<(), String> {
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
 
-    typecheck_entrypoint(TIMEOUT, &entrypoint, &NullLoader, |_| {})
+    typecheck_entrypoint(TIMEOUT, &entrypoint, RootSource::None, |_| {})
 }

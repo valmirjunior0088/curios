@@ -6,8 +6,8 @@ pub use error::*;
 mod names;
 pub use names::*;
 
-mod loader;
-pub use loader::*;
+mod root_source;
+pub use root_source::*;
 
 mod nat;
 pub use nat::*;

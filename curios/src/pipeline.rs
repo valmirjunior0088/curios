@@ -41,7 +41,7 @@ pub fn compile_file(
 
     // The CLI doesn't yet expose a way to supply `foreign` implementations,
     // so its `ForeignStore` is dropped here.
-    compile_entrypoint(timeout, &entrypoint, &loader, stage_printer(print))
+    compile_entrypoint(timeout, &entrypoint, loader, stage_printer(print))
         .map(|(module, _foreigns)| module)
 }
 
@@ -50,5 +50,5 @@ pub fn compile_file(
 pub fn typecheck_file(timeout: Duration, print: &str, input_path: &Path) -> Result<(), String> {
     let (entrypoint, loader) = load(input_path)?;
 
-    typecheck_entrypoint(timeout, &entrypoint, &loader, stage_printer(print))
+    typecheck_entrypoint(timeout, &entrypoint, loader, stage_printer(print))
 }

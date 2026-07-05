@@ -171,10 +171,10 @@ fn bang_std_parse_threads_bangs_left_to_right() {
     let entrypoint = source
         .parse::<crate::text::Entrypoint>()
         .expect("failed to parse source");
-    let loader = crate::text::FileLoader::new(base);
+    let loader = crate::text::RootSource::FileSystem(base.to_path_buf());
 
     let (system, io) = MockHost::builder().build();
-    crate::run_entrypoint(Duration::from_secs(10), &entrypoint, &loader, system)
+    crate::run_entrypoint(Duration::from_secs(10), &entrypoint, loader, system)
         .expect("expected result");
     assert_eq!(io.output(), b"1");
 }
@@ -210,10 +210,10 @@ fn bang_region_mixes_action_types() {
     let entrypoint = source
         .parse::<crate::text::Entrypoint>()
         .expect("failed to parse source");
-    let loader = crate::text::FileLoader::new(base);
+    let loader = crate::text::RootSource::FileSystem(base.to_path_buf());
 
     let (system, io) = MockHost::builder().build();
-    crate::run_entrypoint(Duration::from_secs(10), &entrypoint, &loader, system)
+    crate::run_entrypoint(Duration::from_secs(10), &entrypoint, loader, system)
         .expect("expected result");
     assert_eq!(io.output(), b"AB");
 }
@@ -239,7 +239,7 @@ fn folds_constant_arg_through_let_function() {
     crate::compile_entrypoint(
         Duration::from_secs(10),
         &entrypoint,
-        &text::NullLoader,
+        text::RootSource::None,
         |stage| {
             if let crate::Stage::ContOptm(module) = stage {
                 let entry = module.entry().expect("module has entry").clone();
@@ -338,7 +338,7 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     let (wasm_module, _foreigns) = crate::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
-        &crate::text::NullLoader,
+        crate::text::RootSource::None,
         |stage| {
             if let crate::Stage::ContOptm(module) = stage {
                 cont_optm_funcs = Some(module.funcs().len());
@@ -390,7 +390,7 @@ fn fmt_print_runtime_args_specializes_spine() {
     let (wasm_module, _foreigns) = crate::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
-        &crate::text::NullLoader,
+        crate::text::RootSource::None,
         |stage| {
             if let crate::Stage::ErsdOptm(module) = stage {
                 ersd_optm = Some(format!("{module}"));
@@ -459,7 +459,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     let (wasm_module, _foreigns) = crate::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
-        &crate::text::NullLoader,
+        crate::text::RootSource::None,
         |stage| match stage {
             crate::Stage::ErsdOptm(module) => ersd_optm = Some(format!("{module}")),
             crate::Stage::ContOptm(module) => cont_optm_funcs = Some(module.funcs().len()),
