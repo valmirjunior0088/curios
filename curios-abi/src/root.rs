@@ -103,6 +103,53 @@ impl RootKind {
     }
 }
 
+/// A single compilation's full root roster: the fixed `sys`/`syn`/`std` trio
+/// plus every named path dependency this compilation was given, each
+/// assigned a stable `RootId`. The entry program is deliberately *not* a
+/// roster entry — [`Roster::resolve`] falls back to [`RootId::ENTRY`] for
+/// any name it doesn't recognize, exactly as [`RootId::of_segment`]'s old
+/// fallback did, so the entry program's own qualifier (and every submodule
+/// it declares under an unreserved name) keeps resolving correctly without
+/// needing an entry for itself.
+#[derive(Debug, Clone)]
+pub struct Roster {
+    by_name: std::collections::BTreeMap<String, Root>,
+}
+
+impl Roster {
+    /// Build a roster naming these additional path dependencies, alongside
+    /// the three fixed roots. Ids are assigned by *sorted* name (via
+    /// `BTreeMap`'s key order), not argument order, so a dependency's id
+    /// depends only on the *set* of names in play, never the order the
+    /// caller happened to list them in. Assumes `dependencies` is already
+    /// free of duplicates and reserved names (`sys`/`syn`/`std`) — that
+    /// validation belongs where there is a real `Result` to report through
+    /// (`RootSource::dependencies`), not here.
+    pub fn new(dependencies: impl IntoIterator<Item = String>) -> Roster {
+        let mut by_name = std::collections::BTreeMap::new();
+
+        by_name.insert("sys".to_string(), Root::new(RootId::SYS, "sys", RootKind::Internal));
+        by_name.insert("syn".to_string(), Root::new(RootId::SYN, "syn", RootKind::Privileged));
+        by_name.insert("std".to_string(), Root::new(RootId::STD, "std", RootKind::Privileged));
+
+        let mut names: Vec<String> = dependencies.into_iter().collect();
+        names.sort();
+
+        for (index, name) in names.into_iter().enumerate() {
+            let id = RootId::dynamic(1 + index as u32);
+            by_name.insert(name.clone(), Root::new(id, name, RootKind::Ordinary));
+        }
+
+        Roster { by_name }
+    }
+
+    /// The `RootId` a qualifier's leading segment names: a recognized
+    /// root's own id, or [`RootId::ENTRY`] for anything else.
+    pub fn resolve(&self, segment: &str) -> RootId {
+        self.by_name.get(segment).map_or(RootId::ENTRY, |root| root.id)
+    }
+}
+
 /// One compilation root's descriptor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Root {
