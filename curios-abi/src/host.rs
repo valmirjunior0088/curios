@@ -92,16 +92,6 @@ pub struct ForeignFunction {
     pub signature: WireSignature,
 }
 
-impl ForeignFunction {
-    /// Where the function surfaces in the guest: `(module, label)` under `/sys`
-    /// — `("Io", "start_tls")` is `/sys/Io/start_tls`. Also the dotted head the
-    /// stage printers render (`Io.start_tls`). Every foreign function lives in
-    /// `/sys/Io` today; where user-declared ones surface is future work.
-    pub fn path(&self) -> (&'static str, &str) {
-        ("Io", &self.label)
-    }
-}
-
 // Identity is the import name: a [`ForeignStore`] never holds two functions
 // with one name (`register` enforces it), so the name determines the whole
 // row. This keeps term-level equality and hashing O(1) instead of walking the

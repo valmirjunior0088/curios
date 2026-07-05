@@ -159,16 +159,12 @@ fn print_pure_prim<'a>(prim: &'a PurePrim) -> Printer<'a> {
 
 fn print_host_prim<'a>(prim: &'a HostPrim) -> Printer<'a> {
     match prim {
-        HostPrim::Foreign(function, args) => {
-            let (module, label) = function.path();
-
-            flat(
-                [pure(format!("{module}.{label}"))]
-                    .into_iter()
-                    .chain(args.iter().flat_map(|arg| [pure(" "), print_term(arg)]))
-                    .collect::<Vec<_>>(),
-            )
-        }
+        HostPrim::Foreign(function, args) => flat(
+            [pure(function.label.clone())]
+                .into_iter()
+                .chain(args.iter().flat_map(|arg| [pure(" "), print_term(arg)]))
+                .collect::<Vec<_>>(),
+        ),
         HostPrim::IoExit(code) => print_unary("Io.exit", code),
     }
 }

@@ -386,11 +386,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::IoType => pure("Io"),
         Prim::Io(token) => pure(format!("Io({token})")),
         Prim::IoEql(left, right) => print_prim_call("Io.eql", vec![left, right]),
-        Prim::Foreign(function, args) => {
-            let (module, label) = function.path();
-
-            print_prim_call(format!("{module}.{label}"), args)
-        }
+        Prim::Foreign(function, args) => print_prim_call(function.label.clone(), args),
         Prim::IoExit(type_, code) => print_prim_call("Io.exit", vec![type_, code]),
         Prim::CellType(elem) => print_prim_call("Cell", vec![elem]),
         Prim::Cell(type_, init) => print_prim_call("Cell.new", vec![type_, init]),

@@ -287,21 +287,17 @@ fn print_tail<'a>(tail: &'a Tail) -> Printer<'a> {
                 function,
                 operands,
                 resume,
-            } => {
-                let (module, label) = function.path();
-
-                flat(
-                    [pure(format!("{module}.{label}"))]
-                        .into_iter()
-                        .chain(
-                            operands
-                                .iter()
-                                .flat_map(|operand| [pure(" "), print_value_name(operand)]),
-                        )
-                        .chain([pure(" "), print_block_name(resume)])
-                        .collect::<Vec<_>>(),
-                )
-            }
+            } => flat(
+                [pure(function.label.clone())]
+                    .into_iter()
+                    .chain(
+                        operands
+                            .iter()
+                            .flat_map(|operand| [pure(" "), print_value_name(operand)]),
+                    )
+                    .chain([pure(" "), print_block_name(resume)])
+                    .collect::<Vec<_>>(),
+            ),
             HostTarget::IoExit { code, resume } => flat([
                 pure("Io.exit "),
                 print_value_name(code),

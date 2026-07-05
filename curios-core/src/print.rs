@@ -660,19 +660,15 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         ]),
         Prim::IoType => pure("Io"),
         Prim::Io(token) => pure(format!("Io({token})")),
-        Prim::Foreign(function, args) => {
-            let (module, label) = function.path();
-
-            flat(
-                [pure(format!("{module}.{label}"))]
-                    .into_iter()
-                    .chain(
-                        args.into_iter()
-                            .flat_map(|arg| [pure(" "), print_term(arg, depth)]),
-                    )
-                    .collect::<Vec<_>>(),
-            )
-        }
+        Prim::Foreign(function, args) => flat(
+            [pure(function.label.clone())]
+                .into_iter()
+                .chain(
+                    args.into_iter()
+                        .flat_map(|arg| [pure(" "), print_term(arg, depth)]),
+                )
+                .collect::<Vec<_>>(),
+        ),
         Prim::IoExit(type_, code) => print_binary("Io.exit ", type_, code, depth),
         Prim::CellType(elem) => print_unary("Cell ", elem, depth),
         Prim::Cell(type_, init) => print_binary("Cell.new ", type_, init, depth),
