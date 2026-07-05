@@ -1049,14 +1049,17 @@ fn process_items(
 // source order; a genuine value cycle leaves nodes unorderable, which are emitted
 // in source order and rejected downstream as unbound names — there is nothing to
 // repair, as cross-declaration value recursion is unexpressible by construction.
-// The roots of the embedded, fixed prelude (the `SysLoader`/`SynLoader`/
-// `StdLoader` that `text::prelude` wraps every loader with). An item under one
-// of them is part of the program-independent prelude prefix, whose topological
-// order is cached. This is deliberately *not* the full set of loader roots a
-// custom loader may add — only the fixed embedded ones, so the cache stays
-// valid across programs.
-const PRELUDE_ROOTS: [&str; 3] = ["std", "syn", "sys"];
-
+//
+// The embedded, fixed prelude is every item under a privileged root
+// (`sys`/`syn`/`std` — see `RootKind::is_privileged`), classified structurally
+// rather than off a hardcoded name list. `std` and `syn` genuinely
+// cross-reference each other in both directions (e.g. `/syn/Str`'s `classify`
+// calls `/std/Nat`'s `in_range`, while `/std/Nat` itself uses `/syn/Str`'s
+// `Scan`/`Utf8`), so the three privileged roots are topologically sorted
+// together as *one* graph — there is no valid fixed sys/syn/std emission
+// order to split them into independently. `sys` is not a distinct partition
+// here as a result: it is always internally consistent with `syn`/`std`
+// because all three are elaborated as one prelude block.
 thread_local! {
     // The fixed prelude's topological order, as a *relative permutation* of its
     // declaration order: emit position `j` of the prelude is the prelude item at
@@ -1071,8 +1074,10 @@ thread_local! {
     static PRELUDE_PERMUTATION: RefCell<Option<Vec<usize>>> = const { RefCell::new(None) };
 }
 
-/// Whether a flat item belongs to the fixed embedded prelude. Checked on the
-/// *structured* qualifier's root segment, before names are flattened to strings.
+/// Whether a flat item belongs to the fixed embedded prelude — every let in
+/// it is declared under a privileged root (`RootId::of_segment(..).kind()`).
+/// Checked on the *structured* qualifier's root segment, before names are
+/// flattened to strings.
 fn flat_item_in_prelude(item: &FlatItem) -> bool {
     let lets = match item {
         FlatItem::Let(let_) => std::slice::from_ref(let_),
@@ -1084,28 +1089,25 @@ fn flat_item_in_prelude(item: &FlatItem) -> bool {
             let_.name
                 .segments()
                 .first()
-                .is_some_and(|root| PRELUDE_ROOTS.contains(&root.as_str()))
+                .is_some_and(|root| RootId::of_segment(root).kind().is_privileged())
         })
 }
 
-/// The nodes a node depends on: those declaring its free vars (and, for a
-/// declared inductive/struct, its registry entry's free vars — see the note
-/// inline). Self-edges and names `owner` does not map (primitives, or items in
-/// the other partition, when `owner` is restricted to one) drop out.
-fn dep_nodes(
-    node: usize,
+/// The full set of names one node's declaration references: its own free
+/// vars, plus (for a declared inductive/struct) its registry entry's free
+/// vars. An inductive's declaration is wider than its items: the registry
+/// entry's constructor payload and target types are elaborated alongside the
+/// type-binding group (`curios_core::elaborate_module_rec` rebuilds the
+/// registry telescopes there), so a node declaring a registered name
+/// references everything its registry entry does — those names live nowhere
+/// in the type binding's own `type_`/`body`. Struct field types live in the
+/// registry too.
+fn node_reference_names(
     item: &FlatItem,
     declared: &[String],
     inductives: &BTreeMap<String, curios_core::Inductive>,
     structures: &BTreeMap<String, curios_core::Structure>,
-    owner: &HashMap<String, usize>,
-) -> HashSet<usize> {
-    // An inductive's declaration is wider than its items: the registry entry's
-    // constructor payload and target types are elaborated alongside the
-    // type-binding group (`curios_core::elaborate_module_rec` rebuilds the registry
-    // telescopes there), so a node declaring a registered name references
-    // everything its registry entry does — those names live nowhere in the type
-    // binding's own `type_`/`body`. Struct field types live in the registry too.
+) -> HashSet<String> {
     let mut names = flat_item_free_vars(item);
     for name in declared {
         if let Some(inductive) = inductives.get(name) {
@@ -1115,7 +1117,17 @@ fn dep_nodes(
             names.extend(structure_free_vars(structure));
         }
     }
+    names
+}
 
+/// The nodes a node depends on: those `owner` maps its referenced names to.
+/// Self-edges and names `owner` does not map (primitives, or items outside
+/// the partition `owner` was restricted to) drop out.
+fn dep_nodes(
+    node: usize,
+    names: &HashSet<String>,
+    owner: &HashMap<String, usize>,
+) -> HashSet<usize> {
     names
         .iter()
         .filter_map(|name| owner.get(name).copied())
@@ -1160,21 +1172,43 @@ fn topological_order(nodes: &[usize], deps: &HashMap<usize, HashSet<usize>>) -> 
 /// The prelude's topological order as positions *relative to* `prelude_nodes`
 /// (ascending), so it can be replayed against a later compile's prelude block
 /// wherever it lands. Run once, behind the [`PRELUDE_PERMUTATION`] cache.
+///
+/// Also the one place the cross-root backward-reference invariant is checked:
+/// a privileged declaration referencing a name `rest_owner` maps (i.e. a name
+/// only the entry program declares) can never resolve, since the prelude is
+/// always emitted first. This can only mean a bug in the embedded `sys`/
+/// `syn`/`std` source itself — never anything a user's own program can
+/// trigger — so it panics rather than surfacing as a normal `Error`.
+/// Checking here — rather than as a standalone pass over every compile —
+/// piggybacks on work this function already does on a cache miss, and is
+/// sound to skip on a cache hit: the prelude's own referenced names are a
+/// property of its fixed embedded text, invariant across compiles, so a
+/// violation that doesn't exist on the first (cache-populating) call cannot
+/// appear later.
 fn prelude_permutation(
     items: &[FlatItem],
     prelude_nodes: &[usize],
     inductives: &BTreeMap<String, curios_core::Inductive>,
     structures: &BTreeMap<String, curios_core::Structure>,
+    rest_owner: &HashMap<String, usize>,
 ) -> Vec<usize> {
     let owner = owner_of(items, prelude_nodes);
     let deps = prelude_nodes
         .iter()
         .map(|&n| {
             let declared = flat_item_names(&items[n]);
-            (
-                n,
-                dep_nodes(n, &items[n], &declared, inductives, structures, &owner),
-            )
+            let names = node_reference_names(&items[n], &declared, inductives, structures);
+            if let Some(name) = names.iter().find(|name| {
+                !owner.contains_key(name.as_str()) && rest_owner.contains_key(name.as_str())
+            }) {
+                panic!(
+                    "'{}' (in the standard library) references '{name}', which is only declared \
+                     in the entry program — the standard library is always compiled before the \
+                     entry program, so this is a bug in the embedded prelude source",
+                    declared.first().map_or("<anonymous>", String::as_str),
+                );
+            }
+            (n, dep_nodes(n, &names, &owner))
         })
         .collect::<HashMap<usize, HashSet<usize>>>();
 
@@ -1208,6 +1242,8 @@ fn order_flat_items(
         .filter(|&i| !is_prelude[i])
         .collect::<Vec<usize>>();
 
+    let rest_owner = owner_of(&items, &rest);
+
     let mut order = Vec::with_capacity(count);
 
     // Prelude prefix: replay the cached relative permutation — pure indexing,
@@ -1225,6 +1261,7 @@ fn order_flat_items(
                 &prelude_nodes,
                 inductives,
                 structures,
+                &rest_owner,
             ));
         }
         if let Some(perm) = slot.as_ref() {
@@ -1236,15 +1273,12 @@ fn order_flat_items(
     // serves): topologically ordered among itself, after the whole prelude. Its
     // dependencies on prelude items are already satisfied by the prefix above,
     // so the owner map (and thus the dep edges) need only cover `rest`.
-    let rest_owner = owner_of(&items, &rest);
     let rest_deps = rest
         .iter()
         .map(|&n| {
             let declared = flat_item_names(&items[n]);
-            (
-                n,
-                dep_nodes(n, &items[n], &declared, inductives, structures, &rest_owner),
-            )
+            let names = node_reference_names(&items[n], &declared, inductives, structures);
+            (n, dep_nodes(n, &names, &rest_owner))
         })
         .collect::<HashMap<usize, HashSet<usize>>>();
     order.extend(topological_order(&rest, &rest_deps));
