@@ -693,17 +693,8 @@ pub fn register_witness(context: &mut Context, name: &str, signature: &Term) -> 
 
     // The witness's own declaring root: its island's leading segment, the
     // same classification `Structure`/`Concept`/`Inductive` are stamped with
-    // at construction — consulted by the orphan-rule check. `island` is a
-    // `Qualifier::join`-ed string, which carries a leading `/` for every
-    // non-empty qualifier (`Qualifier` is always canonically absolute) — skip
-    // that leading empty segment to reach the real first one.
-    let root = RootId::of_segment(
-        context
-            .island()
-            .split('/')
-            .find(|segment| !segment.is_empty())
-            .unwrap_or(""),
-    );
+    // at construction — consulted by the orphan-rule check.
+    let root = RootId::of_segment(context.island().root_segment());
 
     // The orphan rule: a witness may be declared only where the concept it
     // witnesses, or at least one rigid type in its key, is already declared —

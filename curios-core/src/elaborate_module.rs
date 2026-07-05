@@ -1,9 +1,9 @@
 use {
     super::{
-        Context, Definition, Error, Inductive, InductiveParam, Item, Mode, Module, Structure,
-        Subterm, Telescope, Term, check, check_concept_registry, check_telescope_entries,
-        drain_parked, elaborate, finish_deferred_witnesses, is_prop, reduce_with, register_witness,
-        retry_deferred_witnesses, zonk, zonk_module,
+        Context, Definition, Error, Inductive, InductiveParam, Item, Mode, Module, Qualifier,
+        Structure, Subterm, Telescope, Term, check, check_concept_registry,
+        check_telescope_entries, drain_parked, elaborate, finish_deferred_witnesses, is_prop,
+        reduce_with, register_witness, retry_deferred_witnesses, zonk, zonk_module,
     },
     std::collections::BTreeMap,
 };
@@ -213,6 +213,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
 
     Ok(Definition {
         name: def.name.clone(),
+        island: def.island.clone(),
         type_,
         body,
     })
@@ -282,6 +283,7 @@ fn elaborate_module_rec(
         .zip(bodies)
         .map(|((def, type_), body)| Definition {
             name: def.name.clone(),
+            island: def.island.clone(),
             type_,
             body,
         })
@@ -339,10 +341,10 @@ pub fn elaborate_module(
         // the qualifier prefix of the item's name (a `rec` group shares one);
         // the entrypoint body below runs under the root module.
         let item_module = match item {
-            Item::Let(def) => module_of(&def.name),
-            Item::Rec(defs) => defs.first().map(|d| module_of(&d.name)).unwrap_or(""),
+            Item::Let(def) => def.island.clone(),
+            Item::Rec(defs) => defs.first().map(|d| d.island.clone()).unwrap_or_default(),
         };
-        context.set_island(item_module.to_string());
+        context.set_island(item_module);
 
         items.push(match item {
             Item::Let(def) => Item::Let(elaborate_module_let(context, def)?),
@@ -358,7 +360,7 @@ pub fn elaborate_module(
         drain_parked(context)?;
     }
 
-    context.set_island(String::new());
+    context.set_island(Qualifier::empty());
     let (body, body_type) = elaborate(context, &module.body, mode)?;
     // The whole program has elaborated: a witness goal still deferred will
     // never find a table entry — report it now.
@@ -494,7 +496,7 @@ pub fn elaborate_and_zonk_with_prelude(
                     // witness's declaring root — unset during a bare replay
                     // (nothing else here consults it), so set it explicitly,
                     // exactly as the live-elaboration loop below does.
-                    context.set_island(module_of(&def.name).to_string());
+                    context.set_island(def.island.clone());
                     register_witness(context, &def.name, &def.type_)?;
                 }
             }
@@ -515,10 +517,10 @@ pub fn elaborate_and_zonk_with_prelude(
     let mut user_items = Vec::new();
     for item in module.items.iter().skip(prelude.items.len()) {
         let item_module = match item {
-            Item::Let(def) => module_of(&def.name),
-            Item::Rec(defs) => defs.first().map(|d| module_of(&d.name)).unwrap_or(""),
+            Item::Let(def) => def.island.clone(),
+            Item::Rec(defs) => defs.first().map(|d| d.island.clone()).unwrap_or_default(),
         };
-        context.set_island(item_module.to_string());
+        context.set_island(item_module);
 
         user_items.push(match item {
             Item::Let(def) => Item::Let(elaborate_module_let(context, def)?),
@@ -528,7 +530,7 @@ pub fn elaborate_and_zonk_with_prelude(
         drain_parked(context)?;
     }
 
-    context.set_island(String::new());
+    context.set_island(Qualifier::empty());
     let (body, body_type) = elaborate(context, &module.body, mode)?;
     finish_deferred_witnesses(context)?;
     drain_parked(context)?;
@@ -605,16 +607,4 @@ pub fn elaborate_and_zonk_with_prelude(
     };
 
     Ok((module, body_type))
-}
-
-/// The module an item belongs to: the qualifier prefix of its fully-qualified
-/// name (`Foo/Bar` for `Foo/Bar/f`; the empty string for a root-level `f`). The
-/// flat `Module` stores no separate module field — the name is the source of
-/// truth. Used to set the per-item `island` for the struct privacy check (§7),
-/// in both `elaborate_module` and `erase_module`.
-pub fn module_of(name: &str) -> &str {
-    match name.rfind('/') {
-        Some(slash) => &name[..slash],
-        None => "",
-    }
 }

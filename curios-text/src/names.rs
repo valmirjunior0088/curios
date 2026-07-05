@@ -1,71 +1,9 @@
 use curios_base::Span;
 
-// `Qualifier` is a canonical, resolved identity: a sequence of module segments
-// rooted at the module root. It is what the resolution tables key on.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Qualifier {
-    segments: Vec<String>,
-}
-
-impl Qualifier {
-    pub fn empty() -> Self {
-        Self { segments: vec![] }
-    }
-
-    pub fn with(&self, segment: &str) -> Self {
-        Self {
-            segments: self
-                .segments
-                .iter()
-                .cloned()
-                .chain([segment.to_string()])
-                .collect(),
-        }
-    }
-
-    pub fn join(&self) -> String {
-        // A canonical resolved identity is absolute: it carries a leading `/` so a
-        // hand-built reference (e.g. the string-literal meta-emitter's `/syn/Str/…`)
-        // matches a definition's key unambiguously. The empty (root) qualifier joins
-        // to the empty string, not a bare `/`.
-        match self.segments.is_empty() {
-            true => String::new(),
-            false => format!("/{}", self.segments.join("/")),
-        }
-    }
-
-    pub fn is_single(&self) -> bool {
-        self.segments.len() == 1
-    }
-
-    pub fn head(&self) -> &str {
-        &self.segments[0]
-    }
-
-    pub fn last(&self) -> &str {
-        self.segments.last().unwrap()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &str> {
-        self.segments.iter().map(String::as_str)
-    }
-
-    pub fn segments(&self) -> &[String] {
-        &self.segments
-    }
-}
-
-impl<S, I> From<I> for Qualifier
-where
-    S: Into<String>,
-    I: IntoIterator<Item = S>,
-{
-    fn from(iter: I) -> Self {
-        Self {
-            segments: iter.into_iter().map(Into::into).collect(),
-        }
-    }
-}
+// `Qualifier` lives in `curios-core` (it's the shared home both crates can see,
+// since `curios-text` already depends on `curios-core`) — re-exported here so
+// every existing `Qualifier` reference in this crate keeps resolving unchanged.
+pub use curios_core::Qualifier;
 
 // `Name` is a surface reference, exactly as written in source: a `Qualifier` plus an
 // `is_abs` flag marking a leading `/` (an absolute, root-anchored reference).

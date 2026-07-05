@@ -1,9 +1,10 @@
 use {
     super::{
         Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, InductiveType,
-        Item, Let, Many, Match, Module, MotivePattern, MotiveSlot, Nat, Prim, PrimHead, Proj, Rec,
-        Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var,
-        Variant, erase_prim, expect_prim_head, infer, is_prop, module_of, reduce_with, refine_head,
+        Item, Let, Many, Match, Module, MotivePattern, MotiveSlot, Nat, Prim, PrimHead, Proj,
+        Qualifier, Rec, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
+        TupleType, Two, Var, Variant, erase_prim, expect_prim_head, infer, is_prop, reduce_with,
+        refine_head,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -1339,10 +1340,13 @@ pub fn erase_module(
         // projection of a private-rep struct (e.g. `/std/Time`'s `Instant`)
         // would be wrongly rejected, the island defaulting to the root.
         let item_module = match item {
-            Item::Let(def) => module_of(&def.name),
-            Item::Rec(defs) => defs.first().map(|def| module_of(&def.name)).unwrap_or(""),
+            Item::Let(def) => def.island.clone(),
+            Item::Rec(defs) => defs
+                .first()
+                .map(|def| def.island.clone())
+                .unwrap_or_default(),
         };
-        context.set_island(item_module.to_string());
+        context.set_island(item_module);
 
         match item {
             Item::Let(def) => {
@@ -1379,7 +1383,7 @@ pub fn erase_module(
     }
 
     // The entrypoint body runs under the root module (mirrors `elaborate_module`).
-    context.set_island(String::new());
+    context.set_island(Qualifier::empty());
     let body = erase(context, &module.body, expected)?;
 
     Ok(curios_ersd::Module { items, body })

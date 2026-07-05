@@ -74,7 +74,11 @@ const ASSETS: &[(&str, &str, &str)] = &[
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect()
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 /// Download `url` into memory. The only failure mode this crate needs to
@@ -107,9 +111,13 @@ fn extract(archive_bytes: &[u8], out_dir: &Path) {
         let mut entry = entry.expect("valid tar entry");
         let path = entry.path().expect("valid entry path").into_owned();
 
-        let Some(top) = path.components().next() else { continue };
+        let Some(top) = path.components().next() else {
+            continue;
+        };
         let rest = path.strip_prefix(top).unwrap();
-        let Some(second) = rest.components().next() else { continue };
+        let Some(second) = rest.components().next() else {
+            continue;
+        };
 
         if second.as_os_str() == "lib" || second.as_os_str() == "include" {
             entry.unpack_in(out_dir).expect("unpack tar entry");
@@ -136,7 +144,11 @@ fn main() {
         .iter()
         .find(|(triple, _, _)| target.contains(triple))
         .unwrap_or_else(|| {
-            let supported = ASSETS.iter().map(|(triple, _, _)| *triple).collect::<Vec<_>>().join(", ");
+            let supported = ASSETS
+                .iter()
+                .map(|(triple, _, _)| *triple)
+                .collect::<Vec<_>>()
+                .join(", ");
             panic!("no prebuilt Binaryen release for target `{target}`; supported: {supported}")
         });
 
@@ -145,8 +157,9 @@ fn main() {
 
     if !lib_dir.join("libbinaryen.a").exists() {
         let asset_name = format!("binaryen-{VERSION}-{asset_target}.tar.gz");
-        let asset_url =
-            format!("https://github.com/WebAssembly/binaryen/releases/download/{VERSION}/{asset_name}");
+        let asset_url = format!(
+            "https://github.com/WebAssembly/binaryen/releases/download/{VERSION}/{asset_name}"
+        );
         let archive_path = out_dir.join(&asset_name);
 
         let archive_bytes = if archive_path.exists() {

@@ -24,6 +24,9 @@ use free_monoid::*;
 mod names;
 pub use names::*;
 
+mod qualifier;
+pub use qualifier::*;
+
 mod term;
 pub use term::*;
 

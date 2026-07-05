@@ -1,5 +1,5 @@
 use {
-    super::{Concept, Inductive, Structure, Term},
+    super::{Concept, Inductive, Qualifier, Structure, Term},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -13,6 +13,13 @@ use {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Definition {
     pub name: String,
+    /// This definition's declaring module — `name`'s qualifier prefix,
+    /// precomputed once by `to_core` (before `name` was flattened) rather
+    /// than re-derived from it later. Stamped into `Context::island` per item
+    /// by `elaborate_module`/`erase` for the struct representation-privacy
+    /// check (§7); the same value `Structure::module` carries for type
+    /// declarations.
+    pub island: Qualifier,
     pub type_: Term,
     pub body: Term,
 }

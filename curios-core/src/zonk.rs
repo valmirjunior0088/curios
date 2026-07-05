@@ -119,6 +119,7 @@ fn zonk_item(context: &Context, item: &Item) -> Result<Item, Error> {
 fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Error> {
     Ok(Definition {
         name: def.name.clone(),
+        island: def.island.clone(),
         type_: zonk_term(context, &def.type_)?,
         body: zonk_term(context, &def.body)?,
     })

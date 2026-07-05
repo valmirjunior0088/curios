@@ -1,7 +1,7 @@
 use {
     super::{
         Bound, Concept, Goal, HeadKey, ImplicitOrigin, Inductive, Metavar, MetavarId,
-        MetavarOrigin, Structure, Term, Witness, WitnessKey, WitnessOrigin,
+        MetavarOrigin, Qualifier, Structure, Term, Witness, WitnessKey, WitnessOrigin,
     },
     crate::time::Instant,
     curios_abi::RootId,
@@ -186,10 +186,10 @@ pub struct Context {
     // reported as errors only when the whole module has been elaborated.
     deferred_witnesses: Vec<ParkedGoal>,
     // The module whose item is currently being elaborated — the qualifier
-    // prefix of that item's name (the root module is the empty string). Set by
-    // `elaborate_module` per item; read by `elaborate_proj` for the struct
+    // prefix of that item's name (the root module is the empty qualifier). Set
+    // by `elaborate_module` per item; read by `elaborate_proj` for the struct
     // representation-privacy check (§7).
-    island: String,
+    island: Qualifier,
 }
 
 // Safety: `Term` keys contain `OnceCell` fields for caching, which triggers Clippy's
@@ -223,7 +223,7 @@ impl Context {
             witness_scope: Vec::new(),
             witness_marks: Vec::new(),
             deferred_witnesses: Vec::new(),
-            island: String::new(),
+            island: Qualifier::empty(),
             parked: Vec::new(),
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
@@ -703,14 +703,14 @@ impl Context {
     /// The module whose item is currently being elaborated (the qualifier
     /// prefix of its name; empty for the root). Used by the struct projection
     /// privacy check.
-    pub fn island(&self) -> &str {
+    pub fn island(&self) -> &Qualifier {
         &self.island
     }
 
     /// Set the current module before elaborating an item (see
     /// `elaborate_module`).
-    pub fn set_island<N: Into<String>>(&mut self, module: N) {
-        self.island = module.into();
+    pub fn set_island(&mut self, island: Qualifier) {
+        self.island = island;
     }
 
     // === Metavariable store =================================================

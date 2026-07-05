@@ -546,7 +546,7 @@ fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Er
             // (`Context::island`, set per item by `elaborate_module`);
             // the island model grants no descendant access, so the check is
             // exact qualifier equality.
-            if !structure.rep_public && context.island() != structure.module {
+            if !structure.rep_public && *context.island() != structure.module {
                 let field = match field {
                     Field::Index(index) => index.to_string(),
                     Field::Label(label) => label.clone(),
@@ -830,7 +830,7 @@ fn elaborate_struct(
     // only within its declaring module. Checked here (alongside projection
     // privacy in `elaborate_proj`) via `island`, set per item by
     // `elaborate_module`.
-    if !structure.rep_public && context.island() != structure.module {
+    if !structure.rep_public && *context.island() != structure.module {
         return Err(Error::private_representation(name.clone()));
     }
 

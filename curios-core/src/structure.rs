@@ -1,5 +1,5 @@
 use {
-    super::{Telescope, Term},
+    super::{Qualifier, Telescope, Term},
     curios_abi::RootId,
 };
 
@@ -27,10 +27,10 @@ pub struct Structure {
     /// type-former's kind. A fully-applied `StructType { name, .. }` has this
     /// sort, which `sort_of` reads to decide propositional irrelevance.
     pub result_sort: Term,
-    /// The declaring module's joined qualified name (e.g. `Foo/Bar`); the root
-    /// module is the empty string. Compared against the use-site module for the
+    /// The declaring module's qualifier (e.g. `Foo/Bar`); the root module is
+    /// the empty qualifier. Compared against the use-site module for the
     /// representation-privacy checks (§7).
-    pub module: String,
+    pub module: Qualifier,
     /// The compilation root (`sys`/`syn`/`std`/the entry program/…) that
     /// declares this struct — orthogonal to `module`, which is fine-grained
     /// per-module privacy. Consulted by the orphan-rule ownership check, not

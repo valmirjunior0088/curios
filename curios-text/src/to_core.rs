@@ -18,18 +18,6 @@ use {
     },
 };
 
-/// The `RootId` a qualifier belongs to — its leading segment, classified by
-/// [`curios_abi::root_id_of_segment`] (the single canonical implementation,
-/// shared with `curios-core`'s witness-root stamping). The root module (no
-/// segments at all) is the entry program, same as every other non-embedded
-/// qualifier.
-fn root_id_of_qualifier(qualifier: &Qualifier) -> RootId {
-    qualifier
-        .segments()
-        .first()
-        .map_or(RootId::ENTRY, |segment| RootId::of_segment(segment))
-}
-
 // Reject a reference that *resolves into* an internal root (`sys`) when the
 // consuming module lies outside the privileged roots. `resolved` is the segments
 // of the qualifier the reference resolved to — not the raw spelled path — so
@@ -374,7 +362,7 @@ fn process_items(
                 // registration, and `host_fn`'s wire-typed signature shape)
                 // stays inside `prelude`; from here a `foreign` declaration
                 // lowers exactly like an ordinary `TopItem::Let`.
-                let root = root_id_of_qualifier(&context.prefixed(&f.label));
+                let root = context.prefixed(&f.label).root_id();
                 let signature = foreign_signature(f, foreigns, root)?;
 
                 let lower = Lower::new(context);
@@ -527,7 +515,7 @@ fn process_items(
                                 ),
                                 constructors,
                                 result_sort: result_sort.clone(),
-                                root: root_id_of_qualifier(&context.prefixed(&u.label)),
+                                root: context.prefixed(&u.label).root_id(),
                             },
                         );
 
@@ -702,8 +690,8 @@ fn process_items(
                 // Declaring module: the type-former's qualifier prefix —
                 // identical to core's per-item `island` — for the
                 // representation-privacy checks.
-                let module = curios_core::module_of(&name).to_string();
-                let root = root_id_of_qualifier(&context.prefixed(&s.label));
+                let module = context.prefixed(&s.label).without_last();
+                let root = context.prefixed(&s.label).root_id();
 
                 let param_tys = s
                     .params
@@ -800,8 +788,8 @@ fn process_items(
             // into the concept's own namespace (§4.1).
             TopItem::Concept(concept) => {
                 let name = context.prefixed(&concept.label).join();
-                let module = curios_core::module_of(&name).to_string();
-                let root = root_id_of_qualifier(&context.prefixed(&concept.label));
+                let module = context.prefixed(&concept.label).without_last();
+                let root = context.prefixed(&concept.label).root_id();
 
                 let param_tys = {
                     let lower = Lower::new(context);
@@ -1359,6 +1347,7 @@ fn structure_free_vars(structure: &curios_core::Structure) -> HashSet<String> {
 
 fn flat_let_to_core(let_: FlatLet) -> curios_core::Definition {
     curios_core::Definition {
+        island: let_.name.without_last(),
         name: let_.name.join(),
         type_: let_.type_,
         body: let_.body,
