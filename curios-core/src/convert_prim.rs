@@ -3,7 +3,7 @@ use {
     crate::{Peel, Prim, ReduceError, Term, peel_arr, peel_bin, peel_nat},
 };
 
-pub fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, ReduceError> {
+pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, ReduceError> {
     // Two `Bin`/`Lst` values are the free monoid on their bytes/elements: peel the
     // longest common prefix (`core::spine`). `Stuck` falls through to the
     // structural arms below, which compare like-shaped symbolic operands (slices,

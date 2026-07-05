@@ -330,7 +330,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
     })
 }
 
-pub fn elaborate_prim(
+pub(crate) fn elaborate_prim(
     context: &mut Context,
     term: &Term,
     prim: &Prim,

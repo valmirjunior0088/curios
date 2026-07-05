@@ -105,7 +105,7 @@ fn host_unary(
 /// (zonk ran), so there is no checking here. `expected` is consumed only where a
 /// runtime shape must be read off the type — the element type of an array literal
 /// (§9).
-pub fn erase_prim(
+pub(crate) fn erase_prim(
     context: &mut Context,
     _term: &Term,
     prim: &Prim,

@@ -382,7 +382,7 @@ fn elaborate_switch(
     Ok((rebuilt, result_type))
 }
 
-pub fn elaborate_match(
+pub(crate) fn elaborate_match(
     context: &mut Context,
     m: &Match,
     term: &Term,

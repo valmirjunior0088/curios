@@ -220,7 +220,7 @@ fn reduce_flt_unary(
 /// `lt`/`gte` decide where `eql` still cannot; `Stuck` is undecidable, and the
 /// op's neutral term is rebuilt.
 #[derive(Debug, PartialEq)]
-pub enum Comparison {
+pub(crate) enum Comparison {
     Eq,
     Lt,
     Gt,
@@ -229,7 +229,7 @@ pub enum Comparison {
     Stuck,
 }
 
-pub fn from_ordering(ordering: Ordering) -> Comparison {
+pub(crate) fn from_ordering(ordering: Ordering) -> Comparison {
     match ordering {
         Ordering::Less => Comparison::Lt,
         Ordering::Equal => Comparison::Eq,
@@ -250,7 +250,7 @@ pub fn from_ordering(ordering: Ordering) -> Comparison {
 /// *undecided* comparison still rebuilds a normalized neutral: `cmp(x + m, y + m)`
 /// and `cmp(x, y)` reduce to the same term, which conversion needs (e.g.
 /// `Lt(a, succ b) ≡ Lt(succ a, succ(succ b))`).
-pub fn compare_nat(
+pub(crate) fn compare_nat(
     context: &mut Context,
     left: Term,
     right: Term,
@@ -374,7 +374,7 @@ fn nat_sum(images: Vec<Term>) -> Term {
         })
 }
 
-pub fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, ReduceError> {
+pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, ReduceError> {
     match prim {
         Prim::BlnType => Ok(Subterm::Prim(Prim::BlnType)),
         Prim::Bln(value) => Ok(Subterm::Prim(Prim::Bln(*value))),

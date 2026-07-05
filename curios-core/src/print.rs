@@ -47,7 +47,7 @@ thread_local! {
 
 /// Install a pretty-name rename map for the duration of `f`, restoring the
 /// previous state afterwards so the faithful `Display` paths are unaffected.
-pub fn with_pretty_names<R>(rename: Rc<HashMap<String, String>>, f: impl FnOnce() -> R) -> R {
+pub(crate) fn with_pretty_names<R>(rename: Rc<HashMap<String, String>>, f: impl FnOnce() -> R) -> R {
     let prev = PRETTY.with(|p| p.borrow_mut().replace(rename));
     let result = f();
     PRETTY.with(|p| *p.borrow_mut() = prev);
@@ -55,7 +55,7 @@ pub fn with_pretty_names<R>(rename: Rc<HashMap<String, String>>, f: impl FnOnce(
 }
 
 /// Install a global-shortening map for the duration of `f`.
-pub fn with_short_names<R>(shorten: Rc<HashMap<String, String>>, f: impl FnOnce() -> R) -> R {
+pub(crate) fn with_short_names<R>(shorten: Rc<HashMap<String, String>>, f: impl FnOnce() -> R) -> R {
     let prev = SHORTEN.with(|s| s.borrow_mut().replace(shorten));
     let result = f();
     SHORTEN.with(|s| *s.borrow_mut() = prev);
@@ -89,7 +89,7 @@ fn display_label(raw: &str) -> String {
 /// stored labels of every binder it reopens. Free vars come from the robust
 /// `Bound` traversal; binder labels — which that traversal never surfaces — from
 /// [`collect_labels`], which descends scope bodies (where nested binders live).
-pub fn display_names(term: &Term) -> BTreeSet<String> {
+pub(crate) fn display_names(term: &Term) -> BTreeSet<String> {
     let mut names = term.free_vars();
     collect_labels(term, &mut names);
     names
@@ -240,7 +240,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
 /// would otherwise collide, or would shadow a name that renders literally
 /// (globals, already-clean labels). The result is unambiguous by construction,
 /// so no rendered name is ever silently shared between two binders.
-pub fn build_rename(names: &BTreeSet<String>) -> HashMap<String, String> {
+pub(crate) fn build_rename(names: &BTreeSet<String>) -> HashMap<String, String> {
     // `names` is sorted, so the assignment below is deterministic.
     let prettifiable = names
         .iter()
@@ -271,7 +271,7 @@ pub fn build_rename(names: &BTreeSet<String>) -> HashMap<String, String> {
 
 /// Every global qualified name in `module`: each definition (`let`/`rec`), each
 /// inductive type, each struct type. The universe a global is shortened *against*.
-pub fn module_symbols(module: &Module) -> Vec<String> {
+pub(crate) fn module_symbols(module: &Module) -> Vec<String> {
     let mut symbols = Vec::new();
     for item in &module.items {
         match item {
@@ -288,7 +288,7 @@ pub fn module_symbols(module: &Module) -> Vec<String> {
 /// shares — the name it has in scope, since Curios has no `use … as` aliasing,
 /// so an in-scope name is always a suffix. Only entries that actually shorten
 /// are recorded; an ambiguous (or single-segment) name keeps its full path.
-pub fn build_shorten(symbols: &[String]) -> HashMap<String, String> {
+pub(crate) fn build_shorten(symbols: &[String]) -> HashMap<String, String> {
     // One global can be listed twice (an inductive is both an `inductives` registry
     // key and an `items` type-constructor definition); count distinct names, or
     // such a name would look ambiguous with itself and never shorten.
