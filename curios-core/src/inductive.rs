@@ -1,5 +1,6 @@
 use {
     super::{Atom, Telescope, Term},
+    curios_abi::RootId,
     std::collections::BTreeMap,
 };
 
@@ -48,6 +49,9 @@ pub struct Inductive {
     /// type-constructor's kind. A fully-applied `InductiveType { name, .. }`
     /// has this sort, which `sort_of` reads to decide propositional irrelevance.
     pub result_sort: Term,
+    /// The compilation root that declares this inductive — consulted by the
+    /// orphan-rule ownership check in `register_witness`.
+    pub root: RootId,
 }
 
 impl Inductive {

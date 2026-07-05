@@ -28,6 +28,7 @@ use {
         ParkedWork, Plicity, StructType, Subterm, Telescope, Term, Witness, WitnessKey,
         WitnessOrigin, convert_outcome, reduce_with, retry_parked,
     },
+    curios_abi::RootId,
     std::collections::{BTreeSet, HashSet},
 };
 
@@ -690,12 +691,58 @@ pub fn register_witness(context: &mut Context, name: &str, signature: &Term) -> 
         }
     }
 
+    // The witness's own declaring root: its island's leading segment, the
+    // same classification `Structure`/`Concept`/`Inductive` are stamped with
+    // at construction — consulted by the orphan-rule check. `island` is a
+    // `Qualifier::join`-ed string, which carries a leading `/` for every
+    // non-empty qualifier (`Qualifier` is always canonically absolute) — skip
+    // that leading empty segment to reach the real first one.
+    let root = RootId::of_segment(
+        context
+            .island()
+            .split('/')
+            .find(|segment| !segment.is_empty())
+            .unwrap_or(""),
+    );
+
+    // The orphan rule: a witness may be declared only where the concept it
+    // witnesses, or at least one rigid type in its key, is already declared —
+    // never by a third root unrelated to both. Without this, two unrelated
+    // roots could each legally `satisfy` the same `(concept, key)` pair, a
+    // collision that is unfixable once both are linked into one program (see
+    // `ROADMAP.md`'s Type System section). Checked before the duplicate-key
+    // insert below: "not allowed to register this at all" is the more
+    // fundamental violation than "and it also collides."
+    //
+    // A privileged root (`sys`/`syn`/`std`) is exempt: the three are one
+    // coordinated standard library, not independent unrelated packages, so
+    // e.g. a `/std`-declared `Eql(Str)` witness bridging `/sys`'s `Eql`
+    // concept and `/syn`'s `Str` type is exactly the sanctioned pattern
+    // (`/std` facades for `/sys`/`/syn`-homed concepts and types), not an
+    // orphan instance. The check only bites an ordinary root — the entry
+    // program today, an untrusted external package once one exists.
+    let concept_root = context
+        .concept(concept_name)
+        .expect("the concept was looked up above")
+        .root;
+    if !root.kind().is_privileged()
+        && root != concept_root
+        && !key.0.iter().any(|head| context.root_of_head(head) == root)
+    {
+        return Err(Error::orphan_witness(
+            concept_name.clone(),
+            key,
+            name.to_string(),
+        ));
+    }
+
     if let Some(first_name) = context.insert_witness(
         concept_name.clone(),
         key.clone(),
         Witness {
             name: name.to_string(),
             signature: signature.clone(),
+            root,
         },
     ) {
         return Err(Error::duplicate_witness(

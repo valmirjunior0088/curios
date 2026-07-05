@@ -8,7 +8,7 @@ mod interface;
 
 use {
     super::*,
-    curios_abi::ForeignStore,
+    curios_abi::{ForeignStore, RootId, RootKind},
     curios_base::Entropy,
     curios_core::Bound,
     std::{
@@ -18,16 +18,17 @@ use {
     },
 };
 
-// Root modules reachable only from the standard library — the trusted primitive
-// substrate (`sys`). User code reaches them through their `/std` wrappers; any
-// reference that resolves into one from outside is rejected during resolution.
-// `syn` (the desugar-target library) is deliberately NOT internal: string-literal
-// desugaring emits references to `/syn/Str`, so the name must be reachable from any
-// module the way an ordinary library is.
-const INTERNAL_ROOTS: &[&str] = &["sys"];
-// Consuming roots permitted to reference an internal root: the standard library, the
-// internal roots themselves, and `syn` (which reaches `/sys` prims via `/std` re-exports).
-const PRIVILEGED_ROOTS: &[&str] = &["std", "sys", "syn"];
+/// The `RootId` a qualifier belongs to — its leading segment, classified by
+/// [`curios_abi::root_id_of_segment`] (the single canonical implementation,
+/// shared with `curios-core`'s witness-root stamping). The root module (no
+/// segments at all) is the entry program, same as every other non-embedded
+/// qualifier.
+fn root_id_of_qualifier(qualifier: &Qualifier) -> RootId {
+    qualifier
+        .segments()
+        .first()
+        .map_or(RootId::ENTRY, |segment| RootId::of_segment(segment))
+}
 
 // Reject a reference that *resolves into* an internal root (`sys`) when the
 // consuming module lies outside the privileged roots. `resolved` is the segments
@@ -55,7 +56,7 @@ fn guard_internal_root(consumer: &Qualifier, resolved: &[String]) -> Result<(), 
 // Whether `label` names an internal root: discoverable so the standard library
 // can resolve it by absolute path, but unreachable from user code.
 fn is_internal_root(label: &str) -> bool {
-    INTERNAL_ROOTS.contains(&label)
+    RootId::of_segment(label).kind() == RootKind::Internal
 }
 
 // Whether `consumer` is rooted in a privileged root (the standard library or an
@@ -64,7 +65,7 @@ fn privileged(consumer: &Qualifier) -> bool {
     consumer
         .segments()
         .first()
-        .is_some_and(|r| PRIVILEGED_ROOTS.contains(&r.as_str()))
+        .is_some_and(|r| RootId::of_segment(r).kind().is_privileged())
 }
 
 struct Resolved {
@@ -525,6 +526,7 @@ fn process_items(
                                 ),
                                 constructors,
                                 result_sort: result_sort.clone(),
+                                root: root_id_of_qualifier(&context.prefixed(&u.label)),
                             },
                         );
 
@@ -699,10 +701,8 @@ fn process_items(
                 // Declaring module: the type-former's qualifier prefix —
                 // identical to core's per-item `island` — for the
                 // representation-privacy checks.
-                let module = match name.rfind('/') {
-                    Some(slash) => name[..slash].to_string(),
-                    None => String::new(),
-                };
+                let module = curios_core::module_of(&name).to_string();
+                let root = root_id_of_qualifier(&context.prefixed(&s.label));
 
                 let param_tys = s
                     .params
@@ -764,6 +764,7 @@ fn process_items(
                         ),
                         result_sort: result_sort.clone(),
                         module,
+                        root,
                         rep_public: s.rep_pub,
                     },
                 );
@@ -798,10 +799,8 @@ fn process_items(
             // into the concept's own namespace (§4.1).
             TopItem::Concept(concept) => {
                 let name = context.prefixed(&concept.label).join();
-                let module = match name.rfind('/') {
-                    Some(slash) => name[..slash].to_string(),
-                    None => String::new(),
-                };
+                let module = curios_core::module_of(&name).to_string();
+                let root = root_id_of_qualifier(&context.prefixed(&concept.label));
 
                 let param_tys = {
                     let lower = Lower::new(context);
@@ -898,6 +897,7 @@ fn process_items(
                         ),
                         result_sort: result_sort.clone(),
                         module,
+                        root,
                         rep_public: true,
                     },
                 );
@@ -926,6 +926,7 @@ fn process_items(
                         fields: field_labels.clone(),
                         supers,
                         inputs,
+                        root,
                     },
                 );
 

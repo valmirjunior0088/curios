@@ -172,7 +172,8 @@ fn prelude_ord_superclass_projects() {
 }
 
 // Registering two witnesses for the same `(concept, head)` key is a coherence
-// error (global uniqueness, no orphan rule).
+// error (global uniqueness) — independent of, and checked alongside, the
+// orphan rule below.
 #[test]
 fn duplicate_witness_is_an_error() {
     let source = r#"
@@ -191,6 +192,42 @@ fn duplicate_witness_is_an_error() {
         "#;
 
     assert!(error(source).to_lowercase().contains("witness"));
+}
+
+// The orphan rule: a witness may be declared only where the concept it
+// witnesses, or a type in its key, is already declared. `Ord` and `Bln` are
+// both `/std`/`/sys`-owned and the entry program owns neither, so `Ord(Bln)`
+// (not already witnessed anywhere in the standard library) is rejected.
+#[test]
+fn orphan_witness_is_rejected() {
+    let source = r#"
+        use /std/{Bln, Ord, Order};
+        satisfy Ord(Bln) {
+            cmp(a, b) = Order/eq()
+        }
+        let n : Bln = true;
+        n
+        "#;
+
+    assert!(error(source).to_lowercase().contains("orphan"));
+}
+
+// The sanctioned counterpart: a user's own type is legal to `satisfy` a
+// standard-library concept for, since the declaring root (the entry program)
+// owns the key's type even though it doesn't own the concept.
+#[test]
+fn witness_for_a_locally_owned_type_is_not_an_orphan() {
+    let source = r#"
+        use /std/{Nat, Io, Str, Show};
+        pub record Wrapper : Type { inner : Nat }
+        satisfy Show(Wrapper) {
+            show(w) = Nat/to_str(w.inner)
+        }
+        let w : Wrapper = Wrapper { inner = 7 };
+        Io/print(Show/show(w))
+        "#;
+
+    assert_eq!(run(source), b"7");
 }
 
 // Multi-parameter concepts key on the tuple of every input head: two

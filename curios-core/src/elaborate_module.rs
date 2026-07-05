@@ -51,6 +51,7 @@ fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), 
             indices,
             constructors: inductive.constructors,
             result_sort: inductive.result_sort,
+            root: inductive.root,
         },
     );
 
@@ -102,6 +103,7 @@ fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result
             indices: inductive.indices,
             constructors,
             result_sort: inductive.result_sort,
+            root: inductive.root,
         },
     );
 
@@ -169,6 +171,7 @@ fn elaborate_structure(context: &mut Context, name: &str) -> Result<(), Error> {
             fields,
             result_sort: structure.result_sort,
             module: structure.module,
+            root: structure.root,
             rep_public: structure.rep_public,
         },
     );
@@ -487,6 +490,11 @@ pub fn elaborate_and_zonk_with_prelude(
             Item::Let(def) => {
                 context.define_assuming(&def.name, &def.type_, &def.body);
                 if prelude.witnesses.contains(&def.name) {
+                    // `register_witness` reads `context.island()` to stamp the
+                    // witness's declaring root — unset during a bare replay
+                    // (nothing else here consults it), so set it explicitly,
+                    // exactly as the live-elaboration loop below does.
+                    context.set_island(module_of(&def.name).to_string());
                     register_witness(context, &def.name, &def.type_)?;
                 }
             }

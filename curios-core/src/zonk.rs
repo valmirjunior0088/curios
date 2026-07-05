@@ -67,6 +67,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                         })
                         .collect::<Result<_, Error>>()?,
                     result_sort: inductive.result_sort.clone(),
+                    root: inductive.root,
                 },
             ))
         })
@@ -84,6 +85,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                     fields: structure.fields.zonk(context)?,
                     result_sort: structure.result_sort.clone(),
                     module: structure.module.clone(),
+                    root: structure.root,
                     rep_public: structure.rep_public,
                 },
             ))

@@ -283,6 +283,16 @@ pub enum Error {
         first: String,
         second: String,
     },
+    /// A witness registered by a root that owns neither the concept nor any
+    /// input head's declaring root — the orphan rule: a coherence-relevant
+    /// registration must happen where the concept or a type it mentions is
+    /// already declared, so two unrelated roots cannot independently
+    /// `satisfy` the same concept+type and collide unfixably downstream.
+    OrphanWitness {
+        concept: String,
+        key: super::WitnessKey,
+        witness: String,
+    },
     /// Two distinct superclass projections of local `use` binders match a goal
     /// at the same minimal depth — no principled tiebreak exists.
     AmbiguousWitness {
@@ -635,6 +645,14 @@ impl Error {
             key,
             first,
             second,
+        }
+    }
+
+    pub fn orphan_witness(concept: String, key: super::WitnessKey, witness: String) -> Self {
+        Self::OrphanWitness {
+            concept,
+            key,
+            witness,
         }
     }
 
@@ -1115,6 +1133,27 @@ impl fmt::Display for Error {
                     "duplicate witness of '{concept}' for {noun} '{key}'\n  one is declared in {}, another in {}\n  every concept-{noun} pair has at most one witness, program-wide",
                     module(first),
                     module(second)
+                )
+            }
+            Error::OrphanWitness {
+                concept,
+                key,
+                witness,
+            } => {
+                let noun = match key.0.len() {
+                    1 => "head",
+                    _ => "key",
+                };
+                // Witnesses are anonymous; their compiler names encode the
+                // declaring module, which is the useful coordinate.
+                let module = |name: &str| match name.rsplit_once('/') {
+                    Some(("", _)) | None => "the entry module".to_string(),
+                    Some((module, _)) => format!("module '{module}'"),
+                };
+                write!(
+                    f,
+                    "orphan witness of '{concept}' for {noun} '{key}', declared in {}\n  a witness may only be declared where the concept or a type in its {noun} is already declared",
+                    module(witness)
                 )
             }
             Error::AmbiguousWitness {

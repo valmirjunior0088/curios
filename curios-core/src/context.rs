@@ -1,9 +1,10 @@
 use {
     super::{
-        Bound, Concept, Goal, ImplicitOrigin, Inductive, Metavar, MetavarId, MetavarOrigin,
-        Structure, Term, Witness, WitnessKey, WitnessOrigin,
+        Bound, Concept, Goal, HeadKey, ImplicitOrigin, Inductive, Metavar, MetavarId,
+        MetavarOrigin, Structure, Term, Witness, WitnessKey, WitnessOrigin,
     },
     crate::time::Instant,
+    curios_abi::RootId,
     curios_base::{Entropy, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -637,6 +638,22 @@ impl Context {
     /// acyclicity) at seed time.
     pub fn concepts(&self) -> &BTreeMap<String, Concept> {
         &self.concepts
+    }
+
+    /// The compilation root that declares one witness key's rigid head — a
+    /// nominal head's own `root` (looked up from whichever registry has it,
+    /// struct or inductive), or the fixed `RootId::SYS` for a primitive head,
+    /// which is never user-declarable. Consulted by the orphan-rule check in
+    /// `register_witness`.
+    pub fn root_of_head(&self, head: &HeadKey) -> RootId {
+        match head {
+            HeadKey::Nominal(name) => self
+                .structure(name)
+                .map(|structure| structure.root)
+                .or_else(|| self.inductive(name).map(|inductive| inductive.root))
+                .expect("a nominal head names a registered structure or inductive"),
+            _ => RootId::SYS,
+        }
     }
 
     /// Mark a definition name as a witness declaration; when its signature

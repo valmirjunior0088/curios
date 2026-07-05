@@ -11,7 +11,10 @@
 //! definition in the program-wide table under `(concept name, tuple of the
 //! rigid heads of the input parameters)`, the [`WitnessKey`] of [`HeadKey`]s.
 
-use super::{Subterm, Telescope, Term};
+use {
+    super::{Subterm, Telescope, Term},
+    curios_abi::RootId,
+};
 
 /// One concept declaration's registry entry.
 #[derive(Debug, Clone, PartialEq)]
@@ -32,6 +35,9 @@ pub struct Concept {
     /// from the key and pinned by the witness's terminal unification instead
     /// (functional dependencies).
     pub inputs: Vec<usize>,
+    /// The compilation root that declares this concept — consulted by the
+    /// orphan-rule ownership check in `register_witness`.
+    pub root: RootId,
 }
 
 /// One registered witness: the qualified name of its backing definition and
@@ -41,6 +47,12 @@ pub struct Concept {
 pub struct Witness {
     pub name: String,
     pub signature: Term,
+    /// The compilation root that declares this witness — consulted by the
+    /// orphan-rule ownership check alongside `Concept::root` and the key's
+    /// head roots. Derived from `Context::island()` at registration, the
+    /// same source `module_of` reads for the (unrelated) representation-
+    /// privacy check.
+    pub root: RootId,
 }
 
 /// The tuple of rigid heads a witness is keyed on: one [`HeadKey`] per input

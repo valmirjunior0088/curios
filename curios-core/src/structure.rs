@@ -1,4 +1,7 @@
-use super::{Telescope, Term};
+use {
+    super::{Telescope, Term},
+    curios_abi::RootId,
+};
 
 /// One struct declaration's registry entry: the metadata a `struct`
 /// declaration produces alongside its type-former binding.
@@ -28,6 +31,11 @@ pub struct Structure {
     /// module is the empty string. Compared against the use-site module for the
     /// representation-privacy checks (§7).
     pub module: String,
+    /// The compilation root (`sys`/`syn`/`std`/the entry program/…) that
+    /// declares this struct — orthogonal to `module`, which is fine-grained
+    /// per-module privacy. Consulted by the orphan-rule ownership check, not
+    /// by representation privacy.
+    pub root: RootId,
     /// The inner `pub`: whether the representation — construction and
     /// projection — is exported.
     pub rep_public: bool,
