@@ -13,7 +13,7 @@ fn lst_match_is_a_foldr() {
         let digits : Nat =
             match xs : Nat
             | [] => 0
-            | h, ..t; ih => Nat/add(Nat/mul(ih, 10), h)
+            | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(digits)))
         "#;
@@ -65,7 +65,7 @@ fn bin_match_is_a_foldr() {
         let digits : Nat =
             match bytes : Nat
             | \\ => 0
-            | h, ..t; ih => Nat/add(Nat/mul(ih, 10), h)
+            | \h\..t; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(digits)))
         "#;
@@ -419,7 +419,7 @@ fn lst_spread_concats_segments() {
         let digits : Nat =
             match ys : Nat
             | [] => 0
-            | h, ..t; ih => Nat/add(Nat/mul(ih, 10), h)
+            | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(digits)))
         "#;
@@ -438,7 +438,7 @@ fn lst_spread_identity_and_multi() {
         let digits : Nat =
             match zs : Nat
             | [] => 0
-            | h, ..t; ih => Nat/add(Nat/mul(ih, 10), h)
+            | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
         Io/write(Io/stdout, Str/to_bin(Nat/to_str(digits)))
         "#;
@@ -500,7 +500,7 @@ fn lst_spread_operand_hoists_bangs() {
             let digits : Nat =
                 match ys : Nat
                 | [] => 0
-                | h, ..t; ih => Nat/add(Nat/mul(ih, 10), h)
+                | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
                 end;
             let wrote = Io/write(Io/stdout, Str/to_bin(Nat/to_str(digits)));
             Task/pure(());

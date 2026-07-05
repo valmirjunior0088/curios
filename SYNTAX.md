@@ -78,7 +78,7 @@ body_using_the_bindings
 rec go(rest : Lst(A), acc : Nat) -> Nat =
     match rest
     | []        => acc
-    | _, ..tail => go(tail, acc + 1)
+    | [_, ..tail] => go(tail, acc + 1)
     end;
 go(l, 0)
 ```
@@ -162,21 +162,21 @@ match d
 end
 ```
 
-**`Lst` fold** (empty arm uses the empty-list literal `[]`; the cons arm `head, ..tail; ih` peels the leading element `head` off the rest `tail`, with `ih` the fold of `tail` — a plain case-split may omit `; ih`):
+**`Lst` fold** (empty arm uses the empty-list literal `[]`; the cons arm `[head, ..tail]; ih` mirrors the list literal's own bracket-and-comma shape, peeling the leading element `head` off the rest `tail`, with `ih` the fold of `tail` — a plain case-split may omit `; ih`):
 
 ```
 match a
-| []                => base
-| head, ..tail; ih  => step(head, ih)
+| []                  => base
+| [head, ..tail]; ih  => step(head, ih)
 end
 ```
 
-**`Bin` fold** (identical, but the empty arm is the empty bytestring `\\` and `head` is the leading byte, a `Nat`):
+**`Bin` fold** (identical in spirit, but the empty arm is the empty bytestring `\\` and the cons arm `\head\..tail; ih` mirrors the `Bin` literal's own backslash-delimited shape; `head` is the leading byte, a `Nat`):
 
 ```
 match b
-| \\                => base
-| head, ..tail; ih  => step(head, ih)
+| \\                  => base
+| \head\..tail; ih    => step(head, ih)
 end
 ```
 

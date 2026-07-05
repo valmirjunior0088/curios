@@ -28,10 +28,10 @@ rec cmp(xs : Lst(Nat), ys : Lst(Nat)) -> Order =
         | true => Order/eq()
         | false => Order/lt()
         end
-    | x, ..xt =>
+    | [x, ..xt] =>
         match ys
         | [] => Order/gt()
-        | y, ..yt =>
+        | [y, ..yt] =>
             match cmp(xt, yt)
             | eq() => Nat/compare(x, y)
             | lt() => Order/lt()
@@ -80,16 +80,16 @@ rec add_c(xs : Lst(Nat), ys : Lst(Nat), carry : Nat) -> Lst(Nat) =
             | true => []
             | false => [carry]
             end
-        | y, ..yt =>
+        | [y, ..yt] =>
             let s = y + carry;
             Lst/cons(s % base, add_c([], yt, s / base))
         end
-    | x, ..xt =>
+    | [x, ..xt] =>
         match ys
         | [] =>
             let s = x + carry;
             Lst/cons(s % base, add_c(xt, [], s / base))
-        | y, ..yt =>
+        | [y, ..yt] =>
             let s = x + y + carry;
             Lst/cons(s % base, add_c(xt, yt, s / base))
         end
@@ -101,14 +101,14 @@ pub let add(a : BigNat, b : BigNat) -> BigNat =
 rec sub_b(xs : Lst(Nat), ys : Lst(Nat), borrow : Nat) -> Lst(Nat) =
     match xs
     | [] => []
-    | x, ..xt =>
+    | [x, ..xt] =>
         match ys
         | [] =>
             match x < borrow
             | true => Lst/cons(x + base - borrow, sub_b(xt, [], 1))
             | false => Lst/cons(x - borrow, sub_b(xt, [], 0))
             end
-        | y, ..yt =>
+        | [y, ..yt] =>
             let need = y + borrow;
             match x < need
             | true => Lst/cons(x + base - need, sub_b(xt, yt, 1))
@@ -120,7 +120,7 @@ rec sub_b(xs : Lst(Nat), ys : Lst(Nat), borrow : Nat) -> Lst(Nat) =
 rec trim(xs : Lst(Nat)) -> Lst(Nat) =
     match xs
     | [] => []
-    | x, ..xt =>
+    | [x, ..xt] =>
         let rest = trim(xt);
         match Lst/len(rest) == 0
         | true =>
@@ -142,7 +142,7 @@ rec mul_c(xs : Lst(Nat), c : Nat, carry : Nat) -> Lst(Nat) =
         | true => []
         | false => limbs_of_nat(carry)
         end
-    | x, ..xt =>
+    | [x, ..xt] =>
         let p = x * c + carry;
         Lst/cons(p % base, mul_c(xt, c, p / base))
     end;

@@ -1019,23 +1019,46 @@ fn parse_arr_empty_branch<'a>() -> Parser<'a, Term> {
         .and_keep(lazy(parse_term))
 }
 
-// The `| head, ..tail; ih =>` cons arm of a native-inductive fold. Carrier-neutral
-// (`Lst` and `Bin` share it); only the empty arm's literal selects the carrier. The
-// `,` separates the peeled head from the rest `tail`; the `;` sets `ih` (the
-// recursive result on `tail`) apart from the scrutinee's shape. A plain
-// case-split needs no induction hypothesis, so `; ih` may be omitted — the
-// binder defaults to `_`.
-fn parse_cons_branch<'a>() -> Parser<'a, ((String, String, String), Term)> {
+// The `; ih =>` tail shared by both carriers' cons arms: `;` sets the
+// induction hypothesis apart from the scrutinee's shape. A plain case-split
+// needs no induction hypothesis, so `; ih` may be omitted — the binder
+// defaults to `_`.
+fn parse_cons_ih<'a>() -> Parser<'a, String> {
+    catch(parse_literal(";").and_keep(parse_identifier()))
+        .map(str::to_string)
+        .or(pure("_".to_string()))
+}
+
+// The `| [head, ..tail]; ih =>` cons arm of an `Lst` fold. Mirrors the `Lst`
+// literal's own bracket-and-comma shape (`parse_arr_literal`): `head` is the
+// peeled leading element, `tail` the rest.
+fn parse_lst_cons_branch<'a>() -> Parser<'a, ((String, String, String), Term)> {
     parse_literal("|")
+        .and_drop(parse_literal("["))
         .and_keep(parse_identifier())
         .and_drop(parse_literal(","))
         .and_drop(parse_literal(".."))
         .and(parse_identifier())
-        .and(
-            catch(parse_literal(";").and_keep(parse_identifier()))
-                .map(str::to_string)
-                .or(pure("_".to_string())),
-        )
+        .and_drop(parse_literal("]"))
+        .and(parse_cons_ih())
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .map(|(((head, tail), ih), cons_case)| {
+            ((head.to_string(), tail.to_string(), ih), cons_case)
+        })
+}
+
+// The `| \head\..tail; ih =>` cons arm of a `Bin` fold. Mirrors the `Bin`
+// literal's own backslash-delimited shape (`parse_bin_literal`): `head` is
+// the leading byte, `tail` the rest.
+fn parse_bin_cons_branch<'a>() -> Parser<'a, ((String, String, String), Term)> {
+    parse_literal("|")
+        .and_drop(parse_literal("\\"))
+        .and_keep(parse_identifier())
+        .and_drop(parse_literal("\\"))
+        .and_drop(parse_literal(".."))
+        .and(parse_identifier())
+        .and(parse_cons_ih())
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
         .map(|(((head, tail), ih), cons_case)| {
@@ -1045,7 +1068,7 @@ fn parse_cons_branch<'a>() -> Parser<'a, ((String, String, String), Term)> {
 
 fn parse_arr_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
-        .and(catch(parse_arr_empty_branch()).and(parse_cons_branch()))
+        .and(catch(parse_arr_empty_branch()).and(parse_lst_cons_branch()))
         .and_drop(parse_keyword("end"))
         .map(
             |((head, motive), (empty_case, ((head_label, tail_label, ih_label), cons_case)))| {
@@ -1073,7 +1096,7 @@ fn parse_bin_empty_branch<'a>() -> Parser<'a, Term> {
 
 fn parse_bin_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
-        .and(catch(parse_bin_empty_branch()).and(parse_cons_branch()))
+        .and(catch(parse_bin_empty_branch()).and(parse_bin_cons_branch()))
         .and_drop(parse_keyword("end"))
         .map(
             |((head, motive), (empty_case, ((head_label, tail_label, ih_label), cons_case)))| {

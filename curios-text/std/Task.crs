@@ -180,7 +180,7 @@ let release_guard(h : Io, gs : Lst(Guard)) -> Lst(Guard) =
     rec each(rest : Lst(Guard)) -> Lst(Guard) =
         match rest : Lst(Guard)
         | [] => Lst/nil(@Guard)
-        | g, ..more =>
+        | [g, ..more] =>
             match /sys/Io/eql(g.0, h) : Lst(Guard)
             | true => let _ = g.1(); more
             | false => Lst/cons(g, each(more))
@@ -198,7 +198,7 @@ let drain_slots(ss : Lst(Slot)) -> {} =
     rec each(rest : Lst(Slot)) -> {} =
         match rest : {}
         | [] => ()
-        | s, ..more =>
+        | [s, ..more] =>
             match Cell/get(s) : {}
             | none() => each(more)
             | some(j) => let _ = run_fins(j.fins); each(more)
@@ -210,7 +210,7 @@ let sweep_parked(ss : Lst(Slot)) -> Lst(Slot) =
     rec each(rest : Lst(Slot)) -> Lst(Slot) =
         match rest : Lst(Slot)
         | [] => Lst/nil(@Slot)
-        | s, ..more =>
+        | [s, ..more] =>
             match Cell/get(s) : Lst(Slot)
             | none() => each(more)
             | some(j) =>
@@ -232,7 +232,7 @@ let poll_ready(blocked : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
     rec walk(rest : Lst(Parked), i : Nat, woken : Lst(Job), still : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
         match rest : {Lst(Job), Lst(Parked)}
         | [] => (woken, still)
-        | p, ..tail =>
+        | [p, ..tail] =>
             match Cell/get(p.token) : {Lst(Job), Lst(Parked)}
             | true => let _ = run_fins(p.fins); walk(tail, i + 1, woken, still)
             | false =>
@@ -310,7 +310,7 @@ pub let block_on(@A : Type, root : Task(A)) -> A =
                     let _ = drain_all();
                     /sys/Io/exit(@A, 1)
                 end
-            | job, ..rest =>
+            | [job, ..rest] =>
                 let _ = Cell/set(runq, rest);
                 let _ = serve(job);
                 drive()

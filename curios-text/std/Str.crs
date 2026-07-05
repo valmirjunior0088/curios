@@ -22,7 +22,7 @@ let check(b : Bin) -> ((s : Scan) -> Option(Utf8(s, b))) =
         | cont(rem, lo, hi) => Option/none()
         | bad() => Option/none()
         end
-    | h, ..t; ih => (s) =>
+    | \h\..t; ih => (s) =>
         match ih(step(h, s))
         | some(rest) => Option/some(Utf8/more(h, s, t, rest))
         | none() => Option/none()
@@ -45,7 +45,7 @@ pub let concat(a : Str, b : Str) -> Str =
 rec drop_width(n : Nat, s : Scan, b : Bin) -> Nat =
     match b
     | \\ => 0
-    | h, ..t; ih =>
+    | \h\..t; ih =>
         match s
         | lead() =>
             match n
@@ -197,7 +197,7 @@ pub rec peel_byte(@s : Scan, @b : Bin, nz : Nat/Lt(0, Bin/len(b)), w : Utf8(s, b
 pub rec count_w(s : Scan, b : Bin) -> Nat =
     match b
     | \\ => 0
-    | h, ..t; ih =>
+    | \h\..t; ih =>
         match s
         | lead() => count_w(step(h, Scan/lead()), t) + 1
         | cont(rem, lo, hi) => count_w(step(h, Scan/cont(rem, lo, hi)), t)
@@ -225,7 +225,7 @@ pub let decode_head(c : Nat, @t : Bin, w : Utf8(Scan/lead(), Bin/cons(c, t))) ->
 pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
     (match s.bytes : (b) => (sc : Scan, valid : Utf8(sc, b), acc : {A, Nat}) -> {A, Nat}
     | \\ => (sc, valid, acc) => acc
-    | h, ..t; ih => (sc, valid, acc) =>
+    | \h\..t; ih => (sc, valid, acc) =>
         match sc
         | lead() =>
             ih(step(h, Scan/lead()),
@@ -297,7 +297,7 @@ pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Nat =
         le : Nat/Lte(i + 1, count_w(sc, b))) -> Nat =
         match b
         | \\ => match le : Nat end
-        | h, ..t; ih =>
+        | \h\..t; ih =>
             match sc
             | lead() =>
                 match i

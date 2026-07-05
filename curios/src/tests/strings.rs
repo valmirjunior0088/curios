@@ -62,12 +62,12 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
             | cont(rem, lo, hi) =>
                 match b
                 | \\ => \\
-                | h, ..t; ih => to_lead_bytes(step(h, Scan/cont(rem, lo, hi)), t)
+                | \h\..t; ih => to_lead_bytes(step(h, Scan/cont(rem, lo, hi)), t)
                 end
             | bad() =>
                 match b
                 | \\ => \\
-                | h, ..t; ih => to_lead_bytes(step(h, Scan/bad()), t)
+                | \h\..t; ih => to_lead_bytes(step(h, Scan/bad()), t)
                 end
             end;
 
@@ -369,7 +369,7 @@ fn utf8_construction_spike() {
         rec build(b : Bin) -> All(b) =
             match b : (b) => All(b)
             | \\ => All/empty()
-            | h, ..t; ih => All/snoc(h, t, ih)
+            | \h\..t; ih => All/snoc(h, t, ih)
             end;
 
         Io/write(Io/stdout, Str/to_bin("ok"))
@@ -545,7 +545,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
                 | cont(rem, lo, hi) => Option/none()
                 | bad() => Option/none()
                 end
-            | h, ..t; ih => (s) =>
+            | \h\..t; ih => (s) =>
                 match ih(step(h, s)) : Option(Utf8(s, Bin/concat(Bin/append(\\, h), t)))
                 | some(rest) => Option/some(Utf8/more(h, s, t, rest))
                 | none() => Option/none()

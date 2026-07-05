@@ -870,7 +870,7 @@ fn peel_loops_are_linear_by_construction() {
             | f + 1; ih =>
                 match Cell/get(c)
                 | \\ => acc
-                | h, ..t; ih2 =>
+                | \h\..t; ih2 =>
                     let _ = Cell/set(c, t);
                     drain(f, acc + (h - 48))
                 end

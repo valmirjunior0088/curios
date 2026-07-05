@@ -71,7 +71,7 @@ let digits_to_str(ds : Lst(Nat)) -> Str =
 rec normalize(ds : Lst(Nat)) -> {Lst(Nat), Bln} =
     match ds
     | [] => ([], false)
-    | h, ..t =>
+    | [h, ..t] =>
         match Lst/len(t) == 0
         | true =>
             match h == 10

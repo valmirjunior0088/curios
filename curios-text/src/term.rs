@@ -255,8 +255,9 @@ pub struct BlnMatch {
 }
 
 /// Structural induction on an `Lst`: an `| [] =>` identity arm and a
-/// `| head, ..tail; ih =>` cons arm. The surface analogue of `NatMatch::Induction`
-/// for the native free-monoid primitives (the empty literal selects the carrier).
+/// `| [head, ..tail]; ih =>` cons arm, mirroring the `Lst` literal's own
+/// bracket-and-comma shape. The surface analogue of `NatMatch::Induction` for
+/// the native free-monoid primitives (the empty literal selects the carrier).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LstMatch {
     pub head: Term,
@@ -269,8 +270,9 @@ pub struct LstMatch {
 }
 
 /// Structural induction on a `Bin`: a `| \\ =>` identity arm (the empty
-/// bytestring literal) and a `| head, ..tail; ih =>` cons arm whose `head` is the
-/// leading byte (a `Nat`) and `tail` the rest. The `Bin` analogue of [`LstMatch`];
+/// bytestring literal) and a `| \head\..tail; ih =>` cons arm, mirroring the
+/// `Bin` literal's own backslash-delimited shape, whose `head` is the leading
+/// byte (a `Nat`) and `tail` the rest. The `Bin` analogue of [`LstMatch`];
 /// `Bin` carries no element type, so there is no carrier parameter to read off.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BinMatch {

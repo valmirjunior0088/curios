@@ -181,7 +181,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
         match v : {}
         | [] => ()
-        | p, ..rest => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(p.1))); ()
+        | [p, ..rest] => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(p.1))); ()
         end
         "#;
 
