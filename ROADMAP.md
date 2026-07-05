@@ -36,7 +36,7 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
   - [x] `Show`/`Eql`/`Ord`/`Monad` in the standard library
   - [x] Higher-kinded concepts (`Monad(M : (Type) -> Type)`, via the flex-apply imitation rule in `convert.rs`)
   - [x] Multi-parameter keying (tuple of input heads) and functional dependencies (`out` parameters)
-  - [ ] Orphan rule (deferred until a package ecosystem exists)
+  - [ ] Orphan rule (prerequisite for the package manager — global witness-table coherence is already enforced, but without this, unrelated packages can independently `satisfy` the same concept+type and collide unfixably downstream)
   - [x] Concept-based operators (every infix except `&&`/`||` dispatches through `Add`/`Sub`/`Mul`/`Div`/`Rem`/`Eql`/`Cmp` with `/sys` witnesses; primitive codegen unchanged)
 - [x] `struct`/`record` declarations (nominal types with representation-visibility control)
 - [x] Inductive types (`induct` declarations)
@@ -132,7 +132,7 @@ Tracks `curios` development by feature area. Checkboxes reflect current codebase
   - [ ] Code formatter
   - [ ] Terminal REPL
   - [ ] Language server (hover, go-to-definition, highlighting)
-  - [ ] Package manager
+  - [ ] Package manager (needs the orphan rule under Type System first)
   - [ ] Project manifest & discovery
   - [ ] `curios new` scaffolding
   - [ ] Linter
