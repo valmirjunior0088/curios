@@ -12,6 +12,7 @@ mod binaryen;
 mod bridge;
 mod codegen;
 mod concepts;
+mod dependencies;
 mod erasure;
 mod foreign;
 mod inference;
