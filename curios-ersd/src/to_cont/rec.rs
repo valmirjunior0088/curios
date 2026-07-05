@@ -1,6 +1,6 @@
 use curios_cont::{ClsrName, ValueName};
 
-pub fn unsupported_sync_rec_item(term: &crate::Term) -> ! {
+pub(super) fn unsupported_sync_rec_item(term: &crate::Term) -> ! {
     panic!(
         "`to_cont` does not support a call-valued `rec` item in value position: \
          the following term reaches `Apply`/`Match`/`NatMatch` on its construction path \
@@ -11,7 +11,7 @@ pub fn unsupported_sync_rec_item(term: &crate::Term) -> ! {
 /// Post-order (dependencies first) of the call/match-valued `rec` bindings, panicking
 /// with the offending cycle if two such bindings depend on each other's value — that
 /// case needs runtime fixpoint cells, which are out of scope.
-pub fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usize> {
+pub(super) fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usize> {
     fn visit(
         node: usize,
         names: &[&str],
@@ -69,7 +69,7 @@ pub fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usize> {
 /// computed items, so a cyclic one is rejected by [`rec_computed_order`] rather than
 /// back-patched (see `plan_backpatch`). Confining cyclic recursion to closures is what lets
 /// every `tpl`/`lst` wasm field stay immutable.
-pub struct Backpatch {
+pub(super) struct Backpatch {
     pub clsr: ClsrName,
     pub captures: Vec<ValueName>,
 }

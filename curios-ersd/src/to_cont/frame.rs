@@ -5,13 +5,13 @@ use {
 };
 
 #[derive(Debug)]
-pub struct FrameEntropy {
+pub(super) struct FrameEntropy {
     values: Entropy<ValueName>,
     blocks: Entropy<BlockName>,
 }
 
 impl FrameEntropy {
-    pub fn new() -> (Self, BlockName) {
+    pub(super) fn new() -> (Self, BlockName) {
         let blocks = Entropy::<BlockName>::new();
         let resume = blocks.fresh();
 
@@ -24,37 +24,37 @@ impl FrameEntropy {
         )
     }
 
-    pub fn fresh_value(&mut self) -> ValueName {
+    pub(super) fn fresh_value(&mut self) -> ValueName {
         self.values.fresh()
     }
 
-    pub fn fresh_block(&mut self) -> BlockName {
+    pub(super) fn fresh_block(&mut self) -> BlockName {
         self.blocks.fresh()
     }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Frame {
+pub(super) struct Frame {
     bindings: HashMap<String, ValueName>,
 }
 
 impl Frame {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self::default()
     }
 
-    pub fn find(&self, name: &str) -> ValueName {
+    pub(super) fn find(&self, name: &str) -> ValueName {
         self.bindings
             .get(name)
             .cloned()
             .unwrap_or_else(|| panic!("`to_cont` lacks value `{name}`"))
     }
 
-    pub fn push(&mut self, name: String, value: ValueName) {
+    pub(super) fn push(&mut self, name: String, value: ValueName) {
         self.bindings.insert(name, value);
     }
 
-    pub fn extended<I>(&self, bindings: I) -> Self
+    pub(super) fn extended<I>(&self, bindings: I) -> Self
     where
         I: IntoIterator<Item = (String, ValueName)>,
     {

@@ -12,20 +12,20 @@ use {
 };
 
 #[derive(Debug)]
-pub struct Lowerer<'a> {
+pub(super) struct Lowerer<'a> {
     module: &'a mut Module,
     clsrs: Entropy<ClsrName>,
 }
 
 impl<'a> Lowerer<'a> {
-    pub fn new(module: &'a mut Module) -> Self {
+    pub(super) fn new(module: &'a mut Module) -> Self {
         Self {
             module,
             clsrs: Entropy::<ClsrName>::new(),
         }
     }
 
-    pub fn lower_module(&mut self, module: &crate::Module, frame: &Frame) -> (BlockName, Region) {
+    pub(super) fn lower_module(&mut self, module: &crate::Module, frame: &Frame) -> (BlockName, Region) {
         let (mut entry, resume) = FrameEntropy::new();
         let mut emit = Emit::new(&mut entry);
         let tail = Work {
@@ -41,7 +41,7 @@ impl<'a> Lowerer<'a> {
 /// A unit of lowering work: the shared [`Lowerer`] (module + closure names) paired with the
 /// region currently being emitted into. Threading one `Work` instead of a `Lowerer` and an
 /// `Emit` separately keeps the per-primitive helpers down to their operands plus a continuation.
-pub struct Work<'a, 'm, 'e> {
+pub(super) struct Work<'a, 'm, 'e> {
     lowerer: &'a mut Lowerer<'m>,
     emit: &'a mut Emit<'e>,
 }
@@ -60,21 +60,21 @@ impl Work<'_, '_, '_> {
 
     /// Allocate a fresh value in the current region. Thin accessor so the per-primitive lowering
     /// in `lower_prim` can emit values without reaching into the private `emit` field.
-    pub fn fresh(&mut self, value: Value) -> ValueName {
+    pub(super) fn fresh(&mut self, value: Value) -> ValueName {
         self.emit.fresh(value)
     }
 
     /// Mint a fresh block name. The block isn't bound to the current region yet —
     /// the caller is expected to follow up with [`Self::add_resume_block`] (or
     /// equivalent) once the block's region is ready.
-    pub fn fresh_block(&mut self) -> BlockName {
+    pub(super) fn fresh_block(&mut self) -> BlockName {
         self.emit.fresh_block()
     }
 
     /// Mint a fresh value name without binding it to the current region. Used
     /// when the name is needed as a block parameter (bound by control flow) or
     /// passed to a continuation before the binding lands in some other region.
-    pub fn fresh_value(&mut self) -> ValueName {
+    pub(super) fn fresh_value(&mut self) -> ValueName {
         self.emit.fresh_value()
     }
 
@@ -83,7 +83,7 @@ impl Work<'_, '_, '_> {
     /// that branches to a synthesized continuation: the caller mints the block
     /// name, supplies the block's params, and provides a closure that emits the
     /// continuation's region against an outer `Cont`.
-    pub fn add_resume_block(
+    pub(super) fn add_resume_block(
         &mut self,
         name: BlockName,
         params: Vec<ValueName>,
@@ -93,7 +93,7 @@ impl Work<'_, '_, '_> {
         self.emit.add_block(name, Block { params, region });
     }
 
-    pub fn lower_closure(
+    pub(super) fn lower_closure(
         &mut self,
         func: &crate::Func,
         frame: &Frame,
@@ -163,7 +163,7 @@ impl Work<'_, '_, '_> {
     /// and return the extended frame. Shared by local `Subterm::Rec` lowering and
     /// the flat top-level `crate::Item::Rec`, so it takes the `names` and `items`
     /// directly rather than an `crate::Rec` (whose `tail` it never used).
-    pub fn lower_letrec_bindings<'x>(
+    pub(super) fn lower_letrec_bindings<'x>(
         &mut self,
         names: &[String],
         items: impl IntoIterator<Item = &'x crate::Term>,
@@ -210,7 +210,7 @@ impl Work<'_, '_, '_> {
         self.emit.fresh(Value::Pure(Data::Nat(0)))
     }
 
-    pub fn lower_pure_name(&mut self, term: &crate::Term, frame: &Frame) -> ValueName {
+    pub(super) fn lower_pure_name(&mut self, term: &crate::Term, frame: &Frame) -> ValueName {
         match &**term {
             crate::Subterm::Name(name) => frame.find(name.as_str()),
             crate::Subterm::Erased => self.erased(),
@@ -266,7 +266,7 @@ impl Work<'_, '_, '_> {
         }
     }
 
-    pub fn lower_letrec_item(&mut self, term: &crate::Term, target: ValueName, frame: &Frame) {
+    pub(super) fn lower_letrec_item(&mut self, term: &crate::Term, target: ValueName, frame: &Frame) {
         match &**term {
             crate::Subterm::Apply(_) | crate::Subterm::Match(_) | crate::Subterm::NatMatch(_) => {
                 unsupported_sync_rec_item(term)
@@ -278,7 +278,7 @@ impl Work<'_, '_, '_> {
         }
     }
 
-    pub fn lower_value_name(&mut self, term: &crate::Term, frame: &Frame, cont: Cont<'_>) -> Tail {
+    pub(super) fn lower_value_name(&mut self, term: &crate::Term, frame: &Frame, cont: Cont<'_>) -> Tail {
         match &**term {
             crate::Subterm::Name(name) => cont.call(self, frame.find(name.as_str())),
             crate::Subterm::Erased => {
@@ -352,7 +352,7 @@ impl Work<'_, '_, '_> {
         }
     }
 
-    pub fn lower_names<'b>(
+    pub(super) fn lower_names<'b>(
         &mut self,
         params: &'b [crate::Term],
         frame: &'b Frame,
@@ -403,7 +403,7 @@ impl Work<'_, '_, '_> {
     /// genuinely self-referential one surfaces as a cycle in `rec_computed_order` and is
     /// rejected. Confining cyclic recursion to closures is what lets `tpl`/`lst` fields stay
     /// immutable.
-    pub fn plan_backpatch(&mut self, item: &crate::Term, frame: &Frame) -> Option<Backpatch> {
+    pub(super) fn plan_backpatch(&mut self, item: &crate::Term, frame: &Frame) -> Option<Backpatch> {
         match &**item {
             crate::Subterm::Func(func) => {
                 let (clsr, captures) = self.lower_closure(func, frame);
@@ -414,7 +414,7 @@ impl Work<'_, '_, '_> {
         }
     }
 
-    pub fn emit_backpatch(&mut self, target: ValueName, backpatch: &Backpatch) {
+    pub(super) fn emit_backpatch(&mut self, target: ValueName, backpatch: &Backpatch) {
         self.emit.add_value(
             target,
             Value::Pure(Data::Clsr(
@@ -427,7 +427,7 @@ impl Work<'_, '_, '_> {
     /// Lower a `rec` group, then `body`. Backpatches are prealloc'd at region entry; call/match
     /// -valued bindings are lowered in dependency order through resume blocks; patches
     /// (which may reference those results) run last, just before `body`.
-    pub fn lower_rec<'b>(
+    pub(super) fn lower_rec<'b>(
         &mut self,
         names: &'b [String],
         items: impl IntoIterator<Item = &'b crate::Term>,
@@ -502,7 +502,7 @@ impl Work<'_, '_, '_> {
         self.lower_rec_computed(&sorted, &frame, backpatch_body)
     }
 
-    pub fn lower_rec_computed<'b>(
+    pub(super) fn lower_rec_computed<'b>(
         &mut self,
         computed: &'b [(ValueName, &'b crate::Term)],
         frame: &'b Frame,
@@ -525,7 +525,7 @@ impl Work<'_, '_, '_> {
         }
     }
 
-    pub fn lower_tail(&mut self, term: &crate::Term, frame: &Frame, resume: &BlockName) -> Tail {
+    pub(super) fn lower_tail(&mut self, term: &crate::Term, frame: &Frame, resume: &BlockName) -> Tail {
         match &**term {
             crate::Subterm::Unreachable => Tail::Unreachable,
             crate::Subterm::Apply(apply) => self.lower_value_name(

@@ -262,7 +262,7 @@ fn lower_arr_concat<'b>(
     }
 }
 
-pub fn lower_pure_prim(work: &mut Work, prim: &crate::PurePrim, frame: &Frame) -> ValueName {
+pub(super) fn lower_pure_prim(work: &mut Work, prim: &crate::PurePrim, frame: &Frame) -> ValueName {
     match prim {
         crate::PurePrim::Nat(value) => work.fresh(Value::Pure(Data::Nat(*value))),
         crate::PurePrim::NatEql(left, right) => {
@@ -499,7 +499,7 @@ pub fn lower_pure_prim(work: &mut Work, prim: &crate::PurePrim, frame: &Frame) -
     }
 }
 
-pub fn lower_value_prim<'b>(
+pub(super) fn lower_value_prim<'b>(
     work: &mut Work,
     prim: &'b crate::Prim,
     frame: &'b Frame,
