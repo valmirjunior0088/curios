@@ -1,4 +1,7 @@
-use {curios_rt::MockHost, std::time::Duration};
+use {
+    curios_rt::{ForeignBindings, MockHost},
+    std::time::Duration,
+};
 
 #[test]
 fn io_write() {
@@ -283,7 +286,8 @@ fn proc_exit_halts_with_code() {
     .expect("compile succeeded");
 
     let (system, io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, system).expect("execution succeeded");
+    let code =
+        crate::run_wasm(&module, system, ForeignBindings::empty()).expect("execution succeeded");
 
     assert_eq!(code, 7);
     assert!(io.output().is_empty());

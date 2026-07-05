@@ -13,6 +13,7 @@ mod bridge;
 mod codegen;
 mod concepts;
 mod erasure;
+mod foreign;
 mod inference;
 mod io;
 mod matching;

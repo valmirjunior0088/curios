@@ -8,7 +8,7 @@
 use {
     crate::abi::{ForeignFunction, sys_io},
     crate::cont::{self, to_wasm},
-    curios_rt::MockHost,
+    curios_rt::{ForeignBindings, MockHost},
     std::sync::Arc,
 };
 
@@ -27,7 +27,7 @@ pub fn foreign_write() -> Arc<ForeignFunction> {
 
 pub fn printed(module: &cont::Module) -> String {
     let (system, io) = MockHost::builder().build();
-    crate::run_wasm(&to_wasm(module), system).expect("run failed");
+    crate::run_wasm(&to_wasm(module), system, ForeignBindings::empty()).expect("run failed");
     String::from_utf8(io.output()).unwrap()
 }
 
@@ -36,7 +36,7 @@ pub fn printed(module: &cont::Module) -> String {
 /// the exit code unsigned.
 pub fn i32_result(module: &cont::Module) -> i32 {
     let (system, _io) = MockHost::builder().build();
-    crate::run_wasm(&to_wasm(module), system).expect("run failed")
+    crate::run_wasm(&to_wasm(module), system, ForeignBindings::empty()).expect("run failed")
 }
 
 /// Like [`i32_result`] but for a signed `Int` result: the exit code carries the
@@ -49,7 +49,7 @@ pub fn int_result(module: &cont::Module) -> i32 {
 /// an `f32`. Fixtures surface a computed `Flt` via `Flt/to_le_bin`.
 pub fn f32_result(module: &cont::Module) -> f32 {
     let (system, io) = MockHost::builder().build();
-    crate::run_wasm(&to_wasm(module), system).expect("run failed");
+    crate::run_wasm(&to_wasm(module), system, ForeignBindings::empty()).expect("run failed");
     let bytes = io.output();
     f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
 }
@@ -57,5 +57,5 @@ pub fn f32_result(module: &cont::Module) -> f32 {
 pub fn traps(module: &cont::Module) -> bool {
     let (system, _io) = MockHost::builder().build();
 
-    crate::run_wasm(&to_wasm(module), system).is_err()
+    crate::run_wasm(&to_wasm(module), system, ForeignBindings::empty()).is_err()
 }

@@ -8,7 +8,7 @@ Agent guide to `curios`. Operational reference plus an orientation map. Read thi
 
 The repo is a **Cargo workspace** (virtual manifest at the root) of twelve crates, layered along the pipeline:
 
-- **`curios-abi`** — the host/guest contract: wire ABI constants (`/sys/Io`'s status, poll-event, and open-mode codes) plus the `ForeignStore` of self-describing `ForeignFunction` rows (import name, `WireSignature`) describing every host operation. The `sys_io()` seed is the single source the `/sys/Io` prelude declarations, elaboration checks, wasm `env.*` imports, and runtime linker types all derive from — the IR nodes carry the row itself (an `Arc<ForeignFunction>`), so adding a host op is one `sys_io` row, one `ForeignImpls::define` closure in `curios-rt`, and the `Host` trait method/impls. A pure leaf, shared by the compiler stages and the runtime.
+- **`curios-abi`** — the host/guest contract: wire ABI constants (`/sys/Io`'s status, poll-event, and open-mode codes) plus the `ForeignStore` of self-describing `ForeignFunction` rows (import name, `WireSignature`) describing every host operation. `sys_io()` seeds the fixed `sys`-tier store the `/sys/Io` prelude declarations, elaboration checks, wasm `sys.*` imports, and runtime linker types all derive from; a program's own `foreign` declarations accumulate a second, `env`-tier store that `compile_entrypoint` hands back for an embedder to satisfy via `curios-rt::ForeignBindings`. The IR nodes carry the row itself (an `Arc<ForeignFunction>`), so adding a `/sys/Io` host op is one `sys_io` row, one `ForeignBindings::define` closure in `curios-rt`'s `sys_impls`, and the `Host` trait method/impls. A pure leaf, shared by the compiler stages and the runtime.
 - **`curios-base`** — foundational utilities shared by every stage: source spans, the fresh-name `Entropy`/`Mint` supply, the `name!` newtype macro, the parser/printer monad combinators, and the slice `suffix_view` re-base laws (shared by `ersd`'s `worker_wrapper` and `cont`'s `slice_forwarding`).
 - **`curios-wasm`** — the wasm module model, parser, and binary writer/encoder. A pristine leaf on top of `curios-base`.
 - **`curios-cont`** — the continuation-passing IR: cont→cont optimization (`optm/`) and wasm emission (`to_wasm/`).
@@ -56,7 +56,7 @@ then, in curios itself:
   → run on wasmtime via curios-rt::run_bytes  (or bundle into an executable)
 ```
 
-`curios-binaryen/binaryen/` is vendored C++ (the Binaryen wasm optimizer), linked via FFI from `curios-binaryen/src/` to optimize emitted wasm. The wasmtime engine + host stack live in `curios-rt/src/` (`run_bytes` deserializes a `.cwasm` and runs it; `instantiate` wires the `sys.io_*` host imports).
+`curios-binaryen/binaryen/` is vendored C++ (the Binaryen wasm optimizer), linked via FFI from `curios-binaryen/src/` to optimize emitted wasm. The wasmtime engine + host stack live in `curios-rt/src/` (`run_bytes` deserializes a `.cwasm` and runs it; `instantiate` wires the `sys.io_*` host imports and, via the required `ForeignBindings` argument, any `env.*` bindings an embedder supplies for the program's own `foreign` declarations).
 
 ## Where things live
 

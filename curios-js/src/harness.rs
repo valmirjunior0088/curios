@@ -6,7 +6,7 @@
 
 use {
     crate::{abi::abi_object, bridge::bridge_bytes},
-    js_sys::{Object, Promise, Reflect, Uint8Array},
+    js_sys::{Array, Object, Promise, Reflect, Uint8Array},
     wasm_bindgen::prelude::*,
 };
 
@@ -16,11 +16,14 @@ extern "C" {
     fn harness_run(config: Object) -> Promise;
 }
 
-/// Run a compiled program in the browser. `hooks` is an optional
-/// `{ onStdout?, onStderr? }` object of per-write `Uint8Array` callbacks;
-/// the promise resolves to `{ stdout, stderr, exitCode, trap }`.
+/// Run a compiled program in the browser. `foreign_names` is `compile`'s
+/// `foreignNames` roster (empty for a program with no `foreign`
+/// declarations). `hooks` is an optional `{ onStdout?, onStderr?, foreign? }`
+/// object — `onStdout`/`onStderr` are per-write `Uint8Array` callbacks,
+/// `foreign` is a `{ name: fn, ... }` map implementing `foreign_names`. The
+/// promise resolves to `{ stdout, stderr, exitCode, trap }`.
 #[wasm_bindgen]
-pub fn run(program: &[u8], hooks: JsValue) -> Promise {
+pub fn run(program: &[u8], foreign_names: Array, hooks: JsValue) -> Promise {
     let config = abi_object();
 
     Reflect::set(
@@ -36,6 +39,9 @@ pub fn run(program: &[u8], hooks: JsValue) -> Promise {
         &Uint8Array::from(bridge_bytes().as_slice()),
     )
     .expect("Reflect::set on a plain object");
+
+    Reflect::set(&config, &JsValue::from_str("foreignNames"), &foreign_names)
+        .expect("Reflect::set on a plain object");
 
     Reflect::set(&config, &JsValue::from_str("hooks"), &hooks)
         .expect("Reflect::set on a plain object");

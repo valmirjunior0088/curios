@@ -25,6 +25,7 @@ pub use harness::*;
 use {
     curios_pipeline::{compile_entrypoint, typecheck_entrypoint},
     curios_text::{Entrypoint, NullLoader},
+    js_sys::{Array, Object, Reflect, Uint8Array},
     std::time::Duration,
     wasm_bindgen::prelude::*,
 };
@@ -32,20 +33,39 @@ use {
 /// Generous but bounded: a playground compile should never hang the tab.
 const TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Compile `source` (no external module imports — see `NullLoader`) to wasm
-/// bytes, or a formatted error string on parse/type/lowering failure.
+/// Compile `source` (no external module imports — see `NullLoader`) to a
+/// `{ bytes, foreignNames }` object, or a formatted error string on
+/// parse/type/lowering failure. `bytes` is the wasm module; `foreignNames` is
+/// the `env`-tier import roster the program's own `foreign` declarations
+/// require — a caller supplies them via `run`'s `hooks.foreign`.
 #[wasm_bindgen]
-pub fn compile(source: &str) -> Result<Vec<u8>, String> {
+pub fn compile(source: &str) -> Result<Object, String> {
     let entrypoint = source
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
 
-    // TODO(Milestone 3): also expose the returned `ForeignStore`'s names to
-    // JS, mirroring `import_names()`, so a caller can supply `foreign`
-    // implementations.
-    let (module, _foreigns) = compile_entrypoint(TIMEOUT, &entrypoint, &NullLoader, |_| {})?;
+    let (module, foreigns) = compile_entrypoint(TIMEOUT, &entrypoint, &NullLoader, |_| {})?;
 
-    Ok(curios_wasm::to_bytes(&module))
+    let object = Object::new();
+
+    Reflect::set(
+        &object,
+        &JsValue::from_str("bytes"),
+        &Uint8Array::from(curios_wasm::to_bytes(&module).as_slice()),
+    )
+    .expect("Reflect::set on a plain object");
+
+    Reflect::set(
+        &object,
+        &JsValue::from_str("foreignNames"),
+        &foreigns
+            .iter()
+            .map(|function| JsValue::from_str(&function.name))
+            .collect::<Array>(),
+    )
+    .expect("Reflect::set on a plain object");
+
+    Ok(object)
 }
 
 /// Type-check `source` and stop, skipping the erase/cont/wasm lowering —

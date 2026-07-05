@@ -4,7 +4,7 @@
 //! it on the runtime-only engine.
 
 use {
-    curios_rt::{OsHost, extract_payload, run_bytes},
+    curios_rt::{ForeignBindings, OsHost, extract_payload, run_bytes},
     std::{
         env, fs,
         process::{self, ExitCode},
@@ -27,7 +27,9 @@ fn main() -> ExitCode {
     // argv crosses to the guest via `/std/Proc/args`; argv[0] is this executable.
     let args = env::args().map(String::into_bytes).collect();
 
-    match payload().and_then(|payload| run_bytes(&payload, OsHost::with_args(args))) {
+    match payload()
+        .and_then(|payload| run_bytes(&payload, OsHost::with_args(args), ForeignBindings::empty()))
+    {
         Ok(0) => ExitCode::SUCCESS,
         Ok(code) => process::exit(code),
         Err(error) => {

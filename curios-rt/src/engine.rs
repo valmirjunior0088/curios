@@ -88,34 +88,43 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
 
 /// A type-erased host implementation: the closure wasmtime calls for one
 /// import, already wrapped in its [`Lift`]/[`Lower`] plumbing. `Arc`ed so
-/// [`ForeignImpls`] can keep the registry while handing wasmtime its own
+/// [`ForeignBindings`] can keep the registry while handing wasmtime its own
 /// handle.
 type Trampoline =
     Arc<dyn Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
 
-/// The host side of the foreign registry: for each [`ForeignFunction`] in the
-/// store, the trampoline implementing it. [`instantiate`] fills one from the
-/// [`Host`] trait and then links *pull-based* — it walks the module's imports
-/// and defines exactly what the module demands, so an import with no
-/// registered implementation is a clean, named error instead of a stranded
-/// wasmtime lookup.
-struct ForeignImpls {
+/// The host side of a foreign registry: for each [`ForeignFunction`] in a
+/// store, the trampoline implementing it. [`instantiate`] fills the `sys`-tier
+/// one from the [`Host`] trait, and links *pull-based* — it walks the
+/// module's imports and defines exactly what the module demands, so an import
+/// with no registered implementation is a clean, named error instead of a
+/// stranded wasmtime lookup. An embedder builds its own `env`-tier one from a
+/// [`ForeignStore`] returned by `compile_entrypoint`, `define`-ing each row it
+/// wants to supply.
+pub struct ForeignBindings {
     foreigns: ForeignStore,
     trampolines: HashMap<String, Trampoline>,
 }
 
-impl ForeignImpls {
-    fn new(foreigns: ForeignStore) -> Self {
+impl ForeignBindings {
+    pub fn new(foreigns: ForeignStore) -> Self {
         Self {
             foreigns,
             trampolines: HashMap::new(),
         }
     }
 
+    /// No bindings — the store every no-FFI caller passes through
+    /// [`run_bytes`]/[`instantiate`], since a program with no `foreign`
+    /// declarations imports nothing under `env`.
+    pub fn empty() -> Self {
+        Self::new(ForeignStore::new())
+    }
+
     /// Implement the store row named `name` with a typed closure. Every row
     /// must be implemented exactly once, and only rows can be implemented —
     /// violations are construction bugs, so they panic.
-    fn define<Li, Lo, F>(&mut self, name: &str, f: F)
+    pub fn define<Li, Lo, F>(&mut self, name: &str, f: F)
     where
         Li: Lift,
         Lo: Lower,
@@ -138,26 +147,27 @@ impl ForeignImpls {
         );
     }
 
-    /// Define the import named `name` into `linker`, typing it from its store
-    /// row — the pull side of the registry, driven by the module's own import
-    /// section.
-    fn link(&self, linker: &mut Linker<()>, engine: &Engine, name: &str) -> Result<(), String> {
+    /// Define the import named `name` into `linker` under `namespace`, typing
+    /// it from its store row — the pull side of the registry, driven by the
+    /// module's own import section.
+    fn link(
+        &self,
+        linker: &mut Linker<()>,
+        engine: &Engine,
+        namespace: &str,
+        name: &str,
+    ) -> Result<(), String> {
         let (function, trampoline) = self
             .foreigns
             .get(name)
             .zip(self.trampolines.get(name))
-            .ok_or_else(|| {
-                format!(
-                    "no host implementation registered for {}.{name}",
-                    curios_abi::NAMESPACE_SYS
-                )
-            })?;
+            .ok_or_else(|| format!("no host implementation registered for {namespace}.{name}"))?;
 
         let trampoline = Arc::clone(trampoline);
 
         linker
             .func_new(
-                curios_abi::NAMESPACE_SYS,
+                namespace,
                 name,
                 host_func_type(engine, function),
                 move |caller, params, results| trampoline(caller, params, results),
@@ -171,8 +181,8 @@ impl ForeignImpls {
 /// its [`Host`] method. The store and the trait evolve together, so a row
 /// without a binding here (or vice versa) is caught by `define`'s asserts the
 /// first time any program runs.
-fn sys_impls<H: Host + Send + Sync + 'static>(host: Arc<H>) -> ForeignImpls {
-    let mut impls = ForeignImpls::new(sys_io());
+fn sys_impls<H: Host + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
+    let mut impls = ForeignBindings::new(sys_io());
 
     impls.define("io_read", {
         let host = host.clone();
@@ -348,23 +358,31 @@ impl Error for ExitTrap {}
 /// Provenance is guaranteed by callers: the launcher reads it from its own
 /// trusted footer, and `curios` produces it in-process. `Module::deserialize`
 /// performs only light validation, so a foreign blob could execute arbitrary code.
-pub fn run_bytes<H: Host + Send + Sync + 'static>(payload: &[u8], host: H) -> Result<i32, String> {
+pub fn run_bytes<H: Host + Send + Sync + 'static>(
+    payload: &[u8],
+    host: H,
+    bindings: ForeignBindings,
+) -> Result<i32, String> {
     let engine = shared_engine();
 
     // SAFETY: see the contract above — `payload` is our own precompiled output.
     let module = unsafe { Module::deserialize(engine, payload) }
         .map_err(|error| format!("failed to load wasm module: {error}"))?;
 
-    instantiate(engine, &module, host)
+    instantiate(engine, &module, host, bindings)
 }
 
 /// Instantiate `module` against `engine`, wire up the host imports, and run its
-/// entrypoint, returning the process exit code. Shared by [`run_bytes`] and by
-/// `curios`'s JIT path (which builds the `Module` via `from_binary`).
+/// entrypoint, returning the process exit code. `bindings` supplies the
+/// `env`-tier implementations for the module's own `foreign` declarations
+/// (pass [`ForeignBindings::empty`] for a program that declares none). Shared
+/// by [`run_bytes`] and by `curios`'s JIT path (which builds the `Module` via
+/// `from_binary`).
 pub fn instantiate<H: Host + Send + Sync + 'static>(
     engine: &Engine,
     module: &Module,
     host: H,
+    bindings: ForeignBindings,
 ) -> Result<i32, String> {
     let impls = sys_impls(Arc::new(host));
     let mut linker = Linker::new(engine);
@@ -397,18 +415,14 @@ pub fn instantiate<H: Host + Send + Sync + 'static>(
                         )
                         .map_err(|error| format!("failed to define io_exit: {error}"))?;
                 }
-                name => impls.link(&mut linker, engine, name)?,
+                name => impls.link(&mut linker, engine, curios_abi::NAMESPACE_SYS, name)?,
             },
-            // No embedder can supply `env`-tier bindings yet — that's
-            // `ForeignBindings` (a later milestone); until then, a module that
-            // declares its own `foreign` function cannot run.
-            curios_abi::NAMESPACE_ENV => {
-                return Err(format!(
-                    "the module imports {}.{}, but this host provides no foreign bindings",
-                    import.module(),
-                    import.name()
-                ));
-            }
+            curios_abi::NAMESPACE_ENV => bindings.link(
+                &mut linker,
+                engine,
+                curios_abi::NAMESPACE_ENV,
+                import.name(),
+            )?,
             namespace => {
                 return Err(format!(
                     "the module imports {}.{}, but host imports live in {} or {}",

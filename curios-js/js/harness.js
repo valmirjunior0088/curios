@@ -23,8 +23,12 @@ export class ExitSignal extends Error {
  *   bridge from `bridge_bytes`);
  * - `sysNamespace`, `envNamespace`, `mainExport`, `importNames`, `status`,
  *   `stdio`: the ABI facts from `abi`;
- * - `hooks`: optional `{ onStdout?, onStderr? }` streaming callbacks, each
- *   receiving a `Uint8Array` per write.
+ * - `foreignNames`: `compile`'s `foreignNames` roster — the `env`-tier
+ *   imports the program's own `foreign` declarations require;
+ * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/
+ *   `onStderr` are streaming callbacks, each receiving a `Uint8Array` per
+ *   write; `foreign` is a `{ name: fn, ... }` map implementing
+ *   `foreignNames`.
  *
  * Resolves to `{ stdout, stderr, exitCode, trap }`: the accumulated output
  * bytes, the code the program exited with (0 when `main` returns), and the
@@ -189,14 +193,22 @@ export async function run(config) {
     trap: null,
   });
 
+  const foreignEnv = {};
+
+  for (const name of config.foreignNames ?? []) {
+    const implementation = hooks.foreign?.[name];
+
+    if (!implementation) {
+      throw new Error(`no foreign implementation supplied for env.${name}`);
+    }
+
+    foreignEnv[name] = implementation;
+  }
+
   try {
-    // Nothing supplies `env`-tier (user `foreign` declaration) bindings yet —
-    // that's `ForeignBindings` (a later milestone) — so a program that
-    // declares its own foreign function fails to instantiate here with a
-    // clear missing-import error.
     const { instance } = await WebAssembly.instantiate(config.program, {
       [config.sysNamespace]: env,
-      [config.envNamespace]: {},
+      [config.envNamespace]: foreignEnv,
     });
 
     instance.exports[config.mainExport]();

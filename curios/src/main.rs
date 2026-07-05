@@ -6,7 +6,7 @@ use {
     clap::Parser,
     cli::{Cli, Mode},
     curios::{run_wasm, to_cwasm},
-    curios_rt::OsHost,
+    curios_rt::{ForeignBindings, OsHost},
     std::{
         iter,
         process::{self, ExitCode},
@@ -33,6 +33,7 @@ fn dispatch() -> Result<(), String> {
                         .chain(args.into_iter().map(String::into_bytes))
                         .collect(),
                 ),
+                ForeignBindings::empty(),
             )?;
 
             if code != 0 {

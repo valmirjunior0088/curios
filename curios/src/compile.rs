@@ -5,7 +5,7 @@
 
 use {
     crate::{compile_entrypoint, text, wasm},
-    curios_rt::{Host, run_bytes, shared_engine},
+    curios_rt::{ForeignBindings, Host, run_bytes, shared_engine},
     std::{path::Path, time::Duration},
 };
 
@@ -23,12 +23,15 @@ pub fn to_cwasm(module: &wasm::Module) -> Result<Vec<u8>, String> {
 
 /// Run a compiled module in-process: precompile to `.cwasm`, then deserialize and
 /// run it on the shared runtime engine — the identical path a bundled executable
-/// takes. Returns the process exit code.
+/// takes. `bindings` supplies the `env`-tier implementations for the module's own
+/// `foreign` declarations (pass [`ForeignBindings::empty`] for a program that
+/// declares none). Returns the process exit code.
 pub fn run_wasm<H: Host + Send + Sync + 'static>(
     module: &wasm::Module,
     host: H,
+    bindings: ForeignBindings,
 ) -> Result<i32, String> {
-    run_bytes(&to_cwasm(module)?, host)
+    run_bytes(&to_cwasm(module)?, host, bindings)
 }
 
 /// Compile an already-parsed entrypoint under `loader` and run it.
@@ -36,7 +39,8 @@ pub fn run_wasm<H: Host + Send + Sync + 'static>(
 /// Drops any `foreign` declarations' [`ForeignStore`](curios_abi::ForeignStore)
 /// — this is the fused compile-and-run convenience path with no point to hand
 /// it back to the caller; an embedder with `foreign` declarations to satisfy
-/// calls [`compile_entrypoint`] directly instead.
+/// calls [`compile_entrypoint`] directly instead, building [`ForeignBindings`]
+/// from the returned store and calling [`run_wasm`] itself.
 pub fn run_entrypoint<H: Host + Send + Sync + 'static>(
     timeout: Duration,
     entrypoint: &text::Entrypoint,
@@ -45,7 +49,7 @@ pub fn run_entrypoint<H: Host + Send + Sync + 'static>(
 ) -> Result<(), String> {
     let (module, _foreigns) = compile_entrypoint(timeout, entrypoint, loader, |_| {})?;
 
-    run_wasm(&module, host).map(|_| ())
+    run_wasm(&module, host, ForeignBindings::empty()).map(|_| ())
 }
 
 /// Parse `source` (no external modules) and run it.
