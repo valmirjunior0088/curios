@@ -69,6 +69,15 @@ impl Qualifier {
         }
     }
 
+    /// The qualifier suffix — everything but the leading (root) segment —
+    /// a root's own qualifier for content nested under it. `[a, b, c]` →
+    /// `[b, c]`; a single-segment or already-empty qualifier drops to empty.
+    pub fn without_first(&self) -> Qualifier {
+        Qualifier {
+            segments: self.segments.iter().skip(1).cloned().collect(),
+        }
+    }
+
     /// The first segment, or `""` if empty. Distinct from `head`, which
     /// indexes unchecked — this is for values (like `Context::island`) that
     /// can legitimately be the empty (root) qualifier.
