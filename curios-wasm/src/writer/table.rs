@@ -4,7 +4,7 @@ use {
 };
 
 #[derive(Debug, Clone)]
-pub struct Table<'a> {
+pub(super) struct Table<'a> {
     types: HashMap<&'a TypeName, usize>,
     fields: HashMap<(&'a TypeName, &'a FieldName), usize>,
     funcs: HashMap<&'a FuncName, usize>,
@@ -14,7 +14,7 @@ pub struct Table<'a> {
 }
 
 impl<'a> Table<'a> {
-    pub fn new(module: &'a Module) -> Self {
+    pub(super) fn new(module: &'a Module) -> Self {
         let mut types = HashMap::new();
         let mut fields = HashMap::new();
 
@@ -84,42 +84,42 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub fn resolve_type(&self, name: &'a TypeName) -> usize {
+    pub(super) fn resolve_type(&self, name: &'a TypeName) -> usize {
         self.types
             .get(name)
             .cloned()
             .unwrap_or_else(|| panic!("`Table` lacks type `{}`", name))
     }
 
-    pub fn resolve_field(&self, parent_name: &'a TypeName, name: &'a FieldName) -> usize {
+    pub(super) fn resolve_field(&self, parent_name: &'a TypeName, name: &'a FieldName) -> usize {
         self.fields
             .get(&(parent_name, name))
             .copied()
             .unwrap_or_else(|| panic!("`Table` lacks field `{}` of type `{}`", name, parent_name))
     }
 
-    pub fn resolve_func(&self, name: &'a FuncName) -> usize {
+    pub(super) fn resolve_func(&self, name: &'a FuncName) -> usize {
         self.funcs
             .get(name)
             .cloned()
             .unwrap_or_else(|| panic!("`Table` lacks func `{}`", name))
     }
 
-    pub fn resolve_local(&self, parent_name: &'a FuncName, name: &'a LocalName) -> usize {
+    pub(super) fn resolve_local(&self, parent_name: &'a FuncName, name: &'a LocalName) -> usize {
         self.locals
             .get(&(parent_name, name))
             .copied()
             .unwrap_or_else(|| panic!("`Table` lacks local `{}` of func `{}`", name, parent_name))
     }
 
-    pub fn resolve_global(&self, name: &'a GlobalName) -> usize {
+    pub(super) fn resolve_global(&self, name: &'a GlobalName) -> usize {
         self.globals
             .get(name)
             .cloned()
             .unwrap_or_else(|| panic!("`Table` lacks global `{}`", name))
     }
 
-    pub fn resolve_data(&self, name: &'a DataName) -> usize {
+    pub(super) fn resolve_data(&self, name: &'a DataName) -> usize {
         self.datas
             .get(name)
             .cloned()

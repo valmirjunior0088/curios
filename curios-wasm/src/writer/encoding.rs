@@ -1,4 +1,4 @@
-pub fn encode_uleb128_unsigned(mut number: u64) -> Vec<u8> {
+pub(super) fn encode_uleb128_unsigned(mut number: u64) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     loop {
@@ -17,7 +17,7 @@ pub fn encode_uleb128_unsigned(mut number: u64) -> Vec<u8> {
     bytes
 }
 
-pub fn encode_leb128_signed(mut number: i64) -> Vec<u8> {
+pub(super) fn encode_leb128_signed(mut number: i64) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     loop {
@@ -37,19 +37,19 @@ pub fn encode_leb128_signed(mut number: i64) -> Vec<u8> {
     bytes
 }
 
-pub fn encode_ieee754_single(number: f32) -> Vec<u8> {
+pub(super) fn encode_ieee754_single(number: f32) -> Vec<u8> {
     number.to_bits().to_le_bytes().to_vec()
 }
 
-pub fn encode_ieee754_double(number: f64) -> Vec<u8> {
+pub(super) fn encode_ieee754_double(number: f64) -> Vec<u8> {
     number.to_bits().to_le_bytes().to_vec()
 }
 
-pub fn encode_utf8(string: &str) -> Vec<u8> {
+pub(super) fn encode_utf8(string: &str) -> Vec<u8> {
     string.as_bytes().to_vec()
 }
 
-pub fn encode_rle<T, I>(values: I) -> Vec<(u64, T)>
+pub(super) fn encode_rle<T, I>(values: I) -> Vec<(u64, T)>
 where
     T: PartialEq,
     I: IntoIterator<Item = T>,

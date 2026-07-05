@@ -4,7 +4,7 @@ use {
 };
 
 #[derive(Debug)]
-pub enum State<'f, 'l> {
+pub(super) enum State<'f, 'l> {
     Const,
     Func {
         func_name: &'f FuncName,
@@ -13,25 +13,25 @@ pub enum State<'f, 'l> {
 }
 
 impl<'f, 'l> State<'f, 'l> {
-    pub fn new_const() -> Self {
+    pub(super) fn new_const() -> Self {
         Self::Const
     }
 
-    pub fn new_func(func_name: &'f FuncName, label_name: &'l LabelName) -> Self {
+    pub(super) fn new_func(func_name: &'f FuncName, label_name: &'l LabelName) -> Self {
         Self::Func {
             func_name,
             label_names: vec![label_name],
         }
     }
 
-    pub fn owner(&self) -> &'f FuncName {
+    pub(super) fn owner(&self) -> &'f FuncName {
         match self {
             Self::Const => panic!("`State` is const"),
             Self::Func { func_name, .. } => func_name,
         }
     }
 
-    pub fn enter_scope(&mut self, label_name: &'l LabelName) {
+    pub(super) fn enter_scope(&mut self, label_name: &'l LabelName) {
         match self {
             Self::Const => {
                 panic!("`State` is const");
@@ -42,7 +42,7 @@ impl<'f, 'l> State<'f, 'l> {
         }
     }
 
-    pub fn leave_scope(&mut self) {
+    pub(super) fn leave_scope(&mut self) {
         match self {
             Self::Const => {
                 panic!("`State` is const");
@@ -53,7 +53,7 @@ impl<'f, 'l> State<'f, 'l> {
         }
     }
 
-    pub fn scoped<T, F>(&mut self, label_name: &'l LabelName, f: F) -> Result<T>
+    pub(super) fn scoped<T, F>(&mut self, label_name: &'l LabelName, f: F) -> Result<T>
     where
         F: FnOnce(&mut Self) -> Result<T>,
     {
@@ -64,7 +64,7 @@ impl<'f, 'l> State<'f, 'l> {
         result
     }
 
-    pub fn resolve(&self, target_name: &LabelName) -> usize {
+    pub(super) fn resolve(&self, target_name: &LabelName) -> usize {
         match self {
             Self::Const => panic!("`State` is const"),
             Self::Func { label_names, .. } => label_names
