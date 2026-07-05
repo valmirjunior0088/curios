@@ -19,14 +19,14 @@ use {
 const LAUNCHER: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/runtime"));
 
 /// Default executable name: the input's file stem, no extension.
-pub fn exe_output_path(input_path: &Path) -> PathBuf {
+pub(crate) fn exe_output_path(input_path: &Path) -> PathBuf {
     PathBuf::from(input_path.file_stem().unwrap_or(input_path.as_os_str()))
 }
 
 /// Build a self-contained executable: the embedded launcher stub with the
 /// `.cwasm` payload and its footer appended to the tail (see
 /// [`curios_rt::append_payload`]).
-pub fn emit_exe(cwasm: &[u8], output: &Path) -> Result<(), String> {
+pub(crate) fn emit_exe(cwasm: &[u8], output: &Path) -> Result<(), String> {
     let mut bytes = LAUNCHER.to_vec();
 
     append_payload(&mut bytes, cwasm);

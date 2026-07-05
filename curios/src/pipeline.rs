@@ -32,7 +32,7 @@ fn stage_printer(print: &str) -> impl Fn(Stage<'_>) + '_ {
 
 /// Compile `input_path` through the full pipeline to a wasm module, printing any
 /// requested IR stages along the way.
-pub fn compile_file(
+pub(crate) fn compile_file(
     timeout: Duration,
     print: &str,
     input_path: &Path,
@@ -47,7 +47,7 @@ pub fn compile_file(
 
 /// Type-check `input_path` only (the fast `check` path), printing any requested
 /// pre-lowering stages (`text`/`core`).
-pub fn typecheck_file(timeout: Duration, print: &str, input_path: &Path) -> Result<(), String> {
+pub(crate) fn typecheck_file(timeout: Duration, print: &str, input_path: &Path) -> Result<(), String> {
     let (entrypoint, loader) = load(input_path)?;
 
     typecheck_entrypoint(timeout, &entrypoint, loader, stage_printer(print))

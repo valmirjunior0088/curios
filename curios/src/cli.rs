@@ -15,7 +15,7 @@ fn parse_timeout(input: &str) -> Result<Duration, String> {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum Mode {
+pub(crate) enum Mode {
     #[command(about = "Compile and execute the entrypoint")]
     Run {
         #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]
@@ -53,7 +53,7 @@ pub enum Mode {
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
-pub struct Cli {
+pub(crate) struct Cli {
     #[arg(long, default_value = "1000", value_name = "MILLIS", value_parser = parse_timeout, help = "Type-checker reduction timeout in milliseconds")]
     pub timeout: Duration,
 
