@@ -12,24 +12,24 @@ use {
 };
 
 #[derive(Debug, Clone)]
-pub struct FieldData {
+pub(super) struct FieldData {
     type_name: TypeName,
     field_name: FieldName,
 }
 
 impl FieldData {
-    pub fn new(type_name: TypeName, field_name: FieldName) -> Self {
+    pub(super) fn new(type_name: TypeName, field_name: FieldName) -> Self {
         Self {
             type_name,
             field_name,
         }
     }
 
-    pub fn type_name(&self) -> TypeName {
+    pub(super) fn type_name(&self) -> TypeName {
         self.type_name.clone()
     }
 
-    pub fn field_name(&self) -> FieldName {
+    pub(super) fn field_name(&self) -> FieldName {
         self.field_name.clone()
     }
 }
@@ -39,7 +39,7 @@ impl FieldData {
 /// payload array, and every field name — one handle to thread through the op
 /// emitters so `Bin` and `Lst` share their lowering code.
 #[derive(Debug, Clone)]
-pub struct RopeData {
+pub(super) struct RopeData {
     pub base: TypeName,
     pub leaf: TypeName,
     pub node: TypeName,
@@ -56,7 +56,7 @@ pub struct RopeData {
 }
 
 #[derive(Debug, Clone)]
-pub struct ClsrData<'a> {
+pub(super) struct ClsrData<'a> {
     name: &'a crate::ClsrName,
     func_name: FuncName,
     clsr_type: TypeName,
@@ -67,7 +67,7 @@ pub struct ClsrData<'a> {
 }
 
 impl<'a> ClsrData<'a> {
-    pub fn new(clsr_name: &'a crate::ClsrName, clsr: &'a crate::Clsr) -> Self {
+    pub(super) fn new(clsr_name: &'a crate::ClsrName, clsr: &'a crate::Clsr) -> Self {
         Self {
             name: clsr_name,
             func_name: FuncName::from(format!("clsr/{}", clsr_name)),
@@ -87,27 +87,27 @@ impl<'a> ClsrData<'a> {
         }
     }
 
-    pub fn name(&self) -> &'a crate::ClsrName {
+    pub(super) fn name(&self) -> &'a crate::ClsrName {
         self.name
     }
 
-    pub fn func_name(&self) -> FuncName {
+    pub(super) fn func_name(&self) -> FuncName {
         self.func_name.clone()
     }
 
-    pub fn clsr_type(&self) -> TypeName {
+    pub(super) fn clsr_type(&self) -> TypeName {
         self.clsr_type.clone()
     }
 
-    pub fn envr_type(&self) -> TypeName {
+    pub(super) fn envr_type(&self) -> TypeName {
         self.envr_type.clone()
     }
 
-    pub fn fields(&self) -> impl Iterator<Item = FieldName> {
+    pub(super) fn fields(&self) -> impl Iterator<Item = FieldName> {
         self.fields.iter().map(|(_, field_name)| field_name.clone())
     }
 
-    pub fn find_field(&self, value_name: &crate::ValueName) -> Option<FieldData> {
+    pub(super) fn find_field(&self, value_name: &crate::ValueName) -> Option<FieldData> {
         self.fields
             .iter()
             .find_map(|(field_name, mapped_field_name)| {
@@ -117,32 +117,32 @@ impl<'a> ClsrData<'a> {
             .map(|field_name| FieldData::new(self.envr_type(), field_name))
     }
 
-    pub fn params(&self) -> HashMap<&'a crate::ValueName, LocalName> {
+    pub(super) fn params(&self) -> HashMap<&'a crate::ValueName, LocalName> {
         self.params.clone()
     }
 
-    pub fn find_param(&self, value_name: &crate::ValueName) -> Option<LocalName> {
+    pub(super) fn find_param(&self, value_name: &crate::ValueName) -> Option<LocalName> {
         self.params.get(value_name).cloned()
     }
 
-    pub fn arity(&self) -> usize {
+    pub(super) fn arity(&self) -> usize {
         self.params.len()
     }
 
-    pub fn is_resume(&self, block_name: &crate::BlockName) -> bool {
+    pub(super) fn is_resume(&self, block_name: &crate::BlockName) -> bool {
         self.resume == block_name
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncData<'a> {
+pub(super) struct FuncData<'a> {
     func_name: FuncName,
     params: HashMap<&'a crate::ValueName, LocalName>,
     resume: &'a crate::BlockName,
 }
 
 impl<'a> FuncData<'a> {
-    pub fn new(func_name: &'a crate::FuncName, func: &'a crate::Func) -> Self {
+    pub(super) fn new(func_name: &'a crate::FuncName, func: &'a crate::Func) -> Self {
         Self {
             // The `func/` prefix is why the exported entrypoint is
             // `curios_abi::MAIN_EXPORT` (`func/main`): the entry is always
@@ -157,23 +157,23 @@ impl<'a> FuncData<'a> {
         }
     }
 
-    pub fn func_name(&self) -> FuncName {
+    pub(super) fn func_name(&self) -> FuncName {
         self.func_name.clone()
     }
 
-    pub fn arity(&self) -> usize {
+    pub(super) fn arity(&self) -> usize {
         self.params.len()
     }
 
-    pub fn params(&self) -> HashMap<&'a crate::ValueName, LocalName> {
+    pub(super) fn params(&self) -> HashMap<&'a crate::ValueName, LocalName> {
         self.params.clone()
     }
 
-    pub fn find_param(&self, value_name: &crate::ValueName) -> Option<LocalName> {
+    pub(super) fn find_param(&self, value_name: &crate::ValueName) -> Option<LocalName> {
         self.params.get(value_name).cloned()
     }
 
-    pub fn is_resume(&self, block_name: &crate::BlockName) -> bool {
+    pub(super) fn is_resume(&self, block_name: &crate::BlockName) -> bool {
         self.resume == block_name
     }
 }
@@ -227,7 +227,7 @@ fn max_region_tpl_arity(region: &crate::Region) -> usize {
 }
 
 #[derive(Debug)]
-pub struct Table<'a> {
+pub(super) struct Table<'a> {
     special_field: FieldName,
     special_local: LocalName,
     special_label: LabelName,
@@ -282,7 +282,7 @@ pub struct Table<'a> {
 }
 
 impl<'a> Table<'a> {
-    pub fn new(module: &'a crate::Module) -> Self {
+    pub(super) fn new(module: &'a crate::Module) -> Self {
         let mut cyclic_clsrs = BTreeSet::new();
         for (_, clsr) in module.clsrs() {
             collect_cyclic_clsrs(&clsr.region, &mut cyclic_clsrs);
@@ -392,54 +392,54 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub fn special_field(&self) -> FieldName {
+    pub(super) fn special_field(&self) -> FieldName {
         self.special_field.clone()
     }
 
-    pub fn special_local(&self) -> LocalName {
+    pub(super) fn special_local(&self) -> LocalName {
         self.special_local.clone()
     }
 
-    pub fn special_label(&self) -> LabelName {
+    pub(super) fn special_label(&self) -> LabelName {
         self.special_label.clone()
     }
 
-    pub fn top_type(&self, is_nullable: bool) -> ValType {
+    pub(super) fn top_type(&self, is_nullable: bool) -> ValType {
         ValType::Ref(RefType {
             is_nullable,
             heap_type: HeapType::Abstract(AbsHeapType::Any),
         })
     }
 
-    pub fn int_type(&self, is_nullable: bool) -> RefType {
+    pub(super) fn int_type(&self, is_nullable: bool) -> RefType {
         RefType {
             is_nullable,
             heap_type: HeapType::Abstract(AbsHeapType::I31),
         }
     }
 
-    pub fn flt_type(&self) -> TypeName {
+    pub(super) fn flt_type(&self) -> TypeName {
         self.flt_type.clone()
     }
 
-    pub fn bin_type(&self) -> TypeName {
+    pub(super) fn bin_type(&self) -> TypeName {
         self.bin_type.clone()
     }
 
-    pub fn lst_type(&self) -> TypeName {
+    pub(super) fn lst_type(&self) -> TypeName {
         self.lst_type.clone()
     }
 
-    pub fn bytes_type(&self) -> TypeName {
+    pub(super) fn bytes_type(&self) -> TypeName {
         self.bytes_type.clone()
     }
 
-    pub fn elems_type(&self) -> TypeName {
+    pub(super) fn elems_type(&self) -> TypeName {
         self.elems_type.clone()
     }
 
     /// The `Bin` rope's name bundle.
-    pub fn bin_rope(&self) -> RopeData {
+    pub(super) fn bin_rope(&self) -> RopeData {
         RopeData {
             base: self.bin_type.clone(),
             leaf: self.bin_leaf_type.clone(),
@@ -458,7 +458,7 @@ impl<'a> Table<'a> {
     }
 
     /// The `Lst` rope's name bundle.
-    pub fn lst_rope(&self) -> RopeData {
+    pub(super) fn lst_rope(&self) -> RopeData {
         RopeData {
             base: self.lst_type.clone(),
             leaf: self.lst_leaf_type.clone(),
@@ -476,14 +476,14 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub fn cell_type(&self) -> TypeName {
+    pub(super) fn cell_type(&self) -> TypeName {
         self.cell_type.clone()
     }
 
     /// The import name of a store-described host function. First use during
     /// emission records the function as live; [`host_funcs`](Self::host_funcs)
     /// hands the recorded set to `emit_sys_imports`.
-    pub fn host_func(&self, function: &Arc<ForeignFunction>) -> FuncName {
+    pub(super) fn host_func(&self, function: &Arc<ForeignFunction>) -> FuncName {
         self.host_funcs
             .borrow_mut()
             .entry(function.name.clone())
@@ -493,39 +493,39 @@ impl<'a> Table<'a> {
     }
 
     /// The foreign functions the emitted code referenced, in import-name order.
-    pub fn host_funcs(&self) -> Vec<Arc<ForeignFunction>> {
+    pub(super) fn host_funcs(&self) -> Vec<Arc<ForeignFunction>> {
         self.host_funcs.borrow().values().cloned().collect()
     }
 
-    pub fn io_exit_func(&self) -> &FuncName {
+    pub(super) fn io_exit_func(&self) -> &FuncName {
         self.io_exit.get_or_init(|| FuncName::from("io_exit"))
     }
 
-    pub fn io_exit_used(&self) -> bool {
+    pub(super) fn io_exit_used(&self) -> bool {
         self.io_exit.get().is_some()
     }
 
     /// `$bin/force (ref $bin) -> (ref $bytes)`: flatten a `Bin` rope to its
     /// payload, memoizing in the entry node. First use marks it for emission.
-    pub fn bin_force_func(&self) -> FuncName {
+    pub(super) fn bin_force_func(&self) -> FuncName {
         self.bin_force
             .get_or_init(|| FuncName::from("bin/force"))
             .clone()
     }
 
-    pub fn bin_force_used(&self) -> bool {
+    pub(super) fn bin_force_used(&self) -> bool {
         self.bin_force.get().is_some()
     }
 
     /// `$lst/force (ref $lst) -> (ref $elems)`: the `Lst` mirror of
     /// [`bin_force_func`](Self::bin_force_func).
-    pub fn lst_force_func(&self) -> FuncName {
+    pub(super) fn lst_force_func(&self) -> FuncName {
         self.lst_force
             .get_or_init(|| FuncName::from("lst/force"))
             .clone()
     }
 
-    pub fn lst_force_used(&self) -> bool {
+    pub(super) fn lst_force_used(&self) -> bool {
         self.lst_force.get().is_some()
     }
 
@@ -533,50 +533,50 @@ impl<'a> Table<'a> {
     /// `Lst(Io)` host argument *deeply* — the outer rope to a fresh payload
     /// whose every element is itself forced to `$bytes`, the element shape
     /// the host lifts.
-    pub fn lst_bin_force_func(&self) -> FuncName {
+    pub(super) fn lst_bin_force_func(&self) -> FuncName {
         self.lst_bin_force
             .get_or_init(|| FuncName::from("lst/bin/force"))
             .clone()
     }
 
-    pub fn lst_bin_force_used(&self) -> bool {
+    pub(super) fn lst_bin_force_used(&self) -> bool {
         self.lst_bin_force.get().is_some()
     }
 
     /// `$bin/wrap (ref $bytes) -> (ref $bin)`: wrap a host-built flat payload
     /// into a fresh leaf on re-entry.
-    pub fn bin_wrap_func(&self) -> FuncName {
+    pub(super) fn bin_wrap_func(&self) -> FuncName {
         self.bin_wrap
             .get_or_init(|| FuncName::from("bin/wrap"))
             .clone()
     }
 
-    pub fn bin_wrap_used(&self) -> bool {
+    pub(super) fn bin_wrap_used(&self) -> bool {
         self.bin_wrap.get().is_some()
     }
 
     /// `$lst/wrap (ref $elems) -> (ref $lst)`: the `Lst` mirror of
     /// [`bin_wrap_func`](Self::bin_wrap_func), for scalar-element results.
-    pub fn lst_wrap_func(&self) -> FuncName {
+    pub(super) fn lst_wrap_func(&self) -> FuncName {
         self.lst_wrap
             .get_or_init(|| FuncName::from("lst/wrap"))
             .clone()
     }
 
-    pub fn lst_wrap_used(&self) -> bool {
+    pub(super) fn lst_wrap_used(&self) -> bool {
         self.lst_wrap.get().is_some()
     }
 
     /// `$lst/bin/wrap (ref $elems) -> (ref $lst)`: wrap an `Lst(Bin)` host
     /// result *deeply* — each raw `$bytes` element into a leaf (in place; the
     /// host-built array is fresh), then the outer array.
-    pub fn lst_bin_wrap_func(&self) -> FuncName {
+    pub(super) fn lst_bin_wrap_func(&self) -> FuncName {
         self.lst_bin_wrap
             .get_or_init(|| FuncName::from("lst/bin/wrap"))
             .clone()
     }
 
-    pub fn lst_bin_wrap_used(&self) -> bool {
+    pub(super) fn lst_bin_wrap_used(&self) -> bool {
         self.lst_bin_wrap.get().is_some()
     }
 
@@ -584,104 +584,104 @@ impl<'a> Table<'a> {
     /// constructor — bounds-check, answer the empty leaf or the whole rope on
     /// the trivial windows, collapse a sub-of-sub, and force an uncached node
     /// base so every `sub` it builds reads through in O(1).
-    pub fn bin_slice_func(&self) -> FuncName {
+    pub(super) fn bin_slice_func(&self) -> FuncName {
         self.bin_slice
             .get_or_init(|| FuncName::from("bin/slice"))
             .clone()
     }
 
-    pub fn bin_slice_used(&self) -> bool {
+    pub(super) fn bin_slice_used(&self) -> bool {
         self.bin_slice.get().is_some()
     }
 
     /// `$lst/slice (ref $lst, i32, i32) -> (ref $lst)`: the `Lst` mirror of
     /// [`bin_slice_func`](Self::bin_slice_func).
-    pub fn lst_slice_func(&self) -> FuncName {
+    pub(super) fn lst_slice_func(&self) -> FuncName {
         self.lst_slice
             .get_or_init(|| FuncName::from("lst/slice"))
             .clone()
     }
 
-    pub fn lst_slice_used(&self) -> bool {
+    pub(super) fn lst_slice_used(&self) -> bool {
         self.lst_slice.get().is_some()
     }
 
     /// `$bin/read (ref $bin, i32) -> i32`: one element read — straight off a
     /// leaf payload, through a `sub`'s window without forcing, and via
     /// `$bin/force` (memoized) on a node.
-    pub fn bin_read_func(&self) -> FuncName {
+    pub(super) fn bin_read_func(&self) -> FuncName {
         self.bin_read
             .get_or_init(|| FuncName::from("bin/read"))
             .clone()
     }
 
-    pub fn bin_read_used(&self) -> bool {
+    pub(super) fn bin_read_used(&self) -> bool {
         self.bin_read.get().is_some()
     }
 
     /// `$lst/read (ref $lst, i32) -> anyref`: the `Lst` mirror of
     /// [`bin_read_func`](Self::bin_read_func).
-    pub fn lst_read_func(&self) -> FuncName {
+    pub(super) fn lst_read_func(&self) -> FuncName {
         self.lst_read
             .get_or_init(|| FuncName::from("lst/read"))
             .clone()
     }
 
-    pub fn lst_read_used(&self) -> bool {
+    pub(super) fn lst_read_used(&self) -> bool {
         self.lst_read.get().is_some()
     }
 
     /// `$bin/eql (ref $bin, ref $bin) -> i32`: whole-value byte equality —
     /// unequal rope lengths answer without forcing, equal lengths force both
     /// payloads once and compare bytewise.
-    pub fn bin_eql_func(&self) -> FuncName {
+    pub(super) fn bin_eql_func(&self) -> FuncName {
         self.bin_eql
             .get_or_init(|| FuncName::from("bin/eql"))
             .clone()
     }
 
-    pub fn bin_eql_used(&self) -> bool {
+    pub(super) fn bin_eql_used(&self) -> bool {
         self.bin_eql.get().is_some()
     }
 
     /// `$lst/map (ref $lst, ref $envr/1) -> (ref $lst)`: apply a unary
     /// closure to every element of the forced payload, filling a fresh leaf.
-    pub fn lst_map_func(&self) -> FuncName {
+    pub(super) fn lst_map_func(&self) -> FuncName {
         self.lst_map
             .get_or_init(|| FuncName::from("lst/map"))
             .clone()
     }
 
-    pub fn lst_map_used(&self) -> bool {
+    pub(super) fn lst_map_used(&self) -> bool {
         self.lst_map.get().is_some()
     }
 
-    pub fn tpl_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
+    pub(super) fn tpl_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
         self.tpl_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    pub fn find_tpl_type(&self, arity: usize) -> TypeName {
+    pub(super) fn find_tpl_type(&self, arity: usize) -> TypeName {
         self.tpl_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks tuple type for arity `{}`", arity))
             .clone()
     }
 
-    pub fn tpl_field(&self, index: usize) -> FieldName {
+    pub(super) fn tpl_field(&self, index: usize) -> FieldName {
         FieldName::from(index.to_string())
     }
 
     /// Whether this closure is ever reserved as a recursive shell, i.e. its `envr` payload
     /// fields are back-patched and so must be declared mutable.
-    pub fn is_cyclic_clsr(&self, name: &crate::ClsrName) -> bool {
+    pub(super) fn is_cyclic_clsr(&self, name: &crate::ClsrName) -> bool {
         self.cyclic_clsrs.contains(name)
     }
 
     /// Whether *any* closure of this arity is cyclic. The shared `envr/N` special field (and
     /// thus every `envr/<clsr>` of that arity, by subtyping invariance) must be mutable iff so.
-    pub fn arity_has_cyclic_clsr(&self, arity: usize) -> bool {
+    pub(super) fn arity_has_cyclic_clsr(&self, arity: usize) -> bool {
         self.cyclic_clsr_arities.contains(&arity)
     }
 
@@ -693,76 +693,76 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub fn tpl_field_mutability(&self) -> Mutability {
+    pub(super) fn tpl_field_mutability(&self) -> Mutability {
         // Tuples are never cyclic (rejected in `to_cont`), so they are never back-patched.
         self.field_mutability(false)
     }
 
-    pub fn envr_special_mutability(&self, arity: usize) -> Mutability {
+    pub(super) fn envr_special_mutability(&self, arity: usize) -> Mutability {
         self.field_mutability(self.arity_has_cyclic_clsr(arity))
     }
 
-    pub fn envr_payload_mutability(&self, name: &crate::ClsrName) -> Mutability {
+    pub(super) fn envr_payload_mutability(&self, name: &crate::ClsrName) -> Mutability {
         self.field_mutability(self.is_cyclic_clsr(name))
     }
 
-    pub fn envr_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
+    pub(super) fn envr_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
         self.envr_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    pub fn find_envr_type(&self, arity: usize) -> TypeName {
+    pub(super) fn find_envr_type(&self, arity: usize) -> TypeName {
         self.envr_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks environment type for arity `{}`", arity))
             .clone()
     }
 
-    pub fn clsr_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
+    pub(super) fn clsr_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
         self.clsr_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    pub fn find_clsr_type(&self, arity: usize) -> TypeName {
+    pub(super) fn find_clsr_type(&self, arity: usize) -> TypeName {
         self.clsr_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks closure type for arity `{}`", arity))
             .clone()
     }
 
-    pub fn func_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
+    pub(super) fn func_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
         self.func_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    pub fn find_func_type(&self, arity: usize) -> TypeName {
+    pub(super) fn find_func_type(&self, arity: usize) -> TypeName {
         self.func_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks function type for arity `{}`", arity))
             .clone()
     }
 
-    pub fn find_const(&self, const_name: &crate::ValueName) -> GlobalName {
+    pub(super) fn find_const(&self, const_name: &crate::ValueName) -> GlobalName {
         self.consts
             .get(const_name)
             .unwrap_or_else(|| panic!("`Table` lacks const `{}`", const_name))
             .clone()
     }
 
-    pub fn clsrs(&self) -> impl Iterator<Item = &ClsrData<'a>> {
+    pub(super) fn clsrs(&self) -> impl Iterator<Item = &ClsrData<'a>> {
         self.clsrs.values()
     }
 
-    pub fn find_clsr(&self, clsr_name: &crate::ClsrName) -> &ClsrData<'a> {
+    pub(super) fn find_clsr(&self, clsr_name: &crate::ClsrName) -> &ClsrData<'a> {
         self.clsrs
             .get(clsr_name)
             .unwrap_or_else(|| panic!("`Table` lacks closure `{}`", clsr_name))
     }
 
-    pub fn find_func(&self, func_name: &crate::FuncName) -> &FuncData<'a> {
+    pub(super) fn find_func(&self, func_name: &crate::FuncName) -> &FuncData<'a> {
         self.funcs
             .get(func_name)
             .unwrap_or_else(|| panic!("`Table` lacks func `{}`", func_name))

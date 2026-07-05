@@ -4,13 +4,13 @@ use {
 };
 
 #[derive(Debug, Clone)]
-pub struct LocalData {
+pub(super) struct LocalData {
     pub local_name: LocalName,
     pub is_nullable: bool,
 }
 
 impl LocalData {
-    pub fn new(local_name: LocalName, is_nullable: bool) -> Self {
+    pub(super) fn new(local_name: LocalName, is_nullable: bool) -> Self {
         Self {
             local_name,
             is_nullable,
@@ -34,7 +34,7 @@ enum Dispatch {
 }
 
 #[derive(Debug, Clone)]
-pub struct BlockData<'a> {
+pub(super) struct BlockData<'a> {
     dispatch: Dispatch,
     pub label_name: LabelName,
     params: Vec<(&'a crate::ValueName, LocalData)>,
@@ -42,7 +42,7 @@ pub struct BlockData<'a> {
 }
 
 impl<'a> BlockData<'a> {
-    pub fn new(
+    pub(super) fn new(
         bloink_label: LabelName,
         bloink_local: LocalName,
         index: usize,
@@ -64,7 +64,7 @@ impl<'a> BlockData<'a> {
 
     /// A single-target block reached only by forward branches — no dispatcher,
     /// no loop. `enter` branches straight out of `label_name` into the body.
-    pub fn new_direct(
+    pub(super) fn new_direct(
         block_name: &'a crate::BlockName,
         params: Vec<(&'a crate::ValueName, LocalData)>,
         region: &'a crate::Region,
@@ -77,7 +77,7 @@ impl<'a> BlockData<'a> {
         }
     }
 
-    pub fn enter(&self, arity: usize) -> Vec<Instr> {
+    pub(super) fn enter(&self, arity: usize) -> Vec<Instr> {
         assert_eq!(
             self.params.len(),
             arity,
@@ -119,13 +119,13 @@ impl<'a> BlockData<'a> {
         bind.chain(branch).collect()
     }
 
-    pub fn params_map(&self) -> HashMap<&'a crate::ValueName, LocalData> {
+    pub(super) fn params_map(&self) -> HashMap<&'a crate::ValueName, LocalData> {
         self.params.iter().cloned().collect()
     }
 }
 
 #[derive(Debug)]
-pub struct Frame<'a> {
+pub(super) struct Frame<'a> {
     pub params: HashMap<&'a crate::ValueName, LocalData>,
     pub values: HashMap<&'a crate::ValueName, LocalName>,
     pub preallocs: HashSet<&'a crate::ValueName>,
@@ -134,7 +134,7 @@ pub struct Frame<'a> {
 }
 
 impl<'a> Frame<'a> {
-    pub fn new(
+    pub(super) fn new(
         params: HashMap<&'a crate::ValueName, LocalData>,
         preallocs: HashSet<&'a crate::ValueName>,
         blocks: Vec<(&'a crate::BlockName, BlockData<'a>)>,

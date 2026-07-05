@@ -14,7 +14,7 @@ fn is_sequential_from_zero(cases: &BTreeMap<u32, crate::JumpTarget>) -> bool {
 }
 
 #[derive(Debug)]
-pub enum Context<'a, 'b> {
+pub(super) enum Context<'a, 'b> {
     Const {
         table: &'a Table<'a>,
     },
@@ -35,7 +35,7 @@ pub enum Context<'a, 'b> {
 }
 
 #[derive(Debug, Clone)]
-pub enum LoadAs {
+pub(super) enum LoadAs {
     Null,
     NonNull,
     Concrete(TypeName),
@@ -61,11 +61,11 @@ fn wire_load_as(wire_type: &WireType) -> LoadAs {
 }
 
 impl<'a, 'b> Context<'a, 'b> {
-    pub fn new_const(table: &'a Table<'a>) -> Self {
+    pub(super) fn new_const(table: &'a Table<'a>) -> Self {
         Self::Const { table }
     }
 
-    pub fn new_clsr(
+    pub(super) fn new_clsr(
         table: &'a Table<'a>,
         data: &'a ClsrData<'a>,
         locals: &'b mut Vec<(LocalName, ValType)>,
@@ -79,7 +79,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn new_func(
+    pub(super) fn new_func(
         table: &'a Table<'a>,
         data: &'a FuncData<'a>,
         locals: &'b mut Vec<(LocalName, ValType)>,
@@ -93,20 +93,20 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn table(&self) -> &'a Table<'a> {
+    pub(super) fn table(&self) -> &'a Table<'a> {
         match self {
             Self::Const { table } | Self::Clsr { table, .. } | Self::Func { table, .. } => table,
         }
     }
 
-    pub fn find_field(&self, value_name: &crate::ValueName) -> Option<FieldData> {
+    pub(super) fn find_field(&self, value_name: &crate::ValueName) -> Option<FieldData> {
         match self {
             Self::Const { .. } | Self::Func { .. } => None,
             Self::Clsr { data, .. } => data.find_field(value_name),
         }
     }
 
-    pub fn params(&self) -> HashMap<&'a crate::ValueName, LocalData> {
+    pub(super) fn params(&self) -> HashMap<&'a crate::ValueName, LocalData> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks params"),
             Self::Clsr { data, .. } => data
@@ -122,7 +122,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn is_resume(&self, block_name: &crate::BlockName) -> bool {
+    pub(super) fn is_resume(&self, block_name: &crate::BlockName) -> bool {
         match self {
             Self::Const { .. } => false,
             Self::Clsr { data, .. } => data.is_resume(block_name),
@@ -130,7 +130,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn push_local(&mut self, string: &str, val_type: ValType) -> LocalName {
+    pub(super) fn push_local(&mut self, string: &str, val_type: ValType) -> LocalName {
         match self {
             Self::Const { .. } => panic!("`Context` lacks locals"),
             Self::Clsr {
@@ -153,14 +153,14 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn enter_frame(&mut self, frame: Frame<'a>) {
+    pub(super) fn enter_frame(&mut self, frame: Frame<'a>) {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
             Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames.push(frame),
         }
     }
 
-    pub fn leave_frame(&mut self) -> Vec<Instr> {
+    pub(super) fn leave_frame(&mut self) -> Vec<Instr> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
             Self::Clsr { frames, .. } | Self::Func { frames, .. } => {
@@ -169,14 +169,14 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn this_frame(&mut self) -> Option<&mut Frame<'a>> {
+    pub(super) fn this_frame(&mut self) -> Option<&mut Frame<'a>> {
         match self {
             Self::Const { .. } => None,
             Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames.last_mut(),
         }
     }
 
-    pub fn find_local(&self, value_name: &crate::ValueName) -> Option<LocalData> {
+    pub(super) fn find_local(&self, value_name: &crate::ValueName) -> Option<LocalData> {
         match self {
             Self::Const { .. } => None,
             Self::Clsr { frames, .. } | Self::Func { frames, .. } => {
@@ -191,7 +191,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn is_prealloc(&self, value_name: &crate::ValueName) -> bool {
+    pub(super) fn is_prealloc(&self, value_name: &crate::ValueName) -> bool {
         match self {
             Self::Const { .. } => false,
             Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames
@@ -200,7 +200,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn find_block(&self, block_name: &crate::BlockName) -> &BlockData<'a> {
+    pub(super) fn find_block(&self, block_name: &crate::BlockName) -> &BlockData<'a> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
             Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames
@@ -282,7 +282,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn load_value_instrs(
+    pub(super) fn load_value_instrs(
         &self,
         value_name: &'a crate::ValueName,
         load_as: LoadAs,
@@ -324,7 +324,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub fn jump_instrs(&self, target: &'a crate::JumpTarget) -> Vec<Instr> {
+    pub(super) fn jump_instrs(&self, target: &'a crate::JumpTarget) -> Vec<Instr> {
         let mut output = Vec::new();
 
         for value_name in &target.params {
@@ -349,7 +349,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub fn match_instrs(&self, target: &'a crate::MatchTarget) -> Vec<Instr> {
+    pub(super) fn match_instrs(&self, target: &'a crate::MatchTarget) -> Vec<Instr> {
         if target.cases.is_empty() && target.default.is_none() {
             return vec![Instr::Unreachable];
         }
@@ -470,7 +470,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub fn call_direct_instrs(
+    pub(super) fn call_direct_instrs(
         &self,
         target: &'a crate::FuncName,
         params: &'a [crate::ValueName],
@@ -506,7 +506,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub fn call_indirect_instrs(
+    pub(super) fn call_indirect_instrs(
         &self,
         target: &'a crate::ValueName,
         params: &'a [crate::ValueName],
@@ -548,7 +548,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub fn tail_instrs(&self, tail: &'a crate::Tail) -> Vec<Instr> {
+    pub(super) fn tail_instrs(&self, tail: &'a crate::Tail) -> Vec<Instr> {
         match tail {
             crate::Tail::Jump(target) => self.jump_instrs(target),
             crate::Tail::Match(target) => self.match_instrs(target),
@@ -646,7 +646,7 @@ impl<'a, 'b> Context<'a, 'b> {
     /// either fall through to the function's return (when the resume happens
     /// to be the sentinel) or set up the dispatcher and branch into the resume
     /// block.
-    pub fn host_instrs(&self, host: &'a crate::HostTarget) -> Vec<Instr> {
+    pub(super) fn host_instrs(&self, host: &'a crate::HostTarget) -> Vec<Instr> {
         let mut output = Vec::new();
 
         match host {
@@ -710,7 +710,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub fn cell_instrs(&self, cell: &'a crate::CellTarget) -> Vec<Instr> {
+    pub(super) fn cell_instrs(&self, cell: &'a crate::CellTarget) -> Vec<Instr> {
         let mut output = Vec::new();
 
         match cell {
@@ -751,7 +751,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub fn bloink_instrs(
+    pub(super) fn bloink_instrs(
         &self,
         bloink_local: LocalName,
         bloink_label: LabelName,

@@ -90,13 +90,13 @@ fn null(type_name: &TypeName) -> Instr {
 }
 
 #[derive(Debug)]
-pub struct RopeEmitter<'a, 'b> {
+pub(super) struct RopeEmitter<'a, 'b> {
     table: &'a Table<'a>,
     module: &'b mut Module,
 }
 
 impl<'a, 'b> RopeEmitter<'a, 'b> {
-    pub fn new(table: &'a Table<'a>, module: &'b mut Module) -> Self {
+    pub(super) fn new(table: &'a Table<'a>, module: &'b mut Module) -> Self {
         Self { table, module }
     }
 
@@ -157,7 +157,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// An entry *sub* is not memoized (its fields are immutable): its fill is
     /// one window copy of exactly its own size, so there is nothing quadratic
     /// to fence off.
-    pub fn emit_force_func(&mut self, rope: &RopeData, func_name: FuncName) {
+    pub(super) fn emit_force_func(&mut self, rope: &RopeData, func_name: FuncName) {
         let elems = self.table.elems_type();
 
         let r = LocalName::from("r");
@@ -518,7 +518,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// The node arm's force is what maintains the read-through invariant:
     /// every `sub` base is flat-available from birth, and stays so (a cache is
     /// written once, never cleared).
-    pub fn emit_slice_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
+    pub(super) fn emit_slice_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
         let r = LocalName::from("r");
         let s = LocalName::from("s");
         let e = LocalName::from("e");
@@ -687,7 +687,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     ///
     /// `Bin` elements are packed bytes (`array.get_u`, an `i32` result);
     /// `Lst` elements are the top type (`array.get`).
-    pub fn emit_read_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
+    pub(super) fn emit_read_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
         let packed = rope.payload == self.table.bytes_type();
 
         let r = LocalName::from("r");
@@ -801,7 +801,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// force every element through `$bin/force` into a *fresh* payload (the
     /// shallow force of a leaf answers its live payload, which must not be
     /// element-rewritten in place).
-    pub fn emit_arr_bin_force_func(&mut self, func_name: FuncName) {
+    pub(super) fn emit_arr_bin_force_func(&mut self, func_name: FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
 
@@ -896,7 +896,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     ///   if lb[i] != rb[i] → 0
     ///   i += 1
     /// ```
-    pub fn emit_eql_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
+    pub(super) fn emit_eql_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
         let l = LocalName::from("l");
         let r = LocalName::from("r");
         let lb = LocalName::from("lb");
@@ -1012,7 +1012,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// `f` is a unary closure `(A) -> B`, called by the arity-1 convention:
     /// the environment as the self argument, the funcref from its special
     /// field.
-    pub fn emit_map_func(&mut self, func_name: FuncName, force_func: FuncName) {
+    pub(super) fn emit_map_func(&mut self, func_name: FuncName, force_func: FuncName) {
         let rope = self.table.lst_rope();
         let envr_type = self.table.find_envr_type(1);
         let clsr_type = self.table.find_clsr_type(1);
@@ -1117,7 +1117,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     }
 
     /// `$<carrier>/wrap (ref <payload>) -> (ref <base>)`: one fresh leaf.
-    pub fn emit_wrap_func(&mut self, rope: &RopeData, func_name: FuncName) {
+    pub(super) fn emit_wrap_func(&mut self, rope: &RopeData, func_name: FuncName) {
         let b = LocalName::from("b");
 
         let instrs = vec![
@@ -1142,7 +1142,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// `$lst/bin/wrap (ref $elems) -> (ref $lst)`: wrap each raw `$bytes`
     /// element into a `$bin/leaf` in place — the host-built array is fresh,
     /// nothing else aliases it — then the outer array into an `$lst/leaf`.
-    pub fn emit_arr_bin_wrap_func(&mut self, func_name: FuncName) {
+    pub(super) fn emit_arr_bin_wrap_func(&mut self, func_name: FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
         let lst = self.table.lst_rope();

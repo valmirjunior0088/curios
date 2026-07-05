@@ -8,14 +8,14 @@ use {
 };
 
 #[derive(Debug)]
-pub struct ExprEmitter<'a, 'b> {
+pub(super) struct ExprEmitter<'a, 'b> {
     context: Context<'a, 'b>,
     module: &'b mut Module,
     expr: &'b mut Expr,
 }
 
 impl<'a, 'b> ExprEmitter<'a, 'b> {
-    pub fn new(context: Context<'a, 'b>, module: &'b mut Module, expr: &'b mut Expr) -> Self {
+    pub(super) fn new(context: Context<'a, 'b>, module: &'b mut Module, expr: &'b mut Expr) -> Self {
         Self {
             context,
             module,
@@ -52,7 +52,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         self.expr.extend(instrs);
     }
 
-    pub fn emit_data(&mut self, value_name: &'a crate::ValueName, value: &'a crate::Data) {
+    pub(super) fn emit_data(&mut self, value_name: &'a crate::ValueName, value: &'a crate::Data) {
         match value {
             &crate::Data::Nat(value) => {
                 if value >> 31 != 0 {
@@ -445,7 +445,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         self.emit_instrs(body);
     }
 
-    pub fn emit_root_region(&mut self, region: &'a crate::Region) {
+    pub(super) fn emit_root_region(&mut self, region: &'a crate::Region) {
         self.emit_region(self.context.params(), region);
         self.leave_last_frame();
     }

@@ -11,12 +11,12 @@ enum WrapAs {
 }
 
 #[derive(Debug)]
-pub struct CodeEmitter<'a, 'b, 'c> {
+pub(super) struct CodeEmitter<'a, 'b, 'c> {
     context: &'c mut Context<'a, 'b>,
 }
 
 impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
-    pub fn new(context: &'c mut Context<'a, 'b>) -> Self {
+    pub(super) fn new(context: &'c mut Context<'a, 'b>) -> Self {
         Self { context }
     }
 
@@ -352,7 +352,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     /// buffer never escapes this helper (it is sealed into a fresh leaf at the
     /// end), so the map stays a pure value at the IR level (no linearity
     /// reasoning) while lowering to a mutating fill.
-    pub fn emit(&mut self, value_name: &'a crate::ValueName, op: &'a crate::Code) {
+    pub(super) fn emit(&mut self, value_name: &'a crate::ValueName, op: &'a crate::Code) {
         let result_local = self
             .context
             .find_local(value_name)
