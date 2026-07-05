@@ -106,12 +106,14 @@ pub struct FuncType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Func {
-    /// Each parameter is a binder name with an optional domain annotation. `None`
-    /// is the surface `(x) => …` form, sugar for `(x : _) => …`; it lowers to a
-    /// hole, solved by [`curios_core::elaborate`] against the expected function
-    /// type when the lambda is checked, or synthesized from the annotation when
-    /// inferred.
-    pub params: Vec<(String, Option<Term>)>,
+    /// Each parameter is a binder pattern with an optional domain annotation.
+    /// `None` is the surface `(x) => …` form, sugar for `(x : _) => …`; it
+    /// lowers to a hole, solved by [`curios_core::elaborate`] against the
+    /// expected function type when the lambda is checked, or synthesized from
+    /// the annotation when inferred. A compound (tuple/struct) pattern desugars
+    /// at lowering into a fresh core binder plus a projection-`let` chain —
+    /// see [`Pattern`].
+    pub params: Vec<(Pattern, Option<Term>)>,
     pub body: Term,
 }
 
@@ -150,8 +152,15 @@ impl TupleField {
     /// written `label(params) = value`.
     pub fn desugared_value(&self) -> Term {
         match &self.func_params {
+            // This sugar's own parameter list stays plain-name-only (it is not
+            // one of the pattern-accepting binder sites), so each name is
+            // wrapped as a trivial `Pattern::Binder` to match `Func.params`'s
+            // element type.
             Some(params) => Subterm::Func(Func {
-                params: params.clone(),
+                params: params
+                    .iter()
+                    .map(|(name, ty)| (Pattern::Binder(name.clone()), ty.clone()))
+                    .collect(),
                 body: self.value.clone(),
             })
             .into(),
@@ -163,6 +172,33 @@ impl TupleField {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tuple {
     pub fields: Vec<TupleField>,
+}
+
+/// A binder pattern at `let`, lambda-parameter, or function-definition-sugar
+/// parameter position: a plain name, or a tuple/struct destructuring that
+/// desugars — at lowering, in `to_core` — into a fresh synthetic binder plus a
+/// chain of ordinary projection `let`s, exactly what a person would hand-write
+/// today. Always irrefutable: unlike a match-arm pattern, there is no
+/// constructor-tag case, since these binder sites never dispatch on shape —
+/// a tuple/struct value always has exactly one shape.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    Binder(String),
+    Tuple(Vec<PatternField>),
+    Struct {
+        head: String,
+        fields: Vec<PatternField>,
+    },
+}
+
+/// One tuple-pattern / struct-pattern field: a labeled sub-pattern (`label =
+/// pattern`) or a bare positional one. The literal mirror of [`TupleField`]
+/// with `Term` replaced by `Pattern` in the value slot — construction and
+/// destructuring read as inverses of each other.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PatternField {
+    pub label: Option<String>,
+    pub value: Pattern,
 }
 
 /// A match's motive ladder — one grammar growing, the binder parenthesized
@@ -319,11 +355,16 @@ pub enum Match {
 }
 
 /// One parameter of the function-definition sugar `let f(x : T, …) -> R = body`.
-/// The binder name flows into both the Π-type binder and the lambda parameter.
+/// A plain-name (`Pattern::Binder`) label flows into both the Π-type binder
+/// and the lambda parameter, exactly as before. A compound (tuple/struct)
+/// pattern has no single name to give the Π-type binder, so it lowers to an
+/// *anonymous* Π-binder (see [`LetSignature::type_`]) — its destructured
+/// leaves are visible only in the function's value body, never in a later
+/// parameter's type or the output type.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncSugarParam {
     pub plicity: Plicity,
-    pub label: String,
+    pub label: Pattern,
     pub type_: Term,
 }
 
@@ -352,14 +393,20 @@ impl LetSignature {
             // An omitted (local-only) annotation lowers to a hole, so the core
             // elaborator infers the body's type; identical to writing `: _`.
             LetSignature::Name { type_: None, .. } => Subterm::Hole.into(),
-            // Each parameter names its Π-binder, so a later domain or the output
-            // may depend on it.
+            // A plain-name parameter names its Π-binder, so a later domain or
+            // the output may depend on it. A compound pattern has no single
+            // name to give the binder, so it lowers anonymously (`None`) —
+            // already a fully legal Π-binder shape (e.g. today's `use`-binder
+            // or an unlabeled `(T) -> R` parameter).
             LetSignature::Func { params, output, .. } => Subterm::FuncType(FuncType {
                 params: params
                     .iter()
                     .map(|param| FuncTypeParam {
                         plicity: param.plicity,
-                        label: Some(param.label.clone()),
+                        label: match &param.label {
+                            Pattern::Binder(name) => Some(name.clone()),
+                            Pattern::Tuple(_) | Pattern::Struct { .. } => None,
+                        },
                         type_: param.type_.clone(),
                     })
                     .collect(),
@@ -388,9 +435,13 @@ impl LetSignature {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Let {
-    /// The bound name — `let x = …` or the `let f(…) -> R = …` function-definition
-    /// sugar (where `f` is the binder).
-    pub binder: String,
+    /// The bound pattern — `let x = …`, `let (x, y) = …`, or the `f` in the
+    /// `let f(…) -> R = …` function-definition sugar. A compound pattern here
+    /// is grammatically legal for the function-sugar form too, but pointless:
+    /// a function's own binding is never itself a tuple/struct value, so
+    /// destructuring it fails the same "not a tuple/struct" projection type
+    /// error a hand-written misuse would (no special-casing needed).
+    pub binder: Pattern,
     pub signature: LetSignature,
     pub tail: Term,
 }

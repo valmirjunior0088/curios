@@ -25,7 +25,7 @@ fn parse_rec_func_and_apply() {
                         .into(),
                     ),
                     body: Subterm::Func(Func {
-                        params: vec![("x".to_string(), None)],
+                        params: vec![(Pattern::Binder("x".to_string()), None)],
                         body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
@@ -388,7 +388,7 @@ fn parse_top_rec_mixed_pub() {
                         .into(),
                     ),
                     body: Subterm::Func(Func {
-                        params: vec![("x".to_string(), None)],
+                        params: vec![(Pattern::Binder("x".to_string()), None)],
                         body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
@@ -981,7 +981,7 @@ fn parse_local_let_without_type() {
     assert_eq!(
         "let x = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            binder: "x".to_string(),
+            binder: Pattern::Binder("x".to_string()),
             signature: LetSignature::Name {
                 type_: None,
                 body: Subterm::Type.into(),
@@ -997,7 +997,7 @@ fn parse_local_let_with_type_still_works() {
     assert_eq!(
         "let x : Type = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            binder: "x".to_string(),
+            binder: Pattern::Binder("x".to_string()),
             signature: LetSignature::Name {
                 type_: Some(Subterm::Type.into()),
                 body: Subterm::Type.into(),
@@ -1013,7 +1013,7 @@ fn parse_func_with_annotation() {
     assert_eq!(
         "(x : Type) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
-            params: vec![("x".to_string(), Some(Subterm::Type.into()))],
+            params: vec![(Pattern::Binder("x".to_string()), Some(Subterm::Type.into()))],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
         .into()
@@ -1027,8 +1027,8 @@ fn parse_func_with_mixed_annotations() {
         "(x : Type, y) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
             params: vec![
-                ("x".to_string(), Some(Subterm::Type.into())),
-                ("y".to_string(), None),
+                (Pattern::Binder("x".to_string()), Some(Subterm::Type.into())),
+                (Pattern::Binder("y".to_string()), None),
             ],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
@@ -1041,7 +1041,7 @@ fn parse_func_without_annotation_still_works() {
     assert_eq!(
         "(x) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
-            params: vec![("x".to_string(), None)],
+            params: vec![(Pattern::Binder("x".to_string()), None)],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
         .into()
@@ -1104,7 +1104,7 @@ fn parse_bang_in_let_binding() {
     assert_eq!(
         "let x = e!; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            binder: "x".to_string(),
+            binder: Pattern::Binder("x".to_string()),
             signature: LetSignature::Name {
                 type_: None,
                 body: Subterm::Bang(name("e")).into(),
@@ -1407,6 +1407,37 @@ fn function_field_sugar_round_trips() {
             entrypoint.to_string().parse::<Entrypoint>().unwrap(),
             entrypoint,
             "item round-trip failed for {source:?}"
+        );
+    }
+}
+
+#[test]
+fn pattern_binders_round_trip() {
+    // Tuple/struct destructuring patterns at `let`, lambda-parameter, and
+    // function-definition-sugar-parameter position: plain names still
+    // round-trip unchanged, and compound patterns (nested, field-punned, or
+    // mixed with plain-name parameters) survive print → re-parse.
+    for source in [
+        "let x = pair; x",                        // plain name, unchanged
+        "let (x, y) = pair; x",                   // tuple pattern
+        "let Point { x, y } = p; x",              // struct pattern, field-punned
+        "let Point { x, w = ww } = p; x",         // punned + explicit label mixed
+        "let Point { loc = (x, y) } = p; x",      // tuple nested in struct
+        "let (Point { x, y }, z) = pair; x",      // struct nested in tuple
+        "((x, y) : Point) => x",                  // tuple-pattern lambda param
+        "(Point { x, y } : Point) => x",          // struct-pattern lambda param
+        "((x, y) : Point, z : Nat) => x",         // mixed pattern/plain-name params
+        "let f((x, y) : Point) -> Nat = x; f(p)", // tuple-pattern func-sugar param
+        // Function-definition-sugar parameters always require an explicit
+        // `: T` annotation (unlike lambda parameters); a struct pattern's
+        // head name is descriptive only, never load-bearing as a type.
+        "let f((x, y) : Point, Point { z, w = ww } : Point) -> Nat = x + y + z + ww; f(p, q)",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "term round-trip failed for {source:?}"
         );
     }
 }
@@ -1821,9 +1852,9 @@ fn parse_use_parameter_forms() {
     assert_eq!(params.len(), 4);
     assert_eq!(params[0].plicity, Plicity::Implicit);
     assert_eq!(params[1].plicity, Plicity::Witness);
-    assert_eq!(params[1].label, "_"); // anonymous
+    assert_eq!(params[1].label, Pattern::Binder("_".to_string())); // anonymous
     assert_eq!(params[2].plicity, Plicity::Witness);
-    assert_eq!(params[2].label, "_"); // anonymous
+    assert_eq!(params[2].label, Pattern::Binder("_".to_string())); // anonymous
     assert_eq!(params[3].plicity, Plicity::Explicit);
 }
 

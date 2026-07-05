@@ -1,9 +1,9 @@
 use {
     super::{
         ConceptField, ConceptParam, Error, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
-        LetSignature, Loader, Module, Name, Nat, NatLiteral, Plicity, Prim, Qualifier, Subterm,
-        Term, TopConcept, TopForeign, TopItem, TopLet, TopMod, TopUse, TopWitness, TupleType,
-        TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
+        LetSignature, Loader, Module, Name, Nat, NatLiteral, Pattern, Plicity, Prim, Qualifier,
+        Subterm, Term, TopConcept, TopForeign, TopItem, TopLet, TopMod, TopUse, TopWitness,
+        TupleType, TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status, stdio},
     std::sync::Arc,
@@ -178,7 +178,7 @@ fn fn_marked(
                 .into_iter()
                 .map(|(p, n, t)| FuncSugarParam {
                     plicity: p,
-                    label: n.to_string(),
+                    label: Pattern::Binder(n.to_string()),
                     type_: t,
                 })
                 .collect(),

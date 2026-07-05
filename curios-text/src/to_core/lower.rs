@@ -2,7 +2,7 @@ use {
     super::Context,
     crate::{
         BinMatch, BinSegment, Error, Field, Let, LstEntry, LstMatch, Match, Motive, Name, Nat,
-        NatLiteral, NatMatch, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
+        NatLiteral, NatMatch, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     num_bigint::BigUint,
     std::{cell::RefCell, collections::BTreeSet, sync::Arc},
@@ -61,13 +61,6 @@ impl<'a, 'b> Lower<'a, 'b> {
             scope.remove(name);
         }
         result
-    }
-
-    /// The binder names a parameter list introduces — each parameter's name, all
-    /// in scope across the body. These shadow like-named module bindings; the
-    /// wildcard `_` rides along but is ignored by [`Self::scoped`].
-    fn param_names(params: &[(String, Option<Term>)]) -> Vec<String> {
-        params.iter().map(|(name, _)| name.clone()).collect()
     }
 
     /// Lowers a *value* body — a top-level `let`/`rec` body, a witness field,
@@ -418,8 +411,9 @@ impl<'a, 'b> Lower<'a, 'b> {
             Subterm::Let(let_) => {
                 let type_ = self.term(&let_.signature.type_())?;
                 let value = self.term(&let_.signature.body())?;
-                let tail = self.scoped([let_.binder.clone()], || self.term(&let_.tail))?;
-                curios_core::Term::let_(self.pattern_binder_name(&let_.binder), type_, value, tail)
+                let tail =
+                    self.scoped(Self::pattern_names(&let_.binder), || self.term(&let_.tail))?;
+                self.bind_pattern(&let_.binder, type_, value, tail)
             }
             // A `rec` is mutually recursive: every item label is in scope across
             // all item types, all item bodies, and the tail.
@@ -632,35 +626,125 @@ impl<'a, 'b> Lower<'a, 'b> {
         binds: &mut Vec<(String, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
         let value = self.collect(&let_.signature.body(), binds)?;
-        let tail = self.scoped([let_.binder.clone()], || self.region(&let_.tail))?;
+        let tail = self.scoped(Self::pattern_names(&let_.binder), || {
+            self.region(&let_.tail)
+        })?;
         let type_ = self.term(&let_.signature.type_())?;
-        Ok(curios_core::Term::let_(
-            self.pattern_binder_name(&let_.binder),
-            type_,
-            value,
-            tail,
-        ))
+        Ok(self.bind_pattern(&let_.binder, type_, value, tail))
     }
 
     /// Lowers a function's parameters into core binder `(name, domain)` pairs.
-    /// Each parameter binds a single name; an un-annotated parameter takes a fresh
-    /// metavar domain. The body needs no wrapping — there is no destructuring.
+    /// A plain-name parameter binds its name directly, unchanged; an
+    /// un-annotated parameter takes a fresh metavar domain. A compound
+    /// pattern's core binder is a fresh synthetic name, and the (already
+    /// lowered) `body` is wrapped with its field-`let` chain — processed in
+    /// reverse so each pattern's chain wraps the body *before* an earlier
+    /// pattern's chain wraps that, giving the declaration-order nesting the
+    /// spec's motivating example expects, then reversed back so the returned
+    /// param list stays in declaration order.
     fn lower_func_params(
         &self,
-        params: &[(String, Option<Term>)],
-        body: curios_core::Term,
+        params: &[(Pattern, Option<Term>)],
+        mut body: curios_core::Term,
     ) -> Result<(Vec<(String, curios_core::Term)>, curios_core::Term), Error> {
-        let lowered = params
-            .iter()
-            .map(|(name, annotation)| {
-                let domain = match annotation {
-                    Some(annotation) => self.term(annotation)?,
-                    None => curios_core::Term::metavar(self.context.fresh_metavar()),
-                };
-                Ok((self.pattern_binder_name(name), domain))
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
+        let mut lowered = Vec::with_capacity(params.len());
+        for (pattern, annotation) in params.iter().rev() {
+            let domain = match annotation {
+                Some(annotation) => self.term(annotation)?,
+                None => curios_core::Term::metavar(self.context.fresh_metavar()),
+            };
+            match pattern {
+                Pattern::Binder(name) => lowered.push((self.pattern_binder_name(name), domain)),
+                Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
+                    let synthetic = self.context.fresh_binder();
+                    body = self.lower_pattern_fields(fields, &synthetic, body);
+                    lowered.push((synthetic, domain));
+                }
+            }
+        }
+        lowered.reverse();
         Ok((lowered, body))
+    }
+
+    /// Builds `let pat = value : type_; tail` for a pattern in any of the
+    /// three binder positions: `Pattern::Binder` is today's single core
+    /// `let_` call, unchanged — the whole reason the plain-name path stays a
+    /// zero-cost passthrough. A compound pattern mints one fresh synthetic
+    /// binder (via [`Context::fresh_binder`]) carrying `type_` (the caller's
+    /// own annotation, so it is still checked), then projects each field off
+    /// it via [`Self::lower_pattern_fields`]. The synthetic binder is minted
+    /// unconditionally, even when `value` is already a bare variable
+    /// reference: reusing it directly would risk silently dropping `type_`'s
+    /// check (e.g. `let (x, y) : Point = pair;` must still check
+    /// `pair : Point`). The extra trivial `let` this occasionally emits is
+    /// exactly the shape `cont`'s copy-threading optimization already
+    /// collapses, so it costs nothing at runtime.
+    fn bind_pattern(
+        &self,
+        pattern: &Pattern,
+        type_: curios_core::Term,
+        value: curios_core::Term,
+        tail: curios_core::Term,
+    ) -> curios_core::Term {
+        match pattern {
+            Pattern::Binder(name) => {
+                curios_core::Term::let_(self.pattern_binder_name(name), type_, value, tail)
+            }
+            Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
+                let synthetic = self.context.fresh_binder();
+                let inner = self.lower_pattern_fields(fields, &synthetic, tail);
+                curios_core::Term::let_(synthetic, type_, value, inner)
+            }
+        }
+    }
+
+    /// Projects each field of a compound pattern off the (already-bound) core
+    /// variable `scrutinee_name`, in field order — folded right-to-left so
+    /// the first field's `let` ends up outermost, matching the order a person
+    /// would hand-write (`let x = p0.0; let y = p0.1; …`) — recursing into
+    /// [`Self::bind_pattern`] for nested patterns. Each field's own type is a
+    /// fresh metavar hole: there is never a per-field annotation to give,
+    /// exactly like a hand-written `let x = p.0;`.
+    fn lower_pattern_fields(
+        &self,
+        fields: &[PatternField],
+        scrutinee_name: &str,
+        tail: curios_core::Term,
+    ) -> curios_core::Term {
+        let mut tail = tail;
+        for (index, field) in fields.iter().enumerate().rev() {
+            let scrutinee = curios_core::Term::var(curios_core::Var::free(scrutinee_name));
+            let proj = match &field.label {
+                Some(label) => curios_core::Term::proj_label(scrutinee, label.clone()),
+                None => curios_core::Term::proj(scrutinee, index),
+            };
+            let hole = curios_core::Term::metavar(self.context.fresh_metavar());
+            tail = self.bind_pattern(&field.value, hole, proj, tail);
+        }
+        tail
+    }
+
+    /// The binder names a parameter list introduces — every leaf binder name
+    /// in each parameter's pattern, flattened, all in scope across the body.
+    /// These shadow like-named module bindings; the wildcard `_` rides along
+    /// but is ignored by [`Self::scoped`].
+    fn param_names(params: &[(Pattern, Option<Term>)]) -> Vec<String> {
+        params
+            .iter()
+            .flat_map(|(pattern, _)| Self::pattern_names(pattern))
+            .collect()
+    }
+
+    /// Every `Pattern::Binder` leaf name in `pattern`, recursing through
+    /// nested tuple/struct fields in field order.
+    fn pattern_names(pattern: &Pattern) -> Vec<String> {
+        match pattern {
+            Pattern::Binder(name) => vec![name.clone()],
+            Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => fields
+                .iter()
+                .flat_map(|field| Self::pattern_names(&field.value))
+                .collect(),
+        }
     }
 
     /// A pattern binder's core name: `_` mints a fresh internal name (so repeated

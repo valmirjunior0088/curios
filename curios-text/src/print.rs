@@ -3,9 +3,9 @@ use {
         Apply, BinMatch, BinSegment, BlnMatch, ConceptField, ConceptParam, Entrypoint, Field, Func,
         FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let,
         LetSignature, LstEntry, LstMatch, Match, Module, Motive, Nat, NatLiteral, NatMatch, NumLit,
-        Plicity, Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase,
-        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness,
-        Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
+        Pattern, PatternField, Plicity, Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm,
+        Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
+        TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
@@ -149,7 +149,7 @@ fn print_func_sugar_param(param: FuncSugarParam) -> Printer<'static> {
     } else {
         flat([
             print_plicity(param.plicity),
-            pure(param.label),
+            print_pattern(param.label),
             pure(" : "),
             print_term(param.type_),
         ])
@@ -188,6 +188,56 @@ fn print_struct_entry(entry: StructLitEntry) -> Printer<'static> {
         StructLitEntry::Field(field) => print_tuple_field(field),
         StructLitEntry::Use(term) => flat([pure("use "), print_term(term)]),
         StructLitEntry::Spread(term) => flat([pure(".."), print_term(term)]),
+    }
+}
+
+/// A tuple-pattern / struct-pattern field: positional or `label = pattern` —
+/// the literal mirror of `print_tuple_field`, with `Term` replaced by
+/// `Pattern` (no definition-sugar form; a pattern field is never a function).
+fn print_pattern_field(field: PatternField) -> Printer<'static> {
+    match field.label {
+        Some(label) => flat([pure(label), pure(" = "), print_pattern(field.value)]),
+        None => print_pattern(field.value),
+    }
+}
+
+/// A binder pattern: a plain name, a tuple pattern, or a struct pattern —
+/// the literal mirror of the `Tuple`/`StructLit` term-printing arms below,
+/// with `Term` replaced by `Pattern`.
+fn print_pattern(pattern: Pattern) -> Printer<'static> {
+    match pattern {
+        Pattern::Binder(name) => pure(name),
+        Pattern::Tuple(fields) => {
+            if fields.len() == 1 {
+                let field = fields.into_iter().next().unwrap();
+                // A labeled one-element tuple pattern needs no trailing comma
+                // — the `=` already disambiguates it from a grouped pattern.
+                let trailer = if field.label.is_some() { ")" } else { ",)" };
+                flat([pure("("), print_pattern_field(field), pure(trailer)])
+            } else {
+                flat([
+                    pure("("),
+                    sep_flat(fields.into_iter().map(print_pattern_field), || pure(", ")),
+                    pure(")"),
+                ])
+            }
+        }
+        Pattern::Struct { head, fields } => flat([
+            pure(head),
+            pure(" { "),
+            sep_flat(fields.into_iter().map(print_pattern_field), || pure(", ")),
+            pure(" }"),
+        ]),
+    }
+}
+
+/// One lambda parameter: the binder pattern with its optional domain
+/// annotation — the pattern-accepting counterpart of `print_func_param`,
+/// forked for the same reason `parse_func_pattern_param` is (see `parse.rs`).
+fn print_func_pattern_param((pattern, annotation): (Pattern, Option<Term>)) -> Printer<'static> {
+    match annotation {
+        Some(ty) => flat([print_pattern(pattern), pure(" : "), print_term(ty)]),
+        None => print_pattern(pattern),
     }
 }
 
@@ -424,7 +474,9 @@ fn print_term(term: Term) -> Printer<'static> {
         ]),
         Subterm::Func(Func { params, body }) => flat([
             pure("("),
-            sep_flat(params.into_iter().map(print_func_param), || pure(", ")),
+            sep_flat(params.into_iter().map(print_func_pattern_param), || {
+                pure(", ")
+            }),
             pure(") =>\n"),
             indent(print_term(body)),
         ]),
@@ -615,7 +667,7 @@ fn print_term(term: Term) -> Printer<'static> {
             tail,
         }) => flat([
             pure("let "),
-            pure(binder),
+            print_pattern(binder),
             print_let_signature(signature),
             pure(";"),
             pure("\n"),

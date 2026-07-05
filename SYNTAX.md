@@ -67,6 +67,8 @@ let y : Nat = 0;             -- type annotated
 let f(n : Nat) -> Nat =      -- function-definition sugar (local; type optional)
     n + 1;
 let p = pair;                -- single binder; destructure with projections (p.0, p.1)
+let (x, y) = pair;            -- tuple pattern; sugar for the two `let`s above
+let Point { x, y } = p;       -- struct pattern (field-punned)
 body_using_the_bindings
 ```
 
@@ -108,9 +110,9 @@ Every operator except `&&`/`||` dispatches through a standard-library concept (s
 
 ## Binders
 
-Every binder — `let`, lambda parameter, function parameter, and constructor-arm payload — is a single name (`_` to ignore). There are no compound binding patterns: destructure a tuple or struct with projections (`p.0`, `p.label`).
+A `let` binder, lambda parameter, or function-definition-sugar parameter is either a single name (`_` to ignore) or a tuple/struct destructuring pattern — `(x, y)`, `Point { x, y }`, `Point { loc = (x, y) }` — nested arbitrarily, and mixed freely with plain names in the same parameter list. A pattern desugars to exactly the hand-written projection chain it stands for (`let (x, y) = pair;` is sugar for `let x = pair.0; let y = pair.1;`); a struct pattern's written head name is descriptive only, never resolved or validated — writing the wrong same-shape struct name is not an error. Field-punning (`Point { x, y }`) is the ordinary positional case, not separate syntax.
 
-Match arms dispatch on one constructor each: `| tag(x, …) =>` binds the payload by name (see [Match](#match)). There are no nested, literal, or catch-all patterns in arms.
+A constructor-arm payload binds a single name only (`_` to ignore) — see [Match](#match). Match arms dispatch on one constructor each: `| tag(x, …) =>` binds the payload by name. There are no nested, literal, or catch-all patterns in arms.
 
 ## Match
 
