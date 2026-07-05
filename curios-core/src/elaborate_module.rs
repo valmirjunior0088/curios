@@ -194,7 +194,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     // witness (a `Show(Tree)` whose fields show subtrees) can resolve through
     // its own entry.
     if context.is_witness_declaration(&def.name) {
-        register_witness(context, &def.name, &type_)
+        register_witness(context, &def.name, &type_, def.root)
             .map_err(|error| error.at_opt(def.type_.span()))?;
     }
 
@@ -214,6 +214,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     Ok(Definition {
         name: def.name.clone(),
         island: def.island.clone(),
+        root: def.root,
         type_,
         body,
     })
@@ -284,6 +285,7 @@ fn elaborate_module_rec(
         .map(|((def, type_), body)| Definition {
             name: def.name.clone(),
             island: def.island.clone(),
+            root: def.root,
             type_,
             body,
         })
@@ -492,12 +494,7 @@ pub fn elaborate_and_zonk_with_prelude(
             Item::Let(def) => {
                 context.define_assuming(&def.name, &def.type_, &def.body);
                 if prelude.witnesses.contains(&def.name) {
-                    // `register_witness` reads `context.island()` to stamp the
-                    // witness's declaring root — unset during a bare replay
-                    // (nothing else here consults it), so set it explicitly,
-                    // exactly as the live-elaboration loop below does.
-                    context.set_island(def.island.clone());
-                    register_witness(context, &def.name, &def.type_)?;
+                    register_witness(context, &def.name, &def.type_, def.root)?;
                 }
             }
             Item::Rec(defs) => {

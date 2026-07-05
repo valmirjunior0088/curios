@@ -120,6 +120,7 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
     Ok(Definition {
         name: def.name.clone(),
         island: def.island.clone(),
+        root: def.root,
         type_: zonk_term(context, &def.type_)?,
         body: zonk_term(context, &def.body)?,
     })

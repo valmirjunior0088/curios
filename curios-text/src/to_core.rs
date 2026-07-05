@@ -1346,8 +1346,11 @@ fn structure_free_vars(structure: &curios_core::Structure) -> HashSet<String> {
 }
 
 fn flat_let_to_core(let_: FlatLet) -> curios_core::Definition {
+    let island = let_.name.without_last();
+
     curios_core::Definition {
-        island: let_.name.without_last(),
+        root: island.root_id(),
+        island,
         name: let_.name.join(),
         type_: let_.type_,
         body: let_.body,

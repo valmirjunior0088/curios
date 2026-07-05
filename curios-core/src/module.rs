@@ -1,5 +1,6 @@
 use {
     super::{Concept, Inductive, Qualifier, Structure, Term},
+    curios_abi::RootId,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -20,6 +21,11 @@ pub struct Definition {
     /// check (§7); the same value `Structure::module` carries for type
     /// declarations.
     pub island: Qualifier,
+    /// This definition's declaring root — `island`'s leading segment,
+    /// precomputed once by `to_core` the same way `Concept`/`Structure`/
+    /// `Inductive` are, so `Context::set_island` (and, downstream, the
+    /// orphan-rule check) never has to re-derive it from `island` itself.
+    pub root: RootId,
     pub type_: Term,
     pub body: Term,
 }

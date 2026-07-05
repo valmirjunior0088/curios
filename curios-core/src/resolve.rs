@@ -591,9 +591,16 @@ pub fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
 /// (no explicit binders, regular premises), key it on the tuple of rigid
 /// heads of the concept's input parameters, and insert it into the
 /// program-wide table — rejecting a duplicate key. `signature` is the
-/// definition's *elaborated* type. Registration ignores `pub`: visibility
-/// governs the name, never table membership.
-pub fn register_witness(context: &mut Context, name: &str, signature: &Term) -> Result<(), Error> {
+/// definition's *elaborated* type; `root` is its declaring `Definition`'s
+/// own precomputed root (consulted by the orphan-rule check below, never
+/// re-derived here). Registration ignores `pub`: visibility governs the
+/// name, never table membership.
+pub fn register_witness(
+    context: &mut Context,
+    name: &str,
+    signature: &Term,
+    root: RootId,
+) -> Result<(), Error> {
     let reduced = reduce_with(context, signature)?;
 
     // Peel the telescope, opening each binder with its own label as a neutral
@@ -690,11 +697,6 @@ pub fn register_witness(context: &mut Context, name: &str, signature: &Term) -> 
             return Err(Error::non_regular_witness_premise(name, premise.clone()));
         }
     }
-
-    // The witness's own declaring root: its island's leading segment, the
-    // same classification `Structure`/`Concept`/`Inductive` are stamped with
-    // at construction — consulted by the orphan-rule check.
-    let root = RootId::of_segment(context.island().root_segment());
 
     // The orphan rule: a witness may be declared only where the concept it
     // witnesses, or at least one rigid type in its key, is already declared —
