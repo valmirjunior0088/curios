@@ -11,7 +11,7 @@ use {
 // The export view of a module: public names only, each pointing at the canonical
 // declaration site. Built to a fixed point before any body is elaborated.
 #[derive(Clone)]
-pub struct PublicInterface {
+pub(super) struct PublicInterface {
     pub children: HashMap<String, Entry>,
     pub bindings: HashMap<String, Entry>,
 }
@@ -26,7 +26,7 @@ impl PublicInterface {
 }
 
 #[derive(Clone)]
-pub struct Entry {
+pub(super) struct Entry {
     pub target: Qualifier,
     pub source: Source,
 }
@@ -34,7 +34,7 @@ pub struct Entry {
 // Provenance of an export entry. A slot may be claimed by at most one source; a
 // re-derivation by the same source is idempotent, a different source conflicts.
 #[derive(Clone, PartialEq, Eq)]
-pub enum Source {
+pub(super) enum Source {
     Direct,
     ReExport(usize),
 }
@@ -59,7 +59,7 @@ struct PubUse {
 // constructor modules), then resolve every `pub use` to a fixed point. Also adds
 // constructor modules to `table` (the direct-interface view) so phase 4 can
 // classify private-vs-missing accesses through them.
-pub fn resolve(
+pub(super) fn resolve(
     entrypoint: &Entrypoint,
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &mut HashMap<Qualifier, ModuleInfo>,

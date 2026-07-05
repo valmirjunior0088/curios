@@ -7,14 +7,14 @@ use {
 };
 
 #[derive(Clone)]
-pub struct FlatLet {
+pub(super) struct FlatLet {
     pub name: Qualifier,
     pub type_: curios_core::Term,
     pub body: curios_core::Term,
 }
 
 #[derive(Clone)]
-pub enum FlatItem {
+pub(super) enum FlatItem {
     Let(FlatLet),
     Rec(Vec<FlatLet>),
 }
@@ -23,20 +23,20 @@ pub enum FlatItem {
 // in each namespace, with its visibility. This is the per-module body view used
 // for lexical scope during elaboration, and to tell private from absent when a
 // public lookup misses.
-pub struct ModuleInfo {
+pub(super) struct ModuleInfo {
     children: HashMap<String, bool>,
     bindings: HashMap<String, bool>,
 }
 
 impl ModuleInfo {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             children: HashMap::new(),
             bindings: HashMap::new(),
         }
     }
 
-    pub fn insert_child(&mut self, label: String, is_pub: bool) -> Result<(), Error> {
+    pub(super) fn insert_child(&mut self, label: String, is_pub: bool) -> Result<(), Error> {
         if is_pub && matches!(self.children.get(&label), Some(true)) {
             return Err(Error::DuplicatePublicDeclaration { label });
         }
@@ -45,7 +45,7 @@ impl ModuleInfo {
         Ok(())
     }
 
-    pub fn insert_binding(&mut self, label: String, is_pub: bool) -> Result<(), Error> {
+    pub(super) fn insert_binding(&mut self, label: String, is_pub: bool) -> Result<(), Error> {
         if is_pub && matches!(self.bindings.get(&label), Some(true)) {
             return Err(Error::DuplicatePublicDeclaration { label });
         }
@@ -54,15 +54,15 @@ impl ModuleInfo {
         Ok(())
     }
 
-    pub fn get_child(&self, label: &str) -> Option<bool> {
+    pub(super) fn get_child(&self, label: &str) -> Option<bool> {
         self.children.get(label).copied()
     }
 
-    pub fn get_binding(&self, label: &str) -> Option<bool> {
+    pub(super) fn get_binding(&self, label: &str) -> Option<bool> {
         self.bindings.get(label).copied()
     }
 
-    pub fn public_children(&self) -> Vec<String> {
+    pub(super) fn public_children(&self) -> Vec<String> {
         self.children
             .iter()
             .filter(|(_, is_pub)| **is_pub)
@@ -70,7 +70,7 @@ impl ModuleInfo {
             .collect()
     }
 
-    pub fn public_bindings(&self) -> Vec<String> {
+    pub(super) fn public_bindings(&self) -> Vec<String> {
         self.bindings
             .iter()
             .filter(|(_, is_pub)| **is_pub)
@@ -80,7 +80,7 @@ impl ModuleInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UseResolved {
+pub(super) struct UseResolved {
     pub module: Option<Qualifier>,
     pub binding: Option<Qualifier>,
 }
@@ -89,7 +89,7 @@ pub struct UseResolved {
 // shared read-only across all nested contexts. `qualifiers`/`bindings` are the
 // lexical scope of the module body being elaborated, populated source-ordered by
 // declarations and `use` imports.
-pub struct Context<'a> {
+pub(super) struct Context<'a> {
     prefix: Qualifier,
     table: &'a HashMap<Qualifier, ModuleInfo>,
     public: &'a HashMap<Qualifier, PublicInterface>,
@@ -119,7 +119,7 @@ fn attach(error: Error, name: &Name) -> Error {
 }
 
 impl<'a> Context<'a> {
-    pub fn new(
+    pub(super) fn new(
         table: &'a HashMap<Qualifier, ModuleInfo>,
         public: &'a HashMap<Qualifier, PublicInterface>,
         roster: &'a Roster,
@@ -138,7 +138,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn nested(&self, label: &str) -> Context<'a> {
+    pub(super) fn nested(&self, label: &str) -> Context<'a> {
         Context {
             prefix: self.prefix.with(label),
             table: self.table,
@@ -155,27 +155,27 @@ impl<'a> Context<'a> {
     /// belongs to — the roster-resolved replacement for the old
     /// `context.prefixed(label).root_id()`, which read straight off
     /// `RootId::of_segment`'s hardcoded match.
-    pub fn root_of(&self, label: &str) -> RootId {
+    pub(super) fn root_of(&self, label: &str) -> RootId {
         self.roster.resolve(self.prefixed(label).root_segment())
     }
 
     /// Mint a fresh, program-globally-unique metavariable id for a surface hole.
-    pub fn fresh_metavar(&self) -> usize {
+    pub(super) fn fresh_metavar(&self) -> usize {
         self.metavars.fresh()
     }
 
     /// Mint a fresh continuation-binder name for `!` desugaring. The `#`
     /// sigil is illegal in source identifiers, so it cannot collide with user
     /// names or qualified references.
-    pub fn fresh_binder(&self) -> String {
+    pub(super) fn fresh_binder(&self) -> String {
         format!("#{}", self.binders.fresh())
     }
 
-    pub fn prefixed(&self, label: &str) -> Qualifier {
+    pub(super) fn prefixed(&self, label: &str) -> Qualifier {
         self.prefix.with(label)
     }
 
-    pub fn bindings(&self) -> &HashMap<String, Qualifier> {
+    pub(super) fn bindings(&self) -> &HashMap<String, Qualifier> {
         &self.bindings
     }
 
@@ -188,7 +188,7 @@ impl<'a> Context<'a> {
     /// segment resolves lexically). Those are what this audits: `signature` is
     /// the item's lowered type, whose free variables are exactly its resolved
     /// global references.
-    pub fn check_public_interface(
+    pub(super) fn check_public_interface(
         &self,
         item: &str,
         signature: &curios_core::Term,
@@ -249,7 +249,7 @@ impl<'a> Context<'a> {
         Ok(())
     }
 
-    pub fn insert_scope(&mut self, qualifier: String, name: Qualifier) -> Result<(), Error> {
+    pub(super) fn insert_scope(&mut self, qualifier: String, name: Qualifier) -> Result<(), Error> {
         if self.qualifiers.contains_key(&qualifier) {
             return Err(Error::QualifierConflict { qualifier });
         }
@@ -258,7 +258,7 @@ impl<'a> Context<'a> {
         Ok(())
     }
 
-    pub fn insert_binding(&mut self, label: String, name: Qualifier) -> Result<(), Error> {
+    pub(super) fn insert_binding(&mut self, label: String, name: Qualifier) -> Result<(), Error> {
         if self.bindings.contains_key(&label) {
             return Err(Error::BindingConflict { label });
         }
@@ -419,7 +419,7 @@ impl<'a> Context<'a> {
         Ok(result)
     }
 
-    pub fn resolve_module_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
+    pub(super) fn resolve_module_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
             self.import_module_label(&parent, &label)
@@ -427,7 +427,7 @@ impl<'a> Context<'a> {
         result.map_err(|e| attach(e, name))
     }
 
-    pub fn resolve_binding_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
+    pub(super) fn resolve_binding_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
             self.import_binding_label(&parent, &label)
@@ -435,7 +435,7 @@ impl<'a> Context<'a> {
         result.map_err(|e| attach(e, name))
     }
 
-    pub fn resolve_both_use(&mut self, name: &Name) -> Result<UseResolved, Error> {
+    pub(super) fn resolve_both_use(&mut self, name: &Name) -> Result<UseResolved, Error> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
 
@@ -473,7 +473,7 @@ impl<'a> Context<'a> {
 
     // A glob `use a/b/*` names a module directly and imports every public child
     // and binding it exposes (including its re-exports), each under its own label.
-    pub fn resolve_glob(&mut self, name: &Name) -> Result<Vec<(String, UseResolved)>, Error> {
+    pub(super) fn resolve_glob(&mut self, name: &Name) -> Result<Vec<(String, UseResolved)>, Error> {
         let result = (|| {
             let module = self.resolve_module_prefix(name, name.qualifier().segments().len())?;
 
@@ -506,7 +506,7 @@ impl<'a> Context<'a> {
 
     // Resolve a qualified/absolute term reference to its canonical binding
     // target, reading the frozen public interfaces.
-    pub fn resolve_term_name(&self, name: &Name) -> Result<Qualifier, Error> {
+    pub(super) fn resolve_term_name(&self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
 

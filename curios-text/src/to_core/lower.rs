@@ -14,7 +14,7 @@ use {
     },
 };
 
-pub struct Lower<'a, 'b> {
+pub(super) struct Lower<'a, 'b> {
     context: &'a Context<'b>,
     /// The user-written names bound by the enclosing local binders (function and
     /// `let`/`rec` binders, match-arm patterns, motive labels). A bare reference
@@ -48,7 +48,7 @@ struct MatrixRow<'t> {
 }
 
 impl<'a, 'b> Lower<'a, 'b> {
-    pub fn new(context: &'a Context<'b>) -> Self {
+    pub(super) fn new(context: &'a Context<'b>) -> Self {
         Self {
             context,
             scope: RefCell::new(BTreeSet::new()),
@@ -93,11 +93,11 @@ impl<'a, 'b> Lower<'a, 'b> {
     /// `rec` item re-roots) and is rewired through `/syn/Monad/bind`, whose
     /// `use` binder resolves the `Monad` witness per site. Types go through
     /// [`Self::term`], where `!` is rejected.
-    pub fn value(&self, term: &Term) -> Result<curios_core::Term, Error> {
+    pub(super) fn value(&self, term: &Term) -> Result<curios_core::Term, Error> {
         self.region(term)
     }
 
-    pub fn term(&self, term: &Term) -> Result<curios_core::Term, Error> {
+    pub(super) fn term(&self, term: &Term) -> Result<curios_core::Term, Error> {
         let span = term.span().cloned();
         let elaborated = match span.as_ref() {
             Some(s) => self
@@ -1829,7 +1829,7 @@ impl<'a, 'b> Lower<'a, 'b> {
         Ok(curios_core::Prim::BinConcat(operands))
     }
 
-    pub fn prim(&self, prim: &Prim) -> Result<curios_core::Prim, Error> {
+    pub(super) fn prim(&self, prim: &Prim) -> Result<curios_core::Prim, Error> {
         Ok(match prim {
             Prim::BlnType => curios_core::Prim::BlnType,
             Prim::Bln(b) => curios_core::Prim::Bln(*b),
