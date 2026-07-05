@@ -2483,3 +2483,119 @@ fn writes_a_window_to_the_host() {
 
     assert_eq!(printed(&module), "ell");
 }
+
+// Regression: `Code::BinEql`'s inline byte loop must re-zero its cursor local
+// on every execution. Wasm zeroes locals once per function *activation*, so a
+// `Bin.eql` sitting inside a converted loop (or any re-entered block) starts
+// its second run with the previous run's cursor — here the first compare
+// advances it past the equal leading byte, and a stale cursor then judges the
+// distinct one-byte operands equal because it starts at (not below) their
+// length.
+#[test]
+fn bin_eql_rezeroes_its_cursor_across_block_reentries() {
+    let mut module = cont::Module::new();
+    module.set_entry(cont::FuncName::from("main"));
+
+    module.add_const(cont::ValueName::from("A"), cont::Data::Bin(vec![1, 2]));
+    module.add_const(cont::ValueName::from("B"), cont::Data::Bin(vec![1, 3]));
+    module.add_const(cont::ValueName::from("C"), cont::Data::Bin(vec![4]));
+    module.add_const(cont::ValueName::from("D"), cont::Data::Bin(vec![5]));
+    module.add_const(cont::ValueName::from("ZERO"), cont::Data::Nat(0));
+    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
+
+    module.add_func(
+        cont::FuncName::from("main"),
+        cont::Func {
+            params: vec![],
+            resume: cont::BlockName::from("r"),
+            region: cont::Region {
+                preallocs: vec![],
+                values: vec![],
+                blocks: vec![(
+                    cont::BlockName::from("step"),
+                    cont::Block {
+                        params: vec![
+                            cont::ValueName::from("x"),
+                            cont::ValueName::from("y"),
+                            cont::ValueName::from("again"),
+                        ],
+                        region: cont::Region {
+                            preallocs: vec![],
+                            values: vec![(
+                                cont::ValueName::from("eq"),
+                                cont::Value::Eval(cont::Code::BinEql(
+                                    cont::ValueName::from("x"),
+                                    cont::ValueName::from("y"),
+                                )),
+                            )],
+                            blocks: vec![
+                                (
+                                    cont::BlockName::from("rerun"),
+                                    cont::Block {
+                                        params: vec![],
+                                        region: cont::Region {
+                                            preallocs: vec![],
+                                            values: vec![],
+                                            blocks: vec![],
+                                            tail: cont::Tail::Jump(cont::JumpTarget {
+                                                target: cont::BlockName::from("step"),
+                                                params: vec![
+                                                    cont::ValueName::from("C"),
+                                                    cont::ValueName::from("D"),
+                                                    cont::ValueName::from("ZERO"),
+                                                ],
+                                            }),
+                                        },
+                                    },
+                                ),
+                                (
+                                    cont::BlockName::from("out"),
+                                    cont::Block {
+                                        params: vec![],
+                                        region: cont::Region {
+                                            preallocs: vec![],
+                                            values: vec![],
+                                            blocks: vec![],
+                                            tail: cont::Tail::Host(cont::HostTarget::IoExit {
+                                                code: cont::ValueName::from("eq"),
+                                                resume: cont::BlockName::from("r"),
+                                            }),
+                                        },
+                                    },
+                                ),
+                            ],
+                            tail: cont::Tail::Match(cont::MatchTarget {
+                                operand: cont::ValueName::from("again"),
+                                cases: [(
+                                    0,
+                                    cont::JumpTarget {
+                                        target: cont::BlockName::from("out"),
+                                        params: vec![],
+                                    },
+                                )]
+                                .into_iter()
+                                .collect(),
+                                default: Some(cont::JumpTarget {
+                                    target: cont::BlockName::from("rerun"),
+                                    params: vec![],
+                                }),
+                            }),
+                        },
+                    },
+                )],
+                tail: cont::Tail::Jump(cont::JumpTarget {
+                    target: cont::BlockName::from("step"),
+                    params: vec![
+                        cont::ValueName::from("A"),
+                        cont::ValueName::from("B"),
+                        cont::ValueName::from("ONE"),
+                    ],
+                }),
+            },
+        },
+    );
+
+    // `[1, 2] == [1, 3]` advances the cursor past the shared leading byte;
+    // `[4] == [5]` must still answer false (exit code 0).
+    assert_eq!(i32_result(&module), 0);
+}

@@ -1274,7 +1274,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     Instr::I32Const { value: 1 },
                     Instr::I32Add,
                     Instr::LocalSet {
-                        local_name: idx_local,
+                        local_name: idx_local.clone(),
                     },
                     Instr::Br {
                         label_name: loop_label.clone(),
@@ -1303,6 +1303,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 block_instrs.extend(self.force_instrs(right, LoadAs::Bin, force));
                 block_instrs.push(Instr::LocalSet {
                     local_name: rbytes_local,
+                });
+
+                // idx = 0. Wasm zeroes locals once per function *activation*,
+                // not per execution of this site — inlined into a loop, the
+                // local still holds the previous iteration's cursor.
+                block_instrs.push(Instr::I32Const { value: 0 });
+                block_instrs.push(Instr::LocalSet {
+                    local_name: idx_local.clone(),
                 });
 
                 block_instrs.push(Instr::Loop {
