@@ -1,13 +1,13 @@
 use {
     super::{
         Apply, BinMatch, BinSegment, BlnMatch, CasePayloadParam, ConceptField, ConceptParam,
-        Entrypoint, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveArm,
-        InductiveMatch, Infix, Let, LetSignature, LoadError, LstEntry, LstMatch, Match, Module,
-        Motive, Name, Nat, NatLiteral, NatMatch, NumLit, NumOp, Pattern, PatternField, Plicity,
-        Prim, Proj, Qualifier, Radix, Rec, RecItem, StructLit, StructLitEntry, Subterm, Syn, Term,
-        TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse,
-        TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
-        WitnessField,
+        Entrypoint, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let,
+        LetSignature, LoadError, LstEntry, LstMatch, Match, MatchPattern, MatchPatternField,
+        MatrixArm, MatrixMatch, Module, Motive, Name, Nat, NatLiteral, NatMatch, NumLit, NumOp,
+        Pattern, PatternField, Plicity, Prim, Proj, Qualifier, Radix, Rec, RecItem, StructLit,
+        StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
+        TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{
@@ -684,12 +684,12 @@ fn parse_func_type<'a>() -> Parser<'a, Term> {
 // A lambda parameter with an optional domain annotation. `(x)` is sugar for
 // `(x : _)`; the annotation, when present, parses as an arbitrary term and stops
 // at the closing `)` (mirrors `parse_func_type_param`).
-// A binder name: a plain identifier (`_` to ignore). Match-arm constructor
-// binders and the `label(params) = value`/`label(params) -> type`
-// definition-sugar parameter lists stay single-name-only — see
-// `parse_constructor_arm` and `parse_func_param` below. `let`, lambda, and
+// A binder name: a plain identifier (`_` to ignore). The `label(params) =
+// value`/`label(params) -> type` definition-sugar parameter lists stay
+// single-name-only — see `parse_func_param` below. `let`, lambda, and
 // function-definition-sugar parameters accept a full `Pattern` instead (see
-// `parse_pattern`).
+// `parse_pattern`); match arms accept a full `MatchPattern` instead (see
+// `parse_match_pattern`).
 fn parse_binder<'a>() -> Parser<'a, String> {
     parse_identifier().map(str::to_string)
 }
@@ -776,15 +776,92 @@ fn parse_pattern<'a>() -> Parser<'a, Pattern> {
         .or(parse_binder().map(|name| Pattern::Binder(Some(name))))
 }
 
-// A match-arm constructor pattern `tag(x, …)` — `nil()` for the nullary case.
-// The `(` immediately after the tag is the commit point, distinguishing it from
-// a bare name. Arguments are plain binder names: every match arm is one distinct
-// constructor binding its payload by name.
-fn parse_constructor_arm<'a>() -> Parser<'a, (String, Vec<String>)> {
+// A match-arm field: `label = pattern` or a bare positional pattern — the
+// `MatchPattern` counterpart of `parse_pattern_field`.
+fn parse_match_pattern_field<'a>() -> Parser<'a, MatchPatternField> {
+    catch(parse_pattern_field_prefix())
+        .and(lazy(parse_match_pattern))
+        .map(|(label, value)| MatchPatternField {
+            label: Some(label),
+            value,
+        })
+        .or(lazy(parse_match_pattern).map(|value| MatchPatternField { label: None, value }))
+}
+
+// A tuple match pattern `(p1, p2, …)` / `(label = p, …)` — the `MatchPattern`
+// counterpart of `parse_tuple_pattern`.
+fn parse_tuple_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    catch(
+        parse_literal("(")
+            .and_keep(parse_match_pattern_field())
+            .and_drop(parse_literal(",")),
+    )
+    .and(sep_by0_trailing(parse_match_pattern_field, || {
+        parse_literal(",")
+    }))
+    .map(|(first, rest)| iter::once(first).chain(rest).collect::<Vec<_>>())
+    .or(
+        catch(parse_literal("(").and_keep(parse_pattern_field_prefix()))
+            .and(lazy(parse_match_pattern))
+            .map(|(label, value)| {
+                vec![MatchPatternField {
+                    label: Some(label),
+                    value,
+                }]
+            }),
+    )
+    .and_drop(parse_literal(")"))
+    .map(MatchPattern::Tuple)
+}
+
+// A struct match pattern `Name { p1, p2, … }` / `Name { label = p, … }` —
+// the `MatchPattern` counterpart of `parse_struct_pattern`, mirroring struct
+// literals rather than the positional constructor-call shape (structs have
+// field labels; inductive constructors don't — see `MatchPattern`).
+fn parse_struct_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    catch(parse_name().and_drop(parse_literal("{")))
+        .and(sep_by0_trailing(parse_match_pattern_field, || {
+            parse_literal(",")
+        }))
+        .and_drop(parse_literal("}"))
+        .map(|(head, fields)| MatchPattern::Struct {
+            head: head.join(),
+            fields,
+        })
+}
+
+// A constructor match pattern `tag(p, …)` — `nil()` for the nullary case.
+// The `(` immediately after the tag is the commit point, distinguishing it
+// from a bare name. Unlike `parse_func_param`'s definition-sugar arguments,
+// each argument here is itself a full `MatchPattern`, so a constructor's
+// payload can nest arbitrarily (`some(some(x))`, `pair(some(x), y)`, …).
+fn parse_ctor_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_identifier().and_drop(parse_literal("(")))
-        .and(sep_by0(parse_binder, || parse_literal(",")))
+        .and(sep_by0(parse_match_pattern, || parse_literal(",")))
         .and_drop(parse_literal(")"))
-        .map(|(tag, args): (&str, Vec<String>)| (tag.to_string(), args))
+        .map(
+            |(tag, args): (&str, Vec<MatchPattern>)| MatchPattern::Ctor {
+                tag: tag.to_string(),
+                args,
+            },
+        )
+}
+
+// A match-arm pattern: a plain binder, an inductive constructor applied to
+// (possibly nested) sub-patterns, a tuple pattern, or a struct pattern — see
+// `MatchPattern`. Struct and constructor forms are tried before the
+// bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple`
+// first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some`
+// in `some(x)`) would otherwise be consumed by the binder case before the
+// disambiguating `{`/`(` is ever seen.
+fn parse_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    parse_struct_match_pattern()
+        .or(parse_ctor_match_pattern())
+        .or(parse_tuple_match_pattern())
+        .or(catch(parse_literal("("))
+            .and_keep(lazy(parse_match_pattern))
+            .and_drop(parse_literal(")")))
+        .or(parse_binder().map(MatchPattern::Binder))
 }
 
 fn parse_func_param<'a>() -> Parser<'a, (String, Option<Term>)> {
@@ -987,15 +1064,19 @@ fn parse_nat_switch<'a>() -> Parser<'a, Term> {
         })
 }
 
-// A match-arm: `| tag(args…) => body`, one distinct constructor with irrefutable
-// payload binders. Nested refutable patterns, scalar literals, and bare
-// `| x =>` / `| _ =>` catch-alls are not part of the grammar.
-fn parse_inductive_match_branch<'a>() -> Parser<'a, InductiveArm> {
+// A match-arm: `| pattern => body`, where `pattern` may nest across
+// constructors, tuples, and structs (see `MatchPattern`, `parse_match_pattern`).
+// Full enumeration only ("Path A" — see `to_core::matrix`'s doc comment): a
+// bare binder arm is legal alone (equivalent to a `let`), but lowering
+// rejects mixing it with a concrete-shape arm in the same column, since that
+// would be a catch-all/row-priority pattern this grammar doesn't otherwise
+// support.
+fn parse_inductive_match_branch<'a>() -> Parser<'a, MatrixArm> {
     catch(parse_literal("|"))
-        .and_keep(parse_constructor_arm())
+        .and_keep(parse_match_pattern())
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
-        .map(|((tag, args), body)| InductiveArm { tag, args, body })
+        .map(|(pattern, body)| MatrixArm { pattern, body })
 }
 
 // Zero arms are legal: under inversion (Rung C) every impossible arm is
@@ -1006,7 +1087,7 @@ fn parse_inductive_match<'a>() -> Parser<'a, Term> {
         .and(many0(parse_inductive_match_branch))
         .and_drop(parse_keyword("end"))
         .map(|((head, motive), arms)| {
-            Subterm::Match(Match::Inductive(InductiveMatch { head, motive, arms }))
+            Subterm::Match(Match::Matrix(MatrixMatch { head, motive, arms }))
         })
         .map(Into::into)
 }

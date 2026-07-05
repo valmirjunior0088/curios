@@ -1,11 +1,16 @@
 use {
     super::Context,
     crate::{
-        BinMatch, BinSegment, Error, Field, Let, LstEntry, LstMatch, Match, Motive, Name, Nat,
-        NatLiteral, NatMatch, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
+        BinMatch, BinSegment, Error, Field, Let, LstEntry, LstMatch, Match, MatchPattern,
+        MatrixArm, Motive, Name, Nat, NatLiteral, NatMatch, Pattern, PatternField, Prim, Rec,
+        StructLitEntry, Subterm, Syn, Term,
     },
     num_bigint::BigUint,
-    std::{cell::RefCell, collections::BTreeSet, sync::Arc},
+    std::{
+        cell::RefCell,
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    },
 };
 
 pub struct Lower<'a, 'b> {
@@ -22,6 +27,24 @@ pub struct Lower<'a, 'b> {
 /// One elaborated arm of a single-level core inductive match: the constructor tag,
 /// its payload binder names, and the (already-lowered) body.
 type InductiveCase = (curios_core::Atom, Vec<String>, curios_core::Term);
+
+/// One in-progress row of the matrix compiler's recursion (see
+/// [`Lower::compile_matrix`]): the still-unconsumed column patterns (left to
+/// right, one per not-yet-retired column, borrowed from the original
+/// [`MatrixArm`]), the `let` bindings accumulated so far from retired
+/// all-[`MatchPattern::Binder`] columns — applied at the leaf, outermost
+/// first, matching [`Lower::lower_pattern_fields`]'s "first field's let ends
+/// up outermost" convention — and the row's own (still-surface) body. A
+/// name already bound directly by an enclosing core binder (see
+/// [`Lower::compile_ctor`]'s single-row fast path) needs no entry here at
+/// all — [`Self::scoped`] is called inline, right where that binder's name
+/// is decided, instead of threading a second bookkeeping list through the
+/// recursion for it.
+struct MatrixRow<'t> {
+    patterns: Vec<&'t MatchPattern>,
+    binds: Vec<(String, curios_core::Term)>,
+    body: &'t Term,
+}
 
 impl<'a, 'b> Lower<'a, 'b> {
     pub fn new(context: &'a Context<'b>) -> Self {
@@ -339,20 +362,13 @@ impl<'a, 'b> Lower<'a, 'b> {
                         self.term(default)?,
                     )
                 }
-                Match::Inductive(um) => {
-                    // A distinct-tag inductive match lowers to a single-level core
-                    // `Match`. Bodies lower here (under the arm's payload binders);
-                    // `inductive_rows` checks distinctness and assembles the cases.
+                Match::Matrix(um) => {
+                    // The matrix compiler recursively decomposes (possibly
+                    // nested, across constructors/tuples/structs) arm
+                    // patterns into single-level core `Match`/projection
+                    // forms — see `Self::compile_matrix`.
                     let head = self.term(&um.head)?;
-                    let arms = um
-                        .arms
-                        .iter()
-                        .map(|arm| {
-                            let body = self.scoped(arm.args.clone(), || self.term(&arm.body))?;
-                            Ok((arm.tag.clone(), arm.args.clone(), body))
-                        })
-                        .collect::<Result<Vec<_>, Error>>()?;
-                    self.inductive_rows(head, &um.motive, arms)?
+                    self.compile_matrix(head, &um.motive, &um.arms, Self::term)?
                 }
                 Match::Lst(LstMatch {
                     head,
@@ -835,21 +851,12 @@ impl<'a, 'b> Lower<'a, 'b> {
                     self.region(default)?,
                 )
             }
-            Match::Inductive(um) => {
-                // Mirrors the `Match::Inductive` arm of `subterm` (see there), swapping
-                // `collect` on the head and `region` on the arm bodies (branch-local
-                // effects).
+            Match::Matrix(um) => {
+                // Mirrors the `Match::Matrix` arm of `subterm` (see there and
+                // `Self::compile_matrix`), swapping `collect` on the head and
+                // `region` on the arm bodies (branch-local effects).
                 let head = self.collect(&um.head, binds)?;
-                let arms = um
-                    .arms
-                    .iter()
-                    .map(|arm| {
-                        let names = arm.args.clone();
-                        let body = self.scoped(names, || self.region(&arm.body))?;
-                        Ok((arm.tag.clone(), arm.args.clone(), body))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?;
-                self.inductive_rows(head, &um.motive, arms)?
+                self.compile_matrix(head, &um.motive, &um.arms, Self::region)?
             }
             Match::Lst(LstMatch {
                 head,
@@ -1021,28 +1028,344 @@ impl<'a, 'b> Lower<'a, 'b> {
         ))
     }
 
-    /// Assembles an inductive match's already-lowered constructor arms into a
-    /// single-level core `Match` via [`Self::inductive_match`]. The surface
-    /// grammar guarantees each arm is one constructor binding its payload by name;
-    /// unknown tags, arity, exhaustiveness, and repeated tags are all verified by
-    /// core elaboration against the inductive's registry.
-    fn inductive_rows(
+    /// The entry point for a match whose arm patterns may nest across
+    /// constructors, tuples, and structs (see [`MatchPattern`]) — compiled
+    /// down into the single-level core forms above, exactly what a person
+    /// would get from hand-nesting matches today (proven end to end by
+    /// `BigNat.crs`'s style of code). `leaf` is the per-body lowering —
+    /// [`Self::term`] on the plain path, [`Self::region`] on the region path
+    /// — so both share this compiler, mirroring every other `Match` arm's
+    /// `term`/`region` split.
+    ///
+    /// Zero arms (a vacuous elimination, e.g. of `False`) needs no
+    /// recursion at all — there is nothing to infer a dispatch kind from, so
+    /// it goes straight to [`Self::inductive_match`] exactly as today.
+    ///
+    /// A dependent motive (`Motive::Scrutinee`/`Motive::Annotated`) is only
+    /// meaningful when the head itself dispatches on a constructor tag
+    /// directly — every arm's *top-level* pattern being [`MatchPattern::Ctor`]
+    /// — since that is the only case where a core `Match` node exists for
+    /// the *original* scrutinee to attach the motive to (a
+    /// tuple/struct-headed or plain-binder match never builds one; it just
+    /// projects). Every deeper/inner split the recursion synthesizes never
+    /// needs its own motive at all: an absent motive lowers to a fresh
+    /// metavariable ([`Self::motive_parts`]'s `None` case), which core
+    /// elaboration unifies against whatever expected type flows in from the
+    /// enclosing checking context — no currying needed for a single head.
+    fn compile_matrix(
         &self,
         head: curios_core::Term,
         motive: &Option<Motive>,
-        arms: Vec<(String, Vec<String>, curios_core::Term)>,
+        arms: &[MatrixArm],
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
-        let mut cases = Vec::with_capacity(arms.len());
-
-        for (tag, args, body) in arms {
-            let binders = args
-                .iter()
-                .map(|name| self.pattern_binder_name(name))
-                .collect();
-            cases.push((curios_core::Atom::from(tag.as_str()), binders, body));
+        if arms.is_empty() {
+            return self.inductive_match(head, motive, Vec::new());
         }
 
-        self.inductive_match(head, motive, cases)
+        let all_ctor = arms
+            .iter()
+            .all(|arm| matches!(arm.pattern, MatchPattern::Ctor { .. }));
+        if !all_ctor
+            && matches!(
+                motive,
+                Some(Motive::Scrutinee { .. } | Motive::Annotated { .. })
+            )
+        {
+            return Err(Error::MatrixMotiveRequiresCtorHead);
+        }
+
+        let rows = arms
+            .iter()
+            .map(|arm| MatrixRow {
+                patterns: vec![&arm.pattern],
+                binds: Vec::new(),
+                body: &arm.body,
+            })
+            .collect();
+
+        self.compile(vec![head], rows, Some(motive), leaf)
+    }
+
+    /// The recursive step: classifies column 0 across every row and either
+    /// retires it (every row a plain binder — never splits), explodes it
+    /// (every row a tuple/struct — exactly one shape, so this is projection,
+    /// not dispatch, via [`Self::compile_fields`]), or groups by constructor
+    /// tag and recurses per group (via [`Self::compile_ctor`]). Mixing a
+    /// plain binder with a concrete shape in the same column is the "Path A"
+    /// full-enumeration boundary this grammar doesn't support (no
+    /// wildcard/catch-all) — a hard error, not a panic. `top_motive` is
+    /// `Some` only on [`Self::compile_matrix`]'s own initial call; every
+    /// recursive call passes `None` (see that method's doc comment).
+    fn compile(
+        &self,
+        mut columns: Vec<curios_core::Term>,
+        rows: Vec<MatrixRow<'_>>,
+        top_motive: Option<&Option<Motive>>,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        if columns.is_empty() {
+            return match rows.len() {
+                1 => self.finish_row(rows.into_iter().next().unwrap(), leaf),
+                _ => Err(Error::MatrixDuplicateRow),
+            };
+        }
+
+        if rows
+            .iter()
+            .all(|row| matches!(row.patterns[0], MatchPattern::Binder(_)))
+        {
+            let scrutinee = columns.remove(0);
+            let rows = rows
+                .into_iter()
+                .map(|mut row| {
+                    let MatchPattern::Binder(name) = row.patterns.remove(0) else {
+                        unreachable!("every row classified as Binder")
+                    };
+                    row.binds.push((name.clone(), scrutinee.clone()));
+                    row
+                })
+                .collect();
+            return self.compile(columns, rows, None, leaf);
+        }
+
+        if rows
+            .iter()
+            .any(|row| matches!(row.patterns[0], MatchPattern::Binder(_)))
+        {
+            return Err(Error::MatrixInconsistentShape);
+        }
+
+        match rows[0].patterns[0] {
+            MatchPattern::Ctor { .. } => {
+                if rows
+                    .iter()
+                    .any(|row| !matches!(row.patterns[0], MatchPattern::Ctor { .. }))
+                {
+                    return Err(Error::MatrixInconsistentShape);
+                }
+                self.compile_ctor(columns, rows, top_motive, leaf)
+            }
+            MatchPattern::Tuple(fields) => {
+                let arity = fields.len();
+                if rows.iter().any(
+                    |row| !matches!(row.patterns[0], MatchPattern::Tuple(f) if f.len() == arity),
+                ) {
+                    return Err(Error::MatrixInconsistentShape);
+                }
+                self.compile_fields(columns, rows, leaf)
+            }
+            MatchPattern::Struct { head, fields } => {
+                if rows.iter().any(|row| {
+                    !matches!(row.patterns[0], MatchPattern::Struct { head: h, fields: f }
+                        if h == head && f.len() == fields.len())
+                }) {
+                    return Err(Error::MatrixInconsistentShape);
+                }
+                self.compile_fields(columns, rows, leaf)
+            }
+            MatchPattern::Binder(_) => unreachable!("handled above"),
+        }
+    }
+
+    /// Groups rows by their column-0 constructor tag (distinct tags freely
+    /// coexist — that's the whole grouping mechanism; two rows sharing a tag
+    /// recurse together, further split by their own sub-patterns). Two rows
+    /// that end up identical in every column (including a literal repeated
+    /// tag with no further distinguishing sub-pattern) are caught by
+    /// [`Self::compile`]'s leaf case, not here.
+    ///
+    /// A tag with exactly one row needs no synthetic binder at all for a
+    /// plain-binder slot: its own written name (wildcard-safe via
+    /// [`Self::pattern_binder_name`]) becomes the core arm's own binder
+    /// directly, exactly matching today's flat lowering — this is the
+    /// overwhelmingly common case (every constructor tag appears once). A
+    /// slot needing further decomposition (a nested sub-pattern), or a slot
+    /// in a group with more than one row (which may need to rebind it
+    /// differently per row), still gets a fresh synthetic column, handled by
+    /// the general recursion. This distinction matters beyond style: minting
+    /// a synthetic name for a slot that didn't need one, then immediately
+    /// `let`-renaming it back to the written name, produces a core binder
+    /// whose only label is that gensym — which the erasure pass's hint-based
+    /// fresh-naming (`Context::fresh`) then chains into another gensym,
+    /// compounding across nested lets until a reference outruns its own
+    /// binding.
+    fn compile_ctor(
+        &self,
+        mut columns: Vec<curios_core::Term>,
+        rows: Vec<MatrixRow<'_>>,
+        top_motive: Option<&Option<Motive>>,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        let scrutinee = columns.remove(0);
+        let rest = columns;
+
+        let mut groups: BTreeMap<String, Vec<(&[MatchPattern], MatrixRow<'_>)>> = BTreeMap::new();
+        for mut row in rows {
+            let MatchPattern::Ctor { tag, args } = row.patterns.remove(0) else {
+                unreachable!("every row classified as Ctor")
+            };
+            groups
+                .entry(tag.clone())
+                .or_default()
+                .push((args.as_slice(), row));
+        }
+
+        let mut cases = Vec::with_capacity(groups.len());
+        for (tag, mut group) in groups {
+            let arity = group[0].0.len();
+            if group.iter().any(|(args, _)| args.len() != arity) {
+                return Err(Error::MatrixInconsistentShape);
+            }
+
+            // The single-row fast path: a plain-binder slot's own name
+            // becomes the core arm's binder directly, with `self.scoped`
+            // called right here — exactly where the name is decided —
+            // rather than deferred through `MatrixRow`. Only a slot needing
+            // further decomposition still gets a fresh synthetic column.
+            if group.len() == 1 {
+                let (args, mut row) = group.pop().unwrap();
+                let mut binder_names = Vec::with_capacity(arity);
+                let mut direct_names = Vec::new();
+                let mut sub_columns = Vec::new();
+                let mut sub_patterns = Vec::new();
+                for pattern in args {
+                    match pattern {
+                        MatchPattern::Binder(name) => {
+                            let bound = self.pattern_binder_name(name);
+                            direct_names.push(bound.clone());
+                            binder_names.push(bound);
+                        }
+                        other => {
+                            let synthetic = self.context.fresh_binder();
+                            sub_columns.push(curios_core::Term::var(curios_core::Var::free(
+                                synthetic.clone(),
+                            )));
+                            sub_patterns.push(other);
+                            binder_names.push(synthetic);
+                        }
+                    }
+                }
+                sub_patterns.extend(row.patterns);
+                row.patterns = sub_patterns;
+                sub_columns.extend(rest.clone());
+
+                let body = self.scoped(direct_names, || {
+                    self.compile(sub_columns, vec![row], None, leaf)
+                })?;
+                cases.push((curios_core::Atom::from(tag.as_str()), binder_names, body));
+                continue;
+            }
+
+            let synthetic = (0..arity)
+                .map(|_| self.context.fresh_binder())
+                .collect::<Vec<_>>();
+            let sub_rows = group
+                .into_iter()
+                .map(|(args, mut row)| {
+                    let mut patterns = args.iter().collect::<Vec<_>>();
+                    patterns.extend(row.patterns);
+                    row.patterns = patterns;
+                    row
+                })
+                .collect::<Vec<_>>();
+            let mut sub_columns = synthetic
+                .iter()
+                .map(|name| curios_core::Term::var(curios_core::Var::free(name.clone())))
+                .collect::<Vec<_>>();
+            sub_columns.extend(rest.clone());
+
+            let body = self.compile(sub_columns, sub_rows, None, leaf)?;
+            cases.push((curios_core::Atom::from(tag.as_str()), synthetic, body));
+        }
+
+        self.inductive_match(scrutinee, top_motive.unwrap_or(&None), cases)
+    }
+
+    /// Explodes a `Tuple`/`Struct` column into one new leftmost column per
+    /// field, via [`curios_core::Term::proj`]/[`curios_core::Term::proj_label`]
+    /// on the current (always already-bound) scrutinee variable — this is
+    /// the same code path whether the exploded column is the outer head or
+    /// several levels deep, and it never needs a core `Match` node at all: a
+    /// tuple/struct value has exactly one shape, so "matching" one is just
+    /// sequential projection, exactly like a hand-written `p.0`/`p.label`.
+    /// Struct privacy is inherited automatically and unmodified, since
+    /// `proj_label` is the same function `elaborate_proj` already checks it
+    /// against. Every row's field list was already validated (by
+    /// [`Self::compile`]) to share this column's arity/head; here they're
+    /// further checked to agree, position by position, on whether each field
+    /// is labeled — an irrefutable `Pattern` never needed this, since a
+    /// `let`/lambda site only ever destructures a value once.
+    fn compile_fields(
+        &self,
+        mut columns: Vec<curios_core::Term>,
+        rows: Vec<MatrixRow<'_>>,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        let scrutinee = columns.remove(0);
+        let rest = columns;
+
+        let canonical_labels = match rows[0].patterns[0] {
+            MatchPattern::Tuple(fields) | MatchPattern::Struct { fields, .. } => fields
+                .iter()
+                .map(|f| f.label.as_deref())
+                .collect::<Vec<_>>(),
+            _ => unreachable!("every row classified as Tuple/Struct"),
+        };
+
+        let mut new_rows = Vec::with_capacity(rows.len());
+        for mut row in rows {
+            let fields = match row.patterns.remove(0) {
+                MatchPattern::Tuple(fields) | MatchPattern::Struct { fields, .. } => fields,
+                _ => unreachable!("every row classified as Tuple/Struct"),
+            };
+            let labels = fields
+                .iter()
+                .map(|f| f.label.as_deref())
+                .collect::<Vec<_>>();
+            if labels != canonical_labels {
+                return Err(Error::MatrixInconsistentShape);
+            }
+            let mut patterns = fields.iter().map(|f| &f.value).collect::<Vec<_>>();
+            patterns.extend(row.patterns);
+            row.patterns = patterns;
+            new_rows.push(row);
+        }
+
+        let mut new_columns = canonical_labels
+            .into_iter()
+            .enumerate()
+            .map(|(index, label)| match label {
+                Some(label) => curios_core::Term::proj_label(scrutinee.clone(), label.to_string()),
+                None => curios_core::Term::proj(scrutinee.clone(), index),
+            })
+            .collect::<Vec<_>>();
+        new_columns.extend(rest);
+
+        self.compile(new_columns, new_rows, None, leaf)
+    }
+
+    /// The leaf of the matrix compiler's recursion: exactly one row remains
+    /// once every column is consumed. Lowers the row's body under every
+    /// accumulated binder name (so a reference resolves to the binder rather
+    /// than a like-named module binding, exactly like [`Self::scoped`]'s
+    /// other callers), then wraps it in the accumulated `let`s, outermost
+    /// first.
+    fn finish_row(
+        &self,
+        row: MatrixRow<'_>,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        let names = row.binds.iter().map(|(name, _)| name.clone());
+        let body = self.scoped(names, || leaf(self, row.body))?;
+        Ok(row
+            .binds
+            .into_iter()
+            .rev()
+            .fold(body, |tail, (name, value)| {
+                let hole = curios_core::Term::metavar(self.context.fresh_metavar());
+                curios_core::Term::let_(self.pattern_binder_name(&name), hole, value, tail)
+            }))
     }
 
     /// Lowers a list literal's entries. A spread-free literal lowers to a

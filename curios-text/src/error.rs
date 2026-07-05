@@ -81,6 +81,26 @@ pub enum Error {
     /// The annotated motive form `(x : T(...)) => P` is only meaningful on a
     /// inductive scrutinee — `Bln` and `Nat` matches take `: P` or `: (x) => P`.
     AnnotatedMotiveNotInductive,
+    /// A dependent motive (`(x) => P` or the annotated type-pattern form) was
+    /// written on a match whose head does not dispatch on a constructor tag
+    /// directly — every arm matches a tuple/struct, or is a plain binder.
+    /// There is no core `Match` node for such a head to attach the motive
+    /// to; only a match whose every top-level arm pattern is a constructor
+    /// tag can carry a dependent motive.
+    MatrixMotiveRequiresCtorHead,
+    /// Two match-arm rows write incompatible shapes for the same column —
+    /// mixing a plain binder with a concrete constructor/tuple/struct shape
+    /// (a "Path A" full-enumeration violation: no wildcard/catch-all is
+    /// allowed alongside a concrete case), or two concrete shapes that
+    /// disagree (a tuple/struct of different arity or field labels, a
+    /// struct with a different head name, or the same constructor tag
+    /// applied with a different number of arguments).
+    MatrixInconsistentShape,
+    /// Two match-arm rows specify the exact same pattern in every column —
+    /// including a flat, single-column match with a literally repeated
+    /// constructor tag. Every arm must be reachable and distinct; "Path A"
+    /// gives arms no priority order to break the tie with.
+    MatrixDuplicateRow,
     ModuleLoadFailed {
         label: String,
         cause: Box<LoadError>,
@@ -186,6 +206,24 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "an annotated motive `(x : T(...)) => P` is only legal on an inductive match"
+                )
+            }
+            Error::MatrixMotiveRequiresCtorHead => {
+                write!(
+                    f,
+                    "a dependent motive is only legal when every arm matches a constructor tag directly"
+                )
+            }
+            Error::MatrixInconsistentShape => {
+                write!(
+                    f,
+                    "match arm patterns disagree on shape for the same column"
+                )
+            }
+            Error::MatrixDuplicateRow => {
+                write!(
+                    f,
+                    "duplicate or overlapping match arm: every arm must be reachable and distinct"
                 )
             }
             Error::ModuleLoadFailed { label, cause } => {

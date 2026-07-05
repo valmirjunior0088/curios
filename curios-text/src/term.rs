@@ -339,22 +339,26 @@ pub struct StructLit {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct InductiveMatch {
+pub struct MatrixMatch {
     pub head: Term,
     pub motive: Option<Motive>,
-    /// The constructor arms, in source order. Each is a single-level pattern
-    /// `tag(p, …)` (distinct tags, irrefutable arguments) paired with its body —
-    /// the only refutable match shape the language admits. The grammar enforces
-    /// the shape; lowering only rejects a repeated `tag`.
-    pub arms: Vec<InductiveArm>,
+    /// The arms, in source order. Each pairs a (possibly nested, across
+    /// constructors/tuples/structs — see [`MatchPattern`]) pattern with its
+    /// body; zero arms is legal (a vacuous elimination, e.g. of `False`).
+    /// The grammar enforces "full enumeration" (no wildcard/catch-all, no
+    /// row priority — see `to_core::matrix`'s doc comment); lowering rejects
+    /// a repeated tag and an overlapping/duplicate row.
+    pub arms: Vec<MatrixArm>,
 }
 
-/// One constructor arm of an [`InductiveMatch`]: `| tag(args…) => body`. `args`
-/// are the binder names for the constructor's payload (`_` to ignore).
+/// One arm of a [`MatrixMatch`]: `| pattern => body`. Compiled by
+/// `to_core::matrix` into the single-level core match/projection forms —
+/// exactly what a person would get from hand-nesting matches today (see its
+/// doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every
+/// argument a plain [`MatchPattern::Binder`]) lowers exactly as before.
 #[derive(Debug, Clone, PartialEq)]
-pub struct InductiveArm {
-    pub tag: String,
-    pub args: Vec<String>,
+pub struct MatrixArm {
+    pub pattern: MatchPattern,
     pub body: Term,
 }
 
@@ -362,9 +366,48 @@ pub struct InductiveArm {
 pub enum Match {
     Bln(BlnMatch),
     Nat(NatMatch),
-    Inductive(InductiveMatch),
+    Matrix(MatrixMatch),
     Lst(LstMatch),
     Bin(BinMatch),
+}
+
+/// A match-arm pattern: genuinely refutable, unlike [`Pattern`] (which is
+/// always irrefutable — see its own doc comment). Distinct from `Pattern` on
+/// purpose, even though `Tuple`/`Struct` mirror its field grammar exactly:
+/// a `let`/lambda/function-sugar binder site never dispatches on shape, but a
+/// match arm's whole point is dispatching on shape, so the two must never be
+/// conflated.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MatchPattern {
+    /// A plain name (or `_`) — never splits a column by itself; legal only
+    /// when every row shares this shape in that column (see the matrix
+    /// compiler in `to_core::matrix`).
+    Binder(String),
+    /// An inductive constructor tag applied to sub-patterns — positional
+    /// (constructors have no field labels in this language).
+    Ctor {
+        tag: String,
+        args: Vec<MatchPattern>,
+    },
+    /// A tuple pattern — field grammar mirrors [`PatternField`] exactly.
+    Tuple(Vec<MatchPatternField>),
+    /// A struct/record pattern — the same labeled/punned/positional grammar
+    /// as struct literals and today's irrefutable [`Pattern::Struct`], not
+    /// the positional constructor-call shape (structs have field labels;
+    /// inductive constructors don't).
+    Struct {
+        head: String,
+        fields: Vec<MatchPatternField>,
+    },
+}
+
+/// One tuple-pattern / struct-pattern field in a [`MatchPattern`]: a labeled
+/// sub-pattern (`label = pattern`) or a bare positional one. The literal
+/// mirror of [`PatternField`] with `Pattern` replaced by `MatchPattern`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchPatternField {
+    pub label: Option<String>,
+    pub value: MatchPattern,
 }
 
 /// One parameter of the function-definition sugar `let f(x : T, …) -> R = body`.

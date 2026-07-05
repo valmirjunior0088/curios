@@ -1,11 +1,12 @@
 use {
     super::{
         Apply, BinMatch, BinSegment, BlnMatch, ConceptField, ConceptParam, Entrypoint, Field, Func,
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, InductiveMatch, Infix, Let,
-        LetSignature, LstEntry, LstMatch, Match, Module, Motive, Nat, NatLiteral, NatMatch, NumLit,
-        Pattern, PatternField, Plicity, Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm,
-        Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
-        TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetSignature, LstEntry,
+        LstMatch, Match, MatchPattern, MatchPatternField, MatrixMatch, Module, Motive, Nat,
+        NatLiteral, NatMatch, NumLit, Pattern, PatternField, Plicity, Prim, Proj, Radix, Rec,
+        StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct,
+        TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
@@ -69,12 +70,6 @@ fn print_plicity(plicity: Plicity) -> Printer<'static> {
         Plicity::Witness => pure("use "),
         Plicity::Explicit => pure(""),
     }
-}
-
-/// Prints one constructor arm pattern `tag(args…)` — the head of an inductive
-/// match arm. `args` are the payload binder names.
-fn print_constructor(tag: String, args: Vec<String>) -> Printer<'static> {
-    pure(format!("{tag}({})", args.join(", ")))
 }
 
 /// Prints a match's optional motive — the parenthesized ladder: ` : body`,
@@ -239,6 +234,55 @@ fn print_pattern(pattern: Pattern) -> Printer<'static> {
             pure(head),
             pure(" { "),
             sep_flat(fields.into_iter().map(print_pattern_field), || pure(", ")),
+            pure(" }"),
+        ]),
+    }
+}
+
+fn print_match_pattern_field(field: MatchPatternField) -> Printer<'static> {
+    match field.label {
+        Some(label) => flat([pure(label), pure(" = "), print_match_pattern(field.value)]),
+        None => print_match_pattern(field.value),
+    }
+}
+
+/// A match-arm pattern: a plain binder, an inductive constructor tag applied
+/// to sub-patterns, a tuple pattern, or a struct pattern — the refutable
+/// counterpart of `print_pattern` (see `MatchPattern`'s doc comment). `Ctor`
+/// stays positional (constructors have no field labels); `Tuple`/`Struct`
+/// mirror `print_pattern`'s own field-printing exactly.
+fn print_match_pattern(pattern: MatchPattern) -> Printer<'static> {
+    match pattern {
+        MatchPattern::Binder(name) => pure(name),
+        MatchPattern::Ctor { tag, args } => flat([
+            pure(tag),
+            pure("("),
+            sep_flat(args.into_iter().map(print_match_pattern), || pure(", ")),
+            pure(")"),
+        ]),
+        MatchPattern::Tuple(fields) => {
+            if fields.len() == 1 {
+                let field = fields.into_iter().next().unwrap();
+                // A labeled one-element tuple pattern needs no trailing comma
+                // — the `=` already disambiguates it from a grouped pattern.
+                let trailer = if field.label.is_some() { ")" } else { ",)" };
+                flat([pure("("), print_match_pattern_field(field), pure(trailer)])
+            } else {
+                flat([
+                    pure("("),
+                    sep_flat(fields.into_iter().map(print_match_pattern_field), || {
+                        pure(", ")
+                    }),
+                    pure(")"),
+                ])
+            }
+        }
+        MatchPattern::Struct { head, fields } => flat([
+            pure(head),
+            pure(" { "),
+            sep_flat(fields.into_iter().map(print_match_pattern_field), || {
+                pure(", ")
+            }),
             pure(" }"),
         ]),
     }
@@ -607,7 +651,7 @@ fn print_term(term: Term) -> Printer<'static> {
                 indent(print_term(default)),
                 pure("\nend"),
             ]),
-            Match::Inductive(InductiveMatch { head, motive, arms }) => flat([
+            Match::Matrix(MatrixMatch { head, motive, arms }) => flat([
                 pure("match "),
                 print_term(head),
                 print_motive(motive),
@@ -616,7 +660,7 @@ fn print_term(term: Term) -> Printer<'static> {
                         .map(|arm| {
                             flat([
                                 pure("\n| "),
-                                print_constructor(arm.tag, arm.args),
+                                print_match_pattern(arm.pattern),
                                 pure(" =>\n"),
                                 indent(print_term(arm.body)),
                             ])

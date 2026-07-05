@@ -848,20 +848,24 @@ fn parse_inductive_match_nullary_and_unary() {
         "match v : Bin\n| null() => \"null\"\n| bln(b) => b\nend"
             .parse::<Term>()
             .unwrap(),
-        Subterm::Match(Match::Inductive(InductiveMatch {
+        Subterm::Match(Match::Matrix(MatrixMatch {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
             motive: Some(Motive::Constant(
                 Subterm::Name(Name::from(["Bin".to_string()])).into()
             )),
             arms: vec![
-                InductiveArm {
-                    tag: "null".to_string(),
-                    args: vec![],
+                MatrixArm {
+                    pattern: MatchPattern::Ctor {
+                        tag: "null".to_string(),
+                        args: vec![],
+                    },
                     body: Subterm::Syn(Syn::Str("null".to_string())).into(),
                 },
-                InductiveArm {
-                    tag: "bln".to_string(),
-                    args: vec!["b".to_string()],
+                MatrixArm {
+                    pattern: MatchPattern::Ctor {
+                        tag: "bln".to_string(),
+                        args: vec![MatchPattern::Binder("b".to_string())],
+                    },
                     body: Subterm::Name(Name::from(["b".to_string()])).into(),
                 },
             ],
@@ -876,14 +880,19 @@ fn parse_inductive_match_multi_binder() {
         "match v : T\n| lit(a, b) => a\nend"
             .parse::<Term>()
             .unwrap(),
-        Subterm::Match(Match::Inductive(InductiveMatch {
+        Subterm::Match(Match::Matrix(MatrixMatch {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
             motive: Some(Motive::Constant(
                 Subterm::Name(Name::from(["T".to_string()])).into()
             )),
-            arms: vec![InductiveArm {
-                tag: "lit".to_string(),
-                args: vec!["a".to_string(), "b".to_string(),],
+            arms: vec![MatrixArm {
+                pattern: MatchPattern::Ctor {
+                    tag: "lit".to_string(),
+                    args: vec![
+                        MatchPattern::Binder("a".to_string()),
+                        MatchPattern::Binder("b".to_string()),
+                    ],
+                },
                 body: Subterm::Name(Name::from(["a".to_string()])).into(),
             }],
         }))
@@ -897,12 +906,14 @@ fn parse_match_omitted_motive() {
     // elaborator later lowers it to a fresh metavariable (sugar for `: _`).
     assert_eq!(
         "match x | foo(y) => y end".parse::<Term>().unwrap(),
-        Subterm::Match(Match::Inductive(InductiveMatch {
+        Subterm::Match(Match::Matrix(MatrixMatch {
             head: Subterm::Name(Name::from(["x".to_string()])).into(),
             motive: None,
-            arms: vec![InductiveArm {
-                tag: "foo".to_string(),
-                args: vec!["y".to_string()],
+            arms: vec![MatrixArm {
+                pattern: MatchPattern::Ctor {
+                    tag: "foo".to_string(),
+                    args: vec![MatchPattern::Binder("y".to_string())],
+                },
                 body: Subterm::Name(Name::from(["y".to_string()])).into(),
             }],
         }))
@@ -1127,12 +1138,12 @@ fn parse_bang_in_match_scrutinee_and_arm() {
     // the elaborator hoists them into different regions.
     let term = "match x! | foo(z) => y! end".parse::<Term>().unwrap();
     match term.into_subterm() {
-        Subterm::Match(Match::Inductive(m)) => {
+        Subterm::Match(Match::Matrix(m)) => {
             assert_eq!(m.head, Subterm::Bang(name("x")).into());
-            let foo = m
-                .arms
-                .iter()
-                .find_map(|arm| (arm.tag == "foo").then_some(&arm.body));
+            let foo = m.arms.iter().find_map(|arm| {
+                matches!(&arm.pattern, MatchPattern::Ctor { tag, .. } if tag == "foo")
+                    .then_some(&arm.body)
+            });
             assert_eq!(foo, Some(&Subterm::Bang(name("y")).into()));
         }
         other => panic!("expected inductive match, got {other:?}"),
@@ -1711,6 +1722,44 @@ fn inductive_match_round_trips() {
             term.to_string().parse::<Term>().unwrap(),
             term,
             "match arm round-trip failed for {source:?}"
+        );
+    }
+}
+
+#[test]
+fn matrix_match_round_trips() {
+    // Nested/tuple/struct match-arm patterns — the matrix pattern compiler's
+    // grammar — survive print → re-parse, including the spec's own
+    // motivating example (a single tupled head).
+    for source in [
+        // A constructor nested inside another constructor's payload.
+        "match x | some(some(y)) => y | some(none()) => y | none() => y end",
+        // A tuple sub-pattern nested inside a constructor's payload.
+        "match x | some((a, b)) => a | none() => a end",
+        // A struct sub-pattern nested inside a constructor's payload,
+        // including field-punning.
+        "match x | some(Point { a, b }) => a | none() => a end",
+        // A mixed row: one argument concrete, the other a plain binder.
+        "match x | pair(some(a), b) => a | pair(none(), b) => b end",
+        // A tuple value as the match target directly (no constructor tag at
+        // all), and a struct value likewise — the "structs/tuples as match
+        // targets" feature.
+        "match p | (a, b) => a end",
+        "match p | Point { a, b } => a end",
+        // The spec's own motivating example: a single tupled head, four
+        // fully-enumerated rows over two independent `Option`-shaped columns.
+        "match p : R\n\
+         | (some(x), some(y)) => f(x, y)\n\
+         | (some(x), none()) => g(x)\n\
+         | (none(), some(y)) => h(y)\n\
+         | (none(), none()) => d\n\
+         end",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "matrix match round-trip failed for {source:?}"
         );
     }
 }
