@@ -71,6 +71,17 @@ fn roster_falls_back_to_entry_for_unrecognized_segments() {
 }
 
 #[test]
+fn roster_distinguishes_a_registered_name_from_an_unregistered_one() {
+    // `foo` and `bar` are equally plain, unreserved segments — nothing about
+    // either spelling marks it as special. Only registration decides whether
+    // a segment is a dependency's own root or the entry program's own `mod`.
+    let roster = Roster::new(["foo".to_string()]);
+
+    assert_ne!(roster.resolve("foo"), RootId::ENTRY);
+    assert_eq!(roster.resolve("bar"), RootId::ENTRY);
+}
+
+#[test]
 fn roster_ids_are_stable_regardless_of_argument_order() {
     let ascending = Roster::new(["bar".to_string(), "foo".to_string()]);
     let descending = Roster::new(["foo".to_string(), "bar".to_string()]);
