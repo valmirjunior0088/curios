@@ -1,6 +1,6 @@
 use {
     curios_rt::{ForeignBindings, MockHost},
-    std::time::Duration,
+    std::{fs, time::Duration},
 };
 
 // A named path dependency's own root module, registered under `name` with no
@@ -101,4 +101,37 @@ fn orphan_rule_rejects_a_witness_in_a_dependency_for_the_entrys_own_types() {
         .expect("expected an orphan-rule error");
 
     assert!(error.to_lowercase().contains("orphan"));
+}
+
+// The CLI-facing boundary end to end: two real `.crs` files on disk, wired
+// together by `load_with_dependencies` with no `mod foo;` in the entry
+// file — exercises `RootSource::dependency_from_path` (the entrypoint-like
+// "point at any file" convention) rather than the in-memory `dependency`
+// helper the tests above use.
+#[test]
+fn load_with_dependencies_wires_a_filesystem_dependency_end_to_end() {
+    let dir = std::env::temp_dir();
+    let entry_path = dir.join("curios_load_with_dependencies_e2e_entry.crs");
+    let dep_path = dir.join("curios_load_with_dependencies_e2e_foo.crs");
+
+    fs::write(
+        &entry_path,
+        r#"
+        use /std/{Nat, Io};
+        let n : Nat = /foo/answer;
+        Io/print(Nat/to_str(n))
+        "#,
+    )
+    .expect("write the temp entry file");
+    fs::write(&dep_path, "pub let answer : /std/Nat = 42;").expect("write the temp dependency file");
+
+    let (entrypoint, loader) =
+        crate::load_with_dependencies(&entry_path, vec![("foo".to_string(), dep_path)])
+            .expect("load_with_dependencies succeeds");
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_entrypoint(Duration::from_secs(10), &entrypoint, loader, system)
+        .expect("expected result");
+
+    assert_eq!(io.output(), b"42");
 }

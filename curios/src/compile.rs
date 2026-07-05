@@ -6,7 +6,10 @@
 use {
     crate::{compile_entrypoint, text, wasm},
     curios_rt::{ForeignBindings, Host, run_bytes, shared_engine},
-    std::{path::Path, time::Duration},
+    std::{
+        path::{Path, PathBuf},
+        time::Duration,
+    },
 };
 
 /// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm`
@@ -94,4 +97,28 @@ pub fn run_file<H: Host + Send + Sync + 'static>(
     let (entrypoint, loader) = load(path)?;
 
     run_entrypoint(timeout, &entrypoint, loader, host)
+}
+
+/// Like [`load`], but also resolves `dependencies` — each a name paired with
+/// the path to its own root file (no fixed root-file convention; the caller
+/// points at whatever file they want, exactly like the entrypoint itself) —
+/// into named path compilation roots alongside the entrypoint's own loader.
+pub fn load_with_dependencies(
+    path: &Path,
+    dependencies: Vec<(String, PathBuf)>,
+) -> Result<(text::Entrypoint, text::RootSource), String> {
+    let (entrypoint, base) = load(path)?;
+
+    let deps = dependencies
+        .into_iter()
+        .map(|(name, dep_path)| {
+            let (module, source) = text::RootSource::dependency_from_path(&dep_path)
+                .map_err(|error| error.format())?;
+            Ok((name, module, source))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+
+    let loader = text::RootSource::dependencies(deps, base).map_err(|error| error.format())?;
+
+    Ok((entrypoint, loader))
 }
