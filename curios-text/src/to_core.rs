@@ -8,7 +8,7 @@ mod interface;
 
 use {
     super::*,
-    curios_abi::{ForeignStore, RootId, RootKind},
+    curios_abi::{ForeignStore, RootId, RootKind, Roster},
     curios_base::Entropy,
     curios_core::Bound,
     std::{
@@ -362,7 +362,7 @@ fn process_items(
                 // registration, and `host_fn`'s wire-typed signature shape)
                 // stays inside `prelude`; from here a `foreign` declaration
                 // lowers exactly like an ordinary `TopItem::Let`.
-                let root = context.prefixed(&f.label).root_id();
+                let root = context.root_of(&f.label);
                 let signature = foreign_signature(f, foreigns, root)?;
 
                 let lower = Lower::new(context);
@@ -515,7 +515,7 @@ fn process_items(
                                 ),
                                 constructors,
                                 result_sort: result_sort.clone(),
-                                root: context.prefixed(&u.label).root_id(),
+                                root: context.root_of(&u.label),
                             },
                         );
 
@@ -691,7 +691,7 @@ fn process_items(
                 // identical to core's per-item `island` — for the
                 // representation-privacy checks.
                 let module = context.prefixed(&s.label).without_last();
-                let root = context.prefixed(&s.label).root_id();
+                let root = context.root_of(&s.label);
 
                 let param_tys = s
                     .params
@@ -789,7 +789,7 @@ fn process_items(
             TopItem::Concept(concept) => {
                 let name = context.prefixed(&concept.label).join();
                 let module = context.prefixed(&concept.label).without_last();
-                let root = context.prefixed(&concept.label).root_id();
+                let root = context.root_of(&concept.label);
 
                 let param_tys = {
                     let lower = Lower::new(context);
@@ -1345,11 +1345,12 @@ fn structure_free_vars(structure: &curios_core::Structure) -> HashSet<String> {
         .collect()
 }
 
-fn flat_let_to_core(let_: FlatLet) -> curios_core::Definition {
+fn flat_let_to_core(roster: &Roster, let_: FlatLet) -> curios_core::Definition {
     let island = let_.name.without_last();
+    let root = roster.resolve(island.root_segment());
 
     curios_core::Definition {
-        root: island.root_id(),
+        root,
         island,
         name: let_.name.join(),
         type_: let_.type_,
@@ -1357,12 +1358,15 @@ fn flat_let_to_core(let_: FlatLet) -> curios_core::Definition {
     }
 }
 
-fn flat_item_to_core(item: FlatItem) -> curios_core::Item {
+fn flat_item_to_core(roster: &Roster, item: FlatItem) -> curios_core::Item {
     match item {
-        FlatItem::Let(let_) => curios_core::Item::Let(flat_let_to_core(let_)),
-        FlatItem::Rec(items) => {
-            curios_core::Item::Rec(items.into_iter().map(flat_let_to_core).collect())
-        }
+        FlatItem::Let(let_) => curios_core::Item::Let(flat_let_to_core(roster, let_)),
+        FlatItem::Rec(items) => curios_core::Item::Rec(
+            items
+                .into_iter()
+                .map(|let_| flat_let_to_core(roster, let_))
+                .collect(),
+        ),
     }
 }
 
@@ -1404,10 +1408,11 @@ pub fn to_core(
 
     let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
     let public = interface::resolve(entrypoint, &modules, &mut table)?;
+    let roster = loader.roster();
     let metavars = Entropy::<usize>::new();
     let binders = Entropy::<usize>::new();
 
-    let mut context = Context::new(&table, &public, &metavars, &binders);
+    let mut context = Context::new(&table, &public, &roster, &metavars, &binders);
     let mut flat_items = Vec::new();
     let mut inductives = BTreeMap::new();
     let mut structures = BTreeMap::new();
@@ -1449,7 +1454,7 @@ pub fn to_core(
     // through those definitions and agree — no shared binder scope required.
     let items = order_flat_items(flat_items, &inductives, &structures)
         .into_iter()
-        .map(flat_item_to_core)
+        .map(|item| flat_item_to_core(&roster, item))
         .collect();
 
     Ok((

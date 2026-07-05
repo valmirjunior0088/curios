@@ -1,5 +1,6 @@
 use {
     super::{Error, Module, Qualifier},
+    curios_abi::Roster,
     std::path::PathBuf,
 };
 
@@ -81,5 +82,18 @@ impl RootSource {
                 .collect(),
             RootSource::None | RootSource::FileSystem(_) => Vec::new(),
         }
+    }
+
+    /// This source's root roster: `sys`/`syn`/`std` are always fixed
+    /// (`Roster::new` seeds them itself), so only `roots()`'s non-reserved
+    /// names — today none, since there is no `Dependencies` variant yet —
+    /// are passed through as named path dependencies.
+    pub fn roster(&self) -> Roster {
+        Roster::new(
+            self.roots()
+                .into_iter()
+                .filter(|name| !matches!(*name, "sys" | "syn" | "std"))
+                .map(String::from),
+        )
     }
 }

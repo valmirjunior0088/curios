@@ -6,8 +6,6 @@
 //! because `curios-text` already depends on `curios-core` — not the other way
 //! around — so this is the shared home, reused verbatim by both crates.
 
-use curios_abi::RootId;
-
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Qualifier {
     segments: Vec<String>,
@@ -83,13 +81,6 @@ impl Qualifier {
     /// can legitimately be the empty (root) qualifier.
     pub fn root_segment(&self) -> &str {
         self.segments.first().map(String::as_str).unwrap_or("")
-    }
-
-    /// The `RootId` this qualifier's leading segment names — the entry
-    /// program for the empty (root) qualifier, same as for any other
-    /// unrecognized segment (`RootId::of_segment`'s fallback).
-    pub fn root_id(&self) -> RootId {
-        RootId::of_segment(self.root_segment())
     }
 }
 
