@@ -1,6 +1,6 @@
 use {
     super::{Context, LoadAs, RopeData},
-    curios_wasm::{BlockType, HeapType, Instr, LabelName, LocalName, NumType, RefType, ValType},
+    curios_wasm::{BlockType, HeapType, Instr, LocalName, NumType, RefType, ValType},
 };
 
 /// How a freshly-computed numeric value is boxed: an `i31ref` for `Nat`/`Int`/`Bln`
@@ -165,20 +165,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             type_name: rope.base.clone(),
             field_name: field.clone(),
         }
-    }
-
-    /// Load a rope-carried operand and force it to its flat payload.
-    fn force_instrs(
-        &self,
-        operand: &'a crate::ValueName,
-        load: LoadAs,
-        force_func: curios_wasm::FuncName,
-    ) -> Vec<Instr> {
-        let mut instrs = self.context.load_value_instrs(operand, load);
-        instrs.push(Instr::Call {
-            func_name: force_func,
-        });
-        instrs
     }
 
     /// Concatenate two loaded ropes into `dest`: answer the other side when
@@ -366,164 +352,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     /// buffer never escapes this helper (it is sealed into a fresh leaf at the
     /// end), so the map stays a pure value at the IR level (no linearity
     /// reasoning) while lowering to a mutating fill.
-    fn emit_map(
-        &mut self,
-        result_local: &LocalName,
-        src: &'a crate::ValueName,
-        f: &'a crate::ValueName,
-    ) {
-        let rope = self.context.table().lst_rope();
-        let force = self.context.table().lst_force_func();
-        let elems_ref = RefType {
-            is_nullable: false,
-            heap_type: HeapType::Concrete(rope.payload.clone()),
-        };
-        // `f` is a unary closure `(A) -> B`; reuse the arity-1 closure calling
-        // convention (env as the self argument, the funcref in its special field).
-        let envr_type = self.context.table().find_envr_type(1);
-        let clsr_type = self.context.table().find_clsr_type(1);
-        let special_field = self.context.table().special_field();
-
-        let selems_local = self.context.push_local(
-            "selems",
-            ValType::Ref(RefType {
-                is_nullable: true,
-                heap_type: HeapType::Concrete(rope.payload.clone()),
-            }),
-        );
-        let count_local = self.context.push_local("count", ValType::Num(NumType::I32));
-        let idx_local = self.context.push_local("idx", ValType::Num(NumType::I32));
-
-        let map_loop = LabelName::from(format!("{}_map_loop", result_local));
-        let map_step = LabelName::from(format!("{}_map_step", result_local));
-
-        // selems = force(src); count = selems.len
-        self.emit_instrs(self.force_instrs(src, LoadAs::Lst, force));
-        self.emit_instr(Instr::LocalSet {
-            local_name: selems_local.clone(),
-        });
-        self.emit_instr(Instr::LocalGet {
-            local_name: selems_local.clone(),
-        });
-        self.emit_instr(Instr::ArrayLen);
-        self.emit_instr(Instr::LocalSet {
-            local_name: count_local.clone(),
-        });
-
-        // result = new payload sized `count` (default-filled, overwritten below)
-        self.emit_instr(Instr::LocalGet {
-            local_name: count_local.clone(),
-        });
-        self.emit_instr(Instr::ArrayNewDefault {
-            type_name: rope.payload.clone(),
-        });
-        self.emit_instr(Instr::LocalSet {
-            local_name: result_local.clone(),
-        });
-
-        // idx = 0
-        self.emit_instr(Instr::I32Const { value: 0 });
-        self.emit_instr(Instr::LocalSet {
-            local_name: idx_local.clone(),
-        });
-
-        // step: result[idx] = f(selems[idx]); idx += 1; continue
-        let mut step_body = vec![
-            Instr::LocalGet {
-                local_name: result_local.clone(),
-            },
-            Instr::RefCast {
-                ref_type: elems_ref,
-            },
-            Instr::LocalGet {
-                local_name: idx_local.clone(),
-            },
-        ];
-        // value = f(selems[idx]) — the closure as its own self/env argument first,
-        // then the element, then the funcref pulled from the env struct.
-        step_body.extend(self.context.load_value_instrs(f, LoadAs::NonNull));
-        step_body.push(Instr::LocalGet {
-            local_name: selems_local,
-        });
-        step_body.push(Instr::LocalGet {
-            local_name: idx_local.clone(),
-        });
-        step_body.push(Instr::ArrayGet {
-            type_name: rope.payload.clone(),
-        });
-        step_body.push(Instr::RefAsNonNull);
-        step_body.extend(
-            self.context
-                .load_value_instrs(f, LoadAs::Concrete(envr_type.clone())),
-        );
-        step_body.push(Instr::StructGet {
-            type_name: envr_type,
-            field_name: special_field,
-        });
-        step_body.push(Instr::RefAsNonNull);
-        step_body.push(Instr::CallRef {
-            type_name: clsr_type,
-        });
-        step_body.push(Instr::ArraySet {
-            type_name: rope.payload.clone(),
-        });
-        // idx += 1; continue
-        step_body.extend([
-            Instr::LocalGet {
-                local_name: idx_local.clone(),
-            },
-            Instr::I32Const { value: 1 },
-            Instr::I32Add,
-            Instr::LocalSet {
-                local_name: idx_local.clone(),
-            },
-            Instr::Br {
-                label_name: map_loop.clone(),
-            },
-        ]);
-
-        self.emit_instr(Instr::Loop {
-            label_name: map_loop,
-            block_type: BlockType::Empty,
-            instructions: vec![
-                Instr::LocalGet {
-                    local_name: idx_local,
-                },
-                Instr::LocalGet {
-                    local_name: count_local.clone(),
-                },
-                Instr::I32LtU,
-                Instr::If {
-                    label_name: map_step,
-                    block_type: BlockType::Empty,
-                    then_instructions: step_body,
-                    else_instructions: vec![],
-                },
-            ],
-        });
-
-        // Seal the filled payload into a fresh leaf.
-        self.emit_instr(Instr::I32Const { value: 0 });
-        self.emit_instr(Instr::LocalGet {
-            local_name: count_local,
-        });
-        self.emit_instr(Instr::LocalGet {
-            local_name: result_local.clone(),
-        });
-        self.emit_instr(Instr::RefCast {
-            ref_type: RefType {
-                is_nullable: false,
-                heap_type: HeapType::Concrete(rope.payload),
-            },
-        });
-        self.emit_instr(Instr::StructNew {
-            type_name: rope.leaf,
-        });
-        self.emit_instr(Instr::LocalSet {
-            local_name: result_local.clone(),
-        });
-    }
-
     pub fn emit(&mut self, value_name: &'a crate::ValueName, op: &'a crate::Code) {
         let result_local = self
             .context
@@ -1190,151 +1018,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 );
             }
             crate::Code::BinEql(left, right) => {
-                let rope = self.context.table().bin_rope();
-                let force = self.context.table().bin_force_func();
-
-                let lbytes_local = self.context.push_local(
-                    "lbytes",
-                    ValType::Ref(RefType {
-                        is_nullable: true,
-                        heap_type: HeapType::Concrete(rope.payload.clone()),
-                    }),
-                );
-                let rbytes_local = self.context.push_local(
-                    "rbytes",
-                    ValType::Ref(RefType {
-                        is_nullable: true,
-                        heap_type: HeapType::Concrete(rope.payload.clone()),
-                    }),
-                );
-                let idx_local = self.context.push_local("idx", ValType::Num(NumType::I32));
-                let result_raw_local = self.context.push_local("eql", ValType::Num(NumType::I32));
-
-                let done_label = LabelName::from(format!("{}_done", result_local));
-                let loop_label = LabelName::from(format!("{}_loop", result_local));
-                let if_label = LabelName::from(format!("{}_if", result_local));
-
-                let load_left = vec![Instr::LocalGet {
-                    local_name: lbytes_local.clone(),
-                }];
-                let load_right = vec![Instr::LocalGet {
-                    local_name: rbytes_local.clone(),
-                }];
-
-                // Build the loop body instructions.
-                let mut loop_instrs = Vec::new();
-
-                // if idx >= left.len: all bytes matched, result = true, exit block
-                loop_instrs.push(Instr::LocalGet {
-                    local_name: idx_local.clone(),
-                });
-                loop_instrs.extend(load_left.clone());
-                loop_instrs.push(Instr::ArrayLen);
-                loop_instrs.push(Instr::I32GeU);
-                loop_instrs.push(Instr::If {
-                    label_name: if_label,
-                    block_type: BlockType::Empty,
-                    then_instructions: vec![
-                        Instr::I32Const { value: 1 },
-                        Instr::LocalSet {
-                            local_name: result_raw_local.clone(),
-                        },
-                        Instr::Br {
-                            label_name: done_label.clone(),
-                        },
-                    ],
-                    else_instructions: vec![],
-                });
-
-                // if left[idx] != right[idx]: mismatch, exit block (result stays false)
-                loop_instrs.extend(load_left.clone());
-                loop_instrs.push(Instr::LocalGet {
-                    local_name: idx_local.clone(),
-                });
-                loop_instrs.push(Instr::ArrayGetU {
-                    type_name: rope.payload.clone(),
-                });
-                loop_instrs.extend(load_right.clone());
-                loop_instrs.push(Instr::LocalGet {
-                    local_name: idx_local.clone(),
-                });
-                loop_instrs.push(Instr::ArrayGetU {
-                    type_name: rope.payload.clone(),
-                });
-                loop_instrs.push(Instr::I32Ne);
-                loop_instrs.push(Instr::BrIf {
-                    label_name: done_label.clone(),
-                });
-
-                // idx += 1; continue loop
-                loop_instrs.extend([
-                    Instr::LocalGet {
-                        local_name: idx_local.clone(),
-                    },
-                    Instr::I32Const { value: 1 },
-                    Instr::I32Add,
-                    Instr::LocalSet {
-                        local_name: idx_local.clone(),
-                    },
-                    Instr::Br {
-                        label_name: loop_label.clone(),
-                    },
-                ]);
-
-                // Build the outer block: length check, force, then loop.
-                let mut block_instrs = Vec::new();
-
-                // if left.len != right.len: exit block immediately (result stays
-                // false) — the rope lengths answer without forcing either side.
-                block_instrs.extend(self.context.load_value_instrs(left, LoadAs::Bin));
-                block_instrs.push(self.rope_get(&rope, &rope.len_field));
-                block_instrs.extend(self.context.load_value_instrs(right, LoadAs::Bin));
-                block_instrs.push(self.rope_get(&rope, &rope.len_field));
-                block_instrs.push(Instr::I32Ne);
-                block_instrs.push(Instr::BrIf {
-                    label_name: done_label.clone(),
-                });
-
-                // Equal lengths: force both payloads once for the byte loop.
-                block_instrs.extend(self.force_instrs(left, LoadAs::Bin, force.clone()));
-                block_instrs.push(Instr::LocalSet {
-                    local_name: lbytes_local,
-                });
-                block_instrs.extend(self.force_instrs(right, LoadAs::Bin, force));
-                block_instrs.push(Instr::LocalSet {
-                    local_name: rbytes_local,
-                });
-
-                // idx = 0. Wasm zeroes locals once per function *activation*,
-                // not per execution of this site — inlined into a loop, the
-                // local still holds the previous iteration's cursor.
-                block_instrs.push(Instr::I32Const { value: 0 });
-                block_instrs.push(Instr::LocalSet {
-                    local_name: idx_local.clone(),
-                });
-
-                block_instrs.push(Instr::Loop {
-                    label_name: loop_label,
-                    block_type: BlockType::Empty,
-                    instructions: loop_instrs,
-                });
-
-                // result_raw defaults to 0 (false); emit block; box result as i31ref
-                self.emit_instr(Instr::I32Const { value: 0 });
-                self.emit_instr(Instr::LocalSet {
-                    local_name: result_raw_local.clone(),
-                });
-                self.emit_instr(Instr::Block {
-                    label_name: done_label,
-                    block_type: BlockType::Empty,
-                    instructions: block_instrs,
-                });
-                self.emit_instr(Instr::LocalGet {
-                    local_name: result_raw_local,
-                });
+                let eql = self.context.table().bin_eql_func();
+                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Bin));
+                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Bin));
+                self.emit_instr(Instr::Call { func_name: eql });
                 self.emit_instr(Instr::RefI31);
                 self.emit_instr(Instr::LocalSet {
-                    local_name: result_local,
+                    local_name: result_local.clone(),
                 });
             }
             crate::Code::BinGet(bin, idx) => {
@@ -1392,7 +1082,19 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 let rope = self.context.table().lst_rope();
                 self.emit_rope_concat(&result_local, operands, LoadAs::Lst, &rope);
             }
-            crate::Code::LstMap(src, f) => self.emit_map(&result_local, src, f),
+            crate::Code::LstMap(src, f) => {
+                let map = self.context.table().lst_map_func();
+                let envr_type = self.context.table().find_envr_type(1);
+                self.emit_instrs(self.context.load_value_instrs(src, LoadAs::Lst));
+                self.emit_instrs(
+                    self.context
+                        .load_value_instrs(f, LoadAs::Concrete(envr_type)),
+                );
+                self.emit_instr(Instr::Call { func_name: map });
+                self.emit_instr(Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             crate::Code::TplGet(tuple, index) => {
                 let tpl_n_type = self.context.table().find_tpl_type(*index + 1);
                 let field_name = self.context.table().tpl_field(*index);

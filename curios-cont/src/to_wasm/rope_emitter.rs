@@ -1,6 +1,9 @@
 //! The shared rope helper functions — the only module-level functions the
 //! emitter mints beyond the program's own (everything else is inlined at its
-//! use site). Four families:
+//! use site — straight-line sequences only; anything the emitter lowers to a
+//! *loop* lives here, so its mutable scratch locals are zeroed by the fresh
+//! activation instead of leaking across executions of one call site). Six
+//! families:
 //!
 //! - `$<carrier>/force` flattens a rope to its payload array: the leaf answers
 //!   its payload, a cached node answers its cache, and everything else fills
@@ -19,6 +22,10 @@
 //! - `$<carrier>/read` answers one element: off a leaf payload, *through* a
 //!   sub's window without forcing (the invariant above makes that O(1)), or
 //!   via `force` on a node.
+//! - `$bin/eql` compares two ropes bytewise: unequal lengths answer without
+//!   forcing, equal lengths force both payloads once and walk them.
+//! - `$lst/map` applies a unary closure to every element of the forced
+//!   payload, filling a fresh leaf.
 //!
 //! The `lst/bin` variants are the host boundary's deep forms: an `Lst(Bin)` /
 //! `Lst(Io)` wire value carries `Bin`-shaped *elements*, which the host lifts
@@ -874,6 +881,236 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             func_name,
             vec![(r, concrete_val(self.table.lst_type(), false))],
             concrete_val(elems, false),
+            locals,
+            instrs,
+        );
+    }
+
+    /// `$bin/eql (ref $bin, ref $bin) -> i32`.
+    ///
+    /// ```wat
+    /// if l.len != r.len → 0            ;; rope lengths answer without forcing
+    /// lb := force(l); rb := force(r)
+    /// loop:
+    ///   if i ≥ lb.len → 1              ;; every byte matched
+    ///   if lb[i] != rb[i] → 0
+    ///   i += 1
+    /// ```
+    pub fn emit_eql_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
+        let l = LocalName::from("l");
+        let r = LocalName::from("r");
+        let lb = LocalName::from("lb");
+        let rb = LocalName::from("rb");
+        let i = LocalName::from("i");
+        let eq = LocalName::from("eq");
+
+        let i32_val = ValType::Num(NumType::I32);
+        let locals = vec![
+            (lb.clone(), concrete_val(rope.payload.clone(), true)),
+            (rb.clone(), concrete_val(rope.payload.clone(), true)),
+            (i.clone(), i32_val.clone()),
+            (eq.clone(), i32_val.clone()),
+        ];
+
+        let done = LabelName::from("done");
+        let bytes = LabelName::from("bytes");
+
+        let loop_instrs = vec![
+            // Every byte matched: eq = 1, exit.
+            get(&i),
+            get(&lb),
+            Instr::ArrayLen,
+            Instr::I32GeU,
+            Instr::If {
+                label_name: LabelName::from("hit"),
+                block_type: BlockType::Empty,
+                then_instructions: vec![
+                    Instr::I32Const { value: 1 },
+                    set(&eq),
+                    Instr::Br {
+                        label_name: done.clone(),
+                    },
+                ],
+                else_instructions: vec![],
+            },
+            // Mismatch: exit with eq still 0.
+            get(&lb),
+            get(&i),
+            Instr::ArrayGetU {
+                type_name: rope.payload.clone(),
+            },
+            get(&rb),
+            get(&i),
+            Instr::ArrayGetU {
+                type_name: rope.payload.clone(),
+            },
+            Instr::I32Ne,
+            Instr::BrIf {
+                label_name: done.clone(),
+            },
+            get(&i),
+            Instr::I32Const { value: 1 },
+            Instr::I32Add,
+            set(&i),
+            Instr::Br {
+                label_name: bytes.clone(),
+            },
+        ];
+
+        let instrs = vec![
+            Instr::Block {
+                label_name: done.clone(),
+                block_type: BlockType::Empty,
+                instructions: vec![
+                    get(&l),
+                    field_get(&rope.base, &rope.len_field),
+                    get(&r),
+                    field_get(&rope.base, &rope.len_field),
+                    Instr::I32Ne,
+                    Instr::BrIf { label_name: done },
+                    get(&l),
+                    Instr::Call {
+                        func_name: force_func.clone(),
+                    },
+                    set(&lb),
+                    get(&r),
+                    Instr::Call {
+                        func_name: force_func,
+                    },
+                    set(&rb),
+                    Instr::Loop {
+                        label_name: bytes,
+                        block_type: BlockType::Empty,
+                        instructions: loop_instrs,
+                    },
+                ],
+            },
+            get(&eq),
+        ];
+
+        self.add_helper(
+            func_name,
+            vec![
+                (l, concrete_val(rope.base.clone(), false)),
+                (r, concrete_val(rope.base.clone(), false)),
+            ],
+            i32_val,
+            locals,
+            instrs,
+        );
+    }
+
+    /// `$lst/map (ref $lst, ref $envr/1) -> (ref $lst)`.
+    ///
+    /// ```wat
+    /// selems := force(src); count := selems.len
+    /// out    := array.new_default <payload> count
+    /// loop: while i < count, out[i] := f(selems[i]), i += 1
+    /// leaf { tag 0, count, out }
+    /// ```
+    ///
+    /// `f` is a unary closure `(A) -> B`, called by the arity-1 convention:
+    /// the environment as the self argument, the funcref from its special
+    /// field.
+    pub fn emit_map_func(&mut self, func_name: FuncName, force_func: FuncName) {
+        let rope = self.table.lst_rope();
+        let envr_type = self.table.find_envr_type(1);
+        let clsr_type = self.table.find_clsr_type(1);
+        let special_field = self.table.special_field();
+
+        let src = LocalName::from("src");
+        let f = LocalName::from("f");
+        let selems = LocalName::from("selems");
+        let out = LocalName::from("out");
+        let count = LocalName::from("count");
+        let i = LocalName::from("i");
+
+        let i32_val = ValType::Num(NumType::I32);
+        let locals = vec![
+            (selems.clone(), concrete_val(rope.payload.clone(), true)),
+            (out.clone(), concrete_val(rope.payload.clone(), true)),
+            (count.clone(), i32_val.clone()),
+            (i.clone(), i32_val),
+        ];
+
+        let step = LabelName::from("step");
+        let slots = LabelName::from("slots");
+
+        // out[i] = f(selems[i]); i += 1
+        let step_instrs = vec![
+            get(&out),
+            get(&i),
+            get(&f),
+            get(&selems),
+            get(&i),
+            Instr::ArrayGet {
+                type_name: rope.payload.clone(),
+            },
+            Instr::RefAsNonNull,
+            get(&f),
+            field_get(&envr_type, &special_field),
+            Instr::RefAsNonNull,
+            Instr::CallRef {
+                type_name: clsr_type,
+            },
+            Instr::ArraySet {
+                type_name: rope.payload.clone(),
+            },
+            get(&i),
+            Instr::I32Const { value: 1 },
+            Instr::I32Add,
+            set(&i),
+            Instr::Br {
+                label_name: slots.clone(),
+            },
+        ];
+
+        let instrs = vec![
+            get(&src),
+            Instr::Call {
+                func_name: force_func,
+            },
+            set(&selems),
+            get(&selems),
+            Instr::ArrayLen,
+            set(&count),
+            get(&count),
+            Instr::ArrayNewDefault {
+                type_name: rope.payload.clone(),
+            },
+            set(&out),
+            Instr::Loop {
+                label_name: slots,
+                block_type: BlockType::Empty,
+                instructions: vec![
+                    get(&i),
+                    get(&count),
+                    Instr::I32LtU,
+                    Instr::If {
+                        label_name: step,
+                        block_type: BlockType::Empty,
+                        then_instructions: step_instrs,
+                        else_instructions: vec![],
+                    },
+                ],
+            },
+            // Seal the filled payload into a fresh leaf.
+            Instr::I32Const { value: 0 },
+            get(&count),
+            get(&out),
+            Instr::RefAsNonNull,
+            Instr::StructNew {
+                type_name: rope.leaf.clone(),
+            },
+        ];
+
+        self.add_helper(
+            func_name,
+            vec![
+                (src, concrete_val(rope.base.clone(), false)),
+                (f, concrete_val(envr_type, false)),
+            ],
+            concrete_val(rope.base, false),
             locals,
             instrs,
         );

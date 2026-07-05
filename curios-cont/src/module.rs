@@ -104,8 +104,8 @@ pub enum Code {
     LstAppend(ValueName, ValueName),
     LstConcat(Vec<ValueName>),
     // `LstMap(src, f)`: map closure `f` over array `src` into a fresh array of
-    // the same length. Codegen allocates once and fills with a single loop that
-    // applies `f` (inline when statically known, else `call_indirect`) per slot.
+    // the same length. Codegen lowers it to the shared `$lst/map` rope helper:
+    // one allocation, one fill loop applying `f` per slot via `call_ref`.
     LstMap(ValueName, ValueName),
     TplGet(ValueName, usize),
 }

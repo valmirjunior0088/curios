@@ -587,6 +587,18 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_arr_bin_wrap_func(self.table.lst_bin_wrap_func());
         }
 
+        if self.table.bin_eql_used() {
+            ropes.emit_eql_func(
+                &self.table.bin_rope(),
+                self.table.bin_eql_func(),
+                self.table.bin_force_func(),
+            );
+        }
+
+        if self.table.lst_map_used() {
+            ropes.emit_map_func(self.table.lst_map_func(), self.table.lst_force_func());
+        }
+
         if self.table.bin_slice_used() {
             ropes.emit_slice_func(
                 &self.table.bin_rope(),

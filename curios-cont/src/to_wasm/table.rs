@@ -258,6 +258,8 @@ pub struct Table<'a> {
     lst_slice: OnceCell<FuncName>,
     bin_read: OnceCell<FuncName>,
     lst_read: OnceCell<FuncName>,
+    bin_eql: OnceCell<FuncName>,
+    lst_map: OnceCell<FuncName>,
     // The foreign functions the emitted code calls, keyed by import name.
     // Same lazy used-tracking as the `io_exit` cell: the first call-site
     // reference during emission records the function's row, and
@@ -329,6 +331,8 @@ impl<'a> Table<'a> {
             lst_slice: OnceCell::new(),
             bin_read: OnceCell::new(),
             lst_read: OnceCell::new(),
+            bin_eql: OnceCell::new(),
+            lst_map: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
             tpl_types: {
                 let max = module
@@ -625,6 +629,31 @@ impl<'a> Table<'a> {
 
     pub fn lst_read_used(&self) -> bool {
         self.lst_read.get().is_some()
+    }
+
+    /// `$bin/eql (ref $bin, ref $bin) -> i32`: whole-value byte equality —
+    /// unequal rope lengths answer without forcing, equal lengths force both
+    /// payloads once and compare bytewise.
+    pub fn bin_eql_func(&self) -> FuncName {
+        self.bin_eql
+            .get_or_init(|| FuncName::from("bin/eql"))
+            .clone()
+    }
+
+    pub fn bin_eql_used(&self) -> bool {
+        self.bin_eql.get().is_some()
+    }
+
+    /// `$lst/map (ref $lst, ref $envr/1) -> (ref $lst)`: apply a unary
+    /// closure to every element of the forced payload, filling a fresh leaf.
+    pub fn lst_map_func(&self) -> FuncName {
+        self.lst_map
+            .get_or_init(|| FuncName::from("lst/map"))
+            .clone()
+    }
+
+    pub fn lst_map_used(&self) -> bool {
+        self.lst_map.get().is_some()
     }
 
     pub fn tpl_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
