@@ -136,10 +136,6 @@ impl Module {
         &self.funcs
     }
 
-    pub fn funcs_mut(&mut self) -> &mut Vec<(FuncName, Func)> {
-        &mut self.funcs
-    }
-
     pub fn add_func(&mut self, func_name: FuncName, func: Func) {
         self.funcs.push((func_name, func));
     }
