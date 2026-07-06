@@ -49,12 +49,6 @@ impl Lift for i32 {
     }
 }
 
-impl Lift for f32 {
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok(params[0].unwrap_f32())
-    }
-}
-
 // Pairs lift positionally: each component consumes one param slot. (Every
 // single-value impl above reads `params[0]`, so slicing re-aligns them.)
 impl<A: Lift, B: Lift> Lift for (A, B) {
