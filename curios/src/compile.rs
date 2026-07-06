@@ -56,7 +56,7 @@ pub fn run_entrypoint<H: Host + Send + Sync + 'static>(
 }
 
 /// Parse `source` (no external modules) and run it.
-pub fn run<H: Host + Send + Sync + 'static>(
+pub fn run_text<H: Host + Send + Sync + 'static>(
     timeout: Duration,
     source: &str,
     host: H,
@@ -68,15 +68,6 @@ pub fn run<H: Host + Send + Sync + 'static>(
     run_entrypoint(timeout, &entrypoint, curios_text::RootSource::None, host)
 }
 
-/// Alias of [`run`] used by the integration suite.
-pub fn run_text<H: Host + Send + Sync + 'static>(
-    timeout: Duration,
-    source: &str,
-    host: H,
-) -> Result<(), String> {
-    run(timeout, source, host)
-}
-
 /// Open a `.crs` entrypoint at `path`, paired with a [`curios_text::RootSource::FileSystem`]
 /// rooted at its parent directory — the standard way to resolve a program's
 /// imports relative to the file it lives in.
@@ -86,17 +77,6 @@ pub fn load(path: &Path) -> Result<(curios_text::Entrypoint, curios_text::RootSo
         curios_text::RootSource::FileSystem(path.parent().unwrap_or(Path::new(".")).to_path_buf());
 
     Ok((entrypoint, loader))
-}
-
-/// Load `path`'s entrypoint (file loader rooted at its parent) and run it.
-pub fn run_file<H: Host + Send + Sync + 'static>(
-    timeout: Duration,
-    path: &Path,
-    host: H,
-) -> Result<(), String> {
-    let (entrypoint, loader) = load(path)?;
-
-    run_entrypoint(timeout, &entrypoint, loader, host)
 }
 
 /// Like [`load`], but also resolves `dependencies` — each a name paired with
