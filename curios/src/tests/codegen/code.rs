@@ -46,7 +46,7 @@ fn lowers_and_runs_nat_add() {
 }
 
 #[test]
-fn lowers_and_runs_arr_len() {
+fn lowers_and_runs_lst_len() {
     let mut module = curios_cont::Module::new();
     module.set_entry(curios_cont::FuncName::from("main"));
 
@@ -97,7 +97,7 @@ fn lowers_and_runs_arr_len() {
 }
 
 #[test]
-fn lowers_and_runs_arr_get() {
+fn lowers_and_runs_lst_get() {
     let mut module = curios_cont::Module::new();
     module.set_entry(curios_cont::FuncName::from("main"));
 
@@ -153,7 +153,7 @@ fn lowers_and_runs_arr_get() {
 }
 
 #[test]
-fn lowers_and_runs_arr_slice() {
+fn lowers_and_runs_lst_slice() {
     let mut module = curios_cont::Module::new();
     module.set_entry(curios_cont::FuncName::from("main"));
 
@@ -227,7 +227,7 @@ fn lowers_and_runs_arr_slice() {
 }
 
 #[test]
-fn lowers_and_runs_arr_concat() {
+fn lowers_and_runs_lst_concat() {
     let mut module = curios_cont::Module::new();
     module.set_entry(curios_cont::FuncName::from("main"));
 
@@ -1765,7 +1765,7 @@ fn lowers_and_runs_bin_eql_unequal() {
 }
 
 #[test]
-fn lowers_and_runs_arr_append() {
+fn lowers_and_runs_lst_append() {
     let mut module = curios_cont::Module::new();
     module.set_entry(curios_cont::FuncName::from("main"));
 
