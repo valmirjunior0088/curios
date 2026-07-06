@@ -1,6 +1,6 @@
 use {
     super::{
-        encode_ieee754_double, encode_ieee754_single, encode_leb128_signed, encode_uleb128_unsigned,
+        encode_ieee754_double, encode_ieee754_single, encode_leb128_signed, encode_leb128_unsigned,
     },
     std::io::{Result, Write},
 };
@@ -31,7 +31,7 @@ where
     }
 
     pub(super) fn push_leb128_unsigned(&mut self, number: u64) -> Result<()> {
-        self.push_bytes(&encode_uleb128_unsigned(number))?;
+        self.push_bytes(&encode_leb128_unsigned(number))?;
 
         Ok(())
     }

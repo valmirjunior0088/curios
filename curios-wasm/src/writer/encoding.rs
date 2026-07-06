@@ -1,4 +1,4 @@
-pub(super) fn encode_uleb128_unsigned(mut number: u64) -> Vec<u8> {
+pub(super) fn encode_leb128_unsigned(mut number: u64) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     loop {
