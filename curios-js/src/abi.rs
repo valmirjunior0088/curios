@@ -25,7 +25,6 @@ fn constants(entries: &[(&str, u32)]) -> Object {
 #[wasm_bindgen]
 pub fn abi() -> Object {
     let object = Object::new();
-
     set(
         &object,
         "status",

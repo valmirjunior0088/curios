@@ -16,10 +16,10 @@ The repo is a **Cargo workspace** (virtual manifest at the root) of twelve crate
 - **`curios-core`** — the core language: elaboration, typing, reduction, conversion, inductives, erasure, zonking.
 - **`curios-text`** — the surface syntax: lexer/parser, lowering to core (`to_core/`), plus the embedded standard library (`curios-text/std/`, `curios-text/syn/`).
 - **`curios-binaryen`** — FFI to Binaryen, built from a source release fetched and compiled by `build.rs` (no vendored source).
-- **`curios-pipeline`** — the pure pipeline driver: `compile_entrypoint`/`typecheck_entrypoint`/`Stage`, chaining `text` → `core` → `ersd` → `cont` → `wasm` with no runtime/Binaryen/CLI dependencies. Extracted from `curios` so a wasm32 build of the compiler doesn't have to drag those in.
-- **`curios-js`** — the Curios ↔ JavaScript boundary: `wasm-bindgen` exports of `curios-pipeline` (`compile`, `typecheck`) plus the browser run harness (`run`, with `bridge_bytes`/`abi` as its exported building blocks; the JS host itself ships as the wasm-bindgen snippet `curios-js/js/harness.js`), built for `wasm32-unknown-unknown` with `cargo build` + `wasm-bindgen-cli --target web` for a browser playground (no `wasm-pack`, no `wasm-opt` — see Gotchas). Everything the harness knows about the host boundary derives from `curios-abi` and `curios-cont`, so it cannot drift from the compiler or runtime.
+- **`curios-pipeline`** — the pure pipeline driver: `compile_entrypoint`/`Stage`, chaining `text` → `core` → `ersd` → `cont` → `wasm` with no runtime/Binaryen/CLI dependencies. Extracted from `curios` so a wasm32 build of the compiler doesn't have to drag those in.
+- **`curios-js`** — the Curios ↔ JavaScript boundary: a `wasm-bindgen` export of `curios-pipeline` (`compile`) plus the browser run harness (`run`, with `bridge_bytes`/`abi` as its exported building blocks; the JS host itself ships as the wasm-bindgen snippet `curios-js/js/harness.js`), built for `wasm32-unknown-unknown` with `cargo build` + `wasm-bindgen-cli --target web` for a browser playground (no `wasm-pack`, no `wasm-opt` — see Gotchas). The harness spells the wire names (`sys`/`ffi` namespaces, `sys.io_*` keys, the entry export) directly, like any embedder; the numeric status/stdio codes it answers with derive from `curios-abi`, the same source the compiler and runtime cite.
 - **`curios-rt`** — runtime-only engine (lib) + the launcher stub (bin `curios-rt`). Deserializes a precompiled module and runs it on wasmtime; **never** links Cranelift or Binaryen. Depends only on `curios-abi` (for the wire constants), not on `curios` — that's what keeps it slim and lets `curios` depend back on it without a cycle.
-- **`curios`** — the driver + CLI: the compile/precompile/run-from-source helpers (`compile.rs`, built on `curios-pipeline`'s `compile_entrypoint`/`typecheck_entrypoint`/`Stage`) and the clap-based CLI (bin `curios`, in `cli.rs`/`pipeline.rs`/`bundle.rs`/`main.rs`). The **only** crate that links Cranelift (via `wasmtime`'s `cranelift` feature) and Binaryen.
+- **`curios`** — the driver + CLI: the compile/precompile/run-from-source helpers (`compile.rs`, built on `curios-pipeline`'s `compile_entrypoint`/`Stage`) and the clap-based CLI (bin `curios`, in `cli.rs`/`pipeline.rs`/`bundle.rs`/`main.rs`). The **only** crate that links Cranelift (via `wasmtime`'s `cranelift` feature) and Binaryen.
 
 Code dependencies between the pipeline-stage crates run the *opposite* direction of data flow: `curios-text` depends on `curios-core` (its `to_core` lowering constructs core terms), `curios-core` depends on `curios-ersd` (`erase` constructs ersd terms), `curios-ersd` depends on `curios-cont` (`to_cont` constructs cont terms), and `curios-cont` depends on `curios-wasm` (`to_wasm` constructs a wasm module). `curios-wasm` is a leaf.
 
@@ -49,7 +49,7 @@ The compiler is a chain of stages, each its own crate (module root `src/`). This
   → ersd/   (crate: curios-ersd)   "erased" IR (types gone); ersd→ersd optimization (ersd/optm), then lower to continuations (ersd/to_cont)
   → cont/   (crate: curios-cont)   continuation-passing-style IR; cont→cont optimization (cont/optm), then emit wasm (cont/to_wasm)
   → wasm/   (crate: curios-wasm)   wasm module model, encoder/writer, parser
-  → lib.rs  (crate: curios-pipeline)   the pipeline driver: compile_entrypoint / typecheck_entrypoint / Stage
+  → lib.rs  (crate: curios-pipeline)   the pipeline driver: compile_entrypoint / Stage
 
 then, in curios itself:
   → optimize (curios-binaryen) + precompile to .cwasm (to_cwasm)
@@ -67,7 +67,7 @@ then, in curios itself:
 | `curios-ersd/src/`                               | Erased IR (post type-erasure); ersd→ersd optimization (`optm/`: prune, the `evaluate` closed-term interpreter + `specialize` literal-spine unroller — the compile-time staging that folds e.g. a literal format string's parse — and the `worker_wrapper` engine — monoid accumulator + suffix cursor — over a shared `call_graph`/`curios_base::suffix_view`); lowering to CPS (`to_cont/`) |
 | `curios-cont/src/`                               | Continuation-passing IR; cont→cont optimization (`optm/`: inlining, DCE, copy/tag/jump threading, tail recursion, …); wasm emission (`to_wasm/`) |
 | `curios-wasm/src/`                               | Wasm module model, parser, binary writer/encoder                                                                                                 |
-| `curios-pipeline/src/lib.rs`                     | Pipeline driver: `compile_entrypoint`, `typecheck_entrypoint`, `Stage`                                                                           |
+| `curios-pipeline/src/lib.rs`                     | Pipeline driver: `compile_entrypoint`, `Stage`                                                                                                   |
 | `curios-js/{src,js}/`                            | `wasm-bindgen` exports for a browser build (`compile`, `run`, `bridge_bytes`, `abi`) + the JS harness snippet                                    |
 | `curios-base/src/monads/`                        | Parser/printer monad combinators                                                                                                                 |
 | `curios-base/src/{span,entropy,macros,suffix_view}.rs` | Foundational utilities shared by every stage                                                                                               |
@@ -114,7 +114,7 @@ cargo run   --package curios -- <args> # invoke the CLI
 cargo test --workspace --all-targets --all-features
 ```
 
-`curios compile foo.crs` produces a native executable `foo` (the embedded launcher with the program's `.cwasm` appended — no launcher file is consulted at compile time); `curios run foo.crs` compiles and runs in-process; `curios check foo.crs` type-checks only.
+`curios compile foo.crs` produces a native executable `foo` (the embedded launcher with the program's `.cwasm` appended — no launcher file is consulted at compile time); `curios run foo.crs` compiles and runs in-process.
 
 ### Crates, features, and the slim launcher
 

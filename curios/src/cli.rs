@@ -30,12 +30,6 @@ pub(crate) enum Mode {
         args: Vec<String>,
     },
 
-    #[command(about = "Type-check the entrypoint without executing")]
-    Check {
-        #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]
-        input_path: PathBuf,
-    },
-
     #[command(about = "Compile the entrypoint to a native executable")]
     Compile {
         #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]

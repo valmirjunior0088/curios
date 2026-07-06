@@ -1,4 +1,4 @@
-//! The compile driver: the one crate that strings the pipeline stages together, from a parsed `curios_text::Entrypoint` to a `curios_wasm::Module`. [`compile_entrypoint`] runs the full `to_core → elaborate → zonk → erase → ersd optm → to_cont → cont optm → to_wasm` sequence; [`typecheck_entrypoint`] stops after zonk, the fast path behind the CLI's `check`. Each stage is passed to the caller's observer as a borrowed [`Stage`], which is how `--print` dumps IRs without the driver retaining them.
+//! The compile driver: the one crate that strings the pipeline stages together, from a parsed `curios_text::Entrypoint` to a `curios_wasm::Module`. [`compile_entrypoint`] runs the full `to_core → elaborate → zonk → erase → ersd optm → to_cont → cont optm → to_wasm` sequence. Each stage is passed to the caller's observer as a borrowed [`Stage`], which is how `--print` dumps IRs without the driver retaining them.
 //!
 //! The fixed `sys`/`syn`/`std` prelude is elaborated once per thread and cached; every compile replays it into a fresh context and type-checks only the user code on top. Everything wasm-native — Binaryen, Cranelift precompilation, execution — lives downstream in `curios`/`curios-rt`: this crate stops at the wasm module plus the program's harvested `ForeignStore`.
 
@@ -7,7 +7,7 @@ use {
     std::{sync::LazyLock, time::Duration},
 };
 
-/// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — the CLI's `--print` stage dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past. A type-check-only run emits just `Text` and `Core`.
+/// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — the CLI's `--print` stage dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
 pub enum Stage<'a> {
     Text(&'a curios_text::Entrypoint),
     Core(&'a curios_core::Module),
@@ -18,9 +18,9 @@ pub enum Stage<'a> {
     Wasm(&'a curios_wasm::Module),
 }
 
-/// Every stage name, in pipeline order — the single source `curios`'s
-/// post-core check and `--print`'s default/help text are derived from, so
-/// neither can drift from [`Stage::name`].
+/// Every stage name, in pipeline order — the single source `--print`'s
+/// default/help text is derived from, so it cannot drift from
+/// [`Stage::name`].
 pub const NAMES: [&str; 7] = [
     "text",
     "core",
@@ -115,8 +115,8 @@ fn build_prelude() -> curios_core::Module {
     })
 }
 
-/// The type-checking prologue shared by [`compile_entrypoint`] and
-/// [`typecheck_entrypoint`]: lower to core, elaborate (checking against the
+/// The type-checking prologue of [`compile_entrypoint`] (and the tests'
+/// typecheck-only path): lower to core, elaborate (checking against the
 /// entrypoint's type when it carries one, else synthesizing), then zonk
 /// metavariable solutions in so the module is meta-free — the `elaborate → zonk`
 /// half of the `elaborate → zonk → erase` data flow (§9). Elaboration is
@@ -181,23 +181,6 @@ where
         .map_err(|error| error.format_with(&lowered))?;
 
     Ok((module, core_type, user_foreigns))
-}
-
-/// Type-check an entrypoint and stop — the fast path for `check`. Runs only
-/// `to_core → elaborate → zonk` (so it observes `Text` and `Core` only), skipping
-/// the `erase → cont → optm → wasm` lowering that a type-check does not need.
-pub fn typecheck_entrypoint<O>(
-    timeout: Duration,
-    entrypoint: &curios_text::Entrypoint,
-    loader: curios_text::RootSource,
-    mut observe: O,
-) -> Result<(), String>
-where
-    O: FnMut(Stage<'_>),
-{
-    elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
-
-    Ok(())
 }
 
 /// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-rt`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.

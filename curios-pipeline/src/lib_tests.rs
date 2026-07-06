@@ -1089,16 +1089,17 @@ fn bare_typeless_let_closure_cannot_be_inferred() {
     assert!(error.contains("cannot"), "unexpected error: {error}");
 }
 
-// --- A: fast `check` (typecheck-only) ------------------------------------
+// --- A: typecheck-only (stop after zonk, no lowering) ---------------------
 
 fn typecheck(source: &str) -> Result<(), String> {
     let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
-    typecheck_entrypoint(
+    super::elaborate_and_zonk(
         Duration::from_secs(5),
         &entrypoint,
         curios_text::RootSource::None,
-        |_| {},
+        &mut |_| {},
     )
+    .map(|_| ())
 }
 
 #[test]
