@@ -1,6 +1,6 @@
 # Roadmap
 
-Tracks `curios` development by feature area. Checkboxes reflect current codebase state, not chronological history — items whose description was later superseded by a rework are folded into the item that replaced them.
+Tracks Curios development by feature area. Checkboxes reflect current codebase state, not chronological history — items whose description was later superseded by a rework are folded into the item that replaced them.
 
 ## Core Pipeline
 

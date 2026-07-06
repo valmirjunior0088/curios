@@ -1,4 +1,4 @@
-//! The launcher stub. A bundled curios executable is this binary with a `.cwasm`
+//! The launcher stub. A bundled Curios executable is this binary with a `.cwasm`
 //! payload appended to its tail (see `curios`'s `compile` subcommand).
 //! At startup it reads its own image, slices off the trailing payload, and runs
 //! it on the runtime-only engine.

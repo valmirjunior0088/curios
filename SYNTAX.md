@@ -1,6 +1,6 @@
 # SYNTAX.md
 
-A pragmatic reference for the curios surface language (`.crs`). It covers every construct with examples, organized for lookup rather than cover-to-cover reading.
+A pragmatic reference for the Curios surface language (`.crs`). It covers every construct with examples, organized for lookup rather than cover-to-cover reading.
 
 `curios-text/src/parse.rs` is the **source of truth**. Where this document and the parser disagree, the parser wins — and this file should be fixed. The standard library under `curios-text/std/` and `curios-text/syn/` is the best corpus of idiomatic usage.
 
@@ -198,7 +198,7 @@ pub let map(@A : Type, @B : Type, f : (A) -> B, m : Option(A)) -> Option(B) =
 pub rec len(@A : Type, l : Lst(A)) -> Nat = ...;
 ```
 
-**`foreign`.** A binding implemented by the embedder rather than by curios code — the user-facing FFI boundary. The type is a **wire signature**: `(T, ...) -> T` or a bare `T` for a zero-argument foreign (mirroring `sys_io`'s own `io_clock_wall`-style ops), where each `T` is one of the six wire types `Nat`, `Int`, `Bln`, `Bin`, `Io`, `Lst(T)` — not an arbitrary curios `Type`, since these are exactly the shapes that can cross the host boundary. The name is both the binding and the wasm import name, imported under the flat `env` namespace; an embedder supplies an implementation via `curios-rt::ForeignBindings` (native) or `hooks.foreign` (the JS harness).
+**`foreign`.** A binding implemented by the embedder rather than by Curios code — the user-facing FFI boundary. The type is a **wire signature**: `(T, ...) -> T` or a bare `T` for a zero-argument foreign (mirroring `sys_io`'s own `io_clock_wall`-style ops), where each `T` is one of the six wire types `Nat`, `Int`, `Bln`, `Bin`, `Io`, `Lst(T)` — not an arbitrary Curios `Type`, since these are exactly the shapes that can cross the host boundary. The name is both the binding and the wasm import name, imported under the flat `env` namespace; an embedder supplies an implementation via `curios-rt::ForeignBindings` (native) or `hooks.foreign` (the JS harness).
 
 ```
 foreign frobnicate : (Nat, Bin) -> Nat;

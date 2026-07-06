@@ -1698,7 +1698,7 @@ fn parse_top_let<'a>() -> Parser<'a, TopItem> {
 }
 
 // One of the six wire shapes, by its own closed grammar — not an ordinary
-// curios type, so this needs no name resolution: `Nat`/`Int`/`Bln`/`Bin`/`Io`
+// Curios type, so this needs no name resolution: `Nat`/`Int`/`Bln`/`Bin`/`Io`
 // are literal keywords here, and `Lst(T)` recurses on the same grammar.
 fn parse_wire_type<'a>() -> Parser<'a, WireType> {
     parse_identifier().flat_map(|name| match name {

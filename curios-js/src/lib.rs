@@ -1,4 +1,4 @@
-//! The curios ↔ JavaScript boundary, for a browser build (`cargo build` +
+//! The Curios ↔ JavaScript boundary, for a browser build (`cargo build` +
 //! `wasm-bindgen-cli --target web` — no `wasm-pack`, see AGENTS.md's
 //! Gotchas): wasm-bindgen exports of the pure compile
 //! pipeline ([`compile`], [`typecheck`]) plus the browser run harness —

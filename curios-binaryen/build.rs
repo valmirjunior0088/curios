@@ -2,7 +2,7 @@
 //! the optimizer built from it: upstream only publishes a prebuilt
 //! `libbinaryen.a` for Linux (macOS and Windows releases ship a
 //! dylib/import-lib instead), so a from-source build is the only route to
-//! a static lib on every platform curios supports. Building from a fetched
+//! a static lib on every platform Curios supports. Building from a fetched
 //! tarball (rather than a vendored copy under version control) keeps the
 //! ~3k-file C++ tree out of the repo.
 //!

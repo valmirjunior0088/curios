@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Agent guide to `curios`. Operational reference plus an orientation map. Read this before touching the code.
+Agent guide to Curios. Operational reference plus an orientation map. Read this before touching the code.
 
 ## Overview
 
-`curios` is a work-in-progress functional, dependently-typed programming language, implemented in Rust (edition 2024, ~88k lines). It compiles `.crs` source through a series of intermediate representations down to WebAssembly, and runs the result on an embedded `wasmtime` engine.
+Curios is a work-in-progress functional, dependently-typed programming language, implemented in Rust (edition 2024, ~88k lines). It compiles `.crs` source through a series of intermediate representations down to WebAssembly, and runs the result on an embedded `wasmtime` engine.
 
 The repo is a **Cargo workspace** (virtual manifest at the root) of twelve crates, layered along the pipeline:
 
@@ -17,7 +17,7 @@ The repo is a **Cargo workspace** (virtual manifest at the root) of twelve crate
 - **`curios-text`** — the surface syntax: lexer/parser, lowering to core (`to_core/`), plus the embedded standard library (`curios-text/std/`, `curios-text/syn/`).
 - **`curios-binaryen`** — FFI to Binaryen, built from a source release fetched and compiled by `build.rs` (no vendored source).
 - **`curios-pipeline`** — the pure pipeline driver: `compile_entrypoint`/`typecheck_entrypoint`/`Stage`, chaining `text` → `core` → `ersd` → `cont` → `wasm` with no runtime/Binaryen/CLI dependencies. Extracted from `curios` so a wasm32 build of the compiler doesn't have to drag those in.
-- **`curios-js`** — the curios ↔ JavaScript boundary: `wasm-bindgen` exports of `curios-pipeline` (`compile`, `typecheck`) plus the browser run harness (`run`, with `bridge_bytes`/`abi` as its exported building blocks; the JS host itself ships as the wasm-bindgen snippet `curios-js/js/harness.js`), built for `wasm32-unknown-unknown` with `cargo build` + `wasm-bindgen-cli --target web` for a browser playground (no `wasm-pack`, no `wasm-opt` — see Gotchas). Everything the harness knows about the host boundary derives from `curios-abi` and `curios-cont`, so it cannot drift from the compiler or runtime.
+- **`curios-js`** — the Curios ↔ JavaScript boundary: `wasm-bindgen` exports of `curios-pipeline` (`compile`, `typecheck`) plus the browser run harness (`run`, with `bridge_bytes`/`abi` as its exported building blocks; the JS host itself ships as the wasm-bindgen snippet `curios-js/js/harness.js`), built for `wasm32-unknown-unknown` with `cargo build` + `wasm-bindgen-cli --target web` for a browser playground (no `wasm-pack`, no `wasm-opt` — see Gotchas). Everything the harness knows about the host boundary derives from `curios-abi` and `curios-cont`, so it cannot drift from the compiler or runtime.
 - **`curios-rt`** — runtime-only engine (lib) + the launcher stub (bin `curios-rt`). Deserializes a precompiled module and runs it on wasmtime; **never** links Cranelift or Binaryen. Depends only on `curios-abi` (for the wire constants), not on `curios` — that's what keeps it slim and lets `curios` depend back on it without a cycle.
 - **`curios`** — the facade + driver + CLI: re-exports the five pipeline-stage crates under their historical module names (`text`, `core`, `ersd`, `cont`, `wasm`), plus `curios-pipeline` (`compile_entrypoint`/`typecheck_entrypoint`/`Stage`), the compile/precompile/run-from-source helpers, and the clap-based CLI (bin `curios`). The **only** crate that links Cranelift (via `wasmtime`'s `cranelift` feature) and Binaryen.
 
@@ -25,7 +25,7 @@ Code dependencies between the pipeline-stage crates run the *opposite* direction
 
 The JIT-vs-deserialize split is a _crate boundary_, not a feature flag — see [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher) for the full mechanism. `curios` and `curios-rt` share one `wasmtime`, version-pinned once in `[workspace.dependencies]`, so the `.cwasm` `curios` produces matches what `curios-rt` deserializes.
 
-Two languages live in this repo: **Rust** (the compiler) and **curios** itself (the object language, with a standard library under `curios-text/std/`). Work touches one or both.
+Two languages live in this repo: **Rust** (the compiler) and **Curios** itself (the object language, with a standard library under `curios-text/std/`). Work touches one or both.
 
 For what's already built vs. still planned, see [ROADMAP.md](ROADMAP.md) — check it before starting work on a new capability, both to confirm it's genuinely unstarted and to see how finished, related features are described.
 
@@ -33,7 +33,7 @@ For what's already built vs. still planned, see [ROADMAP.md](ROADMAP.md) — che
 
 Refresh the relevant reference into working memory _before_ writing, every time — do not rely on a stale recollection from earlier in the session or from training.
 
-- **Writing curios (`.crs`)?** Read [SYNTAX.md](SYNTAX.md) in full first. The surface language has many specialized forms (per-scrutinee `match` shapes, motives, glued literal signs, postfix-`!` do-notation) that are easy to get subtly wrong from memory.
+- **Writing Curios (`.crs`)?** Read [SYNTAX.md](SYNTAX.md) in full first. The surface language has many specialized forms (per-scrutinee `match` shapes, motives, glued literal signs, postfix-`!` do-notation) that are easy to get subtly wrong from memory.
 - **Writing Rust (the compiler)?** Re-read [The pipeline](#the-pipeline) and [Where things live](#where-things-live) below, then open the `//!` module docs of the stage(s) you are touching, so the full architecture and the stage's local invariants are fresh. A change in one stage usually has obligations in the next.
 
 This is cheap insurance: both languages reward precision and punish half-remembered syntax or architecture.
@@ -94,7 +94,7 @@ Documentation lives in several places, each with a different audience and job. W
 | ---------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | `README.md` (root)                | Newcomers on GitHub                     | Project pitch, quickstart, CLI usage, repo-layout summary                                             | The public API, build steps, or crate layout changes                                            |
 | `AGENTS.md` (this file)           | Agents/contributors, before any change  | Architecture, pipeline, build/test/conventions — the deep source of truth                             | Any command, convention, or layout change                                                       |
-| `SYNTAX.md`                        | Anyone writing `.crs`                   | Full curios language reference                                                                         | The surface language changes                                                                     |
+| `SYNTAX.md`                        | Anyone writing `.crs`                   | Full Curios language reference                                                                         | The surface language changes                                                                     |
 | `ROADMAP.md`                       | Anyone planning work                    | What's built vs. still planned                                                                          | A feature lands or is scoped                                                                     |
 | `<crate>/README.md` (one per crate) | Someone browsing a crate on GitHub      | One-paragraph "what is this, where does it sit in the pipeline", linking back to this file and to rustdoc | The crate's role or its immediate pipeline neighbors change — keep it a paragraph, don't re-derive the deep version already here |
 | `Cargo.toml` `description`        | Cargo/crates.io tooling                 | One-line crate summary                                                                                  | The crate's purpose changes (keep in sync with the crate README's first sentence)               |
@@ -149,9 +149,9 @@ There is no `rustfmt.toml` or `clippy.toml` — stock toolchain defaults apply. 
 - **Docs.** Use `//!` module-level doc comments to explain a module's purpose; `curios-binaryen/build.rs` is a good model. See [Documentation](#documentation) for the full map of where documentation lives and what to update where.
 - **Commits.** Imperative mood, capitalized, descriptive — e.g. "Split term.rs and elaborate.rs into focused submodules". Do not patch vendored files in a feature commit.
 
-## Writing curios (`.crs`)
+## Writing Curios (`.crs`)
 
-The standard library under `curios-text/std/` is the reference for idiomatic curios. Each module is one file (`curios-text/std/Foo.crs`) and must be registered in two places: `curios-text/std.crs` (`pub mod Foo; pub use Foo/{let Foo};`) **and** the `include_str!` table in `curios-text/src/prelude.rs` (the modules are embedded into the compiler at build time, not read from disk). The same applies to `curios-text/syn/` via `curios-text/syn.crs`.
+The standard library under `curios-text/std/` is the reference for idiomatic Curios. Each module is one file (`curios-text/std/Foo.crs`) and must be registered in two places: `curios-text/std.crs` (`pub mod Foo; pub use Foo/{let Foo};`) **and** the `include_str!` table in `curios-text/src/prelude.rs` (the modules are embedded into the compiler at build time, not read from disk). The same applies to `curios-text/syn/` via `curios-text/syn.crs`.
 
 [SYNTAX.md](SYNTAX.md) covers every construct with examples (and `curios-text/src/parse.rs` is the ultimate source of truth). A few essentials that are easy to trip on from memory:
 
@@ -175,7 +175,7 @@ To run or test `.crs` code, use the CLI (`cargo run --package curios -- run …`
 
 ## Gotchas
 
-- **`curios-binaryen` has no vendored source.** `build.rs` downloads Binaryen's tagged source release from GitHub into `$OUT_DIR`, verified against a pinned sha256, then builds it with CMake (static lib, no shared libs/tools/tests). Upstream only ships a prebuilt static lib for Linux — macOS/Windows releases are dylib/import-lib only — so building from source is what makes a static link work on every platform curios targets. If the download fails (offline, firewalled), the build error prints the release URL, checksum, and exact `$OUT_DIR` path to place the file at by hand. To bump the Binaryen version, update `VERSION` and `SOURCE_SHA256` at the top of `build.rs`.
+- **`curios-binaryen` has no vendored source.** `build.rs` downloads Binaryen's tagged source release from GitHub into `$OUT_DIR`, verified against a pinned sha256, then builds it with CMake (static lib, no shared libs/tools/tests). Upstream only ships a prebuilt static lib for Linux — macOS/Windows releases are dylib/import-lib only — so building from source is what makes a static link work on every platform Curios targets. If the download fails (offline, firewalled), the build error prints the release URL, checksum, and exact `$OUT_DIR` path to place the file at by hand. To bump the Binaryen version, update `VERSION` and `SOURCE_SHA256` at the top of `build.rs`.
 - **Keep the slim launcher slim.** `cargo build --package curios-rt` must stay free of Cranelift and Binaryen; keep any new runtime dependency out of that crate's graph. A change can pass `--workspace --all-features` and still break `--package curios-rt` (or vice versa) — run both. For the full mechanism see [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher).
 - **The codegen tests live in `curios/src/tests/codegen/`.** They execute emitted wasm, which needs the runtime (`curios-rt`); `curios-rt` depends only on `curios-abi`, not on `curios`, so `curios` depending on `curios-rt` is not a cycle — that's what lets these tests live alongside the rest of the integration suite instead of in a separate crate.
 - **Generated `.wasm` files** are gitignored (`/*.wasm`); don't commit build output.

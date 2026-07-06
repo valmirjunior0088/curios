@@ -2,11 +2,11 @@
 
 A work-in-progress functional, **dependently-typed** programming language that compiles to WebAssembly.
 
-curios is a small language with a full dependent type system: types can depend on values, propositions are first-class, and you can write machine-checked proofs alongside ordinary code. Programs compile through a series of typed intermediate representations down to WebAssembly and run on an embedded [wasmtime](https://wasmtime.dev/) engine, with an optimizing backend built on [Binaryen](https://github.com/WebAssembly/binaryen).
+Curios is a small language with a full dependent type system: types can depend on values, propositions are first-class, and you can write machine-checked proofs alongside ordinary code. Programs compile through a series of typed intermediate representations down to WebAssembly and run on an embedded [wasmtime](https://wasmtime.dev/) engine, with an optimizing backend built on [Binaryen](https://github.com/WebAssembly/binaryen).
 
 > **Status: early and experimental.** This is a research language under active development. The syntax, standard library, and compiler internals all change frequently, and there is no stability guarantee yet. If you enjoy poking at dependently-typed languages and compilers in progress, you're in the right place; if you need something production-ready, this isn't it (yet).
 
-**[Try curios in your browser →](https://valmirjunior0088.github.io/curios/)** — no install needed, it typechecks and compiles to WebAssembly right there in the page.
+**[Try Curios in your browser →](https://valmirjunior0088.github.io/curios/)** — no install needed, it typechecks and compiles to WebAssembly right there in the page.
 
 ## What's interesting about it
 
@@ -118,6 +118,6 @@ For a full tour of the architecture, build/test workflow, and conventions, see [
 
 ## Contributing & feedback
 
-curios is exploratory and moving fast, so the most useful contributions right now are bug reports, small example programs that break things, and feedback on the language design. Please open an issue at <https://github.com/valmirjunior0088/curios>.
+Curios is exploratory and moving fast, so the most useful contributions right now are bug reports, small example programs that break things, and feedback on the language design. Please open an issue at <https://github.com/valmirjunior0088/curios>.
 
-curios is licensed under [Apache-2.0](LICENSE).
+Curios is licensed under [Apache-2.0](LICENSE).

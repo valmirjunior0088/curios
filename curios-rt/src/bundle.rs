@@ -3,7 +3,7 @@
 //! (which recovers it at startup). Defining the layout once here is what keeps the
 //! two sides in lockstep — neither crate hand-rolls the byte layout.
 
-/// Magic trailing the footer, marking an image as a bundled curios executable.
+/// Magic trailing the footer, marking an image as a bundled Curios executable.
 const MAGIC: &[u8; 8] = b"CRSEXEC1";
 
 /// Footer length: the 8-byte little-endian payload length plus [`MAGIC`].
@@ -22,20 +22,20 @@ pub fn append_payload(image: &mut Vec<u8>, cwasm: &[u8]) {
 /// larger than the image body.
 pub fn extract_payload(image: &[u8]) -> Result<Vec<u8>, String> {
     if image.len() < FOOTER_LEN {
-        return Err("not a bundled curios executable (no payload)".into());
+        return Err("not a bundled Curios executable (no payload)".into());
     }
 
     let (body, footer) = image.split_at(image.len() - FOOTER_LEN);
     let (len_bytes, magic) = footer.split_at(8);
 
     if magic != MAGIC {
-        return Err("not a bundled curios executable (bad footer)".into());
+        return Err("not a bundled Curios executable (bad footer)".into());
     }
 
     let len = u64::from_le_bytes(len_bytes.try_into().unwrap()) as usize;
 
     if len > body.len() {
-        return Err("corrupt curios executable (payload length exceeds image)".into());
+        return Err("corrupt Curios executable (payload length exceeds image)".into());
     }
 
     Ok(body[body.len() - len..].to_vec())

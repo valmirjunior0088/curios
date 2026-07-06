@@ -1,4 +1,4 @@
-//! Foundational utilities shared across every curios pipeline stage: source
+//! Foundational utilities shared across every Curios pipeline stage: source
 //! spans, the fresh-name `Entropy`/`Mint` supply, the `name!` newtype macro, the
 //! parser/printer monad combinators, and the slice `suffix_view` re-base laws.
 

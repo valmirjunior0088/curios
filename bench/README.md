@@ -40,7 +40,7 @@ Each program folder also carries a small `lakefile.toml`, because Lean's build s
 
 ## Run it
 
-The image build needs the curios sources, which live *above* `bench/`, so it must run with the **repo root as the build context**. The helper does that from anywhere:
+The image build needs the Curios sources, which live *above* `bench/`, so it must run with the **repo root as the build context**. The helper does that from anywhere:
 
 ```sh
 bash bench/build.sh                        # builds the image (repo root as context)
