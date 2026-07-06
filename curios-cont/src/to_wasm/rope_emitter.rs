@@ -811,7 +811,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// force every element through `$bin/force` into a *fresh* payload (the
     /// shallow force of a leaf answers its live payload, which must not be
     /// element-rewritten in place).
-    pub(super) fn emit_arr_bin_force_func(&mut self, func_name: FuncName) {
+    pub(super) fn emit_lst_bin_force_func(&mut self, func_name: FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
 
@@ -1157,7 +1157,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// `$lst/bin/wrap (ref $elems) -> (ref $lst)`: wrap each raw `$bytes`
     /// element into a `$bin/leaf` in place — the host-built array is fresh,
     /// nothing else aliases it — then the outer array into an `$lst/leaf`.
-    pub(super) fn emit_arr_bin_wrap_func(&mut self, func_name: FuncName) {
+    pub(super) fn emit_lst_bin_wrap_func(&mut self, func_name: FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
         let lst = self.table.lst_rope();
