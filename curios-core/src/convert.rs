@@ -1048,7 +1048,7 @@ impl Convert {
         // entry embedding a metavariable, or equal to another entry, stays
         // ambiguous, and the candidate may not depend on it. Each subject
         // contributes both its spellings — as written, and as the reducer
-        // exposes it at a whnf position (the candidate's root lstives reduced
+        // exposes it at a whnf position (the candidate's root arrives reduced
         // while deep positions do not) — except a reduced form that is a bare
         // variable, which would collide with the renaming machinery.
         let mut subjects = Vec::new();

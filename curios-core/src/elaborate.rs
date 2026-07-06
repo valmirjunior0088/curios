@@ -1895,7 +1895,7 @@ fn check_args_against<B: Bound>(
 /// Producing a full lambda (rather than a partial application) keeps erase/CPS
 /// untouched: the output is an ordinary closure over a saturated call.
 ///
-/// Fires only for `Var`/`Proj` heads against a ground explicit-lstow expectation;
+/// Fires only for `Var`/`Proj` heads against a ground explicit-arrow expectation;
 /// every other shape returns the term unchanged for the ordinary `expect`. The
 /// expected-not-implicit gate preserves polymorphic-value assignment
 /// (`let f : (@z : A) -> … = …` keeps its implicit). It is purely additive: when

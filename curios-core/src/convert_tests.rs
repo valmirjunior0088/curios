@@ -979,7 +979,7 @@ fn solve_abstracts_a_reduced_spelling_occurrence() {
         vec![("a".into(), nat_type()), ("b".into(), nat_type())],
         nat_type(),
     );
-    // `z + 1` successor-peels under reduction, and the candidate side lstives
+    // `z + 1` successor-peels under reduction, and the candidate side arrives
     // reduced — each subject contributes both spellings, so the occurrence
     // still abstracts, and the round-trip verification accepts the pair by
     // definitional (not syntactic) equality.

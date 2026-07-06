@@ -190,7 +190,7 @@ fn max_value_tpl_arity(value: &crate::Value) -> usize {
         crate::Value::Pure(data) => max_tpl_arity(data),
         // Projecting field `index` reads through a tuple type of arity at least
         // `index + 1`, even when no tuple of that arity is ever *built* in the module
-        // (e.g. the projected tuple only ever lstives from outside, or the producing
+        // (e.g. the projected tuple only ever arrives from outside, or the producing
         // array is empty). Sizing the tuple types from constructions alone misses it.
         crate::Value::Eval(crate::Code::TplGet(_, index)) => index + 1,
         _ => 0,

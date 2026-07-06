@@ -10,7 +10,7 @@ use {super::*, std::collections::HashMap};
 ///
 /// This is the intra-function dual of `function_inlining`: it brings values
 /// across what was a continuation edge, so constant folding and aggregate
-/// projection can see a literal or constructor that previously lstived opaquely as
+/// projection can see a literal or constructor that previously arrived opaquely as
 /// a block parameter. It is also where inlining's leftovers get cleaned up — a
 /// spliced call leaves a single-predecessor continuation block at every site.
 ///

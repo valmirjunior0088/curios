@@ -165,7 +165,7 @@ pub enum CallTarget {
 pub enum HostTarget {
     /// A store-described host call: `function`'s [`WireSignature`] fixes the
     /// operand order/types and the resume shape — `resume` takes one block
-    /// parameter per signature result (the multi-result records lstive as
+    /// parameter per signature result (the multi-result records arrive as
     /// parallel block parameters, exactly like the per-op variants did).
     ///
     /// [`WireSignature`]: curios_abi::WireSignature

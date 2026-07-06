@@ -427,7 +427,7 @@ impl Host for OsHost {
     }
 
     fn accept(&self, io: Io) -> (Status, Io) {
-        // `accept` blocks until a connection lstives, so share the `Arc`-held
+        // `accept` blocks until a connection arrives, so share the `Arc`-held
         // listener out and drop the table lock before the wait — never hold it
         // across one. The `Arc` clone is a refcount bump, not a `dup` syscall.
         let listener = match self.table.lock().unwrap().get(&io) {
