@@ -525,6 +525,30 @@ where
     })
 }
 
+/// Consumes one separator between `sep_by*` items: `Ok(Some(state))` advances
+/// past it, `Ok(None)` means it wasn't there (a recoverable failure — the
+/// caller ends the list), and an uncaught failure propagates. Panics on
+/// zero-width progress, like the repetition combinators. Shared by
+/// [`sep_by0`], [`sep_by0_trailing`], and [`sep_by1`], which otherwise had
+/// this loop step verbatim three times over.
+fn parse_separator<'a, S, G>(
+    g: &mut G,
+    state: ParserState<'a>,
+) -> Result<Option<ParserState<'a>>, ParserError>
+where
+    S: 'a,
+    G: FnMut() -> Parser<'a, S> + 'a,
+{
+    match g().parse(state) {
+        Ok((_, next_state)) if state.offset == next_state.offset => {
+            panic!("Infinite repetition")
+        }
+        Ok((_, next_state)) => Ok(Some(next_state)),
+        Err(error) if error.is_uncaught(state) => Err(error),
+        Err(_) => Ok(None),
+    }
+}
+
 /// Zero or more `f` items separated by `g` (separators dropped). An empty list is fine, but once a separator is consumed the next item is mandatory — no trailing separator; use [`sep_by0_trailing`] where one is legal. As with [`many0`], the closures build a fresh single-use [`Parser`] per iteration, and an iteration that consumes no input panics as an infinite repetition.
 pub fn sep_by0<'a, T, S, F, G>(mut f: F, mut g: G) -> Parser<'a, Vec<T>>
 where
@@ -549,13 +573,9 @@ where
         let mut items = vec![item];
 
         loop {
-            let next_state = match g().parse(state) {
-                Ok((_, next_state)) if state.offset == next_state.offset => {
-                    panic!("Infinite repetition")
-                }
-                Ok((_, next_state)) => next_state,
-                Err(error) if error.is_uncaught(state) => return Err(error),
-                Err(_) => break,
+            let next_state = match parse_separator(&mut g, state)? {
+                Some(next_state) => next_state,
+                None => break,
             };
 
             let offset = next_state.offset;
@@ -599,13 +619,9 @@ where
         let mut items = vec![item];
 
         loop {
-            let next_state = match g().parse(state) {
-                Ok((_, next_state)) if state.offset == next_state.offset => {
-                    panic!("Infinite repetition")
-                }
-                Ok((_, next_state)) => next_state,
-                Err(error) if error.is_uncaught(state) => return Err(error),
-                Err(_) => break,
+            let next_state = match parse_separator(&mut g, state)? {
+                Some(next_state) => next_state,
+                None => break,
             };
 
             let offset = next_state.offset;
@@ -650,13 +666,9 @@ where
         let mut items = vec![item];
 
         loop {
-            let next_state = match g().parse(state) {
-                Ok((_, next_state)) if state.offset == next_state.offset => {
-                    panic!("Infinite repetition")
-                }
-                Ok((_, next_state)) => next_state,
-                Err(error) if error.is_uncaught(state) => return Err(error),
-                Err(_) => break,
+            let next_state = match parse_separator(&mut g, state)? {
+                Some(next_state) => next_state,
+                None => break,
             };
 
             let offset = next_state.offset;
