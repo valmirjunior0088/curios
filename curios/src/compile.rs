@@ -6,7 +6,6 @@
 use {
     curios_pipeline::compile_entrypoint,
     curios_rt::{ForeignBindings, Host, run_bytes, shared_engine},
-    curios_text as text, curios_wasm as wasm,
     std::{
         path::{Path, PathBuf},
         time::Duration,
@@ -17,8 +16,8 @@ use {
 /// payload the runtime deserializes — the same payload a bundled executable
 /// carries. Uses `curios-rt`'s shared engine so the precompiled artifact
 /// matches the configuration `run_bytes` deserializes against.
-pub fn to_cwasm(module: &wasm::Module) -> Result<Vec<u8>, String> {
-    let bytes = curios_binaryen::optimize(wasm::to_bytes(module));
+pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
+    let bytes = curios_binaryen::optimize(curios_wasm::to_bytes(module));
 
     shared_engine()
         .precompile_module(&bytes)
@@ -31,7 +30,7 @@ pub fn to_cwasm(module: &wasm::Module) -> Result<Vec<u8>, String> {
 /// `foreign` declarations (pass [`ForeignBindings::empty`] for a program that
 /// declares none). Returns the process exit code.
 pub fn run_wasm<H: Host + Send + Sync + 'static>(
-    module: &wasm::Module,
+    module: &curios_wasm::Module,
     host: H,
     bindings: ForeignBindings,
 ) -> Result<i32, String> {
@@ -47,8 +46,8 @@ pub fn run_wasm<H: Host + Send + Sync + 'static>(
 /// from the returned store and calling [`run_wasm`] itself.
 pub fn run_entrypoint<H: Host + Send + Sync + 'static>(
     timeout: Duration,
-    entrypoint: &text::Entrypoint,
-    loader: text::RootSource,
+    entrypoint: &curios_text::Entrypoint,
+    loader: curios_text::RootSource,
     host: H,
 ) -> Result<(), String> {
     let (module, _foreigns) = compile_entrypoint(timeout, entrypoint, loader, |_| {})?;
@@ -63,10 +62,10 @@ pub fn run<H: Host + Send + Sync + 'static>(
     host: H,
 ) -> Result<(), String> {
     let entrypoint = source
-        .parse::<text::Entrypoint>()
+        .parse::<curios_text::Entrypoint>()
         .map_err(|error| error.format())?;
 
-    run_entrypoint(timeout, &entrypoint, text::RootSource::None, host)
+    run_entrypoint(timeout, &entrypoint, curios_text::RootSource::None, host)
 }
 
 /// Alias of [`run`] used by the integration suite.
@@ -78,13 +77,13 @@ pub fn run_text<H: Host + Send + Sync + 'static>(
     run(timeout, source, host)
 }
 
-/// Open a `.crs` entrypoint at `path`, paired with a [`text::RootSource::FileSystem`]
+/// Open a `.crs` entrypoint at `path`, paired with a [`curios_text::RootSource::FileSystem`]
 /// rooted at its parent directory — the standard way to resolve a program's
 /// imports relative to the file it lives in.
-pub fn load(path: &Path) -> Result<(text::Entrypoint, text::RootSource), String> {
-    let entrypoint = text::Entrypoint::from_path(path).map_err(|error| error.format())?;
+pub fn load(path: &Path) -> Result<(curios_text::Entrypoint, curios_text::RootSource), String> {
+    let entrypoint = curios_text::Entrypoint::from_path(path).map_err(|error| error.format())?;
     let loader =
-        text::RootSource::FileSystem(path.parent().unwrap_or(Path::new(".")).to_path_buf());
+        curios_text::RootSource::FileSystem(path.parent().unwrap_or(Path::new(".")).to_path_buf());
 
     Ok((entrypoint, loader))
 }
@@ -107,19 +106,20 @@ pub fn run_file<H: Host + Send + Sync + 'static>(
 pub fn load_with_dependencies(
     path: &Path,
     dependencies: Vec<(String, PathBuf)>,
-) -> Result<(text::Entrypoint, text::RootSource), String> {
+) -> Result<(curios_text::Entrypoint, curios_text::RootSource), String> {
     let (entrypoint, base) = load(path)?;
 
     let deps = dependencies
         .into_iter()
         .map(|(name, dep_path)| {
-            let (module, source) = text::RootSource::dependency_from_path(&dep_path)
+            let (module, source) = curios_text::RootSource::dependency_from_path(&dep_path)
                 .map_err(|error| error.format())?;
             Ok((name, module, source))
         })
         .collect::<Result<Vec<_>, String>>()?;
 
-    let loader = text::RootSource::dependencies(deps, base).map_err(|error| error.format())?;
+    let loader =
+        curios_text::RootSource::dependencies(deps, base).map_err(|error| error.format())?;
 
     Ok((entrypoint, loader))
 }

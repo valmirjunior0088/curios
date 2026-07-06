@@ -3,7 +3,8 @@
 //! is selected and rendered, shared by both entrypoints below.
 
 use {
-    curios::{Stage, compile_entrypoint, load, typecheck_entrypoint, wasm},
+    curios::load,
+    curios_pipeline::{Stage, compile_entrypoint, typecheck_entrypoint},
     std::{path::Path, time::Duration},
 };
 
@@ -36,7 +37,7 @@ pub(crate) fn compile_file(
     timeout: Duration,
     print: &str,
     input_path: &Path,
-) -> Result<wasm::Module, String> {
+) -> Result<curios_wasm::Module, String> {
     let (entrypoint, loader) = load(input_path)?;
 
     // The CLI doesn't yet expose a way to supply `foreign` implementations,
