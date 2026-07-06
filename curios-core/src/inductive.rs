@@ -67,4 +67,20 @@ impl Inductive {
                 .open_params(params),
         )
     }
+
+    /// Constructor tags in runtime dispatch order: position `i` here is the
+    /// tag `erase` assigns as runtime index `i` (`erase_variant`) and the
+    /// arm order it builds a `Match` in (`erase_inductive_match`). Both sites
+    /// must derive that correspondence from this one method, not from their
+    /// own `constructors.keys()` walk, so the two can never disagree about
+    /// what "index `i`" means.
+    pub(crate) fn constructor_order(&self) -> impl Iterator<Item = &Atom> {
+        self.constructors.keys()
+    }
+
+    /// `tag`'s position in [`Self::constructor_order`] — the runtime tag
+    /// `erase_variant` gives a value constructed with it.
+    pub(crate) fn constructor_index(&self, tag: &Atom) -> Option<usize> {
+        self.constructor_order().position(|candidate| candidate == tag)
+    }
 }

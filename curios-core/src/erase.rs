@@ -841,9 +841,7 @@ fn erase_variant(context: &mut Context, uc: &Variant) -> Result<curios_ersd::Ter
         .expect("erase: constructor names a registered inductive");
 
     let index = inductive
-        .constructors
-        .keys()
-        .position(|candidate| candidate == tag)
+        .constructor_index(tag)
         .expect("erase: constructor tag registered with its inductive");
 
     let telescope = inductive
@@ -1076,8 +1074,7 @@ fn erase_inductive_match(
     let binder_slots = pattern_binder_slots(pattern, inductive.params.len());
 
     let cases_erased = inductive
-        .constructors
-        .keys()
+        .constructor_order()
         .map(|tag| {
             // A tag with no arm was pruned by elaborate (Rung C verified the
             // case impossible at the scrutinee's indices). Its dispatch slot
