@@ -185,7 +185,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     /// The `Lst` mirror of [`emit_bin_types`](Self::emit_bin_types).
-    fn emit_arr_types(&mut self) {
+    fn emit_lst_types(&mut self) {
         let rope = self.table.lst_rope();
 
         self.module.add_type(
@@ -580,11 +580,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         let mut ropes = RopeEmitter::new(self.table, self.module);
 
         if self.table.lst_bin_force_used() {
-            ropes.emit_arr_bin_force_func(self.table.lst_bin_force_func());
+            ropes.emit_lst_bin_force_func(self.table.lst_bin_force_func());
         }
 
         if self.table.lst_bin_wrap_used() {
-            ropes.emit_arr_bin_wrap_func(self.table.lst_bin_wrap_func());
+            ropes.emit_lst_bin_wrap_func(self.table.lst_bin_wrap_func());
         }
 
         if self.table.bin_eql_used() {
@@ -651,7 +651,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     pub(super) fn emit_module(&mut self, module: &'a crate::Module) {
         self.emit_flt_type();
         self.emit_bin_types();
-        self.emit_arr_types();
+        self.emit_lst_types();
         self.emit_cell_type();
         self.emit_tpl_types();
         self.emit_clsr_arity_types();
