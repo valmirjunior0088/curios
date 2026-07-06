@@ -57,7 +57,7 @@ fn lst_type(elem: Term) -> Term {
 /// type, returning the rebuilt elements. Shared by the two ways the element type
 /// is fixed: borrowed from `expected` when checking, or a fresh metavar when
 /// inferring (see [`elaborate_prim`] and [`synth_prim`]'s `Lst` arm).
-fn check_arr_elems(
+fn check_lst_elems(
     context: &mut Context,
     elems: &[Term],
     elem_type: &Term,
@@ -211,7 +211,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
                     binder: "T".to_string(),
                 },
             );
-            let elaborated = check_arr_elems(context, elems, &elem_type)?;
+            let elaborated = check_lst_elems(context, elems, &elem_type)?;
             (Prim::Lst(elaborated), lst_type(elem_type))
         }
         Prim::LstLen(type_, list) => {
@@ -347,7 +347,7 @@ pub(crate) fn elaborate_prim(
     if let (Prim::Lst(elems), Mode::Check(expected)) = (prim, &mode)
         && let Subterm::Prim(Prim::LstType(elem_type)) = &*reduce_with(context, expected)?
     {
-        let elaborated = check_arr_elems(context, elems, elem_type)?;
+        let elaborated = check_lst_elems(context, elems, elem_type)?;
 
         return Ok((Term::prim(Prim::Lst(elaborated)), expected.clone()));
     }
