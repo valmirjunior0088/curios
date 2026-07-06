@@ -1,6 +1,5 @@
 use {
-    super::{Cont, Frame, Work},
-    curios_abi::ForeignFunction,
+    super::{Cont, ContMany, Frame, Work},
     curios_cont::{BlockName, CellTarget, Code, Data, HostTarget, Tail, Value, ValueName},
     num_bigint::BigUint,
     std::sync::Arc,
@@ -78,43 +77,6 @@ fn forward_resume<'b>(work: &mut Work, cont: Cont<'b>) -> BlockName {
     resume
 }
 
-/// Lower a store-described host call: CPS-lower each operand to a value name
-/// in signature order (like `lower_lst` builds an array's elements), then
-/// branch to the host with a resume shaped by the signature's result count —
-/// one result forwards straight through, any other count packs the record
-/// (zero packing unit).
-fn lower_foreign<'b>(
-    work: &mut Work,
-    function: Arc<ForeignFunction>,
-    args: &'b [crate::Term],
-    frame: &'b Frame,
-    mut operands: Vec<ValueName>,
-    cont: Cont<'b>,
-) -> Tail {
-    match args {
-        [] => {
-            let resume = match function.signature.results.len() {
-                1 => forward_resume(work, cont),
-                arity => record_resume(work, arity, cont),
-            };
-
-            Tail::Host(HostTarget::Foreign {
-                function,
-                operands,
-                resume,
-            })
-        }
-        [head, tail @ ..] => work.lower_value_name(
-            head,
-            frame,
-            Cont::new(move |work, name| {
-                operands.push(name);
-                lower_foreign(work, function, tail, frame, operands, cont)
-            }),
-        ),
-    }
-}
-
 fn lower_unary_code<'b>(
     work: &mut Work,
     operand: &'b crate::Term,
@@ -188,78 +150,6 @@ fn lower_ternary_code<'b>(
             )
         }),
     )
-}
-
-fn lower_lst<'b>(
-    work: &mut Work,
-    elements: &'b [crate::Term],
-    frame: &'b Frame,
-    mut names: Vec<ValueName>,
-    cont: Cont<'b>,
-) -> Tail {
-    match elements {
-        [] => {
-            let value = work.fresh(Value::Pure(Data::Lst(names)));
-
-            cont.call(work, value)
-        }
-        [head, tail @ ..] => work.lower_value_name(
-            head,
-            frame,
-            Cont::new(move |work, name| {
-                names.push(name);
-                lower_lst(work, tail, frame, names, cont)
-            }),
-        ),
-    }
-}
-
-fn lower_bin_concat<'b>(
-    work: &mut Work,
-    operands: &'b [crate::Term],
-    frame: &'b Frame,
-    mut names: Vec<ValueName>,
-    cont: Cont<'b>,
-) -> Tail {
-    match operands {
-        [] => {
-            let value = work.fresh(Value::Eval(Code::BinConcat(names)));
-
-            cont.call(work, value)
-        }
-        [head, tail @ ..] => work.lower_value_name(
-            head,
-            frame,
-            Cont::new(move |work, name| {
-                names.push(name);
-                lower_bin_concat(work, tail, frame, names, cont)
-            }),
-        ),
-    }
-}
-
-fn lower_lst_concat<'b>(
-    work: &mut Work,
-    operands: &'b [crate::Term],
-    frame: &'b Frame,
-    mut names: Vec<ValueName>,
-    cont: Cont<'b>,
-) -> Tail {
-    match operands {
-        [] => {
-            let value = work.fresh(Value::Eval(Code::LstConcat(names)));
-
-            cont.call(work, value)
-        }
-        [head, tail @ ..] => work.lower_value_name(
-            head,
-            frame,
-            Cont::new(move |work, name| {
-                names.push(name);
-                lower_lst_concat(work, tail, frame, names, cont)
-            }),
-        ),
-    }
 }
 
 pub(super) fn lower_pure_prim(work: &mut Work, prim: &crate::PurePrim, frame: &Frame) -> ValueName {
@@ -508,7 +398,25 @@ pub(super) fn lower_value_prim<'b>(
     match prim {
         crate::Prim::Pure(pure_prim) => lower_value_pure_prim(work, pure_prim, frame, cont),
         crate::Prim::Host(crate::HostPrim::Foreign(function, args)) => {
-            lower_foreign(work, Arc::clone(function), args, frame, Vec::new(), cont)
+            let function = Arc::clone(function);
+
+            work.lower_names(
+                args,
+                frame,
+                Vec::new(),
+                ContMany::new(move |work, operands| {
+                    let resume = match function.signature.results.len() {
+                        1 => forward_resume(work, cont),
+                        arity => record_resume(work, arity, cont),
+                    };
+
+                    Tail::Host(HostTarget::Foreign {
+                        function,
+                        operands,
+                        resume,
+                    })
+                }),
+            )
         }
         crate::Prim::Host(crate::HostPrim::IoExit(code)) => work.lower_value_name(
             code,
@@ -788,10 +696,26 @@ fn lower_value_pure_prim<'b>(
         crate::PurePrim::BinAppend(bin, byte) => {
             lower_binary_code(work, bin, byte, frame, cont, Code::BinAppend)
         }
-        crate::PurePrim::BinConcat(operands) => {
-            lower_bin_concat(work, operands, frame, vec![], cont)
-        }
-        crate::PurePrim::Lst(elements) => lower_lst(work, elements, frame, vec![], cont),
+        crate::PurePrim::BinConcat(operands) => work.lower_names(
+            operands,
+            frame,
+            vec![],
+            ContMany::new(move |work, names| {
+                let value = work.fresh(Value::Eval(Code::BinConcat(names)));
+
+                cont.call(work, value)
+            }),
+        ),
+        crate::PurePrim::Lst(elements) => work.lower_names(
+            elements,
+            frame,
+            vec![],
+            ContMany::new(move |work, names| {
+                let value = work.fresh(Value::Pure(Data::Lst(names)));
+
+                cont.call(work, value)
+            }),
+        ),
         crate::PurePrim::LstLen(lst) => lower_unary_code(work, lst, frame, cont, Code::LstLen),
         crate::PurePrim::LstGet(lst, idx) => {
             lower_binary_code(work, lst, idx, frame, cont, Code::LstGet)
@@ -802,9 +726,16 @@ fn lower_value_pure_prim<'b>(
         crate::PurePrim::LstAppend(lst, elem) => {
             lower_binary_code(work, lst, elem, frame, cont, Code::LstAppend)
         }
-        crate::PurePrim::LstConcat(operands) => {
-            lower_lst_concat(work, operands, frame, vec![], cont)
-        }
+        crate::PurePrim::LstConcat(operands) => work.lower_names(
+            operands,
+            frame,
+            vec![],
+            ContMany::new(move |work, names| {
+                let value = work.fresh(Value::Eval(Code::LstConcat(names)));
+
+                cont.call(work, value)
+            }),
+        ),
         crate::PurePrim::LstMap(src, f) => {
             lower_binary_code(work, src, f, frame, cont, Code::LstMap)
         }
