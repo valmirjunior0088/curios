@@ -90,18 +90,41 @@ impl<A: Lower, B: Lower, C: Lower> Lower for (A, B, C) {
     }
 }
 
+/// The GC array type an `i8` byte array (`Bin`) allocates under — shared by
+/// every wire shape that carries raw bytes, whether directly (`Vec<u8>`) or
+/// as `Lst(Bin)`'s per-element `Bin`s (`Vec<Vec<u8>>`).
+fn i8_array_pre(caller: &mut Caller<'_, ()>) -> ArrayRefPre {
+    let array_type = ArrayType::new(
+        caller.engine(),
+        FieldType::new(Mutability::Var, StorageType::I8),
+    );
+
+    ArrayRefPre::new(caller, array_type)
+}
+
+/// The GC array type the uniform `Lst` shape allocates under — a `(mut (ref
+/// null any))` element array, shared by every `Lst` lowering regardless of
+/// what its elements themselves are (`Vec<Poll>`'s i31s, `Vec<Vec<u8>>`'s
+/// `Bin`s).
+fn anyref_array_pre(caller: &mut Caller<'_, ()>) -> ArrayRefPre {
+    let array_type = ArrayType::new(
+        caller.engine(),
+        FieldType::new(
+            Mutability::Var,
+            StorageType::ValType(ValType::Ref(RefType::new(true, HeapType::Any))),
+        ),
+    );
+
+    ArrayRefPre::new(caller, array_type)
+}
+
 impl Lower for Vec<u8> {
     fn lower(
         self,
         caller: &mut Caller<'_, ()>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
-        let array_type = ArrayType::new(
-            caller.engine(),
-            FieldType::new(Mutability::Var, StorageType::I8),
-        );
-
-        let array_ref_pre = ArrayRefPre::new(&mut *caller, array_type);
+        let array_ref_pre = i8_array_pre(caller);
 
         results[0] = Val::AnyRef(Some(
             ArrayRef::new_fixed(
@@ -129,15 +152,7 @@ impl Lower for Vec<Poll> {
         caller: &mut Caller<'_, ()>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
-        let outer_type = ArrayType::new(
-            caller.engine(),
-            FieldType::new(
-                Mutability::Var,
-                StorageType::ValType(ValType::Ref(RefType::new(true, HeapType::Any))),
-            ),
-        );
-
-        let outer_pre = ArrayRefPre::new(&mut *caller, outer_type);
+        let outer_pre = anyref_array_pre(caller);
 
         let elements = self
             .into_iter()
@@ -167,12 +182,7 @@ impl Lower for Vec<Vec<u8>> {
         caller: &mut Caller<'_, ()>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
-        let byte_type = ArrayType::new(
-            caller.engine(),
-            FieldType::new(Mutability::Var, StorageType::I8),
-        );
-
-        let byte_pre = ArrayRefPre::new(&mut *caller, byte_type);
+        let byte_pre = i8_array_pre(caller);
 
         let elements = self
             .into_iter()
@@ -191,15 +201,7 @@ impl Lower for Vec<Vec<u8>> {
             })
             .collect::<Result<Vec<_>, wasmtime::Error>>()?;
 
-        let outer_type = ArrayType::new(
-            caller.engine(),
-            FieldType::new(
-                Mutability::Var,
-                StorageType::ValType(ValType::Ref(RefType::new(true, HeapType::Any))),
-            ),
-        );
-
-        let outer_pre = ArrayRefPre::new(&mut *caller, outer_type);
+        let outer_pre = anyref_array_pre(caller);
 
         results[0] = Val::AnyRef(Some(
             ArrayRef::new_fixed(&mut *caller, &outer_pre, &elements)?.to_anyref(),
