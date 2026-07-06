@@ -23,10 +23,12 @@
 
 use {
     super::{
-        Change, Lower, ThreadedParam, is_named, name_term, nat, nat_add, nat_sub, subterms,
-        subterms_mut,
+        Change, Lower, ThreadedParam, is_named, name_term, nat, nat_add, nat_sub, subterms_mut,
     },
-    crate::{Apply, Argument, Func, Prim, PurePrim, Subterm, Term, optm::CallGraph},
+    crate::{
+        Apply, Argument, Func, Prim, PurePrim, Subterm, Term,
+        optm::{CallGraph, rewrite},
+    },
     curios_base::suffix_view::Carrier,
     std::mem,
 };
@@ -159,7 +161,7 @@ fn legible(term: &Term, name: &str, base: &str, index: usize, carrier: Carrier) 
         }
         // A bare `b` or self-reference outside the positions above is illegible.
         Subterm::Name(named) if named.as_str() == base || named.as_str() == name => false,
-        _ => subterms(term)
+        _ => rewrite::children(term)
             .iter()
             .all(|child| legible(child, name, base, index, carrier)),
     }
@@ -322,7 +324,7 @@ fn collect_self_calls<'a>(term: &'a Term, name: &str, out: &mut Vec<&'a Apply>) 
         out.push(apply);
     }
 
-    for child in subterms(term) {
+    for child in rewrite::children(term) {
         collect_self_calls(child, name, out);
     }
 }

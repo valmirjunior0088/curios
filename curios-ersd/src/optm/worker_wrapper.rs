@@ -276,39 +276,6 @@ fn nat_sub(left: Term, right: Term) -> Term {
     Subterm::Prim(Prim::Pure(PurePrim::NatSub(left, right))).into()
 }
 
-/// The immediate sub-terms of a term, including primitive operands — used by the
-/// read-only analyses (self-call counting, legibility) that must see a self-call
-/// buried inside a `NatAdd`'s operand.
-fn subterms(term: &Term) -> Vec<&Term> {
-    use crate::NatMatch;
-
-    match term.as_subterm() {
-        Subterm::Erased | Subterm::Unreachable | Subterm::Atom(_) | Subterm::Name(_) => vec![],
-        Subterm::Prim(prim) => prim.operands(),
-        Subterm::NatMatch(NatMatch::Induction {
-            head,
-            zero_case,
-            succ_case,
-            ..
-        }) => vec![head, zero_case, succ_case],
-        Subterm::NatMatch(NatMatch::Dispatch {
-            head,
-            cases,
-            default,
-        }) => iter::once(head)
-            .chain(cases.values())
-            .chain(iter::once(default))
-            .collect(),
-        Subterm::Func(func) => vec![&func.body],
-        Subterm::Apply(apply) => iter::once(&apply.head).chain(&apply.params).collect(),
-        Subterm::Tuple(tuple) => tuple.fields.iter().collect(),
-        Subterm::Proj(proj) => vec![&proj.head],
-        Subterm::Match(m) => iter::once(&m.head).chain(&m.cases).collect(),
-        Subterm::Let(let_) => vec![&let_.body, &let_.tail],
-        Subterm::Rec(rec) => rec.items.iter().chain(iter::once(&rec.tail)).collect(),
-    }
-}
-
 /// The immediate sub-terms of a term, mutably — the structural children only, *not*
 /// primitive operands (a `rec` never nests inside one, so the cursor walk skips
 /// them).

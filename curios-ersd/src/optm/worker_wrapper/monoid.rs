@@ -23,7 +23,10 @@
 
 use {
     super::{Change, Lower, ThreadedParam, tail_call},
-    crate::{Argument, Func, Match, NatMatch, Prim, PurePrim, Subterm, Term, optm::CallGraph},
+    crate::{
+        Argument, Func, Match, NatMatch, Prim, PurePrim, Subterm, Term,
+        optm::{CallGraph, rewrite},
+    },
     std::mem,
 };
 
@@ -323,7 +326,7 @@ fn count_self_calls(term: &Term, name: &str) -> usize {
     let here =
         matches!(term.as_subterm(), Subterm::Apply(apply) if super::is_named(&apply.head, name));
     here as usize
-        + super::subterms(term)
+        + rewrite::children(term)
             .iter()
             .map(|sub| count_self_calls(sub, name))
             .sum::<usize>()
