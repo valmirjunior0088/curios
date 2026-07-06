@@ -4,7 +4,7 @@ use {
         Let, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType,
         Subterm, Telescope, Term, Tuple, TupleType, Var, Variant, reduce_prim,
     },
-    crate::time::Instant,
+    crate::Instant,
     num_traits::ToPrimitive,
 };
 

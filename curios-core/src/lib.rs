@@ -1,4 +1,5 @@
 mod time;
+use time::*;
 
 mod scope;
 pub use scope::*;

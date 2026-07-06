@@ -4,7 +4,7 @@ use {
         Metavar, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
         Three, Tuple, TupleType, Variant, Visit, check, convert_prim, reduce, unfold_rec,
     },
-    crate::time::Instant,
+    crate::Instant,
     std::collections::{HashSet, VecDeque},
 };
 

@@ -4,7 +4,7 @@
 //! directly, so this is a no-op everywhere except a bare-wasm build.
 
 #[cfg(target_arch = "wasm32")]
-pub use web_time::Instant;
+pub(crate) use web_time::Instant;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use std::time::Instant;

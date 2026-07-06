@@ -3,7 +3,7 @@ use {
         Bound, Concept, Goal, HeadKey, ImplicitOrigin, Inductive, Metavar, MetavarId,
         MetavarOrigin, Qualifier, Structure, Term, Witness, WitnessKey, WitnessOrigin,
     },
-    crate::time::Instant,
+    crate::Instant,
     curios_abi::RootId,
     curios_base::{Entropy, Span},
     std::{
