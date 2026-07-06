@@ -10,7 +10,7 @@
 //! For `Bin` and `Lst`, the same front decode also feeds the operation level:
 //! `Bin/get`/`Bin/slice` and `Lst/get`/`Lst/slice` peel one generator at a time via
 //! `peel_first_byte`/`peel_first_elem`. Each carrier's two destructors share one
-//! structural traversal (`peel_front`, `peel_front_arr`); `Bin` reflects the peeled
+//! structural traversal (`peel_front`, `peel_front_lst`); `Bin` reflects the peeled
 //! head two ways — a `Nat` byte for the eliminator, a one-byte `Bin` chunk for the
 //! operations — while `Lst`'s head is the element term for both.
 
@@ -56,7 +56,7 @@ impl FreeMonoid {
         match self {
             FreeMonoid::Unary => Self::uncons_unary(scrutinee),
             FreeMonoid::Bin => Self::uncons_bin(scrutinee),
-            FreeMonoid::Lst => Self::uncons_arr(scrutinee),
+            FreeMonoid::Lst => Self::uncons_lst(scrutinee),
         }
     }
 
@@ -96,10 +96,10 @@ impl FreeMonoid {
         }
     }
 
-    fn uncons_arr(scrutinee: Subterm) -> Layer {
+    fn uncons_lst(scrutinee: Subterm) -> Layer {
         let term = scrutinee.into();
 
-        match peel_front_arr(&term) {
+        match peel_front_lst(&term) {
             LstFront::Empty => Layer::Empty,
             // The peeled element is the eliminator's head generator directly.
             LstFront::Cons { head, tail } => Layer::Cons {
@@ -236,7 +236,7 @@ enum LstFront {
 /// `concat([h], t)` yields `h` off its leading non-empty literal segment, the
 /// residual elements rejoining the rest exactly as `LstConcat` collapses them. The
 /// empty array is `Empty`; anything else (a variable, a slice, an append) is `Opaque`.
-fn peel_front_arr(lst: &Term) -> LstFront {
+fn peel_front_lst(lst: &Term) -> LstFront {
     match &**lst {
         Subterm::Prim(Prim::Lst(elems)) => match elems.split_first() {
             None => LstFront::Empty,
@@ -248,7 +248,7 @@ fn peel_front_arr(lst: &Term) -> LstFront {
         // A symbolic cons: decode the head off the leading non-empty literal segment;
         // its remaining elements stay ahead of the rest.
         Subterm::Prim(Prim::LstConcat(elem, segments)) => match segments.split_first() {
-            Some((first, rest)) if is_nonempty_arr_literal(first) => {
+            Some((first, rest)) if is_nonempty_lst_literal(first) => {
                 let mut lead = match &**first {
                     Subterm::Prim(Prim::Lst(elems)) => elems.clone(),
                     _ => unreachable!("guard checked a non-empty `Lst` literal lead segment"),
@@ -283,7 +283,7 @@ fn peel_front_arr(lst: &Term) -> LstFront {
 /// `Bin/slice` walk a byte at a time. `None` for the empty array or an opaque
 /// symbolic value, where no first element is statically exposed.
 pub(crate) fn peel_first_elem(lst: &Term) -> Option<(Term, Term)> {
-    match peel_front_arr(lst) {
+    match peel_front_lst(lst) {
         LstFront::Cons { head, tail } => Some((head, tail)),
         LstFront::Empty | LstFront::Opaque => None,
     }
@@ -297,7 +297,7 @@ fn is_empty_bin(term: &Term) -> bool {
 
 // `cons` injects an element at the front as the singleton literal `[h]`; the `Lst`
 // eliminator recognizes a non-empty literal lead segment to decode a symbolic cons.
-fn is_nonempty_arr_literal(term: &Term) -> bool {
+fn is_nonempty_lst_literal(term: &Term) -> bool {
     matches!(&**term, Subterm::Prim(Prim::Lst(elems)) if !elems.is_empty())
 }
 
