@@ -125,7 +125,7 @@ pub enum Error {
     NotBlnType {
         head_type: Box<Term>,
     },
-    NotArrType {
+    NotLstType {
         head_type: Box<Term>,
     },
     NotBinType {
@@ -461,8 +461,8 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_arr_type<U: Into<Term>>(head_type: U) -> Self {
-        Self::NotArrType {
+    pub(crate) fn not_lst_type<U: Into<Term>>(head_type: U) -> Self {
+        Self::NotLstType {
             head_type: Box::new(head_type.into()),
         }
     }
@@ -837,7 +837,7 @@ impl Error {
             | Self::NotATuple { head_type }
             | Self::NotNatType { head_type }
             | Self::NotBlnType { head_type }
-            | Self::NotArrType { head_type }
+            | Self::NotLstType { head_type }
             | Self::NotBinType { head_type }
             | Self::NotAInductiveType { head_type } => out.push(head_type),
             Self::NotAFunctionType { expected } | Self::NotATupleType { expected } => {
@@ -955,7 +955,7 @@ impl fmt::Display for Error {
             Error::NotBlnType { head_type } => {
                 write!(f, "expected Bool but got {head_type}")
             }
-            Error::NotArrType { head_type } => {
+            Error::NotLstType { head_type } => {
                 write!(f, "expected Lst but got {head_type}")
             }
             Error::NotBinType { head_type } => {
