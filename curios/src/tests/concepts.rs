@@ -1,10 +1,4 @@
-use {curios_rt::MockHost, std::time::Duration};
-
-fn run(source: &str) -> Vec<u8> {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
-    io.output().to_vec()
-}
+use {super::run, curios_rt::MockHost, std::time::Duration};
 
 fn error(source: &str) -> String {
     let (system, _io) = MockHost::builder().build();
