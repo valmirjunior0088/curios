@@ -408,7 +408,7 @@ impl Module {
     }
 
     /// Every closure arity the module needs closure types for: the arities of the surviving
-    /// closure definitions, inductiveed with the arities of indirect call sites (whose target
+    /// closure definitions, unioned with the arities of indirect call sites (whose target
     /// definition may have been inlined away). Sizing closure types from definitions alone
     /// misses the latter, leaving a surviving `call_ref` with no declared type for its arity.
     pub(crate) fn clsr_arities(&self) -> BTreeSet<usize> {
