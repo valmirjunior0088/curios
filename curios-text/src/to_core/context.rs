@@ -1,5 +1,5 @@
 use {
-    super::interface::PublicInterface,
+    super::PublicInterface,
     crate::{Error, Name, Qualifier},
     curios_abi::{RootId, Roster},
     curios_base::Entropy,

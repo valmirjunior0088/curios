@@ -5,6 +5,7 @@ mod lower;
 use lower::*;
 
 mod interface;
+use interface::*;
 
 use {
     super::*,
