@@ -1,5 +1,8 @@
 use {
-    super::{Host, Io, Lift, Lower, Mode, Poll},
+    super::{
+        Host, Io, Lift, Lower, Mode, Poll,
+        lower::{anyref_array_type, i8_array_type},
+    },
     curios_abi::{ForeignFunction, ForeignStore, WireType, sys_io},
     std::{
         collections::HashMap,
@@ -8,8 +11,8 @@ use {
         sync::{Arc, LazyLock},
     },
     wasmtime::{
-        AnyRef, ArrayType, Caller, Config, Engine, FieldType, FuncType, HeapType, Linker, Module,
-        Mutability, RefType, Rooted, StorageType, Store, Val, ValType,
+        AnyRef, Caller, Config, Engine, FuncType, HeapType, Linker, Module, RefType, Rooted, Store,
+        Val, ValType,
     },
 };
 
@@ -48,16 +51,14 @@ pub fn shared_engine() -> &'static Engine {
 ///
 /// [`WireSignature`]: curios_abi::WireSignature
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
-    let bin_array = ArrayType::new(engine, FieldType::new(Mutability::Var, StorageType::I8));
-    let bin_ref = ValType::Ref(RefType::new(false, HeapType::ConcreteArray(bin_array)));
-    let lst_array = ArrayType::new(
-        engine,
-        FieldType::new(
-            Mutability::Var,
-            StorageType::ValType(ValType::Ref(RefType::new(true, HeapType::Any))),
-        ),
-    );
-    let lst_ref = ValType::Ref(RefType::new(false, HeapType::ConcreteArray(lst_array)));
+    let bin_ref = ValType::Ref(RefType::new(
+        false,
+        HeapType::ConcreteArray(i8_array_type(engine)),
+    ));
+    let lst_ref = ValType::Ref(RefType::new(
+        false,
+        HeapType::ConcreteArray(anyref_array_type(engine)),
+    ));
     let i31_ref = ValType::Ref(RefType::new(false, HeapType::I31));
 
     let val_type = |wire_type: &WireType, is_result: bool| match wire_type {
