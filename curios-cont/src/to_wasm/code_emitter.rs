@@ -344,14 +344,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
-    /// Map closure `f` over array `src` into a fresh array of the same length
-    /// in a single allocation. Force the source once, then one pass: size the
-    /// result from the payload's length and fill slot `idx` with
-    /// `f(src[idx])` — the closure invoked inline by `call_ref` (its result is
-    /// left on the stack, exactly as a non-tail closure call). The scratch
-    /// buffer never escapes this helper (it is sealed into a fresh leaf at the
-    /// end), so the map stays a pure value at the IR level (no linearity
-    /// reasoning) while lowering to a mutating fill.
+    /// Lower one `Code` op into the current frame, writing its result into
+    /// `value_name`'s local.
     pub(super) fn emit(&mut self, value_name: &'a crate::ValueName, op: &'a crate::Code) {
         let result_local = self
             .context
