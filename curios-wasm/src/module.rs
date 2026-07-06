@@ -20,7 +20,7 @@ impl Import {
     pub(crate) fn func_name(&self) -> Option<&FuncName> {
         match self {
             Import::Func { func_name, .. } => Some(func_name),
-            _ => None,
+            Import::Global { .. } => None,
         }
     }
 }
