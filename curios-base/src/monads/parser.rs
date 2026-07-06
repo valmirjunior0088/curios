@@ -572,12 +572,7 @@ where
 
         let mut items = vec![item];
 
-        loop {
-            let next_state = match parse_separator(&mut g, state)? {
-                Some(next_state) => next_state,
-                None => break,
-            };
-
+        while let Some(next_state) = parse_separator(&mut g, state)? {
             let offset = next_state.offset;
             let (item, next_state) = f().parse(next_state)?;
 
@@ -618,12 +613,7 @@ where
 
         let mut items = vec![item];
 
-        loop {
-            let next_state = match parse_separator(&mut g, state)? {
-                Some(next_state) => next_state,
-                None => break,
-            };
-
+        while let Some(next_state) = parse_separator(&mut g, state)? {
             let offset = next_state.offset;
             match f().parse(next_state) {
                 Ok((item, next_state)) => {
@@ -665,12 +655,7 @@ where
 
         let mut items = vec![item];
 
-        loop {
-            let next_state = match parse_separator(&mut g, state)? {
-                Some(next_state) => next_state,
-                None => break,
-            };
-
+        while let Some(next_state) = parse_separator(&mut g, state)? {
             let offset = next_state.offset;
             let (item, next_state) = f().parse(next_state)?;
 
