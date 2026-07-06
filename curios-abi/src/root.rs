@@ -4,12 +4,12 @@
 //! `std`, and the entry program, in that dependency order; later, a package
 //! manager's resolved dependencies join the same list. [`RootId`] is the
 //! opaque handle every other stage compares by equality instead of re-deriving
-//! "which root does this belong to" from a qualified-name string; [`Root`]
-//! is the descriptor a `RootId` resolves to. This lives in `curios-abi`
-//! (a pure leaf) because it is needed both by `curios-core` (on `Concept`,
-//! `Structure`, `Inductive` registry entries) and by `curios-rt` (on the wasm
-//! import-namespace/link-loop side), and those two crates share no other
-//! common dependency.
+//! "which root does this belong to" from a qualified-name string; [`Roster`]
+//! resolves a compilation's qualified-name segments to their `RootId`s. This
+//! lives in `curios-abi` (a pure leaf) because it is needed both by
+//! `curios-core` (on `Concept`, `Structure`, `Inductive` registry entries) and
+//! by `curios-rt` (on the wasm import-namespace/link-loop side), and those two
+//! crates share no other common dependency.
 
 /// An opaque handle identifying one root within a single compilation. Cheap
 /// to carry and compare — a dense index, not a string.
@@ -110,7 +110,7 @@ impl RootKind {
 /// needing an entry for itself.
 #[derive(Debug, Clone)]
 pub struct Roster {
-    by_name: std::collections::BTreeMap<String, Root>,
+    by_name: std::collections::BTreeMap<String, RootId>,
 }
 
 impl Roster {
@@ -125,16 +125,15 @@ impl Roster {
     pub fn new(dependencies: impl IntoIterator<Item = String>) -> Roster {
         let mut by_name = std::collections::BTreeMap::new();
 
-        by_name.insert("sys".to_string(), Root::new(RootId::SYS, "sys", RootKind::Internal));
-        by_name.insert("syn".to_string(), Root::new(RootId::SYN, "syn", RootKind::Privileged));
-        by_name.insert("std".to_string(), Root::new(RootId::STD, "std", RootKind::Privileged));
+        by_name.insert("sys".to_string(), RootId::SYS);
+        by_name.insert("syn".to_string(), RootId::SYN);
+        by_name.insert("std".to_string(), RootId::STD);
 
         let mut names: Vec<String> = dependencies.into_iter().collect();
         names.sort();
 
         for (index, name) in names.into_iter().enumerate() {
-            let id = RootId::dynamic(1 + index as u32);
-            by_name.insert(name.clone(), Root::new(id, name, RootKind::Ordinary));
+            by_name.insert(name, RootId::dynamic(1 + index as u32));
         }
 
         Roster { by_name }
@@ -143,28 +142,6 @@ impl Roster {
     /// The `RootId` a qualifier's leading segment names: a recognized
     /// root's own id, or `RootId::ENTRY` for anything else.
     pub fn resolve(&self, segment: &str) -> RootId {
-        self.by_name.get(segment).map_or(RootId::ENTRY, |root| root.id)
-    }
-}
-
-/// One compilation root's descriptor.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Root {
-    id: RootId,
-    /// The root's top-level path segment, e.g. `"sys"`, `"std"`, or the
-    /// entry program's (today always empty — the entry program is
-    /// unqualified, per `Structure::module`'s "the root module is the empty
-    /// string" convention).
-    name: String,
-    kind: RootKind,
-}
-
-impl Root {
-    fn new(id: RootId, name: impl Into<String>, kind: RootKind) -> Self {
-        Self {
-            id,
-            name: name.into(),
-            kind,
-        }
+        self.by_name.get(segment).copied().unwrap_or(RootId::ENTRY)
     }
 }
