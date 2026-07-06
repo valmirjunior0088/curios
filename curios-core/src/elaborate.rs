@@ -411,12 +411,12 @@ fn elaborate_apply(
     ))
 }
 
-/// Whether `arg` is a checked-only introduction form (tuple, lambda, array
+/// Whether `arg` is a checked-only introduction form (tuple, lambda, list
 /// literal) that cannot be elaborated yet because the type structure it needs is
-/// an unsolved metavar — a tuple or array literal whose whole expected type, or a
+/// an unsolved metavar — a tuple or list literal whose whole expected type, or a
 /// lambda whose expected *domain*, reduces to one. (A lambda only needs its domain
 /// known: the body, which may project the parameter, can't be checked against an
-/// unknown domain; its codomain may stay a metavar. An array literal borrows its
+/// unknown domain; its codomain may stay a metavar. A list literal borrows its
 /// element type from `expected`, so it needs the expected head — `Lst _` — to be
 /// known.) Synthesizable forms return `false`: they have a turnaround of their own
 /// and must run eagerly so their solutions feed the result unification.
@@ -428,14 +428,14 @@ fn blocked_on_metavar(
     expected_ground: bool,
 ) -> Result<bool, Error> {
     let is_lambda = matches!(&**arg, Subterm::Func(_));
-    let is_arr = matches!(&**arg, Subterm::Prim(Prim::Lst(_)));
+    let is_list = matches!(&**arg, Subterm::Prim(Prim::Lst(_)));
     let is_tuple = matches!(&**arg, Subterm::Tuple(_));
-    if !is_lambda && !is_arr && !is_tuple {
+    if !is_lambda && !is_list && !is_tuple {
         return Ok(false);
     }
     let reduced = reduce_with(context, ty)?;
     Ok(match &*reduced {
-        // A tuple/array/lambda whose whole expected type is an unsolved metavar.
+        // A tuple/list/lambda whose whole expected type is an unsolved metavar.
         Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
         Subterm::FuncType(FuncType { telescope, .. }) if is_lambda => match telescope {
             Telescope::Cons(domain, _) => {
