@@ -654,6 +654,39 @@ fn print_import<'a>(module_name: &'a str, name: &'a str, import: &'a Import) -> 
     ])
 }
 
+/// Prints a `(param $name type)`/`(local $name type)` run: the first binding
+/// leads with a newline (so it starts its own line under the enclosing
+/// `indent`), every later one with a plain space (so they share that line) —
+/// the one layout `param`s and `local`s both use in `print_func`.
+fn print_bindings<'a>(
+    keyword: &'static str,
+    mut bindings: impl Iterator<Item = (&'a LocalName, &'a ValType)> + 'a,
+) -> Printer<'a> {
+    flat(
+        bindings
+            .next()
+            .into_iter()
+            .map(move |(local_name, val_type)| {
+                flat([
+                    pure(format!("\n({keyword} ")),
+                    print_local_name(local_name),
+                    pure(" "),
+                    print_val_type(val_type),
+                    pure(")"),
+                ])
+            })
+            .chain(bindings.map(move |(local_name, val_type)| {
+                flat([
+                    pure(format!(" ({keyword} ")),
+                    print_local_name(local_name),
+                    pure(" "),
+                    print_val_type(val_type),
+                    pure(")"),
+                ])
+            })),
+    )
+}
+
 fn print_func<'a>(module: &'a Module, func_name: &'a FuncName, func: &'a Func) -> Printer<'a> {
     let func_type = module
         .get_type(&func.type_name)
@@ -672,30 +705,7 @@ fn print_func<'a>(module: &'a Module, func_name: &'a FuncName, func: &'a Func) -
         print_type_name(&func.type_name),
         pure(")"),
         indent(flat([
-            flat({
-                let mut iter = func.params.iter().zip(func_type.inputs());
-
-                iter.next()
-                    .into_iter()
-                    .map(|(local_name, val_type)| {
-                        flat([
-                            pure("\n(param "),
-                            print_local_name(local_name),
-                            pure(" "),
-                            print_val_type(val_type),
-                            pure(")"),
-                        ])
-                    })
-                    .chain(iter.map(|(local_name, val_type)| {
-                        flat([
-                            pure(" (param "),
-                            print_local_name(local_name),
-                            pure(" "),
-                            print_val_type(val_type),
-                            pure(")"),
-                        ])
-                    }))
-            }),
+            print_bindings("param", func.params.iter().zip(func_type.inputs())),
             flat(match func_type.outputs.val_types.is_empty() {
                 true => None,
                 false => Some(flat([
@@ -703,30 +713,12 @@ fn print_func<'a>(module: &'a Module, func_name: &'a FuncName, func: &'a Func) -
                     print_result_type("result", &func_type.outputs),
                 ])),
             }),
-            flat({
-                let mut iter = func.locals.iter();
-
-                iter.next()
-                    .into_iter()
-                    .map(|(local_name, val_type)| {
-                        flat([
-                            pure("\n(local "),
-                            print_local_name(local_name),
-                            pure(" "),
-                            print_val_type(val_type),
-                            pure(")"),
-                        ])
-                    })
-                    .chain(iter.map(|(local_name, val_type)| {
-                        flat([
-                            pure(" (local "),
-                            print_local_name(local_name),
-                            pure(" "),
-                            print_val_type(val_type),
-                            pure(")"),
-                        ])
-                    }))
-            }),
+            print_bindings(
+                "local",
+                func.locals
+                    .iter()
+                    .map(|(local_name, val_type)| (local_name, val_type)),
+            ),
             pure("\n"),
             print_expr(&func.expr),
         ])),
