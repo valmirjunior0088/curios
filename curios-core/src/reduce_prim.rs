@@ -417,7 +417,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             Prim::nat_eql,
         ),
         // Handles are opaque runtime tokens with no compile-time literal form,
-        // so this only ever reduces its operands and rebuilds -- it never folds.
+        // so this only ever reduces its operands and rebuilds — it never folds.
         Prim::IoEql(left, right) => {
             reduce_nat_binary(context, left, right, |_, _| None, Prim::IoEql)
         }

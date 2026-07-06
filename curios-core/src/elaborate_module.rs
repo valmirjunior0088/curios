@@ -331,7 +331,7 @@ pub fn elaborate_module(
     metavar_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Term), Error> {
-    // Seed the context's inductive registry before any item is checked: a
+    // Seed the context's inductive registry before any item is checked: an
     // inductive's type-constructor and value-constructor definitions reference
     // their own registry entry (`elaborate_inductive_type` / `elaborate_variant`).
     for (name, inductive) in &module.inductives {

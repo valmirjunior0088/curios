@@ -953,7 +953,7 @@ impl fmt::Display for Error {
                 write!(f, "expected Nat but got {head_type}")
             }
             Error::NotBlnType { head_type } => {
-                write!(f, "expected Bool but got {head_type}")
+                write!(f, "expected Bln but got {head_type}")
             }
             Error::NotLstType { head_type } => {
                 write!(f, "expected Lst but got {head_type}")

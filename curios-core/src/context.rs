@@ -24,7 +24,9 @@ type SharedTelescope = Rc<Vec<(String, Term)>>;
 type SharedSpine = Rc<Vec<Term>>;
 
 /// One metavariable's record in the [`MetaStore`]. Everything here is frozen at
-/// birth except `solution`, which transitions `None -> Some(_)` exactly once.
+/// birth except `solution`, which transitions `None -> Some(_)` on solve —
+/// rolled back to `None` if re-validation rejects the candidate that solved it
+/// (`Context::rollback_solutions`, §7.4).
 #[derive(Debug)]
 pub(crate) struct MetaEntry {
     /// Γ frozen at birth: the local assumption context in binding order, with

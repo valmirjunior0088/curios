@@ -7,7 +7,7 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
     // Two `Bin`/`Lst` values are the free monoid on their bytes/elements: peel the
     // longest common prefix (`core::spine`). `Stuck` falls through to the
     // structural arms below, which compare like-shaped symbolic operands (slices,
-    // appends) and `Lst` element runs the peel leaves opaque — so the peel only
+    // appends) and `Lst` element runs that the peel leaves opaque — so the peel only
     // ever strengthens conversion, never weakens it.
     if let Some(peel) = peel_bin(&this, &that).or_else(|| peel_lst(&this, &that)) {
         match peel {

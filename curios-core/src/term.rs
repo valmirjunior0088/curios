@@ -988,7 +988,7 @@ pub struct Struct {
 /// The unified eliminator: every match form shares a scrutinee and a motive
 /// and differs only in its [`Cases`] payload.
 ///
-/// The motive's arity is 1 (the scrutinee binder) for every form except a
+/// The motive's arity is 1 (the scrutinee binder) for every form except an
 /// inductive match with an annotated type-pattern motive, where the pattern's
 /// binder slots precede the scrutinee binder (in slot order, scrutinee last).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
