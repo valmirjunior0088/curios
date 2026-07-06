@@ -6,7 +6,7 @@ Curios is a small language with a full dependent type system: types can depend o
 
 > **Status: early and experimental.** This is a research language under active development. The syntax, standard library, and compiler internals all change frequently, and there is no stability guarantee yet. If you enjoy poking at dependently-typed languages and compilers in progress, you're in the right place; if you need something production-ready, this isn't it (yet).
 
-**[Try Curios in your browser →](https://valmirjunior0088.github.io/curios/)** — no install needed, it typechecks and compiles to WebAssembly right there in the page.
+**[Try Curios in your browser](https://valmirjunior0088.github.io/curios/)** — no install needed, it typechecks and compiles to WebAssembly right there in the page.
 
 ## What's interesting about it
 
