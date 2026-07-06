@@ -8,15 +8,6 @@ use {
     std::{path::Path, time::Duration},
 };
 
-/// The stage names that don't exist until the full pipeline lowers past `core`
-/// — requesting one of these from `check` forces the fallback to
-/// [`compile_file`], since [`typecheck_file`] never produces them. Kept next
-/// to [`stage_printer`], the other place that spells out this same name set,
-/// so the two cannot drift. `cli::Cli::print`'s `default_missing_value` spells
-/// out the full name set (these five plus `text`/`core`) a third time and
-/// needs updating in step with both.
-pub(crate) const POST_CORE_STAGES: [&str; 5] = ["ersd", "ersd-optm", "cont", "cont-optm", "wasm"];
-
 /// Build the observer closure that prints each requested IR stage to stderr.
 /// `print` is the comma-separated stage list from `--print`; an unlisted stage is
 /// skipped. The closure handles every `Stage` variant, so it serves both the full
@@ -24,19 +15,10 @@ pub(crate) const POST_CORE_STAGES: [&str; 5] = ["ersd", "ersd-optm", "cont", "co
 fn stage_printer(print: &str) -> impl Fn(Stage<'_>) + '_ {
     let stages = print.split(',').collect::<Vec<_>>();
 
-    move |stage| match stage {
-        Stage::Text(text) if stages.contains(&"text") => eprintln!("\n=== text ===\n{text}"),
-        Stage::Core(core) if stages.contains(&"core") => eprintln!("\n=== core ===\n{core}"),
-        Stage::Ersd(ersd) if stages.contains(&"ersd") => eprintln!("\n=== ersd ===\n{ersd}"),
-        Stage::ErsdOptm(ersd) if stages.contains(&"ersd-optm") => {
-            eprintln!("\n=== ersd-optm ===\n{ersd}")
+    move |stage| {
+        if stages.contains(&stage.name()) {
+            eprintln!("\n=== {} ===\n{stage}", stage.name());
         }
-        Stage::Cont(cont) if stages.contains(&"cont") => eprintln!("\n=== cont ===\n{cont}"),
-        Stage::ContOptm(cont) if stages.contains(&"cont-optm") => {
-            eprintln!("\n=== cont-optm ===\n{cont}")
-        }
-        Stage::Wasm(wasm) if stages.contains(&"wasm") => eprintln!("\n=== wasm ===\n{wasm}"),
-        _ => {}
     }
 }
 

@@ -52,7 +52,7 @@ fn dispatch() -> Result<(), String> {
             // stages do not exist until lowering runs.
             if print
                 .split(',')
-                .any(|stage| POST_CORE_STAGES.contains(&stage))
+                .any(|stage| curios_pipeline::NAMES[2..].contains(&stage))
             {
                 compile_file(timeout, &print, &input_path)?;
             } else {

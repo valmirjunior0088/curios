@@ -4,7 +4,7 @@
 
 use {
     curios_abi::{ForeignStore, sys_io},
-    std::time::Duration,
+    std::{sync::LazyLock, time::Duration},
 };
 
 /// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — the CLI's `--print` stage dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past. A type-check-only run emits just `Text` and `Core`.
@@ -16,6 +16,43 @@ pub enum Stage<'a> {
     Cont(&'a curios_cont::Module),
     ContOptm(&'a curios_cont::Module),
     Wasm(&'a curios_wasm::Module),
+}
+
+/// Every stage name, in pipeline order — the single source `curios`'s
+/// post-core check and `--print`'s default/help text are derived from, so
+/// neither can drift from [`Stage::name`].
+pub const NAMES: [&str; 7] = ["text", "core", "ersd", "ersd-optm", "cont", "cont-optm", "wasm"];
+
+/// [`NAMES`] joined with `,`, computed once on first use.
+pub static NAMES_CSV: LazyLock<String> = LazyLock::new(|| NAMES.join(","));
+
+impl<'a> Stage<'a> {
+    /// This stage's name, matching its entry in [`NAMES`].
+    pub fn name(&self) -> &'static str {
+        match self {
+            Stage::Text(_) => "text",
+            Stage::Core(_) => "core",
+            Stage::Ersd(_) => "ersd",
+            Stage::ErsdOptm(_) => "ersd-optm",
+            Stage::Cont(_) => "cont",
+            Stage::ContOptm(_) => "cont-optm",
+            Stage::Wasm(_) => "wasm",
+        }
+    }
+}
+
+impl std::fmt::Display for Stage<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Stage::Text(entrypoint) => write!(f, "{entrypoint}"),
+            Stage::Core(module) => write!(f, "{module}"),
+            Stage::Ersd(module) => write!(f, "{module}"),
+            Stage::ErsdOptm(module) => write!(f, "{module}"),
+            Stage::Cont(module) => write!(f, "{module}"),
+            Stage::ContOptm(module) => write!(f, "{module}"),
+            Stage::Wasm(module) => write!(f, "{module}"),
+        }
+    }
 }
 
 thread_local! {

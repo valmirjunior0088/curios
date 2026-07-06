@@ -61,8 +61,12 @@ pub(crate) struct Cli {
         long,
         value_name = "STAGES",
         num_args = 0..=1,
-        default_missing_value = "text,core,ersd,ersd-optm,cont,cont-optm,wasm",
-        help = "Print selected IRs to stderr (comma-separated: text,core,ersd,ersd-optm,cont,cont-optm,wasm; bare --print prints all)"
+        require_equals = true,
+        default_missing_value = curios_pipeline::NAMES_CSV.as_str(),
+        help = format!(
+            "Print selected IRs to stderr (comma-separated: {}; bare --print prints all)",
+            *curios_pipeline::NAMES_CSV
+        )
     )]
     pub(crate) print: Option<String>,
 
