@@ -103,7 +103,7 @@ fn host_unary(
 /// Lower a primitive to its `ersd` form. Pure downstream lowering: the term is
 /// already well-typed (elaborate discharged every obligation) and meta-free
 /// (zonk ran), so there is no checking here. `expected` is consumed only where a
-/// runtime shape must be read off the type — the element type of an array literal
+/// runtime shape must be read off the type — the element type of a list literal
 /// (§9).
 pub(crate) fn erase_prim(
     context: &mut Context,
@@ -226,11 +226,11 @@ pub(crate) fn erase_prim(
         }
         Prim::LstType(_) => Ok(curios_ersd::Subterm::Erased.into()),
         Prim::Lst(elems) => {
-            // Elaborate already checked this literal against an array type (§9);
+            // Elaborate already checked this literal against a list type (§9);
             // the element type is re-derived here only to lower the elements.
             let elem_type = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
                 Subterm::Prim(Prim::LstType(elem_type)) => elem_type,
-                _ => unreachable!("erase: array literal checked against non-array type"),
+                _ => unreachable!("erase: list literal checked against non-list type"),
             };
             let erased_elems = elems
                 .iter()

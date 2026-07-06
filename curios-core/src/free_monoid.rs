@@ -235,7 +235,7 @@ enum LstFront {
 /// already-reduced value: a literal run yields its first element; a symbolic cons
 /// `concat([h], t)` yields `h` off its leading non-empty literal segment, the
 /// residual elements rejoining the rest exactly as `LstConcat` collapses them. The
-/// empty array is `Empty`; anything else (a variable, a slice, an append) is `Opaque`.
+/// empty list is `Empty`; anything else (a variable, a slice, an append) is `Opaque`.
 fn peel_front_lst(lst: &Term) -> LstFront {
     match &**lst {
         Subterm::Prim(Prim::Lst(elems)) => match elems.split_first() {

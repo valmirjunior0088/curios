@@ -1287,7 +1287,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
                 .iter()
                 .map(|e| reduce(context, e.clone()))
                 .collect::<Result<_, _>>()?;
-            // The `Lst` twin of `BinConcat` normalisation: drop the empty array (so
+            // The `Lst` twin of `BinConcat` normalisation: drop the empty list (so
             // `concat([], a)`/`concat(a, [])` collapse to `a`), merge adjacent literal
             // runs, collapse a lone operand — the definitional partner of `peel_arr`'s
             // `[]`-handling (`core::spine`); see `normalize_concat`.
@@ -1308,7 +1308,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         // elementwise; the spine cases distribute (`map f (concat segs) =
         // concat (map f segs)`, `map f (append b x) = append (map f b) (f x)`) — the
         // same normal form a structural `foldr (\x ih. f x :: ih) []` produces, so
-        // map-based proofs still reduce. A symbolic array stays neutral (the
+        // map-based proofs still reduce. A symbolic list stays neutral (the
         // `Opaque` case), so there is no unfold of a variable.
         Prim::LstMap(a, b, f, lst) => {
             let a = reduce(context, a.clone())?;
