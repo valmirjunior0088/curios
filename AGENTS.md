@@ -4,7 +4,7 @@ Agent guide to `curios`. Operational reference plus an orientation map. Read thi
 
 ## Overview
 
-`curios` is a work-in-progress functional, dependently-typed programming language, implemented in Rust (edition 2024, ~75k lines). It compiles `.crs` source through a series of intermediate representations down to WebAssembly, and runs the result on an embedded `wasmtime` engine.
+`curios` is a work-in-progress functional, dependently-typed programming language, implemented in Rust (edition 2024, ~88k lines). It compiles `.crs` source through a series of intermediate representations down to WebAssembly, and runs the result on an embedded `wasmtime` engine.
 
 The repo is a **Cargo workspace** (virtual manifest at the root) of twelve crates, layered along the pipeline:
 

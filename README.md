@@ -58,9 +58,9 @@ See [SYNTAX.md](SYNTAX.md) for the full language reference.
 ### Prerequisites
 
 - A recent Rust toolchain (the project uses edition 2024).
-- A C++ toolchain and **CMake** — the default build compiles the vendored Binaryen optimizer. The first build takes a few minutes as a result.
+- A network connection for the first build — `curios-binaryen` downloads and sha256-verifies a prebuilt Binaryen static library from GitHub releases (no vendored source, no C++ toolchain/CMake needed).
 
-Binaryen is built only by the crates that need it. For fast iteration on a single pipeline stage you can build e.g. `cargo build --package curios-core` — pure Rust, no Binaryen/CMake.
+Binaryen is fetched only by the crates that need it. For fast iteration on a single pipeline stage you can build e.g. `cargo build --package curios-core` — pure Rust, no Binaryen download.
 
 ### Download a pre-built binary
 
@@ -112,7 +112,7 @@ A compiled executable is the slim launcher stub — embedded inside `curios` its
 
 ## Repository layout
 
-A Cargo workspace of twelve crates, layered along the pipeline: **`curios-abi`** (host/guest wire ABI constants) and **`curios-base`** (spans, entropy, the `name!` macro, parser/printer monads) are the shared foundations; **`curios-wasm`** → **`curios-cont`** → **`curios-ersd`** → **`curios-core`** → **`curios-text`** are the pipeline stages (`text` → `core` → `ersd` → `cont` → `wasm`, each its own crate, code dependencies running the opposite direction of data flow); **`curios-pipeline`** is the pure driver chaining those stages (`compile_entrypoint`/`typecheck_entrypoint`); **`curios-js`** is a `wasm-bindgen` build of `curios-pipeline` for a browser playground; **`curios-binaryen`** is the vendored Binaryen optimizer; **`curios-rt`** is the runtime-only engine + launcher stub; and **`curios`** is the facade + driver + CLI, the only crate that links Cranelift and Binaryen. The standard library (`std`/`syn`) lives under **`curios-text`**, not `curios`.
+A Cargo workspace of twelve crates, layered along the pipeline: **`curios-abi`** (host/guest wire ABI constants) and **`curios-base`** (spans, entropy, the `name!` macro, parser/printer monads) are the shared foundations; **`curios-wasm`** → **`curios-cont`** → **`curios-ersd`** → **`curios-core`** → **`curios-text`** are the pipeline stages (`text` → `core` → `ersd` → `cont` → `wasm`, each its own crate, code dependencies running the opposite direction of data flow); **`curios-pipeline`** is the pure driver chaining those stages (`compile_entrypoint`/`typecheck_entrypoint`); **`curios-js`** is a `wasm-bindgen` build of `curios-pipeline` for a browser playground; **`curios-binaryen`** is FFI to Binaryen, linked from a prebuilt release fetched by `build.rs` (no vendored source); **`curios-rt`** is the runtime-only engine + launcher stub; and **`curios`** is the facade + driver + CLI, the only crate that links Cranelift and Binaryen. The standard library (`std`/`syn`) lives under **`curios-text`**, not `curios`.
 
 For a full tour of the architecture, build/test workflow, and conventions, see [AGENTS.md](AGENTS.md). For the language itself, see [SYNTAX.md](SYNTAX.md). For what's built vs. planned, see [ROADMAP.md](ROADMAP.md).
 
