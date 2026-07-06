@@ -302,12 +302,6 @@ fn resolvable(
     out
 }
 
-// Resolve a `pub use`'s path to its provider module, following re-export targets.
-// A relative path's first segment may be the current module's own child of any
-// visibility (you are inside it, so its privacy does not apply to itself); every
-// later segment, and every segment of an absolute path, must be a public child.
-// `None` if any segment is not (yet) reachable — during the fixed point that
-// means "retry next round".
 // The `Option` view of `resolve_provider`, for callers where non-resolution is
 // benign: a selector that does not resolve *yet* during the fixed point, or a
 // chain hop that simply does not exist. The terminal `classify_dead` pass calls
@@ -463,11 +457,15 @@ fn producer(
     None
 }
 
-// Walk a `use` source path to its provider module. Each resolved hop is guarded
-// so a non-privileged consumer cannot follow a re-export into an internal root
-// (`sys`) by any spelling. On failure, returns the precise error at the
-// offending segment, using the direct-interface table to tell private from
-// absent; `provider` is the `Option` view for callers where that is benign.
+// Walk a `use` source path to its provider module, following re-export targets.
+// A relative path's first segment may be the current module's own child of any
+// visibility (you are inside it, so its privacy does not apply to itself); every
+// later segment, and every segment of an absolute path, must be a public child.
+// Each resolved hop is guarded so a non-privileged consumer cannot follow a
+// re-export into an internal root (`sys`) by any spelling. On failure, returns
+// the precise error at the offending segment, using the direct-interface table
+// to tell private from absent; `provider` is the `Option` view for callers
+// where that is benign.
 fn resolve_provider(
     public: &HashMap<Qualifier, PublicInterface>,
     table: &HashMap<Qualifier, ModuleInfo>,
