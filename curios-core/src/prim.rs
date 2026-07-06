@@ -738,7 +738,7 @@ impl Prim {
 
     /// Visit each `Term` operand of `self`, in field order. The single source of
     /// truth for which fields of a primitive are its term operands — `reach`,
-    /// `collect_metavars`, and `collect_construction_names` all read it.
+    /// `any_metavar`, and `collect_construction_names` all read it.
     /// (`traverse` keeps its own match: it rebuilds rather than visits.) The
     /// closure is taken `impl FnMut` so it monomorphises and inlines, leaving the
     /// de Bruijn / region hot path allocation- and indirection-free.

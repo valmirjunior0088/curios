@@ -908,12 +908,6 @@ fn pattern_binder_slots(pattern: Option<&MotivePattern>, n_params: usize) -> Vec
         .unwrap_or_default()
 }
 
-/// Erase a match on an *erasable* (proof/type) scrutinee, which carries no
-/// runtime tag. Such an inductive is a subsingleton (large-elimination
-/// soundness), so the match has exactly one live arm — `Eq`'s `refl` being the
-/// canonical case. The arm's body is erased with its payload binders bound (so
-/// it type-checks and refines) but never projected, and the scrutinee head is
-/// not erased: it is a dropped binder with no runtime value.
 /// The scrutinee's inductive type at a match site: its registered declaration
 /// plus the concrete instantiation (`name`, parameters, indices) read off the
 /// scrutinee's type.
@@ -924,6 +918,12 @@ struct Scrutinee<'a> {
     actual_indices: &'a [Term],
 }
 
+/// Erase a match on an *erasable* (proof/type) scrutinee, which carries no
+/// runtime tag. Such an inductive is a subsingleton (large-elimination
+/// soundness), so the match has exactly one live arm — `Eq`'s `refl` being the
+/// canonical case. The arm's body is erased with its payload binders bound (so
+/// it type-checks and refines) but never projected, and the scrutinee head is
+/// not erased: it is a dropped binder with no runtime value.
 fn erase_erasable_scrutinee_match(
     context: &mut Context,
     head: &Term,

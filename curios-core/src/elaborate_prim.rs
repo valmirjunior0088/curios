@@ -23,7 +23,8 @@ fn binary(
     Ok((build(left, right), result))
 }
 
-/// The unary counterpart of [`binary`], for the float-unary primitives.
+/// The unary counterpart of [`binary`], for single-operand scalar/conversion
+/// primitives.
 fn unary(
     context: &mut Context,
     inner: &Term,
