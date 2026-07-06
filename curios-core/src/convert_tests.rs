@@ -189,7 +189,7 @@ fn convert_prim_nat_to_int_recurses_into_operand() {
 }
 
 #[test]
-fn convert_prim_arr_compares_element_wise() {
+fn convert_prim_lst_compares_element_wise() {
     let mut context = context();
 
     let this = Subterm::Prim(Prim::lst(vec![
@@ -208,7 +208,7 @@ fn convert_prim_arr_compares_element_wise() {
 }
 
 #[test]
-fn convert_prim_arr_rejects_different_lengths() {
+fn convert_prim_lst_rejects_different_lengths() {
     let mut context = context();
 
     let this = Subterm::Prim(Prim::lst(vec![Subterm::Prim(Prim::Nat(Nat::new(1usize)))])).into();

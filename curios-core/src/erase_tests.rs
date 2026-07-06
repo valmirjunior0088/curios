@@ -91,7 +91,7 @@ fn erase_func_captures_free_variables_before_opening_body() {
 }
 
 #[test]
-fn erase_arr_nat_type_literal_len_and_get() {
+fn erase_lst_nat_type_literal_len_and_get() {
     let mut context = context();
 
     let lst_nat = Subterm::Prim(Prim::lst_type(Subterm::Prim(Prim::NatType))).into();
@@ -270,7 +270,7 @@ fn erase_bin_concat() {
 }
 
 #[test]
-fn erase_arr_concat() {
+fn erase_lst_concat() {
     let mut context = context();
 
     let lst_nat = Subterm::Prim(Prim::lst_type(Subterm::Prim(Prim::NatType))).into();
