@@ -30,7 +30,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     /// The `Bin` rope family: the flat `$bytes` payload (the host-boundary
-    /// shape), the `$bin` base, and its `leaf`/`node` subtypes. Each is its
+    /// shape), the `$bin` base, and its `leaf`/`node`/`sub` subtypes. Each is its
     /// own singleton recursion group — `$bytes` must canonicalize equal to
     /// the type curios-js's bridge declares standalone, and a subtype may
     /// reference any *earlier* group.
@@ -574,8 +574,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// Add the rope helpers the emitted code referenced. Helpers whose bodies
     /// call other helpers go first: *building* a body references its callees
     /// through the table, so the callee used-flags must settle before they
-    /// are read — deep host-boundary forms, then `slice`/`read` (whose node
-    /// arms call `force`), then `force`/`wrap`.
+    /// are read — deep host-boundary forms, then everything else whose body
+    /// calls `force` (`eql`, `map`, `slice`, `read`), then `force`/`wrap`.
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
 
