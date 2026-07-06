@@ -10,11 +10,13 @@ mod host;
 pub use host::*;
 
 mod table;
+use table::*;
 
 mod os_host;
 pub use os_host::*;
 
 mod os_resolver;
+use os_resolver::*;
 
 mod mock_host;
 pub use mock_host::*;

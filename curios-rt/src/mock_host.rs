@@ -1,5 +1,5 @@
 use {
-    super::{host::*, table::Table},
+    super::{Table, host::*},
     std::{
         collections::{HashMap, VecDeque},
         sync::{Arc, Mutex},

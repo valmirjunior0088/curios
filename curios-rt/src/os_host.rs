@@ -1,8 +1,7 @@
 use {
     super::{
         host::*,
-        os_resolver::{OsResolver, Slot},
-        table::Table,
+        OsResolver, Slot, Table,
     },
     rustix::event::{PollFd, Timespec, poll},
     rustls::{
