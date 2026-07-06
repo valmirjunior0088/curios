@@ -305,6 +305,12 @@ pub enum Error {
     CyclicSuperclass {
         concept: String,
     },
+    /// A concept's `use`-marked field names a superclass that isn't a
+    /// registered concept at all (e.g. it resolves to a struct or inductive).
+    UnknownSuperclass {
+        concept: String,
+        target: String,
+    },
     /// A witness's concept parameter at an input `position` (0-based) does
     /// not reduce to a rigid nominal or primitive head — nothing to key the
     /// table entry on.
@@ -691,6 +697,16 @@ impl Error {
     pub(crate) fn cyclic_superclass<N: Into<String>>(concept: N) -> Self {
         Self::CyclicSuperclass {
             concept: concept.into(),
+        }
+    }
+
+    pub(crate) fn unknown_superclass<N: Into<String>, T: Into<String>>(
+        concept: N,
+        target: T,
+    ) -> Self {
+        Self::UnknownSuperclass {
+            concept: concept.into(),
+            target: target.into(),
         }
     }
 
@@ -1190,6 +1206,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "concept '{concept}' participates in a superclass cycle ('use'-marked fields must form an acyclic graph)"
+                )
+            }
+            Error::UnknownSuperclass { concept, target } => {
+                write!(
+                    f,
+                    "concept '{concept}' names '{target}' as a superclass, but '{target}' is not a registered concept"
                 )
             }
             Error::InvalidWitnessHead {

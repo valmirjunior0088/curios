@@ -752,8 +752,11 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
 
     for (name, concept) in concepts {
         for (_, target) in &concept.supers {
-            if target == name || !concepts.contains_key(target) {
+            if target == name {
                 return Err(Error::cyclic_superclass(name.clone()));
+            }
+            if !concepts.contains_key(target) {
+                return Err(Error::unknown_superclass(name.clone(), target.clone()));
             }
         }
     }
