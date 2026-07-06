@@ -55,7 +55,11 @@ pub(crate) fn compile_file(
 
 /// Type-check `input_path` only (the fast `check` path), printing any requested
 /// pre-lowering stages (`text`/`core`).
-pub(crate) fn typecheck_file(timeout: Duration, print: &str, input_path: &Path) -> Result<(), String> {
+pub(crate) fn typecheck_file(
+    timeout: Duration,
+    print: &str,
+    input_path: &Path,
+) -> Result<(), String> {
     let (entrypoint, loader) = load(input_path)?;
 
     typecheck_entrypoint(timeout, &entrypoint, loader, stage_printer(print))

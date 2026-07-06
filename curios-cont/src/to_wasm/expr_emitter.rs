@@ -15,7 +15,11 @@ pub(super) struct ExprEmitter<'a, 'b> {
 }
 
 impl<'a, 'b> ExprEmitter<'a, 'b> {
-    pub(super) fn new(context: Context<'a, 'b>, module: &'b mut Module, expr: &'b mut Expr) -> Self {
+    pub(super) fn new(
+        context: Context<'a, 'b>,
+        module: &'b mut Module,
+        expr: &'b mut Expr,
+    ) -> Self {
         Self {
             context,
             module,

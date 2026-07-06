@@ -437,7 +437,11 @@ impl Error {
         Self::DuplicateTupleLabel { label }
     }
 
-    pub(crate) fn tuple_field_name_mismatch(written: String, expected: String, position: usize) -> Self {
+    pub(crate) fn tuple_field_name_mismatch(
+        written: String,
+        expected: String,
+        position: usize,
+    ) -> Self {
         Self::TupleFieldNameMismatch {
             written,
             expected,
@@ -512,7 +516,11 @@ impl Error {
         }
     }
 
-    pub(crate) fn struct_arity_mismatch<N: Into<String>>(name: N, expected: usize, got: usize) -> Self {
+    pub(crate) fn struct_arity_mismatch<N: Into<String>>(
+        name: N,
+        expected: usize,
+        got: usize,
+    ) -> Self {
         Self::StructArityMismatch {
             name: name.into(),
             expected,
@@ -520,7 +528,11 @@ impl Error {
         }
     }
 
-    pub(crate) fn wrong_number_of_fields<N: Into<String>>(name: N, expected: usize, got: usize) -> Self {
+    pub(crate) fn wrong_number_of_fields<N: Into<String>>(
+        name: N,
+        expected: usize,
+        got: usize,
+    ) -> Self {
         Self::WrongNumberOfFields {
             name: name.into(),
             expected,
@@ -544,7 +556,11 @@ impl Error {
         Self::UseEntryOutsideConcept { name: name.into() }
     }
 
-    pub(crate) fn too_many_use_entries<N: Into<String>>(name: N, expected: usize, got: usize) -> Self {
+    pub(crate) fn too_many_use_entries<N: Into<String>>(
+        name: N,
+        expected: usize,
+        got: usize,
+    ) -> Self {
         Self::TooManyUseEntries {
             name: name.into(),
             expected,
@@ -560,7 +576,10 @@ impl Error {
         Self::MultipleSpreads { name: name.into() }
     }
 
-    pub(crate) fn spread_base_type_mismatch<N: Into<String>, T: Into<Term>>(name: N, found: T) -> Self {
+    pub(crate) fn spread_base_type_mismatch<N: Into<String>, T: Into<Term>>(
+        name: N,
+        found: T,
+    ) -> Self {
         Self::SpreadBaseTypeMismatch {
             name: name.into(),
             found: Box::new(found.into()),

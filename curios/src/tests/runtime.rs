@@ -460,7 +460,9 @@ fn fmt_print_constant_args_collapses_at_ersd() {
         curios_text::RootSource::None,
         |stage| match stage {
             curios_pipeline::Stage::ErsdOptm(module) => ersd_optm = Some(format!("{module}")),
-            curios_pipeline::Stage::ContOptm(module) => cont_optm_funcs = Some(module.funcs().len()),
+            curios_pipeline::Stage::ContOptm(module) => {
+                cont_optm_funcs = Some(module.funcs().len())
+            }
             _ => {}
         },
     )

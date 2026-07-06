@@ -37,7 +37,9 @@ pub(super) struct ContMany<'a> {
 }
 
 impl<'a> ContMany<'a> {
-    pub(super) fn new(func: impl FnOnce(&mut Work<'_, '_, '_>, Vec<ValueName>) -> Tail + 'a) -> Self {
+    pub(super) fn new(
+        func: impl FnOnce(&mut Work<'_, '_, '_>, Vec<ValueName>) -> Tail + 'a,
+    ) -> Self {
         Self {
             func: Box::new(func),
         }
@@ -65,7 +67,9 @@ pub(super) struct RecBody<'a> {
 }
 
 impl<'a> RecBody<'a> {
-    pub(super) fn new(func: impl FnOnce(&mut Work<'_, '_, '_>, &super::Frame) -> Tail + 'a) -> Self {
+    pub(super) fn new(
+        func: impl FnOnce(&mut Work<'_, '_, '_>, &super::Frame) -> Tail + 'a,
+    ) -> Self {
         Self {
             func: Box::new(func),
         }

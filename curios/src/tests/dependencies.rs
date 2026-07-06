@@ -54,8 +54,9 @@ fn foreign_declaration_inside_a_dependency_populates_the_shared_store() {
 
     let loader = dependency("foo", "pub foreign double : (Nat) -> Nat;");
 
-    let (module, foreigns) = curios_pipeline::compile_entrypoint(Duration::from_secs(10), &source, loader, |_| {})
-        .expect("compile succeeded");
+    let (module, foreigns) =
+        curios_pipeline::compile_entrypoint(Duration::from_secs(10), &source, loader, |_| {})
+            .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::new(foreigns);
     bindings.define("double", |x: u32| x * 2);
@@ -122,7 +123,8 @@ fn load_with_dependencies_wires_a_filesystem_dependency_end_to_end() {
         "#,
     )
     .expect("write the temp entry file");
-    fs::write(&dep_path, "pub let answer : /std/Nat = 42;").expect("write the temp dependency file");
+    fs::write(&dep_path, "pub let answer : /std/Nat = 42;")
+        .expect("write the temp dependency file");
 
     let (entrypoint, loader) =
         crate::load_with_dependencies(&entry_path, vec![("foo".to_string(), dep_path)])

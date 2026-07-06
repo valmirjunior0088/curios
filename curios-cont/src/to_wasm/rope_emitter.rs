@@ -518,7 +518,12 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// The node arm's force is what maintains the read-through invariant:
     /// every `sub` base is flat-available from birth, and stays so (a cache is
     /// written once, never cleared).
-    pub(super) fn emit_slice_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
+    pub(super) fn emit_slice_func(
+        &mut self,
+        rope: &RopeData,
+        func_name: FuncName,
+        force_func: FuncName,
+    ) {
         let r = LocalName::from("r");
         let s = LocalName::from("s");
         let e = LocalName::from("e");
@@ -687,7 +692,12 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     ///
     /// `Bin` elements are packed bytes (`array.get_u`, an `i32` result);
     /// `Lst` elements are the top type (`array.get`).
-    pub(super) fn emit_read_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
+    pub(super) fn emit_read_func(
+        &mut self,
+        rope: &RopeData,
+        func_name: FuncName,
+        force_func: FuncName,
+    ) {
         let packed = rope.payload == self.table.bytes_type();
 
         let r = LocalName::from("r");
@@ -896,7 +906,12 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     ///   if lb[i] != rb[i] → 0
     ///   i += 1
     /// ```
-    pub(super) fn emit_eql_func(&mut self, rope: &RopeData, func_name: FuncName, force_func: FuncName) {
+    pub(super) fn emit_eql_func(
+        &mut self,
+        rope: &RopeData,
+        func_name: FuncName,
+        force_func: FuncName,
+    ) {
         let l = LocalName::from("l");
         let r = LocalName::from("r");
         let lb = LocalName::from("lb");

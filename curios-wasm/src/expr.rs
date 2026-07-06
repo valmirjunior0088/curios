@@ -315,7 +315,6 @@ pub struct Expr {
 }
 
 impl Expr {
-
     /// Appends a single instruction.
     pub fn push(&mut self, instr: Instr) {
         self.instrs.push(instr)

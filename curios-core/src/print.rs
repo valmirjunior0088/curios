@@ -47,7 +47,10 @@ thread_local! {
 
 /// Install a pretty-name rename map for the duration of `f`, restoring the
 /// previous state afterwards so the faithful `Display` paths are unaffected.
-pub(crate) fn with_pretty_names<R>(rename: Rc<HashMap<String, String>>, f: impl FnOnce() -> R) -> R {
+pub(crate) fn with_pretty_names<R>(
+    rename: Rc<HashMap<String, String>>,
+    f: impl FnOnce() -> R,
+) -> R {
     let prev = PRETTY.with(|p| p.borrow_mut().replace(rename));
     let result = f();
     PRETTY.with(|p| *p.borrow_mut() = prev);
@@ -55,7 +58,10 @@ pub(crate) fn with_pretty_names<R>(rename: Rc<HashMap<String, String>>, f: impl 
 }
 
 /// Install a global-shortening map for the duration of `f`.
-pub(crate) fn with_short_names<R>(shorten: Rc<HashMap<String, String>>, f: impl FnOnce() -> R) -> R {
+pub(crate) fn with_short_names<R>(
+    shorten: Rc<HashMap<String, String>>,
+    f: impl FnOnce() -> R,
+) -> R {
     let prev = SHORTEN.with(|s| s.borrow_mut().replace(shorten));
     let result = f();
     SHORTEN.with(|s| *s.borrow_mut() = prev);

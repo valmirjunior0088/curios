@@ -25,7 +25,11 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    pub(super) fn lower_module(&mut self, module: &crate::Module, frame: &Frame) -> (BlockName, Region) {
+    pub(super) fn lower_module(
+        &mut self,
+        module: &crate::Module,
+        frame: &Frame,
+    ) -> (BlockName, Region) {
         let (mut entry, resume) = FrameEntropy::new();
         let mut emit = Emit::new(&mut entry);
         let tail = Work {
@@ -266,7 +270,12 @@ impl Work<'_, '_, '_> {
         }
     }
 
-    pub(super) fn lower_letrec_item(&mut self, term: &crate::Term, target: ValueName, frame: &Frame) {
+    pub(super) fn lower_letrec_item(
+        &mut self,
+        term: &crate::Term,
+        target: ValueName,
+        frame: &Frame,
+    ) {
         match &**term {
             crate::Subterm::Apply(_) | crate::Subterm::Match(_) | crate::Subterm::NatMatch(_) => {
                 unsupported_sync_rec_item(term)
@@ -278,7 +287,12 @@ impl Work<'_, '_, '_> {
         }
     }
 
-    pub(super) fn lower_value_name(&mut self, term: &crate::Term, frame: &Frame, cont: Cont<'_>) -> Tail {
+    pub(super) fn lower_value_name(
+        &mut self,
+        term: &crate::Term,
+        frame: &Frame,
+        cont: Cont<'_>,
+    ) -> Tail {
         match &**term {
             crate::Subterm::Name(name) => cont.call(self, frame.find(name.as_str())),
             crate::Subterm::Erased => {
@@ -403,7 +417,11 @@ impl Work<'_, '_, '_> {
     /// genuinely self-referential one surfaces as a cycle in `rec_computed_order` and is
     /// rejected. Confining cyclic recursion to closures is what lets `tpl`/`lst` fields stay
     /// immutable.
-    pub(super) fn plan_backpatch(&mut self, item: &crate::Term, frame: &Frame) -> Option<Backpatch> {
+    pub(super) fn plan_backpatch(
+        &mut self,
+        item: &crate::Term,
+        frame: &Frame,
+    ) -> Option<Backpatch> {
         match &**item {
             crate::Subterm::Func(func) => {
                 let (clsr, captures) = self.lower_closure(func, frame);
@@ -525,7 +543,12 @@ impl Work<'_, '_, '_> {
         }
     }
 
-    pub(super) fn lower_tail(&mut self, term: &crate::Term, frame: &Frame, resume: &BlockName) -> Tail {
+    pub(super) fn lower_tail(
+        &mut self,
+        term: &crate::Term,
+        frame: &Frame,
+        resume: &BlockName,
+    ) -> Tail {
         match &**term {
             crate::Subterm::Unreachable => Tail::Unreachable,
             crate::Subterm::Apply(apply) => self.lower_value_name(

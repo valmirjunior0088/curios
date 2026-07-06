@@ -150,7 +150,6 @@ impl ForeignStore {
     pub fn iter(&self) -> impl Iterator<Item = &Arc<ForeignFunction>> {
         self.functions.iter()
     }
-
 }
 
 #[cfg(test)]
