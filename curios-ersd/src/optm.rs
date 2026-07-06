@@ -27,6 +27,7 @@ mod call_graph;
 pub use call_graph::*;
 
 mod rewrite;
+use rewrite::*;
 
 mod prune;
 pub use prune::*;

@@ -32,7 +32,7 @@ mod cursor;
 mod monoid;
 
 use {
-    super::{CallGraph, rewrite::refresh_captures},
+    super::{CallGraph, refresh_captures},
     crate::{Apply, Argument, Func, Item, Module, Name, Prim, PurePrim, Rec, Subterm, Term},
     cursor::SliceCursor,
     monoid::MonoidAccumulator,

@@ -30,7 +30,7 @@
 //! enclosing closures (`to_cont` threads globals through captures).
 
 use {
-    super::rewrite::{children, clone_args, deep_copy, refresh_captures, term_at_mut},
+    super::{children, clone_args, deep_copy, refresh_captures, term_at_mut},
     crate::{
         Apply, Argument, Func, Item, Let, Module, Name, NatMatch, Prim, PurePrim, Subterm, Term,
     },
@@ -535,7 +535,7 @@ fn fold_known(minter: &mut Minter<'_>, term: &mut Term, scope: &mut Scope) {
             scope.truncate(depth);
         }
         _ => {
-            for child in super::rewrite::children_mut(term) {
+            for child in super::children_mut(term) {
                 fold_known(minter, child, scope);
             }
         }

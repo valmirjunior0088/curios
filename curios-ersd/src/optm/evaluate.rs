@@ -41,7 +41,7 @@
 //! recorded paths never overlap.
 
 use {
-    super::rewrite::{children, clone_args, deep_copy, refresh_captures, term_at_mut},
+    super::{children, clone_args, deep_copy, refresh_captures, term_at_mut},
     crate::{
         Apply, Atom, Func, HostPrim, Item, Let, Module, NatMatch, Prim, PurePrim, Subterm, Term,
         Tuple,
