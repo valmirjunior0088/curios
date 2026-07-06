@@ -1,7 +1,7 @@
 //! Raw bindings to the subset of Binaryen's C API (`binaryen-c.h`) that
-//! [`optimize`](super::optimize) needs. The static library is fetched
-//! prebuilt and linked by `build.rs` — see its module doc for the
-//! download/verify/extract flow.
+//! [`optimize`](super::optimize) needs. The static library is built by
+//! `build.rs` from a downloaded source release — see its module doc for
+//! the download/verify/extract/CMake flow.
 
 use std::ffi::{c_char, c_int, c_void};
 

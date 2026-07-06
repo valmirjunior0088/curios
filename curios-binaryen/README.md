@@ -1,6 +1,6 @@
 # curios-binaryen
 
-Wasm optimization for curios via a prebuilt Binaryen release (`build.rs` downloads and links `libbinaryen.a`; no vendored source).
+Wasm optimization for curios, built from a downloaded Binaryen source release (`build.rs` fetches the tagged source tarball and builds it via CMake; no vendored source in the repo).
 
 Deliberately the last stage of the pipeline: it consumes and produces serialized module bytes, after `wasm::to_bytes`, and knows nothing about any curios IR. Semantic optimization belongs upstream, in `optm/`.
 
