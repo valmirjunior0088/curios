@@ -30,10 +30,11 @@
 //! enclosing closures (`to_cont` threads globals through captures).
 
 use {
-    super::{children, clone_args, deep_copy, refresh_captures, term_at_mut},
-    crate::{
-        Apply, Argument, Func, Item, Let, Module, Name, NatMatch, Prim, PurePrim, Subterm, Term,
+    super::{
+        Loc, children, clone_args, deep_copy, members, refresh_captures, refresh_touched, root_mut,
+        term_at_mut,
     },
+    crate::{Apply, Argument, Func, Item, Let, Module, Name, NatMatch, Prim, PurePrim, Subterm, Term},
     std::{
         collections::{HashMap, HashSet},
         mem,
@@ -52,13 +53,6 @@ const MAX_SPINE_NODES: usize = 256;
 pub(crate) fn specialize_literal_spines(module: &mut Module) {
     let plan = plan(module);
     apply(module, plan);
-}
-
-/// Which top-level term a site path is rooted in.
-#[derive(Clone, Copy)]
-enum Loc {
-    Item { item: usize, member: usize },
-    Body,
 }
 
 /// One call-site rewrite: swap the head for the specialization and drop the
@@ -89,11 +83,7 @@ fn plan(module: &Module) -> Plan {
     let mut sites = Vec::new();
 
     for (index, item) in module.items.iter().enumerate() {
-        let members: Vec<&Term> = match item {
-            Item::Let { body, .. } => vec![body],
-            Item::Rec { items, .. } => items.iter().collect(),
-        };
-        for (member, term) in members.into_iter().enumerate() {
+        for (member, term) in members(item).into_iter().enumerate() {
             let loc = Loc::Item {
                 item: index,
                 member,
@@ -145,19 +135,13 @@ fn apply(module: &mut Module, plan: Plan) {
     let mut touched_body = false;
 
     for site in sites {
-        let root = match site.loc {
+        match site.loc {
             Loc::Item { item, member } => {
                 touched.insert((item, member));
-                match &mut module.items[item] {
-                    Item::Let { body, .. } => body,
-                    Item::Rec { items, .. } => &mut items[member],
-                }
             }
-            Loc::Body => {
-                touched_body = true;
-                &mut module.body
-            }
-        };
+            Loc::Body => touched_body = true,
+        }
+        let root = root_mut(module, site.loc);
         let call = term_at_mut(root, &site.path);
         let Subterm::Apply(apply) = call.as_subterm_mut() else {
             unreachable!("a recorded site is an Apply");
@@ -168,16 +152,7 @@ fn apply(module: &mut Module, plan: Plan) {
 
     // Call-site rewrites free new names (the spec items) under enclosing
     // closures; recompute their captures.
-    for (item, member) in touched {
-        let root = match &mut module.items[item] {
-            Item::Let { body, .. } => body,
-            Item::Rec { items, .. } => &mut items[member],
-        };
-        refresh_captures(root, &spec_names);
-    }
-    if touched_body {
-        refresh_captures(&mut module.body, &spec_names);
-    }
+    refresh_touched(module, &touched, touched_body, &spec_names);
 
     // Insert each target's batch right after the target. `minted` is already
     // callee-first (a body's sub-requests push before the body itself), and

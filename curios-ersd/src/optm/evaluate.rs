@@ -41,7 +41,7 @@
 //! recorded paths never overlap.
 
 use {
-    super::{children, clone_args, deep_copy, refresh_captures, term_at_mut},
+    super::{Loc, children, clone_args, deep_copy, members, refresh_touched, root_mut, term_at_mut},
     crate::{
         Apply, Atom, Func, HostPrim, Item, Let, Module, NatMatch, Prim, PurePrim, Subterm, Term,
         Tuple,
@@ -76,12 +76,6 @@ pub(crate) fn evaluate_closed_terms(module: &mut Module) {
     apply(module, rewrites);
 }
 
-/// Which top-level term a rewrite path is rooted in.
-enum Loc {
-    Item { item: usize, member: usize },
-    Body,
-}
-
 struct Rewrite {
     loc: Loc,
     path: Vec<usize>,
@@ -105,11 +99,7 @@ fn plan(module: &Module) -> Vec<Rewrite> {
     let mut rewrites = Vec::new();
 
     for (index, item) in module.items.iter().enumerate() {
-        let members: Vec<&Term> = match item {
-            Item::Let { body, .. } => vec![body],
-            Item::Rec { items, .. } => items.iter().collect(),
-        };
-        for (member, term) in members.into_iter().enumerate() {
+        for (member, term) in members(item).into_iter().enumerate() {
             for (path, replacement) in scan_root(&mut evaluator, term) {
                 let backward_only = replacement
                     .free_names()
@@ -145,19 +135,13 @@ fn apply(module: &mut Module, rewrites: Vec<Rewrite>) {
     let mut touched_body = false;
 
     for rewrite in rewrites {
-        let root = match rewrite.loc {
+        match rewrite.loc {
             Loc::Item { item, member } => {
                 touched.insert((item, member));
-                match &mut module.items[item] {
-                    Item::Let { body, .. } => body,
-                    Item::Rec { items, .. } => &mut items[member],
-                }
             }
-            Loc::Body => {
-                touched_body = true;
-                &mut module.body
-            }
-        };
+            Loc::Body => touched_body = true,
+        }
+        let root = root_mut(module, rewrite.loc);
         *term_at_mut(root, &rewrite.path) = rewrite.replacement;
     }
 
@@ -167,17 +151,7 @@ fn apply(module: &mut Module, rewrites: Vec<Rewrite>) {
     // through the enclosing captures, and `free_names`/prune read them — so
     // every rewritten root's captures are recomputed. No names are introduced
     // with flags: fresh global captures default to non-candidate.
-    let introduced = HashMap::new();
-    for (item, member) in touched {
-        let root = match &mut module.items[item] {
-            Item::Let { body, .. } => body,
-            Item::Rec { items, .. } => &mut items[member],
-        };
-        refresh_captures(root, &introduced);
-    }
-    if touched_body {
-        refresh_captures(&mut module.body, &introduced);
-    }
+    refresh_touched(module, &touched, touched_body, &HashMap::new());
 }
 
 fn scan_root<'m>(evaluator: &mut Evaluator<'m>, root: &'m Term) -> Vec<(Vec<usize>, Term)> {

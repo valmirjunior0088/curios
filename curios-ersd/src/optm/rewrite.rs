@@ -16,8 +16,8 @@
 
 use {
     crate::{
-        Apply, Argument, CellPrim, Func, HostPrim, Let, Match, NatMatch, Prim, Proj, PurePrim, Rec,
-        Subterm, Term, Tuple,
+        Apply, Argument, CellPrim, Func, HostPrim, Item, Let, Match, Module, NatMatch, Prim, Proj,
+        PurePrim, Rec, Subterm, Term, Tuple,
     },
     std::{
         collections::{HashMap, HashSet},
@@ -103,6 +103,53 @@ pub(super) fn term_at_mut<'t>(root: &'t mut Term, path: &[usize]) -> &'t mut Ter
             .expect("rewrite path resolves within the tree it was recorded on");
     }
     current
+}
+
+/// Which top-level term a rewrite/site path is rooted in: one member of a
+/// module item (a `Let`'s body, or one `Rec` group member), or the top-level
+/// `body`.
+#[derive(Clone, Copy)]
+pub(super) enum Loc {
+    Item { item: usize, member: usize },
+    Body,
+}
+
+/// An item's directly-rewritable sub-terms: a `Let`'s body, or every member of
+/// a `Rec` group.
+pub(super) fn members(item: &Item) -> Vec<&Term> {
+    match item {
+        Item::Let { body, .. } => vec![body],
+        Item::Rec { items, .. } => items.iter().collect(),
+    }
+}
+
+/// Resolve a [`Loc`] to the term it names, mutably — the root [`term_at_mut`]
+/// then descends a path into.
+pub(super) fn root_mut(module: &mut Module, loc: Loc) -> &mut Term {
+    match loc {
+        Loc::Item { item, member } => match &mut module.items[item] {
+            Item::Let { body, .. } => body,
+            Item::Rec { items, .. } => &mut items[member],
+        },
+        Loc::Body => &mut module.body,
+    }
+}
+
+/// Recompute captures for every root a rewrite pass touched — tracked as
+/// `(item, member)` pairs plus a separate `body` flag, since [`Loc`] isn't
+/// hashable and the same root can be touched by more than one rewrite.
+pub(super) fn refresh_touched(
+    module: &mut Module,
+    touched: &HashSet<(usize, usize)>,
+    touched_body: bool,
+    introduced: &HashMap<String, bool>,
+) {
+    for &(item, member) in touched {
+        refresh_captures(root_mut(module, Loc::Item { item, member }), introduced);
+    }
+    if touched_body {
+        refresh_captures(root_mut(module, Loc::Body), introduced);
+    }
 }
 
 /// A by-value copy of an argument list (`Argument` is not `Clone`).
