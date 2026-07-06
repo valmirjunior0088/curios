@@ -18,7 +18,7 @@ pub struct RootId(u32);
 
 impl RootId {
     /// Fixed ids for the three embedded roots, stable across every
-    /// compilation. Needed because [`HeadKey`](../../curios_core/concept/enum.HeadKey.html)'s
+    /// compilation. Needed because `curios-core`'s `HeadKey`'s
     /// primitive variants (`Nat`, `Int`, `Flt`, `Bln`, `Bin`, `Io`, `Lst`,
     /// `Cell`) have no textual declaration of their own to stamp a root onto
     /// — they are simply defined to be `/sys`-owned for orphan-rule purposes.
