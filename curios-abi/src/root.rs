@@ -149,18 +149,18 @@ impl Roster {
 
 /// One compilation root's descriptor.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Root {
-    pub id: RootId,
+struct Root {
+    id: RootId,
     /// The root's top-level path segment, e.g. `"sys"`, `"std"`, or the
     /// entry program's (today always empty — the entry program is
     /// unqualified, per `Structure::module`'s "the root module is the empty
     /// string" convention).
-    pub name: String,
-    pub kind: RootKind,
+    name: String,
+    kind: RootKind,
 }
 
 impl Root {
-    pub fn new(id: RootId, name: impl Into<String>, kind: RootKind) -> Self {
+    fn new(id: RootId, name: impl Into<String>, kind: RootKind) -> Self {
         Self {
             id,
             name: name.into(),

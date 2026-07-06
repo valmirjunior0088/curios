@@ -44,10 +44,6 @@ pub const NAMESPACE_SYS: &str = "sys";
 /// declared under — flat, not per-module.
 pub const NAMESPACE_ENV: &str = "env";
 
-/// Reserved for a future `/syn` host boundary; `/syn` declares no foreign
-/// functions today, so nothing imports under this namespace yet.
-pub const NAMESPACE_SYN: &str = "syn";
-
 /// The exported entrypoint the runtime invokes. `cont`'s wasm emitter names
 /// every function `func/<name>` and exports the entry — always `main` — under
 /// that scheme.
