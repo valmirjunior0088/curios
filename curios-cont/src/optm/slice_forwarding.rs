@@ -341,7 +341,7 @@ mod tests {
     }
 
     #[test]
-    fn a_bin_access_does_not_forward_through_an_arr_slice() {
+    fn a_bin_access_does_not_forward_through_an_lst_slice() {
         // Carriers never cross in well-typed code; guard against it anyway.
         let mut module = module_with(vec![
             (v("w"), Value::Eval(Code::LstSlice(v("xs"), v("s"), v("e")))),

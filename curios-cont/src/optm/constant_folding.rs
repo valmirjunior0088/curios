@@ -374,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn folds_arr_concat_preserving_element_references() {
+    fn folds_lst_concat_preserving_element_references() {
         let data = folded(
             vec![
                 (v("a"), Value::Pure(Data::Lst(vec![v("x"), v("y")]))),
@@ -431,7 +431,7 @@ mod tests {
     }
 
     #[test]
-    fn forwards_arr_get_with_literal_index() {
+    fn forwards_lst_get_with_literal_index() {
         let source = forwarded(
             vec![
                 (
@@ -447,7 +447,7 @@ mod tests {
     }
 
     #[test]
-    fn folds_arr_and_bin_len() {
+    fn folds_lst_and_bin_len() {
         let lst_len = folded(
             vec![
                 (
@@ -801,7 +801,7 @@ mod tests {
     }
 
     #[test]
-    fn folds_arr_slice_preserving_references() {
+    fn folds_lst_slice_preserving_references() {
         let data = folded(
             vec![
                 (v("a"), Value::Pure(Data::Lst(vec![v("x"), v("y"), v("z")]))),
@@ -848,7 +848,7 @@ mod tests {
     }
 
     #[test]
-    fn folds_arr_append_by_reference() {
+    fn folds_lst_append_by_reference() {
         // The appended element need not be a literal; it is kept by name.
         let data = folded(
             vec![

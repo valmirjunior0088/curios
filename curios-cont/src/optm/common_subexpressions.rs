@@ -490,7 +490,7 @@ mod tests {
     }
 
     #[test]
-    fn never_keys_arr_map() {
+    fn never_keys_lst_map() {
         // LstMap invokes a closure whose region may end in an effectful tail.
         let mut module = func(region(
             vec![
