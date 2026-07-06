@@ -152,7 +152,7 @@ fn elaborate_nat_match(
     Ok((rebuilt, result_type))
 }
 
-fn elaborate_arr_match(
+fn elaborate_lst_match(
     context: &mut Context,
     head: &Term,
     motive: &Scope<Many>,
@@ -168,7 +168,7 @@ fn elaborate_arr_match(
     let head_type = reduce_with(context, &head_type)?;
     let elem = match &*head_type {
         Subterm::Prim(Prim::LstType(elem)) => elem.clone(),
-        _ => return Err(Error::not_arr_type(head_type)),
+        _ => return Err(Error::not_lst_type(head_type)),
     };
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
@@ -419,7 +419,7 @@ pub(crate) fn elaborate_match(
                     cons_case,
                     ..
                 },
-        } => elaborate_arr_match(context, head, motive, empty_case, cons_case, term, mode),
+        } => elaborate_lst_match(context, head, motive, empty_case, cons_case, term, mode),
         Cases::FreeMonoid {
             carrier:
                 Carrier::Bin {
