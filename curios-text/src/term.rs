@@ -347,7 +347,7 @@ pub struct StructLit {
     pub entries: Vec<StructLitEntry>,
 }
 
-/// The general pattern match: one scrutinee and arms of arbitrary (nested, across constructors, tuples, structs, and the four literal-carrier leaves) [`MatchPattern`]s, compiled by the pattern-matrix scheme in `to_core::matrix` into the same single-level core match/projection forms a person would get from hand-nesting matches.
+/// The general pattern match: one scrutinee and arms of arbitrary (nested, across constructors, tuples, structs, and the four literal-carrier leaves) [`MatchPattern`]s, compiled by the pattern-matrix scheme in `to_core::lower` into the same single-level core match/projection forms a person would get from hand-nesting matches.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatrixMatch {
     pub head: Term,
@@ -356,13 +356,13 @@ pub struct MatrixMatch {
     /// constructors/tuples/structs — see [`MatchPattern`]) pattern with its
     /// body; zero arms is legal (a vacuous elimination, e.g. of `False`).
     /// The grammar enforces "full enumeration" (no wildcard/catch-all, no
-    /// row priority — see `to_core::matrix`'s doc comment); lowering rejects
+    /// row priority — see `to_core::lower`'s doc comment); lowering rejects
     /// a repeated tag and an overlapping/duplicate row.
     pub arms: Vec<MatrixArm>,
 }
 
 /// One arm of a [`MatrixMatch`]: `| pattern => body`. Compiled by
-/// `to_core::matrix` into the single-level core match/projection forms —
+/// `to_core::lower` into the single-level core match/projection forms —
 /// exactly what a person would get from hand-nesting matches today (see its
 /// doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every
 /// argument a plain [`MatchPattern::Binder`]) lowers exactly as before.
@@ -392,7 +392,7 @@ pub enum Match {
 pub enum MatchPattern {
     /// A plain name (or `_`) — never splits a column by itself; legal only
     /// when every row shares this shape in that column (see the matrix
-    /// compiler in `to_core::matrix`).
+    /// compiler in `to_core::lower`).
     Binder(String),
     /// An inductive constructor tag applied to sub-patterns — positional
     /// (constructors have no field labels in this language).
