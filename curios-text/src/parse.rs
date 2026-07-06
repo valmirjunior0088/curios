@@ -413,7 +413,7 @@ fn parse_bin_literal<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// One entry of an array literal: a `..` spread contributing a whole list, or
+// One entry of an `Lst` literal: a `..` spread contributing a whole list, or
 // a plain element. Unlike the `Bin` literal, brackets and commas delimit, so
 // spreads take full terms and `[.. xs]` may be spaced (as in struct spread).
 fn parse_lst_entry<'a>() -> Parser<'a, LstEntry> {
@@ -423,11 +423,11 @@ fn parse_lst_entry<'a>() -> Parser<'a, LstEntry> {
         .or(lazy(parse_term).map(LstEntry::Elem))
 }
 
-// An array literal `[e0, ..rest, e1, …]` (empty `[]`) — the native
+// An `Lst` literal `[e0, ..rest, e1, …]` (empty `[]`) — the native
 // contiguous-sequence sibling of the `Bin` literal `\\`. Builds a `Prim::Lst`
 // directly (the element type is an implicit the literal cannot name; core
 // elaboration infers it); spreads splice in place, any position and count.
-fn parse_arr_literal<'a>() -> Parser<'a, Term> {
+fn parse_lst_literal<'a>() -> Parser<'a, Term> {
     catch(parse_literal("["))
         .and_keep(sep_by0(parse_lst_entry, || parse_literal(",")))
         .and_drop(parse_literal("]"))
@@ -453,7 +453,7 @@ fn parse_prim<'a>() -> Parser<'a, Term> {
         .or(parse_num_lit())
         .or(parse_string_literal())
         .or(parse_bin_literal())
-        .or(parse_arr_literal())
+        .or(parse_lst_literal())
 }
 
 fn parse_parens<'a>() -> Parser<'a, Term> {
@@ -1204,8 +1204,8 @@ fn parse_inductive_match<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// The `| [] =>` identity arm of an `Lst` fold (the empty-array literal).
-fn parse_arr_empty_branch<'a>() -> Parser<'a, Term> {
+// The `| [] =>` identity arm of an `Lst` fold (the empty `Lst` literal).
+fn parse_lst_empty_branch<'a>() -> Parser<'a, Term> {
     parse_literal("|")
         .and_drop(parse_literal("[]"))
         .and_drop(parse_literal("=>"))
@@ -1227,7 +1227,7 @@ fn parse_cons_ih<'a>() -> Parser<'a, Option<String>> {
 type ConsLabels = (String, String, Option<String>);
 
 // The `| [head, ..tail]; ih =>` cons arm of an `Lst` fold. Mirrors the `Lst`
-// literal's own bracket-and-comma shape (`parse_arr_literal`): `head` is the
+// literal's own bracket-and-comma shape (`parse_lst_literal`): `head` is the
 // peeled leading element, `tail` the rest.
 fn parse_lst_cons_branch<'a>() -> Parser<'a, (ConsLabels, Term)> {
     parse_literal("|")
@@ -1263,9 +1263,9 @@ fn parse_bin_cons_branch<'a>() -> Parser<'a, (ConsLabels, Term)> {
         })
 }
 
-fn parse_arr_match<'a>() -> Parser<'a, Term> {
+fn parse_lst_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
-        .and(catch(parse_arr_empty_branch()).and(parse_lst_cons_branch()))
+        .and(catch(parse_lst_empty_branch()).and(parse_lst_cons_branch()))
         .and_drop(parse_keyword("end"))
         .map(
             |((head, motive), (empty_case, ((head_label, tail_label, ih_label), cons_case)))| {
@@ -1315,7 +1315,7 @@ fn parse_match<'a>() -> Parser<'a, Term> {
     catch(parse_bln_match())
         .or(catch(parse_nat_match()))
         .or(catch(parse_nat_switch()))
-        .or(catch(parse_arr_match()))
+        .or(catch(parse_lst_match()))
         .or(catch(parse_bin_match()))
         .or(parse_inductive_match())
 }

@@ -630,7 +630,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                 self.collect(&infix.left, binds)?,
                 self.collect(&infix.right, binds)?,
             ),
-            // An array literal's elements and spread operands hoist their
+            // An `Lst` literal's elements and spread operands hoist their
             // bangs into this region, like an application's arguments.
             Subterm::Prim(Prim::Lst(entries)) => curios_core::Term::prim(
                 self.lower_lst_literal(entries, |term| self.collect(term, binds))?,
