@@ -178,7 +178,7 @@ impl OsResolver {
     /// spawning a thread and two fds per call. `getaddrinfo` is uncancellable, so
     /// a worker stuck on a dead name stays busy until the system resolver times
     /// out; the bound contains the blast radius to a fixed slice of capacity.
-    pub(crate) fn new(threads: usize, length: usize) -> Self {
+    fn new(threads: usize, length: usize) -> Self {
         let (sender, receiver) = sync_channel::<Job>(length);
         let receiver = Arc::new(Mutex::new(receiver));
 

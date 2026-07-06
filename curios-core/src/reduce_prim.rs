@@ -220,7 +220,7 @@ fn reduce_flt_unary(
 /// `lt`/`gte` decide where `eql` still cannot; `Stuck` is undecidable, and the
 /// op's neutral term is rebuilt.
 #[derive(Debug, PartialEq)]
-pub(crate) enum Comparison {
+enum Comparison {
     Eq,
     Lt,
     Gt,
@@ -229,7 +229,7 @@ pub(crate) enum Comparison {
     Stuck,
 }
 
-pub(crate) fn from_ordering(ordering: Ordering) -> Comparison {
+fn from_ordering(ordering: Ordering) -> Comparison {
     match ordering {
         Ordering::Less => Comparison::Lt,
         Ordering::Equal => Comparison::Eq,
@@ -250,7 +250,7 @@ pub(crate) fn from_ordering(ordering: Ordering) -> Comparison {
 /// *undecided* comparison still rebuilds a normalized neutral: `cmp(x + m, y + m)`
 /// and `cmp(x, y)` reduce to the same term, which conversion needs (e.g.
 /// `Lt(a, succ b) ≡ Lt(succ a, succ(succ b))`).
-pub(crate) fn compare_nat(
+fn compare_nat(
     context: &mut Context,
     left: Term,
     right: Term,
@@ -1367,5 +1367,38 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             kind: "CellGet".to_string(),
             span: cell.span(),
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use {
+        super::{compare_nat, from_ordering},
+        crate::{Context, Nat, Prim, Term},
+        std::time::Duration,
+    };
+
+    fn lit(n: u32) -> Term {
+        Term::prim(Prim::Nat(Nat::new(n as usize)))
+    }
+
+    // Soundness gate: the structural body agrees with the host ordering on every
+    // pair of literals — the decidable closed case where the two routes into a
+    // `Comparison` (the shared-inner shortcut vs. the host `cmp`) must coincide.
+    #[test]
+    fn compare_nat_agrees_with_literal_ordering() {
+        let mut context = Context::new(Duration::from_millis(50));
+        let samples = [0u32, 1, 2, 5, 42, 128, 255, 256, 1000];
+        for &m in &samples {
+            for &n in &samples {
+                assert_eq!(
+                    compare_nat(&mut context, lit(m), lit(n))
+                        .expect("reduces")
+                        .0,
+                    from_ordering(m.cmp(&n)),
+                    "compare_nat disagreed with the literal ordering on ({m}, {n})",
+                );
+            }
+        }
     }
 }

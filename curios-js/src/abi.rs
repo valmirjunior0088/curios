@@ -11,7 +11,7 @@ use {
 /// The import names of every store-described host operation, in store order.
 /// The harness builds its `env` import object from exactly this roster, so a
 /// new `sys_io` row that lacks a browser implementation fails loudly.
-pub(crate) fn import_names() -> Vec<String> {
+fn import_names() -> Vec<String> {
     sys_io()
         .iter()
         .map(|function| function.name.clone())
@@ -90,4 +90,27 @@ pub(crate) fn abi_object() -> Object {
 #[wasm_bindgen]
 pub fn abi() -> JsValue {
     abi_object().into()
+}
+
+#[cfg(test)]
+mod tests {
+    use curios_abi::sys_io;
+
+    /// The roster the harness builds its `env` object from is the store, name for
+    /// name, in store order. (`abi()` itself is JS-only — the object assembly
+    /// can't run on the host — so the roster is pinned here instead.)
+    #[test]
+    fn import_names_are_the_store_rows() {
+        let names = super::import_names();
+
+        assert_eq!(
+            names,
+            sys_io()
+                .iter()
+                .map(|function| function.name.clone())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(names.first().map(String::as_str), Some("io_read"));
+        assert_eq!(names.last().map(String::as_str), Some("io_env"));
+    }
 }

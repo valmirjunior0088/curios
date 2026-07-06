@@ -10,14 +10,8 @@
 mod abi;
 pub use abi::*;
 
-#[cfg(test)]
-mod abi_tests;
-
 mod bridge;
 pub use bridge::*;
-
-#[cfg(test)]
-mod bridge_tests;
 
 mod harness;
 pub use harness::*;

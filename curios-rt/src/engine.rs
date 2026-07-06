@@ -377,7 +377,7 @@ pub fn run_bytes<H: Host + Send + Sync + 'static>(
 /// `env`-tier implementations for the module's own `foreign` declarations
 /// (pass [`ForeignBindings::empty`] for a program that declares none). The
 /// deserialize/instantiate split [`run_bytes`] factors out.
-pub(crate) fn instantiate<H: Host + Send + Sync + 'static>(
+fn instantiate<H: Host + Send + Sync + 'static>(
     engine: &Engine,
     module: &Module,
     host: H,

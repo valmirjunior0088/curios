@@ -559,10 +559,7 @@ fn reduce_flt_to_int_is_exact_or_stuck() {
 
 mod prim {
     use {
-        crate::{
-            Context, Nat, Prim, Subterm, Term, reduce,
-            reduce_prim::{compare_nat, from_ordering},
-        },
+        crate::{Context, Nat, Prim, Subterm, Term, reduce},
         num_bigint::BigUint,
         std::time::Duration,
     };
@@ -585,26 +582,6 @@ mod prim {
 
     fn reduced(context: &mut Context, term: Term) -> Subterm {
         Term::unwrap_or_clone(reduce(context, term).expect("reduces"))
-    }
-
-    // Soundness gate: the structural body agrees with the host ordering on every
-    // pair of literals — the decidable closed case where the two routes into a
-    // `Comparison` (the shared-inner shortcut vs. the host `cmp`) must coincide.
-    #[test]
-    fn compare_nat_agrees_with_literal_ordering() {
-        let mut context = context();
-        let samples = [0u32, 1, 2, 5, 42, 128, 255, 256, 1000];
-        for &m in &samples {
-            for &n in &samples {
-                assert_eq!(
-                    compare_nat(&mut context, lit(m), lit(n))
-                        .expect("reduces")
-                        .0,
-                    from_ordering(m.cmp(&n)),
-                    "compare_nat disagreed with the literal ordering on ({m}, {n})",
-                );
-            }
-        }
     }
 
     // Symbolic successor bounds the family must decide — exactly the cases the old
