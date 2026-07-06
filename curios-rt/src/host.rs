@@ -22,11 +22,11 @@ pub enum Io {
 
 impl Io {
     /// The well-known stdio handle tokens minted by the `/sys/Io` prelude.
-    pub(crate) const STDIN: u32 = stdio::STDIN;
+    const STDIN: u32 = stdio::STDIN;
     /// The well-known stdout handle token.
-    pub(crate) const STDOUT: u32 = stdio::STDOUT;
+    const STDOUT: u32 = stdio::STDOUT;
     /// The well-known stderr handle token, the last before [`HANDLE_SEED`](Self::HANDLE_SEED).
-    pub(crate) const STDERR: u32 = stdio::STDERR;
+    const STDERR: u32 = stdio::STDERR;
     /// The first handle token a host mints, one past the stdio tokens so a minted
     /// file or socket handle never collides with stdin/stdout/stderr; each host
     /// counts up from here with an unbounded `BigUint`.
@@ -36,7 +36,7 @@ impl Io {
     /// `BigUint` bytes. The single shared convention — the runtime mints and
     /// keys handles on it, and the `ersd → cont` lowering encodes the stdio
     /// constants `Io(0/1/2)` the same way — so the two ends cannot drift.
-    pub(crate) fn encode(token: u32) -> Vec<u8> {
+    fn encode(token: u32) -> Vec<u8> {
         BigUint::from(token).to_bytes_le()
     }
 
@@ -78,13 +78,13 @@ pub struct Poll(u32);
 
 impl Poll {
     /// Settable interest: readable (maps to the platform `POLLIN`).
-    pub(crate) const READ: Self = Self(poll::READ);
+    const READ: Self = Self(poll::READ);
     /// Settable interest: writable (maps to the platform `POLLOUT`).
-    pub(crate) const WRITE: Self = Self(poll::WRITE);
+    const WRITE: Self = Self(poll::WRITE);
     /// Result-only: error condition. The host reports it whether or not it was requested; never settable as an interest.
-    pub(crate) const ERR: Self = Self(poll::ERR);
+    const ERR: Self = Self(poll::ERR);
     /// Result-only: peer hang-up. Reported whether or not it was requested, like `ERR`.
-    pub(crate) const HUP: Self = Self(poll::HUP);
+    const HUP: Self = Self(poll::HUP);
 
     /// The empty mask — no interest, or no readiness.
     pub(crate) const fn empty() -> Self {
@@ -102,7 +102,7 @@ impl Poll {
     }
 
     /// Whether every flag in `other` is set — the per-interest readiness test.
-    pub(crate) fn contains(self, other: Self) -> bool {
+    fn contains(self, other: Self) -> bool {
         self.0 & other.0 == other.0
     }
 

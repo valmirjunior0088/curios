@@ -544,6 +544,7 @@ impl MockIo {
 /// Fluent seed for a [`MockHost`]: gather the scripted inputs (stdin, files,
 /// network endpoints, clocks, …) as plain values, then [`build`](Self::build)
 /// wraps them for the run and hands back the host and its [`MockIo`].
+#[derive(Default)]
 pub struct MockHostBuilder {
     input: Vec<u8>,
     files: HashMap<Vec<u8>, Vec<u8>>,
@@ -551,26 +552,8 @@ pub struct MockHostBuilder {
     inbound: VecDeque<Vec<u8>>,
     clock_wall_seq: VecDeque<(u32, u32, u32)>,
     clock_mono_seq: VecDeque<(u32, u32)>,
-    rng: u64,
     args: Vec<Vec<u8>>,
     env: HashMap<Vec<u8>, Vec<u8>>,
-}
-
-impl Default for MockHostBuilder {
-    fn default() -> Self {
-        Self {
-            input: Vec::new(),
-            files: HashMap::new(),
-            endpoints: HashMap::new(),
-            inbound: VecDeque::new(),
-            clock_wall_seq: VecDeque::new(),
-            clock_mono_seq: VecDeque::new(),
-            // A fixed non-zero xorshift64 seed: deterministic across runs.
-            rng: 0x2545_F491_4F6C_DD1D,
-            args: Vec::new(),
-            env: HashMap::new(),
-        }
-    }
 }
 
 impl MockHostBuilder {
@@ -650,13 +633,6 @@ impl MockHostBuilder {
         self
     }
 
-    /// Seed the deterministic RNG backing `random` (must be non-zero).
-    pub fn seed(mut self, seed: u64) -> Self {
-        self.rng = seed;
-
-        self
-    }
-
     /// Set the process arguments served by `args` (`argv[0]` is the program name).
     pub fn args<A: AsRef<[u8]>, I: IntoIterator<Item = A>>(mut self, args: I) -> Self {
         self.args = args.into_iter().map(|a| a.as_ref().to_vec()).collect();
@@ -702,7 +678,8 @@ impl MockHostBuilder {
             captures,
             clock_wall_seq: Mutex::new(self.clock_wall_seq),
             clock_mono_seq: Mutex::new(self.clock_mono_seq),
-            rng: Mutex::new(self.rng),
+            // A fixed non-zero xorshift64 seed: deterministic across runs.
+            rng: Mutex::new(0x2545_F491_4F6C_DD1D),
             args: self.args,
             env: self.env,
         };
@@ -740,18 +717,5 @@ mod tests {
         assert_ne!(handle.bytes(), fresh.bytes());
         assert!(matches!(host.write(handle, b"z"), (Status::NotFound, 0)));
         assert!(matches!(host.write(fresh, b"ok"), (Status::Ok, 2)));
-    }
-
-    #[test]
-    fn seed_changes_the_random_sequence() {
-        let (default_host, _io) = MockHost::builder().build();
-        let (seeded_host, _io) = MockHost::builder().seed(1).build();
-
-        // Two default builds agree (the seed is fixed, not sampled per-build)...
-        let (rebuilt_default_host, _io) = MockHost::builder().build();
-        assert_eq!(default_host.random(8), rebuilt_default_host.random(8));
-
-        // ...but a different seed diverges from it.
-        assert_ne!(default_host.random(8), seeded_host.random(8));
     }
 }

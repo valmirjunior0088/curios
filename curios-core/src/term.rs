@@ -708,17 +708,6 @@ impl Term {
     }
 }
 
-#[cfg(test)]
-impl Term {
-    /// Test-only shorthand: the empty tuple `()`.
-    pub(crate) fn tuple_unit() -> Self {
-        Self::from(Subterm::Tuple(Tuple {
-            fields: vec![],
-            names: vec![],
-        }))
-    }
-}
-
 impl Hash for Term {
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u64(self.get_or_init_hash());

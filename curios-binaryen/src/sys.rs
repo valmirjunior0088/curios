@@ -17,9 +17,9 @@ pub(crate) type BinaryenFeatures = u32;
 /// Buffers are allocated with `malloc()` and must be released with [`free`].
 #[repr(C)]
 pub(crate) struct BinaryenModuleAllocateAndWriteResult {
-    pub binary: *mut c_void,
-    pub binary_bytes: usize,
-    pub source_map: *mut c_char,
+    pub(crate) binary: *mut c_void,
+    pub(crate) binary_bytes: usize,
+    pub(crate) source_map: *mut c_char,
 }
 
 unsafe extern "C" {

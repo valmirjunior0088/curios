@@ -55,7 +55,7 @@ pub(crate) enum Mode {
 #[command(version, about)]
 pub(crate) struct Cli {
     #[arg(long, default_value = "1000", value_name = "MILLIS", value_parser = parse_timeout, help = "Type-checker reduction timeout in milliseconds")]
-    pub timeout: Duration,
+    pub(crate) timeout: Duration,
 
     #[arg(
         long,
@@ -64,8 +64,8 @@ pub(crate) struct Cli {
         default_missing_value = "text,core,ersd,ersd-optm,cont,cont-optm,wasm",
         help = "Print selected IRs to stderr (comma-separated: text,core,ersd,ersd-optm,cont,cont-optm,wasm; bare --print prints all)"
     )]
-    pub print: Option<String>,
+    pub(crate) print: Option<String>,
 
     #[command(subcommand)]
-    pub mode: Mode,
+    pub(crate) mode: Mode,
 }

@@ -644,7 +644,7 @@ impl Telescope<()> {
 /// whole node at the current depth.
 type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
 
-/// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, the pruning flag (skip subtrees whose `reach` proves the visit cannot touch them), and an optional term-level rewrite hook. Public constructors are `Visit::pruning` and `Visit::rewriting`; the plain constructor is crate-internal.
+/// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, the pruning flag (skip subtrees whose `reach` proves the visit cannot touch them), and an optional term-level rewrite hook. `Visit::rewriting` is the crate-visible constructor; `Visit::new` and `Visit::pruning` are module-internal to this file.
 pub struct Visit<F> {
     depth: usize,
     prune: bool,

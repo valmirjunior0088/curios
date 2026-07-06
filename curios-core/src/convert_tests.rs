@@ -1137,7 +1137,12 @@ fn eta_at_unit_trusts_the_goal_type_label() {
     // gates on the type actually being a 0-ary tuple type, flip this to
     // `Ok(false)`.
     assert_eq!(
-        convert(&mut context, &nat_type(), &Term::tuple_unit(), &nat(1)),
+        convert(
+            &mut context,
+            &nat_type(),
+            &Term::tuple(Vec::<Term>::new()),
+            &nat(1)
+        ),
         Ok(true)
     );
 }
