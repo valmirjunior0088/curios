@@ -1,10 +1,11 @@
 use {
     super::{
-        Error, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, LetSignature, Module, Name,
-        Nat, NatLiteral, Pattern, Plicity, Prim, Qualifier, RootSource, Subterm, Term, TopForeign,
-        TopItem, TopLet, TopMod, TopUse, TupleType, TupleTypeParam, UseGroup,
+        Error, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, LetSignature, Module, Name, Nat,
+        NatLiteral, Pattern, Prim, RootSource, Subterm, Term, TopForeign, TopItem, TopLet, TopMod,
+        TopUse, TupleType, TupleTypeParam, UseGroup,
     },
     curios_abi::{ForeignFunction, ForeignStore, RootId, WireType, mode, poll, status, stdio},
+    curios_core::{Plicity, Qualifier},
     std::sync::Arc,
 };
 

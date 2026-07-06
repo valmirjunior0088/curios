@@ -1,6 +1,7 @@
 use {
-    super::{Error, Module, Qualifier},
+    super::{Error, Module},
     curios_abi::Roster,
+    curios_core::Qualifier,
     std::{
         collections::BTreeMap,
         path::{Path, PathBuf},

@@ -7,7 +7,7 @@ use {
 
 /// The failure mode of type-level evaluation (`reduce`/`convert`): either the context's shared deadline fired (`Preempted`) or a partial primitive was folded outside its domain, carrying the offending redex's span. Converted into the user-facing [`Error`] at the driver boundary by `into_error`, whose callback lets each caller decide what a preemption reports — the term being reduced, or the pair being compared.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ReduceError {
+pub(crate) enum ReduceError {
     Preempted,
     BinGetOutOfBounds {
         len: usize,

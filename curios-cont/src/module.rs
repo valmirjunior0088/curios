@@ -326,9 +326,6 @@ impl From<ValueName> for Argument {
     }
 }
 
-impl Argument {
-}
-
 /// Compare an argument to a bare name (candidate-agnostic) — handy in tests that
 /// assert on parameter lists without caring about the flag.
 impl PartialEq<ValueName> for Argument {
@@ -346,18 +343,12 @@ pub struct Clsr {
     pub region: Region,
 }
 
-impl Clsr {
-}
-
 /// A top-level function: parameters, body, and its `resume` sentinel — the block name that means "return": a jump to `resume` with one value *is* the function's return, so a call whose resume block is the enclosing sentinel is a tail call by construction (codegen emits `return_call`), no separate tail-position analysis needed.
 #[derive(Debug, Clone)]
 pub struct Func {
     pub params: Vec<Argument>,
     pub resume: BlockName,
     pub region: Region,
-}
-
-impl Func {
 }
 
 /// One whole program in cont form: module-level consts (hoisted literals), the closure and function definitions, and the blessed entrypoint. Bodies reference consts and each other by name, and definition order is preserved end-to-end — it is the printed order and the wasm emission order. The collections are private: from outside the crate a module only grows through the `add_*` methods, while the mutating views the optimizer rewrites through stay crate-internal.

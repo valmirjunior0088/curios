@@ -11,7 +11,7 @@ use {
     super::*,
     curios_abi::{ForeignStore, RootId, RootKind, Roster},
     curios_base::Entropy,
-    curios_core::Bound,
+    curios_core::{Bound, Plicity, Qualifier},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -535,7 +535,7 @@ fn process_items(
                                 index_tys
                                     .iter()
                                     .cloned()
-                                    .map(|(n, t)| (curios_core::Plicity::Explicit, n, t)),
+                                    .map(|(n, t)| (Plicity::Explicit, n, t)),
                             )
                             .collect();
                         let (type_, body) = if binder_tys.is_empty() {
@@ -582,7 +582,7 @@ fn process_items(
                         // the case's full terminal `T(A, ..., target...)`,
                         // elaborated as a name ref applied to the parameters
                         // and the target's index expressions.
-                        let output_args: Vec<(curios_core::Plicity, Term)> = u
+                        let output_args: Vec<(Plicity, Term)> = u
                             .params
                             .iter()
                             .map(|(p, n, _)| {
@@ -596,7 +596,7 @@ fn process_items(
                                 c.target
                                     .iter()
                                     .flatten()
-                                    .map(|t| (curios_core::Plicity::Explicit, t.clone())),
+                                    .map(|t| (Plicity::Explicit, t.clone())),
                             )
                             .collect();
                         let output_type: Term = if output_args.is_empty() {
@@ -618,9 +618,7 @@ fn process_items(
                         let param_tys = u
                             .params
                             .iter()
-                            .map(|(_, n, t)| {
-                                Ok((curios_core::Plicity::Implicit, n.clone(), lower.term(t)?))
-                            })
+                            .map(|(_, n, t)| Ok((Plicity::Implicit, n.clone(), lower.term(t)?)))
                             .chain(c.payload.iter().enumerate().map(|(i, param)| {
                                 Ok((
                                     param.plicity,

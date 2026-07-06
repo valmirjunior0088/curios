@@ -1,9 +1,9 @@
 use {
     super::{
-        FuncSugarParam, FuncType, FuncTypeParam, LetSignature, Name, Plicity, Subterm, Term,
-        TupleTypeParam,
+        FuncSugarParam, FuncType, FuncTypeParam, LetSignature, Name, Subterm, Term, TupleTypeParam,
     },
     curios_base::Span,
+    curios_core::Plicity,
 };
 
 /// A `mod` declaration: `module` is `Some` for an inline body (`mod m … end`) and `None` for the file-backed form (`mod m;`), whose body module discovery loads through the active [`RootSource`](crate::RootSource). The span locates a failed load at the declaration that requested it; like `Term`'s, it is excluded from `PartialEq`.

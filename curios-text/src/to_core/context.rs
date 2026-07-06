@@ -1,8 +1,9 @@
 use {
     super::PublicInterface,
-    crate::{Error, Name, Qualifier},
+    crate::{Error, Name},
     curios_abi::{RootId, Roster},
     curios_base::Entropy,
+    curios_core::Qualifier,
     std::collections::HashMap,
 };
 
@@ -473,7 +474,10 @@ impl<'a> Context<'a> {
 
     // A glob `use a/b/*` names a module directly and imports every public child
     // and binding it exposes (including its re-exports), each under its own label.
-    pub(super) fn resolve_glob(&mut self, name: &Name) -> Result<Vec<(String, UseResolved)>, Error> {
+    pub(super) fn resolve_glob(
+        &mut self,
+        name: &Name,
+    ) -> Result<Vec<(String, UseResolved)>, Error> {
         let result = (|| {
             let module = self.resolve_module_prefix(name, name.qualifier().segments().len())?;
 

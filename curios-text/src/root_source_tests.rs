@@ -1,4 +1,4 @@
-use super::*;
+use {super::*, curios_core::Qualifier};
 
 // A stand-in dependency module for tests that only exercise `dependencies`'
 // name validation/roster reporting — its content never matters, only the

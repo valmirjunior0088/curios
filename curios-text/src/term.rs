@@ -1,6 +1,7 @@
 use {
-    super::{Name, NumOp, Plicity, Prim, Radix},
+    super::{Name, Prim, Radix},
     curios_base::Span,
+    curios_core::{NumOp, Plicity},
     num_bigint::BigUint,
     std::{collections::BTreeMap, ops::Deref},
 };
