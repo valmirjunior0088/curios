@@ -41,7 +41,7 @@ pub(crate) fn peel_prim(left: &Prim, right: &Prim) -> Option<Peel> {
         (Prim::Int(actual), Prim::Int(target)) => Some(decide(actual == target)),
         // `Bin`/`Lst` are the free monoids on their bytes/elements: peel the
         // longest common prefix (each returns `None` for the other's shapes).
-        _ => peel_bin(left, right).or_else(|| peel_arr(left, right)),
+        _ => peel_bin(left, right).or_else(|| peel_lst(left, right)),
     }
 }
 
@@ -95,13 +95,13 @@ enum Atom<E> {
     Symbolic(Term),
 }
 
-/// The one free-monoid step `peel_bin` and `peel_arr` share: strip the longest
+/// The one free-monoid step `peel_bin` and `peel_lst` share: strip the longest
 /// common prefix the two segment lists *certainly* agree on — literal elements
 /// matched one-for-one and whole symbolic chunks that are syntactically identical
 /// — leaving each list at its residual tail. Reports whether anything was peeled,
 /// so the caller knows it made progress (and a `Continue` cannot loop). Literal
 /// elements compare by `==`: exact for `Bin`'s bytes, *syntactic* for `Lst`'s
-/// terms — hence `peel_arr` must not read a stalled literal head as a clash.
+/// terms — hence `peel_lst` must not read a stalled literal head as a clash.
 fn peel_prefix<E: PartialEq>(left: &mut VecDeque<Atom<E>>, right: &mut VecDeque<Atom<E>>) -> bool {
     let mut peeled = false;
 
@@ -258,7 +258,7 @@ pub(crate) fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
 /// comparison settles it. And its concatenation carries an element type, recovered
 /// here to rebuild a residual `LstConcat`. A leftover literal run against the empty
 /// identity (`[x] ~ []`) is still a definite length clash, as in `peel_bin`.
-pub(crate) fn peel_arr(left: &Prim, right: &Prim) -> Option<Peel> {
+pub(crate) fn peel_lst(left: &Prim, right: &Prim) -> Option<Peel> {
     if !lst_valued(left) || !lst_valued(right) {
         return None;
     }
@@ -280,8 +280,8 @@ pub(crate) fn peel_arr(left: &Prim, right: &Prim) -> Option<Peel> {
         // disagreement is syntactic, not semantic). Hand back any peeled residual.
         _ => match peeled {
             true => Peel::Continue(
-                reassemble_arr(left, elem.clone()),
-                reassemble_arr(right, elem),
+                reassemble_lst(left, elem.clone()),
+                reassemble_lst(right, elem),
             ),
             false => Peel::Stuck,
         },
@@ -443,7 +443,7 @@ fn reassemble_bin(atoms: VecDeque<Atom<u8>>) -> Term {
 /// element runs, restoring the element type `Lst`'s `LstConcat`/`LstSlice` carry.
 /// `elem` is `Some` whenever the residual has more than one segment or holds a slice
 /// window — both can only come from an input carrying the element type.
-fn reassemble_arr(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
+fn reassemble_lst(atoms: VecDeque<Atom<Term>>, elem: Option<Term>) -> Term {
     fn into_term(atom: Atom<Term>, elem: &Option<Term>) -> Term {
         match atom {
             Atom::Literal(elems) => Term::prim(Prim::Lst(elems)),

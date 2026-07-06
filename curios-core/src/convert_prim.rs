@@ -1,6 +1,6 @@
 use {
     super::Convert,
-    crate::{Peel, Prim, ReduceError, Term, peel_arr, peel_bin, peel_nat},
+    crate::{Peel, Prim, ReduceError, Term, peel_bin, peel_lst, peel_nat},
 };
 
 pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<bool, ReduceError> {
@@ -9,7 +9,7 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
     // structural arms below, which compare like-shaped symbolic operands (slices,
     // appends) and `Lst` element runs the peel leaves opaque — so the peel only
     // ever strengthens conversion, never weakens it.
-    if let Some(peel) = peel_bin(&this, &that).or_else(|| peel_arr(&this, &that)) {
+    if let Some(peel) = peel_bin(&this, &that).or_else(|| peel_lst(&this, &that)) {
         match peel {
             Peel::Equal => return Ok(true),
             Peel::Clash => return Ok(false),
