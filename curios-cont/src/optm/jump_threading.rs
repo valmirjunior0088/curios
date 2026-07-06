@@ -25,7 +25,7 @@ use {super::*, std::collections::HashMap};
 ///
 /// - **Multi-predecessor blocks** — a join reached from several edges (the merge
 ///   would duplicate it, or worse). The single-predecessor count includes every
-///   entry: `Jump` tails, `Match` arms, *and* `Call` resumes.
+///   entry: `Jump` tails, `Match` arms, and `Call`/`Host`/`Cell` resumes.
 /// - **Resume continuations and the resume sentinel** — a block entered as a
 ///   call's `resume`, or the virtual return sentinel, is never a `Jump` tail's
 ///   local target, so it is never selected. (Loops are excluded for free too: a
@@ -123,9 +123,9 @@ fn merge_block(region: &mut Region, target: &BlockName) {
     region.tail = block.region.tail;
 }
 
-/// Count how many edges enter each block: `Jump` tails, `Match` arms, and `Call`
-/// resumes. A block name is unique within a function body, so a single tree-wide
-/// map is exact.
+/// Count how many edges enter each block: `Jump` tails, `Match` arms, and
+/// `Call`/`Host`/`Cell` resumes. A block name is unique within a function body,
+/// so a single tree-wide map is exact.
 fn predecessor_counts(region: &Region) -> HashMap<BlockName, usize> {
     let mut counts = HashMap::new();
     count_predecessors(region, &mut counts);
