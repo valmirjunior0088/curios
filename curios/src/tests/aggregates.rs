@@ -327,13 +327,6 @@ fn empty_bin_literal_is_the_empty_sequence() {
     assert_eq!(io.output(), b"ok");
 }
 
-// Local binders shadow like-named *module* bindings, and a local name never
-// leaks past its lexical scope. Inside `mod Foo` the module binding is `Foo/go`:
-// an inner `let go` must shadow it (so `shadowed` is 3, not the captured 7),
-// while a `go` that is a sibling of an inner `let go = 3` — reached only after
-// that scope closes — must resolve back to `Foo/go` (so `sibling` is 7, not a
-// leaked, unbound bare `go`). Encoded as 3*10 + 7 = 37, so the unlawful-capture
-// regression reads 77 and a scope leak fails to compile.
 #[test]
 fn vec_cons_with_nat_succ() {
     let source = r#"

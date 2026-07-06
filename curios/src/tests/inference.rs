@@ -205,10 +205,10 @@ fn checking_problem_without_a_pin_still_rejects() {
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
-// === Structs (SYNTAX.md) ================================================
-
-// A transparent record: build with a pinned head, project by label and by
-// index — both resolve to the same positional projection.
+// Regression: an `Eq/subst` whose motive contains `Eq(_, _)` — whose `@A` is
+// implicit — must insert that implicit when the motive is instantiated. It used
+// to drop it, leaving `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which
+// panicked `reduce_apply` with "telescope arity mismatch".
 #[test]
 fn subst_motive_inserts_implicit_in_eq() {
     let source = r#"
@@ -225,9 +225,9 @@ fn subst_motive_inserts_implicit_in_eq() {
     assert_eq!(io.output(), b"ok");
 }
 
-// `Str/len` and `Str/get` count and index by codepoint, not byte. The string is
-// `a€😀` — a 1-byte, a 3-byte, and a 4-byte scalar — so its length is 3 and the
-// codepoints decode to U+0061 (97), U+20AC (8364), and U+1F600 (128512).
+// A `rec` that never reduces (`go : Bln = go`) forces forever when demanded in
+// type position — same infinite-spin behavior as a top-level `rec` — so a
+// short reduce deadline preempts it with a timeout error rather than hanging.
 #[test]
 fn nonproductive_inner_rec_in_type_position_is_preempted() {
     let source = r#"

@@ -19,9 +19,8 @@ fn named_fields_run_end_to_end() {
     assert_eq!(io.output(), b"42");
 }
 
-// `Io/read(h, n)` is the typed blocking read: each call yields a `chunk` of
-// 1..n available bytes (here one injected line per refill, served in `n`-byte
-// slices), and the third read past the data yields `eof`.
+// A transparent record: build with a pinned head, project by label and by
+// index — both resolve to the same positional projection.
 #[test]
 fn struct_transparent_pair_projects() {
     let source = r#"

@@ -45,6 +45,9 @@ fn io_read() {
     assert_eq!(io.output(), b"hello\n");
 }
 
+// `Io/read(h, n)` is the typed blocking read: each call yields a `chunk` of
+// 1..n available bytes (here one injected line per refill, served in `n`-byte
+// slices), and the third read past the data yields `eof`.
 #[test]
 fn io_read_short_reads_and_eof() {
     let source = r#"

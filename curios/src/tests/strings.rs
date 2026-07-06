@@ -154,6 +154,14 @@ fn str_of_bin_rejects_truncated_multibyte() {
     assert_eq!(io.output(), b"rejected");
 }
 
+// The UTF-8 decode certification lemmas: naming them forces their bodies to
+// elaborate (demand-driven checking). `cont_len` is the one that exercises the
+// comparison intrinsic — `step` only reduces in `cont` state because
+// `eql(succ(succ k''), 1)` now folds to `false`. `peel_byte`/`count_w`/
+// `decode_head` are the cursor-free decode core: `peel_byte` advances the
+// (prop) validity witness one byte without ever large-eliminating it,
+// `count_w` is the codepoint count `len` is built on, and `decode_head`
+// reads the head codepoint from the relevant bytes under that witness.
 #[test]
 fn utf8_decode_lemmas_type_check() {
     let source = r#"
@@ -168,10 +176,9 @@ fn utf8_decode_lemmas_type_check() {
     assert_eq!(io.output(), b"ok");
 }
 
-// Regression: an `Eq/subst` whose motive contains `Eq(_, _)` — whose `@A` is
-// implicit — must insert that implicit when the motive is instantiated. It used
-// to drop it, leaving `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which
-// panicked `reduce_apply` with "telescope arity mismatch".
+// `Str/len` and `Str/get` count and index by codepoint, not byte. The string is
+// `a€😀` — a 1-byte, a 3-byte, and a 4-byte scalar — so its length is 3 and the
+// codepoints decode to U+0061 (97), U+20AC (8364), and U+1F600 (128512).
 #[test]
 fn str_get_indexes_codepoints_of_every_width() {
     let source = r#"
