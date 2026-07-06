@@ -238,7 +238,7 @@ fn lower_bin_concat<'b>(
     }
 }
 
-fn lower_arr_concat<'b>(
+fn lower_lst_concat<'b>(
     work: &mut Work,
     operands: &'b [crate::Term],
     frame: &'b Frame,
@@ -256,7 +256,7 @@ fn lower_arr_concat<'b>(
             frame,
             Cont::new(move |work, name| {
                 names.push(name);
-                lower_arr_concat(work, tail, frame, names, cont)
+                lower_lst_concat(work, tail, frame, names, cont)
             }),
         ),
     }
@@ -803,7 +803,7 @@ fn lower_value_pure_prim<'b>(
             lower_binary_code(work, lst, elem, frame, cont, Code::LstAppend)
         }
         crate::PurePrim::LstConcat(operands) => {
-            lower_arr_concat(work, operands, frame, vec![], cont)
+            lower_lst_concat(work, operands, frame, vec![], cont)
         }
         crate::PurePrim::LstMap(src, f) => {
             lower_binary_code(work, src, f, frame, cont, Code::LstMap)
