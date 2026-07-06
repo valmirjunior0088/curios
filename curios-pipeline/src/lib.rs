@@ -4,7 +4,7 @@
 
 use {
     curios_abi::{ForeignStore, sys_io},
-    std::{sync::LazyLock, time::Duration},
+    std::time::Duration,
 };
 
 /// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — the CLI's `--print` stage dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
@@ -18,24 +18,21 @@ pub enum Stage<'a> {
     Wasm(&'a curios_wasm::Module),
 }
 
-/// Every stage name, in pipeline order — the single source `--print`'s
-/// default/help text is derived from, so it cannot drift from
-/// [`Stage::name`].
-pub const NAMES: [&str; 7] = [
-    "text",
-    "core",
-    "ersd",
-    "ersd-optm",
-    "cont",
-    "cont-optm",
-    "wasm",
-];
-
-/// [`NAMES`] joined with `,`, computed once on first use.
-pub static NAMES_CSV: LazyLock<String> = LazyLock::new(|| NAMES.join(","));
-
 impl<'a> Stage<'a> {
-    /// This stage's name, matching its entry in [`NAMES`].
+    /// Every stage name, in pipeline order — the single source the CLI's
+    /// `--print` default/help text is derived from, so it cannot drift from
+    /// [`Stage::name`].
+    pub const NAMES: [&'static str; 7] = [
+        "text",
+        "core",
+        "ersd",
+        "ersd-optm",
+        "cont",
+        "cont-optm",
+        "wasm",
+    ];
+
+    /// This stage's name, matching its entry in [`Stage::NAMES`].
     pub fn name(&self) -> &'static str {
         match self {
             Stage::Text(_) => "text",

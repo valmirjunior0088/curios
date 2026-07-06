@@ -4,8 +4,12 @@
 
 use {
     clap::{Parser, Subcommand},
-    std::{path::PathBuf, time::Duration},
+    std::{path::PathBuf, sync::LazyLock, time::Duration},
 };
+
+/// [`curios_pipeline::Stage::NAMES`] joined with `,`, computed once on first
+/// use — the `--print` flag's default and help text.
+static NAMES: LazyLock<String> = LazyLock::new(|| curios_pipeline::Stage::NAMES.join(","));
 
 fn parse_timeout(input: &str) -> Result<Duration, String> {
     input
@@ -56,10 +60,10 @@ pub(crate) struct Cli {
         value_name = "STAGES",
         num_args = 0..=1,
         require_equals = true,
-        default_missing_value = curios_pipeline::NAMES_CSV.as_str(),
+        default_missing_value = NAMES.as_str(),
         help = format!(
             "Print selected IRs to stderr (comma-separated: {}; bare --print prints all)",
-            *curios_pipeline::NAMES_CSV
+            *NAMES
         )
     )]
     pub(crate) print: Option<String>,
