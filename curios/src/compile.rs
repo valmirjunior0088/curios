@@ -4,8 +4,9 @@
 //! stays slim.
 
 use {
-    crate::{compile_entrypoint, text, wasm},
+    curios_pipeline::compile_entrypoint,
     curios_rt::{ForeignBindings, Host, run_bytes, shared_engine},
+    curios_text as text, curios_wasm as wasm,
     std::{
         path::{Path, PathBuf},
         time::Duration,
