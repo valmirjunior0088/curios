@@ -635,7 +635,7 @@ where
                 target_type,
             } => {
                 self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(25)?;
+                self.buffer.push_leb128_unsigned(24)?;
                 self.write_cast_flags(source_type, target_type)?;
 
                 self.buffer
@@ -650,7 +650,7 @@ where
                 target_type,
             } => {
                 self.buffer.push_byte(0xfb)?;
-                self.buffer.push_leb128_unsigned(24)?;
+                self.buffer.push_leb128_unsigned(25)?;
                 self.write_cast_flags(source_type, target_type)?;
 
                 self.buffer
