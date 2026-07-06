@@ -201,18 +201,10 @@ where
 
     fn write_number_type(&mut self, num_type: &NumType) -> Result<()> {
         match num_type {
-            NumType::I32 => {
-                self.buffer.push_byte(0x7f)?;
-            }
-            NumType::I64 => {
-                self.buffer.push_byte(0x7e)?;
-            }
-            NumType::F32 => {
-                self.buffer.push_byte(0x7d)?;
-            }
-            NumType::F64 => {
-                self.buffer.push_byte(0x7c)?;
-            }
+            NumType::I32 => self.buffer.push_byte(0x7f)?,
+            NumType::I64 => self.buffer.push_byte(0x7e)?,
+            NumType::F32 => self.buffer.push_byte(0x7d)?,
+            NumType::F64 => self.buffer.push_byte(0x7c)?,
         }
 
         Ok(())
@@ -220,36 +212,16 @@ where
 
     fn write_abs_heap_type(&mut self, abs_heap_type: &AbsHeapType) -> Result<()> {
         match abs_heap_type {
-            AbsHeapType::NoFunc => {
-                self.buffer.push_byte(0x73)?;
-            }
-            AbsHeapType::NoExtern => {
-                self.buffer.push_byte(0x72)?;
-            }
-            AbsHeapType::None => {
-                self.buffer.push_byte(0x71)?;
-            }
-            AbsHeapType::Func => {
-                self.buffer.push_byte(0x70)?;
-            }
-            AbsHeapType::Extern => {
-                self.buffer.push_byte(0x6f)?;
-            }
-            AbsHeapType::Any => {
-                self.buffer.push_byte(0x6e)?;
-            }
-            AbsHeapType::Eq => {
-                self.buffer.push_byte(0x6d)?;
-            }
-            AbsHeapType::I31 => {
-                self.buffer.push_byte(0x6c)?;
-            }
-            AbsHeapType::Struct => {
-                self.buffer.push_byte(0x6b)?;
-            }
-            AbsHeapType::Array => {
-                self.buffer.push_byte(0x6a)?;
-            }
+            AbsHeapType::NoFunc => self.buffer.push_byte(0x73)?,
+            AbsHeapType::NoExtern => self.buffer.push_byte(0x72)?,
+            AbsHeapType::None => self.buffer.push_byte(0x71)?,
+            AbsHeapType::Func => self.buffer.push_byte(0x70)?,
+            AbsHeapType::Extern => self.buffer.push_byte(0x6f)?,
+            AbsHeapType::Any => self.buffer.push_byte(0x6e)?,
+            AbsHeapType::Eq => self.buffer.push_byte(0x6d)?,
+            AbsHeapType::I31 => self.buffer.push_byte(0x6c)?,
+            AbsHeapType::Struct => self.buffer.push_byte(0x6b)?,
+            AbsHeapType::Array => self.buffer.push_byte(0x6a)?,
         }
 
         Ok(())
@@ -257,12 +229,8 @@ where
 
     fn write_heap_type(&mut self, heap_type: &HeapType) -> Result<()> {
         match heap_type {
-            HeapType::Abstract(abs_heap_type) => {
-                self.write_abs_heap_type(abs_heap_type)?;
-            }
-            HeapType::Concrete(name) => {
-                self.write_type_name_signed(name)?;
-            }
+            HeapType::Abstract(abs_heap_type) => self.write_abs_heap_type(abs_heap_type)?,
+            HeapType::Concrete(name) => self.write_type_name_signed(name)?,
         }
 
         Ok(())
@@ -292,12 +260,8 @@ where
 
     fn write_val_type(&mut self, val_type: &ValType) -> Result<()> {
         match val_type {
-            ValType::Num(num_type) => {
-                self.write_number_type(num_type)?;
-            }
-            ValType::Ref(ref_type) => {
-                self.write_ref_type(ref_type)?;
-            }
+            ValType::Num(num_type) => self.write_number_type(num_type)?,
+            ValType::Ref(ref_type) => self.write_ref_type(ref_type)?,
         }
 
         Ok(())
@@ -315,12 +279,8 @@ where
 
     fn write_packed_type(&mut self, packed_type: &PackedType) -> Result<()> {
         match packed_type {
-            PackedType::I8 => {
-                self.buffer.push_byte(0x78)?;
-            }
-            PackedType::I16 => {
-                self.buffer.push_byte(0x77)?;
-            }
+            PackedType::I8 => self.buffer.push_byte(0x78)?,
+            PackedType::I16 => self.buffer.push_byte(0x77)?,
         }
 
         Ok(())
@@ -328,12 +288,8 @@ where
 
     fn write_storage_type(&mut self, storage_type: &StorageType) -> Result<()> {
         match storage_type {
-            StorageType::Val(val_type) => {
-                self.write_val_type(val_type)?;
-            }
-            StorageType::Packed(packed_type) => {
-                self.write_packed_type(packed_type)?;
-            }
+            StorageType::Val(val_type) => self.write_val_type(val_type)?,
+            StorageType::Packed(packed_type) => self.write_packed_type(packed_type)?,
         }
 
         Ok(())
@@ -341,12 +297,8 @@ where
 
     fn write_mutability(&mut self, mutability: &Mutability) -> Result<()> {
         match mutability {
-            Mutability::Const => {
-                self.buffer.push_byte(0x00)?;
-            }
-            Mutability::Var => {
-                self.buffer.push_byte(0x01)?;
-            }
+            Mutability::Const => self.buffer.push_byte(0x00)?,
+            Mutability::Var => self.buffer.push_byte(0x01)?,
         }
 
         Ok(())
@@ -478,15 +430,9 @@ where
 
     fn write_block_type(&mut self, block_type: &BlockType) -> Result<()> {
         match block_type {
-            BlockType::Empty => {
-                self.buffer.push_byte(0x40)?;
-            }
-            BlockType::Inline(val_type) => {
-                self.write_val_type(val_type)?;
-            }
-            BlockType::Concrete(type_name) => {
-                self.write_type_name_signed(type_name)?;
-            }
+            BlockType::Empty => self.buffer.push_byte(0x40)?,
+            BlockType::Inline(val_type) => self.write_val_type(val_type)?,
+            BlockType::Concrete(type_name) => self.write_type_name_signed(type_name)?,
         }
 
         Ok(())
