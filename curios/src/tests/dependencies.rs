@@ -6,14 +6,14 @@ use {
 // A named path dependency's own root module, registered under `name` with no
 // nested `mod` children of its own — enough for these tests, which never
 // declare a `mod` inside the dependency.
-fn dependency(name: &str, source: &str) -> crate::text::RootSource {
+fn dependency(name: &str, source: &str) -> curios_text::RootSource {
     let module = source
-        .parse::<crate::text::Module>()
+        .parse::<curios_text::Module>()
         .expect("dependency module parses");
 
-    crate::text::RootSource::dependencies(
-        vec![(name.to_string(), module, crate::text::RootSource::None)],
-        crate::text::RootSource::None,
+    curios_text::RootSource::dependencies(
+        vec![(name.to_string(), module, curios_text::RootSource::None)],
+        curios_text::RootSource::None,
     )
     .expect("a well-formed dependency list")
 }
@@ -28,7 +28,7 @@ fn dependency_is_implicitly_visible_with_no_mod_declaration() {
         let n : Nat = /foo/answer;
         Io/print(Nat/to_str(n))
         "#
-    .parse::<crate::text::Entrypoint>()
+    .parse::<curios_text::Entrypoint>()
     .expect("failed to parse source");
 
     let loader = dependency("foo", "pub let answer : /std/Nat = 42;");
@@ -49,12 +49,12 @@ fn foreign_declaration_inside_a_dependency_populates_the_shared_store() {
         let _ : /std/False = /std/Proc/exit(/foo/double(21));
         /std/Io/write(/std/Io/stdout, /std/Str/to_bin("unreachable"))
         "#
-    .parse::<crate::text::Entrypoint>()
+    .parse::<curios_text::Entrypoint>()
     .expect("failed to parse source");
 
     let loader = dependency("foo", "pub foreign double : (Nat) -> Nat;");
 
-    let (module, foreigns) = crate::compile_entrypoint(Duration::from_secs(10), &source, loader, |_| {})
+    let (module, foreigns) = curios_pipeline::compile_entrypoint(Duration::from_secs(10), &source, loader, |_| {})
         .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::new(foreigns);
@@ -83,7 +83,7 @@ fn orphan_rule_rejects_a_witness_in_a_dependency_for_the_entrys_own_types() {
         let z : Nat = 0;
         z
         "#
-    .parse::<crate::text::Entrypoint>()
+    .parse::<curios_text::Entrypoint>()
     .expect("failed to parse source");
 
     let loader = dependency(

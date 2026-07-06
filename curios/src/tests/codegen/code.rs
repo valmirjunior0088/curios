@@ -1,36 +1,33 @@
-use {
-    super::*,
-    crate::cont::{self, to_wasm},
-};
+use {super::*, curios_cont::to_wasm};
 
 #[test]
 fn lowers_and_runs_nat_add() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
-    module.add_const(cont::ValueName::from("FOUR"), cont::Data::Nat(4));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("FOUR"), curios_cont::Data::Nat(4));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::NatAdd(
-                        cont::ValueName::from("THREE"),
-                        cont::ValueName::from("FOUR"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::NatAdd(
+                        curios_cont::ValueName::from("THREE"),
+                        curios_cont::ValueName::from("FOUR"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -41,36 +38,36 @@ fn lowers_and_runs_nat_add() {
 
 #[test]
 fn lowers_and_runs_arr_len() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
-    module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("SEVEN"), curios_cont::Data::Nat(7));
     module.add_const(
-        cont::ValueName::from("LST"),
-        cont::Data::Lst(vec![
-            cont::ValueName::from("THREE"),
-            cont::ValueName::from("SEVEN"),
+        curios_cont::ValueName::from("LST"),
+        curios_cont::Data::Lst(vec![
+            curios_cont::ValueName::from("THREE"),
+            curios_cont::ValueName::from("SEVEN"),
         ]),
     );
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::LstLen(cont::ValueName::from("LST"))),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::LstLen(curios_cont::ValueName::from("LST"))),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -81,40 +78,40 @@ fn lowers_and_runs_arr_len() {
 
 #[test]
 fn lowers_and_runs_arr_get() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
-    module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("SEVEN"), curios_cont::Data::Nat(7));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Nat(1));
     module.add_const(
-        cont::ValueName::from("LST"),
-        cont::Data::Lst(vec![
-            cont::ValueName::from("THREE"),
-            cont::ValueName::from("SEVEN"),
+        curios_cont::ValueName::from("LST"),
+        curios_cont::Data::Lst(vec![
+            curios_cont::ValueName::from("THREE"),
+            curios_cont::ValueName::from("SEVEN"),
         ]),
     );
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::LstGet(
-                        cont::ValueName::from("LST"),
-                        cont::ValueName::from("ONE"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::LstGet(
+                        curios_cont::ValueName::from("LST"),
+                        curios_cont::ValueName::from("ONE"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -125,50 +122,50 @@ fn lowers_and_runs_arr_get() {
 
 #[test]
 fn lowers_and_runs_arr_slice() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
-    module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
-    module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
-    module.add_const(cont::ValueName::from("THREE_IDX"), cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("SEVEN"), curios_cont::Data::Nat(7));
+    module.add_const(curios_cont::ValueName::from("FIVE"), curios_cont::Data::Nat(5));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Nat(1));
+    module.add_const(curios_cont::ValueName::from("THREE_IDX"), curios_cont::Data::Nat(3));
     module.add_const(
-        cont::ValueName::from("LST"),
-        cont::Data::Lst(vec![
-            cont::ValueName::from("THREE"),
-            cont::ValueName::from("SEVEN"),
-            cont::ValueName::from("FIVE"),
+        curios_cont::ValueName::from("LST"),
+        curios_cont::Data::Lst(vec![
+            curios_cont::ValueName::from("THREE"),
+            curios_cont::ValueName::from("SEVEN"),
+            curios_cont::ValueName::from("FIVE"),
         ]),
     );
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("slice"),
-                        cont::Value::Eval(cont::Code::LstSlice(
-                            cont::ValueName::from("LST"),
-                            cont::ValueName::from("ONE"),
-                            cont::ValueName::from("THREE_IDX"),
+                        curios_cont::ValueName::from("slice"),
+                        curios_cont::Value::Eval(curios_cont::Code::LstSlice(
+                            curios_cont::ValueName::from("LST"),
+                            curios_cont::ValueName::from("ONE"),
+                            curios_cont::ValueName::from("THREE_IDX"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::LstLen(cont::ValueName::from("slice"))),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::LstLen(curios_cont::ValueName::from("slice"))),
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -179,50 +176,50 @@ fn lowers_and_runs_arr_slice() {
 
 #[test]
 fn lowers_and_runs_arr_concat() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
-    module.add_const(cont::ValueName::from("TWO"), cont::Data::Nat(2));
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Nat(1));
+    module.add_const(curios_cont::ValueName::from("TWO"), curios_cont::Data::Nat(2));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Nat(3));
     module.add_const(
-        cont::ValueName::from("LST1"),
-        cont::Data::Lst(vec![cont::ValueName::from("ONE")]),
+        curios_cont::ValueName::from("LST1"),
+        curios_cont::Data::Lst(vec![curios_cont::ValueName::from("ONE")]),
     );
     module.add_const(
-        cont::ValueName::from("LST2"),
-        cont::Data::Lst(vec![
-            cont::ValueName::from("TWO"),
-            cont::ValueName::from("THREE"),
+        curios_cont::ValueName::from("LST2"),
+        curios_cont::Data::Lst(vec![
+            curios_cont::ValueName::from("TWO"),
+            curios_cont::ValueName::from("THREE"),
         ]),
     );
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("concat"),
-                        cont::Value::Eval(cont::Code::LstConcat(vec![
-                            cont::ValueName::from("LST1"),
-                            cont::ValueName::from("LST2"),
+                        curios_cont::ValueName::from("concat"),
+                        curios_cont::Value::Eval(curios_cont::Code::LstConcat(vec![
+                            curios_cont::ValueName::from("LST1"),
+                            curios_cont::ValueName::from("LST2"),
                         ])),
                     ),
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::LstLen(cont::ValueName::from("concat"))),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::LstLen(curios_cont::ValueName::from("concat"))),
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -233,55 +230,55 @@ fn lowers_and_runs_arr_concat() {
 
 #[test]
 fn lowers_and_runs_flt_floor() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("X"), cont::Data::Flt(2.9));
+    module.add_const(curios_cont::ValueName::from("X"), curios_cont::Data::Flt(2.9));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltFloor(cont::ValueName::from("X"))),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltFloor(curios_cont::ValueName::from("X"))),
                     ),
                     (
-                        cont::ValueName::from("str"),
-                        cont::Value::Eval(cont::Code::FltToLeBin(cont::ValueName::from("result"))),
+                        curios_cont::ValueName::from("str"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(curios_cont::ValueName::from("result"))),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("str"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("str"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -292,55 +289,55 @@ fn lowers_and_runs_flt_floor() {
 
 #[test]
 fn lowers_and_runs_flt_ceil() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("X"), cont::Data::Flt(2.1));
+    module.add_const(curios_cont::ValueName::from("X"), curios_cont::Data::Flt(2.1));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltCeil(cont::ValueName::from("X"))),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltCeil(curios_cont::ValueName::from("X"))),
                     ),
                     (
-                        cont::ValueName::from("str"),
-                        cont::Value::Eval(cont::Code::FltToLeBin(cont::ValueName::from("result"))),
+                        curios_cont::ValueName::from("str"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(curios_cont::ValueName::from("result"))),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("str"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("str"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -351,55 +348,55 @@ fn lowers_and_runs_flt_ceil() {
 
 #[test]
 fn lowers_and_runs_flt_trunc() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("X"), cont::Data::Flt(-2.9));
+    module.add_const(curios_cont::ValueName::from("X"), curios_cont::Data::Flt(-2.9));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltTrunc(cont::ValueName::from("X"))),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltTrunc(curios_cont::ValueName::from("X"))),
                     ),
                     (
-                        cont::ValueName::from("str"),
-                        cont::Value::Eval(cont::Code::FltToLeBin(cont::ValueName::from("result"))),
+                        curios_cont::ValueName::from("str"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(curios_cont::ValueName::from("result"))),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("str"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("str"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -410,55 +407,55 @@ fn lowers_and_runs_flt_trunc() {
 
 #[test]
 fn lowers_and_runs_flt_nearest() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("X"), cont::Data::Flt(2.5));
+    module.add_const(curios_cont::ValueName::from("X"), curios_cont::Data::Flt(2.5));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltNearest(cont::ValueName::from("X"))),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltNearest(curios_cont::ValueName::from("X"))),
                     ),
                     (
-                        cont::ValueName::from("str"),
-                        cont::Value::Eval(cont::Code::FltToLeBin(cont::ValueName::from("result"))),
+                        curios_cont::ValueName::from("str"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(curios_cont::ValueName::from("result"))),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("str"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("str"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -469,32 +466,32 @@ fn lowers_and_runs_flt_nearest() {
 
 #[test]
 fn lowers_and_runs_nat_div() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("TEN"), cont::Data::Nat(10));
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("TEN"), curios_cont::Data::Nat(10));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Nat(3));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::NatDiv(
-                        cont::ValueName::from("TEN"),
-                        cont::ValueName::from("THREE"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::NatDiv(
+                        curios_cont::ValueName::from("TEN"),
+                        curios_cont::ValueName::from("THREE"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -505,32 +502,32 @@ fn lowers_and_runs_nat_div() {
 
 #[test]
 fn lowers_and_runs_nat_rem() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("TEN"), cont::Data::Nat(10));
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("TEN"), curios_cont::Data::Nat(10));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Nat(3));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::NatRem(
-                        cont::ValueName::from("TEN"),
-                        cont::ValueName::from("THREE"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::NatRem(
+                        curios_cont::ValueName::from("TEN"),
+                        curios_cont::ValueName::from("THREE"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -541,32 +538,32 @@ fn lowers_and_runs_nat_rem() {
 
 #[test]
 fn lowers_and_runs_nat_lt() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
-    module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("FIVE"), curios_cont::Data::Nat(5));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::NatLt(
-                        cont::ValueName::from("THREE"),
-                        cont::ValueName::from("FIVE"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::NatLt(
+                        curios_cont::ValueName::from("THREE"),
+                        curios_cont::ValueName::from("FIVE"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -577,37 +574,37 @@ fn lowers_and_runs_nat_lt() {
 
 #[test]
 fn lowers_and_runs_int_neg() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("FIVE"), cont::Data::Int(5));
+    module.add_const(curios_cont::ValueName::from("FIVE"), curios_cont::Data::Int(5));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("zero"),
-                        cont::Value::Pure(cont::Data::Int(0)),
+                        curios_cont::ValueName::from("zero"),
+                        curios_cont::Value::Pure(curios_cont::Data::Int(0)),
                     ),
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::IntSub(
-                            cont::ValueName::from("zero"),
-                            cont::ValueName::from("FIVE"),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::IntSub(
+                            curios_cont::ValueName::from("zero"),
+                            curios_cont::ValueName::from("FIVE"),
                         )),
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -618,32 +615,32 @@ fn lowers_and_runs_int_neg() {
 
 #[test]
 fn lowers_and_runs_int_div() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("NEG7"), cont::Data::Int(-7));
-    module.add_const(cont::ValueName::from("TWO"), cont::Data::Int(2));
+    module.add_const(curios_cont::ValueName::from("NEG7"), curios_cont::Data::Int(-7));
+    module.add_const(curios_cont::ValueName::from("TWO"), curios_cont::Data::Int(2));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::IntDiv(
-                        cont::ValueName::from("NEG7"),
-                        cont::ValueName::from("TWO"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::IntDiv(
+                        curios_cont::ValueName::from("NEG7"),
+                        curios_cont::ValueName::from("TWO"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -654,32 +651,32 @@ fn lowers_and_runs_int_div() {
 
 #[test]
 fn lowers_and_runs_int_lt() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("NEG1"), cont::Data::Int(-1));
-    module.add_const(cont::ValueName::from("ZERO"), cont::Data::Int(0));
+    module.add_const(curios_cont::ValueName::from("NEG1"), curios_cont::Data::Int(-1));
+    module.add_const(curios_cont::ValueName::from("ZERO"), curios_cont::Data::Int(0));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::IntLt(
-                        cont::ValueName::from("NEG1"),
-                        cont::ValueName::from("ZERO"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::IntLt(
+                        curios_cont::ValueName::from("NEG1"),
+                        curios_cont::ValueName::from("ZERO"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -690,59 +687,59 @@ fn lowers_and_runs_int_lt() {
 
 #[test]
 fn lowers_and_runs_flt_div() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Flt(1.0));
-    module.add_const(cont::ValueName::from("FOUR"), cont::Data::Flt(4.0));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Flt(1.0));
+    module.add_const(curios_cont::ValueName::from("FOUR"), curios_cont::Data::Flt(4.0));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltDiv(
-                            cont::ValueName::from("ONE"),
-                            cont::ValueName::from("FOUR"),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltDiv(
+                            curios_cont::ValueName::from("ONE"),
+                            curios_cont::ValueName::from("FOUR"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("str"),
-                        cont::Value::Eval(cont::Code::FltToLeBin(cont::ValueName::from("result"))),
+                        curios_cont::ValueName::from("str"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(curios_cont::ValueName::from("result"))),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("str"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("str"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -753,32 +750,32 @@ fn lowers_and_runs_flt_div() {
 
 #[test]
 fn lowers_and_runs_flt_eql() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("A"), cont::Data::Flt(1.5));
-    module.add_const(cont::ValueName::from("B"), cont::Data::Flt(1.5));
+    module.add_const(curios_cont::ValueName::from("A"), curios_cont::Data::Flt(1.5));
+    module.add_const(curios_cont::ValueName::from("B"), curios_cont::Data::Flt(1.5));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::FltEql(
-                        cont::ValueName::from("A"),
-                        cont::ValueName::from("B"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::FltEql(
+                        curios_cont::ValueName::from("A"),
+                        curios_cont::ValueName::from("B"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -789,55 +786,55 @@ fn lowers_and_runs_flt_eql() {
 
 #[test]
 fn lowers_and_runs_flt_sqrt() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("FOUR"), cont::Data::Flt(4.0));
+    module.add_const(curios_cont::ValueName::from("FOUR"), curios_cont::Data::Flt(4.0));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltSqrt(cont::ValueName::from("FOUR"))),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltSqrt(curios_cont::ValueName::from("FOUR"))),
                     ),
                     (
-                        cont::ValueName::from("str"),
-                        cont::Value::Eval(cont::Code::FltToLeBin(cont::ValueName::from("result"))),
+                        curios_cont::ValueName::from("str"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(curios_cont::ValueName::from("result"))),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("str"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("str"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -848,55 +845,55 @@ fn lowers_and_runs_flt_sqrt() {
 
 #[test]
 fn lowers_and_runs_int_to_flt() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Int(3));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Int(3));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::IntToFlt(cont::ValueName::from("THREE"))),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::IntToFlt(curios_cont::ValueName::from("THREE"))),
                     ),
                     (
-                        cont::ValueName::from("str"),
-                        cont::Value::Eval(cont::Code::FltToLeBin(cont::ValueName::from("result"))),
+                        curios_cont::ValueName::from("str"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(curios_cont::ValueName::from("result"))),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("str"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("str"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -907,55 +904,55 @@ fn lowers_and_runs_int_to_flt() {
 
 #[test]
 fn lowers_and_runs_nat_to_flt() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
+    module.add_const(curios_cont::ValueName::from("FIVE"), curios_cont::Data::Nat(5));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::NatToFlt(cont::ValueName::from("FIVE"))),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::NatToFlt(curios_cont::ValueName::from("FIVE"))),
                     ),
                     (
-                        cont::ValueName::from("str"),
-                        cont::Value::Eval(cont::Code::FltToLeBin(cont::ValueName::from("result"))),
+                        curios_cont::ValueName::from("str"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(curios_cont::ValueName::from("result"))),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("str"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("str"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -966,28 +963,28 @@ fn lowers_and_runs_nat_to_flt() {
 
 #[test]
 fn lowers_and_runs_flt_to_int() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("THREE_SEVEN"), cont::Data::Flt(3.7));
+    module.add_const(curios_cont::ValueName::from("THREE_SEVEN"), curios_cont::Data::Flt(3.7));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::FltToInt(cont::ValueName::from("THREE_SEVEN"))),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::FltToInt(curios_cont::ValueName::from("THREE_SEVEN"))),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -998,28 +995,28 @@ fn lowers_and_runs_flt_to_int() {
 
 #[test]
 fn lowers_and_runs_nat_to_int() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
+    module.add_const(curios_cont::ValueName::from("SEVEN"), curios_cont::Data::Nat(7));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::NatToInt(cont::ValueName::from("SEVEN"))),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::NatToInt(curios_cont::ValueName::from("SEVEN"))),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1030,32 +1027,32 @@ fn lowers_and_runs_nat_to_int() {
 
 #[test]
 fn lowers_and_runs_nat_neq() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
-    module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("FIVE"), curios_cont::Data::Nat(5));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::NatNeq(
-                        cont::ValueName::from("THREE"),
-                        cont::ValueName::from("FIVE"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::NatNeq(
+                        curios_cont::ValueName::from("THREE"),
+                        curios_cont::ValueName::from("FIVE"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1066,32 +1063,32 @@ fn lowers_and_runs_nat_neq() {
 
 #[test]
 fn lowers_and_runs_int_neq() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("NEG1"), cont::Data::Int(-1));
-    module.add_const(cont::ValueName::from("NEG1B"), cont::Data::Int(-1));
+    module.add_const(curios_cont::ValueName::from("NEG1"), curios_cont::Data::Int(-1));
+    module.add_const(curios_cont::ValueName::from("NEG1B"), curios_cont::Data::Int(-1));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::IntNeq(
-                        cont::ValueName::from("NEG1"),
-                        cont::ValueName::from("NEG1B"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::IntNeq(
+                        curios_cont::ValueName::from("NEG1"),
+                        curios_cont::ValueName::from("NEG1B"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1102,32 +1099,32 @@ fn lowers_and_runs_int_neq() {
 
 #[test]
 fn lowers_and_runs_flt_neq() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Flt(1.0));
-    module.add_const(cont::ValueName::from("TWO"), cont::Data::Flt(2.0));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Flt(1.0));
+    module.add_const(curios_cont::ValueName::from("TWO"), curios_cont::Data::Flt(2.0));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::FltNeq(
-                        cont::ValueName::from("ONE"),
-                        cont::ValueName::from("TWO"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::FltNeq(
+                        curios_cont::ValueName::from("ONE"),
+                        curios_cont::ValueName::from("TWO"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1138,59 +1135,59 @@ fn lowers_and_runs_flt_neq() {
 
 #[test]
 fn lowers_and_runs_flt_min() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("A"), cont::Data::Flt(1.5));
-    module.add_const(cont::ValueName::from("B"), cont::Data::Flt(2.5));
+    module.add_const(curios_cont::ValueName::from("A"), curios_cont::Data::Flt(1.5));
+    module.add_const(curios_cont::ValueName::from("B"), curios_cont::Data::Flt(2.5));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltMin(
-                            cont::ValueName::from("A"),
-                            cont::ValueName::from("B"),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltMin(
+                            curios_cont::ValueName::from("A"),
+                            curios_cont::ValueName::from("B"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("str"),
-                        cont::Value::Eval(cont::Code::FltToLeBin(cont::ValueName::from("result"))),
+                        curios_cont::ValueName::from("str"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(curios_cont::ValueName::from("result"))),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("str"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("str"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1201,59 +1198,59 @@ fn lowers_and_runs_flt_min() {
 
 #[test]
 fn lowers_and_runs_flt_max() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("A"), cont::Data::Flt(1.5));
-    module.add_const(cont::ValueName::from("B"), cont::Data::Flt(2.5));
+    module.add_const(curios_cont::ValueName::from("A"), curios_cont::Data::Flt(1.5));
+    module.add_const(curios_cont::ValueName::from("B"), curios_cont::Data::Flt(2.5));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::FltMax(
-                            cont::ValueName::from("A"),
-                            cont::ValueName::from("B"),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltMax(
+                            curios_cont::ValueName::from("A"),
+                            curios_cont::ValueName::from("B"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("str"),
-                        cont::Value::Eval(cont::Code::FltToLeBin(cont::ValueName::from("result"))),
+                        curios_cont::ValueName::from("str"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(curios_cont::ValueName::from("result"))),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("str"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("str"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -1264,31 +1261,31 @@ fn lowers_and_runs_flt_max() {
 
 #[test]
 fn lowers_and_runs_bin_len() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
     module.add_const(
-        cont::ValueName::from("HELLO"),
-        cont::Data::Bin(b"hello".to_vec()),
+        curios_cont::ValueName::from("HELLO"),
+        curios_cont::Data::Bin(b"hello".to_vec()),
     );
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::BinLen(cont::ValueName::from("HELLO"))),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::BinLen(curios_cont::ValueName::from("HELLO"))),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1299,35 +1296,35 @@ fn lowers_and_runs_bin_len() {
 
 #[test]
 fn lowers_and_runs_bin_get() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
     module.add_const(
-        cont::ValueName::from("HELLO"),
-        cont::Data::Bin(b"hello".to_vec()),
+        curios_cont::ValueName::from("HELLO"),
+        curios_cont::Data::Bin(b"hello".to_vec()),
     );
-    module.add_const(cont::ValueName::from("IDX"), cont::Data::Nat(1));
+    module.add_const(curios_cont::ValueName::from("IDX"), curios_cont::Data::Nat(1));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::BinGet(
-                        cont::ValueName::from("HELLO"),
-                        cont::ValueName::from("IDX"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::BinGet(
+                        curios_cont::ValueName::from("HELLO"),
+                        curios_cont::ValueName::from("IDX"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1338,45 +1335,45 @@ fn lowers_and_runs_bin_get() {
 
 #[test]
 fn lowers_and_runs_bin_append() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
     module.add_const(
-        cont::ValueName::from("HELLO"),
-        cont::Data::Bin(b"hello".to_vec()),
+        curios_cont::ValueName::from("HELLO"),
+        curios_cont::Data::Bin(b"hello".to_vec()),
     );
-    module.add_const(cont::ValueName::from("BANG"), cont::Data::Nat(b'!' as u32));
-    module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
+    module.add_const(curios_cont::ValueName::from("BANG"), curios_cont::Data::Nat(b'!' as u32));
+    module.add_const(curios_cont::ValueName::from("FIVE"), curios_cont::Data::Nat(5));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("appended"),
-                        cont::Value::Eval(cont::Code::BinAppend(
-                            cont::ValueName::from("HELLO"),
-                            cont::ValueName::from("BANG"),
+                        curios_cont::ValueName::from("appended"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinAppend(
+                            curios_cont::ValueName::from("HELLO"),
+                            curios_cont::ValueName::from("BANG"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::BinGet(
-                            cont::ValueName::from("appended"),
-                            cont::ValueName::from("FIVE"),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinGet(
+                            curios_cont::ValueName::from("appended"),
+                            curios_cont::ValueName::from("FIVE"),
                         )),
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1387,38 +1384,38 @@ fn lowers_and_runs_bin_append() {
 
 #[test]
 fn lowers_and_runs_bin_eql_equal() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
     module.add_const(
-        cont::ValueName::from("A"),
-        cont::Data::Bin(b"hello".to_vec()),
+        curios_cont::ValueName::from("A"),
+        curios_cont::Data::Bin(b"hello".to_vec()),
     );
     module.add_const(
-        cont::ValueName::from("B"),
-        cont::Data::Bin(b"hello".to_vec()),
+        curios_cont::ValueName::from("B"),
+        curios_cont::Data::Bin(b"hello".to_vec()),
     );
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::BinEql(
-                        cont::ValueName::from("A"),
-                        cont::ValueName::from("B"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::BinEql(
+                        curios_cont::ValueName::from("A"),
+                        curios_cont::ValueName::from("B"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1429,38 +1426,38 @@ fn lowers_and_runs_bin_eql_equal() {
 
 #[test]
 fn lowers_and_runs_bin_eql_unequal() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
     module.add_const(
-        cont::ValueName::from("A"),
-        cont::Data::Bin(b"hello".to_vec()),
+        curios_cont::ValueName::from("A"),
+        curios_cont::Data::Bin(b"hello".to_vec()),
     );
     module.add_const(
-        cont::ValueName::from("B"),
-        cont::Data::Bin(b"world".to_vec()),
+        curios_cont::ValueName::from("B"),
+        curios_cont::Data::Bin(b"world".to_vec()),
     );
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::BinEql(
-                        cont::ValueName::from("A"),
-                        cont::ValueName::from("B"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::BinEql(
+                        curios_cont::ValueName::from("A"),
+                        curios_cont::ValueName::from("B"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1471,50 +1468,50 @@ fn lowers_and_runs_bin_eql_unequal() {
 
 #[test]
 fn lowers_and_runs_arr_append() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
-    module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
-    module.add_const(cont::ValueName::from("NINE"), cont::Data::Nat(9));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("SEVEN"), curios_cont::Data::Nat(7));
+    module.add_const(curios_cont::ValueName::from("NINE"), curios_cont::Data::Nat(9));
     module.add_const(
-        cont::ValueName::from("LST"),
-        cont::Data::Lst(vec![
-            cont::ValueName::from("THREE"),
-            cont::ValueName::from("SEVEN"),
+        curios_cont::ValueName::from("LST"),
+        curios_cont::Data::Lst(vec![
+            curios_cont::ValueName::from("THREE"),
+            curios_cont::ValueName::from("SEVEN"),
         ]),
     );
-    module.add_const(cont::ValueName::from("TWO"), cont::Data::Nat(2));
+    module.add_const(curios_cont::ValueName::from("TWO"), curios_cont::Data::Nat(2));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("appended"),
-                        cont::Value::Eval(cont::Code::LstAppend(
-                            cont::ValueName::from("LST"),
-                            cont::ValueName::from("NINE"),
+                        curios_cont::ValueName::from("appended"),
+                        curios_cont::Value::Eval(curios_cont::Code::LstAppend(
+                            curios_cont::ValueName::from("LST"),
+                            curios_cont::ValueName::from("NINE"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("result"),
-                        cont::Value::Eval(cont::Code::LstGet(
-                            cont::ValueName::from("appended"),
-                            cont::ValueName::from("TWO"),
+                        curios_cont::ValueName::from("result"),
+                        curios_cont::Value::Eval(curios_cont::Code::LstGet(
+                            curios_cont::ValueName::from("appended"),
+                            curios_cont::ValueName::from("TWO"),
                         )),
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1523,25 +1520,25 @@ fn lowers_and_runs_arr_append() {
     assert_eq!(i32_result(&module), 9);
 }
 
-fn nat_op_module(op: cont::Code, left: u32, right: u32) -> cont::Module {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+fn nat_op_module(op: curios_cont::Code, left: u32, right: u32) -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
-    module.add_const(cont::ValueName::from("LEFT"), cont::Data::Nat(left));
-    module.add_const(cont::ValueName::from("RIGHT"), cont::Data::Nat(right));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("LEFT"), curios_cont::Data::Nat(left));
+    module.add_const(curios_cont::ValueName::from("RIGHT"), curios_cont::Data::Nat(right));
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
-                values: vec![(cont::ValueName::from("result"), cont::Value::Eval(op))],
+                values: vec![(curios_cont::ValueName::from("result"), curios_cont::Value::Eval(op))],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1554,9 +1551,9 @@ const MAX_I31: u32 = i32::MAX as u32;
 #[test]
 fn lowers_and_runs_nat_mul() {
     let module = nat_op_module(
-        cont::Code::NatMul(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::NatMul(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         6,
         7,
@@ -1567,9 +1564,9 @@ fn lowers_and_runs_nat_mul() {
 #[test]
 fn lowers_and_runs_nat_sub_monus() {
     let module = nat_op_module(
-        cont::Code::NatSub(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::NatSub(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         3,
         7,
@@ -1580,9 +1577,9 @@ fn lowers_and_runs_nat_sub_monus() {
 #[test]
 fn lowers_and_runs_nat_sub() {
     let module = nat_op_module(
-        cont::Code::NatSub(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::NatSub(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         10,
         3,
@@ -1593,9 +1590,9 @@ fn lowers_and_runs_nat_sub() {
 #[test]
 fn lowers_and_runs_nat_add_at_boundary() {
     let module = nat_op_module(
-        cont::Code::NatAdd(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::NatAdd(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         MAX_I31 - 1,
         1,
@@ -1606,9 +1603,9 @@ fn lowers_and_runs_nat_add_at_boundary() {
 #[test]
 fn lowers_and_runs_nat_mul_at_boundary() {
     let module = nat_op_module(
-        cont::Code::NatMul(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::NatMul(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         MAX_I31,
         1,
@@ -1619,9 +1616,9 @@ fn lowers_and_runs_nat_mul_at_boundary() {
 #[test]
 fn nat_add_overflow_traps() {
     let module = nat_op_module(
-        cont::Code::NatAdd(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::NatAdd(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         MAX_I31,
         1,
@@ -1632,9 +1629,9 @@ fn nat_add_overflow_traps() {
 #[test]
 fn nat_mul_overflow_traps() {
     let module = nat_op_module(
-        cont::Code::NatMul(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::NatMul(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         MAX_I31,
         2,
@@ -1642,25 +1639,25 @@ fn nat_mul_overflow_traps() {
     assert!(traps(&module));
 }
 
-fn int_op_module(op: cont::Code, left: i32, right: i32) -> cont::Module {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+fn int_op_module(op: curios_cont::Code, left: i32, right: i32) -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
-    module.add_const(cont::ValueName::from("LEFT"), cont::Data::Int(left));
-    module.add_const(cont::ValueName::from("RIGHT"), cont::Data::Int(right));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("LEFT"), curios_cont::Data::Int(left));
+    module.add_const(curios_cont::ValueName::from("RIGHT"), curios_cont::Data::Int(right));
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
-                values: vec![(cont::ValueName::from("result"), cont::Value::Eval(op))],
+                values: vec![(curios_cont::ValueName::from("result"), curios_cont::Value::Eval(op))],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1674,9 +1671,9 @@ const MIN_INT: i32 = -(1 << 30);
 #[test]
 fn lowers_and_runs_int_add_at_boundary() {
     let module = int_op_module(
-        cont::Code::IntAdd(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::IntAdd(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         MAX_INT - 1,
         1,
@@ -1687,9 +1684,9 @@ fn lowers_and_runs_int_add_at_boundary() {
 #[test]
 fn int_add_overflow_traps() {
     let module = int_op_module(
-        cont::Code::IntAdd(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::IntAdd(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         MAX_INT,
         1,
@@ -1700,9 +1697,9 @@ fn int_add_overflow_traps() {
 #[test]
 fn int_sub_overflow_traps() {
     let module = int_op_module(
-        cont::Code::IntSub(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::IntSub(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         MIN_INT,
         1,
@@ -1713,9 +1710,9 @@ fn int_sub_overflow_traps() {
 #[test]
 fn lowers_and_runs_int_mul_at_boundary() {
     let module = int_op_module(
-        cont::Code::IntMul(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::IntMul(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         MAX_INT,
         1,
@@ -1726,9 +1723,9 @@ fn lowers_and_runs_int_mul_at_boundary() {
 #[test]
 fn int_mul_overflow_traps() {
     let module = int_op_module(
-        cont::Code::IntMul(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::IntMul(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         MAX_INT,
         2,
@@ -1740,9 +1737,9 @@ fn int_mul_overflow_traps() {
 fn int_div_overflow_traps() {
     // MIN_INT / -1 = 2^30, which exceeds the 31-bit signed maximum.
     let module = int_op_module(
-        cont::Code::IntDiv(
-            cont::ValueName::from("LEFT"),
-            cont::ValueName::from("RIGHT"),
+        curios_cont::Code::IntDiv(
+            curios_cont::ValueName::from("LEFT"),
+            curios_cont::ValueName::from("RIGHT"),
         ),
         MIN_INT,
         -1,
@@ -1752,29 +1749,29 @@ fn int_div_overflow_traps() {
 
 #[test]
 fn flt_to_int_overflow_traps() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
     module.add_const(
-        cont::ValueName::from("TOO_BIG"),
-        cont::Data::Flt((MAX_INT as f32) + 1.0),
+        curios_cont::ValueName::from("TOO_BIG"),
+        curios_cont::Data::Flt((MAX_INT as f32) + 1.0),
     );
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::FltToInt(cont::ValueName::from("TOO_BIG"))),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::FltToInt(curios_cont::ValueName::from("TOO_BIG"))),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("result"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("result"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -1789,38 +1786,38 @@ fn flt_to_int_overflow_traps() {
 // lowering must fire: the emitted code carries the block but no loop or seed.
 #[test]
 fn single_block_region_lowers_without_dispatch_loop() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
-    module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("SEVEN"), curios_cont::Data::Nat(7));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![],
                 blocks: vec![(
-                    cont::BlockName::from("b"),
-                    cont::Block {
-                        params: vec![cont::ValueName::from("x")],
-                        region: cont::Region {
+                    curios_cont::BlockName::from("b"),
+                    curios_cont::Block {
+                        params: vec![curios_cont::ValueName::from("x")],
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                                code: cont::ValueName::from("x"),
-                                resume: cont::BlockName::from("r"),
+                            tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                                code: curios_cont::ValueName::from("x"),
+                                resume: curios_cont::BlockName::from("r"),
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Jump(cont::JumpTarget {
-                    target: cont::BlockName::from("b"),
-                    params: vec![cont::ValueName::from("SEVEN")],
+                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                    target: curios_cont::BlockName::from("b"),
+                    params: vec![curios_cont::ValueName::from("SEVEN")],
                 }),
             },
         },
@@ -1846,47 +1843,47 @@ fn single_block_region_lowers_without_dispatch_loop() {
 /// final `get` forces once, exercising the worklist's grow-by-doubling path.
 #[test]
 fn forces_deep_rope_chains_iteratively() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("DEPTH"), cont::Data::Nat(100_000));
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
-    module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
-    module.add_const(cont::ValueName::from("EMPTY"), cont::Data::Bin(vec![]));
+    module.add_const(curios_cont::ValueName::from("DEPTH"), curios_cont::Data::Nat(100_000));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Nat(1));
+    module.add_const(curios_cont::ValueName::from("SEVEN"), curios_cont::Data::Nat(7));
+    module.add_const(curios_cont::ValueName::from("EMPTY"), curios_cont::Data::Bin(vec![]));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![],
                 blocks: vec![
                     (
-                        cont::BlockName::from("step"),
-                        cont::Block {
-                            params: vec![cont::ValueName::from("i"), cont::ValueName::from("acc")],
-                            region: cont::Region {
+                        curios_cont::BlockName::from("step"),
+                        curios_cont::Block {
+                            params: vec![curios_cont::ValueName::from("i"), curios_cont::ValueName::from("acc")],
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
-                                tail: cont::Tail::Match(cont::MatchTarget {
-                                    operand: cont::ValueName::from("i"),
+                                tail: curios_cont::Tail::Match(curios_cont::MatchTarget {
+                                    operand: curios_cont::ValueName::from("i"),
                                     cases: std::collections::BTreeMap::from([(
                                         0,
-                                        cont::JumpTarget {
-                                            target: cont::BlockName::from("read"),
-                                            params: vec![cont::ValueName::from("acc")],
+                                        curios_cont::JumpTarget {
+                                            target: curios_cont::BlockName::from("read"),
+                                            params: vec![curios_cont::ValueName::from("acc")],
                                         },
                                     )]),
-                                    default: Some(cont::JumpTarget {
-                                        target: cont::BlockName::from("grow"),
+                                    default: Some(curios_cont::JumpTarget {
+                                        target: curios_cont::BlockName::from("grow"),
                                         params: vec![
-                                            cont::ValueName::from("i"),
-                                            cont::ValueName::from("acc"),
+                                            curios_cont::ValueName::from("i"),
+                                            curios_cont::ValueName::from("acc"),
                                         ],
                                     }),
                                 }),
@@ -1894,80 +1891,80 @@ fn forces_deep_rope_chains_iteratively() {
                         },
                     ),
                     (
-                        cont::BlockName::from("grow"),
-                        cont::Block {
-                            params: vec![cont::ValueName::from("j"), cont::ValueName::from("cur")],
-                            region: cont::Region {
+                        curios_cont::BlockName::from("grow"),
+                        curios_cont::Block {
+                            params: vec![curios_cont::ValueName::from("j"), curios_cont::ValueName::from("cur")],
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![
                                     (
-                                        cont::ValueName::from("next_i"),
-                                        cont::Value::Eval(cont::Code::NatSub(
-                                            cont::ValueName::from("j"),
-                                            cont::ValueName::from("ONE"),
+                                        curios_cont::ValueName::from("next_i"),
+                                        curios_cont::Value::Eval(curios_cont::Code::NatSub(
+                                            curios_cont::ValueName::from("j"),
+                                            curios_cont::ValueName::from("ONE"),
                                         )),
                                     ),
                                     (
-                                        cont::ValueName::from("next_acc"),
-                                        cont::Value::Eval(cont::Code::BinAppend(
-                                            cont::ValueName::from("cur"),
-                                            cont::ValueName::from("SEVEN"),
+                                        curios_cont::ValueName::from("next_acc"),
+                                        curios_cont::Value::Eval(curios_cont::Code::BinAppend(
+                                            curios_cont::ValueName::from("cur"),
+                                            curios_cont::ValueName::from("SEVEN"),
                                         )),
                                     ),
                                 ],
                                 blocks: vec![],
-                                tail: cont::Tail::Jump(cont::JumpTarget {
-                                    target: cont::BlockName::from("step"),
+                                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                    target: curios_cont::BlockName::from("step"),
                                     params: vec![
-                                        cont::ValueName::from("next_i"),
-                                        cont::ValueName::from("next_acc"),
+                                        curios_cont::ValueName::from("next_i"),
+                                        curios_cont::ValueName::from("next_acc"),
                                     ],
                                 }),
                             },
                         },
                     ),
                     (
-                        cont::BlockName::from("read"),
-                        cont::Block {
-                            params: vec![cont::ValueName::from("built")],
-                            region: cont::Region {
+                        curios_cont::BlockName::from("read"),
+                        curios_cont::Block {
+                            params: vec![curios_cont::ValueName::from("built")],
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![
                                     (
-                                        cont::ValueName::from("len"),
-                                        cont::Value::Eval(cont::Code::BinLen(
-                                            cont::ValueName::from("built"),
+                                        curios_cont::ValueName::from("len"),
+                                        curios_cont::Value::Eval(curios_cont::Code::BinLen(
+                                            curios_cont::ValueName::from("built"),
                                         )),
                                     ),
                                     (
-                                        cont::ValueName::from("idx"),
-                                        cont::Value::Eval(cont::Code::NatSub(
-                                            cont::ValueName::from("len"),
-                                            cont::ValueName::from("ONE"),
+                                        curios_cont::ValueName::from("idx"),
+                                        curios_cont::Value::Eval(curios_cont::Code::NatSub(
+                                            curios_cont::ValueName::from("len"),
+                                            curios_cont::ValueName::from("ONE"),
                                         )),
                                     ),
                                     (
-                                        cont::ValueName::from("byte"),
-                                        cont::Value::Eval(cont::Code::BinGet(
-                                            cont::ValueName::from("built"),
-                                            cont::ValueName::from("idx"),
+                                        curios_cont::ValueName::from("byte"),
+                                        curios_cont::Value::Eval(curios_cont::Code::BinGet(
+                                            curios_cont::ValueName::from("built"),
+                                            curios_cont::ValueName::from("idx"),
                                         )),
                                     ),
                                 ],
                                 blocks: vec![],
-                                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                                    code: cont::ValueName::from("byte"),
-                                    resume: cont::BlockName::from("r"),
+                                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                                    code: curios_cont::ValueName::from("byte"),
+                                    resume: curios_cont::BlockName::from("r"),
                                 }),
                             },
                         },
                     ),
                 ],
-                tail: cont::Tail::Jump(cont::JumpTarget {
-                    target: cont::BlockName::from("step"),
+                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                    target: curios_cont::BlockName::from("step"),
                     params: vec![
-                        cont::ValueName::from("DEPTH"),
-                        cont::ValueName::from("EMPTY"),
+                        curios_cont::ValueName::from("DEPTH"),
+                        curios_cont::ValueName::from("EMPTY"),
                     ],
                 }),
             },
@@ -1982,68 +1979,68 @@ fn forces_deep_rope_chains_iteratively() {
 /// the read-after-concat roundtrip: 2 + 4 + 5 = 11.
 #[test]
 fn rereads_a_concat_through_the_memo() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("B1"), cont::Data::Bin(vec![1, 2]));
-    module.add_const(cont::ValueName::from("B2"), cont::Data::Bin(vec![3, 4, 5]));
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("B1"), curios_cont::Data::Bin(vec![1, 2]));
+    module.add_const(curios_cont::ValueName::from("B2"), curios_cont::Data::Bin(vec![3, 4, 5]));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Nat(1));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Nat(3));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("cat"),
-                        cont::Value::Eval(cont::Code::BinConcat(vec![
-                            cont::ValueName::from("B1"),
-                            cont::ValueName::from("B2"),
+                        curios_cont::ValueName::from("cat"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinConcat(vec![
+                            curios_cont::ValueName::from("B1"),
+                            curios_cont::ValueName::from("B2"),
                         ])),
                     ),
                     (
-                        cont::ValueName::from("a"),
-                        cont::Value::Eval(cont::Code::BinGet(
-                            cont::ValueName::from("cat"),
-                            cont::ValueName::from("ONE"),
+                        curios_cont::ValueName::from("a"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinGet(
+                            curios_cont::ValueName::from("cat"),
+                            curios_cont::ValueName::from("ONE"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("b"),
-                        cont::Value::Eval(cont::Code::BinGet(
-                            cont::ValueName::from("cat"),
-                            cont::ValueName::from("THREE"),
+                        curios_cont::ValueName::from("b"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinGet(
+                            curios_cont::ValueName::from("cat"),
+                            curios_cont::ValueName::from("THREE"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("len"),
-                        cont::Value::Eval(cont::Code::BinLen(cont::ValueName::from("cat"))),
+                        curios_cont::ValueName::from("len"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinLen(curios_cont::ValueName::from("cat"))),
                     ),
                     (
-                        cont::ValueName::from("ab"),
-                        cont::Value::Eval(cont::Code::NatAdd(
-                            cont::ValueName::from("a"),
-                            cont::ValueName::from("b"),
+                        curios_cont::ValueName::from("ab"),
+                        curios_cont::Value::Eval(curios_cont::Code::NatAdd(
+                            curios_cont::ValueName::from("a"),
+                            curios_cont::ValueName::from("b"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("sum"),
-                        cont::Value::Eval(cont::Code::NatAdd(
-                            cont::ValueName::from("ab"),
-                            cont::ValueName::from("len"),
+                        curios_cont::ValueName::from("sum"),
+                        curios_cont::Value::Eval(curios_cont::Code::NatAdd(
+                            curios_cont::ValueName::from("ab"),
+                            curios_cont::ValueName::from("len"),
                         )),
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("sum"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("sum"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -2057,56 +2054,56 @@ fn rereads_a_concat_through_the_memo() {
 /// plain payload bytes.
 #[test]
 fn writes_an_unforced_rope_to_the_host() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
     module.add_const(
-        cont::ValueName::from("B1"),
-        cont::Data::Bin(b"hel".to_vec()),
+        curios_cont::ValueName::from("B1"),
+        curios_cont::Data::Bin(b"hel".to_vec()),
     );
-    module.add_const(cont::ValueName::from("B2"), cont::Data::Bin(b"lo".to_vec()));
+    module.add_const(curios_cont::ValueName::from("B2"), curios_cont::Data::Bin(b"lo".to_vec()));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("cat"),
-                    cont::Value::Eval(cont::Code::BinConcat(vec![
-                        cont::ValueName::from("B1"),
-                        cont::ValueName::from("B2"),
+                    curios_cont::ValueName::from("cat"),
+                    curios_cont::Value::Eval(curios_cont::Code::BinConcat(vec![
+                        curios_cont::ValueName::from("B1"),
+                        curios_cont::ValueName::from("B2"),
                     ])),
                 )],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("cat"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("cat"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -2122,51 +2119,51 @@ fn writes_an_unforced_rope_to_the_host() {
 /// byte moves — and hang the suite.
 #[test]
 fn peels_a_rope_through_o1_windows() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("DEPTH"), cont::Data::Nat(100_000));
-    module.add_const(cont::ValueName::from("ZERO"), cont::Data::Nat(0));
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
-    module.add_const(cont::ValueName::from("SEVEN"), cont::Data::Nat(7));
-    module.add_const(cont::ValueName::from("EMPTY"), cont::Data::Bin(vec![]));
+    module.add_const(curios_cont::ValueName::from("DEPTH"), curios_cont::Data::Nat(100_000));
+    module.add_const(curios_cont::ValueName::from("ZERO"), curios_cont::Data::Nat(0));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Nat(1));
+    module.add_const(curios_cont::ValueName::from("SEVEN"), curios_cont::Data::Nat(7));
+    module.add_const(curios_cont::ValueName::from("EMPTY"), curios_cont::Data::Bin(vec![]));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![],
                 blocks: vec![
                     (
-                        cont::BlockName::from("step"),
-                        cont::Block {
-                            params: vec![cont::ValueName::from("i"), cont::ValueName::from("acc")],
-                            region: cont::Region {
+                        curios_cont::BlockName::from("step"),
+                        curios_cont::Block {
+                            params: vec![curios_cont::ValueName::from("i"), curios_cont::ValueName::from("acc")],
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
-                                tail: cont::Tail::Match(cont::MatchTarget {
-                                    operand: cont::ValueName::from("i"),
+                                tail: curios_cont::Tail::Match(curios_cont::MatchTarget {
+                                    operand: curios_cont::ValueName::from("i"),
                                     cases: std::collections::BTreeMap::from([(
                                         0,
-                                        cont::JumpTarget {
-                                            target: cont::BlockName::from("peel"),
+                                        curios_cont::JumpTarget {
+                                            target: curios_cont::BlockName::from("peel"),
                                             params: vec![
-                                                cont::ValueName::from("acc"),
-                                                cont::ValueName::from("ZERO"),
+                                                curios_cont::ValueName::from("acc"),
+                                                curios_cont::ValueName::from("ZERO"),
                                             ],
                                         },
                                     )]),
-                                    default: Some(cont::JumpTarget {
-                                        target: cont::BlockName::from("grow"),
+                                    default: Some(curios_cont::JumpTarget {
+                                        target: curios_cont::BlockName::from("grow"),
                                         params: vec![
-                                            cont::ValueName::from("i"),
-                                            cont::ValueName::from("acc"),
+                                            curios_cont::ValueName::from("i"),
+                                            curios_cont::ValueName::from("acc"),
                                         ],
                                     }),
                                 }),
@@ -2174,66 +2171,66 @@ fn peels_a_rope_through_o1_windows() {
                         },
                     ),
                     (
-                        cont::BlockName::from("grow"),
-                        cont::Block {
-                            params: vec![cont::ValueName::from("j"), cont::ValueName::from("cur")],
-                            region: cont::Region {
+                        curios_cont::BlockName::from("grow"),
+                        curios_cont::Block {
+                            params: vec![curios_cont::ValueName::from("j"), curios_cont::ValueName::from("cur")],
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![
                                     (
-                                        cont::ValueName::from("next_i"),
-                                        cont::Value::Eval(cont::Code::NatSub(
-                                            cont::ValueName::from("j"),
-                                            cont::ValueName::from("ONE"),
+                                        curios_cont::ValueName::from("next_i"),
+                                        curios_cont::Value::Eval(curios_cont::Code::NatSub(
+                                            curios_cont::ValueName::from("j"),
+                                            curios_cont::ValueName::from("ONE"),
                                         )),
                                     ),
                                     (
-                                        cont::ValueName::from("next_acc"),
-                                        cont::Value::Eval(cont::Code::BinAppend(
-                                            cont::ValueName::from("cur"),
-                                            cont::ValueName::from("SEVEN"),
+                                        curios_cont::ValueName::from("next_acc"),
+                                        curios_cont::Value::Eval(curios_cont::Code::BinAppend(
+                                            curios_cont::ValueName::from("cur"),
+                                            curios_cont::ValueName::from("SEVEN"),
                                         )),
                                     ),
                                 ],
                                 blocks: vec![],
-                                tail: cont::Tail::Jump(cont::JumpTarget {
-                                    target: cont::BlockName::from("step"),
+                                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                    target: curios_cont::BlockName::from("step"),
                                     params: vec![
-                                        cont::ValueName::from("next_i"),
-                                        cont::ValueName::from("next_acc"),
+                                        curios_cont::ValueName::from("next_i"),
+                                        curios_cont::ValueName::from("next_acc"),
                                     ],
                                 }),
                             },
                         },
                     ),
                     (
-                        cont::BlockName::from("peel"),
-                        cont::Block {
-                            params: vec![cont::ValueName::from("b"), cont::ValueName::from("sum")],
-                            region: cont::Region {
+                        curios_cont::BlockName::from("peel"),
+                        curios_cont::Block {
+                            params: vec![curios_cont::ValueName::from("b"), curios_cont::ValueName::from("sum")],
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![(
-                                    cont::ValueName::from("len"),
-                                    cont::Value::Eval(cont::Code::BinLen(cont::ValueName::from(
+                                    curios_cont::ValueName::from("len"),
+                                    curios_cont::Value::Eval(curios_cont::Code::BinLen(curios_cont::ValueName::from(
                                         "b",
                                     ))),
                                 )],
                                 blocks: vec![],
-                                tail: cont::Tail::Match(cont::MatchTarget {
-                                    operand: cont::ValueName::from("len"),
+                                tail: curios_cont::Tail::Match(curios_cont::MatchTarget {
+                                    operand: curios_cont::ValueName::from("len"),
                                     cases: std::collections::BTreeMap::from([(
                                         0,
-                                        cont::JumpTarget {
-                                            target: cont::BlockName::from("done"),
-                                            params: vec![cont::ValueName::from("sum")],
+                                        curios_cont::JumpTarget {
+                                            target: curios_cont::BlockName::from("done"),
+                                            params: vec![curios_cont::ValueName::from("sum")],
                                         },
                                     )]),
-                                    default: Some(cont::JumpTarget {
-                                        target: cont::BlockName::from("chop"),
+                                    default: Some(curios_cont::JumpTarget {
+                                        target: curios_cont::BlockName::from("chop"),
                                         params: vec![
-                                            cont::ValueName::from("b"),
-                                            cont::ValueName::from("sum"),
-                                            cont::ValueName::from("len"),
+                                            curios_cont::ValueName::from("b"),
+                                            curios_cont::ValueName::from("sum"),
+                                            curios_cont::ValueName::from("len"),
                                         ],
                                     }),
                                 }),
@@ -2241,71 +2238,71 @@ fn peels_a_rope_through_o1_windows() {
                         },
                     ),
                     (
-                        cont::BlockName::from("chop"),
-                        cont::Block {
+                        curios_cont::BlockName::from("chop"),
+                        curios_cont::Block {
                             params: vec![
-                                cont::ValueName::from("b2"),
-                                cont::ValueName::from("s2"),
-                                cont::ValueName::from("l2"),
+                                curios_cont::ValueName::from("b2"),
+                                curios_cont::ValueName::from("s2"),
+                                curios_cont::ValueName::from("l2"),
                             ],
-                            region: cont::Region {
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![
                                     (
-                                        cont::ValueName::from("byte"),
-                                        cont::Value::Eval(cont::Code::BinGet(
-                                            cont::ValueName::from("b2"),
-                                            cont::ValueName::from("ZERO"),
+                                        curios_cont::ValueName::from("byte"),
+                                        curios_cont::Value::Eval(curios_cont::Code::BinGet(
+                                            curios_cont::ValueName::from("b2"),
+                                            curios_cont::ValueName::from("ZERO"),
                                         )),
                                     ),
                                     (
-                                        cont::ValueName::from("tail"),
-                                        cont::Value::Eval(cont::Code::BinSlice(
-                                            cont::ValueName::from("b2"),
-                                            cont::ValueName::from("ONE"),
-                                            cont::ValueName::from("l2"),
+                                        curios_cont::ValueName::from("tail"),
+                                        curios_cont::Value::Eval(curios_cont::Code::BinSlice(
+                                            curios_cont::ValueName::from("b2"),
+                                            curios_cont::ValueName::from("ONE"),
+                                            curios_cont::ValueName::from("l2"),
                                         )),
                                     ),
                                     (
-                                        cont::ValueName::from("s3"),
-                                        cont::Value::Eval(cont::Code::NatAdd(
-                                            cont::ValueName::from("s2"),
-                                            cont::ValueName::from("byte"),
+                                        curios_cont::ValueName::from("s3"),
+                                        curios_cont::Value::Eval(curios_cont::Code::NatAdd(
+                                            curios_cont::ValueName::from("s2"),
+                                            curios_cont::ValueName::from("byte"),
                                         )),
                                     ),
                                 ],
                                 blocks: vec![],
-                                tail: cont::Tail::Jump(cont::JumpTarget {
-                                    target: cont::BlockName::from("peel"),
+                                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                    target: curios_cont::BlockName::from("peel"),
                                     params: vec![
-                                        cont::ValueName::from("tail"),
-                                        cont::ValueName::from("s3"),
+                                        curios_cont::ValueName::from("tail"),
+                                        curios_cont::ValueName::from("s3"),
                                     ],
                                 }),
                             },
                         },
                     ),
                     (
-                        cont::BlockName::from("done"),
-                        cont::Block {
-                            params: vec![cont::ValueName::from("total")],
-                            region: cont::Region {
+                        curios_cont::BlockName::from("done"),
+                        curios_cont::Block {
+                            params: vec![curios_cont::ValueName::from("total")],
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
-                                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                                    code: cont::ValueName::from("total"),
-                                    resume: cont::BlockName::from("r"),
+                                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                                    code: curios_cont::ValueName::from("total"),
+                                    resume: curios_cont::BlockName::from("r"),
                                 }),
                             },
                         },
                     ),
                 ],
-                tail: cont::Tail::Jump(cont::JumpTarget {
-                    target: cont::BlockName::from("step"),
+                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                    target: curios_cont::BlockName::from("step"),
                     params: vec![
-                        cont::ValueName::from("DEPTH"),
-                        cont::ValueName::from("EMPTY"),
+                        curios_cont::ValueName::from("DEPTH"),
+                        curios_cont::ValueName::from("EMPTY"),
                     ],
                 }),
             },
@@ -2321,86 +2318,86 @@ fn peels_a_rope_through_o1_windows() {
 /// 3 + 4 + 2 = 9.
 #[test]
 fn windows_collapse_and_read_through() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("B1"), cont::Data::Bin(vec![1, 2, 3]));
-    module.add_const(cont::ValueName::from("B2"), cont::Data::Bin(vec![4, 5, 6]));
-    module.add_const(cont::ValueName::from("ZERO"), cont::Data::Nat(0));
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Nat(3));
-    module.add_const(cont::ValueName::from("FIVE"), cont::Data::Nat(5));
+    module.add_const(curios_cont::ValueName::from("B1"), curios_cont::Data::Bin(vec![1, 2, 3]));
+    module.add_const(curios_cont::ValueName::from("B2"), curios_cont::Data::Bin(vec![4, 5, 6]));
+    module.add_const(curios_cont::ValueName::from("ZERO"), curios_cont::Data::Nat(0));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Nat(1));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("FIVE"), curios_cont::Data::Nat(5));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("cat"),
-                        cont::Value::Eval(cont::Code::BinConcat(vec![
-                            cont::ValueName::from("B1"),
-                            cont::ValueName::from("B2"),
+                        curios_cont::ValueName::from("cat"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinConcat(vec![
+                            curios_cont::ValueName::from("B1"),
+                            curios_cont::ValueName::from("B2"),
                         ])),
                     ),
                     (
-                        cont::ValueName::from("s1"),
-                        cont::Value::Eval(cont::Code::BinSlice(
-                            cont::ValueName::from("cat"),
-                            cont::ValueName::from("ONE"),
-                            cont::ValueName::from("FIVE"),
+                        curios_cont::ValueName::from("s1"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinSlice(
+                            curios_cont::ValueName::from("cat"),
+                            curios_cont::ValueName::from("ONE"),
+                            curios_cont::ValueName::from("FIVE"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("s2"),
-                        cont::Value::Eval(cont::Code::BinSlice(
-                            cont::ValueName::from("s1"),
-                            cont::ValueName::from("ONE"),
-                            cont::ValueName::from("THREE"),
+                        curios_cont::ValueName::from("s2"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinSlice(
+                            curios_cont::ValueName::from("s1"),
+                            curios_cont::ValueName::from("ONE"),
+                            curios_cont::ValueName::from("THREE"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("a"),
-                        cont::Value::Eval(cont::Code::BinGet(
-                            cont::ValueName::from("s2"),
-                            cont::ValueName::from("ZERO"),
+                        curios_cont::ValueName::from("a"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinGet(
+                            curios_cont::ValueName::from("s2"),
+                            curios_cont::ValueName::from("ZERO"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("b"),
-                        cont::Value::Eval(cont::Code::BinGet(
-                            cont::ValueName::from("s2"),
-                            cont::ValueName::from("ONE"),
+                        curios_cont::ValueName::from("b"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinGet(
+                            curios_cont::ValueName::from("s2"),
+                            curios_cont::ValueName::from("ONE"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("l"),
-                        cont::Value::Eval(cont::Code::BinLen(cont::ValueName::from("s2"))),
+                        curios_cont::ValueName::from("l"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinLen(curios_cont::ValueName::from("s2"))),
                     ),
                     (
-                        cont::ValueName::from("ab"),
-                        cont::Value::Eval(cont::Code::NatAdd(
-                            cont::ValueName::from("a"),
-                            cont::ValueName::from("b"),
+                        curios_cont::ValueName::from("ab"),
+                        curios_cont::Value::Eval(curios_cont::Code::NatAdd(
+                            curios_cont::ValueName::from("a"),
+                            curios_cont::ValueName::from("b"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("sum"),
-                        cont::Value::Eval(cont::Code::NatAdd(
-                            cont::ValueName::from("ab"),
-                            cont::ValueName::from("l"),
+                        curios_cont::ValueName::from("sum"),
+                        curios_cont::Value::Eval(curios_cont::Code::NatAdd(
+                            curios_cont::ValueName::from("ab"),
+                            curios_cont::ValueName::from("l"),
                         )),
                     ),
                 ],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("sum"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("sum"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -2414,68 +2411,68 @@ fn windows_collapse_and_read_through() {
 /// host sees just those bytes.
 #[test]
 fn writes_a_window_to_the_host() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
     module.add_const(
-        cont::ValueName::from("B1"),
-        cont::Data::Bin(b"hel".to_vec()),
+        curios_cont::ValueName::from("B1"),
+        curios_cont::Data::Bin(b"hel".to_vec()),
     );
-    module.add_const(cont::ValueName::from("B2"), cont::Data::Bin(b"lo".to_vec()));
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
-    module.add_const(cont::ValueName::from("FOUR"), cont::Data::Nat(4));
+    module.add_const(curios_cont::ValueName::from("B2"), curios_cont::Data::Bin(b"lo".to_vec()));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Nat(1));
+    module.add_const(curios_cont::ValueName::from("FOUR"), curios_cont::Data::Nat(4));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("cat"),
-                        cont::Value::Eval(cont::Code::BinConcat(vec![
-                            cont::ValueName::from("B1"),
-                            cont::ValueName::from("B2"),
+                        curios_cont::ValueName::from("cat"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinConcat(vec![
+                            curios_cont::ValueName::from("B1"),
+                            curios_cont::ValueName::from("B2"),
                         ])),
                     ),
                     (
-                        cont::ValueName::from("win"),
-                        cont::Value::Eval(cont::Code::BinSlice(
-                            cont::ValueName::from("cat"),
-                            cont::ValueName::from("ONE"),
-                            cont::ValueName::from("FOUR"),
+                        curios_cont::ValueName::from("win"),
+                        curios_cont::Value::Eval(curios_cont::Code::BinSlice(
+                            curios_cont::ValueName::from("cat"),
+                            curios_cont::ValueName::from("ONE"),
+                            curios_cont::ValueName::from("FOUR"),
                         )),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("win"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("win"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -2493,102 +2490,102 @@ fn writes_a_window_to_the_host() {
 // length.
 #[test]
 fn bin_eql_rezeroes_its_cursor_across_block_reentries() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("A"), cont::Data::Bin(vec![1, 2]));
-    module.add_const(cont::ValueName::from("B"), cont::Data::Bin(vec![1, 3]));
-    module.add_const(cont::ValueName::from("C"), cont::Data::Bin(vec![4]));
-    module.add_const(cont::ValueName::from("D"), cont::Data::Bin(vec![5]));
-    module.add_const(cont::ValueName::from("ZERO"), cont::Data::Nat(0));
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Nat(1));
+    module.add_const(curios_cont::ValueName::from("A"), curios_cont::Data::Bin(vec![1, 2]));
+    module.add_const(curios_cont::ValueName::from("B"), curios_cont::Data::Bin(vec![1, 3]));
+    module.add_const(curios_cont::ValueName::from("C"), curios_cont::Data::Bin(vec![4]));
+    module.add_const(curios_cont::ValueName::from("D"), curios_cont::Data::Bin(vec![5]));
+    module.add_const(curios_cont::ValueName::from("ZERO"), curios_cont::Data::Nat(0));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Nat(1));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![],
                 blocks: vec![(
-                    cont::BlockName::from("step"),
-                    cont::Block {
+                    curios_cont::BlockName::from("step"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("x"),
-                            cont::ValueName::from("y"),
-                            cont::ValueName::from("again"),
+                            curios_cont::ValueName::from("x"),
+                            curios_cont::ValueName::from("y"),
+                            curios_cont::ValueName::from("again"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![(
-                                cont::ValueName::from("eq"),
-                                cont::Value::Eval(cont::Code::BinEql(
-                                    cont::ValueName::from("x"),
-                                    cont::ValueName::from("y"),
+                                curios_cont::ValueName::from("eq"),
+                                curios_cont::Value::Eval(curios_cont::Code::BinEql(
+                                    curios_cont::ValueName::from("x"),
+                                    curios_cont::ValueName::from("y"),
                                 )),
                             )],
                             blocks: vec![
                                 (
-                                    cont::BlockName::from("rerun"),
-                                    cont::Block {
+                                    curios_cont::BlockName::from("rerun"),
+                                    curios_cont::Block {
                                         params: vec![],
-                                        region: cont::Region {
+                                        region: curios_cont::Region {
                                             preallocs: vec![],
                                             values: vec![],
                                             blocks: vec![],
-                                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                                target: cont::BlockName::from("step"),
+                                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                                target: curios_cont::BlockName::from("step"),
                                                 params: vec![
-                                                    cont::ValueName::from("C"),
-                                                    cont::ValueName::from("D"),
-                                                    cont::ValueName::from("ZERO"),
+                                                    curios_cont::ValueName::from("C"),
+                                                    curios_cont::ValueName::from("D"),
+                                                    curios_cont::ValueName::from("ZERO"),
                                                 ],
                                             }),
                                         },
                                     },
                                 ),
                                 (
-                                    cont::BlockName::from("out"),
-                                    cont::Block {
+                                    curios_cont::BlockName::from("out"),
+                                    curios_cont::Block {
                                         params: vec![],
-                                        region: cont::Region {
+                                        region: curios_cont::Region {
                                             preallocs: vec![],
                                             values: vec![],
                                             blocks: vec![],
-                                            tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                                                code: cont::ValueName::from("eq"),
-                                                resume: cont::BlockName::from("r"),
+                                            tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                                                code: curios_cont::ValueName::from("eq"),
+                                                resume: curios_cont::BlockName::from("r"),
                                             }),
                                         },
                                     },
                                 ),
                             ],
-                            tail: cont::Tail::Match(cont::MatchTarget {
-                                operand: cont::ValueName::from("again"),
+                            tail: curios_cont::Tail::Match(curios_cont::MatchTarget {
+                                operand: curios_cont::ValueName::from("again"),
                                 cases: [(
                                     0,
-                                    cont::JumpTarget {
-                                        target: cont::BlockName::from("out"),
+                                    curios_cont::JumpTarget {
+                                        target: curios_cont::BlockName::from("out"),
                                         params: vec![],
                                     },
                                 )]
                                 .into_iter()
                                 .collect(),
-                                default: Some(cont::JumpTarget {
-                                    target: cont::BlockName::from("rerun"),
+                                default: Some(curios_cont::JumpTarget {
+                                    target: curios_cont::BlockName::from("rerun"),
                                     params: vec![],
                                 }),
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Jump(cont::JumpTarget {
-                    target: cont::BlockName::from("step"),
+                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                    target: curios_cont::BlockName::from("step"),
                     params: vec![
-                        cont::ValueName::from("A"),
-                        cont::ValueName::from("B"),
-                        cont::ValueName::from("ONE"),
+                        curios_cont::ValueName::from("A"),
+                        curios_cont::ValueName::from("B"),
+                        curios_cont::ValueName::from("ONE"),
                     ],
                 }),
             },

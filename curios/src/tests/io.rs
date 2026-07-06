@@ -274,13 +274,13 @@ fn proc_exit_halts_with_code() {
         let _ : std/False = /std/Proc/exit(7);
         std/Io/write(std/Io/stdout, /std/Str/to_bin("unreachable"))
         "#
-    .parse::<crate::text::Entrypoint>()
+    .parse::<curios_text::Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, _foreigns) = crate::compile_entrypoint(
+    let (module, _foreigns) = curios_pipeline::compile_entrypoint(
         Duration::from_secs(10),
         &entrypoint,
-        crate::text::RootSource::None,
+        curios_text::RootSource::None,
         |_| {},
     )
     .expect("compile succeeded");

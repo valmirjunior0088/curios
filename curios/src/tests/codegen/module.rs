@@ -1,22 +1,22 @@
-use {super::*, crate::cont};
+use super::*;
 
 #[test]
 fn lowers_unreachable_tail_to_trap() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![],
                 blocks: vec![],
-                tail: cont::Tail::Unreachable,
+                tail: curios_cont::Tail::Unreachable,
             },
         },
     );
@@ -30,81 +30,81 @@ fn lowers_unreachable_tail_to_trap() {
 
 #[test]
 fn lowers_and_runs_mutually_recursive_closures() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("ZERO"), cont::Data::Int(0));
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Int(1));
-    module.add_const(cont::ValueName::from("EVEN"), cont::Data::Int(11));
-    module.add_const(cont::ValueName::from("ODD"), cont::Data::Int(22));
+    module.add_const(curios_cont::ValueName::from("ZERO"), curios_cont::Data::Int(0));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Int(1));
+    module.add_const(curios_cont::ValueName::from("EVEN"), curios_cont::Data::Int(11));
+    module.add_const(curios_cont::ValueName::from("ODD"), curios_cont::Data::Int(22));
 
     module.add_clsr(
-        cont::ClsrName::from("even"),
-        cont::Clsr {
-            fields: vec![cont::ValueName::from("odd").into()],
-            params: vec![cont::ValueName::from("n").into()],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+        curios_cont::ClsrName::from("even"),
+        curios_cont::Clsr {
+            fields: vec![curios_cont::ValueName::from("odd").into()],
+            params: vec![curios_cont::ValueName::from("n").into()],
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("is_zero"),
-                    cont::Value::Eval(cont::Code::IntEql(
-                        cont::ValueName::from("n"),
-                        cont::ValueName::from("ZERO"),
+                    curios_cont::ValueName::from("is_zero"),
+                    curios_cont::Value::Eval(curios_cont::Code::IntEql(
+                        curios_cont::ValueName::from("n"),
+                        curios_cont::ValueName::from("ZERO"),
                     )),
                 )],
                 blocks: vec![
                     (
-                        cont::BlockName::from("on_zero"),
-                        cont::Block {
+                        curios_cont::BlockName::from("on_zero"),
+                        curios_cont::Block {
                             params: vec![],
-                            region: cont::Region {
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
-                                tail: cont::Tail::Jump(cont::JumpTarget {
-                                    target: cont::BlockName::from("r"),
-                                    params: vec![cont::ValueName::from("EVEN")],
+                                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                    target: curios_cont::BlockName::from("r"),
+                                    params: vec![curios_cont::ValueName::from("EVEN")],
                                 }),
                             },
                         },
                     ),
                     (
-                        cont::BlockName::from("on_non_zero"),
-                        cont::Block {
+                        curios_cont::BlockName::from("on_non_zero"),
+                        curios_cont::Block {
                             params: vec![],
-                            region: cont::Region {
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![(
-                                    cont::ValueName::from("prev"),
-                                    cont::Value::Eval(cont::Code::IntSub(
-                                        cont::ValueName::from("n"),
-                                        cont::ValueName::from("ONE"),
+                                    curios_cont::ValueName::from("prev"),
+                                    curios_cont::Value::Eval(curios_cont::Code::IntSub(
+                                        curios_cont::ValueName::from("n"),
+                                        curios_cont::ValueName::from("ONE"),
                                     )),
                                 )],
                                 blocks: vec![],
-                                tail: cont::Tail::Call(cont::CallTarget::Indirect {
-                                    target: cont::ValueName::from("odd"),
-                                    params: vec![cont::ValueName::from("prev")],
-                                    resume: cont::BlockName::from("r"),
+                                tail: curios_cont::Tail::Call(curios_cont::CallTarget::Indirect {
+                                    target: curios_cont::ValueName::from("odd"),
+                                    params: vec![curios_cont::ValueName::from("prev")],
+                                    resume: curios_cont::BlockName::from("r"),
                                 }),
                             },
                         },
                     ),
                 ],
-                tail: cont::Tail::Match(cont::MatchTarget {
-                    operand: cont::ValueName::from("is_zero"),
+                tail: curios_cont::Tail::Match(curios_cont::MatchTarget {
+                    operand: curios_cont::ValueName::from("is_zero"),
                     cases: std::collections::BTreeMap::from([(
                         0,
-                        cont::JumpTarget {
-                            target: cont::BlockName::from("on_non_zero"),
+                        curios_cont::JumpTarget {
+                            target: curios_cont::BlockName::from("on_non_zero"),
                             params: vec![],
                         },
                     )]),
-                    default: Some(cont::JumpTarget {
-                        target: cont::BlockName::from("on_zero"),
+                    default: Some(curios_cont::JumpTarget {
+                        target: curios_cont::BlockName::from("on_zero"),
                         params: vec![],
                     }),
                 }),
@@ -113,70 +113,70 @@ fn lowers_and_runs_mutually_recursive_closures() {
     );
 
     module.add_clsr(
-        cont::ClsrName::from("odd"),
-        cont::Clsr {
-            fields: vec![cont::ValueName::from("even").into()],
-            params: vec![cont::ValueName::from("n").into()],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+        curios_cont::ClsrName::from("odd"),
+        curios_cont::Clsr {
+            fields: vec![curios_cont::ValueName::from("even").into()],
+            params: vec![curios_cont::ValueName::from("n").into()],
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("is_zero"),
-                    cont::Value::Eval(cont::Code::IntEql(
-                        cont::ValueName::from("n"),
-                        cont::ValueName::from("ZERO"),
+                    curios_cont::ValueName::from("is_zero"),
+                    curios_cont::Value::Eval(curios_cont::Code::IntEql(
+                        curios_cont::ValueName::from("n"),
+                        curios_cont::ValueName::from("ZERO"),
                     )),
                 )],
                 blocks: vec![
                     (
-                        cont::BlockName::from("on_zero"),
-                        cont::Block {
+                        curios_cont::BlockName::from("on_zero"),
+                        curios_cont::Block {
                             params: vec![],
-                            region: cont::Region {
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
-                                tail: cont::Tail::Jump(cont::JumpTarget {
-                                    target: cont::BlockName::from("r"),
-                                    params: vec![cont::ValueName::from("ODD")],
+                                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                    target: curios_cont::BlockName::from("r"),
+                                    params: vec![curios_cont::ValueName::from("ODD")],
                                 }),
                             },
                         },
                     ),
                     (
-                        cont::BlockName::from("on_non_zero"),
-                        cont::Block {
+                        curios_cont::BlockName::from("on_non_zero"),
+                        curios_cont::Block {
                             params: vec![],
-                            region: cont::Region {
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![(
-                                    cont::ValueName::from("prev"),
-                                    cont::Value::Eval(cont::Code::IntSub(
-                                        cont::ValueName::from("n"),
-                                        cont::ValueName::from("ONE"),
+                                    curios_cont::ValueName::from("prev"),
+                                    curios_cont::Value::Eval(curios_cont::Code::IntSub(
+                                        curios_cont::ValueName::from("n"),
+                                        curios_cont::ValueName::from("ONE"),
                                     )),
                                 )],
                                 blocks: vec![],
-                                tail: cont::Tail::Call(cont::CallTarget::Indirect {
-                                    target: cont::ValueName::from("even"),
-                                    params: vec![cont::ValueName::from("prev")],
-                                    resume: cont::BlockName::from("r"),
+                                tail: curios_cont::Tail::Call(curios_cont::CallTarget::Indirect {
+                                    target: curios_cont::ValueName::from("even"),
+                                    params: vec![curios_cont::ValueName::from("prev")],
+                                    resume: curios_cont::BlockName::from("r"),
                                 }),
                             },
                         },
                     ),
                 ],
-                tail: cont::Tail::Match(cont::MatchTarget {
-                    operand: cont::ValueName::from("is_zero"),
+                tail: curios_cont::Tail::Match(curios_cont::MatchTarget {
+                    operand: curios_cont::ValueName::from("is_zero"),
                     cases: std::collections::BTreeMap::from([(
                         0,
-                        cont::JumpTarget {
-                            target: cont::BlockName::from("on_non_zero"),
+                        curios_cont::JumpTarget {
+                            target: curios_cont::BlockName::from("on_non_zero"),
                             params: vec![],
                         },
                     )]),
-                    default: Some(cont::JumpTarget {
-                        target: cont::BlockName::from("on_zero"),
+                    default: Some(curios_cont::JumpTarget {
+                        target: curios_cont::BlockName::from("on_zero"),
                         params: vec![],
                     }),
                 }),
@@ -185,50 +185,50 @@ fn lowers_and_runs_mutually_recursive_closures() {
     );
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![
-                    (cont::ValueName::from("even"), cont::ClsrName::from("even")),
-                    (cont::ValueName::from("odd"), cont::ClsrName::from("odd")),
+                    (curios_cont::ValueName::from("even"), curios_cont::ClsrName::from("even")),
+                    (curios_cont::ValueName::from("odd"), curios_cont::ClsrName::from("odd")),
                 ],
                 values: vec![
                     (
-                        cont::ValueName::from("even"),
-                        cont::Value::Pure(cont::Data::Clsr(
-                            cont::ClsrName::from("even"),
-                            vec![cont::ValueName::from("odd")],
+                        curios_cont::ValueName::from("even"),
+                        curios_cont::Value::Pure(curios_cont::Data::Clsr(
+                            curios_cont::ClsrName::from("even"),
+                            vec![curios_cont::ValueName::from("odd")],
                         )),
                     ),
                     (
-                        cont::ValueName::from("odd"),
-                        cont::Value::Pure(cont::Data::Clsr(
-                            cont::ClsrName::from("odd"),
-                            vec![cont::ValueName::from("even")],
+                        curios_cont::ValueName::from("odd"),
+                        curios_cont::Value::Pure(curios_cont::Data::Clsr(
+                            curios_cont::ClsrName::from("odd"),
+                            vec![curios_cont::ValueName::from("even")],
                         )),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("after"),
-                    cont::Block {
-                        params: vec![cont::ValueName::from("out")],
-                        region: cont::Region {
+                    curios_cont::BlockName::from("after"),
+                    curios_cont::Block {
+                        params: vec![curios_cont::ValueName::from("out")],
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                                code: cont::ValueName::from("out"),
-                                resume: cont::BlockName::from("r"),
+                            tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                                code: curios_cont::ValueName::from("out"),
+                                resume: curios_cont::BlockName::from("r"),
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Call(cont::CallTarget::Indirect {
-                    target: cont::ValueName::from("even"),
-                    params: vec![cont::ValueName::from("ONE")],
-                    resume: cont::BlockName::from("after"),
+                tail: curios_cont::Tail::Call(curios_cont::CallTarget::Indirect {
+                    target: curios_cont::ValueName::from("even"),
+                    params: vec![curios_cont::ValueName::from("ONE")],
+                    resume: curios_cont::BlockName::from("after"),
                 }),
             },
         },
@@ -239,64 +239,64 @@ fn lowers_and_runs_mutually_recursive_closures() {
 
 #[test]
 fn lowers_and_runs_direct_call() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Int(1));
-    module.add_const(cont::ValueName::from("TWO"), cont::Data::Int(2));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Int(1));
+    module.add_const(curios_cont::ValueName::from("TWO"), curios_cont::Data::Int(2));
 
     module.add_func(
-        cont::FuncName::from("add_one"),
-        cont::Func {
-            params: vec![cont::ValueName::from("x").into()],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+        curios_cont::FuncName::from("add_one"),
+        curios_cont::Func {
+            params: vec![curios_cont::ValueName::from("x").into()],
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("sum"),
-                    cont::Value::Eval(cont::Code::IntAdd(
-                        cont::ValueName::from("x"),
-                        cont::ValueName::from("ONE"),
+                    curios_cont::ValueName::from("sum"),
+                    curios_cont::Value::Eval(curios_cont::Code::IntAdd(
+                        curios_cont::ValueName::from("x"),
+                        curios_cont::ValueName::from("ONE"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Jump(cont::JumpTarget {
-                    target: cont::BlockName::from("r"),
-                    params: vec![cont::ValueName::from("sum")],
+                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                    target: curios_cont::BlockName::from("r"),
+                    params: vec![curios_cont::ValueName::from("sum")],
                 }),
             },
         },
     );
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![],
                 blocks: vec![(
-                    cont::BlockName::from("after_call"),
-                    cont::Block {
-                        params: vec![cont::ValueName::from("out")],
-                        region: cont::Region {
+                    curios_cont::BlockName::from("after_call"),
+                    curios_cont::Block {
+                        params: vec![curios_cont::ValueName::from("out")],
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                                code: cont::ValueName::from("out"),
-                                resume: cont::BlockName::from("r"),
+                            tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                                code: curios_cont::ValueName::from("out"),
+                                resume: curios_cont::BlockName::from("r"),
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Call(cont::CallTarget::Direct {
-                    target: cont::FuncName::from("add_one"),
-                    params: vec![cont::ValueName::from("TWO")],
-                    resume: cont::BlockName::from("after_call"),
+                tail: curios_cont::Tail::Call(curios_cont::CallTarget::Direct {
+                    target: curios_cont::FuncName::from("add_one"),
+                    params: vec![curios_cont::ValueName::from("TWO")],
+                    resume: curios_cont::BlockName::from("after_call"),
                 }),
             },
         },
@@ -307,26 +307,26 @@ fn lowers_and_runs_direct_call() {
 
 #[test]
 fn lowers_and_runs_unit_result() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("unit"),
-                    cont::Value::Pure(cont::Data::Tpl(vec![])),
+                    curios_cont::ValueName::from("unit"),
+                    curios_cont::Value::Pure(curios_cont::Data::Tpl(vec![])),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Jump(cont::JumpTarget {
-                    target: cont::BlockName::from("r"),
-                    params: vec![cont::ValueName::from("unit")],
+                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                    target: curios_cont::BlockName::from("r"),
+                    params: vec![curios_cont::ValueName::from("unit")],
                 }),
             },
         },
@@ -337,60 +337,60 @@ fn lowers_and_runs_unit_result() {
 
 #[test]
 fn lowers_and_runs_float_result() {
-    let mut cont_module = cont::Module::new();
-    cont_module.set_entry(cont::FuncName::from("main"));
+    let mut cont_module = curios_cont::Module::new();
+    cont_module.set_entry(curios_cont::FuncName::from("main"));
 
-    cont_module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    cont_module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    cont_module.add_const(cont::ValueName::from("LEFT"), cont::Data::Flt(1.25));
+    cont_module.add_const(curios_cont::ValueName::from("LEFT"), curios_cont::Data::Flt(1.25));
 
-    cont_module.add_const(cont::ValueName::from("RIGHT"), cont::Data::Flt(2.5));
+    cont_module.add_const(curios_cont::ValueName::from("RIGHT"), curios_cont::Data::Flt(2.5));
 
     cont_module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![
                     (
-                        cont::ValueName::from("sum"),
-                        cont::Value::Eval(cont::Code::FltAdd(
-                            cont::ValueName::from("LEFT"),
-                            cont::ValueName::from("RIGHT"),
+                        curios_cont::ValueName::from("sum"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltAdd(
+                            curios_cont::ValueName::from("LEFT"),
+                            curios_cont::ValueName::from("RIGHT"),
                         )),
                     ),
                     (
-                        cont::ValueName::from("str"),
-                        cont::Value::Eval(cont::Code::FltToLeBin(cont::ValueName::from("sum"))),
+                        curios_cont::ValueName::from("str"),
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(curios_cont::ValueName::from("sum"))),
                     ),
                 ],
                 blocks: vec![(
-                    cont::BlockName::from("io_done"),
-                    cont::Block {
+                    curios_cont::BlockName::from("io_done"),
+                    curios_cont::Block {
                         params: vec![
-                            cont::ValueName::from("io_status"),
-                            cont::ValueName::from("io_written"),
+                            curios_cont::ValueName::from("io_status"),
+                            curios_cont::ValueName::from("io_written"),
                         ],
-                        region: cont::Region {
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Jump(cont::JumpTarget {
-                                target: cont::BlockName::from("r"),
-                                params: vec![cont::ValueName::from("io_status")],
+                            tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("r"),
+                                params: vec![curios_cont::ValueName::from("io_status")],
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Host(cont::HostTarget::Foreign {
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::Foreign {
                     function: foreign_write(),
                     operands: vec![
-                        cont::ValueName::from("STDOUT"),
-                        cont::ValueName::from("str"),
+                        curios_cont::ValueName::from("STDOUT"),
+                        curios_cont::ValueName::from("str"),
                     ],
-                    resume: cont::BlockName::from("io_done"),
+                    resume: curios_cont::BlockName::from("io_done"),
                 }),
             },
         },
@@ -401,36 +401,36 @@ fn lowers_and_runs_float_result() {
 
 #[test]
 fn lowers_and_runs_global_tuple() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("ONE"), cont::Data::Int(1));
-    module.add_const(cont::ValueName::from("TWO"), cont::Data::Int(2));
+    module.add_const(curios_cont::ValueName::from("ONE"), curios_cont::Data::Int(1));
+    module.add_const(curios_cont::ValueName::from("TWO"), curios_cont::Data::Int(2));
     module.add_const(
-        cont::ValueName::from("PAIR"),
-        cont::Data::Tpl(vec![
-            cont::ValueName::from("ONE"),
-            cont::ValueName::from("TWO"),
+        curios_cont::ValueName::from("PAIR"),
+        curios_cont::Data::Tpl(vec![
+            curios_cont::ValueName::from("ONE"),
+            curios_cont::ValueName::from("TWO"),
         ]),
     );
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("out"),
-                    cont::Value::Eval(cont::Code::TplGet(cont::ValueName::from("PAIR"), 1)),
+                    curios_cont::ValueName::from("out"),
+                    curios_cont::Value::Eval(curios_cont::Code::TplGet(curios_cont::ValueName::from("PAIR"), 1)),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                    code: cont::ValueName::from("out"),
-                    resume: cont::BlockName::from("r"),
+                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                    code: curios_cont::ValueName::from("out"),
+                    resume: curios_cont::BlockName::from("r"),
                 }),
             },
         },
@@ -441,73 +441,73 @@ fn lowers_and_runs_global_tuple() {
 
 #[test]
 fn lowers_and_runs_global_closure() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("BIAS"), cont::Data::Int(5));
-    module.add_const(cont::ValueName::from("THREE"), cont::Data::Int(3));
+    module.add_const(curios_cont::ValueName::from("BIAS"), curios_cont::Data::Int(5));
+    module.add_const(curios_cont::ValueName::from("THREE"), curios_cont::Data::Int(3));
 
     module.add_clsr(
-        cont::ClsrName::from("add_bias"),
-        cont::Clsr {
-            fields: vec![cont::ValueName::from("bias").into()],
-            params: vec![cont::ValueName::from("x").into()],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+        curios_cont::ClsrName::from("add_bias"),
+        curios_cont::Clsr {
+            fields: vec![curios_cont::ValueName::from("bias").into()],
+            params: vec![curios_cont::ValueName::from("x").into()],
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![(
-                    cont::ValueName::from("result"),
-                    cont::Value::Eval(cont::Code::IntAdd(
-                        cont::ValueName::from("x"),
-                        cont::ValueName::from("bias"),
+                    curios_cont::ValueName::from("result"),
+                    curios_cont::Value::Eval(curios_cont::Code::IntAdd(
+                        curios_cont::ValueName::from("x"),
+                        curios_cont::ValueName::from("bias"),
                     )),
                 )],
                 blocks: vec![],
-                tail: cont::Tail::Jump(cont::JumpTarget {
-                    target: cont::BlockName::from("r"),
-                    params: vec![cont::ValueName::from("result")],
+                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                    target: curios_cont::BlockName::from("r"),
+                    params: vec![curios_cont::ValueName::from("result")],
                 }),
             },
         },
     );
 
     module.add_const(
-        cont::ValueName::from("K"),
-        cont::Data::Clsr(
-            cont::ClsrName::from("add_bias"),
-            vec![cont::ValueName::from("BIAS")],
+        curios_cont::ValueName::from("K"),
+        curios_cont::Data::Clsr(
+            curios_cont::ClsrName::from("add_bias"),
+            vec![curios_cont::ValueName::from("BIAS")],
         ),
     );
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![],
                 blocks: vec![(
-                    cont::BlockName::from("after"),
-                    cont::Block {
-                        params: vec![cont::ValueName::from("out")],
-                        region: cont::Region {
+                    curios_cont::BlockName::from("after"),
+                    curios_cont::Block {
+                        params: vec![curios_cont::ValueName::from("out")],
+                        region: curios_cont::Region {
                             preallocs: vec![],
                             values: vec![],
                             blocks: vec![],
-                            tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                                code: cont::ValueName::from("out"),
-                                resume: cont::BlockName::from("r"),
+                            tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                                code: curios_cont::ValueName::from("out"),
+                                resume: curios_cont::BlockName::from("r"),
                             }),
                         },
                     },
                 )],
-                tail: cont::Tail::Call(cont::CallTarget::Indirect {
-                    target: cont::ValueName::from("K"),
-                    params: vec![cont::ValueName::from("THREE")],
-                    resume: cont::BlockName::from("after"),
+                tail: curios_cont::Tail::Call(curios_cont::CallTarget::Indirect {
+                    target: curios_cont::ValueName::from("K"),
+                    params: vec![curios_cont::ValueName::from("THREE")],
+                    resume: curios_cont::BlockName::from("after"),
                 }),
             },
         },
@@ -518,129 +518,129 @@ fn lowers_and_runs_global_closure() {
 
 #[test]
 fn lowers_and_runs_sparse_match() {
-    let mut module = cont::Module::new();
-    module.set_entry(cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    module.add_const(cont::ValueName::from("STDOUT"), cont::Data::Bin(vec![1]));
+    module.add_const(curios_cont::ValueName::from("STDOUT"), curios_cont::Data::Bin(vec![1]));
 
-    module.add_const(cont::ValueName::from("BYTE"), cont::Data::Nat(123)); // '{'
-    module.add_const(cont::ValueName::from("R0"), cont::Data::Nat(0));
-    module.add_const(cont::ValueName::from("R1"), cont::Data::Nat(1));
-    module.add_const(cont::ValueName::from("R2"), cont::Data::Nat(2));
-    module.add_const(cont::ValueName::from("R3"), cont::Data::Nat(3));
+    module.add_const(curios_cont::ValueName::from("BYTE"), curios_cont::Data::Nat(123)); // '{'
+    module.add_const(curios_cont::ValueName::from("R0"), curios_cont::Data::Nat(0));
+    module.add_const(curios_cont::ValueName::from("R1"), curios_cont::Data::Nat(1));
+    module.add_const(curios_cont::ValueName::from("R2"), curios_cont::Data::Nat(2));
+    module.add_const(curios_cont::ValueName::from("R3"), curios_cont::Data::Nat(3));
 
     module.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![],
                 blocks: vec![
                     (
-                        cont::BlockName::from("after"),
-                        cont::Block {
-                            params: vec![cont::ValueName::from("out")],
-                            region: cont::Region {
+                        curios_cont::BlockName::from("after"),
+                        curios_cont::Block {
+                            params: vec![curios_cont::ValueName::from("out")],
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
-                                tail: cont::Tail::Host(cont::HostTarget::IoExit {
-                                    code: cont::ValueName::from("out"),
-                                    resume: cont::BlockName::from("r"),
+                                tail: curios_cont::Tail::Host(curios_cont::HostTarget::IoExit {
+                                    code: curios_cont::ValueName::from("out"),
+                                    resume: curios_cont::BlockName::from("r"),
                                 }),
                             },
                         },
                     ),
                     (
-                        cont::BlockName::from("b_quote"),
-                        cont::Block {
+                        curios_cont::BlockName::from("b_quote"),
+                        curios_cont::Block {
                             params: vec![],
-                            region: cont::Region {
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
-                                tail: cont::Tail::Jump(cont::JumpTarget {
-                                    target: cont::BlockName::from("after"),
-                                    params: vec![cont::ValueName::from("R1")],
+                                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                    target: curios_cont::BlockName::from("after"),
+                                    params: vec![curios_cont::ValueName::from("R1")],
                                 }),
                             },
                         },
                     ),
                     (
-                        cont::BlockName::from("b_lbracket"),
-                        cont::Block {
+                        curios_cont::BlockName::from("b_lbracket"),
+                        curios_cont::Block {
                             params: vec![],
-                            region: cont::Region {
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
-                                tail: cont::Tail::Jump(cont::JumpTarget {
-                                    target: cont::BlockName::from("after"),
-                                    params: vec![cont::ValueName::from("R2")],
+                                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                    target: curios_cont::BlockName::from("after"),
+                                    params: vec![curios_cont::ValueName::from("R2")],
                                 }),
                             },
                         },
                     ),
                     (
-                        cont::BlockName::from("b_lbrace"),
-                        cont::Block {
+                        curios_cont::BlockName::from("b_lbrace"),
+                        curios_cont::Block {
                             params: vec![],
-                            region: cont::Region {
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
-                                tail: cont::Tail::Jump(cont::JumpTarget {
-                                    target: cont::BlockName::from("after"),
-                                    params: vec![cont::ValueName::from("R3")],
+                                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                    target: curios_cont::BlockName::from("after"),
+                                    params: vec![curios_cont::ValueName::from("R3")],
                                 }),
                             },
                         },
                     ),
                     (
-                        cont::BlockName::from("b_default"),
-                        cont::Block {
+                        curios_cont::BlockName::from("b_default"),
+                        curios_cont::Block {
                             params: vec![],
-                            region: cont::Region {
+                            region: curios_cont::Region {
                                 preallocs: vec![],
                                 values: vec![],
                                 blocks: vec![],
-                                tail: cont::Tail::Jump(cont::JumpTarget {
-                                    target: cont::BlockName::from("after"),
-                                    params: vec![cont::ValueName::from("R0")],
+                                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                                    target: curios_cont::BlockName::from("after"),
+                                    params: vec![curios_cont::ValueName::from("R0")],
                                 }),
                             },
                         },
                     ),
                 ],
-                tail: cont::Tail::Match(cont::MatchTarget {
-                    operand: cont::ValueName::from("BYTE"),
+                tail: curios_cont::Tail::Match(curios_cont::MatchTarget {
+                    operand: curios_cont::ValueName::from("BYTE"),
                     cases: std::collections::BTreeMap::from([
                         (
                             34,
-                            cont::JumpTarget {
-                                target: cont::BlockName::from("b_quote"),
+                            curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("b_quote"),
                                 params: vec![],
                             },
                         ),
                         (
                             91,
-                            cont::JumpTarget {
-                                target: cont::BlockName::from("b_lbracket"),
+                            curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("b_lbracket"),
                                 params: vec![],
                             },
                         ),
                         (
                             123,
-                            cont::JumpTarget {
-                                target: cont::BlockName::from("b_lbrace"),
+                            curios_cont::JumpTarget {
+                                target: curios_cont::BlockName::from("b_lbrace"),
                                 params: vec![],
                             },
                         ),
                     ]),
-                    default: Some(cont::JumpTarget {
-                        target: cont::BlockName::from("b_default"),
+                    default: Some(curios_cont::JumpTarget {
+                        target: curios_cont::BlockName::from("b_default"),
                         params: vec![],
                     }),
                 }),

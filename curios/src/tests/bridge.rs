@@ -6,7 +6,7 @@
 //! host — and thus to the bridge — is always the forced flat payload.
 
 use {
-    crate::cont::{self, to_wasm},
+    curios_cont::to_wasm,
     wasmtime::{Func, Instance, Linker, Module, Store, Val},
 };
 
@@ -81,25 +81,25 @@ fn bridge_accessors_roundtrip() {
 /// flat array a host call's forced parameter would carry across the wire.
 #[test]
 fn program_bins_flow_through_the_bridge() {
-    let mut program = cont::Module::new();
-    program.set_entry(cont::FuncName::from("main"));
+    let mut program = curios_cont::Module::new();
+    program.set_entry(curios_cont::FuncName::from("main"));
     program.add_const(
-        cont::ValueName::from("BYTES"),
-        cont::Data::Bin(vec![7, 8, 9]),
+        curios_cont::ValueName::from("BYTES"),
+        curios_cont::Data::Bin(vec![7, 8, 9]),
     );
 
     program.add_func(
-        cont::FuncName::from("main"),
-        cont::Func {
+        curios_cont::FuncName::from("main"),
+        curios_cont::Func {
             params: vec![],
-            resume: cont::BlockName::from("r"),
-            region: cont::Region {
+            resume: curios_cont::BlockName::from("r"),
+            region: curios_cont::Region {
                 preallocs: vec![],
                 values: vec![],
                 blocks: vec![],
-                tail: cont::Tail::Jump(cont::JumpTarget {
-                    target: cont::BlockName::from("r"),
-                    params: vec![cont::ValueName::from("BYTES")],
+                tail: curios_cont::Tail::Jump(curios_cont::JumpTarget {
+                    target: curios_cont::BlockName::from("r"),
+                    params: vec![curios_cont::ValueName::from("BYTES")],
                 }),
             },
         },
@@ -107,9 +107,9 @@ fn program_bins_flow_through_the_bridge() {
 
     let mut store = Store::new(curios_rt::shared_engine(), ());
     let bridge = instantiate(&mut store, &curios_js::bridge_bytes());
-    let program = instantiate(&mut store, &crate::wasm::to_bytes(&to_wasm(&program)));
+    let program = instantiate(&mut store, &curios_wasm::to_bytes(&to_wasm(&program)));
 
-    let main = export(&mut store, &program, crate::abi::MAIN_EXPORT);
+    let main = export(&mut store, &program, curios_abi::MAIN_EXPORT);
     let rope = call(&mut store, &main, &[]);
 
     // Project the leaf's payload (field 2: tag, len, bytes).

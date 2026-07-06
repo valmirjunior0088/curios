@@ -14,7 +14,7 @@
 //! through the concepts.
 
 use {
-    crate::{Stage, compile_entrypoint, text},
+    curios_pipeline::{Stage, compile_entrypoint},
     std::time::Duration,
 };
 
@@ -25,14 +25,14 @@ use {
 /// everything that matters.
 fn normalized_cont_optm(source: &str) -> String {
     let entrypoint = source
-        .parse::<text::Entrypoint>()
+        .parse::<curios_text::Entrypoint>()
         .expect("parity source parses");
 
     let mut dump = String::new();
     compile_entrypoint(
         Duration::from_secs(10),
         &entrypoint,
-        text::RootSource::None,
+        curios_text::RootSource::None,
         |stage| {
             if let Stage::ContOptm(module) = stage {
                 dump = module.to_string();
@@ -113,7 +113,7 @@ fn operations(dump: &str) -> Vec<String> {
 /// `Nat.lt` instruction. Unlike the single-method operators, `Cmp` is a
 /// many-method concept whose witness is a *tuple* of methods, so its resolved
 /// instance does not newtype-collapse to a bare field — it is baked in by closure
-/// specialization ([`specialize_calls`](crate::cont::optm)), whose `Tpl.get`s then
+/// specialization ([`specialize_calls`](curios_cont::optm)), whose `Tpl.get`s then
 /// fold to the same primitive. The specialized-clone names therefore differ from
 /// the direct wrapper's, so the dumps are no longer byte-identical; what must still
 /// match is the emitted instructions — the concept path lowers `Cmp/lt` to the bare

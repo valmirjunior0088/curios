@@ -14,13 +14,13 @@ fn foreign_declaration_runs_through_supplied_bindings() {
         let _ : std/False = /std/Proc/exit(double(21));
         std/Io/write(std/Io/stdout, /std/Str/to_bin("unreachable"))
         "#
-    .parse::<crate::text::Entrypoint>()
+    .parse::<curios_text::Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = crate::compile_entrypoint(
+    let (module, foreigns) = curios_pipeline::compile_entrypoint(
         Duration::from_secs(10),
         &source,
-        crate::text::RootSource::None,
+        curios_text::RootSource::None,
         |_| {},
     )
     .expect("compile succeeded");

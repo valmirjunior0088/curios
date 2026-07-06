@@ -169,9 +169,9 @@ fn bang_std_parse_threads_bangs_left_to_right() {
 
     let base = Path::new(env!("CARGO_MANIFEST_DIR"));
     let entrypoint = source
-        .parse::<crate::text::Entrypoint>()
+        .parse::<curios_text::Entrypoint>()
         .expect("failed to parse source");
-    let loader = crate::text::RootSource::FileSystem(base.to_path_buf());
+    let loader = curios_text::RootSource::FileSystem(base.to_path_buf());
 
     let (system, io) = MockHost::builder().build();
     crate::run_entrypoint(Duration::from_secs(10), &entrypoint, loader, system)
@@ -208,9 +208,9 @@ fn bang_region_mixes_action_types() {
 
     let base = Path::new(env!("CARGO_MANIFEST_DIR"));
     let entrypoint = source
-        .parse::<crate::text::Entrypoint>()
+        .parse::<curios_text::Entrypoint>()
         .expect("failed to parse source");
-    let loader = crate::text::RootSource::FileSystem(base.to_path_buf());
+    let loader = curios_text::RootSource::FileSystem(base.to_path_buf());
 
     let (system, io) = MockHost::builder().build();
     crate::run_entrypoint(Duration::from_secs(10), &entrypoint, loader, system)
@@ -236,12 +236,12 @@ fn folds_constant_arg_through_let_function() {
     let entrypoint = source.parse::<text::Entrypoint>().unwrap();
 
     let mut main_func: Option<cont::Func> = None;
-    crate::compile_entrypoint(
+    curios_pipeline::compile_entrypoint(
         Duration::from_secs(10),
         &entrypoint,
         text::RootSource::None,
         |stage| {
-            if let crate::Stage::ContOptm(module) = stage {
+            if let curios_pipeline::Stage::ContOptm(module) = stage {
                 let entry = module.entry().expect("module has entry").clone();
                 let (_, func) = module
                     .funcs()
@@ -329,18 +329,18 @@ fn fmt_print_partial_evaluation_reduces_residual() {
         "#;
 
     let entrypoint = source
-        .parse::<crate::text::Entrypoint>()
+        .parse::<curios_text::Entrypoint>()
         .expect("failed to parse source")
         .with_type("()".parse().unwrap());
 
     let mut cont_optm_funcs: Option<usize> = None;
 
-    let (wasm_module, _foreigns) = crate::compile_entrypoint(
+    let (wasm_module, _foreigns) = curios_pipeline::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
-        crate::text::RootSource::None,
+        curios_text::RootSource::None,
         |stage| {
-            if let crate::Stage::ContOptm(module) = stage {
+            if let curios_pipeline::Stage::ContOptm(module) = stage {
                 cont_optm_funcs = Some(module.funcs().len());
             }
         },
@@ -381,18 +381,18 @@ fn fmt_print_runtime_args_specializes_spine() {
         "#;
 
     let entrypoint = source
-        .parse::<crate::text::Entrypoint>()
+        .parse::<curios_text::Entrypoint>()
         .expect("failed to parse source")
         .with_type("()".parse().unwrap());
 
     let mut ersd_optm = None;
 
-    let (wasm_module, _foreigns) = crate::compile_entrypoint(
+    let (wasm_module, _foreigns) = curios_pipeline::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
-        crate::text::RootSource::None,
+        curios_text::RootSource::None,
         |stage| {
-            if let crate::Stage::ErsdOptm(module) = stage {
+            if let curios_pipeline::Stage::ErsdOptm(module) = stage {
                 ersd_optm = Some(format!("{module}"));
             }
         },
@@ -449,20 +449,20 @@ fn fmt_print_constant_args_collapses_at_ersd() {
         "#;
 
     let entrypoint = source
-        .parse::<crate::text::Entrypoint>()
+        .parse::<curios_text::Entrypoint>()
         .expect("failed to parse source")
         .with_type("()".parse().unwrap());
 
     let mut ersd_optm = None;
     let mut cont_optm_funcs = None;
 
-    let (wasm_module, _foreigns) = crate::compile_entrypoint(
+    let (wasm_module, _foreigns) = curios_pipeline::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
-        crate::text::RootSource::None,
+        curios_text::RootSource::None,
         |stage| match stage {
-            crate::Stage::ErsdOptm(module) => ersd_optm = Some(format!("{module}")),
-            crate::Stage::ContOptm(module) => cont_optm_funcs = Some(module.funcs().len()),
+            curios_pipeline::Stage::ErsdOptm(module) => ersd_optm = Some(format!("{module}")),
+            curios_pipeline::Stage::ContOptm(module) => cont_optm_funcs = Some(module.funcs().len()),
             _ => {}
         },
     )
