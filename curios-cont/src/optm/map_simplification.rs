@@ -8,8 +8,8 @@ use {
 ///
 /// `Lst/map` is a primitive that codegen lowers to an opaque O(n) fill loop, so
 /// every reasoning pass otherwise treats it as a black box that uses both its
-/// source and its closure. When the closure is the identity, the map yields an
-/// array equal to its source; arrays are immutable here, so the fresh allocation
+/// source and its closure. When the closure is the identity, the map yields a
+/// list equal to its source; lists are immutable here, so the fresh allocation
 /// is unobservable and the binding collapses to a plain alias.
 ///
 /// The alias is what lets the rest of the pipeline see through the map: copy

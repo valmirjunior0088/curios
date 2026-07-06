@@ -518,7 +518,7 @@ mod tests {
 
     #[test]
     fn hoists_nested_closed_aggregate_in_dependency_order() {
-        // a=7; inner=[a]; t=(inner) → scalar, then array, then tuple.
+        // a=7; inner=[a]; t=(inner) → scalar, then list, then tuple.
         let mut module = main_func(region(
             vec![
                 (v("a"), Value::Pure(Data::Nat(7))),
