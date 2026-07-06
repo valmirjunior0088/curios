@@ -7,6 +7,7 @@ use {
     curios_rt::append_payload,
     std::{
         fs,
+        os::unix::fs::PermissionsExt,
         path::{Path, PathBuf},
     },
 };
@@ -34,17 +35,12 @@ pub(crate) fn emit_exe(cwasm: &[u8], output: &Path) -> Result<(), String> {
     fs::write(output, &bytes)
         .map_err(|error| format!("failed to write {}: {error}", output.display()))?;
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        let mut perms = fs::metadata(output)
-            .map_err(|error| format!("failed to stat {}: {error}", output.display()))?
-            .permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(output, perms)
-            .map_err(|error| format!("failed to chmod {}: {error}", output.display()))?;
-    }
+    let mut perms = fs::metadata(output)
+        .map_err(|error| format!("failed to stat {}: {error}", output.display()))?
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(output, perms)
+        .map_err(|error| format!("failed to chmod {}: {error}", output.display()))?;
 
     // On macOS we do NOT re-sign. The embedded launcher image carries an ad-hoc
     // signature from the linker whose code-limit covers the original image; our
