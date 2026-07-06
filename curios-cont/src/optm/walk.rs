@@ -83,9 +83,9 @@ fn walk_data(data: &Data, sink: &mut impl Sink) {
 }
 
 /// The block names a tail transfers control to: a `Jump`'s target, every `Match`
-/// arm (cases and default), a `Call`'s resume continuation, or a `Host` op's
-/// resume. The one place this edge enumeration lives, shared by predecessor
-/// counting and reachability.
+/// arm (cases and default), a `Call`'s resume continuation, or a `Host`/`Cell`
+/// op's resume. The one place this edge enumeration lives, shared by
+/// predecessor counting and reachability.
 pub(crate) fn tail_targets(tail: &Tail) -> Vec<&BlockName> {
     match tail {
         Tail::Jump(jump) => vec![&jump.target],
