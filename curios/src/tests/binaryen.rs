@@ -1,7 +1,4 @@
-use {
-    crate::{compile_entrypoint, text, wasm},
-    std::time::Duration,
-};
+use {curios_pipeline::compile_entrypoint, std::time::Duration};
 
 #[test]
 fn optimizes_to_a_smaller_valid_module() {
@@ -21,18 +18,18 @@ fn optimizes_to_a_smaller_valid_module() {
     "#;
 
     let entrypoint = source
-        .parse::<text::Entrypoint>()
+        .parse::<curios_text::Entrypoint>()
         .expect("failed to parse source");
 
     let (module, _foreigns) = compile_entrypoint(
         Duration::from_secs(60),
         &entrypoint,
-        text::RootSource::None,
+        curios_text::RootSource::None,
         |_| {},
     )
     .expect("expected wasm module");
 
-    let bytes = wasm::to_bytes(&module);
+    let bytes = curios_wasm::to_bytes(&module);
     // `optimize` validates the result internally (asserting on an invalid module).
     let optimized = curios_binaryen::optimize(bytes.clone());
 
