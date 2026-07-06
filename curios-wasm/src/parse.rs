@@ -34,47 +34,21 @@ fn is_delimiter(char: char) -> bool {
     char.is_whitespace() || ['(', ')', '$', '"'].contains(&char)
 }
 
-fn parse_u32<'a>() -> Parser<'a, u32> {
+/// Parses any `FromStr` numeric type from a delimiter-bounded token, failing
+/// with the type's own name (via `type_name`, which for a primitive like
+/// `u32`/`f64` is exactly that name) when the token doesn't parse — the one
+/// shape every numeric literal (`u32`, `i32`, `i64`, `f32`, `f64`) parses by.
+fn parse_number<'a, T>() -> Parser<'a, T>
+where
+    T: FromStr + 'a,
+{
     take_while(|char| !is_delimiter(char))
-        .flat_map(|value| match u32::from_str(value) {
+        .flat_map(|value| match T::from_str(value) {
             Ok(value) => pure(value),
-            Err(_) => fail(format!("Expected 'u32', obtained '{value}'")),
-        })
-        .and_drop(parse_whitespace())
-}
-
-fn parse_i32<'a>() -> Parser<'a, i32> {
-    take_while(|char| !is_delimiter(char))
-        .flat_map(|value| match i32::from_str(value) {
-            Ok(value) => pure(value),
-            Err(_) => fail(format!("Expected 'i32', obtained '{value}'")),
-        })
-        .and_drop(parse_whitespace())
-}
-
-fn parse_i64<'a>() -> Parser<'a, i64> {
-    take_while(|char| !is_delimiter(char))
-        .flat_map(|value| match i64::from_str(value) {
-            Ok(value) => pure(value),
-            Err(_) => fail(format!("Expected 'i64', obtained '{value}'")),
-        })
-        .and_drop(parse_whitespace())
-}
-
-fn parse_f32<'a>() -> Parser<'a, f32> {
-    take_while(|char| !is_delimiter(char))
-        .flat_map(|value| match f32::from_str(value) {
-            Ok(value) => pure(value),
-            Err(_) => fail(format!("Expected 'f32', obtained '{value}'")),
-        })
-        .and_drop(parse_whitespace())
-}
-
-fn parse_f64<'a>() -> Parser<'a, f64> {
-    take_while(|char| !is_delimiter(char))
-        .flat_map(|value| match f64::from_str(value) {
-            Ok(value) => pure(value),
-            Err(_) => fail(format!("Expected 'f64', obtained '{value}'")),
+            Err(_) => fail(format!(
+                "Expected '{}', obtained '{value}'",
+                std::any::type_name::<T>()
+            )),
         })
         .and_drop(parse_whitespace())
 }
@@ -467,7 +441,7 @@ fn parse_aggregate_instr<'a>() -> Parser<'a, Instr> {
         }))
     .or(parse_literal("array.new_fixed")
         .and_keep(parse_type_name())
-        .and(parse_u32())
+        .and(parse_number::<u32>())
         .map(|(type_name, length)| Instr::ArrayNewFixed { type_name, length }))
     .or(parse_literal("array.new_data")
         .and_keep(parse_type_name())
@@ -546,16 +520,16 @@ fn parse_variable_instr<'a>() -> Parser<'a, Instr> {
 
 fn parse_numeric_instr<'a>() -> Parser<'a, Instr> {
     (parse_literal("i32.const")
-        .and_keep(parse_i32())
+        .and_keep(parse_number::<i32>())
         .map(|value| Instr::I32Const { value }))
     .or(parse_literal("i64.const")
-        .and_keep(parse_i64())
+        .and_keep(parse_number::<i64>())
         .map(|value| Instr::I64Const { value }))
     .or(parse_literal("f32.const")
-        .and_keep(parse_f32())
+        .and_keep(parse_number::<f32>())
         .map(|value| Instr::F32Const { value }))
     .or(parse_literal("f64.const")
-        .and_keep(parse_f64())
+        .and_keep(parse_number::<f64>())
         .map(|value| Instr::F64Const { value }))
     .or(parse_literal("i32.eqz").map(|()| Instr::I32Eqz))
     .or(parse_literal("i32.eq").map(|()| Instr::I32Eq))
