@@ -225,21 +225,19 @@ fn folds_constant_arg_through_let_function() {
     // leaves a dead closure body in `module.clsrs` whose direct call to the
     // lifted clone of `f` inflates the inliner's call-site count, blocking the
     // splice that ultimately lets constant folding see `3` next to the successor.
-    use crate::{cont, text};
-
     let source = r#"
         use /std/{Nat};
         let f(x : Nat) -> Nat = Nat/add(x, 1);
         f(3)
         "#;
 
-    let entrypoint = source.parse::<text::Entrypoint>().unwrap();
+    let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
 
-    let mut main_func: Option<cont::Func> = None;
+    let mut main_func: Option<curios_cont::Func> = None;
     curios_pipeline::compile_entrypoint(
         Duration::from_secs(10),
         &entrypoint,
-        text::RootSource::None,
+        curios_text::RootSource::None,
         |stage| {
             if let curios_pipeline::Stage::ContOptm(module) = stage {
                 let entry = module.entry().expect("module has entry").clone();
@@ -267,12 +265,12 @@ fn folds_constant_arg_through_let_function() {
         main.region.blocks.len(),
     );
 
-    let folded: Vec<&cont::ValueName> = main
+    let folded: Vec<&curios_cont::ValueName> = main
         .region
         .values
         .iter()
         .filter_map(|(name, val)| match val {
-            cont::Value::Pure(cont::Data::Nat(4)) => Some(name),
+            curios_cont::Value::Pure(curios_cont::Data::Nat(4)) => Some(name),
             _ => None,
         })
         .collect();
@@ -285,7 +283,7 @@ fn folds_constant_arg_through_let_function() {
     let folded_name = folded[0].clone();
 
     match &main.region.tail {
-        cont::Tail::Jump(jump) => {
+        curios_cont::Tail::Jump(jump) => {
             assert_eq!(
                 jump.target, main.resume,
                 "expected main to jump to its resume sentinel",
