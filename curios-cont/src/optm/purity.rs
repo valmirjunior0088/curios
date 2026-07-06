@@ -248,9 +248,8 @@ mod tests {
     #[test]
     fn host_tail_demotes_to_impure() {
         // A body whose tail is `Tail::Host(_)` is impure regardless of its
-        // values. The `*ToStr` ops are no longer impure (see
-        // `pure_to_str_code_is_pure`); `Io.print`/`Io.read` are the real
-        // impurity boundary and they live at tail position.
+        // values. The `*ToStr` ops are no longer impure; `Io.print`/`Io.read`
+        // are the real impurity boundary and they live at tail position.
         let mut module = Module::new();
         module.add_func(
             FuncName::from("f"),
