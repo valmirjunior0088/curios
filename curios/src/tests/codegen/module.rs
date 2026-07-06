@@ -373,25 +373,25 @@ fn lowers_and_runs_unit_result() {
 
 #[test]
 fn lowers_and_runs_float_result() {
-    let mut cont_module = curios_cont::Module::new();
-    cont_module.set_entry(curios_cont::FuncName::from("main"));
+    let mut module = curios_cont::Module::new();
+    module.set_entry(curios_cont::FuncName::from("main"));
 
-    cont_module.add_const(
+    module.add_const(
         curios_cont::ValueName::from("STDOUT"),
         curios_cont::Data::Bin(vec![1]),
     );
 
-    cont_module.add_const(
+    module.add_const(
         curios_cont::ValueName::from("LEFT"),
         curios_cont::Data::Flt(1.25),
     );
 
-    cont_module.add_const(
+    module.add_const(
         curios_cont::ValueName::from("RIGHT"),
         curios_cont::Data::Flt(2.5),
     );
 
-    cont_module.add_func(
+    module.add_func(
         curios_cont::FuncName::from("main"),
         curios_cont::Func {
             params: vec![],
@@ -443,7 +443,7 @@ fn lowers_and_runs_float_result() {
         },
     );
 
-    assert_eq!(f32_result(&cont_module), 3.75);
+    assert_eq!(f32_result(&module), 3.75);
 }
 
 #[test]
