@@ -281,7 +281,7 @@ pub enum Tail {
 pub struct Region {
     /// Closure shells reserved before their captures are filled, so a self- or
     /// mutually-recursive capture can name the shell. Only closures need this; cyclic
-    /// tuples/arrays are rejected upstream (`to_cont`), which keeps `tpl`/`lst` immutable.
+    /// tuples/lists are rejected upstream (`to_cont`), which keeps `tpl`/`lst` immutable.
     pub preallocs: Vec<(ValueName, ClsrName)>,
     pub values: Vec<(ValueName, Value)>,
     pub blocks: Vec<(BlockName, Block)>,
