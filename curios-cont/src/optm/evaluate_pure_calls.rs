@@ -35,7 +35,7 @@ use {
 /// materialised result of compile-time interpretation, plus a `Jump` to the
 /// original resume continuation. Indirect calls through a known pure-closure
 /// value are handled symmetrically.
-pub fn evaluate_pure_calls(module: &mut Module) {
+pub(crate) fn evaluate_pure_calls(module: &mut Module) {
     let (pure_funcs, pure_clsrs) = purity(module);
 
     // Snapshot the callable population so the interpreter can keep reading bodies

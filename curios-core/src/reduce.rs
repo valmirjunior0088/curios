@@ -18,7 +18,7 @@ enum Reduce {
 /// `convert`, which enqueues the tail rather than reducing it eagerly. The
 /// definitions land in the enclosing context and outlive this call; their
 /// labels are entropy-fresh, so nothing collides.
-pub fn unfold_rec(context: &mut Context, rec: Rec) -> Term {
+pub(crate) fn unfold_rec(context: &mut Context, rec: Rec) -> Term {
     let labels = rec
         .tail
         .label_iter()
@@ -78,7 +78,7 @@ fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, ReduceError>
 /// the scrutinee itself, which matches the key raw — so keeping it raw both
 /// avoids forcing effects at elaboration and still matches. A `Preempted`
 /// deadline is the one error that propagates.
-pub fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
+pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
     match &**term {
         Subterm::Apply(Apply {
             head,
@@ -353,7 +353,7 @@ fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
     }
 }
 
-pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+pub(crate) fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     context.get_or_init_reduced(term, |context, mut term| {
         loop {
             if Instant::now() > context.deadline() {
@@ -425,7 +425,7 @@ pub fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
 /// keep their WHNF shape rather than being reduced under their own binders —
 /// they seldom carry the arithmetic this targets, and opening every case arm
 /// buys a diagnostic nothing.
-pub fn normalize(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     let reduced = reduce(context, term)?;
     let span = reduced.span();
 

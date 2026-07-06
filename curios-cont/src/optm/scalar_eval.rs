@@ -20,12 +20,12 @@
 
 use super::*;
 
-/// What [`eval_scalar`] produces: a scalar or bytestring, owned outright. A
+/// What `eval_scalar` produces: a scalar or bytestring, owned outright. A
 /// dedicated carrier rather than [`Data`], whose aggregate variants hold
 /// `ValueName`s an interpreter frame could never resolve — results that carry
 /// elements travel as [`Evaluated::Lst`]/[`Evaluated::Elem`] instead, so the
 /// aggregate case is unrepresentable here by construction.
-pub enum Scalar {
+pub(crate) enum Scalar {
     Nat(u32),
     Int(i32),
     Flt(f32),
@@ -83,7 +83,7 @@ impl Scalar {
 }
 
 /// The result of evaluating or projecting a `Code` operation.
-pub enum Evaluated<E> {
+pub(crate) enum Evaluated<E> {
     /// A scalar or bytestring, owned outright.
     Scalar(Scalar),
     /// A fresh array of environment elements (`Lst` concat/slice/append).
@@ -95,13 +95,13 @@ pub enum Evaluated<E> {
 
 /// The replacement for an `Eval`, if any: a folded result, or a forwarded
 /// aggregate projection.
-pub fn simplify<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
+pub(crate) fn simplify<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
     eval(code, env).or_else(|| project(code, env))
 }
 
 /// The arm a `Match` takes when its operand is a known `Nat` tag: the matching
 /// case, else the default. A tag with neither is left unfolded.
-pub fn decide_match(tail: &Tail, env: &impl EvalEnv) -> Option<JumpTarget> {
+pub(crate) fn decide_match(tail: &Tail, env: &impl EvalEnv) -> Option<JumpTarget> {
     let Tail::Match(target) = tail else {
         return None;
     };
@@ -113,7 +113,7 @@ pub fn decide_match(tail: &Tail, env: &impl EvalEnv) -> Option<JumpTarget> {
 /// Resolve a projection out of a known aggregate to the element (or length/byte)
 /// it reads. Aggregates are immutable, so this is always sound; out-of-bounds
 /// access would trap, so it is left unfolded.
-pub fn project<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
+pub(crate) fn project<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
     use Code::*;
 
     match code {
@@ -147,7 +147,7 @@ fn forward<E: EvalEnv>(elem: &E::Elem, env: &E) -> Evaluated<E::Elem> {
 /// [`project`] — or `Io`), or the operation would trap at runtime —
 /// `evaluate_pure_calls` promotes that `None` into an interpreter abort so the
 /// trap remains observable.
-pub fn eval<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
+pub(crate) fn eval<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
     use Code::*;
 
     match code {

@@ -30,7 +30,7 @@ const MAX_CALL_DEPTH: usize = 256;
 /// Static handles the interpreter needs across every recursive call. The
 /// funcs/clsrs maps are snapshots taken before the rewriter mutates anything,
 /// so the interpreter can read freely while bodies are being edited in place.
-pub struct Ctx<'a> {
+pub(crate) struct Ctx<'a> {
     pub funcs: &'a HashMap<FuncName, Func>,
     pub clsrs: &'a HashMap<ClsrName, Clsr>,
     pub pure_funcs: &'a HashSet<FuncName>,
@@ -47,7 +47,7 @@ pub struct Ctx<'a> {
 /// captures the very name being filled, so the recursive reference must
 /// observe the resolved captures *after* the fill).
 #[derive(Clone)]
-pub enum Snapshot {
+pub(crate) enum Snapshot {
     Nat(u32),
     Int(i32),
     Flt(f32),
@@ -57,7 +57,7 @@ pub enum Snapshot {
     Clsr(ClsrName, Rc<RefCell<Vec<Snapshot>>>),
 }
 
-pub type Frame = HashMap<ValueName, Snapshot>;
+pub(crate) type Frame = HashMap<ValueName, Snapshot>;
 
 /// The frame is the interpreter's [`EvalEnv`]: scalar lookups read snapshots, and an
 /// aggregate's elements are themselves snapshots — so the shared evaluator's
@@ -135,12 +135,12 @@ impl Scalar {
     }
 }
 
-pub enum Outcome {
+pub(crate) enum Outcome {
     Returned(Snapshot),
     GaveUp,
 }
 
-pub struct Interp<'a> {
+pub(crate) struct Interp<'a> {
     ctx: &'a Ctx<'a>,
     /// Tail transitions remaining across the whole top-level interpretation —
     /// shared between the iterative loop and every recursive `run_body`.
@@ -151,7 +151,7 @@ pub struct Interp<'a> {
 }
 
 impl<'a> Interp<'a> {
-    pub fn new(ctx: &'a Ctx<'a>) -> Self {
+    pub(crate) fn new(ctx: &'a Ctx<'a>) -> Self {
         Self {
             ctx,
             budget: STEP_BUDGET,
@@ -164,7 +164,7 @@ impl<'a> Interp<'a> {
     /// `Direct`/`Indirect` calls recurse into Rust frames (one per actual
     /// function invocation), so the host stack tracks logical call depth rather
     /// than total tail transitions.
-    pub fn run_body(
+    pub(crate) fn run_body(
         &mut self,
         region: &Region,
         body_resume: &BlockName,
@@ -391,7 +391,7 @@ fn resolve_names(names: &[ValueName], frame: &Frame) -> Option<Vec<Snapshot>> {
     names.iter().map(|n| frame.get(n).cloned()).collect()
 }
 
-pub fn seed_frame(params: &[Argument], args: Vec<Snapshot>) -> Option<Frame> {
+pub(crate) fn seed_frame(params: &[Argument], args: Vec<Snapshot>) -> Option<Frame> {
     (params.len() == args.len()).then(|| {
         params
             .iter()
@@ -404,7 +404,7 @@ pub fn seed_frame(params: &[Argument], args: Vec<Snapshot>) -> Option<Frame> {
 /// Build a `Snapshot` from a `Data` literal by resolving any name references it
 /// carries (aggregates, closure captures) against the frame. Scalars and `Bin`
 /// are owned outright.
-pub fn materialise_data(data: &Data, frame: &Frame) -> Option<Snapshot> {
+pub(crate) fn materialise_data(data: &Data, frame: &Frame) -> Option<Snapshot> {
     Some(match data {
         Data::Nat(n) => Snapshot::Nat(*n),
         Data::Int(i) => Snapshot::Int(*i),

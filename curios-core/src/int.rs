@@ -17,13 +17,14 @@ pub struct Int {
 }
 
 impl Int {
+    /// An `Int` from anything `BigInt`-convertible — the entry point for integer literals, e.g. curios-text's lowering of a surface `Int` token.
     pub fn new(value: impl Into<BigInt>) -> Self {
         Self {
             value: value.into(),
         }
     }
 
-    pub fn to_i32(&self) -> Option<i32> {
+    pub(crate) fn to_i32(&self) -> Option<i32> {
         self.value.to_i32()
     }
 
@@ -31,31 +32,31 @@ impl Int {
     /// arithmetic (floor) shift `num-bigint` provides — both unbounded. `None`
     /// when `amount` is negative or too large to be a shift count, leaving the
     /// op a neutral term rather than fabricating a value.
-    pub fn checked_shl(self, amount: Self) -> Option<Self> {
+    pub(crate) fn checked_shl(self, amount: Self) -> Option<Self> {
         Some(Self {
             value: self.value << amount.value.to_usize()?,
         })
     }
 
-    pub fn checked_shr(self, amount: Self) -> Option<Self> {
+    pub(crate) fn checked_shr(self, amount: Self) -> Option<Self> {
         Some(Self {
             value: self.value >> amount.value.to_usize()?,
         })
     }
 
-    pub fn is_zero(&self) -> bool {
+    pub(crate) fn is_zero(&self) -> bool {
         self.value.is_zero()
     }
 
     /// The integer part of `value`, exactly — `None` when there is none (NaN,
     /// ±inf). No finite float is out of range at the type level.
-    pub fn from_f32_trunc(value: f32) -> Option<Self> {
+    pub(crate) fn from_f32_trunc(value: f32) -> Option<Self> {
         BigInt::from_f64(value.trunc() as f64).map(|value| Self { value })
     }
 
     /// `None` on a zero divisor — the reducer reports that case before
     /// folding. Truncates toward zero, like the runtime's `i32.div_s`.
-    pub fn checked_div(self, other: Self) -> Option<Self> {
+    pub(crate) fn checked_div(self, other: Self) -> Option<Self> {
         (!other.value.is_zero()).then(|| Self {
             value: self.value / other.value,
         })
@@ -63,7 +64,7 @@ impl Int {
 
     /// `None` on a zero divisor, like [`Int::checked_div`]. The remainder
     /// takes the dividend's sign, like the runtime's `i32.rem_s`.
-    pub fn checked_rem(self, other: Self) -> Option<Self> {
+    pub(crate) fn checked_rem(self, other: Self) -> Option<Self> {
         (!other.value.is_zero()).then(|| Self {
             value: self.value % other.value,
         })

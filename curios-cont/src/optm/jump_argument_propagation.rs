@@ -9,11 +9,11 @@ use {
 /// Copy propagation sees through renames and jump threading dissolves
 /// single-predecessor blocks, but a *multi*-predecessor block parameter hides
 /// its argument even when every edge agrees. The motivating shape is the loop
-/// [`tail_recursion`](super::tail_recursion) mints from an erased `Nat`/`Bin`
+/// `tail_recursion` mints from an erased `Nat`/`Bin`
 /// induction: the case closures are threaded around the loop as header
 /// parameters — the entry edge passes a known closure and every back edge
 /// passes the parameter through unchanged — so the indirect calls through them
-/// sit behind a parameter [`closure_lifting`](super::closure_lifting) cannot
+/// sit behind a parameter `closure_lifting` cannot
 /// resolve, and the loop body never devirtualizes and never inlines.
 ///
 /// In φ terms: `p = φ(v, p, p, …)` is `p = v`. The analysis is a Kleene
@@ -42,7 +42,7 @@ use {
 /// its edge arguments in place, now dead — the same leave-it-to-cleanup
 /// protocol as CSE's aliases: dead-argument elimination drops the slot and
 /// every coordinated argument.
-pub fn propagate_jump_arguments(module: &mut Module) {
+pub(crate) fn propagate_jump_arguments(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         propagate_in_body(&mut func.region);
     }

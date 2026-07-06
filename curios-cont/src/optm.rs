@@ -1,135 +1,135 @@
 //! Cont → Cont optimization. `optm.rs` is a façade over its submodules:
 //!
-//! - [`mangle`] — the one place pass-minted names are constructed; documents
+//! - `mangle` — the one place pass-minted names are constructed; documents
 //!   the shared `base@tag#item` grammar.
-//! - [`walk`] — the traversal engine: a closed walker over the region tree with
+//! - `walk` — the traversal engine: a closed walker over the region tree with
 //!   read-only (`Sink`) and rewriting (`SinkMut`) variants, so no pass spells
 //!   out the structural recursion or the `Code` operand match itself.
-//! - [`harvest`] — metadata-harvesting functions (uses, references) built on the
+//! - `harvest` — metadata-harvesting functions (uses, references) built on the
 //!   read-only walker.
-//! - [`eval_env`] — the [`EvalEnv`] abstraction evaluation reads operands through,
+//! - `eval_env` — the `EvalEnv` abstraction evaluation reads operands through,
 //!   and its literal-map instance ([`Lits`]).
-//! - [`scalar_eval`] — the wasm-faithful `Code` evaluator both folding and
-//!   interpretation share, generic over an [`EvalEnv`].
-//! - [`copy_propagation`] — eliminates `let x = y` renames.
-//! - [`common_subexpressions`] — rebinds a duplicate pure computation (or
+//! - `scalar_eval` — the wasm-faithful `Code` evaluator both folding and
+//!   interpretation share, generic over an `EvalEnv`.
+//! - `copy_propagation` — eliminates `let x = y` renames.
+//! - `common_subexpressions` — rebinds a duplicate pure computation (or
 //!   aggregate construction) as an alias of its first occurrence on the same
 //!   region path, for copy propagation to collapse.
-//! - [`constant_folding`] — evaluates primitive ops on literal operands.
+//! - `constant_folding` — evaluates primitive ops on literal operands.
 //! - [`evaluate_pure_calls`] — interprets pure-callee direct/indirect calls
 //!   whose arguments are all literal, replacing them with the materialised
 //!   result plus a `Jump` to the original resume; its purity classifier and
-//!   interpreter live beside it in [`purity`] and [`interp`].
+//!   interpreter live beside it in [`purity`] and `interp`.
 //! - [`hoist_literals`] — lifts bytestrings and closed aggregates into shared
 //!   module consts.
 //! - [`specialize_calls`] — clones a function per closure shape passed into a
 //!   candidate parameter, so closure lifting can devirtualize through it.
-//! - [`closure_lifting`] — turns known closures into functions and devirtualizes
+//! - `closure_lifting` — turns known closures into functions and devirtualizes
 //!   their call sites.
-//! - [`tail_recursion`] — rewrites a function whose every direct self-call is
+//! - `tail_recursion` — rewrites a function whose every direct self-call is
 //!   a tail call into a loop (a header block plus backward jumps), taking it
 //!   out of the direct-call cycles that exclude it from inlining.
-//! - [`loops`] — the shared loop-shape recognizer over the headers
+//! - `loops` — the shared loop-shape recognizer over the headers
 //!   `tail_recursion` mints (and inlining splices intact).
-//! - [`loop_invariant_motion`] — moves a loop header's invariant computations
+//! - `loop_invariant_motion` — moves a loop header's invariant computations
 //!   and allocations out to the entering region, once per entry instead of
 //!   per iteration.
-//! - [`function_inlining`] — splices a callee's body into its call sites; a
+//! - `function_inlining` — splices a callee's body into its call sites; a
 //!   single-call-site rule unfolds any-sized callees once, and a size-bounded
 //!   multi-site rule dissolves small callees (e.g. the primitive wrappers)
 //!   at every site.
-//! - [`jump_threading`] — merges single-predecessor blocks into their predecessor.
-//! - [`jump_argument_propagation`] — substitutes a block parameter that every
+//! - `jump_threading` — merges single-predecessor blocks into their predecessor.
+//! - `jump_argument_propagation` — substitutes a block parameter that every
 //!   edge feeds the same single value (`p = φ(v, p, …)` is `p = v`), exposing
 //!   the closures loops thread as parameters to lifting and inlining.
-//! - [`tag_threading`] — threads a jump through the tail its known argument
+//! - `tag_threading` — threads a jump through the tail its known argument
 //!   already decides, specializing the join block per edge: a `Match` whose arm
 //!   the edge picks, or an `Indirect` call whose callee the edge fixes to a
 //!   known closure (devirtualized by the lift round that follows).
-//! - [`dead_argument_elimination`] — drops unused function parameters and closure
+//! - `dead_argument_elimination` — drops unused function parameters and closure
 //!   captures, finishing type erasure.
-//! - [`dead_code_elimination`] — drops unused bindings and unreachable
+//! - `dead_code_elimination` — drops unused bindings and unreachable
 //!   functions, closures, and consts.
-//! - [`map_simplification`] — collapses an `Lst.map` by the identity closure to
+//! - `map_simplification` — collapses an `Lst.map` by the identity closure to
 //!   an alias of its source, letting copy propagation and dead-code elimination
 //!   see through the otherwise-opaque map primitive.
-//! - [`slice_forwarding`] — re-bases `len`/`get`/`slice` of a slice onto the
+//! - `slice_forwarding` — re-bases `len`/`get`/`slice` of a slice onto the
 //!   sliced buffer, so a recursor's per-step tail slice goes unmaterialised and
 //!   the quadratic free-monoid fold turns linear.
 
 mod mangle;
 
 mod walk;
-pub use walk::*;
+pub(crate) use walk::*;
 
 mod harvest;
-pub use harvest::*;
+pub(crate) use harvest::*;
 
 mod eval_env;
-pub use eval_env::*;
+pub(crate) use eval_env::*;
 
 mod scalar_eval;
-pub use scalar_eval::*;
+pub(crate) use scalar_eval::*;
 
 mod copy_propagation;
-pub use copy_propagation::*;
+pub(crate) use copy_propagation::*;
 
 mod common_subexpressions;
-pub use common_subexpressions::*;
+pub(crate) use common_subexpressions::*;
 
 mod constant_folding;
-pub use constant_folding::*;
+pub(crate) use constant_folding::*;
 
 mod purity;
-pub use purity::*;
+pub(crate) use purity::*;
 
 mod interp;
-pub use interp::*;
+pub(crate) use interp::*;
 
 mod evaluate_pure_calls;
-pub use evaluate_pure_calls::*;
+pub(crate) use evaluate_pure_calls::*;
 
 mod hoist_literals;
-pub use hoist_literals::*;
+pub(crate) use hoist_literals::*;
 
 mod specialize_calls;
-pub use specialize_calls::*;
+pub(crate) use specialize_calls::*;
 
 mod closure_lifting;
-pub use closure_lifting::*;
+pub(crate) use closure_lifting::*;
 
 mod tail_recursion;
-pub use tail_recursion::*;
+pub(crate) use tail_recursion::*;
 
 mod loops;
-pub use loops::*;
+pub(crate) use loops::*;
 
 mod loop_invariant_motion;
-pub use loop_invariant_motion::*;
+pub(crate) use loop_invariant_motion::*;
 
 mod function_inlining;
-pub use function_inlining::*;
+pub(crate) use function_inlining::*;
 
 mod jump_threading;
-pub use jump_threading::*;
+pub(crate) use jump_threading::*;
 
 mod jump_argument_propagation;
-pub use jump_argument_propagation::*;
+pub(crate) use jump_argument_propagation::*;
 
 mod tag_threading;
-pub use tag_threading::*;
+pub(crate) use tag_threading::*;
 
 mod dead_argument_elimination;
-pub use dead_argument_elimination::*;
+pub(crate) use dead_argument_elimination::*;
 
 mod dead_code_elimination;
-pub use dead_code_elimination::*;
+pub(crate) use dead_code_elimination::*;
 
 mod map_simplification;
-pub use map_simplification::*;
+pub(crate) use map_simplification::*;
 
 mod slice_forwarding;
-pub use slice_forwarding::*;
+pub(crate) use slice_forwarding::*;
 
 use {super::*, curios_base::Entropy};
 

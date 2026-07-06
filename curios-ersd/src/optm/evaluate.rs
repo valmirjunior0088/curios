@@ -71,7 +71,7 @@ const MAX_REIFY_NODES: usize = 2_048;
 const MAX_REIFY_BYTES: usize = 65_536;
 
 /// Fold every closed `Apply` the interpreter can finish, module-wide.
-pub fn evaluate_closed_terms(module: &mut Module) {
+pub(crate) fn evaluate_closed_terms(module: &mut Module) {
     let rewrites = plan(module);
     apply(module, rewrites);
 }

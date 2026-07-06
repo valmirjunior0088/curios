@@ -13,7 +13,7 @@ use {
 /// Names are only unique within a single function or closure body (the lowerer
 /// restarts its counter per body), so resolution runs per region tree, never
 /// across the whole module.
-pub fn propagate_copies(module: &mut Module) {
+pub(crate) fn propagate_copies(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         propagate_in_tree(&mut func.region);
     }

@@ -3,7 +3,7 @@ use {super::*, std::collections::HashSet};
 /// Loop-invariant code motion: move a loop header's per-iteration work that
 /// never varies out to the region that enters the loop.
 ///
-/// [`tail_recursion`](super::tail_recursion) converts a self-tail-recursive
+/// `tail_recursion` converts a self-tail-recursive
 /// function into `region R: Jump(b@loop, ...)` with the header block carrying
 /// the body — and everything in the header's straight line re-executes every
 /// iteration, including work whose operands never change: a `len` of a buffer
@@ -38,7 +38,7 @@ use {super::*, std::collections::HashSet};
 /// subtree — anything else is an enclosing-scope or const name, invariant by
 /// the scoping law. Hoisted names are removed from the varying set as the scan
 /// walks, so a chain of invariant work cascades out in one pass.
-pub fn hoist_loop_invariants(module: &mut Module) {
+pub(crate) fn hoist_loop_invariants(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         hoist_in_region(&mut func.region);
     }

@@ -3,7 +3,7 @@ use super::*;
 /// A read-only traversal of a Cont region tree.
 ///
 /// The walker owns the recursion and the (large) per-node enumeration — notably
-/// the `Code` operand match, written once in [`walk_code_operands!`] and shared
+/// the `Code` operand match, written once in `walk_code_operands!` and shared
 /// by both walkers. The smaller `Tail`/`Data` walkers are genuinely asymmetric
 /// (only the read-only side fires `func_ref`/`clsr_ref` events), so those pairs
 /// are kept in step by hand when a variant is added. A [`Sink`] only reacts to
@@ -13,7 +13,7 @@ use super::*;
 /// Binders — block parameters and the names on the left of `values`/`preallocs`
 /// — are deliberately *not* reported as uses; only operand (use) positions fire
 /// [`Sink::value_use`].
-pub trait Sink {
+pub(crate) trait Sink {
     /// A `ValueName` in a use position.
     fn value_use(&mut self, name: &ValueName) {
         let _ = name;
@@ -31,7 +31,7 @@ pub trait Sink {
 }
 
 /// Walk a region and every nested block, firing events into `sink`.
-pub fn walk_region(region: &Region, sink: &mut impl Sink) {
+pub(crate) fn walk_region(region: &Region, sink: &mut impl Sink) {
     for (_, clsr) in &region.preallocs {
         sink.clsr_ref(clsr);
     }
@@ -57,8 +57,8 @@ fn walk_value(value: &Value, sink: &mut impl Sink) {
 
 /// Walk a single `Data`, firing reference events into `sink`. Exposed so a lone
 /// const value can be harvested without an enclosing region (see
-/// [`harvest::data_refs`](super::harvest)).
-pub fn walk_data_refs(data: &Data, sink: &mut impl Sink) {
+/// `harvest::data_refs`).
+pub(crate) fn walk_data_refs(data: &Data, sink: &mut impl Sink) {
     walk_data(data, sink);
 }
 
@@ -66,8 +66,8 @@ pub fn walk_data_refs(data: &Data, sink: &mut impl Sink) {
 /// Exposed so a pass that classifies *where* a name occurs (value operands vs.
 /// call/jump arguments) can reuse the operand enumeration on values alone and
 /// handle tails itself (see
-/// [`dead_argument_elimination`](super::dead_argument_elimination)).
-pub fn walk_value_uses(value: &Value, sink: &mut impl Sink) {
+/// `dead_argument_elimination`).
+pub(crate) fn walk_value_uses(value: &Value, sink: &mut impl Sink) {
     walk_value(value, sink);
 }
 
@@ -86,7 +86,7 @@ fn walk_data(data: &Data, sink: &mut impl Sink) {
 /// arm (cases and default), a `Call`'s resume continuation, or a `Host` op's
 /// resume. The one place this edge enumeration lives, shared by predecessor
 /// counting and reachability.
-pub fn tail_targets(tail: &Tail) -> Vec<&BlockName> {
+pub(crate) fn tail_targets(tail: &Tail) -> Vec<&BlockName> {
     match tail {
         Tail::Jump(jump) => vec![&jump.target],
         Tail::Match(target) => {
@@ -108,9 +108,9 @@ pub fn tail_targets(tail: &Tail) -> Vec<&BlockName> {
 /// Walk a single `Tail`'s operands and references, firing events into `sink`.
 /// Exposed (like [`walk_value_uses`] for values) so a pass can harvest a tail's
 /// operands on their own — e.g. seeding the liveness roots in
-/// [`dead_code_elimination`](super::dead_code_elimination) — without a region to
+/// `dead_code_elimination` — without a region to
 /// wrap them.
-pub fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
+pub(crate) fn walk_tail(tail: &Tail, sink: &mut impl Sink) {
     match tail {
         Tail::Jump(target) => walk_jump(target, sink),
         Tail::Match(target) => {
@@ -279,7 +279,7 @@ fn walk_uses(names: &[ValueName], sink: &mut impl Sink) {
 /// Only value-use positions are exposed — binders and closure/function
 /// references are never rewritten by any current pass, so they are left out
 /// rather than offered as no-op hooks.
-pub trait SinkMut {
+pub(crate) trait SinkMut {
     fn value_use(&mut self, name: &mut ValueName);
 }
 
@@ -287,9 +287,9 @@ pub trait SinkMut {
 /// name is *bound* in the cloned subtree, leaving free names (enclosing-scope
 /// and module-const references) untouched. Binders and block names are not
 /// use positions, so each cloning pass renames those by hand to its own rules
-/// ([`function_inlining`](super::function_inlining) maps the resume sentinel,
-/// [`tag_threading`](super::tag_threading) gates on the bound block set).
-pub struct FreshenUses<'a> {
+/// (`function_inlining` maps the resume sentinel,
+/// `tag_threading` gates on the bound block set).
+pub(crate) struct FreshenUses<'a> {
     pub bound: &'a std::collections::HashSet<ValueName>,
     pub suffix: &'a str,
 }
@@ -303,7 +303,7 @@ impl SinkMut for FreshenUses<'_> {
 }
 
 /// Walk a region and every nested block, offering each operand for rewriting.
-pub fn walk_region_mut(region: &mut Region, sink: &mut impl SinkMut) {
+pub(crate) fn walk_region_mut(region: &mut Region, sink: &mut impl SinkMut) {
     // Prealloc shells reference a `ClsrName`, never a value use — nothing to rewrite.
     for (_, value) in &mut region.values {
         walk_value_mut(value, sink);

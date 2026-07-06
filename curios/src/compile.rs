@@ -4,13 +4,12 @@
 //! stays slim.
 
 use {
-    curios_pipeline::compile_entrypoint,
     curios_rt::{ForeignBindings, Host, run_bytes, shared_engine},
-    std::{
-        path::{Path, PathBuf},
-        time::Duration,
-    },
+    std::path::Path,
 };
+
+#[cfg(test)]
+use {curios_pipeline::compile_entrypoint, std::path::PathBuf, std::time::Duration};
 
 /// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm`
 /// payload the runtime deserializes — the same payload a bundled executable
@@ -44,7 +43,8 @@ pub fn run_wasm<H: Host + Send + Sync + 'static>(
 /// it back to the caller; an embedder with `foreign` declarations to satisfy
 /// calls [`compile_entrypoint`] directly instead, building [`ForeignBindings`]
 /// from the returned store and calling [`run_wasm`] itself.
-pub fn run_entrypoint<H: Host + Send + Sync + 'static>(
+#[cfg(test)]
+pub(crate) fn run_entrypoint<H: Host + Send + Sync + 'static>(
     timeout: Duration,
     entrypoint: &curios_text::Entrypoint,
     loader: curios_text::RootSource,
@@ -56,7 +56,8 @@ pub fn run_entrypoint<H: Host + Send + Sync + 'static>(
 }
 
 /// Parse `source` (no external modules) and run it.
-pub fn run_text<H: Host + Send + Sync + 'static>(
+#[cfg(test)]
+pub(crate) fn run_text<H: Host + Send + Sync + 'static>(
     timeout: Duration,
     source: &str,
     host: H,
@@ -83,7 +84,8 @@ pub fn load(path: &Path) -> Result<(curios_text::Entrypoint, curios_text::RootSo
 /// the path to its own root file (no fixed root-file convention; the caller
 /// points at whatever file they want, exactly like the entrypoint itself) —
 /// into named path compilation roots alongside the entrypoint's own loader.
-pub fn load_with_dependencies(
+#[cfg(test)]
+pub(crate) fn load_with_dependencies(
     path: &Path,
     dependencies: Vec<(String, PathBuf)>,
 ) -> Result<(curios_text::Entrypoint, curios_text::RootSource), String> {

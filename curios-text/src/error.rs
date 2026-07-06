@@ -3,6 +3,7 @@ use {
     std::{fmt, io, path::PathBuf},
 };
 
+/// Everything that can go wrong between a parsed surface tree and a core module: module discovery and loading, `use`/name resolution and visibility, and the structural checks `to_core` lowering enforces. As an error propagates it is wrapped in `Located` with the *innermost* relevant span (`at` never overwrites an existing location), which [`Error::format`] renders as a source snippet.
 #[derive(Debug)]
 pub enum Error {
     UnresolvedQualifier {
@@ -136,7 +137,7 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn at(self, span: Span) -> Self {
+    pub(crate) fn at(self, span: Span) -> Self {
         match self {
             Self::Located { .. } => self,
             error => Self::Located {
@@ -146,6 +147,7 @@ impl Error {
         }
     }
 
+    /// Renders the error for the user: the `Display` message plus, when the error is `Located`, the source snippet its span points at. Callers should prefer this over `to_string()`, which prints the message alone.
     pub fn format(&self) -> String {
         match self {
             Self::Located { span, error } => {
@@ -266,6 +268,7 @@ impl fmt::Display for Error {
     }
 }
 
+/// Why a `.crs` file could not become a parsed module: unreadable, or read but failed to parse. Returned directly by [`Entrypoint::from_path`](crate::Entrypoint::from_path); for a `mod`-declared file it is wrapped in [`Error::ModuleLoadFailed`], which adds which module was being loaded.
 #[derive(Debug)]
 pub enum LoadError {
     Read { path: PathBuf, error: io::Error },
@@ -273,6 +276,7 @@ pub enum LoadError {
 }
 
 impl LoadError {
+    /// Renders the failure for the user: the offending path plus the io error, or the parser's own formatted diagnostic (which carries its source snippet).
     pub fn format(&self) -> String {
         match self {
             LoadError::Read { path, error } => {

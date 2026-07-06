@@ -113,7 +113,7 @@ fn operations(dump: &str) -> Vec<String> {
 /// `Nat.lt` instruction. Unlike the single-method operators, `Cmp` is a
 /// many-method concept whose witness is a *tuple* of methods, so its resolved
 /// instance does not newtype-collapse to a bare field — it is baked in by closure
-/// specialization ([`specialize_calls`](curios_cont::optm)), whose `Tpl.get`s then
+/// specialization (`specialize_calls`), whose `Tpl.get`s then
 /// fold to the same primitive. The specialized-clone names therefore differ from
 /// the direct wrapper's, so the dumps are no longer byte-identical; what must still
 /// match is the emitted instructions — the concept path lowers `Cmp/lt` to the bare

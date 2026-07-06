@@ -12,16 +12,21 @@ use {
 
 // === Arity ===================================================================
 
+/// A [`Scope`]'s binder count, lifted to the type level: the fixed arities ([`One`]/[`Two`]/[`Three`]) make `close`/`open` take exactly-sized arrays, so an arity mismatch on the common eliminator shapes is a compile error; [`Many`] defers the check to a runtime assert.
 pub trait Arity: Copy {
+    /// The parameter-pack shape `close`/`open` accept: a fixed-size array reference for the static arities, a plain slice for [`Many`].
     type Params<'a, T: ?Sized + 'a>: AsRef<[&'a T]>;
 
+    /// The number of binders this arity denotes.
     fn arity(&self) -> usize;
 }
 
+/// The static one-binder arity — `let` tails, telescope links, single-scrutinee motives.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct One;
 
 impl One {
+    /// The binder count as a constant, so `Params` can be the fixed-size array type `[&T; 1]`.
     pub const ARITY: usize = 1;
 }
 
@@ -33,10 +38,12 @@ impl Arity for One {
     }
 }
 
+/// The static two-binder arity — the `(pred, ih)` successor arm of the `Nat` eliminator.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Two;
 
 impl Two {
+    /// The binder count as a constant, so `Params` can be the fixed-size array type `[&T; 2]`.
     pub const ARITY: usize = 2;
 }
 
@@ -48,10 +55,12 @@ impl Arity for Two {
     }
 }
 
+/// The static three-binder arity — the `(head, tail, ih)` cons arms of the `Bin`/`Lst` eliminators.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Three;
 
 impl Three {
+    /// The binder count as a constant, so `Params` can be the fixed-size array type `[&T; 3]`.
     pub const ARITY: usize = 3;
 }
 
@@ -63,6 +72,7 @@ impl Arity for Three {
     }
 }
 
+/// A runtime-chosen binder count, for scopes whose arity is data-dependent (inductive-match arms over constructor payloads, `Rec` blocks, motives). `close`/`open` fall back to slices and assert the length instead of getting it checked at compile time.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Many(pub usize);
 
@@ -82,12 +92,14 @@ enum VarType {
     Bound(usize),
 }
 
+/// A locally-nameless variable: free (a label naming a Γ assumption or global definition) or bound (a de Bruijn index into enclosing [`Scope`]s). The bound form and its accessors are crate-internal — outside code builds free variables and lets the scope machinery convert them.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Var {
     type_: VarType,
 }
 
 impl Var {
+    /// A free variable named `label` — the only form constructible outside the crate; `Scope::close` (via `capture`) is what turns free occurrences into bound indices.
     pub fn free<A>(label: A) -> Self
     where
         A: Into<String>,
@@ -97,34 +109,36 @@ impl Var {
         }
     }
 
-    pub fn as_free(&self) -> Option<&str> {
+    pub(crate) fn as_free(&self) -> Option<&str> {
         match &self.type_ {
             VarType::Free(label) => Some(label),
             VarType::Bound(_) => None,
         }
     }
 
-    pub fn bound(index: usize) -> Self {
+    pub(crate) fn bound(index: usize) -> Self {
         Self {
             type_: VarType::Bound(index),
         }
     }
 
-    pub fn as_bound(&self) -> Option<usize> {
+    pub(crate) fn as_bound(&self) -> Option<usize> {
         match &self.type_ {
             VarType::Free(_) => None,
             &VarType::Bound(index) => Some(index),
         }
     }
 
-    pub fn unwrap(&self) -> &str {
+    pub(crate) fn unwrap(&self) -> &str {
         self.as_free().unwrap()
     }
 }
 
 // === Bound ===================================================================
 
+/// A syntactic category the de Bruijn machinery can operate on: anything that can rebuild itself under a variable-visiting [`Visit`] and report its `reach`. Implemented by `Term`/`Subterm` (the big structural match lives in `term.rs`), [`Telescope`], and `()` (a Σ-telescope's trailing payload); everything else here — `shift`, `capture`, `release`, `free_vars` — is derived from `traverse` alone.
 pub trait Bound: Sized + Clone + Eq + Hash + Debug {
+    /// Rebuild the term, invoking the visit callback at every variable with the binder depth it sits under; a `Some(replacement)` substitutes that variable. The single primitive the rest of the trait is defined from — implementations must route subterms through `Visit::visit_subterm`/`visit_scope` so depth tracking, pruning, and the rewrite hook fire.
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>;
@@ -141,6 +155,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + Debug {
         self.reach() == 0
     }
 
+    /// De Bruijn weakening: add `amount` to every loose bound index (`>= depth`), making room for that many new enclosing binders when a term is moved under them. Index-monotonic, so the traversal prunes by `reach`.
     fn shift(&self, amount: usize) -> Self {
         self.traverse(&mut Visit::pruning(|depth, var| {
             var.as_bound()
@@ -149,6 +164,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + Debug {
         }))
     }
 
+    /// The closing half of the locally-nameless discipline: turn free occurrences of `labels` into bound indices (position in `labels`, offset by the current depth) while shifting already-loose indices past the new binders. `Scope::close` is this plus the name bookkeeping. Rewrites *free* names, so it can never be pruned by `reach`.
     fn capture(&self, labels: &[&str]) -> Self {
         self.traverse(&mut Visit::new(|depth, var| {
             var.as_free()
@@ -166,6 +182,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + Debug {
         }))
     }
 
+    /// The opening half of the locally-nameless discipline: substitute the outermost `terms.len()` loose bound indices with `terms` (each shifted by the depth it lands under) and re-tighten the loose indices beyond them. `Scope::open` is this plus the arity check; effects depend only on indices `>= depth`, so the traversal prunes by `reach`.
     fn release(&self, terms: &[&Term]) -> Self {
         self.traverse(&mut Visit::pruning(|depth, var| {
             var.as_bound().and_then(|index| {
@@ -179,6 +196,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + Debug {
         }))
     }
 
+    /// The set of free-variable labels occurring anywhere in the term. A pure observation ridden on `traverse` (the callback rewrites nothing), so it must never be pruned — every node has to be seen.
     fn free_vars(&self) -> BTreeSet<String> {
         let mut vars = BTreeSet::new();
         self.traverse(&mut Visit::new(|_, var| {
@@ -205,6 +223,7 @@ impl Bound for () {
 
 // === Scope ===================================================================
 
+/// A body abstracted over `A::arity()` binders, locally nameless: the body stores de Bruijn indices, while `names` remembers the source labels for reopening and printing (`None` for a `constant` scope that never had binders written). Built by `close` (which captures free occurrences of the labels) and eliminated by `open` (which substitutes terms for the indices); entering a `Scope` is the only place a [`Visit`]'s depth changes, so this type is the unit of binding for the whole crate.
 pub struct Scope<A: Arity, B: Bound = Term> {
     arity: A,
     names: Option<Vec<String>>,
@@ -248,7 +267,7 @@ impl<A: Arity + Hash, B: Bound> Hash for Scope<A, B> {
 }
 
 impl<A: Arity, B: Bound> Scope<A, B> {
-    pub fn close<'a>(arity: A, labels: A::Params<'a, str>, body: B) -> Self {
+    pub(crate) fn close<'a>(arity: A, labels: A::Params<'a, str>, body: B) -> Self {
         assert!(
             arity.arity() == labels.as_ref().len(),
             "scope arity mismatch in `close`: expected {}, got {}",
@@ -263,23 +282,23 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         }
     }
 
-    pub fn arity(&self) -> usize {
+    pub(crate) fn arity(&self) -> usize {
         self.arity.arity()
     }
 
-    pub fn body(&self) -> &B {
+    pub(crate) fn body(&self) -> &B {
         &self.body
     }
 
-    pub fn names(&self) -> Option<&[String]> {
+    pub(crate) fn names(&self) -> Option<&[String]> {
         self.names.as_deref()
     }
 
-    pub fn reach(&self) -> usize {
+    pub(crate) fn reach(&self) -> usize {
         self.body.reach().saturating_sub(self.arity())
     }
 
-    pub fn open<'a>(&self, terms: A::Params<'a, Term>) -> B {
+    pub(crate) fn open<'a>(&self, terms: A::Params<'a, Term>) -> B {
         assert!(
             self.arity() == terms.as_ref().len(),
             "scope arity mismatch in `open`: expected {}, got {}",
@@ -290,7 +309,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         self.body.release(terms.as_ref())
     }
 
-    pub fn constant(arity: A, body: B) -> Self {
+    pub(crate) fn constant(arity: A, body: B) -> Self {
         Self {
             arity,
             names: None,
@@ -302,7 +321,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     /// binder names. The body keeps its de Bruijn structure, so `f` must be a
     /// transformation that does not disturb loose indices — e.g. zonking, which
     /// only replaces closed metavariable nodes by closed solutions.
-    pub fn map_body<E>(&self, f: impl FnOnce(&B) -> Result<B, E>) -> Result<Self, E> {
+    pub(crate) fn map_body<E>(&self, f: impl FnOnce(&B) -> Result<B, E>) -> Result<Self, E> {
         Ok(Self {
             arity: self.arity,
             names: self.names.clone(),
@@ -310,19 +329,19 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         })
     }
 
-    pub fn first_label(&self) -> Option<&str> {
+    pub(crate) fn first_label(&self) -> Option<&str> {
         self.names.as_deref()?.first().map(String::as_str)
     }
 
-    pub fn second_label(&self) -> Option<&str> {
+    pub(crate) fn second_label(&self) -> Option<&str> {
         self.names.as_deref()?.get(1).map(String::as_str)
     }
 
-    pub fn third_label(&self) -> Option<&str> {
+    pub(crate) fn third_label(&self) -> Option<&str> {
         self.names.as_deref()?.get(2).map(String::as_str)
     }
 
-    pub fn label_iter(&self) -> impl Iterator<Item = Option<&str>> {
+    pub(crate) fn label_iter(&self) -> impl Iterator<Item = Option<&str>> {
         (0..self.arity()).map(move |i| {
             self.names
                 .as_deref()
@@ -331,16 +350,12 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         })
     }
 
-    pub fn free_vars(&self) -> BTreeSet<String> {
-        self.body.free_vars()
-    }
-
     /// Whether the binder at position `index` (0 = first/outermost label) is
     /// referenced anywhere in the body. A bound var refers to this binder iff its
     /// de Bruijn index equals `index` plus the number of binders entered since —
     /// which `Visit` tracks as `depth`. Used by erasure to spot an eliminator
     /// whose induction hypothesis is dead: that arm is a case-split, not a fold.
-    pub fn uses(&self, index: usize) -> bool {
+    pub(crate) fn uses(&self, index: usize) -> bool {
         let mut used = false;
         self.body.traverse(&mut Visit::new(|depth, var: &Var| {
             if var.as_bound() == Some(index + depth) {
@@ -354,6 +369,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
 
 // === Telescope ===============================================================
 
+/// A dependent context: a chain of entry types where each `Cons` tail is a one-binder [`Scope`], so every later entry — and the final `Done` payload — may mention the binders before it. Function types, function literals, and tuple types all reuse it and differ only in the payload: a `Term` (the return type or body) for Π/λ, `()` for Σ, where the fields themselves are the point.
 pub enum Telescope<B: Bound> {
     Done(Box<B>),
     Cons(Term, Scope<One, Telescope<B>>),
@@ -427,11 +443,11 @@ impl<B: Bound> Bound for Telescope<B> {
 }
 
 impl<B: Bound> Telescope<B> {
-    pub fn done(body: B) -> Self {
+    pub(crate) fn done(body: B) -> Self {
         Telescope::Done(body.into())
     }
 
-    pub fn cons<S, T>(label: S, ty: T, rest: Telescope<B>) -> Self
+    pub(crate) fn cons<S, T>(label: S, ty: T, rest: Telescope<B>) -> Self
     where
         S: Into<String>,
         T: Into<Term>,
@@ -440,6 +456,7 @@ impl<B: Bound> Telescope<B> {
         Telescope::Cons(ty.into(), Scope::close(One, &[label.as_str()], rest))
     }
 
+    /// Build a telescope from `(label, type)` entries in written order, right-folding so each entry's scope closes over everything after it — written order mirrors telescope order.
     pub fn build<I, S, T>(entries: I, body: B) -> Self
     where
         I: IntoIterator<Item = (S, T)>,
@@ -456,7 +473,7 @@ impl<B: Bound> Telescope<B> {
             })
     }
 
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         let mut n = 0;
         let mut cur = self;
         while let Telescope::Cons(_, rest) = cur {
@@ -466,20 +483,13 @@ impl<B: Bound> Telescope<B> {
         n
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         matches!(self, Telescope::Done(_))
-    }
-
-    pub fn first_label(&self) -> Option<&str> {
-        match self {
-            Telescope::Cons(_, rest) => rest.first_label(),
-            Telescope::Done(_) => None,
-        }
     }
 
     /// The binder name at each position (`""` when unnamed), walking the spine
     /// without opening — names are structural, no substitution needed.
-    pub fn labels(&self) -> Vec<&str> {
+    pub(crate) fn labels(&self) -> Vec<&str> {
         let mut out = Vec::new();
         let mut cur = self;
         while let Telescope::Cons(_, rest) = cur {
@@ -495,7 +505,7 @@ impl<B: Bound> Telescope<B> {
     /// binders (tuple-type labels are part of the type's identity and the
     /// target of `.label` resolution, so they must survive elaboration
     /// verbatim).
-    pub fn relabel(self, labels: &[&str]) -> Self {
+    pub(crate) fn relabel(self, labels: &[&str]) -> Self {
         match self {
             Telescope::Done(body) => Telescope::Done(body),
             Telescope::Cons(ty, rest) => {
@@ -513,7 +523,7 @@ impl<B: Bound> Telescope<B> {
         }
     }
 
-    pub fn open(&self, args: &[&Term]) -> B {
+    pub(crate) fn open(&self, args: &[&Term]) -> B {
         assert!(
             self.len() == args.len(),
             "telescope arity mismatch in `open`: expected {}, got {}",
@@ -538,7 +548,7 @@ impl<B: Bound> Telescope<B> {
     /// returning the residual telescope. Every caller's telescope leads with the
     /// type parameters (constructor payloads, struct fields, inductive indices all
     /// follow them), so a telescope that runs out early is an invariant violation.
-    pub fn open_params(self, params: &[Term]) -> Telescope<B> {
+    pub(crate) fn open_params(self, params: &[Term]) -> Telescope<B> {
         let mut telescope = self;
         for param in params {
             telescope = match telescope {
@@ -552,7 +562,7 @@ impl<B: Bound> Telescope<B> {
     /// Open the telescope across `args`, invoking `f(arg, ty)` at each binder
     /// before substituting that arg into the rest, and return the final `Done`
     /// body. The walk is infallible; the error type `E` belongs to the callback.
-    pub fn walk<F, E>(self, args: &[Term], mut f: F) -> Result<B, E>
+    pub(crate) fn walk<F, E>(self, args: &[Term], mut f: F) -> Result<B, E>
     where
         F: FnMut(usize, &Term, &Term) -> Result<(), E>,
     {
@@ -577,39 +587,7 @@ impl<B: Bound> Telescope<B> {
         }
     }
 
-    /// Like [`Telescope::walk`], but each entry is opened with the term `f`
-    /// *returns* for that slot rather than the given argument — the rebuilt
-    /// rather than the lowered spelling, say — so later entry types and the
-    /// body carry the mapped forms. Returns the mapped arguments alongside
-    /// the body.
-    pub fn walk_map<F, E>(self, args: &[Term], mut f: F) -> Result<(Vec<Term>, B), E>
-    where
-        F: FnMut(usize, &Term, &Term) -> Result<Term, E>,
-    {
-        assert!(
-            self.len() == args.len(),
-            "telescope arity mismatch in `walk_map`: expected {}, got {}",
-            self.len(),
-            args.len()
-        );
-
-        let mut mapped = Vec::with_capacity(args.len());
-        let mut tele = self;
-        let mut i = 0;
-        loop {
-            match tele {
-                Telescope::Done(body) => return Ok((mapped, *body)),
-                Telescope::Cons(ty, rest) => {
-                    let term = f(i, &args[i], &ty)?;
-                    tele = rest.open(&[&term]);
-                    mapped.push(term);
-                    i += 1;
-                }
-            }
-        }
-    }
-
-    pub fn nth<F>(self, index: usize, mut sub: F) -> Option<Term>
+    pub(crate) fn nth<F>(self, index: usize, mut sub: F) -> Option<Term>
     where
         F: FnMut(usize) -> Term,
     {
@@ -639,20 +617,11 @@ impl Telescope<Term> {
     /// Whether any metavariable in a function/Π telescope (`Func`/`FuncType`) —
     /// the parameter types and the trailing body/return type — satisfies
     /// `pred`, short-circuiting on the first hit.
-    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
+    pub(crate) fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             Telescope::Done(body) => body.any_metavar(pred),
         }
-    }
-
-    /// Collect the ids of every metavariable in this telescope (an `any_metavar`
-    /// whose collector never short-circuits).
-    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
-        self.any_metavar(&mut |id| {
-            ids.insert(id);
-            false
-        });
     }
 }
 
@@ -660,21 +629,12 @@ impl Telescope<()> {
     /// Whether any metavariable in a Σ telescope (`TupleType`) — only the field
     /// types; its `Done` body is `()` — satisfies `pred`, short-circuiting on
     /// the first hit.
-    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
+    pub(crate) fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             // The trailing body is `()`, which holds no metavariables.
             Telescope::Done(_) => false,
         }
-    }
-
-    /// Collect the ids of every metavariable in this telescope (an `any_metavar`
-    /// whose collector never short-circuits).
-    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
-        self.any_metavar(&mut |id| {
-            ids.insert(id);
-            false
-        });
     }
 }
 
@@ -682,8 +642,9 @@ impl Telescope<()> {
 
 /// A term-level pre-hook for [`Visit`]: `Some(replacement)` substitutes the
 /// whole node at the current depth.
-pub type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
+pub(crate) type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
 
+/// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, the pruning flag (skip subtrees whose `reach` proves the visit cannot touch them), and an optional term-level rewrite hook. Public constructors are `Visit::pruning` and `Visit::rewriting`; the plain constructor is crate-internal.
 pub struct Visit<F> {
     depth: usize,
     prune: bool,
@@ -699,7 +660,7 @@ impl<F> Visit<F>
 where
     F: FnMut(usize, &Var) -> Option<Subterm>,
 {
-    pub fn new(visit: F) -> Self {
+    pub(crate) fn new(visit: F) -> Self {
         Self {
             depth: 0,
             prune: false,
@@ -713,7 +674,7 @@ where
     /// index-monotonic visits whose effect depends solely on bound indices
     /// `>= depth` — i.e. `shift` and `release`. Must NOT be used for `capture`
     /// (rewrites free names) or `free_vars` (must observe every node).
-    pub fn pruning(visit: F) -> Self {
+    pub(crate) fn pruning(visit: F) -> Self {
         Self {
             depth: 0,
             prune: true,
@@ -725,7 +686,7 @@ where
     /// Like `new`, additionally carrying a term-level rewrite hook fired at
     /// every recursion point. Note the root term reaches `traverse` directly,
     /// not through `visit_subterm` — callers must check it themselves.
-    pub fn rewriting(visit: F, rewrite: Rewrite) -> Self {
+    pub(crate) fn rewriting(visit: F, rewrite: Rewrite) -> Self {
         Self {
             depth: 0,
             prune: false,
@@ -734,20 +695,20 @@ where
         }
     }
 
-    pub fn depth(&self) -> usize {
+    pub(crate) fn depth(&self) -> usize {
         self.depth
     }
 
-    pub fn prune(&self) -> bool {
+    pub(crate) fn prune(&self) -> bool {
         self.prune
     }
 
     /// Invoke the underlying visit callback on a variable at the current depth.
-    pub fn call(&mut self, var: &Var) -> Option<Subterm> {
+    pub(crate) fn call(&mut self, var: &Var) -> Option<Subterm> {
         (self.visit)(self.depth, var)
     }
 
-    pub fn visit_subterm(&mut self, term: &Term) -> Term {
+    pub(crate) fn visit_subterm(&mut self, term: &Term) -> Term {
         if let Some(rewrite) = &mut self.rewrite
             && let Some(replacement) = rewrite(self.depth, term)
         {
@@ -757,7 +718,7 @@ where
         term.traverse(self)
     }
 
-    pub fn visit_scope<A: Arity, B: Bound>(&mut self, scope: &Scope<A, B>) -> Scope<A, B> {
+    pub(crate) fn visit_scope<A: Arity, B: Bound>(&mut self, scope: &Scope<A, B>) -> Scope<A, B> {
         self.depth += scope.arity.arity();
         let body = scope.body.traverse(self).into();
         self.depth -= scope.arity.arity();

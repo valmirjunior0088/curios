@@ -49,7 +49,7 @@ use curios_wasm::{
 };
 
 /// `Flt` — a boxed `f32`: `struct (field $special (f32))`.
-pub fn flt_sub_type(special_field: FieldName) -> SubType {
+pub(crate) fn flt_sub_type(special_field: FieldName) -> SubType {
     SubType {
         is_final: true,
         super_types: vec![],
@@ -82,7 +82,7 @@ pub fn bytes_sub_type() -> SubType {
 /// shape: `array (mut <top>)`. The element field stays mutable regardless of
 /// cyclicity: payloads are built with `array.new_default` + per-element
 /// `array.set`, so it must be writable.
-pub fn elems_sub_type(top_type: ValType) -> SubType {
+pub(crate) fn elems_sub_type(top_type: ValType) -> SubType {
     SubType {
         is_final: true,
         super_types: vec![],
@@ -116,7 +116,7 @@ fn ref_field(type_name: TypeName, is_nullable: bool, mutability: Mutability) -> 
 /// cast to: `struct (field $tag (i32)) (field $len (i32))`. `tag` is 0 for a
 /// leaf, 1 for a node, 2 for a sub; `len` is the carrier's element count, so
 /// `len` and the tag dispatch never force.
-pub fn rope_base_sub_type(tag_field: FieldName, len_field: FieldName) -> SubType {
+pub(crate) fn rope_base_sub_type(tag_field: FieldName, len_field: FieldName) -> SubType {
     SubType {
         is_final: false,
         super_types: vec![],
@@ -129,7 +129,7 @@ pub fn rope_base_sub_type(tag_field: FieldName, len_field: FieldName) -> SubType
 
 /// A rope leaf (`$bin/leaf` / `$lst/leaf`) — final, subtype of the base: adds
 /// the flat payload (`$bytes` / `$elems`).
-pub fn rope_leaf_sub_type(
+pub(crate) fn rope_leaf_sub_type(
     base_type: TypeName,
     tag_field: FieldName,
     len_field: FieldName,
@@ -154,7 +154,7 @@ pub fn rope_leaf_sub_type(
 /// two children and the memoization `cache`. All three are mutable and
 /// nullable: forcing writes the flat payload into `cache` and nulls the
 /// children, releasing the tree while the memo stays live.
-pub fn rope_node_sub_type(
+pub(crate) fn rope_node_sub_type(
     base_type: TypeName,
     tag_field: FieldName,
     len_field: FieldName,
@@ -185,7 +185,7 @@ pub fn rope_node_sub_type(
 /// `sub`'s base is always flat-available (a leaf, or a node whose `cache` is
 /// already set), enforced by the only constructor, the emitted `slice`
 /// helper.
-pub fn rope_sub_sub_type(
+pub(crate) fn rope_sub_sub_type(
     base_type: TypeName,
     tag_field: FieldName,
     len_field: FieldName,
@@ -205,7 +205,7 @@ pub fn rope_sub_sub_type(
 }
 
 /// `Cell` — a mutable reference cell: `struct (field $special (mut <top>))`.
-pub fn cell_sub_type(special_field: FieldName, top_type: ValType) -> SubType {
+pub(crate) fn cell_sub_type(special_field: FieldName, top_type: ValType) -> SubType {
     SubType {
         is_final: true,
         super_types: vec![],

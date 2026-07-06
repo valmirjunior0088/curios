@@ -17,8 +17,8 @@ use {
 /// J(x): tag = Eval(TplGet(x, 0)); Match(tag, {0 → s0, 1 → s1})
 /// ```
 ///
-/// `J` has two predecessors, so [`jump_threading`](super::jump_threading)
-/// refuses it; `x` is a block parameter, so [`constant_folding`]'s [`Lits`]
+/// `J` has two predecessors, so `jump_threading`
+/// refuses it; `x` is a block parameter, so `constant_folding`'s [`Lits`]
 /// never binds it and the match cannot be decided in place. Yet on each edge
 /// the outcome is fully determined.
 ///
@@ -28,7 +28,7 @@ use {
 /// to that edge — its prelude, the decided arm's subtree, and a tail that jumps
 /// straight to the selected arm. The original block stays for the edges that do
 /// not decide; once all of them thread, it goes unreferenced and
-/// [`dead_code_elimination`](super::dead_code_elimination) reclaims it.
+/// `dead_code_elimination` reclaims it.
 ///
 /// The pass itself only moves control-flow edges. The payoff lands in the
 /// settle round that follows it in the pipeline: copy propagation collapses the
@@ -40,14 +40,14 @@ use {
 ///
 /// The check reuses the folding machinery wholesale: a clone of the body-wide
 /// [`Lits`] is extended with `param ↦ lits[arg]` for each literal-bound
-/// argument, the target's value prelude is run through [`simplify`] to chase
+/// argument, the target's value prelude is run through `simplify` to chase
 /// projections and aliases (a `TplGet` of a known tuple yields its tag), and
-/// [`decide_match`] is asked for the taken arm. No decision, no clone — the
+/// `decide_match` is asked for the taken arm. No decision, no clone — the
 /// pass never duplicates code it cannot immediately collapse.
 ///
 /// ## Cloning and freshening
 ///
-/// The spliced clone is freshened with [`mangle::thread_suffix`], renaming only
+/// The spliced clone is freshened with `mangle::thread_suffix`, renaming only
 /// the names *bound inside* the target block (parameters, binders, and block
 /// names — [`harvest::bound_values`]/[`harvest::bound_blocks`]). Free names —
 /// enclosing-scope values, module consts, and outside block targets — keep
@@ -76,7 +76,7 @@ use {
 /// The same per-edge specialization devirtualizes an indirect call. The residue
 /// a closure-returning `match` leaves once its arms are lifted is a shared join
 /// whose tail is `%f(args)` with `%f` a *block parameter* — one of several known
-/// closures, depending on the edge, so [`closure_lifting`](super::closure_lifting)
+/// closures, depending on the edge, so `closure_lifting`
 /// (which only devirtualizes a callee that traces to a single known
 /// `Data::Clsr`) cannot resolve it:
 ///
@@ -105,13 +105,13 @@ use {
 ///   jump.
 /// - **Loops** — see termination above.
 /// - **Oversized clones** — a decided edge whose specialized clone measures
-///   over [`TAG_THREAD_BUDGET`] is declined: the join stays shared rather than
+///   over `TAG_THREAD_BUDGET` is declined: the join stays shared rather than
 ///   duplicating a large decision subtree per edge (nested joins would clone
 ///   what earlier threads already cloned, multiplying it). The exception is a
 ///   join whose *every* predecessor edge is a deciding `Jump` — threading them
 ///   all leaves the original unreferenced for dead-code elimination, so the
 ///   clones are net-neutral and the budget does not apply.
-pub fn thread_decided_dispatch(module: &mut Module) {
+pub(crate) fn thread_decided_dispatch(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         thread_tree(&mut func.region);
     }

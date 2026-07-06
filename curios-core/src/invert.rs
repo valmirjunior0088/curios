@@ -17,7 +17,7 @@ use {
 /// The outcome of inversion: either every index position decomposed (or
 /// refused) cleanly, yielding the forced arm-binder solutions, or some
 /// position clashed definitely and the arm is unreachable.
-pub enum Invert {
+pub(crate) enum Invert {
     Solved(Vec<(String, Term)>),
     Impossible,
 }
@@ -31,7 +31,7 @@ enum Step {
 
 /// Open a constructor's instantiated telescope with `vars` and read the
 /// terminal's index expressions.
-pub fn case_target_indices(telescope: Telescope<Term>, vars: &[Term]) -> Vec<Term> {
+pub(crate) fn case_target_indices(telescope: Telescope<Term>, vars: &[Term]) -> Vec<Term> {
     match telescope.open_params(vars) {
         Telescope::Done(terminal) => match &**terminal {
             Subterm::InductiveType(InductiveType { indices, .. }) => indices.clone(),
@@ -51,7 +51,7 @@ pub fn case_target_indices(telescope: Telescope<Term>, vars: &[Term]) -> Vec<Ter
 /// else — metavariables, opaque applications, key-shaped actuals at the top of
 /// a position (Rung B's territory) — it *refuses*: the arm stays mandatory and
 /// the binder unsolved.
-pub fn invert_indices(
+pub(crate) fn invert_indices(
     context: &mut Context,
     actuals: &[Term],
     targets: &[Term],

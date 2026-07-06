@@ -18,6 +18,7 @@ use rec::*;
 
 use curios_cont::{Func, FuncName, Module};
 
+/// Lower an (optimized) erased module into the continuation IR. The flat `items` list and the entrypoint `body` become the region of a single parameterless `main` — synchronous items are lowered inline into that top-level region, effectful ones through the CPS machinery — with every closure encountered split out as its own `Clsr` in the output module, and `main` set as its entry.
 pub fn to_cont(erased: &crate::Module) -> Module {
     let mut cont_module = Module::new();
 

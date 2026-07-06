@@ -5,6 +5,7 @@ use {
     std::{collections::BTreeMap, ops::Deref},
 };
 
+/// The unit of the surface syntax tree: a [`Subterm`] plus an optional source span. The span is deliberately excluded from `PartialEq` — tests build spanless expected trees and compare structure — and is readable only crate-internally; `Deref<Target = Subterm>` lets consumers match on the structure directly.
 #[derive(Debug, Clone)]
 pub struct Term {
     span: Option<Span>,
@@ -15,7 +16,7 @@ impl Term {
     /// Attaches a span to this term. If the term already carries a span (the
     /// innermost one), it is preserved — innermost wins, matching how
     /// `Error::at` keeps the first span it sees as errors propagate up.
-    pub fn with_span(mut self, span: Span) -> Self {
+    pub(crate) fn with_span(mut self, span: Span) -> Self {
         if self.span.is_none() {
             self.span = Some(span);
         }
@@ -23,15 +24,15 @@ impl Term {
         self
     }
 
-    pub fn span(&self) -> Option<&Span> {
+    pub(crate) fn span(&self) -> Option<&Span> {
         self.span.as_ref()
     }
 
-    pub fn into_subterm(self) -> Subterm {
+    pub(crate) fn into_subterm(self) -> Subterm {
         *self.inner
     }
 
-    pub fn as_subterm(&self) -> &Subterm {
+    pub(crate) fn as_subterm(&self) -> &Subterm {
         &self.inner
     }
 }
@@ -77,7 +78,7 @@ pub struct TupleTypeParam {
     /// `Some` for the signature sugar `label(params) -> type_` — the written
     /// parameter list, kept verbatim so the printer round-trips it. `to_core`
     /// undoes the sugar, lowering the field as `label : (params) -> type_`
-    /// (see [`TupleTypeParam::desugared_type`]). Always paired with a label.
+    /// (see `TupleTypeParam::desugared_type`). Always paired with a label.
     pub func_params: Option<Vec<FuncTypeParam>>,
     pub type_: Term,
 }
@@ -86,7 +87,7 @@ impl TupleTypeParam {
     /// The field's type with the signature sugar undone: the written type when
     /// the field is plain, the Π-type `(params) -> type_` when it was written
     /// `label(params) -> type_`.
-    pub fn desugared_type(&self) -> Term {
+    pub(crate) fn desugared_type(&self) -> Term {
         match &self.func_params {
             Some(params) => Subterm::FuncType(FuncType {
                 params: params.clone(),
@@ -98,17 +99,19 @@ impl TupleTypeParam {
     }
 }
 
+/// A Π-/function type `(x : A, @y : B) -> C(x)`: a dependent telescope of binders (see [`FuncTypeParam`]) and the output type, which may mention any named binder.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncType {
     pub params: Vec<FuncTypeParam>,
     pub output: Term,
 }
 
+/// A lambda `(x, (a, b) : P) => body`. Domain annotations are optional and parameters may be compound patterns — the field doc details how each lowers.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Func {
     /// Each parameter is a binder pattern with an optional domain annotation.
     /// `None` is the surface `(x) => …` form, sugar for `(x : _) => …`; it
-    /// lowers to a hole, solved by [`curios_core::elaborate`] against the
+    /// lowers to a hole, solved by `curios_core::elaborate` against the
     /// expected function type when the lambda is checked, or synthesized from
     /// the annotation when inferred. A compound (tuple/struct) pattern desugars
     /// at lowering into a fresh core binder plus a projection-`let` chain —
@@ -126,6 +129,7 @@ pub struct Apply {
     pub params: Vec<(Plicity, Term)>,
 }
 
+/// A Σ-/tuple type `(fst : A, snd : B(fst))`: a dependent telescope of fields — a later field's type may mention an earlier field's label. Its field grammar ([`TupleTypeParam`]) is also what `struct`/`record` declarations reuse.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleType {
     pub fields: Vec<TupleTypeParam>,
@@ -141,7 +145,7 @@ pub struct TupleField {
     /// `Some` for the definition sugar `label(params) = value` — the written
     /// parameter list, kept verbatim so the printer round-trips it. `to_core`
     /// undoes the sugar, lowering the field as `label = (params) => value`
-    /// (see [`TupleField::desugared_value`]). Always paired with a label.
+    /// (see `TupleField::desugared_value`). Always paired with a label.
     pub func_params: Option<Vec<(String, Option<Term>)>>,
     pub value: Term,
 }
@@ -150,7 +154,7 @@ impl TupleField {
     /// The field's value with the definition sugar undone: the written value
     /// when the field is plain, the lambda `(params) => value` when it was
     /// written `label(params) = value`.
-    pub fn desugared_value(&self) -> Term {
+    pub(crate) fn desugared_value(&self) -> Term {
         match &self.func_params {
             // This sugar's own parameter list stays plain-name-only (it is not
             // one of the pattern-accepting binder sites), so each name is
@@ -169,6 +173,7 @@ impl TupleField {
     }
 }
 
+/// A tuple / anonymous-record literal `(a, snd = b)` — see [`TupleField`] for the per-field grammar. Struct literals do not reuse this node: a named head is a [`StructLit`], validated against its declared type.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tuple {
     pub fields: Vec<TupleField>,
@@ -188,7 +193,7 @@ pub enum Pattern {
     /// Lowering mints a fresh internal name for it directly; `Some("_")` (a
     /// user actually typing the wildcard) goes through the same gensym path
     /// but is a distinct case, kept apart so an anonymous `use` binder lowers
-    /// its Π-type binder as truly unlabeled (see [`LetSignature::type_`])
+    /// its Π-type binder as truly unlabeled (see `LetSignature::type_`)
     /// rather than as a Π-binder spelled `"_"`.
     Binder(Option<String>),
     Tuple(Vec<PatternField>),
@@ -235,6 +240,7 @@ pub enum Motive {
     },
 }
 
+/// A `Nat` match, in its two surface forms. `Induction` is the structural `| 0 => … | n + 1; ih => …` split, with the induction hypothesis bound in the successor arm (mandatory, unlike `Lst`/`Bin`'s optional `; ih`). `Dispatch` is literal dispatch — `u32` literal cases plus a mandatory default arm — for matching specific numerals without peeling one successor at a time.
 #[derive(Debug, Clone, PartialEq)]
 pub enum NatMatch {
     Induction {
@@ -253,6 +259,7 @@ pub enum NatMatch {
     },
 }
 
+/// A `Bln` case split: `match b | false => … | true => …`, both arms structurally mandatory (the hardcoded carriers have no core-side exhaustiveness mechanism to fall back on). `Bln` has no recursive structure, so unlike its `Nat`/`Lst`/`Bin` siblings there is no induction-hypothesis form at all.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlnMatch {
     pub head: Term,
@@ -305,6 +312,7 @@ pub enum Field {
     Label(String),
 }
 
+/// A projection `head.field` out of a tuple/struct value — positional (`p.0`) or by label (`p.status`), see [`Field`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct Proj {
     pub head: Term,
@@ -338,6 +346,7 @@ pub struct StructLit {
     pub entries: Vec<StructLitEntry>,
 }
 
+/// The general pattern match: one scrutinee and arms of arbitrary (nested, across constructors, tuples, structs, and the four literal-carrier leaves) [`MatchPattern`]s, compiled by the pattern-matrix scheme in `to_core::matrix` into the same single-level core match/projection forms a person would get from hand-nesting matches.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatrixMatch {
     pub head: Term,
@@ -362,6 +371,7 @@ pub struct MatrixArm {
     pub body: Term,
 }
 
+/// A surface `match`, split by what the arms dispatch on: the four hardcoded carriers (`Bln`, `Nat`, `Lst`, `Bin`) each get a fixed-shape variant whose arms are exactly the carrier's own cases, while constructor-tag dispatch — including nested and tuple/struct patterns — is the general [`MatrixMatch`]. The parser classifies by arm shape, and each variant lowers through a different core elimination form.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Match {
     Bln(BlnMatch),
@@ -468,7 +478,7 @@ impl MatchPattern {
     /// [`std::mem::discriminant`] comparison on the outer variant already
     /// treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same
     /// dispatchable shape, with no separate classifier needed.
-    pub fn is_dispatchable(&self) -> bool {
+    pub(crate) fn is_dispatchable(&self) -> bool {
         !matches!(
             self,
             MatchPattern::Binder(_) | MatchPattern::Tuple(_) | MatchPattern::Struct { .. }
@@ -489,7 +499,7 @@ pub struct MatchPatternField {
 /// A plain-name (`Pattern::Binder`) label flows into both the Π-type binder
 /// and the lambda parameter, exactly as before. A compound (tuple/struct)
 /// pattern has no single name to give the Π-type binder, so it lowers to an
-/// *anonymous* Π-binder (see [`LetSignature::type_`]) — its destructured
+/// *anonymous* Π-binder (see `LetSignature::type_`) — its destructured
 /// leaves are visible only in the function's value body, never in a later
 /// parameter's type or the output type.
 #[derive(Debug, Clone, PartialEq)]
@@ -499,6 +509,7 @@ pub struct FuncSugarParam {
     pub type_: Term,
 }
 
+/// The right-hand side shared by every `let`-like binding site (local [`Let`], top-level [`TopLet`](crate::TopLet), [`RecItem`]): a plain annotated body, or the function-definition sugar `f(x : T, …) -> R = body`, kept verbatim so the printer round-trips it. Lowering undoes the sugar through the crate-internal `type_()`/`body()` accessors — the type becomes a Π-type, the body a lambda binding every parameter.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LetSignature {
     Name {
@@ -516,7 +527,7 @@ pub enum LetSignature {
 }
 
 impl LetSignature {
-    pub fn type_(&self) -> Term {
+    pub(crate) fn type_(&self) -> Term {
         match self {
             LetSignature::Name {
                 type_: Some(type_), ..
@@ -547,7 +558,7 @@ impl LetSignature {
         }
     }
 
-    pub fn body(&self) -> Term {
+    pub(crate) fn body(&self) -> Term {
         match self {
             LetSignature::Name { body, .. } => body.clone(),
             // The lambda binds every parameter, implicit or not — plicity is a
@@ -564,6 +575,7 @@ impl LetSignature {
     }
 }
 
+/// A local `let …; tail`: one binding in scope for `tail` only. The only `let` position where the type annotation may be omitted (`LetSignature::Name` with `type_: None`) — top-level `let` and every `rec` item always carry one.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Let {
     /// The bound pattern — `let x = …`, `let (x, y) = …`, or the `f` in the
@@ -577,12 +589,14 @@ pub struct Let {
     pub tail: Term,
 }
 
+/// One definition of a [`Rec`] block: a plain label (no destructuring — the binding must be nameable in its siblings' bodies) and its signature, whose type annotation the parser makes mandatory here.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RecItem {
     pub label: String,
     pub signature: LetSignature,
 }
 
+/// A local `rec` block: a group of mutually recursive definitions, each in scope of every other and of `tail`. Unlike `let` there is no pattern binder or omitted annotation — every item is a plain label with a mandatory type (a recursive reference's type cannot be inferred from a body that mentions it).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rec {
     pub items: Vec<RecItem>,
@@ -613,6 +627,7 @@ pub struct NumLit {
     pub negative: bool,
 }
 
+/// The term grammar proper, one variant per surface form. Spanless by design — a location rides on the wrapping [`Term`] — so `PartialEq` compares structure alone; bare terms are built via `From<Subterm> for Term`. Most variants lower one-to-one onto a core counterpart in `to_core`; the ones that exist only in the surface language are documented on their variants below.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Subterm {
     Type,

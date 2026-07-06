@@ -44,7 +44,7 @@ pub struct Concept {
 /// that definition's elaborated type `∀ tele. C(t₁, …)`. Resolution
 /// instantiates the telescope fresh at every use.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Witness {
+pub(crate) struct Witness {
     pub name: String,
     pub signature: Term,
     /// The compilation root that declares this witness — consulted by the
@@ -118,7 +118,7 @@ impl HeadKey {
     /// its *body* supplies the key, so `Monad(Option)` keys on `Option`.
     /// `None` for anything else — variables, metavariables, Π/Σ types,
     /// `Type`/`Prop` — which are not keyable.
-    pub fn of_whnf(term: &Term) -> Option<HeadKey> {
+    pub(crate) fn of_whnf(term: &Term) -> Option<HeadKey> {
         match &**term {
             Subterm::InductiveType(inductive) => Some(HeadKey::Nominal(inductive.name.clone())),
             Subterm::StructType(structure) => Some(HeadKey::Nominal(structure.name.clone())),

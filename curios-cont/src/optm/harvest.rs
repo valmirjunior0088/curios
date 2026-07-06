@@ -1,7 +1,7 @@
 use {super::*, std::collections::HashSet};
 
 /// Every `ValueName` used (in operand position) anywhere in a region tree.
-pub fn value_uses(region: &Region) -> HashSet<ValueName> {
+pub(crate) fn value_uses(region: &Region) -> HashSet<ValueName> {
     let mut uses = Uses(HashSet::new());
     walk_region(region, &mut uses);
 
@@ -19,14 +19,14 @@ impl Sink for Uses {
 /// The functions, closures, and value names referenced by a region tree —
 /// everything needed to decide what a region keeps alive.
 #[derive(Default)]
-pub struct Refs {
+pub(crate) struct Refs {
     pub funcs: HashSet<FuncName>,
     pub clsrs: HashSet<ClsrName>,
     pub values: HashSet<ValueName>,
 }
 
 /// Harvest all three reference kinds in a single walk.
-pub fn region_refs(region: &Region) -> Refs {
+pub(crate) fn region_refs(region: &Region) -> Refs {
     let mut refs = Refs::default();
     walk_region(region, &mut refs);
 
@@ -36,7 +36,7 @@ pub fn region_refs(region: &Region) -> Refs {
 /// The value and closure references held by a single `Data` — used to follow the
 /// edges out of a module-level const (a const aggregate can name other consts; a
 /// const `Data::Clsr` names a closure), which a region walk never reaches.
-pub fn data_refs(data: &Data) -> Refs {
+pub(crate) fn data_refs(data: &Data) -> Refs {
     let mut refs = Refs::default();
     walk_data_refs(data, &mut refs);
 
@@ -63,7 +63,7 @@ impl Sink for Refs {
 /// clones a subtree and must separate its bound names from its free ones
 /// (a free name is an enclosing-scope or module-const reference and must not
 /// be renamed).
-pub fn bound_values(region: &Region) -> HashSet<ValueName> {
+pub(crate) fn bound_values(region: &Region) -> HashSet<ValueName> {
     let mut bound = HashSet::new();
     collect_bound_values(region, &mut bound);
 
@@ -92,7 +92,7 @@ fn collect_bound_values(region: &Region, bound: &mut HashSet<ValueName>) {
 /// one per tail, recursively through nested blocks. Cheap, monotonic, and
 /// tracks emitted code size closely enough to gate size-bounded duplication —
 /// Tier 2 multi-site inlining and tag-threading clones share it.
-pub fn region_size(region: &Region) -> usize {
+pub(crate) fn region_size(region: &Region) -> usize {
     region.values.len()
         + region.preallocs.len()
         + 1
@@ -106,7 +106,7 @@ pub fn region_size(region: &Region) -> usize {
 /// Every block name *defined* in a region tree — the block-name mirror of
 /// [`bound_values`]. A block reference not in this set points outside the
 /// tree (an enclosing-scope block or a resume sentinel).
-pub fn bound_blocks(region: &Region) -> HashSet<BlockName> {
+pub(crate) fn bound_blocks(region: &Region) -> HashSet<BlockName> {
     let mut bound = HashSet::new();
     collect_bound_blocks(region, &mut bound);
 

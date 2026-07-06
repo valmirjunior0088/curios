@@ -23,8 +23,8 @@ impl RootId {
     /// `Cell`) have no textual declaration of their own to stamp a root onto
     /// — they are simply defined to be `/sys`-owned for orphan-rule purposes.
     pub const SYS: RootId = RootId(0);
-    pub const SYN: RootId = RootId(1);
-    pub const STD: RootId = RootId(2);
+    pub(crate) const SYN: RootId = RootId(1);
+    pub(crate) const STD: RootId = RootId(2);
 
     /// The first id available to a compilation's non-fixed roots (the entry
     /// program, and later a package manager's resolved dependencies).
@@ -37,7 +37,7 @@ impl RootId {
     }
 
     /// The entry program's fixed id — today the only dynamic root.
-    pub const ENTRY: RootId = RootId::dynamic(0);
+    pub(crate) const ENTRY: RootId = RootId::dynamic(0);
 
     /// The `RootId` a qualified name's leading path segment names — the
     /// single source of truth every consumer classifies a root by, replacing
@@ -103,7 +103,7 @@ impl RootKind {
 /// A single compilation's full root roster: the fixed `sys`/`syn`/`std` trio
 /// plus every named path dependency this compilation was given, each
 /// assigned a stable `RootId`. The entry program is deliberately *not* a
-/// roster entry — [`Roster::resolve`] falls back to [`RootId::ENTRY`] for
+/// roster entry — [`Roster::resolve`] falls back to `RootId::ENTRY` for
 /// any name it doesn't recognize, exactly as [`RootId::of_segment`]'s old
 /// fallback did, so the entry program's own qualifier (and every submodule
 /// it declares under an unreserved name) keeps resolving correctly without
@@ -141,7 +141,7 @@ impl Roster {
     }
 
     /// The `RootId` a qualifier's leading segment names: a recognized
-    /// root's own id, or [`RootId::ENTRY`] for anything else.
+    /// root's own id, or `RootId::ENTRY` for anything else.
     pub fn resolve(&self, segment: &str) -> RootId {
         self.by_name.get(segment).map_or(RootId::ENTRY, |root| root.id)
     }

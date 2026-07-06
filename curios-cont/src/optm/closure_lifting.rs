@@ -41,7 +41,7 @@ use {
 /// with the fields threaded as leading arguments. This is what later lets the
 /// recursion be seen as a direct self-cycle (and converted to a loop) instead
 /// of hiding behind the closure value forever.
-pub fn lift_closures(module: &mut Module) {
+pub(crate) fn lift_closures(module: &mut Module) {
     let self_captures = self_capture_fields(module);
     let mut to_lift = HashSet::new();
 

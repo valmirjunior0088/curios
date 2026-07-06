@@ -19,7 +19,7 @@ enum Solved {
     Failed,
 }
 
-pub fn convert(
+pub(crate) fn convert(
     context: &mut Context,
     type_: &Term,
     this: &Term,
@@ -35,7 +35,7 @@ pub fn convert(
     ))
 }
 
-pub fn convert_outcome(
+pub(crate) fn convert_outcome(
     context: &mut Context,
     type_: &Term,
     this: &Term,
@@ -47,7 +47,7 @@ pub fn convert_outcome(
 /// The verdict of a conversion run, distinguishing "provably unequal" from
 /// "not yet decidable" (§8).
 #[derive(Debug)]
-pub enum Outcome {
+pub(crate) enum Outcome {
     /// Definitionally equal.
     Converts,
     /// A hard structural mismatch — provably unequal, no solution can help.
@@ -252,15 +252,16 @@ impl Sort {
     }
 }
 
+/// One conversion constraint, `this ≡ that : type_` (comparison is type-directed: the type drives η-expansion and proof irrelevance). Public because a [`Outcome::Blocked`] verdict surrenders its still-blocked goals to the caller, which parks them on the [`Context`] (as `ParkedWork::Conversion`) for retry once a watched metavariable is solved.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Goal {
+pub(crate) struct Goal {
     pub type_: Term,
     pub this: Term,
     pub that: Term,
 }
 
 #[derive(Debug)]
-pub struct Convert {
+pub(crate) struct Convert {
     history: HashSet<Goal>,
     pending: VecDeque<Goal>,
     // Constraints postponed because a side is flexible but not yet solvable
@@ -286,7 +287,7 @@ impl Convert {
         !self.history.insert(goal.clone())
     }
 
-    pub fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
+    pub(crate) fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
         self.pending.push_back(Goal { type_, this, that });
     }
 

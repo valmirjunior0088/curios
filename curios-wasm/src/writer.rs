@@ -1239,6 +1239,7 @@ where
     }
 }
 
+/// Encodes a [`Module`] to the wasm binary format. This is where the crate's symbolic names become numbers: a resolution table is built once from the module's declaration order (imports leading), every name in the tree is resolved through it — a dangling reference panics with the missing name — and a trailing custom name section records the module, function, local, type, and field names so disassemblers and profilers show the same identifiers the compiler emitted.
 pub fn to_bytes(module: &Module) -> Vec<u8> {
     let mut bytes = Vec::new();
 

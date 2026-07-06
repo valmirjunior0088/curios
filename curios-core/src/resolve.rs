@@ -33,7 +33,7 @@ use {
 };
 
 /// The outcome of one resolution attempt.
-pub enum Resolution {
+pub(crate) enum Resolution {
     /// A witness term for the goal; solutions its unification committed stay.
     Solved(Term),
     /// The goal's key is still flexible — park, watching its metavariables.
@@ -127,7 +127,7 @@ fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<
 
 /// Run the resolution algorithm for `goal`. `origin` anchors spans and parked
 /// premise goals. Solutions committed by a successful match stay in force.
-pub fn resolve_witness(
+pub(crate) fn resolve_witness(
     context: &mut Context,
     goal: &Term,
     origin: &Term,
@@ -440,7 +440,7 @@ fn instantiate(
 /// Attempt a freshly minted witness goal: solve it now, park it on a flex
 /// key, or defer it on a missing table entry. A definite failure is an error
 /// at `origin`'s span.
-pub fn attempt_witness_goal(
+pub(crate) fn attempt_witness_goal(
     context: &mut Context,
     slot: MetavarId,
     goal: &Term,
@@ -485,7 +485,7 @@ pub fn attempt_witness_goal(
 
 /// Retry a parked or deferred witness goal under its frozen frame. Called by
 /// `retry_parked`'s wake path and the deferred-goal sweeps.
-pub fn retry_witness(
+pub(crate) fn retry_witness(
     context: &mut Context,
     slot: MetavarId,
     goal: Term,
@@ -537,7 +537,7 @@ pub fn retry_witness(
 /// Retry every deferred witness goal — after an item, when new witnesses may
 /// have registered. Goals that stay unresolvable re-defer; solutions that land
 /// wake parked constraints.
-pub fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
+pub(crate) fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
     let deferred = context.take_deferred_witnesses();
     if deferred.is_empty() {
         return Ok(());
@@ -567,7 +567,7 @@ pub fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
 /// The end-of-module sweep: retry once more, then report any survivor — the
 /// whole program has elaborated, so a still-missing table entry will never
 /// register.
-pub fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
+pub(crate) fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
     retry_deferred_witnesses(context)?;
 
     if let Some(parked) = context.take_deferred_witnesses().into_iter().next() {
@@ -595,7 +595,7 @@ pub fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
 /// own precomputed root (consulted by the orphan-rule check below, never
 /// re-derived here). Registration ignores `pub`: visibility governs the
 /// name, never table membership.
-pub fn register_witness(
+pub(crate) fn register_witness(
     context: &mut Context,
     name: &str,
     signature: &Term,
@@ -751,7 +751,7 @@ pub fn register_witness(
 
 /// Validate the seeded concept registry: every superclass edge targets a
 /// registered, different concept, and the graph is acyclic.
-pub fn check_concept_registry(context: &Context) -> Result<(), Error> {
+pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
     let concepts = context.concepts();
 
     for (name, concept) in concepts {

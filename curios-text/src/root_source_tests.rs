@@ -76,8 +76,7 @@ fn an_unregistered_qualifier_falls_through_to_base() {
 
     let error = source
         .load(&Qualifier::from(["bar".to_string()]))
-        .err()
-        .expect("bar is not a registered dependency");
+        .expect_err("bar is not a registered dependency");
 
     assert!(matches!(error, Error::ModuleNotFound { .. }));
 }

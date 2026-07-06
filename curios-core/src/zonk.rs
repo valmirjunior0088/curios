@@ -17,11 +17,11 @@ use {
 /// Substitution replaces a metavariable node by its solution. A solution is
 /// spelled with the birth telescope's names and is *not* in general a closed
 /// term; the occurrence's spine (its delayed substitution) records what each
-/// birth binder corresponds to at the splice site, so [`zonk_term`] resolves
+/// birth binder corresponds to at the splice site, so `zonk_term` resolves
 /// by rewriting the solution through it. Every solved occurrence carries its
 /// spine — `elaborate_apply` opens telescopes with rebuilt arguments, so no
 /// bare copy of a birthed hole survives to be spliced.
-pub fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
+pub(crate) fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
     zonk_term(context, term)
 }
 

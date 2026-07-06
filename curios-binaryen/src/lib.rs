@@ -8,6 +8,7 @@ mod sys;
 
 use std::{ptr, slice, sync::Mutex};
 
+/// Run Binaryen's whole-module optimizer over serialized module bytes (optimize level 2, shrink level 1, closed world) and return the re-encoded binary. The feature set is pinned to exactly what the emitter produces and Wasmtime's engine enables, so the optimizer can never introduce a post-GC proposal the runtime rejects. Safe to call concurrently — Binaryen's settings are process-global and its optimizer is not thread-safe, so calls serialize behind an internal lock — but `bytes` must be a well-formed module: Binaryen aborts the process on malformed input instead of returning an error, which is acceptable only because the input always comes from `wasm::to_bytes`.
 pub fn optimize(mut bytes: Vec<u8>) -> Vec<u8> {
     // Binaryen's optimize/shrink/closed-world settings are process-global
     // and its optimizer is not thread-safe across modules, so the whole

@@ -75,8 +75,8 @@ fn scan_region(region: &Region, scan: &mut BodyScan) {
 
 /// The pure `FuncName`s and `ClsrName`s — every body that has no host code, no
 /// `Indirect` call, no `Direct` call to an impure target, and constructs no
-/// impure closure (transitively). One [`classify`] fixed point serves both sets.
-pub fn purity(module: &Module) -> (HashSet<FuncName>, HashSet<ClsrName>) {
+/// impure closure (transitively). One `classify` fixed point serves both sets.
+pub(crate) fn purity(module: &Module) -> (HashSet<FuncName>, HashSet<ClsrName>) {
     let (impure_funcs, impure_clsrs) = classify(module);
 
     let pure_funcs = module

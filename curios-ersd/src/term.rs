@@ -6,21 +6,23 @@ use {
     },
 };
 
+/// An owned term of the erased IR: the boxed handle around one [`Subterm`] (it `Deref`s to it; build one with `Subterm::….into()`). Deliberately not `Clone` — a pass that wants a copy must route through `optm`'s `deep_copy`, so duplicating a term is a conscious act rather than an accidental `.clone()`.
 #[derive(Debug)]
 pub struct Term {
     inner: Box<Subterm>,
 }
 
 impl Term {
+    /// Unbox into the owned [`Subterm`] — the by-value counterpart of the `Deref` view, for consumers that take a term apart to rebuild it (e.g. `optm::worker_wrapper`'s body splitter).
     pub fn into_subterm(self) -> Subterm {
         *self.inner
     }
 
-    pub fn as_subterm(&self) -> &Subterm {
+    pub(crate) fn as_subterm(&self) -> &Subterm {
         &self.inner
     }
 
-    pub fn as_subterm_mut(&mut self) -> &mut Subterm {
+    pub(crate) fn as_subterm_mut(&mut self) -> &mut Subterm {
         &mut self.inner
     }
 
@@ -118,7 +120,7 @@ impl Term {
     /// `optm::worker_wrapper` (whose `MonoidAccumulator` gate rejects an
     /// absorbed context that is not pure). The transitive half — following an
     /// `Apply` to another module item — lives in `optm::call_graph`.
-    pub fn contains_effect(&self) -> bool {
+    pub(crate) fn contains_effect(&self) -> bool {
         match self.as_subterm() {
             Subterm::Prim(prim) => {
                 prim.is_effectful() || prim.operands().iter().any(|t| t.contains_effect())
@@ -161,7 +163,7 @@ impl Term {
     /// atom, allocated without evaluating an effect. `to_cont` lowers such terms
     /// into the flat top-level loop rather than the CPS path, and `optm::prune`
     /// keeps a non-synchronous tainted item for its eager init effect.
-    pub fn is_synchronous(&self) -> bool {
+    pub(crate) fn is_synchronous(&self) -> bool {
         matches!(
             self.as_subterm(),
             Subterm::Func(_)
@@ -189,6 +191,7 @@ impl From<Subterm> for Term {
     }
 }
 
+/// The two erased shapes of a `Nat` eliminator (and, through the length desugaring, of the `Lst`/`Bin` eliminators too). `Induction` is a genuine fold — `succ_case` binds the predecessor `pred` and the induction hypothesis `ih`, and lowers to an n-iteration loop. `Dispatch` is a literal-keyed switch with a `default` arm: the form `switch` matches erase to, and what the case-split erasure emits as a single peel when the successor arm ignores its `ih` (emitting a fold there would make a re-recursing caller O(2^n)).
 #[derive(Debug)]
 pub enum NatMatch {
     Induction {
@@ -226,11 +229,12 @@ impl<S: Into<String>> From<S> for Argument {
 }
 
 impl Argument {
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.name
     }
 }
 
+/// A closure with its environment made explicit: `params` is the uncurried runtime parameter telescope (erasable binders already dropped) and `captures` is exactly the erased body's free names minus those params — precomputed by erasure and thereafter maintained by hand, since [`Term::free_names`] reads a `Func`'s capture list *instead of* descending into its body. A rewrite that changes which names the body frees must refresh the captures (`optm`'s `refresh_captures`) or the closure threads the wrong environment.
 #[derive(Debug)]
 pub struct Func {
     pub captures: Vec<Argument>,
@@ -238,34 +242,40 @@ pub struct Func {
     pub body: Term,
 }
 
+/// Application of `head` to its full argument list — saturated against the callee's type, with arguments in erasable (proof/type) slots already dropped by erasure, so `params` lines up one-to-one with the callee [`Func`]'s `params`.
 #[derive(Debug)]
 pub struct Apply {
     pub head: Term,
     pub params: Vec<Term>,
 }
 
+/// The one aggregate data shape of the erased IR: a flat record of runtime-relevant fields. An inductive value is its constructor's [`Atom`] tag at field 0 followed by the kept payload fields; a multi-field struct is the fields alone (tagless). A single-field struct never reaches here — it erases to its bare field.
 #[derive(Debug)]
 pub struct Tuple {
     pub fields: Vec<Term>,
 }
 
+/// Positional field read `head.(index)`. On a variant tuple field 0 is the tag, so payload projections start at 1 — and since erasable payload fields are absent from the runtime tuple, a binder's slot is 1 plus the count of *relevant* fields before it, not its source position.
 #[derive(Debug)]
 pub struct Proj {
     pub head: Term,
     pub index: usize,
 }
 
+/// A constructor tag: the constructor's index within its inductive. Erasure seats one at field 0 of every variant [`Tuple`], and [`Match`] dispatches on it.
 #[derive(Debug, Clone, Copy)]
 pub struct Atom {
     pub index: usize,
 }
 
+/// Constructor dispatch: `head` evaluates to an [`Atom`] and selects `cases` positionally by its index. There is exactly one case per constructor of the scrutinee's inductive — an arm elaboration proved impossible still occupies its slot, as `Unreachable`. Payload access is not part of the node: erasure let-binds the scrutinee and each arm projects the fields it uses from that binding.
 #[derive(Debug)]
 pub struct Match {
     pub head: Term,
     pub cases: Vec<Term>,
 }
 
+/// A sequential binding: evaluate `body` — performing any effect it contains — then run `tail` with the result in scope as `name`. Beyond user `let`s, erasure leans on it for sharing: a matched scrutinee is bound once, then dispatched on and projected from many times without re-evaluating.
 #[derive(Debug)]
 pub struct Let {
     pub name: String,
@@ -273,6 +283,7 @@ pub struct Let {
     pub tail: Term,
 }
 
+/// A block of mutually-recursive bindings: `names` and `items` are parallel vectors, every name in scope in every item and in `tail`. The local twin of the top-level `Item::Rec`; `to_cont` computes the group's initialization order from the dependency graph over each item's [`Term::free_names`].
 #[derive(Debug)]
 pub struct Rec {
     pub names: Vec<String>,
@@ -280,6 +291,7 @@ pub struct Rec {
     pub tail: Term,
 }
 
+/// One node of the erased term language. Control is [`Match`]/[`NatMatch`]/[`Let`]/[`Rec`], data is [`Tuple`]/[`Atom`]/[`Proj`] plus the [`Prim`] alphabet, and [`Func`]/[`Apply`] carry closures with explicit captures. `Erased` is the residue a proof or type leaves behind in a relevant slot (never inspected at runtime), and `Unreachable` is a trap seated where elaboration proved an arm impossible. [`Term`] is the boxed handle; build one with `Subterm::….into()`.
 #[derive(Debug)]
 pub enum Subterm {
     Erased,

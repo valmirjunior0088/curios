@@ -1872,7 +1872,7 @@ fn elaborate_metavar(
 /// `(label, type)` entries alongside the telescope's terminal — opened under
 /// those binders. Runs in the caller's frame; the same gensym-then-relabel
 /// discipline as `elaborate_tuple_type`.
-pub fn check_telescope_entries<B: Bound>(
+pub(crate) fn check_telescope_entries<B: Bound>(
     context: &mut Context,
     mut telescope: Telescope<B>,
 ) -> Result<(Vec<(String, Term)>, B), Error> {
@@ -2015,7 +2015,7 @@ fn insert_implicits_on_check(
     Ok((Term::func(binders, body), func_type))
 }
 
-pub fn elaborate(context: &mut Context, term: &Term, mode: Mode) -> Result<(Term, Term), Error> {
+pub(crate) fn elaborate(context: &mut Context, term: &Term, mode: Mode) -> Result<(Term, Term), Error> {
     let result = elaborate_subterm(context, term, mode);
 
     // Carry the source span onto the rebuilt term as well as onto any error, so

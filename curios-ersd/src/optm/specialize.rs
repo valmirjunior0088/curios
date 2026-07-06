@@ -49,7 +49,7 @@ const MAX_SPECIALIZATIONS: usize = 64;
 const MAX_SPINE_NODES: usize = 256;
 
 /// Specialize every eligible call site, module-wide.
-pub fn specialize_literal_spines(module: &mut Module) {
+pub(crate) fn specialize_literal_spines(module: &mut Module) {
     let plan = plan(module);
     apply(module, plan);
 }

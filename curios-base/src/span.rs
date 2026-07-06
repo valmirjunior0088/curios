@@ -1,5 +1,6 @@
 use std::{fs, io, path::PathBuf, rc::Rc};
 
+/// One unit of input text — a file with its path, or pathless inline text — always handed out as `Rc<Source>` so every [`Span`] into it shares the one allocation instead of copying or re-reading the text.
 #[derive(Debug)]
 pub struct Source {
     pub path: Option<PathBuf>,
@@ -7,13 +8,14 @@ pub struct Source {
 }
 
 impl Source {
-    pub fn new(path: impl Into<PathBuf>, text: impl Into<String>) -> Rc<Self> {
+    pub(crate) fn new(path: impl Into<PathBuf>, text: impl Into<String>) -> Rc<Self> {
         Rc::new(Self {
             path: Some(path.into()),
             text: text.into(),
         })
     }
 
+    /// A source with no backing file — embedded or test input handed to a parser as a bare string. Its diagnostics render the snippet without a file-location header.
     pub fn inline(text: impl Into<String>) -> Rc<Self> {
         Rc::new(Self {
             path: None,
@@ -21,6 +23,7 @@ impl Source {
         })
     }
 
+    /// Loads the file at `path` as a source, keeping the path so diagnostics can print a `--> path:line` header.
     pub fn read(path: impl Into<PathBuf>) -> io::Result<Rc<Self>> {
         let path = path.into();
         let text = fs::read_to_string(&path)?;
@@ -29,6 +32,7 @@ impl Source {
     }
 }
 
+/// A half-open byte range `[start, end)` into a shared [`Source`] — how every pipeline stage points a diagnostic back at the text that caused it. Equality and hashing identify the source by `Rc` pointer rather than content, so spans from separately loaded sources never alias even when their texts match, and hashing never walks the text.
 #[derive(Debug, Clone)]
 pub struct Span {
     pub source: Rc<Source>,
@@ -55,10 +59,11 @@ impl std::hash::Hash for Span {
 }
 
 impl Span {
-    pub fn new(source: Rc<Source>, start: usize, end: usize) -> Self {
+    pub(crate) fn new(source: Rc<Source>, start: usize, end: usize) -> Self {
         Self { source, start, end }
     }
 
+    /// Renders the span as a compiler diagnostic: a `--> path:line` header when the source is a file (omitted for inline sources), the 1-based-numbered source line containing the span's start, and a caret underline. The underline is clamped to that first line and is at least one `^` wide, so multi-line and empty spans still point somewhere visible.
     pub fn render_snippet(&self) -> String {
         let source = &self.source.text;
         let start = self.start;

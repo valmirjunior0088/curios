@@ -1,3 +1,5 @@
+//! The `curios` CLI. Three modes: `run` compiles a `.crs` entrypoint and executes it in-process, forwarding the trailing arguments as the program's argv (input path as argv[0]) and its exit code as the process's; `check` type-checks only, falling through to the full pipeline just when `--print` requests a post-core stage that type-checking never produces; `compile` emits a self-contained native executable (the embedded launcher stub with the `.cwasm` payload appended). Argument parsing lives in `cli`, stage printing and file loading in `pipeline`, executable emission in `bundle` — this file only dispatches, mapping any error to stderr and a failure exit.
+
 mod bundle;
 mod cli;
 mod pipeline;

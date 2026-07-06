@@ -36,7 +36,7 @@ enum Tier {
 ///   is spliced at that one site with the bare `@{callee}` suffix. The callee
 ///   becomes dead and is dropped in the same iteration.
 /// - **Tier 2 (multi-site, size-bounded)** — a callee whose body size is at
-///   most [`SIZE_THRESHOLD`] and that does not participate in a direct-call
+///   most `SIZE_THRESHOLD` and that does not participate in a direct-call
 ///   cycle is spliced at *every* site with a per-site suffix `@{callee}#{n}`,
 ///   then dropped. This dissolves the dozen tiny primitive wrappers
 ///   (`Bin.concat`, `Nat.to_str`, …) the higher-level passes leave behind.
@@ -58,7 +58,7 @@ enum Tier {
 /// it across every inline pass, so a given site number is never reused — not
 /// within a pass, and not when a re-lifted closure is inlined by a later pass.
 /// That uniqueness is load-bearing: a duplicate block name would corrupt
-/// [`dead_code_elimination`](super::dead_code_elimination)'s name-keyed
+/// `dead_code_elimination`'s name-keyed
 /// reachability and silently prune a live block.
 ///
 /// # Resume stitching is a rename
@@ -76,22 +76,19 @@ enum Tier {
 /// excluded from both tiers. Every other iteration either deletes one callee
 /// (Tier 1 splices once; Tier 2 splices `count` times) and strictly shrinks
 /// `Module::funcs`, or selects no candidate and returns.
-pub fn inline_calls(module: &mut Module) {
-    inline_calls_with(module, &Entropy::new());
-}
-
-/// As [`inline_calls`], but drawing the freshening suffix from a caller-owned
-/// [`Entropy`] gensym so every splice's `@{callee}#{n}` is globally distinct.
 ///
-/// The pipeline runs inlining several times. A closure can be lifted and inlined in
+/// # Shared gensym across passes
+///
+/// The freshening suffix is drawn from a caller-owned [`Entropy`] gensym so
+/// every splice's `@{callee}#{n}` is globally distinct. The pipeline runs inlining several times. A closure can be lifted and inlined in
 /// one pass, removed, then *re-lifted* by a later pass (devirtualization re-creates
 /// its `@lifted` function) and inlined again. With a counter local to each pass, the
 /// second inline restarts numbering and its fresh blocks collide with the first
 /// inline's surviving copies — a duplicate block name, which silently corrupts
-/// [`dead_code_elimination`](super::dead_code_elimination)'s name-keyed reachability
+/// `dead_code_elimination`'s name-keyed reachability
 /// index (it assumes names are unique) and prunes a still-referenced block. A shared
 /// gensym hands every splice — across every pass — its own never-recurring id.
-pub fn inline_calls_with(module: &mut Module, entropy: &Entropy) {
+pub(crate) fn inline_calls_with(module: &mut Module, entropy: &Entropy) {
     loop {
         let counts = direct_call_counts(module);
         let graph = call_graph(module);
@@ -495,7 +492,7 @@ mod tests {
         module.add_func(FuncName::from("main"), main_calling("f", vec![v("a")]));
         module.add_func(FuncName::from("f"), f);
 
-        inline_calls(&mut module);
+        inline_calls_with(&mut module, &Entropy::new());
 
         // f is consumed and removed.
         assert!(func_named(&module, "f").is_none());
@@ -552,7 +549,7 @@ mod tests {
         module.add_func(FuncName::from("main"), main_calling("g", vec![v("a")]));
         module.add_func(FuncName::from("g"), g);
 
-        inline_calls(&mut module);
+        inline_calls_with(&mut module, &Entropy::new());
 
         let region = main_region(&module);
 
@@ -622,7 +619,7 @@ mod tests {
         module.add_func(FuncName::from("main"), main);
         module.add_func(FuncName::from("f"), f);
 
-        inline_calls(&mut module);
+        inline_calls_with(&mut module, &Entropy::new());
 
         // f is consumed and dropped.
         assert!(func_named(&module, "f").is_none());
@@ -688,7 +685,7 @@ mod tests {
         module.add_func(FuncName::from("main"), main);
         module.add_func(FuncName::from("f"), f);
 
-        inline_calls(&mut module);
+        inline_calls_with(&mut module, &Entropy::new());
 
         assert!(
             func_named(&module, "f").is_some(),
@@ -729,7 +726,7 @@ mod tests {
         module.add_func(FuncName::from("a"), a);
         module.add_func(FuncName::from("b"), b);
 
-        inline_calls(&mut module);
+        inline_calls_with(&mut module, &Entropy::new());
 
         assert!(func_named(&module, "a").is_some());
         assert!(func_named(&module, "b").is_some());
@@ -769,7 +766,7 @@ mod tests {
         module.add_func(FuncName::from("main"), main);
         module.add_func(FuncName::from("f"), f);
 
-        inline_calls(&mut module);
+        inline_calls_with(&mut module, &Entropy::new());
 
         assert!(func_named(&module, "f").is_none());
 
@@ -814,7 +811,7 @@ mod tests {
         module.add_func(FuncName::from("helper"), helper);
         module.set_entry(FuncName::from("main"));
 
-        inline_calls(&mut module);
+        inline_calls_with(&mut module, &Entropy::new());
 
         assert!(
             func_named(&module, "main").is_some(),
@@ -835,7 +832,7 @@ mod tests {
         let mut module = Module::new();
         module.add_func(FuncName::from("f"), f);
 
-        inline_calls(&mut module);
+        inline_calls_with(&mut module, &Entropy::new());
 
         assert!(func_named(&module, "f").is_some());
     }
@@ -895,7 +892,7 @@ mod tests {
 
         // Pipeline order from src/cont/optm.rs::optimize.
         eliminate_dead_code(&mut module);
-        inline_calls(&mut module);
+        inline_calls_with(&mut module, &Entropy::new());
 
         assert!(
             func_named(&module, "f").is_none(),

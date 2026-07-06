@@ -6,6 +6,7 @@ use {
     curios_base::Span,
 };
 
+/// A `mod` declaration: `module` is `Some` for an inline body (`mod m … end`) and `None` for the file-backed form (`mod m;`), whose body module discovery loads through the active [`RootSource`](crate::RootSource). The span locates a failed load at the declaration that requested it; like `Term`'s, it is excluded from `PartialEq`.
 #[derive(Debug, Clone)]
 pub struct TopMod {
     pub span: Option<Span>,
@@ -20,6 +21,7 @@ impl PartialEq for TopMod {
     }
 }
 
+/// One name in a `use` group, carrying which namespace the writer pinned: `mod x` (child module only), `let x` (binding only), or bare `x` (`Both`). Modules and bindings occupy separate namespaces, so one label can name both; a bare item imports whichever exist, requiring at least one.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GroupItem {
     Mod(String),
@@ -28,19 +30,21 @@ pub enum GroupItem {
 }
 
 impl GroupItem {
-    pub fn label(&self) -> &str {
+    pub(crate) fn label(&self) -> &str {
         match self {
             GroupItem::Mod(s) | GroupItem::Let(s) | GroupItem::Both(s) => s,
         }
     }
 }
 
+/// The tail of a `use` path: a braced list of named items (`use m/{a, mod b};`) or the glob `use m/*;`, which imports everything the module publicly exposes.
 #[derive(Debug, Clone, PartialEq)]
 pub enum UseGroup {
     Named(Vec<GroupItem>),
     Glob,
 }
 
+/// A `use` declaration: imports the `group`'s items from the module `name` names into the local scope at its own source position (scoping is point-of-use, not file-wide). `pub use` additionally re-exports the items from the declaring module — that interface effect is computed in resolution's fixed point, separately from the lexical one.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopUse {
     pub is_pub: bool,
@@ -48,6 +52,7 @@ pub struct TopUse {
     pub group: UseGroup,
 }
 
+/// A top-level `let` (or one member of a `rec … and …;` group — see `TopItem::Rec`): a plain label, never a destructuring pattern, and a signature whose type annotation the parser makes mandatory at top level.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopLet {
     pub is_pub: bool,
@@ -57,7 +62,7 @@ pub struct TopLet {
 
 /// A `foreign` declaration: a name and a wire signature, bound to a
 /// host-provided implementation at link time rather than a curios definition.
-/// `signature` is parsed directly as a [`WireSignature`] (`(Nat, Bin) -> Nat`)
+/// `signature` is parsed directly as a [`WireSignature`](curios_abi::WireSignature) (`(Nat, Bin) -> Nat`)
 /// — a closed grammar of the six wire shapes, not an ordinary curios type —
 /// so there is no name resolution to do and no `= body` form.
 #[derive(Debug, Clone, PartialEq)]
@@ -79,6 +84,7 @@ pub struct CasePayloadParam {
     pub type_: Term,
 }
 
+/// One value constructor of an `induct` declaration: a tag label, its payload telescope (see [`CasePayloadParam`]), and — for an indexed family — the `target` pinning which indices this constructor produces.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopCase {
     pub label: String,
@@ -89,6 +95,7 @@ pub struct TopCase {
     pub target: Option<Vec<Term>>,
 }
 
+/// An `induct` declaration: one inductive family — a parameter telescope, an index telescope with its result sort, and the value-constructor cases. Lowering registers the family and derives both the type-constructor function and one value-constructor function per case; see the field docs for the plicity and dependency rules each part obeys.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopInduct {
     pub is_pub: bool,
@@ -141,7 +148,7 @@ pub struct ConceptField {
     /// `Some` for the signature sugar `label(params) -> type_` — the written
     /// parameter list, kept verbatim so the printer round-trips it. `to_core`
     /// undoes the sugar, lowering the field as `label : (params) -> type_`
-    /// (see [`ConceptField::desugared_type`]). Never set on a super field.
+    /// (see `ConceptField::desugared_type`). Never set on a super field.
     pub func_params: Option<Vec<FuncTypeParam>>,
     pub type_: Term,
 }
@@ -150,7 +157,7 @@ impl ConceptField {
     /// The field's type with the signature sugar undone: the written type when
     /// the field is plain, the Π-type `(params) -> type_` when it was written
     /// `label(params) -> type_`.
-    pub fn desugared_type(&self) -> Term {
+    pub(crate) fn desugared_type(&self) -> Term {
         match &self.func_params {
             Some(params) => Subterm::FuncType(FuncType {
                 params: params.clone(),
@@ -189,7 +196,7 @@ pub struct TopConcept {
 }
 
 /// One implementation field of a `witness` declaration: `label = value`, or
-/// the definition sugar `label(params) = value` — the [`TupleField`] grammar
+/// the definition sugar `label(params) = value` — the [`TupleField`](crate::TupleField) grammar
 /// with the label mandatory. The sugar is kept verbatim (the printer
 /// round-trips it); `to_core` undoes it when it builds the desugared
 /// struct literal.
@@ -226,6 +233,7 @@ pub struct TopWitness {
     pub entries: Vec<WitnessEntry>,
 }
 
+/// One top-level item of a module, one variant per declaration keyword. `Rec` and `Induct` hold groups because both keywords chain with `and` — a `rec f … and g …;` group of mutually recursive definitions, an `induct … and … end` group of mutually recursive inductive families.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TopItem {
     Mod(TopMod),
@@ -239,11 +247,13 @@ pub enum TopItem {
     Foreign(TopForeign),
 }
 
+/// A parsed module body: its top-level items in source order — an order that matters, since `use` scoping is point-of-use and flat-item order is the downstream topological-sort tiebreak. Parsed via `FromStr`, loaded from disk through a [`RootSource`](crate::RootSource), or built synthetically (the embedded `sys` prelude).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
     pub items: Vec<TopItem>,
 }
 
+/// A whole program as written: a module of top-level items followed by one tail expression — the value the program computes. Parsed via `FromStr` (inline source) or [`Entrypoint::from_path`]; the grammar has no position for `type_`, which is only ever attached afterwards via [`Entrypoint::with_type`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entrypoint {
     pub module: Module,
@@ -252,7 +262,7 @@ pub struct Entrypoint {
 }
 
 impl Entrypoint {
-    pub fn new(items: Vec<TopItem>, tail: Term) -> Self {
+    pub(crate) fn new(items: Vec<TopItem>, tail: Term) -> Self {
         Self {
             module: Module { items },
             type_: None,
@@ -260,6 +270,7 @@ impl Entrypoint {
         }
     }
 
+    /// Attaches an expected type to the tail expression. The entrypoint grammar has no annotation position for the tail, so this is how embedders (today, the test suites) request `Check` rather than `Infer` mode — `to_core` lowers the annotation alongside the tail and the pipeline elaborates against it.
     pub fn with_type(self, type_: Term) -> Self {
         Self {
             type_: Some(type_),

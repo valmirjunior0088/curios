@@ -248,7 +248,7 @@ fn host_fn(function: &Arc<ForeignFunction>, is_pub: bool) -> TopItem {
 /// for a plain `TopItem::Let`. `root` is the declaring root (the caller's
 /// current position while walking the module tree), stamped onto the row like
 /// every other registry entry.
-pub fn foreign_signature(
+pub(crate) fn foreign_signature(
     declaration: &TopForeign,
     foreigns: &mut ForeignStore,
     root: RootId,
@@ -746,7 +746,7 @@ pub(crate) fn load_embedded(sys: &Module, qualifier: &Qualifier) -> Option<Modul
 
 /// Wrap a root source so `sys`, `syn`, and `std` resolve from the binary and
 /// everything else falls through to `base`. The wrapped source also reports
-/// those roots from [`RootSource::roots`], so `to_core` declares them at the
+/// those roots from `RootSource::roots`, so `to_core` declares them at the
 /// entrypoint root automatically. `foreigns` is the compilation's foreign
 /// store — the host operations `/sys/Io` declares; today always
 /// `curios_abi::sys_io()`, created per compilation by the pipeline driver.

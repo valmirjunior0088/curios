@@ -13,7 +13,7 @@ use super::NumOp;
 /// `Bln` and deliberately non-overloadable (the same status as `if`/`match`,
 /// not a second overload standard). `!=` shares `Eql/eql` and negates the
 /// rebuilt equality.
-pub fn operator_concept(op: NumOp) -> Option<(&'static str, &'static str)> {
+pub(crate) fn operator_concept(op: NumOp) -> Option<(&'static str, &'static str)> {
     Some(match op {
         NumOp::Add => ("/syn/Add", "add"),
         NumOp::Sub => ("/syn/Sub", "sub"),

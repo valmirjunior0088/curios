@@ -8,7 +8,7 @@ use {super::*, std::collections::HashMap};
 /// it — splicing `b`'s body into the region, binding `b`'s parameters to the jump
 /// arguments as aliases, and replacing the tail with `b`'s tail.
 ///
-/// This is the intra-function dual of [`function_inlining`]: it brings values
+/// This is the intra-function dual of `function_inlining`: it brings values
 /// across what was a continuation edge, so constant folding and aggregate
 /// projection can see a literal or constructor that previously lstived opaquely as
 /// a block parameter. It is also where inlining's leftovers get cleaned up — a
@@ -33,7 +33,7 @@ use {super::*, std::collections::HashMap};
 /// - **Cross-level targets** — a single predecessor that sits in a *descendant*
 ///   region rather than the block's own region. Sound to thread, but it is a
 ///   two-location move; left for later.
-pub fn thread_jumps(module: &mut Module) {
+pub(crate) fn thread_jumps(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         thread_tree(&mut func.region);
     }

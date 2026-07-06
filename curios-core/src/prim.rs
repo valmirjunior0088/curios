@@ -7,7 +7,7 @@ use {
 /// The core type a host-boundary [`WireType`] denotes — the one reading of the
 /// signature shared by elaboration (operand checks, result records) and
 /// erasure, so the two cannot disagree about what crosses the wire.
-pub fn wire_term(wire_type: &WireType) -> Term {
+pub(crate) fn wire_term(wire_type: &WireType) -> Term {
     let prim = match wire_type {
         WireType::Nat => Prim::NatType,
         WireType::Int => Prim::IntType,
@@ -20,6 +20,9 @@ pub fn wire_term(wire_type: &WireType) -> Term {
     Subterm::Prim(prim).into()
 }
 
+/// The closed set of primitives of the core calculus: the built-in types (`BlnType`, `NatType`, `IntType`, `FltType`, `BinType`, `LstType`, `IoType`, `CellType`), their literals, and the operator families over them, plus store-described `Foreign` host calls and `IoExit`. Operand positions hold full [`Term`]s, so a primitive participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+///
+/// The `impl` block's constructor helpers (`nat_add`, `bin_slice`, …) take `impl Into<Term>` operands, sparing builder call sites — reduction's neutral rebuilds and curios-text's lowering — the `.into()` noise.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Prim {
     BlnType,
@@ -137,13 +140,14 @@ pub enum Prim {
 /// type-former `Prim`s those helpers accept, as a closed set so an out-of-range
 /// selector is unrepresentable rather than an `unreachable!` panic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PrimHead {
+pub(crate) enum PrimHead {
     Nat,
     Bln,
     Bin,
 }
 
 impl Prim {
+    /// A `NatEql` node from anything term-shaped.
     pub fn nat_eql<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -152,6 +156,7 @@ impl Prim {
         Self::NatEql(left.into(), right.into())
     }
 
+    /// An `IoEql` node — handle identity, the one pure `Io` operation — from anything term-shaped.
     pub fn io_eql<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -160,6 +165,7 @@ impl Prim {
         Self::IoEql(left.into(), right.into())
     }
 
+    /// A `NatNeq` node from anything term-shaped.
     pub fn nat_neq<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -168,6 +174,7 @@ impl Prim {
         Self::NatNeq(left.into(), right.into())
     }
 
+    /// A `NatAdd` node from anything term-shaped.
     pub fn nat_add<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -176,6 +183,7 @@ impl Prim {
         Self::NatAdd(left.into(), right.into())
     }
 
+    /// A `NatSub` node from anything term-shaped.
     pub fn nat_sub<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -184,6 +192,7 @@ impl Prim {
         Self::NatSub(left.into(), right.into())
     }
 
+    /// A `NatMul` node from anything term-shaped.
     pub fn nat_mul<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -192,6 +201,7 @@ impl Prim {
         Self::NatMul(left.into(), right.into())
     }
 
+    /// A `NatDiv` node from anything term-shaped.
     pub fn nat_div<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -200,6 +210,7 @@ impl Prim {
         Self::NatDiv(left.into(), right.into())
     }
 
+    /// A `NatRem` node from anything term-shaped.
     pub fn nat_rem<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -208,6 +219,7 @@ impl Prim {
         Self::NatRem(left.into(), right.into())
     }
 
+    /// A `NatLt` node from anything term-shaped.
     pub fn nat_lt<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -216,6 +228,7 @@ impl Prim {
         Self::NatLt(left.into(), right.into())
     }
 
+    /// A `NatGt` node from anything term-shaped.
     pub fn nat_gt<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -224,6 +237,7 @@ impl Prim {
         Self::NatGt(left.into(), right.into())
     }
 
+    /// A `NatLte` node from anything term-shaped.
     pub fn nat_lte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -232,6 +246,7 @@ impl Prim {
         Self::NatLte(left.into(), right.into())
     }
 
+    /// A `NatGte` node from anything term-shaped.
     pub fn nat_gte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -240,6 +255,7 @@ impl Prim {
         Self::NatGte(left.into(), right.into())
     }
 
+    /// An `IntEql` node from anything term-shaped.
     pub fn int_eql<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -248,6 +264,7 @@ impl Prim {
         Self::IntEql(left.into(), right.into())
     }
 
+    /// An `IntAdd` node from anything term-shaped.
     pub fn int_add<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -256,6 +273,7 @@ impl Prim {
         Self::IntAdd(left.into(), right.into())
     }
 
+    /// An `IntSub` node from anything term-shaped.
     pub fn int_sub<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -264,6 +282,7 @@ impl Prim {
         Self::IntSub(left.into(), right.into())
     }
 
+    /// An `IntMul` node from anything term-shaped.
     pub fn int_mul<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -272,6 +291,7 @@ impl Prim {
         Self::IntMul(left.into(), right.into())
     }
 
+    /// An `IntNeq` node from anything term-shaped.
     pub fn int_neq<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -280,6 +300,7 @@ impl Prim {
         Self::IntNeq(left.into(), right.into())
     }
 
+    /// An `IntDiv` node from anything term-shaped.
     pub fn int_div<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -288,6 +309,7 @@ impl Prim {
         Self::IntDiv(left.into(), right.into())
     }
 
+    /// An `IntRem` node from anything term-shaped.
     pub fn int_rem<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -296,6 +318,7 @@ impl Prim {
         Self::IntRem(left.into(), right.into())
     }
 
+    /// An `IntLt` node from anything term-shaped.
     pub fn int_lt<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -304,6 +327,7 @@ impl Prim {
         Self::IntLt(left.into(), right.into())
     }
 
+    /// An `IntGt` node from anything term-shaped.
     pub fn int_gt<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -312,6 +336,7 @@ impl Prim {
         Self::IntGt(left.into(), right.into())
     }
 
+    /// An `IntLte` node from anything term-shaped.
     pub fn int_lte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -320,6 +345,7 @@ impl Prim {
         Self::IntLte(left.into(), right.into())
     }
 
+    /// An `IntGte` node from anything term-shaped.
     pub fn int_gte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -328,6 +354,7 @@ impl Prim {
         Self::IntGte(left.into(), right.into())
     }
 
+    /// A `FltAdd` node from anything term-shaped.
     pub fn flt_add<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -336,6 +363,7 @@ impl Prim {
         Self::FltAdd(left.into(), right.into())
     }
 
+    /// A `FltSub` node from anything term-shaped.
     pub fn flt_sub<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -344,6 +372,7 @@ impl Prim {
         Self::FltSub(left.into(), right.into())
     }
 
+    /// A `FltMul` node from anything term-shaped.
     pub fn flt_mul<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -352,6 +381,7 @@ impl Prim {
         Self::FltMul(left.into(), right.into())
     }
 
+    /// A `FltNeg` node from anything term-shaped.
     pub fn flt_neg<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -359,6 +389,7 @@ impl Prim {
         Self::FltNeg(inner.into())
     }
 
+    /// A `FltAbs` node from anything term-shaped.
     pub fn flt_abs<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -366,6 +397,7 @@ impl Prim {
         Self::FltAbs(inner.into())
     }
 
+    /// A `FltSqrt` node from anything term-shaped.
     pub fn flt_sqrt<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -373,6 +405,7 @@ impl Prim {
         Self::FltSqrt(inner.into())
     }
 
+    /// A `FltFloor` node from anything term-shaped.
     pub fn flt_floor<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -380,6 +413,7 @@ impl Prim {
         Self::FltFloor(inner.into())
     }
 
+    /// A `FltCeil` node from anything term-shaped.
     pub fn flt_ceil<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -387,6 +421,7 @@ impl Prim {
         Self::FltCeil(inner.into())
     }
 
+    /// A `FltTrunc` node from anything term-shaped.
     pub fn flt_trunc<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -394,6 +429,7 @@ impl Prim {
         Self::FltTrunc(inner.into())
     }
 
+    /// A `FltNearest` (round-ties-to-even) node from anything term-shaped.
     pub fn flt_nearest<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -401,6 +437,7 @@ impl Prim {
         Self::FltNearest(inner.into())
     }
 
+    /// A `FltDiv` node from anything term-shaped.
     pub fn flt_div<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -409,6 +446,7 @@ impl Prim {
         Self::FltDiv(left.into(), right.into())
     }
 
+    /// A `FltMin` node from anything term-shaped.
     pub fn flt_min<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -417,6 +455,7 @@ impl Prim {
         Self::FltMin(left.into(), right.into())
     }
 
+    /// A `FltMax` node from anything term-shaped.
     pub fn flt_max<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -425,6 +464,7 @@ impl Prim {
         Self::FltMax(left.into(), right.into())
     }
 
+    /// A `FltEql` node from anything term-shaped.
     pub fn flt_eql<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -433,6 +473,7 @@ impl Prim {
         Self::FltEql(left.into(), right.into())
     }
 
+    /// A `FltNeq` node from anything term-shaped.
     pub fn flt_neq<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -441,6 +482,7 @@ impl Prim {
         Self::FltNeq(left.into(), right.into())
     }
 
+    /// A `FltLt` node from anything term-shaped.
     pub fn flt_lt<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -449,6 +491,7 @@ impl Prim {
         Self::FltLt(left.into(), right.into())
     }
 
+    /// A `FltGt` node from anything term-shaped.
     pub fn flt_gt<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -457,6 +500,7 @@ impl Prim {
         Self::FltGt(left.into(), right.into())
     }
 
+    /// A `FltLte` node from anything term-shaped.
     pub fn flt_lte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -465,6 +509,7 @@ impl Prim {
         Self::FltLte(left.into(), right.into())
     }
 
+    /// A `FltGte` node from anything term-shaped.
     pub fn flt_gte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -473,6 +518,7 @@ impl Prim {
         Self::FltGte(left.into(), right.into())
     }
 
+    /// A `NatToInt` conversion node from anything term-shaped.
     pub fn nat_to_int<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -480,6 +526,7 @@ impl Prim {
         Self::NatToInt(inner.into())
     }
 
+    /// An `IntToNat` conversion node from anything term-shaped.
     pub fn int_to_nat<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -487,6 +534,7 @@ impl Prim {
         Self::IntToNat(inner.into())
     }
 
+    /// An `IntToFlt` conversion node from anything term-shaped.
     pub fn int_to_flt<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -494,6 +542,7 @@ impl Prim {
         Self::IntToFlt(inner.into())
     }
 
+    /// A `NatToFlt` conversion node from anything term-shaped.
     pub fn nat_to_flt<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -501,6 +550,7 @@ impl Prim {
         Self::NatToFlt(inner.into())
     }
 
+    /// A `FltToInt` conversion node from anything term-shaped.
     pub fn flt_to_int<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -508,6 +558,7 @@ impl Prim {
         Self::FltToInt(inner.into())
     }
 
+    /// A `FltToNat` conversion node from anything term-shaped.
     pub fn flt_to_nat<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -515,6 +566,7 @@ impl Prim {
         Self::FltToNat(inner.into())
     }
 
+    /// A `FltToLeBin` node (a float's four little-endian bytes as a `Bin`) from anything term-shaped.
     pub fn flt_to_le_bin<T>(inner: T) -> Self
     where
         T: Into<Term>,
@@ -522,6 +574,7 @@ impl Prim {
         Self::FltToLeBin(inner.into())
     }
 
+    /// A `BinLen` node from anything term-shaped.
     pub fn bin_len<B>(bin: B) -> Self
     where
         B: Into<Term>,
@@ -529,6 +582,7 @@ impl Prim {
         Self::BinLen(bin.into())
     }
 
+    /// A `BinEql` node from anything term-shaped.
     pub fn bin_eql<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -537,6 +591,7 @@ impl Prim {
         Self::BinEql(left.into(), right.into())
     }
 
+    /// A `BinGet` node from term-shaped bytes and index.
     pub fn bin_get<B, I>(bin: B, index: I) -> Self
     where
         B: Into<Term>,
@@ -545,6 +600,7 @@ impl Prim {
         Self::BinGet(bin.into(), index.into())
     }
 
+    /// A `BinSlice` node from term-shaped bytes, start, and end.
     pub fn bin_slice<B, S, E>(bin: B, start: S, end: E) -> Self
     where
         B: Into<Term>,
@@ -554,6 +610,7 @@ impl Prim {
         Self::BinSlice(bin.into(), start.into(), end.into())
     }
 
+    /// A `BinAppend` node from term-shaped bytes and byte.
     pub fn bin_append<B, E>(bin: B, byte: E) -> Self
     where
         B: Into<Term>,
@@ -562,6 +619,7 @@ impl Prim {
         Self::BinAppend(bin.into(), byte.into())
     }
 
+    /// A `BinConcat` node from any iterator of term-shaped operands.
     pub fn bin_concat<I>(operands: I) -> Self
     where
         I: IntoIterator,
@@ -570,14 +628,7 @@ impl Prim {
         Self::BinConcat(operands.into_iter().map(|e| e.into()).collect())
     }
 
-    pub fn lst<I, A>(items: I) -> Self
-    where
-        I: IntoIterator<Item = A>,
-        A: Into<Term>,
-    {
-        Self::Lst(items.into_iter().map(Into::into).collect())
-    }
-
+    /// A `LstType` node from a term-shaped element type.
     pub fn lst_type<T>(elem: T) -> Self
     where
         T: Into<Term>,
@@ -585,6 +636,7 @@ impl Prim {
         Self::LstType(elem.into())
     }
 
+    /// A `LstLen` node from term-shaped element type and list.
     pub fn lst_len<T, L>(type_: T, list: L) -> Self
     where
         T: Into<Term>,
@@ -593,6 +645,7 @@ impl Prim {
         Self::LstLen(type_.into(), list.into())
     }
 
+    /// A `LstGet` node from term-shaped element type, list, and index.
     pub fn lst_get<T, L, I>(type_: T, list: L, index: I) -> Self
     where
         T: Into<Term>,
@@ -602,6 +655,7 @@ impl Prim {
         Self::LstGet(type_.into(), list.into(), index.into())
     }
 
+    /// A `LstSlice` node from term-shaped element type, list, start, and end.
     pub fn lst_slice<T, L, S, E>(type_: T, list: L, start: S, end: E) -> Self
     where
         T: Into<Term>,
@@ -612,6 +666,7 @@ impl Prim {
         Self::LstSlice(type_.into(), list.into(), start.into(), end.into())
     }
 
+    /// A `LstAppend` node from term-shaped element type, list, and element.
     pub fn lst_append<T, L, E>(type_: T, list: L, elem: E) -> Self
     where
         T: Into<Term>,
@@ -621,6 +676,7 @@ impl Prim {
         Self::LstAppend(type_.into(), list.into(), elem.into())
     }
 
+    /// A `LstConcat` node from a term-shaped element type and any iterator of term-shaped operands.
     pub fn lst_concat<T, O>(type_: T, operands: O) -> Self
     where
         T: Into<Term>,
@@ -633,6 +689,7 @@ impl Prim {
         )
     }
 
+    /// A `LstMap` node from term-shaped source element type, target element type, function, and list.
     pub fn lst_map<A, B, F, R>(a: A, b: B, f: F, lst: R) -> Self
     where
         A: Into<Term>,
@@ -643,6 +700,7 @@ impl Prim {
         Self::LstMap(a.into(), b.into(), f.into(), lst.into())
     }
 
+    /// A `CellType` node from a term-shaped element type.
     pub fn cell_type<T>(elem: T) -> Self
     where
         T: Into<Term>,
@@ -650,6 +708,7 @@ impl Prim {
         Self::CellType(elem.into())
     }
 
+    /// A cell allocation — the `Prim::Cell` variant — from a term-shaped element type and initial value.
     pub fn cell_new<T, I>(type_: T, init: I) -> Self
     where
         T: Into<Term>,
@@ -658,6 +717,7 @@ impl Prim {
         Self::Cell(type_.into(), init.into())
     }
 
+    /// A `CellSet` node from term-shaped element type, cell, and new value.
     pub fn cell_set<T, C, V>(type_: T, cell: C, value: V) -> Self
     where
         T: Into<Term>,
@@ -667,6 +727,7 @@ impl Prim {
         Self::CellSet(type_.into(), cell.into(), value.into())
     }
 
+    /// A `CellGet` node from term-shaped element type and cell.
     pub fn cell_get<T, C>(type_: T, cell: C) -> Self
     where
         T: Into<Term>,
@@ -681,7 +742,7 @@ impl Prim {
     /// (`traverse` keeps its own match: it rebuilds rather than visits.) The
     /// closure is taken `impl FnMut` so it monomorphises and inlines, leaving the
     /// de Bruijn / region hot path allocation- and indirection-free.
-    pub fn for_each_operand(&self, visit: &mut impl FnMut(&Term)) {
+    pub(crate) fn for_each_operand(&self, visit: &mut impl FnMut(&Term)) {
         match self {
             Prim::BlnType
             | Prim::Bln(_)
@@ -809,33 +870,26 @@ impl Prim {
         }
     }
 
-    pub fn reach(&self) -> usize {
+    pub(crate) fn reach(&self) -> usize {
         let mut reach = 0;
         self.for_each_operand(&mut |term| reach = reach.max(term.reach()));
         reach
     }
 
-    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
+    pub(crate) fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         let mut found = false;
         self.for_each_operand(&mut |term| found = found || term.any_metavar(pred));
         found
     }
 
-    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
-        self.any_metavar(&mut |id| {
-            ids.insert(id);
-            false
-        });
-    }
-
     // Recurse into every operand `Term` so a construction nested inside a primitive
     // (e.g. `Lst(Str)`'s element type) still contributes its head name. Prims own no
     // head names of their own.
-    pub fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
+    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
         self.for_each_operand(&mut |term| term.collect_construction_names(names));
     }
 
-    pub fn traverse<F>(&self, visit: &mut Visit<F>) -> Prim
+    pub(crate) fn traverse<F>(&self, visit: &mut Visit<F>) -> Prim
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
@@ -975,6 +1029,18 @@ impl Prim {
                 visit.visit_subterm(c),
             ),
         }
+    }
+}
+
+#[cfg(test)]
+impl Prim {
+    /// Test-only shorthand: a `Lst` literal from anything term-shaped.
+    pub(crate) fn lst<I, A>(items: I) -> Self
+    where
+        I: IntoIterator<Item = A>,
+        A: Into<Term>,
+    {
+        Self::Lst(items.into_iter().map(Into::into).collect())
     }
 }
 

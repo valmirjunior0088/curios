@@ -124,6 +124,7 @@ pub struct ForeignStore {
 }
 
 impl ForeignStore {
+    /// An empty store, ready for [`register`](Self::register) calls.
     pub fn new() -> Self {
         Self::default()
     }
@@ -140,20 +141,23 @@ impl ForeignStore {
         self.functions.push(Arc::new(function));
     }
 
+    /// The row registered under `name` — the wasm import string, the identity every stage links on. Linear scan; stores hold a few dozen rows at most.
     pub fn get(&self, name: &str) -> Option<&Arc<ForeignFunction>> {
         self.functions.iter().find(|function| function.name == name)
     }
 
+    /// The rows in registration order — the declaration order the prelude binds them in and the runtime seeds its implementations by.
     pub fn iter(&self) -> impl Iterator<Item = &Arc<ForeignFunction>> {
         self.functions.iter()
     }
 
-    pub fn len(&self) -> usize {
-        self.functions.len()
-    }
+}
 
-    pub fn is_empty(&self) -> bool {
-        self.functions.is_empty()
+#[cfg(test)]
+impl ForeignStore {
+    /// Test-only: the number of rows in the store.
+    pub(crate) fn len(&self) -> usize {
+        self.functions.len()
     }
 }
 

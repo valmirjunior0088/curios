@@ -3,6 +3,7 @@ use super::{
     TypeName, ValType,
 };
 
+/// The backend's instruction set, one variant per wasm opcode the crate can encode. Every operand the binary format expresses as an index — labels, functions, types, struct fields, locals, globals, data segments — is carried here as a name and resolved by the encoder, so emitters never track index spaces. The roster is deliberately GC-only: struct/array/ref/`i31` operations plus the full numeric core, with no linear-memory instructions — the only route from raw bytes into values is `ArrayNewData` reading a passive data segment.
 #[derive(Debug, Clone)]
 pub enum Instr {
     Unreachable,
@@ -307,20 +308,20 @@ pub enum Instr {
     I64TruncSatF64U,
 }
 
+/// A flat instruction sequence — a function body or a global's constant initializer. The encoder appends the terminating `end` opcode itself, so builders supply only the instructions.
 #[derive(Debug, Default, Clone)]
 pub struct Expr {
     pub instrs: Vec<Instr>,
 }
 
 impl Expr {
-    pub fn new() -> Self {
-        Self::default()
-    }
 
+    /// Appends a single instruction.
     pub fn push(&mut self, instr: Instr) {
         self.instrs.push(instr)
     }
 
+    /// Appends a sequence of instructions in order.
     pub fn extend<I>(&mut self, instrs: I)
     where
         I: IntoIterator<Item = Instr>,

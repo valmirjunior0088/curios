@@ -1389,7 +1389,7 @@ pub fn erase_module(
     Ok(curios_ersd::Module { items, body })
 }
 
-pub fn erase(
+pub(crate) fn erase(
     context: &mut Context,
     term: &Term,
     expected: &Term,

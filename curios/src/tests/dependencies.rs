@@ -97,8 +97,7 @@ fn orphan_rule_rejects_a_witness_in_a_dependency_for_the_entrys_own_types() {
 
     let (system, _io) = MockHost::builder().build();
     let error = crate::run_entrypoint(Duration::from_secs(10), &source, loader, system)
-        .err()
-        .expect("expected an orphan-rule error");
+        .expect_err("expected an orphan-rule error");
 
     assert!(error.to_lowercase().contains("orphan"));
 }

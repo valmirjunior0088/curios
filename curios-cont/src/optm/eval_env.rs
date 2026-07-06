@@ -9,10 +9,10 @@ use {super::*, std::collections::HashMap};
 
 /// A region-tree-wide map from value name to its bound literal. Names are unique
 /// per body and scoping is lexical, so a single flat map is sound.
-pub type Lits = HashMap<ValueName, Data>;
+pub(crate) type Lits = HashMap<ValueName, Data>;
 
 /// Collect every literal-bound scalar or aggregate in the region tree.
-pub fn literals(region: &Region) -> Lits {
+pub(crate) fn literals(region: &Region) -> Lits {
     let mut lits = Lits::new();
     collect_literals(region, &mut lits);
     lits
@@ -32,7 +32,7 @@ fn collect_literals(region: &Region, lits: &mut Lits) {
 
 /// The environment an evaluation runs against: scalar lookups by operand name,
 /// aggregate lookups yielding the environment's own element representation.
-pub trait EvalEnv {
+pub(crate) trait EvalEnv {
     /// What an aggregate holds: a `ValueName` when folding against [`Lits`], a
     /// runtime snapshot when interpreting against a frame.
     type Elem: Clone;

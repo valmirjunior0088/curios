@@ -34,10 +34,10 @@ use {
 /// leans on the same alias-then-propagate idiom as inlining and jump threading.
 ///
 /// Soundness: these values are immutable (the IR has no field-store, the invariant
-/// [`constant_folding`] relies on) and nothing compares them by reference identity
+/// `constant_folding` relies on) and nothing compares them by reference identity
 /// (`BinEql` is bytewise), so sharing one instance across every use — and across
 /// bodies, via dedup — is observationally identical to rebuilding it.
-pub fn hoist_literals(module: &mut Module) {
+pub(crate) fn hoist_literals(module: &mut Module) {
     let mut interner = Interner::over(module.consts());
 
     // Collect against the (immutably borrowed) bodies, recording per body which

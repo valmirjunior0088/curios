@@ -430,7 +430,7 @@ pub fn elaborate_module(
 ///
 /// Sound because the prelude is program-independent: its items never see user
 /// code, and — since top-level definitions are excluded from a metavariable's Γ
-/// ([`Context::identity_snapshot`]) — a user item elaborates against the
+/// (`Context::identity_snapshot`) — a user item elaborates against the
 /// identical local context it would under a from-scratch [`elaborate_module`], so
 /// the solutions (and the zonked output) are identical. The cached prelude is
 /// meta-free, so its ids never collide with the user metavariable range that

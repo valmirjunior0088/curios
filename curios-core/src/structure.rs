@@ -47,7 +47,7 @@ impl Structure {
     /// `(fst : Nat, snd : Bin)`. Peels the leading `params.len()` binders by
     /// opening each with the corresponding parameter — exactly as
     /// `Inductive::instantiate` does for a constructor signature.
-    pub fn fields_at(&self, params: &[Term]) -> Telescope<()> {
+    pub(crate) fn fields_at(&self, params: &[Term]) -> Telescope<()> {
         self.fields.clone().open_params(params)
     }
 }

@@ -58,6 +58,7 @@ type PrinterResult<'a, 'b> = Result<PrinterState<'a, 'b>, Error>;
 type PrinterInner<'a> =
     Box<dyn for<'b, 'c> FnOnce(PrinterState<'b, 'c>) -> PrinterResult<'b, 'c> + 'a>;
 
+/// A deferred, single-use printing action: a boxed `FnOnce` threading indentation state over a `std::fmt::Formatter`. Built compositionally from [`pure`], [`flat`], [`sep_flat`], and [`indent`], and executed exactly once by [`run_printer`]; the inner closure is higher-ranked over the formatter lifetimes so a `Printer` can be built long before anyone knows which formatter it will write to.
 pub struct Printer<'a>(PrinterInner<'a>);
 
 impl<'a> Printer<'a> {
@@ -73,6 +74,7 @@ impl<'a> Printer<'a> {
     }
 }
 
+/// The entry point: executes a printer against `formatter`, with `indent_step` spaces added per [`indent`] level. Typically the entire body of a `Display::fmt` impl — every IR crate's `print.rs` builds a [`Printer`] tree and hands it here.
 pub fn run_printer<'a, 'b, 'c>(
     printer: Printer<'a>,
     formatter: &'b mut Formatter<'c>,
@@ -83,6 +85,7 @@ pub fn run_printer<'a, 'b, 'c>(
     Ok(())
 }
 
+/// Emits a literal string. Not a raw write: any newline it contains arms the pending-indentation logic, so multi-line literals indent correctly under [`indent`].
 pub fn pure<'a, A>(a: A) -> Printer<'a>
 where
     A: Into<String> + 'a,
@@ -90,6 +93,7 @@ where
     Printer::new(move |state| state.write(&a.into()))
 }
 
+/// Concatenates a sequence of printers in order — the workhorse sequencing combinator; pretty-printers are mostly nested `flat(...)` of [`pure`] literals and recursive pieces.
 pub fn flat<'a, I>(i: I) -> Printer<'a>
 where
     I: IntoIterator<Item = Printer<'a>> + 'a,
@@ -103,6 +107,7 @@ where
     })
 }
 
+/// Like [`flat`] but interposes a separator between adjacent items; an empty sequence prints nothing, and no separator trails. The separator comes from a closure rather than a value because [`Printer`] is single-use — each gap needs a fresh instance.
 pub fn sep_flat<'a, I, F>(i: I, mut f: F) -> Printer<'a>
 where
     I: IntoIterator<Item = Printer<'a>> + 'a,
@@ -126,6 +131,7 @@ where
     })
 }
 
+/// Runs the printer one indentation level deeper: every line *begun* inside it gets `indent_step` extra leading spaces, applied lazily at the first character after each newline so blank lines stay blank. The level is restored when the printer finishes.
 pub fn indent<'a>(printer: Printer<'a>) -> Printer<'a> {
     Printer::new(move |state| state.indent(|state| printer.print(state)))
 }

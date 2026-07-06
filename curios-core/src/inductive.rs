@@ -58,7 +58,7 @@ impl Inductive {
     /// Instantiate `tag`'s signature at the given type parameters, yielding the
     /// payload-only telescope: `success` at `[Nat, Bin]` becomes
     /// `(_0 : Nat) -> InductiveType { Result, [Nat, Bin] }`.
-    pub fn instantiate(&self, tag: &Atom, params: &[Term]) -> Option<Telescope<Term>> {
+    pub(crate) fn instantiate(&self, tag: &Atom, params: &[Term]) -> Option<Telescope<Term>> {
         Some(
             self.constructors
                 .get(tag)?
@@ -71,7 +71,7 @@ impl Inductive {
     /// The runtime tag index of `tag`: its position among this inductive's
     /// constructors in sorted (BTreeMap key) order — the order in which a
     /// inductive match's lowered cases are laid out.
-    pub fn tag_index(&self, tag: &Atom) -> Option<usize> {
+    pub(crate) fn tag_index(&self, tag: &Atom) -> Option<usize> {
         self.constructors
             .keys()
             .position(|candidate| candidate == tag)

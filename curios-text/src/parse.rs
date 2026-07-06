@@ -2275,7 +2275,7 @@ impl Module {
         )
     }
 
-    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
+    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
         let path = path.as_ref();
         let source = Source::read(path).map_err(|error| LoadError::Read {
             path: path.into(),
@@ -2306,6 +2306,7 @@ impl Entrypoint {
         )
     }
 
+    /// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression). The file-path counterpart of the `FromStr` impl below, distinguished by keeping the real path in the [`Source`](curios_base::Source) so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`](crate::RootSource) the caller pairs it with.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
         let path = path.as_ref();
         let source = Source::read(path).map_err(|error| LoadError::Read {

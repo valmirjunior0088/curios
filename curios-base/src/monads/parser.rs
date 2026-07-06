@@ -86,6 +86,7 @@ impl<'a> ParserState<'a> {
     }
 }
 
+/// A parse failure: a message at a byte offset into its source. It also carries the commitment flag behind progress-based backtracking — an error that is still fatal and sits past the choice point aborts [`Parser::or`] and the repetition combinators instead of being backtracked, unless [`catch`] downgraded it. Outside this module the error is opaque except for [`ParserError::format`].
 #[derive(Debug, Clone)]
 pub struct ParserError {
     fatal: bool,
@@ -125,6 +126,7 @@ impl ParserError {
         self.fatal && self.offset != state.offset
     }
 
+    /// Renders the error for humans: the message, then a caret snippet (via `Span::render_snippet` on an empty span at the failure offset) pointing into the offending line — the form the CLI and pipeline surface to the user.
     pub fn format(&self) -> String {
         format!(
             "{message}\n\n{snippet}",
@@ -137,6 +139,7 @@ impl ParserError {
 
 type ParserResult<'a, A> = Result<(A, ParserState<'a>), ParserError>;
 
+/// A single-use parser: a boxed `FnOnce` from an input position to a value plus the rest of the input, or a [`ParserError`]. Being `FnOnce` lets combinators move captured values into results without cloning, and is why the repetition combinators ([`many0`], [`sep_by0`], ...) take parser-*building* closures — each iteration needs a fresh instance.
 pub struct Parser<'a, A>(Box<dyn FnOnce(ParserState<'a>) -> ParserResult<'a, A> + 'a>);
 
 impl<'a, A> Parser<'a, A>
@@ -154,6 +157,7 @@ where
         (self.0)(state)
     }
 
+    /// Ordered choice with progress-based commitment: the second alternative is tried only if the first failed *without consuming input* (or its error was downgraded by [`catch`]) — a failure past the choice point means the first alternative was the right branch and its error is the real diagnosis. When both fail recoverably, the error that got further into the input is reported, since it is almost always the more informative one.
     pub fn or(self, parser: Parser<'a, A>) -> Self {
         Parser::new(move |state| {
             let first = match self.parse(state) {
@@ -175,6 +179,7 @@ where
         })
     }
 
+    /// Sequences two parsers and pairs their outputs. A failure in the second half typically *has* consumed input by then, so under [`Parser::or`]'s progress rule it commits — wrap the whole sequence in [`catch`] when the alternatives share a prefix.
     pub fn and<B>(self, parser: Parser<'a, B>) -> Parser<'a, (A, B)>
     where
         B: 'a,
@@ -187,6 +192,7 @@ where
         })
     }
 
+    /// Sequences like [`Parser::and`] but keeps only the *left* output — for trailing punctuation or whitespace that must be consumed but carries no information.
     pub fn and_drop<B>(self, parser: Parser<'a, B>) -> Parser<'a, A>
     where
         B: 'a,
@@ -199,6 +205,7 @@ where
         })
     }
 
+    /// Sequences like [`Parser::and`] but keeps only the *right* output — for a leading keyword or opening delimiter whose text carries no information once matched.
     pub fn and_keep<B>(self, parser: Parser<'a, B>) -> Parser<'a, B>
     where
         B: 'a,
@@ -211,6 +218,7 @@ where
         })
     }
 
+    /// Transforms the parsed value on success — the functor map; consumption and failure behavior are untouched.
     pub fn map<B, F>(self, f: F) -> Parser<'a, B>
     where
         B: 'a,
@@ -223,6 +231,7 @@ where
         })
     }
 
+    /// Replaces the failure's message while keeping its offset and fatality, so a low-level token error ("Expected '('...") can be reworded as a domain-level one without changing where the caret points or how [`Parser::or`] commitment behaves.
     pub fn map_err<M>(self, message: M) -> Parser<'a, A>
     where
         M: Into<String> + 'a,
@@ -233,6 +242,7 @@ where
         })
     }
 
+    /// Monadic bind: the next parser is *chosen from* the first's output, which is what [`Parser::and`] cannot express — e.g. dispatching on the character just read, or turning a parsed value into [`fail`] after semantic inspection.
     pub fn flat_map<B, F>(self, f: F) -> Parser<'a, B>
     where
         B: 'a,
@@ -265,8 +275,8 @@ thread_local! {
 /// dependent function type, then a non-dependent one, then a lambda, then parens),
 /// and without memoization each retry re-parses the whole nested subterm.
 ///
-/// Sound as straight packrat because the wrapped parsers ([`parse_term`],
-/// [`parse_atomic_term`]) are pure functions of the offset — parsing carries no
+/// Sound as straight packrat because the wrapped parsers (`parse_term`,
+/// `parse_atomic_term`) are pure functions of the offset — parsing carries no
 /// symbol table or other context that could make the same input parse differently.
 /// `key` distinguishes the grammar nonterminals that share the table. The wrapped
 /// parser must never re-enter itself at the *same* offset without consuming input
@@ -305,6 +315,7 @@ where
     })
 }
 
+/// The entry point: runs `parser` from the start of `source`, first clearing the packrat table so [`memoize`]d results from a previous parse can never be replayed against this input. Does *not* require the input to be fully consumed — end the grammar with [`take_eof`] if trailing text should be an error.
 pub fn run_parser<'a, A>(parser: Parser<'a, A>, source: &'a Rc<Source>) -> Result<A, ParserError>
 where
     A: 'a,
@@ -314,6 +325,7 @@ where
     parser.parse(ParserState::new(source)).map(|(item, _)| item)
 }
 
+/// Succeeds with `a` without consuming input — the monadic return, for injecting an already-known value into a combinator chain.
 pub fn pure<'a, A>(a: A) -> Parser<'a, A>
 where
     A: 'a,
@@ -321,6 +333,7 @@ where
     Parser::new(move |state| Ok((a, state)))
 }
 
+/// Always fails with `message` at the current offset. Since it consumes nothing, the failure is recoverable by an enclosing [`Parser::or`] at the same position — the usual way to reject a value from inside [`Parser::flat_map`] after semantic inspection.
 pub fn fail<'a, A, S>(message: S) -> Parser<'a, A>
 where
     A: 'a,
@@ -329,6 +342,7 @@ where
     Parser::new(move |state| Err(ParserError::new(state, message)))
 }
 
+/// Consumes exactly the literal `expected`, yielding nothing. On mismatch the error sits at the *pre-consumption* offset, so failing here never commits — a keyword or punctuation probe is always safe as the first token of an [`Parser::or`] alternative.
 pub fn take_exact<'a>(expected: &'static str) -> Parser<'a, ()> {
     Parser::new(move |state| match state.take_exact(expected.len()) {
         Some((obtained, state)) if expected == obtained => Ok(((), state)),
@@ -343,6 +357,7 @@ pub fn take_exact<'a>(expected: &'static str) -> Parser<'a, ()> {
     })
 }
 
+/// Consumes exactly `expected` characters — counted as `char`s, not bytes — and yields them; fails if the input ends first. How the lexical layer grabs one character to dispatch on via [`Parser::flat_map`], e.g. reading the character after a string-literal `\` escape.
 pub fn take_n<'a>(expected: usize) -> Parser<'a, &'a str> {
     Parser::new(move |state| match state.take_n(expected) {
         Some((obtained, state)) => Ok((obtained, state)),
@@ -353,6 +368,7 @@ pub fn take_n<'a>(expected: usize) -> Parser<'a, &'a str> {
     })
 }
 
+/// Consumes the longest (possibly empty) prefix of characters satisfying `f` and yields it. Never fails — pair it with a non-empty check (or start it with a mandatory first character) when the empty match must not count as progress.
 pub fn take_while<'a, F>(f: F) -> Parser<'a, &'a str>
 where
     F: FnMut(char) -> bool + 'a,
@@ -360,6 +376,7 @@ where
     Parser::new(move |state| Ok(state.take_while(f)))
 }
 
+/// Succeeds (consuming nothing) only when the input is exhausted. Top-level grammars end with this so trailing garbage is a parse error — [`run_parser`] itself does not require the input to be fully consumed.
 pub fn take_eof<'a>() -> Parser<'a, ()> {
     Parser::new(|state| match state.is_finished() {
         true => Ok(((), state)),
@@ -403,6 +420,7 @@ pub fn not_ahead<'a>(unexpected: &'static str) -> Parser<'a, ()> {
     })
 }
 
+/// Downgrades the parser's failure to recoverable even when it consumed input, so an enclosing [`Parser::or`] or repetition backtracks instead of aborting. The escape hatch from progress-based commitment, for alternatives that share a prefix — e.g. the WAT parser wraps each `(keyword` head in `catch` so consuming the `(` while probing one form doesn't kill the others.
 pub fn catch<'a, T>(parser: Parser<'a, T>) -> Parser<'a, T>
 where
     T: 'a,
@@ -410,6 +428,7 @@ where
     Parser::new(move |state| parser.parse(state).map_err(|error| error.catch()))
 }
 
+/// Pairs the parser's output with the [`crate::Span`] covering exactly the bytes it consumed — how surface parsers attach source locations, so wrap the whole construct rather than its pieces.
 pub fn spanned<'a, T>(parser: Parser<'a, T>) -> Parser<'a, (crate::Span, T)>
 where
     T: 'a,
@@ -428,6 +447,7 @@ where
     })
 }
 
+/// Defers building the parser until it is actually run. This is what lets the grammar be recursive: `parse_term`'s alternatives refer to `lazy(parse_term)` instead of calling it eagerly, which would recurse forever while merely *constructing* the parser.
 pub fn lazy<'a, T, F>(f: F) -> Parser<'a, T>
 where
     T: 'a,
@@ -436,6 +456,7 @@ where
     Parser::new(move |state| f().parse(state))
 }
 
+/// Zero or more repetitions of the parser `f` builds. Takes a parser-building closure rather than a parser because [`Parser`] is single-use — every iteration needs a fresh instance. Stops at the first recoverable failure; an uncaught (fatal, input-consuming) failure aborts the whole parse, and a repetition that succeeds without consuming input panics rather than loop forever.
 pub fn many0<'a, T, F>(mut f: F) -> Parser<'a, Vec<T>>
 where
     T: 'a,
@@ -466,6 +487,7 @@ where
     })
 }
 
+/// Like [`many0`] but the first item is mandatory: its failure is the whole parser's failure rather than an empty list.
 pub fn many1<'a, T, F>(mut f: F) -> Parser<'a, Vec<T>>
 where
     T: 'a,
@@ -503,6 +525,7 @@ where
     })
 }
 
+/// Zero or more `f` items separated by `g` (separators dropped). An empty list is fine, but once a separator is consumed the next item is mandatory — no trailing separator; use [`sep_by0_trailing`] where one is legal. As with [`many0`], the closures build a fresh single-use [`Parser`] per iteration, and an iteration that consumes no input panics as an infinite repetition.
 pub fn sep_by0<'a, T, S, F, G>(mut f: F, mut g: G) -> Parser<'a, Vec<T>>
 where
     T: 'a,
@@ -608,6 +631,7 @@ where
     })
 }
 
+/// One or more `f` items separated by `g` (separators dropped). Commits after each successful separator: a separator not followed by an item is an error, so trailing separators are rejected — [`sep_by0_trailing`] is the variant that admits them.
 pub fn sep_by1<'a, T, S, F, G>(mut f: F, mut g: G) -> Parser<'a, Vec<T>>
 where
     T: 'a,

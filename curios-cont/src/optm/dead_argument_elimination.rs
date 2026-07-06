@@ -52,7 +52,7 @@ use {
 /// capture rule: dropping a dead capture can erase a parameter's last real use
 /// for the next round, and vice versa. The trailing dead-code pass then sweeps
 /// the now-unreferenced argument bindings.
-pub fn eliminate_dead_arguments(module: &mut Module) {
+pub(crate) fn eliminate_dead_arguments(module: &mut Module) {
     loop {
         let dropped_params = drop_dead_positions(module);
         let dropped_fields = drop_dead_clsr_fields(module);

@@ -7,6 +7,7 @@ use {
     },
 };
 
+/// A constructed value: the scalar immediates, `Bin` bytes, `Lst`/`Tpl` aggregates, and `Clsr` naming its definition plus the captures filling its environment. Aggregates are flat — elements are names of already-bound values, never nested `Data` — so constructing one is a single allocation. `Data` is also the payload of module consts, where codegen materialises it into a wasm global.
 #[derive(Debug, Clone)]
 pub enum Data {
     Nat(u32),
@@ -18,6 +19,7 @@ pub enum Data {
     Clsr(ClsrName, Vec<ValueName>),
 }
 
+/// One pure primitive computation over already-bound values — the expression vocabulary of the IR. Every variant produces exactly one value and has no effects (anything stateful is a [`Tail`], per the IR's atomicity law), which is what licenses the optimizer to fold, dedupe, hoist, and drop `Eval` bindings freely. The scalar families (`Nat*`/`Int*`/`Flt*`) mirror the wasm ops they lower to one-for-one; the `Bin*`/`Lst*` families are rope operations codegen services through shared helper functions.
 #[derive(Debug, Clone)]
 pub enum Code {
     NatEql(ValueName, ValueName),
@@ -110,6 +112,7 @@ pub enum Code {
     TplGet(ValueName, usize),
 }
 
+/// The right-hand side of one binding in a region: `Pure` constructs [`Data`], `Eval` computes one [`Code`] op, and `Alias` re-binds an existing value under another name — a rename that passes like common-subexpression elimination mint and copy propagation erases again, so downstream passes see a value's real identity.
 #[derive(Debug, Clone)]
 pub enum Value {
     Pure(Data),
@@ -117,18 +120,21 @@ pub enum Value {
     Alias(ValueName),
 }
 
+/// A labeled join point inside a region: `params` are its block parameters — the SSA replacement for φ-nodes, bound afresh on every entry from a [`JumpTarget`] — and `region` its body. Blocks are also how calls continue: a call's `resume` names the block that receives its result, and a backward jump to a loop header block is how `tail_recursion`'s loops close.
 #[derive(Debug, Clone)]
 pub struct Block {
     pub params: Vec<ValueName>,
     pub region: Region,
 }
 
+/// One branch edge: the destination block plus the values feeding its parameters, positionally. This is the IR's φ-mechanism — a block parameter's value is whatever the taken edge passed for it.
 #[derive(Debug, Clone)]
 pub struct JumpTarget {
     pub target: BlockName,
     pub params: Vec<ValueName>,
 }
 
+/// A multi-way branch on a scalar: `operand` is read as an unsigned `u32` (a constructor tag or nat), each case maps one value to its edge, and `default` catches the rest — `None` means the cases are exhaustive, and a match with no cases and no default lowers to a trap. Codegen picks the dispatch shape (a `br_table` for dense-from-zero tags, an `if` for two-way, a binary search otherwise); the IR just states the table.
 #[derive(Debug, Clone)]
 pub struct MatchTarget {
     pub operand: ValueName,
@@ -136,6 +142,7 @@ pub struct MatchTarget {
     pub default: Option<JumpTarget>,
 }
 
+/// A user-code call in tail position: `Direct` names a known function, `Indirect` invokes a closure value through the shared closure type of its arity (`call_ref`). Both name the `resume` block, which receives the callee's single result as its one parameter — except when `resume` is the enclosing body's return sentinel, where the call is a genuine tail call and codegen emits `return_call`/`return_call_ref` instead of branching.
 #[derive(Debug, Clone)]
 pub enum CallTarget {
     Direct {
@@ -174,20 +181,20 @@ pub enum HostTarget {
 }
 
 impl HostTarget {
-    pub fn resume(&self) -> &BlockName {
+    pub(crate) fn resume(&self) -> &BlockName {
         match self {
             HostTarget::Foreign { resume, .. } | HostTarget::IoExit { resume, .. } => resume,
         }
     }
 
-    pub fn resume_mut(&mut self) -> &mut BlockName {
+    pub(crate) fn resume_mut(&mut self) -> &mut BlockName {
         match self {
             HostTarget::Foreign { resume, .. } | HostTarget::IoExit { resume, .. } => resume,
         }
     }
 
     /// The value operands this host op reads, in argument order.
-    pub fn operands(&self) -> Vec<&ValueName> {
+    pub(crate) fn operands(&self) -> Vec<&ValueName> {
         match self {
             HostTarget::Foreign { operands, .. } => operands.iter().collect(),
             HostTarget::IoExit { code, .. } => vec![code],
@@ -196,7 +203,7 @@ impl HostTarget {
 
     /// The value operands this host op reads, as mutable references, in
     /// argument order.
-    pub fn operands_mut(&mut self) -> Vec<&mut ValueName> {
+    pub(crate) fn operands_mut(&mut self) -> Vec<&mut ValueName> {
         match self {
             HostTarget::Foreign { operands, .. } => operands.iter_mut().collect(),
             HostTarget::IoExit { code, .. } => vec![code],
@@ -225,7 +232,7 @@ pub enum CellTarget {
 }
 
 impl CellTarget {
-    pub fn resume(&self) -> &BlockName {
+    pub(crate) fn resume(&self) -> &BlockName {
         match self {
             CellTarget::New { resume, .. }
             | CellTarget::Set { resume, .. }
@@ -233,7 +240,7 @@ impl CellTarget {
         }
     }
 
-    pub fn resume_mut(&mut self) -> &mut BlockName {
+    pub(crate) fn resume_mut(&mut self) -> &mut BlockName {
         match self {
             CellTarget::New { resume, .. }
             | CellTarget::Set { resume, .. }
@@ -241,7 +248,7 @@ impl CellTarget {
         }
     }
 
-    pub fn operands(&self) -> Vec<&ValueName> {
+    pub(crate) fn operands(&self) -> Vec<&ValueName> {
         match self {
             CellTarget::New { init, .. } => vec![init],
             CellTarget::Set { cell, value, .. } => vec![cell, value],
@@ -249,7 +256,7 @@ impl CellTarget {
         }
     }
 
-    pub fn operands_mut(&mut self) -> Vec<&mut ValueName> {
+    pub(crate) fn operands_mut(&mut self) -> Vec<&mut ValueName> {
         match self {
             CellTarget::New { init, .. } => vec![init],
             CellTarget::Set { cell, value, .. } => vec![cell, value],
@@ -258,6 +265,7 @@ impl CellTarget {
     }
 }
 
+/// The sole control transfer out of a region — a region never falls through. `Jump` and `Match` stay within the body; `Call` transfers to user code; `Host` and `Cell` are the effectful primitives (the only impurity the IR admits — purity analysis marks a region tree impure exactly when one appears in it); `Unreachable` traps, marking a path that cannot be taken (an absurd match).
 #[derive(Debug, Clone)]
 pub enum Tail {
     Jump(JumpTarget),
@@ -268,6 +276,7 @@ pub enum Tail {
     Unreachable,
 }
 
+/// One straight-line body fragment and the sub-structure hanging off it: bindings evaluated in order, the labeled join blocks its jumps enter, and the single [`Tail`] transfer that ends it. All control flow in a body lives in its region tree — a [`Value`] binding never branches, which is what the optimizer's freedom to fold, dedupe, and reorder bindings rests on.
 #[derive(Debug, Clone)]
 pub struct Region {
     /// Closure shells reserved before their captures are filled, so a self- or
@@ -318,9 +327,6 @@ impl From<ValueName> for Argument {
 }
 
 impl Argument {
-    pub fn as_str(&self) -> &str {
-        self.name.as_str()
-    }
 }
 
 /// Compare an argument to a bare name (candidate-agnostic) — handy in tests that
@@ -331,6 +337,7 @@ impl PartialEq<ValueName> for Argument {
     }
 }
 
+/// A closure definition: `fields` is the captured environment — filled where a `Data::Clsr` names this definition, read inside the body like extra bindings — and `params` the call arguments. `resume` is the return sentinel, exactly as on [`Func`]. Codegen gives each definition its own environment struct type but files its function under the shared closure type for its arity, which is what lets a [`CallTarget::Indirect`] call any closure of matching arity.
 #[derive(Debug, Clone)]
 pub struct Clsr {
     pub fields: Vec<Argument>,
@@ -340,11 +347,9 @@ pub struct Clsr {
 }
 
 impl Clsr {
-    pub fn arity(&self) -> usize {
-        self.params.len()
-    }
 }
 
+/// A top-level function: parameters, body, and its `resume` sentinel — the block name that means "return": a jump to `resume` with one value *is* the function's return, so a call whose resume block is the enclosing sentinel is a tail call by construction (codegen emits `return_call`), no separate tail-position analysis needed.
 #[derive(Debug, Clone)]
 pub struct Func {
     pub params: Vec<Argument>,
@@ -353,11 +358,9 @@ pub struct Func {
 }
 
 impl Func {
-    pub fn arity(&self) -> usize {
-        self.params.len()
-    }
 }
 
+/// One whole program in cont form: module-level consts (hoisted literals), the closure and function definitions, and the blessed entrypoint. Bodies reference consts and each other by name, and definition order is preserved end-to-end — it is the printed order and the wasm emission order. The collections are private: from outside the crate a module only grows through the `add_*` methods, while the mutating views the optimizer rewrites through stay crate-internal.
 #[derive(Debug, Default)]
 pub struct Module {
     consts: Vec<(ValueName, Data)>,
@@ -367,42 +370,48 @@ pub struct Module {
 }
 
 impl Module {
+    /// An empty module: no definitions, no entrypoint.
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn consts(&self) -> &[(ValueName, Data)] {
+    pub(crate) fn consts(&self) -> &[(ValueName, Data)] {
         &self.consts
     }
 
-    pub fn consts_mut(&mut self) -> &mut Vec<(ValueName, Data)> {
+    pub(crate) fn consts_mut(&mut self) -> &mut Vec<(ValueName, Data)> {
         &mut self.consts
     }
 
+    /// Append a module-level const: a [`Data`] binding every body can reference by name. In practice only the optimizer's literal hoisting mints these; codegen materialises each into a wasm global.
     pub fn add_const(&mut self, value_name: ValueName, value: Data) {
         self.consts.push((value_name, value));
     }
 
+    /// The closure definitions, in insertion order.
     pub fn clsrs(&self) -> &[(ClsrName, Clsr)] {
         &self.clsrs
     }
 
-    pub fn clsrs_mut(&mut self) -> &mut Vec<(ClsrName, Clsr)> {
+    pub(crate) fn clsrs_mut(&mut self) -> &mut Vec<(ClsrName, Clsr)> {
         &mut self.clsrs
     }
 
+    /// Append a closure definition under its name; `Data::Clsr` values cite that name to instantiate it.
     pub fn add_clsr(&mut self, clsr_name: ClsrName, clsr: Clsr) {
         self.clsrs.push((clsr_name, clsr));
     }
 
+    /// The function definitions, in insertion order — the order they print and emit in.
     pub fn funcs(&self) -> &[(FuncName, Func)] {
         &self.funcs
     }
 
-    pub fn funcs_mut(&mut self) -> &mut Vec<(FuncName, Func)> {
+    pub(crate) fn funcs_mut(&mut self) -> &mut Vec<(FuncName, Func)> {
         &mut self.funcs
     }
 
+    /// Append a function definition under its name; the position it lands in is the position it keeps.
     pub fn add_func(&mut self, func_name: FuncName, func: Func) {
         self.funcs.push((func_name, func));
     }
@@ -411,7 +420,7 @@ impl Module {
     /// closure definitions, inductiveed with the arities of indirect call sites (whose target
     /// definition may have been inlined away). Sizing closure types from definitions alone
     /// misses the latter, leaving a surviving `call_ref` with no declared type for its arity.
-    pub fn clsr_arities(&self) -> BTreeSet<usize> {
+    pub(crate) fn clsr_arities(&self) -> BTreeSet<usize> {
         let mut arities = BTreeSet::new();
 
         for (_, clsr) in &self.clsrs {
@@ -433,6 +442,7 @@ impl Module {
         self.entry.as_ref()
     }
 
+    /// Bless `func_name` as the entrypoint. Set once by `to_cont` (always `main`); the module does not check the function exists — the lowerer adds it separately.
     pub fn set_entry(&mut self, func_name: FuncName) {
         self.entry = Some(func_name);
     }

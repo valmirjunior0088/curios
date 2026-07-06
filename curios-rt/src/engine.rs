@@ -94,7 +94,7 @@ type Trampoline =
     Arc<dyn Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
 
 /// The host side of a foreign registry: for each [`ForeignFunction`] in a
-/// store, the trampoline implementing it. [`instantiate`] fills the `sys`-tier
+/// store, the trampoline implementing it. `instantiate` fills the `sys`-tier
 /// one from the [`Host`] trait, and links *pull-based* — it walks the
 /// module's imports and defines exactly what the module demands, so an import
 /// with no registered implementation is a clean, named error instead of a
@@ -107,6 +107,7 @@ pub struct ForeignBindings {
 }
 
 impl ForeignBindings {
+    /// An empty registry over the rows of `foreigns`: follow with one [`define`](Self::define) per row the module will import. `instantiate` seeds the `sys`-tier registry this way from `sys_io()`; an embedder seeds the `env`-tier one from the [`ForeignStore`] that `compile_entrypoint` returned for the program.
     pub fn new(foreigns: ForeignStore) -> Self {
         Self {
             foreigns,
@@ -115,7 +116,7 @@ impl ForeignBindings {
     }
 
     /// No bindings — the store every no-FFI caller passes through
-    /// [`run_bytes`]/[`instantiate`], since a program with no `foreign`
+    /// [`run_bytes`]/`instantiate`, since a program with no `foreign`
     /// declarations imports nothing under `env`.
     pub fn empty() -> Self {
         Self::new(ForeignStore::new())

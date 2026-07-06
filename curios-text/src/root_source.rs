@@ -51,7 +51,7 @@ fn module_file_path(base: &std::path::Path, qualifier: &Qualifier) -> PathBuf {
 }
 
 impl RootSource {
-    pub fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
+    pub(crate) fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
         match self {
             RootSource::None => Err(Error::ModuleNotFound {
                 path: qualifier.join(),
@@ -95,7 +95,7 @@ impl RootSource {
     /// genuinely cross-reference each other — see `to_core::order_flat_items`'s
     /// doc comment — so genuine name dependencies reorder regardless of this
     /// tiebreak.
-    pub fn roots(&self) -> Vec<&str> {
+    pub(crate) fn roots(&self) -> Vec<&str> {
         match self {
             RootSource::Prelude { base, .. } => ["sys", "syn", "std"]
                 .into_iter()
@@ -117,7 +117,7 @@ impl RootSource {
     /// (`Roster::new` seeds them itself), so only `roots()`'s non-reserved
     /// names — a `Dependencies` layer's own names — are passed through as
     /// named path dependencies.
-    pub fn roster(&self) -> Roster {
+    pub(crate) fn roster(&self) -> Roster {
         Roster::new(
             self.roots()
                 .into_iter()

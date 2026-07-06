@@ -14,6 +14,7 @@ use {
     },
 };
 
+/// A core-calculus term: an `Rc`-shared [`Subterm`] plus a lazily-cached structural hash and `reach`, and an optional source span. Clones are pointer bumps, and equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The span is identity-irrelevant: hash and equality look only at the inner node, so re-spanning a term never splits a cache.
 #[derive(Debug, Clone)]
 pub struct Term {
     span: Option<Span>,
@@ -32,7 +33,7 @@ impl Term {
         })
     }
 
-    pub fn unwrap_or_clone(this: Self) -> Subterm {
+    pub(crate) fn unwrap_or_clone(this: Self) -> Subterm {
         Rc::unwrap_or_clone(this.inner)
     }
 
@@ -42,7 +43,7 @@ impl Term {
     /// else is `None`. Used to cheaply gate scrutinee-refinement
     /// canonicalization on the applied symbol before paying for argument
     /// reduction.
-    pub fn head_label(&self) -> Option<&str> {
+    pub(crate) fn head_label(&self) -> Option<&str> {
         match &*self.inner {
             Subterm::Apply(Apply { head, .. }) => head.head_label(),
             Subterm::Var(var) => var.as_free(),
@@ -50,44 +51,50 @@ impl Term {
         }
     }
 
-    pub fn span(&self) -> Option<Span> {
+    pub(crate) fn span(&self) -> Option<Span> {
         self.span.clone()
     }
 
     /// Attaches a span to this term. If the term already carries a span (the innermost
     /// one), it is preserved — innermost wins, matching how `Error::at` keeps the first
     /// span it sees as errors propagate up.
-    pub fn with_span(mut self, span: Span) -> Self {
+    pub(crate) fn with_span(mut self, span: Span) -> Self {
         if self.span.is_none() {
             self.span = Some(span);
         }
         self
     }
 
+    /// The universe of types, `Type` (the trailing underscore dodges the Rust keyword).
     pub fn type_() -> Self {
         Self::from(Subterm::Type)
     }
 
+    /// The universe of strict propositions, `Prop`.
     pub fn prop() -> Self {
         Self::from(Subterm::Prop)
     }
 
+    /// A primitive term — any literal or primitive operation that converts into [`Prim`].
     pub fn prim<P: Into<Prim>>(prim: P) -> Self {
         Self::from(Subterm::Prim(prim.into()))
     }
 
+    /// A variable occurrence. External callers can only build free variables ([`Var::free`]); bound ones are the scope machinery's business.
     pub fn var(var: Var) -> Self {
         Self::from(Subterm::Var(var))
     }
 
-    pub fn free_var<A: Into<String>>(label: A) -> Self {
+    pub(crate) fn free_var<A: Into<String>>(label: A) -> Self {
         Self::var(Var::free(label))
     }
 
+    /// An unresolved infix application ([`Infix`]) — elaboration-transient, consumed by `elaborate_infix`.
     pub fn infix(op: NumOp, left: Term, right: Term) -> Self {
         Self::from(Subterm::Infix(Infix { op, left, right }))
     }
 
+    /// A polymorphic numeric literal ([`NumLit`]) — elaboration-transient, resolved to a concrete `Nat`/`Int`/`Flt` primitive by `elaborate_numlit`.
     pub fn num_lit(magnitude: BigUint, signed: bool, negative: bool) -> Self {
         Self::from(Subterm::NumLit(NumLit {
             magnitude,
@@ -96,6 +103,7 @@ impl Term {
         }))
     }
 
+    /// A bare metavariable, as `to_core` mints one for a written hole `?`: empty spine (which resolves as the identity — see [`Metavar::spine`]) and no insertion origin.
     pub fn metavar(id: impl Into<MetavarId>) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id: id.into(),
@@ -107,7 +115,7 @@ impl Term {
     /// A metavariable minted for an omitted implicit or witness argument,
     /// carrying its insertion provenance (see [`Metavar::origin`]) and its
     /// birth spine.
-    pub fn metavar_inserted(
+    pub(crate) fn metavar_inserted(
         id: impl Into<MetavarId>,
         origin: MetavarOrigin,
         spine: impl Into<Rc<Vec<Term>>>,
@@ -121,7 +129,7 @@ impl Term {
 
     /// A hole rebuilt at its birth point with the identity spine over its
     /// frozen telescope (see [`Metavar::spine`]).
-    pub fn metavar_birthed(
+    pub(crate) fn metavar_birthed(
         id: impl Into<MetavarId>,
         origin: Option<MetavarOrigin>,
         spine: impl Into<Rc<Vec<Term>>>,
@@ -133,11 +141,12 @@ impl Term {
         }))
     }
 
+    /// `inner` with `span` attached — innermost wins if `inner` already carries one, per `Term::with_span`.
     pub fn spanned<T: Into<Term>>(span: Span, inner: T) -> Self {
         inner.into().with_span(span)
     }
 
-    pub fn func_type<I, L, T, O>(params: I, output: O) -> Self
+    pub(crate) fn func_type<I, L, T, O>(params: I, output: O) -> Self
     where
         I: IntoIterator<Item = (L, T)>,
         L: Into<String>,
@@ -152,6 +161,7 @@ impl Term {
         )
     }
 
+    /// Build a Π-type from `(plicity, label, type)` binders, keeping one plicity mark per telescope entry (asserted to line up — the [`FuncType`] invariant). The all-explicit shorthand is the crate-internal `func_type`.
     pub fn func_type_marked<I, L, T, O>(params: I, output: O) -> Self
     where
         I: IntoIterator<Item = (Plicity, L, T)>,
@@ -175,6 +185,7 @@ impl Term {
         }))
     }
 
+    /// Build a function literal from `(label, annotation)` parameters, closing the body over the labels via a [`Telescope`]. No plicity marks — see [`Func`].
     pub fn func<I, L, T, B>(params: I, body: B) -> Self
     where
         I: IntoIterator<Item = (L, T)>,
@@ -187,6 +198,7 @@ impl Term {
         }))
     }
 
+    /// Build an application whose arguments are all explicit — the common case; [`Term::apply_marked`] when call-site plicity marks matter.
     pub fn apply<H, I, P>(head: H, params: I) -> Self
     where
         H: Into<Term>,
@@ -199,6 +211,7 @@ impl Term {
         )
     }
 
+    /// Build an application with a per-argument plicity mark — the call-site `@`/`use` marks core must carry for the elaborator to decide which binder each argument fills (see [`Apply`]).
     pub fn apply_marked<H, I, P>(head: H, params: I) -> Self
     where
         H: Into<Term>,
@@ -217,12 +230,13 @@ impl Term {
         }))
     }
 
-    pub fn tuple_type_unit() -> Self {
+    pub(crate) fn tuple_type_unit() -> Self {
         Self::from(Subterm::TupleType(TupleType {
             telescope: Telescope::done(()),
         }))
     }
 
+    /// Build a dependent tuple (Σ) type from `(label, type)` fields: each field's type is closed over the labels before it — written order mirrors telescope order.
     pub fn tuple_type<I, L, T>(fields: I) -> Self
     where
         I: IntoIterator<Item = (L, T)>,
@@ -234,13 +248,7 @@ impl Term {
         Self::from(Subterm::TupleType(TupleType { telescope }))
     }
 
-    pub fn tuple_unit() -> Self {
-        Self::from(Subterm::Tuple(Tuple {
-            fields: vec![],
-            names: vec![],
-        }))
-    }
-
+    /// A positional tuple literal — the name-free normal form ([`Tuple::names`] empty) every internally-built and post-elaboration tuple keeps.
     pub fn tuple<I, T>(fields: I) -> Self
     where
         I: IntoIterator<Item = T>,
@@ -252,6 +260,7 @@ impl Term {
         }))
     }
 
+    /// A tuple literal carrying its written field names from `to_core`; elaboration checks them against the expected tuple type's labels and rebuilds the literal name-free. An all-`None` name list collapses to the positional normal form of [`Term::tuple`], so syntactic equality never splits on how the literal was spelled.
     pub fn tuple_named<I, T>(fields: I) -> Self
     where
         I: IntoIterator<Item = (Option<String>, T)>,
@@ -272,6 +281,7 @@ impl Term {
         Self::from(Subterm::Tuple(Tuple { fields, names }))
     }
 
+    /// A positional projection `head.index` — the normal form every post-elaboration projection takes (cf. [`Field`]).
     pub fn proj<H: Into<Term>>(head: H, index: usize) -> Self {
         Self::from(Subterm::Proj(Proj {
             head: head.into(),
@@ -279,6 +289,7 @@ impl Term {
         }))
     }
 
+    /// A labelled projection `head.label` — the pre-elaboration form; elaboration resolves the label against the head's tuple type and rebuilds it as [`Term::proj`].
     pub fn proj_label<H: Into<Term>, L: Into<String>>(head: H, label: L) -> Self {
         Self::from(Subterm::Proj(Proj {
             head: head.into(),
@@ -286,6 +297,7 @@ impl Term {
         }))
     }
 
+    /// Build an [`InductiveType`] normal form — the body of the generated type-constructor function. See the type's docs for the `params`/`indices` split.
     pub fn inductive_type<N, I, P, J, Q>(name: N, params: I, indices: J) -> Self
     where
         N: Into<String>,
@@ -301,6 +313,7 @@ impl Term {
         }))
     }
 
+    /// Build a [`Variant`] normal form — the body of a generated value-constructor function. `name`/`params` are stored redundantly on purpose; see the type's docs.
     pub fn variant<N, I, P, A, J, Q>(name: N, params: I, tag: A, payload: J) -> Self
     where
         N: Into<String>,
@@ -318,6 +331,7 @@ impl Term {
         }))
     }
 
+    /// Build a [`StructType`] normal form — what the generated type-former's body reduces to. Users never write one directly; see the type's docs.
     pub fn struct_type<N, I, P>(name: N, params: I) -> Self
     where
         N: Into<String>,
@@ -376,6 +390,7 @@ impl Term {
         }))
     }
 
+    /// Build the primitive eliminator of a nominal inductive ([`Cases::Inductive`]) without a type-pattern annotation: one arm per constructor tag, each closed over its payload binders. The annotated-motive form is [`Term::inductive_match_motive`].
     pub fn inductive_match<H, M, I, A, L, B>(
         head: H,
         motive_label: Option<&str>,
@@ -466,6 +481,7 @@ impl Term {
         }
     }
 
+    /// Build the dependent `Bln` eliminator ([`Cases::Bln`]): a false arm and a true arm, neither binding anything — the motive alone sees the scrutinee.
     pub fn bln_match<H, M, F, T>(
         head: H,
         motive_label: Option<&str>,
@@ -489,6 +505,7 @@ impl Term {
         }))
     }
 
+    /// Build the structural `Nat` eliminator ([`Carrier::Nat`]): a zero arm plus a successor arm closed over `(pred, ih)` — `Nat`'s generator carries no payload, so the cons arm binds one fewer variable than `Bin`/`Lst`'s.
     pub fn nat_match<H, M, ZC, PL, IL, SC>(
         head: H,
         motive_label: Option<&str>,
@@ -525,6 +542,7 @@ impl Term {
         }))
     }
 
+    /// Build the structural `Lst` eliminator ([`Carrier::Lst`]): the element type `elem`, an empty arm, and a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
     #[allow(clippy::too_many_arguments)]
     pub fn lst_match<H, M, EL, EC, HL, TL, IL, CC>(
         head: H,
@@ -568,6 +586,7 @@ impl Term {
         }))
     }
 
+    /// Build the structural `Bin` eliminator ([`Carrier::Bin`]): an empty arm plus a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
     #[allow(clippy::too_many_arguments)]
     pub fn bin_match<H, M, EC, HL, TL, IL, CC>(
         head: H,
@@ -608,6 +627,7 @@ impl Term {
         }))
     }
 
+    /// Build a [`Cases::Switch`] match: sparse dispatch on specific literal `Nat` values with a mandatory default arm. The arms bind nothing — unlike [`Term::nat_match`], this is a case split, not induction.
     pub fn switch<H, M, I, B, D>(
         head: H,
         motive_label: Option<&str>,
@@ -632,6 +652,7 @@ impl Term {
         }))
     }
 
+    /// Build a [`Let`], closing `tail` over `label`. `body` is deliberately *not* closed — a `let` is non-recursive; use [`Term::rec`] for self-reference.
     pub fn let_<L, T, B, U>(label: L, type_: T, body: B, tail: U) -> Self
     where
         L: Into<String>,
@@ -648,6 +669,7 @@ impl Term {
         }))
     }
 
+    /// Build a [`Rec`] block from `(label, type, value)` items: every type, every value, and the tail are closed over the full label list, so the items may reference one another (and themselves) by name.
     pub fn rec<I, L, T, U, V>(items: I, tail: V) -> Self
     where
         I: IntoIterator<Item = (L, T, U)>,
@@ -682,6 +704,17 @@ impl Term {
                 })
                 .collect(),
             tail: Scope::close(Many(labels.len()), &labels, tail.into()),
+        }))
+    }
+}
+
+#[cfg(test)]
+impl Term {
+    /// Test-only shorthand: the empty tuple `()`.
+    pub(crate) fn tuple_unit() -> Self {
+        Self::from(Subterm::Tuple(Tuple {
+            fields: vec![],
+            names: vec![],
         }))
     }
 }
@@ -792,7 +825,7 @@ impl NumOp {
 
     /// Comparison and equality operators yield `Bln` regardless of operand type;
     /// arithmetic operators yield the operand type.
-    pub fn result_is_bln(self) -> bool {
+    pub(crate) fn result_is_bln(self) -> bool {
         matches!(
             self,
             NumOp::Eql | NumOp::Neq | NumOp::Lt | NumOp::Gt | NumOp::Lte | NumOp::Gte
@@ -835,6 +868,7 @@ pub struct FuncType {
     pub plicities: Vec<Plicity>,
 }
 
+/// A function literal: the parameter annotations and the body as one [`Telescope`] (each entry a parameter type, the `Done` payload the body). Unlike [`FuncType`]/[`Apply`], a lambda carries no plicity marks — its binders are matched against the expected function type's marks during elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Func {
     pub telescope: Telescope<Term>,
@@ -879,6 +913,7 @@ pub enum Field {
     Label(String),
 }
 
+/// A projection out of a tuple. See [`Field`] for why the field is positional in every post-elaboration term.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Proj {
     pub head: Term,
@@ -994,6 +1029,7 @@ pub struct MotivePattern {
     pub slots: Vec<MotiveSlot>,
 }
 
+/// One positional slot of a [`MotivePattern`] — see there for which positions may take which form.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MotiveSlot {
     /// `_` or a bare identifier: occupies the next binder of the motive
@@ -1003,6 +1039,7 @@ pub enum MotiveSlot {
     Term(Term),
 }
 
+/// The arm payload of a [`Match`] — the only part that differs between the elimination forms (the scrutinee and motive live on `Match` itself). Which variant a match carries decides both its reduction rule and how erasure lowers it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Cases {
     /// Dependent elimination of `Bln`: a false arm and a true arm.
@@ -1050,6 +1087,7 @@ pub enum Carrier {
     },
 }
 
+/// A single `let` binding: the annotated `type_`, the bound `body`, and the `tail` continuation with the binding as its one scope binder. Non-recursive — `body` cannot see the binding; self- and mutual reference is [`Rec`]'s job.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Let {
     pub type_: Term,
@@ -1057,6 +1095,7 @@ pub struct Let {
     pub tail: Scope<One>,
 }
 
+/// A block of mutually recursive bindings: each item's type and value scope — and the `tail` — are closed over *all* the item labels at once, which is what makes the recursion mutual. Occurrences are unfolded lazily during reduction (`unfold_rec`) rather than at construction, so a `Rec` can define non-terminating-looking fixpoints that only unroll on demand.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Rec {
     pub items: Vec<(Scope<Many>, Scope<Many>)>,
@@ -1148,6 +1187,7 @@ pub struct Metavar {
     pub origin: Option<MetavarOrigin>,
 }
 
+/// The actual node of the core term language — one variant per term former. [`Term`] wraps a `Subterm` in an `Rc` with cached hash/reach and an optional span, and `Deref`s here, so pattern matches are written against `Subterm` while construction goes through `Term`'s smart constructors. The final two variants (`Infix`, `NumLit`) are elaboration-transient: born in `to_core`, consumed by `elaborate`, never seen by reduce/convert/zonk/erase.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Subterm {
     Type,
@@ -1175,34 +1215,35 @@ pub enum Subterm {
 }
 
 impl Subterm {
-    pub fn as_nat(&self) -> Option<Nat> {
+    pub(crate) fn as_nat(&self) -> Option<Nat> {
         match self {
             Subterm::Prim(Prim::Nat(nat)) => Some(nat.clone()),
             _ => None,
         }
     }
 
-    pub fn as_int(&self) -> Option<Int> {
+    pub(crate) fn as_int(&self) -> Option<Int> {
         match self {
             Subterm::Prim(Prim::Int(value)) => Some(value.clone()),
             _ => None,
         }
     }
 
-    pub fn as_flt(&self) -> Option<Flt> {
+    pub(crate) fn as_flt(&self) -> Option<Flt> {
         match self {
             Subterm::Prim(Prim::Flt(value)) => Some(*value),
             _ => None,
         }
     }
 
-    pub fn as_bln(&self) -> Option<bool> {
+    pub(crate) fn as_bln(&self) -> Option<bool> {
         match self {
             Subterm::Prim(Prim::Bln(value)) => Some(*value),
             _ => None,
         }
     }
 
+    /// The free-variable labels occurring in this subterm — the inherent-method spelling of [`Bound::free_vars`], callable without importing the trait.
     pub fn free_vars(&self) -> BTreeSet<String> {
         <Subterm as Bound>::free_vars(self)
     }
@@ -1210,7 +1251,7 @@ impl Subterm {
     /// Collect the ids of every metavariable occurring in this subterm. `Visit`
     /// only sees `Var`s and a `Metavar` holds none, so occurs/zonk analyses
     /// cannot piggyback on `free_vars` — this walk enumerates them directly.
-    pub fn metavars(&self) -> BTreeSet<MetavarId> {
+    pub(crate) fn metavars(&self) -> BTreeSet<MetavarId> {
         let mut ids = BTreeSet::new();
         self.collect_metavars(&mut ids);
         ids
@@ -1229,7 +1270,7 @@ impl Subterm {
         names
     }
 
-    pub fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
+    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
         match self {
             Subterm::Type | Subterm::Prop | Subterm::Var(_) => {}
             Subterm::NumLit(_) => {}
@@ -1389,7 +1430,7 @@ impl Subterm {
     /// (which is this with a collector that never stops): the reducer's memo
     /// gate uses it to reject caching a WHNF that still names an unsolved
     /// metavariable, without allocating the full id set.
-    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
+    pub(crate) fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { id, spine, .. }) => {
                 pred(*id) || spine.iter().any(|t| t.any_metavar(pred))
@@ -1488,7 +1529,7 @@ impl Subterm {
     /// only sees `Var`s and a `Metavar` holds none, so occurs/zonk analyses
     /// cannot piggyback on `free_vars` — this walk (an `any_metavar` whose
     /// collector never short-circuits) enumerates them directly.
-    pub fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
+    pub(crate) fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
         self.any_metavar(&mut |id| {
             ids.insert(id);
             false

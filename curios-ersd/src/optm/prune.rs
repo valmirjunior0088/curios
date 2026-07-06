@@ -27,7 +27,7 @@ use crate::{Item, Module, optm::call_graph::CallGraph};
 /// indistinguishable from a live, possibly-effectful call sequence. Items keep
 /// their original relative order, so `to_cont`'s dependency ordering (a
 /// definition precedes its uses) is preserved.
-pub fn prune_unreachable(module: &mut Module) {
+pub(crate) fn prune_unreachable(module: &mut Module) {
     let count = module.items.len();
 
     // The reference graph + transitive effect taint. `tainted[i]` means evaluating

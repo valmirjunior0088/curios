@@ -30,7 +30,7 @@ use {
 /// Soundness rides on the same premise as [`simplify_maps`](super::simplify_maps):
 /// aggregates are immutable, so `b[s + j] == slice(b, s, e)[j]` for every in-bounds
 /// access, and a fully-forwarded slice's allocation is unobservable.
-pub fn forward_slices(module: &mut Module) {
+pub(crate) fn forward_slices(module: &mut Module) {
     // A private counter: the `v@slice#n` names it mints share a shape with no
     // other pass, so they never collide despite starting from zero each run.
     let offsets = Entropy::<usize>::new();

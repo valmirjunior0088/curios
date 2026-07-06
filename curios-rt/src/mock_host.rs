@@ -145,13 +145,6 @@ pub struct MockHost {
 }
 
 impl MockHost {
-    /// An unseeded host — empty stdin, files, net, and clocks — paired with its
-    /// [`MockIo`]. Shortcut for `MockHost::builder().build()` for tests that need
-    /// no scripted inputs.
-    pub fn unseeded() -> (MockHost, MockIo) {
-        Self::builder().build()
-    }
-
     /// Start seeding a host. Chain the `stdin_lines`/`files`/`net`/… setters,
     /// then `build` for the `(host, io)` pair.
     pub fn builder() -> MockHostBuilder {
@@ -583,7 +576,7 @@ impl Default for MockHostBuilder {
 impl MockHostBuilder {
     /// Append one line to scripted stdin; the newline the terminal would
     /// deliver is appended for you.
-    pub fn stdin_line(mut self, line: impl AsRef<[u8]>) -> Self {
+    pub(crate) fn stdin_line(mut self, line: impl AsRef<[u8]>) -> Self {
         self.input.extend_from_slice(line.as_ref());
         self.input.push(b'\n');
 
@@ -664,7 +657,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Set the process arguments served by `args` (argv[0] is the program name).
+    /// Set the process arguments served by `args` (`argv[0]` is the program name).
     pub fn args<A: AsRef<[u8]>, I: IntoIterator<Item = A>>(mut self, args: I) -> Self {
         self.args = args.into_iter().map(|a| a.as_ref().to_vec()).collect();
 
@@ -747,5 +740,18 @@ mod tests {
         assert_ne!(handle.bytes(), fresh.bytes());
         assert!(matches!(host.write(handle, b"z"), (Status::NotFound, 0)));
         assert!(matches!(host.write(fresh, b"ok"), (Status::Ok, 2)));
+    }
+
+    #[test]
+    fn seed_changes_the_random_sequence() {
+        let (default_host, _io) = MockHost::builder().build();
+        let (seeded_host, _io) = MockHost::builder().seed(1).build();
+
+        // Two default builds agree (the seed is fixed, not sampled per-build)...
+        let (rebuilt_default_host, _io) = MockHost::builder().build();
+        assert_eq!(default_host.random(8), rebuilt_default_host.random(8));
+
+        // ...but a different seed diverges from it.
+        assert_ne!(default_host.random(8), seeded_host.random(8));
     }
 }

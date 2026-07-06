@@ -5,6 +5,7 @@ use {
     std::{collections::BTreeSet, fmt, rc::Rc},
 };
 
+/// The failure mode of type-level evaluation (`reduce`/`convert`): either the context's shared deadline fired (`Preempted`) or a partial primitive was folded outside its domain, carrying the offending redex's span. Converted into the user-facing [`Error`] at the driver boundary by `into_error`, whose callback lets each caller decide what a preemption reports — the term being reduced, or the pair being compared.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReduceError {
     Preempted,
@@ -376,67 +377,67 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn reduce_preempted<T: Into<Term>>(term: T) -> Self {
+    pub(crate) fn reduce_preempted<T: Into<Term>>(term: T) -> Self {
         Self::ReducePreempted {
             term: Box::new(term.into()),
         }
     }
 
-    pub fn convert_preempted<T: Into<Term>, U: Into<Term>>(this: T, that: U) -> Self {
+    pub(crate) fn convert_preempted<T: Into<Term>, U: Into<Term>>(this: T, that: U) -> Self {
         Self::ConvertPreempted {
             this: Box::new(this.into()),
             that: Box::new(that.into()),
         }
     }
 
-    pub fn type_mismatch<U: Into<Term>, V: Into<Term>>(inferred: U, expected: V) -> Self {
+    pub(crate) fn type_mismatch<U: Into<Term>, V: Into<Term>>(inferred: U, expected: V) -> Self {
         Self::TypeMismatch {
             inferred: Box::new(inferred.into()),
             expected: Box::new(expected.into()),
         }
     }
 
-    pub fn not_a_function<U: Into<Term>>(head_type: U) -> Self {
+    pub(crate) fn not_a_function<U: Into<Term>>(head_type: U) -> Self {
         Self::NotAFunction {
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn not_a_function_type<U: Into<Term>>(expected: U) -> Self {
+    pub(crate) fn not_a_function_type<U: Into<Term>>(expected: U) -> Self {
         Self::NotAFunctionType {
             expected: Box::new(expected.into()),
         }
     }
 
-    pub fn not_a_tuple<U: Into<Term>>(head_type: U) -> Self {
+    pub(crate) fn not_a_tuple<U: Into<Term>>(head_type: U) -> Self {
         Self::NotATuple {
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn not_a_tuple_type<U: Into<Term>>(expected: U) -> Self {
+    pub(crate) fn not_a_tuple_type<U: Into<Term>>(expected: U) -> Self {
         Self::NotATupleType {
             expected: Box::new(expected.into()),
         }
     }
 
-    pub fn tuple_arity_mismatch(expected: usize, got: usize) -> Self {
+    pub(crate) fn tuple_arity_mismatch(expected: usize, got: usize) -> Self {
         Self::TupleArityMismatch { expected, got }
     }
 
-    pub fn tuple_index_out_of_bounds(index: usize, arity: usize) -> Self {
+    pub(crate) fn tuple_index_out_of_bounds(index: usize, arity: usize) -> Self {
         Self::TupleIndexOutOfBounds { index, arity }
     }
 
-    pub fn unknown_tuple_label(label: String, available: Vec<String>) -> Self {
+    pub(crate) fn unknown_tuple_label(label: String, available: Vec<String>) -> Self {
         Self::UnknownTupleLabel { label, available }
     }
 
-    pub fn duplicate_tuple_label(label: String) -> Self {
+    pub(crate) fn duplicate_tuple_label(label: String) -> Self {
         Self::DuplicateTupleLabel { label }
     }
 
-    pub fn tuple_field_name_mismatch(written: String, expected: String, position: usize) -> Self {
+    pub(crate) fn tuple_field_name_mismatch(written: String, expected: String, position: usize) -> Self {
         Self::TupleFieldNameMismatch {
             written,
             expected,
@@ -444,56 +445,56 @@ impl Error {
         }
     }
 
-    pub fn not_nat_type<U: Into<Term>>(head_type: U) -> Self {
+    pub(crate) fn not_nat_type<U: Into<Term>>(head_type: U) -> Self {
         Self::NotNatType {
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn not_bln_type<U: Into<Term>>(head_type: U) -> Self {
+    pub(crate) fn not_bln_type<U: Into<Term>>(head_type: U) -> Self {
         Self::NotBlnType {
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn not_arr_type<U: Into<Term>>(head_type: U) -> Self {
+    pub(crate) fn not_arr_type<U: Into<Term>>(head_type: U) -> Self {
         Self::NotArrType {
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn not_bin_type<U: Into<Term>>(head_type: U) -> Self {
+    pub(crate) fn not_bin_type<U: Into<Term>>(head_type: U) -> Self {
         Self::NotBinType {
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn wrong_number_of_arguments(expected: usize, got: usize) -> Self {
+    pub(crate) fn wrong_number_of_arguments(expected: usize, got: usize) -> Self {
         Self::WrongNumberOfArguments { expected, got }
     }
 
-    pub fn unknown_match_constructor(type_name: String, tag: String) -> Self {
+    pub(crate) fn unknown_match_constructor(type_name: String, tag: String) -> Self {
         Self::UnknownMatchConstructor { type_name, tag }
     }
 
-    pub fn match_case_missing<T: Into<Term>, A: Into<Atom>>(term: T, atom: A) -> Self {
+    pub(crate) fn match_case_missing<T: Into<Term>, A: Into<Atom>>(term: T, atom: A) -> Self {
         Self::MatchCaseMissing {
             term: Box::new(term.into()),
             atom: atom.into(),
         }
     }
 
-    pub fn not_a_inductive_type<U: Into<Term>>(head_type: U) -> Self {
+    pub(crate) fn not_a_inductive_type<U: Into<Term>>(head_type: U) -> Self {
         Self::NotAInductiveType {
             head_type: Box::new(head_type.into()),
         }
     }
 
-    pub fn large_elim_of_prop<N: Into<String>>(name: N) -> Self {
+    pub(crate) fn large_elim_of_prop<N: Into<String>>(name: N) -> Self {
         Self::LargeElimOfProp { name: name.into() }
     }
 
-    pub fn informative_prop_struct<N: Into<String>, F: Into<String>, T: Into<Term>>(
+    pub(crate) fn informative_prop_struct<N: Into<String>, F: Into<String>, T: Into<Term>>(
         name: N,
         field: F,
         field_type: T,
@@ -505,13 +506,13 @@ impl Error {
         }
     }
 
-    pub fn not_a_struct_type<U: Into<Term>>(found: U) -> Self {
+    pub(crate) fn not_a_struct_type<U: Into<Term>>(found: U) -> Self {
         Self::NotAStructType {
             found: Box::new(found.into()),
         }
     }
 
-    pub fn struct_arity_mismatch<N: Into<String>>(name: N, expected: usize, got: usize) -> Self {
+    pub(crate) fn struct_arity_mismatch<N: Into<String>>(name: N, expected: usize, got: usize) -> Self {
         Self::StructArityMismatch {
             name: name.into(),
             expected,
@@ -519,7 +520,7 @@ impl Error {
         }
     }
 
-    pub fn wrong_number_of_fields<N: Into<String>>(name: N, expected: usize, got: usize) -> Self {
+    pub(crate) fn wrong_number_of_fields<N: Into<String>>(name: N, expected: usize, got: usize) -> Self {
         Self::WrongNumberOfFields {
             name: name.into(),
             expected,
@@ -527,7 +528,7 @@ impl Error {
         }
     }
 
-    pub fn unknown_struct_field<N: Into<String>>(
+    pub(crate) fn unknown_struct_field<N: Into<String>>(
         name: N,
         label: String,
         available: Vec<String>,
@@ -539,11 +540,11 @@ impl Error {
         }
     }
 
-    pub fn use_entry_outside_concept<N: Into<String>>(name: N) -> Self {
+    pub(crate) fn use_entry_outside_concept<N: Into<String>>(name: N) -> Self {
         Self::UseEntryOutsideConcept { name: name.into() }
     }
 
-    pub fn too_many_use_entries<N: Into<String>>(name: N, expected: usize, got: usize) -> Self {
+    pub(crate) fn too_many_use_entries<N: Into<String>>(name: N, expected: usize, got: usize) -> Self {
         Self::TooManyUseEntries {
             name: name.into(),
             expected,
@@ -551,26 +552,26 @@ impl Error {
         }
     }
 
-    pub fn spread_not_first<N: Into<String>>(name: N) -> Self {
+    pub(crate) fn spread_not_first<N: Into<String>>(name: N) -> Self {
         Self::SpreadNotFirst { name: name.into() }
     }
 
-    pub fn multiple_spreads<N: Into<String>>(name: N) -> Self {
+    pub(crate) fn multiple_spreads<N: Into<String>>(name: N) -> Self {
         Self::MultipleSpreads { name: name.into() }
     }
 
-    pub fn spread_base_type_mismatch<N: Into<String>, T: Into<Term>>(name: N, found: T) -> Self {
+    pub(crate) fn spread_base_type_mismatch<N: Into<String>, T: Into<Term>>(name: N, found: T) -> Self {
         Self::SpreadBaseTypeMismatch {
             name: name.into(),
             found: Box::new(found.into()),
         }
     }
 
-    pub fn unlabeled_spread_override<N: Into<String>>(name: N) -> Self {
+    pub(crate) fn unlabeled_spread_override<N: Into<String>>(name: N) -> Self {
         Self::UnlabeledSpreadOverride { name: name.into() }
     }
 
-    pub fn spread_override_out_of_order<N: Into<String>>(
+    pub(crate) fn spread_override_out_of_order<N: Into<String>>(
         name: N,
         label: String,
         order: Vec<String>,
@@ -582,18 +583,18 @@ impl Error {
         }
     }
 
-    pub fn private_field<N: Into<String>, F: Into<String>>(name: N, field: F) -> Self {
+    pub(crate) fn private_field<N: Into<String>, F: Into<String>>(name: N, field: F) -> Self {
         Self::PrivateField {
             name: name.into(),
             field: field.into(),
         }
     }
 
-    pub fn private_representation<N: Into<String>>(name: N) -> Self {
+    pub(crate) fn private_representation<N: Into<String>>(name: N) -> Self {
         Self::PrivateRepresentation { name: name.into() }
     }
 
-    pub fn ctor_arity_mismatch<A: Into<Atom>>(atom: A, expected: usize, got: usize) -> Self {
+    pub(crate) fn ctor_arity_mismatch<A: Into<Atom>>(atom: A, expected: usize, got: usize) -> Self {
         Self::CtorArityMismatch {
             atom: atom.into(),
             expected,
@@ -601,32 +602,32 @@ impl Error {
         }
     }
 
-    pub fn unbound_variable<T: Into<Term>>(var: T) -> Self {
+    pub(crate) fn unbound_variable<T: Into<Term>>(var: T) -> Self {
         Self::UnboundVariable {
             term: Box::new(var.into()),
         }
     }
 
-    pub fn operator_undefined<T: Into<Term>>(symbol: String, type_: T) -> Self {
+    pub(crate) fn operator_undefined<T: Into<Term>>(symbol: String, type_: T) -> Self {
         Self::OperatorUndefined {
             symbol,
             type_: Box::new(type_.into()),
         }
     }
 
-    pub fn uninferred_implicit(func: String, binder: String) -> Self {
+    pub(crate) fn uninferred_implicit(func: String, binder: String) -> Self {
         Self::UninferredImplicit { func, binder }
     }
 
-    pub fn too_many_implicits(expected: usize, got: usize) -> Self {
+    pub(crate) fn too_many_implicits(expected: usize, got: usize) -> Self {
         Self::TooManyImplicits { expected, got }
     }
 
-    pub fn too_many_witness_args(expected: usize, got: usize) -> Self {
+    pub(crate) fn too_many_witness_args(expected: usize, got: usize) -> Self {
         Self::TooManyWitnessArgs { expected, got }
     }
 
-    pub fn no_witness<T: Into<Term>>(goal: T, func: String, binder: String) -> Self {
+    pub(crate) fn no_witness<T: Into<Term>>(goal: T, func: String, binder: String) -> Self {
         Self::NoWitness {
             goal: Box::new(goal.into()),
             func,
@@ -634,7 +635,7 @@ impl Error {
         }
     }
 
-    pub fn duplicate_witness(
+    pub(crate) fn duplicate_witness(
         concept: String,
         key: super::WitnessKey,
         first: String,
@@ -648,7 +649,7 @@ impl Error {
         }
     }
 
-    pub fn orphan_witness(concept: String, key: super::WitnessKey, witness: String) -> Self {
+    pub(crate) fn orphan_witness(concept: String, key: super::WitnessKey, witness: String) -> Self {
         Self::OrphanWitness {
             concept,
             key,
@@ -656,7 +657,7 @@ impl Error {
         }
     }
 
-    pub fn ambiguous_witness<T: Into<Term>, U: Into<Term>, V: Into<Term>>(
+    pub(crate) fn ambiguous_witness<T: Into<Term>, U: Into<Term>, V: Into<Term>>(
         goal: T,
         first: U,
         second: V,
@@ -668,13 +669,13 @@ impl Error {
         }
     }
 
-    pub fn cyclic_superclass<N: Into<String>>(concept: N) -> Self {
+    pub(crate) fn cyclic_superclass<N: Into<String>>(concept: N) -> Self {
         Self::CyclicSuperclass {
             concept: concept.into(),
         }
     }
 
-    pub fn invalid_witness_head<N: Into<String>, T: Into<Term>>(
+    pub(crate) fn invalid_witness_head<N: Into<String>, T: Into<Term>>(
         witness: N,
         position: usize,
         head: T,
@@ -686,14 +687,14 @@ impl Error {
         }
     }
 
-    pub fn not_a_concept<N: Into<String>, T: Into<Term>>(witness: N, found: T) -> Self {
+    pub(crate) fn not_a_concept<N: Into<String>, T: Into<Term>>(witness: N, found: T) -> Self {
         Self::NotAConcept {
             witness: witness.into(),
             found: Box::new(found.into()),
         }
     }
 
-    pub fn non_regular_witness_premise<N: Into<String>, T: Into<Term>>(
+    pub(crate) fn non_regular_witness_premise<N: Into<String>, T: Into<Term>>(
         witness: N,
         premise: T,
     ) -> Self {
@@ -703,48 +704,48 @@ impl Error {
         }
     }
 
-    pub fn explicit_witness_param<N: Into<String>>(witness: N) -> Self {
+    pub(crate) fn explicit_witness_param<N: Into<String>>(witness: N) -> Self {
         Self::ExplicitWitnessParam {
             witness: witness.into(),
         }
     }
 
-    pub fn nat_overflow(value: BigUint) -> Self {
+    pub(crate) fn nat_overflow(value: BigUint) -> Self {
         Self::NatOverflow { value }
     }
 
-    pub fn int_overflow(value: Int) -> Self {
+    pub(crate) fn int_overflow(value: Int) -> Self {
         Self::IntOverflow {
             value: Box::new(value),
         }
     }
 
-    pub fn motive_wrong_inductive(written: String, actual: String) -> Self {
+    pub(crate) fn motive_wrong_inductive(written: String, actual: String) -> Self {
         Self::MotiveWrongInductive { written, actual }
     }
 
-    pub fn motive_pattern_arity(expected: usize, got: usize) -> Self {
+    pub(crate) fn motive_pattern_arity(expected: usize, got: usize) -> Self {
         Self::MotivePatternArity { expected, got }
     }
 
-    pub fn motive_param_mismatch<U: Into<Term>>(written: U, actual: U) -> Self {
+    pub(crate) fn motive_param_mismatch<U: Into<Term>>(written: U, actual: U) -> Self {
         Self::MotiveParamMismatch {
             written: Box::new(written.into()),
             actual: Box::new(actual.into()),
         }
     }
 
-    pub fn motive_index_slot_not_binder<U: Into<Term>>(slot: U) -> Self {
+    pub(crate) fn motive_index_slot_not_binder<U: Into<Term>>(slot: U) -> Self {
         Self::MotiveIndexSlotNotBinder {
             slot: Box::new(slot.into()),
         }
     }
 
-    pub fn missing_arm_not_impossible(tag: Atom) -> Self {
+    pub(crate) fn missing_arm_not_impossible(tag: Atom) -> Self {
         Self::MissingArmNotImpossible { tag }
     }
 
-    pub fn at(self, span: Span) -> Self {
+    pub(crate) fn at(self, span: Span) -> Self {
         match self {
             Self::Located { .. } => self,
             error => Self::Located {
@@ -754,14 +755,14 @@ impl Error {
         }
     }
 
-    pub fn at_opt(self, span: Option<Span>) -> Self {
+    pub(crate) fn at_opt(self, span: Option<Span>) -> Self {
         match span {
             Some(span) => self.at(span),
             None => self,
         }
     }
 
-    pub fn format(&self) -> String {
+    pub(crate) fn format(&self) -> String {
         // Render with source-style names (axis (a)): collect the names appearing
         // across every term this error displays, build one collision-aware
         // rename map for them, and install it for the duration of the render so
@@ -1272,7 +1273,7 @@ impl fmt::Display for Error {
 }
 
 impl ReduceError {
-    pub fn into_error(self, preempted: impl FnOnce() -> Error) -> Error {
+    pub(crate) fn into_error(self, preempted: impl FnOnce() -> Error) -> Error {
         match self {
             Self::Preempted => preempted(),
             Self::BinGetOutOfBounds { len, index, span } => {

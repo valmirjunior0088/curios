@@ -1,8 +1,13 @@
+//! The compile driver: the one crate that strings the pipeline stages together, from a parsed `curios_text::Entrypoint` to a `curios_wasm::Module`. [`compile_entrypoint`] runs the full `to_core → elaborate → zonk → erase → ersd optm → to_cont → cont optm → to_wasm` sequence; [`typecheck_entrypoint`] stops after zonk, the fast path behind the CLI's `check`. Each stage is passed to the caller's observer as a borrowed [`Stage`], which is how `--print` dumps IRs without the driver retaining them.
+//!
+//! The fixed `sys`/`syn`/`std` prelude is elaborated once per thread and cached; every compile replays it into a fresh context and type-checks only the user code on top. Everything wasm-native — Binaryen, Cranelift precompilation, execution — lives downstream in `curios`/`curios-rt`: this crate stops at the wasm module plus the program's harvested `ForeignStore`.
+
 use {
     curios_abi::{ForeignStore, sys_io},
     std::time::Duration,
 };
 
+/// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — the CLI's `--print` stage dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past. A type-check-only run emits just `Text` and `Core`.
 pub enum Stage<'a> {
     Text(&'a curios_text::Entrypoint),
     Core(&'a curios_core::Module),
@@ -150,6 +155,7 @@ where
     Ok(())
 }
 
+/// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `env`-tier bindings (`curios-rt`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
 pub fn compile_entrypoint<O>(
     timeout: Duration,
     entrypoint: &curios_text::Entrypoint,
@@ -174,9 +180,9 @@ where
 
     // *After* erase has type-checked everything, run the Ersd optimization
     // pipeline in place: drop the items the entrypoint cannot reach, then re-base
-    // self-recursion onto accumulators and offsets (see `curios_ersd::optm`).
+    // self-recursion onto accumulators and offsets (see `curios_ersd::optimize`).
     let mut ersd_optm_module = ersd_module;
-    curios_ersd::optm::optimize(&mut ersd_optm_module);
+    curios_ersd::optimize(&mut ersd_optm_module);
 
     observe(Stage::ErsdOptm(&ersd_optm_module));
 
@@ -184,9 +190,9 @@ where
 
     observe(Stage::Cont(&cont_module));
 
-    // Run the Cont optimization pipeline in place (see `curios_cont::optm`).
+    // Run the Cont optimization pipeline in place (see `curios_cont::optimize`).
     let mut cont_optm_module = cont_module;
-    curios_cont::optm::optimize(&mut cont_optm_module);
+    curios_cont::optimize(&mut cont_optm_module);
 
     observe(Stage::ContOptm(&cont_optm_module));
 

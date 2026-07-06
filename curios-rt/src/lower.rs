@@ -6,7 +6,9 @@ use {
     },
 };
 
+/// Encoding one host-import result list into wasmtime `Val`s — the outbound half of the FFI boundary (`Lift` is the inbound half). Each impl produces the exact GC shape the generated code expects on that wire type (i31-boxed scalars, `Bin` as an i8 array, `Lst` as an anyref-element array), so a host function returns plain Rust values and the trampoline lands them in wasm-typed result slots.
 pub trait Lower {
+    /// Encode `self` into the import's `results` slots, allocating any GC values through `caller`. Contract: every single-value impl fills exactly `results[0]` — the alignment the tuple impls rely on to re-slice per component.
     fn lower(self, caller: &mut Caller<'_, ()>, results: &mut [Val])
     -> Result<(), wasmtime::Error>;
 }

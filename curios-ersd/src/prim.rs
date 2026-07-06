@@ -4,6 +4,7 @@ use {
     std::{collections::BTreeSet, sync::Arc},
 };
 
+/// The effect-free primitive alphabet: literals plus arithmetic/comparison/conversion over `Nat` (u32), `Int` (i32), and `Flt` (f32), the `Bin`/`Lst` sequence operations, and `Io` descriptor equality. Purity here is structural — `Term::contains_effect` classifies every variant of this enum pure without inspection — so an operation with observable behavior must live in [`HostPrim`] or [`CellPrim`] instead.
 #[derive(Debug)]
 pub enum PurePrim {
     Nat(u32),
@@ -88,6 +89,7 @@ pub enum PurePrim {
     IoEql(Term, Term),
 }
 
+/// The primitives that leave the module: a store-described foreign import call, or process exit. Both are effectful by definition (`Prim::is_effectful`), and `to_cont` lowers each as the *tail* of its region — the impure boundary of the region tree — never as an in-region value.
 #[derive(Debug)]
 pub enum HostPrim {
     /// A store-described host call: the function's `WireSignature` fixes the
@@ -96,6 +98,7 @@ pub enum HostPrim {
     IoExit(Term),
 }
 
+/// The mutable-cell primitives — the IR's only stateful values (the design law confines mutation to single emitted instructions; `Cell` is the sanctioned exception that gives the guest a mutable reference). Classified effectful so no pass folds, reorders, or duplicates cell traffic.
 #[derive(Debug)]
 pub enum CellPrim {
     New(Term),       // init
@@ -103,6 +106,7 @@ pub enum CellPrim {
     Get(Term),       // cell
 }
 
+/// A primitive operation, partitioned by purity: `Pure` computations may be folded, reordered, and duplicated freely, while `Host` and `Cell` are effectful (`is_effectful`) and pin the evaluation order around them. This partition is the IR's entire impurity story — `Term::contains_effect`, `optm`'s effect-taint analyses, and `to_cont`'s synchronous/CPS split all reduce to which arm a primitive sits in.
 #[derive(Debug)]
 pub enum Prim {
     Pure(PurePrim),
@@ -112,7 +116,7 @@ pub enum Prim {
 
 impl Prim {
     /// Free names of this primitive's operands (see [`Term::free_names`]).
-    pub fn free_names(&self) -> BTreeSet<String> {
+    pub(crate) fn free_names(&self) -> BTreeSet<String> {
         self.operands()
             .into_iter()
             .flat_map(Term::free_names)
@@ -120,7 +124,7 @@ impl Prim {
     }
 
     /// The operand terms this primitive evaluates.
-    pub fn operands(&self) -> Vec<&Term> {
+    pub(crate) fn operands(&self) -> Vec<&Term> {
         match self {
             Prim::Pure(p) => p.operands(),
             Prim::Host(h) => h.operands(),
@@ -130,7 +134,7 @@ impl Prim {
 
     /// The operand terms, mutably — the [`operands`](Self::operands) mirror used by
     /// passes that rewrite operands in place (e.g. `ersd::introduce_offsets`).
-    pub fn operands_mut(&mut self) -> Vec<&mut Term> {
+    pub(crate) fn operands_mut(&mut self) -> Vec<&mut Term> {
         match self {
             Prim::Pure(p) => p.operands_mut(),
             Prim::Host(h) => h.operands_mut(),
@@ -140,13 +144,13 @@ impl Prim {
 
     /// Whether evaluating this primitive performs an observable action — a host
     /// effect or a cell operation — rather than a pure computation.
-    pub fn is_effectful(&self) -> bool {
+    pub(crate) fn is_effectful(&self) -> bool {
         matches!(self, Prim::Host(_) | Prim::Cell(_))
     }
 }
 
 impl PurePrim {
-    pub fn operands(&self) -> Vec<&Term> {
+    pub(crate) fn operands(&self) -> Vec<&Term> {
         use PurePrim::*;
 
         match self {
@@ -211,7 +215,7 @@ impl PurePrim {
         }
     }
 
-    pub fn operands_mut(&mut self) -> Vec<&mut Term> {
+    pub(crate) fn operands_mut(&mut self) -> Vec<&mut Term> {
         use PurePrim::*;
 
         match self {

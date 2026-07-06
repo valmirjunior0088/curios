@@ -51,7 +51,7 @@ use {
 /// indirect calls become known-closure calls for [`lift_closures`] to devirtualize.
 /// Allocations are plain `Data::Clsr` constructions — never hidden behind dispatch —
 /// so this needs no control-flow analysis to find them. Both sites share the clone
-/// builder ([`specialize_arguments`]): "drop each resolved candidate argument,
+/// builder (`specialize_arguments`): "drop each resolved candidate argument,
 /// thread the baked closure's own captures through as leading args, rebind the
 /// dropped name to its baked shape at the body top."
 ///
@@ -84,7 +84,7 @@ use {
 /// specialization is built at most once. The statically-known closures in any one
 /// body form a finite acyclic set (a name's binding precedes its uses), so the
 /// reachable family of clones is finite and the loop converges.
-pub fn specialize_calls(module: &mut Module) {
+pub(crate) fn specialize_calls(module: &mut Module) {
     loop {
         let candidates = candidate_positions(module);
         let capture_candidates = candidate_capture_positions(module);

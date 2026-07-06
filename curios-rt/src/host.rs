@@ -1,5 +1,5 @@
 use {
-    curios_abi::{mode, poll, status, stdio},
+    curios_abi::{poll, status, stdio},
     num_bigint::BigUint,
     rustix::event::PollFlags,
     std::{
@@ -11,7 +11,7 @@ use {
 /// A handle the guest shuttles across the IO boundary: one of the three standard
 /// streams, or a host-minted token for an open file or socket. Mirrors the
 /// guest's `/std/Io` handles; lifts from / lowers to its `Bin` wire token (the
-/// opaque bytes a host mints — see [`bytes`](Self::bytes)).
+/// opaque bytes a host mints — see `bytes`).
 #[derive(Clone)]
 pub enum Io {
     Stdin,
@@ -22,24 +22,26 @@ pub enum Io {
 
 impl Io {
     /// The well-known stdio handle tokens minted by the `/sys/Io` prelude.
-    pub const STDIN: u32 = stdio::STDIN;
-    pub const STDOUT: u32 = stdio::STDOUT;
-    pub const STDERR: u32 = stdio::STDERR;
+    pub(crate) const STDIN: u32 = stdio::STDIN;
+    /// The well-known stdout handle token.
+    pub(crate) const STDOUT: u32 = stdio::STDOUT;
+    /// The well-known stderr handle token, the last before [`HANDLE_SEED`](Self::HANDLE_SEED).
+    pub(crate) const STDERR: u32 = stdio::STDERR;
     /// The first handle token a host mints, one past the stdio tokens so a minted
     /// file or socket handle never collides with stdin/stdout/stderr; each host
     /// counts up from here with an unbounded `BigUint`.
-    pub const HANDLE_SEED: u32 = Self::STDERR + 1;
+    pub(crate) const HANDLE_SEED: u32 = Self::STDERR + 1;
 
     /// The canonical byte encoding of a token integer: its little-endian
     /// `BigUint` bytes. The single shared convention — the runtime mints and
     /// keys handles on it, and the `ersd → cont` lowering encodes the stdio
     /// constants `Io(0/1/2)` the same way — so the two ends cannot drift.
-    pub fn encode(token: u32) -> Vec<u8> {
+    pub(crate) fn encode(token: u32) -> Vec<u8> {
         BigUint::from(token).to_bytes_le()
     }
 
     /// The raw wire token bytes: the stdio encodings, or the minted handle.
-    pub fn bytes(&self) -> Vec<u8> {
+    pub(crate) fn bytes(&self) -> Vec<u8> {
         match self {
             Io::Stdin => Self::encode(Self::STDIN),
             Io::Stdout => Self::encode(Self::STDOUT),
@@ -51,7 +53,7 @@ impl Io {
     /// Lift wire token bytes back to a descriptor: the three stdio encodings map
     /// to the named streams, anything else is a host-minted handle. The inverse
     /// of [`bytes`](Self::bytes).
-    pub fn from_bytes(bytes: Vec<u8>) -> Self {
+    pub(crate) fn from_bytes(bytes: Vec<u8>) -> Self {
         if bytes == Self::encode(Self::STDIN) {
             Io::Stdin
         } else if bytes == Self::encode(Self::STDOUT) {
@@ -75,34 +77,38 @@ impl Io {
 pub struct Poll(u32);
 
 impl Poll {
-    pub const READ: Self = Self(poll::READ);
-    pub const WRITE: Self = Self(poll::WRITE);
-    pub const ERR: Self = Self(poll::ERR);
-    pub const HUP: Self = Self(poll::HUP);
+    /// Settable interest: readable (maps to the platform `POLLIN`).
+    pub(crate) const READ: Self = Self(poll::READ);
+    /// Settable interest: writable (maps to the platform `POLLOUT`).
+    pub(crate) const WRITE: Self = Self(poll::WRITE);
+    /// Result-only: error condition. The host reports it whether or not it was requested; never settable as an interest.
+    pub(crate) const ERR: Self = Self(poll::ERR);
+    /// Result-only: peer hang-up. Reported whether or not it was requested, like `ERR`.
+    pub(crate) const HUP: Self = Self(poll::HUP);
 
     /// The empty mask — no interest, or no readiness.
-    pub const fn empty() -> Self {
+    pub(crate) const fn empty() -> Self {
         Self(0)
     }
 
     /// Lift the raw `Nat` bits the guest marshals into a mask.
-    pub fn from_bits(bits: u32) -> Self {
+    pub(crate) fn from_bits(bits: u32) -> Self {
         Self(bits)
     }
 
     /// The raw bits, to lower back to the guest's `Nat`.
-    pub fn bits(self) -> u32 {
+    pub(crate) fn bits(self) -> u32 {
         self.0
     }
 
     /// Whether every flag in `other` is set — the per-interest readiness test.
-    pub fn contains(self, other: Self) -> bool {
+    pub(crate) fn contains(self, other: Self) -> bool {
         self.0 & other.0 == other.0
     }
 
     /// Map this interest mask to the platform `poll` flags. Only `READ`/`WRITE`
     /// are settable interests; the result-only `ERR`/`HUP` are never requested.
-    pub fn to_poll_flags(self) -> PollFlags {
+    pub(crate) fn to_poll_flags(self) -> PollFlags {
         let mut flags = PollFlags::empty();
 
         if self.contains(Self::READ) {
@@ -119,7 +125,7 @@ impl Poll {
     /// Map the platform `revents` back to a readiness mask, including the
     /// result-only `ERR`/`HUP` the kernel reports whether or not they were asked
     /// for.
-    pub fn from_poll_flags(flags: PollFlags) -> Self {
+    pub(crate) fn from_poll_flags(flags: PollFlags) -> Self {
         let mut events = Self::empty();
 
         if flags.contains(PollFlags::IN) {
@@ -187,7 +193,7 @@ pub enum Status {
 impl Status {
     /// The wire code the guest decodes. The named statuses have fixed tags;
     /// `Other(code)` lowers its carried errno raw.
-    pub fn code(self) -> u32 {
+    pub(crate) fn code(self) -> u32 {
         match self {
             Status::Ok => status::OK,
             Status::Eof => status::EOF,
@@ -233,18 +239,7 @@ pub enum Mode {
     Append,
 }
 
-impl Mode {
-    /// The wire tag the guest marshals, mirrored by `/sys/Io/Mode`. The inverse
-    /// of `Lift for Mode`.
-    pub fn code(self) -> u32 {
-        match self {
-            Mode::Read => mode::READ,
-            Mode::Write => mode::WRITE,
-            Mode::Append => mode::APPEND,
-        }
-    }
-}
-
+/// The host side of the `/sys/Io` import surface: one method per `sys_io` store row (only `io_exit`, which traps instead of returning, is wired outside it). `engine.rs`'s `sys_impls` binds every row to its method, so the store and this trait evolve together — a row without a binding (or vice versa) fails `define`'s asserts the first time any program runs. Handles cross as [`Io`], failures as [`Status`]; one shared `Arc<H>` backs every import closure, so methods take `&self` and implementations synchronize internally. Implemented by `OsHost` over real OS resources and by `MockHost` over scripted in-memory ones.
 pub trait Host {
     /// Open the file at `path` in `mode`. Returns `(status, io)`; the handle is
     /// meaningful only when the status is `Status::Ok`.

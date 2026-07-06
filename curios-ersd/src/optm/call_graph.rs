@@ -14,13 +14,13 @@ use {
 ///
 /// This is the purity oracle shared between two `ersd/optm` clients:
 ///
-/// - [`prune`](super::prune) seeds reachability with the non-synchronous tainted
+/// - `prune` seeds reachability with the non-synchronous tainted
 ///   items (the eager top-level init runs them for effect) and walks forward edges;
-/// - [`worker_wrapper`](super::worker_wrapper)'s `MonoidAccumulator` gate asks
+/// - `worker_wrapper`'s `MonoidAccumulator` gate asks
 ///   [`term_is_pure`](Self::term_is_pure) of each context it wants to reassociate,
 ///   refusing to move anything that could perform — or *call* something that
 ///   performs — an effect into the accumulator.
-pub struct CallGraph {
+pub(crate) struct CallGraph {
     /// Each declared name to the item that owns it (a `rec` group's members all
     /// map to the one group node).
     owner: HashMap<String, usize>,
@@ -33,7 +33,7 @@ pub struct CallGraph {
 
 impl CallGraph {
     /// Build the graph and run the effect-taint fixpoint.
-    pub fn build(module: &Module) -> Self {
+    pub(crate) fn build(module: &Module) -> Self {
         let count = module.items.len();
 
         let owner = module
@@ -76,24 +76,24 @@ impl CallGraph {
     }
 
     /// The items a set of names references (names owned by no item are ignored).
-    pub fn references(&self, names: &BTreeSet<String>) -> HashSet<usize> {
+    pub(crate) fn references(&self, names: &BTreeSet<String>) -> HashSet<usize> {
         references(&self.owner, names.clone())
     }
 
     /// The items item `i` references.
-    pub fn refs_of(&self, item: usize) -> &HashSet<usize> {
+    pub(crate) fn refs_of(&self, item: usize) -> &HashSet<usize> {
         &self.refs[item]
     }
 
     /// Whether evaluating item `i` could perform an effect (directly or via a
     /// reference to a tainted item).
-    pub fn is_tainted(&self, item: usize) -> bool {
+    pub(crate) fn is_tainted(&self, item: usize) -> bool {
         self.tainted[item]
     }
 
     /// Whether `name` resolves to an item whose evaluation could perform an effect.
     /// A name owned by no item (a local binder or parameter) is not effectful here.
-    pub fn name_is_effectful(&self, name: &str) -> bool {
+    pub(crate) fn name_is_effectful(&self, name: &str) -> bool {
         self.owner.get(name).is_some_and(|&i| self.tainted[i])
     }
 
@@ -104,7 +104,7 @@ impl CallGraph {
     /// whose head is not a known module item could call *anything*, so it is
     /// treated as impure. A resolved call to a non-tainted item is fine — the
     /// second clause has already established the callee performs no effect.
-    pub fn term_is_pure(&self, term: &Term) -> bool {
+    pub(crate) fn term_is_pure(&self, term: &Term) -> bool {
         !term.contains_effect()
             && term
                 .free_names()

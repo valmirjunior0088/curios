@@ -6,7 +6,7 @@ use super::{
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
 /// as a thin shim so the many existing call sites (this module, `erase*.rs`,
 /// tests) read unchanged while erase is migrated to downstream lowering (§6).
-pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
+pub(crate) fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
     elaborate(context, term, Mode::Infer).map(|(_, type_)| type_)
 }
 
@@ -15,19 +15,19 @@ pub fn infer(context: &mut Context, term: &Term) -> Result<Term, Error> {
 /// de-Bruijn-correct subterm whose lambda domains are solved and whose binders
 /// are re-closed (§9). Elaboration is authoritative: this output, not the
 /// original lowered term, is what flows on to `zonk`/`erase`.
-pub fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term, Error> {
+pub(crate) fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term, Error> {
     elaborate(context, term, Mode::Check(ty)).map(|(term, _)| term)
 }
 
-pub fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
+pub(crate) fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
     super::reduce(context, term.clone())
         .map_err(|error| error.into_error(|| Error::reduce_preempted(term.clone())))
 }
 
-/// [`super::convert`] with its `ReduceError` mapped to `Error`, at an explicit
+/// `super::convert` with its `ReduceError` mapped to `Error`, at an explicit
 /// type so proof-irrelevance and eta fire at the terms' real sort. The inverter
 /// uses it to compare a binder's competing forcings at the binder's own type.
-pub fn convert_at(
+pub(crate) fn convert_at(
     context: &mut Context,
     type_: &Term,
     this: &Term,
@@ -39,22 +39,22 @@ pub fn convert_at(
 
 /// `convert_at` at `Type`: comparing two types, the elaboration turnaround's
 /// common case.
-pub fn convert_with(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
+pub(crate) fn convert_with(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
     convert_at(context, &Term::type_(), this, that)
 }
 
 /// The sort term (`Type`/`Prop`) `type_` inhabits — what a type-former reports
 /// as its type-of-a-type, so a proposition checks against `Prop`. Wraps
-/// [`super::Sort::of`], mapping preemption to an error like the helpers above.
-pub fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Error> {
+/// `super::Sort::of`, mapping preemption to an error like the helpers above.
+pub(crate) fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Error> {
     super::Sort::of(context, type_)
         .map(super::Sort::term)
         .map_err(|error| error.into_error(|| Error::reduce_preempted(type_.clone())))
 }
 
 /// Whether `type_` is a strict proposition (its sort is `Prop`). Wraps
-/// [`super::Sort::of`], mapping preemption like the helpers above.
-pub fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
+/// `super::Sort::of`, mapping preemption like the helpers above.
+pub(crate) fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
     super::Sort::of(context, type_)
         .map(|sort| matches!(sort, super::Sort::Prop))
         .map_err(|error| error.into_error(|| Error::reduce_preempted(type_.clone())))
@@ -84,7 +84,7 @@ fn display_mismatch(context: &mut Context, this: &Term, that: &Term) -> Error {
     )
 }
 
-pub fn expect(
+pub(crate) fn expect(
     context: &mut Context,
     term: &Term,
     inferred: &Term,
@@ -129,7 +129,7 @@ pub fn expect(
 /// (§8). A woken goal re-runs under its frozen frame: converts and is dropped,
 /// mismatches and errors at its origin, or re-parks still blocked. Each round
 /// consumes wake signals and ids solve exactly once, so this terminates.
-pub fn retry_parked(context: &mut Context) -> Result<(), Error> {
+pub(crate) fn retry_parked(context: &mut Context) -> Result<(), Error> {
     // Never retry inside an oracle: re-validation swallows errors
     // (`Err(_) => false`), so a woken goal's mismatch would vanish along with
     // the goal itself — a silently dropped obligation. The wake signals stay
@@ -263,7 +263,7 @@ fn retry_checking(
 /// survivor as a mismatch at its origin. Run after each top-level item and
 /// after the entrypoint body, so an unresolvable constraint is attributed to
 /// the definition that produced it and frozen frames do not pile up.
-pub fn drain_parked(context: &mut Context) -> Result<(), Error> {
+pub(crate) fn drain_parked(context: &mut Context) -> Result<(), Error> {
     loop {
         retry_parked(context)?;
 
@@ -322,7 +322,7 @@ pub fn drain_parked(context: &mut Context) -> Result<(), Error> {
 /// applied-head symbol to probe) — the inverter pins the arm binders the other
 /// way. A stuck-*application* index would be the genuinely cyclic case, but no
 /// inductive in the library is indexed by one.
-pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
+pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
     match &**head {
         Subterm::Var(var) => {
             context.refine(var.unwrap(), value);
@@ -350,7 +350,7 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
 /// `Check(Type)` mode — erase is downstream lowering now and no longer
 /// type-checks (§6) — and re-closes the elaborated body so the motive carries
 /// its solved/re-closed form (§9).
-pub fn check_motive(
+pub(crate) fn check_motive(
     context: &mut Context,
     head_type: &Term,
     motive: &Scope<Many>,
@@ -373,7 +373,7 @@ pub fn check_motive(
 /// else the matching `not_*_type` error. The shared core of `expect_prim_head`
 /// and `elaborate`'s `elaborate_prim_head` — one source of truth for the
 /// `PrimHead` → type-former / error mapping.
-pub fn check_prim_head(expected: PrimHead, head_type: Term) -> Result<Term, Error> {
+pub(crate) fn check_prim_head(expected: PrimHead, head_type: Term) -> Result<Term, Error> {
     let matches = match expected {
         PrimHead::Nat => matches!(&*head_type, Subterm::Prim(Prim::NatType)),
         PrimHead::Bln => matches!(&*head_type, Subterm::Prim(Prim::BlnType)),
@@ -392,7 +392,7 @@ pub fn check_prim_head(expected: PrimHead, head_type: Term) -> Result<Term, Erro
 
 /// Infer the scrutinee's type, reduce it, and require it to be the given prim
 /// type. Returns the reduced head type — used by `erase` to erase the head.
-pub fn expect_prim_head(
+pub(crate) fn expect_prim_head(
     context: &mut Context,
     head: &Term,
     expected: PrimHead,

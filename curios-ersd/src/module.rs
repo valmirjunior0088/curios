@@ -18,7 +18,7 @@ pub enum Item {
 
 impl Item {
     /// The names this item declares — one for a `let`, the whole group for a `rec`.
-    pub fn names(&self) -> impl Iterator<Item = &str> {
+    pub(crate) fn names(&self) -> impl Iterator<Item = &str> {
         match self {
             Item::Let { name, .. } => std::slice::from_ref(name),
             Item::Rec { names, .. } => names.as_slice(),
@@ -29,7 +29,7 @@ impl Item {
 
     /// The free names this item's body (or, for a `rec` group, every member)
     /// references. See [`Term::free_names`].
-    pub fn free_names(&self) -> BTreeSet<String> {
+    pub(crate) fn free_names(&self) -> BTreeSet<String> {
         match self {
             Item::Let { body, .. } => body.free_names(),
             Item::Rec { items, .. } => items.iter().flat_map(Term::free_names).collect(),
@@ -38,7 +38,7 @@ impl Item {
 
     /// Whether evaluating this item could perform an effect — directly, anywhere in
     /// its body (or any member). See [`Term::contains_effect`].
-    pub fn contains_effect(&self) -> bool {
+    pub(crate) fn contains_effect(&self) -> bool {
         match self {
             Item::Let { body, .. } => body.contains_effect(),
             Item::Rec { items, .. } => items.iter().any(Term::contains_effect),
@@ -47,7 +47,7 @@ impl Item {
 
     /// Whether binding this item performs no action (see [`Term::is_synchronous`]);
     /// a `rec` group is synchronous only if every member is.
-    pub fn is_synchronous(&self) -> bool {
+    pub(crate) fn is_synchronous(&self) -> bool {
         match self {
             Item::Let { body, .. } => body.is_synchronous(),
             Item::Rec { items, .. } => items.iter().all(Term::is_synchronous),
