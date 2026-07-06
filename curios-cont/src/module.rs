@@ -112,7 +112,7 @@ pub enum Code {
     TplGet(ValueName, usize),
 }
 
-/// The right-hand side of one binding in a region: `Pure` constructs [`Data`], `Eval` computes one [`Code`] op, and `Alias` re-binds an existing value under another name — a rename that passes like common-subexpression elimination mint and copy propagation erases again, so downstream passes see a value's real identity.
+/// The right-hand side of one binding in a region: `Pure` constructs [`Data`], `Eval` computes one [`Code`] op, and `Alias` re-binds an existing value under another name — a rename that passes like the ones common-subexpression elimination mints and copy propagation erases again, so downstream passes see a value's real identity.
 #[derive(Debug, Clone)]
 pub enum Value {
     Pure(Data),
