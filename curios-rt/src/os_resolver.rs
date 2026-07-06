@@ -17,9 +17,9 @@ use {
 /// invariant that `Ok` carries a non-empty blob list and `NotFound` carries
 /// none. Distinct from the host's ABI reply, which also encodes `WouldBlock`
 /// (still in flight) — a state a completed `Resolved` never holds.
-pub struct Resolved {
-    pub status: Status,
-    pub addresses: Vec<Vec<u8>>,
+pub(crate) struct Resolved {
+    pub(crate) status: Status,
+    pub(crate) addresses: Vec<Vec<u8>>,
 }
 
 impl Resolved {
@@ -50,7 +50,7 @@ impl Resolved {
 /// it then holds is exactly what `resolve` hands back. Cloning shares the one
 /// underlying cell — the worker holds one handle, the host the other.
 #[derive(Clone)]
-pub struct Slot {
+pub(crate) struct Slot {
     cell: Arc<Mutex<Option<Resolved>>>,
 }
 
@@ -71,7 +71,7 @@ impl Slot {
     /// Host side: take the result if the worker has filled it, else `None` (the
     /// lookup is still in flight, so the caller retries). Drains the cell, so a
     /// second `get` before another `set` yields `None`.
-    pub fn get(&self) -> Option<Resolved> {
+    pub(crate) fn get(&self) -> Option<Resolved> {
         self.cell.lock().unwrap().take()
     }
 }
@@ -149,9 +149,9 @@ impl Job {
 
 /// A queued lookup's two host-facing handles: `fd` becomes poll-`READ` readable
 /// when the worker finishes, and `slot` then holds the result.
-pub struct Pending {
-    pub fd: OwnedFd,
-    pub slot: Slot,
+pub(crate) struct Pending {
+    pub(crate) fd: OwnedFd,
+    pub(crate) slot: Slot,
 }
 
 impl Pending {
@@ -165,7 +165,7 @@ impl Pending {
 /// The blocking-DNS thread pool: a fixed set of workers draining a bounded
 /// queue. Dropping it drops the sender, which wakes the idle workers out of
 /// `recv` so they exit; an in-flight `getaddrinfo` runs to completion first.
-pub struct OsResolver {
+pub(crate) struct OsResolver {
     sender: SyncSender<Job>,
 }
 
@@ -178,7 +178,7 @@ impl OsResolver {
     /// spawning a thread and two fds per call. `getaddrinfo` is uncancellable, so
     /// a worker stuck on a dead name stays busy until the system resolver times
     /// out; the bound contains the blast radius to a fixed slice of capacity.
-    pub fn new(threads: usize, length: usize) -> Self {
+    pub(crate) fn new(threads: usize, length: usize) -> Self {
         let (sender, receiver) = sync_channel::<Job>(length);
         let receiver = Arc::new(Mutex::new(receiver));
 
@@ -222,7 +222,7 @@ impl OsResolver {
     /// poll the returned `ready` fd and drain `slot` once it fires. `Ok(None)`
     /// means the pool is saturated, so the caller sheds the load. `Err(status)`
     /// means the wakeup pipe could not be created.
-    pub fn start(&self, address: String) -> Result<Option<Pending>, Status> {
+    pub(crate) fn start(&self, address: String) -> Result<Option<Pending>, Status> {
         let (job, pending) = Job::new(address)
             .map_err(|err| Status::Other(err.raw_os_error().unwrap_or(0) as u32))?;
 

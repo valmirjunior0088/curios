@@ -375,10 +375,9 @@ pub fn run_bytes<H: Host + Send + Sync + 'static>(
 /// Instantiate `module` against `engine`, wire up the host imports, and run its
 /// entrypoint, returning the process exit code. `bindings` supplies the
 /// `env`-tier implementations for the module's own `foreign` declarations
-/// (pass [`ForeignBindings::empty`] for a program that declares none). Shared
-/// by [`run_bytes`] and by `curios`'s JIT path (which builds the `Module` via
-/// `from_binary`).
-pub fn instantiate<H: Host + Send + Sync + 'static>(
+/// (pass [`ForeignBindings::empty`] for a program that declares none). The
+/// deserialize/instantiate split [`run_bytes`] factors out.
+pub(crate) fn instantiate<H: Host + Send + Sync + 'static>(
     engine: &Engine,
     module: &Module,
     host: H,
