@@ -18,7 +18,7 @@ fn import_names() -> Vec<String> {
         .collect()
 }
 
-fn set(target: &Object, key: &str, value: &JsValue) {
+pub(crate) fn set(target: &Object, key: &str, value: &JsValue) {
     Reflect::set(target, &JsValue::from_str(key), value).expect("Reflect::set on a plain object");
 }
 

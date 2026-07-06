@@ -5,8 +5,11 @@
 //! exposes, so a playground calling `run` never spells an ABI detail itself.
 
 use {
-    crate::{abi::abi_object, bridge::bridge_bytes},
-    js_sys::{Array, Object, Promise, Reflect, Uint8Array},
+    crate::{
+        abi::{abi_object, set},
+        bridge::bridge_bytes,
+    },
+    js_sys::{Array, Object, Promise, Uint8Array},
     wasm_bindgen::prelude::*,
 };
 
@@ -26,25 +29,10 @@ extern "C" {
 pub fn run(program: &[u8], foreign_names: Array, hooks: JsValue) -> Promise {
     let config = abi_object();
 
-    Reflect::set(
-        &config,
-        &JsValue::from_str("program"),
-        &Uint8Array::from(program),
-    )
-    .expect("Reflect::set on a plain object");
-
-    Reflect::set(
-        &config,
-        &JsValue::from_str("bridge"),
-        &Uint8Array::from(bridge_bytes().as_slice()),
-    )
-    .expect("Reflect::set on a plain object");
-
-    Reflect::set(&config, &JsValue::from_str("foreignNames"), &foreign_names)
-        .expect("Reflect::set on a plain object");
-
-    Reflect::set(&config, &JsValue::from_str("hooks"), &hooks)
-        .expect("Reflect::set on a plain object");
+    set(&config, "program", &Uint8Array::from(program));
+    set(&config, "bridge", &Uint8Array::from(bridge_bytes().as_slice()));
+    set(&config, "foreignNames", &foreign_names);
+    set(&config, "hooks", &hooks);
 
     harness_run(config)
 }

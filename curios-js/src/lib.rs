@@ -18,9 +18,10 @@ mod harness;
 pub use harness::*;
 
 use {
+    abi::set,
     curios_pipeline::{compile_entrypoint, typecheck_entrypoint},
     curios_text::{Entrypoint, RootSource},
-    js_sys::{Array, Object, Reflect, Uint8Array},
+    js_sys::{Array, Object, Uint8Array},
     std::time::Duration,
     wasm_bindgen::prelude::*,
 };
@@ -43,22 +44,20 @@ pub fn compile(source: &str) -> Result<Object, String> {
 
     let object = Object::new();
 
-    Reflect::set(
+    set(
         &object,
-        &JsValue::from_str("bytes"),
+        "bytes",
         &Uint8Array::from(curios_wasm::to_bytes(&module).as_slice()),
-    )
-    .expect("Reflect::set on a plain object");
+    );
 
-    Reflect::set(
+    set(
         &object,
-        &JsValue::from_str("foreignNames"),
+        "foreignNames",
         &foreigns
             .iter()
             .map(|function| JsValue::from_str(&function.name))
             .collect::<Array>(),
-    )
-    .expect("Reflect::set on a plain object");
+    );
 
     Ok(object)
 }
