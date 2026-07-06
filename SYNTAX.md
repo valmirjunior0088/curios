@@ -198,7 +198,7 @@ pub let map(@A : Type, @B : Type, f : (A) -> B, m : Option(A)) -> Option(B) =
 pub rec len(@A : Type, l : Lst(A)) -> Nat = ...;
 ```
 
-**`foreign`.** A binding implemented by the embedder rather than by Curios code — the user-facing FFI boundary. The type is a **wire signature**: `(T, ...) -> T` or a bare `T` for a zero-argument foreign (mirroring `sys_io`'s own `io_clock_wall`-style ops), where each `T` is one of the six wire types `Nat`, `Int`, `Bln`, `Bin`, `Io`, `Lst(T)` — not an arbitrary Curios `Type`, since these are exactly the shapes that can cross the host boundary. The name is both the binding and the wasm import name, imported under the flat `env` namespace; an embedder supplies an implementation via `curios-rt::ForeignBindings` (native) or `hooks.foreign` (the JS harness).
+**`foreign`.** A binding implemented by the embedder rather than by Curios code — the user-facing FFI boundary. The type is a **wire signature**: `(T, ...) -> T` or a bare `T` for a zero-argument foreign (mirroring `sys_io`'s own `io_clock_wall`-style ops), where each `T` is one of the six wire types `Nat`, `Int`, `Bln`, `Bin`, `Io`, `Lst(T)` — not an arbitrary Curios `Type`, since these are exactly the shapes that can cross the host boundary. The name is the guest binding; the wasm import name is the declaration's fully qualified name (e.g. `/foo/frobnicate`), imported under the `ffi` namespace, so declarations in different modules never collide on the wire. An embedder supplies an implementation under that qualified name via `curios-rt::ForeignBindings` (native) or `hooks.foreign` (the JS harness).
 
 ```
 foreign frobnicate : (Nat, Bin) -> Nat;

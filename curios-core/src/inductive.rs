@@ -81,6 +81,7 @@ impl Inductive {
     /// `tag`'s position in [`Self::constructor_order`] — the runtime tag
     /// `erase_variant` gives a value constructed with it.
     pub(crate) fn constructor_index(&self, tag: &Atom) -> Option<usize> {
-        self.constructor_order().position(|candidate| candidate == tag)
+        self.constructor_order()
+            .position(|candidate| candidate == tag)
     }
 }

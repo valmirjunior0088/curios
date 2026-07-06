@@ -141,19 +141,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         // The store-described imports — exactly the functions whose call sites
         // recorded themselves in the table, in import-name order. Each
-        // function's own `root` (stamped at declaration time — see
-        // `curios_abi::ForeignFunction`) says whether it's a `/sys/Io` builtin
-        // or a user's own `foreign` declaration, so codegen no longer needs to
-        // rebuild `sys_io()` and re-derive that by name lookup.
+        // function's own `namespace` (stamped at declaration time — see
+        // `curios_abi::ForeignFunction`) is the wasm namespace it imports
+        // under, so codegen neither rebuilds `sys_io()` to re-derive
+        // membership nor chooses a namespace itself.
         for function in self.table.host_funcs() {
             let signature = &function.signature;
-            let namespace = match function.root == curios_abi::RootId::SYS {
-                true => curios_abi::NAMESPACE_SYS,
-                false => curios_abi::NAMESPACE_ENV,
-            };
 
             self.add_host_import(
-                namespace,
+                function.namespace,
                 &function.name,
                 TypeName::from(function.name.as_str()),
                 self.table.host_func(&function),

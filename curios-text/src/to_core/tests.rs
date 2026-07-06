@@ -1182,7 +1182,7 @@ fn foreign_declaration_populates_the_store() {
     )
     .unwrap();
 
-    let function = foreigns.get("frobnicate").expect("frobnicate registered");
+    let function = foreigns.get("/frobnicate").expect("frobnicate registered");
     assert_eq!(
         function.signature.params,
         vec![
@@ -1206,7 +1206,7 @@ fn foreign_declaration_zero_arg_populates_the_store() {
     )
     .unwrap();
 
-    let function = foreigns.get("clock").expect("clock registered");
+    let function = foreigns.get("/clock").expect("clock registered");
     assert!(function.signature.params.is_empty());
 }
 
@@ -1231,15 +1231,13 @@ fn duplicate_foreign_declaration_in_one_scope_is_rejected() {
 }
 
 #[test]
-fn duplicate_foreign_declaration_across_modules_is_rejected() {
-    // Two `foreign` declarations in different modules have different local
-    // scope entries ("/A/frobnicate" vs "/B/frobnicate", both private here),
-    // so ordinary binding-conflict detection doesn't catch this — but they'd
-    // collide on the same global wasm import name (`frobnicate`), which
-    // `foreign_signature`'s own check must still reject.
-    assert!(
-        run_err(
-            r#"
+fn foreign_declarations_across_modules_get_distinct_import_names() {
+    // Two `foreign` declarations in different modules coexist: the wasm
+    // import name is the declaration's fully qualified name, so the shared
+    // label never collides on the wire — each module's row registers under
+    // its own name.
+    let (_, _, foreigns) = super::to_core(
+        &r#"
         mod A
             foreign frobnicate : Nat;
         end
@@ -1248,7 +1246,12 @@ fn duplicate_foreign_declaration_across_modules_is_rejected() {
         end
         0
     "#
-        )
-        .contains("duplicate foreign declaration")
-    );
+        .parse::<crate::Entrypoint>()
+        .unwrap(),
+        &crate::RootSource::None,
+    )
+    .unwrap();
+
+    assert!(foreigns.get("/A/frobnicate").is_some());
+    assert!(foreigns.get("/B/frobnicate").is_some());
 }

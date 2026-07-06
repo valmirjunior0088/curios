@@ -41,8 +41,9 @@ fn dependency_is_implicitly_visible_with_no_mod_declaration() {
 }
 
 // A `foreign` declaration inside a dependency registers into the same shared
-// `ForeignStore` a `foreign` at the entry program's own root would — the
-// store is keyed by declaration, not by which root declared it.
+// `ForeignStore` a `foreign` at the entry program's own root would — rows are
+// keyed by fully qualified name, so the dependency's row imports as
+// `ffi./foo/double` and the embedder binds it under exactly that name.
 #[test]
 fn foreign_declaration_inside_a_dependency_populates_the_shared_store() {
     let source = r#"
@@ -59,7 +60,7 @@ fn foreign_declaration_inside_a_dependency_populates_the_shared_store() {
             .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::new(foreigns);
-    bindings.define("double", |x: u32| x * 2);
+    bindings.define("/foo/double", |x: u32| x * 2);
 
     let (system, io) = MockHost::builder().build();
     let code = crate::run_wasm(&module, system, bindings).expect("execution succeeded");

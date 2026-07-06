@@ -123,13 +123,6 @@ pub enum Error {
     DuplicateRoot {
         name: String,
     },
-    /// Two `foreign` declarations share a name. Unlike an ordinary private
-    /// `let`, a `foreign` declaration names a global wasm import — shadowing
-    /// is not safe even when neither declaration is `pub`, so this is checked
-    /// independently of [`Error::DuplicatePublicDeclaration`].
-    DuplicateForeignDeclaration {
-        label: String,
-    },
     Located {
         span: Span,
         error: Box<Error>,
@@ -259,9 +252,6 @@ impl fmt::Display for Error {
                     f,
                     "duplicate root: '{name}' is already a dependency name or a reserved root (sys/syn/std)"
                 )
-            }
-            Error::DuplicateForeignDeclaration { label } => {
-                write!(f, "duplicate foreign declaration: {label}")
             }
             Error::Located { error, .. } => write!(f, "{error}"),
         }

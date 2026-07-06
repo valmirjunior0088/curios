@@ -55,8 +55,8 @@ fn foreign_declaration_produces_a_wasm_import() {
         module
             .imports()
             .iter()
-            .any(|(namespace, name, _)| namespace == "env" && name == "frobnicate"),
-        "expected an env.frobnicate import, got {:?}",
+            .any(|(namespace, name, _)| namespace == "ffi" && name == "/frobnicate"),
+        "expected an ffi./frobnicate import, got {:?}",
         module.imports()
     );
 }
@@ -86,8 +86,8 @@ fn sys_and_foreign_calls_import_under_separate_namespaces() {
     assert!(
         imports
             .iter()
-            .any(|(namespace, name, _)| namespace == "env" && name == "frobnicate"),
-        "expected an env.frobnicate import, got {imports:?}"
+            .any(|(namespace, name, _)| namespace == "ffi" && name == "/frobnicate"),
+        "expected an ffi./frobnicate import, got {imports:?}"
     );
 }
 

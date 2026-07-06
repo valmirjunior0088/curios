@@ -26,7 +26,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     .expect("compile succeeded");
 
     let mut bindings = ForeignBindings::new(foreigns);
-    bindings.define("double", |x: u32| x * 2);
+    bindings.define("/double", |x: u32| x * 2);
 
     let (system, io) = MockHost::builder().build();
     let code = crate::run_wasm(&module, system, bindings).expect("execution succeeded");

@@ -1,26 +1,15 @@
-//! The ABI facts a JavaScript host needs, surfaced as one JS object — every
-//! value derived from `curios-abi`, so the browser harness cannot drift from
-//! the compiler and runtime the way a hand-copied constants file can.
+//! The numeric wire codes a JavaScript host needs, surfaced as one JS object
+//! — derived from `curios-abi`, so the browser harness cannot drift from the
+//! compiler and runtime the way a hand-copied constants file can. The wire
+//! *names* (import namespaces, `sys.io_*` keys, the entry export) are spelled
+//! directly in `js/harness.js`, exactly as any embedder spells them.
 
 use {
-    curios_abi::{status, stdio, sys_io},
-    js_sys::{Array, Object, Reflect},
+    crate::set,
+    curios_abi::{status, stdio},
+    js_sys::Object,
     wasm_bindgen::prelude::*,
 };
-
-/// The import names of every store-described host operation, in store order.
-/// The harness builds its `env` import object from exactly this roster, so a
-/// new `sys_io` row that lacks a browser implementation fails loudly.
-fn import_names() -> Vec<String> {
-    sys_io()
-        .iter()
-        .map(|function| function.name.clone())
-        .collect()
-}
-
-pub(crate) fn set(target: &Object, key: &str, value: &JsValue) {
-    Reflect::set(target, &JsValue::from_str(key), value).expect("Reflect::set on a plain object");
-}
 
 fn constants(entries: &[(&str, u32)]) -> Object {
     let object = Object::new();
@@ -32,32 +21,11 @@ fn constants(entries: &[(&str, u32)]) -> Object {
     object
 }
 
-pub(crate) fn abi_object() -> Object {
+/// The numeric wire codes as a JS object: the `status`/`stdio` code tables.
+#[wasm_bindgen]
+pub fn abi() -> Object {
     let object = Object::new();
 
-    set(
-        &object,
-        "sysNamespace",
-        &JsValue::from_str(curios_abi::NAMESPACE_SYS),
-    );
-    set(
-        &object,
-        "envNamespace",
-        &JsValue::from_str(curios_abi::NAMESPACE_ENV),
-    );
-    set(
-        &object,
-        "mainExport",
-        &JsValue::from_str(curios_abi::MAIN_EXPORT),
-    );
-    set(
-        &object,
-        "importNames",
-        &import_names()
-            .iter()
-            .map(|name| JsValue::from_str(name))
-            .collect::<Array>(),
-    );
     set(
         &object,
         "status",
@@ -83,34 +51,4 @@ pub(crate) fn abi_object() -> Object {
     );
 
     object
-}
-
-/// The host/guest contract as a JS object: `sysNamespace`, `envNamespace`,
-/// `mainExport`, `importNames`, and the `status`/`stdio` code tables.
-#[wasm_bindgen]
-pub fn abi() -> JsValue {
-    abi_object().into()
-}
-
-#[cfg(test)]
-mod tests {
-    use curios_abi::sys_io;
-
-    /// The roster the harness builds its `env` object from is the store, name for
-    /// name, in store order. (`abi()` itself is JS-only — the object assembly
-    /// can't run on the host — so the roster is pinned here instead.)
-    #[test]
-    fn import_names_are_the_store_rows() {
-        let names = super::import_names();
-
-        assert_eq!(
-            names,
-            sys_io()
-                .iter()
-                .map(|function| function.name.clone())
-                .collect::<Vec<_>>()
-        );
-        assert_eq!(names.first().map(String::as_str), Some("io_read"));
-        assert_eq!(names.last().map(String::as_str), Some("io_env"));
-    }
 }

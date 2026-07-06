@@ -25,7 +25,7 @@ pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
 
 /// Run a compiled module in-process: precompile to `.cwasm`, then deserialize and
 /// run it on the shared runtime engine — the identical path a bundled executable
-/// takes. `bindings` supplies the `env`-tier implementations for the module's own
+/// takes. `bindings` supplies the `ffi`-tier implementations for the module's own
 /// `foreign` declarations (pass [`ForeignBindings::empty`] for a program that
 /// declares none). Returns the process exit code.
 pub fn run_wasm<H: Host + Send + Sync + 'static>(

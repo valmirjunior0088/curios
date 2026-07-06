@@ -41,7 +41,9 @@
 //! recorded paths never overlap.
 
 use {
-    super::{Loc, children, clone_args, deep_copy, members, refresh_touched, root_mut, term_at_mut},
+    super::{
+        Loc, children, clone_args, deep_copy, members, refresh_touched, root_mut, term_at_mut,
+    },
     crate::{
         Apply, Atom, Func, HostPrim, Item, Let, Module, NatMatch, Prim, PurePrim, Subterm, Term,
         Tuple,

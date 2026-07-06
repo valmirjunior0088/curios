@@ -99,7 +99,7 @@ type Trampoline =
 /// one from the [`Host`] trait, and links *pull-based* — it walks the
 /// module's imports and defines exactly what the module demands, so an import
 /// with no registered implementation is a clean, named error instead of a
-/// stranded wasmtime lookup. An embedder builds its own `env`-tier one from a
+/// stranded wasmtime lookup. An embedder builds its own `ffi`-tier one from a
 /// [`ForeignStore`] returned by `compile_entrypoint`, `define`-ing each row it
 /// wants to supply.
 pub struct ForeignBindings {
@@ -108,7 +108,7 @@ pub struct ForeignBindings {
 }
 
 impl ForeignBindings {
-    /// An empty registry over the rows of `foreigns`: follow with one [`define`](Self::define) per row the module will import. `instantiate` seeds the `sys`-tier registry this way from `sys_io()`; an embedder seeds the `env`-tier one from the [`ForeignStore`] that `compile_entrypoint` returned for the program.
+    /// An empty registry over the rows of `foreigns`: follow with one [`define`](Self::define) per row the module will import. `instantiate` seeds the `sys`-tier registry this way from `sys_io()`; an embedder seeds the `ffi`-tier one from the [`ForeignStore`] that `compile_entrypoint` returned for the program.
     pub fn new(foreigns: ForeignStore) -> Self {
         Self {
             foreigns,
@@ -118,14 +118,16 @@ impl ForeignBindings {
 
     /// No bindings — the store every no-FFI caller passes through
     /// [`run_bytes`]/`instantiate`, since a program with no `foreign`
-    /// declarations imports nothing under `env`.
+    /// declarations imports nothing under `ffi`.
     pub fn empty() -> Self {
         Self::new(ForeignStore::new())
     }
 
-    /// Implement the store row named `name` with a typed closure. Every row
-    /// must be implemented exactly once, and only rows can be implemented —
-    /// violations are construction bugs, so they panic.
+    /// Implement the store row named `name` with a typed closure. A `foreign`
+    /// declaration's row is named by its fully qualified name (e.g.
+    /// `/foo/double`). Every row must be implemented exactly once, and only
+    /// rows can be implemented — violations are construction bugs, so they
+    /// panic.
     pub fn define<Li, Lo, F>(&mut self, name: &str, f: F)
     where
         Li: Lift,
@@ -376,7 +378,7 @@ pub fn run_bytes<H: Host + Send + Sync + 'static>(
 
 /// Instantiate `module` against `engine`, wire up the host imports, and run its
 /// entrypoint, returning the process exit code. `bindings` supplies the
-/// `env`-tier implementations for the module's own `foreign` declarations
+/// `ffi`-tier implementations for the module's own `foreign` declarations
 /// (pass [`ForeignBindings::empty`] for a program that declares none). The
 /// deserialize/instantiate split [`run_bytes`] factors out.
 fn instantiate<H: Host + Send + Sync + 'static>(
@@ -418,10 +420,10 @@ fn instantiate<H: Host + Send + Sync + 'static>(
                 }
                 name => impls.link(&mut linker, engine, curios_abi::NAMESPACE_SYS, name)?,
             },
-            curios_abi::NAMESPACE_ENV => bindings.link(
+            curios_abi::NAMESPACE_FFI => bindings.link(
                 &mut linker,
                 engine,
-                curios_abi::NAMESPACE_ENV,
+                curios_abi::NAMESPACE_FFI,
                 import.name(),
             )?,
             namespace => {
@@ -430,7 +432,7 @@ fn instantiate<H: Host + Send + Sync + 'static>(
                     namespace,
                     import.name(),
                     curios_abi::NAMESPACE_SYS,
-                    curios_abi::NAMESPACE_ENV
+                    curios_abi::NAMESPACE_FFI
                 ));
             }
         }

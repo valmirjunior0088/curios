@@ -34,7 +34,9 @@ use {
         Loc, children, clone_args, deep_copy, members, refresh_captures, refresh_touched, root_mut,
         term_at_mut,
     },
-    crate::{Apply, Argument, Func, Item, Let, Module, Name, NatMatch, Prim, PurePrim, Subterm, Term},
+    crate::{
+        Apply, Argument, Func, Item, Let, Module, Name, NatMatch, Prim, PurePrim, Subterm, Term,
+    },
     std::{
         collections::{HashMap, HashSet},
         mem,

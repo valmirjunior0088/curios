@@ -2,8 +2,9 @@
 //! operation, from which each consumer derives its own view of the boundary.
 //!
 //! A [`ForeignFunction`] is one host call, and it is self-describing: its
-//! `name` is the wasm import string (under [`NAMESPACE_SYS`] for a builtin,
-//! [`NAMESPACE_ENV`] for a user's own `foreign` declaration — the wire-level
+//! `namespace`/`name` pair is the wasm import ([`NAMESPACE_SYS`] and a fixed
+//! `io_*` name for a builtin, [`NAMESPACE_FFI`] and the declaration's fully
+//! qualified name for a user's own `foreign` declaration — the wire-level
 //! ABI contract between the emitter and the runtime linker), and its
 //! [`WireSignature`] names the operands and results and gives each a
 //! [`WireType`]. Every host call is effectful, so reducing one at the type
@@ -15,34 +16,34 @@
 //! - the `/sys/Io` prelude declaration, or a user's own `foreign` declaration
 //!   (surface parameter types and the named result record the guest projects),
 //! - the core elaborator's operand checks and result type,
-//! - the wasm emitter's `sys.*`/`env.*` import types and call-site operand loads,
+//! - the wasm emitter's `sys.*`/`ffi.*` import types and call-site operand loads,
 //! - the runtime linker's `wasmtime::FuncType`s.
 //!
 //! A [`ForeignStore`] is the set of foreign functions declared under one
 //! tier. [`sys_io`] seeds the fixed `/sys/Io` builtin tier, consumable only by
 //! the standard library, created per compilation by the pipeline driver; a
 //! second store, accumulated from a program's own `foreign` declarations
-//! (`curios_text::prelude::foreign_signature`), holds the `env` tier. The two
-//! are never merged — which store a row lives in is what fixes its wasm
-//! namespace, not a field on the row. `exit` is deliberately absent from
-//! either store: it traps rather than returns and its guest type is the
-//! polymorphic bottom `(@A : Type) -> Nat -> A`, which a first-order
-//! [`WireSignature`] cannot express, so it stays a hardcoded primitive.
+//! (`curios_text::prelude::foreign_signature`), holds the `ffi` tier. The two
+//! are never merged, but the wasm namespace is the row's own `namespace`
+//! field, stamped at declaration time — the store split only governs who may
+//! consume a tier. `exit` is deliberately absent from either store: it traps
+//! rather than returns and its guest type is the polymorphic bottom
+//! `(@A : Type) -> Nat -> A`, which a first-order [`WireSignature`] cannot
+//! express, so it stays a hardcoded primitive.
 
-use {
-    crate::RootId,
-    std::{
-        hash::{Hash, Hasher},
-        sync::Arc,
-    },
+use std::{
+    hash::{Hash, Hasher},
+    sync::Arc,
 };
 
 /// The wasm import namespace the fixed `/sys/Io` builtins are declared under.
 pub const NAMESPACE_SYS: &str = "sys";
 
 /// The wasm import namespace every user-declared `foreign` function is
-/// declared under — flat, not per-module.
-pub const NAMESPACE_ENV: &str = "env";
+/// declared under. The import name within it is the declaration's fully
+/// qualified name (leading `/`), so declarations in different modules never
+/// collide on the wire.
+pub const NAMESPACE_FFI: &str = "ffi";
 
 /// The exported entrypoint the runtime invokes. `cont`'s wasm emitter names
 /// every function `func/<name>` and exports the entry — always `main` — under
@@ -79,31 +80,30 @@ pub struct WireSignature {
     pub results: Vec<(String, WireType)>,
 }
 
-/// One foreign (host-provided) function. `name` is the wasm import string —
-/// the wire ABI shared by the wasm emitter and the runtime linker; never
-/// change one without changing what the other end expects (the unit tests
-/// snapshot the `/sys/Io` set). `label` is the binding name the function
-/// surfaces under in the guest. `root` is the compilation root that declared
-/// it (`RootId::SYS` for every [`sys_io`] row) — consulted by codegen instead
-/// of re-deriving "is this a `/sys/Io` builtin?" by rebuilding [`sys_io`] and
-/// testing membership.
+/// One foreign (host-provided) function. `namespace`/`name` is the wasm
+/// import pair — the wire ABI shared by the wasm emitter and the runtime
+/// linker; never change one without changing what the other end expects (the
+/// unit tests snapshot the `/sys/Io` set). `namespace` is [`NAMESPACE_SYS`]
+/// for a builtin and [`NAMESPACE_FFI`] for a user's `foreign` declaration,
+/// whose `name` is its fully qualified name (leading `/`). `label` is the
+/// binding name the function surfaces under in the guest.
 #[derive(Debug, Clone)]
 pub struct ForeignFunction {
+    pub namespace: &'static str,
     pub name: String,
     pub label: String,
     pub signature: WireSignature,
-    pub root: RootId,
 }
 
-// Identity is the import name: a [`ForeignStore`] never holds two functions
-// with one name (`register` enforces it), so the name determines the whole
-// row. This keeps term-level equality and hashing O(1) instead of walking the
-// signature — and makes rows from *different* stores with the same content
-// compare equal, so a cached prelude term matches a freshly minted one. `root`
-// is deliberately excluded: it is provenance, not identity.
+// Identity is the wasm import pair: a [`ForeignStore`] never holds two
+// functions with one name (`register` enforces it), so `(namespace, name)`
+// determines the whole row. This keeps term-level equality and hashing O(1)
+// instead of walking the signature — and makes rows from *different* stores
+// with the same content compare equal, so a cached prelude term matches a
+// freshly minted one.
 impl PartialEq for ForeignFunction {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+        self.namespace == other.namespace && self.name == other.name
     }
 }
 
@@ -111,6 +111,7 @@ impl Eq for ForeignFunction {}
 
 impl Hash for ForeignFunction {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        self.namespace.hash(state);
         self.name.hash(state);
     }
 }
@@ -329,13 +330,13 @@ pub fn sys_io() -> ForeignStore {
         ),
     ] {
         store.register(ForeignFunction {
+            namespace: NAMESPACE_SYS,
             name: name.to_string(),
             label: label.to_string(),
             signature: WireSignature {
                 params: slots(params),
                 results: slots(results),
             },
-            root: RootId::SYS,
         });
     }
 

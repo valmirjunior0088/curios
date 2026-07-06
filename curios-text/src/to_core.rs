@@ -363,8 +363,8 @@ fn process_items(
                 // registration, and `host_fn`'s wire-typed signature shape)
                 // stays inside `prelude`; from here a `foreign` declaration
                 // lowers exactly like an ordinary `TopItem::Let`.
-                let root = context.root_of(&f.label);
-                let signature = foreign_signature(f, foreigns, root)?;
+                let name = context.prefixed(&f.label);
+                let signature = foreign_signature(f, foreigns, name.join());
 
                 let lower = Lower::new(context);
                 let type_ = lower.term(&signature.type_())?;
@@ -373,7 +373,7 @@ fn process_items(
                 }
 
                 flat_items.push(FlatItem::Let(FlatLet {
-                    name: context.prefixed(&f.label),
+                    name,
                     type_,
                     body: lower.value(&signature.body())?,
                 }));

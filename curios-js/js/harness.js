@@ -1,9 +1,9 @@
 // The browser run harness: instantiates a compiled curios program against a
-// JS implementation of the host boundary and drives its entrypoint. Every
-// name, code, and roster arrives via `config`, built Rust-side from
-// curios-abi (see src/harness.rs / src/abi.rs), so this file cannot drift
-// from the compiler or runtime — the sole exception is `io_exit`, hardcoded
-// at every end.
+// JS implementation of the host boundary and drives its entrypoint. Like any
+// embedder, this file spells the wire names itself — the `sys.io_*` import
+// keys, the `sys`/`ffi` namespaces, the `func/main` export; the contract is
+// pinned by the Rust test suite. Only the numeric status/stdio codes arrive
+// via `config`, built Rust-side from curios-abi (see src/abi.rs).
 //
 // The browser host is deliberately shallow: stdout/stderr accumulate (and
 // stream via hooks), stdin is at EOF, the clocks and randomness are real, and
@@ -21,14 +21,13 @@ export class ExitSignal extends Error {
  * Run a compiled program. `config` carries:
  * - `program`, `bridge`: the module bytes (the program from `compile`, the
  *   bridge from `bridge_bytes`);
- * - `sysNamespace`, `envNamespace`, `mainExport`, `importNames`, `status`,
- *   `stdio`: the ABI facts from `abi`;
- * - `foreignNames`: `compile`'s `foreignNames` roster — the `env`-tier
- *   imports the program's own `foreign` declarations require;
+ * - `status`, `stdio`: the wire code tables from `abi`;
  * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/
  *   `onStderr` are streaming callbacks, each receiving a `Uint8Array` per
- *   write; `foreign` is a `{ name: fn, ... }` map implementing
- *   `foreignNames`.
+ *   write; `foreign` implements the program's own `foreign` declarations,
+ *   keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`) — it is
+ *   passed through as the `ffi` import object, so a missing implementation
+ *   surfaces as a `LinkError` naming the import.
  *
  * Resolves to `{ stdout, stderr, exitCode, trap }`: the accumulated output
  * bytes, the code the program exited with (0 when `main` returns), and the
@@ -104,7 +103,10 @@ export async function run(config) {
     throw new Error(`${name} is not supported in the browser playground`);
   };
 
-  const implementations = {
+  // The `sys` import object, keyed by wire name. A `sys_io` row without a
+  // browser implementation surfaces as a `LinkError` naming the import when
+  // a program calls it.
+  const sysEnv = {
     io_read: () => [config.status.EOF, emptyBin()],
     io_write: write,
     io_open: deniedHandle,
@@ -151,24 +153,9 @@ export async function run(config) {
     },
     io_args: unsupported("io_args"),
     io_env: () => [config.status.NOT_FOUND, emptyBin()],
-  };
-
-  const sysEnv = {};
-
-  for (const name of config.importNames) {
-    const implementation = implementations[name];
-
-    if (!implementation) {
-      throw new Error(`no browser implementation for sys.${name}`);
-    }
-
-    sysEnv[name] = implementation;
-  }
-
-  // `exit` is a hardcoded primitive at every end (see curios-abi's module
-  // doc), so its import name is spelled directly here too.
-  sysEnv.io_exit = (code) => {
-    throw new ExitSignal(code);
+    io_exit: (code) => {
+      throw new ExitSignal(code);
+    },
   };
 
   const concat = (chunks) => {
@@ -193,25 +180,13 @@ export async function run(config) {
     trap: null,
   });
 
-  const foreignEnv = {};
-
-  for (const name of config.foreignNames ?? []) {
-    const implementation = hooks.foreign?.[name];
-
-    if (!implementation) {
-      throw new Error(`no foreign implementation supplied for env.${name}`);
-    }
-
-    foreignEnv[name] = implementation;
-  }
-
   try {
     const { instance } = await WebAssembly.instantiate(config.program, {
-      [config.sysNamespace]: sysEnv,
-      [config.envNamespace]: foreignEnv,
+      sys: sysEnv,
+      ffi: hooks.foreign ?? {},
     });
 
-    instance.exports[config.mainExport]();
+    instance.exports["func/main"]();
 
     return result();
   } catch (error) {

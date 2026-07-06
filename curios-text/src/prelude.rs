@@ -1,10 +1,12 @@
 use {
     super::{
-        Error, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, LetSignature, Module, Name, Nat,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, LetSignature, Module, Name, Nat,
         NatLiteral, Pattern, Prim, RootSource, Subterm, Term, TopForeign, TopItem, TopLet, TopMod,
         TopUse, TupleType, TupleTypeParam, UseGroup,
     },
-    curios_abi::{ForeignFunction, ForeignStore, RootId, WireType, mode, poll, status, stdio},
+    curios_abi::{
+        ForeignFunction, ForeignStore, NAMESPACE_FFI, WireType, mode, poll, status, stdio,
+    },
     curios_core::{Plicity, Qualifier},
     std::sync::Arc,
 };
@@ -160,7 +162,7 @@ fn pub_fn_marked(
     output: Term,
     body: Term,
 ) -> TopItem {
-    fn_marked(true, label, params, output, body)
+    TopItem::Let(fn_marked(true, label, params, output, body))
 }
 
 fn fn_marked(
@@ -169,8 +171,8 @@ fn fn_marked(
     params: Vec<(Plicity, &str, Term)>,
     output: Term,
     body: Term,
-) -> TopItem {
-    TopItem::Let(TopLet {
+) -> TopLet {
+    TopLet {
         is_pub,
         label: label.to_string(),
         signature: LetSignature::Func {
@@ -185,7 +187,7 @@ fn fn_marked(
             output,
             body,
         },
-    })
+    }
 }
 
 /// The surface type a host-boundary [`WireType`] denotes — the prelude's
@@ -207,7 +209,7 @@ fn wire_type(type_: &WireType) -> Term {
 /// to the parameter names. Used both for `/sys/Io`'s rows (always `pub`) and,
 /// via [`foreign_signature`], for a user's own `foreign` declaration (`is_pub`
 /// follows what they wrote).
-fn host_fn(function: &Arc<ForeignFunction>, is_pub: bool) -> TopItem {
+fn host_fn(function: &Arc<ForeignFunction>, is_pub: bool) -> TopLet {
     let signature = &function.signature;
 
     let output = match signature.results.as_slice() {
@@ -246,35 +248,27 @@ fn host_fn(function: &Arc<ForeignFunction>, is_pub: bool) -> TopItem {
 /// and return the ordinary [`LetSignature`] `to_core` lowers it as — wire-type
 /// bookkeeping and `host_fn`'s shape stay internal to this module, so `to_core`
 /// only ever deals with the same `LetSignature` it already knows how to lower
-/// for a plain `TopItem::Let`. `root` is the declaring root (the caller's
-/// current position while walking the module tree), stamped onto the row like
-/// every other registry entry.
+/// for a plain `TopItem::Let`. `name` is the declaration's fully qualified
+/// name (leading `/`, the caller's current position while walking the module
+/// tree), which becomes the wasm import string under the `ffi` namespace.
+/// Qualified names are unique per compilation (a same-scope duplicate is a
+/// binding conflict long before lowering reaches this point), so `register`'s
+/// duplicate panic stays what it is everywhere else: a construction bug.
 pub(crate) fn foreign_signature(
     declaration: &TopForeign,
     foreigns: &mut ForeignStore,
-    root: RootId,
-) -> Result<LetSignature, Error> {
-    if foreigns.get(&declaration.label).is_some() {
-        return Err(Error::DuplicateForeignDeclaration {
-            label: declaration.label.clone(),
-        });
-    }
-
+    name: String,
+) -> LetSignature {
     let function = ForeignFunction {
-        name: declaration.label.clone(),
+        namespace: NAMESPACE_FFI,
+        name,
         label: declaration.label.clone(),
         signature: declaration.signature.clone(),
-        root,
     };
 
     foreigns.register(function.clone());
 
-    let TopItem::Let(TopLet { signature, .. }) = host_fn(&Arc::new(function), declaration.is_pub)
-    else {
-        unreachable!("host_fn always returns a TopItem::Let");
-    };
-
-    Ok(signature)
+    host_fn(&Arc::new(function), declaration.is_pub).signature
 }
 
 fn binary(label: &str, operand: Term, output: Term, ctor: fn(Term, Term) -> Prim) -> TopItem {
@@ -535,7 +529,11 @@ fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
     // lowered whole, so a top-level value `let` lands in `main`) and trip the
     // IO-at-type-level guard, while under the function abstraction the prim
     // stays unevaluated until called.
-    ops.extend(foreigns.iter().map(|function| host_fn(function, true)));
+    ops.extend(
+        foreigns
+            .iter()
+            .map(|function| TopItem::Let(host_fn(function, true))),
+    );
 
     ops.extend([
         // `(@A : Type) -> Nat -> A`: exit never returns, so its result type is

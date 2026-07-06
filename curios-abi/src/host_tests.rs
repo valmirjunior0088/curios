@@ -1,9 +1,9 @@
 use {
-    super::{ForeignFunction, RootId, WireSignature, WireType, sys_io},
+    super::{ForeignFunction, NAMESPACE_FFI, NAMESPACE_SYS, WireSignature, WireType, sys_io},
     std::collections::BTreeSet,
 };
 
-/// The `/sys/Io` `env` import names, byte for byte and in declaration order —
+/// The `/sys/Io` import names, byte for byte and in declaration order —
 /// the wire ABI contract between the wasm emitter and the runtime linker. A
 /// mismatch here silently strands an import, so the whole list is pinned.
 #[test]
@@ -122,37 +122,49 @@ fn register_rejects_a_duplicate_name() {
     let mut store = sys_io();
 
     store.register(ForeignFunction {
+        namespace: NAMESPACE_SYS,
         name: "io_read".to_string(),
         label: "read_again".to_string(),
         signature: WireSignature {
             params: vec![],
             results: vec![],
         },
-        root: RootId::SYS,
     });
 }
 
-/// Every `sys_io` row is stamped with the internal root — the fixed
+/// Every `sys_io` row is stamped with the `sys` wasm namespace — the fixed
 /// substrate `emit_sys_imports` reads instead of re-deriving membership by
 /// rebuilding this same store.
 #[test]
-fn sys_io_rows_are_stamped_with_the_sys_root() {
-    assert!(sys_io().iter().all(|function| function.root == RootId::SYS));
+fn sys_io_rows_are_stamped_with_the_sys_namespace() {
+    assert!(
+        sys_io()
+            .iter()
+            .all(|function| function.namespace == NAMESPACE_SYS)
+    );
 }
 
-/// Two [`ForeignFunction`]s with the same name but different `root` still
-/// compare equal — identity is the import name alone, `root` is provenance.
+/// Identity is the wasm import pair: `label` and `signature` don't participate
+/// (a cached row matches a freshly minted one), but the namespace does — one
+/// import name under `sys` and under `ffi` names two different imports.
 #[test]
-fn equality_ignores_root() {
-    let base = |root| ForeignFunction {
+fn equality_is_the_import_pair() {
+    let base = |namespace, label: &str| ForeignFunction {
+        namespace,
         name: "frobnicate".to_string(),
-        label: "frobnicate".to_string(),
+        label: label.to_string(),
         signature: WireSignature {
             params: vec![],
             results: vec![],
         },
-        root,
     };
 
-    assert_eq!(base(RootId::SYS), base(RootId::ENTRY));
+    assert_eq!(
+        base(NAMESPACE_FFI, "frobnicate"),
+        base(NAMESPACE_FFI, "frobnicate_again")
+    );
+    assert_ne!(
+        base(NAMESPACE_SYS, "frobnicate"),
+        base(NAMESPACE_FFI, "frobnicate")
+    );
 }

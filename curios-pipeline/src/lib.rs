@@ -21,7 +21,15 @@ pub enum Stage<'a> {
 /// Every stage name, in pipeline order — the single source `curios`'s
 /// post-core check and `--print`'s default/help text are derived from, so
 /// neither can drift from [`Stage::name`].
-pub const NAMES: [&str; 7] = ["text", "core", "ersd", "ersd-optm", "cont", "cont-optm", "wasm"];
+pub const NAMES: [&str; 7] = [
+    "text",
+    "core",
+    "ersd",
+    "ersd-optm",
+    "cont",
+    "cont-optm",
+    "wasm",
+];
 
 /// [`NAMES`] joined with `,`, computed once on first use.
 pub static NAMES_CSV: LazyLock<String> = LazyLock::new(|| NAMES.join(","));
@@ -192,7 +200,7 @@ where
     Ok(())
 }
 
-/// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `env`-tier bindings (`curios-rt`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
+/// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-rt`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
 pub fn compile_entrypoint<O>(
     timeout: Duration,
     entrypoint: &curios_text::Entrypoint,

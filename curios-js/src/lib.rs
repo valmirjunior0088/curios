@@ -4,9 +4,10 @@
 //! pipeline ([`compile`], [`typecheck`]) plus the browser run harness —
 //! [`run`] executes a compiled program against a JS host, and its building
 //! blocks ([`bridge_bytes`], [`abi`]) are exported for playgrounds that wire
-//! the harness themselves. Everything the harness knows about the host
-//! boundary derives from `curios-abi` and `curios-cont`, the same sources the
-//! compiler and runtime cite, so the browser host cannot drift from them.
+//! the harness themselves. The harness spells the wire names (`sys`/`ffi`
+//! namespaces, `sys.io_*` keys, the entry export) directly, like any
+//! embedder; the numeric status/stdio codes it answers with derive from
+//! `curios-abi`, the same source the compiler and runtime cite.
 
 mod abi;
 pub use abi::*;
@@ -18,10 +19,9 @@ mod harness;
 pub use harness::*;
 
 use {
-    abi::set,
     curios_pipeline::{compile_entrypoint, typecheck_entrypoint},
     curios_text::{Entrypoint, RootSource},
-    js_sys::{Array, Object, Uint8Array},
+    js_sys::{Object, Reflect, Uint8Array},
     std::time::Duration,
     wasm_bindgen::prelude::*,
 };
@@ -29,37 +29,24 @@ use {
 /// Generous but bounded: a playground compile should never hang the tab.
 const TIMEOUT: Duration = Duration::from_secs(10);
 
+pub(crate) fn set(target: &Object, key: &str, value: &JsValue) {
+    Reflect::set(target, &JsValue::from_str(key), value).expect("Reflect::set on a plain object");
+}
+
 /// Compile `source` (no external module imports — see `RootSource::None`) to
-/// a `{ bytes, foreignNames }` object, or a formatted error string on
-/// parse/type/lowering failure. `bytes` is the wasm module; `foreignNames` is
-/// the `env`-tier import roster the program's own `foreign` declarations
-/// require — a caller supplies them via `run`'s `hooks.foreign`.
+/// the wasm module bytes, or a formatted error string on parse/type/lowering
+/// failure. A program's own `foreign` declarations import under `ffi` by
+/// fully qualified name — the caller implements them via `run`'s
+/// `hooks.foreign`, keyed by exactly those names.
 #[wasm_bindgen]
-pub fn compile(source: &str) -> Result<Object, String> {
+pub fn compile(source: &str) -> Result<Uint8Array, String> {
     let entrypoint = source
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
 
-    let (module, foreigns) = compile_entrypoint(TIMEOUT, &entrypoint, RootSource::None, |_| {})?;
+    let (module, _foreigns) = compile_entrypoint(TIMEOUT, &entrypoint, RootSource::None, |_| {})?;
 
-    let object = Object::new();
-
-    set(
-        &object,
-        "bytes",
-        &Uint8Array::from(curios_wasm::to_bytes(&module).as_slice()),
-    );
-
-    set(
-        &object,
-        "foreignNames",
-        &foreigns
-            .iter()
-            .map(|function| JsValue::from_str(&function.name))
-            .collect::<Array>(),
-    );
-
-    Ok(object)
+    Ok(Uint8Array::from(curios_wasm::to_bytes(&module).as_slice()))
 }
 
 /// Type-check `source` and stop, skipping the erase/cont/wasm lowering —
