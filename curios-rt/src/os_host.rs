@@ -1,8 +1,5 @@
 use {
-    super::{
-        host::*,
-        OsResolver, Slot, Table,
-    },
+    super::{OsResolver, Slot, Table, host::*},
     rustix::event::{PollFd, Timespec, poll},
     rustls::{
         ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
@@ -92,7 +89,7 @@ pub struct OsHost {
 }
 
 impl OsHost {
-    pub(crate) fn new() -> Self {
+    fn new() -> Self {
         Self::with_args(env::args_os().map(|arg| arg.into_encoded_bytes()).collect())
     }
 

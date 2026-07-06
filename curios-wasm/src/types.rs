@@ -79,12 +79,6 @@ pub struct ResultType {
     pub val_types: Vec<ValType>,
 }
 
-impl ResultType {
-    pub(crate) fn is_empty(&self) -> bool {
-        self.val_types.is_empty()
-    }
-}
-
 impl<I> From<I> for ResultType
 where
     I: IntoIterator<Item = ValType>,
@@ -135,12 +129,6 @@ where
         Self {
             fields: fields.into_iter().collect(),
         }
-    }
-}
-
-impl StructType {
-    pub(crate) fn field_names(&self) -> impl ExactSizeIterator<Item = &FieldName> {
-        self.fields.iter().map(|(field_name, _)| field_name)
     }
 }
 

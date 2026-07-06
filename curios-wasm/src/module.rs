@@ -23,13 +23,6 @@ impl Import {
             _ => None,
         }
     }
-
-    pub(crate) fn global_name(&self) -> Option<&GlobalName> {
-        match self {
-            Import::Global { global_name, .. } => Some(global_name),
-            _ => None,
-        }
-    }
 }
 
 /// A passive data segment: raw bytes with no memory to be loaded into (the backend has none). Its content enters the program only through `array.new_data` — the emitter uses this to materialize literal byte strings as GC arrays.

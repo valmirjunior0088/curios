@@ -1529,7 +1529,7 @@ impl Subterm {
     /// only sees `Var`s and a `Metavar` holds none, so occurs/zonk analyses
     /// cannot piggyback on `free_vars` — this walk (an `any_metavar` whose
     /// collector never short-circuits) enumerates them directly.
-    pub(crate) fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
+    fn collect_metavars(&self, ids: &mut BTreeSet<MetavarId>) {
         self.any_metavar(&mut |id| {
             ids.insert(id);
             false

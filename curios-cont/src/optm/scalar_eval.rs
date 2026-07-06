@@ -113,7 +113,7 @@ pub(crate) fn decide_match(tail: &Tail, env: &impl EvalEnv) -> Option<JumpTarget
 /// Resolve a projection out of a known aggregate to the element (or length/byte)
 /// it reads. Aggregates are immutable, so this is always sound; out-of-bounds
 /// access would trap, so it is left unfolded.
-pub(crate) fn project<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
+fn project<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
     use Code::*;
 
     match code {

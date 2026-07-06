@@ -93,7 +93,7 @@ impl CallGraph {
 
     /// Whether `name` resolves to an item whose evaluation could perform an effect.
     /// A name owned by no item (a local binder or parameter) is not effectful here.
-    pub(crate) fn name_is_effectful(&self, name: &str) -> bool {
+    fn name_is_effectful(&self, name: &str) -> bool {
         self.owner.get(name).is_some_and(|&i| self.tainted[i])
     }
 

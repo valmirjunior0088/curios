@@ -17,11 +17,11 @@ use {
 /// Γ frozen in binding order, with birth-time types. `Rc`-shared: every meta
 /// born under the same Γ shares one allocation (see
 /// [`Context::identity_snapshot`]).
-pub(crate) type SharedTelescope = Rc<Vec<(String, Term)>>;
+type SharedTelescope = Rc<Vec<(String, Term)>>;
 
 /// The identity spine over a [`SharedTelescope`] — one `Var::free` per binder
 /// — shared the same way.
-pub(crate) type SharedSpine = Rc<Vec<Term>>;
+type SharedSpine = Rc<Vec<Term>>;
 
 /// One metavariable's record in the [`MetaStore`]. Everything here is frozen at
 /// birth except `solution`, which transitions `None -> Some(_)` exactly once.
@@ -401,7 +401,7 @@ impl Context {
         self.reduction_cache.clear();
     }
 
-    pub(crate) fn definition(&self, label: &str) -> Option<&Term> {
+    fn definition(&self, label: &str) -> Option<&Term> {
         self.definitions
             .iter()
             .rev()
@@ -1021,7 +1021,11 @@ impl Context {
     /// birthed like any hole — frozen Γ, identity spine — with no insertion
     /// provenance. If it survives unsolved, the item drain reports the parked
     /// problem at its origin before zonk could ever meet the placeholder.
-    pub(crate) fn fresh_placeholder(&mut self, result: Term, span: Option<Span>) -> (MetavarId, Term) {
+    pub(crate) fn fresh_placeholder(
+        &mut self,
+        result: Term,
+        span: Option<Span>,
+    ) -> (MetavarId, Term) {
         let id = self.next_metavar.fresh();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);

@@ -1867,30 +1867,6 @@ fn elaborate_metavar(
     }
 }
 
-/// Walk a (params-first) telescope, checking each binder's type against `Type`
-/// under the earlier binders (fresh-gensym, assume), and return the rebuilt
-/// `(label, type)` entries alongside the telescope's terminal — opened under
-/// those binders. Runs in the caller's frame; the same gensym-then-relabel
-/// discipline as `elaborate_tuple_type`.
-pub(crate) fn check_telescope_entries<B: Bound>(
-    context: &mut Context,
-    mut telescope: Telescope<B>,
-) -> Result<(Vec<(String, Term)>, B), Error> {
-    let mut entries = Vec::new();
-    loop {
-        match telescope {
-            Telescope::Done(body) => break Ok((entries, *body)),
-            Telescope::Cons(ty, rest) => {
-                let rebuilt = check(context, &ty, Term::type_())?;
-                let label = context.fresh(rest.first_label());
-                context.assume(&label, &rebuilt);
-                telescope = rest.open(&[&Term::free_var(&label)]);
-                entries.push((label, rebuilt));
-            }
-        }
-    }
-}
-
 /// Check `args` pointwise against the dependent telescope `signature` — each arg
 /// under the earlier ones — collecting the rebuilt args and returning the
 /// telescope's terminal, opened at those args. The caller checks arity first; the
@@ -2015,7 +1991,11 @@ fn insert_implicits_on_check(
     Ok((Term::func(binders, body), func_type))
 }
 
-pub(crate) fn elaborate(context: &mut Context, term: &Term, mode: Mode) -> Result<(Term, Term), Error> {
+pub(crate) fn elaborate(
+    context: &mut Context,
+    term: &Term,
+    mode: Mode,
+) -> Result<(Term, Term), Error> {
     let result = elaborate_subterm(context, term, mode);
 
     // Carry the source span onto the rebuilt term as well as onto any error, so

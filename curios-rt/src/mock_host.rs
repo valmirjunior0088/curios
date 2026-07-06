@@ -576,7 +576,7 @@ impl Default for MockHostBuilder {
 impl MockHostBuilder {
     /// Append one line to scripted stdin; the newline the terminal would
     /// deliver is appended for you.
-    pub(crate) fn stdin_line(mut self, line: impl AsRef<[u8]>) -> Self {
+    fn stdin_line(mut self, line: impl AsRef<[u8]>) -> Self {
         self.input.extend_from_slice(line.as_ref());
         self.input.push(b'\n');
 

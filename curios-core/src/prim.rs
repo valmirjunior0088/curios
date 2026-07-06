@@ -742,7 +742,7 @@ impl Prim {
     /// (`traverse` keeps its own match: it rebuilds rather than visits.) The
     /// closure is taken `impl FnMut` so it monomorphises and inlines, leaving the
     /// de Bruijn / region hot path allocation- and indirection-free.
-    pub(crate) fn for_each_operand(&self, visit: &mut impl FnMut(&Term)) {
+    fn for_each_operand(&self, visit: &mut impl FnMut(&Term)) {
         match self {
             Prim::BlnType
             | Prim::Bln(_)

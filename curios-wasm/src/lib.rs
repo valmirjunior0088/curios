@@ -20,9 +20,9 @@ mod module_tests;
 mod writer;
 pub use writer::*;
 
-pub(crate) mod parse;
+mod parse;
 
 #[cfg(test)]
 mod parse_tests;
 
-pub(crate) mod print;
+mod print;

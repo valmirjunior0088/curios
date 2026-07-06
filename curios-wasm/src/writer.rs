@@ -1182,8 +1182,9 @@ where
                             (
                                 writer.table.resolve_type(type_name) as u64,
                                 struct_type
-                                    .field_names()
-                                    .map(|field_name| {
+                                    .fields
+                                    .iter()
+                                    .map(|(field_name, _)| {
                                         (
                                             writer.table.resolve_field(type_name, field_name)
                                                 as u64,

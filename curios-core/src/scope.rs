@@ -642,7 +642,7 @@ impl Telescope<()> {
 
 /// A term-level pre-hook for [`Visit`]: `Some(replacement)` substitutes the
 /// whole node at the current depth.
-pub(crate) type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
+type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
 
 /// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, the pruning flag (skip subtrees whose `reach` proves the visit cannot touch them), and an optional term-level rewrite hook. Public constructors are `Visit::pruning` and `Visit::rewriting`; the plain constructor is crate-internal.
 pub struct Visit<F> {
@@ -674,7 +674,7 @@ where
     /// index-monotonic visits whose effect depends solely on bound indices
     /// `>= depth` — i.e. `shift` and `release`. Must NOT be used for `capture`
     /// (rewrites free names) or `free_vars` (must observe every node).
-    pub(crate) fn pruning(visit: F) -> Self {
+    fn pruning(visit: F) -> Self {
         Self {
             depth: 0,
             prune: true,

@@ -841,7 +841,9 @@ fn erase_variant(context: &mut Context, uc: &Variant) -> Result<curios_ersd::Ter
         .expect("erase: constructor names a registered inductive");
 
     let index = inductive
-        .tag_index(tag)
+        .constructors
+        .keys()
+        .position(|candidate| candidate == tag)
         .expect("erase: constructor tag registered with its inductive");
 
     let telescope = inductive

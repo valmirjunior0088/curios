@@ -67,13 +67,4 @@ impl Inductive {
                 .open_params(params),
         )
     }
-
-    /// The runtime tag index of `tag`: its position among this inductive's
-    /// constructors in sorted (BTreeMap key) order — the order in which a
-    /// inductive match's lowered cases are laid out.
-    pub(crate) fn tag_index(&self, tag: &Atom) -> Option<usize> {
-        self.constructors
-            .keys()
-            .position(|candidate| candidate == tag)
-    }
 }

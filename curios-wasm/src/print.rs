@@ -163,14 +163,14 @@ fn print_struct_type<'a>(struct_type: &'a StructType) -> Printer<'a> {
 fn print_func_type<'a>(func_type: &'a FuncType) -> Printer<'a> {
     flat([
         pure("(func"),
-        flat(match func_type.inputs.is_empty() {
+        flat(match func_type.inputs.val_types.is_empty() {
             true => None,
             false => Some(flat([
                 pure(" "),
                 print_result_type("param", &func_type.inputs),
             ])),
         }),
-        flat(match func_type.outputs.is_empty() {
+        flat(match func_type.outputs.val_types.is_empty() {
             true => None,
             false => Some(flat([
                 pure(" "),
@@ -696,7 +696,7 @@ fn print_func<'a>(module: &'a Module, func_name: &'a FuncName, func: &'a Func) -
                         ])
                     }))
             }),
-            flat(match func_type.outputs.is_empty() {
+            flat(match func_type.outputs.val_types.is_empty() {
                 true => None,
                 false => Some(flat([
                     pure(" "),

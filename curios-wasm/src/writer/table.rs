@@ -1,5 +1,5 @@
 use {
-    crate::{DataName, FieldName, FuncName, GlobalName, LocalName, Module, TypeName},
+    crate::{DataName, FieldName, FuncName, GlobalName, Import, LocalName, Module, TypeName},
     std::collections::HashMap,
 };
 
@@ -58,7 +58,10 @@ impl<'a> Table<'a> {
         for (index, global_name) in module
             .imports()
             .iter()
-            .flat_map(|(_, _, import)| import.global_name())
+            .filter_map(|(_, _, import)| match import {
+                Import::Global { global_name, .. } => Some(global_name),
+                Import::Func { .. } => None,
+            })
             .enumerate()
         {
             globals.insert(global_name, index);

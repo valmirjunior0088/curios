@@ -468,25 +468,6 @@ pub enum BinPattern {
     },
 }
 
-impl MatchPattern {
-    /// Whether this leaf is a genuine single-dispatch shape
-    /// (`Ctor`/`Bln`/`Nat`/`Lst`/`Bin`), as opposed to `Binder`/`Tuple`/
-    /// `Struct`, which never produce a core `Match` node at all (a binder
-    /// never splits, a tuple/struct explodes into projections) — so there
-    /// is nothing for a dependent motive to attach to. Used by the matrix
-    /// compiler's (`to_core::lower`) dependent-motive gate: `Nat`/`Lst`/
-    /// `Bin` each nest their own two-case sub-pattern, so a plain
-    /// [`std::mem::discriminant`] comparison on the outer variant already
-    /// treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same
-    /// dispatchable shape, with no separate classifier needed.
-    pub(crate) fn is_dispatchable(&self) -> bool {
-        !matches!(
-            self,
-            MatchPattern::Binder(_) | MatchPattern::Tuple(_) | MatchPattern::Struct { .. }
-        )
-    }
-}
-
 /// One tuple-pattern / struct-pattern field in a [`MatchPattern`]: a labeled
 /// sub-pattern (`label = pattern`) or a bare positional one. The literal
 /// mirror of [`PatternField`] with `Pattern` replaced by `MatchPattern`.

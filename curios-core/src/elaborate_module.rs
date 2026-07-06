@@ -1,12 +1,36 @@
 use {
     super::{
-        Context, Definition, Error, Inductive, InductiveParam, Item, Mode, Module, Qualifier,
-        Structure, Subterm, Telescope, Term, check, check_concept_registry,
-        check_telescope_entries, drain_parked, elaborate, finish_deferred_witnesses, is_prop,
-        reduce_with, register_witness, retry_deferred_witnesses, zonk, zonk_module,
+        Bound, Context, Definition, Error, Inductive, InductiveParam, Item, Mode, Module,
+        Qualifier, Structure, Subterm, Telescope, Term, check, check_concept_registry,
+        drain_parked, elaborate, finish_deferred_witnesses, is_prop, reduce_with, register_witness,
+        retry_deferred_witnesses, zonk, zonk_module,
     },
     std::collections::BTreeMap,
 };
+
+/// Walk a (params-first) telescope, checking each binder's type against `Type`
+/// under the earlier binders (fresh-gensym, assume), and return the rebuilt
+/// `(label, type)` entries alongside the telescope's terminal — opened under
+/// those binders. Runs in the caller's frame; the same gensym-then-relabel
+/// discipline as `elaborate_tuple_type`.
+fn check_telescope_entries<B: Bound>(
+    context: &mut Context,
+    mut telescope: Telescope<B>,
+) -> Result<(Vec<(String, Term)>, B), Error> {
+    let mut entries = Vec::new();
+    loop {
+        match telescope {
+            Telescope::Done(body) => break Ok((entries, *body)),
+            Telescope::Cons(ty, rest) => {
+                let rebuilt = check(context, &ty, Term::type_())?;
+                let label = context.fresh(rest.first_label());
+                context.assume(&label, &rebuilt);
+                telescope = rest.open(&[&Term::free_var(&label)]);
+                entries.push((label, rebuilt));
+            }
+        }
+    }
+}
 
 /// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated*
 /// types. `to_core` records the declaration's lowered spellings, and a lowered

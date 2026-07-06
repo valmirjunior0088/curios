@@ -33,7 +33,7 @@ use {
 };
 
 /// The outcome of one resolution attempt.
-pub(crate) enum Resolution {
+enum Resolution {
     /// A witness term for the goal; solutions its unification committed stay.
     Solved(Term),
     /// The goal's key is still flexible — park, watching its metavariables.
@@ -127,11 +127,7 @@ fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<
 
 /// Run the resolution algorithm for `goal`. `origin` anchors spans and parked
 /// premise goals. Solutions committed by a successful match stay in force.
-pub(crate) fn resolve_witness(
-    context: &mut Context,
-    goal: &Term,
-    origin: &Term,
-) -> Result<Resolution, Error> {
+fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<Resolution, Error> {
     let goal_whnf = reduce_with(context, goal)?;
 
     // A goal whose whole type is still a hole offers nothing to match on.

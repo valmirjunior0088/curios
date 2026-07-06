@@ -8,7 +8,7 @@ pub struct Source {
 }
 
 impl Source {
-    pub(crate) fn new(path: impl Into<PathBuf>, text: impl Into<String>) -> Rc<Self> {
+    fn new(path: impl Into<PathBuf>, text: impl Into<String>) -> Rc<Self> {
         Rc::new(Self {
             path: Some(path.into()),
             text: text.into(),
