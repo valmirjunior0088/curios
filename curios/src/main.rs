@@ -50,9 +50,10 @@ fn dispatch() -> Result<(), String> {
             // Run the fast type-check-only path; fall through to the full pipeline
             // only when a post-core stage is requested for printing, since those
             // stages do not exist until lowering runs.
-            let post_core = ["ersd", "ersd-optm", "cont", "cont-optm", "wasm"];
-
-            if print.split(',').any(|stage| post_core.contains(&stage)) {
+            if print
+                .split(',')
+                .any(|stage| POST_CORE_STAGES.contains(&stage))
+            {
                 compile_file(timeout, &print, &input_path)?;
             } else {
                 typecheck_file(timeout, &print, &input_path)?;

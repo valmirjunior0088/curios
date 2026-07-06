@@ -8,6 +8,13 @@ use {
     std::{path::Path, time::Duration},
 };
 
+/// The stage names that don't exist until the full pipeline lowers past `core`
+/// — requesting one of these from `check` forces the fallback to
+/// [`compile_file`], since [`typecheck_file`] never produces them. Kept next
+/// to [`stage_printer`], the other place that spells out this same name set,
+/// so the two cannot drift.
+pub(crate) const POST_CORE_STAGES: [&str; 5] = ["ersd", "ersd-optm", "cont", "cont-optm", "wasm"];
+
 /// Build the observer closure that prints each requested IR stage to stderr.
 /// `print` is the comma-separated stage list from `--print`; an unlisted stage is
 /// skipped. The closure handles every `Stage` variant, so it serves both the full
