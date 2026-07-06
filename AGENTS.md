@@ -68,7 +68,7 @@ then, in curios itself:
 | `curios-cont/src/`                               | Continuation-passing IR; cont→cont optimization (`optm/`: inlining, DCE, copy/tag/jump threading, tail recursion, …); wasm emission (`to_wasm/`) |
 | `curios-wasm/src/`                               | Wasm module model, parser, binary writer/encoder                                                                                                 |
 | `curios-pipeline/src/lib.rs`                     | Pipeline driver: `compile_entrypoint`, `typecheck_entrypoint`, `Stage`                                                                           |
-| `curios-js/{src,js}/`                            | `wasm-bindgen` exports for a browser build (`compile`, `typecheck`, `run`, `bridge_bytes`, `abi`) + the JS harness snippet                       |
+| `curios-js/{src,js}/`                            | `wasm-bindgen` exports for a browser build (`compile`, `run`, `bridge_bytes`, `abi`) + the JS harness snippet                                    |
 | `curios-base/src/monads/`                        | Parser/printer monad combinators                                                                                                                 |
 | `curios-base/src/{span,entropy,macros,suffix_view}.rs` | Foundational utilities shared by every stage                                                                                               |
 | `curios-abi/src/{lib,host}.rs`                   | Host↔guest contract: wire ABI constants and the `ForeignFunction`/`ForeignStore` host-op rows (`sys_io()` seed)                                  |
