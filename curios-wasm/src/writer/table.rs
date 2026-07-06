@@ -90,7 +90,7 @@ impl<'a> Table<'a> {
     pub(super) fn resolve_type(&self, name: &'a TypeName) -> usize {
         self.types
             .get(name)
-            .cloned()
+            .copied()
             .unwrap_or_else(|| panic!("`Table` lacks type `{}`", name))
     }
 
@@ -104,7 +104,7 @@ impl<'a> Table<'a> {
     pub(super) fn resolve_func(&self, name: &'a FuncName) -> usize {
         self.funcs
             .get(name)
-            .cloned()
+            .copied()
             .unwrap_or_else(|| panic!("`Table` lacks func `{}`", name))
     }
 
@@ -118,14 +118,14 @@ impl<'a> Table<'a> {
     pub(super) fn resolve_global(&self, name: &'a GlobalName) -> usize {
         self.globals
             .get(name)
-            .cloned()
+            .copied()
             .unwrap_or_else(|| panic!("`Table` lacks global `{}`", name))
     }
 
     pub(super) fn resolve_data(&self, name: &'a DataName) -> usize {
         self.datas
             .get(name)
-            .cloned()
+            .copied()
             .unwrap_or_else(|| panic!("`Table` lacks data `{}`", name))
     }
 }
