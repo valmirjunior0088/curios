@@ -145,8 +145,8 @@ impl<'a> FuncData<'a> {
     pub(super) fn new(func_name: &'a crate::FuncName, func: &'a crate::Func) -> Self {
         Self {
             // The `func/` prefix is why the exported entrypoint is
-            // `curios_abi::MAIN_EXPORT` (`func/main`): the entry is always
-            // `main`, and the export reuses the function's emitted name.
+            // `func/main`: the entry is always `main`, and the export reuses
+            // the function's emitted name.
             func_name: FuncName::from(format!("func/{}", func_name)),
             params: func
                 .params

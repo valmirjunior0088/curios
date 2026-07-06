@@ -24,7 +24,7 @@ pub use types::*;
 
 use curios_wasm::Module;
 
-/// Emit the (optimized) cont module as a wasm-GC module — the pipeline's final lowering. A `Table` is computed over the whole module first (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers), then `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under [`curios_abi::MAIN_EXPORT`].
+/// Emit the (optimized) cont module as a wasm-GC module — the pipeline's final lowering. A `Table` is computed over the whole module first (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers), then `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
 pub fn to_wasm(cont_module: &crate::Module) -> Module {
     let mut wasm_module = Module::new("module");
 

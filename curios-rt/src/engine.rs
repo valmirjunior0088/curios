@@ -445,8 +445,8 @@ fn instantiate<H: Host + Send + Sync + 'static>(
         .map_err(|error| format!("failed to instantiate module: {error}"))?;
 
     let function = instance
-        .get_typed_func::<(), Rooted<AnyRef>>(&mut store, curios_abi::MAIN_EXPORT)
-        .map_err(|error| format!("failed to access {}: {error}", curios_abi::MAIN_EXPORT))?;
+        .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main")
+        .map_err(|error| format!("failed to access func/main: {error}"))?;
 
     match function.call(&mut store, ()) {
         Ok(_) => Ok(0),

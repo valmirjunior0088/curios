@@ -45,11 +45,6 @@ pub const NAMESPACE_SYS: &str = "sys";
 /// collide on the wire.
 pub const NAMESPACE_FFI: &str = "ffi";
 
-/// The exported entrypoint the runtime invokes. `cont`'s wasm emitter names
-/// every function `func/<name>` and exports the entry — always `main` — under
-/// that scheme.
-pub const MAIN_EXPORT: &str = "func/main";
-
 /// The type of one value crossing the host boundary. The whole vocabulary is
 /// six shapes; everything a host op consumes or produces is one of them.
 ///
