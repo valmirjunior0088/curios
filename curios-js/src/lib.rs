@@ -1,5 +1,6 @@
-//! The curios ↔ JavaScript boundary, for a browser build (`wasm-pack build
-//! curios-js --target web`): wasm-bindgen exports of the pure compile
+//! The curios ↔ JavaScript boundary, for a browser build (`cargo build` +
+//! `wasm-bindgen-cli --target web` — no `wasm-pack`, see AGENTS.md's
+//! Gotchas): wasm-bindgen exports of the pure compile
 //! pipeline ([`compile`], [`typecheck`]) plus the browser run harness —
 //! [`run`] executes a compiled program against a JS host, and its building
 //! blocks ([`bridge_bytes`], [`abi`]) are exported for playgrounds that wire
