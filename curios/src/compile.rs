@@ -9,7 +9,7 @@ use {
 };
 
 #[cfg(test)]
-use {curios_pipeline::compile_entrypoint, std::path::PathBuf, std::time::Duration};
+use {curios_pipeline::compile_entrypoint, std::time::Duration};
 
 /// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm`
 /// payload the runtime deserializes — the same payload a bundled executable
@@ -76,32 +76,6 @@ pub fn load(path: &Path) -> Result<(curios_text::Entrypoint, curios_text::RootSo
     let entrypoint = curios_text::Entrypoint::from_path(path).map_err(|error| error.format())?;
     let loader =
         curios_text::RootSource::FileSystem(path.parent().unwrap_or(Path::new(".")).to_path_buf());
-
-    Ok((entrypoint, loader))
-}
-
-/// Like [`load`], but also resolves `dependencies` — each a name paired with
-/// the path to its own root file (no fixed root-file convention; the caller
-/// points at whatever file they want, exactly like the entrypoint itself) —
-/// into named path compilation roots alongside the entrypoint's own loader.
-#[cfg(test)]
-pub(crate) fn load_with_dependencies(
-    path: &Path,
-    dependencies: Vec<(String, PathBuf)>,
-) -> Result<(curios_text::Entrypoint, curios_text::RootSource), String> {
-    let (entrypoint, base) = load(path)?;
-
-    let deps = dependencies
-        .into_iter()
-        .map(|(name, dep_path)| {
-            let (module, source) = curios_text::RootSource::dependency_from_path(&dep_path)
-                .map_err(|error| error.format())?;
-            Ok((name, module, source))
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-
-    let loader =
-        curios_text::RootSource::dependencies(deps, base).map_err(|error| error.format())?;
 
     Ok((entrypoint, loader))
 }

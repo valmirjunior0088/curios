@@ -11,9 +11,6 @@ pub use names::*;
 mod root_source;
 pub use root_source::*;
 
-#[cfg(test)]
-mod root_source_tests;
-
 mod nat;
 pub use nat::*;
 

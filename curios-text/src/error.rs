@@ -116,13 +116,6 @@ pub enum Error {
         label: String,
         cause: Box<LoadError>,
     },
-    /// Two named path dependencies share a name, or one collides with a
-    /// reserved root (`sys`/`syn`/`std`). Raised by
-    /// [`RootSource::dependencies`](crate::RootSource::dependencies)'s
-    /// validation, before a `Roster` (which assumes uniqueness) is ever built.
-    DuplicateRoot {
-        name: String,
-    },
     Located {
         span: Span,
         error: Box<Error>,
@@ -246,12 +239,6 @@ impl fmt::Display for Error {
             }
             Error::ModuleLoadFailed { label, cause } => {
                 write!(f, "failed to load module {label}:\n{}", cause.format())
-            }
-            Error::DuplicateRoot { name } => {
-                write!(
-                    f,
-                    "duplicate root: '{name}' is already a dependency name or a reserved root (sys/syn/std)"
-                )
             }
             Error::Located { error, .. } => write!(f, "{error}"),
         }
