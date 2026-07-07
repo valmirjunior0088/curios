@@ -711,7 +711,11 @@ impl Work<'_, '_, '_> {
                             lowerer: &mut *work.lowerer,
                             emit: &mut body,
                         }
-                        .lower_tail(succ_case, &succ_frame, &body_resume_name)?;
+                        .lower_tail(
+                            succ_case,
+                            &succ_frame,
+                            &body_resume_name,
+                        )?;
 
                         body.finish(body_tail)
                     };

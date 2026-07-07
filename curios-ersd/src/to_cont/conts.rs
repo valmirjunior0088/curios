@@ -32,7 +32,8 @@ impl<'a> Cont<'a> {
     }
 }
 
-type ContManyFn<'a> = Box<dyn FnOnce(&mut Work<'_, '_, '_>, Vec<ValueName>) -> LowerResult<Tail> + 'a>;
+type ContManyFn<'a> =
+    Box<dyn FnOnce(&mut Work<'_, '_, '_>, Vec<ValueName>) -> LowerResult<Tail> + 'a>;
 
 pub(super) struct ContMany<'a> {
     func: ContManyFn<'a>,
@@ -47,7 +48,11 @@ impl<'a> ContMany<'a> {
         }
     }
 
-    pub(super) fn call(self, work: &mut Work<'_, '_, '_>, values: Vec<ValueName>) -> LowerResult<Tail> {
+    pub(super) fn call(
+        self,
+        work: &mut Work<'_, '_, '_>,
+        values: Vec<ValueName>,
+    ) -> LowerResult<Tail> {
         (self.func)(work, values)
     }
 
@@ -62,7 +67,8 @@ impl<'a> ContMany<'a> {
     }
 }
 
-type RecBodyFn<'a> = Box<dyn FnOnce(&mut Work<'_, '_, '_>, &super::Frame) -> LowerResult<Tail> + 'a>;
+type RecBodyFn<'a> =
+    Box<dyn FnOnce(&mut Work<'_, '_, '_>, &super::Frame) -> LowerResult<Tail> + 'a>;
 
 pub(super) struct RecBody<'a> {
     func: RecBodyFn<'a>,
@@ -77,7 +83,11 @@ impl<'a> RecBody<'a> {
         }
     }
 
-    pub(super) fn call(self, work: &mut Work<'_, '_, '_>, frame: &super::Frame) -> LowerResult<Tail> {
+    pub(super) fn call(
+        self,
+        work: &mut Work<'_, '_, '_>,
+        frame: &super::Frame,
+    ) -> LowerResult<Tail> {
         (self.func)(work, frame)
     }
 }
