@@ -725,8 +725,8 @@ thread_local! {
 /// `sys` (a single AST value built once per compile) then the embedded
 /// `std`/`syn` tables (each parsed once per thread; see `STD_MODULES`/
 /// `SYN_MODULES`). `None` falls through to whatever [`RootSource`] wraps
-/// this one. Shared by every [`RootSource::Prelude`] value, so it lives here
-/// (alongside the tables it reads) rather than in `root_source`.
+/// this one. Shared by every [`RootSource`] with `sys` attached, so it lives
+/// here (alongside the tables it reads) rather than in `root_source`.
 pub(crate) fn load_embedded(sys: &Module, qualifier: &Qualifier) -> Option<Module> {
     let path = qualifier.iter().collect::<Vec<_>>();
 
@@ -744,14 +744,11 @@ pub(crate) fn load_embedded(sys: &Module, qualifier: &Qualifier) -> Option<Modul
 }
 
 /// Wrap a root source so `sys`, `syn`, and `std` resolve from the binary and
-/// everything else falls through to `base`. The wrapped source also reports
-/// those roots from `RootSource::roots`, so `to_core` declares them at the
-/// entrypoint root automatically. `foreigns` is the compilation's foreign
-/// store — the host operations `/sys/Io` declares; today always
+/// everything else falls through to `base`'s own entry-filesystem setting.
+/// `to_core` discovers them explicitly once `has_embedded_roots()` reports
+/// them attached (see `to_core::FIXED_ROOTS`). `foreigns` is the compilation's
+/// foreign store — the host operations `/sys/Io` declares; today always
 /// `curios_abi::sys_io()`, created per compilation by the pipeline driver.
 pub fn prelude(foreigns: &ForeignStore, base: RootSource) -> RootSource {
-    RootSource::Prelude {
-        sys: sys_module(foreigns),
-        base: Box::new(base),
-    }
+    base.with_sys(sys_module(foreigns))
 }

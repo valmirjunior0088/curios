@@ -13,7 +13,7 @@ fn entrypoint_type_is_used_as_expected_type() {
     let error = compile_entrypoint(
         Duration::from_secs(5),
         &entrypoint,
-        curios_text::RootSource::None,
+        curios_text::RootSource::none(),
         |_| {},
     )
     .unwrap_err();
@@ -32,7 +32,7 @@ fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, Str
     compile_entrypoint(
         Duration::from_secs(5),
         &entrypoint,
-        curios_text::RootSource::None,
+        curios_text::RootSource::none(),
         |_| {},
     )
     .map(|(module, _foreigns)| module)
@@ -99,7 +99,7 @@ fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
     compile_entrypoint(
         Duration::from_secs(5),
         &entrypoint,
-        curios_text::RootSource::None,
+        curios_text::RootSource::none(),
         |stage| match stage {
             Stage::Ersd(stage) => ersd = format!("{stage}"),
             Stage::Cont(stage) => cont = format!("{stage}"),
@@ -1096,7 +1096,7 @@ fn typecheck(source: &str) -> Result<(), String> {
     super::elaborate_and_zonk(
         Duration::from_secs(5),
         &entrypoint,
-        curios_text::RootSource::None,
+        curios_text::RootSource::none(),
         &mut |_| {},
     )
     .map(|_| ())

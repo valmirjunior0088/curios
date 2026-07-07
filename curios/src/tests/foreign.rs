@@ -20,7 +20,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     let (module, foreigns) = curios_pipeline::compile_entrypoint(
         Duration::from_secs(10),
         &source,
-        curios_text::RootSource::None,
+        curios_text::RootSource::none(),
         |_| {},
     )
     .expect("compile succeeded");

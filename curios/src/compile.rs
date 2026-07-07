@@ -66,16 +66,17 @@ pub(crate) fn run_text<H: Host + Send + Sync + 'static>(
         .parse::<curios_text::Entrypoint>()
         .map_err(|error| error.format())?;
 
-    run_entrypoint(timeout, &entrypoint, curios_text::RootSource::None, host)
+    run_entrypoint(timeout, &entrypoint, curios_text::RootSource::none(), host)
 }
 
-/// Open a `.crs` entrypoint at `path`, paired with a [`curios_text::RootSource::FileSystem`]
-/// rooted at its parent directory — the standard way to resolve a program's
-/// imports relative to the file it lives in.
+/// Open a `.crs` entrypoint at `path`, paired with a
+/// [`curios_text::RootSource::file_system`] rooted at its parent directory —
+/// the standard way to resolve a program's imports relative to the file it
+/// lives in.
 pub fn load(path: &Path) -> Result<(curios_text::Entrypoint, curios_text::RootSource), String> {
     let entrypoint = curios_text::Entrypoint::from_path(path).map_err(|error| error.format())?;
     let loader =
-        curios_text::RootSource::FileSystem(path.parent().unwrap_or(Path::new(".")).to_path_buf());
+        curios_text::RootSource::file_system(path.parent().unwrap_or(Path::new(".")).to_path_buf());
 
     Ok((entrypoint, loader))
 }

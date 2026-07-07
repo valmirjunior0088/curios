@@ -89,7 +89,7 @@ fn build_prelude() -> curios_core::Module {
     // prelude, cached independently of any user compilation.
     let (module, metavars, _foreigns) = curios_text::to_core(
         &entrypoint,
-        &curios_text::prelude(&sys_io(), curios_text::RootSource::None),
+        &curios_text::prelude(&sys_io(), curios_text::RootSource::none()),
     )
     .unwrap_or_else(|error| panic!("the embedded prelude failed to lower: {}", error.format()));
 

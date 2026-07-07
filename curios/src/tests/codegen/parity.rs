@@ -32,7 +32,7 @@ fn normalized_cont_optm(source: &str) -> String {
     compile_entrypoint(
         Duration::from_secs(10),
         &entrypoint,
-        curios_text::RootSource::None,
+        curios_text::RootSource::none(),
         |stage| {
             if let Stage::ContOptm(module) = stage {
                 dump = module.to_string();

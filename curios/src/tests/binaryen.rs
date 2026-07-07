@@ -24,7 +24,7 @@ fn optimizes_to_a_smaller_valid_module() {
     let (module, _foreigns) = compile_entrypoint(
         Duration::from_secs(60),
         &entrypoint,
-        curios_text::RootSource::None,
+        curios_text::RootSource::none(),
         |_| {},
     )
     .expect("expected wasm module");

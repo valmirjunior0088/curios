@@ -7,7 +7,7 @@ use std::{
 fn run(src: &str) -> curios_core::Term {
     let (module, _, _) = super::to_core(
         &src.parse::<crate::Entrypoint>().unwrap(),
-        &crate::RootSource::None,
+        &crate::RootSource::none(),
     )
     .unwrap();
 
@@ -17,7 +17,7 @@ fn run(src: &str) -> curios_core::Term {
 fn run_err(src: &str) -> String {
     super::to_core(
         &src.parse::<crate::Entrypoint>().unwrap(),
-        &crate::RootSource::None,
+        &crate::RootSource::none(),
     )
     .unwrap_err()
     .to_string()
@@ -28,7 +28,7 @@ fn run_err(src: &str) -> String {
 fn lower_with_prelude(src: &str) -> Result<(), String> {
     super::to_core(
         &src.parse::<crate::Entrypoint>().unwrap(),
-        &crate::prelude(&curios_abi::sys_io(), crate::RootSource::None),
+        &crate::prelude(&curios_abi::sys_io(), crate::RootSource::none()),
     )
     .map(|_| ())
     .map_err(|error| error.to_string())
@@ -1133,7 +1133,7 @@ fn file_loader_prepares_sibling_modules_before_to_core() {
         "#
     .parse::<crate::Entrypoint>()
     .unwrap();
-    let loader = crate::RootSource::FileSystem(base.clone());
+    let loader = crate::RootSource::file_system(base.clone());
 
     super::to_core(&entrypoint, &loader).unwrap();
 
@@ -1150,7 +1150,7 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
     .unwrap();
 
     assert!(matches!(
-        super::to_core(&entrypoint, &crate::RootSource::None).unwrap_err(),
+        super::to_core(&entrypoint, &crate::RootSource::none()).unwrap_err(),
         crate::Error::Located { error, .. }
             if matches!(error.as_ref(), crate::Error::ModuleNotFound { path } if path == "/A")
     ));
@@ -1205,7 +1205,7 @@ fn foreign_declaration_populates_the_store() {
         &"foreign frobnicate : (Nat, Bin) -> Nat; 0"
             .parse::<crate::Entrypoint>()
             .unwrap(),
-        &crate::RootSource::None,
+        &crate::RootSource::none(),
     )
     .unwrap();
 
@@ -1229,7 +1229,7 @@ fn foreign_declaration_zero_arg_populates_the_store() {
         &"foreign clock : Nat; 0"
             .parse::<crate::Entrypoint>()
             .unwrap(),
-        &crate::RootSource::None,
+        &crate::RootSource::none(),
     )
     .unwrap();
 
@@ -1278,7 +1278,7 @@ fn foreign_declarations_across_modules_get_distinct_import_names() {
     "#
         .parse::<crate::Entrypoint>()
         .unwrap(),
-        &crate::RootSource::None,
+        &crate::RootSource::none(),
     )
     .unwrap();
 

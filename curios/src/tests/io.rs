@@ -283,7 +283,7 @@ fn proc_exit_halts_with_code() {
     let (module, _foreigns) = curios_pipeline::compile_entrypoint(
         Duration::from_secs(10),
         &entrypoint,
-        curios_text::RootSource::None,
+        curios_text::RootSource::none(),
         |_| {},
     )
     .expect("compile succeeded");

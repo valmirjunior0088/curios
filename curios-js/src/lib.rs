@@ -33,7 +33,7 @@ pub(crate) fn set(target: &Object, key: &str, value: &JsValue) {
     Reflect::set(target, &JsValue::from_str(key), value).expect("Reflect::set on a plain object");
 }
 
-/// Compile `source` (no external module imports — see `RootSource::None`) to
+/// Compile `source` (no external module imports — see `RootSource::none()`) to
 /// the wasm module bytes, or a formatted error string on parse/type/lowering
 /// failure. A program's own `foreign` declarations import under `ffi` by
 /// fully qualified name — the caller implements them via `run`'s
@@ -44,7 +44,7 @@ pub fn compile(source: &str) -> Result<Uint8Array, String> {
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
 
-    let (module, _foreigns) = compile_entrypoint(TIMEOUT, &entrypoint, RootSource::None, |_| {})?;
+    let (module, _foreigns) = compile_entrypoint(TIMEOUT, &entrypoint, RootSource::none(), |_| {})?;
 
     Ok(Uint8Array::from(curios_wasm::to_bytes(&module).as_slice()))
 }

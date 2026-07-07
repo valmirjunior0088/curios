@@ -178,7 +178,7 @@ fn bang_std_parse_threads_bangs_left_to_right() {
     let entrypoint = source
         .parse::<curios_text::Entrypoint>()
         .expect("failed to parse source");
-    let loader = curios_text::RootSource::FileSystem(base.to_path_buf());
+    let loader = curios_text::RootSource::file_system(base.to_path_buf());
 
     let (system, io) = MockHost::builder().build();
     crate::run_entrypoint(Duration::from_secs(10), &entrypoint, loader, system)
@@ -217,7 +217,7 @@ fn bang_region_mixes_action_types() {
     let entrypoint = source
         .parse::<curios_text::Entrypoint>()
         .expect("failed to parse source");
-    let loader = curios_text::RootSource::FileSystem(base.to_path_buf());
+    let loader = curios_text::RootSource::file_system(base.to_path_buf());
 
     let (system, io) = MockHost::builder().build();
     crate::run_entrypoint(Duration::from_secs(10), &entrypoint, loader, system)
@@ -244,7 +244,7 @@ fn folds_constant_arg_through_let_function() {
     curios_pipeline::compile_entrypoint(
         Duration::from_secs(10),
         &entrypoint,
-        curios_text::RootSource::None,
+        curios_text::RootSource::none(),
         |stage| {
             if let curios_pipeline::Stage::ContOptm(module) = stage {
                 let entry = module.entry().expect("module has entry").clone();
@@ -343,7 +343,7 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     let (wasm_module, _foreigns) = curios_pipeline::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
-        curios_text::RootSource::None,
+        curios_text::RootSource::none(),
         |stage| {
             if let curios_pipeline::Stage::ContOptm(module) = stage {
                 cont_optm_funcs = Some(module.funcs().len());
@@ -395,7 +395,7 @@ fn fmt_print_runtime_args_specializes_spine() {
     let (wasm_module, _foreigns) = curios_pipeline::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
-        curios_text::RootSource::None,
+        curios_text::RootSource::none(),
         |stage| {
             if let curios_pipeline::Stage::ErsdOptm(module) = stage {
                 ersd_optm = Some(format!("{module}"));
@@ -464,7 +464,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     let (wasm_module, _foreigns) = curios_pipeline::compile_entrypoint(
         Duration::from_secs(15),
         &entrypoint,
-        curios_text::RootSource::None,
+        curios_text::RootSource::none(),
         |stage| match stage {
             curios_pipeline::Stage::ErsdOptm(module) => ersd_optm = Some(format!("{module}")),
             curios_pipeline::Stage::ContOptm(module) => {
