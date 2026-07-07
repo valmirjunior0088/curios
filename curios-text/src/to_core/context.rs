@@ -38,7 +38,7 @@ impl ModuleInfo {
     }
 
     pub(super) fn insert_child(&mut self, label: String, is_pub: bool) -> Result<(), Error> {
-        if is_pub && matches!(self.children.get(&label), Some(true)) {
+        if self.children.contains_key(&label) {
             return Err(Error::DuplicatePublicDeclaration { label });
         }
 
@@ -47,7 +47,7 @@ impl ModuleInfo {
     }
 
     pub(super) fn insert_binding(&mut self, label: String, is_pub: bool) -> Result<(), Error> {
-        if is_pub && matches!(self.bindings.get(&label), Some(true)) {
+        if self.bindings.contains_key(&label) {
             return Err(Error::DuplicatePublicDeclaration { label });
         }
 

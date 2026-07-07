@@ -668,6 +668,25 @@ fn allows_sys_reference_through_std_wrapper() {
     assert!(lower_with_prelude("use /std/{Nat}; Nat/add(1, 2)").is_ok());
 }
 
+// A user program cannot declare its own top-level `std`, `pub` or not — it
+// would collide with the embedded standard library mounted at the same name.
+#[test]
+fn rejects_user_pub_mod_std_colliding_with_prelude_std() {
+    let error =
+        lower_with_prelude("pub mod std\n    pub let x : Type = Type;\nend\nType").unwrap_err();
+    assert!(error.contains("std"), "unexpected error: {error}");
+}
+
+// The private case is the actual regression this guard closes: before
+// `ModuleInfo::insert_child`'s collision check was made unconditional, a
+// private redeclaration of a reserved name didn't trip the pub-only guard and
+// silently overwrote the prelude's `std` registration instead of erroring.
+#[test]
+fn rejects_user_private_mod_std_colliding_with_prelude_std() {
+    let error = lower_with_prelude("mod std\n    let x : Type = Type;\nend\nType").unwrap_err();
+    assert!(error.contains("std"), "unexpected error: {error}");
+}
+
 #[test]
 fn rejects_private_root_module_via_absolute_path() {
     assert!(
@@ -1222,11 +1241,14 @@ fn foreign_declaration_call_lowers() {
     "#);
 }
 
+// Caught during discovery now (`ModuleInfo::insert_binding`'s collision guard
+// is unconditional, not pub-only), before `Context::insert_binding`'s later
+// scope-conflict check would otherwise see it.
 #[test]
 fn duplicate_foreign_declaration_in_one_scope_is_rejected() {
     assert!(
         run_err("foreign frobnicate : Nat; foreign frobnicate : Nat; 0")
-            .contains("binding conflicts with existing scope entry")
+            .contains("duplicate public declaration")
     );
 }
 
