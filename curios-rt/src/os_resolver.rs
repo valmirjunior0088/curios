@@ -18,8 +18,8 @@ use {
 /// none. Distinct from the host's ABI reply, which also encodes `WouldBlock`
 /// (still in flight) — a state a completed `Resolved` never holds.
 pub(crate) struct Resolved {
-    pub(crate) status: Status,
-    pub(crate) addresses: Vec<Vec<u8>>,
+    status: Status,
+    addresses: Vec<Vec<u8>>,
 }
 
 impl Resolved {
@@ -42,6 +42,11 @@ impl Resolved {
             status: Status::NotFound,
             addresses: Vec::new(),
         }
+    }
+
+    /// Unpack the finished lookup for the host's ABI reply.
+    pub(crate) fn into_parts(self) -> (Status, Vec<Vec<u8>>) {
+        (self.status, self.addresses)
     }
 }
 

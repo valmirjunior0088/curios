@@ -57,15 +57,15 @@ pub(crate) struct MetaStore {
 /// committed solutions refinement-free.
 #[derive(Debug, Clone)]
 pub(crate) struct FrozenFrame {
-    pub assumptions: Vec<(String, Term)>,
-    pub definitions: Vec<(String, Term)>,
-    pub refinements: Vec<(String, Term)>,
-    pub refinement_projections: Vec<((Term, usize), Term)>,
-    pub refinement_scrutinees: Vec<(Term, Term)>,
+    assumptions: Vec<(String, Term)>,
+    definitions: Vec<(String, Term)>,
+    refinements: Vec<(String, Term)>,
+    refinement_projections: Vec<((Term, usize), Term)>,
+    refinement_scrutinees: Vec<(Term, Term)>,
     /// The `use`-plicity binders in scope at park time (a subset of
     /// `assumptions`, in the same binding order). Witness resolution scans
     /// these; a retry must see the same instance scope its origin saw.
-    pub witness_binders: Vec<(String, Term)>,
+    witness_binders: Vec<(String, Term)>,
 }
 
 /// The work a parked problem will retry (§8).

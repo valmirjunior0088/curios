@@ -57,10 +57,10 @@ impl RootSource {
     }
 
     pub(crate) fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
-        if let Some(sys) = &self.sys {
-            if let Some(module) = super::prelude::load_embedded(sys, qualifier) {
-                return Ok(module);
-            }
+        if let Some(sys) = &self.sys
+            && let Some(module) = super::prelude::load_embedded(sys, qualifier)
+        {
+            return Ok(module);
         }
 
         match &self.entry_base {

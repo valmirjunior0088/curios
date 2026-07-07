@@ -249,7 +249,7 @@ impl Host for OsHost {
             // Drop the handle (closing the pipe read end) only once drained.
             Some(resolved) => {
                 table.remove(&handle);
-                (resolved.status, resolved.addresses)
+                resolved.into_parts()
             }
             None => (Status::WouldBlock, vec![]),
         }

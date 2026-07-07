@@ -84,8 +84,8 @@ impl ModuleInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct UseResolved {
-    pub module: Option<Qualifier>,
-    pub binding: Option<Qualifier>,
+    module: Option<Qualifier>,
+    binding: Option<Qualifier>,
 }
 
 // The per-body elaboration context. `table`/`public` are frozen interface views,
