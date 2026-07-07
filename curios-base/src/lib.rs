@@ -34,4 +34,5 @@ pub use flt::*;
 mod monads;
 pub use monads::*;
 
-pub mod suffix_view;
+mod suffix_view;
+pub use suffix_view::*;

@@ -5,7 +5,7 @@
 //! - `call_graph` — the [`CallGraph`] purity oracle: the top-level reference
 //!   graph plus its transitive effect taint, shared by `prune` and the engine.
 //! - the shared slice re-base laws (`Carrier`/`SuffixRead`) live in
-//!   `curios_base::suffix_view`, read here by `worker_wrapper` and by `cont`'s
+//!   `curios_base`, read here by `worker_wrapper` and by `cont`'s
 //!   `slice_forwarding`.
 //! - `rewrite` — shared term utilities (ordered child traversal, path lookup,
 //!   deep copy, capture refresh) for the passes that plan against an immutable

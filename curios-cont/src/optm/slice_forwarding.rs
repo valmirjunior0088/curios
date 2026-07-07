@@ -1,9 +1,6 @@
 use {
     super::*,
-    curios_base::{
-        Entropy,
-        suffix_view::{Carrier, SuffixRead},
-    },
+    curios_base::{Carrier, Entropy, SuffixRead},
     std::collections::HashMap,
 };
 
@@ -17,7 +14,7 @@ use {
 /// consumes its tail copies an `i`-long suffix on iteration `i` — `Θ(n²)` over the
 /// whole walk. But a slice is only ever *read* through the three suffix-view
 /// primitives, each reading through to the base in `O(1)` — see the canonical
-/// re-base laws in [`suffix_view`](curios_base::suffix_view).
+/// re-base laws on [`Carrier`](curios_base::Carrier).
 ///
 /// Rewriting each consumer this way drops the slice's last use; the now-dead
 /// pure slice is reclaimed by the dead-code sweep that follows, turning the
