@@ -94,6 +94,11 @@ pub(super) struct UseResolved {
 // declarations and `use` imports.
 pub(super) struct Context<'a> {
     prefix: Qualifier,
+    // The root this module's own subtree belongs to — set explicitly once,
+    // where a root is mounted (`Context::new`/`nested_root`), and inherited
+    // unchanged by ordinary nesting (`nested`). Never re-derived from
+    // `prefix`'s string content past that point.
+    root: RootId,
     table: &'a HashMap<Qualifier, ModuleInfo>,
     public: &'a HashMap<Qualifier, PublicInterface>,
     qualifiers: HashMap<String, Qualifier>,
@@ -122,11 +127,13 @@ impl<'a> Context<'a> {
     pub(super) fn new(
         table: &'a HashMap<Qualifier, ModuleInfo>,
         public: &'a HashMap<Qualifier, PublicInterface>,
+        root: RootId,
         metavars: &'a Entropy,
         binders: &'a Entropy,
     ) -> Context<'a> {
         Context {
             prefix: Qualifier::empty(),
+            root,
             table,
             public,
             qualifiers: HashMap::new(),
@@ -139,6 +146,7 @@ impl<'a> Context<'a> {
     pub(super) fn nested(&self, label: &str) -> Context<'a> {
         Context {
             prefix: self.prefix.with(label),
+            root: self.root,
             table: self.table,
             public: self.public,
             qualifiers: HashMap::new(),
@@ -148,22 +156,23 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// The `RootId` `label`'s declaration (under the current module prefix)
-    /// belongs to.
-    pub(super) fn root_of(&self, label: &str) -> RootId {
-        RootId::of_segment(self.prefixed(label).root_segment())
+    /// Like `nested`, but for descending into one of the fixed roots
+    /// (`sys`/`syn`/`std`) mounted under the entry program: `root` overrides
+    /// rather than inherits, since the fixed root's own subtree belongs to a
+    /// different root than its mounting context. Used only at the three
+    /// `to_core::FIXED_ROOTS` mount points — every deeper `nested` call
+    /// within that subtree inherits the overridden root unchanged.
+    pub(super) fn nested_root(&self, label: &str, root: RootId) -> Context<'a> {
+        Context {
+            root,
+            ..self.nested(label)
+        }
     }
 
     /// The `RootId` this module itself belongs to — the value every `FlatLet`
     /// declared directly in this module's body stamps as its own root.
-    /// Matches `island.root_segment()`'s formula (`island` being a binding's
-    /// qualifier with its own trailing label stripped) exactly, since
-    /// `self.prefix` *is* that stripped-down qualifier for anything declared
-    /// at this level — not `root_of(label)`, which is label-dependent and
-    /// only agrees with this for everything except a binding literally named
-    /// `sys`/`syn`/`std`.
     pub(super) fn root(&self) -> RootId {
-        RootId::of_segment(self.prefix.root_segment())
+        self.root
     }
 
     /// Mint a fresh, program-globally-unique metavariable id for a surface hole.

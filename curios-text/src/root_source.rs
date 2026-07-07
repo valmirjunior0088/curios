@@ -56,29 +56,11 @@ impl RootSource {
         }
     }
 
-    /// Labels of modules this source always serves at the entrypoint root.
-    /// Discovery synthesizes a `pub mod <label>;` declaration for each, so
-    /// they are loaded and resolvable without the entrypoint declaring them.
-    ///
-    /// Privilege order: root order is flat-item lowering order, which is the
-    /// topological-sort tiebreak. `sys` (the primitives) comes first; `syn`
-    /// (the names the compiler emits — the operator concepts, the
-    /// string-literal and `!` desugaring targets) precedes `std` so those
-    /// names lower before the library code that elaborates against them. The
-    /// operator *witnesses* live at the head of `std`'s own index (nothing
-    /// references witness items by name, so only position registers them
-    /// before the pervasively-infix std/syn items); a goal that still
-    /// elaborates early defers to their later registration. `std` and `syn`
-    /// genuinely cross-reference each other — see `to_core::order_flat_items`'s
-    /// doc comment — so genuine name dependencies reorder regardless of this
-    /// tiebreak.
-    pub(crate) fn roots(&self) -> Vec<&str> {
-        match self {
-            RootSource::Prelude { base, .. } => ["sys", "syn", "std"]
-                .into_iter()
-                .chain(base.roots())
-                .collect(),
-            RootSource::None | RootSource::FileSystem(_) => Vec::new(),
-        }
+    /// Whether `sys`/`syn`/`std` are attached to this source — gates
+    /// `to_core`'s explicit per-root discovery/lowering passes (see
+    /// `to_core::FIXED_ROOTS`), since a bare `None`/`FileSystem` loader (a
+    /// test exercising resolution logic in isolation) has no prelude at all.
+    pub(crate) fn has_embedded_roots(&self) -> bool {
+        matches!(self, RootSource::Prelude { .. })
     }
 }

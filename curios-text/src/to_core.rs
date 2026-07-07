@@ -82,30 +82,77 @@ impl Resolved {
         Ok(resolved)
     }
 
+    // No synthesized `mod sys;`-style declarations here: the entry program's
+    // own `ModuleInfo` is built directly from its own raw items, then
+    // sys/syn/std are registered as its children *explicitly* — a deliberate
+    // fact, not something recovered later by pattern-matching a qualifier's
+    // leading string segment. `insert_child` (hardened to reject any
+    // collision, not just pub/pub) is what catches a user's own `mod std`
+    // colliding with this registration, in either direction.
     fn resolve(&mut self, entrypoint: &Entrypoint, loader: &RootSource) -> Result<(), Error> {
-        self.discover(&entrypoint.module.items, &Qualifier::empty(), loader)
+        let mut root_info = scan_module_info(&entrypoint.module.items, RootId::Entry)?;
+
+        if loader.has_embedded_roots() {
+            for &(name, _) in &FIXED_ROOTS {
+                root_info.insert_child(name.to_string(), true)?;
+            }
+        }
+
+        self.table.insert(Qualifier::empty(), root_info);
+
+        if loader.has_embedded_roots() {
+            for &(name, root) in &FIXED_ROOTS {
+                let path = Qualifier::empty().with(name);
+                let content = Rc::new(loader.load(&path)?);
+
+                self.modules.insert(path.clone(), Rc::clone(&content));
+                self.discover(&content.items, &path, loader, root)?;
+            }
+        }
+
+        self.discover_children(
+            &entrypoint.module.items,
+            &Qualifier::empty(),
+            loader,
+            RootId::Entry,
+        )
     }
 
     // `mod` declarations only name children, so the module graph is a tree: every
     // qualifier is reached exactly once and no cycles are possible. Hence the walk
     // needs neither a visited-set nor a cache hit-check — just load each file
-    // module once and recurse.
+    // module once and recurse. `root` is inherited unchanged through the whole
+    // recursion — set once by the caller (`resolve`, at one of the four real
+    // roots), never re-derived from `prefix`'s string content here.
     fn discover(
         &mut self,
         items: &[TopItem],
         prefix: &Qualifier,
         loader: &RootSource,
+        root: RootId,
     ) -> Result<(), Error> {
-        let root = RootId::of_segment(prefix.root_segment());
         self.table
             .insert(prefix.clone(), scan_module_info(items, root)?);
+        self.discover_children(items, prefix, loader, root)
+    }
 
+    // The child-recursion half of `discover`, split out so `resolve` can build
+    // the entry root's `ModuleInfo` itself (with sys/syn/std pre-registered as
+    // children) and recurse into its children without a second, unconditional
+    // `scan_module_info` call clobbering that registration.
+    fn discover_children(
+        &mut self,
+        items: &[TopItem],
+        prefix: &Qualifier,
+        loader: &RootSource,
+        root: RootId,
+    ) -> Result<(), Error> {
         for item in items {
             if let TopItem::Mod(module_item) = item {
                 let path = prefix.with(&module_item.label);
 
                 match &module_item.module {
-                    Some(module) => self.discover(&module.items, &path, loader)?,
+                    Some(module) => self.discover(&module.items, &path, loader, root)?,
                     None => {
                         let module =
                             Rc::new(loader.load(&path).map_err(
@@ -116,7 +163,7 @@ impl Resolved {
                             )?);
 
                         self.modules.insert(path.clone(), Rc::clone(&module));
-                        self.discover(&module.items, &path, loader)?;
+                        self.discover(&module.items, &path, loader, root)?;
                     }
                 }
             }
@@ -526,7 +573,7 @@ fn process_items(
                                 ),
                                 constructors,
                                 result_sort: result_sort.clone(),
-                                root: context.root_of(&u.label),
+                                root: context.root(),
                             },
                         );
 
@@ -702,7 +749,7 @@ fn process_items(
                 // identical to core's per-item `island` — for the
                 // representation-privacy checks.
                 let module = context.prefixed(&s.label).without_last();
-                let root = context.root_of(&s.label);
+                let root = context.root();
 
                 let param_tys = s
                     .params
@@ -801,7 +848,7 @@ fn process_items(
             TopItem::Concept(concept) => {
                 let name = context.prefixed(&concept.label).join();
                 let module = context.prefixed(&concept.label).without_last();
-                let root = context.root_of(&concept.label);
+                let root = context.root();
 
                 let param_tys = {
                     let lower = Lower::new(context);
@@ -1375,19 +1422,22 @@ fn flat_item_to_core(item: FlatItem) -> curios_core::Item {
     }
 }
 
-// A bodyless `pub mod <label>;` declaration. We synthesize one per
-// `RootSource::roots` entry and prepend it to the entrypoint, so a root
-// source's root modules (`sys`, `std`) are discovered, interfaced, and
-// resolvable exactly as if the entrypoint declared them — without every
-// entrypoint having to.
-fn declaration(label: &str) -> TopItem {
-    TopItem::Mod(TopMod {
-        span: None,
-        is_pub: true,
-        label: label.to_string(),
-        module: None,
-    })
-}
+// The three embedded roots, in the fixed order every compile mounts them —
+// also `order_flat_items`'s topological-sort tiebreak order (sys, then syn,
+// then std): `sys` (the primitives) comes first; `syn` (the names the
+// compiler emits — the operator concepts, the string-literal and `!`
+// desugaring targets) precedes `std` so those names lower before the library
+// code that elaborates against them. `std` and `syn` genuinely cross-reference
+// each other in both directions, so the whole trio is topo-sorted as one
+// graph; this tuple only fixes the tiebreak when there is no real dependency
+// edge. Each root's `RootId` is a literal here — never derived from the name
+// string — so a user's own top-level declaration can never be mistaken for
+// one of these regardless of what it's named.
+const FIXED_ROOTS: [(&str, RootId); 3] = [
+    ("sys", RootId::Sys),
+    ("syn", RootId::Syn),
+    ("std", RootId::Std),
+];
 
 /// Lower an [`Entrypoint`] to a [`curios_core::Module`]. Also returns how many
 /// metavariable ids were minted for the module's holes: the floor
@@ -1397,26 +1447,18 @@ pub fn to_core(
     entrypoint: &Entrypoint,
     loader: &RootSource,
 ) -> Result<(curios_core::Module, usize, ForeignStore), Error> {
-    let roots = loader.roots();
-
-    let entrypoint = &Entrypoint {
-        module: Module {
-            items: roots
-                .iter()
-                .map(|&label| declaration(label))
-                .chain(entrypoint.module.items.iter().cloned())
-                .collect(),
-        },
-        type_: entrypoint.type_.clone(),
-        tail: entrypoint.tail.clone(),
-    };
-
     let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
-    let public = interface::resolve(entrypoint, &modules, &mut table)?;
+    let public = interface::resolve(entrypoint, loader, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
     let binders = Entropy::<usize>::new();
 
-    let mut context = Context::new(&table, &public, &metavars, &binders);
+    let mut context = Context::new(&table, &public, RootId::Entry, &metavars, &binders);
+    if loader.has_embedded_roots() {
+        for &(name, _) in &FIXED_ROOTS {
+            context.insert_scope(name.to_string(), Qualifier::empty().with(name))?;
+        }
+    }
+
     let mut flat_items = Vec::new();
     let mut inductives = BTreeMap::new();
     let mut structures = BTreeMap::new();
@@ -1429,6 +1471,25 @@ pub fn to_core(
     // never merged with, the built-in `sys_io()` store the caller's prelude
     // loader was built from.
     let mut foreigns = ForeignStore::new();
+
+    if loader.has_embedded_roots() {
+        for &(name, root) in &FIXED_ROOTS {
+            let path = Qualifier::empty().with(name);
+            let content = modules.get(&path).expect("loaded during discovery");
+
+            process_items(
+                &content.items,
+                &mut context.nested_root(name, root),
+                &mut flat_items,
+                &mut inductives,
+                &mut structures,
+                &mut concepts,
+                &mut witnesses,
+                &mut foreigns,
+                &modules,
+            )?;
+        }
+    }
 
     process_items(
         &entrypoint.module.items,

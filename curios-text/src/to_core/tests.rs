@@ -687,6 +687,14 @@ fn rejects_user_private_mod_std_colliding_with_prelude_std() {
     assert!(error.contains("std"), "unexpected error: {error}");
 }
 
+// Without a prelude attached, `has_embedded_roots()` is false, so the fixed
+// sys/syn/std machinery never runs at all — the user's own `mod std` is just
+// an ordinary, unreserved entry-rooted module, not a collision.
+#[test]
+fn user_own_mod_std_without_prelude_is_not_a_collision() {
+    run("mod std\n    pub let x : Type = Type;\nend\nuse std/{x};\nx");
+}
+
 #[test]
 fn rejects_private_root_module_via_absolute_path() {
     assert!(

@@ -1,6 +1,6 @@
 use {
-    super::ModuleInfo,
-    crate::{Entrypoint, Error, GroupItem, Module, Name, TopItem, UseGroup},
+    super::{FIXED_ROOTS, ModuleInfo},
+    crate::{Entrypoint, Error, GroupItem, Module, Name, RootSource, TopItem, UseGroup},
     curios_abi::RootId,
     curios_base::{Entropy, Qualifier},
     std::{
@@ -60,14 +60,40 @@ struct PubUse {
 // constructor modules), then resolve every `pub use` to a fixed point. Also adds
 // constructor modules to `table` (the direct-interface view) so phase 4 can
 // classify private-vs-missing accesses through them.
+// `seed` is a third parallel tree-walk (mirroring `discover`/`process_items`),
+// so it needs the identical explicit-per-root treatment: it reads `table`'s
+// already-correct root-level children (from `Resolved::resolve`'s explicit
+// registration) but its own recursion only ever follows literal `TopItem::Mod`
+// occurrences in the items it's handed — sys/syn/std no longer appear there,
+// so their own content must be seeded from an explicit call, or `public["sys"]`
+// etc. would never exist at all (not even empty), breaking every absolute
+// reference into them.
 pub(super) fn resolve(
     entrypoint: &Entrypoint,
+    loader: &RootSource,
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &mut HashMap<Qualifier, ModuleInfo>,
 ) -> Result<HashMap<Qualifier, PublicInterface>, Error> {
     let mut public = HashMap::new();
     let mut pub_uses = Vec::new();
     let counter = Entropy::<usize>::new();
+
+    if loader.has_embedded_roots() {
+        for &(name, _) in &FIXED_ROOTS {
+            let path = Qualifier::empty().with(name);
+            let content = modules.get(&path).expect("loaded during discovery");
+
+            seed(
+                &content.items,
+                &path,
+                modules,
+                table,
+                &mut public,
+                &mut pub_uses,
+                &counter,
+            )?;
+        }
+    }
 
     seed(
         &entrypoint.module.items,
