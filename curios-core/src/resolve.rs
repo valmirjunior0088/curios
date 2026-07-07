@@ -25,10 +25,11 @@
 use {
     super::{
         Context, Error, HeadKey, ImplicitOrigin, Metavar, MetavarId, Outcome, ParkedGoal,
-        ParkedWork, Plicity, StructType, Subterm, Telescope, Term, Witness, WitnessKey,
-        WitnessOrigin, convert_outcome, reduce_with, retry_parked,
+        ParkedWork, StructType, Subterm, Telescope, Term, Witness, WitnessKey, WitnessOrigin,
+        convert_outcome, reduce_with, retry_parked,
     },
     curios_abi::RootId,
+    curios_base::Plicity,
     std::collections::{BTreeSet, HashSet},
 };
 

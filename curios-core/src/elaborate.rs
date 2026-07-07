@@ -1,11 +1,12 @@
 use {
     super::{
-        Apply, Bound, Context, Error, Field, Flt, Func, FuncType, ImplicitOrigin, InductiveType,
-        Infix, Int, Let, Metavar, MetavarId, Nat, NumLit, NumOp, ParkedWork, Plicity, Prim, Proj,
-        Rec, Struct, StructEntry, StructType, Structure, Subterm, Telescope, Term, Tuple,
-        TupleType, Var, Variant, WitnessOrigin, attempt_witness_goal, check, elaborate_match,
-        elaborate_prim, expect, operator_concept, reduce_with, sort_term,
+        Apply, Bound, Context, Error, Field, Func, FuncType, ImplicitOrigin, InductiveType, Infix,
+        Let, Metavar, MetavarId, Nat, NumLit, ParkedWork, Prim, Proj, Rec, Struct, StructEntry,
+        StructType, Structure, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
+        WitnessOrigin, attempt_witness_goal, check, elaborate_match, elaborate_prim, expect,
+        operator_concept, reduce_with, sort_term,
     },
+    curios_base::{Flt, Int, NumOp, Plicity},
     num_bigint::BigInt,
     num_traits::ToPrimitive,
     std::collections::{BTreeSet, VecDeque},

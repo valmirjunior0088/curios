@@ -1,6 +1,7 @@
 use {
-    super::{Bound, Flt, Int, MetavarId, Nat, Subterm, Term, Var, Visit},
+    super::{Bound, MetavarId, Nat, Subterm, Term, Var, Visit},
     curios_abi::{ForeignFunction, WireType},
+    curios_base::{Flt, Int},
     std::{collections::BTreeSet, sync::Arc},
 };
 

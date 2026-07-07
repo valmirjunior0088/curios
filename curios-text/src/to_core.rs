@@ -10,8 +10,8 @@ use interface::*;
 use {
     super::*,
     curios_abi::{ForeignStore, RootId, RootKind},
-    curios_base::{Entropy, Qualifier},
-    curios_core::{Bound, Plicity},
+    curios_base::{Entropy, Plicity, Qualifier},
+    curios_core::Bound,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -97,7 +97,8 @@ impl Resolved {
         loader: &RootSource,
     ) -> Result<(), Error> {
         let root = RootId::of_segment(prefix.root_segment());
-        self.table.insert(prefix.clone(), scan_module_info(items, root)?);
+        self.table
+            .insert(prefix.clone(), scan_module_info(items, root)?);
 
         for item in items {
             if let TopItem::Mod(module_item) = item {

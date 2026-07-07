@@ -5,7 +5,7 @@
 //! `curios-text/syn.crs`, their witnesses in the `/std` operator facades.
 //! Keep every such literal in this module.
 
-use super::NumOp;
+use curios_base::NumOp;
 
 /// The concept (by qualified name) and method field an infix operator
 /// dispatches through — the whole operator→concept table. `None` for

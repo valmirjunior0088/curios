@@ -1,6 +1,7 @@
 use {
     super::{Nat, Term},
     curios_abi::ForeignFunction,
+    curios_base::{Flt, Int},
     std::sync::Arc,
 };
 
@@ -27,7 +28,7 @@ pub enum BinSegment {
     Spread(Term),
 }
 
-/// The hardcoded primitive vocabulary, shaped after `curios_core::Prim` rather than after the written syntax (only the literal payloads differ, keeping surface-only detail like radix and spread segments): the scalar carriers (`Bln`/`Nat`/`Int`/`Flt`) with their type formers, literal values, and operators, the conversions between them, the `Bin`/`Lst` free-monoid carriers with their literals and accessors, `Io` with the store-described `Foreign` host calls, and the `Cell` mutable reference. The parser only ever produces the literal-value variants (`Bln`/`Nat`/`Flt`/`Bin`/`Lst`); every other variant — type formers and operations alike — is baked directly into the embedded `sys` prelude's definition bodies (see `prelude`), so user code reaches them as ordinary named bindings rather than syntax.
+/// The hardcoded primitive vocabulary, shaped after `curios_core::Prim` rather than after the written syntax (`Nat`'s payload still differs, keeping surface-only detail like radix and spread segments — `Int`/`Flt` share `curios_base::Int`/`Flt` verbatim, since neither carries any surface-only presentation state): the scalar carriers (`Bln`/`Nat`/`Int`/`Flt`) with their type formers, literal values, and operators, the conversions between them, the `Bin`/`Lst` free-monoid carriers with their literals and accessors, `Io` with the store-described `Foreign` host calls, and the `Cell` mutable reference. The parser only ever produces the literal-value variants (`Bln`/`Nat`/`Flt`/`Bin`/`Lst`); every other variant — type formers and operations alike — is baked directly into the embedded `sys` prelude's definition bodies (see `prelude`), so user code reaches them as ordinary named bindings rather than syntax.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Prim {
     BlnType,
@@ -56,7 +57,7 @@ pub enum Prim {
     NatShl(Term, Term),
     NatShr(Term, Term),
     IntType,
-    Int(i32),
+    Int(Int),
     IntEql(Term, Term),
     IntNeq(Term, Term),
     IntAdd(Term, Term),
@@ -74,7 +75,7 @@ pub enum Prim {
     IntShl(Term, Term),
     IntShr(Term, Term),
     FltType,
-    Flt(f32),
+    Flt(Flt),
     FltAdd(Term, Term),
     FltSub(Term, Term),
     FltMul(Term, Term),

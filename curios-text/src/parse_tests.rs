@@ -1,8 +1,7 @@
 use {
     super::*,
     curios_abi::{WireSignature, WireType},
-    curios_base::Qualifier,
-    curios_core::{NumOp, Plicity},
+    curios_base::{Flt, NumOp, Plicity, Qualifier},
 };
 
 #[test]
@@ -65,15 +64,15 @@ fn parse_integer_literals_are_polymorphic_num_lits() {
     assert_eq!("-42".parse::<Term>().unwrap(), num_lit(42, true, true));
     assert_eq!(
         "42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Flt(42.0_f32)))
+        Term::from(Subterm::Prim(Prim::Flt(Flt::from_f32(42.0))))
     );
     assert_eq!(
         "+42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Flt(42.0_f32)))
+        Term::from(Subterm::Prim(Prim::Flt(Flt::from_f32(42.0))))
     );
     assert_eq!(
         "-42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Flt(-42.0_f32)))
+        Term::from(Subterm::Prim(Prim::Flt(Flt::from_f32(-42.0))))
     );
 }
 
@@ -82,7 +81,7 @@ fn parse_prim() {
     assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, false, false));
     assert_eq!(
         "1.5".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Flt(1.5_f32)))
+        Term::from(Subterm::Prim(Prim::Flt(Flt::from_f32(1.5))))
     );
     assert_eq!(
         "false".parse::<Term>().unwrap(),

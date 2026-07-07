@@ -1,6 +1,7 @@
 use {
     super::erase,
-    crate::{Context, Error, Int, Nat, Prim, Subterm, Term, reduce_with, wire_term},
+    crate::{Context, Error, Nat, Prim, Subterm, Term, reduce_with, wire_term},
+    curios_base::Int,
     num_bigint::BigUint,
     num_traits::ToPrimitive,
     std::sync::Arc,

@@ -1,8 +1,6 @@
 use {
-    super::{
-        Atom, Bound, Flt, Int, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit,
-    },
-    curios_base::Span,
+    super::{Atom, Bound, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit},
+    curios_base::{Flt, Int, NumOp, Plicity, Span},
     num_bigint::BigUint,
     std::{
         cell::OnceCell,
@@ -752,73 +750,6 @@ impl From<Subterm> for Term {
             reach: OnceCell::new(),
             inner: Rc::new(term),
         }
-    }
-}
-
-/// Whether a binder/argument participates in implicit-argument insertion.
-/// An elaboration directive only: conversion ignores plicity entirely, so
-/// erasing the marks yields exactly the unmarked system.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Plicity {
-    Explicit,
-    Implicit,
-    /// A `use` binder/argument: filled by witness resolution (concept lookup)
-    /// rather than unification when omitted at a call site. Like `Implicit`,
-    /// purely an elaboration directive — conversion and erasure never read it.
-    Witness,
-}
-
-/// A fixed infix operator. The surface parser maps an operator symbol (with
-/// its precedence) onto one of these; elaboration dispatches it through its
-/// `/syn` operator concept once the operand type is known (`elaborate_infix`,
-/// `operator_concept`). Both `NumOp` and the [`Infix`]/[`NumLit`] nodes are
-/// *elaboration-transient*:
-/// born in `to_core`, consumed by `elaborate` (replaced with a `Prim` term), so
-/// they never reach reduce/convert/zonk/erase.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum NumOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-    Eql,
-    Neq,
-    Lt,
-    Gt,
-    Lte,
-    Gte,
-    And,
-    Or,
-}
-
-impl NumOp {
-    /// The operator's source spelling, for printing and error messages.
-    pub fn symbol(self) -> &'static str {
-        match self {
-            NumOp::Add => "+",
-            NumOp::Sub => "-",
-            NumOp::Mul => "*",
-            NumOp::Div => "/",
-            NumOp::Rem => "%",
-            NumOp::Eql => "==",
-            NumOp::Neq => "!=",
-            NumOp::Lt => "<",
-            NumOp::Gt => ">",
-            NumOp::Lte => "<=",
-            NumOp::Gte => ">=",
-            NumOp::And => "&&",
-            NumOp::Or => "||",
-        }
-    }
-
-    /// Comparison and equality operators yield `Bln` regardless of operand type;
-    /// arithmetic operators yield the operand type.
-    pub(crate) fn result_is_bln(self) -> bool {
-        matches!(
-            self,
-            NumOp::Eql | NumOp::Neq | NumOp::Lt | NumOp::Gt | NumOp::Lte | NumOp::Gte
-        )
     }
 }
 

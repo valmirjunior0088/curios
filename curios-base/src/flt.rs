@@ -15,63 +15,63 @@ impl Flt {
         Self { bits: v.to_bits() }
     }
 
-    pub(crate) fn to_f32(self) -> f32 {
+    pub fn to_f32(self) -> f32 {
         f32::from_bits(self.bits)
     }
 
-    pub(crate) fn abs(self) -> Self {
+    pub fn abs(self) -> Self {
         Self::from_f32(self.to_f32().abs())
     }
 
-    pub(crate) fn sqrt(self) -> Self {
+    pub fn sqrt(self) -> Self {
         Self::from_f32(self.to_f32().sqrt())
     }
 
-    pub(crate) fn floor(self) -> Self {
+    pub fn floor(self) -> Self {
         Self::from_f32(self.to_f32().floor())
     }
 
-    pub(crate) fn ceil(self) -> Self {
+    pub fn ceil(self) -> Self {
         Self::from_f32(self.to_f32().ceil())
     }
 
-    pub(crate) fn trunc(self) -> Self {
+    pub fn trunc(self) -> Self {
         Self::from_f32(self.to_f32().trunc())
     }
 
-    pub(crate) fn nearest(self) -> Self {
+    pub fn nearest(self) -> Self {
         Self::from_f32(self.to_f32().round_ties_even())
     }
 
-    pub(crate) fn min(self, other: Self) -> Self {
+    pub fn min(self, other: Self) -> Self {
         Self::from_f32(self.to_f32().min(other.to_f32()))
     }
 
-    pub(crate) fn max(self, other: Self) -> Self {
+    pub fn max(self, other: Self) -> Self {
         Self::from_f32(self.to_f32().max(other.to_f32()))
     }
 
-    pub(crate) fn eql(self, other: Self) -> bool {
+    pub fn eql(self, other: Self) -> bool {
         self.to_f32() == other.to_f32()
     }
 
-    pub(crate) fn neq(self, other: Self) -> bool {
+    pub fn neq(self, other: Self) -> bool {
         self.to_f32() != other.to_f32()
     }
 
-    pub(crate) fn lt(self, other: Self) -> bool {
+    pub fn lt(self, other: Self) -> bool {
         self.to_f32() < other.to_f32()
     }
 
-    pub(crate) fn gt(self, other: Self) -> bool {
+    pub fn gt(self, other: Self) -> bool {
         self.to_f32() > other.to_f32()
     }
 
-    pub(crate) fn lte(self, other: Self) -> bool {
+    pub fn lte(self, other: Self) -> bool {
         self.to_f32() <= other.to_f32()
     }
 
-    pub(crate) fn gte(self, other: Self) -> bool {
+    pub fn gte(self, other: Self) -> bool {
         self.to_f32() >= other.to_f32()
     }
 }

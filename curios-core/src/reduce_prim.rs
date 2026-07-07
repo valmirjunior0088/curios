@@ -1,9 +1,10 @@
 use {
     super::reduce,
     crate::{
-        Context, Flt, Int, Nat, Peel, Prim, ReduceError, Subterm, Term, normalize_concat, peel_bin,
+        Context, Nat, Peel, Prim, ReduceError, Subterm, Term, normalize_concat, peel_bin,
         peel_first_byte, peel_first_elem,
     },
+    curios_base::{Flt, Int},
     num_traits::{ToPrimitive, Zero},
     std::cmp::Ordering,
 };

@@ -11,14 +11,13 @@ use {
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{
-        Qualifier, Source,
+        Flt, NumOp, Plicity, Qualifier, Source,
         parser::{
             Parser, ParserError, catch, fail, lazy, many0, many1, memoize, not_ahead,
             preceded_by_space, pure, run_parser, sep_by0, sep_by0_trailing, sep_by1, spanned,
             take_eof, take_exact, take_n, take_while,
         },
     },
-    curios_core::{NumOp, Plicity},
     num_bigint::BigUint,
     num_traits::{ToPrimitive, Zero},
     std::{iter, path::Path, rc::Rc, str::FromStr},
@@ -284,7 +283,7 @@ fn parse_flt_value<'a>() -> Parser<'a, Term> {
             })
             .and_drop(parse_whitespace()),
     )
-    .map(|value| Subterm::Prim(Prim::Flt(value)))
+    .map(|value| Subterm::Prim(Prim::Flt(Flt::from_f32(value))))
     .map(Into::into)
 }
 

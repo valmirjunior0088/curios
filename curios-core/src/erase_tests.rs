@@ -1,4 +1,8 @@
-use {super::*, std::time::Duration};
+use {
+    super::*,
+    curios_base::{Flt, Int},
+    std::time::Duration,
+};
 
 fn context() -> Context {
     Context::new(Duration::from_secs(1))

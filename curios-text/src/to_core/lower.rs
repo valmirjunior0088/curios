@@ -1924,7 +1924,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                 curios_core::Prim::NatShr(self.term(left)?, self.term(right)?)
             }
             Prim::IntType => curios_core::Prim::IntType,
-            Prim::Int(value) => curios_core::Prim::Int(curios_core::Int::new(*value as i64)),
+            Prim::Int(value) => curios_core::Prim::Int(value.clone()),
             Prim::IntEql(left, right) => {
                 curios_core::Prim::int_eql(self.term(left)?, self.term(right)?)
             }
@@ -1974,7 +1974,7 @@ impl<'a, 'b> Lower<'a, 'b> {
                 curios_core::Prim::IntShr(self.term(left)?, self.term(right)?)
             }
             Prim::FltType => curios_core::Prim::FltType,
-            Prim::Flt(flt) => curios_core::Prim::Flt(curios_core::Flt::from_f32(*flt)),
+            Prim::Flt(flt) => curios_core::Prim::Flt(*flt),
             Prim::FltAdd(left, right) => {
                 curios_core::Prim::flt_add(self.term(left)?, self.term(right)?)
             }

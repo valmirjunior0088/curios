@@ -12,12 +12,6 @@ use time::*;
 mod scope;
 pub use scope::*;
 
-mod int;
-pub use int::*;
-
-mod flt;
-pub use flt::*;
-
 mod nat;
 pub use nat::*;
 

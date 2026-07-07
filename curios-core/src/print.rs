@@ -1,10 +1,13 @@
 use {
     super::{
-        Apply, Arity, Atom, Carrier, Cases, Definition, Field, Flt, Func, FuncType, InductiveType,
-        Infix, Item, Let, Match, Module, Nat, One, Plicity, Prim, Proj, Rec, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
+        Apply, Arity, Atom, Carrier, Cases, Definition, Field, Func, FuncType, InductiveType,
+        Infix, Item, Let, Match, Module, Nat, One, Prim, Proj, Rec, Scope, Struct, StructType,
+        Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
     },
-    curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    curios_base::{
+        Flt, Plicity,
+        printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+    },
     std::{
         cell::RefCell,
         collections::{BTreeSet, HashMap},

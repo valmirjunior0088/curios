@@ -1,6 +1,6 @@
 use {
-    super::{Atom, Int, Module, Term},
-    curios_base::Span,
+    super::{Atom, Module, Term},
+    curios_base::{Int, Span},
     num_bigint::BigUint,
     std::{collections::BTreeSet, fmt, rc::Rc},
 };
