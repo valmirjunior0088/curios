@@ -1649,7 +1649,7 @@ fn lst_and_bin_spreads_round_trip() {
         r"\..hdr.bytes",
         r"\../std/x",
         r"\..f(x)",
-        r"\..Reader/read_line!.bytes",
+        r"\..Io/read!.bytes",
         r"\..(x + y)",
         r"\\",
     ] {

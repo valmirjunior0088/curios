@@ -43,9 +43,6 @@ pub use Cell/{let Cell};
 pub mod Io;
 pub use Io/{let Io};
 
-pub mod Reader;
-pub use Reader/{let Reader};
-
 pub mod File;
 pub use File/{let File};
 

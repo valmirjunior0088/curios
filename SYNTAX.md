@@ -14,8 +14,8 @@ Identifiers are runs of alphanumeric characters and `_`. The reserved keywords a
 
 ```
 -- this is a comment
-use /std/{Nat};        -- absolute path
-Option/some(x)         -- qualified member
+use /std/{Nat}; -- absolute path
+Option/some(x) -- qualified member
 ```
 
 ## Literals
@@ -36,13 +36,13 @@ Option/some(x)         -- qualified member
 
 **Function types (Π).** `(p : A, q : B) -> R`. Parameters may be unlabeled (`(A) -> B`) and may be marked implicit with `@` (`(@A : Type, x : A) -> A`). Dependent: later parameters and the result may mention earlier labels.
 
-**Tuple types (Σ).** `{ x : A, y : B }`, with later fields able to depend on earlier ones. Fields may be unlabeled (`{ A, B }`). The empty tuple type `{}` is the unit type. A function-typed field may use the signature sugar `name(params) -> T` (shorthand for `name : (params) -> T`), and the last field may carry a trailing comma — both also apply to `struct`/`record` declarations, which share this field grammar.
+**Tuple types (Σ).** `{x : A, y : B}`, with later fields able to depend on earlier ones. Fields may be unlabeled (`{A, B}`). The empty tuple type `{}` is the unit type. A function-typed field may use the signature sugar `name(params) -> T` (shorthand for `name : (params) -> T`), and the last field may carry a trailing comma — both also apply to `struct`/`record` declarations, which share this field grammar.
 
 ```
-(@A : Type, x : A, y : A) -> Eq(x, y)   -- dependent Π with an implicit parameter
-{ secs : Nat, nanos : Nat }             -- Σ / anonymous record type
-{ len(s : Str) -> Nat }                 -- signature sugar: len : (s : Str) -> Nat
-{}                                       -- unit type
+(@A : Type, x : A, y : A) -> Eq(x, y) -- dependent Π with an implicit parameter
+{secs : Nat, nanos : Nat} -- Σ / anonymous record type
+{len(s : Str) -> Nat} -- signature sugar: len : (s : Str) -> Nat
+{} -- unit type
 ```
 
 ## Expressions
@@ -62,13 +62,13 @@ Option/some(x)         -- qualified member
 **`let`.** Binds a value for the rest of the term (everything after the `;`):
 
 ```
-let x = compute(a);          -- type inferred
-let y : Nat = 0;             -- type annotated
-let f(n : Nat) -> Nat =      -- function-definition sugar (local; type optional)
+let x = compute(a); -- type inferred
+let y : Nat = 0; -- type annotated
+let f(n : Nat) -> Nat = -- function-definition sugar (local; type optional)
     n + 1;
-let p = pair;                -- single binder; destructure with projections (p.0, p.1)
-let (x, y) = pair;            -- tuple pattern; sugar for the two `let`s above
-let Point { x, y } = p;       -- struct pattern (field-punned)
+let p = pair; -- single binder; destructure with projections (p.0, p.1)
+let (x, y) = pair; -- tuple pattern; sugar for the two `let`s above
+let Point { x, y } = p; -- struct pattern (field-punned)
 body_using_the_bindings
 ```
 
@@ -77,7 +77,7 @@ body_using_the_bindings
 ```
 rec go(rest : Lst(A), acc : Nat) -> Nat =
     match rest
-    | []        => acc
+    | [] => acc
     | [_, ..tail] => go(tail, acc + 1)
     end;
 go(l, 0)
@@ -87,7 +87,7 @@ go(l, 0)
 
 ```
 let parser : Parse(Nat) =
-    let a = Parse/any_byte!;     -- Monad(Parse) resolved from the action's type
+    let a = Parse/any_byte!; -- Monad(Parse) resolved from the action's type
     let b = Parse/any_byte!;
     Parse/pure(a + b);
 ```
@@ -112,7 +112,7 @@ Every operator except `&&`/`||` dispatches through a standard-library concept (s
 
 A `let` binder, lambda parameter, or function-definition-sugar parameter is either a single name (`_` to ignore) or a tuple/struct destructuring pattern — `(x, y)`, `Point { x, y }`, `Point { loc = (x, y) }` — nested arbitrarily, and mixed freely with plain names in the same parameter list. A pattern desugars to exactly the hand-written projection chain it stands for (`let (x, y) = pair;` is sugar for `let x = pair.0; let y = pair.1;`); a struct pattern's written head name is descriptive only, never resolved or validated — writing the wrong same-shape struct name is not an error. Field-punning (`Point { x, y }`) is the ordinary positional case, not separate syntax.
 
-A constructor-arm payload binds a single name only (`_` to ignore) — see [Match](#match). Match arms dispatch on one constructor each: `| tag(x, …) =>` binds the payload by name. There are no nested, literal, or catch-all patterns in arms.
+A match-arm pattern may nest arbitrarily — see [Match](#match). A constructor's payload position accepts another full pattern (`some(some(x))`), the scrutinee itself may be a tuple or struct matched positionally (including a tuple of several independent scrutinees dispatched by row), and the `Bln`/`Nat`/`Lst`/`Bin` literal shapes can appear as sub-patterns too (`some([head, ..tail])`). A leaf position still binds a single name only (`_` to ignore) — there is no catch-all (`| x =>` / `| _ =>`) at any depth, so every arm names a concrete shape.
 
 ## Match
 
@@ -121,19 +121,32 @@ A constructor-arm payload binds a single name only (`_` to ignore) — see [Matc
 **Motives** take three forms:
 
 ```
-match x : Nat ...                          -- constant motive
+match x : Nat ... -- constant motive
 match v : (v : Vec(A, k)) => Vec(B, k) ... -- scrutinee-bound motive
-match p : (q : Eq(A, s, t)) => Eq(t, s) ...-- annotated (names the type + its slots)
+match p : (q : Eq(A, s, t)) => Eq(t, s) ... -- annotated (names the type + its slots)
 ```
 
-**Inductive** (the general form). Each arm is `| tag(x, …) => body` — one constructor, binding its payload by name (`_` to ignore). There are no catch-all (`| x =>` / `| _ =>`), nested, or literal patterns, and each constructor is handled by at most one arm. Zero arms is legal (for scrutinees no constructor can inhabit):
+**Inductive** (the general form). Each arm is `| pattern => body`, where `pattern` is a constructor applied to (possibly nested) sub-patterns (`tag(x, …)`, `some(some(x))`), a tuple (`(p, q, …)`) or struct (`Name { f, … }`) pattern matched positionally against a tuple/struct-valued scrutinee, or one of the `Bln`/`Nat`/`Lst`/`Bin` literal leaves, nested at any depth. A leaf binds a single name only (`_` to ignore); there is no catch-all (`| x =>` / `| _ =>`) at any depth, so every combination an arm needs to reach must be spelled out, and each shape is handled by at most one arm. Zero arms is legal (for scrutinees no constructor can inhabit):
 
 ```
 match m
 | some(a) => f(a)
-| none()  => default
+| none() => default
 end
 ```
+
+A scrutinee can be a tuple of several independent values, matched row by row — since there is no catch-all, every reachable combination needs its own arm, so this pays off when the code would otherwise nest one match inside another to cover the same combinations:
+
+```
+match (a, b)
+| (some(x), some(y)) => x + y
+| (some(x), none()) => x
+| (none(), some(y)) => y
+| (none(), none()) => 0
+end
+```
+
+A tuple or struct pattern matched against a scrutinee with no constructor tag of its own (a plain `{A, B}`/`Name` value, not an inductive) desugars to plain projection rather than a real dispatch — equivalent to the destructuring `let` forms in [Binders](#binders).
 
 **Boolean.** Exactly the two arms, in either order:
 
@@ -145,7 +158,7 @@ match cond | true => a | false => b end
 
 ```
 match n : (m) => Lte(m, m)
-| 0           => Lte/z()
+| 0 => Lte/z()
 | pred + 1; ih => Lte/s(ih)
 end
 ```
@@ -166,8 +179,8 @@ end
 
 ```
 match a
-| []                  => base
-| [head, ..tail]; ih  => step(head, ih)
+| [] => base
+| [head, ..tail]; ih => step(head, ih)
 end
 ```
 
@@ -175,8 +188,8 @@ end
 
 ```
 match b
-| \\                  => base
-| \head\..tail; ih    => step(head, ih)
+| \\ => base
+| \head\..tail; ih => step(head, ih)
 end
 ```
 
@@ -192,7 +205,7 @@ A module is a sequence of items; an entrypoint file is items followed by a final
 pub let map(@A : Type, @B : Type, f : (A) -> B, m : Option(A)) -> Option(B) =
     match m
     | some(a) => Option/some(f(a))
-    | none()  => Option/none()
+    | none() => Option/none()
     end;
 
 pub rec len(@A : Type, l : Lst(A)) -> Nat = ...;
@@ -208,8 +221,8 @@ pub foreign log : (Bin) -> Nat;
 **`mod`.** A submodule, either inline (`pub mod Name ... end`) or file-backed (`pub mod Name;`, loaded from `Name.crs`). The `std.crs` / `syn.crs` index files are just lists of file-backed `mod` declarations plus re-exports.
 
 ```
-pub mod Nat;                 -- load Nat.crs
-pub mod Inner                -- inline module
+pub mod Nat; -- load Nat.crs
+pub mod Inner -- inline module
   pub let x : Nat = 0;
 end
 ```
@@ -217,16 +230,16 @@ end
 **`use`.** Bring names into scope. A named group `{...}` lists items; `*` is a glob. Within a group, a bare name imports both the module and the value of that name, `mod X` imports only the module, `let Y` imports only the value.
 
 ```
-use /std/{Bln, Nat};             -- import several names
-pub use Option/*;                -- re-export everything (e.g. constructors)
-pub use Lst/{let Lst};           -- re-export only the value `Lst`
-use /syn/Str/{classify, step};   -- import specific members
+use /std/{Bln, Nat}; -- import several names
+pub use Option/*; -- re-export everything (e.g. constructors)
+pub use Lst/{let Lst}; -- re-export only the value `Lst`
+use /syn/Str/{classify, step}; -- import specific members
 ```
 
 **`induct`.** An inductive type. After the name come optional parameters `(p : T)` (mark with `@` to make them implicit at the type constructor; they are always implicit at value constructors). A **required** `: Sort` declares the result sort — `Type` or `Prop` — written `: Sort` for a plain type or `: (indices) -> Sort` to also declare an index telescope. Each case is `| name(payload)` with an optional `: (targets)` stating its index instantiation — required exactly when the type is indexed. Mutually-recursive families join with `and`; the block ends with `end`.
 
 ```
-pub induct Option(A : Type) : Type   -- parameterized, lands in Type
+pub induct Option(A : Type) : Type -- parameterized, lands in Type
 | some(A)
 | none()
 end
@@ -236,7 +249,7 @@ pub induct Vec(T : Type) : (n : Nat) -> Type -- indexed by a Nat
 | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
 end
 
-pub induct Eq(@A : Type) : (x : A, y : A) -> Prop  -- a proposition
+pub induct Eq(@A : Type) : (x : A, y : A) -> Prop -- a proposition
 | refl(@z : A) : (z, z)
 end
 ```
@@ -246,14 +259,14 @@ Payload binders may be named (`x : T`), named-implicit (`@m : T`, in scope for l
 **`struct` / `record`.** A nominal record type. The keyword sets _representation visibility_: `record` makes the representation **public** (callers construct and project directly); `struct` makes it **private** to the declaring module (construct/project only via exported helpers, else a `PrivateRepresentation` error). Optional parameters and a **required** `: Sort` work as for `induct` (a struct has no indices, so its sort is the bare `: Type` or `: Prop`; a `Prop` struct's fields must all be non-informative). Fields are labeled (`x : A`) or a single unlabeled field forms a newtype.
 
 ```
-pub record Pair(A : Type, B : Type) : Type {   -- transparent
+pub record Pair(A : Type, B : Type) : Type { -- transparent
     fst : A,
     snd : B
 }
 
-pub record Meters : Type { Nat }   -- newtype; project with `.0`; erases to the bare field
+pub record Meters : Type { Nat } -- newtype; project with `.0`; erases to the bare field
 
-pub struct Token : Type { Bin }    -- opaque: representation private to this module
+pub struct Token : Type { Bin } -- opaque: representation private to this module
 ```
 
 **Construction and projection.** Build with `Name { field = value, ... }` (or `Name(params) { ... }` when the type takes parameters); read fields with `.label` or `.0`. A function-valued field may use the definition sugar `name(args) = body` (shorthand for `name = (args) => body`), and the last field may carry a trailing comma — both also apply to tuple literals `(a = x, b = y)`.
@@ -263,10 +276,10 @@ pub struct Token : Type { Bin }    -- opaque: representation private to this mod
 ```
 let p = Pair { fst = 1, snd = 2 };
 let sum = p.fst + p.snd;
-let fst = p.fst;                 -- bind a field via projection
-let api = Api { base = 3, bump(x) = x + 1 };   -- definition sugar
-let q = Pair { ..p, snd = 9 };                 -- update: fst copied from p
-let r : Pair(Str, Nat) = Pair { ..p, fst = "x" };   -- parameter-changing update
+let fst = p.fst; -- bind a field via projection
+let api = Api { base = 3, bump(x) = x + 1 }; -- definition sugar
+let q = Pair { ..p, snd = 9 }; -- update: fst copied from p
+let r : Pair(Str, Nat) = Pair { ..p, fst = "x" }; -- parameter-changing update
 ```
 
 ## Concepts, witnesses, and instance arguments
@@ -281,16 +294,16 @@ Parameters may be higher-kinded: `Monad(M : (Type) -> Type)` keys witnesses on t
 
 ```
 pub concept Show(A : Type) : Type {
-    show(A) -> Str                  -- signature sugar
+    show(A) -> Str -- signature sugar
 }
 
 pub concept Ord(A : Type) : Type {
-    use Eql(A),                     -- superclass: an Ord(A) grants an Eql(A)
+    use Eql(A), -- superclass: an Ord(A) grants an Eql(A)
     cmp(A, A) -> Order
 }
 
 pub concept Convert(A : Type, out B : Type) : Type {
-    convert(A) -> B                 -- B is determined by the witness for A
+    convert(A) -> B -- B is determined by the witness for A
 }
 
 pub concept Monad(M : (Type) -> Type) : Type {
@@ -324,8 +337,8 @@ Every concept–key pair has **at most one** witness, program-wide (global coher
 pub let join(@A : Type, use Show(A), l : Lst(A)) -> Str =
     Lst/fold(l, "", (x, acc) => Str/concat(acc, Show/show(x)));
 
-join([1, 2, 3])                 -- resolves the Lst witness over the Nat witness
-join(use my_dict, [1, 2, 3])    -- explicit override
+join([1, 2, 3]) -- resolves the Lst witness over the Nat witness
+join(use my_dict, [1, 2, 3]) -- explicit override
 ```
 
 **Resolution** proceeds deterministically: local `use` binders innermost-first; then superclass projections of local binders, breadth-first by depth (two matches at the same minimal depth are ambiguous); then the global table, keyed by the concept and the input parameters' rigid heads. A goal with an unsolved metavariable in any input position waits until it is solved. The standard library provides `Show`, `Eql` (value-level equality — distinct from propositional `Eq`), `Ord`, `Monad`, and the operator concepts `Add`/`Sub`/`Mul`/`Div`/`Rem`/`Cmp` (see [Operators](#operators)), with witnesses for the primitive types. `Monad` itself is homed in `/syn` — it is what the postfix `!` desugars to — and `/std/Monad` is the user-facing facade; each monad's witness lives beside its type (`/std/Option`, `/std/Lst`, `/std/Task`, `/std/Parse`, `/std/Reader`).

@@ -29,7 +29,7 @@ end
 
 pub rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, n + m) =
     match v : (v : Vec(T, k)) => Vec(T, k + m)
-    | nil()          => w
+    | nil() => w
     | cons(j, x, xs) => Vec/cons(x, append(xs, w))
     end;
 ```

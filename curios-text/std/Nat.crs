@@ -40,7 +40,7 @@ let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
         Eq/subst((sc) => Utf8(sc, \\), Eq/sym(ok), Utf8/stop());
     Utf8/more(c, Scan/lead(), \\, r);
 
-let digit(d : Nat) -> { c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()) } =
+let digit(d : Nat) -> {c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead())} =
     match d
     | 0 => ('0', Eq/refl())
     | 1 => ('1', Eq/refl())

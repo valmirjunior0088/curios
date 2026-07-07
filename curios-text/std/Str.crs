@@ -39,8 +39,10 @@ pub let of_bin(b : Bin) -> Option(Str) =
     end;
 
 pub let concat(a : Str, b : Str) -> Str =
-    Str { bytes = \..a.bytes\..b.bytes,
-          valid = concat_closed(@a.bytes, @b.bytes, a.valid, b.valid) };
+    Str {
+        bytes = \..a.bytes\..b.bytes,
+        valid = concat_closed(@a.bytes, @b.bytes, a.valid, b.valid)
+    };
 
 rec drop_width(n : Nat, s : Scan, b : Bin) -> Nat =
     match b
@@ -110,12 +112,16 @@ rec take_valid(n : Nat, s : Scan, @b : Bin, d : Utf8(s, b))
     end;
 
 let drop_n(n : Nat, s : Str) -> Str =
-    Str { bytes = Bin/slice(s.bytes, drop_width(n, Scan/lead(), s.bytes), Bin/len(s.bytes)),
-          valid = drop_valid(n, Scan/lead(), @s.bytes, s.valid) };
+    Str {
+        bytes = Bin/slice(s.bytes, drop_width(n, Scan/lead(), s.bytes), Bin/len(s.bytes)),
+        valid = drop_valid(n, Scan/lead(), @s.bytes, s.valid)
+    };
 
 let take_n(n : Nat, s : Str) -> Str =
-    Str { bytes = Bin/slice(s.bytes, 0, drop_width(n, Scan/lead(), s.bytes)),
-          valid = take_valid(n, Scan/lead(), @s.bytes, s.valid) };
+    Str {
+        bytes = Bin/slice(s.bytes, 0, drop_width(n, Scan/lead(), s.bytes)),
+        valid = take_valid(n, Scan/lead(), @s.bytes, s.valid)
+    };
 
 pub let slice(s : Str, x : Nat, y : Nat) -> Str =
     take_n(y - x, drop_n(x, s));
@@ -258,13 +264,13 @@ pub let len(s : Str) -> Nat =
 
 pub let find_index(s : Str, pred : (Nat) -> Bln) -> Option(Nat) =
     let r : {Nat, Option(Nat)} =
-        fold(s, (0, Option/none()), (codepoint, acc) =>
-            match acc.1
-            | some(_) => acc
+        fold(s, (0, Option/none()), (codepoint, (i, found)) =>
+            match found
+            | some(_) => (i, found)
             | none() =>
-                (acc.0 + 1,
+                (i + 1,
                     match pred(codepoint)
-                    | true => Option/some(acc.0)
+                    | true => Option/some(i)
                     | false => Option/none()
                     end)
             end);
@@ -275,13 +281,13 @@ pub let find(s : Str, target : Nat) -> Option(Nat) =
 
 pub let get(s : Str, i : Nat) -> Option(Nat) =
     let r : {Nat, Option(Nat)} =
-        fold(s, (0, Option/none()), (codepoint, acc) =>
-            match acc.1
-            | some(_) => acc
+        fold(s, (0, Option/none()), (codepoint, (idx, found)) =>
+            match found
+            | some(_) => (idx, found)
             | none() =>
-                match acc.0 == i
-                | true => (acc.0 + 1, Option/some(codepoint))
-                | false => (acc.0 + 1, Option/none())
+                match idx == i
+                | true => (idx + 1, Option/some(codepoint))
+                | false => (idx + 1, Option/none())
                 end
             end);
     r.1;
@@ -309,9 +315,9 @@ pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Nat =
                 | pred + 1; ih2 =>
                     go(step(h, Scan/lead()), t,
                         peel_byte(@Scan/lead(), @Bin/cons(h, t), True/qed(), valid), pred,
-                        (match le : (le : Nat/Lte(x, y)) => Nat/Lte(x - 1, y - 1)
-                         | s(a, c, prev) => prev
-                         end))
+                        match le : (le : Nat/Lte(x, y)) => Nat/Lte(x - 1, y - 1)
+                        | s(a, c, prev) => prev
+                        end)
                 end
             | cont(rem, lo, hi) =>
                 go(step(h, Scan/cont(rem, lo, hi)), t,

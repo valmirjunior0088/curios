@@ -64,9 +64,7 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bln) -> Ls
     let r10 = BigNat/mul_small(r, 10);
     let mp10 = BigNat/mul_small(mp, 10);
     let mm10 = BigNat/mul_small(mm, 10);
-    let dr = divmod(r10, s, 0);
-    let d = dr.0;
-    let rem = dr.1;
+    let (d, rem) = divmod(r10, s, 0);
     let low =
         match even
         | true => BigNat/lte(rem, mm10)
@@ -129,28 +127,28 @@ let setup(f_mant : Nat, exp_field : Nat) -> {BigNat, BigNat, BigNat, BigNat} =
         match f_mant == 0x800000
         | false =>
             (BigNat/mul_pow2(BigNat/of_nat(f_mant), ep + 1),
-             BigNat/of_nat(2),
-             pow2(ep),
-             pow2(ep))
+                BigNat/of_nat(2),
+                pow2(ep),
+                pow2(ep))
         | true =>
             (BigNat/mul_pow2(BigNat/of_nat(f_mant), ep + 2),
-             BigNat/of_nat(4),
-             pow2(ep + 1),
-             pow2(ep))
+                BigNat/of_nat(4),
+                pow2(ep + 1),
+                pow2(ep))
         end
     | false =>
         let abs_e = 150 - Nat/max(exp_field, 1);
         match exp_field < 2 || Bln/not(f_mant == 0x800000)
         | true =>
             (BigNat/mul_small(BigNat/of_nat(f_mant), 2),
-             pow2(abs_e + 1),
-             BigNat/of_nat(1),
-             BigNat/of_nat(1))
+                pow2(abs_e + 1),
+                BigNat/of_nat(1),
+                BigNat/of_nat(1))
         | false =>
             (BigNat/mul_small(BigNat/of_nat(f_mant), 4),
-             pow2(abs_e + 2),
-             BigNat/of_nat(2),
-             BigNat/of_nat(1))
+                pow2(abs_e + 2),
+                BigNat/of_nat(2),
+                BigNat/of_nat(1))
         end
     end;
 
@@ -170,20 +168,14 @@ let layout(digits_str : Str, k : Int) -> Str =
     end;
 
 let render(f_mant : Nat, exp_field : Nat, even : Bln) -> Str =
-    let init = setup(f_mant, exp_field);
-    let r0 = init.0;
-    let s0 = init.1;
-    let mp0 = init.2;
-    let mm0 = init.3;
-    let up = scale_up(BigNat/add(r0, mp0), s0, +0);
-    let s1 = up.0;
-    let k1 = up.1;
-    let down = scale_down(r0, mp0, mm0, s1, k1);
-    let digits = generate(down.0, s1, down.1, down.2, even);
+    let (r0, s0, mp0, mm0) = setup(f_mant, exp_field);
+    let (s1, k1) = scale_up(BigNat/add(r0, mp0), s0, +0);
+    let (r1, mp1, mm1, k2) = scale_down(r0, mp0, mm0, s1, k1);
+    let digits = generate(r1, s1, mp1, mm1, even);
     let norm = normalize(digits);
     match norm.1
-    | true => layout(digits_to_str(Lst/cons(1, norm.0)), down.3 + 1)
-    | false => layout(digits_to_str(norm.0), down.3)
+    | true => layout(digits_to_str(Lst/cons(1, norm.0)), k2 + 1)
+    | false => layout(digits_to_str(norm.0), k2)
     end;
 
 pub let to_str(f : Flt) -> Str =

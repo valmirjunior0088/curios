@@ -35,13 +35,13 @@ pub let fold(@A : Type, b : Bin, init : A, f : (Nat, A) -> A) -> A =
 
 pub let find_index(b : Bin, pred : (Nat) -> Bln) -> Option(Nat) =
     let r : {Nat, Option(Nat)} =
-        fold(b, (0, Option/none()), (byte, acc) =>
-            match acc.1
-            | some(_) => acc
+        fold(b, (0, Option/none()), (byte, (i, found)) =>
+            match found
+            | some(_) => (i, found)
             | none() =>
-                (acc.0 + 1,
+                (i + 1,
                     match pred(byte)
-                    | true => Option/some(acc.0)
+                    | true => Option/some(i)
                     | false => Option/none()
                     end)
             end);

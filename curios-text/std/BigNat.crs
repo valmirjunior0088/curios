@@ -22,21 +22,15 @@ pub let is_zero(x : BigNat) -> Bln =
     Lst/len(x.limbs) == 0;
 
 rec cmp(xs : Lst(Nat), ys : Lst(Nat)) -> Order =
-    match xs
-    | [] =>
-        match Lst/len(ys) == 0
-        | true => Order/eq()
-        | false => Order/lt()
-        end
-    | [x, ..xt] =>
-        match ys
-        | [] => Order/gt()
-        | [y, ..yt] =>
-            match cmp(xt, yt)
-            | eq() => Nat/compare(x, y)
-            | lt() => Order/lt()
-            | gt() => Order/gt()
-            end
+    match (xs, ys)
+    | ([], []) => Order/eq()
+    | ([], [_, .._]) => Order/lt()
+    | ([_, .._], []) => Order/gt()
+    | ([x, ..xt], [y, ..yt]) =>
+        match cmp(xt, yt)
+        | eq() => Nat/compare(x, y)
+        | lt() => Order/lt()
+        | gt() => Order/gt()
         end
     end;
 
@@ -72,27 +66,21 @@ pub let gte(a : BigNat, b : BigNat) -> Bln =
     end;
 
 rec add_c(xs : Lst(Nat), ys : Lst(Nat), carry : Nat) -> Lst(Nat) =
-    match xs
-    | [] =>
-        match ys
-        | [] =>
-            match carry == 0
-            | true => []
-            | false => [carry]
-            end
-        | [y, ..yt] =>
-            let s = y + carry;
-            Lst/cons(s % base, add_c([], yt, s / base))
+    match (xs, ys)
+    | ([], []) =>
+        match carry == 0
+        | true => []
+        | false => [carry]
         end
-    | [x, ..xt] =>
-        match ys
-        | [] =>
-            let s = x + carry;
-            Lst/cons(s % base, add_c(xt, [], s / base))
-        | [y, ..yt] =>
-            let s = x + y + carry;
-            Lst/cons(s % base, add_c(xt, yt, s / base))
-        end
+    | ([], [y, ..yt]) =>
+        let s = y + carry;
+        Lst/cons(s % base, add_c([], yt, s / base))
+    | ([x, ..xt], []) =>
+        let s = x + carry;
+        Lst/cons(s % base, add_c(xt, [], s / base))
+    | ([x, ..xt], [y, ..yt]) =>
+        let s = x + y + carry;
+        Lst/cons(s % base, add_c(xt, yt, s / base))
     end;
 
 pub let add(a : BigNat, b : BigNat) -> BigNat =
