@@ -1,11 +1,11 @@
 use {
     super::{
         Bound, Concept, Goal, HeadKey, ImplicitOrigin, Inductive, Metavar, MetavarId,
-        MetavarOrigin, Qualifier, Structure, Term, Witness, WitnessKey, WitnessOrigin,
+        MetavarOrigin, Structure, Term, Witness, WitnessKey, WitnessOrigin,
     },
     crate::Instant,
     curios_abi::RootId,
-    curios_base::{Entropy, Span},
+    curios_base::{Entropy, Qualifier, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         mem,

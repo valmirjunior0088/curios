@@ -2,6 +2,7 @@ use {
     super::*,
     crate::{Atom, Inductive, InductiveParam, Int, MetavarId, Nat, Prim, Structure},
     curios_abi::RootId,
+    curios_base::Qualifier,
     std::{collections::BTreeMap, time::Duration},
 };
 

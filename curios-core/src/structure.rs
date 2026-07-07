@@ -1,6 +1,7 @@
 use {
-    super::{Qualifier, Telescope, Term},
+    super::{Telescope, Term},
     curios_abi::RootId,
+    curios_base::Qualifier,
 };
 
 /// One struct declaration's registry entry: the metadata a `struct`

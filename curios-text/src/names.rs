@@ -1,4 +1,4 @@
-use {curios_base::Span, curios_core::Qualifier};
+use curios_base::{Qualifier, Span};
 
 /// A surface reference, exactly as written in source: a [`Qualifier`](curios_core::Qualifier) plus an `is_abs` flag marking a leading `/` (an absolute, root-anchored path). It is *not* a canonical identity — resolution turns a `Name` into an always-absolute `Qualifier` — so equality and hashing compare the written form (ignoring the span, as everywhere in this crate).
 #[derive(Debug, Clone)]

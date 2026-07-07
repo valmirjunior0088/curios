@@ -11,14 +11,14 @@ use {
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{
-        Source,
+        Qualifier, Source,
         parser::{
             Parser, ParserError, catch, fail, lazy, many0, many1, memoize, not_ahead,
             preceded_by_space, pure, run_parser, sep_by0, sep_by0_trailing, sep_by1, spanned,
             take_eof, take_exact, take_n, take_while,
         },
     },
-    curios_core::{NumOp, Plicity, Qualifier},
+    curios_core::{NumOp, Plicity},
     num_bigint::BigUint,
     num_traits::{ToPrimitive, Zero},
     std::{iter, path::Path, rc::Rc, str::FromStr},

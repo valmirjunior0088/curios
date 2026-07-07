@@ -1,6 +1,6 @@
 use {
     super::{Error, Module},
-    curios_core::Qualifier,
+    curios_base::Qualifier,
     std::path::PathBuf,
 };
 

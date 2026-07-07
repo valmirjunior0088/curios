@@ -33,12 +33,6 @@ use free_monoid::*;
 mod names;
 pub use names::*;
 
-mod qualifier;
-pub use qualifier::*;
-
-#[cfg(test)]
-mod qualifier_tests;
-
 mod term;
 pub use term::*;
 

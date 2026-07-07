@@ -10,8 +10,8 @@ use interface::*;
 use {
     super::*,
     curios_abi::{ForeignStore, RootId, RootKind},
-    curios_base::Entropy,
-    curios_core::{Bound, Plicity, Qualifier},
+    curios_base::{Entropy, Qualifier},
+    curios_core::{Bound, Plicity},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},

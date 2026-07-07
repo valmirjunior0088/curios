@@ -1,10 +1,11 @@
 //! `Qualifier` is a canonical, resolved identity: a sequence of module segments
 //! rooted at the module root. It is what the resolution tables key on, and
-//! what `core`'s `Structure`/`Context`/`Definition` use to track a binding's
-//! declaring/use-site module without re-deriving structure from a flattened
-//! string. Lives in `curios-core` (not `curios-text`, where it originated)
-//! because `curios-text` already depends on `curios-core` — not the other way
-//! around — so this is the shared home, reused verbatim by both crates.
+//! what `curios-core`'s `Structure`/`Context`/`Definition` use to track a
+//! binding's declaring/use-site module without re-deriving structure from a
+//! flattened string. Lives here (not `curios-core`, where it originated) as a
+//! foundational value type with no dependency of its own on the rest of the
+//! core calculus — `curios-base` is the shared leaf every pipeline crate
+//! already depends on.
 
 /// A resolved module path: the segment sequence from the module root (see the module docs above for why it lives in this crate). The empty qualifier *is* the root, not a degenerate case.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]

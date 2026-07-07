@@ -1,6 +1,7 @@
 use {
-    super::{Concept, Inductive, Qualifier, Structure, Term},
+    super::{Concept, Inductive, Structure, Term},
     curios_abi::RootId,
+    curios_base::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
 

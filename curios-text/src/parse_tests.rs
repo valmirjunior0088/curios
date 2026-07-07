@@ -1,7 +1,8 @@
 use {
     super::*,
     curios_abi::{WireSignature, WireType},
-    curios_core::{NumOp, Plicity, Qualifier},
+    curios_base::Qualifier,
+    curios_core::{NumOp, Plicity},
 };
 
 #[test]

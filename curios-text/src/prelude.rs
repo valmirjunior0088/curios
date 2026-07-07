@@ -7,7 +7,8 @@ use {
     curios_abi::{
         ForeignFunction, ForeignStore, NAMESPACE_FFI, WireType, mode, poll, status, stdio,
     },
-    curios_core::{Plicity, Qualifier},
+    curios_base::Qualifier,
+    curios_core::Plicity,
     std::sync::Arc,
 };
 

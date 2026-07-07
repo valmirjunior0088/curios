@@ -2,8 +2,7 @@ use {
     super::PublicInterface,
     crate::{Error, Name},
     curios_abi::RootId,
-    curios_base::Entropy,
-    curios_core::Qualifier,
+    curios_base::{Entropy, Qualifier},
     std::collections::HashMap,
 };
 
