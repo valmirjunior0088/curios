@@ -1,6 +1,7 @@
 use {
     super::ModuleInfo,
     crate::{Entrypoint, Error, GroupItem, Module, Name, TopItem, UseGroup},
+    curios_abi::RootId,
     curios_base::Entropy,
     curios_core::Qualifier,
     std::{
@@ -149,7 +150,7 @@ fn seed(
                     // the parent's info gates every walk from outside, so a
                     // constructor is exactly as visible as its inductive and the
                     // declaring module can always use a non-`pub` inductive.
-                    let mut direct = ModuleInfo::new();
+                    let mut direct = ModuleInfo::new(RootId::of_segment(prefix.root_segment()));
                     for case in &inductive.cases {
                         direct.insert_binding(case.label.clone(), true)?;
                     }
@@ -178,7 +179,7 @@ fn seed(
                 // parent's child-module flag.
                 let namespace = prefix.with(&concept.label);
 
-                let mut direct = ModuleInfo::new();
+                let mut direct = ModuleInfo::new(RootId::of_segment(prefix.root_segment()));
                 for field in &concept.fields {
                     direct.insert_binding(field.label.clone(), true)?;
                 }
@@ -495,13 +496,13 @@ fn resolve_provider(
         (start, &segments[1..])
     };
 
-    super::guard_internal_root(module, current.segments())?;
+    super::guard_internal_root(table, module, current.segments())?;
     for segment in walk {
         match public.get(&current).and_then(|i| i.children.get(segment)) {
             Some(entry) => current = entry.target.clone(),
             None => return Err(segment_error(table, &current, segment)),
         }
-        super::guard_internal_root(module, current.segments())?;
+        super::guard_internal_root(table, module, current.segments())?;
     }
 
     Ok(current)

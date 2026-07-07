@@ -10,6 +10,7 @@ use {
 #[derive(Clone)]
 pub(super) struct FlatLet {
     pub name: Qualifier,
+    pub root: RootId,
     pub type_: curios_core::Term,
     pub body: curios_core::Term,
 }
@@ -25,13 +26,15 @@ pub(super) enum FlatItem {
 // for lexical scope during elaboration, and to tell private from absent when a
 // public lookup misses.
 pub(super) struct ModuleInfo {
+    pub(super) root: RootId,
     children: HashMap<String, bool>,
     bindings: HashMap<String, bool>,
 }
 
 impl ModuleInfo {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(root: RootId) -> Self {
         Self {
+            root,
             children: HashMap::new(),
             bindings: HashMap::new(),
         }
@@ -150,6 +153,18 @@ impl<'a> Context<'a> {
     /// belongs to.
     pub(super) fn root_of(&self, label: &str) -> RootId {
         RootId::of_segment(self.prefixed(label).root_segment())
+    }
+
+    /// The `RootId` this module itself belongs to — the value every `FlatLet`
+    /// declared directly in this module's body stamps as its own root.
+    /// Matches `island.root_segment()`'s formula (`island` being a binding's
+    /// qualifier with its own trailing label stripped) exactly, since
+    /// `self.prefix` *is* that stripped-down qualifier for anything declared
+    /// at this level — not `root_of(label)`, which is label-dependent and
+    /// only agrees with this for everything except a binding literally named
+    /// `sys`/`syn`/`std`.
+    pub(super) fn root(&self) -> RootId {
+        RootId::of_segment(self.prefix.root_segment())
     }
 
     /// Mint a fresh, program-globally-unique metavariable id for a surface hole.
@@ -318,7 +333,7 @@ impl<'a> Context<'a> {
             self.walk_children(start, &segments[1..upto])?
         };
 
-        super::guard_internal_root(&self.prefix, resolved.segments())?;
+        super::guard_internal_root(self.table, &self.prefix, resolved.segments())?;
         Ok(resolved)
     }
 

@@ -24,16 +24,20 @@ use {
 // of the qualifier the reference resolved to — not the raw spelled path — so
 // absolute and relative spellings are guarded identically. A non-internal target
 // or a privileged consumer passes through.
-fn guard_internal_root(consumer: &Qualifier, resolved: &[String]) -> Result<(), Error> {
+fn guard_internal_root(
+    table: &HashMap<Qualifier, ModuleInfo>,
+    consumer: &Qualifier,
+    resolved: &[String],
+) -> Result<(), Error> {
     let Some(root) = resolved.first() else {
         return Ok(());
     };
 
-    if !is_internal_root(root) {
+    if !is_internal_root(table, root) {
         return Ok(());
     }
 
-    if privileged(consumer) {
+    if privileged(table, consumer) {
         Ok(())
     } else {
         Err(Error::InternalRootModule {
@@ -44,17 +48,18 @@ fn guard_internal_root(consumer: &Qualifier, resolved: &[String]) -> Result<(), 
 
 // Whether `label` names an internal root: discoverable so the standard library
 // can resolve it by absolute path, but unreachable from user code.
-fn is_internal_root(label: &str) -> bool {
-    RootId::of_segment(label).kind() == RootKind::Internal
+fn is_internal_root(table: &HashMap<Qualifier, ModuleInfo>, label: &str) -> bool {
+    table
+        .get(&Qualifier::from([label]))
+        .is_some_and(|info| info.root.kind() == RootKind::Internal)
 }
 
 // Whether `consumer` is rooted in a privileged root (the standard library or an
 // internal root itself), and so may reference internal roots.
-fn privileged(consumer: &Qualifier) -> bool {
-    consumer
-        .segments()
-        .first()
-        .is_some_and(|r| RootId::of_segment(r).kind().is_privileged())
+fn privileged(table: &HashMap<Qualifier, ModuleInfo>, consumer: &Qualifier) -> bool {
+    table
+        .get(consumer)
+        .is_some_and(|info| info.root.kind().is_privileged())
 }
 
 struct Resolved {
@@ -91,7 +96,8 @@ impl Resolved {
         prefix: &Qualifier,
         loader: &RootSource,
     ) -> Result<(), Error> {
-        self.table.insert(prefix.clone(), scan_module_info(items)?);
+        let root = RootId::of_segment(prefix.root_segment());
+        self.table.insert(prefix.clone(), scan_module_info(items, root)?);
 
         for item in items {
             if let TopItem::Mod(module_item) = item {
@@ -119,8 +125,8 @@ impl Resolved {
     }
 }
 
-fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
-    let mut info = ModuleInfo::new();
+fn scan_module_info(items: &[TopItem], root: RootId) -> Result<ModuleInfo, Error> {
+    let mut info = ModuleInfo::new(root);
 
     for item in items {
         match item {
@@ -354,6 +360,7 @@ fn process_items(
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&let_item.label),
+                    root: context.root(),
                     type_,
                     body: lower.value(&let_item.signature.body())?,
                 }));
@@ -374,6 +381,7 @@ fn process_items(
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name,
+                    root: context.root(),
                     type_,
                     body: lower.value(&signature.body())?,
                 }));
@@ -390,6 +398,7 @@ fn process_items(
 
                         Ok(FlatLet {
                             name: context.prefixed(&let_item.label),
+                            root: context.root(),
                             type_,
                             body: lower.value(&let_item.signature.body())?,
                         })
@@ -558,6 +567,7 @@ fn process_items(
 
                         Ok(FlatLet {
                             name: context.prefixed(&u.label),
+                            root: context.root(),
                             type_,
                             body,
                         })
@@ -673,6 +683,7 @@ fn process_items(
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             name: context.prefixed(&u.label).with(&c.label),
+                            root: context.root(),
                             type_: ctor_type,
                             body: ctor_body,
                         }));
@@ -776,6 +787,7 @@ fn process_items(
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&s.label),
+                    root: context.root(),
                     type_,
                     body,
                 }));
@@ -933,6 +945,7 @@ fn process_items(
                 };
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&concept.label),
+                    root: context.root(),
                     type_,
                     body,
                 }));
@@ -973,6 +986,7 @@ fn process_items(
                     let lower = Lower::new(context);
                     flat_items.push(FlatItem::Let(FlatLet {
                         name: context.prefixed(&concept.label).with(&field.label),
+                        root: context.root(),
                         type_: lower.term(&signature.type_())?,
                         body: lower.value(&signature.body())?,
                     }));
@@ -1020,6 +1034,7 @@ fn process_items(
                 let lower = Lower::new(context);
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&label),
+                    root: context.root(),
                     type_: lower.term(&signature.type_())?,
                     body: lower.value(&signature.body())?,
                 }));
@@ -1072,13 +1087,7 @@ fn flat_item_in_prelude(item: &FlatItem) -> bool {
         FlatItem::Rec(lets) => lets.as_slice(),
     };
 
-    !lets.is_empty()
-        && lets.iter().all(|let_| {
-            let_.name
-                .segments()
-                .first()
-                .is_some_and(|root| RootId::of_segment(root).kind().is_privileged())
-        })
+    !lets.is_empty() && lets.iter().all(|let_| let_.root.kind().is_privileged())
 }
 
 /// The full set of names one node's declaration references: its own free
@@ -1346,10 +1355,9 @@ fn structure_free_vars(structure: &curios_core::Structure) -> HashSet<String> {
 
 fn flat_let_to_core(let_: FlatLet) -> curios_core::Definition {
     let island = let_.name.without_last();
-    let root = RootId::of_segment(island.root_segment());
 
     curios_core::Definition {
-        root,
+        root: let_.root,
         island,
         name: let_.name.join(),
         type_: let_.type_,
