@@ -211,7 +211,7 @@ where
 
     observe(Stage::ErsdOptm(&ersd_optm_module));
 
-    let cont_module = curios_ersd::to_cont(&ersd_optm_module);
+    let cont_module = curios_ersd::to_cont(&ersd_optm_module).map_err(|error| error.to_string())?;
 
     observe(Stage::Cont(&cont_module));
 

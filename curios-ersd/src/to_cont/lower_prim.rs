@@ -1,5 +1,5 @@
 use {
-    super::{Cont, ContMany, Frame, Work},
+    super::{Cont, ContMany, Frame, LowerResult, Work},
     curios_cont::{BlockName, CellTarget, Code, Data, HostTarget, Tail, Value, ValueName},
     num_bigint::BigUint,
     std::sync::Arc,
@@ -10,9 +10,10 @@ fn lower_pure_unary_code(
     operand: &crate::Term,
     frame: &Frame,
     code: impl FnOnce(ValueName) -> Code,
-) -> ValueName {
-    let operand = work.lower_pure_name(operand, frame);
-    work.fresh(Value::Eval(code(operand)))
+) -> LowerResult<ValueName> {
+    let operand = work.lower_pure_name(operand, frame)?;
+
+    Ok(work.fresh(Value::Eval(code(operand))))
 }
 
 fn lower_pure_binary_code(
@@ -21,10 +22,11 @@ fn lower_pure_binary_code(
     right: &crate::Term,
     frame: &Frame,
     code: impl FnOnce(ValueName, ValueName) -> Code,
-) -> ValueName {
-    let left = work.lower_pure_name(left, frame);
-    let right = work.lower_pure_name(right, frame);
-    work.fresh(Value::Eval(code(left, right)))
+) -> LowerResult<ValueName> {
+    let left = work.lower_pure_name(left, frame)?;
+    let right = work.lower_pure_name(right, frame)?;
+
+    Ok(work.fresh(Value::Eval(code(left, right))))
 }
 
 fn lower_pure_ternary_code(
@@ -34,14 +36,19 @@ fn lower_pure_ternary_code(
     third: &crate::Term,
     frame: &Frame,
     code: impl FnOnce(ValueName, ValueName, ValueName) -> Code,
-) -> ValueName {
-    let first = work.lower_pure_name(first, frame);
-    let second = work.lower_pure_name(second, frame);
-    let third = work.lower_pure_name(third, frame);
-    work.fresh(Value::Eval(code(first, second, third)))
+) -> LowerResult<ValueName> {
+    let first = work.lower_pure_name(first, frame)?;
+    let second = work.lower_pure_name(second, frame)?;
+    let third = work.lower_pure_name(third, frame)?;
+
+    Ok(work.fresh(Value::Eval(code(first, second, third))))
 }
 
-fn lower_pure_names(work: &mut Work, terms: &[crate::Term], frame: &Frame) -> Vec<ValueName> {
+fn lower_pure_names(
+    work: &mut Work,
+    terms: &[crate::Term],
+    frame: &Frame,
+) -> LowerResult<Vec<ValueName>> {
     terms
         .iter()
         .map(|term| work.lower_pure_name(term, frame))
@@ -51,7 +58,7 @@ fn lower_pure_names(work: &mut Work, terms: &[crate::Term], frame: &Frame) -> Ve
 /// A resume block that packs a host op's `arity` results into an `arity`-field
 /// record and feeds it to `cont`; returns the block name to plug into the
 /// `HostTarget`. Arity 0 yields unit, 2/3 the status records.
-fn record_resume<'b>(work: &mut Work, arity: usize, cont: Cont<'b>) -> BlockName {
+fn record_resume<'b>(work: &mut Work, arity: usize, cont: Cont<'b>) -> LowerResult<BlockName> {
     let resume = work.fresh_block();
     let fields = (0..arity).map(|_| work.fresh_value()).collect::<Vec<_>>();
 
@@ -59,22 +66,22 @@ fn record_resume<'b>(work: &mut Work, arity: usize, cont: Cont<'b>) -> BlockName
         let record = inner.fresh(Value::Pure(Data::Tpl(fields)));
 
         cont.call(inner, record)
-    });
+    })?;
 
-    resume
+    Ok(resume)
 }
 
 /// A resume block that forwards a host op's single result straight to `cont`.
-fn forward_resume<'b>(work: &mut Work, cont: Cont<'b>) -> BlockName {
+fn forward_resume<'b>(work: &mut Work, cont: Cont<'b>) -> LowerResult<BlockName> {
     let resume = work.fresh_block();
     let value = work.fresh_value();
     let value_clone = value.clone();
 
     work.add_resume_block(resume.clone(), vec![value], move |inner| {
         cont.call(inner, value_clone)
-    });
+    })?;
 
-    resume
+    Ok(resume)
 }
 
 fn lower_unary_code<'b>(
@@ -83,7 +90,7 @@ fn lower_unary_code<'b>(
     frame: &'b Frame,
     cont: Cont<'b>,
     code: impl FnOnce(ValueName) -> Code + 'b,
-) -> Tail {
+) -> LowerResult<Tail> {
     work.lower_value_name(
         operand,
         frame,
@@ -102,7 +109,7 @@ fn lower_binary_code<'b>(
     frame: &'b Frame,
     cont: Cont<'b>,
     code: impl FnOnce(ValueName, ValueName) -> Code + 'b,
-) -> Tail {
+) -> LowerResult<Tail> {
     work.lower_value_name(
         left,
         frame,
@@ -128,7 +135,7 @@ fn lower_ternary_code<'b>(
     frame: &'b Frame,
     cont: Cont<'b>,
     code: impl FnOnce(ValueName, ValueName, ValueName) -> Code + 'b,
-) -> Tail {
+) -> LowerResult<Tail> {
     work.lower_value_name(
         first,
         frame,
@@ -152,233 +159,237 @@ fn lower_ternary_code<'b>(
     )
 }
 
-pub(super) fn lower_pure_prim(work: &mut Work, prim: &crate::PurePrim, frame: &Frame) -> ValueName {
-    match prim {
+pub(super) fn lower_pure_prim(
+    work: &mut Work,
+    prim: &crate::PurePrim,
+    frame: &Frame,
+) -> LowerResult<ValueName> {
+    Ok(match prim {
         crate::PurePrim::Nat(value) => work.fresh(Value::Pure(Data::Nat(*value))),
         crate::PurePrim::NatEql(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatEql)
+            lower_pure_binary_code(work, left, right, frame, Code::NatEql)?
         }
         crate::PurePrim::NatNeq(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatNeq)
+            lower_pure_binary_code(work, left, right, frame, Code::NatNeq)?
         }
         crate::PurePrim::NatAdd(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatAdd)
+            lower_pure_binary_code(work, left, right, frame, Code::NatAdd)?
         }
         crate::PurePrim::NatSub(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatSub)
+            lower_pure_binary_code(work, left, right, frame, Code::NatSub)?
         }
         crate::PurePrim::NatMul(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatMul)
+            lower_pure_binary_code(work, left, right, frame, Code::NatMul)?
         }
         crate::PurePrim::NatLt(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatLt)
+            lower_pure_binary_code(work, left, right, frame, Code::NatLt)?
         }
         crate::PurePrim::NatDiv(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatDiv)
+            lower_pure_binary_code(work, left, right, frame, Code::NatDiv)?
         }
         crate::PurePrim::NatRem(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatRem)
+            lower_pure_binary_code(work, left, right, frame, Code::NatRem)?
         }
         crate::PurePrim::NatGt(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatGt)
+            lower_pure_binary_code(work, left, right, frame, Code::NatGt)?
         }
         crate::PurePrim::NatLte(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatLte)
+            lower_pure_binary_code(work, left, right, frame, Code::NatLte)?
         }
         crate::PurePrim::NatGte(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatGte)
+            lower_pure_binary_code(work, left, right, frame, Code::NatGte)?
         }
         crate::PurePrim::NatAnd(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatAnd)
+            lower_pure_binary_code(work, left, right, frame, Code::NatAnd)?
         }
         crate::PurePrim::NatOr(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatOr)
+            lower_pure_binary_code(work, left, right, frame, Code::NatOr)?
         }
         crate::PurePrim::NatXor(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatXor)
+            lower_pure_binary_code(work, left, right, frame, Code::NatXor)?
         }
         crate::PurePrim::NatShl(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatShl)
+            lower_pure_binary_code(work, left, right, frame, Code::NatShl)?
         }
         crate::PurePrim::NatShr(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::NatShr)
+            lower_pure_binary_code(work, left, right, frame, Code::NatShr)?
         }
         crate::PurePrim::Int(value) => work.fresh(Value::Pure(Data::Int(*value))),
         crate::PurePrim::Flt(value) => work.fresh(Value::Pure(Data::Flt(*value))),
         crate::PurePrim::IntEql(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntEql)
+            lower_pure_binary_code(work, left, right, frame, Code::IntEql)?
         }
         crate::PurePrim::IntNeq(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntNeq)
+            lower_pure_binary_code(work, left, right, frame, Code::IntNeq)?
         }
         crate::PurePrim::IntAdd(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntAdd)
+            lower_pure_binary_code(work, left, right, frame, Code::IntAdd)?
         }
         crate::PurePrim::IntSub(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntSub)
+            lower_pure_binary_code(work, left, right, frame, Code::IntSub)?
         }
         crate::PurePrim::IntMul(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntMul)
+            lower_pure_binary_code(work, left, right, frame, Code::IntMul)?
         }
         crate::PurePrim::IntDiv(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntDiv)
+            lower_pure_binary_code(work, left, right, frame, Code::IntDiv)?
         }
         crate::PurePrim::IntRem(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntRem)
+            lower_pure_binary_code(work, left, right, frame, Code::IntRem)?
         }
         crate::PurePrim::IntLt(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntLt)
+            lower_pure_binary_code(work, left, right, frame, Code::IntLt)?
         }
         crate::PurePrim::IntGt(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntGt)
+            lower_pure_binary_code(work, left, right, frame, Code::IntGt)?
         }
         crate::PurePrim::IntLte(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntLte)
+            lower_pure_binary_code(work, left, right, frame, Code::IntLte)?
         }
         crate::PurePrim::IntGte(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntGte)
+            lower_pure_binary_code(work, left, right, frame, Code::IntGte)?
         }
         crate::PurePrim::IntAnd(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntAnd)
+            lower_pure_binary_code(work, left, right, frame, Code::IntAnd)?
         }
         crate::PurePrim::IntOr(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntOr)
+            lower_pure_binary_code(work, left, right, frame, Code::IntOr)?
         }
         crate::PurePrim::IntXor(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntXor)
+            lower_pure_binary_code(work, left, right, frame, Code::IntXor)?
         }
         crate::PurePrim::IntShl(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntShl)
+            lower_pure_binary_code(work, left, right, frame, Code::IntShl)?
         }
         crate::PurePrim::IntShr(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::IntShr)
+            lower_pure_binary_code(work, left, right, frame, Code::IntShr)?
         }
         crate::PurePrim::FltAdd(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltAdd)
+            lower_pure_binary_code(work, left, right, frame, Code::FltAdd)?
         }
         crate::PurePrim::FltSub(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltSub)
+            lower_pure_binary_code(work, left, right, frame, Code::FltSub)?
         }
         crate::PurePrim::FltMul(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltMul)
+            lower_pure_binary_code(work, left, right, frame, Code::FltMul)?
         }
         crate::PurePrim::FltDiv(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltDiv)
+            lower_pure_binary_code(work, left, right, frame, Code::FltDiv)?
         }
         crate::PurePrim::FltRem(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltRem)
+            lower_pure_binary_code(work, left, right, frame, Code::FltRem)?
         }
         crate::PurePrim::FltEql(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltEql)
+            lower_pure_binary_code(work, left, right, frame, Code::FltEql)?
         }
         crate::PurePrim::FltNeq(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltNeq)
+            lower_pure_binary_code(work, left, right, frame, Code::FltNeq)?
         }
         crate::PurePrim::FltLt(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltLt)
+            lower_pure_binary_code(work, left, right, frame, Code::FltLt)?
         }
         crate::PurePrim::FltGt(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltGt)
+            lower_pure_binary_code(work, left, right, frame, Code::FltGt)?
         }
         crate::PurePrim::FltLte(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltLte)
+            lower_pure_binary_code(work, left, right, frame, Code::FltLte)?
         }
         crate::PurePrim::FltGte(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltGte)
+            lower_pure_binary_code(work, left, right, frame, Code::FltGte)?
         }
         crate::PurePrim::FltMin(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltMin)
+            lower_pure_binary_code(work, left, right, frame, Code::FltMin)?
         }
         crate::PurePrim::FltMax(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::FltMax)
+            lower_pure_binary_code(work, left, right, frame, Code::FltMax)?
         }
         crate::PurePrim::FltNeg(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::FltNeg)
+            lower_pure_unary_code(work, operand, frame, Code::FltNeg)?
         }
         crate::PurePrim::FltAbs(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::FltAbs)
+            lower_pure_unary_code(work, operand, frame, Code::FltAbs)?
         }
         crate::PurePrim::FltSqrt(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::FltSqrt)
+            lower_pure_unary_code(work, operand, frame, Code::FltSqrt)?
         }
         crate::PurePrim::FltFloor(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::FltFloor)
+            lower_pure_unary_code(work, operand, frame, Code::FltFloor)?
         }
         crate::PurePrim::FltCeil(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::FltCeil)
+            lower_pure_unary_code(work, operand, frame, Code::FltCeil)?
         }
         crate::PurePrim::FltTrunc(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::FltTrunc)
+            lower_pure_unary_code(work, operand, frame, Code::FltTrunc)?
         }
         crate::PurePrim::FltNearest(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::FltNearest)
+            lower_pure_unary_code(work, operand, frame, Code::FltNearest)?
         }
         crate::PurePrim::FltToLeBin(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::FltToLeBin)
+            lower_pure_unary_code(work, operand, frame, Code::FltToLeBin)?
         }
         crate::PurePrim::NatToInt(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::NatToInt)
+            lower_pure_unary_code(work, operand, frame, Code::NatToInt)?
         }
         crate::PurePrim::NatToFlt(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::NatToFlt)
+            lower_pure_unary_code(work, operand, frame, Code::NatToFlt)?
         }
         crate::PurePrim::IntToNat(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::IntToNat)
+            lower_pure_unary_code(work, operand, frame, Code::IntToNat)?
         }
         crate::PurePrim::IntToFlt(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::IntToFlt)
+            lower_pure_unary_code(work, operand, frame, Code::IntToFlt)?
         }
         crate::PurePrim::FltToNat(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::FltToNat)
+            lower_pure_unary_code(work, operand, frame, Code::FltToNat)?
         }
         crate::PurePrim::FltToInt(operand) => {
-            lower_pure_unary_code(work, operand, frame, Code::FltToInt)
+            lower_pure_unary_code(work, operand, frame, Code::FltToInt)?
         }
         crate::PurePrim::Bin(bytes) => work.fresh(Value::Pure(Data::Bin(bytes.clone()))),
-        crate::PurePrim::BinLen(bin) => lower_pure_unary_code(work, bin, frame, Code::BinLen),
+        crate::PurePrim::BinLen(bin) => lower_pure_unary_code(work, bin, frame, Code::BinLen)?,
         crate::PurePrim::BinEql(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::BinEql)
+            lower_pure_binary_code(work, left, right, frame, Code::BinEql)?
         }
         // Handle identity is byte identity: the rep is bytes from here down.
         crate::PurePrim::IoEql(left, right) => {
-            lower_pure_binary_code(work, left, right, frame, Code::BinEql)
+            lower_pure_binary_code(work, left, right, frame, Code::BinEql)?
         }
         crate::PurePrim::BinGet(bin, idx) => {
-            lower_pure_binary_code(work, bin, idx, frame, Code::BinGet)
+            lower_pure_binary_code(work, bin, idx, frame, Code::BinGet)?
         }
         crate::PurePrim::BinSlice(bin, start, end) => {
-            lower_pure_ternary_code(work, bin, start, end, frame, Code::BinSlice)
+            lower_pure_ternary_code(work, bin, start, end, frame, Code::BinSlice)?
         }
         crate::PurePrim::BinAppend(bin, byte) => {
-            lower_pure_binary_code(work, bin, byte, frame, Code::BinAppend)
+            lower_pure_binary_code(work, bin, byte, frame, Code::BinAppend)?
         }
         crate::PurePrim::BinConcat(operands) => {
-            let names = lower_pure_names(work, operands, frame);
+            let names = lower_pure_names(work, operands, frame)?;
 
             work.fresh(Value::Eval(Code::BinConcat(names)))
         }
         crate::PurePrim::Lst(elements) => {
-            let names = lower_pure_names(work, elements, frame);
+            let names = lower_pure_names(work, elements, frame)?;
 
             work.fresh(Value::Pure(Data::Lst(names)))
         }
-        crate::PurePrim::LstLen(lst) => lower_pure_unary_code(work, lst, frame, Code::LstLen),
+        crate::PurePrim::LstLen(lst) => lower_pure_unary_code(work, lst, frame, Code::LstLen)?,
         crate::PurePrim::LstGet(lst, idx) => {
-            lower_pure_binary_code(work, lst, idx, frame, Code::LstGet)
+            lower_pure_binary_code(work, lst, idx, frame, Code::LstGet)?
         }
         crate::PurePrim::LstSlice(lst, start, end) => {
-            lower_pure_ternary_code(work, lst, start, end, frame, Code::LstSlice)
+            lower_pure_ternary_code(work, lst, start, end, frame, Code::LstSlice)?
         }
         crate::PurePrim::LstAppend(lst, elem) => {
-            lower_pure_binary_code(work, lst, elem, frame, Code::LstAppend)
+            lower_pure_binary_code(work, lst, elem, frame, Code::LstAppend)?
         }
         crate::PurePrim::LstConcat(operands) => {
-            let names = lower_pure_names(work, operands, frame);
+            let names = lower_pure_names(work, operands, frame)?;
 
             work.fresh(Value::Eval(Code::LstConcat(names)))
         }
         crate::PurePrim::LstMap(src, f) => {
-            lower_pure_binary_code(work, src, f, frame, Code::LstMap)
+            lower_pure_binary_code(work, src, f, frame, Code::LstMap)?
         }
         // A handle erases to its host token bytes: the LE encoding of the token
         // integer, the same `BigUint::to_bytes_le` the runtime mints and keys on.
@@ -386,7 +397,7 @@ pub(super) fn lower_pure_prim(work: &mut Work, prim: &crate::PurePrim, frame: &F
         crate::PurePrim::Io(token) => {
             work.fresh(Value::Pure(Data::Bin(BigUint::from(*token).to_bytes_le())))
         }
-    }
+    })
 }
 
 pub(super) fn lower_value_prim<'b>(
@@ -394,7 +405,7 @@ pub(super) fn lower_value_prim<'b>(
     prim: &'b crate::Prim,
     frame: &'b Frame,
     cont: Cont<'b>,
-) -> Tail {
+) -> LowerResult<Tail> {
     match prim {
         crate::Prim::Pure(pure_prim) => lower_value_pure_prim(work, pure_prim, frame, cont),
         crate::Prim::Host(crate::HostPrim::Foreign(function, args)) => {
@@ -406,15 +417,15 @@ pub(super) fn lower_value_prim<'b>(
                 Vec::new(),
                 ContMany::new(move |work, operands| {
                     let resume = match function.signature.results.len() {
-                        1 => forward_resume(work, cont),
-                        arity => record_resume(work, arity, cont),
+                        1 => forward_resume(work, cont)?,
+                        arity => record_resume(work, arity, cont)?,
                     };
 
-                    Tail::Host(HostTarget::Foreign {
+                    Ok(Tail::Host(HostTarget::Foreign {
                         function,
                         operands,
                         resume,
-                    })
+                    }))
                 }),
             )
         }
@@ -424,18 +435,18 @@ pub(super) fn lower_value_prim<'b>(
             Cont::new(move |work, code| {
                 // exit never returns — the host traps — so the resume is dead
                 // code, kept only for the uniform shape (like `IoClose`).
-                let resume = record_resume(work, 0, cont);
+                let resume = record_resume(work, 0, cont)?;
 
-                Tail::Host(HostTarget::IoExit { code, resume })
+                Ok(Tail::Host(HostTarget::IoExit { code, resume }))
             }),
         ),
         crate::Prim::Cell(crate::CellPrim::New(init)) => work.lower_value_name(
             init,
             frame,
             Cont::new(move |work, init| {
-                let resume = forward_resume(work, cont);
+                let resume = forward_resume(work, cont)?;
 
-                Tail::Cell(CellTarget::New { init, resume })
+                Ok(Tail::Cell(CellTarget::New { init, resume }))
             }),
         ),
         crate::Prim::Cell(crate::CellPrim::Set(cell, value)) => work.lower_value_name(
@@ -446,13 +457,13 @@ pub(super) fn lower_value_prim<'b>(
                     value,
                     frame,
                     Cont::new(move |work, value| {
-                        let resume = record_resume(work, 0, cont);
+                        let resume = record_resume(work, 0, cont)?;
 
-                        Tail::Cell(CellTarget::Set {
+                        Ok(Tail::Cell(CellTarget::Set {
                             cell,
                             value,
                             resume,
-                        })
+                        }))
                     }),
                 )
             }),
@@ -461,9 +472,9 @@ pub(super) fn lower_value_prim<'b>(
             cell,
             frame,
             Cont::new(move |work, cell| {
-                let resume = forward_resume(work, cont);
+                let resume = forward_resume(work, cont)?;
 
-                Tail::Cell(CellTarget::Get { cell, resume })
+                Ok(Tail::Cell(CellTarget::Get { cell, resume }))
             }),
         ),
     }
@@ -474,7 +485,7 @@ fn lower_value_pure_prim<'b>(
     prim: &'b crate::PurePrim,
     frame: &'b Frame,
     cont: Cont<'b>,
-) -> Tail {
+) -> LowerResult<Tail> {
     match prim {
         crate::PurePrim::Nat(value) => {
             let value = work.fresh(Value::Pure(Data::Nat(*value)));

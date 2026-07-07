@@ -1,6 +1,6 @@
 use {
     super::{
-        Backpatch, Cont, ContMany, Emit, Frame, FrameEntropy, RecBody, RegionBuilder,
+        Backpatch, Cont, ContMany, Emit, Frame, FrameEntropy, LowerResult, RecBody, RegionBuilder,
         lower_pure_prim, lower_value_prim, rec_computed_order, unsupported_sync_rec_item,
     },
     curios_base::Entropy,
@@ -29,16 +29,16 @@ impl<'a> Lowerer<'a> {
         &mut self,
         module: &crate::Module,
         frame: &Frame,
-    ) -> (BlockName, Region) {
+    ) -> LowerResult<(BlockName, Region)> {
         let (mut entry, resume) = FrameEntropy::new();
         let mut emit = Emit::new(&mut entry);
         let tail = Work {
             lowerer: self,
             emit: &mut emit,
         }
-        .lower_module_items(&module.items, &module.body, frame.clone(), &resume);
+        .lower_module_items(&module.items, &module.body, frame.clone(), &resume)?;
 
-        (resume, emit.finish(tail))
+        Ok((resume, emit.finish(tail)))
     }
 }
 
@@ -52,14 +52,17 @@ pub(super) struct Work<'a, 'm, 'e> {
 
 impl Work<'_, '_, '_> {
     /// Build a nested region with its own `Work`, sharing this work's `Lowerer` and name supply.
-    fn in_subregion(&mut self, build: impl FnOnce(&mut Work) -> Tail) -> Region {
+    fn in_subregion(
+        &mut self,
+        build: impl FnOnce(&mut Work) -> LowerResult<Tail>,
+    ) -> LowerResult<Region> {
         let mut emit = self.emit.subregion();
         let tail = build(&mut Work {
             lowerer: &mut *self.lowerer,
             emit: &mut emit,
-        });
+        })?;
 
-        emit.finish(tail)
+        Ok(emit.finish(tail))
     }
 
     /// Allocate a fresh value in the current region. Thin accessor so the per-primitive lowering
@@ -91,17 +94,19 @@ impl Work<'_, '_, '_> {
         &mut self,
         name: BlockName,
         params: Vec<ValueName>,
-        build: impl FnOnce(&mut Work) -> Tail,
-    ) {
-        let region = self.in_subregion(build);
+        build: impl FnOnce(&mut Work) -> LowerResult<Tail>,
+    ) -> LowerResult<()> {
+        let region = self.in_subregion(build)?;
         self.emit.add_block(name, Block { params, region });
+
+        Ok(())
     }
 
     pub(super) fn lower_closure(
         &mut self,
         func: &crate::Func,
         frame: &Frame,
-    ) -> (ClsrName, Vec<ValueName>) {
+    ) -> LowerResult<(ClsrName, Vec<ValueName>)> {
         let clsr_name = self.lowerer.clsrs.fresh();
         let (mut entry, resume) = FrameEntropy::new();
         let mut clsr_frame = Frame::new();
@@ -141,7 +146,7 @@ impl Work<'_, '_, '_> {
             lowerer: &mut *self.lowerer,
             emit: &mut emit,
         }
-        .lower_tail(&func.body, &clsr_frame, &resume);
+        .lower_tail(&func.body, &clsr_frame, &resume)?;
         let region = emit.finish(tail);
 
         self.lowerer.module.add_clsr(
@@ -160,7 +165,7 @@ impl Work<'_, '_, '_> {
             .map(|capture| frame.find(&capture.name))
             .collect();
 
-        (clsr_name, captured_values)
+        Ok((clsr_name, captured_values))
     }
 
     /// Lower a `rec` group's bindings into `frame` synchronously (no resume blocks)
@@ -172,7 +177,7 @@ impl Work<'_, '_, '_> {
         names: &[String],
         items: impl IntoIterator<Item = &'x crate::Term>,
         frame: &Frame,
-    ) -> Frame {
+    ) -> LowerResult<Frame> {
         let mut frame = frame.clone();
         let reserved = names
             .iter()
@@ -185,7 +190,7 @@ impl Work<'_, '_, '_> {
             .collect::<Vec<_>>();
 
         for (item, target) in items.into_iter().zip(reserved) {
-            match self.plan_backpatch(item, &frame) {
+            match self.plan_backpatch(item, &frame)? {
                 Some(backpatch) => {
                     self.emit
                         .add_prealloc(target.clone(), backpatch.clsr.clone());
@@ -194,13 +199,13 @@ impl Work<'_, '_, '_> {
                 None => match &**item {
                     crate::Subterm::Apply(_)
                     | crate::Subterm::Match(_)
-                    | crate::Subterm::NatMatch(_) => unsupported_sync_rec_item(item),
-                    _ => self.lower_letrec_item(item, target, &frame),
+                    | crate::Subterm::NatMatch(_) => return Err(unsupported_sync_rec_item(item)),
+                    _ => self.lower_letrec_item(item, target, &frame)?,
                 },
             }
         }
 
-        frame
+        Ok(frame)
     }
 
     /// The runtime stand-in for an `Erased` term — a proof or type that survived
@@ -214,14 +219,18 @@ impl Work<'_, '_, '_> {
         self.emit.fresh(Value::Pure(Data::Nat(0)))
     }
 
-    pub(super) fn lower_pure_name(&mut self, term: &crate::Term, frame: &Frame) -> ValueName {
-        match &**term {
+    pub(super) fn lower_pure_name(
+        &mut self,
+        term: &crate::Term,
+        frame: &Frame,
+    ) -> LowerResult<ValueName> {
+        Ok(match &**term {
             crate::Subterm::Name(name) => frame.find(name.as_str()),
             crate::Subterm::Erased => self.erased(),
             crate::Subterm::Unreachable => {
                 panic!("unreachable Ersd term cannot be lowered in pure-name position")
             }
-            crate::Subterm::Prim(crate::Prim::Pure(pure)) => lower_pure_prim(self, pure, frame),
+            crate::Subterm::Prim(crate::Prim::Pure(pure)) => lower_pure_prim(self, pure, frame)?,
             crate::Subterm::Prim(crate::Prim::Host(_)) => unreachable!(
                 "host primitive reached pure-name context — pure-name lowering cannot \
                  construct the resume block required by Tail::Host"
@@ -231,7 +240,7 @@ impl Work<'_, '_, '_> {
                  construct the resume block required by Tail::Cell"
             ),
             crate::Subterm::Func(func) => {
-                let (clsr_name, captured_values) = self.lower_closure(func, frame);
+                let (clsr_name, captured_values) = self.lower_closure(func, frame)?;
 
                 self.emit
                     .fresh(Value::Pure(Data::Clsr(clsr_name, captured_values)))
@@ -241,7 +250,7 @@ impl Work<'_, '_, '_> {
                     .fields
                     .iter()
                     .map(|f| self.lower_pure_name(f, frame))
-                    .collect::<Vec<_>>();
+                    .collect::<LowerResult<Vec<_>>>()?;
 
                 self.emit.fresh(Value::Pure(Data::Tpl(field_names)))
             }
@@ -249,25 +258,26 @@ impl Work<'_, '_, '_> {
                 self.emit.fresh(Value::Pure(Data::Nat(atom.index as u32)))
             }
             crate::Subterm::Let(let_) => {
-                let body = self.lower_pure_name(&let_.body, frame);
+                let body = self.lower_pure_name(&let_.body, frame)?;
                 let frame = frame.extended([(let_.name.clone(), body)]);
 
-                self.lower_pure_name(&let_.tail, &frame)
+                return self.lower_pure_name(&let_.tail, &frame);
             }
             crate::Subterm::Rec(letrec) => {
-                let frame = self.lower_letrec_bindings(&letrec.names, letrec.items.iter(), frame);
+                let frame =
+                    self.lower_letrec_bindings(&letrec.names, letrec.items.iter(), frame)?;
 
-                self.lower_pure_name(&letrec.tail, &frame)
+                return self.lower_pure_name(&letrec.tail, &frame);
             }
             crate::Subterm::Proj(proj) => {
-                let head = self.lower_pure_name(&proj.head, frame);
+                let head = self.lower_pure_name(&proj.head, frame)?;
 
                 self.emit.fresh(Value::Eval(Code::TplGet(head, proj.index)))
             }
             crate::Subterm::Apply(_) | crate::Subterm::Match(_) | crate::Subterm::NatMatch(_) => {
-                unsupported_sync_rec_item(term)
+                return Err(unsupported_sync_rec_item(term));
             }
-        }
+        })
     }
 
     pub(super) fn lower_letrec_item(
@@ -275,14 +285,16 @@ impl Work<'_, '_, '_> {
         term: &crate::Term,
         target: ValueName,
         frame: &Frame,
-    ) {
+    ) -> LowerResult<()> {
         match &**term {
             crate::Subterm::Apply(_) | crate::Subterm::Match(_) | crate::Subterm::NatMatch(_) => {
-                unsupported_sync_rec_item(term)
+                Err(unsupported_sync_rec_item(term))
             }
             _ => {
-                let value = self.lower_pure_name(term, frame);
+                let value = self.lower_pure_name(term, frame)?;
                 self.emit.add_value(target, Value::Alias(value));
+
+                Ok(())
             }
         }
     }
@@ -292,7 +304,7 @@ impl Work<'_, '_, '_> {
         term: &crate::Term,
         frame: &Frame,
         cont: Cont<'_>,
-    ) -> Tail {
+    ) -> LowerResult<Tail> {
         match &**term {
             crate::Subterm::Name(name) => cont.call(self, frame.find(name.as_str())),
             crate::Subterm::Erased => {
@@ -300,10 +312,10 @@ impl Work<'_, '_, '_> {
 
                 cont.call(self, value)
             }
-            crate::Subterm::Unreachable => Tail::Unreachable,
+            crate::Subterm::Unreachable => Ok(Tail::Unreachable),
             crate::Subterm::Prim(prim) => lower_value_prim(self, prim, frame, cont),
             crate::Subterm::Func(func) => {
-                let (clsr_name, captured_values) = self.lower_closure(func, frame);
+                let (clsr_name, captured_values) = self.lower_closure(func, frame)?;
                 let value = self
                     .emit
                     .fresh(Value::Pure(Data::Clsr(clsr_name, captured_values)));
@@ -351,7 +363,7 @@ impl Work<'_, '_, '_> {
             crate::Subterm::Apply(_) | crate::Subterm::Match(_) | crate::Subterm::NatMatch(_) => {
                 let block = self.emit.fresh_block();
                 let param = self.emit.fresh_value();
-                let region = self.in_subregion(|work| cont.call(work, param.clone()));
+                let region = self.in_subregion(|work| cont.call(work, param.clone()))?;
 
                 self.emit.add_block(
                     block.clone(),
@@ -372,7 +384,7 @@ impl Work<'_, '_, '_> {
         frame: &'b Frame,
         mut names: Vec<ValueName>,
         cont: ContMany<'b>,
-    ) -> Tail {
+    ) -> LowerResult<Tail> {
         match params {
             [] => cont.call(self, names),
             [head, tail @ ..] => self.lower_value_name(
@@ -392,7 +404,7 @@ impl Work<'_, '_, '_> {
         frame: &'b Frame,
         mut names: Vec<ValueName>,
         cont: Cont<'b>,
-    ) -> Tail {
+    ) -> LowerResult<Tail> {
         match fields {
             [] => {
                 let value = self.emit.fresh(Value::Pure(Data::Tpl(names)));
@@ -421,15 +433,15 @@ impl Work<'_, '_, '_> {
         &mut self,
         item: &crate::Term,
         frame: &Frame,
-    ) -> Option<Backpatch> {
-        match &**item {
+    ) -> LowerResult<Option<Backpatch>> {
+        Ok(match &**item {
             crate::Subterm::Func(func) => {
-                let (clsr, captures) = self.lower_closure(func, frame);
+                let (clsr, captures) = self.lower_closure(func, frame)?;
 
                 Some(Backpatch { clsr, captures })
             }
             _ => None,
-        }
+        })
     }
 
     pub(super) fn emit_backpatch(&mut self, target: ValueName, backpatch: &Backpatch) {
@@ -451,7 +463,7 @@ impl Work<'_, '_, '_> {
         items: impl IntoIterator<Item = &'b crate::Term>,
         frame: &Frame,
         body: RecBody<'b>,
-    ) -> Tail {
+    ) -> LowerResult<Tail> {
         let mut frame = frame.clone();
         let targets = names
             .iter()
@@ -467,7 +479,7 @@ impl Work<'_, '_, '_> {
         let mut computed: Vec<(usize, ValueName, &'b crate::Term)> = vec![];
 
         for (index, (item, target)) in items.into_iter().zip(&targets).enumerate() {
-            match self.plan_backpatch(item, &frame) {
+            match self.plan_backpatch(item, &frame)? {
                 Some(backpatch) => backpatches.push((target.clone(), backpatch)),
                 None => computed.push((index, target.clone(), item)),
             }
@@ -494,7 +506,7 @@ impl Work<'_, '_, '_> {
             })
             .collect::<Vec<_>>();
 
-        let order = rec_computed_order(&computed_names, &deps);
+        let order = rec_computed_order(&computed_names, &deps)?;
 
         for (target, backpatch) in &backpatches {
             self.emit
@@ -525,7 +537,7 @@ impl Work<'_, '_, '_> {
         computed: &'b [(ValueName, &'b crate::Term)],
         frame: &'b Frame,
         body: RecBody<'b>,
-    ) -> Tail {
+    ) -> LowerResult<Tail> {
         match computed {
             [] => body.call(self, frame),
             [(target, rhs), rest @ ..] => {
@@ -548,9 +560,9 @@ impl Work<'_, '_, '_> {
         term: &crate::Term,
         frame: &Frame,
         resume: &BlockName,
-    ) -> Tail {
+    ) -> LowerResult<Tail> {
         match &**term {
-            crate::Subterm::Unreachable => Tail::Unreachable,
+            crate::Subterm::Unreachable => Ok(Tail::Unreachable),
             crate::Subterm::Apply(apply) => self.lower_value_name(
                 &apply.head,
                 frame,
@@ -571,7 +583,7 @@ impl Work<'_, '_, '_> {
 
                     for (i, branch) in m.cases.iter().enumerate() {
                         let block = work.emit.fresh_block();
-                        let region = work.in_subregion(|w| w.lower_tail(branch, frame, resume));
+                        let region = work.in_subregion(|w| w.lower_tail(branch, frame, resume))?;
 
                         work.emit.add_block(
                             block.clone(),
@@ -590,11 +602,11 @@ impl Work<'_, '_, '_> {
                         );
                     }
 
-                    Tail::Match(MatchTarget {
+                    Ok(Tail::Match(MatchTarget {
                         operand: head,
                         cases,
                         default: None,
-                    })
+                    }))
                 }),
             ),
             crate::Subterm::NatMatch(crate::NatMatch::Induction {
@@ -699,11 +711,7 @@ impl Work<'_, '_, '_> {
                             lowerer: &mut *work.lowerer,
                             emit: &mut body,
                         }
-                        .lower_tail(
-                            succ_case,
-                            &succ_frame,
-                            &body_resume_name,
-                        );
+                        .lower_tail(succ_case, &succ_frame, &body_resume_name)?;
 
                         body.finish(body_tail)
                     };
@@ -744,7 +752,7 @@ impl Work<'_, '_, '_> {
 
                     for (val, branch) in nm_cases.iter() {
                         let block = work.emit.fresh_block();
-                        let region = work.in_subregion(|w| w.lower_tail(branch, frame, resume));
+                        let region = work.in_subregion(|w| w.lower_tail(branch, frame, resume))?;
                         work.emit.add_block(
                             block.clone(),
                             Block {
@@ -762,7 +770,7 @@ impl Work<'_, '_, '_> {
                     }
 
                     let default_block = work.emit.fresh_block();
-                    let region = work.in_subregion(|w| w.lower_tail(nm_default, frame, resume));
+                    let region = work.in_subregion(|w| w.lower_tail(nm_default, frame, resume))?;
                     work.emit.add_block(
                         default_block.clone(),
                         Block {
@@ -771,14 +779,14 @@ impl Work<'_, '_, '_> {
                         },
                     );
 
-                    Tail::Match(MatchTarget {
+                    Ok(Tail::Match(MatchTarget {
                         operand: head,
                         cases,
                         default: Some(JumpTarget {
                             target: default_block,
                             params: vec![],
                         }),
-                    })
+                    }))
                 }),
             ),
             crate::Subterm::Let(let_) => {
@@ -815,7 +823,7 @@ impl Work<'_, '_, '_> {
         body: &'b crate::Term,
         mut frame: Frame,
         resume: &BlockName,
-    ) -> Tail {
+    ) -> LowerResult<Tail> {
         let mut index = 0;
 
         while index < items.len() {
@@ -825,7 +833,7 @@ impl Work<'_, '_, '_> {
                 crate::Item::Rec { names, items: defs }
                     if defs.iter().all(crate::Term::is_synchronous) =>
                 {
-                    frame = self.lower_letrec_bindings(names, defs.iter(), &frame);
+                    frame = self.lower_letrec_bindings(names, defs.iter(), &frame)?;
                     index += 1;
                 }
                 // A `rec` group with a computational member needs the CPS `lower_rec`
@@ -848,7 +856,7 @@ impl Work<'_, '_, '_> {
                     name,
                     body: let_body,
                 } if let_body.is_synchronous() => {
-                    let value = self.lower_pure_name(let_body, &frame);
+                    let value = self.lower_pure_name(let_body, &frame)?;
                     frame.push(name.clone(), value);
                     index += 1;
                 }

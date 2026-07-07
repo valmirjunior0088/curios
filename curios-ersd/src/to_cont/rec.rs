@@ -1,17 +1,18 @@
-use curios_cont::{ClsrName, ValueName};
+use {
+    super::{Error, LowerResult},
+    curios_cont::{ClsrName, ValueName},
+};
 
-pub(super) fn unsupported_sync_rec_item(term: &crate::Term) -> ! {
-    panic!(
-        "`to_cont` does not support a call-valued `rec` item in value position: \
-         the following term reaches `Apply`/`Match`/`NatMatch` on its construction path \
-         but is bound where a synchronous value is required: {term:?}",
-    )
+pub(super) fn unsupported_sync_rec_item(term: &crate::Term) -> Error {
+    Error::UnsupportedSyncRecItem {
+        term: term.to_string(),
+    }
 }
 
-/// Post-order (dependencies first) of the call/match-valued `rec` bindings, panicking
+/// Post-order (dependencies first) of the call/match-valued `rec` bindings, erroring
 /// with the offending cycle if two such bindings depend on each other's value — that
 /// case needs runtime fixpoint cells, which are out of scope.
-pub(super) fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usize> {
+pub(super) fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> LowerResult<Vec<usize>> {
     fn visit(
         node: usize,
         names: &[&str],
@@ -19,7 +20,7 @@ pub(super) fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usi
         marks: &mut [u8],
         stack: &mut Vec<usize>,
         order: &mut Vec<usize>,
-    ) {
+    ) -> LowerResult<()> {
         marks[node] = 1;
         stack.push(node);
 
@@ -30,17 +31,12 @@ pub(super) fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usi
                     let cycle = stack[start..]
                         .iter()
                         .chain([&next])
-                        .map(|&n| names[n])
-                        .collect::<Vec<_>>()
-                        .join(" -> ");
+                        .map(|&n| names[n].to_string())
+                        .collect::<Vec<_>>();
 
-                    panic!(
-                        "`to_cont` does not support value-level mutual recursion: \
-                         {cycle} would require runtime fixpoint cells; only closures may be \
-                         mutually recursive (a cyclic tuple/array reaches this path too)",
-                    );
+                    return Err(Error::CyclicRecComputed { cycle });
                 }
-                0 => visit(next, names, deps, marks, stack, order),
+                0 => visit(next, names, deps, marks, stack, order)?,
                 _ => {}
             }
         }
@@ -48,6 +44,8 @@ pub(super) fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usi
         stack.pop();
         marks[node] = 2;
         order.push(node);
+
+        Ok(())
     }
 
     let mut marks = vec![0u8; names.len()];
@@ -56,11 +54,11 @@ pub(super) fn rec_computed_order(names: &[&str], deps: &[Vec<usize>]) -> Vec<usi
 
     for node in 0..names.len() {
         if marks[node] == 0 {
-            visit(node, names, deps, &mut marks, &mut stack, &mut order);
+            visit(node, names, deps, &mut marks, &mut stack, &mut order)?;
         }
     }
 
-    order
+    Ok(order)
 }
 
 /// A `rec`-bound closure shell and its captures. The `Func` is lowered eagerly so its

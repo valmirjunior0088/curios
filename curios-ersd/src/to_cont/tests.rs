@@ -12,6 +12,7 @@ fn lower(term: Term) -> curios_cont::Module {
         items: vec![],
         body: term,
     })
+    .expect("test module lowers")
 }
 
 fn identity_func() -> Func {
@@ -180,7 +181,6 @@ fn lowers_bin_literal() {
 }
 
 #[test]
-#[should_panic(expected = "value-level mutual recursion")]
 fn rejects_mutually_referential_tuples() {
     // `rec x = (y, 1) and y = (2, x)`: genuinely self-referential data. Tuples are lowered as
     // computed items now (not prealloc'd shells), so the x→y→x cycle is caught by
@@ -207,7 +207,13 @@ fn rejects_mutually_referential_tuples() {
         tail: Subterm::Name(Name::from("x")).into(),
     });
 
-    lower(term.into());
+    let error = to_cont(&Module {
+        items: vec![],
+        body: term.into(),
+    })
+    .expect_err("mutually referential tuples must be rejected");
+
+    assert!(error.to_string().contains("value-level mutual recursion"));
 }
 
 #[test]
@@ -245,7 +251,6 @@ fn lowers_cross_region_rec_through_resume_block() {
 }
 
 #[test]
-#[should_panic(expected = "value-level mutual recursion")]
 fn rejects_apply_apply_cycle() {
     let term = Subterm::Rec(Rec {
         names: vec!["a".into(), "b".into()],
@@ -264,5 +269,11 @@ fn rejects_apply_apply_cycle() {
         tail: Subterm::Name(Name::from("a")).into(),
     });
 
-    lower(term.into());
+    let error = to_cont(&Module {
+        items: vec![],
+        body: term.into(),
+    })
+    .expect_err("an apply/apply cycle must be rejected");
+
+    assert!(error.to_string().contains("value-level mutual recursion"));
 }
