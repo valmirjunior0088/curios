@@ -1,5 +1,4 @@
-//! The pipeline's test suite — kept beside `lib.rs` per the sibling
-//! `*_tests.rs` convention.
+//! The pipeline's test suite, kept beside `lib.rs`.
 
 use {super::*, std::time::Duration};
 

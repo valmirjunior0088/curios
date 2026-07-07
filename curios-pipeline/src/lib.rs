@@ -4,7 +4,7 @@
 
 use {
     curios_abi::{ForeignStore, sys_io},
-    std::time::Duration,
+    std::{fmt, time::Duration},
 };
 
 /// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — the CLI's `--print` stage dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
@@ -46,8 +46,8 @@ impl<'a> Stage<'a> {
     }
 }
 
-impl std::fmt::Display for Stage<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Stage<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Stage::Text(entrypoint) => write!(f, "{entrypoint}"),
             Stage::Core(module) => write!(f, "{module}"),
@@ -229,4 +229,4 @@ where
 }
 
 #[cfg(test)]
-mod lib_tests;
+mod tests;
