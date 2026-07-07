@@ -1,6 +1,5 @@
 use {
     super::{Error, Module},
-    curios_abi::Roster,
     curios_core::Qualifier,
     std::path::PathBuf,
 };
@@ -81,11 +80,5 @@ impl RootSource {
                 .collect(),
             RootSource::None | RootSource::FileSystem(_) => Vec::new(),
         }
-    }
-
-    /// This source's root roster: `sys`/`syn`/`std` are always fixed
-    /// (`Roster::new` seeds them itself).
-    pub(crate) fn roster(&self) -> Roster {
-        Roster::new(std::iter::empty())
     }
 }

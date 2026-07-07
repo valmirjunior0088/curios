@@ -646,7 +646,7 @@ impl Context {
 
     /// The compilation root that declares one witness key's rigid head — a
     /// nominal head's own `root` (looked up from whichever registry has it,
-    /// struct or inductive), or the fixed `RootId::SYS` for a primitive head,
+    /// struct or inductive), or the fixed `RootId::Sys` for a primitive head,
     /// which is never user-declarable. Consulted by the orphan-rule check in
     /// `register_witness`.
     pub(crate) fn root_of_head(&self, head: &HeadKey) -> RootId {
@@ -656,7 +656,7 @@ impl Context {
                 .map(|structure| structure.root)
                 .or_else(|| self.inductive(name).map(|inductive| inductive.root))
                 .expect("a nominal head names a registered structure or inductive"),
-            _ => RootId::SYS,
+            _ => RootId::Sys,
         }
     }
 

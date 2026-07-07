@@ -697,7 +697,7 @@ thread_local! {
 
 // The `syn` library: modules the compiler's desugaring targets, kept alongside the
 // compiler (`syn/*.crs`) and embedded in the binary. Unlike `sys`, `syn` is *not*
-// internal (`RootId::SYN`'s kind is `Privileged`, not `Internal` — see
+// internal (`RootId::Syn`'s kind is `Privileged`, not `Internal` — see
 // `curios_abi::RootKind`): desugaring emits absolute `/syn/…` references, so the
 // names must be resolvable like any ordinary library — they are not walled from
 // user code. `syn` is still privileged, so it may reach the `/sys` primitives, and

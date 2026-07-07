@@ -9,7 +9,7 @@ use interface::*;
 
 use {
     super::*,
-    curios_abi::{ForeignStore, RootId, RootKind, Roster},
+    curios_abi::{ForeignStore, RootId, RootKind},
     curios_base::Entropy,
     curios_core::{Bound, Plicity, Qualifier},
     std::{
@@ -1344,9 +1344,9 @@ fn structure_free_vars(structure: &curios_core::Structure) -> HashSet<String> {
         .collect()
 }
 
-fn flat_let_to_core(roster: &Roster, let_: FlatLet) -> curios_core::Definition {
+fn flat_let_to_core(let_: FlatLet) -> curios_core::Definition {
     let island = let_.name.without_last();
-    let root = roster.resolve(island.root_segment());
+    let root = RootId::of_segment(island.root_segment());
 
     curios_core::Definition {
         root,
@@ -1357,15 +1357,12 @@ fn flat_let_to_core(roster: &Roster, let_: FlatLet) -> curios_core::Definition {
     }
 }
 
-fn flat_item_to_core(roster: &Roster, item: FlatItem) -> curios_core::Item {
+fn flat_item_to_core(item: FlatItem) -> curios_core::Item {
     match item {
-        FlatItem::Let(let_) => curios_core::Item::Let(flat_let_to_core(roster, let_)),
-        FlatItem::Rec(items) => curios_core::Item::Rec(
-            items
-                .into_iter()
-                .map(|let_| flat_let_to_core(roster, let_))
-                .collect(),
-        ),
+        FlatItem::Let(let_) => curios_core::Item::Let(flat_let_to_core(let_)),
+        FlatItem::Rec(items) => {
+            curios_core::Item::Rec(items.into_iter().map(flat_let_to_core).collect())
+        }
     }
 }
 
@@ -1407,11 +1404,10 @@ pub fn to_core(
 
     let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
     let public = interface::resolve(entrypoint, &modules, &mut table)?;
-    let roster = loader.roster();
     let metavars = Entropy::<usize>::new();
     let binders = Entropy::<usize>::new();
 
-    let mut context = Context::new(&table, &public, &roster, &metavars, &binders);
+    let mut context = Context::new(&table, &public, &metavars, &binders);
     let mut flat_items = Vec::new();
     let mut inductives = BTreeMap::new();
     let mut structures = BTreeMap::new();
@@ -1453,7 +1449,7 @@ pub fn to_core(
     // through those definitions and agree — no shared binder scope required.
     let items = order_flat_items(flat_items, &inductives, &structures)
         .into_iter()
-        .map(|item| flat_item_to_core(&roster, item))
+        .map(flat_item_to_core)
         .collect();
 
     Ok((

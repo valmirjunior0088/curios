@@ -1,7 +1,7 @@
 use {
     super::PublicInterface,
     crate::{Error, Name},
-    curios_abi::{RootId, Roster},
+    curios_abi::RootId,
     curios_base::Entropy,
     curios_core::Qualifier,
     std::collections::HashMap,
@@ -94,9 +94,6 @@ pub(super) struct Context<'a> {
     prefix: Qualifier,
     table: &'a HashMap<Qualifier, ModuleInfo>,
     public: &'a HashMap<Qualifier, PublicInterface>,
-    // The compilation's root roster — shared read-only, like `table`/`public`,
-    // so every nested `Context` resolves a leading segment to the same ids.
-    roster: &'a Roster,
     qualifiers: HashMap<String, Qualifier>,
     bindings: HashMap<String, Qualifier>,
     // Shared, program-global metavariable-id counter. The whole program folds
@@ -123,7 +120,6 @@ impl<'a> Context<'a> {
     pub(super) fn new(
         table: &'a HashMap<Qualifier, ModuleInfo>,
         public: &'a HashMap<Qualifier, PublicInterface>,
-        roster: &'a Roster,
         metavars: &'a Entropy,
         binders: &'a Entropy,
     ) -> Context<'a> {
@@ -131,7 +127,6 @@ impl<'a> Context<'a> {
             prefix: Qualifier::empty(),
             table,
             public,
-            roster,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
             metavars,
@@ -144,7 +139,6 @@ impl<'a> Context<'a> {
             prefix: self.prefix.with(label),
             table: self.table,
             public: self.public,
-            roster: self.roster,
             qualifiers: HashMap::new(),
             bindings: HashMap::new(),
             metavars: self.metavars,
@@ -153,11 +147,9 @@ impl<'a> Context<'a> {
     }
 
     /// The `RootId` `label`'s declaration (under the current module prefix)
-    /// belongs to — the roster-resolved replacement for the old
-    /// `context.prefixed(label).root_id()`, which read straight off
-    /// `RootId::of_segment`'s hardcoded match.
+    /// belongs to.
     pub(super) fn root_of(&self, label: &str) -> RootId {
-        self.roster.resolve(self.prefixed(label).root_segment())
+        RootId::of_segment(self.prefixed(label).root_segment())
     }
 
     /// Mint a fresh, program-globally-unique metavariable id for a surface hole.

@@ -496,7 +496,7 @@ fn convert_struct_unit_field_is_irrelevant() {
             ),
             result_sort: Term::type_(),
             module: Qualifier::empty(),
-            root: RootId::dynamic(0),
+            root: RootId::Entry,
             rep_public: true,
         },
     );
@@ -539,7 +539,7 @@ fn convert_variant_unit_payload_is_irrelevant() {
                 },
             )]),
             result_sort: Term::type_(),
-            root: RootId::dynamic(0),
+            root: RootId::Entry,
         },
     );
 
@@ -1158,7 +1158,7 @@ fn register_lst(context: &mut Context) {
             indices: Telescope::build([("A", Term::type_())], ()),
             constructors: BTreeMap::new(),
             result_sort: Term::type_(),
-            root: RootId::dynamic(0),
+            root: RootId::Entry,
         },
     );
 }
@@ -1172,7 +1172,7 @@ fn register_vec(context: &mut Context) {
             indices: Telescope::build([("T", Term::type_()), ("n", Term::prim(Prim::NatType))], ()),
             constructors: BTreeMap::new(),
             result_sort: Term::type_(),
-            root: RootId::dynamic(0),
+            root: RootId::Entry,
         },
     );
 }
@@ -1264,7 +1264,7 @@ fn imitation_solves_against_struct_type() {
             fields: Telescope::build([("A", Term::type_()), ("B", Term::type_())], ()),
             result_sort: Term::type_(),
             module: Qualifier::empty(),
-            root: RootId::dynamic(0),
+            root: RootId::Entry,
             rep_public: true,
         },
     );
