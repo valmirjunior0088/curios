@@ -42,9 +42,6 @@ pub use structure::*;
 mod concept;
 pub use concept::*;
 
-mod syn_names;
-pub(crate) use syn_names::*;
-
 mod print;
 use print::*;
 

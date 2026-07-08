@@ -16,6 +16,12 @@ pub use Div/{let Div};
 pub mod Rem;
 pub use Rem/{let Rem};
 
+pub mod And;
+pub use And/{let And};
+
+pub mod Or;
+pub use Or/{let Or};
+
 pub mod Cmp;
 pub use Cmp/{let Cmp};
 

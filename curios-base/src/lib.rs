@@ -1,9 +1,10 @@
 //! Foundational utilities shared across every Curios pipeline stage: source
 //! spans, the fresh-name `Entropy`/`Mint` supply, the `name!` newtype macro, the
 //! parser/printer monad combinators, the slice `suffix_view` re-base laws, the
-//! resolved-module-path `Qualifier` identity, and the value types the surface
+//! resolved-module-path `Qualifier` identity, the value types the surface
 //! (`curios-text`) and core (`curios-core`) `Term` representations share
-//! verbatim: `Plicity`, `NumOp`, `Int`, `Flt`.
+//! verbatim (`Plicity`, `NumOp`, `Int`, `Flt`), and the `/syn` path-literal
+//! registry both crates reference (alongside `NumOp` in `num_op.rs`).
 
 mod macros;
 

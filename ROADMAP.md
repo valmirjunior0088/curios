@@ -37,7 +37,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
   - [x] Higher-kinded concepts (`Monad(M : (Type) -> Type)`, via the flex-apply imitation rule in `convert.rs`)
   - [x] Multi-parameter keying (tuple of input heads) and functional dependencies (`out` parameters)
   - [x] Orphan rule (a witness must be declared where its concept, or a type in its key, is already declared; the standard library's three roots — `sys`/`syn`/`std` — are exempt from the check against each other, one coordinated implementation rather than independent packages)
-  - [x] Concept-based operators (every infix except `&&`/`||` dispatches through `Add`/`Sub`/`Mul`/`Div`/`Rem`/`Eql`/`Cmp` with `/sys` witnesses; primitive codegen unchanged)
+  - [x] Concept-based operators (every infix, `&&`/`||` included, dispatches through `Add`/`Sub`/`Mul`/`Div`/`Rem`/`And`/`Or`/`Eql`/`Cmp` with `/sys` witnesses; primitive codegen unchanged)
 - [x] `struct`/`record` declarations (nominal types with representation-visibility control)
 - [x] Inductive types (`induct` declarations)
   - [x] Constructor registry & dependent eliminators

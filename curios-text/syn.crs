@@ -20,6 +20,14 @@ pub concept Rem(A : Type) : Type {
     rem(A, A) -> A
 }
 
+pub concept And(A : Type) : Type {
+    and(A, A) -> A
+}
+
+pub concept Or(A : Type) : Type {
+    or(A, A) -> A
+}
+
 pub concept Eql(A : Type) : Type {
     eql(A, A) -> Bln
 }

@@ -247,7 +247,8 @@ fn infix_mixes_a_float_variable_with_an_integer_literal() {
 
 #[test]
 fn infix_undefined_operator_for_type_is_rejected() {
-    // `&&` is `Bln`-only, so `nat && nat` has no primitive — a compile-time error.
+    // `&&` only has a witness on `Bln`, so `nat && nat` has no `And(Nat)` — a
+    // compile-time error, same as any other operator at an un-witnessed type.
     let (system, _io) = MockHost::builder().build();
     let source = r#"
         use /std/{Io, Str};
@@ -353,7 +354,8 @@ fn infix_equality_works_on_str() {
 
 // An operator at a type with no witness is a missing-witness diagnostic —
 // the single operator error vocabulary (`operator ... not defined` survives
-// only for `&&`/`||`).
+// only for the exotic no-prelude embedding, where the concept itself is
+// absent from the context).
 #[test]
 fn infix_without_witness_reports_no_witness() {
     let (system, _io) = MockHost::builder().build();

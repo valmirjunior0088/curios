@@ -1,9 +1,17 @@
 pub use /sys/{Bln};
 pub use /sys/Bln/{and, or, xor, eql};
-use /std/{Str, Option, Eql};
+use /std/{Str, Option, Eql, And, Or};
 
 satisfy Eql(Bln) {
     eql(a, b) = /sys/Bln/eql(a, b)
+}
+
+satisfy And(Bln) {
+    and(a, b) = /sys/Bln/and(a, b)
+}
+
+satisfy Or(Bln) {
+    or(a, b) = /sys/Bln/or(a, b)
 }
 
 pub let not(b : Bln) -> Bln =

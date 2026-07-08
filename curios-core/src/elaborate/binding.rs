@@ -280,17 +280,18 @@ pub(super) fn infix_default_type(infix: &Infix) -> Prim {
 /// force it to their own default. That ordering is what lets `1 + flt` resolve
 /// to `Flt` rather than a `Nat`/`Flt` mismatch.
 ///
-/// Dispatch is then **one path**: every operator except `&&`/`||` desugars to
-/// a projection of a witness of its `/syn` concept ([`operator_concept`]) —
-/// `a + b` ≙ `Add/add(a, b)`, primitives included, resolved by the same
-/// engine that fills `use` slots (so `no witness of Add(Point)` is the single
-/// error vocabulary, and what an operator means at a type is entirely a
-/// question of which witnesses exist). `&&`/`||` stay hardcoded on `Bln`:
-/// short-circuit operators are control flow, not overloads. `!=` rebuilds as
+/// Dispatch is then **one path**: every operator, `&&`/`||` included,
+/// desugars to a projection of a witness of its `/syn` concept
+/// ([`NumOp::concept_field`](curios_base::NumOp::concept_field)) — `a + b` ≙
+/// `Add/add(a, b)`, primitives included,
+/// resolved by the same engine that fills `use` slots (so `no witness of
+/// Add(Point)` is the single error vocabulary, and what an operator means at
+/// a type is entirely a question of which witnesses exist). `!=` rebuilds as
 /// `BlnXor(Eql/eql(a, b), true)` — no `BlnNot` prim exists. The node never
 /// survives elaboration; witness projections over the statically-known
-/// primitive witnesses collapse back to bare `Prim` code in the backend (see
-/// the codegen parity tests).
+/// primitive witnesses collapse back to bare `Prim` code in the backend
+/// (`And(Bln)`/`Or(Bln)` collapse to `BlnAnd`/`BlnOr` exactly as `Eql(Bln)`
+/// collapses to `BlnEql` — see the codegen parity tests).
 pub(super) fn elaborate_infix(
     context: &mut Context,
     infix: &Infix,
@@ -342,26 +343,7 @@ pub(super) fn elaborate_infix(
     let left = left.unwrap();
     let right = right.unwrap();
 
-    // `&&`/`||`: hardcoded to the `Bln` short-circuit primitives, the one
-    // deliberate exception to concept dispatch.
-    let Some((concept_name, field_name)) = operator_concept(infix.op) else {
-        let head = Term::unwrap_or_clone(reduce_with(context, &operand_type)?);
-        if !matches!(head, Subterm::Prim(Prim::BlnType)) {
-            return Err(Error::operator_undefined(
-                infix.op.symbol().to_string(),
-                head,
-            ));
-        }
-        let build = match infix.op {
-            NumOp::And => Prim::BlnAnd,
-            _ => Prim::BlnOr,
-        };
-        let rebuilt = Term::prim(build(left, right));
-        if let Mode::Check(expected) = &mode {
-            expect(context, term, &bln_type, expected)?;
-        }
-        return Ok((rebuilt, bln_type));
-    };
+    let (concept_name, field_name) = infix.op.concept_field();
 
     // The concept registry entry — absent only in an exotic embedding that
     // elaborates without the embedded prelude, where the operator has nothing to

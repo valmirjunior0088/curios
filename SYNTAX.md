@@ -106,7 +106,7 @@ Binary operators. Listed loosest to tightest binding; **all are left-associative
 | 4            | `+` `-`                     |
 | 5 (tightest) | `*` `/` `%`                 |
 
-Every operator except `&&`/`||` dispatches through a standard-library concept (see [Concepts](#concepts-witnesses-and-instance-arguments)): `+ - * / %` through `Add`/`Sub`/`Mul`/`Div`/`Rem`, `==`/`!=` through `Eql` (`!=` negates the result), and the comparisons through `Cmp`. Both operands must share one type; a bare integer literal defaults it to `Nat` (`Int` if signed). Primitive witnesses cover `Nat`/`Int`/`Flt` (plus `Eql` on `Bln`, `Bin`, and `Str`), and compile to the bare primitive instruction — declaring a witness (e.g. `satisfy Add(Point) { … }`) makes the operator work on your own type at no cost to the primitive cases. `&&`/`||` are control flow: hardcoded on `Bln` and not overloadable, like `if`/`match`.
+Every operator, `&&`/`||` included, dispatches through a standard-library concept (see [Concepts](#concepts-witnesses-and-instance-arguments)): `+ - * / %` through `Add`/`Sub`/`Mul`/`Div`/`Rem`, `&&`/`||` through `And`/`Or`, `==`/`!=` through `Eql` (`!=` negates the result), and the comparisons through `Cmp`. Both operands must share one type; a bare integer literal defaults it to `Nat` (`Int` if signed). Primitive witnesses cover `Nat`/`Int`/`Flt` (plus `Eql`/`And`/`Or` on `Bln`, `Eql` on `Bin` and `Str`), and compile to the bare primitive instruction — declaring a witness (e.g. `satisfy Add(Point) { … }`) makes the operator work on your own type at no cost to the primitive cases.
 
 ## Binders
 

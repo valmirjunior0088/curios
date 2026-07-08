@@ -4,6 +4,7 @@ use {
         BinMatch, BinSegment, Error, Field, Let, LstEntry, LstMatch, Match, Name, Nat, NatLiteral,
         NatMatch, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
+    curios_base::{MONAD_BIND, STR_SCAN_LEAD, STR_STEP, STR_STR, STR_UTF8_MORE, STR_UTF8_STOP},
     num_bigint::BigUint,
     std::{cell::RefCell, collections::BTreeSet, sync::Arc},
 };
@@ -113,7 +114,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // exactly what a `Bin` literal did.
     pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
         curios_core::Term::struct_(
-            "/syn/Str/Str",
+            STR_STR,
             Vec::<curios_core::Term>::new(),
             [
                 curios_core::Term::prim(curios_core::Prim::Bin(bytes.to_vec())),
@@ -136,7 +137,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     pub(super) fn scan_lead() -> curios_core::Term {
-        Self::syn_call("/syn/Str/Scan/lead", [])
+        Self::syn_call(STR_SCAN_LEAD, [])
     }
 
     // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term —
@@ -151,14 +152,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         state: curios_core::Term,
     ) -> curios_core::Term {
         match bytes.split_first() {
-            None => Self::syn_call("/syn/Str/Utf8/stop", []),
+            None => Self::syn_call(STR_UTF8_STOP, []),
             Some((&head, tail)) => {
                 let byte: curios_core::Term = curios_core::Term::prim(curios_core::Prim::Nat(
                     curios_core::Nat::new(head as usize),
                 ));
-                let next = Self::syn_call("/syn/Str/step", [byte.clone(), state.clone()]);
+                let next = Self::syn_call(STR_STEP, [byte.clone(), state.clone()]);
                 Self::syn_call(
-                    "/syn/Str/Utf8/more",
+                    STR_UTF8_MORE,
                     [
                         byte,
                         state,
@@ -796,7 +797,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let cont = curios_core::Term::func([(name, domain)], acc);
                 // The already-resolved core name: the `Monad` concept at
                 // `/syn`'s top level, method wrapper `bind`.
-                Ok(Self::syn_call("/syn/Monad/bind", [action, cont]))
+                Ok(Self::syn_call(MONAD_BIND, [action, cont]))
             })
     }
 
