@@ -34,32 +34,6 @@ pub(super) enum Context<'a, 'b> {
     },
 }
 
-#[derive(Debug, Clone)]
-pub(super) enum LoadAs {
-    Null,
-    NonNull,
-    Concrete(TypeName),
-    Nat,
-    Int,
-    Flt,
-    Bin,
-    Lst,
-}
-
-/// How a host-import operand of the given wire type is loaded at the call
-/// site: `Nat`/`Bln` unbox their i31 carrier unsigned to a raw i32, `Int`
-/// unboxes signed (the `poll(2)` timeout convention), and the reference
-/// shapes cast to their rope base type (a handle is its `Bin` token) — the
-/// force step to the flat wire payload follows in `wire_force_instrs`.
-fn wire_load_as(wire_type: &WireType) -> LoadAs {
-    match wire_type {
-        WireType::Nat | WireType::Bln => LoadAs::Nat,
-        WireType::Int => LoadAs::Int,
-        WireType::Bin | WireType::Io => LoadAs::Bin,
-        WireType::Lst(_) => LoadAs::Lst,
-    }
-}
-
 impl<'a, 'b> Context<'a, 'b> {
     pub(super) fn new_const(table: &'a Table<'a>) -> Self {
         Self::Const { table }
@@ -665,7 +639,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 );
 
                 for (operand, (_, wire_type)) in operands.iter().zip(&signature.params) {
-                    output.extend(self.load_value_instrs(operand, wire_load_as(wire_type)));
+                    output.extend(self.load_value_instrs(operand, wire_type.into()));
                     output.extend(self.wire_force_instrs(wire_type));
                 }
 
@@ -799,5 +773,33 @@ impl<'a, 'b> Context<'a, 'b> {
             },
             Instr::Unreachable,
         ]
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(super) enum LoadAs {
+    Null,
+    NonNull,
+    Concrete(TypeName),
+    Nat,
+    Int,
+    Flt,
+    Bin,
+    Lst,
+}
+
+/// How a host-import operand of the given wire type is loaded at the call
+/// site: `Nat`/`Bln` unbox their i31 carrier unsigned to a raw i32, `Int`
+/// unboxes signed (the `poll(2)` timeout convention), and the reference
+/// shapes cast to their rope base type (a handle is its `Bin` token) — the
+/// force step to the flat wire payload follows in `wire_force_instrs`.
+impl From<&WireType> for LoadAs {
+    fn from(wire_type: &WireType) -> LoadAs {
+        match wire_type {
+            WireType::Nat | WireType::Bln => LoadAs::Nat,
+            WireType::Int => LoadAs::Int,
+            WireType::Bin | WireType::Io => LoadAs::Bin,
+            WireType::Lst(_) => LoadAs::Lst,
+        }
     }
 }

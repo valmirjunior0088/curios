@@ -6,7 +6,7 @@
 //! plugs it into this machinery by implementing `Bound`.
 
 use {
-    super::{MetavarId, Subterm, Term},
+    super::{Context, Error, MetavarId, Subterm, Term, zonk_term},
     std::{collections::BTreeSet, fmt::Debug, hash::Hash, ops::Deref},
 };
 
@@ -230,42 +230,6 @@ pub struct Scope<A: Arity, B: Bound = Term> {
     body: Box<B>,
 }
 
-impl<A: Arity + Debug, B: Bound> Debug for Scope<A, B> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Scope")
-            .field("arity", &self.arity)
-            .field("names", &self.names)
-            .field("body", &self.body)
-            .finish()
-    }
-}
-
-impl<A: Arity + Clone, B: Bound> Clone for Scope<A, B> {
-    fn clone(&self) -> Self {
-        Self {
-            arity: self.arity,
-            names: self.names.clone(),
-            body: self.body.clone(),
-        }
-    }
-}
-
-impl<A: Arity + PartialEq, B: Bound> PartialEq for Scope<A, B> {
-    fn eq(&self, other: &Self) -> bool {
-        self.arity == other.arity && self.names == other.names && self.body == other.body
-    }
-}
-
-impl<A: Arity + Eq, B: Bound> Eq for Scope<A, B> {}
-
-impl<A: Arity + Hash, B: Bound> Hash for Scope<A, B> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.arity.hash(state);
-        self.names.hash(state);
-        self.body.hash(state);
-    }
-}
-
 impl<A: Arity, B: Bound> Scope<A, B> {
     pub(crate) fn close<'a>(arity: A, labels: A::Params<'a, str>, body: B) -> Self {
         assert!(
@@ -367,79 +331,48 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     }
 }
 
+impl<A: Arity + Debug, B: Bound> Debug for Scope<A, B> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Scope")
+            .field("arity", &self.arity)
+            .field("names", &self.names)
+            .field("body", &self.body)
+            .finish()
+    }
+}
+
+impl<A: Arity + Clone, B: Bound> Clone for Scope<A, B> {
+    fn clone(&self) -> Self {
+        Self {
+            arity: self.arity,
+            names: self.names.clone(),
+            body: self.body.clone(),
+        }
+    }
+}
+
+impl<A: Arity + PartialEq, B: Bound> PartialEq for Scope<A, B> {
+    fn eq(&self, other: &Self) -> bool {
+        self.arity == other.arity && self.names == other.names && self.body == other.body
+    }
+}
+
+impl<A: Arity + Eq, B: Bound> Eq for Scope<A, B> {}
+
+impl<A: Arity + Hash, B: Bound> Hash for Scope<A, B> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.arity.hash(state);
+        self.names.hash(state);
+        self.body.hash(state);
+    }
+}
+
 // === Telescope ===============================================================
 
 /// A dependent context: a chain of entry types where each `Cons` tail is a one-binder [`Scope`], so every later entry — and the final `Done` payload — may mention the binders before it. Function types, function literals, and tuple types all reuse it and differ only in the payload: a `Term` (the return type or body) for Π/λ, `()` for Σ, where the fields themselves are the point.
 pub enum Telescope<B: Bound> {
     Done(Box<B>),
     Cons(Term, Scope<One, Telescope<B>>),
-}
-
-impl<B: Bound> Debug for Telescope<B> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Telescope::Done(body) => f.debug_tuple("Done").field(body).finish(),
-            Telescope::Cons(ty, rest) => f.debug_tuple("Cons").field(ty).field(rest).finish(),
-        }
-    }
-}
-
-impl<B: Bound> Clone for Telescope<B> {
-    fn clone(&self) -> Self {
-        match self {
-            Telescope::Done(body) => Telescope::Done(body.clone()),
-            Telescope::Cons(ty, rest) => Telescope::Cons(ty.clone(), rest.clone()),
-        }
-    }
-}
-
-impl<B: Bound> PartialEq for Telescope<B> {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Telescope::Done(a), Telescope::Done(b)) => a == b,
-            (Telescope::Cons(ta, ra), Telescope::Cons(tb, rb)) => ta == tb && ra == rb,
-            _ => false,
-        }
-    }
-}
-
-impl<B: Bound> Eq for Telescope<B> {}
-
-impl<B: Bound> Hash for Telescope<B> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self {
-            Telescope::Done(body) => {
-                state.write_u8(0);
-                body.hash(state);
-            }
-            Telescope::Cons(ty, rest) => {
-                state.write_u8(1);
-                ty.hash(state);
-                rest.hash(state);
-            }
-        }
-    }
-}
-
-impl<B: Bound> Bound for Telescope<B> {
-    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
-    where
-        F: FnMut(usize, &Var) -> Option<Subterm>,
-    {
-        match self {
-            Telescope::Cons(ty, rest) => {
-                Telescope::Cons(visit.visit_subterm(ty), visit.visit_scope(rest))
-            }
-            Telescope::Done(body) => Telescope::Done(body.traverse(visit).into()),
-        }
-    }
-
-    fn reach(&self) -> usize {
-        match self {
-            Telescope::Cons(ty, rest) => ty.reach().max(rest.reach()),
-            Telescope::Done(body) => body.reach(),
-        }
-    }
 }
 
 impl<B: Bound> Telescope<B> {
@@ -623,6 +556,31 @@ impl Telescope<Term> {
             Telescope::Done(body) => body.any_metavar(pred),
         }
     }
+
+    /// Zonk a function/Π telescope (`Func`/`FuncType`): its parameter types and
+    /// its trailing body/return type, which is a real term to recurse into.
+    pub(crate) fn zonk(&self, context: &Context) -> Result<Self, Error> {
+        match self {
+            Telescope::Done(body) => Ok(Telescope::Done(zonk_term(context, body)?.into())),
+            Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
+                zonk_term(context, ty)?,
+                rest.map_body(|inner| inner.zonk(context))?,
+            )),
+        }
+    }
+
+    /// Walk a function/Π telescope (`Func`/`FuncType`): the parameter types and
+    /// the trailing body/return type. Concrete in `Term` — no collector trait
+    /// needed. See [`Subterm::collect_construction_names`](super::Subterm::collect_construction_names).
+    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
+        match self {
+            Telescope::Cons(ty, rest) => {
+                ty.collect_construction_names(names);
+                rest.body().collect_construction_names(names);
+            }
+            Telescope::Done(body) => body.collect_construction_names(names),
+        }
+    }
 }
 
 impl Telescope<()> {
@@ -634,6 +592,94 @@ impl Telescope<()> {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             // The trailing body is `()`, which holds no metavariables.
             Telescope::Done(_) => false,
+        }
+    }
+
+    /// Zonk a Σ telescope (`TupleType`): only its field types — its `Done` body
+    /// is `()`, which carries no metavariables and is rebuilt as-is.
+    pub(crate) fn zonk(&self, context: &Context) -> Result<Self, Error> {
+        match self {
+            Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
+            Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
+                zonk_term(context, ty)?,
+                rest.map_body(|inner| inner.zonk(context))?,
+            )),
+        }
+    }
+
+    /// Walk a Σ telescope (`TupleType`): only the field types — its `Done` body
+    /// is `()`, which contributes no names.
+    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<String>) {
+        if let Telescope::Cons(ty, rest) = self {
+            ty.collect_construction_names(names);
+            rest.body().collect_construction_names(names);
+        }
+    }
+}
+
+impl<B: Bound> Debug for Telescope<B> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Telescope::Done(body) => f.debug_tuple("Done").field(body).finish(),
+            Telescope::Cons(ty, rest) => f.debug_tuple("Cons").field(ty).field(rest).finish(),
+        }
+    }
+}
+
+impl<B: Bound> Clone for Telescope<B> {
+    fn clone(&self) -> Self {
+        match self {
+            Telescope::Done(body) => Telescope::Done(body.clone()),
+            Telescope::Cons(ty, rest) => Telescope::Cons(ty.clone(), rest.clone()),
+        }
+    }
+}
+
+impl<B: Bound> PartialEq for Telescope<B> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Telescope::Done(a), Telescope::Done(b)) => a == b,
+            (Telescope::Cons(ta, ra), Telescope::Cons(tb, rb)) => ta == tb && ra == rb,
+            _ => false,
+        }
+    }
+}
+
+impl<B: Bound> Eq for Telescope<B> {}
+
+impl<B: Bound> Hash for Telescope<B> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Telescope::Done(body) => {
+                state.write_u8(0);
+                body.hash(state);
+            }
+            Telescope::Cons(ty, rest) => {
+                state.write_u8(1);
+                ty.hash(state);
+                rest.hash(state);
+            }
+        }
+    }
+}
+
+impl<B: Bound> Bound for Telescope<B> {
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
+    where
+        F: FnMut(usize, &Var) -> Option<Subterm>,
+    {
+        match self {
+            Telescope::Cons(ty, rest) => {
+                Telescope::Cons(visit.visit_subterm(ty), visit.visit_scope(rest))
+            }
+            Telescope::Done(body) => Telescope::Done(body.traverse(visit).into()),
+        }
+    }
+
+    fn reach(&self) -> usize {
+        match self {
+            Telescope::Cons(ty, rest) => ty.reach().max(rest.reach()),
+            Telescope::Done(body) => body.reach(),
         }
     }
 }

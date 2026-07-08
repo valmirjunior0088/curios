@@ -1,8 +1,10 @@
 use {
-    super::{BlockName, ClsrName, FuncName, ValueName},
+    super::{BlockName, ClsrName, FuncName, Scalar, ValueName, print_module},
     curios_abi::ForeignFunction,
+    curios_base::printer::run_printer,
     std::{
         collections::{BTreeMap, BTreeSet},
+        fmt,
         sync::Arc,
     },
 };
@@ -17,6 +19,17 @@ pub enum Data {
     Lst(Vec<ValueName>),
     Tpl(Vec<ValueName>),
     Clsr(ClsrName, Vec<ValueName>),
+}
+
+impl From<Scalar> for Data {
+    fn from(scalar: Scalar) -> Self {
+        match scalar {
+            Scalar::Nat(value) => Data::Nat(value),
+            Scalar::Int(value) => Data::Int(value),
+            Scalar::Flt(value) => Data::Flt(value),
+            Scalar::Bin(bytes) => Data::Bin(bytes),
+        }
+    }
 }
 
 /// One pure primitive computation over already-bound values — the expression vocabulary of the IR. Every variant produces exactly one value and has no effects (anything stateful is a [`Tail`], per the IR's atomicity law), which is what licenses the optimizer to fold, dedupe, hoist, and drop `Eval` bindings freely. The scalar families (`Nat*`/`Int*`/`Flt*`) mirror the wasm ops they lower to one-for-one; the `Bin*`/`Lst*` families are rope operations codegen services through shared helper functions.
@@ -436,5 +449,13 @@ impl Module {
     /// Bless `func_name` as the entrypoint. Set once by `to_cont` (always `main`); the module does not check the function exists — the lowerer adds it separately.
     pub fn set_entry(&mut self, func_name: FuncName) {
         self.entry = Some(func_name);
+    }
+}
+
+impl fmt::Display for Module {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        run_printer(print_module(self), formatter, 2)?;
+
+        Ok(())
     }
 }

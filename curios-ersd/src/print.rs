@@ -1,10 +1,9 @@
 use {
     super::{
-        Atom, CellPrim, Func, HostPrim, Item, Let, Match, Module, NatMatch, Prim, Proj, PurePrim,
-        Rec, Subterm, Term, Tuple,
+        Atom, CellPrim, Func, HostPrim, Let, Match, NatMatch, Prim, Proj, PurePrim, Rec, Subterm,
+        Term, Tuple,
     },
-    curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
-    std::fmt::{Display, Formatter, Result},
+    curios_base::printer::{Printer, flat, indent, pure, sep_flat},
 };
 
 fn print_atom(atom: &Atom) -> Printer<'static> {
@@ -177,7 +176,7 @@ fn print_cell_prim<'a>(prim: &'a CellPrim) -> Printer<'a> {
     }
 }
 
-fn print_term<'a>(term: &'a Term) -> Printer<'a> {
+pub(crate) fn print_term<'a>(term: &'a Term) -> Printer<'a> {
     match &**term {
         Subterm::Erased => pure("_"),
         Subterm::Unreachable => pure("unreachable"),
@@ -309,40 +308,5 @@ fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             ])
         }
         Subterm::Name(name) => pure(format!("#{}", name.as_str())),
-    }
-}
-
-impl Display for Term {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        run_printer(print_term(self), formatter, 2)
-    }
-}
-
-impl Display for Module {
-    // Iterates the flat items (each body printed via `Term`'s `Display`) — O(N),
-    // so `--print ersd` cannot re-trigger the prelude-depth overflow.
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        for item in &self.items {
-            match item {
-                Item::Let { name, body } => {
-                    writeln!(formatter, "let #{name} =\n{body};\n")?;
-                }
-                Item::Rec { names, items } => {
-                    write!(formatter, "rec ")?;
-
-                    for (index, (name, body)) in names.iter().zip(items).enumerate() {
-                        if index > 0 {
-                            write!(formatter, "and ")?;
-                        }
-
-                        write!(formatter, "#{name} =\n{body} ")?;
-                    }
-
-                    writeln!(formatter, ";")?;
-                }
-            }
-        }
-
-        write!(formatter, "{}", self.body)
     }
 }

@@ -33,13 +33,6 @@ use {
 /// The result-side worker/wrapper change. See the module documentation.
 pub(super) struct MonoidAccumulator;
 
-/// A recognised summing recursion: the monoid every combine agrees on, and the
-/// accumulator name to thread.
-pub(super) struct MonoidPlan {
-    monoid: Monoid,
-    acc: String,
-}
-
 impl Change for MonoidAccumulator {
     type Plan = MonoidPlan;
 
@@ -80,6 +73,13 @@ impl Change for MonoidAccumulator {
         let owned = mem::replace(body, Subterm::Erased.into());
         *body = rewrite_tail(owned, ctx, plan.monoid, &plan.acc);
     }
+}
+
+/// A recognised summing recursion: the monoid every combine agrees on, and the
+/// accumulator name to thread.
+pub(super) struct MonoidPlan {
+    monoid: Monoid,
+    acc: String,
 }
 
 /// A monoid registered for accumulator reassociation, keyed in the *post-erasure*

@@ -1,21 +1,20 @@
 use {
     super::{
-        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, ConceptField, ConceptParam, Entrypoint,
-        Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetSignature,
-        LstEntry, LstMatch, LstPattern, Match, MatchPattern, MatchPatternField, MatrixMatch,
-        Module, Motive, Nat, NatLiteral, NatMatch, NatPattern, NumLit, Pattern, PatternField, Prim,
-        Proj, Radix, Rec, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept,
-        TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple,
-        TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
+        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, ConceptField, ConceptParam, Field, Func,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetSignature, LstEntry,
+        LstMatch, LstPattern, Match, MatchPattern, MatchPatternField, MatrixMatch, Motive, Nat,
+        NatLiteral, NatMatch, NatPattern, NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec,
+        StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct,
+        TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{
         Plicity,
-        printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+        printer::{Printer, flat, indent, pure, sep_flat},
     },
     num_bigint::BigUint,
     num_traits::One,
-    std::fmt::{Display, Formatter, Result},
 };
 
 /// A `Bin` spread operand under the TIGHT grammar: a suffix chain —
@@ -537,7 +536,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
     }
 }
 
-fn print_term(term: Term) -> Printer<'static> {
+pub(crate) fn print_term(term: Term) -> Printer<'static> {
     match term.into_subterm() {
         Subterm::Type => pure("Type"),
         Subterm::Prop => pure("Prop"),
@@ -826,12 +825,6 @@ fn print_let_signature(signature: LetSignature) -> Printer<'static> {
     }
 }
 
-impl Display for Term {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        run_printer(print_term(self.clone()), formatter, 2)
-    }
-}
-
 fn print_pub(is_pub: bool) -> Printer<'static> {
     if is_pub { pure("pub ") } else { pure("") }
 }
@@ -967,7 +960,7 @@ fn print_top_mod(item: TopMod) -> Printer<'static> {
     }
 }
 
-fn print_module_items(items: Vec<TopItem>) -> Printer<'static> {
+pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer<'static> {
     sep_flat(items.into_iter().map(print_top_item), || pure("\n"))
 }
 
@@ -1234,27 +1227,5 @@ fn print_top_item(item: TopItem) -> Printer<'static> {
         TopItem::Concept(c) => print_top_concept(c),
         TopItem::Witness(w) => print_top_witness(w),
         TopItem::Foreign(f) => print_top_foreign(f),
-    }
-}
-
-impl Display for Module {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        run_printer(print_module_items(self.clone().items), formatter, 2)
-    }
-}
-
-impl Display for Entrypoint {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        let entrypoint = self.clone();
-        let printer = if entrypoint.module.items.is_empty() {
-            print_term(entrypoint.tail)
-        } else {
-            flat([
-                print_module_items(entrypoint.module.items),
-                pure("\n"),
-                print_term(entrypoint.tail),
-            ])
-        };
-        run_printer(printer, formatter, 2)
     }
 }

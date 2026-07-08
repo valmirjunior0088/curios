@@ -17,6 +17,7 @@ mod tests;
 use {
     super::{Subterm, Telescope, Term},
     curios_abi::RootId,
+    std::fmt,
 };
 
 /// One concept declaration's registry entry.
@@ -98,22 +99,6 @@ pub enum HeadKey {
     Cell,
 }
 
-impl std::fmt::Display for HeadKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            HeadKey::Nominal(name) => write!(f, "{name}"),
-            HeadKey::Nat => write!(f, "Nat"),
-            HeadKey::Int => write!(f, "Int"),
-            HeadKey::Flt => write!(f, "Flt"),
-            HeadKey::Bln => write!(f, "Bln"),
-            HeadKey::Bin => write!(f, "Bin"),
-            HeadKey::Io => write!(f, "Io"),
-            HeadKey::Lst => write!(f, "Lst"),
-            HeadKey::Cell => write!(f, "Cell"),
-        }
-    }
-}
-
 impl HeadKey {
     /// The key of a term already in weak-head normal form, if its head is
     /// rigid and nominal/primitive. A `Func` head is the higher-kinded case (a
@@ -168,6 +153,22 @@ impl HeadKey {
             Prim::LstType(_) => Some(HeadKey::Lst),
             Prim::CellType(_) => Some(HeadKey::Cell),
             _ => None,
+        }
+    }
+}
+
+impl fmt::Display for HeadKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HeadKey::Nominal(name) => write!(f, "{name}"),
+            HeadKey::Nat => write!(f, "Nat"),
+            HeadKey::Int => write!(f, "Int"),
+            HeadKey::Flt => write!(f, "Flt"),
+            HeadKey::Bln => write!(f, "Bln"),
+            HeadKey::Bin => write!(f, "Bin"),
+            HeadKey::Io => write!(f, "Io"),
+            HeadKey::Lst => write!(f, "Lst"),
+            HeadKey::Cell => write!(f, "Cell"),
         }
     }
 }

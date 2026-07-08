@@ -3,8 +3,7 @@ use {
         Argument, Block, BlockName, CallTarget, CellTarget, Clsr, ClsrName, Code, Data, Func,
         FuncName, HostTarget, JumpTarget, Module, Region, Tail, Value, ValueName,
     },
-    curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
-    std::fmt::{Display, Formatter, Result},
+    curios_base::printer::{Printer, flat, indent, pure, sep_flat},
 };
 
 fn print_value_name<'a>(name: &'a ValueName) -> Printer<'a> {
@@ -396,7 +395,7 @@ fn print_let_func<'a>(name: &'a FuncName, func: &'a Func) -> Printer<'a> {
     ])
 }
 
-fn print_module<'a>(module: &'a Module) -> Printer<'a> {
+pub(crate) fn print_module<'a>(module: &'a Module) -> Printer<'a> {
     sep_flat(
         (module
             .consts()
@@ -416,12 +415,4 @@ fn print_module<'a>(module: &'a Module) -> Printer<'a> {
         ),
         || pure("\n"),
     )
-}
-
-impl Display for Module {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        run_printer(print_module(self), formatter, 2)?;
-
-        Ok(())
-    }
 }

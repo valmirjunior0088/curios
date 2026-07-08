@@ -10,6 +10,9 @@ use match_compile::*;
 mod interface;
 use interface::*;
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::*,
     curios_abi::{ForeignStore, RootId, RootKind},
@@ -1539,6 +1542,3 @@ pub fn to_core(
         foreigns,
     ))
 }
-
-#[cfg(test)]
-mod tests;

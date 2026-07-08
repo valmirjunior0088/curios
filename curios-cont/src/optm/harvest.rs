@@ -25,6 +25,20 @@ pub(crate) struct Refs {
     pub values: HashSet<ValueName>,
 }
 
+impl Sink for Refs {
+    fn value_use(&mut self, name: &ValueName) {
+        self.values.insert(name.clone());
+    }
+
+    fn clsr_ref(&mut self, name: &ClsrName) {
+        self.clsrs.insert(name.clone());
+    }
+
+    fn func_ref(&mut self, name: &FuncName) {
+        self.funcs.insert(name.clone());
+    }
+}
+
 /// Harvest all three reference kinds in a single walk.
 pub(crate) fn region_refs(region: &Region) -> Refs {
     let mut refs = Refs::default();
@@ -41,20 +55,6 @@ pub(crate) fn data_refs(data: &Data) -> Refs {
     walk_data_refs(data, &mut refs);
 
     refs
-}
-
-impl Sink for Refs {
-    fn value_use(&mut self, name: &ValueName) {
-        self.values.insert(name.clone());
-    }
-
-    fn clsr_ref(&mut self, name: &ClsrName) {
-        self.clsrs.insert(name.clone());
-    }
-
-    fn func_ref(&mut self, name: &FuncName) {
-        self.funcs.insert(name.clone());
-    }
 }
 
 /// Every value name *bound* in a region tree: prealloc, value, and

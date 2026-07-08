@@ -206,6 +206,43 @@ enum Value<'m> {
     Clsr(Rc<ClsrVal<'m>>),
 }
 
+impl<'m> Value<'m> {
+    fn nat(&self) -> Result<u32, Bail> {
+        match self {
+            Value::Nat(value) => Ok(*value),
+            _ => Err(Bail::Unsupported),
+        }
+    }
+
+    fn int(&self) -> Result<i32, Bail> {
+        match self {
+            Value::Int(value) => Ok(*value),
+            _ => Err(Bail::Unsupported),
+        }
+    }
+
+    fn flt(&self) -> Result<f32, Bail> {
+        match self {
+            Value::Flt(value) => Ok(*value),
+            _ => Err(Bail::Unsupported),
+        }
+    }
+
+    fn bin(&self) -> Result<&Rc<Vec<u8>>, Bail> {
+        match self {
+            Value::Bin(bytes) => Ok(bytes),
+            _ => Err(Bail::Unsupported),
+        }
+    }
+
+    fn lst(&self) -> Result<&Rc<Vec<Value<'m>>>, Bail> {
+        match self {
+            Value::Lst(elements) => Ok(elements),
+            _ => Err(Bail::Unsupported),
+        }
+    }
+}
+
 /// The `RefCell` exists for local `rec`: members are bound as empty closures
 /// first, then each capture env is backpatched to see its siblings.
 struct ClsrVal<'m> {
@@ -978,43 +1015,6 @@ fn apply_pure<'m>(prim: &PurePrim, operands: &[Value<'m>]) -> Result<Value<'m>, 
         // Literals and `LstMap` are handled before operand evaluation.
         Nat(..) | Int(..) | Flt(..) | Bin(..) | Io(..) | LstMap(..) => {
             unreachable!("handled in eval_prim")
-        }
-    }
-}
-
-impl<'m> Value<'m> {
-    fn nat(&self) -> Result<u32, Bail> {
-        match self {
-            Value::Nat(value) => Ok(*value),
-            _ => Err(Bail::Unsupported),
-        }
-    }
-
-    fn int(&self) -> Result<i32, Bail> {
-        match self {
-            Value::Int(value) => Ok(*value),
-            _ => Err(Bail::Unsupported),
-        }
-    }
-
-    fn flt(&self) -> Result<f32, Bail> {
-        match self {
-            Value::Flt(value) => Ok(*value),
-            _ => Err(Bail::Unsupported),
-        }
-    }
-
-    fn bin(&self) -> Result<&Rc<Vec<u8>>, Bail> {
-        match self {
-            Value::Bin(bytes) => Ok(bytes),
-            _ => Err(Bail::Unsupported),
-        }
-    }
-
-    fn lst(&self) -> Result<&Rc<Vec<Value<'m>>>, Bail> {
-        match self {
-            Value::Lst(elements) => Ok(elements),
-            _ => Err(Bail::Unsupported),
         }
     }
 }

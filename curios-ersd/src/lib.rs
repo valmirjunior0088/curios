@@ -18,6 +18,7 @@ mod optm;
 pub use optm::*;
 
 mod print;
+use print::*;
 
 mod to_cont;
 pub use to_cont::*;

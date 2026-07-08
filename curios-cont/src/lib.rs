@@ -15,3 +15,4 @@ mod optm;
 pub use optm::*;
 
 mod print;
+use print::*;

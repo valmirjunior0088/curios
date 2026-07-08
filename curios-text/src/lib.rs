@@ -24,6 +24,7 @@ mod to_core;
 pub use to_core::*;
 
 mod print;
+use print::*;
 
 mod prelude;
 pub use prelude::*;

@@ -5,8 +5,7 @@ use {
         Import, Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RecType,
         RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
     },
-    curios_base::printer::{Printer, flat, indent, pure, run_printer, sep_flat},
-    std::fmt::{Display, Formatter, Result},
+    curios_base::printer::{Printer, flat, indent, pure, sep_flat},
 };
 
 fn print_dollar_ident<'a>(name: &'a str) -> Printer<'a> {
@@ -769,7 +768,7 @@ fn print_export<'a>(name: &'a str, export: &'a Export) -> Printer<'a> {
     ])
 }
 
-fn print_module<'a>(module: &'a Module) -> Printer<'a> {
+pub(crate) fn print_module<'a>(module: &'a Module) -> Printer<'a> {
     flat([
         pure("(module "),
         print_dollar_ident(module.name()),
@@ -820,12 +819,4 @@ fn print_module<'a>(module: &'a Module) -> Printer<'a> {
         )),
         pure(")"),
     ])
-}
-
-impl Display for Module {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        run_printer(print_module(self), formatter, 2)?;
-
-        Ok(())
-    }
 }

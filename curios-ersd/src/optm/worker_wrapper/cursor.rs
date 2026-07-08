@@ -37,15 +37,6 @@ use {
 /// The argument-side worker/wrapper change. See the module documentation.
 pub(super) struct SliceCursor;
 
-/// A recognised drop-front recursion: which parameter is the buffer cursor, its
-/// carrier, the base name held fixed, and the offset name threaded over it.
-pub(super) struct CursorPlan {
-    index: usize,
-    carrier: Carrier,
-    base: String,
-    offset: String,
-}
-
 impl Change for SliceCursor {
     type Plan = CursorPlan;
 
@@ -78,6 +69,15 @@ impl Change for SliceCursor {
             plan.carrier,
         );
     }
+}
+
+/// A recognised drop-front recursion: which parameter is the buffer cursor, its
+/// carrier, the base name held fixed, and the offset name threaded over it.
+pub(super) struct CursorPlan {
+    index: usize,
+    carrier: Carrier,
+    base: String,
+    offset: String,
 }
 
 /// Find a parameter that is a drop-front buffer cursor, if any. A parameter `b`

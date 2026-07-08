@@ -1,17 +1,16 @@
 use {
     super::{
-        Apply, Arity, Atom, Carrier, Cases, Definition, Field, Func, FuncType, InductiveType,
-        Infix, Item, Let, Match, Module, Nat, One, Prim, Proj, Rec, Scope, Struct, StructType,
-        Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
+        Apply, Arity, Atom, Carrier, Cases, Field, Func, FuncType, InductiveType, Infix, Item, Let,
+        Match, Module, Nat, One, Prim, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope,
+        Term, Three, Tuple, TupleType, Two, Var, Variant,
     },
     curios_base::{
         Flt, Plicity,
-        printer::{Printer, flat, indent, pure, run_printer, sep_flat},
+        printer::{Printer, flat, indent, pure, sep_flat},
     },
     std::{
         cell::RefCell,
         collections::{BTreeSet, HashMap},
-        fmt::{Display, Formatter, Result},
         rc::Rc,
     },
 };
@@ -693,7 +692,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
     }
 }
 
-fn print_term(term: Term, depth: usize) -> Printer<'static> {
+pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
     match Term::unwrap_or_clone(term) {
         Subterm::Type => pure("Type"),
         Subterm::Prop => pure("Prop"),
@@ -1178,59 +1177,5 @@ fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 ])
             }
         }
-    }
-}
-
-impl Display for Term {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        run_printer(print_term(self.clone(), 0), formatter, 2)
-    }
-}
-
-impl Display for Subterm {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        run_printer(print_term(self.clone().into(), 0), formatter, 2)
-    }
-}
-
-fn print_definition(formatter: &mut Formatter<'_>, def: &Definition) -> Result {
-    write!(formatter, "{} : {} = {}", def.name, def.type_, def.body)
-}
-
-impl Display for Module {
-    // Printed by *iterating* the flat items (never re-folding into a nested term),
-    // so `--print core` stays O(N) and cannot re-trigger the prelude-depth
-    // overflow this representation removed.
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
-        with_short_names(Rc::new(build_shorten(&module_symbols(self))), || {
-            for item in &self.items {
-                match item {
-                    Item::Let(def) => {
-                        write!(formatter, "let ")?;
-                        print_definition(formatter, def)?;
-                        writeln!(formatter, ";")?;
-                    }
-                    Item::Rec(defs) => {
-                        write!(formatter, "rec ")?;
-                        for (index, def) in defs.iter().enumerate() {
-                            if index > 0 {
-                                write!(formatter, "and ")?;
-                            }
-                            print_definition(formatter, def)?;
-                            write!(formatter, " ")?;
-                        }
-                        writeln!(formatter, ";")?;
-                    }
-                }
-            }
-
-            write!(formatter, "{}", self.body)?;
-
-            if let Some(type_) = &self.type_ {
-                write!(formatter, "\n: {type_}")?;
-            }
-
-            Ok(())
-        })
     }
 }

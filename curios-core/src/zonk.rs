@@ -6,7 +6,7 @@ use {
         Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
         InductiveParam, InductiveType, Item, Let, Match, Metavar, MetavarOrigin, Module,
         MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Struct, StructType, Structure, Subterm,
-        Telescope, Term, Tuple, TupleType, Variant,
+        Term, Tuple, TupleType, Variant,
     },
     std::sync::Arc,
 };
@@ -129,7 +129,7 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
     })
 }
 
-fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
+pub(crate) fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
     // A metavariable node *is* the substitution site: replace it by its solution,
     // recursively zonked (the solution may itself mention solved metavariables).
     if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
@@ -550,32 +550,4 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         ),
         Prim::CellGet(a, b) => Prim::CellGet(zonk_term(context, a)?, zonk_term(context, b)?),
     })
-}
-
-impl Telescope<Term> {
-    /// Zonk a function/Π telescope (`Func`/`FuncType`): its parameter types and
-    /// its trailing body/return type, which is a real term to recurse into.
-    fn zonk(&self, context: &Context) -> Result<Self, Error> {
-        match self {
-            Telescope::Done(body) => Ok(Telescope::Done(zonk_term(context, body)?.into())),
-            Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
-                zonk_term(context, ty)?,
-                rest.map_body(|inner| inner.zonk(context))?,
-            )),
-        }
-    }
-}
-
-impl Telescope<()> {
-    /// Zonk a Σ telescope (`TupleType`): only its field types — its `Done` body
-    /// is `()`, which carries no metavariables and is rebuilt as-is.
-    fn zonk(&self, context: &Context) -> Result<Self, Error> {
-        match self {
-            Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
-            Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
-                zonk_term(context, ty)?,
-                rest.map_body(|inner| inner.zonk(context))?,
-            )),
-        }
-    }
 }

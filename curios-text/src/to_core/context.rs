@@ -116,13 +116,6 @@ pub(super) struct Context<'a> {
     binders: &'a Entropy,
 }
 
-fn attach(error: Error, name: &Name) -> Error {
-    match name.span() {
-        Some(span) => error.at(span.clone()),
-        None => error,
-    }
-}
-
 impl<'a> Context<'a> {
     pub(super) fn new(
         table: &'a HashMap<Qualifier, ModuleInfo>,
@@ -440,7 +433,7 @@ impl<'a> Context<'a> {
             let (parent, label) = self.resolve_parent_path(name)?;
             self.import_module_label(&parent, &label)
         })();
-        result.map_err(|e| attach(e, name))
+        result.map_err(|e| Self::attach(e, name))
     }
 
     pub(super) fn resolve_binding_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
@@ -448,7 +441,7 @@ impl<'a> Context<'a> {
             let (parent, label) = self.resolve_parent_path(name)?;
             self.import_binding_label(&parent, &label)
         })();
-        result.map_err(|e| attach(e, name))
+        result.map_err(|e| Self::attach(e, name))
     }
 
     pub(super) fn resolve_both_use(&mut self, name: &Name) -> Result<UseResolved, Error> {
@@ -484,7 +477,7 @@ impl<'a> Context<'a> {
 
             self.import_dual_label(&parent, &label)
         })();
-        result.map_err(|e| attach(e, name))
+        result.map_err(|e| Self::attach(e, name))
     }
 
     // A glob `use a/b/*` names a module directly and imports every public child
@@ -520,7 +513,7 @@ impl<'a> Context<'a> {
                 })
                 .collect::<Result<Vec<_>, Error>>()
         })();
-        result.map_err(|e| attach(e, name))
+        result.map_err(|e| Self::attach(e, name))
     }
 
     // Resolve a qualified/absolute term reference to its canonical binding
@@ -543,6 +536,13 @@ impl<'a> Context<'a> {
                 ),
             }
         })();
-        result.map_err(|e| attach(e, name))
+        result.map_err(|e| Self::attach(e, name))
+    }
+
+    fn attach(error: Error, name: &Name) -> Error {
+        match name.span() {
+            Some(span) => error.at(span.clone()),
+            None => error,
+        }
     }
 }

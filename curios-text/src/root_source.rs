@@ -17,16 +17,6 @@ pub struct RootSource {
     entry_base: Option<PathBuf>,
 }
 
-fn module_file_path(base: &std::path::Path, qualifier: &Qualifier) -> PathBuf {
-    let mut segments = qualifier.iter().collect::<Vec<_>>();
-    let label = segments.pop().unwrap();
-
-    segments
-        .into_iter()
-        .fold(base.to_path_buf(), |path, segment| path.join(segment))
-        .join(format!("{label}.crs"))
-}
-
 impl RootSource {
     /// No further modules resolve — every `mod` declaration in the program
     /// must carry an inline body. Used by tests exercising resolution logic
@@ -64,16 +54,28 @@ impl RootSource {
         }
 
         match &self.entry_base {
-            Some(base) => Module::from_path(module_file_path(base, qualifier)).map_err(|cause| {
-                Error::ModuleLoadFailed {
-                    label: qualifier.join(),
-                    cause: Box::new(cause),
-                }
-            }),
+            Some(base) => {
+                Module::from_path(Self::module_file_path(base, qualifier)).map_err(|cause| {
+                    Error::ModuleLoadFailed {
+                        label: qualifier.join(),
+                        cause: Box::new(cause),
+                    }
+                })
+            }
             None => Err(Error::ModuleNotFound {
                 path: qualifier.join(),
             }),
         }
+    }
+
+    fn module_file_path(base: &std::path::Path, qualifier: &Qualifier) -> PathBuf {
+        let mut segments = qualifier.iter().collect::<Vec<_>>();
+        let label = segments.pop().unwrap();
+
+        segments
+            .into_iter()
+            .fold(base.to_path_buf(), |path, segment| path.join(segment))
+            .join(format!("{label}.crs"))
     }
 
     /// Whether `sys`/`syn`/`std` are attached to this source — gates

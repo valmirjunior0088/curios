@@ -1,8 +1,12 @@
 use {
-    super::{Concept, Inductive, Structure, Term},
+    super::{Concept, Inductive, Structure, Term, build_shorten, module_symbols, with_short_names},
     curios_abi::RootId,
     curios_base::Qualifier,
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        fmt,
+        rc::Rc,
+    },
 };
 
 /// A single top-level definition: `name` bound to `body` of declared `type_`.
@@ -29,6 +33,12 @@ pub struct Definition {
     pub root: RootId,
     pub type_: Term,
     pub body: Term,
+}
+
+impl Definition {
+    fn print(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{} : {} = {}", self.name, self.type_, self.body)
+    }
 }
 
 /// A top-level item: a single `let` definition, or a `rec` group of
@@ -93,5 +103,43 @@ impl Module {
                     acc,
                 ),
             })
+    }
+}
+
+impl fmt::Display for Module {
+    // Printed by *iterating* the flat items (never re-folding into a nested term),
+    // so `--print core` stays O(N) and cannot re-trigger the prelude-depth
+    // overflow this representation removed.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        with_short_names(Rc::new(build_shorten(&module_symbols(self))), || {
+            for item in &self.items {
+                match item {
+                    Item::Let(def) => {
+                        write!(formatter, "let ")?;
+                        def.print(formatter)?;
+                        writeln!(formatter, ";")?;
+                    }
+                    Item::Rec(defs) => {
+                        write!(formatter, "rec ")?;
+                        for (index, def) in defs.iter().enumerate() {
+                            if index > 0 {
+                                write!(formatter, "and ")?;
+                            }
+                            def.print(formatter)?;
+                            write!(formatter, " ")?;
+                        }
+                        writeln!(formatter, ";")?;
+                    }
+                }
+            }
+
+            write!(formatter, "{}", self.body)?;
+
+            if let Some(type_) = &self.type_ {
+                write!(formatter, "\n: {type_}")?;
+            }
+
+            Ok(())
+        })
     }
 }

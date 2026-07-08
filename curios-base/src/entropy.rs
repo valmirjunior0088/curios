@@ -21,12 +21,6 @@ pub struct Entropy<T = usize> {
     marker: PhantomData<T>,
 }
 
-impl<T> Default for Entropy<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl<T> Entropy<T> {
     /// An entropy source with its counter at zero — the first [`Entropy::fresh`] mints from raw value `0`.
     pub fn new() -> Self {
@@ -55,5 +49,11 @@ impl<T: Mint> Entropy<T> {
         self.counter.set(entropy + 1);
 
         T::mint(entropy)
+    }
+}
+
+impl<T> Default for Entropy<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }

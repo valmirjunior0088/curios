@@ -2,13 +2,15 @@
 mod tests;
 
 use {
-    super::{Atom, Bound, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit},
-    curios_base::{Flt, Int, NumOp, Plicity, Span},
+    super::{
+        Atom, Bound, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit, print_term,
+    },
+    curios_base::{Flt, Int, NumOp, Plicity, Span, printer::run_printer},
     num_bigint::BigUint,
     std::{
         cell::OnceCell,
         collections::{BTreeMap, BTreeSet, hash_map::DefaultHasher},
-        fmt::Debug,
+        fmt,
         hash::{Hash, Hasher},
         ops::Deref,
         rc::Rc,
@@ -756,6 +758,35 @@ impl From<Subterm> for Term {
     }
 }
 
+impl fmt::Display for Term {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        run_printer(print_term(self.clone(), 0), formatter, 2)
+    }
+}
+
+impl Bound for Term {
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
+    where
+        F: FnMut(usize, &Var) -> Option<Subterm>,
+    {
+        if visit.prune() && self.reach() <= visit.depth() {
+            return self.clone();
+        }
+
+        // Preserve the span across traversal.
+        Self {
+            span: self.span.clone(),
+            hash: OnceCell::new(),
+            reach: OnceCell::new(),
+            inner: Rc::new((**self).traverse(visit)),
+        }
+    }
+
+    fn reach(&self) -> usize {
+        *self.reach.get_or_init(|| self.inner.reach())
+    }
+}
+
 /// An unresolved infix application `left <op> right`. Elaboration infers a
 /// shared operand type for the two sides and rebuilds the node as a concept
 /// method call (`a + b` ≙ `Add/add(a, b)`; `&&`/`||` alone are hardcoded on
@@ -1073,8 +1104,8 @@ impl curios_base::Mint for MetavarId {
     }
 }
 
-impl std::fmt::Display for MetavarId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for MetavarId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
@@ -1207,11 +1238,9 @@ impl Subterm {
                     .for_each(|t| t.collect_construction_names(names));
             }
             Subterm::Prim(prim) => prim.collect_construction_names(names),
-            Subterm::Func(Func { telescope }) => {
-                telescope_term_construction_names(telescope, names)
-            }
+            Subterm::Func(Func { telescope }) => telescope.collect_construction_names(names),
             Subterm::FuncType(FuncType { telescope, .. }) => {
-                telescope_term_construction_names(telescope, names)
+                telescope.collect_construction_names(names)
             }
             Subterm::Apply(Apply { head, params, .. }) => {
                 head.collect_construction_names(names);
@@ -1220,7 +1249,7 @@ impl Subterm {
                     .for_each(|p| p.collect_construction_names(names));
             }
             Subterm::TupleType(TupleType { telescope, .. }) => {
-                telescope_unit_construction_names(telescope, names)
+                telescope.collect_construction_names(names)
             }
             Subterm::Tuple(Tuple { fields, .. }) => {
                 fields
@@ -1460,46 +1489,9 @@ impl Subterm {
     }
 }
 
-// Walk a function/Π telescope (`Func`/`FuncType`): the parameter types and the
-// trailing body/return type. Concrete in `Term` — no collector trait needed.
-fn telescope_term_construction_names(telescope: &Telescope<Term>, names: &mut BTreeSet<String>) {
-    match telescope {
-        Telescope::Cons(ty, rest) => {
-            ty.collect_construction_names(names);
-            telescope_term_construction_names(rest.body(), names);
-        }
-        Telescope::Done(body) => body.collect_construction_names(names),
-    }
-}
-
-// Walk a Σ telescope (`TupleType`): only the field types — its `Done` body is `()`.
-fn telescope_unit_construction_names(telescope: &Telescope<()>, names: &mut BTreeSet<String>) {
-    if let Telescope::Cons(ty, rest) = telescope {
-        ty.collect_construction_names(names);
-        telescope_unit_construction_names(rest.body(), names);
-    }
-}
-
-impl Bound for Term {
-    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
-    where
-        F: FnMut(usize, &Var) -> Option<Subterm>,
-    {
-        if visit.prune() && self.reach() <= visit.depth() {
-            return self.clone();
-        }
-
-        // Preserve the span across traversal.
-        Self {
-            span: self.span.clone(),
-            hash: OnceCell::new(),
-            reach: OnceCell::new(),
-            inner: Rc::new((**self).traverse(visit)),
-        }
-    }
-
-    fn reach(&self) -> usize {
-        *self.reach.get_or_init(|| self.inner.reach())
+impl fmt::Display for Subterm {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        run_printer(print_term(self.clone().into(), 0), formatter, 2)
     }
 }
 

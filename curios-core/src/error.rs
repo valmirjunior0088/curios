@@ -46,6 +46,34 @@ pub(crate) enum ReduceError {
     },
 }
 
+impl ReduceError {
+    pub(crate) fn into_error(self, preempted: impl FnOnce() -> Error) -> Error {
+        match self {
+            Self::Preempted => preempted(),
+            Self::BinGetOutOfBounds { len, index, span } => {
+                Error::BinGetOutOfBounds { len, index }.at_opt(span)
+            }
+            Self::BinSliceOutOfRange {
+                len,
+                start,
+                end,
+                span,
+            } => Error::BinSliceOutOfRange { len, start, end }.at_opt(span),
+            Self::LstGetOutOfBounds { len, index, span } => {
+                Error::LstGetOutOfBounds { len, index }.at_opt(span)
+            }
+            Self::LstSliceOutOfRange {
+                len,
+                start,
+                end,
+                span,
+            } => Error::LstSliceOutOfRange { len, start, end }.at_opt(span),
+            Self::IoAtTypeLevel { kind, span } => Error::IoAtTypeLevel { kind }.at_opt(span),
+            Self::DivisionByZero { kind, span } => Error::DivisionByZero { kind }.at_opt(span),
+        }
+    }
+}
+
 /// Source-location anchoring is the [`Error::Located`] wrapper's job — the
 /// elaborate/erase/zonk drivers attach the offending term's span as the error
 /// propagates. Variants therefore carry only what their message displays; a
@@ -1347,34 +1375,6 @@ impl fmt::Display for Error {
             Error::Located { error, .. } => {
                 write!(f, "{error}")
             }
-        }
-    }
-}
-
-impl ReduceError {
-    pub(crate) fn into_error(self, preempted: impl FnOnce() -> Error) -> Error {
-        match self {
-            Self::Preempted => preempted(),
-            Self::BinGetOutOfBounds { len, index, span } => {
-                Error::BinGetOutOfBounds { len, index }.at_opt(span)
-            }
-            Self::BinSliceOutOfRange {
-                len,
-                start,
-                end,
-                span,
-            } => Error::BinSliceOutOfRange { len, start, end }.at_opt(span),
-            Self::LstGetOutOfBounds { len, index, span } => {
-                Error::LstGetOutOfBounds { len, index }.at_opt(span)
-            }
-            Self::LstSliceOutOfRange {
-                len,
-                start,
-                end,
-                span,
-            } => Error::LstSliceOutOfRange { len, start, end }.at_opt(span),
-            Self::IoAtTypeLevel { kind, span } => Error::IoAtTypeLevel { kind }.at_opt(span),
-            Self::DivisionByZero { kind, span } => Error::DivisionByZero { kind }.at_opt(span),
         }
     }
 }

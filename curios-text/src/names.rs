@@ -1,4 +1,7 @@
-use curios_base::{Qualifier, Span};
+use {
+    curios_base::{Qualifier, Span},
+    std::hash::{Hash, Hasher},
+};
 
 /// A surface reference, exactly as written in source: a [`Qualifier`](curios_base::Qualifier) plus an `is_abs` flag marking a leading `/` (an absolute, root-anchored path). It is *not* a canonical identity — resolution turns a `Name` into an always-absolute `Qualifier` — so equality and hashing compare the written form (ignoring the span, as everywhere in this crate).
 #[derive(Debug, Clone)]
@@ -6,21 +9,6 @@ pub struct Name {
     span: Option<Span>,
     is_abs: bool,
     qualifier: Qualifier,
-}
-
-impl PartialEq for Name {
-    fn eq(&self, other: &Self) -> bool {
-        self.is_abs == other.is_abs && self.qualifier == other.qualifier
-    }
-}
-
-impl Eq for Name {}
-
-impl std::hash::Hash for Name {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.is_abs.hash(state);
-        self.qualifier.hash(state);
-    }
 }
 
 impl Name {
@@ -78,6 +66,21 @@ impl Name {
 
     pub(crate) fn last(&self) -> &str {
         self.qualifier.last()
+    }
+}
+
+impl PartialEq for Name {
+    fn eq(&self, other: &Self) -> bool {
+        self.is_abs == other.is_abs && self.qualifier == other.qualifier
+    }
+}
+
+impl Eq for Name {}
+
+impl Hash for Name {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.is_abs.hash(state);
+        self.qualifier.hash(state);
     }
 }
 

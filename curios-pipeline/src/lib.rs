@@ -2,6 +2,9 @@
 //!
 //! The fixed `sys`/`syn`/`std` prelude is elaborated once per thread and cached; every compile replays it into a fresh context and type-checks only the user code on top. Everything wasm-native — Binaryen, Cranelift precompilation, execution — lives downstream in `curios`/`curios-rt`: this crate stops at the wasm module plus the program's harvested `ForeignStore`.
 
+#[cfg(test)]
+mod tests;
+
 use {
     curios_abi::{ForeignStore, sys_io},
     std::{fmt, time::Duration},
@@ -227,6 +230,3 @@ where
 
     Ok((wasm_module, foreigns))
 }
-
-#[cfg(test)]
-mod tests;

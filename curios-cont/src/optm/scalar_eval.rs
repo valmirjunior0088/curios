@@ -18,7 +18,7 @@
 //! two passes need — `literals`, `simplify`, `eval`, `project`, `decide_match` —
 //! are `pub`.
 
-use super::*;
+use {super::*, std::rc::Rc};
 
 /// What `eval_scalar` produces: a scalar or bytestring, owned outright. A
 /// dedicated carrier rather than [`Data`], whose aggregate variants hold
@@ -30,17 +30,6 @@ pub(crate) enum Scalar {
     Int(i32),
     Flt(f32),
     Bin(Vec<u8>),
-}
-
-impl From<Scalar> for Data {
-    fn from(scalar: Scalar) -> Self {
-        match scalar {
-            Scalar::Nat(value) => Data::Nat(value),
-            Scalar::Int(value) => Data::Int(value),
-            Scalar::Flt(value) => Data::Flt(value),
-            Scalar::Bin(bytes) => Data::Bin(bytes),
-        }
-    }
 }
 
 impl Scalar {
@@ -79,6 +68,17 @@ impl Scalar {
     fn bin_slice(bytes: &[u8], start: u32, end: u32) -> Option<Self> {
         let (start, end) = (start as usize, end as usize);
         (start <= end && end <= bytes.len()).then(|| Self::Bin(bytes[start..end].to_vec()))
+    }
+
+    /// The snapshot of an owned scalar result — total, since a [`Scalar`]
+    /// cannot carry an aggregate.
+    pub(crate) fn snapshot(self) -> Snapshot {
+        match self {
+            Scalar::Nat(value) => Snapshot::Nat(value),
+            Scalar::Int(value) => Snapshot::Int(value),
+            Scalar::Flt(value) => Snapshot::Flt(value),
+            Scalar::Bin(bytes) => Snapshot::Bin(Rc::new(bytes)),
+        }
     }
 }
 

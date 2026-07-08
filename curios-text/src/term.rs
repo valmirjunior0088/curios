@@ -1,12 +1,13 @@
 use {
-    super::{Name, Prim, Radix},
+    super::{Name, Prim, Radix, print_term},
     crate::parse::{parse_term, parse_whitespace},
     curios_base::{
         NumOp, Plicity, Source, Span,
         parser::{ParserError, run_parser, take_eof},
+        printer::run_printer,
     },
     num_bigint::BigUint,
-    std::{collections::BTreeMap, ops::Deref, rc::Rc, str::FromStr},
+    std::{collections::BTreeMap, fmt, ops::Deref, rc::Rc, str::FromStr},
 };
 
 /// The unit of the surface syntax tree: a [`Subterm`] plus an optional source span. The span is deliberately excluded from `PartialEq` — tests build spanless expected trees and compare structure — and is readable only crate-internally; `Deref<Target = Subterm>` lets consumers match on the structure directly.
@@ -39,6 +40,15 @@ impl Term {
     pub(crate) fn as_subterm(&self) -> &Subterm {
         &self.inner
     }
+
+    fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
+        run_parser(
+            parse_whitespace()
+                .and_keep(parse_term())
+                .and_drop(take_eof()),
+            source,
+        )
+    }
 }
 
 impl Deref for Term {
@@ -64,22 +74,17 @@ impl From<Subterm> for Term {
     }
 }
 
-impl Term {
-    fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
-        run_parser(
-            parse_whitespace()
-                .and_keep(parse_term())
-                .and_drop(take_eof()),
-            source,
-        )
-    }
-}
-
 impl FromStr for Term {
     type Err = ParserError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         Term::parse(&Source::inline(input))
+    }
+}
+
+impl fmt::Display for Term {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        run_printer(print_term(self.clone()), formatter, 2)
     }
 }
 
@@ -443,6 +448,25 @@ pub enum MatchPattern {
     /// A nested `Bin` literal leaf — mirrors [`BinMatch`]'s own `\\`/
     /// `\head\..tail[; ih]` arms.
     Bin(BinPattern),
+}
+
+impl MatchPattern {
+    /// Whether this leaf is a genuine single-dispatch shape
+    /// (`Ctor`/`Bln`/`Nat`/`Lst`/`Bin`), as opposed to `Binder`/`Tuple`/
+    /// `Struct`, which never produce a core `Match` node at all (a binder
+    /// never splits, a tuple/struct explodes into projections) — so there
+    /// is nothing for a dependent motive to attach to. Used by the matrix
+    /// compiler's (`to_core::match_compile`) dependent-motive gate: `Nat`/`Lst`/
+    /// `Bin` each nest their own two-case sub-pattern, so a plain
+    /// [`std::mem::discriminant`] comparison on the outer variant already
+    /// treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same
+    /// dispatchable shape, with no separate classifier needed.
+    pub(crate) fn is_dispatchable(&self) -> bool {
+        !matches!(
+            self,
+            MatchPattern::Binder(_) | MatchPattern::Tuple(_) | MatchPattern::Struct { .. }
+        )
+    }
 }
 
 /// The two shapes a nested `Nat` leaf can take — see [`MatchPattern::Nat`].

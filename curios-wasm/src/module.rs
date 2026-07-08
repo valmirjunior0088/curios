@@ -1,9 +1,13 @@
 #[cfg(test)]
 mod tests;
 
-use super::{
-    DataName, Expr, FuncName, GlobalName, GlobalType, LocalName, RecType, SubType, TypeName,
-    ValType,
+use {
+    super::{
+        DataName, Expr, FuncName, GlobalName, GlobalType, LocalName, RecType, SubType, TypeName,
+        ValType, print_module,
+    },
+    curios_base::printer::run_printer,
+    std::fmt,
 };
 
 /// An imported item: a function (typed by reference to a declared func type) or a global. The name bound here is how the rest of the module refers to the item; the encoder gives imports the leading indices of their respective index spaces.
@@ -196,5 +200,13 @@ impl Module {
     /// Declare a function for `ref.func` use via the declarative element segment.
     pub fn declare_func(&mut self, func_name: FuncName) {
         self.elems.push(func_name);
+    }
+}
+
+impl fmt::Display for Module {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        run_printer(print_module(self), formatter, 2)?;
+
+        Ok(())
     }
 }

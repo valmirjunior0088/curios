@@ -147,17 +147,6 @@ pub(crate) fn specialize_calls(module: &mut Module) {
     }
 }
 
-/// The driver for one fixed-point round: the read-only snapshots both rewrite sites
-/// consult, plus the clones each site discovered (minted by the caller) and whether
-/// anything changed this round.
-struct Specializer<'a> {
-    candidates: &'a HashMap<FuncName, Vec<usize>>,
-    capture_candidates: &'a HashMap<ClsrName, Vec<usize>>,
-    needed_funcs: HashMap<FuncName, SpecPlan>,
-    needed_clsrs: HashMap<ClsrName, ClsrSpecPlan>,
-    changed: bool,
-}
-
 /// The compile-time value a candidate position resolved to — the shapes erasure
 /// leaves at a candidate parameter:
 ///
@@ -293,6 +282,17 @@ enum KnownValue {
 
 /// Maps a value name to the compile-time value it is statically bound to.
 type Known = HashMap<ValueName, KnownValue>;
+
+/// The driver for one fixed-point round: the read-only snapshots both rewrite sites
+/// consult, plus the clones each site discovered (minted by the caller) and whether
+/// anything changed this round.
+struct Specializer<'a> {
+    candidates: &'a HashMap<FuncName, Vec<usize>>,
+    capture_candidates: &'a HashMap<ClsrName, Vec<usize>>,
+    needed_funcs: HashMap<FuncName, SpecPlan>,
+    needed_clsrs: HashMap<ClsrName, ClsrSpecPlan>,
+    changed: bool,
+}
 
 impl Specializer<'_> {
     /// Rewrite both sites in one body against a single tree-wide snapshot of its

@@ -122,19 +122,6 @@ impl EvalEnv for Frame {
     }
 }
 
-impl Scalar {
-    /// The snapshot of an owned scalar result — total, since a [`Scalar`]
-    /// cannot carry an aggregate.
-    fn snapshot(self) -> Snapshot {
-        match self {
-            Scalar::Nat(value) => Snapshot::Nat(value),
-            Scalar::Int(value) => Snapshot::Int(value),
-            Scalar::Flt(value) => Snapshot::Flt(value),
-            Scalar::Bin(bytes) => Snapshot::Bin(Rc::new(bytes)),
-        }
-    }
-}
-
 pub(crate) enum Outcome {
     Returned(Snapshot),
     GaveUp,

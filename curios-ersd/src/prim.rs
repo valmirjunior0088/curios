@@ -89,66 +89,6 @@ pub enum PurePrim {
     IoEql(Term, Term),
 }
 
-/// The primitives that leave the module: a store-described foreign import call, or process exit. Both are effectful by definition (`Prim::is_effectful`), and `to_cont` lowers each as the *tail* of its region — the impure boundary of the region tree — never as an in-region value.
-#[derive(Debug)]
-pub enum HostPrim {
-    /// A store-described host call: the function's `WireSignature` fixes the
-    /// operand order/types and how many results the continuation receives.
-    Foreign(Arc<ForeignFunction>, Vec<Term>),
-    IoExit(Term),
-}
-
-/// The mutable-cell primitives — the IR's only stateful values (the design law confines mutation to single emitted instructions; `Cell` is the sanctioned exception that gives the guest a mutable reference). Classified effectful so no pass folds, reorders, or duplicates cell traffic.
-#[derive(Debug)]
-pub enum CellPrim {
-    New(Term),       // init
-    Set(Term, Term), // cell, value
-    Get(Term),       // cell
-}
-
-/// A primitive operation, partitioned by purity: `Pure` computations may be folded, reordered, and duplicated freely, while `Host` and `Cell` are effectful (`is_effectful`) and pin the evaluation order around them. This partition is the IR's entire impurity story — `Term::contains_effect`, `optm`'s effect-taint analyses, and `to_cont`'s synchronous/CPS split all reduce to which arm a primitive sits in.
-#[derive(Debug)]
-pub enum Prim {
-    Pure(PurePrim),
-    Host(HostPrim),
-    Cell(CellPrim),
-}
-
-impl Prim {
-    /// Free names of this primitive's operands (see [`Term::free_names`]).
-    pub(crate) fn free_names(&self) -> BTreeSet<String> {
-        self.operands()
-            .into_iter()
-            .flat_map(Term::free_names)
-            .collect()
-    }
-
-    /// The operand terms this primitive evaluates.
-    pub(crate) fn operands(&self) -> Vec<&Term> {
-        match self {
-            Prim::Pure(p) => p.operands(),
-            Prim::Host(h) => h.operands(),
-            Prim::Cell(c) => c.operands(),
-        }
-    }
-
-    /// The operand terms, mutably — the [`operands`](Self::operands) mirror used by
-    /// passes that rewrite operands in place (e.g. `ersd::introduce_offsets`).
-    pub(crate) fn operands_mut(&mut self) -> Vec<&mut Term> {
-        match self {
-            Prim::Pure(p) => p.operands_mut(),
-            Prim::Host(h) => h.operands_mut(),
-            Prim::Cell(c) => c.operands_mut(),
-        }
-    }
-
-    /// Whether evaluating this primitive performs an observable action — a host
-    /// effect or a cell operation — rather than a pure computation.
-    pub(crate) fn is_effectful(&self) -> bool {
-        matches!(self, Prim::Host(_) | Prim::Cell(_))
-    }
-}
-
 impl PurePrim {
     pub(crate) fn operands(&self) -> Vec<&Term> {
         use PurePrim::*;
@@ -283,6 +223,15 @@ impl PurePrim {
     }
 }
 
+/// The primitives that leave the module: a store-described foreign import call, or process exit. Both are effectful by definition (`Prim::is_effectful`), and `to_cont` lowers each as the *tail* of its region — the impure boundary of the region tree — never as an in-region value.
+#[derive(Debug)]
+pub enum HostPrim {
+    /// A store-described host call: the function's `WireSignature` fixes the
+    /// operand order/types and how many results the continuation receives.
+    Foreign(Arc<ForeignFunction>, Vec<Term>),
+    IoExit(Term),
+}
+
 impl HostPrim {
     fn operands(&self) -> Vec<&Term> {
         use HostPrim::*;
@@ -303,6 +252,14 @@ impl HostPrim {
     }
 }
 
+/// The mutable-cell primitives — the IR's only stateful values (the design law confines mutation to single emitted instructions; `Cell` is the sanctioned exception that gives the guest a mutable reference). Classified effectful so no pass folds, reorders, or duplicates cell traffic.
+#[derive(Debug)]
+pub enum CellPrim {
+    New(Term),       // init
+    Set(Term, Term), // cell, value
+    Get(Term),       // cell
+}
+
 impl CellPrim {
     fn operands(&self) -> Vec<&Term> {
         match self {
@@ -316,5 +273,48 @@ impl CellPrim {
             CellPrim::New(a) | CellPrim::Get(a) => vec![a],
             CellPrim::Set(a, b) => vec![a, b],
         }
+    }
+}
+
+/// A primitive operation, partitioned by purity: `Pure` computations may be folded, reordered, and duplicated freely, while `Host` and `Cell` are effectful (`is_effectful`) and pin the evaluation order around them. This partition is the IR's entire impurity story — `Term::contains_effect`, `optm`'s effect-taint analyses, and `to_cont`'s synchronous/CPS split all reduce to which arm a primitive sits in.
+#[derive(Debug)]
+pub enum Prim {
+    Pure(PurePrim),
+    Host(HostPrim),
+    Cell(CellPrim),
+}
+
+impl Prim {
+    /// Free names of this primitive's operands (see [`Term::free_names`]).
+    pub(crate) fn free_names(&self) -> BTreeSet<String> {
+        self.operands()
+            .into_iter()
+            .flat_map(Term::free_names)
+            .collect()
+    }
+
+    /// The operand terms this primitive evaluates.
+    pub(crate) fn operands(&self) -> Vec<&Term> {
+        match self {
+            Prim::Pure(p) => p.operands(),
+            Prim::Host(h) => h.operands(),
+            Prim::Cell(c) => c.operands(),
+        }
+    }
+
+    /// The operand terms, mutably — the [`operands`](Self::operands) mirror used by
+    /// passes that rewrite operands in place (e.g. `ersd::introduce_offsets`).
+    pub(crate) fn operands_mut(&mut self) -> Vec<&mut Term> {
+        match self {
+            Prim::Pure(p) => p.operands_mut(),
+            Prim::Host(h) => h.operands_mut(),
+            Prim::Cell(c) => c.operands_mut(),
+        }
+    }
+
+    /// Whether evaluating this primitive performs an observable action — a host
+    /// effect or a cell operation — rather than a pure computation.
+    pub(crate) fn is_effectful(&self) -> bool {
+        matches!(self, Prim::Host(_) | Prim::Cell(_))
     }
 }

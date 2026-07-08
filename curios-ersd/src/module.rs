@@ -1,4 +1,7 @@
-use {super::Term, std::collections::BTreeSet};
+use {
+    super::Term,
+    std::{collections::BTreeSet, fmt},
+};
 
 /// A top-level item of a [`Module`]: a single `let` definition, or a `rec` group
 /// of mutually-recursive definitions. The flat, name-keyed mirror of `core::Item`
@@ -63,4 +66,33 @@ impl Item {
 pub struct Module {
     pub items: Vec<Item>,
     pub body: Term,
+}
+
+impl fmt::Display for Module {
+    // Iterates the flat items (each body printed via `Term`'s `Display`) — O(N),
+    // so `--print ersd` cannot re-trigger the prelude-depth overflow.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for item in &self.items {
+            match item {
+                Item::Let { name, body } => {
+                    writeln!(formatter, "let #{name} =\n{body};\n")?;
+                }
+                Item::Rec { names, items } => {
+                    write!(formatter, "rec ")?;
+
+                    for (index, (name, body)) in names.iter().zip(items).enumerate() {
+                        if index > 0 {
+                            write!(formatter, "and ")?;
+                        }
+
+                        write!(formatter, "#{name} =\n{body} ")?;
+                    }
+
+                    writeln!(formatter, ";")?;
+                }
+            }
+        }
+
+        write!(formatter, "{}", self.body)
+    }
 }

@@ -1,7 +1,9 @@
 use {
-    super::{Name, Prim},
+    super::{Name, Prim, print_term},
+    curios_base::printer::run_printer,
     std::{
         collections::{BTreeMap, BTreeSet},
+        fmt,
         ops::Deref,
     },
 };
@@ -191,6 +193,12 @@ impl From<Subterm> for Term {
     }
 }
 
+impl fmt::Display for Term {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        run_printer(print_term(self), formatter, 2)
+    }
+}
+
 /// The two erased shapes of a `Nat` eliminator (and, through the length desugaring, of the `Lst`/`Bin` eliminators too). `Induction` is a genuine fold — `succ_case` binds the predecessor `pred` and the induction hypothesis `ih`, and lowers to an n-iteration loop. `Dispatch` is a literal-keyed switch with a `default` arm: the form `switch` matches erase to, and what the case-split erasure emits as a single peel when the successor arm ignores its `ih` (emitting a fold there would make a re-recursing caller O(2^n)).
 #[derive(Debug)]
 pub enum NatMatch {
@@ -219,18 +227,18 @@ pub struct Argument {
     pub candidate: bool,
 }
 
+impl Argument {
+    pub(crate) fn as_str(&self) -> &str {
+        &self.name
+    }
+}
+
 impl<S: Into<String>> From<S> for Argument {
     fn from(name: S) -> Self {
         Self {
             name: name.into(),
             candidate: false,
         }
-    }
-}
-
-impl Argument {
-    pub(crate) fn as_str(&self) -> &str {
-        &self.name
     }
 }
 

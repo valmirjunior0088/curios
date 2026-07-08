@@ -1,14 +1,15 @@
 use {
     super::{
         FuncSugarParam, FuncType, FuncTypeParam, LetSignature, LoadError, Name, Subterm, Term,
-        TupleTypeParam,
+        TupleTypeParam, print_module_items, print_term,
     },
     crate::parse::{parse_term, parse_top_item, parse_whitespace},
     curios_base::{
         Plicity, Source, Span,
         parser::{ParserError, lazy, many0, run_parser, take_eof},
+        printer::{flat, pure, run_printer},
     },
-    std::{path::Path, rc::Rc, str::FromStr},
+    std::{fmt, path::Path, rc::Rc, str::FromStr},
 };
 
 /// A `mod` declaration: `module` is `Some` for an inline body (`mod m … end`) and `None` for the file-backed form (`mod m;`), whose body module discovery loads through the active [`RootSource`](crate::RootSource). The span locates a failed load at the declaration that requested it; like `Term`'s, it is excluded from `PartialEq`.
@@ -288,6 +289,12 @@ impl FromStr for Module {
     }
 }
 
+impl fmt::Display for Module {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        run_printer(print_module_items(self.clone().items), formatter, 2)
+    }
+}
+
 /// A whole program as written: a module of top-level items followed by one tail expression — the value the program computes. Parsed via `FromStr` (inline source) or [`Entrypoint::from_path`]; the grammar has no position for `type_`, which is only ever attached afterwards via [`Entrypoint::with_type`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entrypoint {
@@ -343,5 +350,21 @@ impl FromStr for Entrypoint {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         Entrypoint::parse(&Source::inline(input))
+    }
+}
+
+impl fmt::Display for Entrypoint {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let entrypoint = self.clone();
+        let printer = if entrypoint.module.items.is_empty() {
+            print_term(entrypoint.tail)
+        } else {
+            flat([
+                print_module_items(entrypoint.module.items),
+                pure("\n"),
+                print_term(entrypoint.tail),
+            ])
+        };
+        run_printer(printer, formatter, 2)
     }
 }

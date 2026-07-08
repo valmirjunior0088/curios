@@ -1,14 +1,14 @@
-use std::fmt::{Error, Formatter, Write};
+use std::fmt::{self, Write};
 
 struct PrinterState<'a, 'b> {
-    formatter: &'a mut Formatter<'b>,
+    formatter: &'a mut fmt::Formatter<'b>,
     indent_step: usize,
     indent_by: usize,
     should_indent: bool,
 }
 
 impl<'a, 'b> PrinterState<'a, 'b> {
-    fn new(formatter: &'a mut Formatter<'b>, indent_step: usize) -> Self {
+    fn new(formatter: &'a mut fmt::Formatter<'b>, indent_step: usize) -> Self {
         Self {
             formatter,
             indent_step,
@@ -17,7 +17,7 @@ impl<'a, 'b> PrinterState<'a, 'b> {
         }
     }
 
-    fn write(mut self, string: &str) -> Result<Self, Error> {
+    fn write(mut self, string: &str) -> Result<Self, fmt::Error> {
         for char in string.chars() {
             if self.should_indent {
                 for _ in 0..self.indent_by {
@@ -37,9 +37,9 @@ impl<'a, 'b> PrinterState<'a, 'b> {
         Ok(self)
     }
 
-    fn indent<F>(self, f: F) -> Result<Self, Error>
+    fn indent<F>(self, f: F) -> Result<Self, fmt::Error>
     where
-        F: FnOnce(Self) -> Result<Self, Error>,
+        F: FnOnce(Self) -> Result<Self, fmt::Error>,
     {
         let state = f(Self {
             indent_by: self.indent_by + self.indent_step,
@@ -53,7 +53,7 @@ impl<'a, 'b> PrinterState<'a, 'b> {
     }
 }
 
-type PrinterResult<'a, 'b> = Result<PrinterState<'a, 'b>, Error>;
+type PrinterResult<'a, 'b> = Result<PrinterState<'a, 'b>, fmt::Error>;
 
 type PrinterInner<'a> =
     Box<dyn for<'b, 'c> FnOnce(PrinterState<'b, 'c>) -> PrinterResult<'b, 'c> + 'a>;
@@ -77,9 +77,9 @@ impl<'a> Printer<'a> {
 /// The entry point: executes a printer against `formatter`, with `indent_step` spaces added per [`indent`] level. Typically the entire body of a `Display::fmt` impl — every IR crate's `print.rs` builds a [`Printer`] tree and hands it here.
 pub fn run_printer<'a, 'b, 'c>(
     printer: Printer<'a>,
-    formatter: &'b mut Formatter<'c>,
+    formatter: &'b mut fmt::Formatter<'c>,
     indent_step: usize,
-) -> Result<(), Error> {
+) -> Result<(), fmt::Error> {
     printer.print(PrinterState::new(formatter, indent_step))?;
 
     Ok(())

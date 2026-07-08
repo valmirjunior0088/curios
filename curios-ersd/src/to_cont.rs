@@ -16,6 +16,9 @@ use lower_prim::*;
 mod rec;
 use rec::*;
 
+#[cfg(test)]
+mod tests;
+
 use curios_cont::{Func, FuncName, Module};
 
 /// A `to_cont` lowering failure: a Curios language restriction earlier stages don't
@@ -75,6 +78,3 @@ pub fn to_cont(erased: &crate::Module) -> Result<Module, Error> {
 
     Ok(cont_module)
 }
-
-#[cfg(test)]
-mod tests;

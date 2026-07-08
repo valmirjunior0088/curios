@@ -1,4 +1,10 @@
-use std::{fs, io, path::PathBuf, rc::Rc};
+use std::{
+    fs,
+    hash::{Hash, Hasher},
+    io,
+    path::PathBuf,
+    rc::Rc,
+};
 
 /// One unit of input text — a file with its path, or pathless inline text — always handed out as `Rc<Source>` so every [`Span`] into it shares the one allocation instead of copying or re-reading the text.
 #[derive(Debug)]
@@ -38,24 +44,6 @@ pub struct Span {
     pub source: Rc<Source>,
     pub start: usize,
     pub end: usize,
-}
-
-impl PartialEq for Span {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.source, &other.source)
-            && self.start == other.start
-            && self.end == other.end
-    }
-}
-
-impl Eq for Span {}
-
-impl std::hash::Hash for Span {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        (Rc::as_ptr(&self.source) as usize).hash(state);
-        self.start.hash(state);
-        self.end.hash(state);
-    }
 }
 
 impl Span {
@@ -102,5 +90,23 @@ impl Span {
             Some(path) => format!("   --> {}:{number}\n{snippet}", path.display()),
             None => snippet,
         }
+    }
+}
+
+impl PartialEq for Span {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.source, &other.source)
+            && self.start == other.start
+            && self.end == other.end
+    }
+}
+
+impl Eq for Span {}
+
+impl Hash for Span {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (Rc::as_ptr(&self.source) as usize).hash(state);
+        self.start.hash(state);
+        self.end.hash(state);
     }
 }

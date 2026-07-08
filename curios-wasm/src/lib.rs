@@ -20,3 +20,4 @@ pub use writer::*;
 mod parse;
 
 mod print;
+use print::*;

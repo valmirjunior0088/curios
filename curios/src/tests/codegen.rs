@@ -5,13 +5,6 @@
 //! can depend on `curios-rt` without a cycle (`curios-rt` depends only on
 //! `curios-abi`).
 
-use {
-    curios_abi::{ForeignFunction, sys_io},
-    curios_cont::to_wasm,
-    curios_rt::{ForeignBindings, MockHost},
-    std::sync::Arc,
-};
-
 mod code_bin;
 mod code_flt;
 mod code_int;
@@ -20,6 +13,13 @@ mod code_nat;
 mod code_rope;
 mod module;
 mod parity;
+
+use {
+    curios_abi::{ForeignFunction, sys_io},
+    curios_cont::to_wasm,
+    curios_rt::{ForeignBindings, MockHost},
+    std::sync::Arc,
+};
 
 /// Shared between `code_int`'s boundary tests and `code_flt`'s `Flt/to_int` trap test.
 const MAX_INT: i32 = (1 << 30) - 1;
