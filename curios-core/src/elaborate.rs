@@ -32,7 +32,7 @@ use {
         StructType, Structure, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
         WitnessOrigin, attempt_witness_goal, check, expect, reduce_with, sort_term,
     },
-    curios_base::{Flt, Int, NumOp, Plicity},
+    curios_base::{Flt, Int, NumOp, Plicity, Span},
     num_bigint::BigInt,
     num_traits::ToPrimitive,
     std::collections::{BTreeSet, VecDeque},

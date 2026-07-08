@@ -280,7 +280,7 @@ impl Context {
         Ok(result)
     }
 
-    fn enter_frame(&mut self) {
+    pub(crate) fn enter_frame(&mut self) {
         self.assumptions.push(HashMap::new());
         self.definitions.push(HashMap::new());
         self.refinements.push(HashMap::new());
@@ -290,7 +290,7 @@ impl Context {
         self.witness_marks.push(self.witness_scope.len());
     }
 
-    fn leave_frame(&mut self) {
+    pub(crate) fn leave_frame(&mut self) {
         self.locals_stamp.fresh();
         self.assumptions.pop().unwrap();
         let definitions = self.definitions.pop().unwrap();

@@ -749,6 +749,19 @@ where
         self.prune
     }
 
+    /// Enter `amount` binders without visiting a whole scope body in one call
+    /// — the peeled-chain counterpart of `visit_scope`, for a `Bound::traverse`
+    /// impl that walks a `Let`/`Rec` spine one link at a time in a loop instead
+    /// of recursing once per binding. Pair with `leave_scope` in the reverse
+    /// order links were entered.
+    pub(crate) fn enter_scope(&mut self, amount: usize) {
+        self.depth += amount;
+    }
+
+    pub(crate) fn leave_scope(&mut self, amount: usize) {
+        self.depth -= amount;
+    }
+
     /// Invoke the underlying visit callback on a variable at the current depth.
     pub(crate) fn call(&mut self, var: &Var) -> Option<Subterm> {
         (self.visit)(self.depth, var)
