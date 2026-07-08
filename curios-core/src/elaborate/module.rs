@@ -2,8 +2,8 @@ use {
     super::{Bound, Context, Error, Mode, check, elaborate},
     crate::{
         Definition, Inductive, InductiveParam, Item, Module, Structure, Subterm, Telescope, Term,
-        check_concept_registry, drain_parked, finish_deferred_witnesses, is_prop, reduce_with,
-        register_witness, retry_deferred_witnesses, zonk, zonk_module,
+        check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with, register_witness,
+        retry_deferred_witnesses, zonk, zonk_module,
     },
     curios_base::Qualifier,
     std::collections::BTreeMap,
@@ -34,7 +34,7 @@ fn check_telescope_entries<B: Bound>(
 }
 
 /// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated*
-/// types. `to_core` records the declaration's lowered spellings, and a lowered
+/// types. `into_core` records the declaration's lowered spellings, and a lowered
 /// type must never leak into later reduction: implicit insertion saturates
 /// applications during elaboration, and an under-applied index type (e.g.
 /// `Eq(0, 0)` against `Eq`'s 3-ary type constructor) would open a telescope at
@@ -358,7 +358,7 @@ pub fn elaborate_module(
     check_concept_registry(context)?;
 
     // Implicit-argument insertion mints metavariables during elaboration;
-    // floor the counter above `to_core`'s (which returns the count alongside
+    // floor the counter above `into_core`'s (which returns the count alongside
     // the lowered module) so the id spaces never collide.
     context.seed_metavars(metavar_floor);
 
@@ -384,7 +384,7 @@ pub fn elaborate_module(
         // Constraints parked during this item must resolve within it: drain
         // here so an unresolvable one is attributed to its own definition and
         // frozen frames do not accumulate across items (§8).
-        drain_parked(context)?;
+        context.drain_parked()?;
     }
 
     context.set_island(Qualifier::empty());
@@ -392,7 +392,7 @@ pub fn elaborate_module(
     // The whole program has elaborated: a witness goal still deferred will
     // never find a table entry — report it now.
     finish_deferred_witnesses(context)?;
-    drain_parked(context)?;
+    context.drain_parked()?;
     let body_type = reduce_with(context, &body_type)?;
 
     // The output module carries the *rebuilt* registry entries (pulled back
@@ -444,7 +444,7 @@ pub fn elaborate_module(
 /// `prelude` is the elaborated + zonked prelude-only module — its `items` are
 /// the whole prelude in dependency order (its trivial `body`/`type_` are
 /// ignored). The lowered `module` still carries the *whole* program as
-/// `text::to_core` produced it, and the prelude is its **leading prefix**: with
+/// `text::into_core` produced it, and the prelude is its **leading prefix**: with
 /// the prune gone every program lowers the same prelude, and since prelude items
 /// depend only on each other they always topologically sort ahead of the user
 /// items. So this replays the cached prelude into `context` (registering its
@@ -530,7 +530,7 @@ pub fn elaborate_and_zonk_with_prelude(
         }
     }
 
-    // User-minted metavariables sit strictly above `to_core`'s ids (which already
+    // User-minted metavariables sit strictly above `into_core`'s ids (which already
     // include the prelude's range); the cached prelude is meta-free, so nothing
     // collides.
     context.seed_metavars(metavar_floor);
@@ -549,13 +549,13 @@ pub fn elaborate_and_zonk_with_prelude(
             Item::Rec(defs) => Item::Rec(elaborate_module_rec(context, defs)?),
         });
         retry_deferred_witnesses(context)?;
-        drain_parked(context)?;
+        context.drain_parked()?;
     }
 
     context.set_island(Qualifier::empty());
     let (body, body_type) = elaborate(context, &module.body, mode)?;
     finish_deferred_witnesses(context)?;
-    drain_parked(context)?;
+    context.drain_parked()?;
     let body_type = reduce_with(context, &body_type)?;
 
     // Pull the rebuilt user registry entries back out (mirrors `elaborate_module`).

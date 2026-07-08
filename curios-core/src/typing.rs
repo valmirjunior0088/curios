@@ -100,7 +100,7 @@ pub(crate) fn expect(
     if matches!(&*reduce_with(context, expected)?, Subterm::Type)
         && matches!(&*reduce_with(context, inferred)?, Subterm::Prop)
     {
-        return retry_parked(context);
+        return context.retry_parked();
     }
 
     let outcome =
@@ -109,7 +109,7 @@ pub(crate) fn expect(
         })?;
 
     match outcome {
-        Outcome::Converts => retry_parked(context),
+        Outcome::Converts => context.retry_parked(),
         Outcome::Mismatch => Err(display_mismatch(context, inferred, expected)),
         // Undecided: blocked on unsolved metavariables. Park the goals to be
         // retried when a watched metavariable is solved (§8) and succeed
@@ -123,32 +123,80 @@ pub(crate) fn expect(
             for goal in goals {
                 context.park(super::ParkedWork::Conversion(goal), term.clone());
             }
-            retry_parked(context)
+            context.retry_parked()
         }
     }
 }
 
-/// Retry parked constraints woken by freshly landed solutions, to fixpoint
-/// (§8). A woken goal re-runs under its frozen frame: converts and is dropped,
-/// mismatches and errors at its origin, or re-parks still blocked. Each round
-/// consumes wake signals and ids solve exactly once, so this terminates.
-pub(crate) fn retry_parked(context: &mut Context) -> Result<(), Error> {
-    // Never retry inside an oracle: re-validation swallows errors
-    // (`Err(_) => false`), so a woken goal's mismatch would vanish along with
-    // the goal itself — a silently dropped obligation. The wake signals stay
-    // queued; the next unsuppressed turnaround retries them.
-    if context.parking_suppressed() {
-        return Ok(());
-    }
-
-    loop {
-        let woken = context.wake_parked();
-        if woken.is_empty() {
+impl Context {
+    /// Retry parked constraints woken by freshly landed solutions, to fixpoint
+    /// (§8). A woken goal re-runs under its frozen frame: converts and is
+    /// dropped, mismatches and errors at its origin, or re-parks still
+    /// blocked. Each round consumes wake signals and ids solve exactly once,
+    /// so this terminates.
+    pub(crate) fn retry_parked(&mut self) -> Result<(), Error> {
+        // Never retry inside an oracle: re-validation swallows errors
+        // (`Err(_) => false`), so a woken goal's mismatch would vanish along
+        // with the goal itself — a silently dropped obligation. The wake
+        // signals stay queued; the next unsuppressed turnaround retries them.
+        if self.parking_suppressed() {
             return Ok(());
         }
 
-        for parked in woken {
-            retry_one(context, parked)?;
+        loop {
+            let woken = self.wake_parked();
+            if woken.is_empty() {
+                return Ok(());
+            }
+
+            for parked in woken {
+                retry_one(self, parked)?;
+            }
+        }
+    }
+
+    /// Drain the parked store: retry everything to a fixpoint, then report
+    /// any survivor as a mismatch at its origin. Run after each top-level
+    /// item and after the entrypoint body, so an unresolvable constraint is
+    /// attributed to the definition that produced it and frozen frames do not
+    /// pile up.
+    pub(crate) fn drain_parked(&mut self) -> Result<(), Error> {
+        loop {
+            self.retry_parked()?;
+
+            let remaining = self.take_parked();
+            if remaining.is_empty() {
+                return Ok(());
+            }
+
+            // Final sweep: attempt everything once more — a goal parked after
+            // the last solution landed has never been retried.
+            let before = remaining.len();
+            for parked in remaining {
+                retry_one(self, parked)?;
+            }
+
+            // No progress in a full sweep: the rest can never resolve. Report
+            // the first at its origin.
+            if self.parked_len() >= before && !self.has_newly_solved() {
+                if let Some(parked) = self.take_parked().into_iter().next() {
+                    return Err(match parked.work {
+                        super::ParkedWork::Conversion(goal) => {
+                            display_mismatch(self, &goal.this, &goal.that)
+                        }
+                        super::ParkedWork::Checking { .. } => Error::CannotInfer,
+                        super::ParkedWork::Witness {
+                            goal, provenance, ..
+                        } => Error::no_witness(
+                            resolved_for_display(self, &goal),
+                            provenance.func,
+                            provenance.binder,
+                        )
+                        .at_opt(parked.origin.span()),
+                    });
+                }
+                return Ok(());
+            }
         }
     }
 }
@@ -258,50 +306,6 @@ fn retry_checking(
                 frame,
             );
             Ok(())
-        }
-    }
-}
-
-/// Drain the parked store: retry everything to a fixpoint, then report any
-/// survivor as a mismatch at its origin. Run after each top-level item and
-/// after the entrypoint body, so an unresolvable constraint is attributed to
-/// the definition that produced it and frozen frames do not pile up.
-pub(crate) fn drain_parked(context: &mut Context) -> Result<(), Error> {
-    loop {
-        retry_parked(context)?;
-
-        let remaining = context.take_parked();
-        if remaining.is_empty() {
-            return Ok(());
-        }
-
-        // Final sweep: attempt everything once more — a goal parked after the
-        // last solution landed has never been retried.
-        let before = remaining.len();
-        for parked in remaining {
-            retry_one(context, parked)?;
-        }
-
-        // No progress in a full sweep: the rest can never resolve. Report the
-        // first at its origin.
-        if context.parked_len() >= before && !context.has_newly_solved() {
-            if let Some(parked) = context.take_parked().into_iter().next() {
-                return Err(match parked.work {
-                    super::ParkedWork::Conversion(goal) => {
-                        display_mismatch(context, &goal.this, &goal.that)
-                    }
-                    super::ParkedWork::Checking { .. } => Error::CannotInfer,
-                    super::ParkedWork::Witness {
-                        goal, provenance, ..
-                    } => Error::no_witness(
-                        resolved_for_display(context, &goal),
-                        provenance.func,
-                        provenance.binder,
-                    )
-                    .at_opt(parked.origin.span()),
-                });
-            }
-            return Ok(());
         }
     }
 }

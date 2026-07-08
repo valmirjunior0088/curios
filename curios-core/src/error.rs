@@ -877,7 +877,7 @@ impl Error {
     /// module is in scope.
     pub fn format_with(&self, module: &Module) -> String {
         super::with_short_names(
-            Rc::new(super::build_shorten(&super::module_symbols(module))),
+            Rc::new(super::build_shorten(&module.module_symbols())),
             || self.format(),
         )
     }

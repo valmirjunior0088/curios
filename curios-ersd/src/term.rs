@@ -8,14 +8,14 @@ use {
     },
 };
 
-/// An owned term of the erased IR: the boxed handle around one [`Subterm`] (it `Deref`s to it; build one with `Subterm::….into()`). Deliberately not `Clone` — a pass that wants a copy must route through `optm`'s `deep_copy`, so duplicating a term is a conscious act rather than an accidental `.clone()`.
+/// An owned term of the erased IR: the boxed handle around one [`Subterm`] (it `Deref`s to it; build one with `Subterm::….into()`). Deliberately not `Clone` — a pass that wants a copy must route through `optimize`'s `deep_copy`, so duplicating a term is a conscious act rather than an accidental `.clone()`.
 #[derive(Debug)]
 pub struct Term {
     inner: Box<Subterm>,
 }
 
 impl Term {
-    /// Unbox into the owned [`Subterm`] — the by-value counterpart of the `Deref` view, for consumers that take a term apart to rebuild it (e.g. `optm::worker_wrapper`'s body splitter).
+    /// Unbox into the owned [`Subterm`] — the by-value counterpart of the `Deref` view, for consumers that take a term apart to rebuild it (e.g. `optimize::worker_wrapper`'s body splitter).
     pub fn into_subterm(self) -> Subterm {
         *self.inner
     }
@@ -31,7 +31,7 @@ impl Term {
     /// Free names of this term, treating a nested `Func` as contributing its
     /// precomputed `captures` (the closure's free variables) rather than
     /// descending into its body. Used to build the `rec` dependency graph in
-    /// `to_cont` and to compute a closure's captures during erasure — reading the
+    /// `into_cont` and to compute a closure's captures during erasure — reading the
     /// *erased* body's free names is what keeps an erased-only reference from
     /// being threaded as a runtime capture.
     pub fn free_names(&self) -> BTreeSet<String> {
@@ -118,10 +118,10 @@ impl Term {
     /// everything in `PurePrim` is pure by construction.
     ///
     /// This is the intra-term half of the purity question shared between
-    /// `optm::prune` (which seeds its effect taint with it) and
-    /// `optm::worker_wrapper` (whose `MonoidAccumulator` gate rejects an
+    /// `optimize::prune` (which seeds its effect taint with it) and
+    /// `optimize::worker_wrapper` (whose `MonoidAccumulator` gate rejects an
     /// absorbed context that is not pure). The transitive half — following an
-    /// `Apply` to another module item — lives in `optm::call_graph`.
+    /// `Apply` to another module item — lives in `optimize::call_graph`.
     pub(crate) fn contains_effect(&self) -> bool {
         match self.as_subterm() {
             Subterm::Prim(prim) => {
@@ -162,8 +162,8 @@ impl Term {
     }
 
     /// Whether binding this term performs no action — it is a closure, name, or
-    /// atom, allocated without evaluating an effect. `to_cont` lowers such terms
-    /// into the flat top-level loop rather than the CPS path, and `optm::prune`
+    /// atom, allocated without evaluating an effect. `into_cont` lowers such terms
+    /// into the flat top-level loop rather than the CPS path, and `optimize::prune`
     /// keeps a non-synchronous tainted item for its eager init effect.
     pub(crate) fn is_synchronous(&self) -> bool {
         matches!(
@@ -242,7 +242,7 @@ impl<S: Into<String>> From<S> for Argument {
     }
 }
 
-/// A closure with its environment made explicit: `params` is the uncurried runtime parameter telescope (erasable binders already dropped) and `captures` is exactly the erased body's free names minus those params — precomputed by erasure and thereafter maintained by hand, since [`Term::free_names`] reads a `Func`'s capture list *instead of* descending into its body. A rewrite that changes which names the body frees must refresh the captures (`optm`'s `refresh_captures`) or the closure threads the wrong environment.
+/// A closure with its environment made explicit: `params` is the uncurried runtime parameter telescope (erasable binders already dropped) and `captures` is exactly the erased body's free names minus those params — precomputed by erasure and thereafter maintained by hand, since [`Term::free_names`] reads a `Func`'s capture list *instead of* descending into its body. A rewrite that changes which names the body frees must refresh the captures (`optimize`'s `refresh_captures`) or the closure threads the wrong environment.
 #[derive(Debug)]
 pub struct Func {
     pub captures: Vec<Argument>,
@@ -291,7 +291,7 @@ pub struct Let {
     pub tail: Term,
 }
 
-/// A block of mutually-recursive bindings: `names` and `items` are parallel vectors, every name in scope in every item and in `tail`. The local twin of the top-level `Item::Rec`; `to_cont` computes the group's initialization order from the dependency graph over each item's [`Term::free_names`].
+/// A block of mutually-recursive bindings: `names` and `items` are parallel vectors, every name in scope in every item and in `tail`. The local twin of the top-level `Item::Rec`; `into_cont` computes the group's initialization order from the dependency graph over each item's [`Term::free_names`].
 #[derive(Debug)]
 pub struct Rec {
     pub names: Vec<String>,

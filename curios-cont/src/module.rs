@@ -125,6 +125,31 @@ pub enum Code {
     TplGet(ValueName, usize),
 }
 
+impl Code {
+    /// The integer ops whose operand order is irrelevant. Float ops are excluded
+    /// wholesale (identical-order duplicates still key equal), as is `BinEql` —
+    /// symmetric, but left to keep the whitelist purely scalar.
+    pub(crate) fn is_commutative(&self) -> bool {
+        matches!(
+            self,
+            Code::NatEql(..)
+                | Code::NatNeq(..)
+                | Code::NatAdd(..)
+                | Code::NatMul(..)
+                | Code::NatAnd(..)
+                | Code::NatOr(..)
+                | Code::NatXor(..)
+                | Code::IntEql(..)
+                | Code::IntNeq(..)
+                | Code::IntAdd(..)
+                | Code::IntMul(..)
+                | Code::IntAnd(..)
+                | Code::IntOr(..)
+                | Code::IntXor(..)
+        )
+    }
+}
+
 /// The right-hand side of one binding in a region: `Pure` constructs [`Data`], `Eval` computes one [`Code`] op, and `Alias` re-binds an existing value under another name — a rename that passes like the ones common-subexpression elimination mints and copy propagation erases again, so downstream passes see a value's real identity.
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -294,7 +319,7 @@ pub enum Tail {
 pub struct Region {
     /// Closure shells reserved before their captures are filled, so a self- or
     /// mutually-recursive capture can name the shell. Only closures need this; cyclic
-    /// tuples/lists are rejected upstream (`to_cont`), which keeps `tpl`/`lst` immutable.
+    /// tuples/lists are rejected upstream (`into_cont`), which keeps `tpl`/`lst` immutable.
     pub preallocs: Vec<(ValueName, ClsrName)>,
     pub values: Vec<(ValueName, Value)>,
     pub blocks: Vec<(BlockName, Block)>,
@@ -315,6 +340,21 @@ impl Region {
         for (_, block) in &self.blocks {
             block.region.collect_indirect_arities(out);
         }
+    }
+
+    /// Count the items in this region tree: every value and prealloc binding, plus
+    /// one per tail, recursively through nested blocks. Cheap, monotonic, and
+    /// tracks emitted code size closely enough to gate size-bounded duplication —
+    /// Tier 2 multi-site inlining and tag-threading clones share it.
+    pub(crate) fn size(&self) -> usize {
+        self.values.len()
+            + self.preallocs.len()
+            + 1
+            + self
+                .blocks
+                .iter()
+                .map(|(_, block)| block.region.size())
+                .sum::<usize>()
     }
 }
 
@@ -415,6 +455,14 @@ impl Module {
         &mut self.funcs
     }
 
+    /// Find a function definition by name, if one is present.
+    pub(crate) fn find_func(&self, name: &FuncName) -> Option<&Func> {
+        self.funcs
+            .iter()
+            .find(|(func_name, _)| func_name == name)
+            .map(|(_, func)| func)
+    }
+
     /// Append a function definition under its name; the position it lands in is the position it keeps.
     pub fn add_func(&mut self, func_name: FuncName, func: Func) {
         self.funcs.push((func_name, func));
@@ -446,7 +494,7 @@ impl Module {
         self.entry.as_ref()
     }
 
-    /// Bless `func_name` as the entrypoint. Set once by `to_cont` (always `main`); the module does not check the function exists — the lowerer adds it separately.
+    /// Bless `func_name` as the entrypoint. Set once by `into_cont` (always `main`); the module does not check the function exists — the lowerer adds it separately.
     pub fn set_entry(&mut self, func_name: FuncName) {
         self.entry = Some(func_name);
     }

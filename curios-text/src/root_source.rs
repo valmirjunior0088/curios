@@ -54,36 +54,34 @@ impl RootSource {
         }
 
         match &self.entry_base {
-            Some(base) => {
-                Module::from_path(Self::module_file_path(base, qualifier)).map_err(|cause| {
-                    Error::ModuleLoadFailed {
-                        label: qualifier.join(),
-                        cause: Box::new(cause),
-                    }
-                })
-            }
+            Some(base) => Module::from_path(module_file_path(base, qualifier)).map_err(|cause| {
+                Error::ModuleLoadFailed {
+                    label: qualifier.join(),
+                    cause: Box::new(cause),
+                }
+            }),
             None => Err(Error::ModuleNotFound {
                 path: qualifier.join(),
             }),
         }
     }
 
-    fn module_file_path(base: &std::path::Path, qualifier: &Qualifier) -> PathBuf {
-        let mut segments = qualifier.iter().collect::<Vec<_>>();
-        let label = segments.pop().unwrap();
-
-        segments
-            .into_iter()
-            .fold(base.to_path_buf(), |path, segment| path.join(segment))
-            .join(format!("{label}.crs"))
-    }
-
     /// Whether `sys`/`syn`/`std` are attached to this source — gates
-    /// `to_core`'s explicit per-root discovery/lowering passes (see
-    /// `to_core::FIXED_ROOTS`), since a bare `none()`/`file_system(..)` loader
+    /// `into_core`'s explicit per-root discovery/lowering passes (see
+    /// `into_core::FIXED_ROOTS`), since a bare `none()`/`file_system(..)` loader
     /// (a test exercising resolution logic in isolation) has no prelude at
     /// all.
     pub(crate) fn has_embedded_roots(&self) -> bool {
         self.sys.is_some()
     }
+}
+
+fn module_file_path(base: &std::path::Path, qualifier: &Qualifier) -> PathBuf {
+    let mut segments = qualifier.iter().collect::<Vec<_>>();
+    let label = segments.pop().unwrap();
+
+    segments
+        .into_iter()
+        .fold(base.to_path_buf(), |path, segment| path.join(segment))
+        .join(format!("{label}.crs"))
 }

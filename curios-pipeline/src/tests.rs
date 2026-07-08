@@ -1104,7 +1104,7 @@ fn typecheck(source: &str) -> Result<(), String> {
 #[test]
 fn typecheck_accepts_a_well_typed_program() {
     // The fast path stops after `elaborate → zonk`; a well-typed program passes
-    // without running erase/cont/optm/wasm.
+    // without running erase/cont/optimize/wasm.
     assert!(
         typecheck("/std/Io/write(/std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(0)))").is_ok()
     );
@@ -1241,7 +1241,7 @@ fn dependent_record_projects_by_label() {
 
 #[test]
 fn inductive_payload_relying_on_implicit_insertion_is_rebuilt() {
-    // The inductive registry used to keep `to_core`'s *lowered* payload and
+    // The inductive registry used to keep `into_core`'s *lowered* payload and
     // index types, so a type relying on implicit-argument insertion —
     // `Eq(0, 1)` against `Eq`'s 3-ary type constructor — survived
     // under-applied and panicked the `Telescope::open` arity assert the

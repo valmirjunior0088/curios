@@ -1,4 +1,4 @@
-//! The compile driver: the one crate that strings the pipeline stages together, from a parsed `curios_text::Entrypoint` to a `curios_wasm::Module`. [`compile_entrypoint`] runs the full `to_core → elaborate → zonk → erase → ersd optm → to_cont → cont optm → to_wasm` sequence. Each stage is passed to the caller's observer as a borrowed [`Stage`], which is how `--print` dumps IRs without the driver retaining them.
+//! The compile driver: the one crate that strings the pipeline stages together, from a parsed `curios_text::Entrypoint` to a `curios_wasm::Module`. [`compile_entrypoint`] runs the full `into_core → elaborate → zonk → erase → ersd optimize → into_cont → cont optimize → into_wasm` sequence. Each stage is passed to the caller's observer as a borrowed [`Stage`], which is how `--print` dumps IRs without the driver retaining them.
 //!
 //! The fixed `sys`/`syn`/`std` prelude is elaborated once per thread and cached; every compile replays it into a fresh context and type-checks only the user code on top. Everything wasm-native — Binaryen, Cranelift precompilation, execution — lives downstream in `curios`/`curios-rt`: this crate stops at the wasm module plus the program's harvested `ForeignStore`.
 
@@ -66,7 +66,7 @@ impl fmt::Display for Stage<'_> {
 thread_local! {
     // The fixed `sys`/`syn`/`std` prelude, elaborated and zonked once per thread
     // and reused for every compile. Since the reachability prune no longer runs
-    // in `curios_text::to_core`, every program lowers the *same* prelude prefix, so its
+    // in `curios_text::into_core`, every program lowers the *same* prelude prefix, so its
     // (expensive) type-checking is program-independent and cacheable — the whole
     // point of removing the prune. `Term` is not `Sync`, so this is thread-local
     // (like the loader's parse caches), built once per `cargo test` worker thread
@@ -90,7 +90,7 @@ fn build_prelude() -> curios_core::Module {
     // The trivial entrypoint declares no `foreign` items, so the harvested
     // store is always empty here — this is the fixed `sys`/`syn`/`std`
     // prelude, cached independently of any user compilation.
-    let (module, metavars, _foreigns) = curios_text::to_core(
+    let (module, metavars, _foreigns) = curios_text::into_core(
         &entrypoint,
         &curios_text::prelude(&sys_io(), curios_text::RootSource::none()),
     )
@@ -143,14 +143,14 @@ where
 
     // The built-in `/sys/Io` store: the prelude mints the `/sys/Io`
     // declarations from it, and the rows ride the IR nodes from there, so no
-    // later stage needs *this* store back. `to_core` separately harvests any
+    // later stage needs *this* store back. `into_core` separately harvests any
     // user-declared `foreign` items into its own store as it walks the
     // program's module graph, returned below — the two are never merged into
     // one (see `curios-abi::host`'s store-per-provenance note).
     let sys_foreigns = sys_io();
 
     let (lowered, metavars, user_foreigns) =
-        curios_text::to_core(entrypoint, &curios_text::prelude(&sys_foreigns, loader))
+        curios_text::into_core(entrypoint, &curios_text::prelude(&sys_foreigns, loader))
             .map_err(|error| error.format())?;
 
     observe(Stage::Core(&lowered));
@@ -214,7 +214,8 @@ where
 
     observe(Stage::ErsdOptm(&ersd_optm_module));
 
-    let cont_module = curios_ersd::to_cont(&ersd_optm_module).map_err(|error| error.to_string())?;
+    let cont_module =
+        curios_ersd::into_cont(&ersd_optm_module).map_err(|error| error.to_string())?;
 
     observe(Stage::Cont(&cont_module));
 
@@ -224,7 +225,7 @@ where
 
     observe(Stage::ContOptm(&cont_optm_module));
 
-    let wasm_module = curios_cont::to_wasm(&cont_optm_module);
+    let wasm_module = curios_cont::into_wasm(&cont_optm_module);
 
     observe(Stage::Wasm(&wasm_module));
 

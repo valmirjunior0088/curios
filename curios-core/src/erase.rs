@@ -174,7 +174,7 @@ fn erase_func(
         // dropped (erased) ones. Reading the erased body (not the pre-erasure one)
         // is what keeps a variable that survives only inside an erased position —
         // an erased constructor field or a type-level index — from being threaded
-        // as a capture with no runtime value (which would leave `to_cont`
+        // as a capture with no runtime value (which would leave `into_cont`
         // demanding an erased value). The candidate flag rides from here — the last
         // point a binder's type is known — down to `cont`, where the optimizer
         // specializes function-typed args.
@@ -1018,7 +1018,7 @@ fn erase_erasable_scrutinee_match(
 /// Lower the primitive eliminator: an index dispatch on the scrutinee's tag
 /// (field 0), each arm rebinding its payload binders to the flat record's
 /// remaining fields (`head.(i + 1)`). Downstream stages
-/// (`cont`/`optm`/`wasm`) see only generic tuples, projections, and an
+/// (`cont`/`optimize`/`wasm`) see only generic tuples, projections, and an
 /// index-dispatched match.
 fn erase_inductive_match(
     context: &mut Context,

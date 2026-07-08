@@ -223,7 +223,7 @@ impl PurePrim {
     }
 }
 
-/// The primitives that leave the module: a store-described foreign import call, or process exit. Both are effectful by definition (`Prim::is_effectful`), and `to_cont` lowers each as the *tail* of its region — the impure boundary of the region tree — never as an in-region value.
+/// The primitives that leave the module: a store-described foreign import call, or process exit. Both are effectful by definition (`Prim::is_effectful`), and `into_cont` lowers each as the *tail* of its region — the impure boundary of the region tree — never as an in-region value.
 #[derive(Debug)]
 pub enum HostPrim {
     /// A store-described host call: the function's `WireSignature` fixes the
@@ -276,7 +276,7 @@ impl CellPrim {
     }
 }
 
-/// A primitive operation, partitioned by purity: `Pure` computations may be folded, reordered, and duplicated freely, while `Host` and `Cell` are effectful (`is_effectful`) and pin the evaluation order around them. This partition is the IR's entire impurity story — `Term::contains_effect`, `optm`'s effect-taint analyses, and `to_cont`'s synchronous/CPS split all reduce to which arm a primitive sits in.
+/// A primitive operation, partitioned by purity: `Pure` computations may be folded, reordered, and duplicated freely, while `Host` and `Cell` are effectful (`is_effectful`) and pin the evaluation order around them. This partition is the IR's entire impurity story — `Term::contains_effect`, `optimize`'s effect-taint analyses, and `into_cont`'s synchronous/CPS split all reduce to which arm a primitive sits in.
 #[derive(Debug)]
 pub enum Prim {
     Pure(PurePrim),

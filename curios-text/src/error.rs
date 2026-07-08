@@ -3,7 +3,7 @@ use {
     std::{fmt, io, path::PathBuf},
 };
 
-/// Everything that can go wrong between a parsed surface tree and a core module: module discovery and loading, `use`/name resolution and visibility, and the structural checks `to_core` lowering enforces. As an error propagates it is wrapped in `Located` with the *innermost* relevant span (`at` never overwrites an existing location), which [`Error::format`] renders as a source snippet.
+/// Everything that can go wrong between a parsed surface tree and a core module: module discovery and loading, `use`/name resolution and visibility, and the structural checks `into_core` lowering enforces. As an error propagates it is wrapped in `Located` with the *innermost* relevant span (`at` never overwrites an existing location), which [`Error::format`] renders as a source snippet.
 #[derive(Debug)]
 pub enum Error {
     UnresolvedQualifier {

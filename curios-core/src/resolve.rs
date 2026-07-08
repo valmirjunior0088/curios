@@ -26,7 +26,7 @@ use {
     super::{
         Context, Error, HeadKey, ImplicitOrigin, Metavar, MetavarId, Outcome, ParkedGoal,
         ParkedWork, StructType, Subterm, Telescope, Term, Witness, WitnessKey, WitnessOrigin,
-        convert_outcome, reduce_with, retry_parked,
+        convert_outcome, reduce_with,
     },
     curios_abi::RootId,
     curios_base::Plicity,
@@ -558,7 +558,7 @@ pub(crate) fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Erro
         retry_witness(context, slot, goal, provenance, origin, frame)?;
     }
 
-    retry_parked(context)
+    context.retry_parked()
 }
 
 /// The end-of-module sweep: retry once more, then report any survivor — the

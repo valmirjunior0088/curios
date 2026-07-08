@@ -60,7 +60,7 @@ impl Item {
 
 /// The erased program: a flat list of top-level `items` plus the entrypoint
 /// `body`. Replaces the N-deep `Let`/`Rec` chain `erase` used to build, which
-/// `to_cont` then recursed along (BUG.md, §scope/notes). Local `Let`/`Rec` are
+/// `into_cont` then recursed along (BUG.md, §scope/notes). Local `Let`/`Rec` are
 /// unchanged.
 #[derive(Debug)]
 pub struct Module {

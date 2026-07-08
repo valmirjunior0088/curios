@@ -1,5 +1,5 @@
 use {
-    super::{Concept, Inductive, Structure, Term, build_shorten, module_symbols, with_short_names},
+    super::{Concept, Inductive, Structure, Term, build_shorten, with_short_names},
     curios_abi::RootId,
     curios_base::Qualifier,
     std::{
@@ -20,14 +20,14 @@ use {
 pub struct Definition {
     pub name: String,
     /// This definition's declaring module — `name`'s qualifier prefix,
-    /// precomputed once by `to_core` (before `name` was flattened) rather
+    /// precomputed once by `into_core` (before `name` was flattened) rather
     /// than re-derived from it later. Stamped into `Context::island` per item
     /// by `elaborate_module`/`erase` for the struct representation-privacy
     /// check (§7); the same value `Structure::module` carries for type
     /// declarations.
     pub island: Qualifier,
     /// This definition's declaring root — `island`'s leading segment,
-    /// precomputed once by `to_core` the same way `Concept`/`Structure`/
+    /// precomputed once by `into_core` the same way `Concept`/`Structure`/
     /// `Inductive` are, so `Context::set_island` (and, downstream, the
     /// orphan-rule check) never has to re-derive it from `island` itself.
     pub root: RootId,
@@ -53,7 +53,7 @@ pub enum Item {
 /// `body`, and its optional `type_` annotation.
 ///
 /// This replaces the single, N-deep nested `Subterm::Let`/`Rec` term that
-/// `text::to_core` used to fold the entire prelude into — the construction
+/// `text::into_core` used to fold the entire prelude into — the construction
 /// (`Scope::close` over the whole accumulator at each step) and every pass that
 /// recursed along its `.tail` spine were both O(N) in stack and overflowed at
 /// prelude depth (BUG.md). `Subterm::Let`/`Rec` remain for genuine *local*,
@@ -87,7 +87,7 @@ pub struct Module {
 impl Module {
     /// Re-fold the flat module into the legacy nested `Let`/`Rec` `Term` it
     /// replaced (items are already in binding order). Test-only: lets the
-    /// `to_core`/`erase` suites keep asserting against the historical shape — and
+    /// `into_core`/`erase` suites keep asserting against the historical shape — and
     /// keep feeding a single `Term` to `erase` — without rewriting every
     /// expectation. Drops `type_` (the old `run` helper only returned the term).
     /// Not `#[cfg(test)]`: its callers live in `curios`'s test suite, a
@@ -104,6 +104,21 @@ impl Module {
                 ),
             })
     }
+
+    /// Every global qualified name in `self`: each definition (`let`/`rec`), each
+    /// inductive type, each struct type. The universe a global is shortened *against*.
+    pub(crate) fn module_symbols(&self) -> Vec<String> {
+        let mut symbols = Vec::new();
+        for item in &self.items {
+            match item {
+                Item::Let(def) => symbols.push(def.name.clone()),
+                Item::Rec(defs) => symbols.extend(defs.iter().map(|def| def.name.clone())),
+            }
+        }
+        symbols.extend(self.inductives.keys().cloned());
+        symbols.extend(self.structures.keys().cloned());
+        symbols
+    }
 }
 
 impl fmt::Display for Module {
@@ -111,7 +126,7 @@ impl fmt::Display for Module {
     // so `--print core` stays O(N) and cannot re-trigger the prelude-depth
     // overflow this representation removed.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        with_short_names(Rc::new(build_shorten(&module_symbols(self))), || {
+        with_short_names(Rc::new(build_shorten(&self.module_symbols())), || {
             for item in &self.items {
                 match item {
                     Item::Let(def) => {

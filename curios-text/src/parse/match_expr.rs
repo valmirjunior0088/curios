@@ -169,7 +169,7 @@ pub(super) fn parse_nat_switch<'a>() -> Parser<'a, Term> {
 
 // A match-arm: `| pattern => body`, where `pattern` may nest across
 // constructors, tuples, and structs (see `MatchPattern`, `parse_match_pattern`).
-// Full enumeration only ("Path A" — see `to_core::match_compile`'s doc comment): a
+// Full enumeration only ("Path A" — see `into_core::match_compile`'s doc comment): a
 // bare binder arm is legal alone (equivalent to a `let`), but lowering
 // rejects mixing it with a concrete-shape arm in the same column, since that
 // would be a catch-all/row-priority pattern this grammar doesn't otherwise

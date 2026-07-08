@@ -2,7 +2,7 @@
 //!
 //! This is deliberately the last stage of the pipeline: it consumes and
 //! produces serialized module bytes, after `wasm::to_bytes`, and knows
-//! nothing about any Curios IR. Semantic optimization belongs in `optm`.
+//! nothing about any Curios IR. Semantic optimization belongs in `optimize`.
 
 mod sys;
 

@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, Arity, Atom, Carrier, Cases, Field, Func, FuncType, InductiveType, Infix, Item, Let,
-        Match, Module, Nat, One, Prim, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope,
-        Term, Three, Tuple, TupleType, Two, Var, Variant,
+        Apply, Arity, Atom, Carrier, Cases, Field, Func, FuncType, InductiveType, Infix, Let,
+        Match, Nat, One, Prim, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term,
+        Three, Tuple, TupleType, Two, Var, Variant,
     },
     curios_base::{
         Flt, Plicity,
@@ -31,7 +31,7 @@ use {
 //     minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike.
 //
 //   axis (b) — globals: a *shorten map* (`with_short_names`, built by
-//     `build_shorten` over `module_symbols`) replaces each qualified path with
+//     `build_shorten` over `Module::module_symbols`) replaces each qualified path with
 //     its shortest unambiguous `/`-suffix — the name in scope, since Curios has
 //     no `use … as` aliasing. Installed by error rendering *and* `Module` display.
 //
@@ -275,21 +275,6 @@ pub(crate) fn build_rename(names: &BTreeSet<String>) -> HashMap<String, String> 
         map.insert(raw.clone(), candidate);
     }
     map
-}
-
-/// Every global qualified name in `module`: each definition (`let`/`rec`), each
-/// inductive type, each struct type. The universe a global is shortened *against*.
-pub(crate) fn module_symbols(module: &Module) -> Vec<String> {
-    let mut symbols = Vec::new();
-    for item in &module.items {
-        match item {
-            Item::Let(def) => symbols.push(def.name.clone()),
-            Item::Rec(defs) => symbols.extend(defs.iter().map(|def| def.name.clone())),
-        }
-    }
-    symbols.extend(module.inductives.keys().cloned());
-    symbols.extend(module.structures.keys().cloned());
-    symbols
 }
 
 /// Map each global to the shortest `/`-suffix of its path that no other global

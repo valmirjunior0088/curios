@@ -156,21 +156,6 @@ impl MockHost {
     fn mint(&self, resource: MockResource) -> Io {
         self.table.lock().unwrap().mint(resource)
     }
-
-    /// Serve up to `count` bytes of `contents` from `*position`, advancing the
-    /// cursor; `Status::Eof` with empty bytes once it reaches the end. The shared
-    /// shape of every scripted read (file, inbound request, outbound response).
-    fn serve_from(contents: &[u8], position: &mut usize, count: u32) -> (Status, Vec<u8>) {
-        if *position >= contents.len() {
-            return (Status::Eof, vec![]);
-        }
-
-        let stop = contents.len().min(*position + count as usize);
-        let bytes = contents[*position..stop].to_vec();
-        *position = stop;
-
-        (Status::Ok, bytes)
-    }
 }
 
 impl Host for MockHost {
@@ -411,16 +396,16 @@ impl Host for MockHost {
                 }
 
                 self.files.with(&open.path, |contents| {
-                    Self::serve_from(contents, &mut open.position, count)
+                    serve_from(contents, &mut open.position, count)
                 })
             }
             // Inbound (accepted) connection: serve the scripted request.
             Some(MockResource::Inbound(conn)) => {
-                Self::serve_from(&conn.request, &mut conn.position, count)
+                serve_from(&conn.request, &mut conn.position, count)
             }
             // Outbound connection: serve the scripted response.
             Some(MockResource::Outbound(conn)) => {
-                Self::serve_from(&conn.response, &mut conn.position, count)
+                serve_from(&conn.response, &mut conn.position, count)
             }
             _ => (Status::Eof, vec![]),
         }
@@ -510,6 +495,21 @@ impl Host for MockHost {
             None => (Status::NotFound, vec![]),
         }
     }
+}
+
+/// Serve up to `count` bytes of `contents` from `*position`, advancing the
+/// cursor; `Status::Eof` with empty bytes once it reaches the end. The shared
+/// shape of every scripted read (file, inbound request, outbound response).
+fn serve_from(contents: &[u8], position: &mut usize, count: u32) -> (Status, Vec<u8>) {
+    if *position >= contents.len() {
+        return (Status::Eof, vec![]);
+    }
+
+    let stop = contents.len().min(*position + count as usize);
+    let bytes = contents[*position..stop].to_vec();
+    *position = stop;
+
+    (Status::Ok, bytes)
 }
 
 /// The inspectable side of a [`MockHost`]: the shared buffers the run writes

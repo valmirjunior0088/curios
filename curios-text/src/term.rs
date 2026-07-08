@@ -104,7 +104,7 @@ pub struct FuncTypeParam {
 pub struct TupleTypeParam {
     pub label: Option<String>,
     /// `Some` for the signature sugar `label(params) -> type_` — the written
-    /// parameter list, kept verbatim so the printer round-trips it. `to_core`
+    /// parameter list, kept verbatim so the printer round-trips it. `into_core`
     /// undoes the sugar, lowering the field as `label : (params) -> type_`
     /// (see `TupleTypeParam::desugared_type`). Always paired with a label.
     pub func_params: Option<Vec<FuncTypeParam>>,
@@ -150,7 +150,7 @@ pub struct Func {
 
 /// Each argument carries its call-site plicity mark: `@`-arguments fill
 /// implicit binders, plain arguments fill explicit ones. The marks lower to
-/// core untouched — `to_core` is type-blind and cannot match them to slots.
+/// core untouched — `into_core` is type-blind and cannot match them to slots.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Apply {
     pub head: Term,
@@ -171,7 +171,7 @@ pub struct TupleType {
 pub struct TupleField {
     pub label: Option<String>,
     /// `Some` for the definition sugar `label(params) = value` — the written
-    /// parameter list, kept verbatim so the printer round-trips it. `to_core`
+    /// parameter list, kept verbatim so the printer round-trips it. `into_core`
     /// undoes the sugar, lowering the field as `label = (params) => value`
     /// (see `TupleField::desugared_value`). Always paired with a label.
     pub func_params: Option<Vec<(String, Option<Term>)>>,
@@ -209,7 +209,7 @@ pub struct Tuple {
 
 /// A binder pattern at `let`, lambda-parameter, or function-definition-sugar
 /// parameter position: a plain name, or a tuple/struct destructuring that
-/// desugars — at lowering, in `to_core` — into a fresh synthetic binder plus a
+/// desugars — at lowering, in `into_core` — into a fresh synthetic binder plus a
 /// chain of ordinary projection `let`s, exactly what a person would hand-write
 /// today. Always irrefutable: unlike a match-arm pattern, there is no
 /// constructor-tag case, since these binder sites never dispatch on shape —
@@ -374,7 +374,7 @@ pub struct StructLit {
     pub entries: Vec<StructLitEntry>,
 }
 
-/// The general pattern match: one scrutinee and arms of arbitrary (nested, across constructors, tuples, structs, and the four literal-carrier leaves) [`MatchPattern`]s, compiled by the pattern-matrix scheme in `to_core::match_compile` into the same single-level core match/projection forms a person would get from hand-nesting matches.
+/// The general pattern match: one scrutinee and arms of arbitrary (nested, across constructors, tuples, structs, and the four literal-carrier leaves) [`MatchPattern`]s, compiled by the pattern-matrix scheme in `into_core::match_compile` into the same single-level core match/projection forms a person would get from hand-nesting matches.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatrixMatch {
     pub head: Term,
@@ -383,13 +383,13 @@ pub struct MatrixMatch {
     /// constructors/tuples/structs — see [`MatchPattern`]) pattern with its
     /// body; zero arms is legal (a vacuous elimination, e.g. of `False`).
     /// The grammar enforces "full enumeration" (no wildcard/catch-all, no
-    /// row priority — see `to_core::match_compile`'s doc comment); lowering rejects
+    /// row priority — see `into_core::match_compile`'s doc comment); lowering rejects
     /// a repeated tag and an overlapping/duplicate row.
     pub arms: Vec<MatrixArm>,
 }
 
 /// One arm of a [`MatrixMatch`]: `| pattern => body`. Compiled by
-/// `to_core::match_compile` into the single-level core match/projection forms —
+/// `into_core::match_compile` into the single-level core match/projection forms —
 /// exactly what a person would get from hand-nesting matches today (see its
 /// doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every
 /// argument a plain [`MatchPattern::Binder`]) lowers exactly as before.
@@ -419,7 +419,7 @@ pub enum Match {
 pub enum MatchPattern {
     /// A plain name (or `_`) — never splits a column by itself; legal only
     /// when every row shares this shape in that column (see the matrix
-    /// compiler in `to_core::match_compile`).
+    /// compiler in `into_core::match_compile`).
     Binder(String),
     /// An inductive constructor tag applied to sub-patterns — positional
     /// (constructors have no field labels in this language).
@@ -456,7 +456,7 @@ impl MatchPattern {
     /// `Struct`, which never produce a core `Match` node at all (a binder
     /// never splits, a tuple/struct explodes into projections) — so there
     /// is nothing for a dependent motive to attach to. Used by the matrix
-    /// compiler's (`to_core::match_compile`) dependent-motive gate: `Nat`/`Lst`/
+    /// compiler's (`into_core::match_compile`) dependent-motive gate: `Nat`/`Lst`/
     /// `Bin` each nest their own two-case sub-pattern, so a plain
     /// [`std::mem::discriminant`] comparison on the outer variant already
     /// treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same
@@ -655,7 +655,7 @@ pub struct NumLit {
     pub negative: bool,
 }
 
-/// The term grammar proper, one variant per surface form. Spanless by design — a location rides on the wrapping [`Term`] — so `PartialEq` compares structure alone; bare terms are built via `From<Subterm> for Term`. Most variants lower one-to-one onto a core counterpart in `to_core`; the ones that exist only in the surface language are documented on their variants below.
+/// The term grammar proper, one variant per surface form. Spanless by design — a location rides on the wrapping [`Term`] — so `PartialEq` compares structure alone; bare terms are built via `From<Subterm> for Term`. Most variants lower one-to-one onto a core counterpart in `into_core`; the ones that exist only in the surface language are documented on their variants below.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Subterm {
     Type,
@@ -672,11 +672,11 @@ pub enum Subterm {
     Let(Let),
     Rec(Rec),
     /// A postfix bang `e!`: extracts the result of monadic action `e` inline.
-    /// The operand is the action whose result is bound. The `to_core` pass hoists
+    /// The operand is the action whose result is bound. The `into_core` pass hoists
     /// each bang to the top of its enclosing region (a value body, re-rooted at
     /// lambda bodies, match arms, and `rec` items) and sequences it through
     /// `/syn/Monad/bind`, whose `use` binder resolves the `Monad` witness from
-    /// the action's type. Exists only between parsing and `to_core`, which
+    /// the action's type. Exists only between parsing and `into_core`, which
     /// eliminates it before core elaboration; a bang in a type is rejected.
     Bang(Term),
     Name(Name),

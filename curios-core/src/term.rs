@@ -106,7 +106,7 @@ impl Term {
         }))
     }
 
-    /// A bare metavariable, as `to_core` mints one for a written hole `?`: empty spine (which resolves as the identity — see [`Metavar::spine`]) and no insertion origin.
+    /// A bare metavariable, as `into_core` mints one for a written hole `?`: empty spine (which resolves as the identity — see [`Metavar::spine`]) and no insertion origin.
     pub fn metavar(id: impl Into<MetavarId>) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id: id.into(),
@@ -263,7 +263,7 @@ impl Term {
         }))
     }
 
-    /// A tuple literal carrying its written field names from `to_core`; elaboration checks them against the expected tuple type's labels and rebuilds the literal name-free. An all-`None` name list collapses to the positional normal form of [`Term::tuple`], so syntactic equality never splits on how the literal was spelled.
+    /// A tuple literal carrying its written field names from `into_core`; elaboration checks them against the expected tuple type's labels and rebuilds the literal name-free. An all-`None` name list collapses to the positional normal form of [`Term::tuple`], so syntactic equality never splits on how the literal was spelled.
     pub fn tuple_named<I, T>(fields: I) -> Self
     where
         I: IntoIterator<Item = (Option<String>, T)>,
@@ -365,7 +365,7 @@ impl Term {
         }))
     }
 
-    /// A struct literal carrying the written entry shapes from `to_core`;
+    /// A struct literal carrying the written entry shapes from `into_core`;
     /// elaboration validates them against the declared fields and rebuilds
     /// entry-free, exactly like `tuple_named`.
     pub fn struct_entries<N, I, P, J, T>(name: N, params: I, fields: J) -> Self
@@ -829,8 +829,8 @@ pub struct Func {
 }
 
 /// `plicities` parallels `params`, one mark per argument — the call-site `@`
-/// marks. Core must carry them (rather than `to_core` resolving them) because
-/// `to_core` is type-blind: only the elaborator, holding the head's function
+/// marks. Core must carry them (rather than `into_core` resolving them) because
+/// `into_core` is type-blind: only the elaborator, holding the head's function
 /// type, can decide which binder an `@`-argument fills.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Apply {
@@ -848,7 +848,7 @@ pub struct TupleType {
 }
 
 /// `names` carries the literal's written field names (`(status = 0, …)`) from
-/// `to_core` to elaboration, which checks them against the expected tuple
+/// `into_core` to elaboration, which checks them against the expected tuple
 /// type's labels and rebuilds the literal name-free. Empty means "no names
 /// written" — the invariant for every internally-built and post-elaboration
 /// tuple.
@@ -859,7 +859,7 @@ pub struct Tuple {
 }
 
 /// A projection's field is positional in every post-elaboration term; the
-/// `Label` form exists only between `to_core` and `elaborate`, which resolves
+/// `Label` form exists only between `into_core` and `elaborate`, which resolves
 /// it against the head's tuple type and rebuilds it as `Index`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Field {
@@ -937,7 +937,7 @@ pub enum StructEntry {
 /// `name`/`params` are recoverable from the inferred type but stored
 /// redundantly so `convert` stays purely structural.
 ///
-/// `entries` carries the literal's written entry shapes from `to_core`:
+/// `entries` carries the literal's written entry shapes from `into_core`:
 /// elaboration checks plain fields positionally against the declared labels,
 /// pairs `use` entries with the concept's `use`-marked positions, and rebuilds
 /// the value entry-free. Empty means "all plain, no names written" — the
@@ -1118,8 +1118,8 @@ impl fmt::Display for MetavarId {
 /// `origin` rides with the node: `Some` iff the elaborator minted this
 /// metavariable for an omitted implicit argument, in which case zonk's
 /// unsolved-hole report names the binder instead of a bare id. Each id is
-/// minted exactly once (`to_core` holes with `None`, core insertions above
-/// the floor `to_core` returns with `Some`), so every occurrence of an id
+/// minted exactly once (`into_core` holes with `None`, core insertions above
+/// the floor `into_core` returns with `Some`), so every occurrence of an id
 /// carries the same origin and the derived equality never splits an id.
 ///
 /// `spine` is the delayed substitution — one term per binder of the birth
@@ -1129,7 +1129,7 @@ impl fmt::Display for MetavarId {
 /// captures them and `open` substitutes them, and the mapping survives
 /// re-closing under fresh names — which is what lets a solution mentioning a
 /// sibling binder resolve correctly wherever the occurrence ends up. An empty
-/// spine is a not-yet-birthed `to_core` hole and resolves as the identity.
+/// spine is a not-yet-birthed `into_core` hole and resolves as the identity.
 ///
 /// The spine is `Rc`-shared: every meta born under the same Γ shares one
 /// identity-spine allocation (see `Context::identity_snapshot`), which is what
@@ -1141,7 +1141,7 @@ pub struct Metavar {
     pub origin: Option<MetavarOrigin>,
 }
 
-/// The actual node of the core term language — one variant per term former. [`Term`] wraps a `Subterm` in an `Rc` with cached hash/reach and an optional span, and `Deref`s here, so pattern matches are written against `Subterm` while construction goes through `Term`'s smart constructors. The final two variants (`Infix`, `NumLit`) are elaboration-transient: born in `to_core`, consumed by `elaborate`, never seen by reduce/convert/zonk/erase.
+/// The actual node of the core term language — one variant per term former. [`Term`] wraps a `Subterm` in an `Rc` with cached hash/reach and an optional span, and `Deref`s here, so pattern matches are written against `Subterm` while construction goes through `Term`'s smart constructors. The final two variants (`Infix`, `NumLit`) are elaboration-transient: born in `into_core`, consumed by `elaborate`, never seen by reduce/convert/zonk/erase.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Subterm {
     Type,

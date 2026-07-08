@@ -152,7 +152,7 @@ pub struct ConceptField {
     pub is_super: bool,
     pub label: String,
     /// `Some` for the signature sugar `label(params) -> type_` — the written
-    /// parameter list, kept verbatim so the printer round-trips it. `to_core`
+    /// parameter list, kept verbatim so the printer round-trips it. `into_core`
     /// undoes the sugar, lowering the field as `label : (params) -> type_`
     /// (see `ConceptField::desugared_type`). Never set on a super field.
     pub func_params: Option<Vec<FuncTypeParam>>,
@@ -204,7 +204,7 @@ pub struct TopConcept {
 /// One implementation field of a `witness` declaration: `label = value`, or
 /// the definition sugar `label(params) = value` — the [`TupleField`](crate::TupleField) grammar
 /// with the label mandatory. The sugar is kept verbatim (the printer
-/// round-trips it); `to_core` undoes it when it builds the desugared
+/// round-trips it); `into_core` undoes it when it builds the desugared
 /// struct literal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WitnessField {
@@ -312,7 +312,7 @@ impl Entrypoint {
         }
     }
 
-    /// Attaches an expected type to the tail expression. The entrypoint grammar has no annotation position for the tail, so this is how embedders (today, the test suites) request `Check` rather than `Infer` mode — `to_core` lowers the annotation alongside the tail and the pipeline elaborates against it.
+    /// Attaches an expected type to the tail expression. The entrypoint grammar has no annotation position for the tail, so this is how embedders (today, the test suites) request `Check` rather than `Infer` mode — `into_core` lowers the annotation alongside the tail and the pipeline elaborates against it.
     pub fn with_type(self, type_: Term) -> Self {
         Self {
             type_: Some(type_),

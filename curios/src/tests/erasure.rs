@@ -201,7 +201,7 @@ fn erased_indexed_relevant_repro() {
 // Regression: a type-valued *application* (`Box(m)`, here `False/absurd`'s inferred
 // `@A`) is indexed by an erased binder `m`. It must erase to a unit like any type;
 // erasing it structurally used to leave `m` in the runtime term, so codegen
-// demanded a value for an erased binder ("`to_cont` lacks value").
+// demanded a value for an erased binder ("`into_cont` lacks value").
 #[test]
 fn erased_index_in_type_valued_arg() {
     let source = r#"

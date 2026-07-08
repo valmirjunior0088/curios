@@ -1,4 +1,4 @@
-use {super::*, curios_cont::to_wasm};
+use {super::*, curios_cont::into_wasm};
 
 #[test]
 fn single_block_region_lowers_without_dispatch_loop() {
@@ -47,7 +47,7 @@ fn single_block_region_lowers_without_dispatch_loop() {
 
     assert_eq!(i32_result(&module), 7);
 
-    let wat = to_wasm(&module).to_string();
+    let wat = into_wasm(&module).to_string();
     assert!(wat.contains("block $$b"), "expected a direct block:\n{wat}");
     assert!(
         !wat.contains("loop "),

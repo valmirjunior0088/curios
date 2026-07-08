@@ -1307,7 +1307,7 @@ fn parse_function_field_sugar_in_types() {
     // The signature sugar `label(params) -> T` is admitted by every Σ-type-
     // shaped field list — tuple types and struct/record declarations — and is
     // kept as written: the AST node carries the parameter list (`func_params`)
-    // and the output type; `to_core` undoes the sugar.
+    // and the output type; `into_core` undoes the sugar.
     let term = "{ len(s : Str) -> Nat, x : Nat }".parse::<Term>().unwrap();
     let Subterm::TupleType(TupleType { fields }) = term.as_subterm() else {
         panic!("expected a tuple type");
@@ -1339,7 +1339,7 @@ fn parse_function_field_sugar_in_values() {
     // The definition sugar `label(params) = body` is admitted by every
     // tuple-shaped field list — tuple literals and struct literals — and is
     // kept as written: the AST node carries the parameter list (`func_params`)
-    // and the body; `to_core` undoes the sugar.
+    // and the body; `into_core` undoes the sugar.
     let term = "(bump(x) = f(x), 3)".parse::<Term>().unwrap();
     let Subterm::Tuple(Tuple { fields }) = term.as_subterm() else {
         panic!("expected a tuple literal");
@@ -1802,7 +1802,7 @@ fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
 #[test]
 fn parse_concept_item() {
     // Fields: a `use` superclass edge, the signature sugar `cmp(A, A) -> Order`
-    // (kept as written — `func_params` carries the parameter list; `to_core`
+    // (kept as written — `func_params` carries the parameter list; `into_core`
     // undoes the sugar), and a plain `name : T` field.
     let source = "\
         concept Ord(A : Type) : Type { \

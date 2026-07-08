@@ -19,7 +19,7 @@ pub(super) fn parse_parens<'a>() -> Parser<'a, Term> {
 
 // A Σ-type / struct-declaration field: an optional label and the field type,
 // or the signature sugar `label(params) -> type` — kept as written in the AST
-// node (`func_params`); `to_core` undoes the sugar. Shared by tuple types and
+// node (`func_params`); `into_core` undoes the sugar. Shared by tuple types and
 // `struct` decls. The sugared catch spans through `->`, so a positional field
 // that merely starts with an application (`f(x)`) backtracks cleanly.
 pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
@@ -93,7 +93,7 @@ pub(super) fn parse_tuple_field_prefix<'a>() -> Parser<'a, TupleFieldPrefix> {
 
 // A tuple-literal / struct-literal field: `label = value`, the definition
 // sugar `label(params) = value` — kept as written in the AST node
-// (`func_params`); `to_core` undoes the sugar — or a positional value.
+// (`func_params`); `into_core` undoes the sugar — or a positional value.
 pub(super) fn parse_tuple_field<'a>() -> Parser<'a, TupleField> {
     catch(parse_tuple_field_prefix())
         .and(lazy(parse_term))

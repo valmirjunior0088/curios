@@ -951,7 +951,7 @@ fn parked_goals_retry_under_their_frozen_refinements() {
 
     // The frame is gone; the drain retries under the frozen one, where the
     // refinement still holds and the goal converts.
-    assert!(drain_parked(&mut context).is_ok());
+    assert!(context.drain_parked().is_ok());
 }
 
 #[test]
@@ -972,7 +972,7 @@ fn parked_goals_without_their_refinement_mismatch() {
         );
     });
 
-    assert!(drain_parked(&mut context).is_err());
+    assert!(context.drain_parked().is_err());
 }
 
 #[test]

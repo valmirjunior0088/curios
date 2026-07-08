@@ -276,7 +276,7 @@ fn type_struct_distinct_values_not_convertible() {
 
 // The function-field sugar, end to end: `label(params) -> T` in a record
 // declaration and a Σ-type, `label(params) = body` in a struct literal and a
-// tuple literal. The parser keeps the sugar in the AST; `to_core` undoes it —
+// tuple literal. The parser keeps the sugar in the AST; `into_core` undoes it —
 // this pins the lowering, not just the grammar.
 #[test]
 fn function_field_sugar_runs_end_to_end() {

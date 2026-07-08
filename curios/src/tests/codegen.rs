@@ -1,5 +1,5 @@
 //! End-to-end codegen tests: build a `curios_cont::Module` directly, lower it to
-//! wasm via `curios_cont::to_wasm`, and execute it through the compiler's run path
+//! wasm via `curios_cont::into_wasm`, and execute it through the compiler's run path
 //! (`crate::run_wasm`). Executing emitted wasm needs the runtime; these tests
 //! live here, alongside the rest of the integration suite, because `curios`
 //! can depend on `curios-rt` without a cycle (`curios-rt` depends only on
@@ -16,7 +16,7 @@ mod parity;
 
 use {
     curios_abi::{ForeignFunction, sys_io},
-    curios_cont::to_wasm,
+    curios_cont::into_wasm,
     curios_rt::{ForeignBindings, MockHost},
     std::sync::Arc,
 };
@@ -35,7 +35,7 @@ pub(super) fn foreign_write() -> Arc<ForeignFunction> {
 
 pub(super) fn printed(module: &curios_cont::Module) -> String {
     let (system, io) = MockHost::builder().build();
-    crate::run_wasm(&to_wasm(module), system, ForeignBindings::empty()).expect("run failed");
+    crate::run_wasm(&into_wasm(module), system, ForeignBindings::empty()).expect("run failed");
     String::from_utf8(io.output()).unwrap()
 }
 
@@ -44,7 +44,7 @@ pub(super) fn printed(module: &curios_cont::Module) -> String {
 /// the exit code unsigned.
 pub(super) fn i32_result(module: &curios_cont::Module) -> i32 {
     let (system, _io) = MockHost::builder().build();
-    crate::run_wasm(&to_wasm(module), system, ForeignBindings::empty()).expect("run failed")
+    crate::run_wasm(&into_wasm(module), system, ForeignBindings::empty()).expect("run failed")
 }
 
 /// Like [`i32_result`] but for a signed `Int` result: the exit code carries the
@@ -57,7 +57,7 @@ pub(super) fn int_result(module: &curios_cont::Module) -> i32 {
 /// an `f32`. Fixtures surface a computed `Flt` via `Flt/to_le_bin`.
 pub(super) fn f32_result(module: &curios_cont::Module) -> f32 {
     let (system, io) = MockHost::builder().build();
-    crate::run_wasm(&to_wasm(module), system, ForeignBindings::empty()).expect("run failed");
+    crate::run_wasm(&into_wasm(module), system, ForeignBindings::empty()).expect("run failed");
     let bytes = io.output();
     f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
 }
@@ -65,5 +65,5 @@ pub(super) fn f32_result(module: &curios_cont::Module) -> f32 {
 pub(super) fn traps(module: &curios_cont::Module) -> bool {
     let (system, _io) = MockHost::builder().build();
 
-    crate::run_wasm(&to_wasm(module), system, ForeignBindings::empty()).is_err()
+    crate::run_wasm(&into_wasm(module), system, ForeignBindings::empty()).is_err()
 }

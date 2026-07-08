@@ -916,41 +916,6 @@ impl Convert {
         }
     }
 
-    /// Replace every occurrence of a subject term in `t` — matched by the
-    /// same term equality conversion uses, at any depth (binder names are
-    /// entropy-fresh, so a free-named subject cannot be captured by an inner
-    /// scope) — with its birth binder's name. Top-down: an outer match wins
-    /// and is not descended into. Subjects are pairwise distinct by
-    /// construction, so the match is unambiguous. (A subject that is exactly
-    /// a scope's whole body is missed — scope bodies bypass `visit_subterm` —
-    /// which the round-trip verification in `solve` catches conservatively.)
-    fn abstract_occurrences(t: &Term, subjects: &[(Term, String)]) -> Term {
-        if let Some((_, name)) = subjects.iter().find(|(s, _)| s == t) {
-            return Term::free_var(name);
-        }
-
-        let owned = subjects.to_vec();
-        t.traverse(&mut Visit::rewriting(
-            |_, _| None,
-            Box::new(move |_, term: &Term| {
-                owned
-                    .iter()
-                    .find(|(s, _)| s == term)
-                    .map(|(_, name)| Term::free_var(name.as_str()))
-            }),
-        ))
-    }
-
-    /// `Some(metavar)` iff `term` is an unsolved bare metavariable head.
-    /// (`reduce` already resolves solved metavariables, so a metavariable
-    /// surviving to weak-head normal form is necessarily unsolved.)
-    fn as_metavar(term: &Term) -> Option<&Metavar> {
-        match &**term {
-            Subterm::Metavar(metavar) => Some(metavar),
-            _ => None,
-        }
-    }
-
     /// Solve `?id[spine] ≈ t` (the rigid side, already in weak-head normal
     /// form). Implements §7.3 in the pattern fragment: embedded-metavariable
     /// guard, occurs check, spine-as-renaming inversion (which subsumes the
@@ -1086,7 +1051,7 @@ impl Convert {
 
         let abstracted = match subjects.is_empty() {
             true => t.clone(),
-            false => Self::abstract_occurrences(t, &subjects),
+            false => abstract_occurrences(t, &subjects),
         };
 
         // Scope check, through the inversion: every free variable of the
@@ -1241,7 +1206,7 @@ impl Convert {
         rigid_raw: &Term,
         goal: Goal,
     ) -> Result<bool, ReduceError> {
-        let Some(metavar) = Self::as_metavar(&flex.head).cloned() else {
+        let Some(metavar) = as_metavar(&flex.head).cloned() else {
             return self.eta_expand_neutral(context, goal.this, goal.that, goal.type_);
         };
 
@@ -1396,7 +1361,7 @@ impl Convert {
 
         // The unrefined spelling is itself flexible — only the refinement
         // made the side look rigid. Undecided.
-        if Self::as_metavar(&suppressed).is_some() {
+        if as_metavar(&suppressed).is_some() {
             return Ok(Solved::Postponed);
         }
 
@@ -1408,18 +1373,6 @@ impl Convert {
             // metavariable is pinned elsewhere.
             Solved::Postponed | Solved::Failed => Solved::Postponed,
         })
-    }
-
-    /// `true` iff `term` — already in weak-head normal form, so a foldable
-    /// literal would have folded — is a primitive operation still carrying an
-    /// unsolved metavariable: the stuck-on-a-metavariable shape whose
-    /// structural mismatches are undecided rather than definite.
-    fn prim_blocked_on_metavar(context: &Context, term: &Term) -> bool {
-        matches!(&**term, Subterm::Prim(_))
-            && term
-                .metavars()
-                .iter()
-                .any(|id| context.metavar_solution(*id).is_none())
     }
 
     fn outcome(&mut self, context: &mut Context) -> Result<Outcome, ReduceError> {
@@ -1468,10 +1421,7 @@ impl Convert {
             // Flexible heads are dispatched before history and before the
             // structural/η fallthrough — a flexible head must never be
             // η-expanded into a spine (§7.1).
-            match (
-                Self::as_metavar(&this).cloned(),
-                Self::as_metavar(&that).cloned(),
-            ) {
+            match (as_metavar(&this).cloned(), as_metavar(&that).cloned()) {
                 (Some(this_m), Some(that_m)) => {
                     // Same head, different spines (node duplication under
                     // different openings): entrywise spine agreement is a
@@ -1655,8 +1605,8 @@ impl Convert {
                 // head disagreements, which no solution can repair, still
                 // mismatch here. The goal leaves `history` so a retry after
                 // fresh progress is not skipped as already-handled.
-                if Self::prim_blocked_on_metavar(context, &goal.this)
-                    || Self::prim_blocked_on_metavar(context, &goal.that)
+                if prim_blocked_on_metavar(context, &goal.this)
+                    || prim_blocked_on_metavar(context, &goal.that)
                 {
                     self.history.remove(&goal);
                     self.blocked.push(goal);
@@ -1669,4 +1619,51 @@ impl Convert {
 
         Ok(true)
     }
+}
+
+/// Replace every occurrence of a subject term in `t` — matched by the same
+/// term equality conversion uses, at any depth (binder names are
+/// entropy-fresh, so a free-named subject cannot be captured by an inner
+/// scope) — with its birth binder's name. Top-down: an outer match wins and
+/// is not descended into. Subjects are pairwise distinct by construction, so
+/// the match is unambiguous. (A subject that is exactly a scope's whole body
+/// is missed — scope bodies bypass `visit_subterm` — which the round-trip
+/// verification in `Convert::solve` catches conservatively.)
+fn abstract_occurrences(t: &Term, subjects: &[(Term, String)]) -> Term {
+    if let Some((_, name)) = subjects.iter().find(|(s, _)| s == t) {
+        return Term::free_var(name);
+    }
+
+    let owned = subjects.to_vec();
+    t.traverse(&mut Visit::rewriting(
+        |_, _| None,
+        Box::new(move |_, term: &Term| {
+            owned
+                .iter()
+                .find(|(s, _)| s == term)
+                .map(|(_, name)| Term::free_var(name.as_str()))
+        }),
+    ))
+}
+
+/// `Some(metavar)` iff `term` is an unsolved bare metavariable head.
+/// (`reduce` already resolves solved metavariables, so a metavariable
+/// surviving to weak-head normal form is necessarily unsolved.)
+fn as_metavar(term: &Term) -> Option<&Metavar> {
+    match &**term {
+        Subterm::Metavar(metavar) => Some(metavar),
+        _ => None,
+    }
+}
+
+/// `true` iff `term` — already in weak-head normal form, so a foldable
+/// literal would have folded — is a primitive operation still carrying an
+/// unsolved metavariable: the stuck-on-a-metavariable shape whose structural
+/// mismatches are undecided rather than definite.
+fn prim_blocked_on_metavar(context: &Context, term: &Term) -> bool {
+    matches!(&**term, Subterm::Prim(_))
+        && term
+            .metavars()
+            .iter()
+            .any(|id| context.metavar_solution(*id).is_none())
 }

@@ -158,7 +158,7 @@ pub struct Context {
     metas: MetaStore,
     // The next metavariable id this context may mint (implicit-argument
     // insertion). Seeded by `elaborate_module` with its `metavar_floor`
-    // argument so core-minted ids sit strictly above `to_core`'s.
+    // argument so core-minted ids sit strictly above `into_core`'s.
     next_metavar: Entropy<MetavarId>,
     // Inductive declarations, keyed by the type's qualified name ("Result").
     // Like `metas`, a flat store of monotonic facts about the program, not
@@ -171,7 +171,7 @@ pub struct Context {
     // monotonic store like `structures` (which also holds each concept's
     // record entry; this adds the resolution metadata).
     concepts: BTreeMap<String, Concept>,
-    // The definition names `to_core` marked as witness declarations; each
+    // The definition names `into_core` marked as witness declarations; each
     // registers into `witness_table` when its signature elaborates
     // (`elaborate_module_let` → `register_witness`).
     witness_declarations: BTreeSet<String>,
@@ -882,7 +882,7 @@ impl Context {
 
     /// Raise the minting floor: every id `fresh_metavar` hands out will be
     /// `>= floor`. Called by `elaborate_module` with its `metavar_floor`
-    /// argument (the count `to_core` minted) before any item is elaborated.
+    /// argument (the count `into_core` minted) before any item is elaborated.
     pub(crate) fn seed_metavars(&mut self, floor: usize) {
         self.next_metavar.seed(floor);
     }
@@ -945,7 +945,7 @@ impl Context {
     /// is spelled with the birth telescope's names, and the occurrence's spine
     /// records what each of those binders corresponds to here — so resolution
     /// is the solution with birth names rewritten through the spine. An empty
-    /// spine (a never-rebuilt `to_core` hole) resolves as the identity.
+    /// spine (a never-rebuilt `into_core` hole) resolves as the identity.
     /// `None` while unsolved.
     pub(crate) fn resolve_metavar(&self, metavar: &Metavar) -> Option<Term> {
         let entry = self.metavar_entry(metavar.id)?;

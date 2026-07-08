@@ -432,7 +432,7 @@ pub(super) fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
 
 // A concept field: `use? label : term`, or the signature sugar
 // `label(params) -> term` — kept as written in the AST node (`func_params`);
-// `to_core` undoes the sugar (mirroring top-level `let`'s function sugar). A
+// `into_core` undoes the sugar (mirroring top-level `let`'s function sugar). A
 // `use`-prefixed field is a superclass edge — its type must be a concept
 // application, checked at lowering.
 pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
@@ -519,7 +519,7 @@ pub(super) fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
 
 // A witness field: `label = term`, or the definition sugar
 // `label(params) = term` — the tuple-field grammar with the label mandatory,
-// kept as written in the AST node (`func_params`); `to_core` undoes the sugar.
+// kept as written in the AST node (`func_params`); `into_core` undoes the sugar.
 pub(super) fn parse_witness_field<'a>() -> Parser<'a, WitnessField> {
     catch(parse_tuple_field_prefix())
         .and(lazy(parse_term))

@@ -245,8 +245,8 @@ fn host_fn(function: &Arc<ForeignFunction>, is_pub: bool) -> TopLet {
 
 /// Handle one user-written `foreign` declaration: register its
 /// [`ForeignFunction`] into the compilation's (non-`sys_io`) foreign store,
-/// and return the ordinary [`LetSignature`] `to_core` lowers it as — wire-type
-/// bookkeeping and `host_fn`'s shape stay internal to this module, so `to_core`
+/// and return the ordinary [`LetSignature`] `into_core` lowers it as — wire-type
+/// bookkeeping and `host_fn`'s shape stay internal to this module, so `into_core`
 /// only ever deals with the same `LetSignature` it already knows how to lower
 /// for a plain `TopItem::Let`. `name` is the declaration's fully qualified
 /// name (leading `/`, the caller's current position while walking the module
@@ -746,8 +746,8 @@ pub(crate) fn load_embedded(sys: &Module, qualifier: &Qualifier) -> Option<Modul
 
 /// Wrap a root source so `sys`, `syn`, and `std` resolve from the binary and
 /// everything else falls through to `base`'s own entry-filesystem setting.
-/// `to_core` discovers them explicitly once `has_embedded_roots()` reports
-/// them attached (see `to_core::FIXED_ROOTS`). `foreigns` is the compilation's
+/// `into_core` discovers them explicitly once `has_embedded_roots()` reports
+/// them attached (see `into_core::FIXED_ROOTS`). `foreigns` is the compilation's
 /// foreign store — the host operations `/sys/Io` declares; today always
 /// `curios_abi::sys_io()`, created per compilation by the pipeline driver.
 pub fn prelude(foreigns: &ForeignStore, base: RootSource) -> RootSource {
