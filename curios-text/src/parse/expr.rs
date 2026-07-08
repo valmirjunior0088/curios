@@ -104,20 +104,40 @@ pub(super) fn parse_local_let_signature<'a>() -> Parser<'a, LetSignature> {
 // `let f(p : T, …) -> R = …; tail`. The binder accepts a tuple/struct pattern
 // (see `Pattern`), desugaring at lowering into a fresh binder plus a
 // projection-`let` chain.
+//
+// `tail` used to be `lazy(parse_term)` directly, recursing back into this
+// very parser: fine at construction time (deferred), but a straight-line
+// chain of local `let`s — an ordinary program shape, not adversarial — cost
+// one native stack frame per binding once parsing actually ran, unbounded,
+// and overflowed the stack well before any realistic recursion-depth limit.
+// `many1_then` parses the whole run of `let`s in a loop instead, and the
+// `.fold` below rebuilds the same right-nested `Let` chain a recursive
+// parser would have, one link at a time, from the innermost tail outward.
 pub(super) fn parse_let<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("let"))
-        .and_keep(parse_pattern())
-        .and(parse_local_let_signature())
-        .and_drop(parse_literal(";"))
-        .and(lazy(parse_term))
-        .map(|((binder, signature), tail)| {
-            Subterm::Let(Let {
-                binder,
-                signature,
-                tail,
+    many1_then(
+        || {
+            mark().and(
+                catch(parse_keyword("let"))
+                    .and_keep(parse_pattern())
+                    .and(parse_local_let_signature())
+                    .and_drop(parse_literal(";")),
+            )
+        },
+        || lazy(parse_term).and(mark()),
+    )
+    .map(|(links, (base, end))| {
+        links
+            .into_iter()
+            .rev()
+            .fold(base, |tail, (start, (binder, signature))| {
+                Term::from(Subterm::Let(Let {
+                    binder,
+                    signature,
+                    tail,
+                }))
+                .with_span(start.to(&end))
             })
-        })
-        .map(Into::into)
+    })
 }
 
 // A glued `.index`/`.label` projection, consuming no whitespace — usable both

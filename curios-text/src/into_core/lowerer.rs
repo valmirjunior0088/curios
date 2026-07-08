@@ -40,24 +40,39 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         names: impl IntoIterator<Item = String>,
         body: impl FnOnce() -> Result<T, Error>,
     ) -> Result<T, Error> {
+        let added = self.enter_scope(names);
+        let result = body();
+        self.leave_scope(&added);
+        result
+    }
+
+    /// The two steps [`Self::scoped`] runs around one bounded closure call,
+    /// exposed separately for a walk that must hold several nested scopes
+    /// open across a loop instead — see `region`'s `Let` handling, whose
+    /// `.tail` chain used to recurse through `scoped`'s closure once per
+    /// binding.
+    fn enter_scope(&self, names: impl IntoIterator<Item = String>) -> Vec<String> {
         let mut added = Vec::new();
-        {
-            let mut scope = self.scope.borrow_mut();
-            for name in names {
-                if name.is_empty() || name == "_" {
-                    continue;
-                }
-                if scope.insert(name.clone()) {
-                    added.push(name);
-                }
+        let mut scope = self.scope.borrow_mut();
+
+        for name in names {
+            if name.is_empty() || name == "_" {
+                continue;
+            }
+            if scope.insert(name.clone()) {
+                added.push(name);
             }
         }
-        let result = body();
+
+        added
+    }
+
+    fn leave_scope(&self, added: &[String]) {
         let mut scope = self.scope.borrow_mut();
-        for name in &added {
+
+        for name in added {
             scope.remove(name);
         }
-        result
     }
 
     /// Lowers a *value* body — a top-level `let`/`rec` body, a witness field,
@@ -454,11 +469,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // A `let`'s bound expression evaluates in place (its bangs hoist to
             // this region); the tail continues the same region (a bang there
             // hoists after `x` is bound, not above the `let`).
-            Subterm::Let(let_) => {
-                let mut binds = Vec::new();
-                let let_term = self.build_let(let_, &mut binds)?;
-                self.wrap(binds, let_term)
-            }
+            Subterm::Let(_) => self.region_let_chain(term),
             // The scrutinee evaluates before branching (its bangs hoist here);
             // each arm is its own region (branch-local effects).
             Subterm::Match(match_) => {
@@ -484,6 +495,58 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 self.wrap(binds, body)
             }
         }
+    }
+
+    /// `region`'s `Let` handling, peeling the chain into a loop instead of
+    /// recursing through `build_let`'s `scoped(-> region(tail))` once per
+    /// binding: an ordinary long straight-line sequence of local `let`s (not
+    /// adversarial) used to overflow the stack here. `build_let` itself is
+    /// unchanged and still used by `collect` for a single non-boundary
+    /// `let`, whose own tail this same iterative `region` handles once
+    /// entered — so the fix only has to live at this one entry point.
+    fn region_let_chain(&self, term: &Term) -> Result<curios_core::Term, Error> {
+        struct PendingLet<'t> {
+            added: Vec<String>,
+            binds: Vec<(String, curios_core::Term)>,
+            binder: &'t Pattern,
+            type_: curios_core::Term,
+            value: curios_core::Term,
+        }
+
+        let mut pending = Vec::new();
+        let mut current = term;
+
+        let base = loop {
+            let Subterm::Let(let_) = current.as_subterm() else {
+                break self.region(current)?;
+            };
+
+            let mut binds = Vec::new();
+            let value = self.collect(&let_.signature.body(), &mut binds)?;
+            let type_ = self.term(&let_.signature.type_())?;
+            let added = self.enter_scope(pattern_names(&let_.binder));
+
+            pending.push(PendingLet {
+                added,
+                binds,
+                binder: &let_.binder,
+                type_,
+                value,
+            });
+
+            current = &let_.tail;
+        };
+
+        let mut tail = base;
+
+        for pending_let in pending.into_iter().rev() {
+            self.leave_scope(&pending_let.added);
+            let let_term =
+                self.bind_pattern(pending_let.binder, pending_let.type_, pending_let.value, tail);
+            tail = self.wrap(pending_let.binds, let_term)?;
+        }
+
+        Ok(tail)
     }
 
     /// Builds the core `rec` for a `rec` inside a value body: item types are
