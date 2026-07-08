@@ -16,9 +16,6 @@ pub use span::*;
 mod qualifier;
 pub use qualifier::*;
 
-#[cfg(test)]
-mod qualifier_tests;
-
 mod plicity;
 pub use plicity::*;
 

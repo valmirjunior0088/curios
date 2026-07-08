@@ -1,8 +1,6 @@
 use {
-    super::{
-        Context, Error, ImplicitOrigin, Mode, Prim, Subterm, Term, elaborate, expect, reduce_with,
-        wire_term,
-    },
+    super::{Context, Error, ImplicitOrigin, Mode, elaborate, expect},
+    crate::{Prim, Subterm, Term, reduce_with, wire_term},
     std::sync::Arc,
 };
 

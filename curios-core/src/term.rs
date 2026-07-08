@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use {
     super::{Atom, Bound, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit},
     curios_base::{Flt, Int, NumOp, Plicity, Span},
@@ -1786,39 +1789,4 @@ fn max_reach<'a>(terms: impl IntoIterator<Item = &'a Term>) -> usize {
         .map(|term| term.reach())
         .max()
         .unwrap_or(0)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn open_shares_closed_body_without_rebuild() {
-        // body does not mention the bound variable -> open returns the stored Rc unchanged
-        let scope = Scope::close(One, &["x"], Term::type_());
-        let opened = scope.open(&[&Term::free_var("y")]);
-        assert!(Rc::ptr_eq(&opened.inner, &scope.body().inner));
-    }
-
-    #[test]
-    fn open_shares_closed_subterm_inside_substituted_body() {
-        let closed = Term::func([("a", Term::type_())], Term::free_var("a")); // λa.a, closed
-        let scope = Scope::close(One, &["x"], Term::tuple([Term::free_var("x"), closed]));
-
-        let stored_field = match &**scope.body() {
-            Subterm::Tuple(Tuple { fields, .. }) => fields[1].clone(),
-            _ => panic!("expected tuple body"),
-        };
-
-        let opened = scope.open(&[&Term::free_var("y")]);
-
-        let opened_field = match &*opened {
-            Subterm::Tuple(Tuple { fields, .. }) => fields[1].clone(),
-            _ => panic!("expected tuple result"),
-        };
-
-        // the substituted field changed; the closed field is shared, not rebuilt
-        assert_eq!(opened_field, stored_field);
-        assert!(Rc::ptr_eq(&opened_field.inner, &stored_field.inner));
-    }
 }

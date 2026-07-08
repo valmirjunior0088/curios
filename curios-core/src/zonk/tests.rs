@@ -1,8 +1,4 @@
-use {
-    super::*,
-    crate::{MetavarId, Nat, Prim, Term},
-    std::time::Duration,
-};
+use {crate::*, std::time::Duration};
 
 fn context() -> Context {
     Context::new(Duration::from_secs(1))

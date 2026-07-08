@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use super::{
     Context, Error, Field, Many, MetavarId, Mode, Outcome, Prim, PrimHead, Proj, Scope, Subterm,
     Term, elaborate,

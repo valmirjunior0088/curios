@@ -1,8 +1,14 @@
 use {
     super::{
-        FuncSugarParam, FuncType, FuncTypeParam, LetSignature, Name, Subterm, Term, TupleTypeParam,
+        FuncSugarParam, FuncType, FuncTypeParam, LetSignature, LoadError, Name, Subterm, Term,
+        TupleTypeParam,
     },
-    curios_base::{Plicity, Span},
+    crate::parse::{parse_term, parse_top_item, parse_whitespace},
+    curios_base::{
+        Plicity, Source, Span,
+        parser::{ParserError, lazy, many0, run_parser, take_eof},
+    },
+    std::{path::Path, rc::Rc, str::FromStr},
 };
 
 /// A `mod` declaration: `module` is `Some` for an inline body (`mod m … end`) and `None` for the file-backed form (`mod m;`), whose body module discovery loads through the active [`RootSource`](crate::RootSource). The span locates a failed load at the declaration that requested it; like `Term`'s, it is excluded from `PartialEq`.
@@ -252,6 +258,36 @@ pub struct Module {
     pub items: Vec<TopItem>,
 }
 
+impl Module {
+    fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
+        run_parser(
+            parse_whitespace()
+                .and_keep(many0(parse_top_item))
+                .and_drop(take_eof())
+                .map(|items| Module { items }),
+            source,
+        )
+    }
+
+    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
+        let path = path.as_ref();
+        let source = Source::read(path).map_err(|error| LoadError::Read {
+            path: path.into(),
+            error,
+        })?;
+
+        Module::parse(&source).map_err(LoadError::Parse)
+    }
+}
+
+impl FromStr for Module {
+    type Err = ParserError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        Module::parse(&Source::inline(input))
+    }
+}
+
 /// A whole program as written: a module of top-level items followed by one tail expression — the value the program computes. Parsed via `FromStr` (inline source) or [`Entrypoint::from_path`]; the grammar has no position for `type_`, which is only ever attached afterwards via [`Entrypoint::with_type`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entrypoint {
@@ -275,5 +311,37 @@ impl Entrypoint {
             type_: Some(type_),
             ..self
         }
+    }
+}
+
+impl Entrypoint {
+    fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
+        run_parser(
+            parse_whitespace()
+                .and_keep(many0(parse_top_item))
+                .and(lazy(parse_term))
+                .and_drop(take_eof())
+                .map(|(items, tail)| Entrypoint::new(items, tail)),
+            source,
+        )
+    }
+
+    /// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression). The file-path counterpart of the `FromStr` impl below, distinguished by keeping the real path in the [`Source`](curios_base::Source) so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`](crate::RootSource) the caller pairs it with.
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
+        let path = path.as_ref();
+        let source = Source::read(path).map_err(|error| LoadError::Read {
+            path: path.into(),
+            error,
+        })?;
+
+        Entrypoint::parse(&source).map_err(LoadError::Parse)
+    }
+}
+
+impl FromStr for Entrypoint {
+    type Err = ParserError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        Entrypoint::parse(&Source::inline(input))
     }
 }

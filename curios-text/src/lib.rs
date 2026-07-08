@@ -30,8 +30,5 @@ pub use prelude::*;
 
 mod parse;
 
-#[cfg(test)]
-mod parse_tests;
-
 mod module;
 pub use module::*;

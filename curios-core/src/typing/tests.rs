@@ -1,7 +1,4 @@
-use {
-    super::*,
-    crate::{Prim, Subterm},
-};
+use crate::*;
 
 #[test]
 fn display_unbound_variable() {

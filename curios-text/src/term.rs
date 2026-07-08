@@ -1,8 +1,12 @@
 use {
     super::{Name, Prim, Radix},
-    curios_base::{NumOp, Plicity, Span},
+    crate::parse::{parse_term, parse_whitespace},
+    curios_base::{
+        NumOp, Plicity, Source, Span,
+        parser::{ParserError, run_parser, take_eof},
+    },
     num_bigint::BigUint,
-    std::{collections::BTreeMap, ops::Deref},
+    std::{collections::BTreeMap, ops::Deref, rc::Rc, str::FromStr},
 };
 
 /// The unit of the surface syntax tree: a [`Subterm`] plus an optional source span. The span is deliberately excluded from `PartialEq` — tests build spanless expected trees and compare structure — and is readable only crate-internally; `Deref<Target = Subterm>` lets consumers match on the structure directly.
@@ -57,6 +61,25 @@ impl From<Subterm> for Term {
             span: None,
             inner: Box::new(subterm),
         }
+    }
+}
+
+impl Term {
+    fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
+        run_parser(
+            parse_whitespace()
+                .and_keep(parse_term())
+                .and_drop(take_eof()),
+            source,
+        )
+    }
+}
+
+impl FromStr for Term {
+    type Err = ParserError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        Term::parse(&Source::inline(input))
     }
 }
 
@@ -346,7 +369,7 @@ pub struct StructLit {
     pub entries: Vec<StructLitEntry>,
 }
 
-/// The general pattern match: one scrutinee and arms of arbitrary (nested, across constructors, tuples, structs, and the four literal-carrier leaves) [`MatchPattern`]s, compiled by the pattern-matrix scheme in `to_core::lower` into the same single-level core match/projection forms a person would get from hand-nesting matches.
+/// The general pattern match: one scrutinee and arms of arbitrary (nested, across constructors, tuples, structs, and the four literal-carrier leaves) [`MatchPattern`]s, compiled by the pattern-matrix scheme in `to_core::match_compile` into the same single-level core match/projection forms a person would get from hand-nesting matches.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatrixMatch {
     pub head: Term,
@@ -355,13 +378,13 @@ pub struct MatrixMatch {
     /// constructors/tuples/structs — see [`MatchPattern`]) pattern with its
     /// body; zero arms is legal (a vacuous elimination, e.g. of `False`).
     /// The grammar enforces "full enumeration" (no wildcard/catch-all, no
-    /// row priority — see `to_core::lower`'s doc comment); lowering rejects
+    /// row priority — see `to_core::match_compile`'s doc comment); lowering rejects
     /// a repeated tag and an overlapping/duplicate row.
     pub arms: Vec<MatrixArm>,
 }
 
 /// One arm of a [`MatrixMatch`]: `| pattern => body`. Compiled by
-/// `to_core::lower` into the single-level core match/projection forms —
+/// `to_core::match_compile` into the single-level core match/projection forms —
 /// exactly what a person would get from hand-nesting matches today (see its
 /// doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every
 /// argument a plain [`MatchPattern::Binder`]) lowers exactly as before.
@@ -391,7 +414,7 @@ pub enum Match {
 pub enum MatchPattern {
     /// A plain name (or `_`) — never splits a column by itself; legal only
     /// when every row shares this shape in that column (see the matrix
-    /// compiler in `to_core::lower`).
+    /// compiler in `to_core::match_compile`).
     Binder(String),
     /// An inductive constructor tag applied to sub-patterns — positional
     /// (constructors have no field labels in this language).

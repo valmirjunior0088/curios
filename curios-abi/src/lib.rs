@@ -20,9 +20,3 @@ pub use host::*;
 
 mod root;
 pub use root::*;
-
-#[cfg(test)]
-mod host_tests;
-
-#[cfg(test)]
-mod root_tests;

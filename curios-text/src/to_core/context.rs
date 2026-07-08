@@ -107,7 +107,7 @@ pub(super) struct Context<'a> {
     // into one `curios_core::Term`, so holes in different module bodies (each its own
     // `Context` via `nested`) must draw from the same monotonic source. Shared
     // by reference (like `table`/`public`) and `Cell`-backed so it survives
-    // `Lower`'s immutable `&Context` borrow.
+    // `Lowerer`'s immutable `&Context` borrow.
     metavars: &'a Entropy,
     // Sibling counter for fresh continuation-binder names minted while desugaring
     // `!` regions. Threaded (not a process-global atomic) for determinism:

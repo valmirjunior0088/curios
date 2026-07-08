@@ -1,5 +1,5 @@
 use {
-    super::*,
+    crate::*,
     curios_base::{Flt, Int},
     std::time::Duration,
 };

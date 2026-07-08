@@ -8,6 +8,9 @@
 //! registry entries) and by `curios-rt` (on the wasm import-namespace/
 //! link-loop side), and those two crates share no other common dependency.
 
+#[cfg(test)]
+mod tests;
+
 /// A compilation's four roots. `Sys`/`Syn`/`Std` are the embedded standard
 /// library; `Entry` is the program being compiled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

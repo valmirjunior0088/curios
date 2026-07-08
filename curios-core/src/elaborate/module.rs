@@ -1,9 +1,9 @@
 use {
-    super::{
-        Bound, Context, Definition, Error, Inductive, InductiveParam, Item, Mode, Module,
-        Structure, Subterm, Telescope, Term, check, check_concept_registry, drain_parked,
-        elaborate, finish_deferred_witnesses, is_prop, reduce_with, register_witness,
-        retry_deferred_witnesses, zonk, zonk_module,
+    super::{Bound, Context, Error, Mode, check, elaborate},
+    crate::{
+        Definition, Inductive, InductiveParam, Item, Module, Structure, Subterm, Telescope, Term,
+        check_concept_registry, drain_parked, finish_deferred_witnesses, is_prop, reduce_with,
+        register_witness, retry_deferred_witnesses, zonk, zonk_module,
     },
     curios_base::Qualifier,
     std::collections::BTreeMap,

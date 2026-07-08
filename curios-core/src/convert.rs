@@ -1,8 +1,14 @@
+mod prim;
+use prim::*;
+
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, InductiveType, Match,
         Metavar, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
-        Three, Tuple, TupleType, Variant, Visit, check, convert_prim, reduce, unfold_rec,
+        Three, Tuple, TupleType, Variant, Visit, check, reduce, unfold_rec,
     },
     crate::Instant,
     std::collections::{HashSet, VecDeque},

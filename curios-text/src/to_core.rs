@@ -1,8 +1,11 @@
 mod context;
 use context::*;
 
-mod lower;
-use lower::*;
+mod lowerer;
+use lowerer::*;
+
+mod match_compile;
+use match_compile::*;
 
 mod interface;
 use interface::*;
@@ -269,7 +272,7 @@ fn concept_app_head(term: &Term) -> Option<Name> {
 }
 
 // Resolve a super concept's head to its qualified core name — the same rule
-// `Lower`'s term-reference arm uses, minus the local-binder shadowing (a
+// `Lowerer`'s term-reference arm uses, minus the local-binder shadowing (a
 // declaration-site super edge has no enclosing value scope).
 fn resolve_concept_head(context: &Context, name: &Name) -> Result<String, Error> {
     if name.is_abs() || !name.is_single() {
@@ -400,7 +403,7 @@ fn process_items(
                 }
             }
             TopItem::Let(let_item) => {
-                let lower = Lower::new(context);
+                let lower = Lowerer::new(context);
                 let type_ = lower.term(&let_item.signature.type_())?;
                 if let_item.is_pub {
                     context.check_public_interface(&let_item.label, &type_)?;
@@ -421,7 +424,7 @@ fn process_items(
                 let name = context.prefixed(&f.label);
                 let signature = foreign_signature(f, foreigns, name.join());
 
-                let lower = Lower::new(context);
+                let lower = Lowerer::new(context);
                 let type_ = lower.term(&signature.type_())?;
                 if f.is_pub {
                     context.check_public_interface(&f.label, &type_)?;
@@ -438,7 +441,7 @@ fn process_items(
                 let items = ls
                     .iter()
                     .map(|let_item| {
-                        let lower = Lower::new(context);
+                        let lower = Lowerer::new(context);
                         let type_ = lower.term(&let_item.signature.type_())?;
                         if let_item.is_pub {
                             context.check_public_interface(&let_item.label, &type_)?;
@@ -466,7 +469,7 @@ fn process_items(
                 let type_flat_items = group
                     .iter()
                     .map(|u| {
-                        let lower = Lower::new(context);
+                        let lower = Lowerer::new(context);
                         let name = context.prefixed(&u.label).join();
 
                         let param_tys = u
@@ -628,7 +631,7 @@ fn process_items(
                 // injects the variant as a tagged tuple.
                 for u in group {
                     for c in &u.cases {
-                        let lower = Lower::new(context);
+                        let lower = Lowerer::new(context);
 
                         // Per-case payload binder names: the declared name, or
                         // a positional placeholder.
@@ -742,7 +745,7 @@ fn process_items(
             // entry — no value-constructor binding (the literal elaborates
             // directly) and no indices.
             TopItem::Struct(s) => {
-                let lower = Lower::new(context);
+                let lower = Lowerer::new(context);
 
                 let name = context.prefixed(&s.label).join();
                 // Declaring module: the type-former's qualifier prefix —
@@ -851,7 +854,7 @@ fn process_items(
                 let root = context.root();
 
                 let param_tys = {
-                    let lower = Lower::new(context);
+                    let lower = Lowerer::new(context);
                     concept
                         .params
                         .iter()
@@ -907,7 +910,7 @@ fn process_items(
                 // label is inert). The signature sugar `f(params) -> T` is undone
                 // here.
                 let field_tys = {
-                    let lower = Lower::new(context);
+                    let lower = Lowerer::new(context);
                     concept
                         .fields
                         .iter()
@@ -919,7 +922,7 @@ fn process_items(
                 };
 
                 let result_sort = {
-                    let lower = Lower::new(context);
+                    let lower = Lowerer::new(context);
                     lower.term(&concept.result_sort)?
                 };
 
@@ -1000,7 +1003,7 @@ fn process_items(
 
                 // Method wrappers: for each *method* field `f : F`,
                 //   pub let C/f(@p₁ : P₁, …, use w : C(p₁, …)) -> F = w.f;
-                // Built as surface AST and lowered through `Lower`, so binder
+                // Built as surface AST and lowered through `Lowerer`, so binder
                 // scoping and de-Bruijn capture are handled uniformly. Superclass
                 // fields are anonymous and get no wrapper: an instance of the
                 // outer concept already yields the inner one by resolution.
@@ -1031,7 +1034,7 @@ fn process_items(
                         .into(),
                     };
 
-                    let lower = Lower::new(context);
+                    let lower = Lowerer::new(context);
                     flat_items.push(FlatItem::Let(FlatLet {
                         name: context.prefixed(&concept.label).with(&field.label),
                         root: context.root(),
@@ -1079,7 +1082,7 @@ fn process_items(
                     }
                 };
 
-                let lower = Lower::new(context);
+                let lower = Lowerer::new(context);
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&label),
                     root: context.root(),
@@ -1503,7 +1506,7 @@ pub fn to_core(
         &modules,
     )?;
 
-    let lower = Lower::new(&context);
+    let lower = Lowerer::new(&context);
     let type_ = entrypoint
         .type_
         .as_ref()

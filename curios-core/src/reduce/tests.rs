@@ -1,6 +1,5 @@
 use {
-    super::*,
-    crate::{MetavarId, Nat, Prim, Var},
+    crate::*,
     curios_base::{Flt, Int},
     std::time::Duration,
 };

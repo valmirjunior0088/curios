@@ -1,6 +1,5 @@
 use {
-    super::*,
-    crate::{Atom, Inductive, InductiveParam, MetavarId, Nat, Prim, Structure},
+    crate::*,
     curios_abi::RootId,
     curios_base::{Int, Qualifier},
     std::{collections::BTreeMap, time::Duration},

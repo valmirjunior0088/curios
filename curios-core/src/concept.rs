@@ -11,6 +11,9 @@
 //! definition in the program-wide table under `(concept name, tuple of the
 //! rigid heads of the input parameters)`, the [`WitnessKey`] of [`HeadKey`]s.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{Subterm, Telescope, Term},
     curios_abi::RootId,

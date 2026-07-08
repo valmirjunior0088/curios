@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         AbsHeapType, ArrayType, BlockType, CompType, DataName, DataSegment, Export, Expr,

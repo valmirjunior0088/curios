@@ -12,9 +12,17 @@ use {
     std::sync::Arc,
 };
 
-mod code;
+mod code_bin;
+mod code_flt;
+mod code_int;
+mod code_lst;
+mod code_nat;
+mod code_rope;
 mod module;
 mod parity;
+
+/// Shared between `code_int`'s boundary tests and `code_flt`'s `Flt/to_int` trap test.
+const MAX_INT: i32 = (1 << 30) - 1;
 
 /// The `io_write` row of the builtin foreign store, for fixtures that
 /// hand-build host calls.

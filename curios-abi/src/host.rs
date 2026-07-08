@@ -31,6 +31,9 @@
 //! `(@A : Type) -> Nat -> A`, which a first-order [`WireSignature`] cannot
 //! express, so it stays a hardcoded primitive.
 
+#[cfg(test)]
+mod tests;
+
 use std::{
     hash::{Hash, Hasher},
     sync::Arc,

@@ -1,9 +1,15 @@
+mod prim;
+use prim::*;
+
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, InductiveType,
         Item, Let, Many, Match, Module, MotivePattern, MotiveSlot, Nat, Prim, PrimHead, Proj, Rec,
         Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var,
-        Variant, erase_prim, expect_prim_head, infer, is_prop, reduce_with, refine_head,
+        Variant, expect_prim_head, infer, is_prop, reduce_with, refine_head,
     },
     curios_base::Qualifier,
     std::collections::{BTreeMap, BTreeSet},

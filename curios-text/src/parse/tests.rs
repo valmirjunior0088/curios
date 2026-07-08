@@ -1,5 +1,5 @@
 use {
-    super::*,
+    crate::*,
     curios_abi::{WireSignature, WireType},
     curios_base::{Flt, NumOp, Plicity, Qualifier},
 };

@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,

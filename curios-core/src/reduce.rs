@@ -1,8 +1,14 @@
+mod prim;
+use prim::*;
+
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Apply, Carrier, Cases, Context, Field, FreeMonoid, Func, FuncType, InductiveType, Layer,
         Let, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType,
-        Subterm, Telescope, Term, Tuple, TupleType, Var, Variant, reduce_prim,
+        Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
     },
     crate::Instant,
     num_traits::ToPrimitive,

@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use super::{
     DataName, Expr, FuncName, GlobalName, GlobalType, LocalName, RecType, SubType, TypeName,
     ValType,

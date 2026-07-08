@@ -7,6 +7,9 @@
 //! core calculus — `curios-base` is the shared leaf every pipeline crate
 //! already depends on.
 
+#[cfg(test)]
+mod tests;
+
 /// A resolved module path: the segment sequence from the module root (see the module docs above for why it lives in this crate). The empty qualifier *is* the root, not a degenerate case.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Qualifier {

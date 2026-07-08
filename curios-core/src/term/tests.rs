@@ -1,4 +1,8 @@
-use {super::*, curios_base::Plicity, std::collections::BTreeSet};
+use {
+    crate::*,
+    curios_base::Plicity,
+    std::{collections::BTreeSet, rc::Rc},
+};
 
 #[test]
 fn close_open_substitutes_label_name() {
@@ -234,4 +238,34 @@ fn reach_telescope_absorbs_arity() {
         ),
     }));
     assert_eq!(f2.reach(), 1); // two binders: (2 + 1) - 2
+}
+
+#[test]
+fn open_shares_closed_body_without_rebuild() {
+    // body does not mention the bound variable -> open returns the stored Rc unchanged
+    let scope = Scope::close(One, &["x"], Term::type_());
+    let opened = scope.open(&[&Term::free_var("y")]);
+    assert!(Rc::ptr_eq(&opened.inner, &scope.body().inner));
+}
+
+#[test]
+fn open_shares_closed_subterm_inside_substituted_body() {
+    let closed = Term::func([("a", Term::type_())], Term::free_var("a")); // λa.a, closed
+    let scope = Scope::close(One, &["x"], Term::tuple([Term::free_var("x"), closed]));
+
+    let stored_field = match &**scope.body() {
+        Subterm::Tuple(Tuple { fields, .. }) => fields[1].clone(),
+        _ => panic!("expected tuple body"),
+    };
+
+    let opened = scope.open(&[&Term::free_var("y")]);
+
+    let opened_field = match &*opened {
+        Subterm::Tuple(Tuple { fields, .. }) => fields[1].clone(),
+        _ => panic!("expected tuple result"),
+    };
+
+    // the substituted field changed; the closed field is shared, not rebuilt
+    assert_eq!(opened_field, stored_field);
+    assert!(Rc::ptr_eq(&opened_field.inner, &stored_field.inner));
 }

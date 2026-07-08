@@ -30,9 +30,6 @@ pub use names::*;
 mod term;
 pub use term::*;
 
-#[cfg(test)]
-mod term_tests;
-
 mod module;
 pub use module::*;
 
@@ -45,35 +42,20 @@ pub use structure::*;
 mod concept;
 pub use concept::*;
 
-#[cfg(test)]
-mod concept_tests;
-
 mod syn_names;
 pub(crate) use syn_names::*;
 
 mod print;
 use print::*;
 
-mod reduce_prim;
-use reduce_prim::*;
-
 mod reduce;
 pub(crate) use reduce::*;
-
-#[cfg(test)]
-mod reduce_tests;
 
 mod context;
 pub use context::*;
 
-mod convert_prim;
-use convert_prim::*;
-
 mod convert;
 pub(crate) use convert::*;
-
-#[cfg(test)]
-mod convert_tests;
 
 mod error;
 pub use error::*;
@@ -84,38 +66,14 @@ pub(crate) use typing::*;
 mod resolve;
 pub(crate) use resolve::*;
 
-#[cfg(test)]
-mod typing_tests;
-
 mod invert;
 pub(crate) use invert::*;
-
-mod elaborate_prim;
-use elaborate_prim::*;
 
 mod elaborate;
 pub use elaborate::*;
 
-mod elaborate_match;
-use elaborate_match::*;
-
-mod elaborate_module;
-pub use elaborate_module::*;
-
-#[cfg(test)]
-mod elaborate_tests;
-
-mod erase_prim;
-use erase_prim::*;
-
 mod erase;
 pub use erase::*;
 
-#[cfg(test)]
-mod erase_tests;
-
 mod zonk;
 pub use zonk::*;
-
-#[cfg(test)]
-mod zonk_tests;
