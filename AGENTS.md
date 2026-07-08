@@ -29,6 +29,13 @@ Two languages live in this repo: **Rust** (the compiler) and **Curios** itself (
 
 For what's already built vs. still planned, see [ROADMAP.md](ROADMAP.md) — check it before starting work on a new capability, both to confirm it's genuinely unstarted and to see how finished, related features are described.
 
+## Working with the user
+
+- **Do not change any code without explicit instruction to do so.** Investigating, explaining, and proposing are always fine; editing is not, until the user asks for it.
+- **Do not proactively solve problems you were not asked to solve.** Noticing an unrelated bug, inefficiency, or cleanup opportunity is useful — say so and ask — but fixing it unprompted is not.
+- **Run every decision through the user.** Where there is more than one reasonable way to proceed, present the options and their trade-offs and let the user choose, rather than picking one yourself.
+- **Do not spiral into self-doubt.** State findings and recommendations plainly and move on; don't hedge, second-guess, or re-litigate a conclusion you already reached without new information forcing it.
+
 ## Before you write code
 
 Refresh the relevant reference into working memory _before_ writing, every time — do not rely on a stale recollection from earlier in the session or from training.
