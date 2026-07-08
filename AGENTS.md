@@ -35,6 +35,7 @@ For what's already built vs. still planned, see [ROADMAP.md](ROADMAP.md) — che
 - **Do not proactively solve problems you were not asked to solve.** Noticing an unrelated bug, inefficiency, or cleanup opportunity is useful — say so and ask — but fixing it unprompted is not.
 - **Run every decision through the user.** Where there is more than one reasonable way to proceed, present the options and their trade-offs and let the user choose, rather than picking one yourself.
 - **Do not spiral into self-doubt.** State findings and recommendations plainly and move on; don't hedge, second-guess, or re-litigate a conclusion you already reached without new information forcing it.
+- **Do not spawn subagents/Task-tool agents unless explicitly asked to.** Since June 2026, Claude Code's "Dynamic Workflows" update lets the lead agent fan out subagents on its own judgment of task complexity, which burns tokens re-deriving context that's already in hand. In this repo, investigate and edit directly; only delegate to a subagent when the user names one or explicitly requests parallel/delegated work.
 
 ## Before you write code
 
