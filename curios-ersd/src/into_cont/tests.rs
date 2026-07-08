@@ -277,3 +277,28 @@ fn rejects_apply_apply_cycle() {
 
     assert!(error.to_string().contains("value-level mutual recursion"));
 }
+
+#[test]
+fn lowers_a_long_straight_line_let_chain_without_overflowing_the_stack() {
+    // A long sequence of local `let`s — a plausible shape for generated or
+    // desugared code — used to recurse in `lower_value_name`/`lower_tail` one
+    // Rust stack frame per binding and could overflow well before reaching
+    // this depth. The peeling loop in those functions (and in
+    // `lower_pure_name`) makes this O(1) in stack, bounded only by time.
+    const N: usize = 2_000;
+
+    let mut term: Term = Subterm::Name(Name::from(format!("x{}", N - 1))).into();
+    for i in (0..N).rev() {
+        term = Subterm::Let(Let {
+            name: format!("x{i}"),
+            body: Subterm::Prim(Prim::Pure(PurePrim::Nat(i as u32))).into(),
+            tail: term,
+        })
+        .into();
+    }
+
+    let module = lower(term);
+    let func = &module.funcs()[0].1;
+
+    assert_eq!(func.region.values.len(), N);
+}

@@ -483,14 +483,36 @@ impl<'m> Evaluator<'m> {
                 }
                 Outcome::Done(accumulator)
             }
-            Subterm::Let(let_) => {
-                let bound = match self.value_of(&let_.body, env) {
-                    Ok(value) => value,
-                    Err(bail) => return Outcome::Bail(bail),
+            // A `let` chain recurses along its `.tail` spine; peel it into a
+            // loop so a long straight-line sequence of local bindings costs
+            // one iteration instead of one Rust stack frame. Each additional
+            // binding beyond the first (already charged by this `eval` call's
+            // own entry) is charged explicitly, matching the fuel cost of the
+            // recursive form it replaces.
+            Subterm::Let(binding) => {
+                let mut let_ = binding;
+                let mut pushed = 0usize;
+
+                let result = loop {
+                    let bound = match self.value_of(&let_.body, env) {
+                        Ok(value) => value,
+                        Err(bail) => break Outcome::Bail(bail),
+                    };
+                    env.push((let_.name.clone(), bound));
+                    pushed += 1;
+
+                    match let_.tail.as_subterm() {
+                        Subterm::Let(next) => {
+                            if let Err(bail) = self.charge() {
+                                break Outcome::Bail(bail);
+                            }
+                            let_ = next;
+                        }
+                        _ => break self.eval(&let_.tail, env, tail),
+                    }
                 };
-                env.push((let_.name.clone(), bound));
-                let result = self.eval(&let_.tail, env, tail);
-                env.pop();
+
+                env.truncate(env.len() - pushed);
                 result
             }
             Subterm::Rec(rec) => {

@@ -221,63 +221,76 @@ impl Work<'_, '_, '_> {
 
     pub(super) fn lower_pure_name(
         &mut self,
-        term: &crate::Term,
+        mut term: &crate::Term,
         frame: &Frame,
     ) -> LowerResult<ValueName> {
-        Ok(match &**term {
-            crate::Subterm::Name(name) => frame.find(name.as_str()),
-            crate::Subterm::Erased => self.erased(),
-            crate::Subterm::Unreachable => {
-                panic!("unreachable Ersd term cannot be lowered in pure-name position")
-            }
-            crate::Subterm::Prim(crate::Prim::Pure(pure)) => self.lower_pure_prim(pure, frame)?,
-            crate::Subterm::Prim(crate::Prim::Host(_)) => unreachable!(
-                "host primitive reached pure-name context — pure-name lowering cannot \
-                 construct the resume block required by Tail::Host"
-            ),
-            crate::Subterm::Prim(crate::Prim::Cell(_)) => unreachable!(
-                "cell primitive reached pure-name context — pure-name lowering cannot \
-                 construct the resume block required by Tail::Cell"
-            ),
-            crate::Subterm::Func(func) => {
-                let (clsr_name, captured_values) = self.lower_closure(func, frame)?;
+        let mut frame = frame.clone();
 
-                self.emit
-                    .fresh(Value::Pure(Data::Clsr(clsr_name, captured_values)))
-            }
-            crate::Subterm::Tuple(s) => {
-                let field_names = s
-                    .fields
-                    .iter()
-                    .map(|f| self.lower_pure_name(f, frame))
-                    .collect::<LowerResult<Vec<_>>>()?;
+        // A `let`/`rec` chain recurses along its `.tail` spine; peel it into a
+        // loop so a long straight-line sequence of local bindings costs one
+        // iteration instead of one Rust stack frame (see `is_pure_term`).
+        loop {
+            return Ok(match &**term {
+                crate::Subterm::Name(name) => frame.find(name.as_str()),
+                crate::Subterm::Erased => self.erased(),
+                crate::Subterm::Unreachable => {
+                    panic!("unreachable Ersd term cannot be lowered in pure-name position")
+                }
+                crate::Subterm::Prim(crate::Prim::Pure(pure)) => {
+                    self.lower_pure_prim(pure, &frame)?
+                }
+                crate::Subterm::Prim(crate::Prim::Host(_)) => unreachable!(
+                    "host primitive reached pure-name context — pure-name lowering cannot \
+                     construct the resume block required by Tail::Host"
+                ),
+                crate::Subterm::Prim(crate::Prim::Cell(_)) => unreachable!(
+                    "cell primitive reached pure-name context — pure-name lowering cannot \
+                     construct the resume block required by Tail::Cell"
+                ),
+                crate::Subterm::Func(func) => {
+                    let (clsr_name, captured_values) = self.lower_closure(func, &frame)?;
 
-                self.emit.fresh(Value::Pure(Data::Tpl(field_names)))
-            }
-            crate::Subterm::Atom(atom) => {
-                self.emit.fresh(Value::Pure(Data::Nat(atom.index as u32)))
-            }
-            crate::Subterm::Let(let_) => {
-                let body = self.lower_pure_name(&let_.body, frame)?;
-                let frame = frame.extended([(let_.name.clone(), body)]);
+                    self.emit
+                        .fresh(Value::Pure(Data::Clsr(clsr_name, captured_values)))
+                }
+                crate::Subterm::Tuple(s) => {
+                    let field_names = s
+                        .fields
+                        .iter()
+                        .map(|f| self.lower_pure_name(f, &frame))
+                        .collect::<LowerResult<Vec<_>>>()?;
 
-                return self.lower_pure_name(&let_.tail, &frame);
-            }
-            crate::Subterm::Rec(letrec) => {
-                let frame =
-                    self.lower_letrec_bindings(&letrec.names, letrec.items.iter(), frame)?;
+                    self.emit.fresh(Value::Pure(Data::Tpl(field_names)))
+                }
+                crate::Subterm::Atom(atom) => {
+                    self.emit.fresh(Value::Pure(Data::Nat(atom.index as u32)))
+                }
+                crate::Subterm::Let(let_) => {
+                    let body = self.lower_pure_name(&let_.body, &frame)?;
+                    frame = frame.extended([(let_.name.clone(), body)]);
+                    term = &let_.tail;
 
-                return self.lower_pure_name(&letrec.tail, &frame);
-            }
-            crate::Subterm::Proj(proj) => {
-                let head = self.lower_pure_name(&proj.head, frame)?;
+                    continue;
+                }
+                crate::Subterm::Rec(letrec) => {
+                    frame =
+                        self.lower_letrec_bindings(&letrec.names, letrec.items.iter(), &frame)?;
+                    term = &letrec.tail;
 
-                self.emit.fresh(Value::Eval(Code::TplGet(head, proj.index)))
-            }
-            crate::Subterm::Apply(_) | crate::Subterm::Match(_) | crate::Subterm::NatMatch(_) => {
-                return Err(unsupported_sync_rec_item(term));
-            }
-        })
+                    continue;
+                }
+                crate::Subterm::Proj(proj) => {
+                    let head = self.lower_pure_name(&proj.head, &frame)?;
+
+                    self.emit.fresh(Value::Eval(Code::TplGet(head, proj.index)))
+                }
+                crate::Subterm::Apply(_)
+                | crate::Subterm::Match(_)
+                | crate::Subterm::NatMatch(_) => {
+                    return Err(unsupported_sync_rec_item(term));
+                }
+            });
+        }
     }
 
     pub(super) fn lower_letrec_item(
@@ -301,10 +314,54 @@ impl Work<'_, '_, '_> {
 
     pub(super) fn lower_value_name(
         &mut self,
-        term: &crate::Term,
+        mut term: &crate::Term,
         frame: &Frame,
         cont: Cont<'_>,
     ) -> LowerResult<Tail> {
+        let mut frame = frame.clone();
+
+        // Peel a run of `let`/`rec` bindings that lower to a value in place
+        // (see `is_pure_term`), so a long straight-line chain costs one loop
+        // iteration instead of one Rust stack frame. The `Let`/`Rec` arms below
+        // are reached only past this prefix — a binding whose value needs the
+        // CPS resume-block treatment — so native recursion there is bounded by
+        // the count of such bindings, not the chain's total length: each one's
+        // continuation re-enters this same loop for whatever follows.
+        loop {
+            match &**term {
+                crate::Subterm::Let(let_) => match &*let_.body {
+                    crate::Subterm::Name(_)
+                    | crate::Subterm::Erased
+                    | crate::Subterm::Func(_)
+                    | crate::Subterm::Tuple(_)
+                    | crate::Subterm::Atom(_)
+                    | crate::Subterm::Proj(_)
+                    | crate::Subterm::Prim(crate::Prim::Pure(_)) => {
+                        let value = self.lower_pure_name(&let_.body, &frame)?;
+                        frame = frame.extended([(let_.name.clone(), value)]);
+                        term = &let_.tail;
+                    }
+                    crate::Subterm::Unreachable
+                    | crate::Subterm::Prim(crate::Prim::Host(_))
+                    | crate::Subterm::Prim(crate::Prim::Cell(_))
+                    | crate::Subterm::NatMatch(_)
+                    | crate::Subterm::Apply(_)
+                    | crate::Subterm::Match(_)
+                    | crate::Subterm::Let(_)
+                    | crate::Subterm::Rec(_) => break,
+                },
+                crate::Subterm::Rec(letrec)
+                    if letrec.items.iter().all(crate::Term::is_synchronous) =>
+                {
+                    frame =
+                        self.lower_letrec_bindings(&letrec.names, letrec.items.iter(), &frame)?;
+                    term = &letrec.tail;
+                }
+                _ => break,
+            }
+        }
+        let frame = &frame;
+
         match &**term {
             crate::Subterm::Name(name) => cont.call(self, frame.find(name.as_str())),
             crate::Subterm::Erased => {
@@ -534,10 +591,39 @@ impl Work<'_, '_, '_> {
 
     pub(super) fn lower_rec_computed<'b>(
         &mut self,
-        computed: &'b [(ValueName, &'b crate::Term)],
+        mut computed: &'b [(ValueName, &'b crate::Term)],
         frame: &'b Frame,
         body: RecBody<'b>,
     ) -> LowerResult<Tail> {
+        // Peel a run of computed members that lower to a value in place, so a
+        // `rec` group with many non-closure members costs one loop iteration
+        // per member instead of one Rust stack frame. `frame` already carries
+        // every member's reserved target (see `lower_rec`), so it needs no
+        // extending here, unlike the `Let`-chain prologues above.
+        while let [(target, rhs), rest @ ..] = computed {
+            match &***rhs {
+                crate::Subterm::Name(_)
+                | crate::Subterm::Erased
+                | crate::Subterm::Func(_)
+                | crate::Subterm::Tuple(_)
+                | crate::Subterm::Atom(_)
+                | crate::Subterm::Proj(_)
+                | crate::Subterm::Prim(crate::Prim::Pure(_)) => {
+                    let value = self.lower_pure_name(rhs, frame)?;
+                    self.emit.add_value(target.clone(), Value::Alias(value));
+                    computed = rest;
+                }
+                crate::Subterm::Unreachable
+                | crate::Subterm::Prim(crate::Prim::Host(_))
+                | crate::Subterm::Prim(crate::Prim::Cell(_))
+                | crate::Subterm::NatMatch(_)
+                | crate::Subterm::Apply(_)
+                | crate::Subterm::Match(_)
+                | crate::Subterm::Let(_)
+                | crate::Subterm::Rec(_) => break,
+            }
+        }
+
         match computed {
             [] => body.call(self, frame),
             [(target, rhs), rest @ ..] => {
@@ -557,10 +643,48 @@ impl Work<'_, '_, '_> {
 
     pub(super) fn lower_tail(
         &mut self,
-        term: &crate::Term,
+        mut term: &crate::Term,
         frame: &Frame,
         resume: &BlockName,
     ) -> LowerResult<Tail> {
+        let mut frame = frame.clone();
+
+        // See the identical prologue in `lower_value_name`.
+        loop {
+            match &**term {
+                crate::Subterm::Let(let_) => match &*let_.body {
+                    crate::Subterm::Name(_)
+                    | crate::Subterm::Erased
+                    | crate::Subterm::Func(_)
+                    | crate::Subterm::Tuple(_)
+                    | crate::Subterm::Atom(_)
+                    | crate::Subterm::Proj(_)
+                    | crate::Subterm::Prim(crate::Prim::Pure(_)) => {
+                        let value = self.lower_pure_name(&let_.body, &frame)?;
+                        frame = frame.extended([(let_.name.clone(), value)]);
+                        term = &let_.tail;
+                    }
+                    crate::Subterm::Unreachable
+                    | crate::Subterm::Prim(crate::Prim::Host(_))
+                    | crate::Subterm::Prim(crate::Prim::Cell(_))
+                    | crate::Subterm::NatMatch(_)
+                    | crate::Subterm::Apply(_)
+                    | crate::Subterm::Match(_)
+                    | crate::Subterm::Let(_)
+                    | crate::Subterm::Rec(_) => break,
+                },
+                crate::Subterm::Rec(letrec)
+                    if letrec.items.iter().all(crate::Term::is_synchronous) =>
+                {
+                    frame =
+                        self.lower_letrec_bindings(&letrec.names, letrec.items.iter(), &frame)?;
+                    term = &letrec.tail;
+                }
+                _ => break,
+            }
+        }
+        let frame = &frame;
+
         match &**term {
             crate::Subterm::Unreachable => Ok(Tail::Unreachable),
             crate::Subterm::Apply(apply) => self.lower_value_name(
