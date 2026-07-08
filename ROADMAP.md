@@ -150,7 +150,6 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] HTTP client (`std/Http`, built on `Tcp` + `Task`)
 - [x] Typed format strings (`std/Fmt`)
 - [x] Arbitrary-precision naturals (`std/BigNat`)
-- [x] Reader combinator (`std/Reader`)
 - [x] Proof-carrying UTF-8 string decoding (`std/Str`, `std/Char`)
 - [x] Parser-combinator library (`std/Parse`)
 - [x] Core collections (`std/Lst` and its helpers, length-indexed `std/Vec`)

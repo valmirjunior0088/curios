@@ -92,7 +92,7 @@ let parser : Parse(Nat) =
     Parse/pure(a + b);
 ```
 
-The standard library ships `Monad` witnesses for `Option`, `Lst`, `Task`, `Parse`, and `Reader`; declaring `satisfy Monad(M) { … }` makes `!` work with your own type. Inside monad-generic code a local `use Monad(M)` binder resolves the sites, so generic do-notation works too.
+The standard library ships `Monad` witnesses for `Option`, `Lst`, `Task`, and `Parse`; declaring `satisfy Monad(M) { … }` makes `!` work with your own type. Inside monad-generic code a local `use Monad(M)` binder resolves the sites, so generic do-notation works too.
 
 ## Operators
 
@@ -341,7 +341,7 @@ join([1, 2, 3]) -- resolves the Lst witness over the Nat witness
 join(use my_dict, [1, 2, 3]) -- explicit override
 ```
 
-**Resolution** proceeds deterministically: local `use` binders innermost-first; then superclass projections of local binders, breadth-first by depth (two matches at the same minimal depth are ambiguous); then the global table, keyed by the concept and the input parameters' rigid heads. A goal with an unsolved metavariable in any input position waits until it is solved. The standard library provides `Show`, `Eql` (value-level equality — distinct from propositional `Eq`), `Ord`, `Monad`, and the operator concepts `Add`/`Sub`/`Mul`/`Div`/`Rem`/`Cmp` (see [Operators](#operators)), with witnesses for the primitive types. `Monad` itself is homed in `/syn` — it is what the postfix `!` desugars to — and `/std/Monad` is the user-facing facade; each monad's witness lives beside its type (`/std/Option`, `/std/Lst`, `/std/Task`, `/std/Parse`, `/std/Reader`).
+**Resolution** proceeds deterministically: local `use` binders innermost-first; then superclass projections of local binders, breadth-first by depth (two matches at the same minimal depth are ambiguous); then the global table, keyed by the concept and the input parameters' rigid heads. A goal with an unsolved metavariable in any input position waits until it is solved. The standard library provides `Show`, `Eql` (value-level equality — distinct from propositional `Eq`), `Ord`, `Monad`, and the operator concepts `Add`/`Sub`/`Mul`/`Div`/`Rem`/`Cmp` (see [Operators](#operators)), with witnesses for the primitive types. `Monad` itself is homed in `/syn` — it is what the postfix `!` desugars to — and `/std/Monad` is the user-facing facade; each monad's witness lives beside its type (`/std/Option`, `/std/Lst`, `/std/Task`, `/std/Parse`).
 
 ## Proofs (Eq idioms)
 
