@@ -267,7 +267,7 @@ impl Work<'_, '_, '_> {
                 }
                 crate::Subterm::Let(let_) => {
                     let body = self.lower_pure_name(&let_.body, &frame)?;
-                    frame = frame.extended([(let_.name.clone(), body)]);
+                    frame.push(let_.name.clone(), body);
                     term = &let_.tail;
 
                     continue;
@@ -338,7 +338,7 @@ impl Work<'_, '_, '_> {
                     | crate::Subterm::Proj(_)
                     | crate::Subterm::Prim(crate::Prim::Pure(_)) => {
                         let value = self.lower_pure_name(&let_.body, &frame)?;
-                        frame = frame.extended([(let_.name.clone(), value)]);
+                        frame.push(let_.name.clone(), value);
                         term = &let_.tail;
                     }
                     crate::Subterm::Unreachable
@@ -661,7 +661,7 @@ impl Work<'_, '_, '_> {
                     | crate::Subterm::Proj(_)
                     | crate::Subterm::Prim(crate::Prim::Pure(_)) => {
                         let value = self.lower_pure_name(&let_.body, &frame)?;
-                        frame = frame.extended([(let_.name.clone(), value)]);
+                        frame.push(let_.name.clone(), value);
                         term = &let_.tail;
                     }
                     crate::Subterm::Unreachable

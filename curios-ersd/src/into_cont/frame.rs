@@ -1,7 +1,7 @@
 use {
     curios_base::Entropy,
     curios_cont::{BlockName, ValueName},
-    std::collections::HashMap,
+    std::{collections::HashMap, rc::Rc},
 };
 
 #[derive(Debug)]
@@ -33,9 +33,15 @@ impl FrameEntropy {
     }
 }
 
+// `bindings` is behind an `Rc` so that cloning a `Frame` (needed at every
+// branch point: closures, `Match` arms, the peeling loops that walk a
+// `let`/`rec` chain) is O(1) instead of copying the whole map. `push`/
+// `extended` go through `Rc::make_mut`, which only actually clones the map
+// when another `Frame` still shares this allocation — the common case of
+// linearly extending an exclusively-owned frame mutates in place.
 #[derive(Debug, Default, Clone)]
 pub(super) struct Frame {
-    bindings: HashMap<String, ValueName>,
+    bindings: Rc<HashMap<String, ValueName>>,
 }
 
 impl Frame {
@@ -51,7 +57,7 @@ impl Frame {
     }
 
     pub(super) fn push(&mut self, name: String, value: ValueName) {
-        self.bindings.insert(name, value);
+        Rc::make_mut(&mut self.bindings).insert(name, value);
     }
 
     pub(super) fn extended<I>(&self, bindings: I) -> Self
