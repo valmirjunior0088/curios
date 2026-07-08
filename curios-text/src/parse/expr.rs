@@ -212,9 +212,10 @@ pub(super) fn parse_hole<'a>() -> Parser<'a, Term> {
     catch(parse_literal("?")).map(|()| Subterm::Hole.into())
 }
 
-// Grammar keys for the packrat cache (see `parser::memoize`). Only the two
+// Grammar keys for the packrat cache (see `parser::memoize`). Only the
 // nonterminals that overlapping alternatives re-probe at the same offset are
-// memoized; that is enough to keep parsing linear.
+// memoized; that is enough to keep parsing linear. `patterns.rs` mints its own
+// keys (`MEMO_PATTERN`/`MEMO_MATCH_PATTERN`) for the same reason.
 const MEMO_TERM: u32 = 0;
 const MEMO_ATOMIC_TERM: u32 = 1;
 
