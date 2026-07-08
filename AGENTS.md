@@ -124,6 +124,8 @@ cargo test --workspace --all-targets --all-features
 
 `curios compile foo.crs` produces a native executable `foo` (the embedded launcher with the program's `.cwasm` appended — no launcher file is consulted at compile time); `curios run foo.crs` compiles and runs in-process.
 
+**`cargo test --workspace` takes upwards of 5 minutes on a fairly capable machine.** Invoke it deliberately, not as a reflex or chained onto other commands just to see output. Don't pipe it directly into another command or scroll through it live; redirect stdout/stderr to a file and read the file after it finishes, e.g. `cargo test --workspace --all-targets --all-features > /tmp/test-output.txt 2>&1; cat /tmp/test-output.txt`.
+
 ### Crates, features, and the slim launcher
 
 There are **no Cargo features** on the workspace crates. The JIT/Cranelift split is a crate boundary instead:
