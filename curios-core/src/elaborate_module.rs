@@ -69,7 +69,7 @@ fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), 
         Telescope::build(entries[..n_params].iter().cloned(), ()).relabel(&label_refs[..n_params]);
     let indices = Telescope::build(entries, ()).relabel(&label_refs);
 
-    context.register_inductive(
+    context.update_inductive(
         name,
         Inductive {
             params,
@@ -121,7 +121,7 @@ fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result
         );
     }
 
-    context.register_inductive(
+    context.update_inductive(
         name,
         Inductive {
             params: inductive.params,
@@ -189,7 +189,7 @@ fn elaborate_structure(context: &mut Context, name: &str) -> Result<(), Error> {
         Telescope::build(entries[..n_params].iter().cloned(), ()).relabel(&label_refs[..n_params]);
     let fields = Telescope::build(entries, ()).relabel(&label_refs);
 
-    context.register_structure(
+    context.update_structure(
         name,
         Structure {
             params,
@@ -336,13 +336,13 @@ pub fn elaborate_module(
     // inductive's type-constructor and value-constructor definitions reference
     // their own registry entry (`elaborate_inductive_type` / `elaborate_variant`).
     for (name, inductive) in &module.inductives {
-        context.register_inductive(name, inductive.clone());
+        context.register_inductive(name, inductive.clone())?;
     }
 
     // Likewise seed the struct registry — `elaborate_struct`/`elaborate_proj`
     // consult it (and `elaborate_structure` rebuilds each entry's telescopes).
     for (name, structure) in &module.structures {
-        context.register_structure(name, structure.clone());
+        context.register_structure(name, structure.clone())?;
     }
 
     // Concept metadata and witness markers, alongside — witness *table*
@@ -350,7 +350,7 @@ pub fn elaborate_module(
     // head exists. With every concept present, the superclass graph can be
     // validated up front.
     for (name, concept) in &module.concepts {
-        context.register_concept(name, concept.clone());
+        context.register_concept(name, concept.clone())?;
     }
     for name in &module.witnesses {
         context.mark_witness_declaration(name);
@@ -471,13 +471,13 @@ pub fn elaborate_and_zonk_with_prelude(
     // (rebuilt by elaboration below). Keep the user keys to pull their rebuilt
     // forms back out afterwards.
     for (name, inductive) in &prelude.inductives {
-        context.register_inductive(name, inductive.clone());
+        context.register_inductive(name, inductive.clone())?;
     }
     for (name, structure) in &prelude.structures {
-        context.register_structure(name, structure.clone());
+        context.register_structure(name, structure.clone())?;
     }
     for (name, concept) in &prelude.concepts {
-        context.register_concept(name, concept.clone());
+        context.register_concept(name, concept.clone())?;
     }
 
     let user_inductive_keys = module
@@ -493,14 +493,14 @@ pub fn elaborate_and_zonk_with_prelude(
         .cloned()
         .collect::<Vec<String>>();
     for name in &user_inductive_keys {
-        context.register_inductive(name, module.inductives[name].clone());
+        context.register_inductive(name, module.inductives[name].clone())?;
     }
     for name in &user_structure_keys {
-        context.register_structure(name, module.structures[name].clone());
+        context.register_structure(name, module.structures[name].clone())?;
     }
     for (name, concept) in &module.concepts {
         if !prelude.concepts.contains_key(name) {
-            context.register_concept(name, concept.clone());
+            context.register_concept(name, concept.clone())?;
         }
     }
     for name in &module.witnesses {

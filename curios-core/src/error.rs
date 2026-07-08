@@ -114,6 +114,23 @@ pub enum Error {
     DuplicateTupleLabel {
         label: String,
     },
+    /// A second `induct` registered under a name a prior declaration already
+    /// claims. The registry is global across every root elaborated into one
+    /// `Context`, so this is rejected rather than silently overwritten — the
+    /// same shape of collision `DuplicateWitness` guards for witnesses.
+    DuplicateInductive {
+        name: String,
+    },
+    /// A second `struct` registered under a name a prior declaration already
+    /// claims — see `DuplicateInductive`.
+    DuplicateStructure {
+        name: String,
+    },
+    /// A second `concept` registered under a name a prior declaration already
+    /// claims — see `DuplicateInductive`.
+    DuplicateConcept {
+        name: String,
+    },
     TupleFieldNameMismatch {
         written: String,
         expected: String,
@@ -441,6 +458,18 @@ impl Error {
 
     pub(crate) fn duplicate_tuple_label(label: String) -> Self {
         Self::DuplicateTupleLabel { label }
+    }
+
+    pub(crate) fn duplicate_inductive(name: String) -> Self {
+        Self::DuplicateInductive { name }
+    }
+
+    pub(crate) fn duplicate_structure(name: String) -> Self {
+        Self::DuplicateStructure { name }
+    }
+
+    pub(crate) fn duplicate_concept(name: String) -> Self {
+        Self::DuplicateConcept { name }
     }
 
     pub(crate) fn tuple_field_name_mismatch(
@@ -947,6 +976,15 @@ impl fmt::Display for Error {
             }
             Error::DuplicateTupleLabel { label } => {
                 write!(f, "duplicate field label '{label}' in tuple type")
+            }
+            Error::DuplicateInductive { name } => {
+                write!(f, "duplicate inductive declaration '{name}'")
+            }
+            Error::DuplicateStructure { name } => {
+                write!(f, "duplicate struct declaration '{name}'")
+            }
+            Error::DuplicateConcept { name } => {
+                write!(f, "duplicate concept declaration '{name}'")
             }
             Error::TupleFieldNameMismatch {
                 written,

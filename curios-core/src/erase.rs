@@ -1320,13 +1320,13 @@ pub fn erase_module(
     // Erase runs with its own `Context` (see `run::compile`); seed its
     // inductive registry from the module before any item consults it.
     for (name, inductive) in &module.inductives {
-        context.register_inductive(name, inductive.clone());
+        context.register_inductive(name, inductive.clone())?;
     }
 
     // Seed the struct registry too — `erase_struct`/`erase_proj` consult it to
     // lower fields and to elide a newtype projection.
     for (name, structure) in &module.structures {
-        context.register_structure(name, structure.clone());
+        context.register_structure(name, structure.clone())?;
     }
 
     let mut items = Vec::with_capacity(module.items.len());

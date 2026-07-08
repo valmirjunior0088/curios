@@ -1,6 +1,6 @@
 use {
     super::{
-        Bound, Concept, Goal, HeadKey, ImplicitOrigin, Inductive, Metavar, MetavarId,
+        Bound, Concept, Error, Goal, HeadKey, ImplicitOrigin, Inductive, Metavar, MetavarId,
         MetavarOrigin, Structure, Term, Witness, WitnessKey, WitnessOrigin,
     },
     crate::Instant,
@@ -356,22 +356,30 @@ impl Context {
     /// must be assumed (lowered) before they can be elaborated, since members
     /// reference each other, and are then upgraded here to their rebuilt forms
     /// — implicit insertion makes the two no longer interchangeable, and a
-    /// lowered type must never leak into later reduction.
+    /// lowered type must never leak into later reduction. Panics if `label`
+    /// has no prior assumption — every caller is expected to have `assume`d
+    /// it earlier in the same scope (a construction bug otherwise, not a
+    /// user-facing case).
     pub(crate) fn reassume(&mut self, label: &str, type_: &Term) {
         self.locals_stamp.fresh();
 
-        if let Some(entry) = self.local.iter_mut().rev().find(|(name, _)| name == label) {
-            entry.1 = type_.clone();
-        }
+        let entry = self
+            .local
+            .iter_mut()
+            .rev()
+            .find(|(name, _)| name == label)
+            .unwrap_or_else(|| panic!("reassume: '{label}' has no local binding to replace"));
+        entry.1 = type_.clone();
 
-        if let Some(assumptions) = self
+        let assumptions = self
             .assumptions
             .iter_mut()
             .rev()
             .find(|assumptions| assumptions.contains_key(label))
-        {
-            assumptions.insert(label.to_string(), type_.clone());
-        }
+            .unwrap_or_else(|| {
+                panic!("reassume: '{label}' has no assumption-frame entry to replace")
+            });
+        assumptions.insert(label.to_string(), type_.clone());
     }
 
     pub(crate) fn assumption(&self, label: &str) -> Option<&Term> {
@@ -589,14 +597,48 @@ impl Context {
 
     // === Inductive registry =================================================
 
-    /// Record an inductive declaration's metadata. Called once per `induct`
-    /// declaration as the module's items are processed, alongside the
-    /// `define`s for its type-constructor and value-constructor functions.
-    pub(crate) fn register_inductive<N>(&mut self, name: N, inductive: Inductive)
+    /// Record a new inductive declaration's metadata. Called once per
+    /// `induct` declaration as a module is seeded into the context. Errs with
+    /// `DuplicateInductive` (leaving the existing entry untouched) if `name`
+    /// is already registered — the registry is shared across every root
+    /// elaborated into this `Context`, so a collision is rejected rather than
+    /// silently overwriting a prior root's declaration. Mid-elaboration
+    /// rebuilds of an already-registered entry go through
+    /// [`Context::update_inductive`] instead.
+    pub(crate) fn register_inductive<N>(
+        &mut self,
+        name: N,
+        inductive: Inductive,
+    ) -> Result<(), Error>
     where
         N: Into<String>,
     {
-        self.inductives.insert(name.into(), inductive);
+        let name = name.into();
+        if self.inductives.contains_key(&name) {
+            return Err(Error::duplicate_inductive(name));
+        }
+        self.inductives.insert(name, inductive);
+        Ok(())
+    }
+
+    /// Overwrite an already-registered inductive's metadata with a rebuilt
+    /// telescope — called mid-elaboration by `elaborate_inductive_indices`/
+    /// `elaborate_inductive_constructors` to refine the same declaration's
+    /// own entry, not to register a new one, so unlike
+    /// [`Context::register_inductive`] this always overwrites. Panics if
+    /// `name` has no prior entry — every caller is expected to have checked
+    /// `Context::inductive` first (a construction bug otherwise, not a
+    /// user-facing case).
+    pub(crate) fn update_inductive<N>(&mut self, name: N, inductive: Inductive)
+    where
+        N: Into<String>,
+    {
+        let name = name.into();
+        assert!(
+            self.inductives.contains_key(&name),
+            "update_inductive: '{name}' is not already registered"
+        );
+        self.inductives.insert(name, inductive);
     }
 
     /// Look up an inductive declaration by the type's qualified name.
@@ -606,14 +648,47 @@ impl Context {
 
     // === Struct registry ====================================================
 
-    /// Record a struct declaration's metadata. Called once per `struct`
-    /// declaration as the module's items are processed (and again when the
-    /// module is seeded into a fresh `Context` for erasure).
-    pub(crate) fn register_structure<N>(&mut self, name: N, structure: Structure)
+    /// Record a new struct declaration's metadata. Called once per `struct`
+    /// declaration as a module is seeded into the context (elaboration or
+    /// erasure). Errs with `DuplicateStructure` (leaving the existing entry
+    /// untouched) if `name` is already registered — the registry is shared
+    /// across every root elaborated into this `Context`, so a collision is
+    /// rejected rather than silently overwriting a prior root's declaration.
+    /// Mid-elaboration rebuilds of an already-registered entry go through
+    /// [`Context::update_structure`] instead.
+    pub(crate) fn register_structure<N>(
+        &mut self,
+        name: N,
+        structure: Structure,
+    ) -> Result<(), Error>
     where
         N: Into<String>,
     {
-        self.structures.insert(name.into(), structure);
+        let name = name.into();
+        if self.structures.contains_key(&name) {
+            return Err(Error::duplicate_structure(name));
+        }
+        self.structures.insert(name, structure);
+        Ok(())
+    }
+
+    /// Overwrite an already-registered struct's metadata with rebuilt field
+    /// types — called mid-elaboration by `elaborate_structure` to refine the
+    /// same declaration's own entry, not to register a new one, so unlike
+    /// [`Context::register_structure`] this always overwrites. Panics if
+    /// `name` has no prior entry — every caller is expected to have checked
+    /// `Context::structure` first (a construction bug otherwise, not a
+    /// user-facing case).
+    pub(crate) fn update_structure<N>(&mut self, name: N, structure: Structure)
+    where
+        N: Into<String>,
+    {
+        let name = name.into();
+        assert!(
+            self.structures.contains_key(&name),
+            "update_structure: '{name}' is not already registered"
+        );
+        self.structures.insert(name, structure);
     }
 
     /// Look up a struct declaration by the type's qualified name.
@@ -623,14 +698,23 @@ impl Context {
 
     // === Concept & witness registries =======================================
 
-    /// Record a concept declaration's resolution metadata (its record shape is
-    /// registered separately, as an ordinary structure). Called once per
-    /// `concept` declaration when the module's registries are seeded.
-    pub(crate) fn register_concept<N>(&mut self, name: N, concept: Concept)
+    /// Record a new concept declaration's resolution metadata (its record
+    /// shape is registered separately, as an ordinary structure). Called once
+    /// per `concept` declaration when a module's registries are seeded. Errs
+    /// with `DuplicateConcept` (leaving the existing entry untouched) if
+    /// `name` is already registered — the registry is shared across every
+    /// root elaborated into this `Context`, so a collision is rejected rather
+    /// than silently overwriting a prior root's declaration.
+    pub(crate) fn register_concept<N>(&mut self, name: N, concept: Concept) -> Result<(), Error>
     where
         N: Into<String>,
     {
-        self.concepts.insert(name.into(), concept);
+        let name = name.into();
+        if self.concepts.contains_key(&name) {
+            return Err(Error::duplicate_concept(name));
+        }
+        self.concepts.insert(name, concept);
+        Ok(())
     }
 
     /// Look up a concept by its qualified name.

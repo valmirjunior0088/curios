@@ -484,23 +484,25 @@ fn convert_struct_unit_field_is_irrelevant() {
     let mut context = context();
 
     // struct Wrap { x : Nat, u : () }
-    context.register_structure(
-        "Wrap",
-        Structure {
-            params: Telescope::done(()),
-            fields: Telescope::build(
-                [
-                    ("x", Term::prim(Prim::NatType)),
-                    ("u", Term::tuple_type_unit()),
-                ],
-                (),
-            ),
-            result_sort: Term::type_(),
-            module: Qualifier::empty(),
-            root: RootId::Entry,
-            rep_public: true,
-        },
-    );
+    context
+        .register_structure(
+            "Wrap",
+            Structure {
+                params: Telescope::done(()),
+                fields: Telescope::build(
+                    [
+                        ("x", Term::prim(Prim::NatType)),
+                        ("u", Term::tuple_type_unit()),
+                    ],
+                    (),
+                ),
+                result_sort: Term::type_(),
+                module: Qualifier::empty(),
+                root: RootId::Entry,
+                rep_public: true,
+            },
+        )
+        .unwrap();
 
     context.assume("r", &Term::tuple_type_unit());
     context.assume("s", &Term::tuple_type_unit());
@@ -522,27 +524,29 @@ fn convert_variant_unit_payload_is_irrelevant() {
     let mut context = context();
 
     // induct Wrap | wrap(x : Nat, u : ()) end
-    context.register_inductive(
-        "Wrap",
-        Inductive {
-            params: Telescope::done(()),
-            indices: Telescope::done(()),
-            constructors: BTreeMap::from([(
-                Atom::from("wrap"),
-                InductiveParam {
-                    telescope: Telescope::build(
-                        [
-                            ("x", Term::prim(Prim::NatType)),
-                            ("u", Term::tuple_type_unit()),
-                        ],
-                        Term::inductive_type("Wrap", Vec::<Term>::new(), Vec::<Term>::new()),
-                    ),
-                },
-            )]),
-            result_sort: Term::type_(),
-            root: RootId::Entry,
-        },
-    );
+    context
+        .register_inductive(
+            "Wrap",
+            Inductive {
+                params: Telescope::done(()),
+                indices: Telescope::done(()),
+                constructors: BTreeMap::from([(
+                    Atom::from("wrap"),
+                    InductiveParam {
+                        telescope: Telescope::build(
+                            [
+                                ("x", Term::prim(Prim::NatType)),
+                                ("u", Term::tuple_type_unit()),
+                            ],
+                            Term::inductive_type("Wrap", Vec::<Term>::new(), Vec::<Term>::new()),
+                        ),
+                    },
+                )]),
+                result_sort: Term::type_(),
+                root: RootId::Entry,
+            },
+        )
+        .unwrap();
 
     context.assume("r", &Term::tuple_type_unit());
     context.assume("s", &Term::tuple_type_unit());
@@ -1152,30 +1156,37 @@ fn eta_at_unit_trusts_the_goal_type_label() {
 
 /// Register a `Lst`-shaped inductive: one parameter, no indices.
 fn register_lst(context: &mut Context) {
-    context.register_inductive(
-        "Lst",
-        Inductive {
-            params: Telescope::build([("A", Term::type_())], ()),
-            indices: Telescope::build([("A", Term::type_())], ()),
-            constructors: BTreeMap::new(),
-            result_sort: Term::type_(),
-            root: RootId::Entry,
-        },
-    );
+    context
+        .register_inductive(
+            "Lst",
+            Inductive {
+                params: Telescope::build([("A", Term::type_())], ()),
+                indices: Telescope::build([("A", Term::type_())], ()),
+                constructors: BTreeMap::new(),
+                result_sort: Term::type_(),
+                root: RootId::Entry,
+            },
+        )
+        .unwrap();
 }
 
 /// Register a `Vec`-shaped inductive: one parameter, one `Nat` index.
 fn register_vec(context: &mut Context) {
-    context.register_inductive(
-        "Vec",
-        Inductive {
-            params: Telescope::build([("T", Term::type_())], ()),
-            indices: Telescope::build([("T", Term::type_()), ("n", Term::prim(Prim::NatType))], ()),
-            constructors: BTreeMap::new(),
-            result_sort: Term::type_(),
-            root: RootId::Entry,
-        },
-    );
+    context
+        .register_inductive(
+            "Vec",
+            Inductive {
+                params: Telescope::build([("T", Term::type_())], ()),
+                indices: Telescope::build(
+                    [("T", Term::type_()), ("n", Term::prim(Prim::NatType))],
+                    (),
+                ),
+                constructors: BTreeMap::new(),
+                result_sort: Term::type_(),
+                root: RootId::Entry,
+            },
+        )
+        .unwrap();
 }
 
 /// The kind `(Type) -> Type`.
@@ -1258,17 +1269,19 @@ fn imitation_splits_params_and_indices() {
 #[test]
 fn imitation_solves_against_struct_type() {
     let mut context = context();
-    context.register_structure(
-        "Pair",
-        Structure {
-            params: Telescope::build([("A", Term::type_()), ("B", Term::type_())], ()),
-            fields: Telescope::build([("A", Term::type_()), ("B", Term::type_())], ()),
-            result_sort: Term::type_(),
-            module: Qualifier::empty(),
-            root: RootId::Entry,
-            rep_public: true,
-        },
-    );
+    context
+        .register_structure(
+            "Pair",
+            Structure {
+                params: Telescope::build([("A", Term::type_()), ("B", Term::type_())], ()),
+                fields: Telescope::build([("A", Term::type_()), ("B", Term::type_())], ()),
+                result_sort: Term::type_(),
+                module: Qualifier::empty(),
+                root: RootId::Entry,
+                rep_public: true,
+            },
+        )
+        .unwrap();
     context.birth_metavar(
         MetavarId(0),
         Vec::new(),
