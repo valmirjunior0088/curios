@@ -458,11 +458,7 @@ where
         erase_over(context, &var)
     })?;
 
-    Ok(curios_ersd::Subterm::Let(curios_ersd::Let {
-        bindings: vec![(label, erased_head)],
-        tail,
-    })
-    .into())
+    Ok(curios_ersd::Term::let_(vec![(label, erased_head)], tail))
 }
 
 fn erase_nat_match(
@@ -1218,14 +1214,7 @@ fn erase_inductive_match(
                 ));
             }
 
-            Ok(match bindings.is_empty() {
-                true => body,
-                false => curios_ersd::Subterm::Let(curios_ersd::Let {
-                    bindings,
-                    tail: body,
-                })
-                .into(),
-            })
+            Ok(curios_ersd::Term::let_(bindings, body))
         })?;
         cases_erased.insert(index, arm);
     }
@@ -1252,21 +1241,23 @@ fn erase_inductive_match(
 
     // The head term is erased (and thus evaluated) exactly once, shared by
     // the tag dispatch and every arm's payload projections.
-    Ok(curios_ersd::Subterm::Let(curios_ersd::Let {
-        bindings: vec![(scrutinee_label.clone(), erase(context, head, &head_type)?)],
-        tail: curios_ersd::Subterm::Match(curios_ersd::Match {
-            head: curios_ersd::Subterm::Proj(curios_ersd::Proj {
-                head: curios_ersd::Subterm::Name(curios_ersd::Name::from(scrutinee_label.as_str()))
-                    .into(),
-                index: 0,
-            })
-            .into(),
-            cases: cases_erased,
-            default: default_erased,
+    let scrutinee = erase(context, head, &head_type)?;
+    let dispatch = curios_ersd::Subterm::Match(curios_ersd::Match {
+        head: curios_ersd::Subterm::Proj(curios_ersd::Proj {
+            head: curios_ersd::Subterm::Name(curios_ersd::Name::from(scrutinee_label.as_str()))
+                .into(),
+            index: 0,
         })
         .into(),
+        cases: cases_erased,
+        default: default_erased,
     })
-    .into())
+    .into();
+
+    Ok(curios_ersd::Term::let_(
+        vec![(scrutinee_label.clone(), scrutinee)],
+        dispatch,
+    ))
 }
 
 fn erase_let(
@@ -1298,10 +1289,7 @@ fn erase_let(
         let tail = let_.tail.open(&label_terms.iter().collect::<Vec<_>>());
         let tail = erase(context, &tail, expected)?;
 
-        Ok(match bindings.is_empty() {
-            true => tail,
-            false => curios_ersd::Subterm::Let(curios_ersd::Let { bindings, tail }).into(),
-        })
+        Ok(curios_ersd::Term::let_(bindings, tail))
     })
 }
 

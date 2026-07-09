@@ -20,6 +20,34 @@ impl Term {
         *self.inner
     }
 
+    /// Build a [`Let`] binding `bindings` over `tail`, merging into `tail` when
+    /// it is itself a `Let` so an adjacent run of bindings collapses into one
+    /// flat block rather than nesting. `bindings` are the outer (earlier) ones;
+    /// `tail`'s own bindings stay after them, which preserves their sequential
+    /// scoping (names are fresh, so the concatenation never captures). Empty
+    /// `bindings` returns `tail` unchanged.
+    pub fn let_(mut bindings: Vec<(String, Term)>, tail: Term) -> Term {
+        if bindings.is_empty() {
+            return tail;
+        }
+
+        match tail.into_subterm() {
+            Subterm::Let(inner) => {
+                bindings.extend(inner.bindings);
+                Subterm::Let(Let {
+                    bindings,
+                    tail: inner.tail,
+                })
+                .into()
+            }
+            other => Subterm::Let(Let {
+                bindings,
+                tail: other.into(),
+            })
+            .into(),
+        }
+    }
+
     pub(crate) fn as_subterm(&self) -> &Subterm {
         &self.inner
     }

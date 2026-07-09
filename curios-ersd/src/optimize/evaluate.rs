@@ -45,8 +45,7 @@ use {
         Loc, children, clone_args, deep_copy, members, refresh_touched, root_mut, term_at_mut,
     },
     crate::{
-        Apply, Atom, Func, HostPrim, Item, Let, Module, NatMatch, Prim, PurePrim, Subterm, Term,
-        Tuple,
+        Apply, Atom, Func, HostPrim, Item, Module, NatMatch, Prim, PurePrim, Subterm, Term, Tuple,
     },
     std::{
         cell::RefCell,
@@ -852,14 +851,7 @@ impl<'m> Evaluator<'m> {
                     bindings.push((name.clone(), body));
                 }
 
-                let result = match bindings.is_empty() {
-                    true => result,
-                    false => Subterm::Let(Let {
-                        bindings,
-                        tail: result,
-                    })
-                    .into(),
-                };
+                let result = Term::let_(bindings, result);
 
                 visiting.pop();
                 result
@@ -1131,7 +1123,7 @@ fn nonzero_s(divisor: i32) -> Result<i32, Bail> {
 mod tests {
     use {
         super::*,
-        crate::{Argument, Atom, CellPrim, Match, Name},
+        crate::{Argument, Atom, CellPrim, Let, Match, Name},
     };
 
     fn nat(value: u32) -> Term {

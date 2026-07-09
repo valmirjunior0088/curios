@@ -34,9 +34,7 @@ use {
         Loc, children, clone_args, deep_copy, members, refresh_captures, refresh_touched, root_mut,
         term_at_mut,
     },
-    crate::{
-        Apply, Argument, Func, Item, Let, Module, Name, NatMatch, Prim, PurePrim, Subterm, Term,
-    },
+    crate::{Apply, Argument, Func, Item, Module, Name, NatMatch, Prim, PurePrim, Subterm, Term},
     std::{
         collections::{HashMap, HashSet},
         mem,
@@ -433,13 +431,10 @@ impl<'m> Minter<'m> {
         let (item, func) = *self.targets.get(target.as_str())?;
         let baked = func.params[position].name.clone();
 
-        // The body: bind the literal, copy the original body verbatim, and
-        // fold the projections, matches, and recursive calls it decides.
-        let mut body: Term = Subterm::Let(Let {
-            bindings: vec![(baked.clone(), literal)],
-            tail: deep_copy(&func.body),
-        })
-        .into();
+        // The body: bind the literal, copy the original body verbatim (merging
+        // into its leading `let` block if any), and fold the projections,
+        // matches, and recursive calls it decides.
+        let mut body: Term = Term::let_(vec![(baked.clone(), literal)], deep_copy(&func.body));
         let mut scope: Scope = Vec::new();
         fold_known(self, &mut body, &mut scope);
 
@@ -609,7 +604,10 @@ fn respecialized(apply: &Apply, spec: String, drop: usize) -> Term {
 
 #[cfg(test)]
 mod tests {
-    use {super::*, crate::Atom, crate::Match, crate::Proj, crate::Tuple};
+    use {
+        super::*,
+        crate::{Atom, Let, Match, Proj, Tuple},
+    };
 
     fn nat(value: u32) -> Term {
         Subterm::Prim(Prim::Pure(PurePrim::Nat(value))).into()
