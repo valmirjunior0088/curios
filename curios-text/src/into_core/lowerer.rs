@@ -1,9 +1,8 @@
 use {
     super::{Context, MatchCompiler},
     crate::{
-        BinMatch, BinSegment, CondMatch, Error, Field, LadderTest, Let, LetBinding, LstEntry,
-        LstMatch, Match, Name, Nat, NatLiteral, NatMatch, Pattern, PatternField, Prim, Rec,
-        StructLitEntry, Subterm, Syn, Term,
+        BinSegment, CondMatch, Error, Field, LadderTest, Let, LetBinding, LstEntry, Match, Name,
+        Nat, NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     curios_base::{MONAD_BIND, STR_SCAN_LEAD, STR_STEP, STR_STR, STR_UTF8_MORE, STR_UTF8_STOP},
     num_bigint::BigUint,
@@ -337,55 +336,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     }
                     acc
                 }
-                Match::Bln(bm) => {
-                    let (label, body) = MatchCompiler::new(self).motive_parts(&bm.motive)?;
-                    curios_core::Term::bln_match(
-                        self.term(&bm.head)?,
-                        label,
-                        body,
-                        self.term(&bm.false_case)?,
-                        self.term(&bm.true_case)?,
-                    )
-                }
-                Match::Nat(NatMatch::Induction {
-                    head,
-                    motive,
-                    zero_case,
-                    pred_label,
-                    ih_label,
-                    succ_case,
-                }) => {
-                    let (label, body) = MatchCompiler::new(self).motive_parts(motive)?;
-                    curios_core::Term::nat_match(
-                        self.term(head)?,
-                        label,
-                        body,
-                        self.term(zero_case)?,
-                        pred_label.clone(),
-                        ih_label.clone(),
-                        self.scoped([pred_label.clone(), ih_label.clone()], || {
-                            self.term(succ_case)
-                        })?,
-                    )
-                }
-                Match::Nat(NatMatch::Dispatch {
-                    head,
-                    motive,
-                    cases,
-                    default,
-                }) => {
-                    let (label, motive_body) = MatchCompiler::new(self).motive_parts(motive)?;
-                    curios_core::Term::switch(
-                        self.term(head)?,
-                        label,
-                        motive_body,
-                        cases
-                            .iter()
-                            .map(|(&nat, body)| Ok((nat, self.term(body)?)))
-                            .collect::<Result<Vec<_>, Error>>()?,
-                        self.term(default)?,
-                    )
-                }
                 Match::Matrix(um) => {
                     // The matrix compiler recursively decomposes (possibly
                     // nested, across constructors/tuples/structs) arm
@@ -399,57 +349,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         &um.arms,
                         MatchCompiler::term,
                     )?
-                }
-                Match::Lst(LstMatch {
-                    head,
-                    motive,
-                    empty_case,
-                    head_label,
-                    tail_label,
-                    ih_label,
-                    cons_case,
-                }) => {
-                    let (label, body) = MatchCompiler::new(self).motive_parts(motive)?;
-                    let head_label = self.pattern_binder_name(head_label);
-                    let tail_label = self.pattern_binder_name(tail_label);
-                    let ih_label = self.cons_ih_name(ih_label);
-                    // The element type is type-directed (read off the scrutinee
-                    // during elaboration), so lowering leaves it a hole.
-                    curios_core::Term::lst_match(
-                        self.term(head)?,
-                        curios_core::Term::metavar(self.context.fresh_metavar()),
-                        label,
-                        body,
-                        self.term(empty_case)?,
-                        head_label.clone(),
-                        tail_label.clone(),
-                        ih_label.clone(),
-                        self.scoped([head_label, tail_label, ih_label], || self.term(cons_case))?,
-                    )
-                }
-                Match::Bin(BinMatch {
-                    head,
-                    motive,
-                    empty_case,
-                    head_label,
-                    tail_label,
-                    ih_label,
-                    cons_case,
-                }) => {
-                    let (label, body) = MatchCompiler::new(self).motive_parts(motive)?;
-                    let head_label = self.pattern_binder_name(head_label);
-                    let tail_label = self.pattern_binder_name(tail_label);
-                    let ih_label = self.cons_ih_name(ih_label);
-                    curios_core::Term::bin_match(
-                        self.term(head)?,
-                        label,
-                        body,
-                        self.term(empty_case)?,
-                        head_label.clone(),
-                        tail_label.clone(),
-                        ih_label.clone(),
-                        self.scoped([head_label, tail_label, ih_label], || self.term(cons_case))?,
-                    )
                 }
             },
             // A `let` block is non-recursive: each binding is in scope for the

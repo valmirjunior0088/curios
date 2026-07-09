@@ -1,8 +1,8 @@
 use {
     super::Lowerer,
     crate::{
-        BinMatch, BinPattern, CondMatch, Error, LadderArm, LadderTest, LstMatch, LstPattern, Match,
-        MatchPattern, MatrixArm, Motive, NatMatch, NatPattern, Subterm, Term,
+        BinPattern, CondMatch, Error, LadderArm, LadderTest, LstPattern, Match, MatchPattern,
+        MatrixArm, Motive, NatPattern, Subterm, Term,
     },
     std::{collections::BTreeMap, mem},
 };
@@ -97,114 +97,12 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             Match::Cond(CondMatch { arms, default }) => {
                 self.cond_ladder_region(arms, default, binds)?
             }
-            Match::Bln(bm) => {
-                let (label, body) = self.motive_parts(&bm.motive)?;
-                curios_core::Term::bln_match(
-                    self.collect(&bm.head, binds)?,
-                    label,
-                    body,
-                    self.region(&bm.false_case)?,
-                    self.region(&bm.true_case)?,
-                )
-            }
-            Match::Nat(NatMatch::Induction {
-                head,
-                motive,
-                zero_case,
-                pred_label,
-                ih_label,
-                succ_case,
-            }) => {
-                let (label, body) = self.motive_parts(motive)?;
-                curios_core::Term::nat_match(
-                    self.collect(head, binds)?,
-                    label,
-                    body,
-                    self.region(zero_case)?,
-                    pred_label.clone(),
-                    ih_label.clone(),
-                    self.scoped([pred_label.clone(), ih_label.clone()], || {
-                        self.region(succ_case)
-                    })?,
-                )
-            }
-            Match::Nat(NatMatch::Dispatch {
-                head,
-                motive,
-                cases,
-                default,
-            }) => {
-                let (label, motive_body) = self.motive_parts(motive)?;
-                curios_core::Term::switch(
-                    self.collect(head, binds)?,
-                    label,
-                    motive_body,
-                    cases
-                        .iter()
-                        .map(|(&nat, body)| Ok((nat, self.region(body)?)))
-                        .collect::<Result<Vec<_>, Error>>()?,
-                    self.region(default)?,
-                )
-            }
             Match::Matrix(um) => {
                 // Mirrors the `Match::Matrix` arm of `subterm` (see there and
                 // `Self::compile_matrix_headed`), swapping `collect` on the head
                 // and `region` on the arm bodies (branch-local effects).
                 let head = self.collect(&um.head, binds)?;
                 self.compile_matrix_headed(head, &um.motive, &um.arms, Self::region)?
-            }
-            Match::Lst(LstMatch {
-                head,
-                motive,
-                empty_case,
-                head_label,
-                tail_label,
-                ih_label,
-                cons_case,
-            }) => {
-                let (label, body) = self.motive_parts(motive)?;
-                let head_label = self.pattern_binder_name(head_label);
-                let tail_label = self.pattern_binder_name(tail_label);
-                let ih_label = self.cons_ih_name(ih_label);
-                curios_core::Term::lst_match(
-                    self.collect(head, binds)?,
-                    curios_core::Term::metavar(self.context.fresh_metavar()),
-                    label,
-                    body,
-                    self.region(empty_case)?,
-                    head_label.clone(),
-                    tail_label.clone(),
-                    ih_label.clone(),
-                    self.scoped([head_label, tail_label, ih_label], || {
-                        self.region(cons_case)
-                    })?,
-                )
-            }
-            Match::Bin(BinMatch {
-                head,
-                motive,
-                empty_case,
-                head_label,
-                tail_label,
-                ih_label,
-                cons_case,
-            }) => {
-                let (label, body) = self.motive_parts(motive)?;
-                let head_label = self.pattern_binder_name(head_label);
-                let tail_label = self.pattern_binder_name(tail_label);
-                let ih_label = self.cons_ih_name(ih_label);
-                curios_core::Term::bin_match(
-                    self.collect(head, binds)?,
-                    label,
-                    body,
-                    self.region(empty_case)?,
-                    head_label.clone(),
-                    tail_label.clone(),
-                    ih_label.clone(),
-                    self.scoped([head_label, tail_label, ih_label], || {
-                        self.region(cons_case)
-                    })?,
-                )
             }
         })
     }
@@ -798,8 +696,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 
     /// Compiles a `Nat` column in one of two modes, chosen by its leaves —
-    /// the same split `NatMatch::Induction` vs. `NatMatch::Dispatch` drew at
-    /// the surface, now decided here so both are ordinary matrix leaves:
+    /// the induction/dispatch split the surface once drew with two separate
+    /// `Nat` match forms, now decided here so both are ordinary matrix leaves:
     ///
     /// - **Induction** (a `Succ` leaf present): `0`/`n+1; ih` structural
     ///   peeling, emitted as [`curios_core::Term::nat_match`]. A `Lit` leaf
@@ -1274,19 +1172,20 @@ fn refutation_count(pattern: &MatchPattern) -> usize {
 }
 
 /// Splits a headed match's arms into its concrete arms and an optional
-/// `| _ =>` catch-all body. A final top-level bare `_` among constructor arms is
-/// the catch-all (its body becomes the core match's default). A *named* final
-/// binder in that position is a mistake ([`Error::MatchNamedCatchAll`]). A lone
-/// `_` with no concrete arms is not a catch-all — it stays the all-binder
-/// retirement path (a `let`) — and neither is a `_` after non-constructor
-/// (tuple/struct) arms, which project exhaustively and need no default.
+/// `| _ =>` catch-all body. A final top-level bare `_` after *dispatching* arms
+/// (a constructor tag or any of the four hardcoded-carrier leaves —
+/// [`MatchPattern::is_dispatchable`]) is the catch-all: its body becomes the
+/// core match's default (a `Cases::Inductive` default, or a `Nat`/`Bln`
+/// carrier's fallthrough — this is what makes a `Nat` literal dispatch's
+/// mandatory `_` legal). A *named* final binder in that position is a mistake
+/// ([`Error::MatchNamedCatchAll`]). A lone `_` with no concrete arms is not a
+/// catch-all — it stays the all-binder retirement path (a `let`) — and neither
+/// is a `_` after tuple/struct arms, which project exhaustively and need no
+/// default.
 fn split_catch_all(arms: &[MatrixArm]) -> Result<(&[MatrixArm], Option<&Term>), Error> {
     match arms.split_last() {
         Some((last, init))
-            if !init.is_empty()
-                && init
-                    .iter()
-                    .all(|arm| matches!(arm.pattern, MatchPattern::Ctor { .. })) =>
+            if !init.is_empty() && init.iter().all(|arm| arm.pattern.is_dispatchable()) =>
         {
             match &last.pattern {
                 MatchPattern::Binder(name) if name == "_" => Ok((init, Some(&last.body))),

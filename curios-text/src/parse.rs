@@ -22,11 +22,11 @@ mod tests;
 
 use {
     super::{
-        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, CasePayloadParam, ConceptField,
+        Apply, BinPattern, BinSegment, CasePayloadParam, ConceptField,
         ConceptParam, CondMatch, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
-        Infix, LadderArm, LadderTest, Let, LetBinding, LetSignature, LstEntry, LstMatch,
+        Infix, LadderArm, LadderTest, Let, LetBinding, LetSignature, LstEntry,
         LstPattern, Match, MatchPattern, MatchPatternField, MatrixArm, MatrixMatch, Module, Motive,
-        Name, Nat, NatLiteral, NatMatch, NatPattern, NumLit, Pattern, PatternField, Prim, Proj,
+        Name, Nat, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Prim, Proj,
         Radix, Rec, RecItem, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept,
         TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple,
         TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry, WitnessField,

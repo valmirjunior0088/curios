@@ -184,6 +184,8 @@ match d
 end
 ```
 
+The literal cases may also appear nested inside a constructor payload (`some(5)`); there the enclosing match's top-level `| _ =>` supplies the switch's mandatory default. Whether a `Nat` match is induction or dispatch is decided purely by its arms — a `pred + 1; ih` successor arm makes it induction, literal cases make it dispatch, and the two cannot be mixed in one match.
+
 **`Lst` fold** (empty arm uses the empty-list literal `[]`; the cons arm `[head, ..tail]; ih` mirrors the list literal's own bracket-and-comma shape, peeling the leading element `head` off the rest `tail`, with `ih` the fold of `tail` — a plain case-split may omit `; ih`):
 
 ```

@@ -233,8 +233,9 @@ pub(super) fn parse_bln_match_pattern<'a>() -> Parser<'a, MatchPattern> {
         .or(catch(parse_keyword("true")).map(|()| MatchPattern::Bln(true)))
 }
 
-// The `0` leaf of a nested `Nat` pattern — mirrors `parse_nat_match`'s own
-// zero-case check.
+// The `0` leaf of a `Nat` match-arm pattern (the zero case of an induction,
+// or literal `0` in a switch). Only the numeral `0` maps here; every other
+// literal is `parse_nat_lit_match_pattern`.
 pub(super) fn parse_nat_zero_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_nat().flat_map(|lit| match lit {
         NatLiteral::Number(n, _) if n.is_zero() => pure(MatchPattern::Nat(NatPattern::Zero)),
@@ -242,9 +243,9 @@ pub(super) fn parse_nat_zero_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     }))
 }
 
-// The `pred + 1; ih` leaf of a nested `Nat` pattern. `ih` is mandatory here
-// (no optional-ih alternative), mirroring `parse_nat_match`'s own asymmetry
-// against the `Lst`/`Bin` cons leaves below. Tried after `Ctor` and before
+// The `pred + 1; ih` leaf of a `Nat` match-arm pattern. `ih` is mandatory here
+// (no optional-ih alternative), unlike the optional `; ih` on the `Lst`/`Bin`
+// cons leaves below. Tried after `Ctor` and before
 // the generic `Binder` fallback in `parse_match_pattern`: it shares a
 // leading identifier with both, so `Binder` would otherwise silently
 // swallow every `name+1;ih` input before this ever gets a chance to commit.
@@ -271,12 +272,13 @@ pub(super) fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     })
 }
 
-// The literal-dispatch leaf `k` of a nested `Nat` pattern (`| 5 =>`, `| 0x90 =>`)
-// — mirrors `parse_nat_case`'s own `parse_nat_literal_u32`, so hex/char literals
-// dispatch exactly as they do in a `NatMatch::Dispatch`. `0` is rejected here: it
-// is always the `Zero` leaf (tried earlier in `parse_match_pattern`), keeping one
-// canonical leaf per value. Tried before the generic `Binder` fallback, which
-// would otherwise swallow a bare digit as an identifier.
+// The literal-dispatch leaf `k` of a `Nat` match-arm pattern (`| 5 =>`,
+// `| 0x90 =>`). Reuses `parse_nat_literal_u32`, so hex/char literals dispatch by
+// value; a column of these (with no `pred + 1; ih` arm) lowers to a `switch`.
+// `0` is rejected here: it is always the `Zero` leaf (tried earlier in
+// `parse_match_pattern`), keeping one canonical leaf per value. Tried before the
+// generic `Binder` fallback, which would otherwise swallow a bare digit as an
+// identifier.
 pub(super) fn parse_nat_lit_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_nat_literal_u32().flat_map(|k| match k {
         0 => fail("0 is the Nat zero pattern, not a literal-dispatch case"),

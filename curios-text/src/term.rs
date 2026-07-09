@@ -7,7 +7,7 @@ use {
         printer::run_printer,
     },
     num_bigint::BigUint,
-    std::{collections::BTreeMap, fmt, ops::Deref, rc::Rc, str::FromStr},
+    std::{fmt, ops::Deref, rc::Rc, str::FromStr},
 };
 
 /// The unit of the surface syntax tree: a [`Subterm`] plus an optional source span. The span is deliberately excluded from `PartialEq` — tests build spanless expected trees and compare structure — and is readable only crate-internally; `Deref<Target = Subterm>` lets consumers match on the structure directly.
@@ -268,45 +268,17 @@ pub enum Motive {
     },
 }
 
-/// A `Nat` match, in its two surface forms. `Induction` is the structural `| 0 => … | n + 1; ih => …` split, with the induction hypothesis bound in the successor arm (mandatory, unlike `Lst`/`Bin`'s optional `; ih`). `Dispatch` is literal dispatch — `u32` literal cases plus a mandatory default arm — for matching specific numerals without peeling one successor at a time.
-#[derive(Debug, Clone, PartialEq)]
-pub enum NatMatch {
-    Induction {
-        head: Term,
-        motive: Option<Motive>,
-        zero_case: Term,
-        pred_label: String,
-        ih_label: String,
-        succ_case: Term,
-    },
-    Dispatch {
-        head: Term,
-        motive: Option<Motive>,
-        cases: BTreeMap<u32, Term>,
-        default: Term,
-    },
-}
-
-/// A `Bln` case split: `match b | false => … | true => …`, both arms structurally mandatory (the hardcoded carriers have no core-side exhaustiveness mechanism to fall back on). `Bln` has no recursive structure, so unlike its `Nat`/`Lst`/`Bin` siblings there is no induction-hypothesis form at all.
-#[derive(Debug, Clone, PartialEq)]
-pub struct BlnMatch {
-    pub head: Term,
-    pub motive: Option<Motive>,
-    pub false_case: Term,
-    pub true_case: Term,
-}
-
 /// A headless ladder: `match | test => body | … | _ => default end`. There is
 /// no scrutinee — the arms are tried top-to-bottom and the first that fires
 /// selects its body; the mandatory final `| _ =>` supplies the fallthrough. An
 /// arm's [`LadderTest`] is either a `Bln` condition (`| cond =>`) or a refutable
 /// bind (`| pattern = value =>`, Rust `if let`). Lowering right-folds the ladder
-/// into nested [`BlnMatch`]es / single-row matrix matches
+/// into nested `Bln` matches / single-row matrix matches
 /// (`into_core::match_compile`), so each body inherits the definitional
 /// refinement of its condition for free (the same `refine_head` keying a
 /// hand-written `match cond | true => … | false => …` would get). A dispatch
 /// form, not an elimination: it enumerates no shapes, so the `_` default is
-/// mandatory (mirroring [`NatMatch::Dispatch`]). No motive.
+/// mandatory (as in a headed `Nat` literal dispatch). No motive.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CondMatch {
     /// The arms, in source order; the first whose test fires selects its body.
@@ -333,41 +305,6 @@ pub enum LadderTest {
     /// its sub-patterns in the body. A bare-[`MatchPattern::Binder`] `pattern`
     /// is irrefutable and rejected by lowering — it would be a plain `let`.
     Bind { pattern: MatchPattern, value: Term },
-}
-
-/// Structural induction on an `Lst`: an `| [] =>` identity arm and a
-/// `| [head, ..tail]; ih =>` cons arm, mirroring the `Lst` literal's own
-/// bracket-and-comma shape. The surface analogue of `NatMatch::Induction` for
-/// the native free-monoid primitives (the empty literal selects the carrier).
-/// `ih_label` is `None` when `; ih` is omitted — a plain case-split with no
-/// induction hypothesis at all, not a user-spelled placeholder name; lowering
-/// mints a fresh internal name for it directly.
-#[derive(Debug, Clone, PartialEq)]
-pub struct LstMatch {
-    pub head: Term,
-    pub motive: Option<Motive>,
-    pub empty_case: Term,
-    pub head_label: String,
-    pub tail_label: String,
-    pub ih_label: Option<String>,
-    pub cons_case: Term,
-}
-
-/// Structural induction on a `Bin`: a `| \\ =>` identity arm (the empty
-/// bytestring literal) and a `| \head\..tail; ih =>` cons arm, mirroring the
-/// `Bin` literal's own backslash-delimited shape, whose `head` is the leading
-/// byte (a `Nat`) and `tail` the rest. The `Bin` analogue of [`LstMatch`];
-/// `Bin` carries no element type, so there is no carrier parameter to read off.
-/// `ih_label` is `None` when `; ih` is omitted, exactly as in [`LstMatch`].
-#[derive(Debug, Clone, PartialEq)]
-pub struct BinMatch {
-    pub head: Term,
-    pub motive: Option<Motive>,
-    pub empty_case: Term,
-    pub head_label: String,
-    pub tail_label: String,
-    pub ih_label: Option<String>,
-    pub cons_case: Term,
 }
 
 /// A projection names its field either positionally (`p.0`) or by the tuple
@@ -438,14 +375,18 @@ pub struct MatrixArm {
     pub body: Term,
 }
 
-/// A surface `match`, split by what the arms dispatch on: the four hardcoded carriers (`Bln`, `Nat`, `Lst`, `Bin`) each get a fixed-shape variant whose arms are exactly the carrier's own cases, while constructor-tag dispatch — including nested and tuple/struct patterns — is the general [`MatrixMatch`]. The headless [`CondMatch`] has no scrutinee at all — its arms are `Bln` conditions. The parser classifies by prefix and arm shape, and each variant lowers through a different core elimination form.
+/// A surface `match`, in exactly two shapes. [`MatrixMatch`] is the general
+/// headed form: one scrutinee and arms of arbitrary (nested, across
+/// constructors, tuples, structs, and the four literal-carrier leaves)
+/// [`MatchPattern`]s. The hardcoded carriers (`Bln`, `Nat` — induction *and*
+/// literal dispatch — `Lst`, `Bin`) are not separate variants: each is a matrix
+/// whose arm patterns are that carrier's own leaves, lowered through the
+/// per-carrier `compile_bln`/`compile_nat`/`compile_lst`/`compile_bin` in
+/// `into_core::match_compile`. The headless [`CondMatch`] has no scrutinee at
+/// all — its arms are `Bln` conditions (and refutable binds).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Match {
-    Bln(BlnMatch),
-    Nat(NatMatch),
     Matrix(MatrixMatch),
-    Lst(LstMatch),
-    Bin(BinMatch),
     Cond(CondMatch),
 }
 
@@ -479,14 +420,14 @@ pub enum MatchPattern {
     },
     /// A `Bln` literal leaf: `true` or `false`.
     Bln(bool),
-    /// A nested `Nat` literal leaf — mirrors [`NatMatch::Induction`]'s own
-    /// `0`/`n+1; ih` arms.
+    /// A nested `Nat` literal leaf — the `0`/`n+1; ih` (induction) or bare
+    /// literal (dispatch) shapes a headed `Nat` match takes.
     Nat(NatPattern),
-    /// A nested `Lst` literal leaf — mirrors [`LstMatch`]'s own `[]`/
-    /// `[head,..tail][; ih]` arms.
+    /// A nested `Lst` literal leaf — the `[]`/`[head,..tail][; ih]` shapes a
+    /// headed `Lst` match takes.
     Lst(LstPattern),
-    /// A nested `Bin` literal leaf — mirrors [`BinMatch`]'s own `\\`/
-    /// `\head\..tail[; ih]` arms.
+    /// A nested `Bin` literal leaf — the `\\`/`\head\..tail[; ih]` shapes a
+    /// headed `Bin` match takes.
     Bin(BinPattern),
 }
 
@@ -517,8 +458,8 @@ pub enum NatPattern {
     /// The `pred + 1; ih` leaf. `pred_label`/`ih_label` are always plain
     /// binder names, never a further nested sub-pattern — deep peeling in
     /// one arm stays expressible only via hand-nested matches. `ih_label`
-    /// is mandatory, mirroring `NatMatch::Induction`'s own asymmetry versus
-    /// `Lst`/`Bin` below.
+    /// is mandatory here, unlike the optional `; ih` on the `Lst`/`Bin` cons
+    /// leaves below.
     Succ {
         pred_label: String,
         ih_label: String,
@@ -528,8 +469,7 @@ pub enum NatPattern {
     /// `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of
     /// `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch,
     /// lowered to a `Cases::Switch` with a mandatory default rather than the
-    /// `Nat` eliminator — the matrix home of `NatMatch::Dispatch` (see
-    /// `into_core::match_compile`'s `compile_nat`).
+    /// `Nat` eliminator (see `into_core::match_compile`'s `compile_nat`).
     Lit(u32),
 }
 
@@ -539,8 +479,8 @@ pub enum LstPattern {
     /// The `[]` leaf.
     Nil,
     /// The `[head, ..tail][; ih]` leaf. `ih_label` is `None` when `; ih` is
-    /// omitted (lowering mints a fresh internal name), mirroring
-    /// `LstMatch`'s own optionality.
+    /// omitted (lowering mints a fresh internal name) — a plain case-split with
+    /// no induction hypothesis.
     Cons {
         head_label: String,
         tail_label: String,
@@ -553,8 +493,8 @@ pub enum LstPattern {
 pub enum BinPattern {
     /// The `\\` leaf.
     End,
-    /// The `\head\..tail[; ih]` leaf, mirroring `BinMatch`'s own optional
-    /// `ih_label`.
+    /// The `\head\..tail[; ih]` leaf; `ih_label` is optional exactly as on the
+    /// `Lst` cons leaf.
     Byte {
         head_label: String,
         tail_label: String,

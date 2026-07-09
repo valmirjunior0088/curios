@@ -65,108 +65,6 @@ pub(super) fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Motive>)> {
         )
 }
 
-pub(super) fn parse_bln_false_branch<'a>() -> Parser<'a, Term> {
-    parse_literal("|")
-        .and_keep(parse_keyword("false"))
-        .and_drop(parse_literal("=>"))
-        .and_keep(lazy(parse_term))
-}
-
-pub(super) fn parse_bln_true_branch<'a>() -> Parser<'a, Term> {
-    parse_literal("|")
-        .and_keep(parse_keyword("true"))
-        .and_drop(parse_literal("=>"))
-        .and_keep(lazy(parse_term))
-}
-
-pub(super) fn parse_bln_match<'a>() -> Parser<'a, Term> {
-    catch(parse_match_prefix())
-        .and(
-            catch(parse_bln_false_branch())
-                .and(parse_bln_true_branch())
-                .or(parse_bln_true_branch()
-                    .and(parse_bln_false_branch())
-                    .map(|(tc, fc)| (fc, tc))),
-        )
-        .and_drop(parse_keyword("end"))
-        .map(|((head, motive), (false_case, true_case))| {
-            Subterm::Match(Match::Bln(BlnMatch {
-                head,
-                motive,
-                false_case,
-                true_case,
-            }))
-        })
-        .map(Into::into)
-}
-
-pub(super) fn parse_nat_match<'a>() -> Parser<'a, Term> {
-    catch(parse_match_prefix())
-        .and(
-            catch(
-                parse_literal("|")
-                    .and_keep(parse_nat())
-                    .flat_map(|lit| match lit {
-                        NatLiteral::Number(n, _) if n.is_zero() => pure(()),
-                        _ => fail("expected 0 as NatFold zero case"),
-                    })
-                    .and_drop(parse_literal("=>"))
-                    .and_keep(lazy(parse_term)),
-            )
-            .and(
-                parse_literal("|")
-                    .and_keep(parse_identifier())
-                    .and_drop(parse_literal("+"))
-                    .and_drop(parse_literal("1"))
-                    .and_drop(parse_literal(";"))
-                    .and(parse_identifier())
-                    .and_drop(parse_literal("=>"))
-                    .and(lazy(parse_term)),
-            ),
-        )
-        .and_drop(parse_keyword("end"))
-        .map(
-            |((head, motive), (zero_case, ((pred_label, ih_label), succ_case)))| {
-                Subterm::Match(Match::Nat(NatMatch::Induction {
-                    head,
-                    motive,
-                    zero_case,
-                    pred_label: pred_label.to_string(),
-                    ih_label: ih_label.to_string(),
-                    succ_case,
-                }))
-            },
-        )
-        .map(Into::into)
-}
-
-pub(super) fn parse_nat_case<'a>() -> Parser<'a, (u32, Term)> {
-    catch(parse_literal("|").and_keep(parse_nat_literal_u32()))
-        .and_drop(parse_literal("=>"))
-        .and(lazy(parse_term))
-}
-
-pub(super) fn parse_nat_default<'a>() -> Parser<'a, Term> {
-    catch(parse_literal("|").and_keep(parse_literal("_")))
-        .and_drop(parse_literal("=>"))
-        .and_keep(lazy(parse_term))
-}
-
-pub(super) fn parse_nat_switch<'a>() -> Parser<'a, Term> {
-    catch(parse_match_prefix())
-        .and(catch(many0(parse_nat_case).and(parse_nat_default())))
-        .and_drop(parse_keyword("end"))
-        .map(|((head, motive), (cases, default))| {
-            Subterm::Match(Match::Nat(NatMatch::Dispatch {
-                head,
-                motive,
-                cases: cases.into_iter().collect(),
-                default,
-            }))
-            .into()
-        })
-}
-
 // A match-arm: `| pattern => body`, where `pattern` may nest across
 // constructors, tuples, and structs (see `MatchPattern`, `parse_match_pattern`).
 // Full enumeration only ("Path A" — see `into_core::match_compile`'s doc comment): a
@@ -195,111 +93,15 @@ pub(super) fn parse_inductive_match<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// The `| [] =>` identity arm of an `Lst` fold (the empty `Lst` literal).
-pub(super) fn parse_lst_empty_branch<'a>() -> Parser<'a, Term> {
-    parse_literal("|")
-        .and_drop(parse_literal("[]"))
-        .and_drop(parse_literal("=>"))
-        .and_keep(lazy(parse_term))
-}
-
-// The `; ih =>` tail shared by both carriers' cons arms: `;` sets the
-// induction hypothesis apart from the scrutinee's shape. A plain case-split
-// needs no induction hypothesis, so `; ih` may be omitted — `None`, not a
-// placeholder name; lowering mints a fresh internal name for it directly.
+// The `; ih` induction-hypothesis tail on a `Lst`/`Bin` cons leaf pattern
+// (`parse_lst_cons_match_pattern`/`parse_bin_cons_match_pattern`): `;` sets the
+// hypothesis apart from the scrutinee's shape. A plain case-split needs no
+// induction hypothesis, so `; ih` may be omitted — `None`, not a placeholder
+// name; lowering mints a fresh internal name for it directly.
 pub(super) fn parse_cons_ih<'a>() -> Parser<'a, Option<String>> {
     catch(parse_literal(";").and_keep(parse_identifier()))
         .map(|name| Some(name.to_string()))
         .or(pure(None))
-}
-
-// A cons arm's three binder names: the peeled `head`, the rest `tail`, and
-// the optional induction hypothesis `ih` (`None` when `; ih` is omitted).
-type ConsLabels = (String, String, Option<String>);
-
-// The `| [head, ..tail]; ih =>` cons arm of an `Lst` fold. Mirrors the `Lst`
-// literal's own bracket-and-comma shape (`parse_lst_literal`): `head` is the
-// peeled leading element, `tail` the rest.
-pub(super) fn parse_lst_cons_branch<'a>() -> Parser<'a, (ConsLabels, Term)> {
-    parse_literal("|")
-        .and_drop(parse_literal("["))
-        .and_keep(parse_identifier())
-        .and_drop(parse_literal(","))
-        .and_drop(parse_literal(".."))
-        .and(parse_identifier())
-        .and_drop(parse_literal("]"))
-        .and(parse_cons_ih())
-        .and_drop(parse_literal("=>"))
-        .and(lazy(parse_term))
-        .map(|(((head, tail), ih), cons_case)| {
-            ((head.to_string(), tail.to_string(), ih), cons_case)
-        })
-}
-
-// The `| \head\..tail; ih =>` cons arm of a `Bin` fold. Mirrors the `Bin`
-// literal's own backslash-delimited shape (`parse_bin_literal`): `head` is
-// the leading byte, `tail` the rest.
-pub(super) fn parse_bin_cons_branch<'a>() -> Parser<'a, (ConsLabels, Term)> {
-    parse_literal("|")
-        .and_drop(parse_literal("\\"))
-        .and_keep(parse_identifier())
-        .and_drop(parse_literal("\\"))
-        .and_drop(parse_literal(".."))
-        .and(parse_identifier())
-        .and(parse_cons_ih())
-        .and_drop(parse_literal("=>"))
-        .and(lazy(parse_term))
-        .map(|(((head, tail), ih), cons_case)| {
-            ((head.to_string(), tail.to_string(), ih), cons_case)
-        })
-}
-
-pub(super) fn parse_lst_match<'a>() -> Parser<'a, Term> {
-    catch(parse_match_prefix())
-        .and(catch(parse_lst_empty_branch()).and(parse_lst_cons_branch()))
-        .and_drop(parse_keyword("end"))
-        .map(
-            |((head, motive), (empty_case, ((head_label, tail_label, ih_label), cons_case)))| {
-                Subterm::Match(Match::Lst(LstMatch {
-                    head,
-                    motive,
-                    empty_case,
-                    head_label,
-                    tail_label,
-                    ih_label,
-                    cons_case,
-                }))
-            },
-        )
-        .map(Into::into)
-}
-
-// The `| \\ =>` identity arm of a `Bin` fold (the empty bytestring literal).
-pub(super) fn parse_bin_empty_branch<'a>() -> Parser<'a, Term> {
-    parse_literal("|")
-        .and_drop(parse_literal("\\\\"))
-        .and_drop(parse_literal("=>"))
-        .and_keep(lazy(parse_term))
-}
-
-pub(super) fn parse_bin_match<'a>() -> Parser<'a, Term> {
-    catch(parse_match_prefix())
-        .and(catch(parse_bin_empty_branch()).and(parse_bin_cons_branch()))
-        .and_drop(parse_keyword("end"))
-        .map(
-            |((head, motive), (empty_case, ((head_label, tail_label, ih_label), cons_case)))| {
-                Subterm::Match(Match::Bin(BinMatch {
-                    head,
-                    motive,
-                    empty_case,
-                    head_label,
-                    tail_label,
-                    ih_label,
-                    cons_case,
-                }))
-            },
-        )
-        .map(Into::into)
 }
 
 // A bind arm `| pattern = value => body` (Rust `if let`): the arm fires when
@@ -361,9 +163,8 @@ pub(super) fn parse_ladder_arm<'a>() -> Parser<'a, LadderArm> {
     catch(parse_bind_case()).or(parse_cond_case())
 }
 
-// The mandatory `| _ =>` default arm closing a headless ladder. Same shape as
-// `parse_nat_default` (:149) — a `Bln` ladder is a dispatch form, so `_` is
-// required, not optional.
+// The mandatory `| _ =>` default arm closing a headless ladder. A `Bln` ladder
+// is a dispatch form (it enumerates no shapes), so `_` is required, not optional.
 pub(super) fn parse_cond_default<'a>() -> Parser<'a, Term> {
     catch(parse_literal("|").and_keep(parse_literal("_")))
         .and_drop(parse_literal("=>"))
@@ -381,12 +182,14 @@ pub(super) fn parse_cond_match<'a>() -> Parser<'a, Term> {
         .map(|(arms, default)| Subterm::Match(Match::Cond(CondMatch { arms, default })).into())
 }
 
+// A `match` is one of exactly two surface shapes: the headless `Bln`/bind
+// ladder (no head term after `match`), or the general headed pattern matrix.
+// Every headed carrier form — `Bln`, `Nat` (induction *and* literal dispatch),
+// `Lst`, `Bin` — is just a matrix whose arm patterns are that carrier's leaves
+// (see `parse_match_pattern`), lowered by `into_core::match_compile`'s
+// `compile_bln`/`compile_nat`/`compile_lst`/`compile_bin`. The headless form is
+// tried first: no term starts with `|`, so a headed form's `lazy(parse_term)`
+// head backtracks cleanly when there is none.
 pub(super) fn parse_match<'a>() -> Parser<'a, Term> {
-    catch(parse_cond_match())
-        .or(catch(parse_bln_match()))
-        .or(catch(parse_nat_match()))
-        .or(catch(parse_nat_switch()))
-        .or(catch(parse_lst_match()))
-        .or(catch(parse_bin_match()))
-        .or(parse_inductive_match())
+    catch(parse_cond_match()).or(parse_inductive_match())
 }

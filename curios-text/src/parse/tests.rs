@@ -1770,11 +1770,19 @@ fn matrix_match_round_trips() {
         // Bin literal leaves nested inside a constructor payload.
         r#"match o | some(\\) => y | some(\h\..t) => y | none() => y end"#,
         r#"match o | some(\h\..t; ih) => y | some(\\) => y | none() => y end"#,
-        // Bln literal leaves nested inside a constructor payload — two full
-        // rows, since a bare top-level `true`/`false` would otherwise be
-        // swallowed by the separate flat `parse_bln_match` before ever
-        // reaching this grammar.
+        // Bln literal leaves nested inside a constructor payload.
         "match p | pair(true, y) => y | pair(false, y) => y end",
+        // The four hardcoded carriers as *headed* matches — no longer separate
+        // surface variants, just matrices over that carrier's own leaves. Each
+        // must survive print → re-parse identically to prove the collapse
+        // preserves their surface syntax.
+        "match b | false => x | true => y end",
+        "match n | 0 => a | m + 1; ih => b end",
+        // Nat literal dispatch (the old `NatMatch::Dispatch`): literal cases and
+        // the mandatory `| _ =>` default.
+        "match d | 0 => a | 5 => b | _ => c end",
+        "match a | [] => b | [h, ..t]; ih => c end",
+        r#"match a | \\ => b | \h\..t; ih => c end"#,
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
