@@ -76,6 +76,33 @@ fn reduce_let_then_var_unfolds_definition() {
 }
 
 #[test]
+fn reduce_let_binds_each_value_to_its_own_slot() {
+    // Two distinct bindings referenced together in the tail: pins the positional
+    // correctness of `reduce_let`'s environment open. The tail is `(λ p q. q) a b`,
+    // so the result is `b`'s value — and only if `a`/`b` land in the right slots.
+    // A transposed open would beta-reduce to `a`'s value instead.
+    let mut context = context();
+
+    let nat_type = Term::prim(Prim::NatType);
+    let pick_second = Term::apply(
+        Term::func(
+            [("p", nat_type.clone()), ("q", nat_type.clone())],
+            Term::free_var("q"),
+        ),
+        [Term::free_var("a"), Term::free_var("b")],
+    );
+
+    let term = Term::let_(
+        "a",
+        nat_type.clone(),
+        nat(3),
+        Term::let_("b", nat_type, nat(7), pick_second),
+    );
+
+    assert_eq!(reduce(&mut context, term), Ok(nat(7)));
+}
+
+#[test]
 fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
     // A long straight-line `let` sequence must lower to a single flat `Let`
     // block, not a nest: `Term::let_` merges each binding into the block already
