@@ -54,7 +54,12 @@ pub(super) fn children(term: &Term) -> Vec<&Term> {
             .chain(m.cases.values())
             .chain(m.default.iter())
             .collect(),
-        Subterm::Let(let_) => vec![&let_.body, &let_.tail],
+        Subterm::Let(let_) => let_
+            .bindings
+            .iter()
+            .map(|(_, body)| body)
+            .chain(iter::once(&let_.tail))
+            .collect(),
         Subterm::Rec(rec) => rec.items.iter().chain(iter::once(&rec.tail)).collect(),
     }
 }
@@ -90,7 +95,12 @@ pub(super) fn children_mut(term: &mut Term) -> Vec<&mut Term> {
             .chain(m.cases.values_mut())
             .chain(m.default.iter_mut())
             .collect(),
-        Subterm::Let(let_) => vec![&mut let_.body, &mut let_.tail],
+        Subterm::Let(let_) => let_
+            .bindings
+            .iter_mut()
+            .map(|(_, body)| body)
+            .chain(iter::once(&mut let_.tail))
+            .collect(),
         Subterm::Rec(rec) => rec
             .items
             .iter_mut()
@@ -229,8 +239,11 @@ pub(super) fn deep_copy(term: &Term) -> Term {
             default: m.default.as_ref().map(deep_copy),
         }),
         Subterm::Let(let_) => Subterm::Let(Let {
-            name: let_.name.clone(),
-            body: deep_copy(&let_.body),
+            bindings: let_
+                .bindings
+                .iter()
+                .map(|(name, body)| (name.clone(), deep_copy(body)))
+                .collect(),
             tail: deep_copy(&let_.tail),
         }),
         Subterm::Rec(rec) => Subterm::Rec(Rec {
@@ -422,8 +435,7 @@ mod tests {
         .into();
 
         Subterm::Let(Let {
-            name: "m".to_owned(),
-            body: map,
+            bindings: vec![("m".to_owned(), map)],
             tail: Subterm::Apply(Apply {
                 head: name("f"),
                 params: vec![

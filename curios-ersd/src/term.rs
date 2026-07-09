@@ -91,11 +91,16 @@ impl Term {
                 names.extend(default.free_names());
             }
             Subterm::Let(let_) => {
-                names.extend(let_.body.free_names());
-
-                let mut tail = let_.tail.free_names();
-                tail.remove(&let_.name);
-                names.extend(tail);
+                // Sequential scoping: binding `i` is bound for every later
+                // binding and the tail but not for its own body, so fold from
+                // the tail inward, dropping each name before adding its body's
+                // frees (which may reference the bindings before it).
+                let mut free = let_.tail.free_names();
+                for (name, body) in let_.bindings.iter().rev() {
+                    free.remove(name);
+                    free.extend(body.free_names());
+                }
+                names.extend(free);
             }
             Subterm::Rec(rec) => {
                 let mut inner = BTreeSet::new();
@@ -158,7 +163,10 @@ impl Term {
                     || cases.iter().any(|(_, case)| case.contains_effect())
                     || default.contains_effect()
             }
-            Subterm::Let(let_) => let_.body.contains_effect() || let_.tail.contains_effect(),
+            Subterm::Let(let_) => {
+                let_.bindings.iter().any(|(_, body)| body.contains_effect())
+                    || let_.tail.contains_effect()
+            }
             Subterm::Rec(rec) => {
                 rec.items.iter().any(Term::contains_effect) || rec.tail.contains_effect()
             }
@@ -289,11 +297,10 @@ pub struct Match {
     pub default: Option<Term>,
 }
 
-/// A sequential binding: evaluate `body` — performing any effect it contains — then run `tail` with the result in scope as `name`. Beyond user `let`s, erasure leans on it for sharing: a matched scrutinee is bound once, then dispatched on and projected from many times without re-evaluating.
+/// A sequential block of bindings: evaluate each `body` in order — performing any effect it contains — binding its result in scope as `name` for the later bindings and the `tail`. A whole run of source `let`s is one node, not a nest, so every walk over it is a loop over `bindings` rather than one native stack frame per binding. Beyond user `let`s, erasure leans on it for sharing: a matched scrutinee is bound once, then dispatched on and projected from many times without re-evaluating.
 #[derive(Debug)]
 pub struct Let {
-    pub name: String,
-    pub body: Term,
+    pub bindings: Vec<(String, Term)>,
     pub tail: Term,
 }
 

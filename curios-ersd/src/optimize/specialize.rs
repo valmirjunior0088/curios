@@ -222,16 +222,22 @@ fn find_sites(
 
     match term.as_subterm() {
         Subterm::Let(let_) => {
-            path.push(0);
-            find_sites(minter, &let_.body, path, scope, loc, sites);
-            path.pop();
+            // Child indices match `children`: binding `i`'s body at `i`, tail
+            // last. Each binding enters scope for the ones after it and the tail.
+            for (i, (name, body)) in let_.bindings.iter().enumerate() {
+                path.push(i);
+                find_sites(minter, body, path, scope, loc, sites);
+                path.pop();
 
-            let known = resolve_literal(&let_.body, scope);
-            scope.push((let_.name.clone(), known));
-            path.push(1);
+                let known = resolve_literal(body, scope);
+                scope.push((name.clone(), known));
+            }
+            path.push(let_.bindings.len());
             find_sites(minter, &let_.tail, path, scope, loc, sites);
             path.pop();
-            scope.pop();
+            for _ in 0..let_.bindings.len() {
+                scope.pop();
+            }
         }
         Subterm::Func(func) => {
             let depth = scope.len();
@@ -430,8 +436,7 @@ impl<'m> Minter<'m> {
         // The body: bind the literal, copy the original body verbatim, and
         // fold the projections, matches, and recursive calls it decides.
         let mut body: Term = Subterm::Let(Let {
-            name: baked.clone(),
-            body: literal,
+            bindings: vec![(baked.clone(), literal)],
             tail: deep_copy(&func.body),
         })
         .into();
@@ -472,11 +477,15 @@ impl<'m> Minter<'m> {
 fn fold_known(minter: &mut Minter<'_>, term: &mut Term, scope: &mut Scope) {
     match term.as_subterm_mut() {
         Subterm::Let(let_) => {
-            fold_known(minter, &mut let_.body, scope);
-            let known = resolve_literal(&let_.body, scope);
-            scope.push((let_.name.clone(), known));
+            for (name, body) in let_.bindings.iter_mut() {
+                fold_known(minter, body, scope);
+                let known = resolve_literal(body, scope);
+                scope.push((name.clone(), known));
+            }
             fold_known(minter, &mut let_.tail, scope);
-            scope.pop();
+            for _ in 0..let_.bindings.len() {
+                scope.pop();
+            }
         }
         Subterm::Func(func) => {
             let depth = scope.len();
@@ -637,8 +646,7 @@ mod tests {
 
     fn let_(bound: &str, body: Term, tail: Term) -> Term {
         Subterm::Let(Let {
-            name: bound.to_owned(),
-            body,
+            bindings: vec![(bound.to_owned(), body)],
             tail,
         })
         .into()

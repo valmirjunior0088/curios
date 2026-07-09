@@ -494,20 +494,36 @@ impl<'m> Evaluator<'m> {
                 let mut pushed = 0usize;
 
                 let result = loop {
-                    let bound = match self.value_of(&let_.body, env) {
-                        Ok(value) => value,
-                        Err(bail) => break Outcome::Bail(bail),
-                    };
-                    env.push((let_.name.clone(), bound));
-                    pushed += 1;
+                    let mut bail = None;
+
+                    for (name, body) in &let_.bindings {
+                        // The first binding of the whole chain is charged by
+                        // this `eval` call's own entry; every one beyond it is
+                        // charged explicitly, matching the recursive form's fuel.
+                        if pushed > 0 {
+                            if let Err(b) = self.charge() {
+                                bail = Some(b);
+                                break;
+                            }
+                        }
+
+                        let bound = match self.value_of(body, env) {
+                            Ok(value) => value,
+                            Err(b) => {
+                                bail = Some(b);
+                                break;
+                            }
+                        };
+                        env.push((name.clone(), bound));
+                        pushed += 1;
+                    }
+
+                    if let Some(bail) = bail {
+                        break Outcome::Bail(bail);
+                    }
 
                     match let_.tail.as_subterm() {
-                        Subterm::Let(next) => {
-                            if let Err(bail) = self.charge() {
-                                break Outcome::Bail(bail);
-                            }
-                            let_ = next;
-                        }
+                        Subterm::Let(next) => let_ = next,
                         _ => break self.eval(&let_.tail, env, tail),
                     }
                 };
@@ -820,21 +836,30 @@ impl<'m> Evaluator<'m> {
                 visiting.push(key);
 
                 budget.nodes(term_size(&closure.func.body))?;
-                let mut result: Term = Subterm::Func(Func {
+                let result: Term = Subterm::Func(Func {
                     captures: clone_args(&closure.func.captures),
                     params: clone_args(&closure.func.params),
                     body: deep_copy(&closure.func.body),
                 })
                 .into();
-                for (name, captured) in closure.env.borrow().iter().rev() {
+
+                // Reify the captured environment as one grouped `Let` in env
+                // order — `env[0]` is the outermost binding, and each later
+                // capture may reference the ones before it.
+                let mut bindings = Vec::with_capacity(closure.env.borrow().len());
+                for (name, captured) in closure.env.borrow().iter() {
                     let body = self.reify(captured, budget, visiting)?;
-                    result = Subterm::Let(Let {
-                        name: name.clone(),
-                        body,
+                    bindings.push((name.clone(), body));
+                }
+
+                let result = match bindings.is_empty() {
+                    true => result,
+                    false => Subterm::Let(Let {
+                        bindings,
                         tail: result,
                     })
-                    .into();
-                }
+                    .into(),
+                };
 
                 visiting.pop();
                 result
@@ -1162,8 +1187,7 @@ mod tests {
 
     fn let_(bound: &str, body: Term, tail: Term) -> Term {
         Subterm::Let(Let {
-            name: bound.to_owned(),
-            body,
+            bindings: vec![(bound.to_owned(), body)],
             tail,
         })
         .into()

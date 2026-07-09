@@ -312,7 +312,12 @@ fn subterms_mut(term: &mut Term) -> Vec<&mut Term> {
             .chain(m.cases.values_mut())
             .chain(m.default.iter_mut())
             .collect(),
-        Subterm::Let(let_) => vec![&mut let_.body, &mut let_.tail],
+        Subterm::Let(let_) => let_
+            .bindings
+            .iter_mut()
+            .map(|(_, body)| body)
+            .chain(iter::once(&mut let_.tail))
+            .collect(),
         Subterm::Rec(rec) => rec
             .items
             .iter_mut()
@@ -588,8 +593,7 @@ mod tests {
         // (len b))` — a cursor instance beyond `count_w`: the buffer is only indexed,
         // no monoid, yet the re-slice still becomes an offset.
         let step = Subterm::Let(crate::Let {
-            name: "h".to_owned(),
-            body: bin_get(name_term("b"), nat(0)),
+            bindings: vec![("h".to_owned(), bin_get(name_term("b"), nat(0)))],
             tail: call(
                 "scan",
                 vec![bin_slice(name_term("b"), nat(1), bin_len(name_term("b")))],

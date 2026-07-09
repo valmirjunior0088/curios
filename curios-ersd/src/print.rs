@@ -291,14 +291,23 @@ pub(crate) fn print_term<'a>(term: &'a Term) -> Printer<'a> {
                 default_printer,
             ])
         }
-        Subterm::Let(Let { name, body, tail }) => flat([
-            pure("let "),
-            pure(format!("#{}", name.as_str())),
-            pure(" =\n"),
-            indent(flat([print_term(body), pure(";")])),
-            pure("\n"),
-            print_term(tail),
-        ]),
+        Subterm::Let(Let { bindings, tail }) => {
+            let printers = bindings
+                .iter()
+                .map(|(name, body)| {
+                    flat([
+                        pure("let "),
+                        pure(format!("#{}", name.as_str())),
+                        pure(" =\n"),
+                        indent(flat([print_term(body), pure(";")])),
+                        pure("\n"),
+                    ])
+                })
+                .chain([print_term(tail)])
+                .collect::<Vec<_>>();
+
+            flat(printers)
+        }
         Subterm::Rec(Rec { names, items, tail }) => {
             let bindings = names
                 .iter()

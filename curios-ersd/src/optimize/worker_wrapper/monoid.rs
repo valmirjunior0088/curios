@@ -291,8 +291,7 @@ fn rewrite_tail(term: Term, ctx: &Lower, monoid: Monoid, acc: &str) -> Term {
         })
         .into(),
         Subterm::Let(let_) => Subterm::Let(crate::Let {
-            name: let_.name,
-            body: let_.body,
+            bindings: let_.bindings,
             tail: rewrite_tail(let_.tail, ctx, monoid, acc),
         })
         .into(),

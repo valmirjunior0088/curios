@@ -52,11 +52,15 @@ fn lowers_tail_apply_as_indirect_call_to_resume() {
 #[test]
 fn lowers_arr_into_main_region_value() {
     let term = Subterm::Let(Let {
-        name: "a".into(),
-        body: Subterm::Prim(Prim::Pure(PurePrim::Nat(1))).into(),
+        bindings: vec![(
+            "a".into(),
+            Subterm::Prim(Prim::Pure(PurePrim::Nat(1))).into(),
+        )],
         tail: Subterm::Let(Let {
-            name: "b".into(),
-            body: Subterm::Prim(Prim::Pure(PurePrim::Nat(2))).into(),
+            bindings: vec![(
+                "b".into(),
+                Subterm::Prim(Prim::Pure(PurePrim::Nat(2))).into(),
+            )],
             tail: Subterm::Prim(Prim::Pure(PurePrim::Lst(vec![
                 Subterm::Name(Name::from("a")).into(),
                 Subterm::Name(Name::from("b")).into(),
@@ -153,18 +157,20 @@ fn peels_a_let_whose_tuple_body_hides_an_apply_field() {
     // route it through `lower_pure_name`, which rejects the inner `Apply` with
     // `UnsupportedSyncRecItem`. Guards `is_pure_term`'s recursion into children.
     let term = Subterm::Let(Let {
-        name: "t".into(),
-        body: Subterm::Tuple(Tuple {
-            fields: vec![
-                Subterm::Apply(Apply {
-                    head: Subterm::Func(identity_func()).into(),
-                    params: vec![Subterm::Prim(Prim::Pure(PurePrim::Int(7))).into()],
-                })
-                .into(),
-                Subterm::Prim(Prim::Pure(PurePrim::Int(1))).into(),
-            ],
-        })
-        .into(),
+        bindings: vec![(
+            "t".into(),
+            Subterm::Tuple(Tuple {
+                fields: vec![
+                    Subterm::Apply(Apply {
+                        head: Subterm::Func(identity_func()).into(),
+                        params: vec![Subterm::Prim(Prim::Pure(PurePrim::Int(7))).into()],
+                    })
+                    .into(),
+                    Subterm::Prim(Prim::Pure(PurePrim::Int(1))).into(),
+                ],
+            })
+            .into(),
+        )],
         tail: Subterm::Name(Name::from("t")).into(),
     });
 
@@ -329,8 +335,10 @@ fn lowers_a_long_straight_line_let_chain_without_overflowing_the_stack() {
     let mut term: Term = Subterm::Name(Name::from(format!("x{}", N - 1))).into();
     for i in (0..N).rev() {
         term = Subterm::Let(Let {
-            name: format!("x{i}"),
-            body: Subterm::Prim(Prim::Pure(PurePrim::Nat(i as u32))).into(),
+            bindings: vec![(
+                format!("x{i}"),
+                Subterm::Prim(Prim::Pure(PurePrim::Nat(i as u32))).into(),
+            )],
             tail: term,
         })
         .into();

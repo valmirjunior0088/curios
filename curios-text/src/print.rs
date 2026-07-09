@@ -1,12 +1,12 @@
 use {
     super::{
-        Apply, BinPattern, BinSegment, ConceptField, ConceptParam, CondMatch,
-        Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, LadderArm,
-        LadderTest, Let, LetSignature, LstEntry, LstPattern, Match, MatchPattern,
-        MatchPatternField, MatrixMatch, Motive, Nat, NatLiteral, NatPattern, NumLit,
-        Pattern, PatternField, Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm, Syn,
-        Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
-        TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
+        Apply, BinPattern, BinSegment, ConceptField, ConceptParam, CondMatch, Field, Func,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, LadderArm, LadderTest, Let,
+        LetSignature, LstEntry, LstPattern, Match, MatchPattern, MatchPatternField, MatrixMatch,
+        Motive, Nat, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec,
+        StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct,
+        TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{

@@ -45,7 +45,7 @@ fn is_pure_term(term: &crate::Term) -> bool {
             crate::Subterm::Tuple(tuple) => return tuple.fields.iter().all(is_pure_term),
             crate::Subterm::Proj(proj) => return is_pure_term(&proj.head),
             crate::Subterm::Let(let_) => {
-                if !is_pure_term(&let_.body) {
+                if !let_.bindings.iter().all(|(_, body)| is_pure_term(body)) {
                     return false;
                 }
 
@@ -322,8 +322,10 @@ impl Work<'_, '_, '_> {
                     self.emit.fresh(Value::Pure(Data::Nat(atom.index as u32)))
                 }
                 crate::Subterm::Let(let_) => {
-                    let body = self.lower_pure_name(&let_.body, &frame)?;
-                    frame.push(let_.name.clone(), body);
+                    for (name, body) in &let_.bindings {
+                        let value = self.lower_pure_name(body, &frame)?;
+                        frame.push(name.clone(), value);
+                    }
                     term = &let_.tail;
 
                     continue;
@@ -385,9 +387,13 @@ impl Work<'_, '_, '_> {
         // continuation re-enters this same loop for whatever follows.
         loop {
             match &**term {
-                crate::Subterm::Let(let_) if is_pure_term(&let_.body) => {
-                    let value = self.lower_pure_name(&let_.body, &frame)?;
-                    frame.push(let_.name.clone(), value);
+                crate::Subterm::Let(let_)
+                    if let_.bindings.iter().all(|(_, body)| is_pure_term(body)) =>
+                {
+                    for (name, body) in &let_.bindings {
+                        let value = self.lower_pure_name(body, &frame)?;
+                        frame.push(name.clone(), value);
+                    }
                     term = &let_.tail;
                 }
                 crate::Subterm::Rec(letrec)
@@ -426,17 +432,7 @@ impl Work<'_, '_, '_> {
                 cont.call(self, value)
             }
             crate::Subterm::Let(let_) => {
-                let name = let_.name.clone();
-
-                self.lower_value_name(
-                    &let_.body,
-                    frame,
-                    Cont::new(move |work, body| {
-                        let frame = frame.extended([(name, body)]);
-
-                        work.lower_value_name(&let_.tail, &frame, cont)
-                    }),
-                )
+                self.lower_let_value(&let_.bindings, &let_.tail, frame, cont)
             }
             crate::Subterm::Rec(letrec) => self.lower_rec(
                 &letrec.names,
@@ -667,6 +663,80 @@ impl Work<'_, '_, '_> {
         }
     }
 
+    /// Lower a grouped `Let`'s bindings in sequence, then its `tail`, in
+    /// value-name position. A pure prefix is pushed into the frame in a loop —
+    /// one iteration per binding, not one stack frame — and the first binding
+    /// whose value needs the CPS resume-block treatment recurses through its
+    /// continuation into whatever bindings remain, so native recursion is
+    /// bounded by the count of impure bindings, never the group's length.
+    fn lower_let_value(
+        &mut self,
+        mut bindings: &[(String, crate::Term)],
+        tail: &crate::Term,
+        frame: &Frame,
+        cont: Cont<'_>,
+    ) -> LowerResult<Tail> {
+        let mut frame = frame.clone();
+
+        while let Some(((name, body), rest)) = bindings.split_first() {
+            if is_pure_term(body) {
+                let value = self.lower_pure_name(body, &frame)?;
+                frame.push(name.clone(), value);
+                bindings = rest;
+            } else {
+                let name = name.clone();
+                let captured = frame.clone();
+
+                return self.lower_value_name(
+                    body,
+                    &frame,
+                    Cont::new(move |work, value| {
+                        let frame = captured.extended([(name, value)]);
+                        work.lower_let_value(rest, tail, &frame, cont)
+                    }),
+                );
+            }
+        }
+
+        self.lower_value_name(tail, &frame, cont)
+    }
+
+    /// The tail-position twin of [`Self::lower_let_value`]: identical
+    /// pure-prefix peeling, but the group's `tail` is lowered in tail position,
+    /// resuming at `resume` past the CPS boundary.
+    fn lower_let_tail(
+        &mut self,
+        mut bindings: &[(String, crate::Term)],
+        tail: &crate::Term,
+        frame: &Frame,
+        resume: &BlockName,
+    ) -> LowerResult<Tail> {
+        let mut frame = frame.clone();
+
+        while let Some(((name, body), rest)) = bindings.split_first() {
+            if is_pure_term(body) {
+                let value = self.lower_pure_name(body, &frame)?;
+                frame.push(name.clone(), value);
+                bindings = rest;
+            } else {
+                let name = name.clone();
+                let captured = frame.clone();
+                let resume = resume.clone();
+
+                return self.lower_value_name(
+                    body,
+                    &frame,
+                    Cont::new(move |work, value| {
+                        let frame = captured.extended([(name, value)]);
+                        work.lower_let_tail(rest, tail, &frame, &resume)
+                    }),
+                );
+            }
+        }
+
+        self.lower_tail(tail, &frame, resume)
+    }
+
     pub(super) fn lower_tail(
         &mut self,
         mut term: &crate::Term,
@@ -678,9 +748,13 @@ impl Work<'_, '_, '_> {
         // See the identical prologue in `lower_value_name`.
         loop {
             match &**term {
-                crate::Subterm::Let(let_) if is_pure_term(&let_.body) => {
-                    let value = self.lower_pure_name(&let_.body, &frame)?;
-                    frame.push(let_.name.clone(), value);
+                crate::Subterm::Let(let_)
+                    if let_.bindings.iter().all(|(_, body)| is_pure_term(body)) =>
+                {
+                    for (name, body) in &let_.bindings {
+                        let value = self.lower_pure_name(body, &frame)?;
+                        frame.push(name.clone(), value);
+                    }
                     term = &let_.tail;
                 }
                 crate::Subterm::Rec(letrec)
@@ -953,15 +1027,7 @@ impl Work<'_, '_, '_> {
                 }),
             ),
             crate::Subterm::Let(let_) => {
-                let name = let_.name.clone();
-                self.lower_value_name(
-                    &let_.body,
-                    frame,
-                    Cont::new(move |work, body| {
-                        let frame = frame.extended([(name, body)]);
-                        work.lower_tail(&let_.tail, &frame, resume)
-                    }),
-                )
+                self.lower_let_tail(&let_.bindings, &let_.tail, frame, resume)
             }
             crate::Subterm::Rec(letrec) => self.lower_rec(
                 &letrec.names,

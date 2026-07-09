@@ -459,8 +459,7 @@ where
     })?;
 
     Ok(curios_ersd::Subterm::Let(curios_ersd::Let {
-        name: label,
-        body: erased_head,
+        bindings: vec![(label, erased_head)],
         tail,
     })
     .into())
@@ -1189,52 +1188,44 @@ fn erase_inductive_match(
             let var_refs = vars.iter().collect::<Vec<_>>();
             let body = erase(context, &scope.open(&var_refs), &expected)?;
 
-            // Bind each *relevant* payload binder to its flat-record slot:
-            // `let x_i = scrutinee.(slot); …` (innermost-last, so fold in
-            // reverse). Erasable payload fields are absent from the runtime
-            // tuple, so a relevant binder's slot is `1 + (relevant payload
-            // before it)` (field 0 is the tag); an erasable binder gets no
-            // `let` at all — the arm body only uses it in erased (→ `Erased`)
-            // positions, so nothing projects it. Projections read the
-            // let-bound scrutinee — never a re-erased copy of the head term,
-            // which would re-execute an effectful scrutinee once per arm.
+            // Bind each *relevant* payload binder to its flat-record slot in
+            // one grouped `let`: `let x_i = scrutinee.(slot); … ; body`.
+            // Erasable payload fields are absent from the runtime tuple, so a
+            // relevant binder's slot is `1 + (relevant payload before it)`
+            // (field 0 is the tag); an erasable binder gets no binding at all —
+            // the arm body only uses it in erased (→ `Erased`) positions, so
+            // nothing projects it. Projections read the let-bound scrutinee —
+            // never a re-erased copy of the head term, which would re-execute
+            // an effectful scrutinee once per arm.
             let mut relevant = 0usize;
-            let runtime_slot = labels
-                .iter()
-                .enumerate()
-                .map(|(i, _)| {
-                    if erasable[i] {
-                        None
-                    } else {
-                        let slot = 1 + relevant;
-                        relevant += 1;
-                        Some(slot)
-                    }
-                })
-                .collect::<Vec<_>>();
-
-            labels
-                .iter()
-                .enumerate()
-                .rev()
-                .try_fold(body, |tail, (i, label)| {
-                    let Some(slot) = runtime_slot[i] else {
-                        return Ok(tail);
-                    };
-                    Ok(curios_ersd::Subterm::Let(curios_ersd::Let {
-                        name: label.clone(),
-                        body: curios_ersd::Subterm::Proj(curios_ersd::Proj {
-                            head: curios_ersd::Subterm::Name(curios_ersd::Name::from(
-                                scrutinee_label.as_str(),
-                            ))
-                            .into(),
-                            index: slot,
-                        })
+            let mut bindings = Vec::with_capacity(labels.len());
+            for (i, label) in labels.iter().enumerate() {
+                if erasable[i] {
+                    continue;
+                }
+                let slot = 1 + relevant;
+                relevant += 1;
+                bindings.push((
+                    label.clone(),
+                    curios_ersd::Subterm::Proj(curios_ersd::Proj {
+                        head: curios_ersd::Subterm::Name(curios_ersd::Name::from(
+                            scrutinee_label.as_str(),
+                        ))
                         .into(),
-                        tail,
+                        index: slot,
                     })
-                    .into())
+                    .into(),
+                ));
+            }
+
+            Ok(match bindings.is_empty() {
+                true => body,
+                false => curios_ersd::Subterm::Let(curios_ersd::Let {
+                    bindings,
+                    tail: body,
                 })
+                .into(),
+            })
         })?;
         cases_erased.insert(index, arm);
     }
@@ -1262,8 +1253,7 @@ fn erase_inductive_match(
     // The head term is erased (and thus evaluated) exactly once, shared by
     // the tag dispatch and every arm's payload projections.
     Ok(curios_ersd::Subterm::Let(curios_ersd::Let {
-        name: scrutinee_label.clone(),
-        body: erase(context, head, &head_type)?,
+        bindings: vec![(scrutinee_label.clone(), erase(context, head, &head_type)?)],
         tail: curios_ersd::Subterm::Match(curios_ersd::Match {
             head: curios_ersd::Subterm::Proj(curios_ersd::Proj {
                 head: curios_ersd::Subterm::Name(curios_ersd::Name::from(scrutinee_label.as_str()))
@@ -1285,12 +1275,11 @@ fn erase_let(
     expected: &Term,
 ) -> Result<curios_ersd::Term, Error> {
     // Erase each binding in one frame, opening its stored prefix as we go, then
-    // fold the results into the (still-nested) ersd `Let` chain innermost-first.
-    // The core side is a flat block, so this loops rather than recursing per
-    // binding; the ersd nesting is bounded by ersd's own chain machinery.
+    // seat the results in one grouped ersd `Let` — core's flat block maps
+    // straight onto ersd's flat block, binding for binding, in written order.
     context.with_frame(|context| {
         let mut label_terms = Vec::<Term>::with_capacity(let_.bindings.len());
-        let mut erased = Vec::with_capacity(let_.bindings.len());
+        let mut bindings = Vec::with_capacity(let_.bindings.len());
 
         for (i, (type_, value)) in let_.bindings.iter().enumerate() {
             let (type_, value) = {
@@ -1303,22 +1292,16 @@ fn erase_let(
             context.define_assuming(&name, &type_, &value);
 
             label_terms.push(Term::free_var(&name));
-            erased.push((name, erased_value));
+            bindings.push((name, erased_value));
         }
 
         let tail = let_.tail.open(&label_terms.iter().collect::<Vec<_>>());
-        let mut acc = erase(context, &tail, expected)?;
+        let tail = erase(context, &tail, expected)?;
 
-        for (name, body) in erased.into_iter().rev() {
-            acc = curios_ersd::Subterm::Let(curios_ersd::Let {
-                name,
-                body,
-                tail: acc,
-            })
-            .into();
-        }
-
-        Ok(acc)
+        Ok(match bindings.is_empty() {
+            true => tail,
+            false => curios_ersd::Subterm::Let(curios_ersd::Let { bindings, tail }).into(),
+        })
     })
 }
 
