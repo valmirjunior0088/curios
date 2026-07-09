@@ -1,8 +1,8 @@
 use {
     super::Lowerer,
     crate::{
-        BinMatch, BinPattern, Error, LstMatch, LstPattern, Match, MatchPattern, MatrixArm, Motive,
-        NatMatch, NatPattern, Subterm, Term,
+        BinMatch, BinPattern, CondMatch, Error, LstMatch, LstPattern, Match, MatchPattern,
+        MatrixArm, Motive, NatMatch, NatPattern, Subterm, Term,
     },
     std::{collections::BTreeMap, mem},
 };
@@ -68,6 +68,14 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         binds: &mut Vec<(String, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
         Ok(match match_ {
+            // The headless ladder mirrors the `subterm` path's right-fold, but
+            // only the *first* condition runs unconditionally, so only its bangs
+            // hoist into `binds`. Every deeper condition evaluates just when its
+            // predecessor is false, so each lowers as its own sub-region inside
+            // that false branch (see `cond_ladder_region`).
+            Match::Cond(CondMatch { arms, default }) => {
+                self.cond_ladder_region(arms, default, binds)?
+            }
             Match::Bln(bm) => {
                 let (label, body) = self.motive_parts(&bm.motive)?;
                 curios_core::Term::bln_match(
@@ -178,6 +186,36 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 )
             }
         })
+    }
+
+    /// Lowers a headless ladder's arms inside a region. The head arm's
+    /// condition collects its bangs into `binds` (the caller's region — it runs
+    /// unconditionally); its `true` body is its own region; its `false` branch
+    /// is the rest of the ladder, lowered as a *fresh* region so the deeper
+    /// conditions' bangs stay branch-local. With no arms left, the ladder is
+    /// just its default, which runs unconditionally in the current region
+    /// (its bangs hoist into `binds`).
+    fn cond_ladder_region(
+        &self,
+        arms: &[(Term, Term)],
+        default: &Term,
+        binds: &mut Vec<(String, curios_core::Term)>,
+    ) -> Result<curios_core::Term, Error> {
+        let Some(((cond, body), rest)) = arms.split_first() else {
+            return self.collect(default, binds);
+        };
+        let head = self.collect(cond, binds)?;
+        let true_case = self.region(body)?;
+        let mut rest_binds = Vec::new();
+        let rest_term = self.cond_ladder_region(rest, default, &mut rest_binds)?;
+        let false_case = self.wrap(rest_binds, rest_term)?;
+        Ok(curios_core::Term::bln_match(
+            head,
+            None,
+            curios_core::Term::metavar(self.context.fresh_metavar()),
+            false_case,
+            true_case,
+        ))
     }
 
     /// Splits an optional match motive into its `(label, body)` for the core

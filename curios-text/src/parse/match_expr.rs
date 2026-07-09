@@ -302,8 +302,51 @@ pub(super) fn parse_bin_match<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
+// A headless ladder arm `| cond => body`. The catch spans through `=>` so a
+// condition term that merely *starts* like the default backtracks cleanly. A
+// bare `_` parses as an ordinary `Name` term, so the ladder's `| _ =>` default
+// would otherwise be swallowed here; the `flat_map` guard rejects a lone `_`
+// condition, letting `many0` stop and hand the default to `parse_cond_default`.
+// A condition that merely *begins* with `_` (e.g. `_ready`) has a longer head
+// and passes the guard, parsing as an ordinary condition.
+pub(super) fn parse_cond_case<'a>() -> Parser<'a, (Term, Term)> {
+    catch(
+        parse_literal("|")
+            .and_keep(lazy(parse_term))
+            .flat_map(|cond| match cond.as_subterm() {
+                Subterm::Name(name) if name.is_single() && name.head() == "_" => {
+                    fail("the `| _ =>` default is not a condition arm")
+                }
+                _ => pure(cond),
+            })
+            .and_drop(parse_literal("=>")),
+    )
+    .and(lazy(parse_term))
+}
+
+// The mandatory `| _ =>` default arm closing a headless ladder. Same shape as
+// `parse_nat_default` (:149) — a `Bln` ladder is a dispatch form, so `_` is
+// required, not optional.
+pub(super) fn parse_cond_default<'a>() -> Parser<'a, Term> {
+    catch(parse_literal("|").and_keep(parse_literal("_")))
+        .and_drop(parse_literal("=>"))
+        .and_keep(lazy(parse_term))
+}
+
+// The headless form `match | cond => body | … | _ => default end`. No head
+// term follows `match` — the arms are `Bln` conditions tried top-to-bottom,
+// first `true` wins. Prefix-disambiguated from every headed form: no term
+// starts with `|`, so those forms' `lazy(parse_term)` backtracks out.
+pub(super) fn parse_cond_match<'a>() -> Parser<'a, Term> {
+    catch(parse_keyword("match"))
+        .and_keep(many0(parse_cond_case).and(parse_cond_default()))
+        .and_drop(parse_keyword("end"))
+        .map(|(arms, default)| Subterm::Match(Match::Cond(CondMatch { arms, default })).into())
+}
+
 pub(super) fn parse_match<'a>() -> Parser<'a, Term> {
-    catch(parse_bln_match())
+    catch(parse_cond_match())
+        .or(catch(parse_bln_match()))
         .or(catch(parse_nat_match()))
         .or(catch(parse_nat_switch()))
         .or(catch(parse_lst_match()))

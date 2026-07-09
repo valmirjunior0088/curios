@@ -22,7 +22,8 @@ mod tests;
 
 use {
     super::{
-        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, CasePayloadParam, ConceptField,
+        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, CasePayloadParam, CondMatch,
+        ConceptField,
         ConceptParam, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let,
         LetBinding, LetSignature, LstEntry, LstMatch, LstPattern, Match, MatchPattern,
         MatchPatternField, MatrixArm, MatrixMatch, Module, Motive, Name, Nat, NatLiteral, NatMatch,

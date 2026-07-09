@@ -389,3 +389,74 @@ fn effectful_match_scrutinee_runs_once() {
     assert_eq!(io.output(), b"ok");
     assert_eq!(io.file(b"log.txt"), Some(b"x".to_vec()));
 }
+
+// The headless `Bln` ladder, exercised as emitted wasm rather than folded:
+// `Rand/bin(0)` is length 0 so `z` is a runtime-opaque 0, and `n` is a runtime
+// 2. The first *true* condition wins — `n <= 0` and `n <= 1` are false, `n <= 2`
+// selects `300`, and the later-true `_` default is never reached.
+#[test]
+fn headless_cond_ladder_selects_first_true_arm() {
+    let source = r#"
+        use /std/{Nat, Bin, Rand, Io};
+        let z = Bin/len(Rand/bin(0));
+        let n = Nat/add(z, 2);
+        let result =
+            match
+            | n <= 0 => Nat/add(z, 100)
+            | n <= 1 => Nat/add(z, 200)
+            | n <= 2 => Nat/add(z, 300)
+            | _ => Nat/add(z, 999)
+            end;
+        Io/print(Nat/to_str(result))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"300");
+}
+
+// A ladder with no condition arms is just its default. Runtime-tainted so it
+// runs as wasm.
+#[test]
+fn headless_cond_ladder_default_only() {
+    let source = r#"
+        use /std/{Nat, Bin, Rand, Io};
+        let z = Bin/len(Rand/bin(0));
+        let result =
+            match
+            | _ => Nat/add(z, 42)
+            end;
+        Io/print(Nat/to_str(result))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"42");
+}
+
+// A deeper condition's effect fires only when it is reached: `probe` prints its
+// tag as a side effect, so an all-false-but-first ladder would print every tag,
+// but a ladder whose first condition is true prints only that tag. The nested
+// `Bln` lowering keeps deeper conditions inside the previous false branch.
+#[test]
+fn headless_cond_ladder_evaluates_conditions_lazily() {
+    let source = r#"
+        use /std/{Nat, Bin, Rand, Io, Bln, Str};
+        let z = Bin/len(Rand/bin(0));
+        let probe(tag : Str, r : Bln) -> Bln =
+            let _ = Io/print(tag);
+            r;
+        let result =
+            match
+            | probe("a", true)  => Nat/add(z, 1)
+            | probe("b", false) => Nat/add(z, 2)
+            | _ => Nat/add(z, 9)
+            end;
+        Io/print(Nat/to_str(result))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    // "a" from the winning first condition, then "1" — "b" is never evaluated.
+    assert_eq!(io.output(), b"a1");
+}

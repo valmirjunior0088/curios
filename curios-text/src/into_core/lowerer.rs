@@ -1,7 +1,8 @@
 use {
     super::{Context, MatchCompiler},
     crate::{
-        BinMatch, BinSegment, Error, Field, Let, LetBinding, LstEntry, LstMatch, Match, Name, Nat,
+        BinMatch, BinSegment, CondMatch, Error, Field, Let, LetBinding, LstEntry, LstMatch, Match,
+        Name, Nat,
         NatLiteral, NatMatch, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     curios_base::{MONAD_BIND, STR_SCAN_LEAD, STR_STEP, STR_STR, STR_UTF8_MORE, STR_UTF8_STOP},
@@ -304,6 +305,26 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Match(match_) => match match_ {
+                // The headless ladder right-folds into nested `Bln` matches:
+                // each `cond => body` becomes `match cond | false => <rest> |
+                // true => body end`, the `_` default sitting at the innermost
+                // false branch. No motive at any level (a fresh hole each),
+                // matching the surface form's absence of one. Arms inherit the
+                // definitional refinement of their conditions for free — that
+                // is exactly what nesting `Bln` matches buys.
+                Match::Cond(CondMatch { arms, default }) => {
+                    let mut acc = self.term(default)?;
+                    for (cond, body) in arms.iter().rev() {
+                        acc = curios_core::Term::bln_match(
+                            self.term(cond)?,
+                            None,
+                            curios_core::Term::metavar(self.context.fresh_metavar()),
+                            acc,
+                            self.term(body)?,
+                        );
+                    }
+                    acc
+                }
                 Match::Bln(bm) => {
                     let (label, body) = MatchCompiler::new(self).motive_parts(&bm.motive)?;
                     curios_core::Term::bln_match(

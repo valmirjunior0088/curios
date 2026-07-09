@@ -1,6 +1,7 @@
 use {
     super::{
-        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, ConceptField, ConceptParam, Field, Func,
+        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, CondMatch, ConceptField, ConceptParam,
+        Field, Func,
         FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetSignature, LstEntry,
         LstMatch, LstPattern, Match, MatchPattern, MatchPatternField, MatrixMatch, Motive, Nat,
         NatLiteral, NatMatch, NatPattern, NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec,
@@ -628,6 +629,24 @@ pub(crate) fn print_term(term: Term) -> Printer<'static> {
             pure(" }"),
         ]),
         Subterm::Match(match_) => match match_ {
+            Match::Cond(CondMatch { arms, default }) => flat([
+                pure("match"),
+                flat(
+                    arms.into_iter()
+                        .map(|(cond, body)| {
+                            flat([
+                                pure("\n| "),
+                                print_term(cond),
+                                pure(" =>\n"),
+                                indent(print_term(body)),
+                            ])
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+                pure("\n| _ =>\n"),
+                indent(print_term(default)),
+                pure("\nend"),
+            ]),
             Match::Bln(BlnMatch {
                 head,
                 motive,

@@ -296,6 +296,24 @@ pub struct BlnMatch {
     pub true_case: Term,
 }
 
+/// A headless condition ladder: `match | cond => body | … | _ => default end`.
+/// There is no scrutinee — each arm's `cond` is a `Bln` term, tried top-to-bottom,
+/// and the first `true` wins; the mandatory final `| _ =>` supplies the fallthrough.
+/// Lowering right-folds it into nested [`BlnMatch`]es (`into_core::match_compile`),
+/// so each arm's body inherits the definitional refinement of its condition for free
+/// (the same `refine_head` keying a hand-written `match cond | true => … | false => …`
+/// would get). A dispatch form, not an elimination: it enumerates no shapes, so the
+/// `_` default is mandatory (mirroring [`NatMatch::Dispatch`]). No motive — the
+/// nested `Bln` matches each carry their own.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CondMatch {
+    /// The `(condition, body)` arms, in source order; the first condition that
+    /// evaluates to `true` selects its body. May be empty (then the ladder is
+    /// just its `default`).
+    pub arms: Vec<(Term, Term)>,
+    pub default: Term,
+}
+
 /// Structural induction on an `Lst`: an `| [] =>` identity arm and a
 /// `| [head, ..tail]; ih =>` cons arm, mirroring the `Lst` literal's own
 /// bracket-and-comma shape. The surface analogue of `NatMatch::Induction` for
@@ -399,7 +417,7 @@ pub struct MatrixArm {
     pub body: Term,
 }
 
-/// A surface `match`, split by what the arms dispatch on: the four hardcoded carriers (`Bln`, `Nat`, `Lst`, `Bin`) each get a fixed-shape variant whose arms are exactly the carrier's own cases, while constructor-tag dispatch — including nested and tuple/struct patterns — is the general [`MatrixMatch`]. The parser classifies by arm shape, and each variant lowers through a different core elimination form.
+/// A surface `match`, split by what the arms dispatch on: the four hardcoded carriers (`Bln`, `Nat`, `Lst`, `Bin`) each get a fixed-shape variant whose arms are exactly the carrier's own cases, while constructor-tag dispatch — including nested and tuple/struct patterns — is the general [`MatrixMatch`]. The headless [`CondMatch`] has no scrutinee at all — its arms are `Bln` conditions. The parser classifies by prefix and arm shape, and each variant lowers through a different core elimination form.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Match {
     Bln(BlnMatch),
@@ -407,6 +425,7 @@ pub enum Match {
     Matrix(MatrixMatch),
     Lst(LstMatch),
     Bin(BinMatch),
+    Cond(CondMatch),
 }
 
 /// A match-arm pattern: genuinely refutable, unlike [`Pattern`] (which is

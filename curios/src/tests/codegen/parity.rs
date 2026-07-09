@@ -86,6 +86,49 @@ fn concept_method_call_matches_direct_primitive_codegen() {
     );
 }
 
+/// The headless `Bln` ladder desugars to exactly the nested boolean matches a
+/// user would hand-write: `match | c0 => b0 | c1 => b1 | _ => d end` is
+/// `match c0 | true => b0 | false => match c1 | true => b1 | false => d end end`.
+/// Both lower through the same core `bln_match` nesting, so they emit the same
+/// primitive operations — the two forms mint metavars in a slightly different
+/// order, which only permutes the emission order of the top-level specialized
+/// closures (their bodies are identical), so `operations()` is the exact
+/// comparison. A runtime operand (`Lst/len(Proc/args())`) keeps the ladder from
+/// folding to a constant.
+#[test]
+fn headless_cond_ladder_matches_hand_nested_bln_codegen() {
+    let ladder = r#"
+        use /std/{Nat, Lst, Io, Str, Proc};
+        let n : Nat = Lst/len(Proc/args());
+        let result =
+            match
+            | n <= 0 => Nat/add(n, 100)
+            | n <= 1 => Nat/add(n, 200)
+            | _ => Nat/add(n, 300)
+            end;
+        Io/print(Nat/to_str(result))
+        "#;
+    let nested = r#"
+        use /std/{Nat, Lst, Io, Str, Proc};
+        let n : Nat = Lst/len(Proc/args());
+        let result =
+            match n <= 0
+            | true => Nat/add(n, 100)
+            | false =>
+                match n <= 1
+                | true => Nat/add(n, 200)
+                | false => Nat/add(n, 300)
+                end
+            end;
+        Io/print(Nat/to_str(result))
+        "#;
+
+    assert_eq!(
+        operations(&normalized_cont_optm(ladder)),
+        operations(&normalized_cont_optm(nested)),
+    );
+}
+
 /// The primitive operations emitted by a cont dump, sorted — the `Kind.op` tokens
 /// (`Nat.lt`, `Tpl.get`, `Lst.len`, …) that are the actual instructions, ignoring
 /// the generated names that wire them together. A generated name is never

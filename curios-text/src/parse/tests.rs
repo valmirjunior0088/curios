@@ -1785,6 +1785,71 @@ fn matrix_match_round_trips() {
     }
 }
 
+// The headless ladder: no head term, `Bln` condition arms, and a mandatory
+// `| _ =>` default. A bare `_` condition parses as the default (not a `Name`
+// condition arm) — the `flat_map` guard in `parse_cond_case` sees it and lets
+// `many0` stop.
+#[test]
+fn parse_headless_cond_match() {
+    assert_eq!(
+        "match\n| p => 1\n| q => 2\n| _ => 3\nend"
+            .parse::<Term>()
+            .unwrap(),
+        Subterm::Match(Match::Cond(CondMatch {
+            arms: vec![
+                (name("p"), num_lit(1, false, false)),
+                (name("q"), num_lit(2, false, false)),
+            ],
+            default: num_lit(3, false, false),
+        }))
+        .into()
+    );
+}
+
+// An arm-free ladder is legal: `match | _ => d end` is just its default.
+#[test]
+fn parse_headless_cond_match_default_only() {
+    assert_eq!(
+        "match\n| _ => 0\nend".parse::<Term>().unwrap(),
+        Subterm::Match(Match::Cond(CondMatch {
+            arms: vec![],
+            default: num_lit(0, false, false),
+        }))
+        .into()
+    );
+}
+
+// A condition whose head merely *begins* with `_` (`_ready`) is an ordinary
+// condition, not the default — the guard rejects only a lone `_`.
+#[test]
+fn parse_headless_cond_match_leading_underscore_condition() {
+    assert_eq!(
+        "match\n| _ready => 1\n| _ => 2\nend".parse::<Term>().unwrap(),
+        Subterm::Match(Match::Cond(CondMatch {
+            arms: vec![(name("_ready"), num_lit(1, false, false))],
+            default: num_lit(2, false, false),
+        }))
+        .into()
+    );
+}
+
+// The headless ladder survives print → re-parse, including the arm-free form.
+#[test]
+fn headless_cond_match_round_trips() {
+    for source in [
+        "match | p => 1 | q => 2 | _ => 3 end",
+        "match | _ => 0 end",
+        "match | a <= b => x | _ => y end",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "headless cond match round-trip failed for {source:?}"
+        );
+    }
+}
+
 // A nested `Nat` succ pattern requires a space on each side of `+` (mirrors
 // `parse_infix_requires_spaces_and_disambiguates_signs`'s own operator
 // spacing rule). A glued `n+1` is not recognized as `NatPattern::Succ` at
