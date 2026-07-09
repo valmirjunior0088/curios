@@ -44,6 +44,27 @@ fn nested_ctor_pattern_dispatches_by_shape() {
     assert_eq!(io.output(), b"7");
 }
 
+// Regression for a headless ladder lowering bug: a condition arm followed by
+// a refutable bind arm was parsed as `CondMatch`, but lowering the bind arm
+// accidentally routed through the headed-match dependent-motive/default gate.
+#[test]
+fn headless_cond_match_allows_condition_before_bind_arm() {
+    let source = r#"
+        use /std/{Bln, Nat, Option, Io};
+        let pick(prefer_fresh : Bln, cached : Option(Nat), fresh : Nat) -> Nat =
+            match
+            | prefer_fresh && fresh > 0 => fresh
+            | some(n) = cached => n
+            | _ => 0
+            end;
+        Io/print(Nat/to_str(pick(true, Option/some(21), 5)))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"5");
+}
+
 // A tuple value used as a match target directly — no constructor tag at all
 // — desugars to plain projection, never a core `Match` node.
 #[test]

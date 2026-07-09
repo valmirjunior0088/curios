@@ -631,7 +631,14 @@ fn elaborate_inductive_match(
         // stall the large-elimination guard. Outside checking mode there is no
         // expected type to abstract, so the metavar stays and is solved by
         // unifying the arms (`check_motive`).
-        None if is_elided_motive(motive) => match &mode {
+        // A defaulted match (`| _ =>` catch-all / bind-arm fallthrough) cannot
+        // carry a dependent pattern motive — the two forms are mutually
+        // exclusive (see the up-front gate). So synthesis is skipped here and
+        // the elided motive is solved plainly by unifying the arms, exactly as
+        // in `Mode::Infer`; otherwise the rebuilt node would combine a
+        // synthesized pattern with the default and be rejected on re-elaboration
+        // (e.g. the erase pass's refined-branch re-check).
+        None if is_elided_motive(motive) && default.is_none() => match &mode {
             Mode::Check(expected) => {
                 let (motive_elaborated, pattern_elaborated, plan, generalized) =
                     synthesize_inductive_motive(
