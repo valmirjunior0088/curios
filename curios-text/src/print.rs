@@ -294,6 +294,7 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer<'static> {
             pred_label,
             ih_label,
         }) => flat([pure(pred_label), pure(" + 1; "), pure(ih_label)]),
+        MatchPattern::Nat(NatPattern::Lit(n)) => pure(n.to_string()),
         MatchPattern::Lst(LstPattern::Nil) => pure("[]"),
         MatchPattern::Lst(LstPattern::Cons {
             head_label,

@@ -523,6 +523,14 @@ pub enum NatPattern {
         pred_label: String,
         ih_label: String,
     },
+    /// A literal-dispatch leaf `k` — matched by value, peeling no successor.
+    /// Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never
+    /// `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of
+    /// `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch,
+    /// lowered to a `Cases::Switch` with a mandatory default rather than the
+    /// `Nat` eliminator — the matrix home of `NatMatch::Dispatch` (see
+    /// `into_core::match_compile`'s `compile_nat`).
+    Lit(u32),
 }
 
 /// The two shapes a nested `Lst` leaf can take — see [`MatchPattern::Lst`].

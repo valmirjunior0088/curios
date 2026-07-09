@@ -271,6 +271,19 @@ pub(super) fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     })
 }
 
+// The literal-dispatch leaf `k` of a nested `Nat` pattern (`| 5 =>`, `| 0x90 =>`)
+// — mirrors `parse_nat_case`'s own `parse_nat_literal_u32`, so hex/char literals
+// dispatch exactly as they do in a `NatMatch::Dispatch`. `0` is rejected here: it
+// is always the `Zero` leaf (tried earlier in `parse_match_pattern`), keeping one
+// canonical leaf per value. Tried before the generic `Binder` fallback, which
+// would otherwise swallow a bare digit as an identifier.
+pub(super) fn parse_nat_lit_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    catch(parse_nat_literal_u32().flat_map(|k| match k {
+        0 => fail("0 is the Nat zero pattern, not a literal-dispatch case"),
+        k => pure(MatchPattern::Nat(NatPattern::Lit(k))),
+    }))
+}
+
 // The `[]` leaf of a nested `Lst` pattern.
 pub(super) fn parse_lst_nil_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_literal("[]")).map(|()| MatchPattern::Lst(LstPattern::Nil))
@@ -343,6 +356,7 @@ fn parse_match_pattern_inner<'a>() -> Parser<'a, MatchPattern> {
         .or(parse_bln_match_pattern())
         .or(parse_nat_zero_match_pattern())
         .or(parse_nat_succ_match_pattern())
+        .or(parse_nat_lit_match_pattern())
         .or(parse_lst_nil_match_pattern())
         .or(parse_lst_cons_match_pattern())
         .or(parse_bin_end_match_pattern())

@@ -1253,6 +1253,30 @@ fn nested_underscore_mixed_with_concrete_stays_inconsistent_shape() {
 }
 
 #[test]
+fn nested_nat_literal_lowers_to_switch() {
+    // A literal `5` inside a constructor payload, with a `_` fallthrough, is
+    // value dispatch — it lowers through `compile_nat`'s switch mode to a
+    // `Cases::Switch`, not the `Nat` eliminator. (`wrap`/`b` need not resolve:
+    // lowering precedes name resolution.)
+    let term = run("match b | wrap(5) => 1 | _ => 0 end");
+    assert!(
+        format!("{term:?}").contains("Switch"),
+        "expected a Cases::Switch, got {term:?}"
+    );
+}
+
+#[test]
+fn nat_literal_mixed_with_succ_is_rejected() {
+    // A literal case and a `n + 1; ih` successor arm in the same `Nat` column
+    // select incompatible core forms (a value `switch` vs. the eliminator).
+    let error = run_err("match b | wrap(5) => 1 | wrap(n + 1; ih) => n | _ => 0 end");
+    assert!(
+        error.contains("mixes successor-peeling"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
 fn bang_in_a_type_is_rejected() {
     // Types have no region to hoist an action to, so a `!` in an annotation is
     // rejected during desugaring.

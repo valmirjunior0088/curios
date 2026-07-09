@@ -112,6 +112,11 @@ pub enum Error {
     MatrixIncompleteCarrierMatch {
         carrier: &'static str,
     },
+    /// A `Nat` match-arm column mixes successor-peeling (`n + 1; ih`) with
+    /// literal dispatch (`5`, `0x90`). A literal case peels no successor, so the
+    /// two select incompatible core forms (the `Nat` eliminator vs. a value
+    /// `switch`) and cannot share one column — write one or the other.
+    MatrixMixedNatDispatch,
     /// A headless-ladder bind arm `| pattern = value =>` whose `pattern` is a
     /// bare binder — irrefutable, so it always fires and the rest of the ladder
     /// is dead. A bind is for *refutable* matching; use a `let` for an
@@ -245,6 +250,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "a nested `{carrier}` pattern column must cover both of its cases"
+                )
+            }
+            Error::MatrixMixedNatDispatch => {
+                write!(
+                    f,
+                    "a `Nat` match arm mixes successor-peeling (`n + 1; ih`) with literal dispatch (`5`) in one column; use one or the other"
                 )
             }
             Error::BindArmIrrefutable => {

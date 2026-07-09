@@ -797,11 +797,22 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         ))
     }
 
-    /// Groups rows into `NatZero`/`NatSucc` — the nested-pattern counterpart
-    /// of `NatMatch::Induction`'s own `0`/`n+1; ih` arms — and emits
-    /// [`curios_core::Term::nat_match`] directly.
+    /// Compiles a `Nat` column in one of two modes, chosen by its leaves —
+    /// the same split `NatMatch::Induction` vs. `NatMatch::Dispatch` drew at
+    /// the surface, now decided here so both are ordinary matrix leaves:
     ///
-    /// Mirrors [`Self::compile_ctor`]'s single-row/multi-row naming
+    /// - **Induction** (a `Succ` leaf present): `0`/`n+1; ih` structural
+    ///   peeling, emitted as [`curios_core::Term::nat_match`]. A `Lit` leaf
+    ///   mixed in is [`Error::MatrixMixedNatDispatch`] — no single core form
+    ///   peels a successor *and* dispatches on a value.
+    /// - **Dispatch** (no `Succ`): value dispatch over `0`/`Lit(k)` cases,
+    ///   emitted as [`curios_core::Term::switch`] with the matrix default as
+    ///   its fallthrough. A `switch` over `Nat` is never exhaustive, so the
+    ///   default is mandatory (else [`Error::MatrixIncompleteCarrierMatch`]).
+    ///   Rows sharing a literal group and recurse together, exactly like
+    ///   [`Self::compile_ctor`]'s tags.
+    ///
+    /// The induction path mirrors [`Self::compile_ctor`]'s single-row/multi-row naming
     /// discipline exactly, for the same reason: `curios-core`'s erasure pass
     /// reads a `Nat` succ arm's stored binder labels as naming hints too
     /// (`erase_nat_match`, the same `Context::fresh` hint-compounding
@@ -836,6 +847,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
         let mut zero_rows = Vec::new();
         let mut succ_rows: Vec<(String, String, MatrixRow<'_>)> = Vec::new();
+        let mut lit_rows: Vec<(u32, MatrixRow<'_>)> = Vec::new();
         for mut row in rows {
             match row.patterns.remove(0) {
                 MatchPattern::Nat(NatPattern::Zero) => zero_rows.push(row),
@@ -843,15 +855,51 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                     pred_label,
                     ih_label,
                 }) => succ_rows.push((pred_label.clone(), ih_label.clone(), row)),
+                MatchPattern::Nat(NatPattern::Lit(value)) => lit_rows.push((*value, row)),
                 _ => unreachable!("every row classified as Nat"),
             }
         }
 
-        if (zero_rows.is_empty() || succ_rows.is_empty()) && self.default.is_none() {
+        let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
+
+        // Dispatch mode: no successor peeling, so `0`/`Lit(k)` are `switch`
+        // cases and the matrix default is the mandatory fallthrough (a `switch`
+        // over `Nat` is never exhaustive). Rows sharing a literal group and
+        // recurse together — a genuinely duplicated row falls to
+        // [`Self::compile`]'s leaf case, not silent last-wins.
+        if succ_rows.is_empty() {
+            let Some(default) = self.default.clone() else {
+                return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Nat" });
+            };
+            let mut groups: BTreeMap<u32, Vec<MatrixRow<'_>>> = BTreeMap::new();
+            for row in zero_rows {
+                groups.entry(0).or_default().push(row);
+            }
+            for (value, row) in lit_rows {
+                groups.entry(value).or_default().push(row);
+            }
+            let mut cases = Vec::with_capacity(groups.len());
+            for (value, group) in groups {
+                cases.push((value, self.compile(rest.clone(), group, None, leaf)?));
+            }
+            return Ok(curios_core::Term::switch(
+                scrutinee,
+                label,
+                motive_body,
+                cases,
+                default,
+            ));
+        }
+
+        // Induction mode: `0`/`n+1; ih`. A literal case here mixes value
+        // dispatch with successor peeling — no core form does both.
+        if !lit_rows.is_empty() {
+            return Err(Error::MatrixMixedNatDispatch);
+        }
+        if zero_rows.is_empty() && self.default.is_none() {
             return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Nat" });
         }
 
-        let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
         let zero_case = match zero_rows.is_empty() {
             true => self
                 .default
@@ -860,17 +908,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             false => self.compile(rest.clone(), zero_rows, None, leaf)?,
         };
 
-        let (pred_label, ih_label, succ_case) = if succ_rows.is_empty() {
-            // The default fills the successor arm; its binders go unused, so
-            // fresh placeholders satisfy the core node's fixed shape.
-            (
-                self.context.fresh_binder(),
-                self.context.fresh_binder(),
-                self.default
-                    .clone()
-                    .expect("default present when a group is missing"),
-            )
-        } else if succ_rows.len() == 1 {
+        let (pred_label, ih_label, succ_case) = if succ_rows.len() == 1 {
             let (pred_name, ih_name, row) = succ_rows.pop().unwrap();
             let pred_bound = self.pattern_binder_name(&pred_name);
             let ih_bound = self.pattern_binder_name(&ih_name);

@@ -374,6 +374,48 @@ fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
     assert_eq!(io.output(), b"0");
 }
 
+// Nested literal dispatch as emitted wasm: a runtime-tainted `n == 5` inside
+// `some(n)` selects the `some(5)` arm; the `_` fallthrough covers every other
+// value (and `none()`). Exercises `compile_nat`'s switch mode — a `Cases::Switch`
+// reached through a constructor payload — at runtime rather than folded.
+#[test]
+fn nested_nat_literal_dispatch_selects_matching_case() {
+    let source = r#"
+        use /std/{Option, Nat, Bin, Rand, Io};
+        let z = Bin/len(Rand/bin(0));
+        let n = Nat/add(z, 5);
+        let hit =
+            match Option/some(n)
+            | some(5) => Nat/add(z, 700)
+            | _ => Nat/add(z, 999)
+            end;
+        Io/print(Nat/to_str(hit))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"700");
+}
+
+#[test]
+fn nested_nat_literal_dispatch_falls_through_to_default() {
+    let source = r#"
+        use /std/{Option, Nat, Bin, Rand, Io};
+        let z = Bin/len(Rand/bin(0));
+        let n = Nat/add(z, 6);
+        let miss =
+            match Option/some(n)
+            | some(5) => Nat/add(z, 700)
+            | _ => Nat/add(z, 999)
+            end;
+        Io/print(Nat/to_str(miss))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"999");
+}
+
 #[test]
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
