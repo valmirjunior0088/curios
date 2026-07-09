@@ -1,2 +1,27 @@
 pub use /syn/{Eql};
 pub use /syn/Eql/{eql};
+use /std/{Nat, Int, Flt, Bln, Bin, Str};
+
+satisfy Eql(Nat) {
+    eql(a, b) = Nat/eql(a, b)
+}
+
+satisfy Eql(Int) {
+    eql(a, b) = Int/eql(a, b)
+}
+
+satisfy Eql(Flt) {
+    eql(a, b) = Flt/eql(a, b)
+}
+
+satisfy Eql(Bln) {
+    eql(a, b) = Bln/eql(a, b)
+}
+
+satisfy Eql(Bin) {
+    eql(a, b) = Bin/eql(a, b)
+}
+
+satisfy Eql(Str) {
+    eql(a, b) = Str/eql(a, b)
+}

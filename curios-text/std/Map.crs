@@ -56,13 +56,10 @@ satisfy Key(Nat) {
 let bit(k : Bin, j : Nat) -> Nat =
     let g = j / 9;
     let o = j % 9;
-    match g < Bin/len(k)
-    | false => 0
-    | true =>
-        match o
-        | 0 => 1
-        | _ => Nat/and(Nat/shr(/sys/Bin/get(k, g), 8 - o), 1)
-        end
+    match
+    | g >= Bin/len(k) => 0
+    | o == 0 => 1
+    | _ => Nat/and(Nat/shr(/sys/Bin/get(k, g), 8 - o), 1)
     end;
 
 -- The first extended-stream position at which two distinct keys differ.
@@ -164,9 +161,9 @@ pub let get(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Option(V) 
     match m.root
     | none() => Option/none()
     | some(n) =>
-        let hit = lookup(n, k);
-        match Bin/eql(hit.0, k)
-        | true => Option/some(hit.1)
+        let (k0, v0) = lookup(n, k);
+        match Bin/eql(k0, k)
+        | true => Option/some(v0)
         | false => Option/none()
         end
     end;
@@ -179,11 +176,11 @@ pub let set(@K : Type, @V : Type, use Key(K), m : Map(V), key : K, v : V) -> Map
     match m.root
     | none() => Map { size = 1, root = Option/some(Node/leaf(k, v)) }
     | some(n) =>
-        let hit = lookup(n, k);
-        match Bin/eql(hit.0, k)
+        let (k0, _) = lookup(n, k);
+        match Bin/eql(k0, k)
         | true => Map { size = m.size, root = Option/some(replace(n, k, v)) }
         | false =>
-            let c = crit(k, hit.0);
+            let c = crit(k, k0);
             Map { size = m.size + 1, root = Option/some(insert(n, c, bit(k, c), k, v)) }
         end
     end;
@@ -193,8 +190,8 @@ pub let del(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Map(V) =
     match m.root
     | none() => m
     | some(n) =>
-        let hit = lookup(n, k);
-        match Bin/eql(hit.0, k)
+        let (k0, _) = lookup(n, k);
+        match Bin/eql(k0, k)
         | true => Map { size = m.size - 1, root = remove(n, k) }
         | false => m
         end
@@ -224,4 +221,4 @@ pub let values(@V : Type, m : Map(V)) -> Lst(V) =
     fold(m, [], (_, v, acc) => [..acc, v]);
 
 pub let of(@K : Type, @V : Type, use Key(K), l : Lst({K, V})) -> Map(V) =
-    Lst/fold(l, empty(), (kv, acc) => set(acc, kv.0, kv.1));
+    Lst/fold(l, empty(), ((k, v), acc) => set(acc, k, v));

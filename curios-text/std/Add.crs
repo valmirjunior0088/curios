@@ -1,2 +1,15 @@
 pub use /syn/{Add};
 pub use /syn/Add/{add};
+use /std/{Nat, Int, Flt};
+
+satisfy Add(Nat) {
+    add(a, b) = Nat/add(a, b)
+}
+
+satisfy Add(Int) {
+    add(a, b) = Int/add(a, b)
+}
+
+satisfy Add(Flt) {
+    add(a, b) = Flt/add(a, b)
+}

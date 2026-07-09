@@ -1,18 +1,6 @@
 pub use /sys/{Bln};
 pub use /sys/Bln/{and, or, xor, eql};
-use /std/{Str, Option, Eql, And, Or};
-
-satisfy Eql(Bln) {
-    eql(a, b) = /sys/Bln/eql(a, b)
-}
-
-satisfy And(Bln) {
-    and(a, b) = /sys/Bln/and(a, b)
-}
-
-satisfy Or(Bln) {
-    or(a, b) = /sys/Bln/or(a, b)
-}
+use /std/{Str, Option};
 
 pub let not(b : Bln) -> Bln =
     xor(b, true);
@@ -24,11 +12,8 @@ pub let to_str(b : Bln) -> Str =
     end;
 
 pub let of_str(s : Str) -> Option(Bln) =
-    match Str/eql(s, "true")
-    | true => Option/some(true)
-    | false =>
-        match Str/eql(s, "false")
-        | true => Option/some(false)
-        | false => Option/none()
-        end
+    match
+    | s == "true" => Option/some(true)
+    | s == "false" => Option/some(false)
+    | _ => Option/none()
     end;

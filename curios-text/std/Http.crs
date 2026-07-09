@@ -64,10 +64,10 @@ let until(target : Nat) -> (Nat) -> Bln =
     (byte) => Bln/not(byte == target);
 
 let header_lookup(headers : Lst({Str, Str}), name : Str) -> Option(Str) =
-    Option/map((pair) => pair.1, Lst/find(headers, (pair) => Str/eql_ci(pair.0, name)));
+    Option/map(((_, value)) => value, Lst/find(headers, ((key, _)) => Str/eql_ci(key, name)));
 
-let render_header(pair : {Str, Str}) -> Str =
-    Str/flatten([pair.0, ": ", pair.1, "\r\n"]);
+let render_header((name, value) : {Str, Str}) -> Str =
+    Str/flatten([name, ": ", value, "\r\n"]);
 
 let content_length(body : Bin) -> Str =
     match Bin/len(body) == 0 : Str

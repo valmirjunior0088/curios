@@ -64,19 +64,10 @@ pub let diff(a : Instant, b : Instant) -> Duration =
     };
 
 pub let before(a : Instant, b : Instant) -> Bln =
-    match a.secs_hi < b.secs_hi
-    | true => true
-    | false =>
-        match a.secs_hi > b.secs_hi
-        | true => false
-        | false =>
-            match a.secs_lo < b.secs_lo
-            | true => true
-            | false =>
-                match a.secs_lo > b.secs_lo
-                | true => false
-                | false => a.nanos < b.nanos
-                end
-            end
-        end
+    match
+    | a.secs_hi < b.secs_hi => true
+    | a.secs_hi > b.secs_hi => false
+    | a.secs_lo < b.secs_lo => true
+    | a.secs_lo > b.secs_lo => false
+    | _ => a.nanos < b.nanos
     end;

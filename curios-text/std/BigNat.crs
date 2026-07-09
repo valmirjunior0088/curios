@@ -40,29 +40,25 @@ pub let compare(a : BigNat, b : BigNat) -> Order =
 pub let lt(a : BigNat, b : BigNat) -> Bln =
     match compare(a, b)
     | lt() => true
-    | eq() => false
-    | gt() => false
+    | _ => false
     end;
 
 pub let lte(a : BigNat, b : BigNat) -> Bln =
     match compare(a, b)
-    | lt() => true
-    | eq() => true
     | gt() => false
+    | _ => true
     end;
 
 pub let gt(a : BigNat, b : BigNat) -> Bln =
     match compare(a, b)
-    | lt() => false
-    | eq() => false
     | gt() => true
+    | _ => false
     end;
 
 pub let gte(a : BigNat, b : BigNat) -> Bln =
     match compare(a, b)
     | lt() => false
-    | eq() => true
-    | gt() => true
+    | _ => true
     end;
 
 rec add_c(xs : Lst(Nat), ys : Lst(Nat), carry : Nat) -> Lst(Nat) =
@@ -148,17 +144,11 @@ pub rec mul_pow2(a : BigNat, k : Nat) -> BigNat =
     end;
 
 let pad4(n : Nat) -> Str =
-    match n < 10
-    | true => Str/concat("000", Nat/to_str(n))
-    | false =>
-        match n < 100
-        | true => Str/concat("00", Nat/to_str(n))
-        | false =>
-            match n < 1000
-            | true => Str/concat("0", Nat/to_str(n))
-            | false => Nat/to_str(n)
-            end
-        end
+    match
+    | n < 10 => Str/concat("000", Nat/to_str(n))
+    | n < 100 => Str/concat("00", Nat/to_str(n))
+    | n < 1000 => Str/concat("0", Nat/to_str(n))
+    | _ => Nat/to_str(n)
     end;
 
 -- Limbs are little-endian; print the top limb bare, then the rest

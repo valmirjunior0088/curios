@@ -60,42 +60,39 @@ pub rec encode(v : Json) -> Str =
     end;
 
 let is_num_byte(byte : Nat) -> Bln =
-    match Char/is_digit(byte)
-    | true => true
-    | false =>
-        match byte
-        | '-' => true
-        | '+' => true
-        | '.' => true
-        | 'e' => true
-        | 'E' => true
-        | _ => false
-        end
+    match byte
+    | '-' => true
+    | '+' => true
+    | '.' => true
+    | 'e' => true
+    | 'E' => true
+    | _ => Char/is_digit(byte)
     end;
 
 let take_literal(literal : Str) -> Parse({}) =
     Parse {
         run(input, pos) =
             let lit = Str/to_bin(literal);
-            let r =
+            let (stop, matched) =
                 match Bin/len(lit) : {Nat, Bln}
                 | 0 => (pos, true)
                 | step + 1; ih =>
-                    match ih.1
+                    let (cur, live) = ih;
+                    match live
                     | false => ih
                     | true =>
-                        match Nat/try_lt(ih.0, Bin/len(input))
-                        | none() => (ih.0, false)
+                        match Nat/try_lt(cur, Bin/len(input))
+                        | none() => (cur, false)
                         | some(ok) =>
-                            match Option/unwrap_or(Bin/get(lit, step), 0) == Bin/at(input, ih.0, ok)
-                            | true => (ih.0 + 1, true)
-                            | false => (ih.0, false)
+                            match Option/unwrap_or(Bin/get(lit, step), 0) == Bin/at(input, cur, ok)
+                            | true => (cur + 1, true)
+                            | false => (cur, false)
                             end
                         end
                     end
                 end;
-            match r.1
-            | true => Result/success((r.0, ()))
+            match matched
+            | true => Result/success((stop, ()))
             | false => Result/failure("unexpected literal")
             end
     };
@@ -113,9 +110,9 @@ let parse_num : Parse(Json) =
     Parse {
         run(input, pos) =
             match Parse/take_while(is_num_byte).run(input, pos)
-            | success(pair) =>
-                match Flt/of_str(Option/unwrap_or(Str/of_bin(pair.1), ""))
-                | some(value) => Result/success((pair.0, Json/num(value)))
+            | success((next, chunk)) =>
+                match Flt/of_str(Option/unwrap_or(Str/of_bin(chunk), ""))
+                | some(value) => Result/success((next, Json/num(value)))
                 | none() => Result/failure("expected number")
                 end
             | failure(msg) => Result/failure(msg)
@@ -209,8 +206,7 @@ pub rec decode : Parse(Json) =
         run(input, pos) =
             match ws.run(input, pos)
             | failure(msg) => Result/failure(msg)
-            | success(skipped) =>
-                let start = skipped.0;
+            | success((start, _)) =>
                 match Nat/try_lt(start, Bin/len(input))
                 | none() => Result/failure("unexpected end of input")
                 | some(ok) =>

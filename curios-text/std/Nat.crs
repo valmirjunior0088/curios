@@ -1,38 +1,7 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, to_int, to_flt};
-use /std/{Str, Option, Char, Bin, Bln, Eq, Order, True, False, Add, Sub, Mul, Div, Rem, Eql, Cmp};
+use /std/{Str, Option, Char, Bin, Bln, Eq, Order, True, False};
 use /syn/Str/{Scan, Utf8, step, Valid};
-
-satisfy Add(Nat) {
-    add(a, b) = /sys/Nat/add(a, b)
-}
-
-satisfy Sub(Nat) {
-    sub(a, b) = /sys/Nat/sub(a, b)
-}
-
-satisfy Mul(Nat) {
-    mul(a, b) = /sys/Nat/mul(a, b)
-}
-
-satisfy Div(Nat) {
-    div(a, b) = /sys/Nat/div(a, b)
-}
-
-satisfy Rem(Nat) {
-    rem(a, b) = /sys/Nat/rem(a, b)
-}
-
-satisfy Eql(Nat) {
-    eql(a, b) = /sys/Nat/eql(a, b)
-}
-
-satisfy Cmp(Nat) {
-    lt(a, b) = /sys/Nat/lt(a, b),
-    lte(a, b) = /sys/Nat/lte(a, b),
-    gt(a, b) = /sys/Nat/gt(a, b),
-    gte(a, b) = /sys/Nat/gte(a, b)
-}
 
 let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
     -> Valid(Bin/append(\\, c)) =
@@ -56,8 +25,8 @@ let digit(d : Nat) -> {c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead())} =
     end;
 
 let single_digit(d : Nat) -> Str =
-    let g = digit(d);
-    Str { bytes = Bin/append(\\, g.c), valid = single(g.c, g.ok) };
+    let (c, ok) = digit(d);
+    Str { bytes = Bin/append(\\, c), valid = single(c, ok) };
 
 pub rec to_str(n : Nat) -> Str =
     match n < 10
@@ -160,11 +129,8 @@ pub rec lte_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(n + a,
     end;
 
 pub let compare(x : Nat, y : Nat) -> Order =
-    match x < y
-    | true => Order/lt()
-    | false =>
-        match x == y
-        | true => Order/eq()
-        | false => Order/gt()
-        end
+    match
+    | x < y => Order/lt()
+    | x == y => Order/eq()
+    | _ => Order/gt()
     end;

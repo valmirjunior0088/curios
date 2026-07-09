@@ -1,2 +1,24 @@
 pub use /syn/{Cmp};
 pub use /syn/Cmp/{lt, lte, gt, gte};
+use /std/{Nat, Int, Flt};
+
+satisfy Cmp(Nat) {
+    lt(a, b) = Nat/lt(a, b),
+    lte(a, b) = Nat/lte(a, b),
+    gt(a, b) = Nat/gt(a, b),
+    gte(a, b) = Nat/gte(a, b)
+}
+
+satisfy Cmp(Int) {
+    lt(a, b) = Int/lt(a, b),
+    lte(a, b) = Int/lte(a, b),
+    gt(a, b) = Int/gt(a, b),
+    gte(a, b) = Int/gte(a, b)
+}
+
+satisfy Cmp(Flt) {
+    lt(a, b) = Flt/lt(a, b),
+    lte(a, b) = Flt/lte(a, b),
+    gt(a, b) = Flt/gt(a, b),
+    gte(a, b) = Flt/gte(a, b)
+}

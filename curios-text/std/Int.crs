@@ -1,37 +1,6 @@
 pub use /sys/{Int};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, to_nat, to_flt};
-use /std/{Nat, Str, Option, Add, Sub, Mul, Div, Rem, Eql, Cmp};
-
-satisfy Add(Int) {
-    add(a, b) = /sys/Int/add(a, b)
-}
-
-satisfy Sub(Int) {
-    sub(a, b) = /sys/Int/sub(a, b)
-}
-
-satisfy Mul(Int) {
-    mul(a, b) = /sys/Int/mul(a, b)
-}
-
-satisfy Div(Int) {
-    div(a, b) = /sys/Int/div(a, b)
-}
-
-satisfy Rem(Int) {
-    rem(a, b) = /sys/Int/rem(a, b)
-}
-
-satisfy Eql(Int) {
-    eql(a, b) = /sys/Int/eql(a, b)
-}
-
-satisfy Cmp(Int) {
-    lt(a, b) = /sys/Int/lt(a, b),
-    lte(a, b) = /sys/Int/lte(a, b),
-    gt(a, b) = /sys/Int/gt(a, b),
-    gte(a, b) = /sys/Int/gte(a, b)
-}
+use /std/{Nat, Str, Option};
 
 pub let to_str(n : Int) -> Str =
     let mag = Nat/to_str(abs(n));

@@ -1,2 +1,15 @@
 pub use /syn/{Mul};
 pub use /syn/Mul/{mul};
+use /std/{Nat, Int, Flt};
+
+satisfy Mul(Nat) {
+    mul(a, b) = Nat/mul(a, b)
+}
+
+satisfy Mul(Int) {
+    mul(a, b) = Int/mul(a, b)
+}
+
+satisfy Mul(Flt) {
+    mul(a, b) = Flt/mul(a, b)
+}

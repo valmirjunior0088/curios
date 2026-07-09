@@ -81,45 +81,30 @@ pub let nonblocking(h : Io) -> {} =
 pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
     defer(() =>
         let r = /sys/Io/read(h, n);
-        match r.status == /sys/Io/Status/would_block : Task(Io/Read)
-        | true => bind(wait(h, /sys/Io/Poll/read), (_) => read(h, n))
-        | false =>
-            match r.status == /sys/Io/Status/eof : Task(Io/Read)
-            | true => pure(Io/Read/eof())
-            | false =>
-                match r.status == /sys/Io/Status/ok : Task(Io/Read)
-                | true => pure(Io/Read/chunk(r.bytes))
-                | false => pure(Io/Read/error(Io/error_of(r.status)))
-                end
-            end
+        match
+        | r.status == /sys/Io/Status/would_block => bind(wait(h, /sys/Io/Poll/read), (_) => read(h, n))
+        | r.status == /sys/Io/Status/eof => pure(Io/Read/eof())
+        | r.status == /sys/Io/Status/ok => pure(Io/Read/chunk(r.bytes))
+        | _ => pure(Io/Read/error(Io/error_of(r.status)))
         end);
 
 pub rec write(h : Io, b : Bin) -> Task(Result({}, Io/Error)) =
     defer(() =>
         let r = /sys/Io/write(h, b);
-        match r.status == /sys/Io/Status/would_block : Task(Result({}, Io/Error))
-        | true => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, b))
-        | false =>
-            match r.status == /sys/Io/Status/ok : Task(Result({}, Io/Error))
-            | true =>
-                match r.written < Bin/len(b) : Task(Result({}, Io/Error))
-                | true => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, Bin/slice(b, r.written, Bin/len(b))))
-                | false => pure(Result/success(()))
-                end
-            | false => pure(Result/failure(Io/error_of(r.status)))
-            end
+        match
+        | r.status == /sys/Io/Status/would_block => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, b))
+        | r.status != /sys/Io/Status/ok => pure(Result/failure(Io/error_of(r.status)))
+        | r.written < Bin/len(b) => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, Bin/slice(b, r.written, Bin/len(b))))
+        | _ => pure(Result/success(()))
         end);
 
 pub rec accept(l : Io) -> Task(Result(Io, Io/Error)) =
     defer(() =>
         let r = /sys/Io/accept(l);
-        match r.status == /sys/Io/Status/would_block : Task(Result(Io, Io/Error))
-        | true => bind(wait(l, /sys/Io/Poll/read), (_) => accept(l))
-        | false =>
-            match r.status == /sys/Io/Status/ok : Task(Result(Io, Io/Error))
-            | true => pure(Result/success(r.handle))
-            | false => pure(Result/failure(Io/error_of(r.status)))
-            end
+        match
+        | r.status == /sys/Io/Status/would_block => bind(wait(l, /sys/Io/Poll/read), (_) => accept(l))
+        | r.status == /sys/Io/Status/ok => pure(Result/success(r.handle))
+        | _ => pure(Result/failure(Io/error_of(r.status)))
         end);
 
 pub let drain(read : (Nat) -> Task(Io/Read)) -> Task(Bin) =

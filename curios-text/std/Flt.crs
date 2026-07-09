@@ -1,37 +1,6 @@
 pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte, neg, abs, sqrt, floor, ceil, trunc, nearest, to_nat, to_int, to_le_bin};
-use /std/{Nat, Int, Str, Bln, Option, Bin, Lst, Order, BigNat, Add, Sub, Mul, Div, Rem, Eql, Cmp};
-
-satisfy Add(Flt) {
-    add(a, b) = /sys/Flt/add(a, b)
-}
-
-satisfy Sub(Flt) {
-    sub(a, b) = /sys/Flt/sub(a, b)
-}
-
-satisfy Mul(Flt) {
-    mul(a, b) = /sys/Flt/mul(a, b)
-}
-
-satisfy Div(Flt) {
-    div(a, b) = /sys/Flt/div(a, b)
-}
-
-satisfy Rem(Flt) {
-    rem(a, b) = /sys/Flt/rem(a, b)
-}
-
-satisfy Eql(Flt) {
-    eql(a, b) = /sys/Flt/eql(a, b)
-}
-
-satisfy Cmp(Flt) {
-    lt(a, b) = /sys/Flt/lt(a, b),
-    lte(a, b) = /sys/Flt/lte(a, b),
-    gt(a, b) = /sys/Flt/gt(a, b),
-    gte(a, b) = /sys/Flt/gte(a, b)
-}
+use /std/{Nat, Int, Str, Bln, Option, Bin, Lst, Order, BigNat};
 
 let pow2(k : Nat) -> BigNat =
     BigNat/mul_pow2(BigNat/of_nat(1), k);
@@ -79,17 +48,11 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bln) -> Ls
     | false => Lst/cons(d, generate(rem, s, mp10, mm10, even))
     | true =>
         let last =
-            match low
-            | false => d + 1
-            | true =>
-                match high
-                | false => d
-                | true =>
-                    match BigNat/lt(BigNat/mul_small(rem, 2), s)
-                    | true => d
-                    | false => d + 1
-                    end
-                end
+            match
+            | Bln/not(low) => d + 1
+            | Bln/not(high) => d
+            | BigNat/lt(BigNat/mul_small(rem, 2), s) => d
+            | _ => d + 1
             end;
         [last]
     end;
@@ -108,14 +71,11 @@ rec normalize(ds : Lst(Nat)) -> {Lst(Nat), Bln} =
             | false => ([h], false)
             end
         | false =>
-            let rest = normalize(t);
-            match rest.1
-            | false => (Lst/cons(h, rest.0), false)
-            | true =>
-                match h == 9
-                | true => (Lst/cons(0, rest.0), true)
-                | false => (Lst/cons(h + 1, rest.0), false)
-                end
+            let (rest, carry) = normalize(t);
+            match
+            | Bln/not(carry) => (Lst/cons(h, rest), false)
+            | h == 9 => (Lst/cons(0, rest), true)
+            | _ => (Lst/cons(h + 1, rest), false)
             end
         end
     end;
@@ -172,10 +132,10 @@ let render(f_mant : Nat, exp_field : Nat, even : Bln) -> Str =
     let (s1, k1) = scale_up(BigNat/add(r0, mp0), s0, +0);
     let (r1, mp1, mm1, k2) = scale_down(r0, mp0, mm0, s1, k1);
     let digits = generate(r1, s1, mp1, mm1, even);
-    let norm = normalize(digits);
-    match norm.1
-    | true => layout(digits_to_str(Lst/cons(1, norm.0)), k2 + 1)
-    | false => layout(digits_to_str(norm.0), k2)
+    let (norm, carry) = normalize(digits);
+    match carry
+    | true => layout(digits_to_str(Lst/cons(1, norm)), k2 + 1)
+    | false => layout(digits_to_str(norm), k2)
     end;
 
 pub let to_str(f : Flt) -> Str =
@@ -191,24 +151,18 @@ pub let to_str(f : Flt) -> Str =
         | true => "-"
         | false => "+"
         end;
-    match exp_field == 0xFF
-    | true =>
-        match mant_field == 0
-        | true => Str/concat(sign, "inf")
-        | false => "NaN"
-        end
-    | false =>
-        match exp_field == 0 && mant_field == 0
-        | true => Str/concat(sign, "0")
-        | false =>
-            let f_mant =
-                match exp_field == 0
-                | true => mant_field
-                | false => mant_field + 0x800000
-                end;
-            let even = f_mant % 2 == 0;
-            Str/concat(sign, render(f_mant, exp_field, even))
-        end
+    match
+    | exp_field == 0xFF && mant_field == 0 => Str/concat(sign, "inf")
+    | exp_field == 0xFF => "NaN"
+    | exp_field == 0 && mant_field == 0 => Str/concat(sign, "0")
+    | _ =>
+        let f_mant =
+            match exp_field == 0
+            | true => mant_field
+            | false => mant_field + 0x800000
+            end;
+        let even = f_mant % 2 == 0;
+        Str/concat(sign, render(f_mant, exp_field, even))
     end;
 
 let pow10(n : Nat) -> Flt =

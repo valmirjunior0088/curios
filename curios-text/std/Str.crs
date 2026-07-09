@@ -1,6 +1,6 @@
 pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
-use /std/{Char, Nat, Bin, Bln, Lst, Option, True, False, Eql};
+use /std/{Char, Nat, Bin, Bln, Lst, Option, True, False};
 
 
 rec seq(@s : Scan, @a : Bin, @b : Bin, va : Utf8(s, a), vb : Valid(b))
@@ -132,10 +132,6 @@ pub let flatten(parts : Lst(Str)) -> Str =
 pub let eql(a : Str, b : Str) -> Bln =
     Bin/eql(to_bin(a), to_bin(b));
 
-satisfy Eql(Str) {
-    eql(a, b) = eql(a, b)
-}
-
 let lower_bytes(b : Bin) -> Bin =
     Bin/fold(b, \\, (byte, acc) => Bin/append(acc, Char/to_lower(byte)));
 
@@ -263,7 +259,7 @@ pub let len(s : Str) -> Nat =
     count_w(Scan/lead(), s.bytes);
 
 pub let find_index(s : Str, pred : (Nat) -> Bln) -> Option(Nat) =
-    let r : {Nat, Option(Nat)} =
+    let (_, found) : {Nat, Option(Nat)} =
         fold(s, (0, Option/none()), (codepoint, (i, found)) =>
             match found
             | some(_) => (i, found)
@@ -274,13 +270,13 @@ pub let find_index(s : Str, pred : (Nat) -> Bln) -> Option(Nat) =
                     | false => Option/none()
                     end)
             end);
-    r.1;
+    found;
 
 pub let find(s : Str, target : Nat) -> Option(Nat) =
     find_index(s, (codepoint) => codepoint == target);
 
 pub let get(s : Str, i : Nat) -> Option(Nat) =
-    let r : {Nat, Option(Nat)} =
+    let (_, found) : {Nat, Option(Nat)} =
         fold(s, (0, Option/none()), (codepoint, (idx, found)) =>
             match found
             | some(_) => (idx, found)
@@ -290,7 +286,7 @@ pub let get(s : Str, i : Nat) -> Option(Nat) =
                 | false => (idx + 1, Option/none())
                 end
             end);
-    r.1;
+    found;
 
 rec lte_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Lte(i + 1, n) =
     match n
@@ -336,23 +332,23 @@ pub let join(sep : Str, parts : Lst(Str)) -> Str =
 
 let trim_bounds(s : Str) -> {Nat, Nat} =
     let n = len(s);
-    let r : {Nat, Nat, Nat} =
-        fold(s, (0, n, 0), (codepoint, acc) =>
+    let (_, start, stop) : {Nat, Nat, Nat} =
+        fold(s, (0, n, 0), (codepoint, (i, start, stop)) =>
             match Char/is_whitespace(codepoint)
-            | true => (acc.0 + 1, acc.1, acc.2)
+            | true => (i + 1, start, stop)
             | false =>
-                let start =
-                    match acc.1 < n
-                    | true => acc.1
-                    | false => acc.0
+                let begin =
+                    match start < n
+                    | true => start
+                    | false => i
                     end;
-                (acc.0 + 1, start, acc.0 + 1)
+                (i + 1, begin, i + 1)
             end);
-    (r.1, r.2);
+    (start, stop);
 
 pub let trim(s : Str) -> Str =
-    let b = trim_bounds(s);
-    match b.0 < b.1
+    let (lo, hi) = trim_bounds(s);
+    match lo < hi
     | false => ""
-    | true => slice(s, b.0, b.1)
+    | true => slice(s, lo, hi)
     end;

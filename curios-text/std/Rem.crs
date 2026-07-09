@@ -1,2 +1,15 @@
 pub use /syn/{Rem};
 pub use /syn/Rem/{rem};
+use /std/{Nat, Int, Flt};
+
+satisfy Rem(Nat) {
+    rem(a, b) = Nat/rem(a, b)
+}
+
+satisfy Rem(Int) {
+    rem(a, b) = Int/rem(a, b)
+}
+
+satisfy Rem(Flt) {
+    rem(a, b) = Flt/rem(a, b)
+}

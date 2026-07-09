@@ -34,9 +34,6 @@ pub use Int/{let Int};
 pub mod Flt;
 pub use Flt/{let Flt};
 
-pub mod Bln;
-pub use Bln/{let Bln};
-
 pub mod Bin;
 pub use Bin/{let Bin};
 
@@ -97,6 +94,9 @@ pub use True/{let True};
 
 pub mod Str;
 pub use Str/{let Str};
+
+pub mod Bln;
+pub use Bln/{let Bln};
 
 pub mod Parse;
 pub use Parse/{let Parse};

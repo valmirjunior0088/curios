@@ -37,17 +37,11 @@ pub let hex_digit(nibble : Nat) -> Nat =
     end;
 
 pub let of_hex_digit(c : Nat) -> Option(Nat) =
-    match is_digit(c)
-    | true => Option/some(c - '0')
-    | false =>
-        match Nat/in_range(c, 'a', 'f')
-        | true => Option/some(c - 'a' + 10)
-        | false =>
-            match Nat/in_range(c, 'A', 'F')
-            | true => Option/some(c - 'A' + 10)
-            | false => Option/none()
-            end
-        end
+    match
+    | is_digit(c) => Option/some(c - '0')
+    | Nat/in_range(c, 'a', 'f') => Option/some(c - 'a' + 10)
+    | Nat/in_range(c, 'A', 'F') => Option/some(c - 'A' + 10)
+    | _ => Option/none()
     end;
 
 rec emit_continuations(acc : Bin, codepoint : Nat, shift : Nat) -> Bin =
@@ -59,15 +53,9 @@ rec emit_continuations(acc : Bin, codepoint : Nat, shift : Nat) -> Bin =
     end;
 
 pub let to_utf8(codepoint : Nat) -> Bin =
-    match codepoint < 0x80
-    | true => Bin/append(\\, codepoint)
-    | false =>
-        match codepoint < 0x800
-        | true => emit_continuations(Bin/append(\\, 0xC0 + codepoint / 0x40), codepoint, 1)
-        | false =>
-            match codepoint < 0x10000
-            | true => emit_continuations(Bin/append(\\, 0xE0 + codepoint / 0x1000), codepoint, 0x40)
-            | false => emit_continuations(Bin/append(\\, 0xF0 + codepoint / 0x40000), codepoint, 0x1000)
-            end
-        end
+    match
+    | codepoint < 0x80 => Bin/append(\\, codepoint)
+    | codepoint < 0x800 => emit_continuations(Bin/append(\\, 0xC0 + codepoint / 0x40), codepoint, 1)
+    | codepoint < 0x10000 => emit_continuations(Bin/append(\\, 0xE0 + codepoint / 0x1000), codepoint, 0x40)
+    | _ => emit_continuations(Bin/append(\\, 0xF0 + codepoint / 0x40000), codepoint, 0x1000)
     end;

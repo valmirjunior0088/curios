@@ -50,24 +50,18 @@ end
 
 pub let read(h : Io, n : Nat) -> Read =
     let r = /sys/Io/read(h, n);
-    match r.status == /sys/Io/Status/ok : Read
-    | true => Read/chunk(r.bytes)
-    | false =>
-        match r.status == /sys/Io/Status/eof : Read
-        | true => Read/eof()
-        | false => Read/error(error_of(r.status))
-        end
+    match
+    | r.status == /sys/Io/Status/ok => Read/chunk(r.bytes)
+    | r.status == /sys/Io/Status/eof => Read/eof()
+    | _ => Read/error(error_of(r.status))
     end;
 
 pub rec write(h : Io, b : Bin) -> Result({}, Error) =
     let r = /sys/Io/write(h, b);
-    match r.status == /sys/Io/Status/ok : Result({}, Error)
-    | true =>
-        match r.written < Bin/len(b) : Result({}, Error)
-        | true => write(h, Bin/slice(b, r.written, Bin/len(b)))
-        | false => Result/success(())
-        end
-    | false => Result/failure(error_of(r.status))
+    match
+    | r.status != /sys/Io/Status/ok => Result/failure(error_of(r.status))
+    | r.written < Bin/len(b) => write(h, Bin/slice(b, r.written, Bin/len(b)))
+    | _ => Result/success(())
     end;
 
 pub let print(s : Str) -> {} =
@@ -81,16 +75,10 @@ pub let print_err(s : Str) -> {} =
 pub let input() -> Option(Bin) =
     rec go(acc : Bin) -> Option(Bin) =
         let r = /sys/Io/read(stdin, 1);
-        match r.status == /sys/Io/Status/ok : Option(Bin)
-        | false =>
-            match Bin/len(acc) == 0 : Option(Bin)
-            | true => Option/none()
-            | false => Option/some(acc)
-            end
-        | true =>
-            match Option/unwrap_or(Bin/get(r.bytes, 0), 0) == '\n' : Option(Bin)
-            | true => Option/some(acc)
-            | false => go(\..acc\..r.bytes)
-            end
+        match
+        | r.status != /sys/Io/Status/ok && Bin/len(acc) == 0 => Option/none()
+        | r.status != /sys/Io/Status/ok => Option/some(acc)
+        | Option/unwrap_or(Bin/get(r.bytes, 0), 0) == '\n' => Option/some(acc)
+        | _ => go(\..acc\..r.bytes)
         end;
     go(\\);

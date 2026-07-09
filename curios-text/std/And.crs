@@ -1,2 +1,7 @@
 pub use /syn/{And};
 pub use /syn/And/{and};
+use /std/{Bln};
+
+satisfy And(Bln) {
+    and(a, b) = Bln/and(a, b)
+}

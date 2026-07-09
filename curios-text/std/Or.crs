@@ -1,2 +1,7 @@
 pub use /syn/{Or};
 pub use /syn/Or/{or};
+use /std/{Bln};
+
+satisfy Or(Bln) {
+    or(a, b) = Bln/or(a, b)
+}
