@@ -144,14 +144,13 @@ match m
 end
 ```
 
-A scrutinee can be a tuple of several independent values, matched row by row — since there is no catch-all, every reachable combination needs its own arm, so this pays off when the code would otherwise nest one match inside another to cover the same combinations:
+A scrutinee can be a tuple of several independent values, matched row by row — since there is no catch-all row, every reachable combination needs an arm, so this pays off when the code would otherwise nest one match inside another to cover the same combinations. Columns are consumed left to right, rows grouping by each column's shape before the next column is examined — so a row's later column may be a plain binder when its earlier columns already set it apart from every concrete-shaped row (`(none(), _)` below); only a binder meeting a concrete shape in the same column of the same group is an error, which is why the discriminating column has to come first (`(_, none())` alongside a `(some(x), …)` row is rejected):
 
 ```
 match (a, b)
 | (some(x), some(y)) => x + y
 | (some(x), none()) => x
-| (none(), some(y)) => y
-| (none(), none()) => 0
+| (none(), _) => 0
 end
 ```
 

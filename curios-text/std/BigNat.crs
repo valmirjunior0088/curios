@@ -83,21 +83,18 @@ pub let add(a : BigNat, b : BigNat) -> BigNat =
     BigNat { limbs = add_c(a.limbs, b.limbs, 0) };
 
 rec sub_b(xs : Lst(Nat), ys : Lst(Nat), borrow : Nat) -> Lst(Nat) =
-    match xs
-    | [] => []
-    | [x, ..xt] =>
-        match ys
-        | [] =>
-            match x < borrow
-            | true => Lst/cons(x + base - borrow, sub_b(xt, [], 1))
-            | false => Lst/cons(x - borrow, sub_b(xt, [], 0))
-            end
-        | [y, ..yt] =>
-            let need = y + borrow;
-            match x < need
-            | true => Lst/cons(x + base - need, sub_b(xt, yt, 1))
-            | false => Lst/cons(x - need, sub_b(xt, yt, 0))
-            end
+    match (xs, ys)
+    | ([], _) => []
+    | ([x, ..xt], []) =>
+        match x < borrow
+        | true => Lst/cons(x + base - borrow, sub_b(xt, [], 1))
+        | false => Lst/cons(x - borrow, sub_b(xt, [], 0))
+        end
+    | ([x, ..xt], [y, ..yt]) =>
+        let need = y + borrow;
+        match x < need
+        | true => Lst/cons(x + base - need, sub_b(xt, yt, 1))
+        | false => Lst/cons(x - need, sub_b(xt, yt, 0))
         end
     end;
 
