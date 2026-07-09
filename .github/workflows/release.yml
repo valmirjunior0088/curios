@@ -54,7 +54,7 @@ jobs:
           path: target/${{ matrix.target }}/release/${{ matrix.binary }}
 
   build-wasm:
-    name: Build curios-js (wasm)
+    name: Build curios-js
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
