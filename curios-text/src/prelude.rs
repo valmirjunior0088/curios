@@ -4,9 +4,7 @@ use {
         NatLiteral, Pattern, Prim, RootSource, Subterm, Term, TopForeign, TopItem, TopLet, TopMod,
         TopUse, TupleType, TupleTypeParam, UseGroup,
     },
-    curios_abi::{
-        ForeignFunction, ForeignStore, NAMESPACE_FFI, WireType, mode, poll, status, stdio,
-    },
+    curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status, stdio},
     curios_base::{Plicity, Qualifier},
     std::sync::Arc,
 };
@@ -260,7 +258,7 @@ pub(crate) fn foreign_signature(
     name: String,
 ) -> LetSignature {
     let function = ForeignFunction {
-        namespace: NAMESPACE_FFI,
+        namespace: "ffi",
         name,
         label: declaration.label.clone(),
         signature: declaration.signature.clone(),

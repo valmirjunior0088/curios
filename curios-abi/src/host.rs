@@ -2,10 +2,10 @@
 //! operation, from which each consumer derives its own view of the boundary.
 //!
 //! A [`ForeignFunction`] is one host call, and it is self-describing: its
-//! `namespace`/`name` pair is the wasm import ([`NAMESPACE_SYS`] and a fixed
-//! `io_*` name for a builtin, [`NAMESPACE_FFI`] and the declaration's fully
-//! qualified name for a user's own `foreign` declaration — the wire-level
-//! ABI contract between the emitter and the runtime linker), and its
+//! `namespace`/`name` pair is the wasm import (`sys` and a fixed `io_*` name
+//! for a builtin, `ffi` and the declaration's fully qualified name for a
+//! user's own `foreign` declaration — the wire-level ABI contract between the
+//! emitter and the runtime linker), and its
 //! [`WireSignature`] names the operands and results and gives each a
 //! [`WireType`]. Every host call is effectful, so reducing one at the type
 //! level is always an error — the effect cannot happen at compile time. The
@@ -38,15 +38,6 @@ use std::{
     hash::{Hash, Hasher},
     sync::Arc,
 };
-
-/// The wasm import namespace the fixed `/sys/Io` builtins are declared under.
-pub const NAMESPACE_SYS: &str = "sys";
-
-/// The wasm import namespace every user-declared `foreign` function is
-/// declared under. The import name within it is the declaration's fully
-/// qualified name (leading `/`), so declarations in different modules never
-/// collide on the wire.
-pub const NAMESPACE_FFI: &str = "ffi";
 
 /// The type of one value crossing the host boundary. The whole vocabulary is
 /// six shapes; everything a host op consumes or produces is one of them.
@@ -81,10 +72,10 @@ pub struct WireSignature {
 /// One foreign (host-provided) function. `namespace`/`name` is the wasm
 /// import pair — the wire ABI shared by the wasm emitter and the runtime
 /// linker; never change one without changing what the other end expects (the
-/// unit tests snapshot the `/sys/Io` set). `namespace` is [`NAMESPACE_SYS`]
-/// for a builtin and [`NAMESPACE_FFI`] for a user's `foreign` declaration,
-/// whose `name` is its fully qualified name (leading `/`). `label` is the
-/// binding name the function surfaces under in the guest.
+/// unit tests snapshot the `/sys/Io` set). `namespace` is `sys` for a builtin
+/// and `ffi` for a user's `foreign` declaration, whose `name` is its fully
+/// qualified name (leading `/`). `label` is the binding name the function
+/// surfaces under in the guest.
 #[derive(Debug, Clone)]
 pub struct ForeignFunction {
     pub namespace: &'static str,
@@ -328,7 +319,7 @@ pub fn sys_io() -> ForeignStore {
         ),
     ] {
         store.register(ForeignFunction {
-            namespace: NAMESPACE_SYS,
+            namespace: "sys",
             name: name.to_string(),
             label: label.to_string(),
             signature: WireSignature {

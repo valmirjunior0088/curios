@@ -168,7 +168,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         if self.table.io_exit_used() {
             self.add_host_import(
-                curios_abi::NAMESPACE_SYS,
+                "sys",
                 "io_exit",
                 TypeName::from("io_exit"),
                 self.table.io_exit_func().clone(),

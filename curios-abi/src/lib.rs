@@ -1,8 +1,8 @@
 //! The contract shared across the host/guest boundary: the numeric wire codes
 //! for `/sys/Io`'s status, poll-event, open-mode, and stdio-handle tags, the
 //! [`ForeignStore`] of [`ForeignFunction`]s describing every host operation's
-//! import name and [`WireSignature`], and the well-known import namespaces
-//! both ends link on ([`NAMESPACE_SYS`], [`NAMESPACE_FFI`]).
+//! import name and [`WireSignature`], and the well-known import namespaces both
+//! ends link on (`sys` for builtins, `ffi` for user foreign declarations).
 //!
 //! Both ends cite these definitions: the runtime (`run::host`) when it lowers a
 //! `Status`/`Poll`/`Mode` to the wire and when it types the `ffi.*` imports,

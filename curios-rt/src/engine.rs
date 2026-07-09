@@ -395,7 +395,7 @@ fn instantiate<H: Host + Send + Sync + 'static>(
     // the registry cannot meet is a named error.
     for import in module.imports() {
         match import.module() {
-            curios_abi::NAMESPACE_SYS => match import.name() {
+            "sys" => match import.name() {
                 // `exit` never returns: it traps with the code, which the
                 // caller below catches. A registry trampoline cannot trap, so
                 // it is wired directly, outside the store.
@@ -403,36 +403,26 @@ fn instantiate<H: Host + Send + Sync + 'static>(
                     let io_exit_type = FuncType::new(engine, [ValType::I32], []);
 
                     linker
-                        .func_new(
-                            curios_abi::NAMESPACE_SYS,
-                            "io_exit",
-                            io_exit_type,
-                            move |_caller, params, _| {
-                                let code = match params.first() {
-                                    Some(wasmtime::Val::I32(code)) => *code,
-                                    _ => 0,
-                                };
+                        .func_new("sys", "io_exit", io_exit_type, move |_caller, params, _| {
+                            let code = match params.first() {
+                                Some(wasmtime::Val::I32(code)) => *code,
+                                _ => 0,
+                            };
 
-                                Err(wasmtime::Error::from(ExitTrap(code)))
-                            },
-                        )
+                            Err(wasmtime::Error::from(ExitTrap(code)))
+                        })
                         .map_err(|error| format!("failed to define io_exit: {error}"))?;
                 }
-                name => impls.link(&mut linker, engine, curios_abi::NAMESPACE_SYS, name)?,
+                name => impls.link(&mut linker, engine, "sys", name)?,
             },
-            curios_abi::NAMESPACE_FFI => bindings.link(
-                &mut linker,
-                engine,
-                curios_abi::NAMESPACE_FFI,
-                import.name(),
-            )?,
+            "ffi" => bindings.link(&mut linker, engine, "ffi", import.name())?,
             namespace => {
                 return Err(format!(
                     "the module imports {}.{}, but host imports live in {} or {}",
                     namespace,
                     import.name(),
-                    curios_abi::NAMESPACE_SYS,
-                    curios_abi::NAMESPACE_FFI
+                    "sys",
+                    "ffi"
                 ));
             }
         }

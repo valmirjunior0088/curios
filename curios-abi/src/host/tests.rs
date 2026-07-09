@@ -1,5 +1,5 @@
 use {
-    super::{ForeignFunction, NAMESPACE_FFI, NAMESPACE_SYS, WireSignature, WireType, sys_io},
+    super::{ForeignFunction, WireSignature, WireType, sys_io},
     std::collections::BTreeSet,
 };
 
@@ -122,7 +122,7 @@ fn register_rejects_a_duplicate_name() {
     let mut store = sys_io();
 
     store.register(ForeignFunction {
-        namespace: NAMESPACE_SYS,
+        namespace: "sys",
         name: "io_read".to_string(),
         label: "read_again".to_string(),
         signature: WireSignature {
@@ -137,11 +137,7 @@ fn register_rejects_a_duplicate_name() {
 /// rebuilding this same store.
 #[test]
 fn sys_io_rows_are_stamped_with_the_sys_namespace() {
-    assert!(
-        sys_io()
-            .iter()
-            .all(|function| function.namespace == NAMESPACE_SYS)
-    );
+    assert!(sys_io().iter().all(|function| function.namespace == "sys"));
 }
 
 /// Identity is the wasm import pair: `label` and `signature` don't participate
@@ -159,12 +155,6 @@ fn equality_is_the_import_pair() {
         },
     };
 
-    assert_eq!(
-        base(NAMESPACE_FFI, "frobnicate"),
-        base(NAMESPACE_FFI, "frobnicate_again")
-    );
-    assert_ne!(
-        base(NAMESPACE_SYS, "frobnicate"),
-        base(NAMESPACE_FFI, "frobnicate")
-    );
+    assert_eq!(base("ffi", "frobnicate"), base("ffi", "frobnicate_again"));
+    assert_ne!(base("sys", "frobnicate"), base("ffi", "frobnicate"));
 }
