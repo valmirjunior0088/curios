@@ -408,12 +408,14 @@ pub(crate) fn elaborate_match(
             default,
         } => elaborate_inductive_match(
             context,
-            head,
-            motive,
-            cases,
-            pattern.as_ref(),
-            default.as_ref(),
-            term,
+            InductiveMatchInput {
+                head,
+                motive,
+                cases,
+                pattern: pattern.as_ref(),
+                default: default.as_ref(),
+                term,
+            },
             mode,
         ),
         Cases::FreeMonoid {
@@ -439,6 +441,15 @@ pub(crate) fn elaborate_match(
                 },
         } => elaborate_bin_match(context, head, motive, empty_case, cons_case, term, mode),
     }
+}
+
+struct InductiveMatchInput<'a> {
+    head: &'a Term,
+    motive: &'a Scope<Many>,
+    cases: &'a BTreeMap<Atom, Scope<Many>>,
+    pattern: Option<&'a MotivePattern>,
+    default: Option<&'a Term>,
+    term: &'a Term,
 }
 
 fn elaborate_bln_match(
@@ -555,14 +566,18 @@ fn singleton_eliminable(
 /// indices, and the whole match types at the scrutinee's *actual* indices.
 fn elaborate_inductive_match(
     context: &mut Context,
-    head: &Term,
-    motive: &Scope<Many>,
-    cases: &BTreeMap<Atom, Scope<Many>>,
-    pattern: Option<&MotivePattern>,
-    default: Option<&Term>,
-    term: &Term,
+    input: InductiveMatchInput<'_>,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
+    let InductiveMatchInput {
+        head,
+        motive,
+        cases,
+        pattern,
+        default,
+        term,
+    } = input;
+
     // The dependent type-pattern motive refines the scrutinee's indices per
     // constructor; a binding-free catch-all has no constructor to refine
     // against, so the two forms are mutually exclusive (v1).

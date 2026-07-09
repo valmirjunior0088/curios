@@ -24,7 +24,7 @@ curios-pipeline = { workspace = true }
 curios-binaryen = { workspace = true }
 curios-rt = { workspace = true }
 wasmtime = { workspace = true, features = ["cranelift"] }
-clap = { version = "4.5.60", features = ["derive"] }
+clap = { version = "4.6.1", features = ["derive"] }
 
 # The integration suite exercises curios-js's bridge module on wasmtime; the
 # reverse edge does not exist (curios-js never depends on curios), so this

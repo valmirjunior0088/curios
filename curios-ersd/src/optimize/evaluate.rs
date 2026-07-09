@@ -499,11 +499,11 @@ impl<'m> Evaluator<'m> {
                         // The first binding of the whole chain is charged by
                         // this `eval` call's own entry; every one beyond it is
                         // charged explicitly, matching the recursive form's fuel.
-                        if pushed > 0 {
-                            if let Err(b) = self.charge() {
-                                bail = Some(b);
-                                break;
-                            }
+                        if pushed > 0
+                            && let Err(b) = self.charge()
+                        {
+                            bail = Some(b);
+                            break;
                         }
 
                         let bound = match self.value_of(body, env) {
