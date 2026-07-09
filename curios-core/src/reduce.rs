@@ -6,9 +6,9 @@ mod tests;
 
 use {
     super::{
-        Apply, Carrier, Cases, Context, Field, FreeMonoid, Func, FuncType, InductiveType, Layer,
-        Let, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType,
-        Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
+        Apply, Bound, Carrier, Cases, Context, Field, FreeMonoid, Func, FuncType, InductiveType,
+        Layer, Let, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Scope, Struct,
+        StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
     },
     crate::Instant,
     num_traits::ToPrimitive,
@@ -339,7 +339,17 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
 }
 
 fn reduce_let(let_: Let) -> Reduce {
-    Reduce::Continue(let_.tail.open(&[&let_.body]))
+    // Substitute each binding's value into the bindings after it and the tail,
+    // left to right — sound because a `let` is non-recursive, so binding `i`
+    // only mentions bindings `0..i`, which are already resolved.
+    let mut values = Vec::<Term>::with_capacity(let_.bindings.len());
+
+    for (_, value) in &let_.bindings {
+        let opened = value.release(&values.iter().collect::<Vec<_>>());
+        values.push(opened);
+    }
+
+    Reduce::Continue(let_.tail.open(&values.iter().collect::<Vec<_>>()))
 }
 
 fn reduce_var(context: &Context, var: Var) -> Reduce {

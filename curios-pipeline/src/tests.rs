@@ -110,6 +110,23 @@ fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
 }
 
 #[test]
+fn let_bound_tuple_with_an_effectful_field_lowers() {
+    // A `let` bound to a tuple one of whose fields is an opaque foreign call:
+    // the field cannot be lowered in a pure-name position, so the binding must
+    // take the CPS join-block path in `into_cont`. Head-only purity
+    // classification used to route the whole `let` through `lower_pure_name`
+    // and panic the compiler on the field's host primitive. End-to-end guard
+    // for `is_pure_term`.
+    let source = r#"
+        foreign frobnicate : (Nat) -> Nat;
+        let t = (frobnicate(5), 2);
+        t.0
+    "#;
+
+    assert!(compile(source, None).is_ok());
+}
+
+#[test]
 fn meta_free_prelude_program_compiles_without_overflow() {
     // The exact case BUG.md calls out: a meta-free entrypoint (no holes) that
     // still pulls in the whole std/std prelude. Assembling and traversing the

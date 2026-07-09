@@ -1,8 +1,8 @@
 use {
     super::{Context, MatchCompiler},
     crate::{
-        BinMatch, BinSegment, Error, Field, Let, LstEntry, LstMatch, Match, Name, Nat, NatLiteral,
-        NatMatch, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
+        BinMatch, BinSegment, Error, Field, Let, LetBinding, LstEntry, LstMatch, Match, Name, Nat,
+        NatLiteral, NatMatch, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     curios_base::{MONAD_BIND, STR_SCAN_LEAD, STR_STEP, STR_STR, STR_UTF8_MORE, STR_UTF8_STOP},
     num_bigint::BigUint,
@@ -47,10 +47,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// The two steps [`Self::scoped`] runs around one bounded closure call,
-    /// exposed separately for a walk that must hold several nested scopes
-    /// open across a loop instead — see `region`'s `Let` handling, whose
-    /// `.tail` chain used to recurse through `scoped`'s closure once per
-    /// binding.
+    /// exposed separately for a walk that must hold several nested scopes open
+    /// across a loop instead — see [`Self::lower_let_region`], which enters one
+    /// scope per binding of a `let` block and leaves them in reverse.
     fn enter_scope(&self, names: impl IntoIterator<Item = String>) -> Vec<String> {
         let mut added = Vec::new();
         let mut scope = self.scope.borrow_mut();
@@ -419,13 +418,28 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     )
                 }
             },
-            // A `let` is non-recursive: its binder is in scope only in the tail,
-            // never in its own type or value.
+            // A `let` block is non-recursive: each binding is in scope for the
+            // bindings after it and the tail, never for its own type or value.
+            // Lower each binding's type/value in the scope of the bindings
+            // before it, then wrap them back (reverse) around the tail.
             Subterm::Let(let_) => {
-                let type_ = self.term(&let_.signature.type_())?;
-                let value = self.term(&let_.signature.body())?;
-                let tail = self.scoped(pattern_names(&let_.binder), || self.term(&let_.tail))?;
-                self.bind_pattern(&let_.binder, type_, value, tail)
+                let mut pending = Vec::new();
+
+                for binding in &let_.bindings {
+                    let type_ = self.term(&binding.signature.type_())?;
+                    let value = self.term(&binding.signature.body())?;
+                    let added = self.enter_scope(pattern_names(&binding.binder));
+                    pending.push((added, &binding.binder, type_, value));
+                }
+
+                let mut tail = self.term(&let_.tail)?;
+
+                for (added, binder, type_, value) in pending.into_iter().rev() {
+                    self.leave_scope(&added);
+                    tail = self.bind_pattern(binder, type_, value, tail);
+                }
+
+                tail
             }
             // A `rec` is mutually recursive: every item label is in scope across
             // all item types, all item bodies, and the tail.
@@ -469,7 +483,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // A `let`'s bound expression evaluates in place (its bangs hoist to
             // this region); the tail continues the same region (a bang there
             // hoists after `x` is bound, not above the `let`).
-            Subterm::Let(_) => self.region_let_chain(term),
+            Subterm::Let(let_) => self.lower_let_region(&let_.bindings, &let_.tail),
             // The scrutinee evaluates before branching (its bangs hoist here);
             // each arm is its own region (branch-local effects).
             Subterm::Match(match_) => {
@@ -497,14 +511,19 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// `region`'s `Let` handling, peeling the chain into a loop instead of
-    /// recursing through `build_let`'s `scoped(-> region(tail))` once per
-    /// binding: an ordinary long straight-line sequence of local `let`s (not
-    /// adversarial) used to overflow the stack here. `build_let` itself is
-    /// unchanged and still used by `collect` for a single non-boundary
-    /// `let`, whose own tail this same iterative `region` handles once
-    /// entered — so the fix only has to live at this one entry point.
-    fn region_let_chain(&self, term: &Term) -> Result<curios_core::Term, Error> {
+    /// Lowers a run of `let` `bindings` and its `tail` as one region: each
+    /// binding's bound expression is a value in this region (its bangs hoist
+    /// here, sequenced by `wrap`), the tail continues the same region. Loops
+    /// over `bindings` rather than recursing once per binding — a `let` block is
+    /// flat, so a long straight-line sequence costs one loop, not a stack of
+    /// native frames. Shared by `region`'s `Let` arm (the whole block) and
+    /// `build_let` (the bindings after the first, whose own bangs hoist to the
+    /// enclosing region instead).
+    pub(super) fn lower_let_region(
+        &self,
+        bindings: &[LetBinding],
+        tail: &Term,
+    ) -> Result<curios_core::Term, Error> {
         struct PendingLet<'t> {
             added: Vec<String>,
             binds: Vec<(String, curios_core::Term)>,
@@ -514,35 +533,32 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
 
         let mut pending = Vec::new();
-        let mut current = term;
 
-        let base = loop {
-            let Subterm::Let(let_) = current.as_subterm() else {
-                break self.region(current)?;
-            };
-
+        for binding in bindings {
             let mut binds = Vec::new();
-            let value = self.collect(&let_.signature.body(), &mut binds)?;
-            let type_ = self.term(&let_.signature.type_())?;
-            let added = self.enter_scope(pattern_names(&let_.binder));
+            let value = self.collect(&binding.signature.body(), &mut binds)?;
+            let type_ = self.term(&binding.signature.type_())?;
+            let added = self.enter_scope(pattern_names(&binding.binder));
 
             pending.push(PendingLet {
                 added,
                 binds,
-                binder: &let_.binder,
+                binder: &binding.binder,
                 type_,
                 value,
             });
+        }
 
-            current = &let_.tail;
-        };
-
-        let mut tail = base;
+        let mut tail = self.region(tail)?;
 
         for pending_let in pending.into_iter().rev() {
             self.leave_scope(&pending_let.added);
-            let let_term =
-                self.bind_pattern(pending_let.binder, pending_let.type_, pending_let.value, tail);
+            let let_term = self.bind_pattern(
+                pending_let.binder,
+                pending_let.type_,
+                pending_let.value,
+                tail,
+            );
             tail = self.wrap(pending_let.binds, let_term)?;
         }
 
@@ -678,18 +694,26 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         })
     }
 
-    /// Builds `let x = value; tail` for a `let` inside a region, collecting the
-    /// bound expression's bangs into `binds` and desugaring the tail as the
-    /// continuation of the same region.
+    /// Builds a `let` block reached inside a `collect` (spine) context. The
+    /// *first* binding's bangs hoist to the enclosing region (`binds`); the
+    /// bindings after it and the tail form their own region via
+    /// `lower_let_region`, scoped under the first binder.
     pub(super) fn build_let(
         &self,
         let_: &Let,
         binds: &mut Vec<(String, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
-        let value = self.collect(&let_.signature.body(), binds)?;
-        let tail = self.scoped(pattern_names(&let_.binder), || self.region(&let_.tail))?;
-        let type_ = self.term(&let_.signature.type_())?;
-        Ok(self.bind_pattern(&let_.binder, type_, value, tail))
+        let (first, rest) = let_
+            .bindings
+            .split_first()
+            .expect("a `let` block has at least one binding");
+
+        let value = self.collect(&first.signature.body(), binds)?;
+        let tail = self.scoped(pattern_names(&first.binder), || {
+            self.lower_let_region(rest, &let_.tail)
+        })?;
+        let type_ = self.term(&first.signature.type_())?;
+        Ok(self.bind_pattern(&first.binder, type_, value, tail))
     }
 
     /// Lowers a function's parameters into core binder `(name, domain)` pairs.

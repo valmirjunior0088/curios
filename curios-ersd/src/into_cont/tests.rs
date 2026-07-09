@@ -144,6 +144,45 @@ fn lowers_apply_in_value_position_through_join_block() {
 }
 
 #[test]
+fn peels_a_let_whose_tuple_body_hides_an_apply_field() {
+    // A `let` bound to a *tuple that contains a call* is a legal, ordinary
+    // shape. The peeling prologue must not classify it pure from the `Tuple`
+    // head alone — the field call needs the CPS join-block path — so it falls
+    // through to `lower_value_name`'s `Let` arm, which lowers the tuple via a
+    // resume block and continues the chain. Head-only classification used to
+    // route it through `lower_pure_name`, which rejects the inner `Apply` with
+    // `UnsupportedSyncRecItem`. Guards `is_pure_term`'s recursion into children.
+    let term = Subterm::Let(Let {
+        name: "t".into(),
+        body: Subterm::Tuple(Tuple {
+            fields: vec![
+                Subterm::Apply(Apply {
+                    head: Subterm::Func(identity_func()).into(),
+                    params: vec![Subterm::Prim(Prim::Pure(PurePrim::Int(7))).into()],
+                })
+                .into(),
+                Subterm::Prim(Prim::Pure(PurePrim::Int(1))).into(),
+            ],
+        })
+        .into(),
+        tail: Subterm::Name(Name::from("t")).into(),
+    });
+
+    let module = lower(term.into());
+    let func = &module.funcs()[0].1;
+
+    assert_eq!(func.region.blocks.len(), 1);
+    let (_, block) = &func.region.blocks[0];
+    assert!(
+        block
+            .region
+            .values
+            .iter()
+            .any(|(_, value)| matches!(value, Value::Pure(Data::Tpl(_))))
+    );
+}
+
+#[test]
 fn lowers_nat_match_as_sparse_match() {
     let term = Subterm::NatMatch(NatMatch::Dispatch {
         head: Subterm::Prim(Prim::Pure(PurePrim::Nat(7))).into(),

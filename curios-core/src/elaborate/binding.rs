@@ -1,250 +1,152 @@
 use super::*;
 
+/// Elaborate a local `let` block. The bindings are a flat `Vec` in one node,
+/// so this loops over them — elaborating each binding's type/body, minting its
+/// binder, and defining it in a single frame — rather than recursing once per
+/// binding, which a long straight-line sequence of `let`s would overflow the
+/// stack with. The tail continues with one ordinary (recursive) `elaborate`,
+/// its depth bounded by how often `let` and `rec` alternate, not by chain
+/// length. Rebuilding folds through `Term::let_`, which merges the bindings
+/// back into a single flat `Let`. The whole block is one source term with one
+/// span, stamped by `elaborate`'s wrapper — no per-binding span bookkeeping.
 pub(super) fn elaborate_let(
     context: &mut Context,
     let_: &Let,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    elaborate_binding_chain(context, Head::Let(let_.clone()), mode)
+    context.with_frame(|context| {
+        let mut label_terms = Vec::<Term>::with_capacity(let_.bindings.len());
+        let mut triples = Vec::<(String, Term, Term)>::with_capacity(let_.bindings.len());
+
+        for (index, (type_, body)) in let_.bindings.iter().enumerate() {
+            let (type_, body) = {
+                let refs = label_terms.iter().collect::<Vec<_>>();
+                (type_.release(&refs), body.release(&refs))
+            };
+
+            // A bare metavar annotation is the lowering of a typeless local
+            // `let x = e` (equivalently `let x : _ = e`): infer the body's type
+            // instead of checking the body against the hole. This is what lets a
+            // lambda/tuple/atom body — which `check` against an unsolved hole
+            // would reject — be bound without an annotation. Otherwise check the
+            // body against the (possibly partial) annotation, as before.
+            let (type_elaborated, body_elaborated, assumed) = match &*type_ {
+                Subterm::Metavar(_) => {
+                    let (body_elaborated, inferred) = elaborate(context, &body, Mode::Infer)?;
+                    (inferred.clone(), body_elaborated, inferred)
+                }
+                // The body is checked against — and the binder assumed at — the
+                // *rebuilt* annotation: insertion saturates applications during
+                // elaboration, and a lowered (under-applied) type reaching the
+                // reducer would open a telescope at the wrong arity.
+                _ => {
+                    let type_elaborated = check(context, &type_, Term::type_())?;
+                    let body_elaborated = check(context, &body, type_elaborated.clone())?;
+                    (type_elaborated.clone(), body_elaborated, type_elaborated)
+                }
+            };
+
+            let label = context.fresh(let_.tail.label_iter().nth(index).flatten());
+
+            // Define the binding with the *rebuilt* body so the tail's
+            // type-level evaluation does not reduce through the lowered
+            // (under-applied) original.
+            context.define_assuming(&label, &assumed, &body_elaborated);
+
+            label_terms.push(Term::free_var(&label));
+            triples.push((label, type_elaborated, body_elaborated));
+        }
+
+        // Propagate `mode` into the tail: a `Check(expected)` turnaround happens
+        // where the bindings are in scope; `expected` comes from the outer scope
+        // and does not mention them, so comparing inside the frame is sound.
+        let tail = let_.tail.open(&label_terms.iter().collect::<Vec<_>>());
+        let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
+        let tail_type = reduce_with(context, &tail_type)?;
+
+        let rebuilt = triples
+            .into_iter()
+            .rev()
+            .fold(tail_elaborated, |tail, (label, type_, body)| {
+                Term::let_(label, type_, body, tail)
+            });
+
+        Ok((rebuilt, tail_type))
+    })
 }
 
+/// Elaborate a local `rec` group and its tail. The group's mutually-recursive
+/// bindings are one node, so this handles them at once; the tail recurses
+/// through one ordinary `elaborate`, bounded by `let`/`rec` alternation.
 pub(super) fn elaborate_rec(
     context: &mut Context,
     rec: &Rec,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    elaborate_binding_chain(context, Head::Rec(rec.clone()), mode)
-}
+    context.with_frame(|context| {
+        let labels = rec
+            .tail
+            .label_iter()
+            .map(|l| context.fresh(l))
+            .collect::<Vec<_>>();
 
-enum Head {
-    Let(Let),
-    Rec(Rec),
-}
+        let label_terms = labels
+            .iter()
+            .map(Var::free)
+            .map(Term::var)
+            .collect::<Vec<_>>();
+        let label_refs = label_terms.iter().collect::<Vec<_>>();
 
-enum FrameKind {
-    Let {
-        label: String,
-        type_elaborated: Term,
-        body_elaborated: Term,
-    },
-    Rec {
-        triples: Vec<(String, Term, Term)>,
-    },
-}
+        let items = rec
+            .items
+            .iter()
+            .map(|(type_, body)| (type_.open(&label_refs), body.open(&label_refs)))
+            .collect::<Vec<_>>();
 
-/// One binding link's reconstruction data, plus the span of the *opened* term
-/// that led into it — the span `elaborate`'s wrapper would have stamped onto
-/// this link's rebuilt term, back when reaching it was a recursive call.
-struct PendingFrame {
-    own_span: Option<Span>,
-    kind: FrameKind,
-}
-
-/// Elaborate a local `let`/`rec` chain. A source program's local bindings are
-/// nested one `Let`/`Rec` inside the previous one's `tail`, so a naive walk
-/// that recurses into `tail` — as `elaborate_let`/`elaborate_rec` used to,
-/// each wrapped in `context.with_frame(|context| { ...; elaborate(tail) })`
-/// — costs one native Rust stack frame per binding, unbounded: a long
-/// straight-line sequence of local `let`s (an ordinary shape, not adversarial)
-/// could overflow the stack.
-///
-/// This walks the chain in two passes instead. The forward pass elaborates
-/// each binding's own type/body, enters its frame, and defines it — exactly
-/// the work `elaborate_let`/`elaborate_rec` did before recursing — but loops
-/// rather than recurring, stopping at the first tail that is not itself a
-/// `Let`/`Rec` and elaborating that base case with one ordinary (bounded)
-/// call. The backward pass then unwinds: for each link, innermost first,
-/// `reduce_with` runs — in that link's still-active frame, exactly as it did
-/// before `leave_frame` in the recursive version — then the frame is left,
-/// and the link's `Term::let_`/`Term::rec` is rebuilt around the
-/// already-unwound tail, restamped with the span its own opening carried.
-/// Frame enter/leave calls land in the identical order and the identical
-/// active-frame context the recursive version produced; only the Rust call
-/// stack shape changes.
-fn elaborate_binding_chain(
-    context: &mut Context,
-    mut head: Head,
-    mode: Mode,
-) -> Result<(Term, Term), Error> {
-    let mut pending = Vec::<PendingFrame>::new();
-    let mut own_span = None;
-
-    let (base_term, base_type) = loop {
-        match head {
-            Head::Let(Let { type_, body, tail }) => {
-                // A bare metavar annotation is the lowering of a typeless local
-                // `let x = e` (equivalently `let x : _ = e`): infer the body's
-                // type instead of checking the body against the hole. This is
-                // what lets a lambda/tuple/atom body — which `check` against an
-                // unsolved hole would reject — be bound without an annotation.
-                // Otherwise check the body against the (possibly partial)
-                // annotation, as before.
-                let (type_elaborated, body_elaborated, assumed) = match &*type_ {
-                    Subterm::Metavar(_) => {
-                        let (body_elaborated, inferred) = elaborate(context, &body, Mode::Infer)?;
-                        (inferred.clone(), body_elaborated, inferred)
-                    }
-                    // The body is checked against — and the binder assumed at —
-                    // the *rebuilt* annotation: insertion saturates applications
-                    // during elaboration, and a lowered (under-applied) type
-                    // reaching the reducer would open a telescope at the wrong
-                    // arity.
-                    _ => {
-                        let type_elaborated = check(context, &type_, Term::type_())?;
-                        let body_elaborated = check(context, &body, type_elaborated.clone())?;
-                        (type_elaborated.clone(), body_elaborated, type_elaborated)
-                    }
-                };
-
-                let label = context.fresh(tail.first_label());
-
-                // Propagate `mode` into the frame so a `Check(expected)`
-                // turnaround happens where the let binding is in scope;
-                // `expected` is from the outer scope and does not mention the
-                // bound name, so comparing inside the frame is sound. The
-                // binding is `define`d with the *rebuilt* body: insertion
-                // saturates applications during elaboration, and the tail's
-                // type-level evaluation must not reduce through the lowered
-                // (under-applied) original.
-                context.enter_frame();
-                context.define_assuming(&label, &assumed, &body_elaborated);
-
-                pending.push(PendingFrame {
-                    own_span,
-                    kind: FrameKind::Let {
-                        label: label.clone(),
-                        type_elaborated,
-                        body_elaborated,
-                    },
-                });
-
-                let opened = tail.open(&[&Term::free_var(&label)]);
-                own_span = opened.span();
-
-                head = match Term::unwrap_or_clone(opened) {
-                    Subterm::Let(inner) => Head::Let(inner),
-                    Subterm::Rec(inner) => Head::Rec(inner),
-                    other => {
-                        let based = match own_span.clone() {
-                            Some(span) => Term::from(other).with_span(span),
-                            None => Term::from(other),
-                        };
-
-                        break elaborate(context, &based, mode)?;
-                    }
-                };
-            }
-            Head::Rec(Rec { items, tail }) => {
-                let labels = tail
-                    .label_iter()
-                    .map(|l| context.fresh(l))
-                    .collect::<Vec<_>>();
-
-                let label_terms = labels
-                    .iter()
-                    .map(Var::free)
-                    .map(Term::var)
-                    .collect::<Vec<_>>();
-
-                let label_terms = label_terms.iter().collect::<Vec<_>>();
-
-                let items = items
-                    .iter()
-                    .map(|(type_, body)| (type_.open(&label_terms), body.open(&label_terms)))
-                    .collect::<Vec<_>>();
-
-                context.enter_frame();
-
-                for (label, (type_, _)) in labels.iter().zip(items.iter()) {
-                    context.assume(label, type_);
-                }
-
-                let mut types_elaborated = Vec::with_capacity(items.len());
-                for (type_, _) in &items {
-                    types_elaborated.push(check(context, type_, Term::type_())?);
-                }
-
-                // Upgrade the assumptions to the *rebuilt* signatures before any
-                // body is checked: insertion saturates applications during
-                // elaboration, and a lowered (under-applied) type reaching the
-                // reducer would open a telescope at the wrong arity. The
-                // lowered forms were only needed above, while the signatures
-                // checked each other.
-                for (label, type_) in labels.iter().zip(&types_elaborated) {
-                    context.reassume(label, type_);
-                }
-
-                for (label, (_, body)) in labels.iter().zip(items.iter()) {
-                    context.define(label, body);
-                }
-
-                let mut bodies_elaborated = Vec::with_capacity(items.len());
-                for ((_, body), type_) in items.iter().zip(&types_elaborated) {
-                    bodies_elaborated.push(check(context, body, type_.clone())?);
-                }
-
-                // Re-define with the rebuilt bodies before the tail: insertion
-                // saturates applications during elaboration, and the tail's
-                // type-level evaluation must not reduce through the lowered
-                // (under-applied) originals.
-                for (label, body) in labels.iter().zip(&bodies_elaborated) {
-                    context.define(label, body);
-                }
-
-                let triples = labels
-                    .into_iter()
-                    .zip(types_elaborated)
-                    .zip(bodies_elaborated)
-                    .map(|((label, type_), body)| (label, type_, body))
-                    .collect::<Vec<_>>();
-
-                pending.push(PendingFrame {
-                    own_span,
-                    kind: FrameKind::Rec { triples },
-                });
-
-                let opened = tail.open(&label_terms);
-                own_span = opened.span();
-
-                head = match Term::unwrap_or_clone(opened) {
-                    Subterm::Let(inner) => Head::Let(inner),
-                    Subterm::Rec(inner) => Head::Rec(inner),
-                    other => {
-                        let based = match own_span.clone() {
-                            Some(span) => Term::from(other).with_span(span),
-                            None => Term::from(other),
-                        };
-
-                        break elaborate(context, &based, mode)?;
-                    }
-                };
-            }
+        for (label, (type_, _)) in labels.iter().zip(items.iter()) {
+            context.assume(label, type_);
         }
-    };
 
-    let mut tail_elaborated = base_term;
-    let mut tail_type = base_type;
+        let mut types_elaborated = Vec::with_capacity(items.len());
+        for (type_, _) in &items {
+            types_elaborated.push(check(context, type_, Term::type_())?);
+        }
 
-    for frame in pending.into_iter().rev() {
-        tail_type = reduce_with(context, &tail_type)?;
-        context.leave_frame();
+        // Upgrade the assumptions to the *rebuilt* signatures before any body is
+        // checked: a lowered (under-applied) type reaching the reducer would open
+        // a telescope at the wrong arity.
+        for (label, type_) in labels.iter().zip(&types_elaborated) {
+            context.reassume(label, type_);
+        }
 
-        let rebuilt = match frame.kind {
-            FrameKind::Let {
-                label,
-                type_elaborated,
-                body_elaborated,
-            } => Term::let_(label, type_elaborated, body_elaborated, tail_elaborated),
-            FrameKind::Rec { triples } => Term::rec(triples, tail_elaborated),
-        };
+        for (label, (_, body)) in labels.iter().zip(items.iter()) {
+            context.define(label, body);
+        }
 
-        tail_elaborated = match frame.own_span {
-            Some(span) => rebuilt.with_span(span),
-            None => rebuilt,
-        };
-    }
+        let mut bodies_elaborated = Vec::with_capacity(items.len());
+        for ((_, body), type_) in items.iter().zip(&types_elaborated) {
+            bodies_elaborated.push(check(context, body, type_.clone())?);
+        }
 
-    Ok((tail_elaborated, tail_type))
+        // Re-define with the rebuilt bodies before the tail, for the same reason.
+        for (label, body) in labels.iter().zip(&bodies_elaborated) {
+            context.define(label, body);
+        }
+
+        let triples = labels
+            .iter()
+            .cloned()
+            .zip(types_elaborated)
+            .zip(bodies_elaborated)
+            .map(|((label, type_), body)| (label, type_, body))
+            .collect::<Vec<_>>();
+
+        let tail = rec.tail.open(&label_refs);
+        let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
+        let tail_type = reduce_with(context, &tail_type)?;
+
+        Ok((Term::rec(triples, tail_elaborated), tail_type))
+    })
 }
 
 pub(super) fn elaborate_func(

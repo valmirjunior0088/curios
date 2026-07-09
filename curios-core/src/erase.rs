@@ -1235,29 +1235,42 @@ fn erase_let(
     let_: &Let,
     expected: &Term,
 ) -> Result<curios_ersd::Term, Error> {
-    let Let {
-        type_: body_type,
-        body,
-        tail,
-    } = let_;
+    // Erase each binding in one frame, opening its stored prefix as we go, then
+    // fold the results into the (still-nested) ersd `Let` chain innermost-first.
+    // The core side is a flat block, so this loops rather than recursing per
+    // binding; the ersd nesting is bounded by ersd's own chain machinery.
+    context.with_frame(|context| {
+        let mut label_terms = Vec::<Term>::with_capacity(let_.bindings.len());
+        let mut erased = Vec::with_capacity(let_.bindings.len());
 
-    let name = context.fresh(tail.first_label());
-    let erased_body = erase(context, body, body_type)?;
-    let var_term = Term::free_var(&name);
-    let tail = tail.open(&[&var_term]);
+        for (i, (type_, value)) in let_.bindings.iter().enumerate() {
+            let (type_, value) = {
+                let refs = label_terms.iter().collect::<Vec<_>>();
+                (type_.release(&refs), value.release(&refs))
+            };
 
-    let tail = context.with_frame(|context| {
-        context.define_assuming(&name, body_type, body);
+            let name = context.fresh(let_.tail.label_iter().nth(i).flatten());
+            let erased_value = erase(context, &value, &type_)?;
+            context.define_assuming(&name, &type_, &value);
 
-        erase(context, &tail, expected)
-    })?;
+            label_terms.push(Term::free_var(&name));
+            erased.push((name, erased_value));
+        }
 
-    Ok(curios_ersd::Subterm::Let(curios_ersd::Let {
-        name,
-        body: erased_body,
-        tail,
+        let tail = let_.tail.open(&label_terms.iter().collect::<Vec<_>>());
+        let mut acc = erase(context, &tail, expected)?;
+
+        for (name, body) in erased.into_iter().rev() {
+            acc = curios_ersd::Subterm::Let(curios_ersd::Let {
+                name,
+                body,
+                tail: acc,
+            })
+            .into();
+        }
+
+        Ok(acc)
     })
-    .into())
 }
 
 fn erase_rec(

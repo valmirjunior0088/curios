@@ -993,11 +993,13 @@ fn parse_local_let_without_type() {
     assert_eq!(
         "let x = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            binder: Pattern::Binder(Some("x".to_string())),
-            signature: LetSignature::Name {
-                type_: None,
-                body: Subterm::Type.into(),
-            },
+            bindings: vec![LetBinding {
+                binder: Pattern::Binder(Some("x".to_string())),
+                signature: LetSignature::Name {
+                    type_: None,
+                    body: Subterm::Type.into(),
+                },
+            }],
             tail: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
         .into()
@@ -1009,11 +1011,13 @@ fn parse_local_let_with_type_still_works() {
     assert_eq!(
         "let x : Type = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            binder: Pattern::Binder(Some("x".to_string())),
-            signature: LetSignature::Name {
-                type_: Some(Subterm::Type.into()),
-                body: Subterm::Type.into(),
-            },
+            bindings: vec![LetBinding {
+                binder: Pattern::Binder(Some("x".to_string())),
+                signature: LetSignature::Name {
+                    type_: Some(Subterm::Type.into()),
+                    body: Subterm::Type.into(),
+                },
+            }],
             tail: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
         .into()
@@ -1122,11 +1126,13 @@ fn parse_bang_in_let_binding() {
     assert_eq!(
         "let x = e!; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            binder: Pattern::Binder(Some("x".to_string())),
-            signature: LetSignature::Name {
-                type_: None,
-                body: Subterm::Bang(name("e")).into(),
-            },
+            bindings: vec![LetBinding {
+                binder: Pattern::Binder(Some("x".to_string())),
+                signature: LetSignature::Name {
+                    type_: None,
+                    body: Subterm::Bang(name("e")).into(),
+                },
+            }],
             tail: name("x"),
         })
         .into()

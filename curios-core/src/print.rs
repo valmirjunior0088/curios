@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Arity, Atom, Carrier, Cases, Field, Func, FuncType, InductiveType, Infix, Let,
-        Match, Nat, One, Prim, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term,
+        Apply, Arity, Atom, Bound, Carrier, Cases, Field, Func, FuncType, InductiveType, Infix,
+        Let, Match, Nat, Prim, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term,
         Three, Tuple, TupleType, Two, Var, Variant,
     },
     curios_base::{
@@ -174,9 +174,11 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
             each(out, params);
             each(out, fields);
         }
-        Subterm::Let(Let { type_, body, tail }) => {
-            collect_labels(type_, out);
-            collect_labels(body, out);
+        Subterm::Let(Let { bindings, tail }) => {
+            for (type_, value) in bindings {
+                collect_labels(type_, out);
+                collect_labels(value, out);
+            }
             scope(out, tail);
         }
         Subterm::Rec(Rec { items, tail }) => {
@@ -336,13 +338,6 @@ fn scope_labels<'a>(labels: impl Iterator<Item = Option<&'a str>>, depth: usize)
 
 fn label_terms(labels: &[String]) -> Vec<Term> {
     labels.iter().map(Var::free).map(Term::var).collect()
-}
-
-fn open_scope_one(scope: Scope<One>, depth: usize) -> (String, Term) {
-    let label = label_or(scope.first_label(), depth);
-    let body = scope.open(&[&Term::free_var(&label)]);
-
-    (label, body)
 }
 
 fn open_telescope(telescope: Telescope<Term>, depth: usize) -> (Vec<String>, Term) {
@@ -1075,18 +1070,33 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
 
             flat([prefix, arms])
         }
-        Subterm::Let(Let { type_, body, tail }) => {
-            let (label, tail) = open_scope_one(tail, depth);
+        Subterm::Let(Let { bindings, tail }) => {
+            let labels = scope_labels(tail.label_iter(), depth);
+            let label_terms = label_terms(&labels);
+            let label_terms = label_terms.iter().collect::<Vec<_>>();
+
+            let lines = bindings
+                .iter()
+                .enumerate()
+                .map(|(index, (type_, value))| {
+                    let type_ = type_.release(&label_terms[..index]);
+                    let value = value.release(&label_terms[..index]);
+
+                    flat([
+                        pure("let "),
+                        pure(display_label(&labels[index])),
+                        pure(" : "),
+                        print_term(type_, depth + index),
+                        pure(" =\n"),
+                        indent(flat([print_term(value, depth + index), pure(";")])),
+                        pure("\n"),
+                    ])
+                })
+                .collect::<Vec<_>>();
 
             flat([
-                pure("let "),
-                pure(display_label(&label)),
-                pure(" : "),
-                print_term(type_, depth),
-                pure(" =\n"),
-                indent(flat([print_term(body, depth), pure(";")])),
-                pure("\n"),
-                print_term(tail, depth + 1),
+                flat(lines),
+                print_term(tail.open(&label_terms), depth + labels.len()),
             ])
         }
         Subterm::Rec(Rec { items, tail }) => {

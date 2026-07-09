@@ -563,63 +563,6 @@ pub fn mark<'a>() -> Parser<'a, Mark> {
     })
 }
 
-/// One or more `f` items followed by a mandatory `base` — [`many1`]'s shape,
-/// but with a trailing item of a different type, for a grammar whose
-/// repeated prefix and final tail aren't the same nonterminal. Lets a
-/// right-nested chain grammar (`let x = e; tail`, `rec a = e; …; tail`)
-/// parse in a loop instead of recursing once per repetition — the tail used
-/// to be parsed by calling back into the very parser being built
-/// (indirectly, through [`lazy`]): fine for construction (deferred), but
-/// each `f` cost a further native stack frame once parsing actually ran,
-/// unbounded in the number of repetitions.
-///
-/// The first `f` is mandatory — its failure (recoverable or not) is the
-/// whole parser's failure, so an empty match still lets an enclosing
-/// [`Parser::or`] try a different alternative. Subsequent `f`s and `base`
-/// follow [`many0`]'s rules: a recoverable failure ends the repetition, a
-/// fatal one propagates, and zero-width progress panics.
-pub fn many1_then<'a, T, U, F, G>(mut f: F, base: G) -> Parser<'a, (Vec<T>, U)>
-where
-    T: 'a,
-    U: 'a,
-    F: FnMut() -> Parser<'a, T> + 'a,
-    G: FnOnce() -> Parser<'a, U> + 'a,
-{
-    Parser::new(move |state| {
-        let offset = state.offset;
-        let (item, mut state) = f().parse(state)?;
-
-        if offset == state.offset {
-            panic!("Infinite repetition");
-        }
-
-        let mut items = vec![item];
-
-        let error = loop {
-            let offset = state.offset;
-            match f().parse(state) {
-                Ok((item, next_state)) => {
-                    if offset == next_state.offset {
-                        panic!("Infinite repetition");
-                    }
-
-                    items.push(item);
-                    state = next_state;
-                }
-                Err(error) => break error,
-            }
-        };
-
-        if error.is_uncaught(state) {
-            return Err(error);
-        }
-
-        let (result, state) = base().parse(state)?;
-
-        Ok(((items, result), state))
-    })
-}
-
 /// Consumes one separator between `sep_by*` items: `Ok(Some(state))` advances
 /// past it, `Ok(None)` means it wasn't there (a recoverable failure — the
 /// caller ends the list), and an uncaught failure propagates. Panics on

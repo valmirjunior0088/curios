@@ -105,38 +105,31 @@ pub(super) fn parse_local_let_signature<'a>() -> Parser<'a, LetSignature> {
 // (see `Pattern`), desugaring at lowering into a fresh binder plus a
 // projection-`let` chain.
 //
-// `tail` used to be `lazy(parse_term)` directly, recursing back into this
-// very parser: fine at construction time (deferred), but a straight-line
-// chain of local `let`s — an ordinary program shape, not adversarial — cost
-// one native stack frame per binding once parsing actually ran, unbounded,
-// and overflowed the stack well before any realistic recursion-depth limit.
-// `many1_then` parses the whole run of `let`s in a loop instead, and the
-// `.fold` below rebuilds the same right-nested `Let` chain a recursive
-// parser would have, one link at a time, from the innermost tail outward.
+// `many1` parses the whole run of `let` headers in a loop, then the tail once,
+// and they become a single flat `Let` block — one node for the whole run, not a
+// right-nested chain — so nothing downstream (clone, lowering) recurses once per
+// binding. The leading `mark` on the first header and the trailing `mark` after
+// the tail span the block.
 pub(super) fn parse_let<'a>() -> Parser<'a, Term> {
-    many1_then(
-        || {
-            mark().and(
-                catch(parse_keyword("let"))
-                    .and_keep(parse_pattern())
-                    .and(parse_local_let_signature())
-                    .and_drop(parse_literal(";")),
-            )
-        },
-        || lazy(parse_term).and(mark()),
-    )
-    .map(|(links, (base, end))| {
-        links
+    many1(|| {
+        mark().and(
+            catch(parse_keyword("let"))
+                .and_keep(parse_pattern())
+                .and(parse_local_let_signature())
+                .and_drop(parse_literal(";")),
+        )
+    })
+    .and(lazy(parse_term).and(mark()))
+    .map(|(headers, (tail, end))| {
+        // `many1` guarantees at least one header, so the span start is defined.
+        let span = headers[0].0.to(&end);
+
+        let bindings = headers
             .into_iter()
-            .rev()
-            .fold(base, |tail, (start, (binder, signature))| {
-                Term::from(Subterm::Let(Let {
-                    binder,
-                    signature,
-                    tail,
-                }))
-                .with_span(start.to(&end))
-            })
+            .map(|(_, (binder, signature))| LetBinding { binder, signature })
+            .collect();
+
+        Term::from(Subterm::Let(Let { bindings, tail })).with_span(span)
     })
 }
 

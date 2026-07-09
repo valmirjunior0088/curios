@@ -381,9 +381,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             },
         }),
 
-        Subterm::Let(Let { type_, body, tail }) => Subterm::Let(Let {
-            type_: zonk_term(context, type_)?,
-            body: zonk_term(context, body)?,
+        Subterm::Let(Let { bindings, tail }) => Subterm::Let(Let {
+            bindings: bindings
+                .iter()
+                .map(|(type_, value)| Ok((zonk_term(context, type_)?, zonk_term(context, value)?)))
+                .collect::<Result<_, Error>>()?,
             tail: tail.map_body(|b| zonk_term(context, b))?,
         }),
 

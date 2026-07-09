@@ -2,15 +2,12 @@
 mod tests;
 
 use {
-    super::{
-        Atom, Bound, Many, Nat, One, Prim, Scope, Telescope, Three, Two, Var, Visit, print_term,
-    },
+    super::{Atom, Bound, Many, Nat, Prim, Scope, Telescope, Three, Two, Var, Visit, print_term},
     curios_base::{Flt, Int, NumOp, Plicity, Span, printer::run_printer},
     num_bigint::BigUint,
     std::{
         cell::OnceCell,
         collections::{BTreeMap, BTreeSet, hash_map::DefaultHasher},
-        convert::Infallible,
         fmt,
         hash::{Hash, Hasher},
         ops::Deref,
@@ -656,7 +653,19 @@ impl Term {
         }))
     }
 
-    /// Build a [`Let`], closing `tail` over `label`. `body` is deliberately *not* closed — a `let` is non-recursive; use [`Term::rec`] for self-reference.
+    /// Prepend a single non-recursive binding `label = body : type_` in front of
+    /// `tail`. `body` is deliberately *not* closed over `label` — a `let` is
+    /// non-recursive; use [`Term::rec`] for self-reference.
+    ///
+    /// When `tail` is itself a [`Let`] block, the binding is *merged* into it so
+    /// a run of `let`s becomes one flat block, not a nest: `label` becomes the
+    /// block's new outermost binding, every existing binding and the tail step
+    /// over one more binder (`capture`/reclose shift them by one), and free
+    /// occurrences of `label` in them bind to it. Building a block bottom-up —
+    /// as `into_core` and the elaborator's rebuild both do — therefore yields a
+    /// single `Let`, and the flatness is what bounds every later walk over it.
+    /// A `tail` that is not a `Let` (a `!`-bind's `Apply`, a `rec`, a base term)
+    /// starts a fresh one-binding block, so effect boundaries segment naturally.
     pub fn let_<L, T, B, U>(label: L, type_: T, body: B, tail: U) -> Self
     where
         L: Into<String>,
@@ -665,12 +674,46 @@ impl Term {
         U: Into<Term>,
     {
         let label = label.into();
+        let type_ = type_.into();
+        let body = body.into();
+        let tail = tail.into();
 
-        Self::from(Subterm::Let(Let {
-            type_: type_.into(),
-            body: body.into(),
-            tail: Scope::close(One, &[label.as_str()], tail.into()),
-        }))
+        match Term::unwrap_or_clone(tail) {
+            Subterm::Let(Let { bindings, tail }) => {
+                let mut merged = Vec::with_capacity(bindings.len() + 1);
+                merged.push((type_, body));
+
+                for (binding_type, binding_value) in &bindings {
+                    merged.push((
+                        binding_type.capture(&[label.as_str()]),
+                        binding_value.capture(&[label.as_str()]),
+                    ));
+                }
+
+                let inner_labels = tail
+                    .names()
+                    .expect("a `let` block's tail names every binder");
+                let inner_terms = inner_labels
+                    .iter()
+                    .map(Var::free)
+                    .map(Term::var)
+                    .collect::<Vec<_>>();
+                let opened = tail.open(&inner_terms.iter().collect::<Vec<_>>());
+
+                let mut labels = Vec::with_capacity(inner_labels.len() + 1);
+                labels.push(label.as_str());
+                labels.extend(inner_labels.iter().map(String::as_str));
+
+                Self::from(Subterm::Let(Let {
+                    bindings: merged,
+                    tail: Scope::close(Many(labels.len()), &labels, opened),
+                }))
+            }
+            other => Self::from(Subterm::Let(Let {
+                bindings: vec![(type_, body)],
+                tail: Scope::close(Many(1), &[label.as_str()], Term::from(other)),
+            })),
+        }
     }
 
     /// Build a [`Rec`] block from `(label, type, value)` items: every type, every value, and the tail are closed over the full label list, so the items may reference one another (and themselves) by name.
@@ -1042,12 +1085,19 @@ pub enum Carrier {
     },
 }
 
-/// A single `let` binding: the annotated `type_`, the bound `body`, and the `tail` continuation with the binding as its one scope binder. Non-recursive — `body` cannot see the binding; self- and mutual reference is [`Rec`]'s job.
+/// A straight-line block of `let` bindings: `bindings` in written order, then a
+/// `tail` continuation in scope of all of them. Binding `i` is stored under the
+/// `i` binders before it — its `type_` and `value` may reference bindings
+/// `0..i` but never binding `i` itself; a `let` is non-recursive, self- and
+/// mutual reference is [`Rec`]'s job. A whole run of source `let`s is one
+/// `Let`, not a nest, so every walk over it (`traverse`/`reach`/`reduce`/
+/// `erase`/`elaborate`) is a loop over `bindings` rather than one native stack
+/// frame per binding — which is what keeps a long local `let` sequence from
+/// overflowing the stack.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Let {
-    pub type_: Term,
-    pub body: Term,
-    pub tail: Scope<One>,
+    pub bindings: Vec<(Term, Term)>,
+    pub tail: Scope<Many>,
 }
 
 /// A block of mutually recursive bindings: each item's type and value scope — and the `tail` — are closed over *all* the item labels at once, which is what makes the recursion mutual. Occurrences are unfolded lazily during reduction (`unfold_rec`) rather than at construction, so a `Rec` can define non-terminating-looking fixpoints that only unroll on demand.
@@ -1055,65 +1105,6 @@ pub struct Let {
 pub struct Rec {
     pub items: Vec<(Scope<Many>, Scope<Many>)>,
     pub tail: Scope<Many>,
-}
-
-/// One `let`/`rec` binding, peeled off the front of the local-binding chain
-/// its `tail` continues. A source program's local bindings nest one `Let`/
-/// `Rec` inside the previous one's `tail`, so a walk that recurses into
-/// `tail` — one native Rust call per binding, no bound — overflows the stack
-/// on an ordinary long straight-line sequence of local `let`s. Every walk
-/// that must not do that (`Subterm::any_metavar`, `Bound::traverse` for
-/// `Subterm`) peels through [`ChainLink::at`] in a loop instead: process this
-/// link's own (non-chain) content — `type_`/`body` for a `Let`, `items` for a
-/// `Rec` — then step to [`ChainLink::tail_body`] and peel again, stopping at
-/// the first term that isn't a `Let`/`Rec`. A caller that also needs to
-/// *rebuild* the chain (`traverse`) records what each link needs to
-/// reconstruct itself as it peels, then rebuilds bottom-up over that record
-/// once the base case is reached — see `Subterm::traverse`'s `Let`/`Rec` arms
-/// for the pattern.
-enum ChainLink<'a> {
-    Let {
-        type_: &'a Term,
-        body: &'a Term,
-        tail: &'a Scope<One>,
-    },
-    Rec {
-        items: &'a [(Scope<Many>, Scope<Many>)],
-        tail: &'a Scope<Many>,
-    },
-}
-
-impl<'a> ChainLink<'a> {
-    /// Classify `term`: `Some` with the link's parts if it's a `Let`/`Rec`
-    /// binding, `None` if it's the chain's base case (anything else).
-    fn at(term: &'a Subterm) -> Option<Self> {
-        match term {
-            Subterm::Let(Let { type_, body, tail }) => Some(ChainLink::Let { type_, body, tail }),
-            Subterm::Rec(Rec { items, tail }) => Some(ChainLink::Rec { items, tail }),
-            _ => None,
-        }
-    }
-
-    /// This link's own scope arity — the number of binders its own `tail`
-    /// introduces (1 for a `Let`, the mutual group's size for a `Rec`).
-    fn arity(&self) -> usize {
-        match self {
-            ChainLink::Let { tail, .. } => tail.arity(),
-            ChainLink::Rec { tail, .. } => tail.arity(),
-        }
-    }
-
-    /// The next link (or the chain's base case): this link's `tail` body,
-    /// still closed over its own binder(s) as loose de Bruijn indices — sound
-    /// for a walk that only inspects shape/structure, not for one that needs
-    /// resolved (named) binders. A walk that does (`elaborate_binding_chain`)
-    /// must `open` the scope explicitly instead of going through this.
-    fn tail_body(&self) -> &'a Term {
-        match self {
-            ChainLink::Let { tail, .. } => tail.body(),
-            ChainLink::Rec { tail, .. } => tail.body(),
-        }
-    }
 }
 
 /// Provenance of an inserted implicit argument: the applied function (`func`)
@@ -1422,9 +1413,11 @@ impl Subterm {
                     },
                 }
             }
-            Subterm::Let(Let { type_, body, tail }) => {
-                type_.collect_construction_names(names);
-                body.collect_construction_names(names);
+            Subterm::Let(Let { bindings, tail }) => {
+                for (type_, value) in bindings {
+                    type_.collect_construction_names(names);
+                    value.collect_construction_names(names);
+                }
                 tail.body().collect_construction_names(names);
             }
             Subterm::Rec(Rec { items, tail }) => {
@@ -1443,28 +1436,7 @@ impl Subterm {
     /// gate uses it to reject caching a WHNF that still names an unsolved
     /// metavariable, without allocating the full id set.
     pub(crate) fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
-        let mut term = self;
-
-        // See `ChainLink`: peel the `let`/`rec` chain into a loop instead of
-        // recursing once per binding.
-        while let Some(link) = ChainLink::at(term) {
-            let hit = match link {
-                ChainLink::Let { type_, body, .. } => {
-                    type_.any_metavar(pred) || body.any_metavar(pred)
-                }
-                ChainLink::Rec { items, .. } => items.iter().any(|(type_, value)| {
-                    type_.body().any_metavar(pred) || value.body().any_metavar(pred)
-                }),
-            };
-
-            if hit {
-                return true;
-            }
-
-            term = link.tail_body();
-        }
-
-        match term {
+        match self {
             Subterm::Metavar(Metavar { id, spine, .. }) => {
                 pred(*id) || spine.iter().any(|t| t.any_metavar(pred))
             }
@@ -1547,8 +1519,16 @@ impl Subterm {
                         },
                     }
             }
-            Subterm::Let(_) | Subterm::Rec(_) => {
-                unreachable!("the chain-peeling loop above only exits on a non-Let/Rec term")
+            Subterm::Let(Let { bindings, tail }) => {
+                bindings
+                    .iter()
+                    .any(|(type_, value)| type_.any_metavar(pred) || value.any_metavar(pred))
+                    || tail.body().any_metavar(pred)
+            }
+            Subterm::Rec(Rec { items, tail }) => {
+                items.iter().any(|(type_, value)| {
+                    type_.body().any_metavar(pred) || value.body().any_metavar(pred)
+                }) || tail.body().any_metavar(pred)
             }
         }
     }
@@ -1721,105 +1701,35 @@ impl Bound for Subterm {
                     },
                 },
             }),
-            Subterm::Let(_) | Subterm::Rec(_) => {
-                // See `ChainLink`: peel the chain into a loop instead of
-                // recursing once per binding via `visit.visit_scope`. Each
-                // link's own (non-chain) content still goes through
-                // `visit_subterm`/`visit_scope` normally — bounded by
-                // expression nesting, not chain length. `own_span` mirrors
-                // `Term::traverse`'s span preservation for the link that led
-                // into each entry (the outermost link's span is the caller's
-                // job, exactly as before).
-                struct PendingLink<'a> {
-                    own_span: Option<Span>,
-                    kind: PendingKind<'a>,
-                }
+            Subterm::Let(Let { bindings, tail }) => {
+                // Binding `i` sits under the `i` binders written before it, so
+                // bracket the visit at that depth; the enter/leave don't stack
+                // with `visit_scope(tail)`, which owns all the binders on its
+                // own. A forward loop over `bindings` is what a flat block buys
+                // over the old nested chain — no native frame per binding.
+                let bindings = bindings
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (type_, value))| {
+                        visit.enter_scope(i);
+                        let out = (visit.visit_subterm(type_), visit.visit_subterm(value));
+                        visit.leave_scope(i);
+                        out
+                    })
+                    .collect();
 
-                enum PendingKind<'a> {
-                    Let {
-                        type_: Term,
-                        body: Term,
-                        tail: &'a Scope<One>,
-                    },
-                    Rec {
-                        items: Vec<(Scope<Many>, Scope<Many>)>,
-                        tail: &'a Scope<Many>,
-                    },
-                }
-
-                let mut pending = Vec::<PendingLink>::new();
-                let mut link = ChainLink::at(self).expect("this arm only matches Let/Rec");
-                let mut own_span = None;
-
-                let base = loop {
-                    let arity = link.arity();
-                    let next_term = link.tail_body();
-
-                    let kind = match link {
-                        ChainLink::Let { type_, body, tail } => PendingKind::Let {
-                            type_: visit.visit_subterm(type_),
-                            body: visit.visit_subterm(body),
-                            tail,
-                        },
-                        ChainLink::Rec { items, tail } => PendingKind::Rec {
-                            items: items
-                                .iter()
-                                .map(|(type_, value)| {
-                                    (visit.visit_scope(type_), visit.visit_scope(value))
-                                })
-                                .collect(),
-                            tail,
-                        },
-                    };
-                    pending.push(PendingLink { own_span, kind });
-
-                    visit.enter_scope(arity);
-
-                    if visit.prune() && next_term.reach() <= visit.depth() {
-                        break next_term.clone();
-                    }
-
-                    own_span = next_term.span();
-
-                    match ChainLink::at(next_term) {
-                        Some(next_link) => link = next_link,
-                        None => break visit.visit_subterm(next_term),
-                    }
-                };
-
-                let mut result = base;
-
-                for frame in pending.into_iter().rev() {
-                    let arity = match &frame.kind {
-                        PendingKind::Let { tail, .. } => tail.arity(),
-                        PendingKind::Rec { tail, .. } => tail.arity(),
-                    };
-                    visit.leave_scope(arity);
-
-                    let rebuilt = match frame.kind {
-                        PendingKind::Let { type_, body, tail } => Subterm::Let(Let {
-                            type_,
-                            body,
-                            tail: tail
-                                .map_body(|_| Ok::<_, Infallible>(result))
-                                .unwrap_or_else(|e: Infallible| match e {}),
-                        }),
-                        PendingKind::Rec { items, tail } => Subterm::Rec(Rec {
-                            items,
-                            tail: tail
-                                .map_body(|_| Ok::<_, Infallible>(result))
-                                .unwrap_or_else(|e: Infallible| match e {}),
-                        }),
-                    };
-
-                    result = match frame.own_span {
-                        Some(span) => Term::spanned(span, rebuilt),
-                        None => Term::from(rebuilt),
-                    };
-                }
-
-                Term::unwrap_or_clone(result)
+                Subterm::Let(Let {
+                    bindings,
+                    tail: visit.visit_scope(tail),
+                })
             }
+            Subterm::Rec(Rec { items, tail }) => Subterm::Rec(Rec {
+                items: items
+                    .iter()
+                    .map(|(type_, value)| (visit.visit_scope(type_), visit.visit_scope(value)))
+                    .collect(),
+                tail: visit.visit_scope(tail),
+            }),
             Subterm::Var(var) => visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone())),
             // The spine is ordinary term content: visiting it is what keeps
             // the delayed substitution aligned through `close`/`open`. Spines
@@ -1925,40 +1835,27 @@ impl Bound for Subterm {
                     } => elem.reach().max(empty_case.reach()).max(cons_case.reach()),
                 },
             }),
-            Subterm::Let(_) | Subterm::Rec(_) => {
-                // See `ChainLink`: peel the chain into a loop instead of
-                // recursing once per binding. Unlike `any_metavar`, this
-                // can't stop at a flat max over every link's own content:
-                // `Scope::reach` subtracts each level's own arity from what's
-                // inside it (a binder "uses up" one level of escaping
-                // reference), and that subtraction has to apply in the same
-                // inner-to-outer order the recursive version applied it in —
-                // so this still needs an unwind pass, just over `usize`s
-                // instead of rebuilt terms.
-                let mut own_max_and_arity = Vec::<(usize, usize)>::new();
-                let mut term = self;
+            // Binding `i` sits under `i` binders, so its reach past the block
+            // boundary is `reach - i`; `Scope::reach` handles the tail's own
+            // arity. A flat forward max — no inner-to-outer unwind — because
+            // the block is flat, not a nest of arity-subtracting scopes.
+            Subterm::Let(Let { bindings, tail }) => {
+                let mut reach = tail.reach();
 
-                while let Some(link) = ChainLink::at(term) {
-                    let own_max = match link {
-                        ChainLink::Let { type_, body, .. } => type_.reach().max(body.reach()),
-                        ChainLink::Rec { items, .. } => items
-                            .iter()
-                            .map(|(type_, value)| type_.reach().max(value.reach()))
-                            .max()
-                            .unwrap_or(0),
-                    };
-                    own_max_and_arity.push((own_max, link.arity()));
-
-                    term = link.tail_body();
-                }
-
-                let mut reach = term.reach();
-                for (own_max, arity) in own_max_and_arity.into_iter().rev() {
-                    reach = reach.saturating_sub(arity).max(own_max);
+                for (i, (type_, value)) in bindings.iter().enumerate() {
+                    reach = reach
+                        .max(type_.reach().saturating_sub(i))
+                        .max(value.reach().saturating_sub(i));
                 }
 
                 reach
             }
+            Subterm::Rec(Rec { items, tail }) => items
+                .iter()
+                .map(|(type_, value)| type_.reach().max(value.reach()))
+                .max()
+                .unwrap_or(0)
+                .max(tail.reach()),
         }
     }
 }

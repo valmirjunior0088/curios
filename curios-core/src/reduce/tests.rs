@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_base::{Flt, Int},
-    std::time::Duration,
+    std::time::{Duration, Instant},
 };
 
 fn context() -> Context {
@@ -73,6 +73,51 @@ fn reduce_let_then_var_unfolds_definition() {
     let term: Term = Term::let_("x", Term::type_(), Term::free_var("y"), Term::free_var("x"));
 
     assert_eq!(reduce(&mut context, term.clone()), Ok(nat(7)));
+}
+
+#[test]
+fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
+    // A long straight-line `let` sequence must lower to a single flat `Let`
+    // block, not a nest: `Term::let_` merges each binding into the block already
+    // built for its tail, so folding the chain bottom-up (as `into_core` and the
+    // elaborator's rebuild both do) yields one node. That flatness is what bounds
+    // every walk over it — `reduce` here, and `traverse` via `reach` — to a loop
+    // instead of one native stack frame per binding.
+    let depth = 1000;
+    let base = Term::free_var(format!("x{}", depth - 1));
+
+    // `let x0 = 0; let x1 = x0; …; let x{n-1} = x{n-2}; x{n-1}`.
+    let t0 = Instant::now();
+    let term = (0..depth).rev().fold(base, |tail, i| {
+        let value = if i == 0 {
+            nat(0)
+        } else {
+            Term::free_var(format!("x{}", i - 1))
+        };
+
+        Term::let_(format!("x{i}"), Term::prim(Prim::NatType), value, tail)
+    });
+    eprintln!("build: {:?}", t0.elapsed());
+
+    let mut context = Context::new(Duration::from_secs(30));
+
+    match &*term {
+        Subterm::Let(let_) => {
+            assert_eq!(
+                let_.bindings.len(),
+                depth,
+                "the chain must collapse to one flat block"
+            )
+        }
+        other => panic!("expected a single flat `Let` block, got {other:?}"),
+    }
+
+    // Every reference is internal (no free variables escape), and both `reach`
+    // and `reduce` compute over the whole depth without recursing per binding.
+    assert_eq!(term.reach(), 0);
+    let t1 = Instant::now();
+    assert_eq!(reduce(&mut context, term), Ok(nat(0)));
+    eprintln!("reduce: {:?}", t1.elapsed());
 }
 
 #[test]

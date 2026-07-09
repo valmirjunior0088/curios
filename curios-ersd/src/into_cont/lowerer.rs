@@ -11,6 +11,62 @@ use {
     std::collections::{BTreeMap, HashMap},
 };
 
+/// Whether [`Work::lower_pure_name`] can lower `term` to a value in place —
+/// synchronously, returning a `ValueName` with no resume block. True exactly
+/// when no `Apply`, `Match`, `NatMatch`, `Unreachable`, or `Host`/`Cell`
+/// primitive appears outside a closure body: those are the forms
+/// `lower_pure_name` cannot emit in a pure-name position (calls and control
+/// flow need a block; host/cell prims need a resume block; `Unreachable` has no
+/// value at all). Note this is *not* effect-freedom — an effect-free `match` is
+/// still control flow, and a closure with an effectful body is still a fine
+/// pure value — so it is a distinct predicate from
+/// [`crate::Term::contains_effect`], mirroring `lower_pure_name`'s own arms
+/// arm-for-arm instead. The peeling prologues in `lower_value_name`,
+/// `lower_tail`, and `lower_rec_computed` use it to decide which bindings they
+/// may bind in a loop; a body that fails it falls through to the CPS path,
+/// exactly as it did before those loops existed. A head-only test would be
+/// unsound — `Tuple`/`Proj`/`Prim(Pure)` are lowerable in place only when their
+/// *children* are.
+fn is_pure_term(term: &crate::Term) -> bool {
+    // Peel the `let`/`rec` spine iteratively: recursing once per binding here
+    // would reintroduce the very stack overflow the prologues that call this
+    // exist to prevent.
+    let mut term = term;
+
+    loop {
+        match &**term {
+            crate::Subterm::Name(_)
+            | crate::Subterm::Erased
+            | crate::Subterm::Atom(_)
+            | crate::Subterm::Func(_) => return true,
+            crate::Subterm::Prim(crate::Prim::Pure(pure)) => {
+                return pure.operands().into_iter().all(is_pure_term);
+            }
+            crate::Subterm::Tuple(tuple) => return tuple.fields.iter().all(is_pure_term),
+            crate::Subterm::Proj(proj) => return is_pure_term(&proj.head),
+            crate::Subterm::Let(let_) => {
+                if !is_pure_term(&let_.body) {
+                    return false;
+                }
+
+                term = &let_.tail;
+            }
+            crate::Subterm::Rec(rec) => {
+                if !rec.items.iter().all(is_pure_term) {
+                    return false;
+                }
+
+                term = &rec.tail;
+            }
+            crate::Subterm::Unreachable
+            | crate::Subterm::Apply(_)
+            | crate::Subterm::Match(_)
+            | crate::Subterm::NatMatch(_)
+            | crate::Subterm::Prim(crate::Prim::Host(_) | crate::Prim::Cell(_)) => return false,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct Lowerer<'a> {
     module: &'a mut Module,
@@ -329,27 +385,11 @@ impl Work<'_, '_, '_> {
         // continuation re-enters this same loop for whatever follows.
         loop {
             match &**term {
-                crate::Subterm::Let(let_) => match &*let_.body {
-                    crate::Subterm::Name(_)
-                    | crate::Subterm::Erased
-                    | crate::Subterm::Func(_)
-                    | crate::Subterm::Tuple(_)
-                    | crate::Subterm::Atom(_)
-                    | crate::Subterm::Proj(_)
-                    | crate::Subterm::Prim(crate::Prim::Pure(_)) => {
-                        let value = self.lower_pure_name(&let_.body, &frame)?;
-                        frame.push(let_.name.clone(), value);
-                        term = &let_.tail;
-                    }
-                    crate::Subterm::Unreachable
-                    | crate::Subterm::Prim(crate::Prim::Host(_))
-                    | crate::Subterm::Prim(crate::Prim::Cell(_))
-                    | crate::Subterm::NatMatch(_)
-                    | crate::Subterm::Apply(_)
-                    | crate::Subterm::Match(_)
-                    | crate::Subterm::Let(_)
-                    | crate::Subterm::Rec(_) => break,
-                },
+                crate::Subterm::Let(let_) if is_pure_term(&let_.body) => {
+                    let value = self.lower_pure_name(&let_.body, &frame)?;
+                    frame.push(let_.name.clone(), value);
+                    term = &let_.tail;
+                }
                 crate::Subterm::Rec(letrec)
                     if letrec.items.iter().all(crate::Term::is_synchronous) =>
                 {
@@ -601,27 +641,13 @@ impl Work<'_, '_, '_> {
         // every member's reserved target (see `lower_rec`), so it needs no
         // extending here, unlike the `Let`-chain prologues above.
         while let [(target, rhs), rest @ ..] = computed {
-            match &***rhs {
-                crate::Subterm::Name(_)
-                | crate::Subterm::Erased
-                | crate::Subterm::Func(_)
-                | crate::Subterm::Tuple(_)
-                | crate::Subterm::Atom(_)
-                | crate::Subterm::Proj(_)
-                | crate::Subterm::Prim(crate::Prim::Pure(_)) => {
-                    let value = self.lower_pure_name(rhs, frame)?;
-                    self.emit.add_value(target.clone(), Value::Alias(value));
-                    computed = rest;
-                }
-                crate::Subterm::Unreachable
-                | crate::Subterm::Prim(crate::Prim::Host(_))
-                | crate::Subterm::Prim(crate::Prim::Cell(_))
-                | crate::Subterm::NatMatch(_)
-                | crate::Subterm::Apply(_)
-                | crate::Subterm::Match(_)
-                | crate::Subterm::Let(_)
-                | crate::Subterm::Rec(_) => break,
+            if !is_pure_term(rhs) {
+                break;
             }
+
+            let value = self.lower_pure_name(rhs, frame)?;
+            self.emit.add_value(target.clone(), Value::Alias(value));
+            computed = rest;
         }
 
         match computed {
@@ -652,27 +678,11 @@ impl Work<'_, '_, '_> {
         // See the identical prologue in `lower_value_name`.
         loop {
             match &**term {
-                crate::Subterm::Let(let_) => match &*let_.body {
-                    crate::Subterm::Name(_)
-                    | crate::Subterm::Erased
-                    | crate::Subterm::Func(_)
-                    | crate::Subterm::Tuple(_)
-                    | crate::Subterm::Atom(_)
-                    | crate::Subterm::Proj(_)
-                    | crate::Subterm::Prim(crate::Prim::Pure(_)) => {
-                        let value = self.lower_pure_name(&let_.body, &frame)?;
-                        frame.push(let_.name.clone(), value);
-                        term = &let_.tail;
-                    }
-                    crate::Subterm::Unreachable
-                    | crate::Subterm::Prim(crate::Prim::Host(_))
-                    | crate::Subterm::Prim(crate::Prim::Cell(_))
-                    | crate::Subterm::NatMatch(_)
-                    | crate::Subterm::Apply(_)
-                    | crate::Subterm::Match(_)
-                    | crate::Subterm::Let(_)
-                    | crate::Subterm::Rec(_) => break,
-                },
+                crate::Subterm::Let(let_) if is_pure_term(&let_.body) => {
+                    let value = self.lower_pure_name(&let_.body, &frame)?;
+                    frame.push(let_.name.clone(), value);
+                    term = &let_.tail;
+                }
                 crate::Subterm::Rec(letrec)
                     if letrec.items.iter().all(crate::Term::is_synchronous) =>
                 {

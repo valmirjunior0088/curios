@@ -603,9 +603,9 @@ impl LetSignature {
     }
 }
 
-/// A local `let …; tail`: one binding in scope for `tail` only. The only `let` position where the type annotation may be omitted (`LetSignature::Name` with `type_: None`) — top-level `let` and every `rec` item always carry one.
+/// One binding of a [`Let`] block: a bound pattern and its signature.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Let {
+pub struct LetBinding {
     /// The bound pattern — `let x = …`, `let (x, y) = …`, or the `f` in the
     /// `let f(…) -> R = …` function-definition sugar. A compound pattern here
     /// is grammatically legal for the function-sugar form too, but pointless:
@@ -614,6 +614,17 @@ pub struct Let {
     /// error a hand-written misuse would (no special-casing needed).
     pub binder: Pattern,
     pub signature: LetSignature,
+}
+
+/// A local `let` block: a straight-line run of `bindings`, each in scope for the
+/// bindings after it and for `tail`. `let` is the only position where a type
+/// annotation may be omitted (`LetSignature::Name` with `type_: None`) —
+/// top-level `let` and every `rec` item always carry one. A whole run is one
+/// node, not a nest, so cloning/lowering it is a loop over `bindings` rather
+/// than one native stack frame per binding.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Let {
+    pub bindings: Vec<LetBinding>,
     pub tail: Term,
 }
 
@@ -655,8 +666,8 @@ pub struct NumLit {
     pub negative: bool,
 }
 
-/// The term grammar proper, one variant per surface form. Spanless by design — a location rides on the wrapping [`Term`] — so `PartialEq` compares structure alone; bare terms are built via `From<Subterm> for Term`. Most variants lower one-to-one onto a core counterpart in `into_core`; the ones that exist only in the surface language are documented on their variants below. `Clone` is hand-written, not derived — see the `impl` below.
-#[derive(Debug, PartialEq)]
+/// The term grammar proper, one variant per surface form. Spanless by design — a location rides on the wrapping [`Term`] — so `PartialEq` compares structure alone; bare terms are built via `From<Subterm> for Term`. Most variants lower one-to-one onto a core counterpart in `into_core`; the ones that exist only in the surface language are documented on their variants below.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Subterm {
     Type,
     Prop,
@@ -691,120 +702,6 @@ pub enum Subterm {
     Infix(Infix),
     /// A polymorphic numeric literal (see [`NumLit`]).
     NumLit(NumLit),
-}
-
-impl Clone for Subterm {
-    /// Hand-written rather than derived: `Let`/`Rec` nest one inside the
-    /// previous one's `tail`, so a derived `Clone` — which clones `tail`,
-    /// whose own derived `Clone` clones *its* `tail`, … — costs one native
-    /// stack frame per binding in a local `let`/`rec` chain, unbounded. An
-    /// ordinary long straight-line sequence of local `let`s (not
-    /// adversarial) overflowed the stack this way inside `memoize`'s
-    /// packrat cache, which clones its whole cached value — an entire such
-    /// chain, parsed as one term — every time it stores a result. Every
-    /// other variant clones exactly as the derive would; only `Let`/`Rec`
-    /// peel the chain into a loop instead of recursing (see
-    /// `clone_let_rec_chain`).
-    fn clone(&self) -> Self {
-        match self {
-            Subterm::Type => Subterm::Type,
-            Subterm::Prop => Subterm::Prop,
-            Subterm::Prim(prim) => Subterm::Prim(prim.clone()),
-            Subterm::FuncType(func_type) => Subterm::FuncType(func_type.clone()),
-            Subterm::Func(func) => Subterm::Func(func.clone()),
-            Subterm::Apply(apply) => Subterm::Apply(apply.clone()),
-            Subterm::TupleType(tuple_type) => Subterm::TupleType(tuple_type.clone()),
-            Subterm::Tuple(tuple) => Subterm::Tuple(tuple.clone()),
-            Subterm::Proj(proj) => Subterm::Proj(proj.clone()),
-            Subterm::StructLit(struct_lit) => Subterm::StructLit(struct_lit.clone()),
-            Subterm::Match(match_) => Subterm::Match(match_.clone()),
-            Subterm::Let(_) | Subterm::Rec(_) => clone_let_rec_chain(self),
-            Subterm::Bang(term) => Subterm::Bang(term.clone()),
-            Subterm::Name(name) => Subterm::Name(name.clone()),
-            Subterm::Hole => Subterm::Hole,
-            Subterm::Syn(syn) => Subterm::Syn(syn.clone()),
-            Subterm::Infix(infix) => Subterm::Infix(infix.clone()),
-            Subterm::NumLit(num_lit) => Subterm::NumLit(num_lit.clone()),
-        }
-    }
-}
-
-/// `Subterm::clone`'s `Let`/`Rec` handling. `term` must be a `Let`/`Rec`.
-/// Peels the chain forward, cloning each link's own (non-chain) content —
-/// `binder`/`signature` for a `Let`, `items` for a `Rec` — and remembering
-/// the span its own `tail` carried (mirroring what the derived clone of
-/// `Term`'s `span` field would have preserved at each level), then rebuilds
-/// bottom-up from the first non-`Let`/`Rec` term reached.
-fn clone_let_rec_chain(term: &Subterm) -> Subterm {
-    enum PendingKind {
-        Let {
-            binder: Pattern,
-            signature: LetSignature,
-        },
-        Rec {
-            items: Vec<RecItem>,
-        },
-    }
-
-    struct PendingFrame {
-        own_span: Option<Span>,
-        kind: PendingKind,
-    }
-
-    let mut pending = Vec::<PendingFrame>::new();
-    let mut current = term;
-    let mut own_span = None;
-
-    let base = loop {
-        let (kind, tail) = match current {
-            Subterm::Let(Let {
-                binder,
-                signature,
-                tail,
-            }) => (
-                PendingKind::Let {
-                    binder: binder.clone(),
-                    signature: signature.clone(),
-                },
-                tail,
-            ),
-            Subterm::Rec(Rec { items, tail }) => (
-                PendingKind::Rec {
-                    items: items.clone(),
-                },
-                tail,
-            ),
-            other => break other.clone(),
-        };
-
-        pending.push(PendingFrame { own_span, kind });
-
-        own_span = tail.span().cloned();
-        current = tail.as_subterm();
-    };
-
-    let mut tail = base;
-
-    for frame in pending.into_iter().rev() {
-        let tail_term = match frame.own_span {
-            Some(span) => Term::from(tail).with_span(span),
-            None => Term::from(tail),
-        };
-
-        tail = match frame.kind {
-            PendingKind::Let { binder, signature } => Subterm::Let(Let {
-                binder,
-                signature,
-                tail: tail_term,
-            }),
-            PendingKind::Rec { items } => Subterm::Rec(Rec {
-                items,
-                tail: tail_term,
-            }),
-        };
-    }
-
-    tail
 }
 
 /// The literals the lowerer desugars to a `/syn` construction: a string becomes

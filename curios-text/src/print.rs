@@ -751,18 +751,20 @@ pub(crate) fn print_term(term: Term) -> Printer<'static> {
                 pure("\nend"),
             ]),
         },
-        Subterm::Let(Let {
-            binder,
-            signature,
-            tail,
-        }) => flat([
-            pure("let "),
-            print_pattern(binder),
-            print_let_signature(signature),
-            pure(";"),
-            pure("\n"),
-            print_term(tail),
-        ]),
+        Subterm::Let(Let { bindings, tail }) => flat(
+            bindings
+                .into_iter()
+                .map(|binding| {
+                    flat([
+                        pure("let "),
+                        print_pattern(binding.binder),
+                        print_let_signature(binding.signature),
+                        pure(";"),
+                        pure("\n"),
+                    ])
+                })
+                .chain([print_term(tail)]),
+        ),
         Subterm::Rec(Rec { items, tail }) => {
             let bindings = items
                 .into_iter()
