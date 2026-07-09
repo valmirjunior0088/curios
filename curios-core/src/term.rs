@@ -690,23 +690,9 @@ impl Term {
                     ));
                 }
 
-                let inner_labels = tail
-                    .names()
-                    .expect("a `let` block's tail names every binder");
-                let inner_terms = inner_labels
-                    .iter()
-                    .map(Var::free)
-                    .map(Term::var)
-                    .collect::<Vec<_>>();
-                let opened = tail.open(&inner_terms.iter().collect::<Vec<_>>());
-
-                let mut labels = Vec::with_capacity(inner_labels.len() + 1);
-                labels.push(label.as_str());
-                labels.extend(inner_labels.iter().map(String::as_str));
-
                 Self::from(Subterm::Let(Let {
                     bindings: merged,
-                    tail: Scope::close(Many(labels.len()), &labels, opened),
+                    tail: tail.prepend(label.as_str()),
                 }))
             }
             other => Self::from(Subterm::Let(Let {

@@ -7,7 +7,7 @@
 
 use {
     super::{Context, Error, MetavarId, Subterm, Term, zonk_term},
-    std::{collections::BTreeSet, fmt::Debug, hash::Hash, ops::Deref},
+    std::{collections::BTreeSet, fmt, hash::Hash, ops::Deref},
 };
 
 // === Arity ===================================================================
@@ -137,7 +137,7 @@ impl Var {
 // === Bound ===================================================================
 
 /// A syntactic category the de Bruijn machinery can operate on: anything that can rebuild itself under a variable-visiting [`Visit`] and report its `reach`. Implemented by `Term`/`Subterm` (the big structural match lives in `term.rs`), [`Telescope`], and `()` (a Σ-telescope's trailing payload); everything else here — `shift`, `capture`, `release`, `free_vars` — is derived from `traverse` alone.
-pub trait Bound: Sized + Clone + Eq + Hash + Debug {
+pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     /// Rebuild the term, invoking the visit callback at every variable with the binder depth it sits under; a `Some(replacement)` substitutes that variable. The single primitive the rest of the trait is defined from — implementations must route subterms through `Visit::visit_subterm`/`visit_scope` so depth tracking, pruning, and the rewrite hook fire.
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
@@ -331,8 +331,34 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     }
 }
 
-impl<A: Arity + Debug, B: Bound> Debug for Scope<A, B> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<B: Bound> Scope<Many, B> {
+    /// Prepend one binder named `label` to the front of this scope: the new
+    /// binder becomes index 0 and every existing binder shifts up by one.
+    ///
+    /// Done by a direct `capture` on the body — free `label` occurrences bind to
+    /// the new index 0 while every existing bound index shifts by one — so it
+    /// stays correct when `label` shadows an inner binder. An open/close
+    /// round-trip through names cannot: opening turns the inner binder into a
+    /// free `label`, indistinguishable from a genuine outer reference, and the
+    /// reclose captures both to the same (wrong) index.
+    pub(crate) fn prepend(&self, label: &str) -> Self {
+        let names = self.names.as_ref().map(|names| {
+            [label.to_string()]
+                .into_iter()
+                .chain(names.iter().cloned())
+                .collect()
+        });
+
+        Self {
+            arity: Many(self.arity() + 1),
+            names,
+            body: self.body.capture(&[label]).into(),
+        }
+    }
+}
+
+impl<A: Arity + fmt::Debug, B: Bound> fmt::Debug for Scope<A, B> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Scope")
             .field("arity", &self.arity)
             .field("names", &self.names)
@@ -617,8 +643,8 @@ impl Telescope<()> {
     }
 }
 
-impl<B: Bound> Debug for Telescope<B> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<B: Bound> fmt::Debug for Telescope<B> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Telescope::Done(body) => f.debug_tuple("Done").field(body).finish(),
             Telescope::Cons(ty, rest) => f.debug_tuple("Cons").field(ty).field(rest).finish(),

@@ -103,6 +103,43 @@ fn reduce_let_binds_each_value_to_its_own_slot() {
 }
 
 #[test]
+fn reduce_let_shadowing_tail_picks_innermost() {
+    // `let x = 3; let x = 7; x` — two bindings share the name `x`. The flat
+    // block is built by name-based `capture`, so the tail's `x` must bind to the
+    // *innermost* binding (7), not the shadowed outer one (3).
+    let mut context = context();
+
+    let nat_type = Term::prim(Prim::NatType);
+    let term = Term::let_(
+        "x",
+        nat_type.clone(),
+        nat(3),
+        Term::let_("x", nat_type, nat(7), Term::free_var("x")),
+    );
+
+    assert_eq!(reduce(&mut context, term), Ok(nat(7)));
+}
+
+#[test]
+fn reduce_let_shadowing_value_sees_the_outer_binding() {
+    // `let x = 5; let x = x; x` — the middle binding's value is the *outer* `x`,
+    // since a `let` is non-recursive. Merging must leave that reference free so
+    // the enclosing binder captures it to the first binding, not to itself: a
+    // self-capture would define `x := x` and diverge instead of yielding 5.
+    let mut context = context();
+
+    let nat_type = Term::prim(Prim::NatType);
+    let term = Term::let_(
+        "x",
+        nat_type.clone(),
+        nat(5),
+        Term::let_("x", nat_type, Term::free_var("x"), Term::free_var("x")),
+    );
+
+    assert_eq!(reduce(&mut context, term), Ok(nat(5)));
+}
+
+#[test]
 fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
     // A long straight-line `let` sequence must lower to a single flat `Let`
     // block, not a nest: `Term::let_` merges each binding into the block already
