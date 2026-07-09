@@ -260,11 +260,12 @@ pub(super) struct Table<'a> {
     lst_read: OnceCell<FuncName>,
     bin_eql: OnceCell<FuncName>,
     lst_map: OnceCell<FuncName>,
-    // The foreign functions the emitted code calls, keyed by import name.
-    // Same lazy used-tracking as the `io_exit` cell: the first call-site
-    // reference during emission records the function's row, and
-    // `emit_sys_imports` then declares exactly the recorded set (in name
-    // order — wasmtime links by name, so import order is cosmetic).
+    // The foreign functions the emitted code calls, keyed by the minted
+    // internal name (see `host_func`). Same lazy used-tracking as the
+    // `io_exit` cell: the first call-site reference during emission records
+    // the function's row, and `emit_sys_imports` then declares exactly the
+    // recorded set (in minted-name order — wasmtime links by name, so
+    // import order is cosmetic).
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
     tpl_types: BTreeMap<usize, TypeName>,
     envr_types: BTreeMap<usize, TypeName>,
@@ -480,19 +481,30 @@ impl<'a> Table<'a> {
         self.cell_type.clone()
     }
 
-    /// The import name of a store-described host function. First use during
-    /// emission records the function as live; [`host_funcs`](Self::host_funcs)
-    /// hands the recorded set to `emit_sys_imports`.
+    /// The internal binding name of a store-described host function. First
+    /// use during emission records the function as live;
+    /// [`host_funcs`](Self::host_funcs) hands the recorded set to
+    /// `emit_sys_imports`.
+    ///
+    /// A row's identity is its `(namespace, name)` pair (see
+    /// `curios_abi::ForeignFunction`), and its name is chosen outside the
+    /// emitter, so the minted name embeds both components under the reserved
+    /// `host/` family prefix — a foreign name can never collide with a
+    /// runtime helper, another minted family, or a same-named row from
+    /// another namespace. The embedding is injective because namespaces are
+    /// compiler-chosen and never contain `/`.
     pub(super) fn host_func(&self, function: &Arc<ForeignFunction>) -> FuncName {
+        let func_name = FuncName::from(format!("host/{}/{}", function.namespace, function.name));
+
         self.host_funcs
             .borrow_mut()
-            .entry(function.name.clone())
+            .entry(func_name.as_string())
             .or_insert_with(|| Arc::clone(function));
 
-        FuncName::from(function.name.as_str())
+        func_name
     }
 
-    /// The foreign functions the emitted code referenced, in import-name order.
+    /// The foreign functions the emitted code referenced, in minted-name order.
     pub(super) fn host_funcs(&self) -> Vec<Arc<ForeignFunction>> {
         self.host_funcs.borrow().values().cloned().collect()
     }

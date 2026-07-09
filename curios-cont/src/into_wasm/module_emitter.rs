@@ -138,19 +138,20 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         let i32_val = ValType::Num(NumType::I32);
 
         // The store-described imports — exactly the functions whose call sites
-        // recorded themselves in the table, in import-name order. Each
+        // recorded themselves in the table, in minted-name order. Each
         // function's own `namespace` (stamped at declaration time — see
         // `curios_abi::ForeignFunction`) is the wasm namespace it imports
         // under, so codegen neither rebuilds `sys_io()` to re-derive
         // membership nor chooses a namespace itself.
         for function in self.table.host_funcs() {
             let signature = &function.signature;
+            let func_name = self.table.host_func(&function);
 
             self.add_host_import(
                 function.namespace,
                 &function.name,
-                TypeName::from(function.name.as_str()),
-                self.table.host_func(&function),
+                TypeName::from(func_name.as_str()),
+                func_name.clone(),
                 ResultType::from(
                     signature
                         .params
