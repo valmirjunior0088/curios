@@ -308,7 +308,10 @@ fn subterms_mut(term: &mut Term) -> Vec<&mut Term> {
             .collect(),
         Subterm::Tuple(tuple) => tuple.fields.iter_mut().collect(),
         Subterm::Proj(proj) => vec![&mut proj.head],
-        Subterm::Match(m) => iter::once(&mut m.head).chain(&mut m.cases).collect(),
+        Subterm::Match(m) => iter::once(&mut m.head)
+            .chain(m.cases.values_mut())
+            .chain(m.default.iter_mut())
+            .collect(),
         Subterm::Let(let_) => vec![&mut let_.body, &mut let_.tail],
         Subterm::Rec(rec) => rec
             .items
@@ -388,9 +391,15 @@ mod tests {
         .into()
     }
 
-    /// `match head | @0 => a | @1 => b` — a two-arm value match (a list eliminator).
+    /// `match head | @0 => a | @1 => b` — a two-arm value match (a list
+    /// eliminator), fully covered (keyed positionally, no catch-all).
     fn value_match(head: Term, cases: Vec<Term>) -> Term {
-        Subterm::Match(Match { head, cases }).into()
+        Subterm::Match(Match {
+            head,
+            cases: cases.into_iter().enumerate().collect(),
+            default: None,
+        })
+        .into()
     }
 
     /// A module of one single-binding `rec name = (params) => body`, the recursion

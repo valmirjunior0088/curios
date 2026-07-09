@@ -533,7 +533,9 @@ fn fold_known(minter: &mut Minter<'_>, term: &mut Term, scope: &mut Scope) {
             }
         }
         Subterm::Match(m) => match m.head.as_subterm() {
-            Subterm::Atom(atom) if atom.index < m.cases.len() => Some(take_case(term, atom.index)),
+            Subterm::Atom(atom) if m.cases.contains_key(&atom.index) || m.default.is_some() => {
+                Some(take_case(term, atom.index))
+            }
             _ => None,
         },
         Subterm::NatMatch(NatMatch::Dispatch { head, .. }) => match head.as_subterm() {
@@ -557,14 +559,15 @@ fn fold_known(minter: &mut Minter<'_>, term: &mut Term, scope: &mut Scope) {
     }
 }
 
-/// Take `cases[index]` out of a `Match` term.
+/// Take the arm keyed by `index` (or the default) out of a `Match` term.
+/// Mirrors [`take_dispatch`] for the sparse constructor switch.
 fn take_case(term: &mut Term, index: usize) -> Term {
     match mem::replace(term.as_subterm_mut(), Subterm::Erased) {
-        Subterm::Match(m) => m
+        Subterm::Match(mut m) => m
             .cases
-            .into_iter()
-            .nth(index)
-            .expect("the taken arm exists"),
+            .remove(&index)
+            .or(m.default)
+            .expect("the taken arm or a default exists"),
         _ => unreachable!("caller matched a Match"),
     }
 }
@@ -641,8 +644,69 @@ mod tests {
         .into()
     }
 
+    // A fully-covered match (one arm per constructor, keyed positionally, no
+    // catch-all) — the shape every consumer test here exercises.
     fn match_(head: Term, cases: Vec<Term>) -> Term {
-        Subterm::Match(Match { head, cases }).into()
+        Subterm::Match(Match {
+            head,
+            cases: cases.into_iter().enumerate().collect(),
+            default: None,
+        })
+        .into()
+    }
+
+    // A sparse match `match head | @tag => body … | _ => default end`.
+    fn match_default(head: Term, cases: Vec<(usize, Term)>, default: Term) -> Term {
+        Subterm::Match(Match {
+            head,
+            cases: cases.into_iter().collect(),
+            default: Some(default),
+        })
+        .into()
+    }
+
+    // `walk` with the `stop` (`@0`) case demoted to a `| _ =>` catch-all,
+    // leaving only the `step` (`@1`) arm enumerated. Specializing over a spine
+    // that ends in `stop` drives `take_case` through its default branch.
+    fn walk_d() -> Item {
+        Item::Rec {
+            names: vec!["walk".to_owned()],
+            items: vec![func(
+                vec!["walk"],
+                vec!["finish", "f", "acc"],
+                let_(
+                    "scrutinee",
+                    name("f"),
+                    match_default(
+                        proj(name("scrutinee"), 0),
+                        vec![(
+                            1,
+                            let_(
+                                "piece",
+                                proj(name("scrutinee"), 1),
+                                let_(
+                                    "rest",
+                                    proj(name("scrutinee"), 2),
+                                    apply(
+                                        name("walk"),
+                                        vec![
+                                            name("finish"),
+                                            name("rest"),
+                                            Subterm::Prim(Prim::Pure(PurePrim::NatAdd(
+                                                name("acc"),
+                                                name("piece"),
+                                            )))
+                                            .into(),
+                                        ],
+                                    ),
+                                ),
+                            ),
+                        )],
+                        apply(name("finish"), vec![name("acc")]),
+                    ),
+                ),
+            )],
+        }
     }
 
     /// `stop()` = `(@0)`; `step(piece, rest)` = `(@1, piece, rest)`.
@@ -729,6 +793,24 @@ mod tests {
         assert!(printed.contains("#walk@s1(#finish"), "{printed}");
         assert!(printed.contains("#walk@s2(#finish"), "{printed}");
         // The nil specialization is the finish call, no residual dispatch.
+        assert!(printed.contains("#finish(#acc)"), "{printed}");
+    }
+
+    #[test]
+    fn specializes_a_defaulted_match_over_a_spine() {
+        // The spine ends in `stop` (`@0`), which is now the catch-all: the
+        // nil specialization must still fold to the `finish` call by driving
+        // `take_case` through its `default` branch, with no residual dispatch.
+        let module = Module {
+            items: vec![fin(), walk_d()],
+            body: let_(
+                "sp",
+                spine(&[5, 7]),
+                apply(name("walk"), vec![name("fin"), name("sp"), nat(0)]),
+            ),
+        };
+        let printed = run(module);
+        assert!(printed.contains("#walk@s0(#fin, 0n)"), "{printed}");
         assert!(printed.contains("#finish(#acc)"), "{printed}");
     }
 

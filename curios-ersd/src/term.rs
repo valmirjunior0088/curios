@@ -59,7 +59,10 @@ impl Term {
                 names.extend(m.head.free_names());
                 m.cases
                     .iter()
-                    .for_each(|case| names.extend(case.free_names()));
+                    .for_each(|(_, case)| names.extend(case.free_names()));
+                if let Some(default) = &m.default {
+                    names.extend(default.free_names());
+                }
             }
             Subterm::NatMatch(NatMatch::Induction {
                 head,
@@ -134,7 +137,9 @@ impl Term {
             Subterm::Tuple(tuple) => tuple.fields.iter().any(Term::contains_effect),
             Subterm::Proj(proj) => proj.head.contains_effect(),
             Subterm::Match(m) => {
-                m.head.contains_effect() || m.cases.iter().any(Term::contains_effect)
+                m.head.contains_effect()
+                    || m.cases.iter().any(|(_, case)| case.contains_effect())
+                    || m.default.iter().any(Term::contains_effect)
             }
             Subterm::NatMatch(NatMatch::Induction {
                 head,
@@ -276,11 +281,12 @@ pub struct Atom {
     pub index: usize,
 }
 
-/// Constructor dispatch: `head` evaluates to an [`Atom`] and selects `cases` positionally by its index. There is exactly one case per constructor of the scrutinee's inductive — an arm elaboration proved impossible still occupies its slot, as `Unreachable`. Payload access is not part of the node: erasure let-binds the scrutinee and each arm projects the fields it uses from that binding.
+/// Constructor dispatch: `head` evaluates to an [`Atom`] and selects `cases` by its index, falling through to `default` when no key matches. Sparse, mirroring [`NatMatch::Dispatch`]: only constructors with a distinct arm appear in `cases`, sorted iteration preserving their positional order. `default: None` is the invariant that the arms cover *every* constructor — a pruned (elaboration-proved-impossible) arm then still occupies its slot as `Unreachable`; `Some` supplies a `| _ =>` catch-all for every omitted constructor, so omission from `cases` is used only when a default exists. Payload access is not part of the node: erasure let-binds the scrutinee and each arm projects the fields it uses from that binding.
 #[derive(Debug)]
 pub struct Match {
     pub head: Term,
-    pub cases: Vec<Term>,
+    pub cases: BTreeMap<usize, Term>,
+    pub default: Option<Term>,
 }
 
 /// A sequential binding: evaluate `body` — performing any effect it contains — then run `tail` with the result in scope as `name`. Beyond user `let`s, erasure leans on it for sharing: a matched scrutinee is bound once, then dispatched on and projected from many times without re-evaluating.

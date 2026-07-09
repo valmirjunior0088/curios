@@ -265,18 +265,30 @@ pub(crate) fn print_term<'a>(term: &'a Term) -> Printer<'a> {
             flat([pure("("), print_term(head), pure(format!(").{index}"))])
         }
         Subterm::Atom(atom) => print_atom(atom),
-        Subterm::Match(Match { head, cases }) => {
-            let cases = cases.iter().enumerate().map(|(i, body)| {
+        Subterm::Match(Match {
+            head,
+            cases,
+            default,
+        }) => {
+            let case_printers = cases.iter().map(|(tag, body)| {
                 flat([
-                    pure(format!("\n| @{i} =>\n")),
+                    pure(format!("\n| @{tag} =>\n")),
                     indent(flat([print_term(body), pure(";")])),
                 ])
             });
+            let default_printer = match default {
+                Some(default) => flat([
+                    pure("\n| _ =>\n"),
+                    indent(flat([print_term(default), pure(";")])),
+                ]),
+                None => pure(""),
+            };
             flat([
                 pure("match "),
                 print_term(head),
                 pure(";"),
-                flat(cases.collect::<Vec<_>>()),
+                flat(case_printers.collect::<Vec<_>>()),
+                default_printer,
             ])
         }
         Subterm::Let(Let { name, body, tail }) => flat([

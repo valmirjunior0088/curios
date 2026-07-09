@@ -1864,15 +1864,13 @@ impl Bound for Subterm {
                         .map(|s| s.reach())
                         .max()
                         .unwrap_or(0)
-                        .max(
-                            pattern
-                                .iter()
-                                .flat_map(|p| &p.slots)
-                                .fold(0, |acc, slot| match slot {
-                                    MotiveSlot::Binder => acc,
-                                    MotiveSlot::Term(t) => acc.max(t.reach()),
-                                }),
-                        )
+                        .max(pattern.iter().flat_map(|p| &p.slots).fold(
+                            0,
+                            |acc, slot| match slot {
+                                MotiveSlot::Binder => acc,
+                                MotiveSlot::Term(t) => acc.max(t.reach()),
+                            },
+                        ))
                         .max(default.as_ref().map_or(0, |d| d.reach()))
                 }
                 Cases::FreeMonoid { carrier } => match carrier {

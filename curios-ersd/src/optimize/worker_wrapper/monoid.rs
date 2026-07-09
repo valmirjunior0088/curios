@@ -208,8 +208,13 @@ fn scan_tail<'a>(term: &'a Term, name: &str, scan: &mut Scan<'a>) {
             scan_tail(zero_case, name, scan);
             scan_tail(succ_case, name, scan);
         }
-        Subterm::Match(Match { cases, .. }) => {
-            cases.iter().for_each(|case| scan_tail(case, name, scan));
+        Subterm::Match(Match { cases, default, .. }) => {
+            cases.values().for_each(|case| scan_tail(case, name, scan));
+            // The catch-all is a tail position too; a self-call in it would be
+            // missed if left unscanned.
+            if let Some(default) = default {
+                scan_tail(default, name, scan);
+            }
         }
         Subterm::Let(let_) => scan_tail(&let_.tail, name, scan),
         // A bare tail self-call carries the accumulator forward unchanged.
@@ -272,12 +277,17 @@ fn rewrite_tail(term: Term, ctx: &Lower, monoid: Monoid, acc: &str) -> Term {
             succ_case: rewrite_tail(succ_case, ctx, monoid, acc),
         })
         .into(),
-        Subterm::Match(Match { head, cases }) => Subterm::Match(Match {
+        Subterm::Match(Match {
+            head,
+            cases,
+            default,
+        }) => Subterm::Match(Match {
             head,
             cases: cases
                 .into_iter()
-                .map(|case| rewrite_tail(case, ctx, monoid, acc))
+                .map(|(tag, case)| (tag, rewrite_tail(case, ctx, monoid, acc)))
                 .collect(),
+            default: default.map(|d| rewrite_tail(d, ctx, monoid, acc)),
         })
         .into(),
         Subterm::Let(let_) => Subterm::Let(crate::Let {

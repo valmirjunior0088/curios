@@ -715,7 +715,10 @@ impl Work<'_, '_, '_> {
                 Cont::new(move |work, head| {
                     let mut cases = BTreeMap::new();
 
-                    for (i, branch) in m.cases.iter().enumerate() {
+                    // Sparse: the key is the constructor tag (the map key), not a
+                    // dense position — a complete match still lists every tag,
+                    // so this matches the old `enumerate` order exactly.
+                    for (tag, branch) in m.cases.iter() {
                         let block = work.emit.fresh_block();
                         let region = work.in_subregion(|w| w.lower_tail(branch, frame, resume))?;
 
@@ -728,7 +731,7 @@ impl Work<'_, '_, '_> {
                         );
 
                         cases.insert(
-                            i as u32,
+                            *tag as u32,
                             JumpTarget {
                                 target: block,
                                 params: vec![],
@@ -736,10 +739,32 @@ impl Work<'_, '_, '_> {
                         );
                     }
 
+                    // A `| _ =>` catch-all lowers to the cont match's default
+                    // block — verbatim the `NatMatch::Dispatch` shape below.
+                    let default = match &m.default {
+                        Some(default) => {
+                            let default_block = work.emit.fresh_block();
+                            let region =
+                                work.in_subregion(|w| w.lower_tail(default, frame, resume))?;
+                            work.emit.add_block(
+                                default_block.clone(),
+                                Block {
+                                    params: vec![],
+                                    region,
+                                },
+                            );
+                            Some(JumpTarget {
+                                target: default_block,
+                                params: vec![],
+                            })
+                        }
+                        None => None,
+                    };
+
                     Ok(Tail::Match(MatchTarget {
                         operand: head,
                         cases,
-                        default: None,
+                        default,
                     }))
                 }),
             ),

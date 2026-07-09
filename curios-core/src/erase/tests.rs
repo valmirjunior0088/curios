@@ -1,11 +1,54 @@
 use {
     crate::*,
+    curios_abi::RootId,
     curios_base::{Flt, Int},
-    std::time::Duration,
+    std::{collections::BTreeMap, time::Duration},
 };
 
 fn context() -> Context {
     Context::new(Duration::from_secs(1))
+}
+
+fn nat_lit(n: usize) -> Term {
+    Term::prim(Prim::Nat(Nat::new(n)))
+}
+
+fn opt_type() -> Term {
+    Term::inductive_type("Opt", Vec::<Term>::new(), Vec::<Term>::new())
+}
+
+// induct Opt : Type | none() | some(x : Nat) end — `none` is tag 0, `some` tag
+// 1 (BTreeMap-sorted). A relevant (Type-sorted) data type, so its match erases
+// through the tag-dispatch path rather than collapsing to a single arm.
+fn register_opt(context: &mut Context) {
+    context
+        .register_inductive(
+            "Opt",
+            Inductive {
+                params: Telescope::done(()),
+                indices: Telescope::done(()),
+                constructors: BTreeMap::from([
+                    (
+                        Atom::from("none"),
+                        InductiveParam {
+                            telescope: Telescope::done(opt_type()),
+                        },
+                    ),
+                    (
+                        Atom::from("some"),
+                        InductiveParam {
+                            telescope: Telescope::build(
+                                [("x", Term::prim(Prim::NatType))],
+                                opt_type(),
+                            ),
+                        },
+                    ),
+                ]),
+                result_sort: Term::type_(),
+                root: RootId::Entry,
+            },
+        )
+        .unwrap();
 }
 
 #[test]
@@ -218,6 +261,71 @@ fn erase_nat_match_dispatches_to_named_case() {
     );
 
     erase(&mut context, &nat_match, &bool_type).unwrap();
+}
+
+#[test]
+fn erase_inductive_match_default_is_sparse() {
+    let mut context = context();
+    register_opt(&mut context);
+
+    // `match some(5) : Nat | none() => 0 | _ => 99 end` — only `none` is
+    // enumerated; `some` is covered by the catch-all. Erasure emits a *sparse*
+    // dispatch: one case entry (the `none` tag) plus a single `default`, not a
+    // dense slot per constructor.
+    let term = Term::inductive_match_default(
+        Term::variant("Opt", Vec::<Term>::new(), "some", [nat_lit(5)]),
+        Some("m"),
+        Term::prim(Prim::NatType),
+        [("none", Vec::<&str>::new(), nat_lit(0))],
+        nat_lit(99),
+    );
+
+    let erased = erase(&mut context, &term, &Term::prim(Prim::NatType)).unwrap();
+
+    // The scrutinee is let-bound once, then dispatched on its tag.
+    let curios_ersd::Subterm::Let(let_) = &*erased else {
+        panic!("expected a scrutinee-binding Let, got:\n{erased}");
+    };
+    let curios_ersd::Subterm::Match(m) = &*let_.tail else {
+        panic!("expected a Match tail, got:\n{}", let_.tail);
+    };
+    assert_eq!(m.cases.len(), 1, "only the `none` arm should be enumerated");
+    assert!(
+        m.cases.contains_key(&0),
+        "the `none` tag (index 0) is present"
+    );
+    assert!(
+        m.default.is_some(),
+        "the catch-all becomes a sparse default"
+    );
+}
+
+#[test]
+fn erase_complete_inductive_match_has_no_default() {
+    let mut context = context();
+    register_opt(&mut context);
+
+    // A fully-enumerated match keeps every constructor as an explicit arm and
+    // needs no default — the sparse-omission-implies-default invariant.
+    let term = Term::inductive_match(
+        Term::variant("Opt", Vec::<Term>::new(), "some", [nat_lit(5)]),
+        Some("m"),
+        Term::prim(Prim::NatType),
+        [
+            ("none", Vec::<&str>::new(), nat_lit(0)),
+            ("some", vec!["x"], Term::free_var("x")),
+        ],
+    );
+
+    let erased = erase(&mut context, &term, &Term::prim(Prim::NatType)).unwrap();
+    let curios_ersd::Subterm::Let(let_) = &*erased else {
+        panic!("expected a scrutinee-binding Let, got:\n{erased}");
+    };
+    let curios_ersd::Subterm::Match(m) = &*let_.tail else {
+        panic!("expected a Match tail, got:\n{}", let_.tail);
+    };
+    assert_eq!(m.cases.len(), 2, "both constructors are enumerated");
+    assert!(m.default.is_none(), "a complete match needs no default");
 }
 
 #[test]

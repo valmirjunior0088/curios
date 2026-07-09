@@ -50,7 +50,10 @@ pub(super) fn children(term: &Term) -> Vec<&Term> {
         Subterm::Apply(apply) => iter::once(&apply.head).chain(&apply.params).collect(),
         Subterm::Tuple(tuple) => tuple.fields.iter().collect(),
         Subterm::Proj(proj) => vec![&proj.head],
-        Subterm::Match(m) => iter::once(&m.head).chain(&m.cases).collect(),
+        Subterm::Match(m) => iter::once(&m.head)
+            .chain(m.cases.values())
+            .chain(m.default.iter())
+            .collect(),
         Subterm::Let(let_) => vec![&let_.body, &let_.tail],
         Subterm::Rec(rec) => rec.items.iter().chain(iter::once(&rec.tail)).collect(),
     }
@@ -83,7 +86,10 @@ pub(super) fn children_mut(term: &mut Term) -> Vec<&mut Term> {
             .collect(),
         Subterm::Tuple(tuple) => tuple.fields.iter_mut().collect(),
         Subterm::Proj(proj) => vec![&mut proj.head],
-        Subterm::Match(m) => iter::once(&mut m.head).chain(&mut m.cases).collect(),
+        Subterm::Match(m) => iter::once(&mut m.head)
+            .chain(m.cases.values_mut())
+            .chain(m.default.iter_mut())
+            .collect(),
         Subterm::Let(let_) => vec![&mut let_.body, &mut let_.tail],
         Subterm::Rec(rec) => rec
             .items
@@ -215,7 +221,12 @@ pub(super) fn deep_copy(term: &Term) -> Term {
         }),
         Subterm::Match(m) => Subterm::Match(Match {
             head: deep_copy(&m.head),
-            cases: m.cases.iter().map(deep_copy).collect(),
+            cases: m
+                .cases
+                .iter()
+                .map(|(tag, case)| (*tag, deep_copy(case)))
+                .collect(),
+            default: m.default.as_ref().map(deep_copy),
         }),
         Subterm::Let(let_) => Subterm::Let(Let {
             name: let_.name.clone(),
@@ -419,7 +430,11 @@ mod tests {
                     Subterm::Prim(Prim::Pure(PurePrim::NatAdd(nat(1), nat(2)))).into(),
                     Subterm::Match(Match {
                         head: name("m"),
-                        cases: vec![nat(3), Subterm::Erased.into()],
+                        cases: std::collections::BTreeMap::from([
+                            (0, nat(3)),
+                            (1, Subterm::Erased.into()),
+                        ]),
+                        default: Some(nat(4)),
                     })
                     .into(),
                 ],

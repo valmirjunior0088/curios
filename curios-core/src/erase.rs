@@ -596,7 +596,14 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<curios_ersd::Term, Er
             cases,
             pattern,
             default,
-        } => erase_inductive_match(context, head, motive, cases, pattern.as_ref(), default.as_ref()),
+        } => erase_inductive_match(
+            context,
+            head,
+            motive,
+            cases,
+            pattern.as_ref(),
+            default.as_ref(),
+        ),
         Cases::FreeMonoid {
             carrier:
                 Carrier::Nat {
@@ -1088,143 +1095,146 @@ fn erase_inductive_match(
 
     let binder_slots = pattern_binder_slots(pattern, inductive.params.len());
 
-    let cases_erased = inductive
-        .constructor_order()
-        .map(|tag| {
-            // A tag with no explicit arm: with a catch-all default, its dense
-            // slot holds the (re-)erased default body — per-slot re-erasure is
-            // pure, and the default binds nothing so it needs no payload frame.
-            // Without a default, the arm was pruned by elaborate (Rung C proved
-            // it impossible at the scrutinee's indices); reaching its slot means
-            // a corrupted tag, so lower it to a real trap. (Stage 3 replaces
-            // this dense duplication with a single sparse default.)
-            let Some(scope) = cases.get(tag) else {
-                return match default {
-                    Some(default) => erase(context, default, &motive.open(&[head])),
-                    None => Ok(curios_ersd::Subterm::Unreachable.into()),
-                };
-            };
+    // Sparse dispatch: an entry per constructor with an explicit arm, keyed by
+    // its positional tag. A tag with no arm is either covered by the catch-all
+    // default (omitted here — the single `Match.default` below stands in) or,
+    // absent a default, a Rung-C-pruned arm that keeps an explicit `Unreachable`
+    // trap in its slot (reaching it means a corrupted runtime tag).
+    let mut cases_erased = BTreeMap::new();
+    for (index, tag) in inductive.constructor_order().enumerate() {
+        let Some(scope) = cases.get(tag) else {
+            if default.is_none() {
+                cases_erased.insert(index, curios_ersd::Subterm::Unreachable.into());
+            }
+            continue;
+        };
 
-            let telescope = inductive
-                .instantiate(tag, &params)
-                .expect("erase: constructor instantiates at its inductive's parameters");
+        let telescope = inductive
+            .instantiate(tag, &params)
+            .expect("erase: constructor instantiates at its inductive's parameters");
 
-            let hints = scope
-                .label_iter()
-                .map(|l| l.map(str::to_string))
-                .collect::<Vec<_>>();
+        let hints = scope
+            .label_iter()
+            .map(|l| l.map(str::to_string))
+            .collect::<Vec<_>>();
 
-            let labels = hints
-                .iter()
-                .map(|hint| context.fresh(hint.as_deref()))
-                .collect::<Vec<_>>();
+        let labels = hints
+            .iter()
+            .map(|hint| context.fresh(hint.as_deref()))
+            .collect::<Vec<_>>();
 
-            let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
+        let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
 
-            context.with_frame(|context| {
-                let mut telescope = telescope;
-                // One erasable flag per payload binder (a proof or a type),
-                // computed before the binder is assumed — a binder's type never
-                // depends on itself. Drives the flat-record slot assignment below.
-                let mut erasable = Vec::with_capacity(labels.len());
-                for (label, var) in labels.iter().zip(&vars) {
-                    match telescope {
-                        Telescope::Cons(ty, rest) => {
-                            erasable.push(is_erasable(context, &ty)?);
-                            context.assume(label, &ty);
-                            telescope = rest.open(&[var]);
-                        }
-                        Telescope::Done(_) => {
-                            unreachable!("erase: constructor arity checked by elaborate")
-                        }
+        let arm = context.with_frame(|context| {
+            let mut telescope = telescope;
+            // One erasable flag per payload binder (a proof or a type),
+            // computed before the binder is assumed — a binder's type never
+            // depends on itself. Drives the flat-record slot assignment below.
+            let mut erasable = Vec::with_capacity(labels.len());
+            for (label, var) in labels.iter().zip(&vars) {
+                match telescope {
+                    Telescope::Cons(ty, rest) => {
+                        erasable.push(is_erasable(context, &ty)?);
+                        context.assume(label, &ty);
+                        telescope = rest.open(&[var]);
                     }
-                }
-
-                // This case's target indices, for opening a pattern motive.
-                let ix_c = match &telescope {
-                    Telescope::Done(terminal) => match &***terminal {
-                        Subterm::InductiveType(InductiveType { indices, .. }) => indices.clone(),
-                        _ => unreachable!("erase: constructor terminal is its inductive type"),
-                    },
-                    Telescope::Cons(..) => {
+                    Telescope::Done(_) => {
                         unreachable!("erase: constructor arity checked by elaborate")
                     }
-                };
-
-                let ctor_val =
-                    Term::variant(name.clone(), params.clone(), tag.clone(), vars.clone());
-
-                refine_head(context, head, &ctor_val)?;
-
-                // Rung B, mirrored from elaborate: key-shaped scrutinee
-                // indices reduce to the case's targets inside the arm, so
-                // types erased here converge the same way they checked.
-                for (actual, target) in actual_indices.iter().zip(&ix_c) {
-                    refine_head(context, actual, target)?;
                 }
+            }
 
-                let arm_args = binder_slots
-                    .iter()
-                    .map(|&(is_param, i)| match is_param {
-                        true => params[i].clone(),
-                        false => ix_c[i].clone(),
-                    })
-                    .collect::<Vec<_>>();
+            // This case's target indices, for opening a pattern motive.
+            let ix_c = match &telescope {
+                Telescope::Done(terminal) => match &***terminal {
+                    Subterm::InductiveType(InductiveType { indices, .. }) => indices.clone(),
+                    _ => unreachable!("erase: constructor terminal is its inductive type"),
+                },
+                Telescope::Cons(..) => {
+                    unreachable!("erase: constructor arity checked by elaborate")
+                }
+            };
 
-                let arm_refs = arm_args.iter().chain([&ctor_val]).collect::<Vec<_>>();
-                let expected = motive.open(&arm_refs);
-                let var_refs = vars.iter().collect::<Vec<_>>();
-                let body = erase(context, &scope.open(&var_refs), &expected)?;
+            let ctor_val = Term::variant(name.clone(), params.clone(), tag.clone(), vars.clone());
 
-                // Bind each *relevant* payload binder to its flat-record slot:
-                // `let x_i = scrutinee.(slot); …` (innermost-last, so fold in
-                // reverse). Erasable payload fields are absent from the runtime
-                // tuple, so a relevant binder's slot is `1 + (relevant payload
-                // before it)` (field 0 is the tag); an erasable binder gets no
-                // `let` at all — the arm body only uses it in erased (→ `Erased`)
-                // positions, so nothing projects it. Projections read the
-                // let-bound scrutinee — never a re-erased copy of the head term,
-                // which would re-execute an effectful scrutinee once per arm.
-                let mut relevant = 0usize;
-                let runtime_slot = labels
-                    .iter()
-                    .enumerate()
-                    .map(|(i, _)| {
-                        if erasable[i] {
-                            None
-                        } else {
-                            let slot = 1 + relevant;
-                            relevant += 1;
-                            Some(slot)
-                        }
-                    })
-                    .collect::<Vec<_>>();
+            refine_head(context, head, &ctor_val)?;
 
-                labels
-                    .iter()
-                    .enumerate()
-                    .rev()
-                    .try_fold(body, |tail, (i, label)| {
-                        let Some(slot) = runtime_slot[i] else {
-                            return Ok(tail);
-                        };
-                        Ok(curios_ersd::Subterm::Let(curios_ersd::Let {
-                            name: label.clone(),
-                            body: curios_ersd::Subterm::Proj(curios_ersd::Proj {
-                                head: curios_ersd::Subterm::Name(curios_ersd::Name::from(
-                                    scrutinee_label.as_str(),
-                                ))
-                                .into(),
-                                index: slot,
-                            })
+            // Rung B, mirrored from elaborate: key-shaped scrutinee
+            // indices reduce to the case's targets inside the arm, so
+            // types erased here converge the same way they checked.
+            for (actual, target) in actual_indices.iter().zip(&ix_c) {
+                refine_head(context, actual, target)?;
+            }
+
+            let arm_args = binder_slots
+                .iter()
+                .map(|&(is_param, i)| match is_param {
+                    true => params[i].clone(),
+                    false => ix_c[i].clone(),
+                })
+                .collect::<Vec<_>>();
+
+            let arm_refs = arm_args.iter().chain([&ctor_val]).collect::<Vec<_>>();
+            let expected = motive.open(&arm_refs);
+            let var_refs = vars.iter().collect::<Vec<_>>();
+            let body = erase(context, &scope.open(&var_refs), &expected)?;
+
+            // Bind each *relevant* payload binder to its flat-record slot:
+            // `let x_i = scrutinee.(slot); …` (innermost-last, so fold in
+            // reverse). Erasable payload fields are absent from the runtime
+            // tuple, so a relevant binder's slot is `1 + (relevant payload
+            // before it)` (field 0 is the tag); an erasable binder gets no
+            // `let` at all — the arm body only uses it in erased (→ `Erased`)
+            // positions, so nothing projects it. Projections read the
+            // let-bound scrutinee — never a re-erased copy of the head term,
+            // which would re-execute an effectful scrutinee once per arm.
+            let mut relevant = 0usize;
+            let runtime_slot = labels
+                .iter()
+                .enumerate()
+                .map(|(i, _)| {
+                    if erasable[i] {
+                        None
+                    } else {
+                        let slot = 1 + relevant;
+                        relevant += 1;
+                        Some(slot)
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            labels
+                .iter()
+                .enumerate()
+                .rev()
+                .try_fold(body, |tail, (i, label)| {
+                    let Some(slot) = runtime_slot[i] else {
+                        return Ok(tail);
+                    };
+                    Ok(curios_ersd::Subterm::Let(curios_ersd::Let {
+                        name: label.clone(),
+                        body: curios_ersd::Subterm::Proj(curios_ersd::Proj {
+                            head: curios_ersd::Subterm::Name(curios_ersd::Name::from(
+                                scrutinee_label.as_str(),
+                            ))
                             .into(),
-                            tail,
+                            index: slot,
                         })
-                        .into())
+                        .into(),
+                        tail,
                     })
-            })
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
+                    .into())
+                })
+        })?;
+        cases_erased.insert(index, arm);
+    }
+
+    // The catch-all is erased exactly once (it binds nothing, so no payload
+    // frame), at the motive'd unrefined head — the same expected type the
+    // omitted-slot fill used, now shared instead of duplicated per constructor.
+    let default_erased = default
+        .map(|default| erase(context, default, &motive.open(&[head])))
+        .transpose()?;
 
     // The head term is erased (and thus evaluated) exactly once, shared by
     // the tag dispatch and every arm's payload projections.
@@ -1239,6 +1249,7 @@ fn erase_inductive_match(
             })
             .into(),
             cases: cases_erased,
+            default: default_erased,
         })
         .into(),
     })

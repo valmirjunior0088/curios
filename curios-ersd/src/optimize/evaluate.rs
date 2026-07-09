@@ -430,7 +430,7 @@ impl<'m> Evaluator<'m> {
                 let Value::Tag(tag) = head else {
                     return Outcome::Bail(Bail::Unsupported);
                 };
-                match m.cases.get(tag) {
+                match m.cases.get(&tag).or(m.default.as_ref()) {
                     Some(case) => self.eval(case, env, tail),
                     None => Outcome::Bail(Bail::Unsupported),
                 }
@@ -1106,11 +1106,33 @@ fn nonzero_s(divisor: i32) -> Result<i32, Bail> {
 mod tests {
     use {
         super::*,
-        crate::{Argument, CellPrim, Name},
+        crate::{Argument, Atom, CellPrim, Match, Name},
     };
 
     fn nat(value: u32) -> Term {
         Subterm::Prim(Prim::Pure(PurePrim::Nat(value))).into()
+    }
+
+    fn atom(index: usize) -> Term {
+        Subterm::Atom(Atom { index }).into()
+    }
+
+    // `dispatch(x) = match x | @0 => 100 | _ => 999 end` — a sparse constructor
+    // switch with a single enumerated arm and a catch-all default.
+    fn dispatch() -> Item {
+        item(
+            "dispatch",
+            func(
+                vec![],
+                vec!["x"],
+                Subterm::Match(Match {
+                    head: name("x"),
+                    cases: [(0usize, nat(100))].into_iter().collect(),
+                    default: Some(nat(999)),
+                })
+                .into(),
+            ),
+        )
     }
 
     fn flt(value: f32) -> Term {
@@ -1239,6 +1261,38 @@ mod tests {
         let printed = run(module);
         assert!(printed.contains("42n"), "{printed}");
         assert!(!printed.contains("#double(21n)"), "{printed}");
+    }
+
+    #[test]
+    fn folds_sparse_match_absent_tag_to_default() {
+        // `dispatch(@1)` — tag 1 is not enumerated, so the catch-all wins. The
+        // module body (last line) is the folded result; the retained `dispatch`
+        // item still spells both literals, so assert on the tail, not `contains`.
+        let module = Module {
+            items: vec![dispatch()],
+            body: apply(name("dispatch"), vec![atom(1)]),
+        };
+        let printed = run(module);
+        assert!(
+            !printed.contains("#dispatch("),
+            "call not folded:\n{printed}"
+        );
+        assert!(printed.trim_end().ends_with("999n"), "{printed}");
+    }
+
+    #[test]
+    fn folds_sparse_match_present_tag_to_its_arm() {
+        // `dispatch(@0)` — the enumerated arm wins over the default.
+        let module = Module {
+            items: vec![dispatch()],
+            body: apply(name("dispatch"), vec![atom(0)]),
+        };
+        let printed = run(module);
+        assert!(
+            !printed.contains("#dispatch("),
+            "call not folded:\n{printed}"
+        );
+        assert!(printed.trim_end().ends_with("100n"), "{printed}");
     }
 
     #[test]
