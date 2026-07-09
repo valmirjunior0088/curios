@@ -1,13 +1,12 @@
 use {
     super::{
-        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, CondMatch, ConceptField, ConceptParam,
-        Field, Func,
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetSignature, LstEntry,
-        LstMatch, LstPattern, Match, MatchPattern, MatchPatternField, MatrixMatch, Motive, Nat,
-        NatLiteral, NatMatch, NatPattern, NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec,
-        StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct,
-        TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
-        TupleTypeParam, UseGroup, WitnessEntry,
+        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, ConceptField, ConceptParam, CondMatch,
+        Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, LadderArm,
+        LadderTest, Let, LetSignature, LstEntry, LstMatch, LstPattern, Match, MatchPattern,
+        MatchPatternField, MatrixMatch, Motive, Nat, NatLiteral, NatMatch, NatPattern, NumLit,
+        Pattern, PatternField, Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm, Syn,
+        Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
+        TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{
@@ -633,13 +632,20 @@ pub(crate) fn print_term(term: Term) -> Printer<'static> {
                 pure("match"),
                 flat(
                     arms.into_iter()
-                        .map(|(cond, body)| {
-                            flat([
-                                pure("\n| "),
-                                print_term(cond),
-                                pure(" =>\n"),
-                                indent(print_term(body)),
-                            ])
+                        .map(|LadderArm { test, body }| {
+                            let head = match test {
+                                LadderTest::Cond(condition) => {
+                                    flat([pure("\n| "), print_term(condition), pure(" =>\n")])
+                                }
+                                LadderTest::Bind { pattern, value } => flat([
+                                    pure("\n| "),
+                                    print_match_pattern(pattern),
+                                    pure(" = "),
+                                    print_term(value),
+                                    pure(" =>\n"),
+                                ]),
+                            };
+                            flat([head, indent(print_term(body))])
                         })
                         .collect::<Vec<_>>(),
                 ),

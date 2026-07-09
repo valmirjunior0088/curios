@@ -22,15 +22,14 @@ mod tests;
 
 use {
     super::{
-        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, CasePayloadParam, CondMatch,
-        ConceptField,
-        ConceptParam, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let,
-        LetBinding, LetSignature, LstEntry, LstMatch, LstPattern, Match, MatchPattern,
-        MatchPatternField, MatrixArm, MatrixMatch, Module, Motive, Name, Nat, NatLiteral, NatMatch,
-        NatPattern, NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec, RecItem, StructLit,
-        StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
-        TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
-        TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
+        Apply, BinMatch, BinPattern, BinSegment, BlnMatch, CasePayloadParam, ConceptField,
+        ConceptParam, CondMatch, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
+        Infix, LadderArm, LadderTest, Let, LetBinding, LetSignature, LstEntry, LstMatch,
+        LstPattern, Match, MatchPattern, MatchPatternField, MatrixArm, MatrixMatch, Module, Motive,
+        Name, Nat, NatLiteral, NatMatch, NatPattern, NumLit, Pattern, PatternField, Prim, Proj,
+        Radix, Rec, RecItem, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept,
+        TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple,
+        TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{

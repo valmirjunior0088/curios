@@ -1797,13 +1797,20 @@ fn parse_headless_cond_match() {
             .unwrap(),
         Subterm::Match(Match::Cond(CondMatch {
             arms: vec![
-                (name("p"), num_lit(1, false, false)),
-                (name("q"), num_lit(2, false, false)),
+                cond_arm(name("p"), num_lit(1, false, false)),
+                cond_arm(name("q"), num_lit(2, false, false)),
             ],
             default: num_lit(3, false, false),
         }))
         .into()
     );
+}
+
+fn cond_arm(condition: Term, body: Term) -> LadderArm {
+    LadderArm {
+        test: LadderTest::Cond(condition),
+        body,
+    }
 }
 
 // An arm-free ladder is legal: `match | _ => d end` is just its default.
@@ -1824,9 +1831,39 @@ fn parse_headless_cond_match_default_only() {
 #[test]
 fn parse_headless_cond_match_leading_underscore_condition() {
     assert_eq!(
-        "match\n| _ready => 1\n| _ => 2\nend".parse::<Term>().unwrap(),
+        "match\n| _ready => 1\n| _ => 2\nend"
+            .parse::<Term>()
+            .unwrap(),
         Subterm::Match(Match::Cond(CondMatch {
-            arms: vec![(name("_ready"), num_lit(1, false, false))],
+            arms: vec![cond_arm(name("_ready"), num_lit(1, false, false))],
+            default: num_lit(2, false, false),
+        }))
+        .into()
+    );
+}
+
+// A bind arm `| pattern = value =>` parses as a `LadderTest::Bind`; a condition
+// arm sharing a `|` with it stays a `Cond`.
+#[test]
+fn parse_headless_bind_arm() {
+    assert_eq!(
+        "match\n| some(x) = o => x\n| ready => 1\n| _ => 2\nend"
+            .parse::<Term>()
+            .unwrap(),
+        Subterm::Match(Match::Cond(CondMatch {
+            arms: vec![
+                LadderArm {
+                    test: LadderTest::Bind {
+                        pattern: MatchPattern::Ctor {
+                            tag: "some".to_string(),
+                            args: vec![MatchPattern::Binder("x".to_string())],
+                        },
+                        value: name("o"),
+                    },
+                    body: name("x"),
+                },
+                cond_arm(name("ready"), num_lit(1, false, false)),
+            ],
             default: num_lit(2, false, false),
         }))
         .into()
@@ -1840,6 +1877,9 @@ fn headless_cond_match_round_trips() {
         "match | p => 1 | q => 2 | _ => 3 end",
         "match | _ => 0 end",
         "match | a <= b => x | _ => y end",
+        // Bind arms, mixed with a condition arm.
+        "match | some(x) = o => x | _ => y end",
+        "match | cons(h, t) = xs => h | ready => 1 | _ => 0 end",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(

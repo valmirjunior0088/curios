@@ -302,14 +302,41 @@ pub(super) fn parse_bin_match<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// A headless ladder arm `| cond => body`. The catch spans through `=>` so a
-// condition term that merely *starts* like the default backtracks cleanly. A
-// bare `_` parses as an ordinary `Name` term, so the ladder's `| _ =>` default
+// A bind arm `| pattern = value => body` (Rust `if let`): the arm fires when
+// `value` matches the refutable `pattern`. The `=` separator is guarded against
+// `==` (equality) and `=>` (an empty value) via `not_ahead`, mirroring the `!`
+// vs `!=` idiom. Tried *before* the condition arm — a bind pattern like
+// `some(x)` also parses as a condition term — so the `catch` backtracks to the
+// `|` when no `=` separator follows the pattern, and the condition arm re-parses
+// the same text as a `Bln` term.
+pub(super) fn parse_bind_case<'a>() -> Parser<'a, LadderArm> {
+    catch(
+        parse_literal("|")
+            .and_keep(parse_match_pattern())
+            .and_drop(
+                take_exact("=")
+                    .and_drop(not_ahead("="))
+                    .and_drop(not_ahead(">")),
+            )
+            .and_drop(parse_whitespace())
+            .and(lazy(parse_term))
+            .and_drop(parse_literal("=>")),
+    )
+    .and(lazy(parse_term))
+    .map(|((pattern, value), body)| LadderArm {
+        test: LadderTest::Bind { pattern, value },
+        body,
+    })
+}
+
+// A headless ladder condition arm `| cond => body`. The catch spans through `=>`
+// so a condition term that merely *starts* like the default backtracks cleanly.
+// A bare `_` parses as an ordinary `Name` term, so the ladder's `| _ =>` default
 // would otherwise be swallowed here; the `flat_map` guard rejects a lone `_`
 // condition, letting `many0` stop and hand the default to `parse_cond_default`.
 // A condition that merely *begins* with `_` (e.g. `_ready`) has a longer head
 // and passes the guard, parsing as an ordinary condition.
-pub(super) fn parse_cond_case<'a>() -> Parser<'a, (Term, Term)> {
+pub(super) fn parse_cond_case<'a>() -> Parser<'a, LadderArm> {
     catch(
         parse_literal("|")
             .and_keep(lazy(parse_term))
@@ -322,6 +349,16 @@ pub(super) fn parse_cond_case<'a>() -> Parser<'a, (Term, Term)> {
             .and_drop(parse_literal("=>")),
     )
     .and(lazy(parse_term))
+    .map(|(condition, body)| LadderArm {
+        test: LadderTest::Cond(condition),
+        body,
+    })
+}
+
+// One ladder arm: a bind arm first (its `catch` backtracks when the pattern is
+// not followed by `=`), else a condition arm.
+pub(super) fn parse_ladder_arm<'a>() -> Parser<'a, LadderArm> {
+    catch(parse_bind_case()).or(parse_cond_case())
 }
 
 // The mandatory `| _ =>` default arm closing a headless ladder. Same shape as
@@ -333,13 +370,13 @@ pub(super) fn parse_cond_default<'a>() -> Parser<'a, Term> {
         .and_keep(lazy(parse_term))
 }
 
-// The headless form `match | cond => body | … | _ => default end`. No head
-// term follows `match` — the arms are `Bln` conditions tried top-to-bottom,
-// first `true` wins. Prefix-disambiguated from every headed form: no term
-// starts with `|`, so those forms' `lazy(parse_term)` backtracks out.
+// The headless form `match | test => body | … | _ => default end`. No head term
+// follows `match` — the arms are `Bln` conditions or refutable binds, tried
+// top-to-bottom, first to fire wins. Prefix-disambiguated from every headed
+// form: no term starts with `|`, so those forms' `lazy(parse_term)` backtracks.
 pub(super) fn parse_cond_match<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("match"))
-        .and_keep(many0(parse_cond_case).and(parse_cond_default()))
+        .and_keep(many0(parse_ladder_arm).and(parse_cond_default()))
         .and_drop(parse_keyword("end"))
         .map(|(arms, default)| Subterm::Match(Match::Cond(CondMatch { arms, default })).into())
 }

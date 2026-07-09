@@ -1,9 +1,9 @@
 use {
     super::{Context, MatchCompiler},
     crate::{
-        BinMatch, BinSegment, CondMatch, Error, Field, Let, LetBinding, LstEntry, LstMatch, Match,
-        Name, Nat,
-        NatLiteral, NatMatch, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
+        BinMatch, BinSegment, CondMatch, Error, Field, LadderTest, Let, LetBinding, LstEntry,
+        LstMatch, Match, Name, Nat, NatLiteral, NatMatch, Pattern, PatternField, Prim, Rec,
+        StructLitEntry, Subterm, Syn, Term,
     },
     curios_base::{MONAD_BIND, STR_SCAN_LEAD, STR_STEP, STR_STR, STR_UTF8_MORE, STR_UTF8_STOP},
     num_bigint::BigUint,
@@ -314,14 +314,26 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 // is exactly what nesting `Bln` matches buys.
                 Match::Cond(CondMatch { arms, default }) => {
                     let mut acc = self.term(default)?;
-                    for (cond, body) in arms.iter().rev() {
-                        acc = curios_core::Term::bln_match(
-                            self.term(cond)?,
-                            None,
-                            curios_core::Term::metavar(self.context.fresh_metavar()),
-                            acc,
-                            self.term(body)?,
-                        );
+                    for arm in arms.iter().rev() {
+                        acc = match &arm.test {
+                            LadderTest::Cond(condition) => curios_core::Term::bln_match(
+                                self.term(condition)?,
+                                None,
+                                curios_core::Term::metavar(self.context.fresh_metavar()),
+                                acc,
+                                self.term(&arm.body)?,
+                            ),
+                            LadderTest::Bind { pattern, value } => {
+                                let value = self.term(value)?;
+                                MatchCompiler::new(self).lower_bind_arm(
+                                    pattern,
+                                    value,
+                                    &arm.body,
+                                    acc,
+                                    MatchCompiler::term,
+                                )?
+                            }
+                        };
                     }
                     acc
                 }
@@ -378,9 +390,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     // The matrix compiler recursively decomposes (possibly
                     // nested, across constructors/tuples/structs) arm
                     // patterns into single-level core `Match`/projection
-                    // forms — see `MatchCompiler::compile_matrix`.
+                    // forms — see `MatchCompiler::compile_matrix`. A final
+                    // `| _ =>` catch-all is split off as the dispatch default.
                     let head = self.term(&um.head)?;
-                    MatchCompiler::new(self).compile_matrix(
+                    MatchCompiler::new(self).compile_matrix_headed(
                         head,
                         &um.motive,
                         &um.arms,

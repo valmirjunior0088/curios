@@ -112,6 +112,16 @@ pub enum Error {
     MatrixIncompleteCarrierMatch {
         carrier: &'static str,
     },
+    /// A headless-ladder bind arm `| pattern = value =>` whose `pattern` is a
+    /// bare binder — irrefutable, so it always fires and the rest of the ladder
+    /// is dead. A bind is for *refutable* matching; use a `let` for an
+    /// unconditional binding.
+    BindArmIrrefutable,
+    /// A headed match ended in a *named* catch-all (`| x =>`) among concrete
+    /// constructor arms. Only a bare `| _ =>` is a catch-all default; a named
+    /// binder there is almost certainly a mistake (a misspelled constructor, or
+    /// a binder that silently swallows every remaining case).
+    MatchNamedCatchAll,
     ModuleLoadFailed {
         label: String,
         cause: Box<LoadError>,
@@ -235,6 +245,18 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "a nested `{carrier}` pattern column must cover both of its cases"
+                )
+            }
+            Error::BindArmIrrefutable => {
+                write!(
+                    f,
+                    "a bind arm `| pattern = value =>` needs a refutable pattern; a bare binder is irrefutable — use a `let`"
+                )
+            }
+            Error::MatchNamedCatchAll => {
+                write!(
+                    f,
+                    "a named final arm cannot be a catch-all; write `| _ =>` for a default, or name the constructor"
                 )
             }
             Error::ModuleLoadFailed { label, cause } => {

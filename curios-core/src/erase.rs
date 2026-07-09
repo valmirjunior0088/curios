@@ -960,7 +960,17 @@ fn erase_erasable_scrutinee_match(
     // default is then the single live result (it binds nothing).
     let Some((tag, scope)) = cases.iter().next() else {
         let default = default.expect("erase: erasable match with no arms has a default");
-        return erase(context, default, &motive.open(&[head]));
+        // Open the motive at the actual params/indices and head — same arity as
+        // an arm would (see `erase_inductive_match`'s default).
+        let default_args = binder_slots
+            .iter()
+            .map(|&(is_param, i)| match is_param {
+                true => params[i].clone(),
+                false => actual_indices[i].clone(),
+            })
+            .collect::<Vec<_>>();
+        let default_refs = default_args.iter().chain([head]).collect::<Vec<_>>();
+        return erase(context, default, &motive.open(&default_refs));
     };
 
     let telescope = inductive
@@ -1230,10 +1240,23 @@ fn erase_inductive_match(
     }
 
     // The catch-all is erased exactly once (it binds nothing, so no payload
-    // frame), at the motive'd unrefined head — the same expected type the
-    // omitted-slot fill used, now shared instead of duplicated per constructor.
+    // frame), at the motive taken at the *actual* parameters/indices and the
+    // unrefined head — the same shape the arms open the motive at (`arm_refs`),
+    // but with this match's own params/indices in place of a constructor's
+    // targets. A dependent motive synthesized by elaborate has arity
+    // `binder_slots.len() + 1`, so opening at `[head]` alone would mismatch.
     let default_erased = default
-        .map(|default| erase(context, default, &motive.open(&[head])))
+        .map(|default| {
+            let default_args = binder_slots
+                .iter()
+                .map(|&(is_param, i)| match is_param {
+                    true => params[i].clone(),
+                    false => actual_indices[i].clone(),
+                })
+                .collect::<Vec<_>>();
+            let default_refs = default_args.iter().chain([head]).collect::<Vec<_>>();
+            erase(context, default, &motive.open(&default_refs))
+        })
         .transpose()?;
 
     // The head term is erased (and thus evaluated) exactly once, shared by

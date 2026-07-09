@@ -129,6 +129,38 @@ fn headless_cond_ladder_matches_hand_nested_bln_codegen() {
     );
 }
 
+/// A single-refutation bind arm `| some(x) = o => …` desugars to exactly the
+/// headed catch-all `match o | some(x) => … | _ => …` — both a single-row
+/// inductive match with the same default — so they emit identical operations.
+#[test]
+fn headless_bind_arm_matches_headed_catch_all_codegen() {
+    let bind = r#"
+        use /std/{Option, Nat, Lst, Io, Str, Proc};
+        let f(o : Option(Nat)) -> Nat =
+            match
+            | some(x) = o => x + 10
+            | _ => 99
+            end;
+        let n : Nat = Lst/len(Proc/args());
+        Io/print(Nat/to_str(f(Option/some(n))))
+        "#;
+    let headed = r#"
+        use /std/{Option, Nat, Lst, Io, Str, Proc};
+        let f(o : Option(Nat)) -> Nat =
+            match o
+            | some(x) => x + 10
+            | _ => 99
+            end;
+        let n : Nat = Lst/len(Proc/args());
+        Io/print(Nat/to_str(f(Option/some(n))))
+        "#;
+
+    assert_eq!(
+        operations(&normalized_cont_optm(bind)),
+        operations(&normalized_cont_optm(headed)),
+    );
+}
+
 /// The primitive operations emitted by a cont dump, sorted — the `Kind.op` tokens
 /// (`Nat.lt`, `Tpl.get`, `Lst.len`, …) that are the actual instructions, ignoring
 /// the generated names that wire them together. A generated name is never

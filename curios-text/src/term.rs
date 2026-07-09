@@ -296,22 +296,43 @@ pub struct BlnMatch {
     pub true_case: Term,
 }
 
-/// A headless condition ladder: `match | cond => body | … | _ => default end`.
-/// There is no scrutinee — each arm's `cond` is a `Bln` term, tried top-to-bottom,
-/// and the first `true` wins; the mandatory final `| _ =>` supplies the fallthrough.
-/// Lowering right-folds it into nested [`BlnMatch`]es (`into_core::match_compile`),
-/// so each arm's body inherits the definitional refinement of its condition for free
-/// (the same `refine_head` keying a hand-written `match cond | true => … | false => …`
-/// would get). A dispatch form, not an elimination: it enumerates no shapes, so the
-/// `_` default is mandatory (mirroring [`NatMatch::Dispatch`]). No motive — the
-/// nested `Bln` matches each carry their own.
+/// A headless ladder: `match | test => body | … | _ => default end`. There is
+/// no scrutinee — the arms are tried top-to-bottom and the first that fires
+/// selects its body; the mandatory final `| _ =>` supplies the fallthrough. An
+/// arm's [`LadderTest`] is either a `Bln` condition (`| cond =>`) or a refutable
+/// bind (`| pattern = value =>`, Rust `if let`). Lowering right-folds the ladder
+/// into nested [`BlnMatch`]es / single-row matrix matches
+/// (`into_core::match_compile`), so each body inherits the definitional
+/// refinement of its condition for free (the same `refine_head` keying a
+/// hand-written `match cond | true => … | false => …` would get). A dispatch
+/// form, not an elimination: it enumerates no shapes, so the `_` default is
+/// mandatory (mirroring [`NatMatch::Dispatch`]). No motive.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CondMatch {
-    /// The `(condition, body)` arms, in source order; the first condition that
-    /// evaluates to `true` selects its body. May be empty (then the ladder is
-    /// just its `default`).
-    pub arms: Vec<(Term, Term)>,
+    /// The arms, in source order; the first whose test fires selects its body.
+    /// May be empty (then the ladder is just its `default`).
+    pub arms: Vec<LadderArm>,
     pub default: Term,
+}
+
+/// One arm of a headless [`CondMatch`] ladder: a [`LadderTest`] and the `body`
+/// it selects when the test fires.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LadderArm {
+    pub test: LadderTest,
+    pub body: Term,
+}
+
+/// What a ladder arm dispatches on.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LadderTest {
+    /// `| cond =>` — a `Bln` condition; the arm fires when `cond` is `true`.
+    Cond(Term),
+    /// `| pattern = value =>` — a refutable bind (Rust `if let`): the arm fires
+    /// when `value` matches the (refutable, possibly nested) `pattern`, binding
+    /// its sub-patterns in the body. A bare-[`MatchPattern::Binder`] `pattern`
+    /// is irrefutable and rejected by lowering — it would be a plain `let`.
+    Bind { pattern: MatchPattern, value: Term },
 }
 
 /// Structural induction on an `Lst`: an `| [] =>` identity arm and a

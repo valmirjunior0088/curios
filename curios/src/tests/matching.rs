@@ -460,3 +460,70 @@ fn headless_cond_ladder_evaluates_conditions_lazily() {
     // "a" from the winning first condition, then "1" — "b" is never evaluated.
     assert_eq!(io.output(), b"a1");
 }
+
+// A headed inductive match with a `| _ =>` catch-all: enumerated constructors
+// take their arm, everything else the default. Rand-tainted so it runs as wasm.
+#[test]
+fn inductive_match_catch_all_covers_unenumerated_constructors() {
+    let source = r#"
+        use /std/{Option, Nat, Bin, Rand, Io};
+        let f(o : Option(Nat)) -> Nat =
+            match o
+            | some(x) => x + 10
+            | _ => 99
+            end;
+        let z = Bin/len(Rand/bin(0));
+        Io/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    // some(5) → 15 via its arm; none() → 99 via the catch-all; 15 + 99 = 114.
+    assert_eq!(io.output(), b"114");
+}
+
+// A headless-ladder bind arm `| pattern = value =>` (Rust `if let`): fires and
+// binds when `value` matches, else falls through to the rest of the ladder.
+#[test]
+fn headless_ladder_bind_arm_destructures_or_falls_through() {
+    let source = r#"
+        use /std/{Option, Nat, Bin, Rand, Io};
+        let f(o : Option(Nat)) -> Nat =
+            match
+            | some(x) = o => x + 10
+            | _ => 99
+            end;
+        let z = Bin/len(Rand/bin(0));
+        Io/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"114");
+}
+
+// A bind arm whose pattern is refutable at *two* points (`some` and the `cons`
+// nested in its payload): the rest-of-ladder is shared through a nullary thunk,
+// reached whether the outer `some` or the inner cons fails to match.
+#[test]
+fn headless_ladder_nested_bind_shares_the_fallthrough() {
+    let source = r#"
+        use /std/{Option, Lst, Nat, Bin, Rand, Io};
+        let f(o : Option(Lst(Nat))) -> Nat =
+            match
+            | some([h, ..t]) = o => h + 1
+            | _ => 99
+            end;
+        let z = Bin/len(Rand/bin(0));
+        let a = f(Option/some([5, 6, 7]));
+        let b = f(Option/some([]));
+        let c = f(Option/none());
+        Io/print(Nat/to_str(((a + b) + c) + z))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    // some([5,..]) → 6; some([]) → 99 (inner cons fails); none() → 99 (outer
+    // some fails). 6 + 99 + 99 = 204.
+    assert_eq!(io.output(), b"204");
+}

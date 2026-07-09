@@ -1,8 +1,8 @@
 use {
     super::Lowerer,
     crate::{
-        BinMatch, BinPattern, CondMatch, Error, LstMatch, LstPattern, Match, MatchPattern,
-        MatrixArm, Motive, NatMatch, NatPattern, Subterm, Term,
+        BinMatch, BinPattern, CondMatch, Error, LadderArm, LadderTest, LstMatch, LstPattern, Match,
+        MatchPattern, MatrixArm, Motive, NatMatch, NatPattern, Subterm, Term,
     },
     std::{collections::BTreeMap, mem},
 };
@@ -37,11 +37,32 @@ struct MatrixRow<'t> {
 /// its `Lowerer` counterpart there.
 pub(super) struct MatchCompiler<'l, 'a, 'b> {
     lowerer: &'l Lowerer<'a, 'b>,
+    /// The fallthrough arm for constructors/cases no row covers, already
+    /// lowered — a headed match's `| _ =>` catch-all, or a headless ladder
+    /// bind-arm's rest-of-ladder (see [`Lowerer::lower_bind_arm`]). `None` means
+    /// full enumeration: `compile_ctor` emits a plain `inductive_match` (leaning
+    /// on core's Rung-C vacuity for any pruned tag) and the hardcoded carriers
+    /// require both of their shapes. Constant across one matrix's whole
+    /// recursion — a nested match inside a body re-enters through `leaf`, which
+    /// builds a fresh `MatchCompiler` with its own (absent) default.
+    default: Option<curios_core::Term>,
 }
 
 impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     pub(super) fn new(lowerer: &'l Lowerer<'a, 'b>) -> Self {
-        Self { lowerer }
+        Self {
+            lowerer,
+            default: None,
+        }
+    }
+
+    /// A [`MatchCompiler`] whose uncovered-case fallthrough is `default`. Used
+    /// for a headed `| _ =>` catch-all and for ladder bind-arms.
+    pub(super) fn with_default(
+        lowerer: &'l Lowerer<'a, 'b>,
+        default: Option<curios_core::Term>,
+    ) -> Self {
+        Self { lowerer, default }
     }
 
     /// Leaf shim for the plain (non-region) lowering path — matches
@@ -127,10 +148,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             }
             Match::Matrix(um) => {
                 // Mirrors the `Match::Matrix` arm of `subterm` (see there and
-                // `Self::compile_matrix`), swapping `collect` on the head and
-                // `region` on the arm bodies (branch-local effects).
+                // `Self::compile_matrix_headed`), swapping `collect` on the head
+                // and `region` on the arm bodies (branch-local effects).
                 let head = self.collect(&um.head, binds)?;
-                self.compile_matrix(head, &um.motive, &um.arms, Self::region)?
+                self.compile_matrix_headed(head, &um.motive, &um.arms, Self::region)?
             }
             Match::Lst(LstMatch {
                 head,
@@ -188,34 +209,132 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         })
     }
 
-    /// Lowers a headless ladder's arms inside a region. The head arm's
-    /// condition collects its bangs into `binds` (the caller's region — it runs
-    /// unconditionally); its `true` body is its own region; its `false` branch
-    /// is the rest of the ladder, lowered as a *fresh* region so the deeper
-    /// conditions' bangs stay branch-local. With no arms left, the ladder is
-    /// just its default, which runs unconditionally in the current region
-    /// (its bangs hoist into `binds`).
+    /// Lowers a headless ladder's arms inside a region. The head arm's test (a
+    /// condition or a bind scrutinee) collects its bangs into `binds` (the
+    /// caller's region — it runs unconditionally at this level); its body is its
+    /// own region; the rest of the ladder — reached only when this test fails —
+    /// is lowered as a *fresh* region so deeper tests' bangs stay branch-local.
+    /// With no arms left, the ladder is just its default, run unconditionally in
+    /// the current region.
     fn cond_ladder_region(
         &self,
-        arms: &[(Term, Term)],
+        arms: &[LadderArm],
         default: &Term,
         binds: &mut Vec<(String, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
-        let Some(((cond, body), rest)) = arms.split_first() else {
+        let Some((arm, rest)) = arms.split_first() else {
             return self.collect(default, binds);
         };
-        let head = self.collect(cond, binds)?;
-        let true_case = self.region(body)?;
         let mut rest_binds = Vec::new();
         let rest_term = self.cond_ladder_region(rest, default, &mut rest_binds)?;
-        let false_case = self.wrap(rest_binds, rest_term)?;
-        Ok(curios_core::Term::bln_match(
-            head,
-            None,
-            curios_core::Term::metavar(self.context.fresh_metavar()),
-            false_case,
-            true_case,
-        ))
+        let rest_wrapped = self.wrap(rest_binds, rest_term)?;
+        match &arm.test {
+            LadderTest::Cond(condition) => {
+                let head = self.collect(condition, binds)?;
+                let true_case = self.region(&arm.body)?;
+                Ok(curios_core::Term::bln_match(
+                    head,
+                    None,
+                    curios_core::Term::metavar(self.context.fresh_metavar()),
+                    rest_wrapped,
+                    true_case,
+                ))
+            }
+            LadderTest::Bind { pattern, value } => {
+                let value = self.collect(value, binds)?;
+                self.lower_bind_arm(
+                    pattern,
+                    value,
+                    &arm.body,
+                    rest_wrapped,
+                    MatchCompiler::region,
+                )
+            }
+        }
+    }
+
+    /// Lowers a headless-ladder bind arm `| pattern = value => body` — with
+    /// `value` and `rest` (the fallthrough) already lowered — as a single-row
+    /// matrix over `value` whose fallthrough for every unmatched shape is `rest`
+    /// (via [`Self::default`]). A refutable pattern only: a bare-binder LHS is
+    /// irrefutable (a plain `let`) and rejected. When the pattern is refutable
+    /// at more than one point, `rest` is shared through a nullary thunk (see
+    /// [`Self::lower_defaulted_matrix`]).
+    pub(super) fn lower_bind_arm(
+        &self,
+        pattern: &MatchPattern,
+        value: curios_core::Term,
+        body: &Term,
+        rest: curios_core::Term,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        if matches!(pattern, MatchPattern::Binder(_)) {
+            return Err(Error::BindArmIrrefutable);
+        }
+        let arm = MatrixArm {
+            pattern: pattern.clone(),
+            body: body.clone(),
+        };
+        self.lower_defaulted_matrix(
+            value,
+            &None,
+            std::slice::from_ref(&arm),
+            rest,
+            refutation_count(pattern) > 1,
+            leaf,
+        )
+    }
+
+    /// Lowers a headed match after splitting off a `| _ =>` catch-all: with no
+    /// catch-all it is the plain full-enumeration matrix; with one the arms plus
+    /// the (already-`leaf`-lowered) catch-all become a defaulted matrix, shared
+    /// through a thunk when a nested arm would emit the default at more than one
+    /// dispatch point.
+    pub(super) fn compile_matrix_headed(
+        &self,
+        head: curios_core::Term,
+        motive: &Option<Motive>,
+        arms: &[MatrixArm],
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        let (arms, default_body) = split_catch_all(arms)?;
+        match default_body {
+            None => MatchCompiler::new(self.lowerer).compile_matrix(head, motive, arms, leaf),
+            Some(body) => {
+                let default = leaf(&MatchCompiler::new(self.lowerer), body)?;
+                self.lower_defaulted_matrix(head, motive, arms, default, !arms_all_flat(arms), leaf)
+            }
+        }
+    }
+
+    /// Compiles `arms` against `head` with `default` as the uncovered-case
+    /// fallthrough. When `share`, `default` is bound once as a nullary by-name
+    /// thunk `k = () => default` and every fallthrough site calls `k()` — no
+    /// duplication, and (by-name) `default`'s effects run only if a branch
+    /// reaches it. Otherwise the default is emitted directly (a single site).
+    fn lower_defaulted_matrix(
+        &self,
+        head: curios_core::Term,
+        motive: &Option<Motive>,
+        arms: &[MatrixArm],
+        default: curios_core::Term,
+        share: bool,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        if !share {
+            return MatchCompiler::with_default(self.lowerer, Some(default))
+                .compile_matrix(head, motive, arms, leaf);
+        }
+        let k = self.context.fresh_binder();
+        let call = curios_core::Term::apply(
+            curios_core::Term::var(curios_core::Var::free(k.clone())),
+            Vec::<curios_core::Term>::new(),
+        );
+        let matrix = MatchCompiler::with_default(self.lowerer, Some(call))
+            .compile_matrix(head, motive, arms, leaf)?;
+        let thunk = curios_core::Term::func(Vec::<(String, curios_core::Term)>::new(), default);
+        let hole = curios_core::Term::metavar(self.context.fresh_metavar());
+        Ok(curios_core::Term::let_(k, hole, thunk, matrix))
     }
 
     /// Splits an optional match motive into its `(label, body)` for the core
@@ -263,7 +382,19 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }) = motive
         else {
             let (label, body) = self.motive_parts(motive)?;
-            return Ok(curios_core::Term::inductive_match(head, label, body, cases));
+            // A `| _ =>` catch-all (or bind-arm fallthrough) becomes the core
+            // match's default; otherwise the arms enumerate every constructor
+            // (core's Rung-C vacuity covers any pruned tag).
+            return Ok(match &self.default {
+                Some(default) => curios_core::Term::inductive_match_default(
+                    head,
+                    label,
+                    body,
+                    cases,
+                    default.clone(),
+                ),
+                None => curios_core::Term::inductive_match(head, label, body, cases),
+            });
         };
 
         // Resolve the annotation's inductive name exactly like a term reference.
@@ -635,13 +766,27 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             }
         }
 
-        if false_rows.is_empty() || true_rows.is_empty() {
+        // With a fallthrough default, a missing group's arm is the default
+        // (see [`Self::default`]); without one, both shapes are still required.
+        if (false_rows.is_empty() || true_rows.is_empty()) && self.default.is_none() {
             return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Bln" });
         }
 
         let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
-        let false_case = self.compile(rest.clone(), false_rows, None, leaf)?;
-        let true_case = self.compile(rest, true_rows, None, leaf)?;
+        let false_case = match false_rows.is_empty() {
+            true => self
+                .default
+                .clone()
+                .expect("default present when a group is missing"),
+            false => self.compile(rest.clone(), false_rows, None, leaf)?,
+        };
+        let true_case = match true_rows.is_empty() {
+            true => self
+                .default
+                .clone()
+                .expect("default present when a group is missing"),
+            false => self.compile(rest, true_rows, None, leaf)?,
+        };
 
         Ok(curios_core::Term::bln_match(
             scrutinee,
@@ -702,14 +847,30 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             }
         }
 
-        if zero_rows.is_empty() || succ_rows.is_empty() {
+        if (zero_rows.is_empty() || succ_rows.is_empty()) && self.default.is_none() {
             return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Nat" });
         }
 
         let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
-        let zero_case = self.compile(rest.clone(), zero_rows, None, leaf)?;
+        let zero_case = match zero_rows.is_empty() {
+            true => self
+                .default
+                .clone()
+                .expect("default present when a group is missing"),
+            false => self.compile(rest.clone(), zero_rows, None, leaf)?,
+        };
 
-        let (pred_label, ih_label, succ_case) = if succ_rows.len() == 1 {
+        let (pred_label, ih_label, succ_case) = if succ_rows.is_empty() {
+            // The default fills the successor arm; its binders go unused, so
+            // fresh placeholders satisfy the core node's fixed shape.
+            (
+                self.context.fresh_binder(),
+                self.context.fresh_binder(),
+                self.default
+                    .clone()
+                    .expect("default present when a group is missing"),
+            )
+        } else if succ_rows.len() == 1 {
             let (pred_name, ih_name, row) = succ_rows.pop().unwrap();
             let pred_bound = self.pattern_binder_name(&pred_name);
             let ih_bound = self.pattern_binder_name(&ih_name);
@@ -787,14 +948,30 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             }
         }
 
-        if nil_rows.is_empty() || cons_rows.is_empty() {
+        if (nil_rows.is_empty() || cons_rows.is_empty()) && self.default.is_none() {
             return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Lst" });
         }
 
         let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
-        let empty_case = self.compile(rest.clone(), nil_rows, None, leaf)?;
+        let empty_case = match nil_rows.is_empty() {
+            true => self
+                .default
+                .clone()
+                .expect("default present when a group is missing"),
+            false => self.compile(rest.clone(), nil_rows, None, leaf)?,
+        };
 
-        let (head_label, tail_label, ih_label, cons_case) = if cons_rows.len() == 1 {
+        let (head_label, tail_label, ih_label, cons_case) = if cons_rows.is_empty() {
+            // The default fills the cons arm; its binders go unused.
+            (
+                self.context.fresh_binder(),
+                self.context.fresh_binder(),
+                self.context.fresh_binder(),
+                self.default
+                    .clone()
+                    .expect("default present when a group is missing"),
+            )
+        } else if cons_rows.len() == 1 {
             let (head_name, tail_name, ih_name, row) = cons_rows.pop().unwrap();
             let head_bound = self.pattern_binder_name(&head_name);
             let tail_bound = self.pattern_binder_name(&tail_name);
@@ -878,14 +1055,30 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             }
         }
 
-        if end_rows.is_empty() || byte_rows.is_empty() {
+        if (end_rows.is_empty() || byte_rows.is_empty()) && self.default.is_none() {
             return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Bin" });
         }
 
         let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
-        let empty_case = self.compile(rest.clone(), end_rows, None, leaf)?;
+        let empty_case = match end_rows.is_empty() {
+            true => self
+                .default
+                .clone()
+                .expect("default present when a group is missing"),
+            false => self.compile(rest.clone(), end_rows, None, leaf)?,
+        };
 
-        let (head_label, tail_label, ih_label, cons_case) = if byte_rows.len() == 1 {
+        let (head_label, tail_label, ih_label, cons_case) = if byte_rows.is_empty() {
+            // The default fills the byte arm; its binders go unused.
+            (
+                self.context.fresh_binder(),
+                self.context.fresh_binder(),
+                self.context.fresh_binder(),
+                self.default
+                    .clone()
+                    .expect("default present when a group is missing"),
+            )
+        } else if byte_rows.len() == 1 {
             let (head_name, tail_name, ih_name, row) = byte_rows.pop().unwrap();
             let head_bound = self.pattern_binder_name(&head_name);
             let tail_bound = self.pattern_binder_name(&tail_name);
@@ -1020,6 +1213,64 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 curios_core::Term::let_(self.pattern_binder_name(&name), hole, value, tail)
             }))
     }
+}
+
+/// How many distinct dispatch points a bind pattern is refutable at — one per
+/// constructor/carrier shape it constrains, summed across nested arguments.
+/// Drives fallthrough-sharing: >1 point means the rest-of-ladder would be
+/// emitted at more than one core default site, so it is shared through a thunk
+/// rather than duplicated. Irrefutable binders and exhaustive tuple/struct
+/// shells contribute none of their own.
+fn refutation_count(pattern: &MatchPattern) -> usize {
+    match pattern {
+        MatchPattern::Binder(_) => 0,
+        MatchPattern::Ctor { args, .. } => 1 + args.iter().map(refutation_count).sum::<usize>(),
+        MatchPattern::Tuple(fields) | MatchPattern::Struct { fields, .. } => {
+            fields.iter().map(|f| refutation_count(&f.value)).sum()
+        }
+        MatchPattern::Bln(_)
+        | MatchPattern::Nat(_)
+        | MatchPattern::Lst(_)
+        | MatchPattern::Bin(_) => 1,
+    }
+}
+
+/// Splits a headed match's arms into its concrete arms and an optional
+/// `| _ =>` catch-all body. A final top-level bare `_` among constructor arms is
+/// the catch-all (its body becomes the core match's default). A *named* final
+/// binder in that position is a mistake ([`Error::MatchNamedCatchAll`]). A lone
+/// `_` with no concrete arms is not a catch-all — it stays the all-binder
+/// retirement path (a `let`) — and neither is a `_` after non-constructor
+/// (tuple/struct) arms, which project exhaustively and need no default.
+fn split_catch_all(arms: &[MatrixArm]) -> Result<(&[MatrixArm], Option<&Term>), Error> {
+    match arms.split_last() {
+        Some((last, init))
+            if !init.is_empty()
+                && init
+                    .iter()
+                    .all(|arm| matches!(arm.pattern, MatchPattern::Ctor { .. })) =>
+        {
+            match &last.pattern {
+                MatchPattern::Binder(name) if name == "_" => Ok((init, Some(&last.body))),
+                MatchPattern::Binder(_) => Err(Error::MatchNamedCatchAll),
+                _ => Ok((arms, None)),
+            }
+        }
+        _ => Ok((arms, None)),
+    }
+}
+
+/// Whether every constructor arm is *flat* — each argument a plain binder, no
+/// nested shape. A flat set emits the catch-all default at exactly one dispatch
+/// point (the head), so it needs no thunk; any nesting propagates the default
+/// into a payload sub-match, a second site worth sharing.
+fn arms_all_flat(arms: &[MatrixArm]) -> bool {
+    arms.iter().all(|arm| match &arm.pattern {
+        MatchPattern::Ctor { args, .. } => {
+            args.iter().all(|p| matches!(p, MatchPattern::Binder(_)))
+        }
+        _ => true,
+    })
 }
 
 impl<'l, 'a, 'b> std::ops::Deref for MatchCompiler<'l, 'a, 'b> {

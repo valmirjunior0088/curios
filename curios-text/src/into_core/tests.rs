@@ -1220,6 +1220,39 @@ fn headless_cond_ladder_lowers_to_nested_bln_matches() {
 }
 
 #[test]
+fn bind_arm_bare_binder_is_rejected() {
+    // `| x = n =>` binds irrefutably — always fires, so the rest of the ladder
+    // is dead. Rejected in favor of a `let`.
+    let error = run_err("match | x = n => x | _ => 0 end");
+    assert!(
+        error.contains("refutable") && error.contains("let"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn named_catch_all_is_rejected() {
+    // A named final arm among concrete constructor arms is not a catch-all.
+    let error = run_err("match m | some(x) => x | rest => 0 end");
+    assert!(
+        error.contains("named final arm") && error.contains("_"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn nested_underscore_mixed_with_concrete_stays_inconsistent_shape() {
+    // A `_` *nested* inside a constructor payload (not a final top-level arm)
+    // still mixes a binder with a concrete shape in the same column — the
+    // pre-existing full-enumeration boundary, not a catch-all.
+    let error = run_err("match m | some(some(x)) => x | some(_) => 0 | none() => 1 end");
+    assert!(
+        error.contains("disagree on shape"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
 fn bang_in_a_type_is_rejected() {
     // Types have no region to hoist an action to, so a `!` in an annotation is
     // rejected during desugaring.
