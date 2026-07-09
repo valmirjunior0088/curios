@@ -95,6 +95,8 @@ fn instructions_on_failure(archive_path: &Path, cause: &str) -> ! {
 }
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let source_dir = out_dir.join(format!("binaryen-{VERSION}"));
 
