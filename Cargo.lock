@@ -436,7 +436,7 @@ dependencies = [
 
 [[package]]
 name = "curios"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "clap",
  "curios-abi",
@@ -455,11 +455,11 @@ dependencies = [
 
 [[package]]
 name = "curios-abi"
-version = "0.3.2"
+version = "0.3.3"
 
 [[package]]
 name = "curios-base"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "num-bigint",
  "num-traits",
@@ -467,7 +467,7 @@ dependencies = [
 
 [[package]]
 name = "curios-binaryen"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "cmake",
  "flate2",
@@ -478,7 +478,7 @@ dependencies = [
 
 [[package]]
 name = "curios-cont"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "curios-abi",
  "curios-base",
@@ -487,7 +487,7 @@ dependencies = [
 
 [[package]]
 name = "curios-core"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "curios-abi",
  "curios-base",
@@ -499,7 +499,7 @@ dependencies = [
 
 [[package]]
 name = "curios-ersd"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "curios-abi",
  "curios-base",
@@ -510,7 +510,7 @@ dependencies = [
 
 [[package]]
 name = "curios-js"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "curios-abi",
  "curios-cont",
@@ -523,7 +523,7 @@ dependencies = [
 
 [[package]]
 name = "curios-pipeline"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "curios-abi",
  "curios-cont",
@@ -535,7 +535,7 @@ dependencies = [
 
 [[package]]
 name = "curios-rt"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "curios-abi",
  "getrandom 0.4.3",
@@ -550,7 +550,7 @@ dependencies = [
 
 [[package]]
 name = "curios-text"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "curios-abi",
  "curios-base",
@@ -561,7 +561,7 @@ dependencies = [
 
 [[package]]
 name = "curios-wasm"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "curios-base",
 ]
