@@ -2,17 +2,15 @@
 //! compiler's `$bytes` heap type — the flat payload every `Bin` crosses the
 //! host boundary as. JS cannot touch wasm-GC arrays directly, so the harness
 //! instantiates this module and reads/builds byte strings through its
-//! exports. It declares [`curios_cont::bytes_sub_type`] verbatim — wasm-GC
-//! canonicalizes structural types, so the refs it produces and consumes are
-//! interchangeable with a compiled program's, no matter that the two modules
-//! were instantiated separately.
+//! exports. It declares the compiler's `array (mut i8)` payload shape locally
+//! — wasm-GC canonicalizes structural types, so the refs it produces and
+//! consumes are interchangeable with a compiled program's, no matter that the
+//! two modules were instantiated separately.
 
-use {
-    curios_wasm::{
-        CompType, Export, Expr, Func, FuncName, FuncType, HeapType, Instr, LocalName, Module,
-        NumType, RefType, ResultType, SubType, TypeName, ValType,
-    },
-    wasm_bindgen::prelude::*,
+use curios_wasm::{
+    ArrayType, CompType, Export, Expr, FieldType, Func, FuncName, FuncType, HeapType, Instr,
+    LocalName, Module, Mutability, NumType, PackedType, RefType, ResultType, StorageType, SubType,
+    TypeName, ValType,
 };
 
 /// One accessor's name, parameters, outputs, and array op.
@@ -23,15 +21,29 @@ type Accessor = (
     Instr,
 );
 
+/// The compiler's `$bytes` host-boundary shape: `array (mut i8)`.
+pub(crate) fn bytes_sub_type() -> SubType {
+    SubType {
+        is_final: true,
+        super_types: vec![],
+        comp_type: CompType::Array(ArrayType {
+            field_type: FieldType {
+                storage_type: StorageType::Packed(PackedType::I8),
+                mutability: Mutability::Var,
+            },
+        }),
+    }
+}
+
 /// The bridge as a `curios_wasm::Module`: the canonical `bytes` type plus the
 /// four accessor exports (`bin_len`, `bin_get`, `bin_new`, `bin_set`). Each
 /// accessor body is its parameters' `local.get`s followed by one array op.
-fn bridge_module() -> Module {
+pub(crate) fn bridge_module() -> Module {
     let mut module = Module::new("bridge");
 
     let bin = TypeName::from("bytes");
 
-    module.add_type(bin.clone(), curios_cont::bytes_sub_type());
+    module.add_type(bin.clone(), bytes_sub_type());
 
     let bin_ref = ValType::Ref(RefType {
         is_nullable: false,
@@ -120,62 +132,6 @@ fn bridge_module() -> Module {
 }
 
 /// The encoded bridge, ready for `WebAssembly.instantiate`.
-#[wasm_bindgen]
-pub fn bridge_bytes() -> Vec<u8> {
+pub(crate) fn bridge_bytes() -> Vec<u8> {
     curios_wasm::to_bytes(&bridge_module())
-}
-
-#[cfg(test)]
-mod tests {
-    use curios_wasm::{CompType, Export, SubType, TypeName};
-
-    fn func_arity(sub_type: &SubType) -> (usize, usize) {
-        match &sub_type.comp_type {
-            CompType::Func(func_type) => (func_type.inputs().len(), func_type.outputs().len()),
-            comp_type => panic!("expected a func type, got {comp_type:?}"),
-        }
-    }
-
-    /// The bridge's `bytes` declaration is the compiler's, verbatim — the premise
-    /// of the whole canonicalization scheme.
-    #[test]
-    fn bytes_type_is_the_compilers() {
-        assert_eq!(
-            super::bridge_module().get_type(&TypeName::from("bytes")),
-            Some(&curios_cont::bytes_sub_type())
-        );
-    }
-
-    #[test]
-    fn accessors_are_exported_with_their_shapes() {
-        let module = super::bridge_module();
-
-        for (name, inputs, outputs) in [
-            ("bin_len", 1, 1),
-            ("bin_get", 2, 1),
-            ("bin_new", 1, 1),
-            ("bin_set", 3, 0),
-        ] {
-            let export = module
-                .exports()
-                .iter()
-                .find(|(export_name, _)| export_name == name);
-
-            assert!(
-                matches!(export, Some((_, Export::Func(_)))),
-                "missing func export {name}"
-            );
-
-            let sub_type = module
-                .get_type(&TypeName::from(name))
-                .unwrap_or_else(|| panic!("missing type {name}"));
-
-            assert_eq!(func_arity(sub_type), (inputs, outputs), "{name}");
-        }
-    }
-
-    #[test]
-    fn bridge_bytes_encode_a_wasm_module() {
-        assert_eq!(&super::bridge_bytes()[..4], b"\0asm");
-    }
 }

@@ -131,7 +131,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Module system
   - [x] Private-item-in-public-interface check (signature-only; hidden `struct` fields exempt)
 - [x] Browser playground
-  - [x] Run harness owned by `curios-js` (`run`/`bridge_bytes`/`abi`, derived from `curios-abi`/`curios-cont`)
+  - [x] Run harness owned by `curios-js` (`compile`/`run`, with wire codes from `curios-abi` and a local bridge for the compiler's `Bin` payload shape)
 - [ ] Developer tooling
   - [ ] Code formatter
   - [ ] Terminal REPL

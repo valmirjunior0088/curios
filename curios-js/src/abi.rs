@@ -8,7 +8,7 @@ use {
     crate::set,
     curios_abi::{status, stdio},
     js_sys::Object,
-    wasm_bindgen::prelude::*,
+    wasm_bindgen::JsValue,
 };
 
 fn constants(entries: &[(&str, u32)]) -> Object {
@@ -22,8 +22,7 @@ fn constants(entries: &[(&str, u32)]) -> Object {
 }
 
 /// The numeric wire codes as a JS object: the `status`/`stdio` code tables.
-#[wasm_bindgen]
-pub fn abi() -> Object {
+pub(crate) fn abi() -> Object {
     let object = Object::new();
     set(
         &object,

@@ -14,9 +14,12 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 curios-abi = { workspace = true }
-curios-cont = { workspace = true }
 curios-text = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-wasm = { workspace = true }
 wasm-bindgen = { version = "0.2.126" }
 js-sys = { version = "0.3.103" }
+
+[dev-dependencies]
+curios-rt = { workspace = true }
+wasmtime = { workspace = true, features = ["cranelift"] }

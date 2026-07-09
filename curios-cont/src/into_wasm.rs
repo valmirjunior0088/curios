@@ -20,7 +20,7 @@ mod rope_emitter;
 use rope_emitter::*;
 
 mod types;
-pub use types::*;
+use types::*;
 
 use curios_wasm::Module;
 

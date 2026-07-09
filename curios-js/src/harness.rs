@@ -2,11 +2,11 @@
 //! the program, satisfying the host imports, catching the exit signal —
 //! lives in `js/harness.js` (shipped as a wasm-bindgen snippet); this module
 //! assembles its `config` from the same `curios-abi`-derived code tables
-//! `abi()` exposes, so a playground calling `run` never spells a wire code
-//! itself.
+//! as the native runtime, so a playground calling `run` never spells a wire
+//! code itself.
 
 use {
-    crate::{abi::abi, bridge::bridge_bytes, set},
+    crate::{abi, bridge_bytes, set},
     js_sys::{Object, Promise, Uint8Array},
     wasm_bindgen::prelude::*,
 };

@@ -445,7 +445,6 @@ dependencies = [
  "curios-cont",
  "curios-core",
  "curios-ersd",
- "curios-js",
  "curios-pipeline",
  "curios-rt",
  "curios-text",
@@ -513,12 +512,13 @@ name = "curios-js"
 version = "0.3.4"
 dependencies = [
  "curios-abi",
- "curios-cont",
  "curios-pipeline",
+ "curios-rt",
  "curios-text",
  "curios-wasm",
  "js-sys",
  "wasm-bindgen",
+ "wasmtime",
 ]
 
 [[package]]

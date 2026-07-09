@@ -1,22 +1,23 @@
 //! The Curios ↔ JavaScript boundary, for a browser build (`cargo build` +
 //! `wasm-bindgen-cli --target web` — no `wasm-pack`, see AGENTS.md's
 //! Gotchas): a wasm-bindgen export of the pure compile
-//! pipeline ([`compile`]) plus the browser run harness —
-//! [`run`] executes a compiled program against a JS host, and its building
-//! blocks ([`bridge_bytes`], [`abi`]) are exported for playgrounds that wire
-//! the harness themselves. The harness spells the wire names (`sys`/`ffi`
-//! namespaces, `sys.io_*` keys, the entry export) directly, like any
-//! embedder; the numeric status/stdio codes it answers with derive from
-//! `curios-abi`, the same source the compiler and runtime cite.
+//! pipeline ([`compile`]) plus the browser run harness ([`run`]). The harness
+//! spells the wire names (`sys`/`ffi` namespaces, `sys.io_*` keys, the entry
+//! export) directly, like any embedder; the numeric status/stdio codes it
+//! answers with derive from `curios-abi`, the same source the compiler and
+//! runtime cite.
 
 mod abi;
-pub use abi::*;
+use abi::*;
 
 mod bridge;
-pub use bridge::*;
+use bridge::*;
 
 mod harness;
-pub use harness::*;
+pub use harness::run;
+
+#[cfg(test)]
+mod tests;
 
 use {
     curios_pipeline::compile_entrypoint,

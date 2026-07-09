@@ -2,8 +2,8 @@
 //! representations (`Flt`, `Bin`, `Lst`, `Cell`) whose structure is
 //! program-independent, unlike the per-program families (`tpl/N`, closures,
 //! environments, `func/N`) the emitter derives from the module. Kept in one
-//! file, exported at the crate root, so each shape has a single spelling —
-//! curios-js's bridge builder declares [`bytes_sub_type`] verbatim: wasm-GC
+//! file so the emitter has one spelling for each shape. curios-js's bridge
+//! builder declares its own structurally identical `$bytes` type: wasm-GC
 //! canonicalizes structural types, so any module declaring the exact shape
 //! can exchange byte-payload refs with a compiled program. curios-rt's
 //! `host_func_type` mirrors `$bytes` and `$elems` in wasmtime's type
@@ -65,7 +65,7 @@ pub(crate) fn flt_sub_type(special_field: FieldName) -> SubType {
 
 /// `$bytes` — a `Bin` rope's flat byte payload, and the host-boundary shape:
 /// `array (mut i8)`.
-pub fn bytes_sub_type() -> SubType {
+pub(crate) fn bytes_sub_type() -> SubType {
     SubType {
         is_final: true,
         super_types: vec![],
