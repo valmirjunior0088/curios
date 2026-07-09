@@ -81,13 +81,13 @@ jobs:
         run: wasm-bindgen --target web --out-dir curios-js/dist target/wasm32-unknown-unknown/release/curios_js.wasm
 
       - name: Archive package
-        run: tar -czf curios-wasm.tar.gz -C curios-js/dist .
+        run: tar -czf curios-js.tar.gz -C curios-js/dist .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: curios-wasm
-          path: curios-wasm.tar.gz
+          name: curios-js
+          path: curios-js.tar.gz
 
   build-docs:
     name: Build docs
@@ -142,7 +142,7 @@ jobs:
           mv artifacts/curios-linux-x86_64/curios curios-linux-x86_64
           mv artifacts/curios-linux-aarch64/curios curios-linux-aarch64
           mv artifacts/curios-macos-aarch64/curios curios-macos-aarch64
-          mv artifacts/curios-wasm/curios-wasm.tar.gz curios-wasm.tar.gz
+          mv artifacts/curios-js/curios-js.tar.gz curios-js.tar.gz
           mv artifacts/curios-docs/curios-docs.tar.gz curios-docs.tar.gz
 
       - name: Create release
@@ -155,5 +155,5 @@ jobs:
             curios-linux-x86_64 \
             curios-linux-aarch64 \
             curios-macos-aarch64 \
-            curios-wasm.tar.gz \
+            curios-js.tar.gz \
             curios-docs.tar.gz
