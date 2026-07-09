@@ -5,8 +5,8 @@ use {
         TopUse, TupleType, TupleTypeParam, UseGroup,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status, stdio},
-    curios_base::{Plicity, Qualifier},
-    std::sync::Arc,
+    curios_base::{Plicity, Qualifier, Source},
+    std::{rc::Rc, sync::Arc},
 };
 
 // The `sys` module is the home of every primitive type and operation. It is
@@ -678,19 +678,34 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Proc"], include_str!("../std/Proc.crs")),
 ];
 
+// Parse one embedded module under a synthetic path (`std/Bln.crs` — the file's
+// location within this crate), so spans into it render a `--> path:line` header
+// like any file-backed source instead of an anonymous inline snippet.
+// Well-formedness of the embedded libraries is a compiler invariant, so a parse
+// failure is a `panic!`.
+fn parse_embedded(segments: &[&str], text: &str) -> Module {
+    let source = Rc::new(Source {
+        path: Some(format!("{}.crs", segments.join("/")).into()),
+        text: text.to_string(),
+    });
+
+    Module::parse(&source).unwrap_or_else(|error| {
+        panic!(
+            "embedded module {} is malformed: {}",
+            segments.join("/"),
+            error.format()
+        )
+    })
+}
+
 thread_local! {
     // Parse every embedded `std` module once per thread; `load` then hands out
-    // clones. `std` being well-formed is a compiler invariant, so a parse failure
-    // is a `panic!`. Discovery loads the full `std` manifest (and its leaves) on
+    // clones. Discovery loads the full `std` manifest (and its leaves) on
     // every compile, so without this each compile re-parses all of `std`. `Module`
     // is not `Sync`, so this is thread-local rather than a `static` (§ loader cache).
     static STD_MODULES: Vec<Module> = STD
         .iter()
-        .map(|(segments, source)| {
-            source.parse::<Module>().unwrap_or_else(|error| {
-                panic!("embedded std module {} is malformed: {error:?}", segments.join("/"))
-            })
-        })
+        .map(|(segments, source)| parse_embedded(segments, source))
         .collect();
 }
 
@@ -712,11 +727,7 @@ thread_local! {
     // Mirrors `STD_MODULES` (§ loader cache).
     static SYN_MODULES: Vec<Module> = SYN
         .iter()
-        .map(|(segments, source)| {
-            source.parse::<Module>().unwrap_or_else(|error| {
-                panic!("embedded syn module {} is malformed: {error:?}", segments.join("/"))
-            })
-        })
+        .map(|(segments, source)| parse_embedded(segments, source))
         .collect();
 }
 

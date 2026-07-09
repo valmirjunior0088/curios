@@ -260,7 +260,7 @@ pub struct Module {
 }
 
 impl Module {
-    fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
+    pub(crate) fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
         run_parser(
             parse_whitespace()
                 .and_keep(many0(parse_top_item))
