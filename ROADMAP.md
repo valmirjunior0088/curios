@@ -124,7 +124,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 
 ## Tooling & Ecosystem
 
-- [x] CLI (`run`, `check`, `compile` subcommands — `compile` bundles a native executable: launcher + appended `.cwasm`)
+- [x] CLI (`run` and `compile` subcommands — `compile` bundles a native executable: launcher + appended `.cwasm`)
 - [x] Standard library canonicalization
 - [x] CI pipeline (fmt/check/clippy/test)
 - [x] Multi-platform release automation (Linux x86_64/aarch64, macOS aarch64 native binaries + wasm playground bundle, via tag-triggered GitHub Releases)
@@ -136,7 +136,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
   - [ ] Code formatter
   - [ ] Terminal REPL
   - [ ] Language server (hover, go-to-definition, highlighting)
-  - [ ] Package manager (needs the orphan rule under Type System first)
+  - [ ] Package manager
   - [ ] Project manifest & discovery
   - [ ] `curios new` scaffolding
   - [ ] Linter

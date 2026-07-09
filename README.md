@@ -15,7 +15,7 @@ Curios is a small language with a full dependent type system: types can depend o
 - **Indexed inductive types** — declare your own data and proof families with index telescopes and per-constructor targets.
 - **Type erasure** — implicit/erased arguments (marked `@`) and zero-cost newtypes carry type-level information that vanishes at runtime.
 - **Compiles to WebAssembly** — a real lowering pipeline (parse → elaborate/typecheck → erase → CPS → optimize → emit), not an interpreter.
-- **A practical standard library** — numbers (including `BigNat`), strings, lists, vectors, options/results, plus IO, files, TCP, HTTP, tasks, time, and JSON.
+- **A practical standard library** — numbers (including `BigNat`), strings, lists, vectors, maps, options/results, typed formatting, IO, files, TCP, HTTP, tasks, time, and JSON.
 
 ## A taste
 
@@ -89,7 +89,7 @@ cargo run --package curios --release -- run hello.crs
 
 ## Using the CLI
 
-The `curios` binary exposes three subcommands:
+The `curios` binary exposes two subcommands:
 
 | Command                              | What it does                                                                         |
 | -------------------------------------- | ------------------------------------------------------------------------------------ |
@@ -102,7 +102,7 @@ Two global flags are useful while exploring:
 - `--timeout MILLIS` bounds the type-checker's reduction time (default `1000`).
 
 ```sh
-cargo run --package curios --release -- check hello.crs --print=core
+cargo run --package curios --release -- --print=core run hello.crs
 cargo run --package curios --release -- compile hello.crs -o hello
 ./hello
 ```
