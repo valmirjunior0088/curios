@@ -1,8 +1,0 @@
-# Elaborating the proof-carrying `/syn/Str` standard-library module (the UTF-8
-# `Utf8` relation, `check`, `concat_closed`/`seq`) recurses deeper than the old
-# `Str` primitive did, and a string literal's `Utf8` derivation is an O(length)
-# `more`-spine. The compiler runs on the process main thread (an 8 MB stack on
-# Linux), which is ample, but `cargo test` runs each test on a 2 MB libtest
-# thread. Raise the per-thread floor so the test threads match the main thread.
-[env]
-RUST_MIN_STACK = "16777216"
