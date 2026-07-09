@@ -1,4 +1,4 @@
-use /std/{Nat, Bin};
+use /std/{Nat, Bin, Bln};
 
 pub induct Class : Type
 | ascii()
@@ -7,27 +7,18 @@ pub induct Class : Type
 end
 
 pub let classify(c : Nat) -> Class =
-    match Nat/in_range(c, 0x00, 0x7F)
-    | true => Class/ascii()
-    | false =>
-        match Nat/in_range(c, 0xC2, 0xDF)
-        | true => Class/lead(1, 0x80, 0xBF, c - 0xC0)
-        | false =>
-            match Nat/in_range(c, 0xE0, 0xEF)
-            | true =>
-                let lo = match c == 0xE0 | true => 0xA0 | false => 0x80 end;
-                let hi = match c == 0xED | true => 0x9F | false => 0xBF end;
-                Class/lead(2, lo, hi, c - 0xE0)
-            | false =>
-                match Nat/in_range(c, 0xF0, 0xF4)
-                | true =>
-                    let lo = match c == 0xF0 | true => 0x90 | false => 0x80 end;
-                    let hi = match c == 0xF4 | true => 0x8F | false => 0xBF end;
-                    Class/lead(3, lo, hi, c - 0xF0)
-                | false => Class/bad()
-                end
-            end
-        end
+    match
+    | Nat/in_range(c, 0x00, 0x7F) => Class/ascii()
+    | Nat/in_range(c, 0xC2, 0xDF) => Class/lead(1, 0x80, 0xBF, c - 0xC0)
+    | Nat/in_range(c, 0xE0, 0xEF) =>
+        let lo = match | c == 0xE0 => 0xA0 | _ => 0x80 end;
+        let hi = match | c == 0xED => 0x9F | _ => 0xBF end;
+        Class/lead(2, lo, hi, c - 0xE0)
+    | Nat/in_range(c, 0xF0, 0xF4) =>
+        let lo = match | c == 0xF0 => 0x90 | _ => 0x80 end;
+        let hi = match | c == 0xF4 => 0x8F | _ => 0xBF end;
+        Class/lead(3, lo, hi, c - 0xF0)
+    | _ => Class/bad()
     end;
 
 pub induct Scan : Type
@@ -40,13 +31,10 @@ pub let step(c : Nat, s : Scan) -> Scan =
     match s
     | bad() => Scan/bad()
     | cont(rem, lo, hi) =>
-        match Nat/in_range(c, lo, hi)
-        | false => Scan/bad()
-        | true =>
-            match rem == 1
-            | true => Scan/lead()
-            | false => Scan/cont(rem - 1, 0x80, 0xBF)
-            end
+        match
+        | Bln/not(Nat/in_range(c, lo, hi)) => Scan/bad()
+        | rem == 1 => Scan/lead()
+        | _ => Scan/cont(rem - 1, 0x80, 0xBF)
         end
     | lead() =>
         match classify(c)

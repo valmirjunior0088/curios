@@ -64,6 +64,10 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Function-field sugar in every field list (`name(params) -> T` in tuple types and `struct`/`record` declarations, `name(args) = body` in tuple and struct literals — the forms concept/witness bodies always had) and trailing commas in field lists
 - [x] Struct spread/update syntax (`T { ..base, f = x }` — one leading spread; labeled, declaration-ordered overrides; unwritten fields copied from the base, concept superclass fields included, overridable with `use <term>`; no tuple spread)
 - [x] List/bytestring spread syntax (`[a, ..xs, b]`, `\00\..bytes\01` — positional splices, any position/count, desugared to the n-ary concat prims; `Bin` literals stay whitespace-free with glued atomic operands; no tuple/string spread)
+- [x] Nested/tuple/struct match-arm patterns (the pattern-matrix compiler — full enumeration, no row priority)
+- [x] Headless match (a headless `Bln` condition ladder `match | cond => … | _ => … end` with a mandatory `_` default; arms inherit their condition's definitional refinement)
+- [x] Bind-arms (`| pattern = value =>`, Rust `if let`, in the headless ladder; refutable LHS, nested patterns, fallthrough shared through a nullary thunk)
+- [x] Final `| _ =>` catch-all in headed inductive matches (bare/final/top-level only; lowers to the core `Cases::Inductive` default)
 
 ## Optimizations
 

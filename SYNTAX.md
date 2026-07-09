@@ -126,12 +126,21 @@ match v : (v : Vec(A, k)) => Vec(B, k) ... -- scrutinee-bound motive
 match p : (q : Eq(A, s, t)) => Eq(t, s) ... -- annotated (names the type + its slots)
 ```
 
-**Inductive** (the general form). Each arm is `| pattern => body`, where `pattern` is a constructor applied to (possibly nested) sub-patterns (`tag(x, …)`, `some(some(x))`), a tuple (`(p, q, …)`) or struct (`Name { f, … }`) pattern matched positionally against a tuple/struct-valued scrutinee, or one of the `Bln`/`Nat`/`Lst`/`Bin` literal leaves, nested at any depth. A leaf binds a single name only (`_` to ignore); there is no catch-all (`| x =>` / `| _ =>`) at any depth, so every combination an arm needs to reach must be spelled out, and each shape is handled by at most one arm. Zero arms is legal (for scrutinees no constructor can inhabit):
+**Inductive** (the general form). Each arm is `| pattern => body`, where `pattern` is a constructor applied to (possibly nested) sub-patterns (`tag(x, …)`, `some(some(x))`), a tuple (`(p, q, …)`) or struct (`Name { f, … }`) pattern matched positionally against a tuple/struct-valued scrutinee, or one of the `Bln`/`Nat`/`Lst`/`Bin` literal leaves, nested at any depth. A leaf binds a single name only (`_` to ignore). The concrete arms carry no row priority — each shape is handled by at most one arm — so every combination an arm needs to reach must be spelled out. Zero arms is legal (for scrutinees no constructor can inhabit):
 
 ```
 match m
 | some(a) => f(a)
 | none() => default
+end
+```
+
+**The `_` default.** A single **final, top-level, bare** `| _ =>` arm may follow the concrete constructor arms of an inductive match; it covers every constructor no earlier arm names. Only a bare `_` is a default — a *named* final binder (`| rest =>`) among concrete arms is a mistake, not a catch-all, and is rejected. The default is still forbidden nested inside a payload (that mixes a binder with a concrete shape in one column, which stays an error) and absent from the `Bln` and fold (`Nat`-induction/`Lst`/`Bin`) forms, whose shapes are already exhaustive. A lone `_` with no concrete arms is not a default at all — it is the plain binder form (equivalent to a `let`). The default binds nothing and is checked at the unrefined scrutinee against the motive.
+
+```
+match m
+| some(a) => f(a)
+| _ => default          -- covers none() and any other constructor
 end
 ```
 
@@ -192,6 +201,21 @@ match b
 | \head\..tail; ih => step(head, ih)
 end
 ```
+
+**Headless (condition ladder).** `match` with **no head term** — arms are tried top-to-bottom and the first that fires selects its body, closed by a mandatory `| _ =>` default. Two arm shapes:
+
+- `| cond => body` — a `Bln` **condition**; the arm fires when `cond` is `true`.
+- `| pattern = value => body` — a refutable **bind** (Rust `if let`); the arm fires when `value` matches `pattern`, binding its sub-patterns in `body`. The pattern must be refutable — a bare binder (`| x = v =>`) is always-fires, so it is rejected in favor of a `let`.
+
+```
+match
+| Nat/in_range(c, 0x00, 0x7F) => Class/ascii()
+| some(x) = lookup(k)         => use(x)
+| _                           => Class/bad()
+end
+```
+
+The ladder desugars to nested `Bln` matches (for conditions) and single-row inductive matches with the rest-of-ladder as their default (for binds), so an arm's body inherits the definitional refinement of its condition exactly as the hand-nested `match cond | true => … | false => … end` would — the rewrite keys on the canonicalized condition term, so `Eq/refl()` mints propositional evidence inside an arm. The `_` is mandatory because a ladder enumerates no shapes it could exhaust (a *dispatch* form, like the `Nat` switch, not an *elimination*).
 
 ## Top-level items
 
