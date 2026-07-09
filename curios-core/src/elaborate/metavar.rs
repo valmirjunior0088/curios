@@ -107,6 +107,23 @@ pub(super) fn elaborate_metavar(
         // already born in a checking position, in which case report that type.
         Mode::Infer => match context.metavar_entry(id) {
             Some(entry) => Ok((term.clone(), entry.result.clone())),
+            // A written goal, though, must survive to zonk's report rather
+            // than die here: a fresh *unmarked* metavariable stands in as its
+            // type (unmarked so only the goal itself reports; the report then
+            // shows the stand-in — `?N` — if nothing ever pins it). Birth
+            // mirrors the checking arm, with the stand-in as `result`.
+            None if matches!(metavar.origin, Some(MetavarOrigin::Goal)) => {
+                let result = context.fresh_unmarked_metavar(Term::type_(), term.span());
+                let (telescope, spine) = context.identity_snapshot();
+                context.birth_metavar(id, telescope, result.clone());
+
+                let rebuilt = Term::metavar_birthed(id, metavar.origin.clone(), spine);
+                let rebuilt = match term.span() {
+                    Some(span) => rebuilt.with_span(span),
+                    None => rebuilt,
+                };
+                Ok((rebuilt, result))
+            }
             None => Err(Error::CannotInfer),
         },
     }

@@ -32,7 +32,7 @@ Option/some(x) -- qualified member
 
 ## Types and sorts
 
-`Type` and `Prop` are the two sorts (`Prop` for proof-irrelevant propositions). A hole `?` stands for a term to be inferred (a fresh metavariable); `_` is the wildcard binder and the nat-switch default.
+`Type` and `Prop` are the two sorts (`Prop` for proof-irrelevant propositions). A goal `?` stands for a term the compiler should determine and *report*: the module still elaborates fully, then compilation fails with the goal's local scope (`name : type` per binder), its type (`? : T`), and the solution unification committed (`? = t`, absent when nothing determined it) — a development probe, never a shippable construct. `_` is the wildcard binder and the nat-switch default.
 
 **Function types (Π).** `(p : A, q : B) -> R`. Parameters may be unlabeled (`(A) -> B`) and may be marked implicit with `@` (`(@A : Type, x : A) -> A`). Dependent: later parameters and the result may mention earlier labels.
 

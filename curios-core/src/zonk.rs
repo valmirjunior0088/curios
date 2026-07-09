@@ -4,7 +4,7 @@ mod tests;
 use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
-        InductiveParam, InductiveType, Item, Let, Match, Metavar, MetavarOrigin, Module,
+        InductiveParam, InductiveType, Item, Let, Match, Metavar, MetavarId, MetavarOrigin, Module,
         MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Struct, StructType, Structure, Subterm,
         Term, Tuple, TupleType, Variant,
     },
@@ -129,10 +129,40 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
     })
 }
 
+/// The report a written goal `?` errors out with: the local scope frozen at
+/// its birth, the goal's type, and the solution elaboration committed (if
+/// any) — each zonked for *display*, keeping the raw spelling where unsolved
+/// holes survive (the same tolerance the no-witness report uses).
+fn goal_report(context: &Context, id: MetavarId) -> Error {
+    let display = |term: &Term| zonk_term(context, term).unwrap_or_else(|_| term.clone());
+    match context.metavar_entry(id) {
+        Some(entry) => Error::goal(
+            entry
+                .telescope
+                .iter()
+                .map(|(name, type_)| (Term::free_var(name), display(type_)))
+                .collect(),
+            display(&entry.result),
+            context.metavar_solution(id).map(display),
+        ),
+        // A goal elaboration never reached was never birthed, so there is no
+        // scope or type to report — unreachable in practice, since every kept
+        // item elaborates.
+        None => Error::CannotInfer,
+    }
+}
+
 pub(crate) fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
     // A metavariable node *is* the substitution site: replace it by its solution,
     // recursively zonked (the solution may itself mention solved metavariables).
     if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
+        // A written goal `?` never splices — the whole point of writing it was
+        // the report. Solved or not, error with what elaboration determined:
+        // the frozen scope, the goal's type, and the solution when one landed.
+        if matches!(origin, Some(MetavarOrigin::Goal)) {
+            return Err(goal_report(context, *id).at_opt(term.span()));
+        }
+
         let solution = context.metavar_solution(*id).ok_or_else(|| {
             // An unsolved metavariable the *elaborator* minted (an omitted
             // implicit or witness argument) is reported by the binder it
@@ -155,6 +185,8 @@ pub(crate) fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
                     Error::no_witness(goal, origin.func.clone(), origin.binder.clone())
                 }
                 None => Error::CannotInfer,
+                // Handled by the unconditional report above.
+                Some(MetavarOrigin::Goal) => unreachable!("a goal never reaches the splice path"),
             };
             match term.span() {
                 Some(span) => error.at(span),

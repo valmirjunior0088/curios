@@ -198,6 +198,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Type => curios_core::Term::type_(),
             Subterm::Prop => curios_core::Term::prop(),
             Subterm::Hole => curios_core::Term::metavar(self.context.fresh_metavar()),
+            // A written goal `?`: same fresh metavariable, but marked so zonk
+            // reports what elaboration determined for it instead of splicing.
+            Subterm::Goal => curios_core::Term::goal(self.context.fresh_metavar()),
             // A `/syn` literal (string or list) desugars via the meta-emitter to a
             // `/syn` construction (see `syn_literal`), never a core primitive.
             Subterm::Syn(syn) => self.syn_literal(syn)?,

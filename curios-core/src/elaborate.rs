@@ -28,9 +28,9 @@ mod tests;
 use {
     super::{
         Apply, Bound, Context, Error, Field, Func, FuncType, ImplicitOrigin, InductiveType, Infix,
-        Let, Metavar, MetavarId, Nat, NumLit, ParkedWork, Prim, Proj, Rec, Struct, StructEntry,
-        StructType, Structure, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
-        WitnessOrigin, attempt_witness_goal, check, expect, reduce_with, sort_term,
+        Let, Metavar, MetavarId, MetavarOrigin, Nat, NumLit, ParkedWork, Prim, Proj, Rec, Struct,
+        StructEntry, StructType, Structure, Subterm, Telescope, Term, Tuple, TupleType, Var,
+        Variant, WitnessOrigin, attempt_witness_goal, check, expect, reduce_with, sort_term,
     },
     curios_base::{Flt, Int, NumOp, Plicity},
     num_bigint::BigInt,

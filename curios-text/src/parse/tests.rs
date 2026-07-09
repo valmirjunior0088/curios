@@ -962,17 +962,19 @@ fn at_on_a_binder_type_is_a_parse_error() {
 }
 
 #[test]
-fn parse_hole() {
-    assert_eq!("?".parse::<Term>().unwrap(), Subterm::Hole.into());
+fn parse_goal() {
+    // A written `?` is a goal — reported at zonk — never a silent
+    // `Subterm::Hole`, which only desugars mint.
+    assert_eq!("?".parse::<Term>().unwrap(), Subterm::Goal.into());
 }
 
 #[test]
-fn parse_hole_as_argument() {
+fn parse_goal_as_argument() {
     let term = "id(?)".parse::<Term>().unwrap();
     match term.into_subterm() {
         Subterm::Apply(apply) => {
             assert_eq!(apply.params.len(), 1);
-            assert_eq!(apply.params[0], (Plicity::Explicit, Subterm::Hole.into()));
+            assert_eq!(apply.params[0], (Plicity::Explicit, Subterm::Goal.into()));
         }
         other => panic!("expected apply, got {other:?}"),
     }

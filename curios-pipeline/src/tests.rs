@@ -142,34 +142,49 @@ fn meta_free_prelude_program_compiles_without_overflow() {
 }
 
 #[test]
-fn hole_in_a_type_argument_is_inferred_and_lowers() {
-    // `id ? 5`: the type argument `?` is solved to `Nat` from the value `5`,
-    // synthesizing the whole program end-to-end through to wasm (§14, `id ? x`).
+fn solved_goal_reports_its_solution() {
+    // `id ? 5`: the type argument `?` is solved to `Nat` from the value `5`
+    // (§14, `id ? x`) — but a written goal never compiles: the module still
+    // elaborates fully, then zonk reports what it determined.
     let source = r#"
         let id(A : Type, a : A) -> A = a;
         id(?, 5)
     "#;
 
-    assert!(compile(source, None).is_ok());
+    let error = compile(source, None).unwrap_err();
+
+    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("? : Type"), "unexpected error: {error}");
+    assert!(
+        error.contains("? =") && error.contains("Nat"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]
-fn hole_pinned_through_the_expected_type_is_solved() {
+fn goal_pinned_through_the_expected_type_reports_the_pin() {
     // `id ? true` checked against `/std/Bln`: the turnaround pins the type
-    // argument `?` to `Bln` through the expected type (§14, a type-level pin).
+    // argument `?` to `Bln` through the expected type (§14, a type-level pin),
+    // and the goal report names that solution.
     let source = r#"
         use /std/{Bln};
         let id(A : Type, a : A) -> A = a;
         id(?, true)
     "#;
 
-    assert!(compile(source, Some("/std/Bln")).is_ok());
+    let error = compile(source, Some("/std/Bln")).unwrap_err();
+
+    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(
+        error.contains("? =") && error.contains("Bln"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]
-fn unconstrained_value_hole_cannot_be_inferred() {
-    // `let m : Nat = ? in m`: nothing constrains the value of `?`, so the
-    // metavariable is unsolved at zonk and compilation fails (§14).
+fn unconstrained_goal_reports_undetermined() {
+    // `let m : Nat = ? in m`: nothing constrains the value of `?`, so the goal
+    // report shows its type but no solution (§14).
     let source = r#"
         use /std/{Nat};
         let m : Nat = ?;
@@ -178,7 +193,40 @@ fn unconstrained_value_hole_cannot_be_inferred() {
 
     let error = compile(source, Some("/std/Nat")).unwrap_err();
 
-    assert!(error.contains("cannot"), "unexpected error: {error}");
+    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("? : Nat"), "unexpected error: {error}");
+    // No `? =` clause: nothing determined the goal.
+    assert!(!error.contains("? ="), "unexpected error: {error}");
+}
+
+#[test]
+fn goal_report_includes_the_local_scope() {
+    // The goal sits under `x`'s binder, so the Γ frozen at its birth — just
+    // that binder — appears in the report.
+    let source = r#"
+        use /std/{Nat};
+        let f(x : Nat) -> Nat = ?;
+        f(1)
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("x : Nat"), "unexpected error: {error}");
+}
+
+#[test]
+fn goal_in_synthesis_position_reports_a_meta_type() {
+    // A bare `?` with nothing to check against: a fresh metavariable stands
+    // in as its type, so the goal still reaches zonk's report (instead of
+    // dying with `CannotInfer` during elaboration) and shows the
+    // undetermined stand-in.
+    let error = compile("?", None).unwrap_err();
+
+    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("? : ?"), "unexpected error: {error}");
+    // No `? =` clause: nothing determined the goal.
+    assert!(!error.contains("? ="), "unexpected error: {error}");
 }
 
 #[test]
@@ -1128,9 +1176,9 @@ fn typecheck_accepts_a_well_typed_program() {
 }
 
 #[test]
-fn typecheck_rejects_an_unsolved_hole() {
-    // `zonk` is included in the fast path, so an unconstrained hole is still
-    // caught — type-checking is fully validated even though lowering is skipped.
+fn typecheck_rejects_a_goal() {
+    // `zonk` is included in the fast path, so a written goal is still
+    // reported — type-checking is fully validated even though lowering is skipped.
     let error = typecheck(
         r#"
         use /std/{Nat};
@@ -1140,7 +1188,7 @@ fn typecheck_rejects_an_unsolved_hole() {
     )
     .unwrap_err();
 
-    assert!(error.contains("cannot"), "unexpected error: {error}");
+    assert!(error.contains("goal `?`"), "unexpected error: {error}");
 }
 
 // --- B2: named tuple fields ----------------------------------------------

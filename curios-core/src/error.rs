@@ -327,6 +327,19 @@ pub enum Error {
         func: String,
         binder: String,
     },
+    /// A written goal `?` reaching zonk — reported unconditionally, solved or
+    /// not: writing `?` asks what elaboration determined there, so the report
+    /// *is* the outcome and the program never compiles. Carries the display
+    /// frozen at the goal's birth: the local scope in binding order, the
+    /// goal's type, and the solution unification committed (if any). Each
+    /// scope binder is a free `Var` term (not a raw string) so it runs
+    /// through the same pretty-rename map as the types and solution, and the
+    /// report spells every name consistently.
+    Goal {
+        scope: Vec<(Term, Term)>,
+        goal: Box<Term>,
+        solution: Option<Box<Term>>,
+    },
     /// Two witnesses registered under the same `(concept, key)` — global
     /// coherence admits exactly one witness per key, program-wide.
     DuplicateWitness {
@@ -727,6 +740,14 @@ impl Error {
         }
     }
 
+    pub(crate) fn goal(scope: Vec<(Term, Term)>, goal: Term, solution: Option<Term>) -> Self {
+        Self::Goal {
+            scope,
+            goal: Box::new(goal),
+            solution: solution.map(Box::new),
+        }
+    }
+
     pub(crate) fn duplicate_witness(
         concept: String,
         key: super::WitnessKey,
@@ -936,6 +957,18 @@ impl Error {
             }
             Self::MotiveIndexSlotNotBinder { slot } => out.push(slot),
             Self::NoWitness { goal, .. } => out.push(goal),
+            Self::Goal {
+                scope,
+                goal,
+                solution,
+            } => {
+                for (name, type_) in scope {
+                    out.push(name);
+                    out.push(type_);
+                }
+                out.push(goal);
+                out.extend(solution.as_deref());
+            }
             Self::AmbiguousWitness {
                 goal,
                 first,
@@ -1229,6 +1262,26 @@ impl fmt::Display for Error {
                     f,
                     "no witness of {goal} found\n  needed by '{func}' for its 'use' binder '{binder}'"
                 )
+            }
+            Error::Goal {
+                scope,
+                goal,
+                solution,
+            } => {
+                // `?` itself is the turnstile: hypotheses as `name : type`
+                // lines, then `? : type` states the goal and `? = term` its
+                // solution — the declaration idiom `name : type = value`
+                // split into clauses about `?`. No `? =` line means nothing
+                // determined it.
+                write!(f, "goal `?`")?;
+                for (name, type_) in scope {
+                    write!(f, "\n  {name} : {type_}")?;
+                }
+                write!(f, "\n  ? : {goal}")?;
+                match solution {
+                    Some(solution) => write!(f, "\n  ? = {solution}"),
+                    None => Ok(()),
+                }
             }
             Error::DuplicateWitness {
                 concept,

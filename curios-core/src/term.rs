@@ -104,7 +104,7 @@ impl Term {
         }))
     }
 
-    /// A bare metavariable, as `into_core` mints one for a written hole `?`: empty spine (which resolves as the identity — see [`Metavar::spine`]) and no insertion origin.
+    /// A bare metavariable, as `into_core` mints one for a desugared hole (an omitted annotation, motive, or lambda domain): empty spine (which resolves as the identity — see [`Metavar::spine`]) and no insertion origin, so its solution is spliced silently at zonk.
     pub fn metavar(id: impl Into<MetavarId>) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id: id.into(),
@@ -113,23 +113,19 @@ impl Term {
         }))
     }
 
-    /// A metavariable minted for an omitted implicit or witness argument,
-    /// carrying its insertion provenance (see [`Metavar::origin`]) and its
-    /// birth spine.
-    pub(crate) fn metavar_inserted(
-        id: impl Into<MetavarId>,
-        origin: MetavarOrigin,
-        spine: impl Into<Rc<Vec<Term>>>,
-    ) -> Self {
+    /// A written goal `?`, as `into_core` mints one: a bare metavariable (empty spine, like [`Term::metavar`]) whose [`MetavarOrigin::Goal`] origin makes zonk *report* what elaboration determined for it — scope, type, and solution — instead of splicing silently.
+    pub fn goal(id: impl Into<MetavarId>) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id: id.into(),
-            spine: spine.into(),
-            origin: Some(origin),
+            spine: Rc::new(Vec::new()),
+            origin: Some(MetavarOrigin::Goal),
         }))
     }
 
-    /// A hole rebuilt at its birth point with the identity spine over its
-    /// frozen telescope (see [`Metavar::spine`]).
+    /// A metavariable carrying its (optional) provenance mark and birth spine:
+    /// a hole or goal rebuilt at its birth point with the identity spine over
+    /// its frozen telescope, or an elaborator insertion minted with its
+    /// provenance (see [`Metavar::origin`] and [`Metavar::spine`]).
     pub(crate) fn metavar_birthed(
         id: impl Into<MetavarId>,
         origin: Option<MetavarOrigin>,
@@ -1155,12 +1151,17 @@ pub struct WitnessOrigin {
     pub binder: String,
 }
 
-/// Provenance of an elaborator-minted metavariable — which insertion mechanism
-/// created it, deciding how an unsolved survivor is reported at zonk.
+/// Provenance of a marked metavariable — which mechanism created it, deciding
+/// how zonk reports it: an unsolved `Implicit`/`Witness` survivor names the
+/// binder it filled, while a `Goal` is reported unconditionally.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MetavarOrigin {
     Implicit(ImplicitOrigin),
     Witness(WitnessOrigin),
+    /// A written goal `?` (`into_core` mints it via [`Term::goal`]): the user
+    /// asked what elaboration determines here, so zonk errors with the goal's
+    /// scope, type, and solution — solved or not — instead of splicing.
+    Goal,
 }
 
 /// A metavariable's identity: a dense index into the `Context`'s `MetaStore`,
@@ -1193,12 +1194,14 @@ impl fmt::Display for MetavarId {
 /// solution, when one exists, lives in the `Context`'s `MetaStore`, keyed by
 /// `id`, spelled with the *birth telescope's* free names.
 ///
-/// `origin` rides with the node: `Some` iff the elaborator minted this
-/// metavariable for an omitted implicit argument, in which case zonk's
-/// unsolved-hole report names the binder instead of a bare id. Each id is
-/// minted exactly once (`into_core` holes with `None`, core insertions above
-/// the floor `into_core` returns with `Some`), so every occurrence of an id
-/// carries the same origin and the derived equality never splits an id.
+/// `origin` rides with the node: `Some` iff the metavariable was marked at its
+/// mint — an elaborator-inserted implicit/witness argument (zonk's
+/// unsolved-hole report then names the binder instead of a bare id) or a
+/// written goal `?` (zonk reports it unconditionally). Each id is minted
+/// exactly once (`into_core` desugared holes with `None` and written goals
+/// with `Some(Goal)`, core insertions above the floor `into_core` returns
+/// with `Some`), so every occurrence of an id carries the same origin and the
+/// derived equality never splits an id.
 ///
 /// `spine` is the delayed substitution — one term per binder of the birth
 /// telescope (`MetaEntry::telescope` order), recording what that binder

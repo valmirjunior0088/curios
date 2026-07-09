@@ -679,9 +679,18 @@ pub enum Subterm {
     /// eliminates it before core elaboration; a bang in a type is rejected.
     Bang(Term),
     Name(Name),
-    /// A surface hole `?`: a placeholder elaborated to a fresh metavariable.
+    /// A silent inference hole: a placeholder elaborated to a fresh
+    /// metavariable whose solution zonk splices in without comment. Desugar-only
+    /// — the parser mints [`Subterm::Goal`] for a written `?`; `Hole` stands in
+    /// where a desugar omits a term (an unannotated local `let`'s type).
     /// Carries no payload — its span rides on the wrapping [`Term`].
     Hole,
+    /// A written goal `?`: elaborated to a metavariable like [`Subterm::Hole`],
+    /// but marked so zonk *reports* what elaboration determined for it (scope,
+    /// type, and solution, if any) instead of splicing silently — writing `?`
+    /// always fails compilation with that report. Minted only by the parser;
+    /// carries no payload — its span rides on the wrapping [`Term`].
+    Goal,
     /// A literal whose value is synthesized from `/syn` rather than lowered to a
     /// core primitive (see [`Syn`]). The lowerer runs a meta-emitter on it
     /// instead of `prim()`.

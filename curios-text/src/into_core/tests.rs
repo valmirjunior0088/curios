@@ -1157,17 +1157,19 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
 }
 
 #[test]
-fn hole_lowers_to_metavar() {
-    assert_eq!(run("?"), curios_core::Term::metavar(0));
+fn goal_lowers_to_marked_metavar() {
+    // A written `?` lowers to the same fresh metavariable a desugared hole
+    // does, but marked `MetavarOrigin::Goal` so zonk reports it.
+    assert_eq!(run("?"), curios_core::Term::goal(0));
 }
 
 #[test]
-fn distinct_holes_get_distinct_ids() {
-    // Two holes in one program draw distinct, monotonic ids from the shared counter.
+fn distinct_goals_get_distinct_ids() {
+    // Two goals in one program draw distinct, monotonic ids from the shared counter.
     let term = run("(?, ?)");
     assert_eq!(
         term,
-        curios_core::Term::tuple([curios_core::Term::metavar(0), curios_core::Term::metavar(1)]),
+        curios_core::Term::tuple([curios_core::Term::goal(0), curios_core::Term::goal(1)]),
     );
 }
 

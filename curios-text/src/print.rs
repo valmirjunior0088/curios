@@ -543,7 +543,9 @@ pub(crate) fn print_term(term: Term) -> Printer<'static> {
         Subterm::Prop => pure("Prop"),
         Subterm::Prim(prim) => print_prim(prim),
         Subterm::Name(name) => pure(name.join()),
-        Subterm::Hole => pure("?"),
+        // Both spell `?`: the written/desugared distinction matters to zonk's
+        // reporting, not to how the term reads.
+        Subterm::Hole | Subterm::Goal => pure("?"),
         Subterm::Syn(Syn::Str(content)) => pure(format!(
             "\"{}\"",
             content

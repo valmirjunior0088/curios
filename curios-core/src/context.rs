@@ -898,7 +898,7 @@ impl Context {
         span: Option<Span>,
         origin: ImplicitOrigin,
     ) -> Term {
-        self.fresh_metavar_marked(result, span, MetavarOrigin::Implicit(origin))
+        self.fresh_metavar_with(result, span, Some(MetavarOrigin::Implicit(origin)))
             .1
     }
 
@@ -911,19 +911,26 @@ impl Context {
         span: Option<Span>,
         origin: WitnessOrigin,
     ) -> (MetavarId, Term) {
-        self.fresh_metavar_marked(result, span, MetavarOrigin::Witness(origin))
+        self.fresh_metavar_with(result, span, Some(MetavarOrigin::Witness(origin)))
     }
 
-    fn fresh_metavar_marked(
+    /// Mint an unmarked (silently spliced) metavariable — the stand-in type a
+    /// written goal in synthesis position gets, so the goal survives to zonk's
+    /// report instead of dying with `CannotInfer` (`elaborate_metavar`).
+    pub(crate) fn fresh_unmarked_metavar(&mut self, result: Term, span: Option<Span>) -> Term {
+        self.fresh_metavar_with(result, span, None).1
+    }
+
+    fn fresh_metavar_with(
         &mut self,
         result: Term,
         span: Option<Span>,
-        origin: MetavarOrigin,
+        origin: Option<MetavarOrigin>,
     ) -> (MetavarId, Term) {
         let id = self.next_metavar.fresh();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);
-        let metavar = Term::metavar_inserted(id, origin, spine);
+        let metavar = Term::metavar_birthed(id, origin, spine);
 
         let metavar = match span {
             Some(span) => metavar.with_span(span),

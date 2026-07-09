@@ -113,3 +113,36 @@ fn zonk_rejects_an_unsolved_metavariable() {
 
     assert!(result.is_err());
 }
+
+#[test]
+fn zonk_reports_a_solved_goal() {
+    let mut context = context();
+
+    // A written goal `?` errors even when solved — the report carries the
+    // frozen scope, the goal's type, and the committed solution.
+    context.birth_metavar(MetavarId(0), vec![("x".to_string(), nat())], nat());
+    context.solve_metavar(MetavarId(0), nat_lit(7));
+
+    let error = zonk(&context, &Term::goal(0)).unwrap_err();
+
+    assert!(matches!(
+        &error,
+        Error::Goal { scope, goal, solution: Some(solution) }
+            if **goal == nat() && **solution == nat_lit(7)
+                && *scope == vec![(Term::free_var("x"), nat())]
+    ));
+}
+
+#[test]
+fn zonk_reports_an_unsolved_goal_as_undetermined() {
+    let mut context = context();
+
+    context.birth_metavar(MetavarId(0), Vec::new(), nat());
+
+    let error = zonk(&context, &Term::goal(0)).unwrap_err();
+
+    assert!(matches!(
+        &error,
+        Error::Goal { scope, goal, solution: None } if **goal == nat() && scope.is_empty()
+    ));
+}

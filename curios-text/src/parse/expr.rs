@@ -219,10 +219,12 @@ pub(super) fn with_span<'a>(parser: Parser<'a, Term>) -> Parser<'a, Term> {
     spanned(parser).map(|(span, term)| term.with_span(span))
 }
 
-pub(super) fn parse_hole<'a>() -> Parser<'a, Term> {
+pub(super) fn parse_goal<'a>() -> Parser<'a, Term> {
     // `?` is not an identifier character, so a plain literal suffices — no
     // token-aware matching needed. (`_` remains the match wildcard binder.)
-    catch(parse_literal("?")).map(|()| Subterm::Hole.into())
+    // A written `?` is a *goal* — reported at zonk — never a silent
+    // `Subterm::Hole`, which only desugars mint.
+    catch(parse_literal("?")).map(|()| Subterm::Goal.into())
 }
 
 // Grammar keys for the packrat cache (see `parser::memoize`). Only the
@@ -238,7 +240,7 @@ pub(super) fn parse_atomic_term<'a>() -> Parser<'a, Term> {
 
 pub(super) fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
     with_span(
-        parse_hole()
+        parse_goal()
             .or(parse_struct_lit())
             .or(parse_qualified_name().map(|n| Subterm::Name(n).into()))
             .or(parse_type())
