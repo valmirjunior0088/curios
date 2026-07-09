@@ -338,18 +338,32 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
     }
 }
 
-fn reduce_let(let_: Let) -> Reduce {
-    // Substitute each binding's value into the bindings after it and the tail,
-    // left to right — sound because a `let` is non-recursive, so binding `i`
-    // only mentions bindings `0..i`, which are already resolved.
-    let mut values = Vec::<Term>::with_capacity(let_.bindings.len());
+fn reduce_let(context: &mut Context, let_: Let) -> Reduce {
+    // Bind each value as a fresh definition and continue with the tail opened
+    // over those definitions — an environment step (like `unfold_rec`) rather
+    // than a substitution, so no value is copied into the tail. Left to right:
+    // a `let` is non-recursive, so binding `i` sees only labels `0..i`, which
+    // are already defined; each value is released against just that prefix. The
+    // definitions land in the enclosing context and outlive this call; their
+    // labels are entropy-fresh, so nothing collides.
+    let labels = let_
+        .tail
+        .label_iter()
+        .map(|label| context.fresh(label))
+        .collect::<Vec<_>>();
 
-    for (_, value) in &let_.bindings {
-        let opened = value.release(&values.iter().collect::<Vec<_>>());
-        values.push(opened);
+    let label_terms = labels
+        .iter()
+        .map(Var::free)
+        .map(Term::var)
+        .collect::<Vec<_>>();
+    let label_refs = label_terms.iter().collect::<Vec<_>>();
+
+    for (i, (label, (_, value))) in labels.iter().zip(let_.bindings.iter()).enumerate() {
+        context.define(label, &value.release(&label_refs[..i]));
     }
 
-    Reduce::Continue(let_.tail.open(&values.iter().collect::<Vec<_>>()))
+    Reduce::Continue(let_.tail.open(&label_refs))
 }
 
 fn reduce_var(context: &Context, var: Var) -> Reduce {
@@ -405,7 +419,7 @@ pub(crate) fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceEr
                 Subterm::Apply(apply) => reduce_apply(context, apply)?,
                 Subterm::Proj(proj) => reduce_proj(context, proj)?,
                 Subterm::Func(func) => reduce_func_eta(context, func)?,
-                Subterm::Let(let_) => reduce_let(let_),
+                Subterm::Let(let_) => reduce_let(context, let_),
                 Subterm::Var(var) => reduce_var(context, var),
                 Subterm::Metavar(metavar) => reduce_metavar(context, metavar),
                 // `InductiveType`/`Variant` and `StructType`/`Struct` are primitive
