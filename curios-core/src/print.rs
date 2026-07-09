@@ -207,7 +207,10 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
                     cases.iter().for_each(|(_, body)| collect_labels(body, out));
                     collect_labels(default, out);
                 }
-                Cases::Inductive { cases, .. } => cases.iter().for_each(|(_, s)| scope(out, s)),
+                Cases::Inductive { cases, default, .. } => {
+                    cases.iter().for_each(|(_, s)| scope(out, s));
+                    default.iter().for_each(|d| collect_labels(d, out));
+                }
                 Cases::FreeMonoid { carrier } => match carrier {
                     Carrier::Nat {
                         empty_case,
@@ -966,38 +969,51 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         indent(flat([print_term(default, depth), pure(";")])),
                     ])
                 }
-                Cases::Inductive { cases, .. } => flat(
-                    cases
-                        .into_iter()
-                        .map(|(atom, scope)| {
-                            let labels = scope_labels(scope.label_iter(), depth);
-                            let label_terms = label_terms(&labels);
-                            let label_terms = label_terms.iter().collect::<Vec<_>>();
-                            let body = scope.open(&label_terms);
+                Cases::Inductive { cases, default, .. } => {
+                    let case_printers = flat(
+                        cases
+                            .into_iter()
+                            .map(|(atom, scope)| {
+                                let labels = scope_labels(scope.label_iter(), depth);
+                                let label_terms = label_terms(&labels);
+                                let label_terms = label_terms.iter().collect::<Vec<_>>();
+                                let body = scope.open(&label_terms);
 
-                            let binders = if labels.is_empty() {
-                                pure("")
-                            } else {
-                                pure(format!(
-                                    "({})",
-                                    labels
-                                        .iter()
-                                        .map(|l| display_label(l))
-                                        .collect::<Vec<_>>()
-                                        .join(", ")
-                                ))
-                            };
+                                let binders = if labels.is_empty() {
+                                    pure("")
+                                } else {
+                                    pure(format!(
+                                        "({})",
+                                        labels
+                                            .iter()
+                                            .map(|l| display_label(l))
+                                            .collect::<Vec<_>>()
+                                            .join(", ")
+                                    ))
+                                };
 
-                            flat([
-                                pure("\n| "),
-                                print_atom(atom),
-                                binders,
-                                pure(" =>\n"),
-                                indent(flat([print_term(body, depth + labels.len()), pure(";")])),
-                            ])
-                        })
-                        .collect::<Vec<_>>(),
-                ),
+                                flat([
+                                    pure("\n| "),
+                                    print_atom(atom),
+                                    binders,
+                                    pure(" =>\n"),
+                                    indent(flat([
+                                        print_term(body, depth + labels.len()),
+                                        pure(";"),
+                                    ])),
+                                ])
+                            })
+                            .collect::<Vec<_>>(),
+                    );
+                    match default {
+                        Some(default) => flat([
+                            case_printers,
+                            pure("\n| _ =>\n"),
+                            indent(flat([print_term(default, depth), pure(";")])),
+                        ]),
+                        None => case_printers,
+                    }
+                }
                 Cases::FreeMonoid { carrier } => {
                     // The cons arm mirrors each carrier's own literal delimiters:
                     // `\head\..tail; ih` for `Bin`, `[head, ..tail]; ih` for `Lst`.

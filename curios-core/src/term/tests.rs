@@ -182,6 +182,25 @@ fn inductive_match_case_binders_are_captured() {
 }
 
 #[test]
+fn inductive_match_default_prints_a_catch_all_arm() {
+    // The catch-all renders as a trailing `| _ =>` arm, after the enumerated
+    // constructors — mirroring `Cases::Switch`'s default.
+    let term = Term::inductive_match_default(
+        Term::free_var("r"),
+        None,
+        Term::type_(),
+        [("none", Vec::<&str>::new(), Term::free_var("a"))],
+        Term::free_var("b"),
+    );
+
+    let printed = term.to_string();
+    assert!(
+        printed.contains("| 'none =>") && printed.contains("| _ =>"),
+        "expected an enumerated arm and a catch-all, got:\n{printed}"
+    );
+}
+
+#[test]
 fn inductive_variants_reach_spans_components() {
     assert_eq!(
         Term::inductive_type("Result", [Term::var(Var::bound(2))], Vec::<Term>::new()).reach(),

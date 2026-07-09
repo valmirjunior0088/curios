@@ -202,6 +202,12 @@ pub enum Error {
     LargeElimOfProp {
         name: String,
     },
+    /// An inductive match combined an annotated type-pattern motive
+    /// (`match v : (x : Vec(T, k)) => P`) with a `| _ =>` catch-all default.
+    /// The dependent motive form is elimination-only: its arms refine the
+    /// scrutinee's indices per constructor, which a binding-free default cannot
+    /// participate in. Use a plain motive with the default, or full arms.
+    DefaultWithPatternMotive,
     /// A struct was declared at sort `Prop` but a field is informative (its type
     /// is not itself a proposition). Proof irrelevance would then let projection
     /// observe which inhabitant was built — the singleton-elimination condition,
@@ -559,6 +565,10 @@ impl Error {
 
     pub(crate) fn large_elim_of_prop<N: Into<String>>(name: N) -> Self {
         Self::LargeElimOfProp { name: name.into() }
+    }
+
+    pub(crate) fn default_with_pattern_motive() -> Self {
+        Self::DefaultWithPatternMotive
     }
 
     pub(crate) fn informative_prop_struct<N: Into<String>, F: Into<String>, T: Into<Term>>(
@@ -1065,6 +1075,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "cannot eliminate the proposition '{name}' into a relevant result\n  a strict proposition admits large elimination only when empty or singleton"
+                )
+            }
+            Error::DefaultWithPatternMotive => {
+                write!(
+                    f,
+                    "a `| _ =>` default cannot be combined with an annotated type-pattern motive\n  the dependent motive form is elimination-only; use a plain motive or full arms"
                 )
             }
             Error::InformativePropStruct {

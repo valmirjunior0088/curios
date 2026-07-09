@@ -81,6 +81,44 @@ fn convert_inductive_match_compares_cases_and_motive() {
 }
 
 #[test]
+fn convert_inductive_match_compares_default() {
+    let mut context = context();
+
+    let with_default = |d: usize| {
+        Term::inductive_match_default(
+            Term::free_var("r"),
+            Some("m"),
+            Term::prim(Prim::NatType),
+            [("none", Vec::<&str>::new(), nat(0))],
+            nat(d),
+        )
+    };
+
+    // Same enumerated arm and same default: convertible.
+    assert_eq!(
+        conv(&mut context, &with_default(9), &with_default(9)),
+        Ok(true)
+    );
+
+    // Same arm, different default body: not convertible — the default is a real
+    // arm, not erased provenance.
+    assert_eq!(
+        conv(&mut context, &with_default(9), &with_default(8)),
+        Ok(false)
+    );
+
+    // A defaulted match never converts with an otherwise-identical bare one:
+    // presence of the catch-all is itself a difference.
+    let bare = Term::inductive_match(
+        Term::free_var("r"),
+        Some("m"),
+        Term::prim(Prim::NatType),
+        [("none", Vec::<&str>::new(), nat(0))],
+    );
+    assert_eq!(conv(&mut context, &with_default(9), &bare), Ok(false));
+}
+
+#[test]
 fn convert_prim_recurses_into_operands() {
     let mut context = context();
 

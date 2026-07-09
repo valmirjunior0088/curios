@@ -693,13 +693,19 @@ impl Convert {
             }
 
             // The pattern is elaboration-time data, fully reflected in the
-            // motive scope once checked — convertibility ignores it.
+            // motive scope once checked — convertibility ignores it. The
+            // default, though, is a real arm: two matches convert only if their
+            // catch-alls agree in presence and body.
             (
                 Cases::Inductive {
-                    cases: this_cases, ..
+                    cases: this_cases,
+                    default: this_default,
+                    ..
                 },
                 Cases::Inductive {
-                    cases: that_cases, ..
+                    cases: that_cases,
+                    default: that_default,
+                    ..
                 },
             ) => {
                 if this_cases.len() != that_cases.len() {
@@ -723,6 +729,12 @@ impl Convert {
                         this_scope.open(&binder_refs),
                         that_scope.open(&binder_refs),
                     );
+                }
+
+                match (this_default, that_default) {
+                    (None, None) => {}
+                    (Some(this), Some(that)) => self.enqueue(Term::type_(), this, that),
+                    _ => return Ok(false),
                 }
 
                 Ok(true)

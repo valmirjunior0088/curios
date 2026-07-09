@@ -412,6 +412,39 @@ impl Term {
             cases: Cases::Inductive {
                 cases: Self::inductive_cases(cases),
                 pattern: None,
+                default: None,
+            },
+        }))
+    }
+
+    /// The primitive eliminator of a nominal inductive with an explicit `| _ =>`
+    /// catch-all ([`Cases::Inductive`]'s `default`): the enumerated arms plus a
+    /// binding-free default standing in for every other constructor tag. The
+    /// dispatching analogue of [`Term::inductive_match`], mirroring how
+    /// [`Term::switch`] relates to [`Term::nat_match`].
+    pub fn inductive_match_default<H, M, I, A, L, B, D>(
+        head: H,
+        motive_label: Option<&str>,
+        motive: M,
+        cases: I,
+        default: D,
+    ) -> Self
+    where
+        H: Into<Term>,
+        M: Into<Term>,
+        I: IntoIterator<Item = (A, Vec<L>, B)>,
+        A: Into<Atom>,
+        L: Into<String>,
+        B: Into<Term>,
+        D: Into<Term>,
+    {
+        Self::from(Subterm::Match(Match {
+            head: head.into(),
+            motive: Self::motive_scope(motive_label, motive.into()),
+            cases: Cases::Inductive {
+                cases: Self::inductive_cases(cases),
+                pattern: None,
+                default: Some(default.into()),
             },
         }))
     }
@@ -448,6 +481,7 @@ impl Term {
             cases: Cases::Inductive {
                 cases: Self::inductive_cases(cases),
                 pattern: Some(pattern),
+                default: None,
             },
         }))
     }
@@ -1036,9 +1070,16 @@ pub enum Cases {
     /// The primitive eliminator of a nominal inductive: one arm per constructor,
     /// each arm's arity equal to that constructor's payload arity. `pattern`
     /// is `Some` iff the surface motive was the annotated type-pattern form.
+    /// `default` is the optional catch-all arm (`| _ =>`, mirroring
+    /// [`Cases::Switch`]'s): present iff the surface match ended in a bare `_`.
+    /// It binds nothing and stands in for every constructor tag absent from
+    /// `cases`; `None` means the arms structurally cover every constructor
+    /// (a true elimination). A `Some(default)` may not co-occur with `pattern`
+    /// — the annotated type-pattern motive is elimination-only.
     Inductive {
         cases: BTreeMap<Atom, Scope<Many>>,
         pattern: Option<MotivePattern>,
+        default: Option<Term>,
     },
     /// Structural induction on a native free-monoid primitive (`Nat`/`Lst`/
     /// `Bin`): the `carrier` selects the primitive and carries both its parameters
@@ -1362,7 +1403,11 @@ impl Subterm {
                             .for_each(|b| b.collect_construction_names(names));
                         default.collect_construction_names(names);
                     }
-                    Cases::Inductive { cases, pattern } => {
+                    Cases::Inductive {
+                        cases,
+                        pattern,
+                        default,
+                    } => {
                         cases
                             .values()
                             .for_each(|s| s.body().collect_construction_names(names));
@@ -1371,6 +1416,9 @@ impl Subterm {
                                 t.collect_construction_names(names);
                             }
                         });
+                        default
+                            .iter()
+                            .for_each(|d| d.collect_construction_names(names));
                     }
                     Cases::FreeMonoid { carrier } => match carrier {
                         Carrier::Nat {
@@ -1474,7 +1522,11 @@ impl Subterm {
                         Cases::Switch { cases, default } => {
                             cases.values().any(|b| b.any_metavar(pred)) || default.any_metavar(pred)
                         }
-                        Cases::Inductive { cases, pattern } => {
+                        Cases::Inductive {
+                            cases,
+                            pattern,
+                            default,
+                        } => {
                             cases.values().any(|s| s.body().any_metavar(pred))
                                 || pattern
                                     .iter()
@@ -1483,6 +1535,7 @@ impl Subterm {
                                         MotiveSlot::Term(t) => t.any_metavar(pred),
                                         _ => false,
                                     })
+                                || default.as_ref().is_some_and(|d| d.any_metavar(pred))
                         }
                         Cases::FreeMonoid { carrier } => match carrier {
                             Carrier::Nat {
@@ -1639,7 +1692,11 @@ impl Bound for Subterm {
                             .collect(),
                         default: visit.visit_subterm(default),
                     },
-                    Cases::Inductive { cases, pattern } => Cases::Inductive {
+                    Cases::Inductive {
+                        cases,
+                        pattern,
+                        default,
+                    } => Cases::Inductive {
                         cases: cases
                             .iter()
                             .map(|(atom, scope)| (atom.clone(), visit.visit_scope(scope)))
@@ -1657,6 +1714,9 @@ impl Bound for Subterm {
                                 })
                                 .collect(),
                         }),
+                        // The default binds nothing — it lives in the enclosing
+                        // scope, like `head`.
+                        default: default.as_ref().map(|d| visit.visit_subterm(d)),
                     },
                     Cases::FreeMonoid { carrier } => Cases::FreeMonoid {
                         carrier: match carrier {
@@ -1794,16 +1854,26 @@ impl Bound for Subterm {
                     true_case,
                 } => false_case.reach().max(true_case.reach()),
                 Cases::Switch { cases, default } => max_reach(cases.values()).max(default.reach()),
-                Cases::Inductive { cases, pattern } => {
-                    cases.values().map(|s| s.reach()).max().unwrap_or(0).max(
-                        pattern
-                            .iter()
-                            .flat_map(|p| &p.slots)
-                            .fold(0, |acc, slot| match slot {
-                                MotiveSlot::Binder => acc,
-                                MotiveSlot::Term(t) => acc.max(t.reach()),
-                            }),
-                    )
+                Cases::Inductive {
+                    cases,
+                    pattern,
+                    default,
+                } => {
+                    cases
+                        .values()
+                        .map(|s| s.reach())
+                        .max()
+                        .unwrap_or(0)
+                        .max(
+                            pattern
+                                .iter()
+                                .flat_map(|p| &p.slots)
+                                .fold(0, |acc, slot| match slot {
+                                    MotiveSlot::Binder => acc,
+                                    MotiveSlot::Term(t) => acc.max(t.reach()),
+                                }),
+                        )
+                        .max(default.as_ref().map_or(0, |d| d.reach()))
                 }
                 Cases::FreeMonoid { carrier } => match carrier {
                     Carrier::Nat {

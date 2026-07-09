@@ -45,6 +45,44 @@ fn reduce_inductive_match_selects_case_and_projects_payload() {
 }
 
 #[test]
+fn reduce_inductive_match_absent_tag_takes_default() {
+    let mut context = context();
+
+    // The scrutinee is `some(42)`, but only `none` has an explicit arm; the
+    // `some` tag is absent from the cases, so dispatch falls through to the
+    // binding-free `| _ =>` default (no payload projected).
+    let term: Term = Term::inductive_match_default(
+        Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
+        Some("m"),
+        Term::prim(Prim::NatType),
+        [("none", Vec::<&str>::new(), nat(0))],
+        nat(99),
+    );
+
+    assert_eq!(reduce(&mut context, term), Ok(nat(99)));
+}
+
+#[test]
+fn reduce_inductive_match_present_tag_ignores_default() {
+    let mut context = context();
+
+    // With the `some` arm present, dispatch selects it (binding the payload)
+    // rather than the default — the default is only for absent tags.
+    let term: Term = Term::inductive_match_default(
+        Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
+        Some("m"),
+        Term::prim(Prim::NatType),
+        [
+            ("none", Vec::<&str>::new(), nat(0)),
+            ("some", vec!["x"], Term::free_var("x")),
+        ],
+        nat(99),
+    );
+
+    assert_eq!(reduce(&mut context, term), Ok(nat(42)));
+}
+
+#[test]
 fn reduce_nat_fold_zero_is_not_true() {
     let mut context = context();
 

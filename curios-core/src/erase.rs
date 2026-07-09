@@ -592,9 +592,11 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<curios_ersd::Term, Er
             true_case,
         } => erase_bln_match(context, head, motive, false_case, true_case),
         Cases::Switch { cases, default } => erase_switch(context, head, motive, cases, default),
-        Cases::Inductive { cases, pattern } => {
-            erase_inductive_match(context, head, motive, cases, pattern.as_ref())
-        }
+        Cases::Inductive {
+            cases,
+            pattern,
+            default,
+        } => erase_inductive_match(context, head, motive, cases, pattern.as_ref(), default.as_ref()),
         Cases::FreeMonoid {
             carrier:
                 Carrier::Nat {
@@ -935,6 +937,7 @@ fn erase_erasable_scrutinee_match(
     cases: &BTreeMap<Atom, Scope<Many>>,
     scrutinee: Scrutinee<'_>,
     pattern: Option<&MotivePattern>,
+    default: Option<&Term>,
 ) -> Result<curios_ersd::Term, Error> {
     let Scrutinee {
         inductive,
@@ -945,11 +948,13 @@ fn erase_erasable_scrutinee_match(
     let binder_slots = pattern_binder_slots(pattern, inductive.params.len());
 
     // The single live arm. Elaborate prunes impossible arms; an erasable
-    // (subsingleton) scrutinee leaves exactly one, whose body is the result.
-    let (tag, scope) = cases
-        .iter()
-        .next()
-        .expect("erase: erasable scrutinee match has its one live arm");
+    // (subsingleton) scrutinee leaves exactly one, whose body is the result. A
+    // bare `| _ =>` ladder over a subsingleton leaves *no* enumerated arm — the
+    // default is then the single live result (it binds nothing).
+    let Some((tag, scope)) = cases.iter().next() else {
+        let default = default.expect("erase: erasable match with no arms has a default");
+        return erase(context, default, &motive.open(&[head]));
+    };
 
     let telescope = inductive
         .instantiate(tag, params)
@@ -1026,13 +1031,16 @@ fn erase_inductive_match(
     motive: &Scope<Many>,
     cases: &BTreeMap<Atom, Scope<Many>>,
     pattern: Option<&MotivePattern>,
+    default: Option<&Term>,
 ) -> Result<curios_ersd::Term, Error> {
-    // A match with no arms is a vacuous elimination — of an empty inductive (`False`)
-    // or of one whose every constructor inversion-clashes at the scrutinee's
-    // indices. It is unreachable code that never inspects the scrutinee, which
-    // elaborate placed in an erased position; erasing the head here would emit a
-    // reference to an erased binder, so short-circuit to a trap.
-    if cases.is_empty() {
+    // A match with no arms *and no default* is a vacuous elimination — of an
+    // empty inductive (`False`) or of one whose every constructor
+    // inversion-clashes at the scrutinee's indices. It is unreachable code that
+    // never inspects the scrutinee, which elaborate placed in an erased
+    // position; erasing the head here would emit a reference to an erased
+    // binder, so short-circuit to a trap. A bare `| _ =>` ladder, by contrast,
+    // does dispatch — it fills every constructor slot with the default below.
+    if cases.is_empty() && default.is_none() {
         return Ok(curios_ersd::Subterm::Unreachable.into());
     }
 
@@ -1072,6 +1080,7 @@ fn erase_inductive_match(
                 actual_indices: &actual_indices,
             },
             pattern,
+            default,
         );
     }
 
@@ -1082,12 +1091,18 @@ fn erase_inductive_match(
     let cases_erased = inductive
         .constructor_order()
         .map(|tag| {
-            // A tag with no arm was pruned by elaborate (Rung C verified the
-            // case impossible at the scrutinee's indices). Its dispatch slot
-            // still exists positionally, but reaching it is a compiler bug or
-            // corrupted runtime tag, so lower it to a real trap.
+            // A tag with no explicit arm: with a catch-all default, its dense
+            // slot holds the (re-)erased default body — per-slot re-erasure is
+            // pure, and the default binds nothing so it needs no payload frame.
+            // Without a default, the arm was pruned by elaborate (Rung C proved
+            // it impossible at the scrutinee's indices); reaching its slot means
+            // a corrupted tag, so lower it to a real trap. (Stage 3 replaces
+            // this dense duplication with a single sparse default.)
             let Some(scope) = cases.get(tag) else {
-                return Ok(curios_ersd::Subterm::Unreachable.into());
+                return match default {
+                    Some(default) => erase(context, default, &motive.open(&[head])),
+                    None => Ok(curios_ersd::Subterm::Unreachable.into()),
+                };
             };
 
             let telescope = inductive

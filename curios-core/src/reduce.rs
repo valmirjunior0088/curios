@@ -260,25 +260,39 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         // inline evaluated definition internals (including local-`let`
         // annotation holes that elaboration never births) into types that
         // flow on to `zonk`.
-        Cases::Inductive { cases, pattern } => {
+        Cases::Inductive {
+            cases,
+            pattern,
+            default,
+        } => {
             let head_reduced = reduce_forced(context, head.clone())?;
 
-            if let Subterm::Variant(ctor) = &*head_reduced
-                && let Some(scope) = cases.get(&ctor.tag)
-            {
-                let projections = (0..scope.arity())
-                    .map(|i| Term::proj(head.clone(), i + 1))
-                    .collect::<Vec<_>>();
+            if let Subterm::Variant(ctor) = &*head_reduced {
+                if let Some(scope) = cases.get(&ctor.tag) {
+                    let projections = (0..scope.arity())
+                        .map(|i| Term::proj(head.clone(), i + 1))
+                        .collect::<Vec<_>>();
 
-                let projection_refs = projections.iter().collect::<Vec<_>>();
+                    let projection_refs = projections.iter().collect::<Vec<_>>();
 
-                return Ok(Reduce::Continue(scope.open(&projection_refs)));
+                    return Ok(Reduce::Continue(scope.open(&projection_refs)));
+                }
+
+                // A concrete constructor with no enumerated arm takes the
+                // catch-all default, which binds nothing (no scope to open).
+                if let Some(default) = &default {
+                    return Ok(Reduce::Continue(default.clone()));
+                }
             }
 
             Ok(Reduce::Break(Term::from(Subterm::Match(Match {
                 head: head_reduced,
                 motive,
-                cases: Cases::Inductive { cases, pattern },
+                cases: Cases::Inductive {
+                    cases,
+                    pattern,
+                    default,
+                },
             }))))
         }
 

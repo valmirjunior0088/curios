@@ -1,4 +1,8 @@
-use {crate::*, std::time::Duration};
+use {
+    crate::*,
+    curios_abi::RootId,
+    std::{collections::BTreeMap, time::Duration},
+};
 
 fn context() -> Context {
     Context::new(Duration::from_secs(1))
@@ -10,6 +14,43 @@ fn nat() -> Term {
 
 fn nat_lit(n: usize) -> Term {
     Subterm::Prim(Prim::Nat(Nat::new(n))).into()
+}
+
+fn opt_type() -> Term {
+    Term::inductive_type("Opt", Vec::<Term>::new(), Vec::<Term>::new())
+}
+
+// induct Opt : Type | none() | some(x : Nat) end — an unindexed, two-constructor
+// data type, the minimal shape a `| _ =>` catch-all is interesting over.
+fn register_opt(context: &mut Context) {
+    context
+        .register_inductive(
+            "Opt",
+            Inductive {
+                params: Telescope::done(()),
+                indices: Telescope::done(()),
+                constructors: BTreeMap::from([
+                    (
+                        Atom::from("none"),
+                        InductiveParam {
+                            telescope: Telescope::done(opt_type()),
+                        },
+                    ),
+                    (
+                        Atom::from("some"),
+                        InductiveParam {
+                            telescope: Telescope::build(
+                                [("x", Term::prim(Prim::NatType))],
+                                opt_type(),
+                            ),
+                        },
+                    ),
+                ]),
+                result_sort: Term::type_(),
+                root: RootId::Entry,
+            },
+        )
+        .unwrap();
 }
 
 #[test]
@@ -131,4 +172,69 @@ fn infer_on_an_unborn_hole_cannot_infer() {
     let result = elaborate(&mut context, &Term::metavar(0), Mode::Infer);
 
     assert!(result.is_err());
+}
+
+#[test]
+fn inductive_match_default_relaxes_coverage() {
+    let mut context = context();
+    register_opt(&mut context);
+
+    // `match some(5) : Nat | none() => 0 | _ => 99 end` — only `none` is
+    // enumerated; the un-written `some` constructor is covered by the catch-all,
+    // so this otherwise-incomplete match elaborates, at the motive's type.
+    let term = Term::inductive_match_default(
+        Term::variant("Opt", Vec::<Term>::new(), "some", [nat_lit(5)]),
+        Some("m"),
+        nat(),
+        [("none", Vec::<&str>::new(), nat_lit(0))],
+        nat_lit(99),
+    );
+
+    let (_, type_) = elaborate(&mut context, &term, Mode::Infer).unwrap();
+    assert_eq!(type_, nat());
+}
+
+#[test]
+fn inductive_match_missing_arm_without_default_is_rejected() {
+    let mut context = context();
+    register_opt(&mut context);
+
+    // The same match without the catch-all: `some` is genuinely missing from an
+    // unindexed inductive, so coverage fails.
+    let term = Term::inductive_match(
+        Term::variant("Opt", Vec::<Term>::new(), "some", [nat_lit(5)]),
+        Some("m"),
+        nat(),
+        [("none", Vec::<&str>::new(), nat_lit(0))],
+    );
+
+    assert!(elaborate(&mut context, &term, Mode::Infer).is_err());
+}
+
+#[test]
+fn inductive_match_default_with_pattern_motive_is_rejected() {
+    let mut context = context();
+    register_opt(&mut context);
+
+    // A catch-all default combined with an annotated type-pattern motive is
+    // rejected up front (the dependent motive form is elimination-only). Built
+    // directly — no surface form produces this pairing.
+    let term: Term = Subterm::Match(Match {
+        head: Term::variant("Opt", Vec::<Term>::new(), "none", Vec::<Term>::new()),
+        motive: Scope::close(Many(1), &["m"], nat()),
+        cases: Cases::Inductive {
+            cases: BTreeMap::from([(Atom::from("none"), Scope::close(Many(0), &[], nat_lit(0)))]),
+            pattern: Some(MotivePattern {
+                name: "Opt".to_string(),
+                slots: vec![],
+            }),
+            default: Some(nat_lit(1)),
+        },
+    })
+    .into();
+
+    assert!(matches!(
+        elaborate(&mut context, &term, Mode::Infer),
+        Err(Error::DefaultWithPatternMotive)
+    ));
 }

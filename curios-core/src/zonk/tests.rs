@@ -35,6 +35,34 @@ fn zonk_replaces_a_solved_metavariable_with_its_solution() {
 }
 
 #[test]
+fn zonk_resolves_a_metavariable_in_an_inductive_match_default() {
+    let mut context = context();
+
+    context.birth_metavar(MetavarId(0), Vec::new(), nat());
+    context.solve_metavar(MetavarId(0), nat_lit(7));
+
+    // The catch-all default is a real term position, so a solved metavar sitting
+    // in it is resolved like any other.
+    let term = Term::inductive_match_default(
+        Term::free_var("r"),
+        Some("m"),
+        nat(),
+        [("none", Vec::<&str>::new(), nat_lit(0))],
+        Term::metavar(0),
+    );
+
+    let expected = Term::inductive_match_default(
+        Term::free_var("r"),
+        Some("m"),
+        nat(),
+        [("none", Vec::<&str>::new(), nat_lit(0))],
+        nat_lit(7),
+    );
+
+    assert_eq!(zonk(&context, &term).unwrap(), expected);
+}
+
+#[test]
 fn zonk_resolves_a_metavariable_nested_in_a_structure() {
     let mut context = context();
 

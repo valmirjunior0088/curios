@@ -402,9 +402,20 @@ pub(crate) fn elaborate_match(
         Cases::Switch { cases, default } => {
             elaborate_switch(context, head, motive, cases, default, term, mode)
         }
-        Cases::Inductive { cases, pattern } => {
-            elaborate_inductive_match(context, head, motive, cases, pattern.as_ref(), term, mode)
-        }
+        Cases::Inductive {
+            cases,
+            pattern,
+            default,
+        } => elaborate_inductive_match(
+            context,
+            head,
+            motive,
+            cases,
+            pattern.as_ref(),
+            default.as_ref(),
+            term,
+            mode,
+        ),
         Cases::FreeMonoid {
             carrier:
                 Carrier::Nat {
@@ -548,9 +559,16 @@ fn elaborate_inductive_match(
     motive: &Scope<Many>,
     cases: &BTreeMap<Atom, Scope<Many>>,
     pattern: Option<&MotivePattern>,
+    default: Option<&Term>,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
+    // The dependent type-pattern motive refines the scrutinee's indices per
+    // constructor; a binding-free catch-all has no constructor to refine
+    // against, so the two forms are mutually exclusive (v1).
+    if pattern.is_some() && default.is_some() {
+        return Err(Error::default_with_pattern_motive());
+    }
     // A match with no arms is a vacuous elimination — either of an empty inductive
     // (`False`) or of one whose every constructor inversion-clashes at the
     // scrutinee's indices. Such a match compiles to unreachable code that never
@@ -681,14 +699,19 @@ fn elaborate_inductive_match(
         // — a `cont`-scan `Utf8` admits only `more` — making an otherwise
         // multi-constructor proposition singleton in this context. (An
         // under-covered match is still caught by the coverage check below.)
-        let permitted = match cases.len() {
-            0 => true,
-            1 => {
-                let tag = cases.keys().next().expect("one covered constructor");
-                singleton_eliminable(context, &inductive, tag, &params)?
-            }
-            _ => false,
-        };
+        // A catch-all default stands in for more than one constructor — a
+        // relevant result branching on an erased scrutinee's tag is exactly
+        // what this guard forbids — so it is never permitted here. (A
+        // prop-into-prop defaulted match never reaches this branch.)
+        let permitted = default.is_none()
+            && match cases.len() {
+                0 => true,
+                1 => {
+                    let tag = cases.keys().next().expect("one covered constructor");
+                    singleton_eliminable(context, &inductive, tag, &params)?
+                }
+                _ => false,
+            };
         if !permitted {
             return Err(Error::large_elim_of_prop(name.clone()));
         }
@@ -710,6 +733,13 @@ fn elaborate_inductive_match(
     let mut cases_elaborated = BTreeMap::new();
     for tag in inductive.constructors.keys() {
         let Some(scope) = cases.get(tag) else {
+            // A catch-all default covers every un-enumerated constructor, so a
+            // missing arm needs neither the unindexed-completeness check nor
+            // Rung-C inversion — the default is checked once, below.
+            if default.is_some() {
+                continue;
+            }
+
             // An unindexed inductive has nothing to invert: every arm is
             // reachable and a missing one is plainly missing.
             if actual_indices.is_empty() {
@@ -843,12 +873,26 @@ fn elaborate_inductive_match(
         );
     }
 
+    // The catch-all binds nothing and refines no index, so it is checked at the
+    // unrefined head — the motive at the actual scrutinee (`elim_type`), exactly
+    // as `elaborate_switch` checks its default. Under generalization `elim_type`
+    // is the Π over the hypotheses, so it routes through `check_generalized_arm`
+    // (with no arm binders) just as the constructor arms do.
+    let default_elaborated = default
+        .map(|d| {
+            context.with_frame(|context| {
+                check_generalized_arm(context, d, elim_type.clone(), &generalized)
+            })
+        })
+        .transpose()?;
+
     let rebuilt_match: Term = Subterm::Match(Match {
         head: head_elaborated,
         motive: motive_elaborated,
         cases: Cases::Inductive {
             cases: cases_elaborated,
             pattern: pattern_elaborated,
+            default: default_elaborated,
         },
     })
     .into();

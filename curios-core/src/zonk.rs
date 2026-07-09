@@ -350,13 +350,21 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                         .collect::<Result<_, Error>>()?,
                     default: zonk_term(context, default)?,
                 },
-                Cases::Inductive { cases, pattern } => Cases::Inductive {
+                Cases::Inductive {
+                    cases,
+                    pattern,
+                    default,
+                } => Cases::Inductive {
                     cases: cases
                         .iter()
                         .map(|(atom, scope)| {
                             Ok((atom.clone(), scope.map_body(|b| zonk_term(context, b))?))
                         })
                         .collect::<Result<_, Error>>()?,
+                    default: default
+                        .as_ref()
+                        .map(|d| zonk_term(context, d))
+                        .transpose()?,
                     pattern: pattern
                         .as_ref()
                         .map(|p| {
