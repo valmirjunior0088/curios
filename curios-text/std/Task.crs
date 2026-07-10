@@ -1,7 +1,5 @@
-use /std/{Io, Bin, Nat, Bln, Lst, Option, Result, Cell, Monad};
+use /std/{Io, Bin, Nat, Bln, Lst, Option, Result, Cell};
 
--- Public because `Task/step` carries a `Pause` payload: a pub inductive's
--- constructors are its interface, so everything they mention must be pub too.
 pub induct Pause : Type
 | wait(Io, Nat)
 | fork(() -> Task({}), Cell(Bln))
@@ -39,11 +37,6 @@ pub rec bind(@A : Type, @B : Type, m : Task(A), f : (A) -> Task(B)) -> Task(B) =
     | done(a) => f(a)
     | step(p, k) => Task/step(p, () => bind(k(), f))
     end;
-
-satisfy Monad(Task) {
-    pure(A, x) = pure(@A, x),
-    bind(A, B, m, f) = bind(@A, @B, m, f)
-}
 
 pub let map(@A : Type, @B : Type, f : (A) -> B, m : Task(A)) -> Task(B) =
     bind(m, (a) => pure(f(a)));
@@ -358,4 +351,3 @@ pub let select(@A : Type, tasks : Lst(() -> Task(A))) -> Task({Nat, A}) =
 
 pub let race(@A : Type, tasks : Lst(() -> Task(A))) -> Task(A) =
     bind(select(tasks), (w) => pure(w.1));
-

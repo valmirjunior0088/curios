@@ -1,4 +1,4 @@
-use /std/{Result, Nat, Bin, Str, Bln, Lst, Monad};
+use /std/{Result, Nat, Bin, Str, Bln, Lst};
 
 -- A parser is nominal (not a bare function type) so it has a rigid head:
 -- witness resolution keys on it (`Monad(Parse)`) and the elaborator can
@@ -152,8 +152,3 @@ pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(
                 go([first], first_end)
             end
     };
-
-satisfy Monad(Parse) {
-    pure(A, x) = pure(@A, x),
-    bind(A, B, m, f) = bind(@A, @B, m, f)
-}

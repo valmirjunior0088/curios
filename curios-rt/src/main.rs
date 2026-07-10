@@ -24,7 +24,7 @@ fn payload() -> Result<Vec<u8>, String> {
 }
 
 fn main() -> ExitCode {
-    // argv crosses to the guest via `/std/Proc/args`; argv[0] is this executable.
+    // argv crosses to the guest via `/std/proc/args`; argv[0] is this executable.
     let args = env::args().map(String::into_bytes).collect();
 
     match payload()

@@ -1375,7 +1375,7 @@ pub fn erase_module(
         // item's qualifier prefix (a `rec` group shares one). `erase` re-derives
         // types via `infer` (= `elaborate` in Infer mode), which re-runs the
         // struct projection privacy check (§7); without the island an in-module
-        // projection of a private-rep struct (e.g. `/std/Time`'s `Instant`)
+        // projection of a private-rep struct (e.g. `/std/time`'s `Instant`)
         // would be wrongly rejected, the island defaulting to the root.
         let item_module = match item {
             Item::Let(def) => def.island.clone(),

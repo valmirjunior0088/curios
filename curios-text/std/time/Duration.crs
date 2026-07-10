@@ -1,0 +1,30 @@
+use /std/{Nat};
+
+pub struct Duration : Type {
+    secs : Nat,
+    nanos : Nat
+}
+
+pub let of(secs : Nat, nanos : Nat) -> Duration =
+    Duration { secs = secs, nanos = nanos };
+
+pub let zero : Duration =
+    Duration { secs = 0, nanos = 0 };
+
+pub let of_secs(secs : Nat) -> Duration =
+    Duration { secs = secs, nanos = 0 };
+
+pub let of_millis(ms : Nat) -> Duration =
+    Duration {
+        secs = ms / 1000,
+        nanos = ms % 1000 * 1000000
+    };
+
+pub let secs(d : Duration) -> Nat =
+    d.secs;
+
+pub let nanos(d : Duration) -> Nat =
+    d.nanos;
+
+pub let to_millis(d : Duration) -> Nat =
+    d.secs * 1000 + d.nanos / 1000000;

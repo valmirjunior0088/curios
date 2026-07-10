@@ -29,7 +29,7 @@ pub(crate) enum Mode {
             trailing_var_arg = true,
             allow_hyphen_values = true,
             value_name = "ARGS",
-            help = "Arguments passed to the program (read via /std/Proc/args)"
+            help = "Arguments passed to the program (read via /std/proc/args)"
         )]
         args: Vec<String>,
     },

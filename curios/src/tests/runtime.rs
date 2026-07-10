@@ -615,7 +615,7 @@ fn random_bin_returns_requested_length() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
-        r#"std/Io/write(std/Io/stdout, /std/Rand/bin(8))"#,
+        r#"std/Io/write(std/Io/stdout, /std/rand/bin(8))"#,
         system,
     )
     .expect("expected result");
@@ -711,20 +711,20 @@ fn option_result_char_helpers() {
 
 #[test]
 fn clock_diff_of_two_distinct_now_readings() {
-    // Two scripted wall readings 30 s + 400 ns apart. `Time/now` referenced
-    // twice must perform two *distinct* host calls (the nullary-effect
-    // distinctness the struct-head reduction relies on), so the diff is the
-    // gap between them, not zero.
+    // Two scripted wall readings 30 s + 400 ns apart. `time/Instant/now`
+    // referenced twice must perform two *distinct* host calls (the
+    // nullary-effect distinctness the struct-head reduction relies on), so the
+    // diff is the gap between them, not zero.
     let (system, io) = MockHost::builder()
         .wall([(1, 100, 500), (1, 130, 900)])
         .build();
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        let a = /std/Time/now();
-        let b = /std/Time/now();
-        let d = /std/Time/diff(b, a);
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/Time/secs(d))))
+        let a = /std/time/Instant/now();
+        let b = /std/time/Instant/now();
+        let d = /std/time/Instant/diff(b, a);
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/time/Duration/secs(d))))
         "#,
         system,
     )
@@ -739,8 +739,8 @@ fn clock_mono_reads_scripted_elapsed() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        let e = /std/Time/elapsed();
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/Time/secs(e))))
+        let e = /std/time/Instant/elapsed();
+        std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/time/Duration/secs(e))))
         "#,
         system,
     )

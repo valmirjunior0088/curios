@@ -1,4 +1,4 @@
-use /std/{Bln, Monad};
+use /std/{Bln};
 
 pub induct Option(A : Type) : Type
 | some(A)
@@ -36,8 +36,3 @@ pub let is_none(@A : Type, m : Option(A)) -> Bln =
     | some(_) => false
     | none() => true
     end;
-
-satisfy Monad(Option) {
-    pure(A, x) = Option/some(x),
-    bind(A, B, m, f) = bind(@A, @B, m, f)
-}

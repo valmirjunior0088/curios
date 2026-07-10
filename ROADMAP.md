@@ -151,7 +151,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
   - [x] result cell (`Cell`)
   - [ ] `sleep`/`timeout`
 - [x] JSON codec (`std/Json`)
-- [x] HTTP client (`std/Http`, built on `Tcp` + `Task`)
+- [x] HTTP client (`std/http`, built on `tcp` + `Task`)
 - [x] Typed format strings (`std/Fmt`)
 - [x] Arbitrary-precision naturals (`std/BigNat`)
 - [x] Proof-carrying UTF-8 string decoding (`std/Str`, `std/Char`)

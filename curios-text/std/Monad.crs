@@ -1,2 +1,23 @@
 pub use /syn/{Monad};
 pub use /syn/Monad/{pure, bind};
+use /std/{Lst, Option, Parse, Task};
+
+satisfy Monad(Lst) {
+    pure(A, x) = [x],
+    bind(A, B, m, f) = Lst/fold(m, [], (x, acc) => [..acc, ..f(x)])
+}
+
+satisfy Monad(Option) {
+    pure(A, x) = Option/some(x),
+    bind(A, B, m, f) = Option/bind(@A, @B, m, f)
+}
+
+satisfy Monad(Parse) {
+    pure(A, x) = Parse/pure(@A, x),
+    bind(A, B, m, f) = Parse/bind(@A, @B, m, f)
+}
+
+satisfy Monad(Task) {
+    pure(A, x) = Task/pure(@A, x),
+    bind(A, B, m, f) = Task/bind(@A, @B, m, f)
+}

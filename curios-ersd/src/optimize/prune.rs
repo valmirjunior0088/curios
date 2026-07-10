@@ -18,7 +18,7 @@ use crate::{Item, Module, optimize::call_graph::CallGraph};
 /// - **effectful** — a *non-synchronous* item whose eager evaluation performs an
 ///   observable action (a host/cell op, or a call to something that does). The
 ///   top-level init runs these for effect even when their result is unused, e.g.
-///   `let _ : False = Proc/exit(7);`. Synchronous items (closures, names, atoms)
+///   `let _ : False = proc/exit(7);`. Synchronous items (closures, names, atoms)
 ///   allocate without acting, so they are kept only when reached.
 ///
 /// This is the reachability/effect information that is plain at this layer and

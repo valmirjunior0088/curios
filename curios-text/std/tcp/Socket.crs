@@ -1,0 +1,88 @@
+use /std/{Bin, Str, Nat, Bln, Io, Result, Option, Task};
+use /std/tcp/{Settings, resolve};
+use /std/time/{Duration};
+
+pub struct Socket : Type { Io }
+
+pub let of(h : Io) -> Socket =
+    Socket { h };
+
+pub let read(c : Socket, n : Nat) -> Task(Io/Read) =
+    Task/read(c.0, n);
+
+pub let write(c : Socket, b : Bin) -> Task(Result({}, Io/Error)) =
+    Task/write(c.0, b);
+
+let configure(h : Io, settings : Settings) -> {} =
+    let _ = /sys/Io/set_recv_timeout(h, Option/unwrap_or(Option/map(Duration/to_millis, settings.read_timeout), 0));
+    let _ = /sys/Io/set_send_timeout(h, Option/unwrap_or(Option/map(Duration/to_millis, settings.write_timeout), 0));
+    ();
+
+let upgrade(h : Io, host : Str, tls : Bln) -> Nat =
+    match tls : Nat
+    | false => /sys/Io/Status/ok
+    | true => /sys/Io/start_tls(h, Str/to_bin(host))
+    end;
+
+let connect_addr(settings : Settings, host : Str, addr : Bin) -> Result(Socket, Io/Error) =
+    let s = /sys/Io/socket(addr);
+    match s.status == /sys/Io/Status/ok : Result(Socket, Io/Error)
+    | false => Result/failure(Io/error_of(s.status))
+    | true =>
+        let _ = configure(s.handle, settings);
+        let status = /sys/Io/connect(s.handle, addr);
+        match status == /sys/Io/Status/ok : Result(Socket, Io/Error)
+        | false =>
+            let _ = /sys/Io/close(s.handle);
+            Result/failure(Io/error_of(status))
+        | true =>
+            let upgraded = upgrade(s.handle, host, settings.tls);
+            match upgraded == /sys/Io/Status/ok : Result(Socket, Io/Error)
+            | false =>
+                let _ = /sys/Io/close(s.handle);
+                Result/failure(Io/error_of(upgraded))
+            | true =>
+                let _ =
+                    match settings.tls : {}
+                    | false => Task/nonblocking(s.handle)
+                    | true => ()
+                    end;
+                Result/success(Socket { s.handle })
+            end
+        end
+    end;
+
+let connect_socket(settings : Settings, host : Str, port : Nat) -> Task(Result(Socket, Io/Error)) =
+    Task/bind(resolve(host, port), (resolved) =>
+        match resolved : Task(Result(Socket, Io/Error))
+        | failure(e) => Task/pure(Result/failure(e))
+        | success(addr) => Task/pure(connect_addr(settings, host, addr))
+        end);
+
+pub let connect(settings : Settings, host : Str, port : Nat) -> Task(Result(Socket, Io/Error)) =
+    Task/defer(() =>
+        Task/bind(connect_socket(settings, host, port), (opened) =>
+            match opened : Task(Result(Socket, Io/Error))
+            | failure(e) => Task/pure(Result/failure(e))
+            | success(c) =>
+                Task/bind(Task/acquire(c.0, () => /sys/Io/close(c.0)), (_) => Task/pure(Result/success(c)))
+            end));
+
+pub let close(c : Socket) -> Task({}) =
+    Task/release(c.0);
+
+pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket) -> Task(A)) -> Task(Result(A, Io/Error)) =
+    Task/bind(connect(settings, host, port), (opened) =>
+        match opened : Task(Result(A, Io/Error))
+        | failure(e) => Task/pure(Result/failure(e))
+        | success(c) =>
+            Task/bind(f(c), (a) =>
+                Task/bind(close(c), (_) => Task/pure(Result/success(a))))
+        end);
+
+let drain(c : Socket) -> Task(Bin) =
+    Task/drain((n) => read(c, n));
+
+pub let call(settings : Settings, host : Str, port : Nat, request : Bin) -> Task(Result(Bin, Io/Error)) =
+    with(settings, host, port, (c) =>
+        Task/bind(write(c, request), (_) => drain(c)));

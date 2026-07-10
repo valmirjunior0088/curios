@@ -1,0 +1,75 @@
+use /std/{Bin, Str, Nat, Io, Result, Task};
+use /std/tcp/{resolve, Socket};
+
+pub struct Listener : Type { Io }
+
+let bind_listen(addr : Bin) -> Result(Listener, Io/Error) =
+    let s = /sys/Io/socket(addr);
+    match s.status == /sys/Io/Status/ok : Result(Listener, Io/Error)
+    | false => Result/failure(Io/error_of(s.status))
+    | true =>
+        let _ = /sys/Io/set_reuseaddr(s.handle, true);
+        let bound = /sys/Io/bind(s.handle, addr);
+        match bound == /sys/Io/Status/ok : Result(Listener, Io/Error)
+        | false =>
+            let _ = /sys/Io/close(s.handle);
+            Result/failure(Io/error_of(bound))
+        | true =>
+            let status = /sys/Io/listen(s.handle, 128);
+            match status == /sys/Io/Status/ok : Result(Listener, Io/Error)
+            | false =>
+                let _ = /sys/Io/close(s.handle);
+                Result/failure(Io/error_of(status))
+            | true =>
+                let _ = Task/nonblocking(s.handle);
+                Result/success(Listener { s.handle })
+            end
+        end
+    end;
+
+let listen(host : Str, port : Nat) -> Task(Result(Listener, Io/Error)) =
+    Task/bind(resolve(host, port), (resolved) =>
+        match resolved : Task(Result(Listener, Io/Error))
+        | failure(e) => Task/pure(Result/failure(e))
+        | success(addr) => Task/pure(bind_listen(addr))
+        end);
+
+let listen_loop(host : Str, port : Nat, on_conn : (Io) -> Task({})) -> Task(Result({}, Io/Error)) =
+    Task/bind(listen(host, port), (opened) =>
+        match opened : Task(Result({}, Io/Error))
+        | failure(e) => Task/pure(Result/failure(e))
+        | success(l) =>
+            Task/bind(
+                Task/using(l.0, () => /sys/Io/close(l.0),
+                    rec go() -> Task({}) =
+                        Task/bind(Task/accept(l.0), (r) =>
+                            match r : Task({})
+                            | failure(_) => Task/pure(())
+                            | success(h) => Task/bind(on_conn(h), (_) => go())
+                            end);
+                    go()),
+                (_) => Task/pure(Result/success(())))
+        end);
+
+pub let serve(host : Str, port : Nat, handler : (Socket) -> Task({})) -> Task(Result({}, Io/Error)) =
+    Task/defer(() =>
+        listen_loop(host, port, (h) =>
+            let _ = Task/nonblocking(h);
+            Task/go(() => Task/using(h, () => /sys/Io/close(h), handler(Socket/of(h))))));
+
+pub let serve_tls(host : Str, port : Nat, cert : Bin, key : Bin, handler : (Socket) -> Task({})) -> Task(Result({}, Io/Error)) =
+    Task/defer(() =>
+        let cfg = /sys/Io/tls_server_config(cert, key);
+        match cfg.status == /sys/Io/Status/ok : Task(Result({}, Io/Error))
+        | false => Task/pure(Result/failure(Io/error_of(cfg.status)))
+        | true =>
+            Task/using(cfg.handle, () => let _ = /sys/Io/close(cfg.handle); (),
+                listen_loop(host, port, (h) =>
+                    let status = /sys/Io/start_tls_server(h, cfg.handle);
+                    match status == /sys/Io/Status/ok : Task({})
+                    | true => Task/using(h, () => /sys/Io/close(h), handler(Socket/of(h)))
+                    | false =>
+                        let _ = /sys/Io/close(h);
+                        Task/pure(())
+                    end))
+        end);

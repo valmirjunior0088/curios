@@ -337,7 +337,7 @@ fn sys_impls<H: Host + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
     impls
 }
 
-/// A process exit requested via `Proc/exit`. Carried out of the wasm call as a
+/// A process exit requested via `proc/exit`. Carried out of the wasm call as a
 /// trap so it unwinds cleanly; `instantiate_and_run` catches it and recovers the
 /// code, distinguishing a clean exit from a real trap.
 #[derive(Debug)]
@@ -354,7 +354,7 @@ impl Error for ExitTrap {}
 /// Run a precompiled module — `.cwasm` bytes produced by
 /// `Engine::precompile_module` for this exact wasmtime version and engine
 /// configuration — returning the process exit code (`0` when `main` returns
-/// normally, otherwise the code passed to `Proc/exit`).
+/// normally, otherwise the code passed to `proc/exit`).
 ///
 /// # Safety contract
 ///

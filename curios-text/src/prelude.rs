@@ -535,7 +535,7 @@ fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
 
     ops.extend([
         // `(@A : Type) -> Nat -> A`: exit never returns, so its result type is
-        // whatever the caller wants. `/std/Proc/exit` pins `A := False`.
+        // whatever the caller wants. `/std/proc/exit` pins `A := False`.
         pub_fn_marked(
             "exit",
             vec![
@@ -643,9 +643,13 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Bln"], include_str!("../std/Bln.crs")),
     (&["std", "Io"], include_str!("../std/Io.crs")),
     (&["std", "File"], include_str!("../std/File.crs")),
-    (&["std", "Tcp"], include_str!("../std/Tcp.crs")),
+    (&["std", "tcp"], include_str!("../std/tcp.crs")),
+    (&["std", "tcp", "Settings"], include_str!("../std/tcp/Settings.crs")),
+    (&["std", "tcp", "resolve"], include_str!("../std/tcp/resolve.crs")),
+    (&["std", "tcp", "Socket"], include_str!("../std/tcp/Socket.crs")),
+    (&["std", "tcp", "Listener"], include_str!("../std/tcp/Listener.crs")),
     (&["std", "Task"], include_str!("../std/Task.crs")),
-    (&["std", "Http"], include_str!("../std/Http.crs")),
+    (&["std", "http"], include_str!("../std/http.crs")),
     (&["std", "Char"], include_str!("../std/Char.crs")),
     (&["std", "Result"], include_str!("../std/Result.crs")),
     (&["std", "Option"], include_str!("../std/Option.crs")),
@@ -673,9 +677,11 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Parse"], include_str!("../std/Parse.crs")),
     (&["std", "Json"], include_str!("../std/Json.crs")),
     (&["std", "Fmt"], include_str!("../std/Fmt.crs")),
-    (&["std", "Time"], include_str!("../std/Time.crs")),
-    (&["std", "Rand"], include_str!("../std/Rand.crs")),
-    (&["std", "Proc"], include_str!("../std/Proc.crs")),
+    (&["std", "time"], include_str!("../std/time.crs")),
+    (&["std", "time", "Instant"], include_str!("../std/time/Instant.crs")),
+    (&["std", "time", "Duration"], include_str!("../std/time/Duration.crs")),
+    (&["std", "rand"], include_str!("../std/rand.crs")),
+    (&["std", "proc"], include_str!("../std/proc.crs")),
 ];
 
 // Parse one embedded module under a synthetic path (`std/Bln.crs` — the file's

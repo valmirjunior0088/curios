@@ -157,7 +157,7 @@ fn proc_args_indexes_the_argv_snapshot() {
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     crate::run_text(
         Duration::from_secs(10),
-        r#"std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/Lst/get(/std/Proc/args(), 1), \\))"#,
+        r#"std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/Lst/get(/std/proc/args(), 1), \\))"#,
         system,
     )
     .expect("expected result");
@@ -171,7 +171,7 @@ fn proc_env_found_unwraps_to_some() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        match /std/Proc/env("HOME") : {}
+        match /std/proc/env("HOME") : {}
         | some(v) => let _ = std/Io/write(std/Io/stdout, v); ()
         | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bin("missing")); ()
         end
@@ -189,7 +189,7 @@ fn proc_env_absent_is_none() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        match /std/Proc/env("NOPE") : {}
+        match /std/proc/env("NOPE") : {}
         | some(v) => let _ = std/Io/write(std/Io/stdout, v); ()
         | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bin("missing")); ()
         end
@@ -205,7 +205,7 @@ fn proc_env_absent_is_none() {
 fn proc_exit_halts_with_code() {
     // exit traps: it surfaces its code *and* the trailing write never runs.
     let entrypoint = r#"
-        let _ : std/False = /std/Proc/exit(7);
+        let _ : std/False = /std/proc/exit(7);
         std/Io/write(std/Io/stdout, /std/Str/to_bin("unreachable"))
         "#
     .parse::<curios_text::Entrypoint>()

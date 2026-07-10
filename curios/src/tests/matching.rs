@@ -402,8 +402,8 @@ fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
 #[test]
 fn nested_nat_literal_dispatch_selects_matching_case() {
     let source = r#"
-        use /std/{Option, Nat, Bin, Rand, Io};
-        let z = Bin/len(Rand/bin(0));
+        use /std/{Option, Nat, Bin, rand, Io};
+        let z = Bin/len(rand/bin(0));
         let n = Nat/add(z, 5);
         let hit =
             match Option/some(n)
@@ -421,8 +421,8 @@ fn nested_nat_literal_dispatch_selects_matching_case() {
 #[test]
 fn nested_nat_literal_dispatch_falls_through_to_default() {
     let source = r#"
-        use /std/{Option, Nat, Bin, Rand, Io};
-        let z = Bin/len(Rand/bin(0));
+        use /std/{Option, Nat, Bin, rand, Io};
+        let z = Bin/len(rand/bin(0));
         let n = Nat/add(z, 6);
         let miss =
             match Option/some(n)
@@ -454,14 +454,14 @@ fn effectful_match_scrutinee_runs_once() {
 }
 
 // The headless `Bln` ladder, exercised as emitted wasm rather than folded:
-// `Rand/bin(0)` is length 0 so `z` is a runtime-opaque 0, and `n` is a runtime
+// `rand/bin(0)` is length 0 so `z` is a runtime-opaque 0, and `n` is a runtime
 // 2. The first *true* condition wins — `n <= 0` and `n <= 1` are false, `n <= 2`
 // selects `300`, and the later-true `_` default is never reached.
 #[test]
 fn headless_cond_ladder_selects_first_true_arm() {
     let source = r#"
-        use /std/{Nat, Bin, Rand, Io};
-        let z = Bin/len(Rand/bin(0));
+        use /std/{Nat, Bin, rand, Io};
+        let z = Bin/len(rand/bin(0));
         let n = Nat/add(z, 2);
         let result =
             match
@@ -483,8 +483,8 @@ fn headless_cond_ladder_selects_first_true_arm() {
 #[test]
 fn headless_cond_ladder_default_only() {
     let source = r#"
-        use /std/{Nat, Bin, Rand, Io};
-        let z = Bin/len(Rand/bin(0));
+        use /std/{Nat, Bin, rand, Io};
+        let z = Bin/len(rand/bin(0));
         let result =
             match
             | _ => Nat/add(z, 42)
@@ -504,8 +504,8 @@ fn headless_cond_ladder_default_only() {
 #[test]
 fn headless_cond_ladder_evaluates_conditions_lazily() {
     let source = r#"
-        use /std/{Nat, Bin, Rand, Io, Bln, Str};
-        let z = Bin/len(Rand/bin(0));
+        use /std/{Nat, Bin, rand, Io, Bln, Str};
+        let z = Bin/len(rand/bin(0));
         let probe(tag : Str, r : Bln) -> Bln =
             let _ = Io/print(tag);
             r;
@@ -525,17 +525,17 @@ fn headless_cond_ladder_evaluates_conditions_lazily() {
 }
 
 // A headed inductive match with a `| _ =>` catch-all: enumerated constructors
-// take their arm, everything else the default. Rand-tainted so it runs as wasm.
+// take their arm, everything else the default. rand-tainted so it runs as wasm.
 #[test]
 fn inductive_match_catch_all_covers_unenumerated_constructors() {
     let source = r#"
-        use /std/{Option, Nat, Bin, Rand, Io};
+        use /std/{Option, Nat, Bin, rand, Io};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(x) => x + 10
             | _ => 99
             end;
-        let z = Bin/len(Rand/bin(0));
+        let z = Bin/len(rand/bin(0));
         Io/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
         "#;
 
@@ -550,13 +550,13 @@ fn inductive_match_catch_all_covers_unenumerated_constructors() {
 #[test]
 fn headless_ladder_bind_arm_destructures_or_falls_through() {
     let source = r#"
-        use /std/{Option, Nat, Bin, Rand, Io};
+        use /std/{Option, Nat, Bin, rand, Io};
         let f(o : Option(Nat)) -> Nat =
             match
             | some(x) = o => x + 10
             | _ => 99
             end;
-        let z = Bin/len(Rand/bin(0));
+        let z = Bin/len(rand/bin(0));
         Io/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
         "#;
 
@@ -571,13 +571,13 @@ fn headless_ladder_bind_arm_destructures_or_falls_through() {
 #[test]
 fn headless_ladder_nested_bind_shares_the_fallthrough() {
     let source = r#"
-        use /std/{Option, Lst, Nat, Bin, Rand, Io};
+        use /std/{Option, Lst, Nat, Bin, rand, Io};
         let f(o : Option(Lst(Nat))) -> Nat =
             match
             | some([h, ..t]) = o => h + 1
             | _ => 99
             end;
-        let z = Bin/len(Rand/bin(0));
+        let z = Bin/len(rand/bin(0));
         let a = f(Option/some([5, 6, 7]));
         let b = f(Option/some([]));
         let c = f(Option/none());

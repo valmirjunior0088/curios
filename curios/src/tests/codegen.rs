@@ -39,7 +39,7 @@ pub(super) fn printed(module: &curios_cont::Module) -> String {
     String::from_utf8(io.output()).unwrap()
 }
 
-/// Run `module` and return the value it exits with via `Proc/exit`. Codegen
+/// Run `module` and return the value it exits with via `proc/exit`. Codegen
 /// fixtures surface a computed `Nat` by exiting with it; the i31 payload crosses
 /// the exit code unsigned.
 pub(super) fn i32_result(module: &curios_cont::Module) -> i32 {

@@ -25,6 +25,9 @@ pub use Or/{let Or};
 pub mod Cmp;
 pub use Cmp/{let Cmp};
 
+pub mod Monad;
+pub use Monad/{let Monad};
+
 pub mod Nat;
 pub use Nat/{let Nat};
 
@@ -49,8 +52,6 @@ pub use Io/{let Io};
 pub mod File;
 pub use File/{let File};
 
-pub mod Tcp;
-
 pub mod Task;
 pub use Task/{let Task};
 
@@ -70,9 +71,6 @@ pub use Ord/{let Ord};
 
 pub mod Show;
 pub use Show/{let Show};
-
-pub mod Monad;
-pub use Monad/{let Monad};
 
 pub mod BigNat;
 pub use BigNat/{let BigNat};
@@ -101,16 +99,18 @@ pub use Bln/{let Bln};
 pub mod Parse;
 pub use Parse/{let Parse};
 
-pub mod Http;
-
 pub mod Json;
 pub use Json/{let Json};
 
 pub mod Fmt;
 pub use Fmt/{let Fmt};
 
-pub mod Time;
+pub mod tcp;
 
-pub mod Rand;
+pub mod http;
 
-pub mod Proc;
+pub mod time;
+
+pub mod rand;
+
+pub mod proc;

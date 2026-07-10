@@ -264,7 +264,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::IoType => (prim.clone(), Term::type_()),
         Prim::Io(_) => (prim.clone(), io_type),
         // `(@A : Type) -> Nat -> A`: exit never returns, so the result type is
-        // whatever the caller demands (`/std/Proc/exit` instantiates it at
+        // whatever the caller demands (`/std/proc/exit` instantiates it at
         // `False`). The type argument keeps the kernel from naming `/std/False`.
         Prim::IoExit(type_, code) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;

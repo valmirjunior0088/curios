@@ -1,4 +1,5 @@
-use /std/{Bin, Str, Nat, Bln, Char, Lst, Parse, Result, Option, Tcp, Io, Task};
+use /std/{Bin, Str, Nat, Bln, Char, Lst, Parse, Result, Option, Io, Task};
+use /std/tcp/{Settings, Socket};
 
 pub induct Method : Type
 | get()
@@ -23,7 +24,7 @@ pub record Request : Type {
     path : Str,
     headers : Lst({Str, Str}),
     body : Bin,
-    settings : Tcp/Settings
+    settings : Settings
 }
 
 pub let get(host : Str, port : Nat, path : Str) -> Request =
@@ -34,7 +35,7 @@ pub let get(host : Str, port : Nat, path : Str) -> Request =
         path = path,
         headers = [],
         body = \\,
-        settings = Tcp/default
+        settings = Settings/default
     };
 
 pub let post(host : Str, port : Nat, path : Str, body : Bin) -> Request =
@@ -45,11 +46,11 @@ pub let post(host : Str, port : Nat, path : Str, body : Bin) -> Request =
         path = path,
         headers = [],
         body = body,
-        settings = Tcp/default
+        settings = Settings/default
     };
 
-let with_tls(s : Tcp/Settings) -> Tcp/Settings =
-    Tcp/Settings { ..s, tls = true };
+let with_tls(s : Settings) -> Settings =
+    Settings { ..s, tls = true };
 
 pub let secure(request : Request) -> Request =
     Request { ..request, settings = with_tls(request.settings) };
@@ -174,7 +175,7 @@ pub let header(resp : Response, name : Str) -> Option(Str) =
     header_lookup(resp.headers, name);
 
 pub let perform(request : Request) -> Task(Result(Response, Error)) =
-    Task/bind(Tcp/call(request.settings, request.host, request.port, render(request)), (r) =>
+    Task/bind(Socket/call(request.settings, request.host, request.port, render(request)), (r) =>
         match r : Task(Result(Response, Error))
         | success(bytes) =>
             match Parse/run(decode, bytes) : Task(Result(Response, Error))

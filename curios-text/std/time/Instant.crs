@@ -1,5 +1,5 @@
-use /sys/{Io};
 use /std/{Nat, Bln};
+use /std/time/{Duration};
 
 pub struct Instant : Type {
     secs_hi : Nat,
@@ -7,25 +7,8 @@ pub struct Instant : Type {
     nanos : Nat
 }
 
-pub struct Duration : Type {
-    secs : Nat,
-    nanos : Nat
-}
-
-pub let zero : Duration =
-    Duration { secs = 0, nanos = 0 };
-
-pub let of_secs(secs : Nat) -> Duration =
-    Duration { secs = secs, nanos = 0 };
-
-pub let of_millis(ms : Nat) -> Duration =
-    Duration {
-        secs = ms / 1000,
-        nanos = ms % 1000 * 1000000
-    };
-
 pub let now() -> Instant =
-    let r = Io/clock_wall();
+    let r = /sys/Io/clock_wall();
     Instant {
         secs_hi = r.secs_hi,
         secs_lo = r.secs_lo,
@@ -33,20 +16,8 @@ pub let now() -> Instant =
     };
 
 pub let elapsed() -> Duration =
-    let r = Io/clock_mono();
-    Duration {
-        secs = r.secs,
-        nanos = r.nanos
-    };
-
-pub let secs(d : Duration) -> Nat =
-    d.secs;
-
-pub let nanos(d : Duration) -> Nat =
-    d.nanos;
-
-pub let to_millis(d : Duration) -> Nat =
-    d.secs * 1000 + d.nanos / 1000000;
+    let r = /sys/Io/clock_mono();
+    Duration/of(r.secs, r.nanos);
 
 let sub_digit(x : Nat, y : Nat) -> {digit : Nat, borrow : Nat} =
     match x < y
@@ -58,10 +29,7 @@ pub let diff(a : Instant, b : Instant) -> Duration =
     let d_nanos = sub_digit(a.nanos, b.nanos);
     let d_lo = sub_digit(a.secs_lo, b.secs_lo + d_nanos.borrow);
     let r_hi = a.secs_hi - (b.secs_hi + d_lo.borrow);
-    Duration {
-        secs = r_hi * 1000000000 + d_lo.digit,
-        nanos = d_nanos.digit
-    };
+    Duration/of(r_hi * 1000000000 + d_lo.digit, d_nanos.digit);
 
 pub let before(a : Instant, b : Instant) -> Bln =
     match
