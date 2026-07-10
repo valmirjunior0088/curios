@@ -1,5 +1,4 @@
-use /sys/{Io};
 use /std/{Nat, Bin};
 
 pub let bin(n : Nat) -> Bin =
-    Io/random(n);
+    /sys/Io/random(n);

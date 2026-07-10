@@ -1,13 +1,12 @@
 pub use /sys/Io/{args};
-use /sys/{Io};
 use /std/{Bin, Nat, Str, Option, False};
 
 pub let env(name : Str) -> Option(Bin) =
-    let r = Io/env(Str/to_bin(name));
+    let r = /sys/Io/env(Str/to_bin(name));
     match r.status == /sys/Io/Status/ok
     | true => Option/some(r.value)
     | false => Option/none()
     end;
 
 pub let exit(code : Nat) -> False =
-    Io/exit(code);
+    /sys/Io/exit(code);
