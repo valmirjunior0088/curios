@@ -644,10 +644,22 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Io"], include_str!("../std/Io.crs")),
     (&["std", "File"], include_str!("../std/File.crs")),
     (&["std", "tcp"], include_str!("../std/tcp.crs")),
-    (&["std", "tcp", "Settings"], include_str!("../std/tcp/Settings.crs")),
-    (&["std", "tcp", "resolve"], include_str!("../std/tcp/resolve.crs")),
-    (&["std", "tcp", "Socket"], include_str!("../std/tcp/Socket.crs")),
-    (&["std", "tcp", "Listener"], include_str!("../std/tcp/Listener.crs")),
+    (
+        &["std", "tcp", "Settings"],
+        include_str!("../std/tcp/Settings.crs"),
+    ),
+    (
+        &["std", "tcp", "resolve"],
+        include_str!("../std/tcp/resolve.crs"),
+    ),
+    (
+        &["std", "tcp", "Socket"],
+        include_str!("../std/tcp/Socket.crs"),
+    ),
+    (
+        &["std", "tcp", "Listener"],
+        include_str!("../std/tcp/Listener.crs"),
+    ),
     (&["std", "Task"], include_str!("../std/Task.crs")),
     (&["std", "http"], include_str!("../std/http.crs")),
     (&["std", "Char"], include_str!("../std/Char.crs")),
@@ -678,8 +690,14 @@ const STD: &[(&[&str], &str)] = &[
     (&["std", "Json"], include_str!("../std/Json.crs")),
     (&["std", "Fmt"], include_str!("../std/Fmt.crs")),
     (&["std", "time"], include_str!("../std/time.crs")),
-    (&["std", "time", "Instant"], include_str!("../std/time/Instant.crs")),
-    (&["std", "time", "Duration"], include_str!("../std/time/Duration.crs")),
+    (
+        &["std", "time", "Instant"],
+        include_str!("../std/time/Instant.crs"),
+    ),
+    (
+        &["std", "time", "Duration"],
+        include_str!("../std/time/Duration.crs"),
+    ),
     (&["std", "rand"], include_str!("../std/rand.crs")),
     (&["std", "proc"], include_str!("../std/proc.crs")),
 ];
