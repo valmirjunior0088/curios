@@ -1,6 +1,6 @@
 pub use /sys/{Int};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, to_nat, to_flt};
-use /std/{Nat, Str, Option};
+use /std/{Nat, Str, Option, Order};
 
 pub let to_str(n : Int) -> Str =
     let mag = Nat/to_str(abs(n));
@@ -34,4 +34,11 @@ pub let abs(n : Int) -> Nat =
     match n >= +0
     | true => to_nat(n)
     | false => to_nat(+0 - n)
+    end;
+
+pub let cmp(x : Int, y : Int) -> Order =
+    match
+    | x < y => Order/lt()
+    | x == y => Order/eq()
+    | _ => Order/gt()
     end;

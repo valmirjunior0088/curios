@@ -84,7 +84,7 @@ pub induct Lte : (a : Nat, b : Nat) -> Prop
 | s(@a : Nat, @b : Nat, prev : Lte(a, b)) : (a + 1, b + 1)
 end
 
-pub rec lte_refl(n : Nat) -> Lte(n, n) =
+pub let lte_refl(n : Nat) -> Lte(n, n) =
     match n : (m) => Lte(m, m)
     | 0 => Lte/z()
     | pred + 1; ih => Lte/s(ih)
@@ -96,7 +96,7 @@ pub rec lte_succ_r(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(a, b + 1) =
     | s(_, _, prev) => Lte/s(lte_succ_r(prev))
     end;
 
-pub rec lte_add_r(a : Nat, k : Nat) -> Lte(a, a + k) =
+pub let lte_add_r(a : Nat, k : Nat) -> Lte(a, a + k) =
     match k : (m) => Lte(a, a + m)
     | 0 => lte_refl(a)
     | pred + 1; ih => lte_succ_r(ih)
@@ -122,13 +122,13 @@ pub let lt_of_lte_succ(@a : Nat, @b : Nat, p : Lte(a + 1, b)) -> Lt(a, b) =
     | s(a2, b2, prev) => lte_to_lt_succ(prev)
     end;
 
-pub rec lte_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(n + a, n + b) =
+pub let lte_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(n + a, n + b) =
     match n : (m) => Lte(m + a, m + b)
     | 0 => p
     | m + 1; ih => Lte/s(ih)
     end;
 
-pub let compare(x : Nat, y : Nat) -> Order =
+pub let cmp(x : Nat, y : Nat) -> Order =
     match
     | x < y => Order/lt()
     | x == y => Order/eq()

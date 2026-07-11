@@ -1,18 +1,24 @@
-use /std/{Nat, Order, Eql};
+use /std/{Nat, Int, Flt, BigNat, Order, Eql};
 
--- A total order. The `use Eql(A)` field is a superclass edge: an `Ord(A)`
--- in scope yields an `Eql(A)` by projection.
 pub concept Ord(A : Type) : Type {
     use Eql(A),
     cmp(A, A) -> Order
 }
 
--- Lift `Ord/cmp` to the module level (see `Show`). The superclass edge is
--- anonymous: it has no method wrapper, and `Eql/eql` reaches it by resolution.
 pub use Ord/*;
 
--- The superclass field is omitted: it resolves to the registered `Eql(Nat)`
--- witness, the same way a call-site `use` slot would.
 satisfy Ord(Nat) {
-    cmp(a, b) = Nat/compare(a, b)
+    cmp(a, b) = Nat/cmp(a, b)
+}
+
+satisfy Ord(Int) {
+    cmp(a, b) = Int/cmp(a, b)
+}
+
+satisfy Ord(Flt) {
+    cmp(a, b) = Flt/cmp(a, b)
+}
+
+satisfy Ord(BigNat) {
+    cmp(a, b) = BigNat/cmp(a, b)
 }

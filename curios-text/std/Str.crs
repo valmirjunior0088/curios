@@ -156,9 +156,6 @@ pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bin, w : Utf8(Scan/cont(k, 
             match kp
             | 0 => Nat/Lte/s(Nat/Lte/z())
             | kpp + 1; ih2 =>
-                -- Matching `Nat/in_range(c, lo, hi)` directly refines `rest`'s
-                -- type: `step(c, Scan/cont(kp + 1, lo, hi))` reduces to
-                -- `Scan/cont(kpp + 1, 0x80, 0xBF)` (true) or `Scan/bad()` (false).
                 Nat/Lte/s(
                     match Nat/in_range(c, lo, hi)
                     | true => cont_len(kpp + 1, @0x80, @0xBF, @tt, rest)
@@ -192,8 +189,6 @@ pub rec take_conts(b : Bin, off : Nat, remaining : Nat, acc : Nat,
 
 pub rec peel_byte(@s : Scan, @b : Bin, nz : Nat/Lt(0, Bin/len(b)), w : Utf8(s, b))
     -> Utf8(step(Bin/at(b, 0, nz), s), Bin/slice(b, 1, Bin/len(b))) =
-    -- Matching `w` directly refines the goal: the type checker generalizes the
-    -- dependent hypothesis `nz` into the motive automatically (no convoy needed).
     match w
     | stop() =>
         False/absurd(@Utf8(step(Bin/at(\\, 0, nz), Scan/lead()), Bin/slice(\\, 1, Bin/len(\\))), nz)
@@ -212,10 +207,6 @@ pub rec count_w(s : Scan, b : Bin) -> Nat =
     end;
 
 pub let decode_head(c : Nat, @t : Bin, w : Utf8(Scan/lead(), Bin/cons(c, t))) -> Nat =
-    -- `peel_byte(...)` has type `Utf8(step(c, Scan/lead()), t)`. Matching
-    -- `classify(c)` directly refines that type: `step(c, Scan/lead())` reduces
-    -- to the arm's `Scan` (`Scan/cont(k, lo, hi)` / `Scan/bad()`), so no `Eq`
-    -- transport is needed to retype `w`.
     match classify(c)
     | ascii() => c
     | lead(k, lo, hi, payload) =>

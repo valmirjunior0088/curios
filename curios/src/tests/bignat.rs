@@ -49,8 +49,8 @@ fn bignat_mul_pow2_builds_large_powers() {
 }
 
 #[test]
-fn bignat_compare_orders_by_magnitude() {
-    // `compare` decides by the most-significant limb first (recursing to the top
+fn bignat_cmp_orders_by_magnitude() {
+    // `cmp` decides by the most-significant limb first (recursing to the top
     // of the little-endian list), so two values differing only in the lowest limb
     // still order correctly: 12345678 < 12345679, equal to itself, and the
     // reverse is greater.
@@ -64,7 +64,7 @@ fn bignat_compare_orders_by_magnitude() {
             end;
         let a = BigNat/of_nat(12345678);
         let b = BigNat/of_nat(12345679);
-        Io/print(Str/concat(Str/concat(show(BigNat/compare(a, b)), show(BigNat/compare(a, a))), show(BigNat/compare(b, a))))
+        Io/print(Str/concat(Str/concat(show(BigNat/cmp(a, b)), show(BigNat/cmp(a, a))), show(BigNat/cmp(b, a))))
         "#;
     assert_eq!(run(source), b"lteqgt");
 }

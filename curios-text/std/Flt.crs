@@ -138,6 +138,13 @@ let render(f_mant : Nat, exp_field : Nat, even : Bln) -> Str =
     | false => layout(digits_to_str(norm), k2)
     end;
 
+pub let cmp(x : Flt, y : Flt) -> Order =
+    match
+    | x < y => Order/lt()
+    | x == y => Order/eq()
+    | _ => Order/gt()
+    end;
+
 pub let to_str(f : Flt) -> Str =
     let b = Flt/to_le_bin(f);
     let b0 = Option/unwrap_or(Bin/get(b, 0), 0);

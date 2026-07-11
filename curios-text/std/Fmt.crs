@@ -15,17 +15,12 @@ pub rec format_type_with(T: Type, f: Fmt) -> Type =
     | nat(rest) => (Nat) -> format_type_with(T, rest)
     end;
 
--- `parse` receives a valid `Str` and splits at ASCII '%', so the sliced
--- segment is always valid UTF-8; the `none` arm is unreachable in practice.
 let flush(bytes : Bin, start : Nat, stop : Nat, rest : Fmt) -> Fmt =
     match Str/of_bin(Bin/slice(bytes, start, stop))
     | some(piece) => Fmt/lit(piece, rest)
     | none() => Fmt/nil()
     end;
 
--- First-order on purpose: no combinator records, no local closures — every
--- call is direct, so the compiler can run a literal format string's parse at
--- compile time (and a runtime format string doesn't drag in /std/Parse).
 rec parse_at(bytes : Bin, pos : Nat) -> Fmt =
     match Nat/try_lt(pos, Bin/len(bytes))
     | none() => Fmt/nil()

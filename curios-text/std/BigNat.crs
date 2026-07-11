@@ -21,42 +21,48 @@ pub let of_nat(n : Nat) -> BigNat =
 pub let is_zero(x : BigNat) -> Bln =
     Lst/len(x.limbs) == 0;
 
-rec cmp(xs : Lst(Nat), ys : Lst(Nat)) -> Order =
+rec cmp_limbs(xs : Lst(Nat), ys : Lst(Nat)) -> Order =
     match (xs, ys)
     | ([], []) => Order/eq()
     | ([], [_, .._]) => Order/lt()
     | ([_, .._], []) => Order/gt()
     | ([x, ..xt], [y, ..yt]) =>
-        match cmp(xt, yt)
-        | eq() => Nat/compare(x, y)
+        match cmp_limbs(xt, yt)
+        | eq() => Nat/cmp(x, y)
         | lt() => Order/lt()
         | gt() => Order/gt()
         end
     end;
 
-pub let compare(a : BigNat, b : BigNat) -> Order =
-    cmp(a.limbs, b.limbs);
+pub let cmp(a : BigNat, b : BigNat) -> Order =
+    cmp_limbs(a.limbs, b.limbs);
+
+pub let eql(a : BigNat, b : BigNat) -> Bln =
+    match cmp(a, b)
+    | eq() => true
+    | _ => false
+    end;
 
 pub let lt(a : BigNat, b : BigNat) -> Bln =
-    match compare(a, b)
+    match cmp(a, b)
     | lt() => true
     | _ => false
     end;
 
 pub let lte(a : BigNat, b : BigNat) -> Bln =
-    match compare(a, b)
+    match cmp(a, b)
     | gt() => false
     | _ => true
     end;
 
 pub let gt(a : BigNat, b : BigNat) -> Bln =
-    match compare(a, b)
+    match cmp(a, b)
     | gt() => true
     | _ => false
     end;
 
 pub let gte(a : BigNat, b : BigNat) -> Bln =
-    match compare(a, b)
+    match cmp(a, b)
     | lt() => false
     | _ => true
     end;
@@ -98,18 +104,17 @@ rec sub_b(xs : Lst(Nat), ys : Lst(Nat), borrow : Nat) -> Lst(Nat) =
         end
     end;
 
-rec trim(xs : Lst(Nat)) -> Lst(Nat) =
+let trim(xs : Lst(Nat)) -> Lst(Nat) =
     match xs
     | [] => []
-    | [x, ..xt] =>
-        let rest = trim(xt);
-        match Lst/len(rest) == 0
+    | [x, ..xt]; ih =>
+        match Lst/len(ih) == 0
         | true =>
             match x == 0
             | true => []
             | false => [x]
             end
-        | false => Lst/cons(x, rest)
+        | false => Lst/cons(x, ih)
         end
     end;
 
@@ -148,8 +153,6 @@ let pad4(n : Nat) -> Str =
     | _ => Nat/to_str(n)
     end;
 
--- Limbs are little-endian; print the top limb bare, then the rest
--- most-significant-first, zero-padded to the limb width.
 let show(xs : Lst(Nat)) -> Str =
     let n = Lst/len(xs);
     match n == 0

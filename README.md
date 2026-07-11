@@ -93,7 +93,7 @@ The `curios` binary exposes two subcommands:
 
 | Command                              | What it does                                                                         |
 | -------------------------------------- | ------------------------------------------------------------------------------------ |
-| `curios run <file.crs> [args...]`    | Compile and execute the program. Extra arguments are readable from `/std/Proc/args`. |
+| `curios run <file.crs> [args...]`    | Compile and execute the program. Extra arguments are readable from `/std/proc/args`. |
 | `curios compile <file.crs> [-o out]` | Compile to a self-contained native executable (default name: the input file stem).   |
 
 Two global flags are useful while exploring:

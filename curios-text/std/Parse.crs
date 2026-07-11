@@ -1,8 +1,5 @@
 use /std/{Result, Nat, Bin, Str, Bln, Lst};
 
--- A parser is nominal (not a bare function type) so it has a rigid head:
--- witness resolution keys on it (`Monad(Parse)`) and the elaborator can
--- infer `M := Parse` from an applied occurrence.
 pub record Parse(A : Type) : Type {
     run(input : Bin, pos : Nat) -> Result({Nat, A}, Str)
 }

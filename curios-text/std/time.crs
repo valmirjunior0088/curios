@@ -1,5 +1,5 @@
 pub mod Instant;
-pub use Instant/{Instant};
+pub use Instant/{let Instant};
 
 pub mod Duration;
-pub use Duration/{Duration};
+pub use Duration/{let Duration};
