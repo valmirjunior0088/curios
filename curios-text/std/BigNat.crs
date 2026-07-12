@@ -1,41 +1,122 @@
-use /std/{Nat, Bln, Lst, Str, Option, Order};
+use /std/{Nat, Bln, Str, Order, Eq, False, True};
 
-pub record BigNat : Type {
-    limbs : Lst(Nat)
-}
+-- Arbitrary-precision naturals as little-endian binary numerals, Coq's
+-- `positive`/`N` design: `Pos` is the strictly positive stratum, where `one()`
+-- is the terminating leading 1 bit, `o(p)` appends a low 0 bit (value 2·p),
+-- and `i(p)` a low 1 bit (value 2·p + 1). Every number has exactly one
+-- representation — the terminator is the mandatory leading 1 — so structural
+-- equality is value equality by construction: no trimming, no certificate.
+-- `BigNat` adjoins the (equally unique) zero.
+--
+-- Every operation is pure constructor structure — no `/`, `%`, or `-` on
+-- symbolic operands anywhere (the type level cannot reason about those
+-- primitives) — which is what makes the accompanying lemma base provable.
+-- The two boundary functions (`of_nat`, `to_str`) alone use native `Nat`
+-- arithmetic, on runtime values only; no proof mentions them.
 
-let base : Nat = 10000;
+pub induct Pos : Type
+| one()
+| o(Pos)
+| i(Pos)
+end
 
-rec limbs_of_nat(n : Nat) -> Lst(Nat) =
-    match n == 0
-    | true => []
-    | false => Lst/cons(n % base, limbs_of_nat(n / base))
-    end;
+pub induct BigNat : Type
+| zero()
+| pos(Pos)
+end
 
 pub let zero : BigNat =
-    BigNat { limbs = [] };
+    BigNat/zero();
 
-pub let of_nat(n : Nat) -> BigNat =
-    BigNat { limbs = limbs_of_nat(n) };
+pub let is_zero(a : BigNat) -> Bln =
+    match a
+    | zero() => true
+    | pos(_) => false
+    end;
 
-pub let is_zero(x : BigNat) -> Bln =
-    Lst/len(x.limbs) == 0;
+-- 2·a and 2·a + 1 on the zero-adjoined carrier.
+let dbl(a : BigNat) -> BigNat =
+    match a
+    | zero() => BigNat/zero()
+    | pos(p) => BigNat/pos(Pos/o(p))
+    end;
 
-rec cmp_limbs(xs : Lst(Nat), ys : Lst(Nat)) -> Order =
-    match (xs, ys)
-    | ([], []) => Order/eq()
-    | ([], [_, .._]) => Order/lt()
-    | ([_, .._], []) => Order/gt()
-    | ([x, ..xt], [y, ..yt]) =>
-        match cmp_limbs(xt, yt)
-        | eq() => Nat/cmp(x, y)
+let dbl_succ(a : BigNat) -> BigNat =
+    match a
+    | zero() => BigNat/pos(Pos/one())
+    | pos(p) => BigNat/pos(Pos/i(p))
+    end;
+
+pub rec pos_succ(x : Pos) -> Pos =
+    match x
+    | one() => Pos/o(Pos/one())
+    | o(t) => Pos/i(t)
+    | i(t) => Pos/o(pos_succ(t))
+    end;
+
+-- Addition, with `pos_add_c` the carry twin (value x + y + 1); the carry
+-- stays in the function, never in the data.
+pub rec pos_add(x : Pos, y : Pos) -> Pos =
+    match (x, y)
+    | (one(), q) => pos_succ(q)
+    | (o(xt), one()) => Pos/i(xt)
+    | (o(xt), o(yt)) => Pos/o(pos_add(xt, yt))
+    | (o(xt), i(yt)) => Pos/i(pos_add(xt, yt))
+    | (i(xt), one()) => Pos/o(pos_succ(xt))
+    | (i(xt), o(yt)) => Pos/i(pos_add(xt, yt))
+    | (i(xt), i(yt)) => Pos/o(pos_add_c(xt, yt))
+    end
+and pos_add_c(x : Pos, y : Pos) -> Pos =
+    match (x, y)
+    | (one(), q) => pos_succ(pos_succ(q))
+    | (o(xt), one()) => Pos/o(pos_succ(xt))
+    | (o(xt), o(yt)) => Pos/i(pos_add(xt, yt))
+    | (o(xt), i(yt)) => Pos/o(pos_add_c(xt, yt))
+    | (i(xt), one()) => Pos/i(pos_succ(xt))
+    | (i(xt), o(yt)) => Pos/o(pos_add_c(xt, yt))
+    | (i(xt), i(yt)) => Pos/i(pos_add_c(xt, yt))
+    end;
+
+pub let add(a : BigNat, b : BigNat) -> BigNat =
+    match (a, b)
+    | (zero(), y) => y
+    | (pos(p), zero()) => BigNat/pos(p)
+    | (pos(p), pos(q)) => BigNat/pos(pos_add(p, q))
+    end;
+
+-- Comparison: the high bits (the recursion on the tails) decide; only at a
+-- high-bit tie does the low bit break it, and only a genuinely longer number
+-- is larger.
+pub rec pos_cmp(x : Pos, y : Pos) -> Order =
+    match (x, y)
+    | (one(), one()) => Order/eq()
+    | (one(), o(_)) => Order/lt()
+    | (one(), i(_)) => Order/lt()
+    | (o(_), one()) => Order/gt()
+    | (o(xt), o(yt)) => pos_cmp(xt, yt)
+    | (o(xt), i(yt)) =>
+        match pos_cmp(xt, yt)
+        | eq() => Order/lt()
         | lt() => Order/lt()
         | gt() => Order/gt()
         end
+    | (i(_), one()) => Order/gt()
+    | (i(xt), o(yt)) =>
+        match pos_cmp(xt, yt)
+        | eq() => Order/gt()
+        | lt() => Order/lt()
+        | gt() => Order/gt()
+        end
+    | (i(xt), i(yt)) => pos_cmp(xt, yt)
     end;
 
 pub let cmp(a : BigNat, b : BigNat) -> Order =
-    cmp_limbs(a.limbs, b.limbs);
+    match (a, b)
+    | (zero(), zero()) => Order/eq()
+    | (zero(), pos(_)) => Order/lt()
+    | (pos(_), zero()) => Order/gt()
+    | (pos(p), pos(q)) => pos_cmp(p, q)
+    end;
 
 pub let eql(a : BigNat, b : BigNat) -> Bln =
     match cmp(a, b)
@@ -67,104 +148,1424 @@ pub let gte(a : BigNat, b : BigNat) -> Bln =
     | _ => true
     end;
 
-rec add_c(xs : Lst(Nat), ys : Lst(Nat), carry : Nat) -> Lst(Nat) =
-    match (xs, ys)
-    | ([], []) =>
-        match carry == 0
-        | true => []
-        | false => [carry]
-        end
-    | ([], [y, ..yt]) =>
-        let s = y + carry;
-        Lst/cons(s % base, add_c([], yt, s / base))
-    | ([x, ..xt], []) =>
-        let s = x + carry;
-        Lst/cons(s % base, add_c(xt, [], s / base))
-    | ([x, ..xt], [y, ..yt]) =>
-        let s = x + y + carry;
-        Lst/cons(s % base, add_c(xt, yt, s / base))
+-- 2·x − 1; total on `Pos` since x ≥ 1 makes the result ≥ 1 (and odd).
+rec pos_pred_dbl(x : Pos) -> Pos =
+    match x
+    | one() => Pos/one()
+    | o(t) => Pos/i(pos_pred_dbl(t))
+    | i(t) => Pos/i(Pos/o(t))
     end;
 
-pub let add(a : BigNat, b : BigNat) -> BigNat =
-    BigNat { limbs = add_c(a.limbs, b.limbs, 0) };
+-- Truncating subtraction via Coq's mask: `nul` means x = y, `sub(d)` means
+-- x − y = d > 0, `neg` means x < y (magnitude dropped — `BigNat/sub`
+-- truncates to zero there, and the signed variant lives with `BigInt`).
+induct Mask : Type
+| nul()
+| sub(Pos)
+| neg()
+end
 
-rec sub_b(xs : Lst(Nat), ys : Lst(Nat), borrow : Nat) -> Lst(Nat) =
-    match (xs, ys)
-    | ([], _) => []
-    | ([x, ..xt], []) =>
-        match x < borrow
-        | true => Lst/cons(x + base - borrow, sub_b(xt, [], 1))
-        | false => Lst/cons(x - borrow, sub_b(xt, [], 0))
-        end
-    | ([x, ..xt], [y, ..yt]) =>
-        let need = y + borrow;
-        match x < need
-        | true => Lst/cons(x + base - need, sub_b(xt, yt, 1))
-        | false => Lst/cons(x - need, sub_b(xt, yt, 0))
-        end
+let mask_dbl(m : Mask) -> Mask =
+    match m
+    | nul() => Mask/nul()
+    | sub(d) => Mask/sub(Pos/o(d))
+    | neg() => Mask/neg()
     end;
 
-let trim(xs : Lst(Nat)) -> Lst(Nat) =
-    match xs
-    | [] => []
-    | [x, ..xt]; ih =>
-        match Lst/len(ih) == 0
-        | true =>
-            match x == 0
-            | true => []
-            | false => [x]
-            end
-        | false => Lst/cons(x, ih)
-        end
+let mask_dbl_succ(m : Mask) -> Mask =
+    match m
+    | nul() => Mask/sub(Pos/one())
+    | sub(d) => Mask/sub(Pos/i(d))
+    | neg() => Mask/neg()
+    end;
+
+-- 2·(x − 1) as a mask.
+let mask_dbl_pred(x : Pos) -> Mask =
+    match x
+    | one() => Mask/nul()
+    | o(t) => Mask/sub(Pos/o(pos_pred_dbl(t)))
+    | i(t) => Mask/sub(Pos/o(Pos/o(t)))
+    end;
+
+-- x − y and its borrow twin x − y − 1 (Coq `Pos.sub_mask`).
+rec pos_sub_mask(x : Pos, y : Pos) -> Mask =
+    match (x, y)
+    | (one(), one()) => Mask/nul()
+    | (one(), o(_)) => Mask/neg()
+    | (one(), i(_)) => Mask/neg()
+    | (o(xt), one()) => Mask/sub(pos_pred_dbl(xt))
+    | (o(xt), o(yt)) => mask_dbl(pos_sub_mask(xt, yt))
+    | (o(xt), i(yt)) => mask_dbl_succ(pos_sub_mask_c(xt, yt))
+    | (i(xt), one()) => Mask/sub(Pos/o(xt))
+    | (i(xt), o(yt)) => mask_dbl_succ(pos_sub_mask(xt, yt))
+    | (i(xt), i(yt)) => mask_dbl(pos_sub_mask(xt, yt))
+    end
+and pos_sub_mask_c(x : Pos, y : Pos) -> Mask =
+    match (x, y)
+    | (one(), _) => Mask/neg()
+    | (o(xt), one()) => mask_dbl_pred(xt)
+    | (o(xt), o(yt)) => mask_dbl_succ(pos_sub_mask_c(xt, yt))
+    | (o(xt), i(yt)) => mask_dbl(pos_sub_mask_c(xt, yt))
+    | (i(xt), one()) => Mask/sub(pos_pred_dbl(xt))
+    | (i(xt), o(yt)) => mask_dbl(pos_sub_mask(xt, yt))
+    | (i(xt), i(yt)) => mask_dbl_succ(pos_sub_mask_c(xt, yt))
     end;
 
 pub let sub(a : BigNat, b : BigNat) -> BigNat =
-    BigNat { limbs = trim(sub_b(a.limbs, b.limbs, 0)) };
-
-rec mul_c(xs : Lst(Nat), c : Nat, carry : Nat) -> Lst(Nat) =
-    match xs
-    | [] =>
-        match carry == 0
-        | true => []
-        | false => limbs_of_nat(carry)
+    match (a, b)
+    | (zero(), _) => BigNat/zero()
+    | (pos(p), zero()) => BigNat/pos(p)
+    | (pos(p), pos(q)) =>
+        match pos_sub_mask(p, q)
+        | nul() => BigNat/zero()
+        | sub(d) => BigNat/pos(d)
+        | neg() => BigNat/zero()
         end
-    | [x, ..xt] =>
-        let p = x * c + carry;
-        Lst/cons(p % base, mul_c(xt, c, p / base))
+    end;
+
+pub rec pos_mul(x : Pos, y : Pos) -> Pos =
+    match x
+    | one() => y
+    | o(xt) => Pos/o(pos_mul(xt, y))
+    | i(xt) => pos_add(y, Pos/o(pos_mul(xt, y)))
+    end;
+
+pub let mul(a : BigNat, b : BigNat) -> BigNat =
+    match (a, b)
+    | (zero(), _) => BigNat/zero()
+    | (pos(_), zero()) => BigNat/zero()
+    | (pos(p), pos(q)) => BigNat/pos(pos_mul(p, q))
+    end;
+
+pub let mul_pow2(a : BigNat, k : Nat) -> BigNat =
+    match k
+    | 0 => a
+    | _ + 1; ih => dbl(ih)
+    end;
+
+pub let is_even(a : BigNat) -> Bln =
+    match a
+    | zero() => true
+    | pos(one()) => false
+    | pos(o(_)) => true
+    | pos(i(_)) => false
+    end;
+
+-- Floor halving: drop the low bit. O(1) — the representation is the reason.
+pub let div2(a : BigNat) -> BigNat =
+    match a
+    | zero() => BigNat/zero()
+    | pos(one()) => BigNat/zero()
+    | pos(o(t)) => BigNat/pos(t)
+    | pos(i(t)) => BigNat/pos(t)
+    end;
+
+rec pos_bit_len(x : Pos) -> Nat =
+    match x
+    | one() => 1
+    | o(t) => pos_bit_len(t) + 1
+    | i(t) => pos_bit_len(t) + 1
+    end;
+
+pub let bit_len(a : BigNat) -> Nat =
+    match a
+    | zero() => 0
+    | pos(p) => pos_bit_len(p)
+    end;
+
+-- Boundary decode: native `Nat` arithmetic on runtime values (n ≥ 2 keeps
+-- n / 2 ≥ 1, so the recursion bottoms out at 1).
+rec pos_of_nat(n : Nat) -> Pos =
+    match n == 1
+    | true => Pos/one()
+    | false =>
+        match n % 2 == 0
+        | true => Pos/o(pos_of_nat(n / 2))
+        | false => Pos/i(pos_of_nat(n / 2))
+        end
+    end;
+
+pub let of_nat(n : Nat) -> BigNat =
+    match n == 0
+    | true => BigNat/zero()
+    | false => BigNat/pos(pos_of_nat(n))
     end;
 
 pub let mul_small(a : BigNat, c : Nat) -> BigNat =
-    match c == 0
-    | true => zero
-    | false => BigNat { limbs = mul_c(a.limbs, c, 0) }
+    mul(a, of_nat(c));
+
+-- Boundary decimal rendering: binary long division by 10, high bits first
+-- (the tail holds the high bits, so the recursion is the MSB-first pass),
+-- with the per-step digit arithmetic on small runtime `Nat`s.
+rec pos_div10(p : Pos) -> {BigNat, Nat} =
+    match p
+    | one() => (BigNat/zero(), 1)
+    | o(t) =>
+        let (q, r) = pos_div10(t);
+        let rr = r * 2;
+        match rr < 10
+        | true => (dbl(q), rr)
+        | false => (dbl_succ(q), rr - 10)
+        end
+    | i(t) =>
+        let (q, r) = pos_div10(t);
+        let rr = r * 2 + 1;
+        match rr < 10
+        | true => (dbl(q), rr)
+        | false => (dbl_succ(q), rr - 10)
+        end
     end;
 
-pub rec mul_pow2(a : BigNat, k : Nat) -> BigNat =
-    match k == 0
-    | true => a
-    | false => mul_pow2(mul_small(a, 2), k - 1)
-    end;
-
-let pad4(n : Nat) -> Str =
-    match
-    | n < 10 => Str/concat("000", Nat/to_str(n))
-    | n < 100 => Str/concat("00", Nat/to_str(n))
-    | n < 1000 => Str/concat("0", Nat/to_str(n))
-    | _ => Nat/to_str(n)
-    end;
-
-let show(xs : Lst(Nat)) -> Str =
-    let n = Lst/len(xs);
-    match n == 0
-    | true => "0"
-    | false =>
-        rec go(i : Nat, acc : Str) -> Str =
-            match i == 0
-            | true => acc
-            | false => go(i - 1, Str/concat(acc, pad4(Option/unwrap_or(Lst/get(xs, i - 1), 0))))
-            end;
-        Str/concat(Nat/to_str(Option/unwrap_or(Lst/get(xs, n - 1), 0)), go(n - 1, ""))
+rec to_str_go(a : BigNat, acc : Str) -> Str =
+    match a
+    | zero() => acc
+    | pos(p) =>
+        let (q, r) = pos_div10(p);
+        to_str_go(q, Str/concat(Nat/to_str(r), acc))
     end;
 
 pub let to_str(a : BigNat) -> Str =
-    show(a.limbs);
+    match a
+    | zero() => "0"
+    | pos(_) => to_str_go(a, "")
+    end;
+
+-- ===================== the lemma base: addition =====================
+-- Everything below is compile-time only (Prop-erased); the recursions all
+-- descend on structural subterms.
+
+-- Reflexivity with the subject named: `Eq/refl()`'s implicit must be solved
+-- against both goal indices at once, which the elaborator manages only when
+-- a side is already constructor-headed; naming the subject sidesteps that.
+let qed(@A : Type, x : A) -> Eq(x, x) =
+    Eq/refl();
+
+let cong_o(@s : Pos, @t : Pos, p : Eq(s, t)) -> Eq(Pos/o(s), Pos/o(t)) =
+    match p : (q : Eq(Pos, a, b)) => Eq(Pos/o(a), Pos/o(b))
+    | refl(z) => Eq/refl()
+    end;
+
+let cong_i(@s : Pos, @t : Pos, p : Eq(s, t)) -> Eq(Pos/i(s), Pos/i(t)) =
+    match p : (q : Eq(Pos, a, b)) => Eq(Pos/i(a), Pos/i(b))
+    | refl(z) => Eq/refl()
+    end;
+
+let cong_succ(@s : Pos, @t : Pos, p : Eq(s, t)) -> Eq(pos_succ(s), pos_succ(t)) =
+    match p : (q : Eq(Pos, a, b)) => Eq(pos_succ(a), pos_succ(b))
+    | refl(z) => Eq/refl()
+    end;
+
+let cong_add_l(w : Pos, @s : Pos, @t : Pos, p : Eq(s, t)) -> Eq(pos_add(w, s), pos_add(w, t)) =
+    match p : (q : Eq(Pos, a, b)) => Eq(pos_add(w, a), pos_add(w, b))
+    | refl(z) => Eq/refl()
+    end;
+
+let cong_add_r(w : Pos, @s : Pos, @t : Pos, p : Eq(s, t)) -> Eq(pos_add(s, w), pos_add(t, w)) =
+    match p : (q : Eq(Pos, a, b)) => Eq(pos_add(a, w), pos_add(b, w))
+    | refl(z) => Eq/refl()
+    end;
+
+-- The carry twin is one successor ahead: add_c(x, y) = succ(add(x, y)).
+rec pos_add_c_spec(x : Pos, y : Pos) -> Eq(pos_add_c(x, y), pos_succ(pos_add(x, y))) =
+    match x : (a) => Eq(pos_add_c(a, y), pos_succ(pos_add(a, y)))
+    | one() => qed(pos_add_c(Pos/one(), y))
+    | o(xt) =>
+        match y : (b) => Eq(pos_add_c(Pos/o(xt), b), pos_succ(pos_add(Pos/o(xt), b)))
+        | one() => qed(pos_add_c(Pos/o(xt), Pos/one()))
+        | o(yt) => qed(pos_add_c(Pos/o(xt), Pos/o(yt)))
+        | i(yt) => cong_o(pos_add_c_spec(xt, yt))
+        end
+    | i(xt) =>
+        match y : (b) => Eq(pos_add_c(Pos/i(xt), b), pos_succ(pos_add(Pos/i(xt), b)))
+        | one() => qed(pos_add_c(Pos/i(xt), Pos/one()))
+        | o(yt) => cong_o(pos_add_c_spec(xt, yt))
+        | i(yt) => qed(pos_add_c(Pos/i(xt), Pos/i(yt)))
+        end
+    end;
+
+pub let pos_add_one_r(x : Pos) -> Eq(pos_add(x, Pos/one()), pos_succ(x)) =
+    match x : (a) => Eq(pos_add(a, Pos/one()), pos_succ(a))
+    | one() => qed(pos_add(Pos/one(), Pos/one()))
+    | o(t) => qed(pos_add(Pos/o(t), Pos/one()))
+    | i(t) => qed(pos_add(Pos/i(t), Pos/one()))
+    end;
+
+pub rec pos_add_succ_l(x : Pos, y : Pos)
+    -> Eq(pos_add(pos_succ(x), y), pos_succ(pos_add(x, y))) =
+    match x : (a) => Eq(pos_add(pos_succ(a), y), pos_succ(pos_add(a, y)))
+    | one() =>
+        match y : (b) => Eq(pos_add(pos_succ(Pos/one()), b), pos_succ(pos_add(Pos/one(), b)))
+        | one() => qed(pos_add(pos_succ(Pos/one()), Pos/one()))
+        | o(yt) => qed(pos_add(pos_succ(Pos/one()), Pos/o(yt)))
+        | i(yt) => qed(pos_add(pos_succ(Pos/one()), Pos/i(yt)))
+        end
+    | o(xt) =>
+        match y : (b) => Eq(pos_add(pos_succ(Pos/o(xt)), b), pos_succ(pos_add(Pos/o(xt), b)))
+        | one() => qed(pos_add(pos_succ(Pos/o(xt)), Pos/one()))
+        | o(yt) => qed(pos_add(pos_succ(Pos/o(xt)), Pos/o(yt)))
+        | i(yt) => cong_o(pos_add_c_spec(xt, yt))
+        end
+    | i(xt) =>
+        match y : (b) => Eq(pos_add(pos_succ(Pos/i(xt)), b), pos_succ(pos_add(Pos/i(xt), b)))
+        | one() => qed(pos_add(pos_succ(Pos/i(xt)), Pos/one()))
+        | o(yt) => cong_o(pos_add_succ_l(xt, yt))
+        | i(yt) => cong_i(Eq/trans(pos_add_succ_l(xt, yt), Eq/sym(pos_add_c_spec(xt, yt))))
+        end
+    end;
+
+pub rec pos_add_succ_r(x : Pos, y : Pos)
+    -> Eq(pos_add(x, pos_succ(y)), pos_succ(pos_add(x, y))) =
+    match x : (a) => Eq(pos_add(a, pos_succ(y)), pos_succ(pos_add(a, y)))
+    | one() => qed(pos_add(Pos/one(), pos_succ(y)))
+    | o(xt) =>
+        match y : (b) => Eq(pos_add(Pos/o(xt), pos_succ(b)), pos_succ(pos_add(Pos/o(xt), b)))
+        | one() => cong_o(pos_add_one_r(xt))
+        | o(yt) => qed(pos_add(Pos/o(xt), pos_succ(Pos/o(yt))))
+        | i(yt) => cong_o(pos_add_succ_r(xt, yt))
+        end
+    | i(xt) =>
+        match y : (b) => Eq(pos_add(Pos/i(xt), pos_succ(b)), pos_succ(pos_add(Pos/i(xt), b)))
+        | one() => cong_i(pos_add_one_r(xt))
+        | o(yt) => cong_o(pos_add_c_spec(xt, yt))
+        | i(yt) => cong_i(Eq/trans(pos_add_succ_r(xt, yt), Eq/sym(pos_add_c_spec(xt, yt))))
+        end
+    end;
+
+pub rec pos_add_comm(x : Pos, y : Pos) -> Eq(pos_add(x, y), pos_add(y, x)) =
+    match x : (a) => Eq(pos_add(a, y), pos_add(y, a))
+    | one() => Eq/sym(pos_add_one_r(y))
+    | o(xt) =>
+        match y : (b) => Eq(pos_add(Pos/o(xt), b), pos_add(b, Pos/o(xt)))
+        | one() => qed(pos_add(Pos/o(xt), Pos/one()))
+        | o(yt) => cong_o(pos_add_comm(xt, yt))
+        | i(yt) => cong_i(pos_add_comm(xt, yt))
+        end
+    | i(xt) =>
+        match y : (b) => Eq(pos_add(Pos/i(xt), b), pos_add(b, Pos/i(xt)))
+        | one() => qed(pos_add(Pos/i(xt), Pos/one()))
+        | o(yt) => cong_i(pos_add_comm(xt, yt))
+        | i(yt) =>
+            cong_o(Eq/trans(
+                pos_add_c_spec(xt, yt),
+                Eq/trans(cong_succ(pos_add_comm(xt, yt)), Eq/sym(pos_add_c_spec(yt, xt)))))
+        end
+    end;
+
+pub rec pos_add_assoc(x : Pos, y : Pos, z : Pos)
+    -> Eq(pos_add(pos_add(x, y), z), pos_add(x, pos_add(y, z))) =
+    match x : (a) => Eq(pos_add(pos_add(a, y), z), pos_add(a, pos_add(y, z)))
+    | one() => pos_add_succ_l(y, z)
+    | o(xt) =>
+        match y : (b) => Eq(pos_add(pos_add(Pos/o(xt), b), z), pos_add(Pos/o(xt), pos_add(b, z)))
+        | one() =>
+            match z : (c) => Eq(
+                pos_add(pos_add(Pos/o(xt), Pos/one()), c),
+                pos_add(Pos/o(xt), pos_add(Pos/one(), c)))
+            | one() => cong_o(Eq/sym(pos_add_one_r(xt)))
+            | o(zt) => qed(pos_add(pos_add(Pos/o(xt), Pos/one()), Pos/o(zt)))
+            | i(zt) => cong_o(Eq/trans(pos_add_c_spec(xt, zt), Eq/sym(pos_add_succ_r(xt, zt))))
+            end
+        | o(yt) =>
+            match z : (c) => Eq(
+                pos_add(pos_add(Pos/o(xt), Pos/o(yt)), c),
+                pos_add(Pos/o(xt), pos_add(Pos/o(yt), c)))
+            | one() => qed(pos_add(pos_add(Pos/o(xt), Pos/o(yt)), Pos/one()))
+            | o(zt) => cong_o(pos_add_assoc(xt, yt, zt))
+            | i(zt) => cong_i(pos_add_assoc(xt, yt, zt))
+            end
+        | i(yt) =>
+            match z : (c) => Eq(
+                pos_add(pos_add(Pos/o(xt), Pos/i(yt)), c),
+                pos_add(Pos/o(xt), pos_add(Pos/i(yt), c)))
+            | one() => cong_o(Eq/sym(pos_add_succ_r(xt, yt)))
+            | o(zt) => cong_i(pos_add_assoc(xt, yt, zt))
+            | i(zt) =>
+                cong_o(Eq/trans(
+                    pos_add_c_spec(pos_add(xt, yt), zt),
+                    Eq/trans(
+                        cong_succ(pos_add_assoc(xt, yt, zt)),
+                        Eq/trans(
+                            Eq/sym(pos_add_succ_r(xt, pos_add(yt, zt))),
+                            cong_add_l(xt, Eq/sym(pos_add_c_spec(yt, zt)))))))
+            end
+        end
+    | i(xt) =>
+        match y : (b) => Eq(pos_add(pos_add(Pos/i(xt), b), z), pos_add(Pos/i(xt), pos_add(b, z)))
+        | one() =>
+            match z : (c) => Eq(
+                pos_add(pos_add(Pos/i(xt), Pos/one()), c),
+                pos_add(Pos/i(xt), pos_add(Pos/one(), c)))
+            | one() => cong_i(Eq/sym(pos_add_one_r(xt)))
+            | o(zt) => cong_o(Eq/trans(pos_add_succ_l(xt, zt), Eq/sym(pos_add_c_spec(xt, zt))))
+            | i(zt) => cong_i(Eq/trans(pos_add_succ_l(xt, zt), Eq/sym(pos_add_succ_r(xt, zt))))
+            end
+        | o(yt) =>
+            match z : (c) => Eq(
+                pos_add(pos_add(Pos/i(xt), Pos/o(yt)), c),
+                pos_add(Pos/i(xt), pos_add(Pos/o(yt), c)))
+            | one() => cong_o(Eq/sym(pos_add_c_spec(xt, yt)))
+            | o(zt) => cong_i(pos_add_assoc(xt, yt, zt))
+            | i(zt) =>
+                cong_o(Eq/trans(
+                    pos_add_c_spec(pos_add(xt, yt), zt),
+                    Eq/trans(
+                        cong_succ(pos_add_assoc(xt, yt, zt)),
+                        Eq/sym(pos_add_c_spec(xt, pos_add(yt, zt))))))
+            end
+        | i(yt) =>
+            match z : (c) => Eq(
+                pos_add(pos_add(Pos/i(xt), Pos/i(yt)), c),
+                pos_add(Pos/i(xt), pos_add(Pos/i(yt), c)))
+            | one() => cong_i(Eq/trans(pos_add_c_spec(xt, yt), Eq/sym(pos_add_succ_r(xt, yt))))
+            | o(zt) =>
+                cong_o(Eq/trans(
+                    cong_add_r(zt, pos_add_c_spec(xt, yt)),
+                    Eq/trans(
+                        pos_add_succ_l(pos_add(xt, yt), zt),
+                        Eq/trans(
+                            cong_succ(pos_add_assoc(xt, yt, zt)),
+                            Eq/sym(pos_add_c_spec(xt, pos_add(yt, zt)))))))
+            | i(zt) =>
+                cong_i(Eq/trans(
+                    cong_add_r(zt, pos_add_c_spec(xt, yt)),
+                    Eq/trans(
+                        pos_add_succ_l(pos_add(xt, yt), zt),
+                        Eq/trans(
+                            cong_succ(pos_add_assoc(xt, yt, zt)),
+                            Eq/trans(
+                                Eq/sym(pos_add_succ_r(xt, pos_add(yt, zt))),
+                                cong_add_l(xt, Eq/sym(pos_add_c_spec(yt, zt))))))))
+            end
+        end
+    end;
+
+-- ============== no-confusion, injectivity, cancellation ==============
+-- The helpers' implicit subjects are passed explicitly at every call whose
+-- premise carries a reducible index — the elaborator only solves such an
+-- implicit against an index that is already constructor-headed.
+
+let pos_is_i(x : Pos) -> Bln =
+    match x
+    | one() => false
+    | o(_) => false
+    | i(_) => true
+    end;
+
+let pos_is_one(x : Pos) -> Bln =
+    match x
+    | one() => true
+    | o(_) => false
+    | i(_) => false
+    end;
+
+let bln_clash(p : Eq(false, true)) -> False =
+    Eq/subst((b : Bln) => match b : Prop | false => True | true => False end, p, True/qed());
+
+let o_neq_i(@a : Pos, @b : Pos, p : Eq(Pos/o(a), Pos/i(b))) -> False =
+    bln_clash(match p : (q : Eq(Pos, s, t)) => Eq(pos_is_i(s), pos_is_i(t))
+        | refl(z) => Eq/refl()
+        end);
+
+let i_neq_o(@a : Pos, @b : Pos, p : Eq(Pos/i(a), Pos/o(b))) -> False =
+    o_neq_i(Eq/sym(p));
+
+let o_neq_one(@a : Pos, p : Eq(Pos/o(a), Pos/one())) -> False =
+    bln_clash(match p : (q : Eq(Pos, s, t)) => Eq(pos_is_one(s), pos_is_one(t))
+        | refl(z) => Eq/refl()
+        end);
+
+let i_neq_one(@a : Pos, p : Eq(Pos/i(a), Pos/one())) -> False =
+    bln_clash(match p : (q : Eq(Pos, s, t)) => Eq(pos_is_one(s), pos_is_one(t))
+        | refl(z) => Eq/refl()
+        end);
+
+-- The shared sub-constructor projection: `o`/`i` peel to their payload, and
+-- `one` maps to itself, which the injectivity lemmas never observe.
+let pos_tail(x : Pos) -> Pos =
+    match x
+    | one() => Pos/one()
+    | o(t) => t
+    | i(t) => t
+    end;
+
+let o_inj(@a : Pos, @b : Pos, p : Eq(Pos/o(a), Pos/o(b))) -> Eq(a, b) =
+    match p : (q : Eq(Pos, s, t)) => Eq(pos_tail(s), pos_tail(t))
+    | refl(z) => Eq/refl()
+    end;
+
+let i_inj(@a : Pos, @b : Pos, p : Eq(Pos/i(a), Pos/i(b))) -> Eq(a, b) =
+    match p : (q : Eq(Pos, s, t)) => Eq(pos_tail(s), pos_tail(t))
+    | refl(z) => Eq/refl()
+    end;
+
+let pos_succ_neq_one(y : Pos, p : Eq(pos_succ(y), Pos/one())) -> False =
+    (match y : (b) => (q : Eq(pos_succ(b), Pos/one())) -> False
+     | one() => (q) => o_neq_one(@(Pos/one()), q)
+     | o(t) => (q) => i_neq_one(@t, q)
+     | i(t) => (q) => o_neq_one(@(pos_succ(t)), q)
+     end)(p);
+
+rec pos_succ_inj(x : Pos, y : Pos, p : Eq(pos_succ(x), pos_succ(y))) -> Eq(x, y) =
+    (match x : (a) => (q : Eq(pos_succ(a), pos_succ(y))) -> Eq(a, y)
+     | one() =>
+         (match y : (b) => (q : Eq(pos_succ(Pos/one()), pos_succ(b))) -> Eq(Pos/one(), b)
+          | one() => (q) => qed(Pos/one())
+          | o(bt) => (q) => False/absurd(o_neq_i(@(Pos/one()), @bt, q))
+          | i(bt) => (q) =>
+              False/absurd(pos_succ_neq_one(bt,
+                  Eq/sym(o_inj(@(Pos/one()), @(pos_succ(bt)), q))))
+          end)
+     | o(at) =>
+         (match y : (b) => (q : Eq(pos_succ(Pos/o(at)), pos_succ(b))) -> Eq(Pos/o(at), b)
+          | one() => (q) => False/absurd(i_neq_o(@at, @(Pos/one()), q))
+          | o(bt) => (q) => cong_o(i_inj(@at, @bt, q))
+          | i(bt) => (q) => False/absurd(i_neq_o(@at, @(pos_succ(bt)), q))
+          end)
+     | i(at) =>
+         (match y : (b) => (q : Eq(pos_succ(Pos/i(at)), pos_succ(b))) -> Eq(Pos/i(at), b)
+          | one() => (q) =>
+              False/absurd(pos_succ_neq_one(at, o_inj(@(pos_succ(at)), @(Pos/one()), q)))
+          | o(bt) => (q) => False/absurd(o_neq_i(@(pos_succ(at)), @bt, q))
+          | i(bt) => (q) =>
+              cong_i(pos_succ_inj(at, bt, o_inj(@(pos_succ(at)), @(pos_succ(bt)), q)))
+          end)
+     end)(p);
+
+-- x never equals x + b: addition strictly grows.
+rec pos_add_no_fix(x : Pos, b : Pos, p : Eq(x, pos_add(x, b))) -> False =
+    (match x : (a) => (q : Eq(a, pos_add(a, b))) -> False
+     | one() => (q) =>
+         pos_succ_neq_one(b, Eq/sym(@Pos, @(Pos/one()), @(pos_add(Pos/one(), b)), q))
+     | o(xt) =>
+         (match b : (c) => (q : Eq(Pos/o(xt), pos_add(Pos/o(xt), c))) -> False
+          | one() => (q) => o_neq_i(@xt, @xt, q)
+          | o(bt) => (q) => pos_add_no_fix(xt, bt, o_inj(@xt, @(pos_add(xt, bt)), q))
+          | i(bt) => (q) => o_neq_i(@xt, @(pos_add(xt, bt)), q)
+          end)
+     | i(xt) =>
+         (match b : (c) => (q : Eq(Pos/i(xt), pos_add(Pos/i(xt), c))) -> False
+          | one() => (q) => i_neq_o(@xt, @(pos_succ(xt)), q)
+          | o(bt) => (q) => pos_add_no_fix(xt, bt, i_inj(@xt, @(pos_add(xt, bt)), q))
+          | i(bt) => (q) => i_neq_o(@xt, @(pos_add_c(xt, bt)), q)
+          end)
+     end)(p);
+
+pub rec pos_add_cancel_l(x : Pos, y : Pos, z : Pos, p : Eq(pos_add(x, y), pos_add(x, z)))
+    -> Eq(y, z) =
+    (match x : (a) => (q : Eq(pos_add(a, y), pos_add(a, z))) -> Eq(y, z)
+     | one() => (q) => pos_succ_inj(y, z, q)
+     | o(xt) =>
+         (match y : (b) => (q : Eq(pos_add(Pos/o(xt), b), pos_add(Pos/o(xt), z))) -> Eq(b, z)
+          | one() =>
+              (match z : (c) => (q : Eq(pos_add(Pos/o(xt), Pos/one()), pos_add(Pos/o(xt), c)))
+                  -> Eq(Pos/one(), c)
+               | one() => (q) => qed(Pos/one())
+               | o(bt) => (q) => False/absurd(i_neq_o(@xt, @(pos_add(xt, bt)), q))
+               | i(bt) => (q) =>
+                   False/absurd(pos_add_no_fix(xt, bt, i_inj(@xt, @(pos_add(xt, bt)), q)))
+               end)
+          | o(at) =>
+              (match z : (c) => (q : Eq(pos_add(Pos/o(xt), Pos/o(at)), pos_add(Pos/o(xt), c)))
+                  -> Eq(Pos/o(at), c)
+               | one() => (q) => False/absurd(o_neq_i(@(pos_add(xt, at)), @xt, q))
+               | o(bt) => (q) =>
+                   cong_o(pos_add_cancel_l(xt, at, bt,
+                       o_inj(@(pos_add(xt, at)), @(pos_add(xt, bt)), q)))
+               | i(bt) => (q) =>
+                   False/absurd(o_neq_i(@(pos_add(xt, at)), @(pos_add(xt, bt)), q))
+               end)
+          | i(at) =>
+              (match z : (c) => (q : Eq(pos_add(Pos/o(xt), Pos/i(at)), pos_add(Pos/o(xt), c)))
+                  -> Eq(Pos/i(at), c)
+               | one() => (q) =>
+                   False/absurd(pos_add_no_fix(xt, at,
+                       Eq/sym(i_inj(@(pos_add(xt, at)), @xt, q))))
+               | o(bt) => (q) =>
+                   False/absurd(i_neq_o(@(pos_add(xt, at)), @(pos_add(xt, bt)), q))
+               | i(bt) => (q) =>
+                   cong_i(pos_add_cancel_l(xt, at, bt,
+                       i_inj(@(pos_add(xt, at)), @(pos_add(xt, bt)), q)))
+               end)
+          end)
+     | i(xt) =>
+         (match y : (b) => (q : Eq(pos_add(Pos/i(xt), b), pos_add(Pos/i(xt), z))) -> Eq(b, z)
+          | one() =>
+              (match z : (c) => (q : Eq(pos_add(Pos/i(xt), Pos/one()), pos_add(Pos/i(xt), c)))
+                  -> Eq(Pos/one(), c)
+               | one() => (q) => qed(Pos/one())
+               | o(bt) => (q) => False/absurd(o_neq_i(@(pos_succ(xt)), @(pos_add(xt, bt)), q))
+               | i(bt) => (q) =>
+                   False/absurd(pos_add_no_fix(xt, bt,
+                       pos_succ_inj(xt, pos_add(xt, bt),
+                           Eq/trans(o_inj(@(pos_succ(xt)), @(pos_add_c(xt, bt)), q),
+                               pos_add_c_spec(xt, bt)))))
+               end)
+          | o(at) =>
+              (match z : (c) => (q : Eq(pos_add(Pos/i(xt), Pos/o(at)), pos_add(Pos/i(xt), c)))
+                  -> Eq(Pos/o(at), c)
+               | one() => (q) => False/absurd(i_neq_o(@(pos_add(xt, at)), @(pos_succ(xt)), q))
+               | o(bt) => (q) =>
+                   cong_o(pos_add_cancel_l(xt, at, bt,
+                       i_inj(@(pos_add(xt, at)), @(pos_add(xt, bt)), q)))
+               | i(bt) => (q) =>
+                   False/absurd(i_neq_o(@(pos_add(xt, at)), @(pos_add_c(xt, bt)), q))
+               end)
+          | i(at) =>
+              (match z : (c) => (q : Eq(pos_add(Pos/i(xt), Pos/i(at)), pos_add(Pos/i(xt), c)))
+                  -> Eq(Pos/i(at), c)
+               | one() => (q) =>
+                   False/absurd(pos_add_no_fix(xt, at,
+                       Eq/sym(pos_succ_inj(pos_add(xt, at), xt,
+                           Eq/trans(Eq/sym(pos_add_c_spec(xt, at)),
+                               o_inj(@(pos_add_c(xt, at)), @(pos_succ(xt)), q))))))
+               | o(bt) => (q) =>
+                   False/absurd(o_neq_i(@(pos_add_c(xt, at)), @(pos_add(xt, bt)), q))
+               | i(bt) => (q) =>
+                   cong_i(pos_add_cancel_l(xt, at, bt,
+                       pos_succ_inj(pos_add(xt, at), pos_add(xt, bt),
+                           Eq/trans(Eq/sym(pos_add_c_spec(xt, at)),
+                               Eq/trans(o_inj(@(pos_add_c(xt, at)), @(pos_add_c(xt, bt)), q),
+                                   pos_add_c_spec(xt, bt))))))
+               end)
+          end)
+     end)(p);
+
+pub let pos_add_cancel_r(x : Pos, y : Pos, z : Pos, p : Eq(pos_add(y, x), pos_add(z, x)))
+    -> Eq(y, z) =
+    pos_add_cancel_l(x, y, z,
+        Eq/trans(pos_add_comm(x, y), Eq/trans(p, pos_add_comm(z, x))));
+
+-- ===================== the lemma base: multiplication =====================
+
+pub rec pos_mul_one_r(x : Pos) -> Eq(pos_mul(x, Pos/one()), x) =
+    match x : (a) => Eq(@Pos, pos_mul(a, Pos/one()), a)
+    | one() => qed(Pos/one())
+    | o(xt) => cong_o(pos_mul_one_r(xt))
+    | i(xt) => cong_i(pos_mul_one_r(xt))
+    end;
+
+pub rec pos_mul_o_r(x : Pos, y : Pos) -> Eq(pos_mul(x, Pos/o(y)), Pos/o(pos_mul(x, y))) =
+    match x : (a) => Eq(@Pos, pos_mul(a, Pos/o(y)), Pos/o(pos_mul(a, y)))
+    | one() => qed(Pos/o(y))
+    | o(xt) => cong_o(pos_mul_o_r(xt, y))
+    | i(xt) => cong_o(cong_add_l(y, pos_mul_o_r(xt, y)))
+    end;
+
+pub rec pos_mul_i_r(x : Pos, y : Pos)
+    -> Eq(pos_mul(x, Pos/i(y)), pos_add(x, Pos/o(pos_mul(x, y)))) =
+    match x : (a) => Eq(@Pos, pos_mul(a, Pos/i(y)), pos_add(a, Pos/o(pos_mul(a, y))))
+    | one() => qed(pos_mul(Pos/one(), Pos/i(y)))
+    | o(xt) => cong_o(pos_mul_i_r(xt, y))
+    | i(xt) =>
+        cong_i(Eq/trans(
+            cong_add_l(y, pos_mul_i_r(xt, y)),
+            Eq/trans(
+                Eq/sym(pos_add_assoc(y, xt, Pos/o(pos_mul(xt, y)))),
+                Eq/trans(
+                    cong_add_r(Pos/o(pos_mul(xt, y)), pos_add_comm(y, xt)),
+                    pos_add_assoc(xt, y, Pos/o(pos_mul(xt, y)))))))
+    end;
+
+pub rec pos_mul_comm(x : Pos, y : Pos) -> Eq(pos_mul(x, y), pos_mul(y, x)) =
+    match x : (a) => Eq(@Pos, pos_mul(a, y), pos_mul(y, a))
+    | one() => Eq/sym(pos_mul_one_r(y))
+    | o(xt) => Eq/trans(cong_o(pos_mul_comm(xt, y)), Eq/sym(pos_mul_o_r(y, xt)))
+    | i(xt) =>
+        Eq/trans(
+            cong_add_l(y, cong_o(pos_mul_comm(xt, y))),
+            Eq/sym(pos_mul_i_r(y, xt)))
+    end;
+
+-- The interchange shuffle: (a + b) + (c + d) = (a + c) + (b + d).
+let pos_add_medial(a : Pos, b : Pos, c : Pos, d : Pos)
+    -> Eq(pos_add(pos_add(a, b), pos_add(c, d)), pos_add(pos_add(a, c), pos_add(b, d))) =
+    Eq/trans(
+        pos_add_assoc(a, b, pos_add(c, d)),
+        Eq/trans(
+            cong_add_l(a, Eq/sym(pos_add_assoc(b, c, d))),
+            Eq/trans(
+                cong_add_l(a, cong_add_r(d, pos_add_comm(b, c))),
+                Eq/trans(
+                    cong_add_l(a, pos_add_assoc(c, b, d)),
+                    Eq/sym(pos_add_assoc(a, c, pos_add(b, d)))))));
+
+pub rec pos_distrib_l(x : Pos, y : Pos, z : Pos)
+    -> Eq(pos_mul(x, pos_add(y, z)), pos_add(pos_mul(x, y), pos_mul(x, z))) =
+    match x : (a) => Eq(@Pos, pos_mul(a, pos_add(y, z)), pos_add(pos_mul(a, y), pos_mul(a, z)))
+    | one() => qed(pos_add(y, z))
+    | o(xt) => cong_o(pos_distrib_l(xt, y, z))
+    | i(xt) =>
+        Eq/trans(
+            cong_add_l(pos_add(y, z), cong_o(pos_distrib_l(xt, y, z))),
+            Eq/sym(pos_add_medial(y, Pos/o(pos_mul(xt, y)), z, Pos/o(pos_mul(xt, z)))))
+    end;
+
+pub let pos_distrib_r(x : Pos, y : Pos, z : Pos)
+    -> Eq(pos_mul(pos_add(y, z), x), pos_add(pos_mul(y, x), pos_mul(z, x))) =
+    Eq/trans(
+        pos_mul_comm(pos_add(y, z), x),
+        Eq/trans(
+            pos_distrib_l(x, y, z),
+            Eq/trans(
+                cong_add_r(pos_mul(x, z), pos_mul_comm(x, y)),
+                cong_add_l(pos_mul(y, x), pos_mul_comm(x, z)))));
+
+pub rec pos_mul_assoc(x : Pos, y : Pos, z : Pos)
+    -> Eq(pos_mul(pos_mul(x, y), z), pos_mul(x, pos_mul(y, z))) =
+    match x : (a) => Eq(@Pos, pos_mul(pos_mul(a, y), z), pos_mul(a, pos_mul(y, z)))
+    | one() => qed(pos_mul(y, z))
+    | o(xt) => cong_o(pos_mul_assoc(xt, y, z))
+    | i(xt) =>
+        Eq/trans(
+            pos_distrib_r(z, y, Pos/o(pos_mul(xt, y))),
+            cong_add_l(pos_mul(y, z), cong_o(pos_mul_assoc(xt, y, z))))
+    end;
+
+-- ===================== the lemma base: comparison =====================
+
+let order_is_eq(r : Order) -> Bln =
+    match r
+    | lt() => false
+    | eq() => true
+    | gt() => false
+    end;
+
+let order_is_lt(r : Order) -> Bln =
+    match r
+    | lt() => true
+    | eq() => false
+    | gt() => false
+    end;
+
+let lt_neq_eq(p : Eq(Order/lt(), Order/eq())) -> False =
+    bln_clash(match p : (q : Eq(Order, s, t)) => Eq(order_is_eq(s), order_is_eq(t))
+        | refl(z) => Eq/refl()
+        end);
+
+let gt_neq_eq(p : Eq(Order/gt(), Order/eq())) -> False =
+    bln_clash(match p : (q : Eq(Order, s, t)) => Eq(order_is_eq(s), order_is_eq(t))
+        | refl(z) => Eq/refl()
+        end);
+
+let eq_neq_lt(p : Eq(Order/eq(), Order/lt())) -> False =
+    bln_clash(match p : (q : Eq(Order, s, t)) => Eq(order_is_lt(s), order_is_lt(t))
+        | refl(z) => Eq/refl()
+        end);
+
+let gt_neq_lt(p : Eq(Order/gt(), Order/lt())) -> False =
+    bln_clash(match p : (q : Eq(Order, s, t)) => Eq(order_is_lt(s), order_is_lt(t))
+        | refl(z) => Eq/refl()
+        end);
+
+let order_is_gt(r : Order) -> Bln =
+    match r
+    | lt() => false
+    | eq() => false
+    | gt() => true
+    end;
+
+let eq_neq_gt(p : Eq(Order/eq(), Order/gt())) -> False =
+    bln_clash(match p : (q : Eq(Order, s, t)) => Eq(order_is_gt(s), order_is_gt(t))
+        | refl(z) => Eq/refl()
+        end);
+
+let lt_neq_gt(p : Eq(Order/lt(), Order/gt())) -> False =
+    bln_clash(match p : (q : Eq(Order, s, t)) => Eq(order_is_gt(s), order_is_gt(t))
+        | refl(z) => Eq/refl()
+        end);
+
+pub rec pos_cmp_refl(x : Pos) -> Eq(pos_cmp(x, x), Order/eq()) =
+    match x : (a) => Eq(@Order, pos_cmp(a, a), Order/eq())
+    | one() => qed(Order/eq())
+    | o(t) => pos_cmp_refl(t)
+    | i(t) => pos_cmp_refl(t)
+    end;
+
+pub rec pos_cmp_eq(x : Pos, y : Pos, p : Eq(pos_cmp(x, y), Order/eq())) -> Eq(x, y) =
+    (match x : (a) => (q : Eq(pos_cmp(a, y), Order/eq())) -> Eq(a, y)
+     | one() =>
+         (match y : (b) => (q : Eq(pos_cmp(Pos/one(), b), Order/eq())) -> Eq(Pos/one(), b)
+          | one() => (q) => qed(Pos/one())
+          | o(bt) => (q) => False/absurd(lt_neq_eq(q))
+          | i(bt) => (q) => False/absurd(lt_neq_eq(q))
+          end)
+     | o(at) =>
+         (match y : (b) => (q : Eq(pos_cmp(Pos/o(at), b), Order/eq())) -> Eq(Pos/o(at), b)
+          | one() => (q) => False/absurd(gt_neq_eq(q))
+          | o(bt) => (q) => cong_o(pos_cmp_eq(at, bt, q))
+          | i(bt) => (q) =>
+              False/absurd((match pos_cmp(at, bt) : (r) =>
+                  (q2 : Eq(pos_cmp(Pos/o(at), Pos/i(bt)), Order/eq())) -> False
+               | eq() => (q2) => lt_neq_eq(q2)
+               | lt() => (q2) => lt_neq_eq(q2)
+               | gt() => (q2) => gt_neq_eq(q2)
+               end)(q))
+          end)
+     | i(at) =>
+         (match y : (b) => (q : Eq(pos_cmp(Pos/i(at), b), Order/eq())) -> Eq(Pos/i(at), b)
+          | one() => (q) => False/absurd(gt_neq_eq(q))
+          | o(bt) => (q) =>
+              False/absurd((match pos_cmp(at, bt) : (r) =>
+                  (q2 : Eq(pos_cmp(Pos/i(at), Pos/o(bt)), Order/eq())) -> False
+               | eq() => (q2) => gt_neq_eq(q2)
+               | lt() => (q2) => lt_neq_eq(q2)
+               | gt() => (q2) => gt_neq_eq(q2)
+               end)(q))
+          | i(bt) => (q) => cong_i(pos_cmp_eq(at, bt, q))
+          end)
+     end)(p);
+
+pub rec pos_cmp_flip(x : Pos, y : Pos) -> Eq(pos_cmp(y, x), Order/flip(pos_cmp(x, y))) =
+    match x : (a) => Eq(@Order, pos_cmp(y, a), Order/flip(pos_cmp(a, y)))
+    | one() =>
+        match y : (b) => Eq(@Order, pos_cmp(b, Pos/one()), Order/flip(pos_cmp(Pos/one(), b)))
+        | one() => qed(Order/eq())
+        | o(bt) => qed(Order/gt())
+        | i(bt) => qed(Order/gt())
+        end
+    | o(at) =>
+        match y : (b) => Eq(@Order, pos_cmp(b, Pos/o(at)), Order/flip(pos_cmp(Pos/o(at), b)))
+        | one() => qed(Order/lt())
+        | o(bt) => pos_cmp_flip(at, bt)
+        | i(bt) =>
+            (match pos_cmp(at, bt) : (r) =>
+                (ih : Eq(pos_cmp(bt, at), Order/flip(r)))
+                -> Eq(pos_cmp(Pos/i(bt), Pos/o(at)), Order/flip(pos_cmp(Pos/o(at), Pos/i(bt))))
+             | eq() => (ih) =>
+                 (match pos_cmp(bt, at) : (r2) => (ih2 : Eq(r2, Order/flip(Order/eq())))
+                     -> Eq(@Order, pos_cmp(Pos/i(bt), Pos/o(at)),
+                         Order/flip(pos_cmp(Pos/o(at), Pos/i(bt))))
+                  | eq() => (ih2) => qed(Order/gt())
+                  | lt() => (ih2) => False/absurd(lt_neq_eq(ih2))
+                  | gt() => (ih2) => False/absurd(gt_neq_eq(ih2))
+                  end)(ih)
+             | lt() => (ih) =>
+                 (match pos_cmp(bt, at) : (r2) => (ih2 : Eq(r2, Order/flip(Order/lt())))
+                     -> Eq(@Order, pos_cmp(Pos/i(bt), Pos/o(at)),
+                         Order/flip(pos_cmp(Pos/o(at), Pos/i(bt))))
+                  | eq() => (ih2) => False/absurd(eq_neq_gt(ih2))
+                  | lt() => (ih2) => False/absurd(lt_neq_gt(ih2))
+                  | gt() => (ih2) => qed(Order/gt())
+                  end)(ih)
+             | gt() => (ih) =>
+                 (match pos_cmp(bt, at) : (r2) => (ih2 : Eq(r2, Order/flip(Order/gt())))
+                     -> Eq(@Order, pos_cmp(Pos/i(bt), Pos/o(at)),
+                         Order/flip(pos_cmp(Pos/o(at), Pos/i(bt))))
+                  | eq() => (ih2) => False/absurd(eq_neq_lt(ih2))
+                  | lt() => (ih2) => qed(Order/lt())
+                  | gt() => (ih2) => False/absurd(gt_neq_lt(ih2))
+                  end)(ih)
+             end)(pos_cmp_flip(at, bt))
+        end
+    | i(at) =>
+        match y : (b) => Eq(@Order, pos_cmp(b, Pos/i(at)), Order/flip(pos_cmp(Pos/i(at), b)))
+        | one() => qed(Order/lt())
+        | o(bt) =>
+            (match pos_cmp(at, bt) : (r) =>
+                (ih : Eq(pos_cmp(bt, at), Order/flip(r)))
+                -> Eq(pos_cmp(Pos/o(bt), Pos/i(at)), Order/flip(pos_cmp(Pos/i(at), Pos/o(bt))))
+             | eq() => (ih) =>
+                 (match pos_cmp(bt, at) : (r2) => (ih2 : Eq(r2, Order/flip(Order/eq())))
+                     -> Eq(@Order, pos_cmp(Pos/o(bt), Pos/i(at)),
+                         Order/flip(pos_cmp(Pos/i(at), Pos/o(bt))))
+                  | eq() => (ih2) => qed(Order/lt())
+                  | lt() => (ih2) => False/absurd(lt_neq_eq(ih2))
+                  | gt() => (ih2) => False/absurd(gt_neq_eq(ih2))
+                  end)(ih)
+             | lt() => (ih) =>
+                 (match pos_cmp(bt, at) : (r2) => (ih2 : Eq(r2, Order/flip(Order/lt())))
+                     -> Eq(@Order, pos_cmp(Pos/o(bt), Pos/i(at)),
+                         Order/flip(pos_cmp(Pos/i(at), Pos/o(bt))))
+                  | eq() => (ih2) => False/absurd(eq_neq_gt(ih2))
+                  | lt() => (ih2) => False/absurd(lt_neq_gt(ih2))
+                  | gt() => (ih2) => qed(Order/gt())
+                  end)(ih)
+             | gt() => (ih) =>
+                 (match pos_cmp(bt, at) : (r2) => (ih2 : Eq(r2, Order/flip(Order/gt())))
+                     -> Eq(@Order, pos_cmp(Pos/o(bt), Pos/i(at)),
+                         Order/flip(pos_cmp(Pos/i(at), Pos/o(bt))))
+                  | eq() => (ih2) => False/absurd(eq_neq_lt(ih2))
+                  | lt() => (ih2) => qed(Order/lt())
+                  | gt() => (ih2) => False/absurd(gt_neq_lt(ih2))
+                  end)(ih)
+             end)(pos_cmp_flip(at, bt))
+        | i(bt) => pos_cmp_flip(at, bt)
+        end
+    end;
+
+rec pos_succ_pred_dbl(t : Pos) -> Eq(pos_succ(pos_pred_dbl(t)), Pos/o(t)) =
+    match t : (a) => Eq(@Pos, pos_succ(pos_pred_dbl(a)), Pos/o(a))
+    | one() => qed(Pos/o(Pos/one()))
+    | o(tt) => cong_o(pos_succ_pred_dbl(tt))
+    | i(tt) => qed(Pos/o(Pos/i(tt)))
+    end;
+
+-- (2x + 1) + (2d − 1) = 2·(x + d). Each arm reduces the left side to a
+-- carry-add and closes with an equation chain; conversion alone bridges the
+-- chain's endpoints to the goal, so no rewrite has to reach into reduced
+-- occurrences.
+rec pos_add_i_pred_dbl(x : Pos, d : Pos)
+    -> Eq(pos_add(Pos/i(x), pos_pred_dbl(d)), Pos/o(pos_add(x, d))) =
+    match d : (c) => Eq(@Pos, pos_add(Pos/i(x), pos_pred_dbl(c)), Pos/o(pos_add(x, c)))
+    | one() => cong_o(Eq/sym(pos_add_one_r(x)))
+    | o(dt) =>
+        cong_o(Eq/trans(
+            pos_add_c_spec(x, pos_pred_dbl(dt)),
+            Eq/trans(
+                Eq/sym(pos_add_succ_r(x, pos_pred_dbl(dt))),
+                cong_add_l(x, pos_succ_pred_dbl(dt)))))
+    | i(dt) =>
+        cong_o(Eq/trans(
+            pos_add_c_spec(x, Pos/o(dt)),
+            Eq/sym(pos_add_succ_r(x, Pos/o(dt)))))
+    end;
+
+-- The mixed-bit steps of `pos_cmp`, with the tail comparison generalized to a
+-- premise. The generalization is load-bearing: matching on `pos_cmp(x, y)`
+-- with `y` a plain variable keys the arm's refinement exactly as the switch
+-- scrutinee is spelled, whereas a composed argument (`pos_succ(t)`, an
+-- unreduced `pos_add`) is re-spelled by reduction and the key never fires.
+-- Callers instantiate `y` at the composed term and conversion closes the gap.
+let pos_cmp_io_lt(x : Pos, y : Pos, w : Eq(pos_cmp(x, y), Order/lt()))
+    -> Eq(pos_cmp(Pos/i(x), Pos/o(y)), Order/lt()) =
+    (match pos_cmp(x, y) : (r) => (w2 : Eq(r, Order/lt()))
+        -> Eq(@Order, pos_cmp(Pos/i(x), Pos/o(y)), Order/lt())
+     | eq() => (w2) => False/absurd(eq_neq_lt(w2))
+     | lt() => (w2) => qed(Order/lt())
+     | gt() => (w2) => False/absurd(gt_neq_lt(w2))
+     end)(w);
+
+let pos_cmp_oi_lt(x : Pos, y : Pos, w : Eq(pos_cmp(x, y), Order/lt()))
+    -> Eq(pos_cmp(Pos/o(x), Pos/i(y)), Order/lt()) =
+    (match pos_cmp(x, y) : (r) => (w2 : Eq(r, Order/lt()))
+        -> Eq(@Order, pos_cmp(Pos/o(x), Pos/i(y)), Order/lt())
+     | eq() => (w2) => qed(Order/lt())
+     | lt() => (w2) => qed(Order/lt())
+     | gt() => (w2) => False/absurd(gt_neq_lt(w2))
+     end)(w);
+
+let pos_cmp_oi_of_eq(x : Pos, y : Pos, w : Eq(pos_cmp(x, y), Order/eq()))
+    -> Eq(pos_cmp(Pos/o(x), Pos/i(y)), Order/lt()) =
+    (match pos_cmp(x, y) : (r) => (w2 : Eq(r, Order/eq()))
+        -> Eq(@Order, pos_cmp(Pos/o(x), Pos/i(y)), Order/lt())
+     | eq() => (w2) => qed(Order/lt())
+     | lt() => (w2) => qed(Order/lt())
+     | gt() => (w2) => False/absurd(gt_neq_eq(w2))
+     end)(w);
+
+let cong_cmp_r(w : Pos, @s : Pos, @t : Pos, p : Eq(s, t))
+    -> Eq(pos_cmp(w, s), pos_cmp(w, t)) =
+    match p : (q : Eq(Pos, a, b)) => Eq(pos_cmp(w, a), pos_cmp(w, b))
+    | refl(z) => Eq/refl()
+    end;
+
+pub rec pos_cmp_succ(x : Pos) -> Eq(pos_cmp(x, pos_succ(x)), Order/lt()) =
+    match x : (a) => Eq(@Order, pos_cmp(a, pos_succ(a)), Order/lt())
+    | one() => qed(Order/lt())
+    | o(t) => pos_cmp_oi_of_eq(t, t, pos_cmp_refl(t))
+    | i(t) => pos_cmp_io_lt(t, pos_succ(t), pos_cmp_succ(t))
+    end;
+
+-- x < x + d: the forward half of the order/addition correspondence.
+pub rec pos_cmp_lt_add(x : Pos, d : Pos) -> Eq(pos_cmp(x, pos_add(x, d)), Order/lt()) =
+    match x : (a) => Eq(@Order, pos_cmp(a, pos_add(a, d)), Order/lt())
+    | one() =>
+        match d : (c) => Eq(@Order, pos_cmp(Pos/one(), pos_add(Pos/one(), c)), Order/lt())
+        | one() => qed(Order/lt())
+        | o(dt) => qed(Order/lt())
+        | i(dt) => qed(Order/lt())
+        end
+    | o(xt) =>
+        match d : (c) => Eq(@Order, pos_cmp(Pos/o(xt), pos_add(Pos/o(xt), c)), Order/lt())
+        | one() => pos_cmp_oi_of_eq(xt, xt, pos_cmp_refl(xt))
+        | o(dt) => pos_cmp_lt_add(xt, dt)
+        | i(dt) => pos_cmp_oi_lt(xt, pos_add(xt, dt), pos_cmp_lt_add(xt, dt))
+        end
+    | i(xt) =>
+        match d : (c) => Eq(@Order, pos_cmp(Pos/i(xt), pos_add(Pos/i(xt), c)), Order/lt())
+        | one() => pos_cmp_io_lt(xt, pos_succ(xt), pos_cmp_succ(xt))
+        | o(dt) => pos_cmp_lt_add(xt, dt)
+        | i(dt) =>
+            pos_cmp_io_lt(xt, pos_add_c(xt, dt),
+                Eq/trans(
+                    cong_cmp_r(xt, pos_add_c_spec(xt, dt)),
+                    Eq/trans(
+                        cong_cmp_r(xt, Eq/sym(pos_add_succ_r(xt, dt))),
+                        pos_cmp_lt_add(xt, pos_succ(dt)))))
+        end
+    end;
+
+-- x < y yields the exact difference: the backward half.
+pub rec pos_lt_witness(x : Pos, y : Pos, p : Eq(pos_cmp(x, y), Order/lt()))
+    -> {d : Pos, e : Eq(pos_add(x, d), y)} =
+    (match x : (a) => (q : Eq(pos_cmp(a, y), Order/lt())) -> {d : Pos, e : Eq(pos_add(a, d), y)}
+     | one() =>
+         (match y : (b) => (q : Eq(pos_cmp(Pos/one(), b), Order/lt()))
+             -> {d : Pos, e : Eq(pos_add(Pos/one(), d), b)}
+          | one() => (q) => False/absurd(eq_neq_lt(q))
+          | o(bt) => (q) => (pos_pred_dbl(bt), pos_succ_pred_dbl(bt))
+          | i(bt) => (q) => (Pos/o(bt), qed(Pos/i(bt)))
+          end)
+     | o(at) =>
+         (match y : (b) => (q : Eq(pos_cmp(Pos/o(at), b), Order/lt()))
+             -> {d : Pos, e : Eq(pos_add(Pos/o(at), d), b)}
+          | one() => (q) => False/absurd(gt_neq_lt(q))
+          | o(bt) => (q) =>
+              let (dt, et) = pos_lt_witness(at, bt, q);
+              (Pos/o(dt), cong_o(et))
+          | i(bt) => (q) =>
+              ((match pos_cmp(at, bt) : (r) =>
+                  (q2 : Eq(pos_cmp(Pos/o(at), Pos/i(bt)), Order/lt()))
+                  -> {d : Pos, e : Eq(pos_add(Pos/o(at), d), Pos/i(bt))}
+                | eq() => (q2) =>
+                    (Pos/one(),
+                     cong_i(pos_cmp_eq(at, bt, qed(Order/eq()))))
+                | lt() => (q2) =>
+                    let (dt, et) = pos_lt_witness(at, bt, qed(Order/lt()));
+                    (Pos/i(dt), cong_i(et))
+                | gt() => (q2) => False/absurd(gt_neq_lt(q2))
+                end)(q))
+          end)
+     | i(at) =>
+         (match y : (b) => (q : Eq(pos_cmp(Pos/i(at), b), Order/lt()))
+             -> {d : Pos, e : Eq(pos_add(Pos/i(at), d), b)}
+          | one() => (q) => False/absurd(gt_neq_lt(q))
+          | o(bt) => (q) =>
+              ((match pos_cmp(at, bt) : (r) =>
+                  (q2 : Eq(pos_cmp(Pos/i(at), Pos/o(bt)), Order/lt()))
+                  -> {d : Pos, e : Eq(pos_add(Pos/i(at), d), Pos/o(bt))}
+                | eq() => (q2) => False/absurd(gt_neq_lt(q2))
+                | lt() => (q2) =>
+                    let (dt, et) = pos_lt_witness(at, bt, qed(Order/lt()));
+                    (pos_pred_dbl(dt),
+                     (match et : Eq(@Pos, pos_add(Pos/i(at), pos_pred_dbl(dt)), Pos/o(bt))
+                      | refl(z) => pos_add_i_pred_dbl(at, dt)
+                      end))
+                | gt() => (q2) => False/absurd(gt_neq_lt(q2))
+                end)(q))
+          | i(bt) => (q) =>
+              let (dt, et) = pos_lt_witness(at, bt, q);
+              (Pos/o(dt), cong_i(et))
+          end)
+     end)(p);
+
+pub let pos_cmp_trans(x : Pos, y : Pos, z : Pos,
+    p : Eq(pos_cmp(x, y), Order/lt()), q : Eq(pos_cmp(y, z), Order/lt()))
+    -> Eq(pos_cmp(x, z), Order/lt()) =
+    let (d1, e1) = pos_lt_witness(x, y, p);
+    let (d2, e2) = pos_lt_witness(y, z, q);
+    match e2 : Eq(@Order, pos_cmp(x, z), Order/lt())
+    | refl(z2) =>
+        match e1 : Eq(@Order, pos_cmp(x, pos_add(y, d2)), Order/lt())
+        | refl(z3) =>
+            Eq/trans(
+                cong_cmp_r(x, pos_add_assoc(x, d1, d2)),
+                pos_cmp_lt_add(x, pos_add(d1, d2)))
+        end
+    end;
+
+-- ===================== the lemma base: BigNat lifts =====================
+-- The zero-adjoined laws: every proof cases both carriers down to
+-- constructors (the operations match on tuples, which reduce only once every
+-- component is constructor-headed) and hands the all-positive case to the
+-- `Pos` lemma of the same name.
+
+let bignat_is_pos(a : BigNat) -> Bln =
+    match a
+    | zero() => false
+    | pos(_) => true
+    end;
+
+let zero_neq_pos(@p : Pos, q : Eq(BigNat/zero(), BigNat/pos(p))) -> False =
+    bln_clash(match q : (e : Eq(BigNat, s, t)) => Eq(bignat_is_pos(s), bignat_is_pos(t))
+        | refl(z) => Eq/refl()
+        end);
+
+let pos_neq_zero(@p : Pos, q : Eq(BigNat/pos(p), BigNat/zero())) -> False =
+    bln_clash(match q : (e : Eq(BigNat, s, t)) => Eq(bignat_is_pos(t), bignat_is_pos(s))
+        | refl(z) => Eq/refl()
+        end);
+
+let bignat_head(d : Pos, a : BigNat) -> Pos =
+    match a
+    | zero() => d
+    | pos(p) => p
+    end;
+
+let pos_inj(@a : Pos, @b : Pos, q : Eq(BigNat/pos(a), BigNat/pos(b))) -> Eq(a, b) =
+    match q : (e : Eq(BigNat, s, t)) => Eq(bignat_head(a, s), bignat_head(a, t))
+    | refl(z) => Eq/refl()
+    end;
+
+let cong_pos(@s : Pos, @t : Pos, p : Eq(s, t)) -> Eq(BigNat/pos(s), BigNat/pos(t)) =
+    match p : (q : Eq(Pos, a, b)) => Eq(BigNat/pos(a), BigNat/pos(b))
+    | refl(z) => Eq/refl()
+    end;
+
+let cong_dbl(@s : BigNat, @t : BigNat, p : Eq(s, t)) -> Eq(dbl(s), dbl(t)) =
+    match p : (q : Eq(BigNat, a, b)) => Eq(dbl(a), dbl(b))
+    | refl(z) => Eq/refl()
+    end;
+
+pub let add_comm(a : BigNat, b : BigNat) -> Eq(add(a, b), add(b, a)) =
+    match a : (x) => Eq(@BigNat, add(x, b), add(b, x))
+    | zero() =>
+        match b : (y) => Eq(@BigNat, add(BigNat/zero(), y), add(y, BigNat/zero()))
+        | zero() => qed(BigNat/zero())
+        | pos(bp) => qed(BigNat/pos(bp))
+        end
+    | pos(ap) =>
+        match b : (y) => Eq(@BigNat, add(BigNat/pos(ap), y), add(y, BigNat/pos(ap)))
+        | zero() => qed(BigNat/pos(ap))
+        | pos(bp) => cong_pos(pos_add_comm(ap, bp))
+        end
+    end;
+
+pub let add_assoc(a : BigNat, b : BigNat, c : BigNat)
+    -> Eq(add(add(a, b), c), add(a, add(b, c))) =
+    match a : (x) => Eq(@BigNat, add(add(x, b), c), add(x, add(b, c)))
+    | zero() =>
+        match b : (y) => Eq(@BigNat,
+            add(add(BigNat/zero(), y), c), add(BigNat/zero(), add(y, c)))
+        | zero() =>
+            match c : (w) => Eq(@BigNat,
+                add(add(BigNat/zero(), BigNat/zero()), w),
+                add(BigNat/zero(), add(BigNat/zero(), w)))
+            | zero() => qed(BigNat/zero())
+            | pos(cp) => qed(BigNat/pos(cp))
+            end
+        | pos(bp) =>
+            match c : (w) => Eq(@BigNat,
+                add(add(BigNat/zero(), BigNat/pos(bp)), w),
+                add(BigNat/zero(), add(BigNat/pos(bp), w)))
+            | zero() => qed(BigNat/pos(bp))
+            | pos(cp) => qed(BigNat/pos(pos_add(bp, cp)))
+            end
+        end
+    | pos(ap) =>
+        match b : (y) => Eq(@BigNat,
+            add(add(BigNat/pos(ap), y), c), add(BigNat/pos(ap), add(y, c)))
+        | zero() =>
+            match c : (w) => Eq(@BigNat,
+                add(add(BigNat/pos(ap), BigNat/zero()), w),
+                add(BigNat/pos(ap), add(BigNat/zero(), w)))
+            | zero() => qed(BigNat/pos(ap))
+            | pos(cp) => qed(BigNat/pos(pos_add(ap, cp)))
+            end
+        | pos(bp) =>
+            match c : (w) => Eq(@BigNat,
+                add(add(BigNat/pos(ap), BigNat/pos(bp)), w),
+                add(BigNat/pos(ap), add(BigNat/pos(bp), w)))
+            | zero() => qed(BigNat/pos(pos_add(ap, bp)))
+            | pos(cp) => cong_pos(pos_add_assoc(ap, bp, cp))
+            end
+        end
+    end;
+
+pub let add_cancel_l(a : BigNat, b : BigNat, c : BigNat, p : Eq(add(a, b), add(a, c)))
+    -> Eq(b, c) =
+    (match a : (x) => (q : Eq(add(x, b), add(x, c))) -> Eq(b, c)
+     | zero() =>
+         (match b : (y) => (q : Eq(add(BigNat/zero(), y), add(BigNat/zero(), c)))
+             -> Eq(y, c)
+          | zero() =>
+              (match c : (w) => (q : Eq(add(BigNat/zero(), BigNat/zero()),
+                  add(BigNat/zero(), w))) -> Eq(BigNat/zero(), w)
+               | zero() => (q) => qed(BigNat/zero())
+               | pos(cp) => (q) => False/absurd(zero_neq_pos(@cp, q))
+               end)
+          | pos(bp) =>
+              (match c : (w) => (q : Eq(add(BigNat/zero(), BigNat/pos(bp)),
+                  add(BigNat/zero(), w))) -> Eq(BigNat/pos(bp), w)
+               | zero() => (q) => False/absurd(pos_neq_zero(@bp, q))
+               | pos(cp) => (q) => q
+               end)
+          end)
+     | pos(ap) =>
+         (match b : (y) => (q : Eq(add(BigNat/pos(ap), y), add(BigNat/pos(ap), c)))
+             -> Eq(y, c)
+          | zero() =>
+              (match c : (w) => (q : Eq(add(BigNat/pos(ap), BigNat/zero()),
+                  add(BigNat/pos(ap), w))) -> Eq(BigNat/zero(), w)
+               | zero() => (q) => qed(BigNat/zero())
+               | pos(cp) => (q) =>
+                   False/absurd(pos_add_no_fix(ap, cp,
+                       pos_inj(@ap, @(pos_add(ap, cp)), q)))
+               end)
+          | pos(bp) =>
+              (match c : (w) => (q : Eq(add(BigNat/pos(ap), BigNat/pos(bp)),
+                  add(BigNat/pos(ap), w))) -> Eq(BigNat/pos(bp), w)
+               | zero() => (q) =>
+                   False/absurd(pos_add_no_fix(ap, bp,
+                       Eq/sym(@Pos, @(pos_add(ap, bp)), @ap,
+                           pos_inj(@(pos_add(ap, bp)), @ap, q))))
+               | pos(cp) => (q) =>
+                   cong_pos(pos_add_cancel_l(ap, bp, cp,
+                       pos_inj(@(pos_add(ap, bp)), @(pos_add(ap, cp)), q)))
+               end)
+          end)
+     end)(p);
+
+pub let add_cancel_r(a : BigNat, b : BigNat, c : BigNat, p : Eq(add(b, a), add(c, a)))
+    -> Eq(b, c) =
+    add_cancel_l(a, b, c,
+        Eq/trans(add_comm(a, b), Eq/trans(p, add_comm(c, a))));
+
+pub let mul_comm(a : BigNat, b : BigNat) -> Eq(mul(a, b), mul(b, a)) =
+    match a : (x) => Eq(@BigNat, mul(x, b), mul(b, x))
+    | zero() =>
+        match b : (y) => Eq(@BigNat, mul(BigNat/zero(), y), mul(y, BigNat/zero()))
+        | zero() => qed(BigNat/zero())
+        | pos(bp) => qed(BigNat/zero())
+        end
+    | pos(ap) =>
+        match b : (y) => Eq(@BigNat, mul(BigNat/pos(ap), y), mul(y, BigNat/pos(ap)))
+        | zero() => qed(BigNat/zero())
+        | pos(bp) => cong_pos(pos_mul_comm(ap, bp))
+        end
+    end;
+
+pub let mul_assoc(a : BigNat, b : BigNat, c : BigNat)
+    -> Eq(mul(mul(a, b), c), mul(a, mul(b, c))) =
+    match a : (x) => Eq(@BigNat, mul(mul(x, b), c), mul(x, mul(b, c)))
+    | zero() =>
+        match b : (y) => Eq(@BigNat,
+            mul(mul(BigNat/zero(), y), c), mul(BigNat/zero(), mul(y, c)))
+        | zero() =>
+            match c : (w) => Eq(@BigNat,
+                mul(mul(BigNat/zero(), BigNat/zero()), w),
+                mul(BigNat/zero(), mul(BigNat/zero(), w)))
+            | zero() => qed(BigNat/zero())
+            | pos(cp) => qed(BigNat/zero())
+            end
+        | pos(bp) =>
+            match c : (w) => Eq(@BigNat,
+                mul(mul(BigNat/zero(), BigNat/pos(bp)), w),
+                mul(BigNat/zero(), mul(BigNat/pos(bp), w)))
+            | zero() => qed(BigNat/zero())
+            | pos(cp) => qed(BigNat/zero())
+            end
+        end
+    | pos(ap) =>
+        match b : (y) => Eq(@BigNat,
+            mul(mul(BigNat/pos(ap), y), c), mul(BigNat/pos(ap), mul(y, c)))
+        | zero() =>
+            match c : (w) => Eq(@BigNat,
+                mul(mul(BigNat/pos(ap), BigNat/zero()), w),
+                mul(BigNat/pos(ap), mul(BigNat/zero(), w)))
+            | zero() => qed(BigNat/zero())
+            | pos(cp) => qed(BigNat/zero())
+            end
+        | pos(bp) =>
+            match c : (w) => Eq(@BigNat,
+                mul(mul(BigNat/pos(ap), BigNat/pos(bp)), w),
+                mul(BigNat/pos(ap), mul(BigNat/pos(bp), w)))
+            | zero() => qed(BigNat/zero())
+            | pos(cp) => cong_pos(pos_mul_assoc(ap, bp, cp))
+            end
+        end
+    end;
+
+pub let distrib_l(a : BigNat, b : BigNat, c : BigNat)
+    -> Eq(mul(a, add(b, c)), add(mul(a, b), mul(a, c))) =
+    match a : (x) => Eq(@BigNat, mul(x, add(b, c)), add(mul(x, b), mul(x, c)))
+    | zero() =>
+        match b : (y) => Eq(@BigNat,
+            mul(BigNat/zero(), add(y, c)),
+            add(mul(BigNat/zero(), y), mul(BigNat/zero(), c)))
+        | zero() =>
+            match c : (w) => Eq(@BigNat,
+                mul(BigNat/zero(), add(BigNat/zero(), w)),
+                add(mul(BigNat/zero(), BigNat/zero()), mul(BigNat/zero(), w)))
+            | zero() => qed(BigNat/zero())
+            | pos(cp) => qed(BigNat/zero())
+            end
+        | pos(bp) =>
+            match c : (w) => Eq(@BigNat,
+                mul(BigNat/zero(), add(BigNat/pos(bp), w)),
+                add(mul(BigNat/zero(), BigNat/pos(bp)), mul(BigNat/zero(), w)))
+            | zero() => qed(BigNat/zero())
+            | pos(cp) => qed(BigNat/zero())
+            end
+        end
+    | pos(ap) =>
+        match b : (y) => Eq(@BigNat,
+            mul(BigNat/pos(ap), add(y, c)),
+            add(mul(BigNat/pos(ap), y), mul(BigNat/pos(ap), c)))
+        | zero() =>
+            match c : (w) => Eq(@BigNat,
+                mul(BigNat/pos(ap), add(BigNat/zero(), w)),
+                add(mul(BigNat/pos(ap), BigNat/zero()), mul(BigNat/pos(ap), w)))
+            | zero() => qed(BigNat/zero())
+            | pos(cp) => qed(BigNat/pos(pos_mul(ap, cp)))
+            end
+        | pos(bp) =>
+            match c : (w) => Eq(@BigNat,
+                mul(BigNat/pos(ap), add(BigNat/pos(bp), w)),
+                add(mul(BigNat/pos(ap), BigNat/pos(bp)), mul(BigNat/pos(ap), w)))
+            | zero() => qed(BigNat/pos(pos_mul(ap, bp)))
+            | pos(cp) => cong_pos(pos_distrib_l(ap, bp, cp))
+            end
+        end
+    end;
+
+pub let distrib_r(a : BigNat, b : BigNat, c : BigNat)
+    -> Eq(mul(add(b, c), a), add(mul(b, a), mul(c, a))) =
+    match a : (x) => Eq(@BigNat, mul(add(b, c), x), add(mul(b, x), mul(c, x)))
+    | zero() =>
+        match b : (y) => Eq(@BigNat,
+            mul(add(y, c), BigNat/zero()),
+            add(mul(y, BigNat/zero()), mul(c, BigNat/zero())))
+        | zero() =>
+            match c : (w) => Eq(@BigNat,
+                mul(add(BigNat/zero(), w), BigNat/zero()),
+                add(mul(BigNat/zero(), BigNat/zero()), mul(w, BigNat/zero())))
+            | zero() => qed(BigNat/zero())
+            | pos(cp) => qed(BigNat/zero())
+            end
+        | pos(bp) =>
+            match c : (w) => Eq(@BigNat,
+                mul(add(BigNat/pos(bp), w), BigNat/zero()),
+                add(mul(BigNat/pos(bp), BigNat/zero()), mul(w, BigNat/zero())))
+            | zero() => qed(BigNat/zero())
+            | pos(cp) => qed(BigNat/zero())
+            end
+        end
+    | pos(ap) =>
+        match b : (y) => Eq(@BigNat,
+            mul(add(y, c), BigNat/pos(ap)),
+            add(mul(y, BigNat/pos(ap)), mul(c, BigNat/pos(ap))))
+        | zero() =>
+            match c : (w) => Eq(@BigNat,
+                mul(add(BigNat/zero(), w), BigNat/pos(ap)),
+                add(mul(BigNat/zero(), BigNat/pos(ap)), mul(w, BigNat/pos(ap))))
+            | zero() => qed(BigNat/zero())
+            | pos(cp) => qed(BigNat/pos(pos_mul(cp, ap)))
+            end
+        | pos(bp) =>
+            match c : (w) => Eq(@BigNat,
+                mul(add(BigNat/pos(bp), w), BigNat/pos(ap)),
+                add(mul(BigNat/pos(bp), BigNat/pos(ap)), mul(w, BigNat/pos(ap))))
+            | zero() => qed(BigNat/pos(pos_mul(bp, ap)))
+            | pos(cp) => cong_pos(pos_distrib_r(ap, bp, cp))
+            end
+        end
+    end;
+
+pub let cmp_refl(a : BigNat) -> Eq(cmp(a, a), Order/eq()) =
+    match a : (x) => Eq(@Order, cmp(x, x), Order/eq())
+    | zero() => qed(Order/eq())
+    | pos(ap) => pos_cmp_refl(ap)
+    end;
+
+pub let cmp_eq(a : BigNat, b : BigNat, p : Eq(cmp(a, b), Order/eq())) -> Eq(a, b) =
+    (match a : (x) => (q : Eq(cmp(x, b), Order/eq())) -> Eq(x, b)
+     | zero() =>
+         (match b : (y) => (q : Eq(cmp(BigNat/zero(), y), Order/eq()))
+             -> Eq(BigNat/zero(), y)
+          | zero() => (q) => qed(BigNat/zero())
+          | pos(bp) => (q) => False/absurd(lt_neq_eq(q))
+          end)
+     | pos(ap) =>
+         (match b : (y) => (q : Eq(cmp(BigNat/pos(ap), y), Order/eq()))
+             -> Eq(BigNat/pos(ap), y)
+          | zero() => (q) => False/absurd(gt_neq_eq(q))
+          | pos(bp) => (q) => cong_pos(pos_cmp_eq(ap, bp, q))
+          end)
+     end)(p);
+
+pub let cmp_flip(a : BigNat, b : BigNat) -> Eq(cmp(b, a), Order/flip(cmp(a, b))) =
+    match a : (x) => Eq(@Order, cmp(b, x), Order/flip(cmp(x, b)))
+    | zero() =>
+        match b : (y) => Eq(@Order, cmp(y, BigNat/zero()), Order/flip(cmp(BigNat/zero(), y)))
+        | zero() => qed(Order/eq())
+        | pos(bp) => qed(Order/gt())
+        end
+    | pos(ap) =>
+        match b : (y) => Eq(@Order, cmp(y, BigNat/pos(ap)), Order/flip(cmp(BigNat/pos(ap), y)))
+        | zero() => qed(Order/lt())
+        | pos(bp) => pos_cmp_flip(ap, bp)
+        end
+    end;
+
+pub let cmp_trans(a : BigNat, b : BigNat, c : BigNat,
+    p : Eq(cmp(a, b), Order/lt()), q : Eq(cmp(b, c), Order/lt()))
+    -> Eq(cmp(a, c), Order/lt()) =
+    (match b : (y) => (p2 : Eq(cmp(a, y), Order/lt()))
+        -> (q2 : Eq(cmp(y, c), Order/lt())) -> Eq(cmp(a, c), Order/lt())
+     | zero() => (p2) => (q2) =>
+         (match a : (x) => (p3 : Eq(cmp(x, BigNat/zero()), Order/lt()))
+             -> Eq(cmp(x, c), Order/lt())
+          | zero() => (p3) => False/absurd(eq_neq_lt(p3))
+          | pos(ap) => (p3) => False/absurd(gt_neq_lt(p3))
+          end)(p2)
+     | pos(bp) => (p2) => (q2) =>
+         (match a : (x) => (p3 : Eq(cmp(x, BigNat/pos(bp)), Order/lt()))
+             -> Eq(cmp(x, c), Order/lt())
+          | zero() => (p3) =>
+              (match c : (w) => (q3 : Eq(cmp(BigNat/pos(bp), w), Order/lt()))
+                  -> Eq(cmp(BigNat/zero(), w), Order/lt())
+               | zero() => (q3) => False/absurd(gt_neq_lt(q3))
+               | pos(cp) => (q3) => qed(Order/lt())
+               end)(q2)
+          | pos(ap) => (p3) =>
+              (match c : (w) => (q3 : Eq(cmp(BigNat/pos(bp), w), Order/lt()))
+                  -> Eq(cmp(BigNat/pos(ap), w), Order/lt())
+               | zero() => (q3) => False/absurd(gt_neq_lt(q3))
+               | pos(cp) => (q3) => pos_cmp_trans(ap, bp, cp, p3, q3)
+               end)(q2)
+          end)(p2)
+     end)(p)(q);
+
+-- Doubling distributes over `add` and slides out of `mul`; both are pure
+-- constructor pushes, so every case is definitional.
+let dbl_add(a : BigNat, b : BigNat) -> Eq(dbl(add(a, b)), add(dbl(a), dbl(b))) =
+    match a : (x) => Eq(@BigNat, dbl(add(x, b)), add(dbl(x), dbl(b)))
+    | zero() =>
+        match b : (y) => Eq(@BigNat, dbl(add(BigNat/zero(), y)), add(dbl(BigNat/zero()), dbl(y)))
+        | zero() => qed(BigNat/zero())
+        | pos(bp) => qed(BigNat/pos(Pos/o(bp)))
+        end
+    | pos(ap) =>
+        match b : (y) => Eq(@BigNat, dbl(add(BigNat/pos(ap), y)), add(dbl(BigNat/pos(ap)), dbl(y)))
+        | zero() => qed(BigNat/pos(Pos/o(ap)))
+        | pos(bp) => qed(BigNat/pos(Pos/o(pos_add(ap, bp))))
+        end
+    end;
+
+let dbl_mul_l(a : BigNat, b : BigNat) -> Eq(dbl(mul(a, b)), mul(dbl(a), b)) =
+    match a : (x) => Eq(@BigNat, dbl(mul(x, b)), mul(dbl(x), b))
+    | zero() =>
+        match b : (y) => Eq(@BigNat, dbl(mul(BigNat/zero(), y)), mul(dbl(BigNat/zero()), y))
+        | zero() => qed(BigNat/zero())
+        | pos(bp) => qed(BigNat/zero())
+        end
+    | pos(ap) =>
+        match b : (y) => Eq(@BigNat, dbl(mul(BigNat/pos(ap), y)), mul(dbl(BigNat/pos(ap)), y))
+        | zero() => qed(BigNat/zero())
+        | pos(bp) => qed(BigNat/pos(Pos/o(pos_mul(ap, bp))))
+        end
+    end;
+
+pub let mul_pow2_add(a : BigNat, b : BigNat, k : Nat)
+    -> Eq(mul_pow2(add(a, b), k), add(mul_pow2(a, k), mul_pow2(b, k))) =
+    match k : (n) => Eq(@BigNat, mul_pow2(add(a, b), n), add(mul_pow2(a, n), mul_pow2(b, n)))
+    | 0 => qed(add(a, b))
+    | pred + 1; ih =>
+        Eq/trans(cong_dbl(ih), dbl_add(mul_pow2(a, pred), mul_pow2(b, pred)))
+    end;
+
+pub let mul_pow2_mul_l(a : BigNat, b : BigNat, k : Nat)
+    -> Eq(mul_pow2(mul(a, b), k), mul(mul_pow2(a, k), b)) =
+    match k : (n) => Eq(@BigNat, mul_pow2(mul(a, b), n), mul(mul_pow2(a, n), b))
+    | 0 => qed(mul(a, b))
+    | pred + 1; ih =>
+        Eq/trans(cong_dbl(ih), dbl_mul_l(mul_pow2(a, pred), b))
+    end;
+
+pub let mul_pow2_compose(a : BigNat, j : Nat, k : Nat)
+    -> Eq(mul_pow2(mul_pow2(a, j), k), mul_pow2(a, j + k)) =
+    match k : (n) => Eq(@BigNat, mul_pow2(mul_pow2(a, j), n), mul_pow2(a, j + n))
+    | 0 => qed(mul_pow2(a, j))
+    | pred + 1; ih => cong_dbl(ih)
+    end;

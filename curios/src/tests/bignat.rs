@@ -1,10 +1,10 @@
 use {super::run, curios_rt::MockHost, std::time::Duration};
 
 #[test]
-fn bignat_add_carries_across_limbs() {
-    // `add` propagates carry across base-10^4 limbs: 99_999_999 (= [9999, 9999])
-    // plus 1 ripples a carry through both limbs and grows a new top limb,
-    // yielding [0, 0, 1] = 100_000_000.
+fn bignat_add_ripples_carry() {
+    // `add` propagates carry along the binary numeral: 99_999_999 ends in eight
+    // set bits, so adding 1 ripples the carry through all of them (the
+    // `pos_add`/`pos_add_c` twin recursion) before it lands.
     let source = r#"
         use /std/{Io, Str, BigNat};
         Io/print(BigNat/to_str(BigNat/add(BigNat/of_nat(99999999), BigNat/of_nat(1))))
@@ -13,10 +13,10 @@ fn bignat_add_carries_across_limbs() {
 }
 
 #[test]
-fn bignat_sub_borrows_and_trims() {
-    // `sub` borrows across limbs and then trims the high zero limbs the borrow
-    // leaves behind: 100_000_000 (= [0, 0, 1]) minus 1 borrows twice to [9999,
-    // 9999, 0], which must trim back to the canonical [9999, 9999] = 99_999_999.
+fn bignat_sub_borrows() {
+    // `sub` runs the mask-based borrow recursion: 100_000_000 ends in eight
+    // clear bits, so subtracting 1 borrows through all of them. The result is
+    // canonical by construction — no trailing-zero cleanup exists to get wrong.
     let source = r#"
         use /std/{Io, Str, BigNat};
         Io/print(BigNat/to_str(BigNat/sub(BigNat/of_nat(100000000), BigNat/of_nat(1))))
@@ -26,9 +26,9 @@ fn bignat_sub_borrows_and_trims() {
 
 #[test]
 fn bignat_mul_small_propagates_carry() {
-    // `mul_small` carries a value that itself exceeds the base: 9999 * 99999 =
-    // 999_890_001, whose final carry (99_989) must be split into multiple limbs
-    // rather than dropped into one.
+    // `mul_small` is `mul` against a decoded native operand: 9999 * 99999 =
+    // 999_890_001 crosses well past both inputs' bit widths, so every carry of
+    // the shift-and-add recursion has to land.
     let source = r#"
         use /std/{Io, Str, BigNat};
         Io/print(BigNat/to_str(BigNat/mul_small(BigNat/of_nat(9999), 99999)))
@@ -37,10 +37,22 @@ fn bignat_mul_small_propagates_carry() {
 }
 
 #[test]
+fn bignat_mul_crosses_word_width() {
+    // Full big-by-big `mul`: 123_456_789 × 987_654_321 = 121_932_631_112_635_269
+    // needs 57 bits, so a correct rendering proves the product lives in the
+    // numeral itself, never in a fixed-width intermediate.
+    let source = r#"
+        use /std/{Io, Str, BigNat};
+        Io/print(BigNat/to_str(BigNat/mul(BigNat/of_nat(123456789), BigNat/of_nat(987654321))))
+        "#;
+    assert_eq!(run(source), b"121932631112635269");
+}
+
+#[test]
 fn bignat_mul_pow2_builds_large_powers() {
     // `mul_pow2` doubles past every fixed-width integer: 2^40 = 1_099_511_627_776
-    // far exceeds the 31-bit `Nat` carrier, so a correct result proves the value
-    // is held across limbs, not in a single trapping `Nat`.
+    // far exceeds the 31-bit `Nat` carrier, so a correct result proves each
+    // doubling is a low-bit prepend on the numeral, not native arithmetic.
     let source = r#"
         use /std/{Io, Str, BigNat};
         Io/print(BigNat/to_str(BigNat/mul_pow2(BigNat/of_nat(1), 40)))
@@ -49,11 +61,45 @@ fn bignat_mul_pow2_builds_large_powers() {
 }
 
 #[test]
+fn bignat_div2_and_parity() {
+    // `div2` drops the low bit in O(1) and `is_even` reads it: 101 is odd and
+    // floor-halves to 50, which is even.
+    let source = r#"
+        use /std/{Io, Str, Bln, BigNat};
+        let show(b : Bln) -> Str =
+            match b : Str
+            | true => "T"
+            | false => "F"
+            end;
+        let n = BigNat/of_nat(101);
+        Io/print(Str/concat(
+            Str/concat(BigNat/to_str(BigNat/div2(n)), show(BigNat/is_even(n))),
+            show(BigNat/is_even(BigNat/div2(n)))))
+        "#;
+    assert_eq!(run(source), b"50FT");
+}
+
+#[test]
+fn bignat_bit_len_counts_binary_digits() {
+    // `bit_len` is the numeral's length: zero has no bits, 1 is a single bit,
+    // and the 255 → 256 step is where the count grows from 8 to 9.
+    let source = r#"
+        use /std/{Io, Str, Nat, Lst, BigNat};
+        Io/print(Str/join(",", [
+            Nat/to_str(BigNat/bit_len(BigNat/zero)),
+            Nat/to_str(BigNat/bit_len(BigNat/of_nat(1))),
+            Nat/to_str(BigNat/bit_len(BigNat/of_nat(255))),
+            Nat/to_str(BigNat/bit_len(BigNat/of_nat(256)))]))
+        "#;
+    assert_eq!(run(source), b"0,1,8,9");
+}
+
+#[test]
 fn bignat_cmp_orders_by_magnitude() {
-    // `cmp` decides by the most-significant limb first (recursing to the top
-    // of the little-endian list), so two values differing only in the lowest limb
-    // still order correctly: 12345678 < 12345679, equal to itself, and the
-    // reverse is greater.
+    // `cmp` lets the high bits decide (the recursion on the numeral tails),
+    // breaking ties on the low bit only afterward, so two values differing only
+    // in the lowest bit still order correctly: 12345678 < 12345679, equal to
+    // itself, and the reverse is greater.
     let source = r#"
         use /std/{Io, Str, BigNat, Order};
         let show(o : Order) -> Str =
@@ -71,9 +117,9 @@ fn bignat_cmp_orders_by_magnitude() {
 
 #[test]
 fn bignat_zero_renders_and_roundtrips() {
-    // The canonical zero is the empty limb list, which `to_str` renders as "0"
-    // (not the empty string), and a value whose lowest limb is zero round-trips
-    // through `of_nat`/`to_str` with the high limb un-padded and the rest padded.
+    // Zero is its own constructor, which `to_str` renders as "0" (not the empty
+    // string), and a value with clear low bits round-trips through the binary
+    // long division that produces the decimal digits.
     let source = r#"
         use /std/{Io, Str, BigNat};
         Io/print(Str/concat(Str/concat(BigNat/to_str(BigNat/zero), "/"), BigNat/to_str(BigNat/of_nat(70000))))

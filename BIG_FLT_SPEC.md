@@ -1,6 +1,6 @@
 # BigFlt implementation specification
 
-Design and build plan for exact binary-rational arithmetic (`BigFlt`) with proof-carrying conversion to and from the native `Flt` type, plus the one compiler primitive (`Flt/of_le_bin`) it depends on. Staged: **stage 1** ships `BigFlt` as a certified dyadic rational (arbitrary-precision binary float, ℤ[1/2]) on top of a new `BigInt` integer layer; **stage 2** — deferred until a real workload demands exact interior division — *extends* the same carrier with an odd `denominator` field, turning the type into full ℚ with the dyadics as the `denominator = 1` stratum. This document is a working implementation reference, not permanent architecture documentation.
+Design and build plan for exact binary-rational arithmetic (`BigFlt`) with proof-carrying conversion to and from the native `Flt` type, plus the one compiler primitive (`Flt/of_le_bin`) it depends on. Staged: **stage 1** ships `BigFlt` as a certified dyadic rational (arbitrary-precision binary float, ℤ[1/2]) on top of a new `BigInt` integer layer over a ground-up rewrite of `BigNat` as canonical binary numerals; **stage 2** — deferred until a real workload demands exact interior division — *extends* the same carrier with an odd `denominator` field, turning the type into full ℚ with the dyadics as the `denominator = 1` stratum. This document is a working implementation reference, not permanent architecture documentation.
 
 ## Motivation
 
@@ -12,23 +12,23 @@ The opacity goes further than arithmetic, and this drives the architecture: **an
 
 ## Design keystones
 
-**Certificates, not discipline.** `struct` privacy is an elaboration-time access check (`PrivateRepresentation`), **not** a restriction on the type's inhabitants — a ∀-quantified theorem ranges over all field tuples, canonical or not. Laws that conclude structural `Eq` from value-level premises are false over such a type: `x = ⟨mantissa 2, exponent 0⟩` and `y = ⟨mantissa 1, exponent 1⟩` are value-equal, so `lte` holds both ways and `add(a, x) = add(a, y)` (both canonicalize through `mk`) — but `Eq(x, y)` fails, so antisymmetry, `add_cancel`, and `mul_cancel` are unprovable as stated over a bare struct. The fix is the `/syn/Str` pattern (`record Str { bytes, valid : Valid(bytes) }`): every arithmetic type carries a **certificate field** reflecting a computable canonicality check, so non-canonical tuples cannot be extended to inhabitants at all and quantifiers only see canonical values. `Prop` is definitionally proof-irrelevant (`curios-core/src/convert.rs:168` — any two inhabitants of a `Prop` are definitionally equal, and conversion is type-directed), so certificates never obstruct equality goals: `Eq` between certified records reduces to `Eq` of the data fields. Certificates are non-informative and erase, so the runtime representation stays the bare data. Unlike `Str`, there is no per-literal derivation cost (`BigFlt` has no literals — the `RUST_MIN_STACK` gotcha has no analogue here) and no bespoke per-op proof plumbing: every operation ends in the smart constructor, which produces the certificate once.
+**Canonical by construction first; certificates only where canonicity isn't structural.** The arithmetic carriers are Coq's `positive`/`N`/`Z` design: a binary numeral `Pos = one() | o(Pos) | i(Pos)` (little-endian; `one` is the mandatory leading 1 bit, `o`/`i` append a low 0/1 bit — value `o(p) = 2p`, `i(p) = 2p + 1`), with `BigNat` adjoining zero and `BigInt` adjoining sign as constructors. Every value has exactly one representation, so structural `Eq` *is* value equality, quantified laws range over exactly the meaningful values, and there is nothing to certify — no smart constructors, no trimming, no negative zero. This displaced the earlier trimmed-limbs-certificate retrofit for a reason recorded under Background facts: the limb ops lean on native `/`, `%`, `-`, which are proof-opaque on symbolic operands, while the numeral ops are pure constructor algebra end to end — which is what makes the lemma base provable at all.
 
-**The certificate tower.** Each layer's check assumes the one below:
+**The carrier tower.**
 
-| Type | Data fields | Certificate (reflection of a `Bln` check) |
+| Type | Form | Canonicity |
 | --- | --- | --- |
-| `BigNat` (existing, retrofitted) | `limbs : Lst(Nat)` | no trailing zero limb |
-| `BigInt` (new) | `sign : Bln`, `magnitude : BigNat` | no negative zero (`magnitude` nonzero, or `sign` false) |
-| `BigFlt` (new) | `mantissa : BigInt`, `exponent : BigInt` | `mantissa` odd, or the canonical zero (`mantissa` and `exponent` both zero) |
+| `BigNat` (rewritten, Part 2) | `induct`: `zero()`, `pos(Pos)` | structural — unique numerals by construction |
+| `BigInt` (new, Part 3) | `induct`: `neg(Pos)`, `zero()`, `pos(Pos)` | structural — a negative zero cannot be written |
+| `BigFlt` (new, Part 4) | `struct`: `mantissa : BigInt`, `exponent : BigInt`, certificate | certificate — `mantissa` odd (an O(1) head check on the numeral) or the canonical zero |
 
-`BigNat` and `BigInt` are transparent `record`s: their representations are permanent, and the certificate is what makes transparency safe (a `−0` or an untrimmed limb list cannot be constructed anywhere — its certificate is unprovable). `BigFlt` is a `struct`: privacy is no longer needed for invariant enforcement (the certificate does that), but it is exactly what keeps stage 2's field extension a non-breaking change — **representation mobility**.
+**Where the certificate survives.** `BigFlt`'s canonical form ties two fields together (`⟨mantissa 2, exponent 0⟩` and `⟨mantissa 1, exponent 1⟩` denote the same value, so over a bare struct antisymmetry, `add_cancel`, and `mul_cancel` are false as stated), and no constructor shape can enforce a joint property — the one place the `/syn/Str` certificate pattern (`record Str { bytes, valid : Valid(bytes) }`) still carries the design: a certificate field reflecting a computable check, so non-canonical tuples cannot be inhabited and quantifiers see only canonical values. `Prop` is definitionally proof-irrelevant (`curios-core/src/convert.rs:168` — conversion is type-directed), so the certificate never obstructs equality goals (`Eq` between certified records reduces to `Eq` of the data fields), is non-informative, and erases. Every operation ends in the smart constructor `mk`, which produces the certificate once. `BigFlt` is a `struct` not for invariant enforcement — the certificate does that — but for **representation mobility**: stage 2's field extension is a non-breaking change because no outside code or proof can have mentioned the representation.
 
-**`BigInt` as the sign layer.** Without it, every `BigFlt` ring law pays sign-magnitude splits × exponent-alignment splits × `mk`-transport as one case product. With it, the sign reasoning happens once in `BigInt` (against the `BigNat` semiring, no exponents in sight), and `BigFlt`'s laws see an opaque ring (alignment and transport only). `BigInt` is also stage 2's numerator type and a permanent stdlib asset in its own right — the stdlib has no true integer (`/sys/Int` is a runtime i31).
+**`BigInt` as the sign layer.** Without it, every `BigFlt` ring law pays sign splits × exponent-alignment splits × `mk`-transport as one case product. With it, the sign reasoning happens once in `BigInt` (constructor case splits citing the `Pos` lemma base, no exponents in sight), and `BigFlt`'s laws see an opaque ring (alignment and transport only). `BigInt` is also stage 2's numerator type and a permanent stdlib asset in its own right — the stdlib has no true integer (`/sys/Int` is a runtime i31).
 
 ## Goals (stage 1)
 
-- `BigInt`: sign-magnitude arbitrary-precision integers, certified no-negative-zero, with exact ring ops, proved ring laws (the home of all sign-case reasoning), and an order layer.
+- `BigInt`: constructor-signed arbitrary-precision integers (no negative zero exists by construction), with exact ring ops, proved ring laws (the home of all sign-case reasoning), and an order layer.
 - `BigFlt` as a certified dyadic rational, canonical by inhabitance (certificate field), representation-private (`struct`) for stage-2 mobility.
 - Exact, closed `add`/`sub`/`mul`/`neg`/`abs` with proved ring laws (commutativity, associativity, distributivity, additive and multiplicative cancellation — cancellation is the integral-domain substitute for inverse reasoning). Closure is **unconditional**: the `BigInt` exponent removes the runtime i31 overflow trap a pathological squaring chain could hit with a native-`Int` exponent.
 - An order layer: `Order`-valued `cmp`, `Bln`-valued `lt`/`lte`/`gt`/`gte`, boolean-reflection `Prop`s, and the monotonicity lemmas Part 9's bounds consume. Antisymmetry is provable *because* the type is certified.
@@ -54,8 +54,9 @@ The opacity goes further than arithmetic, and this drives the architecture: **an
 - Open-term prim opacity (see Motivation) — the load-bearing fact behind the byte-level architecture.
 - **`Prop` is definitionally proof-irrelevant** (`curios-core/src/convert.rs:168-169`; conversion is type-directed, driving η and irrelevance). `/syn/Str` (`record { bytes : Bin, valid : Valid(bytes) }`, `curios-text/syn/Str.crs`) is the stdlib precedent for certified records and for ops that produce the certificate alongside the data (`concat_closed`, `drop_valid`, `take_valid`).
 - `Flt/of_str` is not correctly rounded (parses via native `Flt` arithmetic); nothing correctly-rounded exists to lean on. `narrow_b` is new work, structurally akin to `to_str`'s Dragon4 machinery but in base 2 with fixed precision.
-- `BigNat` (`curios-text/std/BigNat.crs`) is a `record` over little-endian base-10000 `Lst(Nat)` limbs with `add`, `sub` (truncating), `mul_small`, `mul_pow2`, `Order`-valued `cmp` plus the `Bln` family — **no general `mul`** (Part 2 adds it). Its **no-trailing-zero-limb invariant is maintained by every existing op** (`trim` in `sub`, carry handling in `add_c`, `limbs_of_nat` stopping at 0) **but stated nowhere and load-bearing everywhere**: `cmp_limbs` is value-correct only on trimmed lists (`[3]` vs `[3, 0]` compares `lt` though both mean 3), `is_zero` is a length check that misclassifies `[0]`, and a naive structural `div2` emits a trailing zero limb even on trimmed input (`div2([0, 1]) = [5000, 0]`). Part 2 turns this invariant into the certificate.
-- No `BigNat { … }` record literal and no `.limbs` projection exists outside `BigNat.crs` (`Flt.crs` consumes exported ops only), so the certificate retrofit touches one file.
+- **The provable fragment of definitional arithmetic** (probe-verified; this drove the carrier design): `Nat`'s `+` normalizes literal floors (`n + 1` matches successor patterns, `n + 0 ≡ n`, nested literal floors reassociate) and comparisons cancel shared successor floors — but `-`, `/`, and `%` applied to symbolic operands are fully opaque: not definitional, and not recoverable by any induction. Consequently every `BigNat`/`BigInt` operation must stay in constructor algebra; exactly two boundary functions (`of_nat`, `to_str`) use native arithmetic, on runtime values only, and no proof mentions them.
+- **Kernel conversion handles stuck recursive calls** (fixed in 76c870f9, forced by Part 2's corpus): applications of `rec`-bound names whose unfolding stays a stuck match are normal forms (match-guarded delta); rec bodies are opened once and memoized under stable labels; conversion falls back to lazy delta to identify folded-vs-unfolded spellings of the same call. Conversion is therefore the reliable mechanism for closing goals over stuck recursive applications — lean on it.
+- **Elaborator proof idioms** (Part 2's corpus is the reference): explicit-subject reflexivity (`qed(x)`) where `Eq/refl()`'s implicit meets reducible indices; explicit `@`-arguments where a helper's constructor pattern meets a reducible premise index; nested single-scrutinee matches with motives (tuple scrutinees do not refine goals); congruence lemmas as dependent matches on the equation. To make a stuck match reduce counterfactually, convoy on the scrutinee itself — reliable only when the matched application's arguments are plain variables; generalize a composed argument through a helper lemma and let conversion instantiate it. Match-rewrites on `Eq` proofs whose rewritten occurrence is produced by reduction are elaboration-order-fragile — build the equation with congruence + `Eq/trans` chains instead.
 - Native `Int` is type-level ℤ (`curios-base/src/int.rs`, `BigInt`-backed — "the type level pretends ℤ") but a runtime i31 carrier with overflow traps. This is why `BigFlt`'s `exponent` is a `BigInt`, not an `Int`: with an `Int` exponent, a squaring chain could trap at runtime while the type-level proofs stayed valid. `Int` literals still appear at the byte boundary (`widen_b`'s field arithmetic) and cross over via `BigInt/of_int`; `Int`'s 31 bits are ample there (`f32` needs `[-149, 127]`).
 - `Flt.crs`'s existing `divmod` is a repeated-subtraction digit extractor (small *quotient*, large scaled divisor) — fine for Dragon4, unusable as general division; irrelevant to stage 1, which needs no division at all.
 - `record` vs `struct` (`SYNTAX.md:284`): `struct` = representation private to the declaring module (`PrivateRepresentation` otherwise). Privacy is an elaboration check, **not** an inhabitance restriction — invariants come from certificates (see Design keystones); what privacy buys is **representation mobility**, which is why `BigFlt` alone is a `struct`.
@@ -80,29 +81,29 @@ Assembles a native `Flt` from its 4 little-endian bytes, mirroring `Flt/to_le_bi
 
 Independent of everything else; needed only by the Part 8 wrappers.
 
-## Part 2 — `BigNat`: trimmed-limbs certificate, multiplication, lemma base
+## Part 2 — `BigNat`: positive binary numerals, multiplication, lemma base (delivered)
 
-The carrier-independent foundation everything stands on. Changes to `BigNat.crs`:
+The carrier-independent foundation everything stands on. `BigNat.crs` rewritten around the numeral carrier:
 
-- **Retrofit the certificate**: `limbs` gains a sibling `canonical : Eq(is_trimmed(limbs), true)` (`is_trimmed` = empty, or last limb nonzero). Every existing op already maintains the invariant; the retrofit makes each op's body *prove* it — construction sites are all inside `BigNat.crs`, each becoming a smart-constructor call or carrying its preservation lemma. `is_zero`'s length check becomes genuinely correct over all inhabitants.
-- `mul(a, b) -> BigNat` — schoolbook over limbs (`mul_small` per limb + limb shift + `add`). Required by `BigFlt/mul` and by every algebraic law.
-- Parity/binary infrastructure: `is_even`, `div2` (both **structural folds** — little-endian limb folds work because the base 10000 is even: half of `l + B·t` is `(l + r·B)/2 + q·B` with `t = 2q + r`, and the low bit is `l % 2`; **`div2` must re-trim**, since the naive fold emits a trailing zero limb), `bit_len`, top-bits extraction helpers for Part 8.
-- The semiring lemma base, by `Lst`-`; ih` induction: `add_comm`, `add_assoc`, `mul_comm`, `mul_assoc`, `distrib`, `add_cancel`, `mul_pow2`/`add`/`mul` interaction lemmas, `cmp` order lemmas — now honestly stated over certified inhabitants, no trimmedness premises to thread. Permanent stdlib assets; they survive stage 2 unchanged.
+- `Pos` (`one`/`o`/`i`) and `BigNat` (`zero`/`pos`), canonical by construction. All ops are constructor algebra: `pos_succ`; `pos_add` with its carry twin `pos_add_c` (the carry lives in the function, never in the data); `pos_cmp` high-bits-first with the low bit breaking ties only at a high-bit tie (shaped combine-after-recursion — see the specializer note); truncating `sub` via the `Pos.sub_mask` borrow recursion (Coq's design); shift-and-add `pos_mul`; `mul_pow2` as a `Nat`-fold of doubling; O(1) `is_even`/`div2`; `bit_len`; boundary `of_nat`/`mul_small`/`to_str` (binary long division by 10, MSB-first).
+- The lemma base, machine-checked by prelude elaboration on every compile — the `Pos` addition family (`one_r`, `succ_l`/`succ_r`, `comm`, `assoc`, `cancel_l`/`cancel_r`, `no_fix`, plus the no-confusion/injectivity toolkit), multiplication family (`one_r`, `o_r`/`i_r`, `comm`, `distrib_l`/`distrib_r`, `assoc`), comparison family (`refl`, `eq`-reflection to structural `Eq`, `flip` antisymmetry via the new `Order/flip`, `succ`, `lt_add`, the `lt`-witness Σ-lemma, `trans` by witness composition) — and the `BigNat`-level lifts: `add_comm`/`add_assoc`/`add_cancel_l`/`add_cancel_r`, `mul_comm`/`mul_assoc`, `distrib_l`/`distrib_r`, `cmp_refl`/`cmp_eq`/`cmp_flip`/`cmp_trans`, `mul_pow2_add`/`mul_pow2_mul_l`/`mul_pow2_compose`. Permanent stdlib assets; they survive stage 2 unchanged.
+- Top-bits extraction for Part 8 is deliberately deferred to Part 8: `div2`/`bit_len` are the primitives, and the exact helper shapes fall out of `narrow_b`'s loop.
+- Known compiler issue dodged, not fixed: the ersd specializer loses the minted `@s0` item for a rec function applied to a literal inductive argument (surfaced as `into_cont lacks value .../pos_cmp_c@s0` under a switch-then-recurse `pos_cmp`); the combine-after-recursion shape avoids the trigger.
 
 ## Part 3 — `BigInt`: signed integers and the sign-case proofs
 
 ```
-pub record BigInt : Type {
-    sign : Bln,
-    magnitude : BigNat,
-    canonical : Canonical(sign, magnitude)
-}
+pub induct BigInt : Type
+| neg(Pos)
+| zero()
+| pos(Pos)
+end
 ```
 
-New module, permanent stdlib asset, and the factoring that keeps `BigFlt`'s proofs small (see Design keystones). Certificate: no negative zero — `magnitude` nonzero, or `sign` false. Transparent `record`: safe because `−0`'s certificate is unprovable.
+New module, permanent stdlib asset, and the factoring that keeps `BigFlt`'s proofs small (see Design keystones). Canonical by construction: sign is a constructor, and a negative zero cannot be written.
 
-- Ops: `add`/`sub` (sign-magnitude case split over `BigNat/cmp`; `sub` is total — ℤ has inverses, unlike `BigNat`'s truncating `sub`), `mul` (xor signs, multiply magnitudes), `neg`/`abs`, `Order`-valued `cmp` + `Bln` `lt`/`lte`/`gt`/`gte`, structural `eql` (valid because certified), `of_nat`, `of_int` (the i31 boundary helper, via `Int/abs`), `is_even`/`div2`/oddness lifted from `magnitude`, `to_str`.
-- Ring laws: `add_comm`, `add_assoc`, `mul_comm`, `mul_assoc`, `distrib`, `add_cancel`, `mul_cancel`, `neg` involution, `abs`/`sign` lemmas, order lemmas including antisymmetry (provable because certified). These are ℤ's laws, proved by sign case analysis citing Part 2's semiring lemmas — the sign splits happen here, once, and nowhere else.
+- Ops: `add` via signed positive subtraction — `pos_sub(p, q) : BigInt`, the `sub_mask` borrow recursion returning the signed difference directly (Coq's `Z.pos_sub`) — so no op consults an order test it then has to reason about separately; `sub` = `add` of `neg`; `mul` (sign by constructor case, magnitudes via `pos_mul`); `neg`/`abs`; `Order`-valued `cmp` (`pos_cmp` flipped under `neg`) + `Bln` `lt`/`lte`/`gt`/`gte`; structural `eql`; `of_nat`/`of_bignat`, `of_int` (the i31 boundary helper, via `Int/abs`); `is_even`/`div2`; `to_str`.
+- Ring laws: `add_comm`, `add_assoc`, `mul_comm`, `mul_assoc`, `distrib`, `add_cancel`, `mul_cancel`, `neg` involution, `abs`/sign lemmas, order laws including antisymmetry (structural, since the carrier is canonical). Constructor case splits citing Part 2's `Pos` corpus; the new proof mass is the `pos_sub` spec family (`pos_sub(p, p) = zero`, the `pos_sub`/`pos_cmp` trichotomy, `pos_sub`/`pos_add` cancellation) — the sign splits happen here, once, and nowhere else.
 - Witnesses (`Add`/`Sub`/`Mul`/`Eql`/`Cmp`, plus `Show`/`Ord` as useful) — homed in the `/std` operator facades (`std/Add.crs`, `std/Eql.crs`, `std/Cmp.crs`, …), following the `BigNat` precedent.
 
 ## Part 4 — `BigFlt` representation and canonicity kernel
@@ -115,14 +116,14 @@ pub struct BigFlt : Type {
 }
 ```
 
-Value: `mantissa · 2^exponent`. Certificate: `mantissa` odd, or the canonical zero (`mantissa` and `exponent` both zero; `BigInt`'s own certificate already forbids a signed zero mantissa). A `struct` not for invariant enforcement — the certificate does that — but for **representation mobility**: stage 2 adds a field, which no outside code or proof can have mentioned.
+Value: `mantissa · 2^exponent`. Certificate: `mantissa` odd, or the canonical zero (`mantissa` and `exponent` both zero; a signed zero mantissa is unrepresentable in `BigInt` to begin with). A `struct` not for invariant enforcement — the certificate does that — but for **representation mobility**: stage 2 adds a field, which no outside code or proof can have mentioned.
 
 The exported smart constructor `mk(mantissa, exponent)` is total: it strips trailing zero bits of the mantissa's magnitude into the exponent and forces the canonical zero. Because `mk`'s result type carries the certificate, **the strip-correctness proof is a prerequisite for defining `mk` at all** — the kernel gates the ops (see Build order).
 
 The **canonicity kernel** — deliberately the smallest possible trusted-by-effort core, and the stage-1 summit:
 
 - Uniqueness: `a·2^e = b·2^f` with `a`, `b` odd implies `a = b` and `e = f` (parity argument over `mul_pow2`; shallow).
-- `strip` correctness (value preservation, odd-or-zero result): by fuel-indexed structural induction, with **fuel as an explicit argument shared by the computation and the proof** (fuel `14 · limb-count + 1` bounds the bit length — base 10000 < 2^14; the bound is a `Lst` induction). Explicit fuel makes `strip` total by construction and avoids a rec-vs-proof-model bridging lemma. Strong induction is not required.
+- `strip` correctness (value preservation, odd-or-zero result): the strip is structural — trailing zero bits of the mantissa's magnitude are exactly the numeral's `o` heads, so `strip` recurses on the `Pos` subterm (`o(t)` recurses on `t`; `one`/`i` are done), terminates by construction, and needs no fuel. Correctness is a plain structural induction, and oddness of the result is a head inspection.
 - `mk`-respects: equal values (alignment equality on raw pairs: `mul_pow2(m₁, e₁−e₂) = m₂` at the common exponent) yield structurally `Eq` results. Certificates never appear in these goals — proof irrelevance discharges them.
 
 Contrast deliberately noted: the stage-2 addition to this kernel is gcd-reduced-form uniqueness (Euclid's lemma, coprimality) — the reason the denominator is deferred.
@@ -150,7 +151,7 @@ Exactness is definitional — nothing here rounds. Wrapper: `widen(f) = widen_b(
 
 ## Part 8 — `narrow_b : BigFlt -> Bin` and `narrow_ratio_b`
 
-- `narrow_b`: unbiased exponent from `bit_len(magnitude) + exponent`; sign from the mantissa; overflow (`> 127` after rounding) → ±Inf bytes; normal range → top 24 bits with guard/sticky from the rest, round-to-nearest-even, carry-propagate (may bump the exponent, re-check overflow); below `−126` → round on the `2^(−149)` grid (subnormal, reduced precision — *not* "leading 24 bits") or signed zero (the sign of a nonzero `x` that rounds to zero survives into the byte pattern). All shifts and comparisons — no division.
+- `narrow_b`: unbiased exponent from `bit_len(magnitude) + exponent`; sign from the mantissa; overflow (`> 127` after rounding) → ±Inf bytes; normal range → top 24 bits with guard/sticky from the rest, round-to-nearest-even, carry-propagate (may bump the exponent, re-check overflow); below `−126` → round on the `2^(−149)` grid (subnormal, reduced precision — *not* "leading 24 bits") or signed zero (the sign of a nonzero `x` that rounds to zero survives into the byte pattern). All shifts and comparisons — no division; top-bits/guard/sticky extraction is built here from Part 2's `div2`/`bit_len` (deferred from Part 2 so the helper shapes match the loop that consumes them).
 - `narrow_ratio_b(num, den)`: correctly-rounded quotient, the plan's only division, implemented as the base-2 compare-subtract-double digit loop (the Dragon4-`generate` shape) against `den`'s magnitude. Total, with IEEE edge semantics: `0/0` → NaN bytes, `x/0` → signed-Inf bytes. **Forward-compatibility**: this loop is precisely stage 2's `narrow` engine — building it now pre-pays that migration.
 - Wrappers: `narrow = Flt/of_le_bin ∘ narrow_b`, `narrow_ratio = Flt/of_le_bin ∘ narrow_ratio_b` (needs Part 1).
 - Dependencies: computationally this part needs only Parts 2–4 (bit helpers, `BigNat`/`BigInt` `cmp`, the representation); Part 6's order layer is consumed by Part 9's *statements*, not here.
@@ -173,8 +174,9 @@ Expected fiddly cases: subnormal boundary, exact ties, exponent extremes, zero. 
 ## Soundness discipline (binding for every part)
 
 - Every `Prop`-typed definition is built via the checked eliminators (`Nat`/`Lst`/`Bin` `; ih` matches) and checked case analysis on `induct`/reflection values; recursion over derivations, if ever needed, is `rec` on a structural subterm (the `lte_succ_r` pattern) — never a bare self-reference (`rec p : P = p` typechecks today and must be rejected in review).
-- Computations (`mk`'s strip, `narrow_b`'s loops) use `rec` freely; no proof depends on a `rec` computation's termination for its logical content (`strip` carries explicit fuel precisely so its proof doesn't have to).
-- Certificates are reflection-`Eq`s over computable `Bln` checks — no new `induct`s to positivity-vet. Proof irrelevance means no obligation ever inspects a certificate; if an equality goal seems to need certificate equality, something is mis-stated.
+- Computations (`mk`'s strip, `narrow_b`'s loops) use `rec` freely; no proof depends on a `rec` computation's termination for its logical content (`mk`'s strip is structural on the numeral, so nothing in stage 1 needs fuel).
+- The one certificate (`BigFlt`'s) is a reflection-`Eq` over a computable `Bln` check — no new `induct`s to positivity-vet. Proof irrelevance means no obligation ever inspects a certificate; if an equality goal seems to need certificate equality, something is mis-stated.
+- Proofs prefer congruence + `Eq/trans` chains closed by conversion over match-rewrite refinements, per the elaborator idioms under Background facts.
 - Everything above would be accepted unchanged by a future termination/positivity checker.
 
 ## Stage 2 — the denominator extension (deferred; its *contract* binds stage 1)
@@ -189,8 +191,8 @@ Expected fiddly cases: subnormal boundary, exact ties, exponent extremes, zero. 
 
 ## Build order (stage 1)
 
-1. Part 1 (`Flt/of_le_bin`) — independent, start immediately.
-2. Part 2 (`BigNat` certificate + `mul` + parity + lemma base) — independent, start immediately.
+1. Part 1 (`Flt/of_le_bin`) — **delivered** (3ed05d35).
+2. Part 2 (`BigNat` numeral rewrite + `mul` + parity + lemma base) — **delivered**, together with the kernel conversion fixes it forced (76c870f9).
 3. Part 3 (`BigInt`) — needs Part 2.
 4. Part 4 (`struct`, `mk`, canonicity kernel) — needs Parts 2–3; **its proofs gate Part 5's code** (`mk`'s type demands the certificate).
 5. Part 5 (ops + ring laws) — needs Part 4.

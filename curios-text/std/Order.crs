@@ -5,3 +5,11 @@ pub induct Order : Type
 end
 
 pub use Order/*;
+
+-- The verdict with its operands swapped.
+pub let flip(r : Order) -> Order =
+    match r
+    | lt() => Order/gt()
+    | eq() => Order/eq()
+    | gt() => Order/lt()
+    end;
