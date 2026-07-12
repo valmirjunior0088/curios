@@ -62,6 +62,15 @@ pub(super) fn f32_result(module: &curios_cont::Module) -> f32 {
     f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
 }
 
+/// Run `module` and return the raw bytes it writes to stdout. Fixtures that
+/// compare exact bit patterns (NaN payloads, `-0.0`) use this instead of
+/// [`f32_result`] — IEEE `==` rejects NaN and conflates the signed zeros.
+pub(super) fn bytes_result(module: &curios_cont::Module) -> Vec<u8> {
+    let (system, io) = MockHost::builder().build();
+    crate::run_wasm(&into_wasm(module), system, ForeignBindings::empty()).expect("run failed");
+    io.output()
+}
+
 pub(super) fn traps(module: &curios_cont::Module) -> bool {
     let (system, _io) = MockHost::builder().build();
 

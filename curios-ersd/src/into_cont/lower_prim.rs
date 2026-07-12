@@ -330,6 +330,9 @@ impl Work<'_, '_, '_> {
             crate::PurePrim::FltToLeBin(operand) => {
                 lower_pure_unary_code(work, operand, frame, Code::FltToLeBin)?
             }
+            crate::PurePrim::FltOfLeBin(operand) => {
+                lower_pure_unary_code(work, operand, frame, Code::FltOfLeBin)?
+            }
             crate::PurePrim::NatToInt(operand) => {
                 lower_pure_unary_code(work, operand, frame, Code::NatToInt)?
             }
@@ -673,6 +676,9 @@ impl Work<'_, '_, '_> {
             }
             crate::PurePrim::FltToLeBin(operand) => {
                 lower_unary_code(work, operand, frame, cont, Code::FltToLeBin)
+            }
+            crate::PurePrim::FltOfLeBin(operand) => {
+                lower_unary_code(work, operand, frame, cont, Code::FltOfLeBin)
             }
             crate::PurePrim::NatToInt(operand) => {
                 lower_unary_code(work, operand, frame, cont, Code::NatToInt)

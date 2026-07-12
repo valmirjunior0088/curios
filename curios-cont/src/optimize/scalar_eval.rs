@@ -293,6 +293,13 @@ fn eval_scalar<E: EvalEnv>(code: &Code, env: &E) -> Option<Scalar> {
 
         FltToLeBin(a) => Some(Scalar::Bin(env.flt(a)?.to_le_bytes().to_vec())),
 
+        // Fold only an exact 4-byte literal; a wrong-length literal is the
+        // runtime trap, so it is left unfolded.
+        FltOfLeBin(a) => match <[u8; 4]>::try_from(env.bin(a)?) {
+            Ok(le_bytes) => Some(Scalar::Flt(f32::from_le_bytes(le_bytes))),
+            Err(_) => None,
+        },
+
         // Bytewise equality — total whenever both operands are known.
         BinEql(a, b) => Some(Scalar::bln(env.bin(a)? == env.bin(b)?)),
 

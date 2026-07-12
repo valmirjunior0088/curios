@@ -195,6 +195,7 @@ pub(crate) fn erase_prim(
         Prim::FltLte(l, r) => binary(context, l, r, flt_type, curios_ersd::PurePrim::FltLte),
         Prim::FltGte(l, r) => binary(context, l, r, flt_type, curios_ersd::PurePrim::FltGte),
         Prim::FltToLeBin(i) => unary(context, i, flt_type, curios_ersd::PurePrim::FltToLeBin),
+        Prim::FltOfLeBin(i) => unary(context, i, bin_type, curios_ersd::PurePrim::FltOfLeBin),
         Prim::NatToInt(i) => unary(context, i, nat_type, curios_ersd::PurePrim::NatToInt),
         Prim::IntToNat(i) => unary(context, i, int_type, curios_ersd::PurePrim::IntToNat),
         Prim::IntToFlt(i) => unary(context, i, int_type, curios_ersd::PurePrim::IntToFlt),

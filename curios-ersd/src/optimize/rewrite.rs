@@ -335,6 +335,7 @@ fn copy_pure(prim: &PurePrim) -> PurePrim {
         IntToFlt(a) => copy!(IntToFlt, a),
         FltToNat(a) => copy!(FltToNat, a),
         FltToLeBin(a) => copy!(FltToLeBin, a),
+        FltOfLeBin(a) => copy!(FltOfLeBin, a),
         FltToInt(a) => copy!(FltToInt, a),
         BinLen(a) => copy!(BinLen, a),
         BinEql(a, b) => copy!(BinEql, a, b),

@@ -1053,6 +1053,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Prim::FltTrunc(inner) => curios_core::Prim::flt_trunc(self.term(inner)?),
             Prim::FltNearest(inner) => curios_core::Prim::flt_nearest(self.term(inner)?),
             Prim::FltToLeBin(inner) => curios_core::Prim::flt_to_le_bin(self.term(inner)?),
+            Prim::FltOfLeBin(inner) => curios_core::Prim::flt_of_le_bin(self.term(inner)?),
             Prim::NatToInt(inner) => curios_core::Prim::nat_to_int(self.term(inner)?),
             Prim::IoType => curios_core::Prim::IoType,
             Prim::Io(token) => curios_core::Prim::Io(*token),

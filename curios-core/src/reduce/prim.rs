@@ -852,6 +852,19 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             |v| Prim::Bin(v.to_f32().to_le_bytes().to_vec()),
             Prim::FltToLeBin,
         ),
+        // Assemble a float from an exact 4-byte literal; anything else —
+        // symbolic, or a wrong-length literal (the runtime trap) — stays stuck.
+        Prim::FltOfLeBin(inner) => {
+            let inner = reduce(context, inner.clone())?;
+            Ok(Subterm::Prim(match &*inner {
+                Subterm::Prim(Prim::Bin(bytes)) if bytes.len() == 4 => {
+                    Prim::Flt(Flt::from_f32(f32::from_le_bytes([
+                        bytes[0], bytes[1], bytes[2], bytes[3],
+                    ])))
+                }
+                _ => Prim::FltOfLeBin(inner),
+            }))
+        }
         Prim::NatToInt(inner) => reduce_nat_unary(
             context,
             inner,

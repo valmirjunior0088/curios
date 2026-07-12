@@ -144,3 +144,17 @@ fn flt_to_le_bin_prints_raw_bytes() {
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), 1.5f32.to_le_bytes());
 }
+
+#[test]
+fn flt_of_le_bin_roundtrips_raw_bytes() {
+    // Full-pipeline inverse of `to_le_bin`: assemble the float back from its
+    // four little-endian bytes, then re-serialize. The program is closed, so
+    // this also exercises the type-level and optimizer folds of `of_le_bin`.
+    let source = r#"
+        std/Io/write(std/Io/stdout, std/Flt/to_le_bin(std/Flt/of_le_bin(std/Flt/to_le_bin(+1.5))))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), 1.5f32.to_le_bytes());
+}

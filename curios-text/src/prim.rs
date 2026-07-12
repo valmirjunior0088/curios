@@ -102,6 +102,7 @@ pub enum Prim {
     IntToFlt(Term),
     FltToNat(Term),
     FltToLeBin(Term),
+    FltOfLeBin(Term),
     FltToInt(Term),
     BinType,
     Bin(Vec<BinSegment>),

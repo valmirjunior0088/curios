@@ -380,6 +380,7 @@ fn flt_ops() -> Vec<TopItem> {
         unary("to_nat", flt(), nat(), Prim::FltToNat),
         unary("to_int", flt(), int(), Prim::FltToInt),
         unary("to_le_bin", flt(), bin(), Prim::FltToLeBin),
+        unary("of_le_bin", bin(), flt(), Prim::FltOfLeBin),
     ]
 }
 

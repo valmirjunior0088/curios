@@ -248,6 +248,7 @@ macro_rules! walk_code_operands {
             | FltNearest(a)
             | FltToNat(a)
             | FltToLeBin(a)
+            | FltOfLeBin(a)
             | FltToInt(a)
             | BinLen(a)
             | LstLen(a)

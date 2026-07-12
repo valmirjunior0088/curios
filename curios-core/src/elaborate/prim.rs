@@ -152,6 +152,9 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         // `Flt/to_le_bin` exposes the IEEE-754 bytes (`Bin`); `/std/Flt/to_str`
         // renders them to the proof-carrying `/syn/Str` in Curios (Dragon4).
         Prim::FltToLeBin(i) => unary(context, i, &flt_type, bin_type.clone(), Prim::FltToLeBin)?,
+        // `Flt/of_le_bin` assembles a float from its IEEE-754 bytes — the
+        // inverse of `to_le_bin`; traps unless the `Bin` is exactly 4 bytes.
+        Prim::FltOfLeBin(i) => unary(context, i, &bin_type, flt_type.clone(), Prim::FltOfLeBin)?,
         Prim::NatToInt(i) => unary(context, i, &nat_type, int_type.clone(), Prim::NatToInt)?,
         Prim::NatToFlt(i) => unary(context, i, &nat_type, flt_type.clone(), Prim::NatToFlt)?,
         Prim::IntToNat(i) => unary(context, i, &int_type, nat_type.clone(), Prim::IntToNat)?,

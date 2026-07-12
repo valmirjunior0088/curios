@@ -97,6 +97,7 @@ pub enum Prim {
     IntToFlt(Term),
     FltToNat(Term),
     FltToLeBin(Term),
+    FltOfLeBin(Term),
     FltToInt(Term),
     BinType,
     Bin(Vec<u8>),
@@ -564,6 +565,14 @@ impl Prim {
         Self::FltToLeBin(inner.into())
     }
 
+    /// A `FltOfLeBin` node (a float assembled from its four little-endian bytes) from anything term-shaped.
+    pub fn flt_of_le_bin<T>(inner: T) -> Self
+    where
+        T: Into<Term>,
+    {
+        Self::FltOfLeBin(inner.into())
+    }
+
     /// A `BinLen` node from anything term-shaped.
     pub fn bin_len<B>(bin: B) -> Self
     where
@@ -750,6 +759,7 @@ impl Prim {
             Prim::Nat(Nat::Succ(_, inner)) => visit(inner),
 
             Prim::FltToLeBin(t)
+            | Prim::FltOfLeBin(t)
             | Prim::NatToInt(t)
             | Prim::NatToFlt(t)
             | Prim::IntToNat(t)
@@ -954,6 +964,7 @@ impl Prim {
             Prim::FltTrunc(inner) => Prim::FltTrunc(visit.visit_subterm(inner)),
             Prim::FltNearest(inner) => Prim::FltNearest(visit.visit_subterm(inner)),
             Prim::FltToLeBin(inner) => Prim::FltToLeBin(visit.visit_subterm(inner)),
+            Prim::FltOfLeBin(inner) => Prim::FltOfLeBin(visit.visit_subterm(inner)),
             Prim::NatToInt(inner) => Prim::NatToInt(visit.visit_subterm(inner)),
             Prim::NatToFlt(inner) => Prim::NatToFlt(visit.visit_subterm(inner)),
             Prim::IntToNat(inner) => Prim::IntToNat(visit.visit_subterm(inner)),

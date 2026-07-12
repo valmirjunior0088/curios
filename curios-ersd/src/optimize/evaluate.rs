@@ -986,6 +986,10 @@ fn apply_pure<'m>(prim: &PurePrim, operands: &[Value<'m>]) -> Result<Value<'m>, 
         FltToNat(..) => flt_to_nat(flt(0)?),
         FltToInt(..) => flt_to_int(flt(0)?),
         FltToLeBin(..) => Ok(Value::Bin(Rc::new(flt(0)?.to_le_bytes().to_vec()))),
+        FltOfLeBin(..) => match <[u8; 4]>::try_from(bin(0)?.as_slice()) {
+            Ok(le_bytes) => Ok(Value::Flt(f32::from_le_bytes(le_bytes))),
+            Err(_) => Err(Bail::Trap),
+        },
 
         // Bin — bounds-checked reads trap; append truncates the byte like the
         // backend; concat and equality are total.

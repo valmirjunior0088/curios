@@ -1,5 +1,5 @@
 pub use /sys/{Flt};
-pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte, neg, abs, sqrt, floor, ceil, trunc, nearest, to_nat, to_int, to_le_bin};
+pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte, neg, abs, sqrt, floor, ceil, trunc, nearest, to_nat, to_int, to_le_bin, of_le_bin};
 use /std/{Nat, Int, Str, Bln, Option, Bin, Lst, Order, BigNat};
 
 let pow2(k : Nat) -> BigNat =

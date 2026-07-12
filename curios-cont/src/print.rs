@@ -148,6 +148,7 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::IntToNat(o) => print_unary("Int.to_nat", o),
         Code::IntToFlt(o) => print_unary("Int.to_flt", o),
         Code::FltToLeBin(o) => print_unary("Flt.to_le_bin", o),
+        Code::FltOfLeBin(o) => print_unary("Flt.of_le_bin", o),
         Code::FltToNat(o) => print_unary("Flt.to_nat", o),
         Code::FltToInt(o) => print_unary("Flt.to_int", o),
         Code::BinLen(bin) => print_unary("Bin.len", bin),

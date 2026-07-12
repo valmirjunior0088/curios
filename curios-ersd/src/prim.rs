@@ -68,6 +68,7 @@ pub enum PurePrim {
     IntToFlt(Term),
     FltToNat(Term),
     FltToLeBin(Term),
+    FltOfLeBin(Term),
     FltToInt(Term),
     Bin(Vec<u8>),
     BinLen(Term),
@@ -96,8 +97,8 @@ impl PurePrim {
         match self {
             Nat(_) | Int(_) | Flt(_) | Bin(_) | Io(_) => vec![],
             NatToInt(a) | NatToFlt(a) | IntToNat(a) | IntToFlt(a) | FltToNat(a) | FltToLeBin(a)
-            | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a) | FltFloor(a) | FltCeil(a)
-            | FltTrunc(a) | FltNearest(a) | BinLen(a) | LstLen(a) => vec![a],
+            | FltOfLeBin(a) | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a) | FltFloor(a)
+            | FltCeil(a) | FltTrunc(a) | FltNearest(a) | BinLen(a) | LstLen(a) => vec![a],
             NatEql(a, b)
             | NatNeq(a, b)
             | NatAdd(a, b)
@@ -161,8 +162,8 @@ impl PurePrim {
         match self {
             Nat(_) | Int(_) | Flt(_) | Bin(_) | Io(_) => vec![],
             NatToInt(a) | NatToFlt(a) | IntToNat(a) | IntToFlt(a) | FltToNat(a) | FltToLeBin(a)
-            | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a) | FltFloor(a) | FltCeil(a)
-            | FltTrunc(a) | FltNearest(a) | BinLen(a) | LstLen(a) => vec![a],
+            | FltOfLeBin(a) | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a) | FltFloor(a)
+            | FltCeil(a) | FltTrunc(a) | FltNearest(a) | BinLen(a) | LstLen(a) => vec![a],
             NatEql(a, b)
             | NatNeq(a, b)
             | NatAdd(a, b)

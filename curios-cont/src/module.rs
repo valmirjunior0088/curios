@@ -106,6 +106,7 @@ pub enum Code {
     FltCopysign(ValueName, ValueName),
     FltToNat(ValueName),
     FltToLeBin(ValueName),
+    FltOfLeBin(ValueName),
     FltToInt(ValueName),
     BinLen(ValueName),
     BinEql(ValueName, ValueName),

@@ -949,6 +949,42 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
+            crate::Code::FltOfLeBin(operand) => {
+                // The inverse of `FltToLeBin`: trap (via the special label) unless
+                // the `Bin` is exactly 4 bytes, then OR the bytes back into an i32
+                // -- each `$bin/read` zero-extends its packed byte -- and
+                // reinterpret. Byte-for-byte `f32::from_le_bytes`, no host
+                // round-trip.
+                let rope = self.context.table().bin_rope();
+                let read = self.context.table().bin_read_func();
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Bin));
+                self.emit_instr(Self::rope_get(&rope, &rope.len_field));
+                self.emit_instr(Instr::I32Const { value: 4 });
+                self.emit_instr(Instr::I32Ne);
+                self.emit_instr(Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: BlockType::Empty,
+                    then_instructions: vec![Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                for shift in [0, 8, 16, 24] {
+                    self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Bin));
+                    self.emit_instr(Instr::I32Const { value: shift / 8 });
+                    self.emit_instr(Instr::Call {
+                        func_name: read.clone(),
+                    });
+                    if shift != 0 {
+                        self.emit_instr(Instr::I32Const { value: shift });
+                        self.emit_instr(Instr::I32Shl);
+                        self.emit_instr(Instr::I32Or);
+                    }
+                }
+                self.emit_instr(Instr::F32ReinterpretI32);
+                self.emit_wrap(WrapAs::Flt);
+                self.emit_instr(Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             crate::Code::FltToNat(operand) => {
                 let local_name = self
                     .context

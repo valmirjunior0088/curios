@@ -108,6 +108,7 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         | (Prim::FltTrunc(this), Prim::FltTrunc(that))
         | (Prim::FltNearest(this), Prim::FltNearest(that))
         | (Prim::FltToLeBin(this), Prim::FltToLeBin(that))
+        | (Prim::FltOfLeBin(this), Prim::FltOfLeBin(that))
         | (Prim::NatToInt(this), Prim::NatToInt(that))
         | (Prim::NatToFlt(this), Prim::NatToFlt(that))
         | (Prim::IntToNat(this), Prim::IntToNat(that))
