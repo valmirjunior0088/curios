@@ -1,6 +1,6 @@
 # Caching the elaborated/erased prelude, and de-smelling the prelude-replay fork
 
-Working implementation specification. Like [BIG_FLT_SPEC.md](BIG_FLT_SPEC.md) and [NUMERIC_REPRESENTATION_SPEC.md](NUMERIC_REPRESENTATION_SPEC.md), this file is a working reference for one arc of work, not permanent documentation: fold its durable conclusions into [AGENTS.md](../AGENTS.md) and [ROADMAP.md](ROADMAP.md) as they land, and delete it once the arc is finished. It assumes the architecture in AGENTS.md (the `text → core → ersd → cont → wasm` pipeline, the crate layering, the slim-launcher boundary) and does not restate it.
+Working implementation specification. Like the representation series beginning with [REPRESENTATION_SPEC_PT1_BIN.md](REPRESENTATION_SPEC_PT1_BIN.md), this file is a working reference for one arc of work, not permanent documentation: fold its durable conclusions into [AGENTS.md](../AGENTS.md) and [ROADMAP.md](ROADMAP.md) as they land, and delete it once the arc is finished. It assumes the architecture in AGENTS.md (the `text → core → ersd → cont → wasm` pipeline, the crate layering, the slim-launcher boundary) and does not restate it.
 
 ## Motivation
 
@@ -10,7 +10,7 @@ Today that waste is only partially avoided, and only within a single process. Th
 
 The goal of this work is to compute the fixed prefix **zero times per user compile**: the prelude is elaborated (and erased) once, out of band, and every subsequent compile restores that result instead of recomputing it.
 
-This is not a performance-tuning exercise and carries no benchmark target. It is the removal of redundant recomputation of an invariant. It is one of two prongs against the same std-cost pain: the [numeric representation](NUMERIC_REPRESENTATION_SPEC.md) work makes the prefix *cheap to compute*; this work makes it *not recomputed at all*. The two are complementary — the numeric fix shrinks every artifact this work caches and deletes the `RecId` serialization hazard (see Sequencing).
+This is not a performance-tuning exercise and carries no benchmark target. It is the removal of redundant recomputation of an invariant. It is one of two prongs against the same std-cost pain: the [packed numeric representation](REPRESENTATION_SPEC_PT2_NUMERIC.md) work makes the prefix *cheap to compute*; this work makes it *not recomputed at all*. The two are complementary — the numeric fix shrinks every artifact this work caches and deletes the `RecId` serialization hazard (see Sequencing).
 
 ## What actually re-runs, per compile
 
