@@ -1,4 +1,5 @@
 use /std/{Nat, Bln, Str, Order, Eq, False, True};
+use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt, eq_neq_gt, lt_neq_gt};
 
 -- Arbitrary-precision naturals as little-endian binary numerals, Coq's
 -- `positive`/`N` design: `Pos` is the strictly positive stratum, where `one()`
@@ -24,6 +25,10 @@ pub induct BigNat : Type
 | zero()
 | pos(Pos)
 end
+
+-- The `zero` constructor stays behind the `zero` value below (the names would
+-- clash); `pos` is re-exported for the signed layer in /std/BigInt.
+pub use BigNat/{pos};
 
 pub let zero : BigNat =
     BigNat/zero();
@@ -149,7 +154,7 @@ pub let gte(a : BigNat, b : BigNat) -> Bln =
     end;
 
 -- 2·x − 1; total on `Pos` since x ≥ 1 makes the result ≥ 1 (and odd).
-rec pos_pred_dbl(x : Pos) -> Pos =
+pub rec pos_pred_dbl(x : Pos) -> Pos =
     match x
     | one() => Pos/one()
     | o(t) => Pos/i(pos_pred_dbl(t))
@@ -382,6 +387,15 @@ rec pos_add_c_spec(x : Pos, y : Pos) -> Eq(pos_add_c(x, y), pos_succ(pos_add(x, 
         | i(yt) => qed(pos_add_c(Pos/i(xt), Pos/i(yt)))
         end
     end;
+
+-- The carry twin behind a `pub` face: `pos_add_c` is an `and`-item (which the
+-- grammar cannot mark `pub`), so external statements cite this alias instead.
+pub let pos_add_carry(x : Pos, y : Pos) -> Pos =
+    pos_add_c(x, y);
+
+pub let pos_add_carry_spec(x : Pos, y : Pos)
+    -> Eq(pos_add_carry(x, y), pos_succ(pos_add(x, y))) =
+    pos_add_c_spec(x, y);
 
 pub let pos_add_one_r(x : Pos) -> Eq(pos_add(x, Pos/one()), pos_succ(x)) =
     match x : (a) => Eq(pos_add(a, Pos/one()), pos_succ(a))
@@ -822,57 +836,7 @@ pub rec pos_mul_assoc(x : Pos, y : Pos, z : Pos)
     end;
 
 -- ===================== the lemma base: comparison =====================
-
-let order_is_eq(r : Order) -> Bln =
-    match r
-    | lt() => false
-    | eq() => true
-    | gt() => false
-    end;
-
-let order_is_lt(r : Order) -> Bln =
-    match r
-    | lt() => true
-    | eq() => false
-    | gt() => false
-    end;
-
-let lt_neq_eq(p : Eq(Order/lt(), Order/eq())) -> False =
-    bln_clash(match p : (q : Eq(Order, s, t)) => Eq(order_is_eq(s), order_is_eq(t))
-        | refl(z) => Eq/refl()
-        end);
-
-let gt_neq_eq(p : Eq(Order/gt(), Order/eq())) -> False =
-    bln_clash(match p : (q : Eq(Order, s, t)) => Eq(order_is_eq(s), order_is_eq(t))
-        | refl(z) => Eq/refl()
-        end);
-
-let eq_neq_lt(p : Eq(Order/eq(), Order/lt())) -> False =
-    bln_clash(match p : (q : Eq(Order, s, t)) => Eq(order_is_lt(s), order_is_lt(t))
-        | refl(z) => Eq/refl()
-        end);
-
-let gt_neq_lt(p : Eq(Order/gt(), Order/lt())) -> False =
-    bln_clash(match p : (q : Eq(Order, s, t)) => Eq(order_is_lt(s), order_is_lt(t))
-        | refl(z) => Eq/refl()
-        end);
-
-let order_is_gt(r : Order) -> Bln =
-    match r
-    | lt() => false
-    | eq() => false
-    | gt() => true
-    end;
-
-let eq_neq_gt(p : Eq(Order/eq(), Order/gt())) -> False =
-    bln_clash(match p : (q : Eq(Order, s, t)) => Eq(order_is_gt(s), order_is_gt(t))
-        | refl(z) => Eq/refl()
-        end);
-
-let lt_neq_gt(p : Eq(Order/lt(), Order/gt())) -> False =
-    bln_clash(match p : (q : Eq(Order, s, t)) => Eq(order_is_gt(s), order_is_gt(t))
-        | refl(z) => Eq/refl()
-        end);
+-- The Order no-confusion lemmas (lt_neq_eq and friends) live in /std/Order.
 
 pub rec pos_cmp_refl(x : Pos) -> Eq(pos_cmp(x, x), Order/eq()) =
     match x : (a) => Eq(@Order, pos_cmp(a, a), Order/eq())
@@ -993,11 +957,29 @@ pub rec pos_cmp_flip(x : Pos, y : Pos) -> Eq(pos_cmp(y, x), Order/flip(pos_cmp(x
         end
     end;
 
-rec pos_succ_pred_dbl(t : Pos) -> Eq(pos_succ(pos_pred_dbl(t)), Pos/o(t)) =
+-- Inverting the antisymmetry: a `gt` verdict is `lt` with the operands
+-- swapped, extracted by casing the swapped comparison under its own evidence.
+pub let pos_cmp_gt_to_lt(x : Pos, y : Pos, w : Eq(pos_cmp(x, y), Order/gt()))
+    -> Eq(pos_cmp(y, x), Order/lt()) =
+    (match pos_cmp(y, x) : (r) => (w2 : Eq(Order/flip(r), Order/gt()))
+        -> Eq(pos_cmp(y, x), Order/lt())
+     | eq() => (w2) => False/absurd(eq_neq_gt(w2))
+     | lt() => (w2) => qed(Order/lt())
+     | gt() => (w2) => False/absurd(lt_neq_gt(w2))
+     end)(Eq/trans(Eq/sym(pos_cmp_flip(y, x)), w));
+
+pub rec pos_succ_pred_dbl(t : Pos) -> Eq(pos_succ(pos_pred_dbl(t)), Pos/o(t)) =
     match t : (a) => Eq(@Pos, pos_succ(pos_pred_dbl(a)), Pos/o(a))
     | one() => qed(Pos/o(Pos/one()))
     | o(tt) => cong_o(pos_succ_pred_dbl(tt))
     | i(tt) => qed(Pos/o(Pos/i(tt)))
+    end;
+
+pub rec pos_pred_dbl_succ(t : Pos) -> Eq(pos_pred_dbl(pos_succ(t)), Pos/i(t)) =
+    match t : (a) => Eq(@Pos, pos_pred_dbl(pos_succ(a)), Pos/i(a))
+    | one() => qed(Pos/i(Pos/one()))
+    | o(tt) => qed(Pos/i(Pos/o(tt)))
+    | i(tt) => cong_i(pos_pred_dbl_succ(tt))
     end;
 
 -- (2x + 1) + (2d − 1) = 2·(x + d). Each arm reduces the left side to a
@@ -1163,6 +1145,41 @@ pub let pos_cmp_trans(x : Pos, y : Pos, z : Pos,
                 pos_cmp_lt_add(x, pos_add(d1, d2)))
         end
     end;
+
+let cong_mul_l(w : Pos, @s : Pos, @t : Pos, p : Eq(s, t))
+    -> Eq(pos_mul(w, s), pos_mul(w, t)) =
+    match p : (q : Eq(Pos, a, b)) => Eq(pos_mul(w, a), pos_mul(w, b))
+    | refl(z) => Eq/refl()
+    end;
+
+-- Multiplication is cancellative: trichotomy turns a supposed fixpoint
+-- x·y = x·y + x·d into a `pos_add_no_fix` contradiction.
+pub let pos_mul_cancel_l(x : Pos, y : Pos, z : Pos, p : Eq(pos_mul(x, y), pos_mul(x, z)))
+    -> Eq(y, z) =
+    (match pos_cmp(y, z) : (r) => (w : Eq(pos_cmp(y, z), r)) -> Eq(y, z)
+     | eq() => (w) => pos_cmp_eq(y, z, w)
+     | lt() => (w) =>
+         let (d, e) = pos_lt_witness(y, z, w);
+         False/absurd(pos_add_no_fix(pos_mul(x, y), pos_mul(x, d),
+             Eq/trans(p,
+                 Eq/trans(
+                     cong_mul_l(x, @z, @(pos_add(y, d)),
+                         Eq/sym(@Pos, @(pos_add(y, d)), @z, e)),
+                     pos_distrib_l(x, y, d)))))
+     | gt() => (w) =>
+         let (d, e) = pos_lt_witness(z, y, pos_cmp_gt_to_lt(y, z, w));
+         False/absurd(pos_add_no_fix(pos_mul(x, z), pos_mul(x, d),
+             Eq/trans(Eq/sym(p),
+                 Eq/trans(
+                     cong_mul_l(x, @y, @(pos_add(z, d)),
+                         Eq/sym(@Pos, @(pos_add(z, d)), @y, e)),
+                     pos_distrib_l(x, z, d)))))
+     end)(qed(pos_cmp(y, z)));
+
+pub let pos_mul_cancel_r(x : Pos, y : Pos, z : Pos, p : Eq(pos_mul(y, x), pos_mul(z, x)))
+    -> Eq(y, z) =
+    pos_mul_cancel_l(x, y, z,
+        Eq/trans(pos_mul_comm(x, y), Eq/trans(p, pos_mul_comm(z, x))));
 
 -- ===================== the lemma base: BigNat lifts =====================
 -- The zero-adjoined laws: every proof cases both carriers down to

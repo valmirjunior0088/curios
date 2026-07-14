@@ -1,7 +1,7 @@
 use {
     super::{
         Bound, Concept, Error, Goal, HeadKey, ImplicitOrigin, Inductive, Metavar, MetavarId,
-        MetavarOrigin, Structure, Term, Witness, WitnessKey, WitnessOrigin,
+        MetavarOrigin, RecId, Structure, Subterm, Term, Witness, WitnessKey, WitnessOrigin,
     },
     crate::Instant,
     curios_abi::RootId,
@@ -48,6 +48,48 @@ pub(crate) struct MetaStore {
     entries: Vec<Option<MetaEntry>>,
 }
 
+/// One definition: the definiens plus whether the label is a `rec`-group
+/// member. `reduce_apply`'s match-guarded delta reads `recursive` to decide
+/// whether a stuck unfolding refolds — a recursive call whose unfolding stays
+/// a stuck match is its own normal form. The flag is set in exactly one
+/// place, [`Context::define_rec_members`] — `define`/`define_assuming` never
+/// take a `recursive` parameter, so there is no "plain" path a rec-group
+/// registration could accidentally go through instead.
+#[derive(Debug, Clone)]
+pub(crate) struct DefEntry {
+    term: Term,
+    recursive: bool,
+}
+
+impl DefEntry {
+    /// Whether this entry's substitution is withheld: a `rec`-group member
+    /// still inside its raw mutual-checking window — its registered body
+    /// carries elaboration-transient material (see
+    /// [`Term::contains_transient`]) the rebuilt registration will replace.
+    /// Substituting it would let a consumer freeze a disconnected copy of the
+    /// raw body (a conversion comparison against it, a metavariable *solved*
+    /// to it), and a copy is dead: no later elaboration progress ever updates
+    /// it. The name itself is the one live indirection, so [`Context::var_reduct`]
+    /// breaks at it instead — the value-level counterpart of the refold
+    /// `reduce_apply` performs for a recursive application.
+    ///
+    /// `Func`-rooted bodies are exempt: an application must still open them
+    /// *per call*, because whether the raw material is even reachable depends
+    /// on the arguments (a type family's `T(2)` must reduce to `Nat` through
+    /// a clean arm mid-window even when another arm is still raw) —
+    /// `reduce_apply`'s post-hoc guard decides path-sensitively from the
+    /// reduced result. A *bare* reference escaping as a raw `Func` value is
+    /// caught by conversion's transient backstop instead. Derived entirely
+    /// from the registered body — no separate "elaborated" flag to keep in
+    /// sync, and nothing to reset: the rebuilt body contains no transients,
+    /// so registration itself closes the window. Order matters for the hot
+    /// path: the deep (cached) walk runs only for non-`Func` recursive
+    /// entries, which exist only mid-window.
+    fn withheld(&self) -> bool {
+        self.recursive && !matches!(&*self.term, Subterm::Func(_)) && self.term.contains_transient()
+    }
+}
+
 /// The local frame a parked problem froze at park time: assumptions (in
 /// binding order), and the non-base-frame definitions, counterfactual
 /// refinements, projection refinements, and scrutinee refinements (each outermost frame first, so
@@ -58,7 +100,7 @@ pub(crate) struct MetaStore {
 #[derive(Debug, Clone)]
 pub(crate) struct FrozenFrame {
     assumptions: Vec<(String, Term)>,
-    definitions: Vec<(String, Term)>,
+    definitions: Vec<(String, DefEntry)>,
     refinements: Vec<(String, Term)>,
     refinement_projections: Vec<((Term, usize), Term)>,
     refinement_scrutinees: Vec<(Term, Term)>,
@@ -117,7 +159,7 @@ pub struct Context {
     deadline: Instant,
     reduction_cache: HashMap<Term, Term>,
     assumptions: Vec<HashMap<String, Term>>,
-    definitions: Vec<HashMap<String, Term>>,
+    definitions: Vec<HashMap<String, DefEntry>>,
     // Counterfactual match-arm refinements (`refine_head`), kept parallel to
     // `definitions` but suppressible: re-validation of a metavariable
     // solution (§7.4) must keep stable definitions yet ignore these.
@@ -160,6 +202,18 @@ pub struct Context {
     // insertion). Seeded by `elaborate_module` with its `metavar_floor`
     // argument so core-minted ids sit strictly above `into_core`'s.
     next_metavar: Entropy<MetavarId>,
+    // The next `RecId` this context may mint (one per local `rec` group, at
+    // elaboration — see `Context::fresh_rec`).
+    next_rec: Entropy<RecId>,
+    // Memoized `rec` openings, indexed by `RecId` (see `Context::unfold_rec`
+    // in `reduce.rs`): every unfolding of the same local `rec` group yields
+    // the *same* opened tail, so its recursive labels stay stable across
+    // repeated unfoldings — conversion's syntactic short-circuit and spine
+    // comparisons rely on that to terminate. Keyed by id rather than by
+    // whole-term structural equality, so it stays valid across any
+    // subsequent capture/release or cloning of the `Rec` node. Flat and
+    // monotonic, like `metas` — `enter_frame`/`leave_frame` never touch it.
+    rec_unfolds: Vec<Option<Term>>,
     // Inductive declarations, keyed by the type's qualified name ("Result").
     // Like `metas`, a flat store of monotonic facts about the program, not
     // lexically-scoped bindings — `enter_frame`/`leave_frame` never touch it.
@@ -219,6 +273,8 @@ impl Context {
             local_marks: Vec::new(),
             metas: MetaStore::default(),
             next_metavar: Entropy::<MetavarId>::new(),
+            next_rec: Entropy::<RecId>::new(),
+            rec_unfolds: Vec::new(),
             inductives: BTreeMap::new(),
             structures: BTreeMap::new(),
             concepts: BTreeMap::new(),
@@ -399,23 +455,108 @@ impl Context {
         &self.local
     }
 
-    pub(crate) fn define<A>(&mut self, label: A, term: &Term)
-    where
-        A: Into<String>,
-    {
-        self.definitions
-            .last_mut()
-            .unwrap()
-            .insert(label.into(), term.clone());
+    fn define_entry(&mut self, label: String, entry: DefEntry) {
+        self.definitions.last_mut().unwrap().insert(label, entry);
 
         self.reduction_cache.clear();
     }
 
-    fn definition(&self, label: &str) -> Option<&Term> {
+    pub(crate) fn define<A>(&mut self, label: A, term: &Term)
+    where
+        A: Into<String>,
+    {
+        self.define_entry(
+            label.into(),
+            DefEntry {
+                term: term.clone(),
+                recursive: false,
+            },
+        );
+    }
+
+    /// Register a `rec`-group's members all at once — the *only* path that
+    /// marks a definition recursive (see [`DefEntry`]). Used by local `rec`
+    /// (`unfold_rec`, keyed to the group's shared frame) and top-level `rec`
+    /// (`elaborate_module_rec`, the prelude replay) alike: whatever collects
+    /// the group's `(label, body)` pairs calls this once for the whole group,
+    /// so there is no per-item loop where one member could be registered
+    /// through the plain, non-recursive `define` by mistake.
+    pub(crate) fn define_rec_members(&mut self, members: &[(String, Term)]) {
+        for (label, term) in members {
+            self.define_entry(
+                label.clone(),
+                DefEntry {
+                    term: term.clone(),
+                    recursive: true,
+                },
+            );
+        }
+    }
+
+    /// Upgrade a just-elaborated local `rec` group's members inside every
+    /// parked goal's frozen frame. A goal parked during the group's raw
+    /// window froze the live local frame — raw member bodies included — and
+    /// its retry runs under that frozen copy *after* the group's frame has
+    /// popped, so the second `define_rec_members` call (which upgrades only
+    /// the live frame) never reaches it: without this, the retry re-reduces
+    /// through the raw copy forever and a resolvable goal reports as a
+    /// mismatch. Member labels are entropy-fresh (minted once per group in
+    /// `elaborate_rec`), so a label match is unambiguous across every frozen
+    /// frame. Top-level groups need no refresh — they live in the persistent
+    /// base frame, which `freeze_frame` deliberately skips.
+    pub(crate) fn refresh_parked_rec_members(&mut self, members: &[(String, Term)]) {
+        for goal in self
+            .parked
+            .iter_mut()
+            .chain(self.deferred_witnesses.iter_mut())
+        {
+            for (label, entry) in &mut goal.frame.definitions {
+                if let Some((_, rebuilt)) = members.iter().find(|(name, _)| name == label) {
+                    *entry = DefEntry {
+                        term: rebuilt.clone(),
+                        recursive: true,
+                    };
+                }
+            }
+        }
+    }
+
+    /// Test-only convenience over [`Context::define_rec_members`] for a
+    /// single name — production code always registers a whole group at once
+    /// (there being no single-member `rec` group of interest to isolate), so
+    /// this stays behind `cfg(test)` rather than tempting a real call site
+    /// into a one-off registration that bypasses the group API.
+    #[cfg(test)]
+    pub(crate) fn define_recursive<A>(&mut self, label: A, term: &Term)
+    where
+        A: Into<String>,
+    {
+        self.define_rec_members(&[(label.into(), term.clone())]);
+    }
+
+    /// Whether `name` is defined as a `rec`-group member (see [`DefEntry`]).
+    /// `reduce_apply`'s match-guarded delta reads this to decide whether an
+    /// application's unfolding may need refolding.
+    pub(crate) fn is_recursive(&self, name: &str) -> bool {
         self.definitions
             .iter()
             .rev()
-            .find_map(|definitions| definitions.get(label))
+            .find_map(|definitions| definitions.get(name))
+            .is_some_and(|entry| entry.recursive)
+    }
+
+    /// Whether `name`'s definition is withheld from substitution (see
+    /// [`DefEntry::withheld`]): a `rec`-group value member still inside its
+    /// raw mutual-checking window. Conversion consults this to *park* a goal
+    /// stuck on such a bare neutral — the name carries no transient marker of
+    /// its own, so without this the neutral would fall through to a hard
+    /// structural mismatch.
+    pub(crate) fn is_withheld_rec_member(&self, name: &str) -> bool {
+        self.definitions
+            .iter()
+            .rev()
+            .find_map(|definitions| definitions.get(name))
+            .is_some_and(DefEntry::withheld)
     }
 
     pub(crate) fn define_assuming<A>(&mut self, label: A, type_: &Term, term: &Term)
@@ -425,6 +566,30 @@ impl Context {
         let label = label.into();
         self.assume(label.as_str(), type_);
         self.define(label, term);
+    }
+
+    /// Mint a fresh identity for a local `rec` group, at elaboration (see
+    /// [`RecId`], and `Term::rec_with_id`). Unlike a metavariable, a `RecId`
+    /// carries no birth record — it exists purely as a stable memo key for
+    /// [`Context::rec_unfold`].
+    pub(crate) fn fresh_rec(&mut self) -> RecId {
+        self.next_rec.fresh()
+    }
+
+    /// The memoized opening of a local `rec` group, if this id was unfolded
+    /// before (see `unfold_rec` in `reduce.rs`). Takes the id's raw index —
+    /// callers only ever reach this after matching a `RecId::Elaborated`,
+    /// the only variant that names a real memo slot.
+    pub(crate) fn rec_unfold(&self, id: usize) -> Option<&Term> {
+        self.rec_unfolds.get(id).and_then(Option::as_ref)
+    }
+
+    pub(crate) fn remember_rec_unfold(&mut self, id: usize, tail: Term) {
+        if id >= self.rec_unfolds.len() {
+            self.rec_unfolds.resize_with(id + 1, || None);
+        }
+
+        self.rec_unfolds[id] = Some(tail);
     }
 
     // === Refinements ========================================================
@@ -459,6 +624,13 @@ impl Context {
     /// suppressed — its counterfactual refinement. Labels never appear in both
     /// stores (definitions name `let`/`rec` binders; refinements name assumed
     /// scrutinee heads), so the order between them is immaterial.
+    ///
+    /// A raw-window rec member is withheld (see [`DefEntry::withheld`]) —
+    /// `None`, as if undefined — so the name reduces to its own neutral
+    /// rather than substituting-and-exposing the elaboration-transient body.
+    /// Folded into this single lookup (rather than a separate pre-check in
+    /// `reduce_var`) because this is the kernel's hottest path: the guard
+    /// costs one flag test on a *found* definition, and nothing on a miss.
     pub(crate) fn var_reduct(&self, label: &str) -> Option<&Term> {
         if !self.suppress_refinements
             && let Some(term) = self.refinements.iter().rev().find_map(|r| r.get(label))
@@ -466,7 +638,12 @@ impl Context {
             return Some(term);
         }
 
-        self.definition(label)
+        self.definitions
+            .iter()
+            .rev()
+            .find_map(|definitions| definitions.get(label))
+            .filter(|entry| !entry.withheld())
+            .map(|entry| &entry.term)
     }
 
     /// The reduct of a projection: its counterfactual match-arm refinement,
@@ -1049,8 +1226,8 @@ impl Context {
             self.assume(name, type_);
         }
 
-        for (name, value) in &frame.definitions {
-            self.define(name, value);
+        for (name, entry) in &frame.definitions {
+            self.define_entry(name.clone(), entry.clone());
         }
 
         for (name, value) in &frame.refinements {

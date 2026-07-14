@@ -181,7 +181,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
             }
             scope(out, tail);
         }
-        Subterm::Rec(Rec { items, tail }) => {
+        Subterm::Rec(Rec { items, tail, .. }) => {
             for (type_, value) in items {
                 scope(out, type_);
                 scope(out, value);
@@ -1116,7 +1116,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(tail.open(&label_terms), depth + labels.len()),
             ])
         }
-        Subterm::Rec(Rec { items, tail }) => {
+        Subterm::Rec(Rec { items, tail, .. }) => {
             let labels = scope_labels(tail.label_iter(), depth);
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();

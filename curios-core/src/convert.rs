@@ -6,12 +6,13 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, InductiveType, Match,
-        Metavar, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
-        Three, Tuple, TupleType, Variant, Visit, check, reduce, unfold_rec,
+        Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, GuardedUnfold, InductiveType,
+        Match, Metavar, Prim, Proj, Rec, RecId, ReduceError, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, Variant, Visit, check, reduce,
+        unfold_guarded_apply, unfold_rec,
     },
     crate::Instant,
-    std::collections::{HashSet, VecDeque},
+    std::collections::{HashMap, HashSet, VecDeque},
 };
 
 /// The outcome of attempting to solve a metavariable against a candidate.
@@ -136,26 +137,6 @@ fn apply_param_types(
     Ok(Some(types))
 }
 
-/// η-frame at a function type of arity `n`: mint `n` fresh argument variables
-/// and recover the codomain after instantiating them, falling back to `Type`
-/// when `type_` does not reduce to a function type.
-fn func_eta_args(
-    context: &mut Context,
-    n: usize,
-    type_: Term,
-) -> Result<(Vec<Term>, Term), ReduceError> {
-    let ys: Vec<Term> = (0..n)
-        .map(|_| Term::free_var(context.fresh(None)))
-        .collect();
-    let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
-        Subterm::FuncType(FuncType { telescope, .. }) => {
-            telescope.open(&ys.iter().collect::<Vec<_>>())
-        }
-        _ => Term::type_(),
-    };
-    Ok((ys, output_type))
-}
-
 /// The universe a type inhabits — `Prop` for a strict proposition, `Type`
 /// otherwise.
 #[derive(Clone, Copy)]
@@ -268,6 +249,10 @@ pub(crate) struct Goal {
 
 #[derive(Debug)]
 pub(crate) struct Convert {
+    // Structural goals already seen, stored as `history_key` fingerprints. A
+    // recurring goal is assumed to hold — the coinductive reading: a genuine
+    // cycle leaves nothing but itself to check, and any finite disagreement
+    // surfaces on a sibling goal first.
     history: HashSet<Goal>,
     pending: VecDeque<Goal>,
     // Constraints postponed because a side is flexible but not yet solvable
@@ -277,6 +262,12 @@ pub(crate) struct Convert {
     // Whether a metavariable was solved since the last `blocked` sweep — the
     // signal that retrying `blocked` could make further progress.
     progress: bool,
+    // The opening labels this conversion minted to compare under binders
+    // (label → mint sequence), and the placeholder pool `history_key` renames
+    // them into. Fingerprints only — the goals actually processed keep their
+    // globally-unique labels.
+    minted: HashMap<String, usize>,
+    placeholders: Vec<Term>,
 }
 
 impl Convert {
@@ -286,11 +277,72 @@ impl Convert {
             pending: VecDeque::from([Goal { type_, this, that }]),
             blocked: Vec::new(),
             progress: false,
+            minted: HashMap::new(),
+            placeholders: Vec::new(),
         }
     }
 
     fn in_history(&mut self, goal: &Goal) -> bool {
         !self.history.insert(goal.clone())
+    }
+
+    /// Mint a fresh label for opening scopes under structural comparison,
+    /// recording it for `history_key`. The label itself is ordinary entropy
+    /// freshness — recording changes nothing about the terms conversion
+    /// builds.
+    fn opening(&mut self, context: &mut Context, hint: Option<&str>) -> String {
+        let label = context.fresh(hint);
+        self.minted.insert(label.clone(), self.minted.len());
+        label
+    }
+
+    /// The history fingerprint of a goal: every opening label this conversion
+    /// minted (see [`Convert::opening`]) is renamed to a per-run placeholder,
+    /// in mint order. A comparison recurring under later openings — the same
+    /// match arm re-opened at a fresh binder on each round of an unfolding
+    /// cycle — differs from its previous visit only in that entropy, so the
+    /// rename collapses the rounds onto one `history` entry and the
+    /// recurrence rule in `drain` fires: a cycle with no finite disagreement
+    /// is definitional equality, as for equirecursive types. Genuinely
+    /// growing comparisons never recur and still spend the deadline.
+    ///
+    /// A pure key transform: the goal conversion processes keeps its
+    /// globally-unique labels, so no freshness contract (`capture` inversion,
+    /// `abstract_occurrences`, `define_fresh`) is involved — the placeholders
+    /// are themselves entropy-fresh and never enter a real term.
+    fn history_key(&mut self, context: &mut Context, goal: &Goal) -> Goal {
+        if self.minted.is_empty() {
+            return goal.clone();
+        }
+
+        let mut free = goal.type_.free_vars();
+        free.extend(goal.this.free_vars());
+        free.extend(goal.that.free_vars());
+
+        let mut present = free
+            .iter()
+            .filter_map(|label| self.minted.get(label).map(|&seq| (seq, label.as_str())))
+            .collect::<Vec<_>>();
+        if present.is_empty() {
+            return goal.clone();
+        }
+
+        // Mint order, so a recurrence — whose structural steps minted their
+        // openings in the same relative order — maps positionally onto the
+        // same placeholders.
+        present.sort_unstable_by_key(|&(seq, _)| seq);
+        let labels = present.iter().map(|&(_, l)| l).collect::<Vec<_>>();
+
+        while self.placeholders.len() < labels.len() {
+            self.placeholders.push(Term::free_var(context.fresh(None)));
+        }
+        let refs = self.placeholders[..labels.len()].iter().collect::<Vec<_>>();
+
+        Goal {
+            type_: goal.type_.capture(&labels).release(&refs),
+            this: goal.this.capture(&labels).release(&refs),
+            that: goal.that.capture(&labels).release(&refs),
+        }
     }
 
     pub(crate) fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
@@ -305,9 +357,9 @@ impl Convert {
         this: Scope<Three>,
         that: Scope<Three>,
     ) {
-        let a = Term::free_var(context.fresh(None));
-        let b = Term::free_var(context.fresh(None));
-        let c = Term::free_var(context.fresh(None));
+        let a = Term::free_var(self.opening(context, None));
+        let b = Term::free_var(self.opening(context, None));
+        let c = Term::free_var(self.opening(context, None));
         self.enqueue(
             Term::type_(),
             this.open(&[&a, &b, &c]),
@@ -341,7 +393,7 @@ impl Convert {
             match (this, that) {
                 (Telescope::Cons(ty_a, rest_a), Telescope::Cons(ty_b, rest_b)) => {
                     cmp.enqueue(Term::type_(), ty_a.clone(), ty_b.clone());
-                    let v = Term::free_var(context.fresh(rest_a.first_label()));
+                    let v = Term::free_var(cmp.opening(context, rest_a.first_label()));
                     let inner_a = rest_a.open(&[&v]);
                     let inner_b = rest_b.open(&[&v]);
                     walk(cmp, context, &inner_a, &inner_b)
@@ -356,6 +408,28 @@ impl Convert {
         walk(self, context, &this.telescope, &that.telescope)
     }
 
+    /// η-frame at a function type of arity `n`: mint `n` fresh argument
+    /// variables (recorded openings — see [`Convert::history_key`]) and
+    /// recover the codomain after instantiating them, falling back to `Type`
+    /// when `type_` does not reduce to a function type.
+    fn func_eta_args(
+        &mut self,
+        context: &mut Context,
+        n: usize,
+        type_: Term,
+    ) -> Result<(Vec<Term>, Term), ReduceError> {
+        let ys: Vec<Term> = (0..n)
+            .map(|_| Term::free_var(self.opening(context, None)))
+            .collect();
+        let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
+            Subterm::FuncType(FuncType { telescope, .. }) => {
+                telescope.open(&ys.iter().collect::<Vec<_>>())
+            }
+            _ => Term::type_(),
+        };
+        Ok((ys, output_type))
+    }
+
     fn compare_func(
         &mut self,
         context: &mut Context,
@@ -363,7 +437,7 @@ impl Convert {
         that: Func,
         type_: Term,
     ) -> Result<bool, ReduceError> {
-        let (ys, output_type) = func_eta_args(context, this.telescope.len(), type_)?;
+        let (ys, output_type) = self.func_eta_args(context, this.telescope.len(), type_)?;
         let y_refs = ys.iter().collect::<Vec<_>>();
         self.enqueue(
             output_type,
@@ -429,7 +503,7 @@ impl Convert {
                         return Ok(false);
                     }
                     cmp.enqueue(Term::type_(), ty_a.clone(), ty_b.clone());
-                    let v = Term::free_var(context.fresh(rest_a.first_label()));
+                    let v = Term::free_var(cmp.opening(context, rest_a.first_label()));
                     let inner_a = rest_a.open(&[&v]);
                     let inner_b = rest_b.open(&[&v]);
                     walk(cmp, context, &inner_a, &inner_b)
@@ -642,7 +716,7 @@ impl Convert {
         }
 
         let labels = (0..this.motive.arity())
-            .map(|_| Term::free_var(context.fresh(None)))
+            .map(|_| Term::free_var(self.opening(context, None)))
             .collect::<Vec<_>>();
         let label_refs = labels.iter().collect::<Vec<_>>();
         self.enqueue(
@@ -720,7 +794,7 @@ impl Convert {
                     }
 
                     let binders = (0..this_scope.arity())
-                        .map(|_| Term::free_var(context.fresh(None)))
+                        .map(|_| Term::free_var(self.opening(context, None)))
                         .collect::<Vec<_>>();
                     let binder_refs = binders.iter().collect::<Vec<_>>();
 
@@ -762,8 +836,8 @@ impl Convert {
 
                     // The unary cons arm binds (predecessor, ih); open both under
                     // shared fresh binders and compare the bodies.
-                    let a = Term::free_var(context.fresh(None));
-                    let b = Term::free_var(context.fresh(None));
+                    let a = Term::free_var(self.opening(context, None));
+                    let b = Term::free_var(self.opening(context, None));
                     self.enqueue(
                         Term::type_(),
                         this_cons.open(&[&a, &b]),
@@ -821,6 +895,18 @@ impl Convert {
         this: Rec,
         that: Rec,
     ) -> Result<bool, ReduceError> {
+        // Same *elaborated* id: provably the same group by the minting-once
+        // invariant (see `RecId`) — a sound fast path ahead of the
+        // structural walk below. `RecId::Unelaborated` is the shared
+        // not-yet-elaborated placeholder (`Term::rec`), so it proves nothing
+        // about two raw groups being the same and must fall through to the
+        // structural walk like any other mismatch.
+        if let (RecId::Elaborated(a), RecId::Elaborated(b)) = (this.id, that.id)
+            && a == b
+        {
+            return Ok(true);
+        }
+
         if this.items.len() != that.items.len() {
             return Ok(false);
         }
@@ -862,7 +948,7 @@ impl Convert {
         other: Term,
         type_: Term,
     ) -> Result<bool, ReduceError> {
-        let (ys, output_type) = func_eta_args(context, func.telescope.len(), type_)?;
+        let (ys, output_type) = self.func_eta_args(context, func.telescope.len(), type_)?;
         let body = func.telescope.open(&ys.iter().collect::<Vec<_>>());
         self.enqueue(output_type, body, Term::apply(other, ys));
         Ok(true)
@@ -903,7 +989,7 @@ impl Convert {
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let n = telescope.len();
                 let ys: Vec<Term> = (0..n)
-                    .map(|_| Term::free_var(context.fresh(None)))
+                    .map(|_| Term::free_var(self.opening(context, None)))
                     .collect();
                 let y_refs: Vec<&Term> = ys.iter().collect();
                 let output_type = telescope.open(&y_refs);
@@ -954,6 +1040,19 @@ impl Convert {
             .iter()
             .any(|other| context.metavar_solution(*other).is_none())
         {
+            return Ok(Solved::Postponed);
+        }
+
+        // Transient guard: a candidate carrying elaboration-transient material
+        // (see `Term::contains_transient`) is a raw, not-yet-elaborated body
+        // that leaked through a rec group's mutual-checking window. Committing
+        // it would freeze a disconnected copy in the store — resolved at every
+        // occurrence forever, never updated by the rebuilt registration.
+        // Postpone, like an embedded unsolved metavariable: the retry
+        // re-derives the candidate once the owning group has elaborated. (The
+        // drain's backstop parks such goals before they reach here; this
+        // guards the remaining callers.)
+        if t.contains_transient() {
             return Ok(Solved::Postponed);
         }
 
@@ -1177,8 +1276,9 @@ impl Convert {
     /// a retry after fresh progress is not skipped as already-handled) and
     /// push it to `blocked`. Returns `Ok(true)` — a blocked goal is undecided,
     /// never a mismatch.
-    fn block(&mut self, goal: Goal) -> Result<bool, ReduceError> {
-        self.history.remove(&goal);
+    fn block(&mut self, context: &mut Context, goal: Goal) -> Result<bool, ReduceError> {
+        let key = self.history_key(context, &goal);
+        self.history.remove(&key);
         self.blocked.push(goal);
         Ok(true)
     }
@@ -1265,7 +1365,7 @@ impl Convert {
         let arity = rigid_args.len();
 
         if flex.params.len() != arity {
-            return self.block(goal);
+            return self.block(context, goal);
         }
 
         // The candidate's binders come from `?m`'s frozen birth type, which
@@ -1273,14 +1373,14 @@ impl Convert {
         // opens each binder as a free variable of its own label (elaborated
         // labels are entropy-fresh), so dependent domains stay well-scoped.
         let Some(entry) = context.metavar_entry(metavar.id) else {
-            return self.block(goal);
+            return self.block(context, goal);
         };
         let result = reduce(context, entry.result.clone())?;
         let Subterm::FuncType(func_type) = &*result else {
-            return self.block(goal);
+            return self.block(context, goal);
         };
         if func_type.plicities.len() != arity {
-            return self.block(goal);
+            return self.block(context, goal);
         }
 
         let mut domains: Vec<(String, Term)> = Vec::with_capacity(arity);
@@ -1315,7 +1415,7 @@ impl Convert {
             let suppressed = context
                 .with_suppressed_refinements(|context| reduce(context, rigid_raw.clone()))?;
             if suppressed != rigid {
-                return self.block(goal);
+                return self.block(context, goal);
             }
         }
 
@@ -1326,7 +1426,7 @@ impl Convert {
         // ill-kinded imitation before it commits.
         match self.solve(context, &metavar, &candidate)? {
             Solved::Done => {}
-            Solved::Postponed | Solved::Failed => return self.block(goal),
+            Solved::Postponed | Solved::Failed => return self.block(context, goal),
         }
 
         // Equate arguments pairwise, at the candidate telescope's domains
@@ -1430,6 +1530,31 @@ impl Convert {
                 continue;
             }
 
+            // Transient backstop: a side carrying elaboration-transient
+            // material (see `Term::contains_transient`) is a raw,
+            // not-yet-elaborated body that leaked through a rec group's
+            // mutual-checking window — the reducer's refolds keep the common
+            // shapes name-rooted, but a raw value can still surface whole
+            // (e.g. a bare raw `Func` member compared at function type).
+            // Neither decomposing it (a sub-goal would freeze a dead copy of
+            // raw material nothing ever updates) nor solving against it (a
+            // metavariable pinned to the copy) can ever succeed, so park the
+            // *un-reduced* spellings — they still name the definitions the
+            // raw material came from, and the retry after the group finishes
+            // re-derives through the rebuilt bodies. Placed after the
+            // syntactic short-circuit (two references to the same raw body
+            // are equal without inspection) and before the flexible-head
+            // dispatch (a flex–rigid goal with a raw rigid side must park,
+            // not solve).
+            if this.contains_transient() || that.contains_transient() {
+                self.blocked.push(Goal {
+                    type_,
+                    this: this_raw,
+                    that: that_raw,
+                });
+                continue;
+            }
+
             // Flexible heads are dispatched before history and before the
             // structural/η fallthrough — a flexible head must never be
             // η-expanded into a spine (§7.1).
@@ -1502,7 +1627,8 @@ impl Convert {
                 that: that.clone(),
             };
 
-            if self.in_history(&goal) {
+            let key = self.history_key(context, &goal);
+            if self.in_history(&key) {
                 continue;
             }
 
@@ -1528,8 +1654,61 @@ impl Convert {
                 (other, Subterm::Func(func)) => {
                     self.eta_expand_func(context, func, other.into(), type_.clone())?
                 }
-                (Subterm::Apply(this), Subterm::Apply(that)) => {
-                    self.compare_apply(context, this, that)?
+                // Same-head applications compare spine-wise. Different heads
+                // may still denote the same value when a side is a *folded*
+                // recursive call (the reducer's match-guarded delta keeps a
+                // stuck recursive application folded): lazy delta — unfold
+                // whichever sides unfold and retry. Two distinct recursive
+                // names whose unfoldings never structurally disagree recur
+                // here; the canonicalized `history` (see `history_key`)
+                // recognizes the recurrence and assumes it coinductively,
+                // while a genuinely growing unfolding — never recurring —
+                // spends the deadline. Deliberate: conversion is incomplete
+                // only through the deadline's bound on semantic effort, never
+                // through deciding by name identity — a nominal rule here
+                // rejects equalities the unfolding proves (an alias member
+                // `rec { f = …, g = f }` applied, whose sides unfold to one
+                // cached stuck body).
+                (Subterm::Apply(this_a), Subterm::Apply(that_a)) => {
+                    let same_head = matches!(
+                        (&*this_a.head, &*that_a.head),
+                        (Subterm::Var(a), Subterm::Var(b)) if a.unwrap() == b.unwrap()
+                    );
+
+                    if same_head {
+                        self.compare_apply(context, this_a, that_a)?
+                    } else {
+                        match (
+                            unfold_guarded_apply(context, &this_a)?,
+                            unfold_guarded_apply(context, &that_a)?,
+                        ) {
+                            (GuardedUnfold::NotApplicable, GuardedUnfold::NotApplicable) => {
+                                self.compare_apply(context, this_a, that_a)?
+                            }
+                            // Either side's registered body is still raw
+                            // (mid rec-group elaboration): park rather than
+                            // compare — see `GuardedUnfold::StillElaborating`.
+                            (GuardedUnfold::StillElaborating, _)
+                            | (_, GuardedUnfold::StillElaborating) => {
+                                let key = self.history_key(context, &goal);
+                                self.history.remove(&key);
+                                self.blocked.push(goal);
+                                continue;
+                            }
+                            (l, r) => {
+                                let l = match l {
+                                    GuardedUnfold::Unfolded(t) => t,
+                                    _ => Subterm::Apply(this_a).into(),
+                                };
+                                let r = match r {
+                                    GuardedUnfold::Unfolded(t) => t,
+                                    _ => Subterm::Apply(that_a).into(),
+                                };
+                                self.enqueue(type_.clone(), l, r);
+                                true
+                            }
+                        }
+                    }
                 }
                 (Subterm::TupleType(this), Subterm::TupleType(that)) => {
                     self.compare_tuple_type(context, this, that)?
@@ -1559,6 +1738,11 @@ impl Convert {
                 (Subterm::Rec(this), Subterm::Rec(that)) => {
                     self.compare_rec(context, this, that)?
                 }
+                // A `Rec` here is necessarily elaborated (id-bearing): a raw
+                // group carries `RecId::Unelaborated`, which makes the whole
+                // node transient — the backstop above parked it before this
+                // dispatch. So the unfolding below is always the memoized,
+                // stable opening, never a disconnected raw copy.
                 (Subterm::Rec(rec), other) => {
                     let tail = unfold_rec(context, rec);
                     self.enqueue(type_, tail, other.into());
@@ -1568,6 +1752,87 @@ impl Convert {
                     let tail = unfold_rec(context, rec);
                     self.enqueue(type_, other.into(), tail);
                     true
+                }
+                // A recursive value member still inside its raw window:
+                // `var_reduct` withheld its body, so it surfaces as this bare
+                // name — which carries no transient marker of its own, putting
+                // it past the backstop's reach. Like a folded recursive
+                // *application* meeting `StillElaborating`, park the
+                // un-reduced, name-bearing sides and let the retry re-derive
+                // once the rebuilt body lands. Without this the neutral name
+                // falls through to a hard mismatch (`eta_expand_neutral` at a
+                // non-function type).
+                (Subterm::Var(var), _) if context.is_withheld_rec_member(var.unwrap()) => {
+                    let key = self.history_key(context, &goal);
+                    self.history.remove(&key);
+                    self.blocked.push(Goal {
+                        type_,
+                        this: this_raw,
+                        that: that_raw,
+                    });
+                    continue;
+                }
+                (_, Subterm::Var(var)) if context.is_withheld_rec_member(var.unwrap()) => {
+                    let key = self.history_key(context, &goal);
+                    self.history.remove(&key);
+                    self.blocked.push(Goal {
+                        type_,
+                        this: this_raw,
+                        that: that_raw,
+                    });
+                    continue;
+                }
+                // A folded recursive call against any other shape: the only
+                // way they can agree is through the unfolding.
+                (Subterm::Apply(apply), other)
+                    if matches!(
+                        &*apply.head,
+                        Subterm::Var(var) if context.is_recursive(var.unwrap())
+                    ) =>
+                {
+                    match unfold_guarded_apply(context, &apply)? {
+                        GuardedUnfold::Unfolded(unfolded) => {
+                            self.enqueue(type_.clone(), unfolded, other.into());
+                            true
+                        }
+                        GuardedUnfold::StillElaborating => {
+                            let key = self.history_key(context, &goal);
+                            self.history.remove(&key);
+                            self.blocked.push(goal);
+                            continue;
+                        }
+                        GuardedUnfold::NotApplicable => self.eta_expand_neutral(
+                            context,
+                            Term::from(Subterm::Apply(apply)),
+                            other.into(),
+                            type_,
+                        )?,
+                    }
+                }
+                (other, Subterm::Apply(apply))
+                    if matches!(
+                        &*apply.head,
+                        Subterm::Var(var) if context.is_recursive(var.unwrap())
+                    ) =>
+                {
+                    match unfold_guarded_apply(context, &apply)? {
+                        GuardedUnfold::Unfolded(unfolded) => {
+                            self.enqueue(type_.clone(), other.into(), unfolded);
+                            true
+                        }
+                        GuardedUnfold::StillElaborating => {
+                            let key = self.history_key(context, &goal);
+                            self.history.remove(&key);
+                            self.blocked.push(goal);
+                            continue;
+                        }
+                        GuardedUnfold::NotApplicable => self.eta_expand_neutral(
+                            context,
+                            other.into(),
+                            Term::from(Subterm::Apply(apply)),
+                            type_,
+                        )?,
+                    }
                 }
                 // Flex-apply imitation: a stuck application against a nominal
                 // type constructor. The unsolved-metavariable-head guard (and
@@ -1620,7 +1885,8 @@ impl Convert {
                 if prim_blocked_on_metavar(context, &goal.this)
                     || prim_blocked_on_metavar(context, &goal.that)
                 {
-                    self.history.remove(&goal);
+                    let key = self.history_key(context, &goal);
+                    self.history.remove(&key);
                     self.blocked.push(goal);
                     continue;
                 }

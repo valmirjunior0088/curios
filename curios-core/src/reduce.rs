@@ -7,7 +7,7 @@ mod tests;
 use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Field, FreeMonoid, Func, FuncType, InductiveType,
-        Layer, Let, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Scope, Struct,
+        Layer, Let, Match, Metavar, Nat, One, Prim, Proj, Rec, RecId, ReduceError, Scope, Struct,
         StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
     },
     crate::Instant,
@@ -20,11 +20,12 @@ enum Reduce {
 }
 
 /// Open a `rec` group: register each binding as a definition (so `reduce_var`
-/// unfolds the recursive calls) and return the opened tail. Shared with
-/// `convert`, which enqueues the tail rather than reducing it eagerly. The
-/// definitions land in the enclosing context and outlive this call; their
-/// labels are entropy-fresh, so nothing collides.
-pub(crate) fn unfold_rec(context: &mut Context, rec: Rec) -> Term {
+/// unfolds the recursive calls) and return the opened tail. The definitions
+/// land in the enclosing context and outlive this call; their labels are
+/// entropy-fresh, so nothing collides. Registered via `define_rec_members` —
+/// one call for the whole group — so every member is marked recursive by
+/// construction (see `DefEntry`).
+fn unfold_rec_raw(context: &mut Context, rec: Rec) -> Term {
     let labels = rec
         .tail
         .label_iter()
@@ -38,11 +39,48 @@ pub(crate) fn unfold_rec(context: &mut Context, rec: Rec) -> Term {
         .collect::<Vec<_>>();
     let label_refs = label_terms.iter().collect::<Vec<_>>();
 
-    for (label, (_, body)) in labels.iter().zip(rec.items.iter()) {
-        context.define(label, &body.open(&label_refs));
-    }
+    let members = labels
+        .iter()
+        .cloned()
+        .zip(rec.items.iter().map(|(_, body)| body.open(&label_refs)))
+        .collect::<Vec<_>>();
+    context.define_rec_members(&members);
 
     rec.tail.open(&label_refs)
+}
+
+/// Open a `rec` group, memoized per id (`Context::rec_unfold`/`remember_rec_unfold`):
+/// every unfolding of the same local `rec` group yields the *same* opened
+/// tail, so its recursive labels are stable. Without this, each unfolding
+/// mints fresh labels, and conversion comparing two separately reduced copies
+/// of one recursive call never sees them syntactically equal — each stuck
+/// match's arms unfold another copy, and the comparison diverges. Keyed by
+/// `Rec::id` rather than whole-term structural equality, so the memo stays
+/// valid across any capture/release or cloning of the node. Shared with
+/// `convert`, which enqueues the tail rather than reducing it eagerly.
+///
+/// `RecId::Unelaborated` is `Term::rec`'s placeholder for a group
+/// `elaborate_rec` hasn't minted a real id for yet — every not-yet-elaborated
+/// `Rec` shares it. A raw group *can* still reach here: a `rec`-group
+/// member's unelaborated body is registered for mutual reference before its
+/// own nested locals are elaborated (`elaborate_module_rec`), and a
+/// sibling's conversion goal can force it in that window. Memoizing under the
+/// shared placeholder would serve one raw group's cached unfolding to every
+/// other unrelated raw group — so an unelaborated id always takes the
+/// uncached path.
+pub(crate) fn unfold_rec(context: &mut Context, rec: Rec) -> Term {
+    let RecId::Elaborated(id) = rec.id else {
+        return unfold_rec_raw(context, rec);
+    };
+
+    if let Some(tail) = context.rec_unfold(id) {
+        return tail.clone();
+    }
+
+    let tail = unfold_rec_raw(context, rec);
+    context.remember_rec_unfold(id, tail.clone());
+
+    tail
 }
 
 /// Force a `rec` group in WHNF position. The main loop treats a `Rec` node as a
@@ -118,15 +156,119 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
         plicities,
     } = apply;
 
+    // A recursive call keeps its *folded application* as the normal form for
+    // two independent reasons — one permanent, one an elaboration-window
+    // artifact — that share the same refold:
+    //
+    //   * Match-guarded delta: the unfolding leaves a stuck `match`, its
+    //     arguments never reaching the shapes the dispatch demands. This is a
+    //     genuine neutral, post-elaboration too. Unfolding anyway hands
+    //     conversion a match whose arms hold further recursive calls, and
+    //     comparing two distinct such trees unfolds forever; folded neutrals
+    //     compare spine-wise instead. A later refinement of an argument
+    //     re-fires the unfolding — `refine` clears the reduction cache.
+    //
+    //   * Transient leak: the unfolding's result carries elaboration-transient
+    //     material at any depth (`Term::contains_transient` — a
+    //     `NumLit`/`Infix`, or a nested `rec` still carrying
+    //     `RecId::Unelaborated`, possibly wrapped in a constructor or other
+    //     value shell), meaning the definition's raw, not-yet-elaborated body
+    //     leaked through its mutual-checking window. The check is per *call*,
+    //     on the reduced result — not on the registered body — so a clean
+    //     path through a partly-raw body still reduces (a type family's
+    //     `T(2) -> Nat` mid-window, with another arm still raw).
+    //
+    // Either way, folding back to the application — naming the head again
+    // rather than keeping whatever structure `reduce` stopped at — lets a
+    // later retry re-resolve the head from scratch once elaboration has
+    // replaced its definition; the raw structure itself is a disconnected copy
+    // nothing ever updates. Conversion then parks the goal
+    // (`unfold_guarded_apply`'s `StillElaborating`) instead of comparing the
+    // raw material and mismatching.
+    let recursive = matches!(
+        &*head,
+        Subterm::Var(var) if context.is_recursive(var.unwrap())
+    );
+
     let param_refs = params.iter().collect::<Vec<_>>();
 
-    match Term::unwrap_or_clone(reduce_forced(context, head)?) {
-        Subterm::Func(Func { telescope }) => Ok(Reduce::Continue(telescope.open(&param_refs))),
+    match Term::unwrap_or_clone(reduce_forced(context, head.clone())?) {
+        Subterm::Func(Func { telescope }) => {
+            let opened = telescope.open(&param_refs);
+
+            if recursive {
+                let result = reduce(context, opened)?;
+
+                let refold = matches!(&*result, Subterm::Match(_)) || result.contains_transient();
+
+                return Ok(Reduce::Break(if refold {
+                    Term::from(Subterm::Apply(Apply {
+                        head,
+                        params,
+                        plicities,
+                    }))
+                } else {
+                    result
+                }));
+            }
+
+            Ok(Reduce::Continue(opened))
+        }
         head => Ok(Reduce::Break(Term::from(Subterm::Apply(Apply {
             head: head.into(),
             params,
             plicities,
         })))),
+    }
+}
+
+/// The outcome of [`unfold_guarded_apply`].
+pub(crate) enum GuardedUnfold {
+    /// The head is not a recursive name, or does not resolve to a function —
+    /// the caller's own fallback (structural comparison, a hard mismatch)
+    /// applies; there is nothing more unfolding could reveal.
+    NotApplicable,
+    /// Unfolded to a genuine value.
+    Unfolded(Term),
+    /// The head is recursive, but its registered body is still raw:
+    /// unfolding surfaced elaboration-transient material (see
+    /// [`Term::contains_transient`]) instead of a settled value. Not a
+    /// mismatch — the owning `rec` group is still inside its mutual-checking
+    /// window; the caller should park the goal rather than compare the raw
+    /// material.
+    StillElaborating,
+}
+
+/// The one-step unfolding of a *guarded* recursive application — the reduced
+/// body, even when that is a stuck match the guard in [`reduce_apply`] would
+/// re-fold. Conversion's lazy-delta fallback uses this when a folded neutral
+/// meets a shape it cannot match spine-wise: the literal match body it must
+/// convert against can only be reached by unfolding.
+pub(crate) fn unfold_guarded_apply(
+    context: &mut Context,
+    apply: &Apply,
+) -> Result<GuardedUnfold, ReduceError> {
+    let recursive = matches!(
+        &*apply.head,
+        Subterm::Var(var) if context.is_recursive(var.unwrap())
+    );
+
+    if !recursive {
+        return Ok(GuardedUnfold::NotApplicable);
+    }
+
+    let param_refs = apply.params.iter().collect::<Vec<_>>();
+
+    match Term::unwrap_or_clone(reduce_forced(context, apply.head.clone())?) {
+        Subterm::Func(Func { telescope }) => {
+            let result = reduce(context, telescope.open(&param_refs))?;
+
+            Ok(match result.contains_transient() {
+                true => GuardedUnfold::StillElaborating,
+                false => GuardedUnfold::Unfolded(result),
+            })
+        }
+        _ => Ok(GuardedUnfold::NotApplicable),
     }
 }
 
@@ -381,6 +523,13 @@ fn reduce_let(context: &mut Context, let_: Let) -> Reduce {
 }
 
 fn reduce_var(context: &Context, var: Var) -> Reduce {
+    // `var_reduct` withholds a recursive member still inside its raw window
+    // (see `Context::var_reduct`): the name breaks as its own neutral — the
+    // value-level counterpart of the refold `reduce_apply` performs for a
+    // recursive *application* — rather than substituting the
+    // elaboration-transient body and letting a consumer freeze a disconnected
+    // copy of it (a conversion comparison, or the subtler leak: a
+    // metavariable *solved* to it, `?a := reduce(x)`).
     match context.var_reduct(var.unwrap()) {
         Some(next) => Reduce::Continue(next.clone()),
         None => Reduce::Break(Term::var(var)),

@@ -1,6 +1,6 @@
 pub use /syn/{Add};
 pub use /syn/Add/{add};
-use /std/{Nat, Int, Flt};
+use /std/{Nat, Int, Flt, BigInt};
 
 satisfy Add(Nat) {
     add(a, b) = Nat/add(a, b)
@@ -12,4 +12,8 @@ satisfy Add(Int) {
 
 satisfy Add(Flt) {
     add(a, b) = Flt/add(a, b)
+}
+
+satisfy Add(BigInt) {
+    add(a, b) = BigInt/add(a, b)
 }

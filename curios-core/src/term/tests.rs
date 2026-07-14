@@ -288,3 +288,31 @@ fn open_shares_closed_subterm_inside_substituted_body() {
     assert_eq!(opened_field, stored_field);
     assert!(Rc::ptr_eq(&opened_field.inner, &stored_field.inner));
 }
+
+#[test]
+fn binder_name_hints_are_identity_irrelevant() {
+    use std::hash::BuildHasher;
+
+    let this = Term::func([("x", Term::type_())], Term::free_var("x"));
+    let that = Term::func([("y", Term::type_())], Term::free_var("y"));
+
+    assert_eq!(this, that);
+
+    let state = std::collections::hash_map::RandomState::new();
+    assert_eq!(state.hash_one(&this), state.hash_one(&that));
+}
+
+#[test]
+fn tuple_type_field_labels_are_identity() {
+    // Field labels are the target of `.label` resolution, so unlike binder
+    // hints they split identity: an α-equal twin with different labels must
+    // not be substituted for this type by any Eq-keyed cache.
+    let this = Term::tuple_type([("cp", Term::type_()), ("v", Term::free_var("cp"))]);
+    let that = Term::tuple_type([("r", Term::type_()), ("v", Term::free_var("r"))]);
+
+    assert_ne!(this, that);
+    assert_eq!(
+        this,
+        Term::tuple_type([("cp", Term::type_()), ("v", Term::free_var("cp"))])
+    );
+}

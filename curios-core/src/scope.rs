@@ -223,7 +223,7 @@ impl Bound for () {
 
 // === Scope ===================================================================
 
-/// A body abstracted over `A::arity()` binders, locally nameless: the body stores de Bruijn indices, while `names` remembers the source labels for reopening and printing (`None` for a `constant` scope that never had binders written). Built by `close` (which captures free occurrences of the labels) and eliminated by `open` (which substitutes terms for the indices); entering a `Scope` is the only place a [`Visit`]'s depth changes, so this type is the unit of binding for the whole crate.
+/// A body abstracted over `A::arity()` binders, locally nameless: the body stores de Bruijn indices, while `names` remembers the source labels for reopening and printing (`None` for a `constant` scope that never had binders written). Like a [`Term`]'s span, `names` is irrelevant to identity: `Eq`/`Hash` compare arity and body only, so scopes differing solely in binder hints are equal — term equality is α-equivalence. The one place labels are semantic rather than hints — tuple-type fields, the target of `.label` resolution — reasserts them in its own node identity (see `TupleType` in `term.rs`). Built by `close` (which captures free occurrences of the labels) and eliminated by `open` (which substitutes terms for the indices); entering a `Scope` is the only place a [`Visit`]'s depth changes, so this type is the unit of binding for the whole crate.
 pub struct Scope<A: Arity, B: Bound = Term> {
     arity: A,
     names: Option<Vec<String>>,
@@ -379,7 +379,7 @@ impl<A: Arity + Clone, B: Bound> Clone for Scope<A, B> {
 
 impl<A: Arity + PartialEq, B: Bound> PartialEq for Scope<A, B> {
     fn eq(&self, other: &Self) -> bool {
-        self.arity == other.arity && self.names == other.names && self.body == other.body
+        self.arity == other.arity && self.body == other.body
     }
 }
 
@@ -388,7 +388,6 @@ impl<A: Arity + Eq, B: Bound> Eq for Scope<A, B> {}
 impl<A: Arity + Hash, B: Bound> Hash for Scope<A, B> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.arity.hash(state);
-        self.names.hash(state);
         self.body.hash(state);
     }
 }
@@ -583,6 +582,17 @@ impl Telescope<Term> {
         }
     }
 
+    /// Whether an elaboration-transient node occurs in a function/Π telescope
+    /// (`Func`/`FuncType`) — the parameter types and the trailing body/return
+    /// type. Entry types recurse through [`Term::contains_transient`], so
+    /// shared sub-terms answer from their cache.
+    pub(crate) fn any_transient(&self) -> bool {
+        match self {
+            Telescope::Cons(ty, rest) => ty.contains_transient() || rest.body().any_transient(),
+            Telescope::Done(body) => body.contains_transient(),
+        }
+    }
+
     /// Zonk a function/Π telescope (`Func`/`FuncType`): its parameter types and
     /// its trailing body/return type, which is a real term to recurse into.
     pub(crate) fn zonk(&self, context: &Context) -> Result<Self, Error> {
@@ -617,6 +627,17 @@ impl Telescope<()> {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             // The trailing body is `()`, which holds no metavariables.
+            Telescope::Done(_) => false,
+        }
+    }
+
+    /// Whether an elaboration-transient node occurs in a Σ telescope
+    /// (`TupleType`) — only the field types; its `Done` body is `()`. See
+    /// [`Term::contains_transient`].
+    pub(crate) fn any_transient(&self) -> bool {
+        match self {
+            Telescope::Cons(ty, rest) => ty.contains_transient() || rest.body().any_transient(),
+            // The trailing body is `()`, which holds no terms.
             Telescope::Done(_) => false,
         }
     }

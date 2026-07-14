@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, BigNat, Order, Eql};
+use /std/{Nat, Int, Flt, BigNat, BigInt, Order, Eql};
 
 pub concept Ord(A : Type) : Type {
     use Eql(A),
@@ -21,4 +21,8 @@ satisfy Ord(Flt) {
 
 satisfy Ord(BigNat) {
     cmp(a, b) = BigNat/cmp(a, b)
+}
+
+satisfy Ord(BigInt) {
+    cmp(a, b) = BigInt/cmp(a, b)
 }

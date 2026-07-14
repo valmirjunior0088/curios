@@ -882,6 +882,15 @@ impl Prim {
         found
     }
 
+    /// Whether an elaboration-transient node occurs in any operand `Term`
+    /// nested inside this primitive (a symbolic arithmetic spine, `Lst(T)`'s
+    /// element type). See [`Term::contains_transient`].
+    pub(crate) fn any_transient(&self) -> bool {
+        let mut found = false;
+        self.for_each_operand(&mut |term| found = found || term.contains_transient());
+        found
+    }
+
     // Recurse into every operand `Term` so a construction nested inside a primitive
     // (e.g. `Lst(Str)`'s element type) still contributes its head name. Prims own no
     // head names of their own.

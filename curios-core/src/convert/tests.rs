@@ -164,6 +164,196 @@ fn convert_prim_distinguishes_operator_kind() {
     assert_eq!(conv(&mut context, &this, &that), Ok(false));
 }
 
+// === Folded recursive calls (match-guarded delta) ===========================
+
+/// `λx. match x | none() => <none_value> | some(p) => head(p) end` — stuck at
+/// a neutral scrutinee, with a `head`-call in an arm to make unfolding
+/// self-feeding.
+fn recursive_matcher(head: &str, none_value: usize) -> Term {
+    Term::func(
+        [("x", Term::prim(Prim::NatType))],
+        Term::inductive_match(
+            Term::free_var("x"),
+            Some("m"),
+            Term::prim(Prim::NatType),
+            [
+                ("none", Vec::<&str>::new(), nat(none_value)),
+                (
+                    "some",
+                    vec!["p"],
+                    Term::apply(Term::free_var(head), [Term::free_var("p")]),
+                ),
+            ],
+        ),
+    )
+}
+
+#[test]
+fn convert_folded_recursive_call_against_its_unfolding() {
+    let mut context = context();
+    context.define_recursive("f", &recursive_matcher("f", 0));
+
+    let folded = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
+
+    // The literal stuck body, spelled reducibly (the η-redex around `p`) so
+    // the sides are not syntactically equal: the folded call meets a
+    // non-apply shape, lazy delta unfolds it once, and the two stuck
+    // matches compare structurally.
+    let unfolded = Term::inductive_match(
+        Term::free_var("a"),
+        Some("m"),
+        Term::prim(Prim::NatType),
+        [
+            ("none", Vec::<&str>::new(), nat(0)),
+            (
+                "some",
+                vec!["p"],
+                Term::apply(
+                    Term::free_var("f"),
+                    [Term::apply(
+                        func(["z"], Term::free_var("z")),
+                        [Term::free_var("p")],
+                    )],
+                ),
+            ),
+        ],
+    );
+
+    assert_eq!(conv(&mut context, &folded, &unfolded), Ok(true));
+}
+
+#[test]
+fn convert_same_recursive_head_compares_spines() {
+    let mut context = context();
+    context.define_recursive("f", &recursive_matcher("f", 0));
+
+    // Convertible (but not syntactically equal) spines: true.
+    let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
+    let that = Term::apply(
+        Term::free_var("f"),
+        [Term::apply(
+            func(["z"], Term::free_var("z")),
+            [Term::free_var("a")],
+        )],
+    );
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+
+    // Mismatching spines: committal false, no unfolding retry.
+    let other = Term::apply(Term::free_var("f"), [Term::free_var("b")]);
+    assert_eq!(conv(&mut context, &this, &other), Ok(false));
+}
+
+#[test]
+fn convert_distinct_recursive_heads_with_identical_bodies_converge_coinductively() {
+    let mut context = context();
+    // Identical bodies, distinct names: each round unfolds both sides to the
+    // same stuck match and re-opens its `some` arm at a fresh binder — the
+    // recurrence differs from the previous round only in that opening
+    // entropy, so the canonicalized history recognizes the cycle and assumes
+    // it. No finite disagreement exists: the functions are bisimilar. Before
+    // goal canonicalization this pair spun to `Err(Preempted)`.
+    context.define_recursive("f", &recursive_matcher("f", 0));
+    context.define_recursive("g", &recursive_matcher("g", 0));
+
+    let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
+    let that = Term::apply(Term::free_var("g"), [Term::free_var("a")]);
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}
+
+#[test]
+fn convert_distinct_recursive_heads_with_differing_bodies_is_false() {
+    let mut context = context();
+    // The `none` arms disagree: the first unfolding round surfaces the
+    // finite disagreement on a sibling goal, well before any deadline.
+    context.define_recursive("f", &recursive_matcher("f", 0));
+    context.define_recursive("g", &recursive_matcher("g", 1));
+
+    let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
+    let that = Term::apply(Term::free_var("g"), [Term::free_var("a")]);
+    assert_eq!(conv(&mut context, &this, &that), Ok(false));
+}
+
+#[test]
+fn convert_growing_recursive_unfolding_spends_the_deadline() {
+    let mut context = context();
+    // `λx. match x | none() => head(s(x)) | some(p) => 0 end` never recurs —
+    // every unfolding round's arm goal is structurally new, one more `s` on
+    // the folded argument — so no cycle exists to detect and the comparison
+    // rightly spends the deadline: the accepted cost of fully general
+    // recursion. (The growth rides the match arm so each round refolds and
+    // returns to the drain queue; bare `f = λx. f(s(x))` growth would nest
+    // inside one `reduce` call instead.)
+    let growing = |head: &str| {
+        Term::func(
+            [("x", Term::prim(Prim::NatType))],
+            Term::inductive_match(
+                Term::free_var("x"),
+                Some("m"),
+                Term::prim(Prim::NatType),
+                [
+                    (
+                        "none",
+                        Vec::<&str>::new(),
+                        Term::apply(
+                            Term::free_var(head),
+                            [Term::apply(Term::free_var("s"), [Term::free_var("x")])],
+                        ),
+                    ),
+                    ("some", vec!["p"], nat(0)),
+                ],
+            ),
+        )
+    };
+    context.define_recursive("f", &growing("f"));
+    context.define_recursive("g", &growing("g"));
+
+    let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
+    let that = Term::apply(Term::free_var("g"), [Term::free_var("a")]);
+    assert_eq!(
+        conv(&mut context, &this, &that),
+        Err(ReduceError::Preempted)
+    );
+}
+
+#[test]
+fn convert_recursive_values_are_bisimilar() {
+    let mut context = context();
+    // Two distinct recursive value definitions unfolding to the same
+    // constructor shape: the payload goal recurs exactly (no openings
+    // involved), history cuts it, and the streams are equal coinductively.
+    let stream = |name: &str| {
+        Term::variant(
+            "E",
+            Vec::<Term>::new(),
+            "cons",
+            [nat(1), Term::free_var(name)],
+        )
+    };
+    context.define_recursive("xs", &stream("xs"));
+    context.define_recursive("ys", &stream("ys"));
+
+    assert_eq!(
+        conv(&mut context, &Term::free_var("xs"), &Term::free_var("ys")),
+        Ok(true)
+    );
+}
+
+#[test]
+fn convert_folded_recursive_call_against_neutral_head_is_false() {
+    let mut context = context();
+    context.define_recursive("f", &recursive_matcher("f", 0));
+
+    // The recursive side unfolds to its stuck match, the neutral side
+    // cannot unfold at all: a structural mismatch, decided well within the
+    // deadline.
+    let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
+    let neutral = Term::apply(Term::free_var("h"), [Term::free_var("a")]);
+    assert_eq!(conv(&mut context, &this, &neutral), Ok(false));
+}
+
+// === `Rec` (local groups, still a term-level construct — no lambda-lifting
+// in this design) ============================================================
+
 #[test]
 fn convert_rec_is_alpha_equivalent() {
     let mut context = context();

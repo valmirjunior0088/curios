@@ -429,7 +429,8 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             tail: tail.map_body(|b| zonk_term(context, b))?,
         }),
 
-        Subterm::Rec(Rec { items, tail }) => Subterm::Rec(Rec {
+        Subterm::Rec(Rec { id, items, tail }) => Subterm::Rec(Rec {
+            id: *id,
             items: items
                 .iter()
                 .map(|(type_, body)| {

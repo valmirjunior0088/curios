@@ -21,6 +21,7 @@ pub struct Term {
     span: Option<Span>,
     hash: OnceCell<u64>,
     reach: OnceCell<usize>,
+    transient: OnceCell<bool>,
     inner: Rc<Subterm>,
 }
 
@@ -36,6 +37,16 @@ impl Term {
 
     pub(crate) fn unwrap_or_clone(this: Self) -> Subterm {
         Rc::unwrap_or_clone(this.inner)
+    }
+
+    /// Whether an elaboration-transient node (see [`Subterm::any_transient`])
+    /// occurs anywhere in this term. Lazily cached per node, like `hash` and
+    /// `reach`: sub-terms reached through a shared `Rc` share their cached
+    /// answer, so the kernel's guards can consult this on hot paths — a
+    /// definition lookup, every recursive unfolding, every conversion goal —
+    /// at amortized O(1).
+    pub(crate) fn contains_transient(&self) -> bool {
+        *self.transient.get_or_init(|| self.inner.any_transient())
     }
 
     /// The free-variable label at the head of an application spine, descending
@@ -732,8 +743,22 @@ impl Term {
         }
     }
 
-    /// Build a [`Rec`] block from `(label, type, value)` items: every type, every value, and the tail are closed over the full label list, so the items may reference one another (and themselves) by name.
+    /// Build a [`Rec`] block from `(label, type, value)` items: every type, every value, and the tail are closed over the full label list, so the items may reference one another (and themselves) by name. Used by lowering, before any `Context` exists to mint a real [`RecId`] from — sets `id: RecId::Unelaborated`, a placeholder `elaborate_rec` replaces via [`Term::rec_with_id`].
     pub fn rec<I, L, T, U, V>(items: I, tail: V) -> Self
+    where
+        I: IntoIterator<Item = (L, T, U)>,
+        L: Into<String>,
+        T: Into<Term>,
+        U: Into<Term>,
+        V: Into<Term>,
+    {
+        Self::rec_with_id(RecId::Unelaborated, items, tail)
+    }
+
+    /// [`Term::rec`] with an explicit, freshly-minted [`RecId`] — used by
+    /// `elaborate_rec` to attach the group's real identity once elaboration
+    /// mints one (see [`Context::fresh_rec`](super::Context::fresh_rec)).
+    pub fn rec_with_id<I, L, T, U, V>(id: RecId, items: I, tail: V) -> Self
     where
         I: IntoIterator<Item = (L, T, U)>,
         L: Into<String>,
@@ -757,6 +782,7 @@ impl Term {
             .collect::<Vec<_>>();
 
         Self::from(Subterm::Rec(Rec {
+            id,
             items: items
                 .into_iter()
                 .map(|(_, type_, value)| {
@@ -813,6 +839,7 @@ impl From<Subterm> for Term {
             span: None,
             hash: OnceCell::new(),
             reach: OnceCell::new(),
+            transient: OnceCell::new(),
             inner: Rc::new(term),
         }
     }
@@ -838,6 +865,7 @@ impl Bound for Term {
             span: self.span.clone(),
             hash: OnceCell::new(),
             reach: OnceCell::new(),
+            transient: OnceCell::new(),
             inner: Rc::new((**self).traverse(visit)),
         }
     }
@@ -902,9 +930,28 @@ pub struct Apply {
 /// A dependent product (Σ-type). Erasure is sort-driven: a proof or type-valued
 /// field is a *subset type* witness — dropped at erasure, leaving the relevant
 /// fields (and collapsing to the bare field when only one remains).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+///
+/// Unlike binder hints elsewhere, field labels are the target of `.label`
+/// resolution during elaboration, so they are part of the type's identity:
+/// `Eq`/`Hash` reassert them on top of the label-blind [`Telescope`] identity.
+/// Otherwise the reduction memo could hand elaboration a twin type whose
+/// labels differ, and a well-typed projection would fail to resolve.
+#[derive(Debug, Clone, Eq)]
 pub struct TupleType {
     pub telescope: Telescope<()>,
+}
+
+impl PartialEq for TupleType {
+    fn eq(&self, other: &Self) -> bool {
+        self.telescope == other.telescope && self.telescope.labels() == other.telescope.labels()
+    }
+}
+
+impl Hash for TupleType {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.telescope.hash(state);
+        self.telescope.labels().hash(state);
+    }
 }
 
 /// `names` carries the literal's written field names (`(status = 0, …)`) from
@@ -1123,9 +1170,55 @@ pub struct Let {
     pub tail: Scope<Many>,
 }
 
+/// A local `rec` group's identity: a dense index into the `Context`'s
+/// per-id unfold memo, minted once when the group is elaborated (see
+/// `Context::fresh_rec`) — the same role `MetavarId` plays for a
+/// metavariable. Unlike `MetavarId`, a `Rec` can exist before elaboration
+/// gives it a meaningful id: `Term::rec` (used by lowering, before any
+/// `Context` exists to mint from) builds one carrying `RecId::Unelaborated`.
+/// That state is a real variant, not a sentinel `usize` — no minted id can
+/// ever collide with it, so a check for "still raw" can never confuse a
+/// genuinely-elaborated group (whose id could otherwise legitimately be
+/// zero, since `Entropy` counts from 0) for an unelaborated one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RecId {
+    /// `Term::rec`'s placeholder — nothing reads it before elaboration
+    /// replaces it with `Elaborated` via `Term::rec_with_id`.
+    Unelaborated,
+    Elaborated(usize),
+}
+
+impl curios_base::Mint for RecId {
+    fn mint(entropy: usize) -> Self {
+        Self::Elaborated(entropy)
+    }
+}
+
+impl fmt::Display for RecId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unelaborated => write!(f, "?"),
+            Self::Elaborated(id) => write!(f, "{id}"),
+        }
+    }
+}
+
 /// A block of mutually recursive bindings: each item's type and value scope — and the `tail` — are closed over *all* the item labels at once, which is what makes the recursion mutual. Occurrences are unfolded lazily during reduction (`unfold_rec`) rather than at construction, so a `Rec` can define non-terminating-looking fixpoints that only unroll on demand.
+///
+/// `id` gives a local `rec` group the same stable, term-carried identity
+/// `Metavar::id` gives a metavariable — minted once (by `elaborate_rec`,
+/// after which [`Term::rec_with_id`] attaches it) and never reassigned, so
+/// `unfold_rec`'s memo can key off `id` instead of whole-term structural
+/// equality: the id rides along unchanged through any subsequent
+/// capture/release or cloning, where a structural key would not. Two `Rec`s
+/// sharing an `Elaborated` id are provably the same definition, so it
+/// participates in the derived `Eq`/`Hash` as a sound fast path — `Term::rec`
+/// (used by lowering, before any `Context` exists to mint from) sets
+/// `id: RecId::Unelaborated`, a placeholder nothing reads before elaboration
+/// replaces it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Rec {
+    pub id: RecId,
     pub items: Vec<(Scope<Many>, Scope<Many>)>,
     pub tail: Scope<Many>,
 }
@@ -1275,6 +1368,135 @@ impl Subterm {
         match self {
             Subterm::Prim(Prim::Bln(value)) => Some(*value),
             _ => None,
+        }
+    }
+
+    /// Whether an elaboration-transient node occurs in this subterm, at any
+    /// depth — one elaboration has not finished with, so it will be replaced
+    /// before a *final* form of the enclosing definition exists. Three
+    /// shapes qualify: `NumLit` and `Infix` are lowered by `into_core` and
+    /// consumed by `elaborate`, so they never legitimately reach a completed
+    /// `reduce`/`convert`; a `Rec` still carrying [`RecId::Unelaborated`] is
+    /// a raw group whose real, id-bearing form `elaborate_rec` has not built
+    /// yet. Transient material surfacing in a reduct means a recursive
+    /// definition's *raw* body leaked through its mutual-checking window —
+    /// a group member forced by a sibling's goal before its rebuilt body
+    /// replaced it.
+    ///
+    /// The shared law for that leak: such material must never escape into a
+    /// durable artifact except behind the definition's *name*, the one live
+    /// indirection a retry can re-resolve once elaboration replaces the
+    /// definition — the raw structure itself is a disconnected copy nothing
+    /// ever updates. `Context::var_reduct` withholds a raw value member,
+    /// `reduce_apply` refolds a raw unfolding to its application, and
+    /// conversion parks (rather than decomposes) a goal whose side carries
+    /// transient material — all keyed on this walk, cached on `Term`
+    /// ([`Term::contains_transient`]), which the recursion below goes
+    /// through so shared subtrees answer in O(1).
+    fn any_transient(&self) -> bool {
+        match self {
+            Subterm::NumLit(_) | Subterm::Infix(_) => true,
+            Subterm::Rec(Rec { id, items, tail }) => {
+                *id == RecId::Unelaborated
+                    || items.iter().any(|(type_, value)| {
+                        type_.body().contains_transient() || value.body().contains_transient()
+                    })
+                    || tail.body().contains_transient()
+            }
+            Subterm::Type | Subterm::Prop | Subterm::Var(_) => false,
+            Subterm::Metavar(Metavar { spine, .. }) => spine.iter().any(|t| t.contains_transient()),
+            Subterm::Prim(prim) => prim.any_transient(),
+            Subterm::Func(Func { telescope }) => telescope.any_transient(),
+            Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_transient(),
+            Subterm::Apply(Apply { head, params, .. }) => {
+                head.contains_transient() || params.iter().any(|p| p.contains_transient())
+            }
+            Subterm::TupleType(TupleType { telescope, .. }) => telescope.any_transient(),
+            Subterm::Tuple(Tuple { fields, .. }) => fields.iter().any(|f| f.contains_transient()),
+            Subterm::Proj(Proj { head, .. }) => head.contains_transient(),
+            Subterm::InductiveType(InductiveType {
+                params, indices, ..
+            }) => {
+                params.iter().any(|p| p.contains_transient())
+                    || indices.iter().any(|i| i.contains_transient())
+            }
+            Subterm::Variant(Variant {
+                params, payload, ..
+            }) => {
+                params.iter().any(|p| p.contains_transient())
+                    || payload.iter().any(|p| p.contains_transient())
+            }
+            Subterm::StructType(StructType { params, .. }) => {
+                params.iter().any(|p| p.contains_transient())
+            }
+            Subterm::Struct(Struct { params, fields, .. }) => {
+                params.iter().any(|p| p.contains_transient())
+                    || fields.iter().any(|f| f.contains_transient())
+            }
+            Subterm::Match(Match {
+                head,
+                motive,
+                cases,
+            }) => {
+                head.contains_transient()
+                    || motive.body().contains_transient()
+                    || match cases {
+                        Cases::Bln {
+                            false_case,
+                            true_case,
+                        } => false_case.contains_transient() || true_case.contains_transient(),
+                        Cases::Switch { cases, default } => {
+                            cases.values().any(|b| b.contains_transient())
+                                || default.contains_transient()
+                        }
+                        Cases::Inductive {
+                            cases,
+                            pattern,
+                            default,
+                        } => {
+                            cases.values().any(|s| s.body().contains_transient())
+                                || pattern
+                                    .iter()
+                                    .flat_map(|p| &p.slots)
+                                    .any(|slot| match slot {
+                                        MotiveSlot::Term(t) => t.contains_transient(),
+                                        _ => false,
+                                    })
+                                || default.as_ref().is_some_and(|d| d.contains_transient())
+                        }
+                        Cases::FreeMonoid { carrier } => match carrier {
+                            Carrier::Nat {
+                                empty_case,
+                                cons_case,
+                            } => {
+                                empty_case.contains_transient()
+                                    || cons_case.body().contains_transient()
+                            }
+                            Carrier::Bin {
+                                empty_case,
+                                cons_case,
+                            } => {
+                                empty_case.contains_transient()
+                                    || cons_case.body().contains_transient()
+                            }
+                            Carrier::Lst {
+                                elem,
+                                empty_case,
+                                cons_case,
+                            } => {
+                                elem.contains_transient()
+                                    || empty_case.contains_transient()
+                                    || cons_case.body().contains_transient()
+                            }
+                        },
+                    }
+            }
+            Subterm::Let(Let { bindings, tail }) => {
+                bindings
+                    .iter()
+                    .any(|(type_, value)| type_.contains_transient() || value.contains_transient())
+                    || tail.body().contains_transient()
+            }
         }
     }
 
@@ -1457,7 +1679,7 @@ impl Subterm {
                 }
                 tail.body().collect_construction_names(names);
             }
-            Subterm::Rec(Rec { items, tail }) => {
+            Subterm::Rec(Rec { items, tail, .. }) => {
                 for (type_, value) in items {
                     type_.body().collect_construction_names(names);
                     value.body().collect_construction_names(names);
@@ -1567,7 +1789,7 @@ impl Subterm {
                     .any(|(type_, value)| type_.any_metavar(pred) || value.any_metavar(pred))
                     || tail.body().any_metavar(pred)
             }
-            Subterm::Rec(Rec { items, tail }) => {
+            Subterm::Rec(Rec { items, tail, .. }) => {
                 items.iter().any(|(type_, value)| {
                     type_.body().any_metavar(pred) || value.body().any_metavar(pred)
                 }) || tail.body().any_metavar(pred)
@@ -1772,7 +1994,8 @@ impl Bound for Subterm {
                     tail: visit.visit_scope(tail),
                 })
             }
-            Subterm::Rec(Rec { items, tail }) => Subterm::Rec(Rec {
+            Subterm::Rec(Rec { id, items, tail }) => Subterm::Rec(Rec {
+                id: *id,
                 items: items
                     .iter()
                     .map(|(type_, value)| (visit.visit_scope(type_), visit.visit_scope(value)))
@@ -1907,7 +2130,7 @@ impl Bound for Subterm {
 
                 reach
             }
-            Subterm::Rec(Rec { items, tail }) => items
+            Subterm::Rec(Rec { items, tail, .. }) => items
                 .iter()
                 .map(|(type_, value)| type_.reach().max(value.reach()))
                 .max()

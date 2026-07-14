@@ -1,4 +1,5 @@
 mod aggregates;
+mod bigint;
 mod bignat;
 mod binaryen;
 mod codegen;

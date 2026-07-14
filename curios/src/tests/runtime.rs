@@ -890,3 +890,228 @@ fn peel_loops_are_linear_by_construction() {
     .expect("expected result");
     assert_eq!(io.output(), b"450000");
 }
+
+// A local `rec` nested inside another local `rec`'s body: `go` (inner) is an
+// ordinary term-level construct here — never lambda-lifted, never spliced
+// anywhere — so it just works, elaborated and erased in place exactly where
+// written. Runtime-tainted so codegen cannot const-fold it away.
+#[test]
+fn nested_local_rec_runs_correctly() {
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Io, Nat, Str, Bin};
+        rec f(n : Nat) -> Nat =
+            (rec go(i : Nat) -> Nat =
+                match i
+                | 0 => 0
+                | k + 1; ih => go(k) + 1
+                end;
+             go(n));
+        Io/print(Nat/to_str(f(Bin/len(/std/rand/bin(4)))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"4");
+}
+
+// A local `rec` nested inside a top-level `rec` member, calling that
+// enclosing member by name: since nothing gets lambda-lifted or spliced as a
+// separate item, there is no forward-reference to worry about — `go` just
+// resolves `f` through ordinary lexical/context scoping, exactly where it's
+// written.
+#[test]
+fn local_rec_calls_enclosing_rec_member() {
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Io, Nat, Str, Bin};
+        rec f(n : Nat) -> Nat =
+            (rec go(i : Nat) -> Nat =
+                match i
+                | 0 => 0
+                | k + 1; ih => f(k) + go(k)
+                end;
+             go(n));
+        Io/print(Nat/to_str(f(Bin/len(/std/rand/bin(3)))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"0");
+}
+
+// A non-capturing, self-referential value `rec` (`loop : Nat = loop`) that
+// the program never calls: this is exactly the shape that silently
+// miscompiled under lambda-lifting (a self-aliased value slot dropped by the
+// optimizer's copy-propagation) — here it stays a term-level `Rec`, erased in
+// place, and its mere existence has no effect on the rest of the program.
+#[test]
+fn self_referential_value_rec_never_forced_compiles_and_runs() {
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Io, Nat, Str, Bin};
+        let make(n : Nat) -> Nat =
+            rec loop : Nat = loop;
+            n;
+        Io/print(Nat/to_str(make(Bin/len(/std/rand/bin(5)))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"5");
+}
+
+// A sibling's proof obligation forces conversion on another member's body
+// while that member is still inside its raw (not-yet-elaborated) window:
+// `prf`'s type `Eq(f(0), 0)` reduces `f(0)` through `f`'s not-yet-checked
+// body, straight into the nested local `rec go` before `go` has been
+// elaborated — conversion must park that goal rather than mismatch on the
+// transient literal it finds there, and the retry (after the whole group has
+// elaborated) must resolve against `go`'s real body, not a disconnected copy
+// of its raw one.
+#[test]
+fn sibling_proof_forces_conversion_during_rec_members_raw_window() {
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Io, Nat, Str, Bin, Eq};
+        rec f(n : Nat) -> Nat =
+            (rec go(i : Nat) -> Nat =
+                match i
+                | 0 => 0
+                | k + 1; ih => go(k)
+                end;
+             go(n))
+        and prf(n : Nat) -> Eq(f(0), 0) =
+            Eq/refl();
+        Io/print(Nat/to_str(f(Bin/len(/std/rand/bin(3)))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"0");
+}
+
+// The value-level analogue of the test above, and the subtler leak: a sibling
+// proof forces conversion on a *value* rec member `x` whose body is a nested
+// local `rec`, during `x`'s raw window. `prf`'s `Eq(x, 5)` enqueues `?a ≟ x`
+// before `?a ≟ 5`, so the metavariable is solved against `x` — and `x` must
+// reduce to its *name*, not to a frozen copy of its raw `rec` body, or `?a`
+// freezes the dead copy and the second goal mismatches forever. `reduce_var`
+// refolds the transient-bodied member to its name (as `reduce_apply` does for
+// a recursive application), conversion parks the name, and the retry re-derives
+// against `x`'s real body once the group has elaborated.
+#[test]
+fn sibling_proof_forces_conversion_on_value_rec_member_raw_window() {
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Io, Nat, Str, Bin, Eq};
+        rec x : Nat =
+            (rec loop : Nat = loop;
+             5)
+        and prf : Eq(x, 5) =
+            Eq/refl();
+        Io/print(Nat/to_str(x + Bin/len(/std/rand/bin(0))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"5");
+}
+
+// The counterweight: a recursive member's raw body must stay *substitutable*
+// during its window. A sibling's *signature* forces a type family to reduce on
+// a concrete argument mid-window — `val : T(2)` reduces `T(2)` through `T`'s
+// raw (not-yet-rebuilt) body all the way to `Nat` while the group is still
+// being checked. A blanket "don't unfold an unelaborated recursive name" guard
+// would strand `T(2)` as a neutral and reject `val`; the fix refolds only an
+// *elaboration-transient* body, never a productively reducing one. (Indexed
+// inductive families lower to exactly this shape, so the prelude depends on it.)
+#[test]
+fn type_family_reduces_on_concrete_arg_during_rec_members_raw_window() {
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Io, Nat, Str, Bin};
+        rec T(n : Nat) -> Type =
+            match n
+            | 0 => Nat
+            | k + 1; ih => T(k)
+            end
+        and val : T(2) =
+            Bin/len(/std/rand/bin(3));
+        Io/print(Nat/to_str(val))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"3");
+}
+
+// The wrapped variant of the value-member test: the transient (a raw nested
+// `rec`) sits one `let` *inside* the member's raw body, so no root-shape check
+// on the registered body can see it — `x` substitutes, reduction flows through
+// the `let`, and the raw `rec` surfaces as the WHNF. The transient walk must
+// be deep (`Term::contains_transient`): `var_reduct` withholds `x` because its
+// body *contains* raw material, wherever it sits, and the parked name resolves
+// against the rebuilt body after the group elaborates.
+#[test]
+fn wrapped_transient_in_value_rec_member_raw_window() {
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Io, Nat, Str, Bin, Eq};
+        rec x : Nat =
+            (let y : Nat = (rec loop : Nat = loop; 5);
+             y)
+        and prf : Eq(x, 5) =
+            Eq/refl();
+        Io/print(Nat/to_str(x + Bin/len(/std/rand/bin(0))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"5");
+}
+
+// The sibling-proof window inside a *local* rec group. The goal parks while
+// the group's raw window is open, freezing the enclosing local frame — raw
+// member bodies included — and retries only after that frame has popped, where
+// the group's own rebuilt registration can never reach it. Without
+// `Context::refresh_parked_rec_members` upgrading the frozen entries when the
+// rebuilt bodies land, the retry re-reduces `f(0)` through the frozen raw copy
+// forever and reports a false mismatch at the item drain.
+#[test]
+fn sibling_proof_in_local_rec_group_resolves_after_frame_pops() {
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Io, Nat, Str, Bin, Eq};
+        let outer(n : Nat) -> Nat =
+            (rec f(i : Nat) -> Nat =
+                match i
+                | 0 => 0
+                | k + 1; ih => f(k)
+                end
+             and prf : Eq(f(0), 0) =
+                Eq/refl();
+             f(n));
+        Io/print(Nat/to_str(outer(Bin/len(/std/rand/bin(3)))))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"0");
+}

@@ -1298,7 +1298,7 @@ fn erase_rec(
     rec: &Rec,
     expected: &Term,
 ) -> Result<curios_ersd::Term, Error> {
-    let Rec { items, tail } = rec;
+    let Rec { items, tail, .. } = rec;
 
     let names = tail
         .label_iter()
@@ -1325,9 +1325,17 @@ fn erase_rec(
             context.assume(name, type_);
         }
 
-        for (name, (_, body)) in names.iter().zip(items.iter()) {
-            context.define(name, body);
-        }
+        // One call for the whole group marks every member recursive by
+        // construction (see `Context::define_rec_members`) — the direct fix
+        // for the bug this design started from: a per-item loop here once
+        // omitted the mark, and match-guarded delta silently stopped
+        // covering erasure.
+        let members = names
+            .iter()
+            .cloned()
+            .zip(items.iter().map(|(_, body)| body.clone()))
+            .collect::<Vec<_>>();
+        context.define_rec_members(&members);
 
         let erased_items = items
             .iter()

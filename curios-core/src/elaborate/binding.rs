@@ -84,6 +84,12 @@ pub(super) fn elaborate_rec(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     context.with_frame(|context| {
+        // The group's identity (see `RecId`): minted once, here, and carried
+        // by the elaborated `Rec` this function returns — `unfold_rec`'s memo
+        // keys off it, and it's stable across every subsequent capture,
+        // release, or clone of the resulting term.
+        let id = context.fresh_rec();
+
         let labels = rec
             .tail
             .label_iter()
@@ -119,19 +125,37 @@ pub(super) fn elaborate_rec(
             context.reassume(label, type_);
         }
 
-        for (label, (_, body)) in labels.iter().zip(items.iter()) {
-            context.define(label, body);
-        }
+        // One call for the whole group marks every member recursive by
+        // construction (see `Context::define_rec_members`).
+        let raw_members = labels
+            .iter()
+            .cloned()
+            .zip(items.iter().map(|(_, body)| body.clone()))
+            .collect::<Vec<_>>();
+        context.define_rec_members(&raw_members);
 
         let mut bodies_elaborated = Vec::with_capacity(items.len());
         for ((_, body), type_) in items.iter().zip(&types_elaborated) {
             bodies_elaborated.push(check(context, body, type_.clone())?);
         }
 
-        // Re-define with the rebuilt bodies before the tail, for the same reason.
-        for (label, body) in labels.iter().zip(&bodies_elaborated) {
-            context.define(label, body);
-        }
+        // Re-define with the rebuilt bodies before the tail, for the same
+        // reason — again through `define_rec_members`, so the upgrade cannot
+        // silently drop the recursive mark.
+        let rebuilt_members = labels
+            .iter()
+            .cloned()
+            .zip(bodies_elaborated.iter().cloned())
+            .collect::<Vec<_>>();
+        context.define_rec_members(&rebuilt_members);
+
+        // Goals parked while the group's raw window was open froze this local
+        // frame — raw member bodies included — and their retries run under
+        // that frozen copy after the frame pops, where the upgrade above can
+        // never reach them. Upgrade the frozen entries too, or a retry
+        // re-reduces through the raw copy forever (see
+        // `Context::refresh_parked_rec_members`).
+        context.refresh_parked_rec_members(&rebuilt_members);
 
         let triples = labels
             .iter()
@@ -145,7 +169,7 @@ pub(super) fn elaborate_rec(
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
 
-        Ok((Term::rec(triples, tail_elaborated), tail_type))
+        Ok((Term::rec_with_id(id, triples, tail_elaborated), tail_type))
     })
 }
 

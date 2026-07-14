@@ -279,9 +279,13 @@ fn elaborate_module_rec(
         elaborate_inductive_indices(context, &def.name)?;
     }
 
-    for def in defs {
-        context.define(&def.name, &def.body);
-    }
+    // One call for the whole group marks every member recursive by
+    // construction (see `Context::define_rec_members`).
+    let raw_members = defs
+        .iter()
+        .map(|def| (def.name.clone(), def.body.clone()))
+        .collect::<Vec<_>>();
+    context.define_rec_members(&raw_members);
 
     let mut bodies = Vec::with_capacity(defs.len());
     for (def, type_) in defs.iter().zip(&types) {
@@ -292,9 +296,14 @@ fn elaborate_module_rec(
     // applications during elaboration, and later items' type-level evaluation
     // must not reduce through the lowered (under-applied) originals. The
     // originals were only needed above, while the members checked each other.
-    for (def, body) in defs.iter().zip(&bodies) {
-        context.define(&def.name, body);
-    }
+    // Again through `define_rec_members`, so the upgrade cannot silently drop
+    // the recursive mark.
+    let rebuilt_members = defs
+        .iter()
+        .zip(&bodies)
+        .map(|(def, body)| (def.name.clone(), body.clone()))
+        .collect::<Vec<_>>();
+    context.define_rec_members(&rebuilt_members);
 
     // Registry rebuild, phase two: constructor payload types may apply the
     // group's type constructors, so their signatures (and `InductiveType`
@@ -524,8 +533,15 @@ pub fn elaborate_and_zonk_with_prelude(
             }
             Item::Rec(defs) => {
                 for def in defs {
-                    context.define_assuming(&def.name, &def.type_, &def.body);
+                    context.assume(&def.name, &def.type_);
                 }
+                // One call for the whole group marks every member recursive
+                // by construction (see `Context::define_rec_members`).
+                let members = defs
+                    .iter()
+                    .map(|def| (def.name.clone(), def.body.clone()))
+                    .collect::<Vec<_>>();
+                context.define_rec_members(&members);
             }
         }
     }
