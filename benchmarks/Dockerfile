@@ -1,7 +1,7 @@
 # Kitchen-sink benchmark image — every toolchain in one arm64 container.
 #
 # Build from the REPO ROOT (the build needs the curios sources):
-#   docker build --platform linux/arm64 -f bench/Dockerfile -t curios-bench .
+#   docker build --platform linux/arm64 -f benchmarks/Dockerfile -t curios-bench .
 # Run on a single pinned core so the numbers are stable:
 #   docker run --rm --cpuset-cpus 0 curios-bench
 #   docker run --rm --cpuset-cpus 0 -e D_TREES=23 -e N_LCG=100000000 curios-bench
@@ -22,8 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 RUN curl -sSL -o /usr/local/bin/grain \
       https://github.com/grain-lang/grain/releases/download/grain-v0.7.2/grain-linux-x64 \
     && chmod +x /usr/local/bin/grain
-COPY bench/programs/lcg/lcg.gr     /w/lcg.gr
-COPY bench/programs/trees/trees.gr /w/trees.gr
+COPY benchmarks/programs/lcg/lcg.gr     /w/lcg.gr
+COPY benchmarks/programs/trees/trees.gr /w/trees.gr
 RUN cd /w \
     && grain compile lcg.gr   -o lcg_grain.wasm \
     && grain compile trees.gr -o trees_grain.wasm
@@ -102,8 +102,8 @@ RUN make curios/runtime \
 ENV PATH="/curios/target/release:${PATH}"
 
 # --- the benchmark harness --------------------------------------------------
-COPY bench bench
-WORKDIR /curios/bench
+COPY benchmarks benchmarks
+WORKDIR /curios/benchmarks
 # Grain wasm, precompiled in the amd64 stage (no arm64 Grain toolchain exists).
 COPY --from=grain /w/lcg_grain.wasm   prebuilt/lcg_grain.wasm
 COPY --from=grain /w/trees_grain.wasm prebuilt/trees_grain.wasm

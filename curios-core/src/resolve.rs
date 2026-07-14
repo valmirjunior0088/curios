@@ -700,7 +700,7 @@ pub(crate) fn register_witness(
     // never by a third root unrelated to both. Without this, two unrelated
     // roots could each legally `satisfy` the same `(concept, key)` pair, a
     // collision that is unfixable once both are linked into one program (see
-    // `ROADMAP.md`'s Type System section). Checked before the duplicate-key
+    // `documentation/ROADMAP.md`'s Type System section). Checked before the duplicate-key
     // insert below: "not allowed to register this at all" is the more
     // fundamental violation than "and it also collides."
     //

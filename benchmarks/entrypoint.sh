@@ -6,7 +6,7 @@
 # Knobs (env vars): N_LCG, D_TREES, RUNS, WARMUP.
 set -uo pipefail
 cd "$(dirname "$0")"
-ROOT="$PWD"          # absolute bench dir; asc is invoked from elsewhere (see below)
+ROOT="$PWD"          # absolute benchmarks dir; asc is invoked from elsewhere (see below)
 mkdir -p bin
 
 # OCaml's flambda compiler lives in the opam switch.

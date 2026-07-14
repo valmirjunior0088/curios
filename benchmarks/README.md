@@ -1,4 +1,4 @@
-# bench — where is Curios, roughly, on performance?
+# benchmarks — where is Curios, roughly, on performance?
 
 A throwaway, run-once-every-never harness to place Curios against industry languages with a single number per workload. It is **not** a rigorous benchmark suite — its job is orientation: "Curios is ~Nx off Rust on integer loops, ~Mx on allocation." Everything runs in one kitchen-sink arm64 container so nothing has to be installed locally.
 
@@ -27,7 +27,7 @@ Both are (a) expressible in a total, structurally-recursive language, (b) immune
 ## Layout
 
 ```
-bench/
+benchmarks/
   Dockerfile           kitchen-sink arm64 image with all 8 toolchains + curios
   build.sh             build the image (repo root as context) from anywhere
   entrypoint.sh        build all, cross-check outputs, then 4 hyperfine tables
@@ -40,14 +40,14 @@ Each program folder also carries a small `lakefile.toml`, because Lean's build s
 
 ## Run it
 
-The image build needs the Curios sources, which live *above* `bench/`, so it must run with the **repo root as the build context**. The helper does that from anywhere:
+The image build needs the Curios sources, which live *above* `benchmarks/`, so it must run with the **repo root as the build context**. The helper does that from anywhere:
 
 ```sh
-bash bench/build.sh                        # builds the image (repo root as context)
+bash benchmarks/build.sh                   # builds the image (repo root as context)
 docker run --rm --cpuset-cpus 0 curios-bench
 
 # equivalent by hand, from the repo root:
-docker build --platform linux/arm64 -f bench/Dockerfile -t curios-bench .
+docker build --platform linux/arm64 -f benchmarks/Dockerfile -t curios-bench .
 
 # tune the workloads:
 docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e RUNS=7 curios-bench

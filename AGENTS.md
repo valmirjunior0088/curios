@@ -27,7 +27,7 @@ The JIT-vs-deserialize split is a _crate boundary_, not a feature flag — see [
 
 Two languages live in this repo: **Rust** (the compiler) and **Curios** itself (the object language, with a standard library under `curios-text/std/`). Work touches one or both.
 
-For what's already built vs. still planned, see [ROADMAP.md](ROADMAP.md) — check it before starting work on a new capability, both to confirm it's genuinely unstarted and to see how finished, related features are described.
+For what's already built vs. still planned, see [ROADMAP.md](documentation/ROADMAP.md) — check it before starting work on a new capability, both to confirm it's genuinely unstarted and to see how finished, related features are described.
 
 ## Working with the user
 
@@ -41,7 +41,7 @@ For what's already built vs. still planned, see [ROADMAP.md](ROADMAP.md) — che
 
 Refresh the relevant reference into working memory _before_ writing, every time — do not rely on a stale recollection from earlier in the session or from training.
 
-- **Writing Curios (`.crs`)?** Read [SYNTAX.md](SYNTAX.md) in full first. The surface language has many specialized forms (per-scrutinee `match` shapes, motives, glued literal signs, postfix-`!` do-notation) that are easy to get subtly wrong from memory.
+- **Writing Curios (`.crs`)?** Read [SYNTAX.md](documentation/SYNTAX.md) in full first. The surface language has many specialized forms (per-scrutinee `match` shapes, motives, glued literal signs, postfix-`!` do-notation) that are easy to get subtly wrong from memory.
 - **Writing Rust (the compiler)?** Re-read [The pipeline](#the-pipeline) and [Where things live](#where-things-live) below, then open the `//!` module docs of the stage(s) you are touching, so the full architecture and the stage's local invariants are fresh. A change in one stage usually has obligations in the next.
 
 This is cheap insurance: both languages reward precision and punish half-remembered syntax or architecture.
@@ -92,7 +92,7 @@ then, in curios itself:
 | `Makefile`                                       | Builds the slim `curios-rt` and copies it to `curios/runtime` for `bundle.rs` to `include_bytes!`                                                |
 | `curios/src/tests/`                              | Cross-stage integration tests (incl. `codegen/` and the relocated Binaryen optimize-roundtrip test)                                              |
 | `curios/tests/bundle.rs`                         | Gated (`#[ignore]`) end-to-end test of the `compile`→executable path                                                                             |
-| `bench/`                                          | Throwaway cross-language performance harness (Docker + hyperfine); see `bench/README.md`                                                         |
+| `benchmarks/`                                     | Throwaway cross-language performance harness (Docker + hyperfine); see `benchmarks/README.md`                                                    |
 
 ## Documentation
 
@@ -102,11 +102,11 @@ Documentation lives in several places, each with a different audience and job. W
 | ---------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | `README.md` (root)                | Newcomers on GitHub                     | Project pitch, quickstart, CLI usage, repo-layout summary                                             | The public API, build steps, or crate layout changes                                            |
 | `AGENTS.md` (this file)           | Agents/contributors, before any change  | Architecture, pipeline, build/test/conventions — the deep source of truth                             | Any command, convention, or layout change                                                       |
-| `SYNTAX.md`                        | Anyone writing `.crs`                   | Full Curios language reference                                                                         | The surface language changes                                                                     |
-| `ROADMAP.md`                       | Anyone planning work                    | What's built vs. still planned                                                                          | A feature lands or is scoped                                                                     |
+| `documentation/SYNTAX.md`          | Anyone writing `.crs`                   | Full Curios language reference                                                                         | The surface language changes                                                                     |
+| `documentation/ROADMAP.md`         | Anyone planning work                    | What's built vs. still planned                                                                          | A feature lands or is scoped                                                                     |
 | `Cargo.toml` `description`        | Cargo/crates.io tooling                 | One-line crate summary                                                                                  | A crate's purpose changes                                                                       |
 | `//!` / `///` rustdoc comments     | IDE hover, `cargo doc`                  | API-level documentation of modules and items                                                            | Any public item is added, renamed, or changes behavior                                          |
-| `bench/README.md` / `bench/RESULTS.md` | Anyone evaluating perf              | Harness mechanics (evergreen) vs. one dated run's numbers (point-in-time) — deliberately not merged     | The harness changes / a new benchmark run is captured                                           |
+| `benchmarks/README.md` / `benchmarks/RESULTS.md` | Anyone evaluating perf        | Harness mechanics (evergreen) vs. one dated run's numbers (point-in-time) — deliberately not merged     | The harness changes / a new benchmark run is captured                                           |
 
 **No `.md` file should contain hardwrapped lines.** Write one line per paragraph (or per list item) and let the editor/viewer soft-wrap; this keeps diffs to the sentence that actually changed instead of reflowing the whole paragraph. Fenced code blocks and tables keep their own line structure and are exempt.
 
@@ -162,11 +162,11 @@ There is no `rustfmt.toml` or `clippy.toml` — stock toolchain defaults apply. 
 
 The standard library under `curios-text/std/` is the reference for idiomatic Curios. Each module is one file (`curios-text/std/Foo.crs`) and must be registered in two places: `curios-text/std.crs` (`pub mod Foo; pub use Foo/{let Foo};`) **and** the `include_str!` table in `curios-text/src/prelude.rs` (the modules are embedded into the compiler at build time, not read from disk). The same applies to `curios-text/syn/` via `curios-text/syn.crs`.
 
-[SYNTAX.md](SYNTAX.md) covers every construct with examples (and `curios-text/src/parse.rs` is the ultimate source of truth). A few essentials that are easy to trip on from memory:
+[SYNTAX.md](documentation/SYNTAX.md) covers every construct with examples (and `curios-text/src/parse.rs` is the ultimate source of truth). A few essentials that are easy to trip on from memory:
 
 - Names are path-qualified with `/`: `Option/none`, `/std/Lst`, `/syn/Str`; a leading `/` is absolute.
 - `@x : T` is an implicit (type-erased) parameter; ordinary `x : T` is explicit; `use T` is an anonymous **instance argument** filled by witness resolution.
-- **Concepts / witnesses / instance arguments** are the ad-hoc-polymorphism layer (see [SYNTAX.md](SYNTAX.md#concepts-witnesses-and-instance-arguments) for the surface syntax). The Rust-side implementation, file by file:
+- **Concepts / witnesses / instance arguments** are the ad-hoc-polymorphism layer (see [SYNTAX.md](documentation/SYNTAX.md#concepts-witnesses-and-instance-arguments) for the surface syntax). The Rust-side implementation, file by file:
   - A `concept` lowers to a `record` plus a `Concept` registry entry (`curios-core/src/concept.rs`) and per-field method wrappers.
   - A witness (declared with `satisfy`) is anonymous (no name, no `pub` — a second instance of a key is an ordinary concept-typed `let` passed via `use <term>`) and lowers to a compiler-named definition (`witness#N`), registered in a program-wide table keyed by `(concept, tuple of the rigid heads of the concept's input parameters)`.
   - A concept's `use`-marked (superclass) fields leave the positional sequence in every concept literal: omitted → resolved as a witness goal, explicitly filled with a `use <term>` entry (`elaborate_struct` in `curios-core/src/elaborate.rs`).
