@@ -1,6 +1,6 @@
 pub use /syn/{Eql};
 pub use /syn/Eql/{eql};
-use /std/{Nat, Byte, Int, Flt, Bln, Bits, Bytes, Str};
+use /std/{Nat, Byte, Int, Flt, Bln, Bits, Bytes, Str, BigNat, BigInt};
 
 satisfy Eql(Nat) {
     eql(a, b) = Nat/eql(a, b)
@@ -32,4 +32,12 @@ satisfy Eql(Bytes) {
 
 satisfy Eql(Str) {
     eql(a, b) = Str/eql(a, b)
+}
+
+satisfy Eql(BigNat) {
+    eql(a, b) = BigNat/eql(a, b)
+}
+
+satisfy Eql(BigInt) {
+    eql(a, b) = BigInt/eql(a, b)
 }

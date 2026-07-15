@@ -1,6 +1,6 @@
 # Representation specification PT4 — exact `BigFlt` and native-float boundaries
 
-Working implementation specification for exact binary-rational arithmetic (`BigFlt`), proof-carrying conversion to and from native `Flt` byte patterns, and the obligations needed exclusively by that layer. This is the final part of the ordered representation series: [packed Bits, Bytes, and Byte syntax](SYNTAX.md#literals) supplies primitive `Byte`, `Bits`, and `Bytes`; [PT2](REPRESENTATION_SPEC_PT2_NUMERIC.md) supplies packed `BigNat` and `BigInt`; [PT3](REPRESENTATION_SPEC_PT3_CHARACTER.md) supplies the final `Char`/`Str` presentation layer.
+Working implementation specification for exact binary-rational arithmetic (`BigFlt`), proof-carrying conversion to and from native `Flt` byte patterns, and the obligations needed exclusively by that layer. This is the final part of the ordered representation series: [packed Bits, Bytes, and Byte syntax](SYNTAX.md#literals) supplies primitive `Byte`, `Bits`, and `Bytes`; PT2 (landed) supplies packed `BigNat` and `BigInt`; [PT3](REPRESENTATION_SPEC_PT3_CHARACTER.md) supplies the final `Char`/`Str` presentation layer.
 
 Stage 1 ships `BigFlt` as a certified dyadic rational, an arbitrary-precision element of ℤ[1/2]. Stage 2 is deferred until a real workload demands exact interior division; it extends the same private carrier with an odd denominator, yielding full ℚ while preserving dyadics as the `denominator = 1` stratum.
 
@@ -20,7 +20,7 @@ PT4 therefore owns every requirement forced exclusively by `BigFlt`:
 - Flt-facing wrappers;
 - the deferred denominator extension and its strong-induction, divmod, gcd, and reduced-form proof obligations.
 
-General BigNat and BigInt operations and ring/order laws remain in PT2 even where PT4 consumes them, because they are honest properties of those standalone types.
+General BigNat operations and their full ring/order law corpus remain in PT2, as do every BigNat, NonZero, and BigInt *operation* (`/std/NonZero` also ships the delegated NonZero ring/order corpus). BigInt's own signed algebraic law corpus — commutativity, associativity, distributivity, comparison, cancellation, and the sign-case lemmas — was **deferred** during the PT2 port rather than built: BigInt is a leaf with no consumer of those laws, and by the `Flt.crs` precedent (Dragon4 consumes BigNat *operations* and none of its lemmas) a `BigFlt` built the same way is expected to need BigInt operations, not its algebraic laws. When a specific BigInt law is genuinely required, build it then — lifting it from the BigNat corpus through the sign-case structure — rather than assuming PT2 already supplies it. The validated BigNat sub-recovery theory that a signed-difference law would rest on is preserved as a starting point.
 
 ## Motivation
 
@@ -46,7 +46,7 @@ Flocq and HOL float formalizations provide the relevant precedent: reason about 
 
 **Representation privacy preserves stage-2 mobility.** `BigFlt` is a `struct`. Its certificate enforces inhabitance; privacy prevents external code and theorems from depending on the dyadic field layout that stage 2 extends.
 
-**BigInt owns sign reasoning.** BigFlt arithmetic consumes PT2's ring and order laws. No BigFlt proof repeats the full sign-case product.
+**BigInt owns sign reasoning.** BigFlt arithmetic consumes PT2's BigInt *operations* and the BigNat ring/order law corpus. BigInt's own signed ring/order law corpus was deferred, not built, in PT2 (see [Why this work is postponed](#why-this-work-is-postponed)); a BigFlt proof that genuinely needs a signed law builds it against BigInt's operations at that point rather than repeating the full sign-case product inline.
 
 **Correct rounding happens once at the boundary.** Stage 1 has no exact division operation or `Div` witness. `narrow_b` and `narrow_ratio_b` implement round-to-nearest-even directly from exact values.
 

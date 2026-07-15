@@ -1,3 +1,11 @@
+-- Arbitrary-precision naturals over the packed `Bits` substrate. A `BigNat` is a
+-- transparent record pairing an LSB-first `Bits` rep with a `Canonical` proof that
+-- the rep is trimmed (no redundant high zero bit), so equality is decided at the
+-- `.rep` level and the certificate erases away. `View` (zero / succ low tail) is the
+-- structural accessor consumers and single-operand recursions go through; two-operand
+-- ops match `.rep` directly, build a raw untrimmed result, and route it through
+-- `of_bits` — a single `trim` — at the public boundary.
+
 use /std/{Nat, Bln, Bits, Str, Order, Eq, False, True};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt, eq_neq_gt, lt_neq_gt};
 use /std/Bits/{cons};
@@ -18,7 +26,7 @@ pub let Canonical(rep : Bits) -> Prop =
     | false => False
     end;
 
-let combine(head : Bln, t : Bits) -> Bits =
+pub let combine(head : Bln, t : Bits) -> Bits =
     match t
     | b\ =>
         match head
@@ -129,13 +137,13 @@ pub rec succ_raw(x : Bits) -> Bits =
 pub let succ(a : BigNat) -> BigNat =
     of_bits(succ_raw(a.rep));
 
-let xor3(a : Bln, b : Bln, c : Bln) -> Bln =
+pub let xor3(a : Bln, b : Bln, c : Bln) -> Bln =
     match a
     | true => match b | true => c | false => match c | true => false | false => true end end
     | false => match b | true => match c | true => false | false => true end | false => c end
     end;
 
-let maj3(a : Bln, b : Bln, c : Bln) -> Bln =
+pub let maj3(a : Bln, b : Bln, c : Bln) -> Bln =
     match a
     | true => match b | true => true | false => c end
     | false => match b | true => c | false => false end

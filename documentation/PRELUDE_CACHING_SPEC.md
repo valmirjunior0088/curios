@@ -10,7 +10,7 @@ Today that waste is only partially avoided, and only within a single process. Th
 
 The goal of this work is to compute the fixed prefix **zero times per user compile**: the prelude is elaborated (and erased) once, out of band, and every subsequent compile restores that result instead of recomputing it.
 
-This is not a performance-tuning exercise and carries no benchmark target. It is the removal of redundant recomputation of an invariant. It is one of two prongs against the same std-cost pain: the [packed numeric representation](REPRESENTATION_SPEC_PT2_NUMERIC.md) work makes the prefix *cheap to compute*; this work makes it *not recomputed at all*. The two are complementary — the numeric fix shrinks every artifact this work caches and deletes the `RecId` serialization hazard (see Sequencing).
+This is not a performance-tuning exercise and carries no benchmark target. It is the removal of redundant recomputation of an invariant. It is one of two prongs against the same std-cost pain: the packed numeric representation work (landed) makes the prefix *cheap to compute*; this work makes it *not recomputed at all*. The two are complementary — the numeric fix shrinks every artifact this work caches and deletes the `RecId` serialization hazard (see Sequencing).
 
 ## What actually re-runs, per compile
 

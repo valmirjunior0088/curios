@@ -1,6 +1,5 @@
 mod aggregates;
-// PT2: BigInt tests disabled pending its own packed-Bits port.
-// mod bigint;
+mod big_int;
 mod big_nat;
 mod binaryen;
 mod codegen;

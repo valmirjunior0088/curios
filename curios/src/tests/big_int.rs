@@ -2,10 +2,10 @@ use super::run;
 
 #[test]
 fn bigint_add_crosses_zero_in_both_directions() {
-    // Mixed-sign `add` routes through `pos_sub`, whose borrow recursion
-    // returns the sign directly: the same magnitudes flipped land exactly on
-    // the other side of zero, and equal magnitudes land on zero itself —
-    // which has its own constructor, so "-0" cannot even be produced.
+    // Mixed-sign `add` routes through `pos_sub`, which reads the sign straight
+    // off `cmp`: the same magnitudes flipped land exactly on the other side of
+    // zero, and equal magnitudes land on zero itself — which has its own
+    // constructor, so "-0" cannot even be produced.
     let source = r#"
         use /std/{Io, Str, Lst, BigInt};
         Io/print(Str/join(",", [
