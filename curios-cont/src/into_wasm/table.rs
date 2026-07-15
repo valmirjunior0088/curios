@@ -34,10 +34,10 @@ impl FieldData {
     }
 }
 
-/// The name bundle for one rope carrier (`Bin` or `Lst`): the base struct the
+/// The name bundle for one internal rope carrier (`$bin` or `$lst`): the base struct the
 /// emitter casts carrier refs to, its `leaf`/`node`/`sub` subtypes, the flat
 /// payload array, and every field name — one handle to thread through the op
-/// emitters so `Bin` and `Lst` share their lowering code.
+/// emitters so packed `Bits`/`Bytes` and `Lst` share their lowering code.
 #[derive(Debug, Clone)]
 pub(super) struct RopeData {
     pub base: TypeName,
@@ -249,16 +249,20 @@ pub(super) struct Table<'a> {
     // emitter then adds exactly the recorded set after the program's own
     // functions (see `emit_rope_funcs`).
     bin_force: OnceCell<FuncName>,
+    bits_force: OnceCell<FuncName>,
     lst_force: OnceCell<FuncName>,
     lst_bin_force: OnceCell<FuncName>,
     bin_wrap: OnceCell<FuncName>,
     lst_wrap: OnceCell<FuncName>,
     lst_bin_wrap: OnceCell<FuncName>,
     bin_slice: OnceCell<FuncName>,
+    bits_slice: OnceCell<FuncName>,
     lst_slice: OnceCell<FuncName>,
     bin_read: OnceCell<FuncName>,
+    bits_read: OnceCell<FuncName>,
     lst_read: OnceCell<FuncName>,
     bin_eql: OnceCell<FuncName>,
+    bits_eql: OnceCell<FuncName>,
     lst_map: OnceCell<FuncName>,
     // The foreign functions the emitted code calls, keyed by the minted
     // internal name (see `host_func`). Same lazy used-tracking as the
@@ -323,16 +327,20 @@ impl<'a> Table<'a> {
             cell_type: TypeName::from("cell"),
             io_exit: OnceCell::new(),
             bin_force: OnceCell::new(),
+            bits_force: OnceCell::new(),
             lst_force: OnceCell::new(),
             lst_bin_force: OnceCell::new(),
             bin_wrap: OnceCell::new(),
             lst_wrap: OnceCell::new(),
             lst_bin_wrap: OnceCell::new(),
             bin_slice: OnceCell::new(),
+            bits_slice: OnceCell::new(),
             lst_slice: OnceCell::new(),
             bin_read: OnceCell::new(),
+            bits_read: OnceCell::new(),
             lst_read: OnceCell::new(),
             bin_eql: OnceCell::new(),
+            bits_eql: OnceCell::new(),
             lst_map: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
             tpl_types: {
@@ -439,7 +447,7 @@ impl<'a> Table<'a> {
         self.elems_type.clone()
     }
 
-    /// The `Bin` rope's name bundle.
+    /// The shared packed `Bits`/`Bytes` rope's name bundle.
     pub(super) fn bin_rope(&self) -> RopeData {
         RopeData {
             base: self.bin_type.clone(),
@@ -517,7 +525,7 @@ impl<'a> Table<'a> {
         self.io_exit.get().is_some()
     }
 
-    /// `$bin/force (ref $bin) -> (ref $bytes)`: flatten a `Bin` rope to its
+    /// `$bin/force (ref $bin) -> (ref $bytes)`: flatten a `Bytes` rope to its
     /// payload, memoizing in the entry node. First use marks it for emission.
     pub(super) fn bin_force_func(&self) -> FuncName {
         self.bin_force
@@ -527,6 +535,19 @@ impl<'a> Table<'a> {
 
     pub(super) fn bin_force_used(&self) -> bool {
         self.bin_force.get().is_some()
+    }
+
+    /// `$bits/force (ref $bin) -> (ref $bytes)`: flatten a bit-grain rope to
+    /// its packed payload, memoizing in the entry node. First use marks it for
+    /// emission.
+    pub(super) fn bits_force_func(&self) -> FuncName {
+        self.bits_force
+            .get_or_init(|| FuncName::from("bits/force"))
+            .clone()
+    }
+
+    pub(super) fn bits_force_used(&self) -> bool {
+        self.bits_force.get().is_some()
     }
 
     /// `$lst/force (ref $lst) -> (ref $elems)`: the `Lst` mirror of
@@ -592,7 +613,7 @@ impl<'a> Table<'a> {
         self.lst_bin_wrap.get().is_some()
     }
 
-    /// `$bin/slice (ref $bin, i32, i32) -> (ref $bin)`: the O(1) window
+    /// `$bin/slice (ref $bin, i32, i32) -> (ref $bin)`: the `Bytes` O(1) window
     /// constructor — bounds-check, answer the empty leaf or the whole rope on
     /// the trivial windows, collapse a sub-of-sub, and force an uncached node
     /// base so every `sub` it builds reads through in O(1).
@@ -604,6 +625,16 @@ impl<'a> Table<'a> {
 
     pub(super) fn bin_slice_used(&self) -> bool {
         self.bin_slice.get().is_some()
+    }
+
+    pub(super) fn bits_slice_func(&self) -> FuncName {
+        self.bits_slice
+            .get_or_init(|| FuncName::from("bits/slice"))
+            .clone()
+    }
+
+    pub(super) fn bits_slice_used(&self) -> bool {
+        self.bits_slice.get().is_some()
     }
 
     /// `$lst/slice (ref $lst, i32, i32) -> (ref $lst)`: the `Lst` mirror of
@@ -618,7 +649,7 @@ impl<'a> Table<'a> {
         self.lst_slice.get().is_some()
     }
 
-    /// `$bin/read (ref $bin, i32) -> i32`: one element read — straight off a
+    /// `$bin/read (ref $bin, i32) -> i32`: one byte read — straight off a
     /// leaf payload, through a `sub`'s window without forcing, and via
     /// `$bin/force` (memoized) on a node.
     pub(super) fn bin_read_func(&self) -> FuncName {
@@ -629,6 +660,16 @@ impl<'a> Table<'a> {
 
     pub(super) fn bin_read_used(&self) -> bool {
         self.bin_read.get().is_some()
+    }
+
+    pub(super) fn bits_read_func(&self) -> FuncName {
+        self.bits_read
+            .get_or_init(|| FuncName::from("bits/read"))
+            .clone()
+    }
+
+    pub(super) fn bits_read_used(&self) -> bool {
+        self.bits_read.get().is_some()
     }
 
     /// `$lst/read (ref $lst, i32) -> anyref`: the `Lst` mirror of
@@ -654,6 +695,16 @@ impl<'a> Table<'a> {
 
     pub(super) fn bin_eql_used(&self) -> bool {
         self.bin_eql.get().is_some()
+    }
+
+    pub(super) fn bits_eql_func(&self) -> FuncName {
+        self.bits_eql
+            .get_or_init(|| FuncName::from("bits/eql"))
+            .clone()
+    }
+
+    pub(super) fn bits_eql_used(&self) -> bool {
+        self.bits_eql.get().is_some()
     }
 
     /// `$lst/map (ref $lst, ref $envr/1) -> (ref $lst)`: apply a unary

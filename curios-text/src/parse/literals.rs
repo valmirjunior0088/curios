@@ -231,7 +231,7 @@ pub(super) fn parse_bin_spread_operand<'a>() -> Parser<'a, Term> {
     )
 }
 
-// One segment of a `Bin` literal: a literal byte, or a `\..` spread. Adjacent
+// One segment of a `Bits`/`Bytes` literal: a literal atom, or a `\..` spread. Adjacent
 // bytes are coalesced into `BinSegment::Bytes` runs by the literal parser.
 pub(super) enum RawBinSegment {
     Byte(u8),
@@ -244,6 +244,17 @@ pub(super) fn parse_bin_segment<'a>() -> Parser<'a, RawBinSegment> {
         // Committed after `\..`: an operand failure is fatal (no inner
         // `catch`), so the error points at the segment rather than at
         // whatever the surrounding grammar makes of the leftovers.
+        .or(catch(take_exact("\\..")).and_keep(
+            parse_bin_spread_operand()
+                .map_err("Expected a glued name or parenthesized term after '\\..'")
+                .map(RawBinSegment::Spread),
+        ))
+}
+
+pub(super) fn parse_bit_segment<'a>() -> Parser<'a, RawBinSegment> {
+    catch(take_exact("\\0"))
+        .map(|()| RawBinSegment::Byte(0))
+        .or(catch(take_exact("\\1")).map(|()| RawBinSegment::Byte(1)))
         .or(catch(take_exact("\\..")).and_keep(
             parse_bin_spread_operand()
                 .map_err("Expected a glued name or parenthesized term after '\\..'")
@@ -267,20 +278,31 @@ pub(super) fn coalesce_bin_segments(raw: Vec<RawBinSegment>) -> Vec<BinSegment> 
     segments
 }
 
-// A `Bin` literal: `\\` (empty), or one-or-more glued segments — `\HH` bytes
-// and `\..operand` spreads. One whitespace-free lexical unit: after a spread
+// A `Bits`/`Bytes` literal: a prefixed empty form, or one-or-more glued atom
+// and `\..operand` segments. One whitespace-free lexical unit: after a spread
 // operand the literal continues only when the very next character is `\`.
 pub(super) fn parse_bin_literal<'a>() -> Parser<'a, Term> {
-    catch(take_exact("\\\\"))
-        .map(|()| Vec::new())
-        .or(catch(many1(parse_bin_segment)).map(coalesce_bin_segments))
+    let empty_bits = catch(take_exact("b\\").and_drop(parse_whitespace()))
+        .map(|()| (curios_base::Grain::B, Vec::new()));
+    let bits = catch(take_exact("b").and_keep(many1(parse_bit_segment).map(coalesce_bin_segments)))
         .and_drop(parse_whitespace())
-        .map(|segments| Subterm::Prim(Prim::Bin(segments)))
+        .map(|segments| (curios_base::Grain::B, segments));
+    let empty_bytes = catch(take_exact("x\\").and_drop(parse_whitespace()))
+        .map(|()| (curios_base::Grain::X, Vec::new()));
+    let bytes =
+        catch(take_exact("x").and_keep(many1(parse_bin_segment).map(coalesce_bin_segments)))
+            .and_drop(parse_whitespace())
+            .map(|segments| (curios_base::Grain::X, segments));
+
+    bits.or(empty_bits)
+        .or(bytes)
+        .or(empty_bytes)
+        .map(|(grain, segments)| Subterm::Prim(Prim::Bin(grain, segments)))
         .map(Into::into)
 }
 
 // One entry of an `Lst` literal: a `..` spread contributing a whole list, or
-// a plain element. Unlike the `Bin` literal, brackets and commas delimit, so
+// a plain element. Unlike a `Bits`/`Bytes` literal, brackets and commas delimit, so
 // spreads take full terms and `[.. xs]` may be spaced (as in struct spread).
 pub(super) fn parse_lst_entry<'a>() -> Parser<'a, LstEntry> {
     catch(parse_literal(".."))
@@ -290,7 +312,7 @@ pub(super) fn parse_lst_entry<'a>() -> Parser<'a, LstEntry> {
 }
 
 // An `Lst` literal `[e0, ..rest, e1, …]` (empty `[]`) — the native
-// contiguous-sequence sibling of the `Bin` literal `\\`. Builds a `Prim::Lst`
+// contiguous-sequence sibling of the packed binary literals. Builds a `Prim::Lst`
 // directly (the element type is an implicit the literal cannot name; core
 // elaboration infers it); spreads splice in place, any position and count.
 pub(super) fn parse_lst_literal<'a>() -> Parser<'a, Term> {

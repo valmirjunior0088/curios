@@ -1,4 +1,7 @@
-use super::*;
+use {
+    super::*,
+    curios_base::{Grain, PackedBin},
+};
 
 #[test]
 fn lowers_and_runs_lst_len() {
@@ -7,7 +10,7 @@ fn lowers_and_runs_lst_len() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -58,7 +61,7 @@ fn lowers_and_runs_lst_get() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -114,7 +117,7 @@ fn lowers_and_runs_lst_slice() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -188,7 +191,7 @@ fn lowers_and_runs_lst_concat() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -256,7 +259,7 @@ fn lowers_and_runs_lst_append() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(

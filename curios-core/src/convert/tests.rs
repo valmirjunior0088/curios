@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_abi::RootId,
-    curios_base::{Int, Qualifier},
+    curios_base::{Grain, Int, PackedBin, Qualifier},
     std::{collections::BTreeMap, time::Duration},
 };
 
@@ -454,8 +454,8 @@ fn convert_prim_lst_rejects_different_lengths() {
 fn convert_prim_bin_type_is_equal_to_itself() {
     let mut context = context();
 
-    let this = Subterm::Prim(Prim::BinType).into();
-    let that = Subterm::Prim(Prim::BinType).into();
+    let this = Subterm::Prim(Prim::BinType(curios_base::Grain::X)).into();
+    let that = Subterm::Prim(Prim::BinType(curios_base::Grain::X)).into();
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -467,8 +467,16 @@ fn convert_prim_bin_literal_compares_bytes() {
     assert_eq!(
         conv(
             &mut context,
-            &Subterm::Prim(Prim::Bin(vec![1, 2])).into(),
-            &Subterm::Prim(Prim::Bin(vec![1, 2])).into(),
+            &Subterm::Prim(Prim::Bin(
+                curios_base::Grain::X,
+                PackedBin::from_bytes(vec![1, 2])
+            ))
+            .into(),
+            &Subterm::Prim(Prim::Bin(
+                curios_base::Grain::X,
+                PackedBin::from_bytes(vec![1, 2])
+            ))
+            .into(),
         ),
         Ok(true)
     );
@@ -476,8 +484,16 @@ fn convert_prim_bin_literal_compares_bytes() {
     assert_eq!(
         conv(
             &mut context,
-            &Subterm::Prim(Prim::Bin(vec![1, 2])).into(),
-            &Subterm::Prim(Prim::Bin(vec![1, 3])).into(),
+            &Subterm::Prim(Prim::Bin(
+                curios_base::Grain::X,
+                PackedBin::from_bytes(vec![1, 2])
+            ))
+            .into(),
+            &Subterm::Prim(Prim::Bin(
+                curios_base::Grain::X,
+                PackedBin::from_bytes(vec![1, 3])
+            ))
+            .into(),
         ),
         Ok(false)
     );
@@ -487,8 +503,14 @@ fn convert_prim_bin_literal_compares_bytes() {
 fn convert_prim_bin_len_recurses_into_operand() {
     let mut context = context();
 
-    let this = func(["x"], Subterm::Prim(Prim::bin_len(Term::free_var("x"))));
-    let that = func(["y"], Subterm::Prim(Prim::bin_len(Term::free_var("y"))));
+    let this = func(
+        ["x"],
+        Subterm::Prim(Prim::bin_len(Grain::X, Term::free_var("x"))),
+    );
+    let that = func(
+        ["y"],
+        Subterm::Prim(Prim::bin_len(Grain::X, Term::free_var("y"))),
+    );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -501,7 +523,11 @@ fn convert_prim_bin_get_recurses_into_operands() {
         ["x"],
         func(
             ["a"],
-            Subterm::Prim(Prim::bin_get(Term::free_var("x"), Term::free_var("a"))),
+            Subterm::Prim(Prim::bin_get(
+                Grain::X,
+                Term::free_var("x"),
+                Term::free_var("a"),
+            )),
         ),
     );
 
@@ -509,7 +535,11 @@ fn convert_prim_bin_get_recurses_into_operands() {
         ["y"],
         func(
             ["b"],
-            Subterm::Prim(Prim::bin_get(Term::free_var("y"), Term::free_var("b"))),
+            Subterm::Prim(Prim::bin_get(
+                Grain::X,
+                Term::free_var("y"),
+                Term::free_var("b"),
+            )),
         ),
     );
 
@@ -524,7 +554,10 @@ fn convert_prim_bin_concat_recurses_into_operands() {
         ["x"],
         func(
             ["a"],
-            Subterm::Prim(Prim::bin_concat([Term::free_var("x"), Term::free_var("a")])),
+            Subterm::Prim(Prim::bin_concat(
+                Grain::X,
+                [Term::free_var("x"), Term::free_var("a")],
+            )),
         ),
     );
 
@@ -532,7 +565,10 @@ fn convert_prim_bin_concat_recurses_into_operands() {
         ["y"],
         func(
             ["b"],
-            Subterm::Prim(Prim::bin_concat([Term::free_var("y"), Term::free_var("b")])),
+            Subterm::Prim(Prim::bin_concat(
+                Grain::X,
+                [Term::free_var("y"), Term::free_var("b")],
+            )),
         ),
     );
 
@@ -550,6 +586,7 @@ fn convert_prim_bin_slice_recurses_into_operands() {
             func(
                 ["p"],
                 Subterm::Prim(Prim::bin_slice(
+                    Grain::X,
                     Term::free_var("x"),
                     Term::free_var("a"),
                     Term::free_var("p"),
@@ -565,6 +602,7 @@ fn convert_prim_bin_slice_recurses_into_operands() {
             func(
                 ["q"],
                 Subterm::Prim(Prim::bin_slice(
+                    Grain::X,
                     Term::free_var("y"),
                     Term::free_var("b"),
                     Term::free_var("q"),

@@ -5,6 +5,7 @@ use {
         PrimHead, Scope, Subterm, Telescope, Term, Three, Two, case_target_indices, check_motive,
         check_prim_head, convert_with, invert_indices, is_prop, reduce_with, refine_head,
     },
+    curios_base::{Grain, PackedBin},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -242,16 +243,17 @@ fn elaborate_lst_match(
 
 fn elaborate_bin_match(
     context: &mut Context,
+    grain: Grain,
     head: &Term,
     motive: &Scope<Many>,
-    empty_case: &Term,
-    cons_case: &Scope<Three>,
+    cases: (&Term, &Scope<Three>),
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
+    let (empty_case, cons_case) = cases;
     // `Bin` is a parameterless carrier (like `Nat`/`Bln`), so the scrutinee's type
     // is just `Bin` — no element type to read off the head as `Lst` needs.
-    let (head_elaborated, head_type) = elaborate_prim_head(context, head, PrimHead::Bin)?;
+    let (head_elaborated, head_type) = elaborate_prim_head(context, head, PrimHead::Bin(grain))?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
     let motive = resolve_prim_motive(context, &head_type, &head_elaborated, motive, &mode)?;
@@ -262,7 +264,7 @@ fn elaborate_bin_match(
     // already do): a context hypothesis whose type mentions the scrutinee then
     // reduces at the arm's value, so a dependent match needs no hand-written
     // convoy to carry it across the eliminator.
-    let empty_value: Term = Subterm::Prim(Prim::Bin(vec![])).into();
+    let empty_value: Term = Subterm::Prim(Prim::Bin(grain, PackedBin::empty())).into();
     let empty_elaborated = context.with_frame(|context| {
         refine_head(context, &head_elaborated, &empty_value)?;
         check(context, empty_case, motive.open(&[&empty_value]))
@@ -273,24 +275,29 @@ fn elaborate_bin_match(
     let ih_label = context.fresh(cons_case.third_label());
 
     let cons_body = context.with_frame(|context| {
-        // A `Bin`'s generator is a single byte, typed as `Nat`.
-        context.assume(&head_label, &Subterm::Prim(Prim::NatType).into());
+        let atom_type: Term = Subterm::Prim(match grain {
+            Grain::B => Prim::BlnType,
+            Grain::X => Prim::ByteType,
+        })
+        .into();
+        context.assume(&head_label, &atom_type);
         context.assume(&tail_label, &head_type);
         context.assume(&ih_label, &motive.open(&[&Term::free_var(&tail_label)]));
 
         // The cons value `head :: tail`, encoded as the monoid operation on the
-        // singleton `[head]` and the tail. A `Bin` literal holds only concrete
+        // singleton `[head]` and the tail. A `Bits`/`Bytes` literal holds only concrete
         // bytes, so the singleton of the symbolic byte `head` is `append(\\, head)`
-        // (a byte appended to the empty bytestring), not a `Bin` literal.
+        // (an atom appended to the empty packed sequence), not a literal run.
         let singleton: Term = Subterm::Prim(Prim::BinAppend(
-            Subterm::Prim(Prim::Bin(vec![])).into(),
+            grain,
+            Subterm::Prim(Prim::Bin(grain, PackedBin::empty())).into(),
             Term::free_var(&head_label),
         ))
         .into();
-        let cons_value: Term = Subterm::Prim(Prim::BinConcat(vec![
-            singleton,
-            Term::free_var(&tail_label),
-        ]))
+        let cons_value: Term = Subterm::Prim(Prim::BinConcat(
+            grain,
+            vec![singleton, Term::free_var(&tail_label)],
+        ))
         .into();
         refine_head(context, &head_elaborated, &cons_value)?;
 
@@ -317,6 +324,7 @@ fn elaborate_bin_match(
         motive,
         cases: Cases::FreeMonoid {
             carrier: Carrier::Bin {
+                grain,
                 empty_case: empty_elaborated,
                 cons_case: cons_elaborated,
             },
@@ -436,10 +444,19 @@ pub(crate) fn elaborate_match(
         Cases::FreeMonoid {
             carrier:
                 Carrier::Bin {
+                    grain,
                     empty_case,
                     cons_case,
                 },
-        } => elaborate_bin_match(context, head, motive, empty_case, cons_case, term, mode),
+        } => elaborate_bin_match(
+            context,
+            *grain,
+            head,
+            motive,
+            (empty_case, cons_case),
+            term,
+            mode,
+        ),
     }
 }
 

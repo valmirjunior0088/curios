@@ -44,7 +44,7 @@ fn foreign_declaration_produces_a_wasm_import() {
     let module = compile(
         r#"
             foreign frobnicate : (Nat, Bin) -> Nat;
-            frobnicate(5, \00\01)
+            frobnicate(5, x\00\01)
         "#,
         None,
     )
@@ -67,7 +67,7 @@ fn sys_and_foreign_calls_import_under_separate_namespaces() {
     let module = compile(
         r#"
             foreign frobnicate : (Nat) -> Nat;
-            let _ = /std/Io/write(/std/Io/stdout, \00);
+            let _ = /std/Io/write(/std/Io/stdout, x\00);
             frobnicate(5)
         "#,
         None,
@@ -261,7 +261,7 @@ fn projection_through_a_stuck_inductive_payload_lowers() {
     // index) instead of demanding a literal `TupleType`. Guards
     // `projectable_at`; without it this panics `erase: projected a non-tuple`.
     let source = r#"
-        use /std/{Fmt, Bin};
+        use /std/{Fmt, Bytes};
         Fmt/print("%s is %d")
     "#;
 
@@ -308,8 +308,8 @@ fn inductive_match_arm_arity_is_checked_statically() {
     // binder became an out-of-range payload projection).
     let source = r#"
         use /std/{Result};
-        use /std/{Nat, Bin};
-        let f(r : Result(Nat, Bin)) -> Nat =
+        use /std/{Nat, Bytes};
+        let f(r : Result(Nat, Bytes)) -> Nat =
             match r : Nat
             | success(value, extra) => value
             | failure(_) => 0
@@ -371,9 +371,9 @@ fn interleaved_implicit_with_partial_override() {
     // `T` is overridden positionally with `@`, `U` (interleaved after an
     // explicit binder) is inferred from `y`.
     let source = r#"
-        use /std/{Nat, Bin};
+        use /std/{Nat, Bytes};
         let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-        std/Bin/len(second(@Nat, 1, /std/Str/to_bin("abc")))
+        std/Bytes/len(second(@Nat, 1, /std/Str/to_bytes("abc")))
     "#;
 
     compile(source, None).unwrap();
@@ -385,14 +385,14 @@ fn implicit_argument_queues_are_order_insensitive() {
     // first unfilled implicit binder no matter where it sits among the
     // plain arguments.
     let at_first = r#"
-        use /std/{Nat, Bin};
+        use /std/{Nat, Bytes};
         let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-        std/Bin/len(second(@Nat, 1, /std/Str/to_bin("abc")))
+        std/Bytes/len(second(@Nat, 1, /std/Str/to_bytes("abc")))
     "#;
     let at_last = r#"
-        use /std/{Nat, Bin};
+        use /std/{Nat, Bytes};
         let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-        std/Bin/len(second(1, /std/Str/to_bin("abc"), @Nat))
+        std/Bytes/len(second(1, /std/Str/to_bytes("abc"), @Nat))
     "#;
 
     compile(at_first, None).unwrap();
@@ -558,8 +558,8 @@ fn new_style_inductive_match_lowers_end_to_end() {
     // runtime shape.
     let source = r#"
         use /std/{Result};
-        use /std/{Nat, Bin};
-        let f(r : Result(Nat, Bin)) -> Nat =
+        use /std/{Nat, Bytes};
+        let f(r : Result(Nat, Bytes)) -> Nat =
             match r : Nat
             | success(value) => value
             | failure(_) => 0
@@ -604,15 +604,15 @@ fn indexed_inductive_without_params_and_unnamed_index_lowers() {
     // pointwise: `Tag(7)` accepts `Tag/b` and the match dispatches on the
     // tag as ever.
     let source = r#"
-        use /std/{Nat, Bin};
+        use /std/{Nat, Bytes};
         induct Tag : (Nat) -> Type
         | a() : (0)
         | b() : (7)
         end
         let t : Tag(7) = Tag/b();
-        match t : Bin
-        | a() => /std/Str/to_bin("a")
-        | b() => /std/Str/to_bin("b")
+        match t : Bytes
+        | a() => /std/Str/to_bytes("a")
+        | b() => /std/Str/to_bytes("b")
         end
     "#;
 
@@ -653,7 +653,7 @@ fn motive_pattern_slots_are_validated() {
     // slot must bind (a fresh name or `_`); a verbatim parameter must be
     // the scrutinee's actual parameter.
     let inductive_decl = r#"
-        use /std/{Nat, Bin};
+        use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -695,7 +695,7 @@ fn motive_pattern_slots_are_validated() {
     let param = format!(
         r#"{inductive_decl}
         let f(@n : Nat, v : Vec(Nat, n)) -> Nat =
-            match v : (v : Vec(Bin, k)) => Nat
+            match v : (v : Vec(Bytes, k)) => Nat
             | nil() => 0
             | cons(m, x, xs) => 1
             end;
@@ -713,14 +713,14 @@ fn motive_pattern_slots_are_validated() {
 fn index_refinement_learns_inside_the_arm() {
     // Rung B: a scrutinee index that is a stable key is refined to the
     // case's target inside the arm. Three faces of it:
-    // - `subst` casts `Vec(Bin, n)` to `Vec(Bin, m)` through an
+    // - `subst` casts `Vec(Bytes, n)` to `Vec(Bytes, m)` through an
     //   `Eq(Nat, n, m)` under a *constant* motive — the equality is
     //   learned (`n := z`, `m := z`), not eliminated;
     // - `sym` is J-style elimination from the pattern motive alone;
     // - `f`'s nil arm uses a hypothesis demanding `Vec(T, 0)` — legal
     //   because the arm refines `n := 0`.
     let source = r#"
-        use /std/{Nat, Bin};
+        use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -728,8 +728,8 @@ fn index_refinement_learns_inside_the_arm() {
         induct Eq(A : Type) : (x : A, y : A) -> Type
         | refl(z : A) : (z, z)
         end
-        let subst(@n : Nat, @m : Nat, p : Eq(Nat, n, m), v : Vec(Bin, n)) -> Vec(Bin, m) =
-            match p : Vec(Bin, m)
+        let subst(@n : Nat, @m : Nat, p : Eq(Nat, n, m), v : Vec(Bytes, n)) -> Vec(Bytes, m) =
+            match p : Vec(Bytes, m)
             | refl(z) => v
             end;
         let sym(@A : Type, @x : A, @y : A, p : Eq(A, x, y)) -> Eq(A, y, x) =
@@ -742,11 +742,11 @@ fn index_refinement_learns_inside_the_arm() {
             | nil() => zonly(w)
             | cons(j, x, xs) => 1
             end;
-        let a : Vec(Bin, 0) = Vec/nil();
+        let a : Vec(Bytes, 0) = Vec/nil();
         let p : Eq(Nat, 0, 0) = Eq/refl(0);
-        let b : Vec(Bin, 0) = subst(p, a);
+        let b : Vec(Bytes, 0) = subst(p, a);
         let q : Eq(Nat, 3, 3) = sym(Eq/refl(3));
-        f(Vec/nil(@Bin), Vec/nil())
+        f(Vec/nil(@Bytes), Vec/nil())
     "#;
 
     assert!(compile(source, None).is_ok());
@@ -778,7 +778,7 @@ fn inversion_prunes_impossible_arms_and_solves_binders() {
     // unifier decomposes `Nat/succ(n) ~ Nat/succ(j)` and pins `j := n`, which is
     // what types `xs : Vec(T, j)` at the declared `Vec(T, n)`.
     let source = r#"
-        use /std/{Nat, Bin};
+        use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -791,8 +791,8 @@ fn inversion_prunes_impossible_arms_and_solves_binders() {
             match v : Vec(T, n)
             | cons(j, x, xs) => xs
             end;
-        let v : Vec(Bin, 2) = Vec/cons(/std/Str/to_bin("a"), Vec/cons(/std/Str/to_bin("b"), Vec/nil()));
-        let w : Vec(Bin, 1) = rest(v);
+        let v : Vec(Bytes, 2) = Vec/cons(/std/Str/to_bytes("a"), Vec/cons(/std/Str/to_bytes("b"), Vec/nil()));
+        let w : Vec(Bytes, 1) = rest(v);
         first(w)
     "#;
 
@@ -805,7 +805,7 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
     // a fully-constant vector would be folded whole by ersd's `evaluate`
     // pass, and the pruned arm would never reach the lowering this pins.
     let source = r#"
-        use /std/{Nat, Bin};
+        use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -814,7 +814,7 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
             match v : T
             | cons(j, x, xs) => x
             end;
-        (b : Bin) => first(Vec/cons(b, Vec/nil()))
+        (b : Bytes) => first(Vec/cons(b, Vec/nil()))
     "#;
 
     let (ersd, cont) = compile_printed_stages(source).unwrap();
@@ -857,14 +857,14 @@ fn omission_requires_a_definite_clash() {
     // plainly-uninhabited `Foo(3, 4)`. The flip side: `diff`'s target
     // `(0, 1)` clashes against literals `(5, 5)` and prunes.
     let nonlinear = r#"
-        use /std/{Nat, Bin};
+        use /std/{Nat, Bytes};
         induct Foo : (x : Nat, y : Nat) -> Type
         | same(z : Nat) : (z, z)
         | diff() : (0, 1)
         end
-        let f(q : Foo(3, 4)) -> Bin =
-            match q : Bin
-            | diff() => /std/Str/to_bin("d")
+        let f(q : Foo(3, 4)) -> Bytes =
+            match q : Bytes
+            | diff() => /std/Str/to_bytes("d")
             end;
         0
     "#;
@@ -875,14 +875,14 @@ fn omission_requires_a_definite_clash() {
     );
 
     let prunes = r#"
-        use /std/{Nat, Bin};
+        use /std/{Nat, Bytes};
         induct Foo : (x : Nat, y : Nat) -> Type
         | same(z : Nat) : (z, z)
         | diff() : (0, 1)
         end
-        let g(q : Foo(5, 5)) -> Bin =
-            match q : Bin
-            | same(z) => /std/Str/to_bin("s")
+        let g(q : Foo(5, 5)) -> Bytes =
+            match q : Bytes
+            | same(z) => /std/Str/to_bytes("s")
             end;
         g(Foo/same(5))
     "#;
@@ -1171,7 +1171,7 @@ fn typecheck_accepts_a_well_typed_program() {
     // The fast path stops after `elaborate → zonk`; a well-typed program passes
     // without running erase/cont/optimize/wasm.
     assert!(
-        typecheck("/std/Io/write(/std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(0)))").is_ok()
+        typecheck("/std/Io/write(/std/Io/stdout, /std/Str/to_bytes(/std/Nat/to_str(0)))").is_ok()
     );
 }
 
@@ -1198,10 +1198,10 @@ fn proj_by_label_resolves_to_its_position() {
     // `.label` is elaboration-time sugar for the positional projection,
     // so both spellings typecheck identically.
     let source = r#"
-        use /std/{Nat, Bin, Io};
-        let r : { status : Nat, payload : Bin } = (0, /std/Str/to_bin("ok"));
-        let by_label : Bin = r.payload;
-        let by_index : Bin = r.1;
+        use /std/{Nat, Bytes, Io};
+        let r : { status : Nat, payload : Bytes } = (0, /std/Str/to_bytes("ok"));
+        let by_label : Bytes = r.payload;
+        let by_index : Bytes = r.1;
         Io/write(Io/stdout, by_label)
     "#;
 
@@ -1211,8 +1211,8 @@ fn proj_by_label_resolves_to_its_position() {
 #[test]
 fn proj_unknown_label_names_the_available_fields() {
     let source = r#"
-        use /std/{Nat, Bin};
-        let r : { status : Nat, payload : Bin } = (0, /std/Str/to_bin("ok"));
+        use /std/{Nat, Bytes};
+        let r : { status : Nat, payload : Bytes } = (0, /std/Str/to_bytes("ok"));
         r.body
     "#;
 
@@ -1265,16 +1265,16 @@ fn named_construction_checks_against_the_labels() {
     // Written names must match the expected type's labels positionally;
     // bare fields are always accepted.
     let source = r#"
-        use /std/{Nat, Bin};
-        let r : { status : Nat, payload : Bin } = (status = 0, payload = /std/Str/to_bin("ok"));
-        let mixed : { status : Nat, payload : Bin } = (status = 0, /std/Str/to_bin("ok"));
+        use /std/{Nat, Bytes};
+        let r : { status : Nat, payload : Bytes } = (status = 0, payload = /std/Str/to_bytes("ok"));
+        let mixed : { status : Nat, payload : Bytes } = (status = 0, /std/Str/to_bytes("ok"));
         r.status
     "#;
     assert!(typecheck(source).is_ok());
 
     let wrong_name = r#"
-        use /std/{Nat, Bin};
-        let r : { status : Nat, payload : Bin } = (code = 0, payload = /std/Str/to_bin("ok"));
+        use /std/{Nat, Bytes};
+        let r : { status : Nat, payload : Bytes } = (code = 0, payload = /std/Str/to_bytes("ok"));
         r.status
     "#;
     let error = typecheck(wrong_name).unwrap_err();
@@ -1284,8 +1284,8 @@ fn named_construction_checks_against_the_labels() {
     );
 
     let unlabeled_type = r#"
-        use /std/{Nat, Bin};
-        let r : { Nat, Bin } = (status = 0, /std/Str/to_bin("ok"));
+        use /std/{Nat, Bytes};
+        let r : { Nat, Bytes } = (status = 0, /std/Str/to_bytes("ok"));
         r.0
     "#;
     assert!(typecheck(unlabeled_type).is_err());
@@ -1298,7 +1298,7 @@ fn dependent_record_projects_by_label() {
     let source = r#"
         let p : { T : Type, x : T } = (T = /std/Nat, x = 3);
         let v : p.T = p.x;
-        /std/Io/write(/std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(v)))
+        /std/Io/write(/std/Io/stdout, /std/Str/to_bytes(/std/Nat/to_str(v)))
     "#;
 
     assert!(typecheck(source).is_ok());
@@ -1362,11 +1362,11 @@ fn inductive_payload_relying_on_implicit_insertion_is_rebuilt() {
 fn dead_user_definition_is_still_typechecked() {
     // A user-authored top-level binding the body never references is still
     // type-checked (every item is, before any reachability is considered), so
-    // its error is reported. (`write` returns its `Nat` status, `Bin` mismatches.)
+    // its error is reported. (`write` returns its `Nat` status, `Bytes` mismatches.)
     let error = typecheck(
         r#"
-        let dead : /std/Bin = /std/Io/write(/std/Io/stdout, /std/Str/to_bin("x"));
-        /std/Io/write(/std/Io/stdout, /std/Str/to_bin("ok"))
+        let dead : /std/Bytes = /std/Io/write(/std/Io/stdout, /std/Str/to_bytes("x"));
+        /std/Io/write(/std/Io/stdout, /std/Str/to_bytes("ok"))
         "#,
     )
     .unwrap_err();

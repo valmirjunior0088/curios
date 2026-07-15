@@ -3,7 +3,10 @@ use {
         Argument, Block, BlockName, CallTarget, CellTarget, Clsr, ClsrName, Code, Data, Func,
         FuncName, HostTarget, JumpTarget, Module, Region, Tail, Value, ValueName,
     },
-    curios_base::printer::{Printer, flat, indent, pure, sep_flat},
+    curios_base::{
+        Grain,
+        printer::{Printer, flat, indent, pure, sep_flat},
+    },
 };
 
 fn print_value_name<'a>(name: &'a ValueName) -> Printer<'a> {
@@ -45,12 +48,21 @@ fn print_data<'a>(value: &'a Data) -> Printer<'a> {
         Data::Nat(value) => pure(value.to_string()),
         Data::Int(value) => pure(value.to_string()),
         Data::Flt(value) => pure(value.to_string()),
-        Data::Bin(bytes) => pure(
-            bytes
+        Data::Bin(Grain::B, value) => pure(format!(
+            "b\\{}",
+            (0..value.bit_length())
+                .map(|index| if value.bit(index).unwrap() { '1' } else { '0' })
+                .collect::<String>()
+        )),
+        Data::Bin(Grain::X, value) => pure(format!(
+            "x\\{}",
+            value
+                .to_bytes()
+                .unwrap()
                 .iter()
-                .map(|b| format!("\\{:02x}", b))
-                .collect::<String>(),
-        ),
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        )),
         Data::Lst(elems) => flat([pure("["), print_value_names(elems), pure("]")]),
         Data::Tpl(elems) => flat([pure("("), print_value_names(elems), pure(")")]),
         Data::Clsr(target, fields) => flat([
@@ -62,7 +74,11 @@ fn print_data<'a>(value: &'a Data) -> Printer<'a> {
     }
 }
 
-fn print_binary<'a>(name: &'static str, left: &'a ValueName, right: &'a ValueName) -> Printer<'a> {
+fn print_binary<'a>(
+    name: impl Into<String> + 'a,
+    left: &'a ValueName,
+    right: &'a ValueName,
+) -> Printer<'a> {
     flat([
         pure(name),
         pure(" "),
@@ -72,7 +88,7 @@ fn print_binary<'a>(name: &'static str, left: &'a ValueName, right: &'a ValueNam
     ])
 }
 
-fn print_unary<'a>(name: &'static str, operand: &'a ValueName) -> Printer<'a> {
+fn print_unary<'a>(name: impl Into<String> + 'a, operand: &'a ValueName) -> Printer<'a> {
     flat([pure(name), pure(" "), print_value_name(operand)])
 }
 
@@ -147,15 +163,50 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
         Code::NatToFlt(o) => print_unary("Nat.to_flt", o),
         Code::IntToNat(o) => print_unary("Int.to_nat", o),
         Code::IntToFlt(o) => print_unary("Int.to_flt", o),
-        Code::FltToLeBin(o) => print_unary("Flt.to_le_bin", o),
-        Code::FltOfLeBin(o) => print_unary("Flt.of_le_bin", o),
+        Code::FltToLeBytes(o) => print_unary("Flt.to_le_bytes", o),
+        Code::FltOfLeBytes(o) => print_unary("Flt.of_le_bytes", o),
         Code::FltToNat(o) => print_unary("Flt.to_nat", o),
         Code::FltToInt(o) => print_unary("Flt.to_int", o),
-        Code::BinLen(bin) => print_unary("Bin.len", bin),
-        Code::BinEql(l, r) => print_binary("Bin.eql", l, r),
-        Code::BinGet(bin, idx) => print_binary("Bin.get", bin, idx),
-        Code::BinSlice(bin, start, end) => flat([
-            pure("Bin.slice"),
+        Code::BinLen(grain, bin) => print_unary(
+            format!(
+                "{}.len",
+                match grain {
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
+                }
+            ),
+            bin,
+        ),
+        Code::BinEql(grain, l, r) => print_binary(
+            format!(
+                "{}.eql",
+                match grain {
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
+                }
+            ),
+            l,
+            r,
+        ),
+        Code::BinGet(grain, bin, idx) => print_binary(
+            format!(
+                "{}.get",
+                match grain {
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
+                }
+            ),
+            bin,
+            idx,
+        ),
+        Code::BinSlice(grain, bin, start, end) => flat([
+            pure(format!(
+                "{}.slice",
+                match grain {
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
+                }
+            )),
             pure(" "),
             print_value_name(bin),
             pure(", "),
@@ -163,10 +214,28 @@ fn print_code<'a>(op: &'a Code) -> Printer<'a> {
             pure(", "),
             print_value_name(end),
         ]),
-        Code::BinAppend(bin, byte) => print_binary("Bin.append", bin, byte),
-        Code::BinConcat(operands) => {
-            flat([pure("Bin.concat"), pure(" "), print_value_names(operands)])
-        }
+        Code::BinAppend(grain, bin, atom) => print_binary(
+            format!(
+                "{}.append",
+                match grain {
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
+                }
+            ),
+            bin,
+            atom,
+        ),
+        Code::BinConcat(grain, operands) => flat([
+            pure(format!(
+                "{}.concat",
+                match grain {
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
+                }
+            )),
+            pure(" "),
+            print_value_names(operands),
+        ]),
         Code::LstLen(lst) => print_unary("Lst.len", lst),
         Code::LstGet(lst, idx) => print_binary("Lst.get", lst, idx),
         Code::LstSlice(lst, start, end) => flat([

@@ -12,7 +12,7 @@ rec loop(k : Nat, x : Nat) -> Nat =
 
 match Io/input() : {}
 | some(bytes) =>
-    match Str/of_bin(bytes) : {}
+    match Str/of_bytes(bytes) : {}
     | some(s) =>
         match Nat/of_str(Str/trim(s)) : {}
         | some(n) => Io/print(Str/concat(Nat/to_str(loop(n, 1)), "\n"))

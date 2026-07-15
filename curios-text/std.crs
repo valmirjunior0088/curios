@@ -31,14 +31,20 @@ pub use Monad/{let Monad};
 pub mod Nat;
 pub use Nat/{let Nat};
 
+pub mod Byte;
+pub use Byte/{let Byte};
+
 pub mod Int;
 pub use Int/{let Int};
 
 pub mod Flt;
 pub use Flt/{let Flt};
 
-pub mod Bin;
-pub use Bin/{let Bin};
+pub mod Bits;
+pub use Bits/{let Bits};
+
+pub mod Bytes;
+pub use Bytes/{let Bytes};
 
 pub mod Lst;
 pub use Lst/{let Lst};

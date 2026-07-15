@@ -1,4 +1,4 @@
-//! Tests for the browser bridge helpers. A program-side `Bin` is a rope
+//! Tests for the browser bridge helpers. Program-side `Bytes` is a rope
 //! (`$bin/leaf` / `$bin/node` structs); what crosses to a host is always the
 //! forced flat payload, which is what the bridge accessors read and write.
 

@@ -12,7 +12,7 @@ fn bln_logic_and_of_str() {
             | some(b) => b
             | none() => true
             end;
-        Io/write(Io/stdout, Str/to_bin(Str/concat(Bln/to_str(computed), Bln/to_str(parsed))))
+        Io/write(Io/stdout, Str/to_bytes(Str/concat(Bln/to_str(computed), Bln/to_str(parsed))))
         "#,
         system,
     )
@@ -30,7 +30,7 @@ fn bln_xor_executes() {
         use /std/{Bln, Str, Io};
         let a = Bln/xor(true, false);
         let b = Bln/xor(true, true);
-        Io/write(Io/stdout, Str/to_bin(Str/concat(Bln/to_str(a), Bln/to_str(b))))
+        Io/write(Io/stdout, Str/to_bytes(Str/concat(Bln/to_str(a), Bln/to_str(b))))
         "#,
         system,
     )
@@ -48,7 +48,7 @@ fn bln_eql_executes() {
         use /std/{Bln, Str, Io};
         let a = Bln/eql(true, true);
         let b = Bln/eql(true, false);
-        Io/write(Io/stdout, Str/to_bin(Str/concat(Bln/to_str(a), Bln/to_str(b))))
+        Io/write(Io/stdout, Str/to_bytes(Str/concat(Bln/to_str(a), Bln/to_str(b))))
         "#,
         system,
     )
@@ -68,13 +68,13 @@ fn nat_bitwise_ops_execute() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Bin, Nat, Str, Option};
-        let bytes = match Io/read(Io/stdin, 16) : Bin
+        use /std/{Io, Byte, Bytes, Nat, Str, Option};
+        let bytes = match Io/read(Io/stdin, 16) : Bytes
             | chunk(b) => b
-            | eof() => \\
-            | error(_) => \\
+            | eof() => x\
+            | error(_) => x\
             end;
-        let x = Option/unwrap_or(Bin/get(bytes, 0), 0);
+        let x = Byte/to_nat(Option/unwrap_or(Bytes/get(bytes, 0), 0));
         let r = Str/flatten([
             Nat/to_str(Nat/and(x, 15)), ",",
             Nat/to_str(Nat/or(x, 128)), ",",
@@ -82,7 +82,7 @@ fn nat_bitwise_ops_execute() {
             Nat/to_str(Nat/shl(x, 25)), ",",
             Nat/to_str(Nat/shr(x, 1))
         ]);
-        Io/write(Io/stdout, Str/to_bin(r))
+        Io/write(Io/stdout, Str/to_bytes(r))
         "#,
         system,
     )
@@ -102,13 +102,13 @@ fn int_bitwise_ops_execute() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Bin, Nat, Int, Str, Option};
-        let bytes = match Io/read(Io/stdin, 16) : Bin
+        use /std/{Io, Byte, Bytes, Nat, Int, Str, Option};
+        let bytes = match Io/read(Io/stdin, 16) : Bytes
             | chunk(b) => b
-            | eof() => \\
-            | error(_) => \\
+            | eof() => x\
+            | error(_) => x\
             end;
-        let x = Nat/to_int(Option/unwrap_or(Bin/get(bytes, 0), 0));
+        let x = Nat/to_int(Byte/to_nat(Option/unwrap_or(Bytes/get(bytes, 0), 0)));
         let neg = Int/sub(+0, x);
         let r = Str/flatten([
             Int/to_str(Int/and(x, +15)), ",",
@@ -118,7 +118,7 @@ fn int_bitwise_ops_execute() {
             Int/to_str(Int/shr(neg, +1)), ",",
             Int/to_str(Int/not(x))
         ]);
-        Io/write(Io/stdout, Str/to_bin(r))
+        Io/write(Io/stdout, Str/to_bytes(r))
         "#,
         system,
     )
@@ -134,28 +134,28 @@ fn infix_nat_arithmetic_respects_precedence_and_associativity() {
     assert_eq!(
         run(r#"
             use /std/{Io, Str, Nat};
-            Io/write(Io/stdout, Str/to_bin(Nat/to_str(2 + 3 * 4)))
+            Io/write(Io/stdout, Str/to_bytes(Nat/to_str(2 + 3 * 4)))
         "#),
         b"14"
     );
     assert_eq!(
         run(r#"
             use /std/{Io, Str, Nat};
-            Io/write(Io/stdout, Str/to_bin(Nat/to_str((2 + 3) * 4)))
+            Io/write(Io/stdout, Str/to_bytes(Nat/to_str((2 + 3) * 4)))
         "#),
         b"20"
     );
     assert_eq!(
         run(r#"
             use /std/{Io, Str, Nat};
-            Io/write(Io/stdout, Str/to_bin(Nat/to_str(10 - 3 - 2)))
+            Io/write(Io/stdout, Str/to_bytes(Nat/to_str(10 - 3 - 2)))
         "#),
         b"5"
     );
     assert_eq!(
         run(r#"
             use /std/{Io, Str, Nat};
-            Io/write(Io/stdout, Str/to_bin(Nat/to_str(17 % 5)))
+            Io/write(Io/stdout, Str/to_bytes(Nat/to_str(17 % 5)))
         "#),
         b"2"
     );
@@ -167,7 +167,7 @@ fn infix_resolves_to_int_for_signed_literals() {
     assert_eq!(
         run(r#"
             use /std/{Io, Str, Int};
-            Io/write(Io/stdout, Str/to_bin(Int/to_str(-2 - +3)))
+            Io/write(Io/stdout, Str/to_bytes(Int/to_str(-2 - +3)))
         "#),
         b"-5"
     );
@@ -181,7 +181,7 @@ fn infix_resolves_against_a_bound_variable_type() {
         run(r#"
             use /std/{Io, Str, Int};
             let x : Int = -10;
-            Io/write(Io/stdout, Str/to_bin(Int/to_str(x + 1)))
+            Io/write(Io/stdout, Str/to_bytes(Int/to_str(x + 1)))
         "#),
         b"-9"
     );
@@ -195,8 +195,8 @@ fn infix_comparison_yields_a_bln_scrutinee() {
         run(r#"
             use /std/{Io, Str};
             match 2 + 2 == 4
-            | true => Io/write(Io/stdout, Str/to_bin("yes"))
-            | false => Io/write(Io/stdout, Str/to_bin("no"))
+            | true => Io/write(Io/stdout, Str/to_bytes("yes"))
+            | false => Io/write(Io/stdout, Str/to_bytes("no"))
             end
         "#),
         b"yes"
@@ -205,8 +205,8 @@ fn infix_comparison_yields_a_bln_scrutinee() {
         run(r#"
             use /std/{Io, Str};
             match 3 < 1
-            | true => Io/write(Io/stdout, Str/to_bin("yes"))
-            | false => Io/write(Io/stdout, Str/to_bin("no"))
+            | true => Io/write(Io/stdout, Str/to_bytes("yes"))
+            | false => Io/write(Io/stdout, Str/to_bytes("no"))
             end
         "#),
         b"no"
@@ -220,8 +220,8 @@ fn infix_equality_is_overloaded_for_bln() {
         run(r#"
             use /std/{Io, Str};
             match (1 < 2) == (3 < 4)
-            | true => Io/write(Io/stdout, Str/to_bin("yes"))
-            | false => Io/write(Io/stdout, Str/to_bin("no"))
+            | true => Io/write(Io/stdout, Str/to_bytes("yes"))
+            | false => Io/write(Io/stdout, Str/to_bytes("no"))
             end
         "#),
         b"yes"
@@ -237,8 +237,8 @@ fn infix_mixes_a_float_variable_with_an_integer_literal() {
             use /std/{Io, Str, Flt};
             let x : Flt = 3.0;
             match x + 1 < 4.5
-            | true => Io/write(Io/stdout, Str/to_bin("less"))
-            | false => Io/write(Io/stdout, Str/to_bin("more"))
+            | true => Io/write(Io/stdout, Str/to_bytes("less"))
+            | false => Io/write(Io/stdout, Str/to_bytes("more"))
             end
         "#),
         b"less"
@@ -253,8 +253,8 @@ fn infix_undefined_operator_for_type_is_rejected() {
     let source = r#"
         use /std/{Io, Str};
         match 1 && 2
-        | true => Io/write(Io/stdout, Str/to_bin("yes"))
-        | false => Io/write(Io/stdout, Str/to_bin("no"))
+        | true => Io/write(Io/stdout, Str/to_bytes("yes"))
+        | false => Io/write(Io/stdout, Str/to_bytes("no"))
         end
     "#;
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
@@ -268,8 +268,8 @@ fn infix_rem_on_flt_computes_fmod() {
         run(r#"
             use /std/{Io, Str};
             match 5.5 % 2.0 == 1.5
-            | true => Io/write(Io/stdout, Str/to_bin("yes"))
-            | false => Io/write(Io/stdout, Str/to_bin("no"))
+            | true => Io/write(Io/stdout, Str/to_bytes("yes"))
+            | false => Io/write(Io/stdout, Str/to_bytes("no"))
             end
         "#),
         b"yes"
@@ -283,8 +283,8 @@ fn infix_not_equal_on_bln_resolves_to_bln_neq() {
         run(r#"
             use /std/{Io, Str};
             match true != false
-            | true => Io/write(Io/stdout, Str/to_bin("yes"))
-            | false => Io/write(Io/stdout, Str/to_bin("no"))
+            | true => Io/write(Io/stdout, Str/to_bytes("yes"))
+            | false => Io/write(Io/stdout, Str/to_bytes("no"))
             end
         "#),
         b"yes"
@@ -299,7 +299,7 @@ fn infix_mismatched_operand_types_are_rejected() {
         use /std/{Io, Str, Int};
         let n : Nat = 1;
         let i : Int = -1;
-        Io/write(Io/stdout, Str/to_bin(Int/to_str(n + i)))
+        Io/write(Io/stdout, Str/to_bytes(Int/to_str(n + i)))
     "#;
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
@@ -319,7 +319,7 @@ fn infix_add_on_a_user_record_resolves_its_witness() {
             }
             let p : Point = Point { x = 3, y = 4 };
             let q : Point = p + p;
-            Io/write(Io/stdout, Str/to_bin(Nat/to_str(q.y)))
+            Io/write(Io/stdout, Str/to_bytes(Nat/to_str(q.y)))
         "#),
         b"8"
     );
@@ -333,7 +333,7 @@ fn infix_resolves_against_a_local_use_premise() {
         run(r#"
             use /std/{Nat, Io, Str, Add};
             pub let double(@A : Type, use Add(A), x : A) -> A = x + x;
-            Io/write(Io/stdout, Str/to_bin(Nat/to_str(double(21))))
+            Io/write(Io/stdout, Str/to_bytes(Nat/to_str(double(21))))
         "#),
         b"42"
     );
@@ -346,7 +346,7 @@ fn infix_equality_works_on_str() {
     assert_eq!(
         run(r#"
             use /std/{Bln, Io, Str};
-            Io/write(Io/stdout, Str/to_bin(Bln/to_str("abc" == "abc")))
+            Io/write(Io/stdout, Str/to_bytes(Bln/to_str("abc" == "abc")))
         "#),
         b"true"
     );
@@ -362,7 +362,7 @@ fn infix_without_witness_reports_no_witness() {
     let source = r#"
         use /std/{Bln, Io, Str};
         let b : Bln = true + false;
-        Io/write(Io/stdout, Str/to_bin(Bln/to_str(b)))
+        Io/write(Io/stdout, Str/to_bytes(Bln/to_str(b)))
     "#;
     let error = crate::run_text(Duration::from_secs(10), source, system)
         .expect_err("Add(Bln) has no witness");
@@ -382,7 +382,7 @@ fn infix_literal_against_a_user_type_is_rejected() {
         }
         let p : Point = Point { x = 1, y = 2 };
         let q : Point = p + 1;
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(q.x)))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(q.x)))
     "#;
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
@@ -400,22 +400,22 @@ fn type_level_operator_indices_stay_convertible() {
                 Nat/Lte/s(p);
             let base : Nat/Lte(0, 1) = Nat/Lte/z();
             let bumped : Nat/Lte(1, 2) = step(base);
-            Io/write(Io/stdout, Str/to_bin("ok"))
+            Io/write(Io/stdout, Str/to_bytes("ok"))
         "#),
         b"ok"
     );
 }
 
-// `!=` is the xor-negated equality (no `BlnNot` prim); on `Bin` both `==`
+// `!=` is the xor-negated equality (no `BlnNot` prim); on `Bytes` both `==`
 // and `!=` newly resolve through the migrated sys witness.
 #[test]
 fn infix_equality_works_on_bin() {
     assert_eq!(
         run(r#"
-            use /std/{Bln, Bin, Io, Str};
-            let a : Bin = Str/to_bin("xy");
-            let b : Bin = Str/to_bin("xz");
-            Io/write(Io/stdout, Str/to_bin(Bln/to_str(a != b)))
+            use /std/{Bln, Bytes, Io, Str};
+            let a : Bytes = Str/to_bytes("xy");
+            let b : Bytes = Str/to_bytes("xz");
+            Io/write(Io/stdout, Str/to_bytes(Bln/to_str(a != b)))
         "#),
         b"true"
     );

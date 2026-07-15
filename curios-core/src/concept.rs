@@ -17,6 +17,7 @@ mod tests;
 use {
     super::{Subterm, Telescope, Term},
     curios_abi::RootId,
+    curios_base::Grain,
     std::fmt,
 };
 
@@ -90,10 +91,11 @@ impl std::fmt::Display for WitnessKey {
 pub enum HeadKey {
     Nominal(String),
     Nat,
+    Byte,
     Int,
     Flt,
     Bln,
-    Bin,
+    Bin(Grain),
     Io,
     Lst,
     Cell,
@@ -145,10 +147,11 @@ impl HeadKey {
         use super::Prim;
         match prim {
             Prim::NatType => Some(HeadKey::Nat),
+            Prim::ByteType => Some(HeadKey::Byte),
             Prim::IntType => Some(HeadKey::Int),
             Prim::FltType => Some(HeadKey::Flt),
             Prim::BlnType => Some(HeadKey::Bln),
-            Prim::BinType => Some(HeadKey::Bin),
+            Prim::BinType(grain) => Some(HeadKey::Bin(*grain)),
             Prim::IoType => Some(HeadKey::Io),
             Prim::LstType(_) => Some(HeadKey::Lst),
             Prim::CellType(_) => Some(HeadKey::Cell),
@@ -162,10 +165,12 @@ impl fmt::Display for HeadKey {
         match self {
             HeadKey::Nominal(name) => write!(f, "{name}"),
             HeadKey::Nat => write!(f, "Nat"),
+            HeadKey::Byte => write!(f, "Byte"),
             HeadKey::Int => write!(f, "Int"),
             HeadKey::Flt => write!(f, "Flt"),
             HeadKey::Bln => write!(f, "Bln"),
-            HeadKey::Bin => write!(f, "Bin"),
+            HeadKey::Bin(Grain::B) => write!(f, "Bits"),
+            HeadKey::Bin(Grain::X) => write!(f, "Bytes"),
             HeadKey::Io => write!(f, "Io"),
             HeadKey::Lst => write!(f, "Lst"),
             HeadKey::Cell => write!(f, "Cell"),

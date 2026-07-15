@@ -1,4 +1,4 @@
-use /std/{Nat, Bln, Bin, Option};
+use /std/{Nat, Bln, Bytes, Option};
 
 pub let is_whitespace(c : Nat) -> Bln =
     c == ' ' || Nat/in_range(c, '\t', '\r');
@@ -44,18 +44,18 @@ pub let of_hex_digit(c : Nat) -> Option(Nat) =
     | _ => Option/none()
     end;
 
-rec emit_continuations(acc : Bin, codepoint : Nat, shift : Nat) -> Bin =
+rec emit_continuations(acc : Bytes, codepoint : Nat, shift : Nat) -> Bytes =
     match shift == 0
     | true => acc
     | false =>
         let group = codepoint / shift % 0x40;
-        emit_continuations(Bin/append(acc, 0x80 + group), codepoint, shift / 0x40)
+        emit_continuations(Bytes/append(acc, Nat/to_byte(0x80 + group)), codepoint, shift / 0x40)
     end;
 
-pub let to_utf8(codepoint : Nat) -> Bin =
+pub let to_utf8(codepoint : Nat) -> Bytes =
     match
-    | codepoint < 0x80 => Bin/append(\\, codepoint)
-    | codepoint < 0x800 => emit_continuations(Bin/append(\\, 0xC0 + codepoint / 0x40), codepoint, 1)
-    | codepoint < 0x10000 => emit_continuations(Bin/append(\\, 0xE0 + codepoint / 0x1000), codepoint, 0x40)
-    | _ => emit_continuations(Bin/append(\\, 0xF0 + codepoint / 0x40000), codepoint, 0x1000)
+    | codepoint < 0x80 => Bytes/append(x\, Nat/to_byte(codepoint))
+    | codepoint < 0x800 => emit_continuations(Bytes/append(x\, Nat/to_byte(0xC0 + codepoint / 0x40)), codepoint, 1)
+    | codepoint < 0x10000 => emit_continuations(Bytes/append(x\, Nat/to_byte(0xE0 + codepoint / 0x1000)), codepoint, 0x40)
+    | _ => emit_continuations(Bytes/append(x\, Nat/to_byte(0xF0 + codepoint / 0x40000)), codepoint, 0x1000)
     end;

@@ -5,6 +5,7 @@
 
 use {
     super::*,
+    curios_base::{Grain, PackedBin},
     std::{
         cell::RefCell,
         collections::{HashMap, HashSet},
@@ -51,7 +52,7 @@ pub(crate) enum Snapshot {
     Nat(u32),
     Int(i32),
     Flt(f32),
-    Bin(Rc<Vec<u8>>),
+    Bin(Grain, Rc<PackedBin>),
     Lst(Rc<Vec<Snapshot>>),
     Tpl(Rc<Vec<Snapshot>>),
     Clsr(ClsrName, Rc<RefCell<Vec<Snapshot>>>),
@@ -87,9 +88,9 @@ impl EvalEnv for Frame {
         }
     }
 
-    fn bin(&self, name: &ValueName) -> Option<&[u8]> {
+    fn bin(&self, name: &ValueName, grain: Grain) -> Option<&PackedBin> {
         match self.get(name)? {
-            Snapshot::Bin(bytes) => Some(bytes),
+            Snapshot::Bin(actual, value) if *actual == grain => Some(value),
             _ => None,
         }
     }
@@ -392,7 +393,7 @@ pub(crate) fn materialise_data(data: &Data, frame: &Frame) -> Option<Snapshot> {
         Data::Nat(n) => Snapshot::Nat(*n),
         Data::Int(i) => Snapshot::Int(*i),
         Data::Flt(f) => Snapshot::Flt(*f),
-        Data::Bin(bytes) => Snapshot::Bin(Rc::new(bytes.clone())),
+        Data::Bin(grain, value) => Snapshot::Bin(*grain, Rc::new(value.clone())),
         Data::Lst(elems) => Snapshot::Lst(Rc::new(resolve_names(elems, frame)?)),
         Data::Tpl(elems) => Snapshot::Tpl(Rc::new(resolve_names(elems, frame)?)),
         Data::Clsr(c, captures) => Snapshot::Clsr(

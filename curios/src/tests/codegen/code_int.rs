@@ -1,4 +1,7 @@
-use super::*;
+use {
+    super::*,
+    curios_base::{Grain, PackedBin},
+};
 
 #[test]
 fn lowers_and_runs_int_neg() {
@@ -7,7 +10,7 @@ fn lowers_and_runs_int_neg() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -54,7 +57,7 @@ fn lowers_and_runs_int_div() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -99,7 +102,7 @@ fn lowers_and_runs_int_lt() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -144,7 +147,7 @@ fn lowers_and_runs_int_to_flt() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -168,7 +171,7 @@ fn lowers_and_runs_int_to_flt() {
                     ),
                     (
                         curios_cont::ValueName::from("str"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBytes(
                             curios_cont::ValueName::from("result"),
                         )),
                     ),
@@ -213,7 +216,7 @@ fn lowers_and_runs_int_neq() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -257,7 +260,7 @@ fn int_op_module(op: curios_cont::Code, left: i32, right: i32) -> curios_cont::M
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
     module.add_const(
         curios_cont::ValueName::from("LEFT"),

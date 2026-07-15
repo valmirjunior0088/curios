@@ -314,32 +314,52 @@ pub(super) fn parse_lst_cons_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 
 // The `\\` leaf of a nested `Bin` pattern (the empty bytestring literal).
 pub(super) fn parse_bin_end_match_pattern<'a>() -> Parser<'a, MatchPattern> {
-    catch(parse_literal("\\\\")).map(|()| MatchPattern::Bin(BinPattern::End))
+    catch(take_exact("b\\").and_drop(parse_whitespace()))
+        .map(|()| MatchPattern::Bin(BinPattern::End(curios_base::Grain::B)))
+        .or(catch(take_exact("x\\").and_drop(parse_whitespace()))
+            .map(|()| MatchPattern::Bin(BinPattern::End(curios_base::Grain::X))))
 }
 
 // The `\head\..tail[; ih]` leaf of a nested `Bin` pattern — mirrors
 // `parse_bin_cons_branch` minus the leading `|` and trailing `=> body`.
 pub(super) fn parse_bin_byte_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(
-        parse_literal("\\")
-            .and_keep(parse_identifier())
-            .and_drop(parse_literal("\\"))
-            .and_drop(parse_literal("..")),
+        take_exact("b\\")
+            .and_keep(parse_identifier_raw())
+            .and_drop(take_exact("\\"))
+            .and_drop(take_exact("..")),
     )
     .and(parse_identifier())
     .and(parse_cons_ih())
     .map(|((head, tail), ih_label)| {
-        MatchPattern::Bin(BinPattern::Byte {
+        MatchPattern::Bin(BinPattern::Atom {
+            grain: curios_base::Grain::B,
             head_label: head.to_string(),
             tail_label: tail.to_string(),
             ih_label,
         })
     })
+    .or(catch(
+        take_exact("x\\")
+            .and_keep(parse_identifier_raw())
+            .and_drop(take_exact("\\"))
+            .and_drop(take_exact("..")),
+    )
+    .and(parse_identifier())
+    .and(parse_cons_ih())
+    .map(|((head, tail), ih_label)| {
+        MatchPattern::Bin(BinPattern::Atom {
+            grain: curios_base::Grain::X,
+            head_label: head.to_string(),
+            tail_label: tail.to_string(),
+            ih_label,
+        })
+    }))
 }
 
 // A match-arm pattern: a plain binder, an inductive constructor applied to
 // (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one
-// of the `Bln`/`Nat`/`Lst`/`Bin` literal leaves — see `MatchPattern`. Struct
+// of the `Bln`/`Nat`/`Lst`/`Bits`/`Bytes` literal leaves — see `MatchPattern`. Struct
 // and constructor forms are tried before the bare-name case for the same
 // reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier
 // prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would
@@ -353,7 +373,9 @@ pub(super) fn parse_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 }
 
 fn parse_match_pattern_inner<'a>() -> Parser<'a, MatchPattern> {
-    parse_struct_match_pattern()
+    parse_bin_byte_match_pattern()
+        .or(parse_bin_end_match_pattern())
+        .or(parse_struct_match_pattern())
         .or(parse_ctor_match_pattern())
         .or(parse_bln_match_pattern())
         .or(parse_nat_zero_match_pattern())
@@ -361,8 +383,6 @@ fn parse_match_pattern_inner<'a>() -> Parser<'a, MatchPattern> {
         .or(parse_nat_lit_match_pattern())
         .or(parse_lst_nil_match_pattern())
         .or(parse_lst_cons_match_pattern())
-        .or(parse_bin_end_match_pattern())
-        .or(parse_bin_byte_match_pattern())
         .or(parse_tuple_match_pattern())
         .or(catch(parse_literal("("))
             .and_keep(lazy(parse_match_pattern))

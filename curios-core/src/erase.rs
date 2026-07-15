@@ -11,7 +11,7 @@ use {
         Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Var,
         Variant, expect_prim_head, infer, is_prop, reduce_with, refine_head,
     },
-    curios_base::Qualifier,
+    curios_base::{Grain, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -335,7 +335,7 @@ fn erase_apply(context: &mut Context, apply: &Apply) -> Result<curios_ersd::Term
 /// with the trivial `Erased` rather than materialising a witness no runtime code
 /// reads. Without this a `Prop`-payload constructor — `Option(Utf8)` in
 /// `/std/Str`'s `check` — builds its proof at runtime, and an inductive proof
-/// like `Utf8/more` drags the tail `Bin` along: an O(n²) of per-step slices in
+/// like `Utf8/more` drags the tail `Bytes` along: an O(n²) of per-step slices in
 /// `of_bin`. The slot stays (arity is fixed by the opaque mask); only its
 /// contents collapse.
 fn erase_kept(context: &mut Context, value: &Term, ty: &Term) -> Result<curios_ersd::Term, Error> {
@@ -624,6 +624,7 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<curios_ersd::Term, Er
         Cases::FreeMonoid {
             carrier:
                 Carrier::Bin {
+                    grain,
                     empty_case,
                     cons_case,
                 },
@@ -633,7 +634,7 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<curios_ersd::Term, Er
             motive,
             empty_case,
             cons_case,
-            IndexedCarrier::Bin,
+            IndexedCarrier::Bin { grain: *grain },
         ),
     }
 }
@@ -647,7 +648,7 @@ fn erase_match(context: &mut Context, m: &Match) -> Result<curios_ersd::Term, Er
 #[derive(Clone, Copy)]
 enum IndexedCarrier<'a> {
     Lst { elem: &'a Term },
-    Bin,
+    Bin { grain: Grain },
 }
 
 impl IndexedCarrier<'_> {
@@ -657,7 +658,9 @@ impl IndexedCarrier<'_> {
             IndexedCarrier::Lst { elem } => {
                 Subterm::Prim(Prim::LstLen(elem.clone(), head.clone())).into()
             }
-            IndexedCarrier::Bin => Subterm::Prim(Prim::BinLen(head.clone())).into(),
+            IndexedCarrier::Bin { grain } => {
+                Subterm::Prim(Prim::BinLen(grain, head.clone())).into()
+            }
         }
     }
 
@@ -667,7 +670,9 @@ impl IndexedCarrier<'_> {
             IndexedCarrier::Lst { elem } => {
                 Subterm::Prim(Prim::LstGet(elem.clone(), head.clone(), index)).into()
             }
-            IndexedCarrier::Bin => Subterm::Prim(Prim::BinGet(head.clone(), index)).into(),
+            IndexedCarrier::Bin { grain } => {
+                Subterm::Prim(Prim::BinGet(grain, head.clone(), index)).into()
+            }
         }
     }
 
@@ -677,7 +682,9 @@ impl IndexedCarrier<'_> {
             IndexedCarrier::Lst { elem } => {
                 Subterm::Prim(Prim::LstSlice(elem.clone(), head.clone(), lo, hi)).into()
             }
-            IndexedCarrier::Bin => Subterm::Prim(Prim::BinSlice(head.clone(), lo, hi)).into(),
+            IndexedCarrier::Bin { grain } => {
+                Subterm::Prim(Prim::BinSlice(grain, head.clone(), lo, hi)).into()
+            }
         }
     }
 }

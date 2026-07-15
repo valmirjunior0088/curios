@@ -450,7 +450,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
 
             let layer = match &carrier {
                 Carrier::Nat { .. } => FreeMonoid::Unary,
-                Carrier::Bin { .. } => FreeMonoid::Bin,
+                Carrier::Bin { grain, .. } => FreeMonoid::Bin(*grain),
                 Carrier::Lst { .. } => FreeMonoid::Lst,
             }
             .uncons(scrutinee);

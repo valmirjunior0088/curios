@@ -2,9 +2,9 @@ use {
     super::reduce,
     crate::{
         Context, Nat, Peel, Prim, ReduceError, Subterm, Term, normalize_concat, peel_bin,
-        peel_first_byte, peel_first_elem,
+        peel_first_atom, peel_first_elem,
     },
-    curios_base::{Flt, Int},
+    curios_base::{Flt, Grain, Int, PackedBin},
     num_traits::{ToPrimitive, Zero},
     std::cmp::Ordering,
 };
@@ -31,6 +31,24 @@ fn reduce_bln_binary(
 
     Ok(Subterm::Prim(match (left.as_bln(), right.as_bln()) {
         (Some(l), Some(r)) => Prim::Bln(fold(l, r)),
+        _ => rebuild(left, right),
+    }))
+}
+
+fn reduce_byte_binary(
+    context: &mut Context,
+    left: &Term,
+    right: &Term,
+    fold: impl FnOnce(u8, u8) -> bool,
+    rebuild: impl FnOnce(Term, Term) -> Prim,
+) -> Result<Subterm, ReduceError> {
+    let left = reduce(context, left.clone())?;
+    let right = reduce(context, right.clone())?;
+
+    Ok(Subterm::Prim(match (&*left, &*right) {
+        (Subterm::Prim(Prim::Byte(left)), Subterm::Prim(Prim::Byte(right))) => {
+            Prim::Bln(fold(*left, *right))
+        }
         _ => rebuild(left, right),
     }))
 }
@@ -318,11 +336,20 @@ enum Shape<L> {
 }
 
 /// Classify a reduced `Bin` value into its product shape (generators are bytes).
-fn bin_shape(value: Term) -> Shape<u8> {
+fn bin_shape(grain: Grain, value: Term) -> Shape<u8> {
     match Term::unwrap_or_clone(value) {
-        Subterm::Prim(Prim::Bin(bytes)) => Shape::Literal(bytes),
-        Subterm::Prim(Prim::BinConcat(operands)) => Shape::Concat(operands),
-        Subterm::Prim(Prim::BinAppend(base, byte)) => Shape::Append(base, byte),
+        Subterm::Prim(Prim::Bin(found, value)) if found == grain => Shape::Literal(match grain {
+            Grain::B => (0..value.bit_length())
+                .map(|index| u8::from(value.bit(index).unwrap()))
+                .collect(),
+            Grain::X => value.to_bytes().unwrap(),
+        }),
+        Subterm::Prim(Prim::BinConcat(found, operands)) if found == grain => {
+            Shape::Concat(operands)
+        }
+        Subterm::Prim(Prim::BinAppend(found, base, atom)) if found == grain => {
+            Shape::Append(base, atom)
+        }
         other => Shape::Opaque(other.into()),
     }
 }
@@ -406,6 +433,36 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
                 inner => Subterm::Prim(Prim::Nat(Nat::Succ(spine.clone(), Term::from(inner)))),
             })
         }
+        Prim::ByteType => Ok(Subterm::Prim(Prim::ByteType)),
+        Prim::Byte(value) => Ok(Subterm::Prim(Prim::Byte(*value))),
+        Prim::ByteToNat(inner) => {
+            let inner = reduce(context, inner.clone())?;
+            Ok(Subterm::Prim(match &*inner {
+                Subterm::Prim(Prim::Byte(value)) => Prim::Nat(Nat::new(usize::from(*value))),
+                _ => Prim::ByteToNat(inner),
+            }))
+        }
+        Prim::NatToByte(inner) => {
+            let inner = reduce(context, inner.clone())?;
+            if let Subterm::Prim(Prim::ByteToNat(byte)) = &*inner {
+                return reduce(context, byte.clone()).map(Term::unwrap_or_clone);
+            }
+
+            Ok(Subterm::Prim(
+                match inner.as_nat().and_then(|value| {
+                    let value = value.to_big_uint()?;
+                    Some((value.to_u32().unwrap_or(0) & 0xff) as u8)
+                }) {
+                    Some(value) => Prim::Byte(value),
+                    None => Prim::NatToByte(inner),
+                },
+            ))
+        }
+        Prim::ByteEql(l, r) => reduce_byte_binary(context, l, r, |l, r| l == r, Prim::ByteEql),
+        Prim::ByteLt(l, r) => reduce_byte_binary(context, l, r, |l, r| l < r, Prim::ByteLt),
+        Prim::ByteLte(l, r) => reduce_byte_binary(context, l, r, |l, r| l <= r, Prim::ByteLte),
+        Prim::ByteGt(l, r) => reduce_byte_binary(context, l, r, |l, r| l > r, Prim::ByteGt),
+        Prim::ByteGte(l, r) => reduce_byte_binary(context, l, r, |l, r| l >= r, Prim::ByteGte),
         Prim::NatEql(left, right) => reduce_nat_compare(
             context,
             left,
@@ -846,23 +903,28 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             |flt| Prim::Flt(flt.nearest()),
             Prim::FltNearest,
         ),
-        Prim::FltToLeBin(inner) => reduce_flt_unary(
+        Prim::FltToLeBytes(inner) => reduce_flt_unary(
             context,
             inner,
-            |v| Prim::Bin(v.to_f32().to_le_bytes().to_vec()),
-            Prim::FltToLeBin,
+            |v| {
+                Prim::Bin(
+                    Grain::X,
+                    PackedBin::from_bytes(v.to_f32().to_le_bytes().to_vec()),
+                )
+            },
+            Prim::FltToLeBytes,
         ),
         // Assemble a float from an exact 4-byte literal; anything else —
         // symbolic, or a wrong-length literal (the runtime trap) — stays stuck.
-        Prim::FltOfLeBin(inner) => {
+        Prim::FltOfLeBytes(inner) => {
             let inner = reduce(context, inner.clone())?;
             Ok(Subterm::Prim(match &*inner {
-                Subterm::Prim(Prim::Bin(bytes)) if bytes.len() == 4 => {
-                    Prim::Flt(Flt::from_f32(f32::from_le_bytes([
-                        bytes[0], bytes[1], bytes[2], bytes[3],
-                    ])))
+                Subterm::Prim(Prim::Bin(Grain::X, bytes)) if bytes.len(Grain::X) == 4 => {
+                    Prim::Flt(Flt::from_f32(f32::from_le_bytes(
+                        bytes.as_bytes().unwrap().try_into().unwrap(),
+                    )))
                 }
-                _ => Prim::FltOfLeBin(inner),
+                _ => Prim::FltOfLeBytes(inner),
             }))
         }
         Prim::NatToInt(inner) => reduce_nat_unary(
@@ -919,13 +981,13 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
                 },
             ))
         }
-        Prim::BinType => Ok(Subterm::Prim(Prim::BinType)),
-        Prim::Bin(bytes) => Ok(Subterm::Prim(Prim::Bin(bytes.clone()))),
-        Prim::BinLen(bin) => {
+        Prim::BinType(Grain::X) => Ok(Subterm::Prim(Prim::BinType(Grain::X))),
+        Prim::Bin(Grain::X, bytes) => Ok(Subterm::Prim(Prim::Bin(Grain::X, bytes.clone()))),
+        Prim::BinLen(Grain::X, bin) => {
             let bin = reduce(context, bin.clone())?;
             reduce_homomorphism(
                 context,
-                bin_shape(bin),
+                bin_shape(Grain::X, bin),
                 |run| Term::prim(Prim::Nat(Nat::new(run.len()))),
                 nat_sum,
                 |base_len, _| {
@@ -934,10 +996,10 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
                         base_len,
                     ))
                 },
-                |sub| Term::prim(Prim::bin_len(sub)),
+                |sub| Term::prim(Prim::bin_len(Grain::X, sub)),
             )
         }
-        Prim::BinEql(left, right) => {
+        Prim::BinEql(Grain::X, left, right) => {
             let left = reduce(context, left.clone())?;
             let right = reduce(context, right.clone())?;
 
@@ -961,20 +1023,21 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             }
 
             Ok(Subterm::Prim(Prim::bin_eql(
+                Grain::X,
                 Term::unwrap_or_clone(left),
                 Term::unwrap_or_clone(right),
             )))
         }
-        Prim::BinGet(bin, index) => {
+        Prim::BinGet(Grain::X, bin, index) => {
             let bin = reduce(context, bin.clone())?;
             let index_reduced = reduce(context, index.clone())?;
             let i = as_index(&index_reduced);
             // A concrete index into a literal run.
-            if let (Subterm::Prim(Prim::Bin(bytes)), Some(i)) = (&*bin, i) {
-                return match bytes.get(i).copied() {
-                    Some(byte) => Ok(Subterm::Prim(Prim::Nat(Nat::new(byte)))),
+            if let (Subterm::Prim(Prim::Bin(Grain::X, bytes)), Some(i)) = (&*bin, i) {
+                return match bytes.byte(i) {
+                    Some(byte) => Ok(Subterm::Prim(Prim::Byte(byte))),
                     None => Err(ReduceError::BinGetOutOfBounds {
-                        len: bytes.len(),
+                        len: bytes.len(Grain::X),
                         index: i,
                         span: index.span(),
                     }),
@@ -982,8 +1045,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             }
             // The cons head's byte: `get(append(\\, byte), 0) = byte` — the base
             // case of the cons-peel below, and the partner of `BinSlice`'s rules.
-            if let Subterm::Prim(Prim::BinAppend(base, byte)) = &*bin
-                && let Subterm::Prim(Prim::Bin(b)) = &**base
+            if let Subterm::Prim(Prim::BinAppend(Grain::X, base, byte)) = &*bin
+                && let Subterm::Prim(Prim::Bin(Grain::X, b)) = &**base
                 && b.is_empty()
                 && let Subterm::Prim(Prim::Nat(Nat::Zero)) = &*index_reduced
             {
@@ -991,25 +1054,25 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             }
             // A get over a cons spine peels one byte per `0`/`succ` index step:
             //   `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
-            if let Some((head, tail)) = peel_first_byte(&bin) {
+            if let Some((head, tail)) = peel_first_atom(Grain::X, &bin) {
                 match &*index_reduced {
                     Subterm::Prim(Prim::Nat(Nat::Zero)) => {
                         let zero = Term::prim(Prim::Nat(Nat::Zero));
-                        return reduce(context, Term::prim(Prim::bin_get(head, zero)))
+                        return reduce(context, Term::prim(Prim::bin_get(Grain::X, head, zero)))
                             .map(Term::unwrap_or_clone);
                     }
                     Subterm::Prim(Prim::Nat(Nat::Succ(..))) => {
                         let one = Term::prim(Prim::Nat(Nat::new(1usize)));
                         let prev = Term::prim(Prim::nat_sub(index_reduced.clone(), one));
-                        return reduce(context, Term::prim(Prim::bin_get(tail, prev)))
+                        return reduce(context, Term::prim(Prim::bin_get(Grain::X, tail, prev)))
                             .map(Term::unwrap_or_clone);
                     }
                     _ => {}
                 }
             }
-            Ok(Subterm::Prim(Prim::bin_get(bin, index_reduced)))
+            Ok(Subterm::Prim(Prim::bin_get(Grain::X, bin, index_reduced)))
         }
-        Prim::BinSlice(bin, start, end) => {
+        Prim::BinSlice(Grain::X, bin, start, end) => {
             let bin = reduce(context, bin.clone())?;
             let start_reduced = reduce(context, start.clone())?;
             let end_reduced = reduce(context, end.clone())?;
@@ -1019,7 +1082,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             // bare full-window `BinSlice` reduce to its base, so a `Bin/slice` over
             // the whole value costs no copy and converts against the base directly.
             if matches!(&*start_reduced, Subterm::Prim(Prim::Nat(Nat::Zero)))
-                && matches!(&*end_reduced, Subterm::Prim(Prim::BinLen(whole)) if *whole == bin)
+                && matches!(&*end_reduced, Subterm::Prim(Prim::BinLen(Grain::X, whole)) if *whole == bin)
             {
                 return Ok(Term::unwrap_or_clone(bin));
             }
@@ -1029,26 +1092,26 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             // It lets a codepoint take collapse its zero-width base (`take 0`) to
             // the empty string even over a symbolic cons.
             if start_reduced == end_reduced {
-                return Ok(Subterm::Prim(Prim::Bin(Vec::new())));
+                return Ok(Subterm::Prim(Prim::Bin(Grain::X, PackedBin::empty())));
             }
             // A nested slice reassociates: `slice(slice(b, p, q), i, j) =
             // slice(b, p + i, p + j)`. Sound for the in-range bounds real call
             // sites produce; reassociating the window lets a codepoint walk
             // collapse a `slice(drop1(b), ..)` back onto `b`.
-            if let Subterm::Prim(Prim::BinSlice(inner, p, _q)) = &*bin {
+            if let Subterm::Prim(Prim::BinSlice(Grain::X, inner, p, _q)) = &*bin {
                 let lo = Term::prim(Prim::nat_add(p.clone(), start_reduced.clone()));
                 let hi = Term::prim(Prim::nat_add(p.clone(), end_reduced.clone()));
-                let flattened = Term::prim(Prim::bin_slice(inner.clone(), lo, hi));
+                let flattened = Term::prim(Prim::bin_slice(Grain::X, inner.clone(), lo, hi));
                 return reduce(context, flattened).map(Term::unwrap_or_clone);
             }
             let s = as_index(&start_reduced);
             let e = as_index(&end_reduced);
             // A concrete slice of a literal run.
-            if let (Subterm::Prim(Prim::Bin(bytes)), Some(s), Some(e)) = (&*bin, s, e) {
-                return match bytes.get(s..e) {
-                    Some(slice) => Ok(Subterm::Prim(Prim::Bin(slice.to_vec()))),
+            if let (Subterm::Prim(Prim::Bin(Grain::X, bytes)), Some(s), Some(e)) = (&*bin, s, e) {
+                return match bytes.slice(Grain::X, s, e) {
+                    Some(slice) => Ok(Subterm::Prim(Prim::Bin(Grain::X, slice))),
                     None => Err(ReduceError::BinSliceOutOfRange {
-                        len: bytes.len(),
+                        len: bytes.len(Grain::X),
                         start: s,
                         end: e,
                         span: start.span().or_else(|| end.span()),
@@ -1059,7 +1122,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             // step — the reduction partner of the `Utf8` cons the validity proofs
             // walk:  `slice(cons(h, t), 0, succ e) = h ++ slice(t, 0, e)`  and
             // `slice(cons(h, t), succ s, e) = slice(t, s, e - 1)`.
-            if let Some((head, tail)) = peel_first_byte(&bin) {
+            if let Some((head, tail)) = peel_first_atom(Grain::X, &bin) {
                 let dec = |n: &Term| {
                     let one = Term::prim(Prim::Nat(Nat::new(1usize)));
                     Term::prim(Prim::nat_sub(n.clone(), one))
@@ -1070,12 +1133,14 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
                         Subterm::Prim(Prim::Nat(Nat::Succ(..))),
                     ) => {
                         let zero = Term::prim(Prim::Nat(Nat::Zero));
-                        let rest = Term::prim(Prim::bin_slice(tail, zero, dec(&end_reduced)));
-                        let consed = Term::prim(Prim::bin_concat([head, rest]));
+                        let rest =
+                            Term::prim(Prim::bin_slice(Grain::X, tail, zero, dec(&end_reduced)));
+                        let consed = Term::prim(Prim::bin_concat(Grain::X, [head, rest]));
                         return reduce(context, consed).map(Term::unwrap_or_clone);
                     }
                     (Subterm::Prim(Prim::Nat(Nat::Succ(..))), _) => {
                         let sliced = Term::prim(Prim::bin_slice(
+                            Grain::X,
                             tail,
                             dec(&start_reduced),
                             dec(&end_reduced),
@@ -1086,30 +1151,30 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
                 }
             }
             Ok(Subterm::Prim(Prim::bin_slice(
+                Grain::X,
                 bin,
                 start_reduced,
                 end_reduced,
             )))
         }
-        Prim::BinAppend(bin, byte) => {
+        Prim::BinAppend(Grain::X, bin, byte) => {
             let bin = reduce(context, bin.clone())?;
             let byte = reduce(context, byte.clone())?;
             // A concrete byte is taken mod 256 — its low 8 bits — matching the
             // runtime's packed-`i8` store and the optimizer's `as u8`. A symbolic
             // operand has no `as_nat`, so it stays stuck rather than truncating.
-            let n = byte
-                .as_nat()
-                .and_then(|n| n.to_big_uint())
-                .map(|big| big.to_bytes_le().first().copied().unwrap_or(0));
+            let n = match &*byte {
+                Subterm::Prim(Prim::Byte(byte)) => Some(*byte),
+                _ => None,
+            };
             Ok(match (Term::unwrap_or_clone(bin), n) {
-                (Subterm::Prim(Prim::Bin(mut bytes)), Some(n)) => {
-                    bytes.push(n);
-                    Subterm::Prim(Prim::Bin(bytes))
+                (Subterm::Prim(Prim::Bin(Grain::X, bytes)), Some(n)) => {
+                    Subterm::Prim(Prim::Bin(Grain::X, bytes.append_byte(n).unwrap()))
                 }
-                (bin, _) => Subterm::Prim(Prim::bin_append(bin, byte)),
+                (bin, _) => Subterm::Prim(Prim::bin_append(Grain::X, bin, byte)),
             })
         }
-        Prim::BinConcat(operands) => {
+        Prim::BinConcat(Grain::X, operands) => {
             let reduced: Vec<Term> = operands
                 .iter()
                 .map(|e| reduce(context, e.clone()))
@@ -1121,16 +1186,205 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             // `normalize_concat`.
             fn literal(operand: &Term) -> Option<&[u8]> {
                 match &**operand {
-                    Subterm::Prim(Prim::Bin(bytes)) => Some(bytes.as_slice()),
+                    Subterm::Prim(Prim::Bin(Grain::X, bytes)) => bytes.as_bytes(),
                     _ => None,
                 }
             }
             Ok(normalize_concat(
                 reduced,
                 literal,
-                |bytes| Subterm::Prim(Prim::Bin(bytes)),
-                |kept| Subterm::Prim(Prim::BinConcat(kept)),
+                |bytes| Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(bytes))),
+                |kept| Subterm::Prim(Prim::BinConcat(Grain::X, kept)),
             ))
+        }
+        Prim::BinType(Grain::B) => Ok(Subterm::Prim(Prim::BinType(Grain::B))),
+        Prim::Bin(Grain::B, bits) => Ok(Subterm::Prim(Prim::Bin(Grain::B, bits.clone()))),
+        Prim::BinLen(Grain::B, bin) => {
+            let bin = reduce(context, bin.clone())?;
+            reduce_homomorphism(
+                context,
+                bin_shape(Grain::B, bin),
+                |run| Term::prim(Prim::Nat(Nat::new(run.len()))),
+                nat_sum,
+                |base_len, _| {
+                    Term::prim(Prim::nat_add(
+                        Term::prim(Prim::Nat(Nat::new(1usize))),
+                        base_len,
+                    ))
+                },
+                |sub| Term::prim(Prim::bin_len(Grain::B, sub)),
+            )
+        }
+        Prim::BinEql(Grain::B, left, right) => {
+            let left = reduce(context, left.clone())?;
+            let right = reduce(context, right.clone())?;
+            if left == right {
+                return Ok(Subterm::Prim(Prim::Bln(true)));
+            }
+            if let (Subterm::Prim(l), Subterm::Prim(r)) = (&*left, &*right) {
+                match peel_bin(l, r) {
+                    Some(Peel::Equal) => return Ok(Subterm::Prim(Prim::Bln(true))),
+                    Some(Peel::Clash) => return Ok(Subterm::Prim(Prim::Bln(false))),
+                    Some(Peel::Continue(..)) | Some(Peel::Stuck) | None => {}
+                }
+            }
+            Ok(Subterm::Prim(Prim::BinEql(Grain::B, left, right)))
+        }
+        Prim::BinGet(Grain::B, bin, index) => {
+            let span = index.span();
+            let bin = reduce(context, bin.clone())?;
+            let index_reduced = reduce(context, index.clone())?;
+            if let (Subterm::Prim(Prim::Bin(Grain::B, bits)), Some(index)) =
+                (&*bin, as_index(&index_reduced))
+            {
+                return bits
+                    .bit(index)
+                    .map(|bit| Subterm::Prim(Prim::Bln(bit)))
+                    .ok_or_else(|| ReduceError::BinGetOutOfBounds {
+                        len: bits.bit_length(),
+                        index,
+                        span,
+                    });
+            }
+            if let Some((head, tail)) = peel_first_atom(Grain::B, &bin) {
+                match &*index_reduced {
+                    Subterm::Prim(Prim::Nat(Nat::Zero)) => {
+                        return reduce(
+                            context,
+                            Term::prim(Prim::bin_get(
+                                Grain::B,
+                                head,
+                                Term::prim(Prim::Nat(Nat::Zero)),
+                            )),
+                        )
+                        .map(Term::unwrap_or_clone);
+                    }
+                    Subterm::Prim(Prim::Nat(Nat::Succ(..))) => {
+                        let prev = Term::prim(Prim::nat_sub(
+                            index_reduced.clone(),
+                            Term::prim(Prim::Nat(Nat::new(1usize))),
+                        ));
+                        return reduce(context, Term::prim(Prim::bin_get(Grain::B, tail, prev)))
+                            .map(Term::unwrap_or_clone);
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Subterm::Prim(Prim::BinGet(Grain::B, bin, index_reduced)))
+        }
+        Prim::BinSlice(Grain::B, bin, start, end) => {
+            let span = start.span().or_else(|| end.span());
+            let bin = reduce(context, bin.clone())?;
+            let start_reduced = reduce(context, start.clone())?;
+            let end_reduced = reduce(context, end.clone())?;
+            if matches!(&*start_reduced, Subterm::Prim(Prim::Nat(Nat::Zero)))
+                && matches!(&*end_reduced, Subterm::Prim(Prim::BinLen(Grain::B, whole)) if *whole == bin)
+            {
+                return Ok(Term::unwrap_or_clone(bin));
+            }
+            if start_reduced == end_reduced {
+                return Ok(Subterm::Prim(Prim::Bin(Grain::B, PackedBin::empty())));
+            }
+            if let Subterm::Prim(Prim::BinSlice(Grain::B, inner, offset, _)) = &*bin {
+                let lo = Term::prim(Prim::nat_add(offset.clone(), start_reduced.clone()));
+                let hi = Term::prim(Prim::nat_add(offset.clone(), end_reduced.clone()));
+                return reduce(
+                    context,
+                    Term::prim(Prim::bin_slice(Grain::B, inner.clone(), lo, hi)),
+                )
+                .map(Term::unwrap_or_clone);
+            }
+            if let (Subterm::Prim(Prim::Bin(Grain::B, bits)), Some(start), Some(end)) =
+                (&*bin, as_index(&start_reduced), as_index(&end_reduced))
+            {
+                return bits
+                    .slice(Grain::B, start, end)
+                    .map(|bits| Subterm::Prim(Prim::Bin(Grain::B, bits)))
+                    .ok_or_else(|| ReduceError::BinSliceOutOfRange {
+                        len: bits.bit_length(),
+                        start,
+                        end,
+                        span,
+                    });
+            }
+            if let Some((head, tail)) = peel_first_atom(Grain::B, &bin) {
+                let dec = |n: &Term| {
+                    Term::prim(Prim::nat_sub(
+                        n.clone(),
+                        Term::prim(Prim::Nat(Nat::new(1usize))),
+                    ))
+                };
+                match (&*start_reduced, &*end_reduced) {
+                    (
+                        Subterm::Prim(Prim::Nat(Nat::Zero)),
+                        Subterm::Prim(Prim::Nat(Nat::Succ(..))),
+                    ) => {
+                        let rest = Term::prim(Prim::bin_slice(
+                            Grain::B,
+                            tail,
+                            Term::prim(Prim::Nat(Nat::Zero)),
+                            dec(&end_reduced),
+                        ));
+                        return reduce(
+                            context,
+                            Term::prim(Prim::bin_concat(Grain::B, [head, rest])),
+                        )
+                        .map(Term::unwrap_or_clone);
+                    }
+                    (Subterm::Prim(Prim::Nat(Nat::Succ(..))), _) => {
+                        return reduce(
+                            context,
+                            Term::prim(Prim::bin_slice(
+                                Grain::B,
+                                tail,
+                                dec(&start_reduced),
+                                dec(&end_reduced),
+                            )),
+                        )
+                        .map(Term::unwrap_or_clone);
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Subterm::Prim(Prim::BinSlice(
+                Grain::B,
+                bin,
+                start_reduced,
+                end_reduced,
+            )))
+        }
+        Prim::BinAppend(Grain::B, bin, bit) => {
+            let bin = reduce(context, bin.clone())?;
+            let bit = reduce(context, bit.clone())?;
+            Ok(Subterm::Prim(match (&*bin, bit.as_bln()) {
+                (Subterm::Prim(Prim::Bin(Grain::B, bits)), Some(bit)) => {
+                    Prim::Bin(Grain::B, bits.append_bit(bit))
+                }
+                _ => Prim::BinAppend(Grain::B, bin, bit),
+            }))
+        }
+        Prim::BinConcat(Grain::B, operands) => {
+            let mut operands = operands
+                .iter()
+                .map(|operand| reduce(context, operand.clone()))
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .filter(|operand| {
+                    !matches!(&**operand, Subterm::Prim(Prim::Bin(Grain::B, bits)) if bits.is_empty())
+                })
+                .collect::<Vec<_>>();
+            let literals = operands
+                .iter()
+                .map(|operand| match &**operand {
+                    Subterm::Prim(Prim::Bin(Grain::B, bits)) => Some(bits),
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>();
+            Ok(match literals {
+                Some(literals) => Subterm::Prim(Prim::Bin(Grain::B, PackedBin::concat(literals))),
+                None if operands.len() == 1 => Term::unwrap_or_clone(operands.pop().unwrap()),
+                None => Subterm::Prim(Prim::BinConcat(Grain::B, operands)),
+            })
         }
         Prim::LstType(elem) => {
             let elem = reduce(context, elem.clone())?;

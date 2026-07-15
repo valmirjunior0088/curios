@@ -1,4 +1,4 @@
-use /std/{Nat, Bin, Bln};
+use /std/{Nat, Byte, Bytes, Bln};
 
 pub induct Class : Type
 | ascii()
@@ -6,18 +6,19 @@ pub induct Class : Type
 | bad()
 end
 
-pub let classify(c : Nat) -> Class =
+pub let classify(c : Byte) -> Class =
+    let n = Byte/to_nat(c);
     match
-    | Nat/in_range(c, 0x00, 0x7F) => Class/ascii()
-    | Nat/in_range(c, 0xC2, 0xDF) => Class/lead(1, 0x80, 0xBF, c - 0xC0)
-    | Nat/in_range(c, 0xE0, 0xEF) =>
-        let lo = match | c == 0xE0 => 0xA0 | _ => 0x80 end;
-        let hi = match | c == 0xED => 0x9F | _ => 0xBF end;
-        Class/lead(2, lo, hi, c - 0xE0)
-    | Nat/in_range(c, 0xF0, 0xF4) =>
-        let lo = match | c == 0xF0 => 0x90 | _ => 0x80 end;
-        let hi = match | c == 0xF4 => 0x8F | _ => 0xBF end;
-        Class/lead(3, lo, hi, c - 0xF0)
+    | Nat/in_range(n, 0x00, 0x7F) => Class/ascii()
+    | Nat/in_range(n, 0xC2, 0xDF) => Class/lead(1, 0x80, 0xBF, n - 0xC0)
+    | Nat/in_range(n, 0xE0, 0xEF) =>
+        let lo = match | n == 0xE0 => 0xA0 | _ => 0x80 end;
+        let hi = match | n == 0xED => 0x9F | _ => 0xBF end;
+        Class/lead(2, lo, hi, n - 0xE0)
+    | Nat/in_range(n, 0xF0, 0xF4) =>
+        let lo = match | n == 0xF0 => 0x90 | _ => 0x80 end;
+        let hi = match | n == 0xF4 => 0x8F | _ => 0xBF end;
+        Class/lead(3, lo, hi, n - 0xF0)
     | _ => Class/bad()
     end;
 
@@ -27,12 +28,13 @@ pub induct Scan : Type
 | bad()
 end
 
-pub let step(c : Nat, s : Scan) -> Scan =
+pub let step(c : Byte, s : Scan) -> Scan =
+    let n = Byte/to_nat(c);
     match s
     | bad() => Scan/bad()
     | cont(rem, lo, hi) =>
         match
-        | Bln/not(Nat/in_range(c, lo, hi)) => Scan/bad()
+        | Bln/not(Nat/in_range(n, lo, hi)) => Scan/bad()
         | rem == 1 => Scan/lead()
         | _ => Scan/cont(rem - 1, 0x80, 0xBF)
         end
@@ -44,16 +46,16 @@ pub let step(c : Nat, s : Scan) -> Scan =
         end
     end;
 
-pub induct Utf8 : (s : Scan, b : Bin) -> Prop
-| stop() : (Scan/lead(), \\)
-| more(c : Nat, st : Scan, t : Bin, rest : Utf8(step(c, st), t))
-    : (st, Bin/cons(c, t))
+pub induct Utf8 : (s : Scan, b : Bytes) -> Prop
+| stop() : (Scan/lead(), x\)
+| more(c : Byte, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
+    : (st, Bytes/cons(c, t))
 end
 
-pub let Valid(b : Bin) -> Prop =
+pub let Valid(b : Bytes) -> Prop =
     Utf8(Scan/lead(), b);
 
 pub record Str : Type {
-    bytes : Bin,
+    bytes : Bytes,
     valid : Valid(bytes)
 }

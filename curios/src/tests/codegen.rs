@@ -54,7 +54,7 @@ pub(super) fn int_result(module: &curios_cont::Module) -> i32 {
 }
 
 /// Run `module` and decode the four little-endian bytes it writes to stdout as
-/// an `f32`. Fixtures surface a computed `Flt` via `Flt/to_le_bin`.
+/// an `f32`. Fixtures surface a computed `Flt` via `Flt/to_le_bytes`.
 pub(super) fn f32_result(module: &curios_cont::Module) -> f32 {
     let (system, io) = MockHost::builder().build();
     crate::run_wasm(&into_wasm(module), system, ForeignBindings::empty()).expect("run failed");

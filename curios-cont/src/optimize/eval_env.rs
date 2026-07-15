@@ -5,7 +5,11 @@
 //! to literal `Data`, harvested per region tree by [`literals`]. The
 //! interpreter's frame in [`interp`](super::interp) is the other instance.
 
-use {super::*, std::collections::HashMap};
+use {
+    super::*,
+    curios_base::{Grain, PackedBin},
+    std::collections::HashMap,
+};
 
 /// A region-tree-wide map from value name to its bound literal. Names are unique
 /// per body and scoping is lexical, so a single flat map is sound.
@@ -40,7 +44,7 @@ pub(crate) trait EvalEnv {
     fn nat(&self, name: &ValueName) -> Option<u32>;
     fn int(&self, name: &ValueName) -> Option<i32>;
     fn flt(&self, name: &ValueName) -> Option<f32>;
-    fn bin(&self, name: &ValueName) -> Option<&[u8]>;
+    fn bin(&self, name: &ValueName, grain: Grain) -> Option<&PackedBin>;
     fn lst(&self, name: &ValueName) -> Option<&[Self::Elem]>;
     fn tpl(&self, name: &ValueName) -> Option<&[Self::Elem]>;
 
@@ -77,9 +81,9 @@ impl EvalEnv for Lits {
         }
     }
 
-    fn bin(&self, name: &ValueName) -> Option<&[u8]> {
+    fn bin(&self, name: &ValueName, grain: Grain) -> Option<&PackedBin> {
         match self.get(name)? {
-            Data::Bin(bytes) => Some(bytes),
+            Data::Bin(actual, value) if *actual == grain => Some(value),
             _ => None,
         }
     }

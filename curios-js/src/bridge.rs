@@ -1,6 +1,6 @@
-//! The Bin bridge: a tiny GC module giving JavaScript accessors over the
-//! compiler's `$bytes` heap type — the flat payload every `Bin` crosses the
-//! host boundary as. JS cannot touch wasm-GC arrays directly, so the harness
+//! The wire-ABI `Bin` bridge: a tiny GC module giving JavaScript accessors over
+//! the compiler's `$bytes` heap type — the flat payload every object-language
+//! `Bytes` value crosses the host boundary as. JS cannot touch wasm-GC arrays directly, so the harness
 //! instantiates this module and reads/builds byte strings through its
 //! exports. It declares the compiler's `array (mut i8)` payload shape locally
 //! — wasm-GC canonicalizes structural types, so the refs it produces and

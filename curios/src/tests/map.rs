@@ -69,7 +69,7 @@ fn map_iterates_in_lexicographic_key_order() {
         let m : Map(Nat) =
             Map/of([("b", 0), ("abc", 0), ("", 0), ("a", 0), ("ab", 0)]);
         Io/print(Str/join(",",
-            Lst/map((k) => Option/unwrap_or(Str/of_bin(k), "?"), Map/keys(m))))
+            Lst/map((k) => Option/unwrap_or(Str/of_bytes(k), "?"), Map/keys(m))))
         "#;
     assert_eq!(run(source), b",a,ab,abc,b");
 }
@@ -83,7 +83,7 @@ fn map_entries_agree_across_insertion_orders() {
         use /std/{Io, Str, Map, Nat, Option, Lst};
         let show(m : Map(Nat)) -> Str =
             Str/join(",", Lst/map(
-                ((k, v)) => Str/concat(Option/unwrap_or(Str/of_bin(k), "?"), Nat/to_str(v)),
+                ((k, v)) => Str/concat(Option/unwrap_or(Str/of_bytes(k), "?"), Nat/to_str(v)),
                 Map/entries(m)));
         let m1 : Map(Nat) = Map/of([("x", 1), ("y", 2), ("z", 3)]);
         let m2 : Map(Nat) = Map/del(Map/of([("z", 3), ("w", 0), ("y", 2), ("x", 1)]), "w");

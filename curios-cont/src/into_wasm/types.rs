@@ -1,5 +1,5 @@
 //! The fixed runtime heap-type shapes every emitted module declares: the data
-//! representations (`Flt`, `Bin`, `Lst`, `Cell`) whose structure is
+//! representations (`Flt`, packed binary sequences, `Lst`, `Cell`) whose structure is
 //! program-independent, unlike the per-program families (`tpl/N`, closures,
 //! environments, `func/N`) the emitter derives from the module. Kept in one
 //! file so the emitter has one spelling for each shape. curios-js's bridge
@@ -11,8 +11,9 @@
 //!
 //! # The rope representation
 //!
-//! `Bin` and `Lst` are *ropes*: a three-shape tagged union behind a non-final
-//! struct base (`$bin` / `$lst`, fields `tag` + `len`). A `leaf` holds a flat
+//! `Bits`, `Bytes`, and `Lst` are *ropes*: the two packed grains share one
+//! three-shape tagged union behind the non-final `$bin` struct base, while
+//! lists use `$lst` (both have fields `tag` + `len`). A `leaf` holds a flat
 //! payload array (`$bytes` / `$elems`); a `node` holds two children plus a
 //! memoization `cache`; a `sub` is a window — a `base` rope plus an `offset`.
 //! The cost model this buys:
@@ -38,7 +39,7 @@
 //! once, every later peel is an O(1) window over the settled payload. There
 //! is no compile-time recognition anywhere.
 //!
-//! The host ABI is untouched by the rope: payloads cross the boundary as the
+//! The host ABI is untouched by the rope: wire `Bin` payloads cross the boundary as the
 //! flat `$bytes`/`$elems` arrays (params are forced before the call, results
 //! are wrapped into fresh leaves after it), so curios-rt and the curios-js
 //! bridge only ever see flat arrays.
@@ -63,7 +64,7 @@ pub(crate) fn flt_sub_type(special_field: FieldName) -> SubType {
     }
 }
 
-/// `$bytes` — a `Bin` rope's flat byte payload, and the host-boundary shape:
+/// `$bytes` — a `Bits`/`Bytes` rope's flat packed payload, and the wire-`Bin` host-boundary shape:
 /// `array (mut i8)`.
 pub(crate) fn bytes_sub_type() -> SubType {
     SubType {

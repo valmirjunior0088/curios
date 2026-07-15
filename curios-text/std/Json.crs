@@ -1,4 +1,4 @@
-use /std/{Bin, Str, Bln, Char, Flt, Nat, Parse, Result, Option, Lst};
+use /std/{Bytes, Byte, Str, Bln, Char, Flt, Nat, Parse, Result, Option, Lst};
 
 pub induct Json : Type
 | null()
@@ -18,29 +18,30 @@ let encode_num(n : Flt) -> Str =
     | false => raw
     end;
 
-let escape_byte(byte : Nat) -> Bin =
-    match byte
-    | '"' => Str/to_bin("\\\"")
-    | '\\' => Str/to_bin("\\\\")
-    | '\n' => Str/to_bin("\\n")
-    | '\r' => Str/to_bin("\\r")
-    | '\t' => Str/to_bin("\\t")
-    | 0x08 => Str/to_bin("\\b")
-    | 0x0C => Str/to_bin("\\f")
+let escape_byte(byte : Byte) -> Bytes =
+    let n = Byte/to_nat(byte);
+    match n
+    | '"' => Str/to_bytes("\\\"")
+    | '\\' => Str/to_bytes("\\\\")
+    | '\n' => Str/to_bytes("\\n")
+    | '\r' => Str/to_bytes("\\r")
+    | '\t' => Str/to_bytes("\\t")
+    | 0x08 => Str/to_bytes("\\b")
+    | 0x0C => Str/to_bytes("\\f")
     | _ =>
-        match byte < 0x20
+        match n < 0x20
         | true =>
-            Bin/append(
-                Bin/append(Str/to_bin("\\u00"), Char/hex_digit(byte / 0x10)),
-                Char/hex_digit(byte % 0x10))
-        | false => Bin/append(\\, byte)
+            Bytes/append(
+                Bytes/append(Str/to_bytes("\\u00"), Nat/to_byte(Char/hex_digit(n / 0x10))),
+                Nat/to_byte(Char/hex_digit(n % 0x10)))
+        | false => Bytes/append(x\, byte)
         end
     end;
 
 let encode_str(s : Str) -> Str =
     let body =
-        Bin/fold(Str/to_bin(s), \\, (byte, acc) => \..acc\..escape_byte(byte));
-    Str/concat(Str/concat("\"", Option/unwrap_or(Str/of_bin(body), "")), "\"");
+        Bytes/fold(Str/to_bytes(s), x\, (byte, acc) => x\..acc\..escape_byte(byte));
+    Str/concat(Str/concat("\"", Option/unwrap_or(Str/of_bytes(body), "")), "\"");
 
 pub rec encode(v : Json) -> Str =
     match v
@@ -72,19 +73,19 @@ let is_num_byte(byte : Nat) -> Bln =
 let take_literal(literal : Str) -> Parse({}) =
     Parse {
         run(input, pos) =
-            let lit = Str/to_bin(literal);
+            let lit = Str/to_bytes(literal);
             let (stop, matched) =
-                match Bin/len(lit) : {Nat, Bln}
+                match Bytes/len(lit) : {Nat, Bln}
                 | 0 => (pos, true)
                 | step + 1; ih =>
                     let (cur, live) = ih;
                     match live
                     | false => ih
                     | true =>
-                        match Nat/try_lt(cur, Bin/len(input))
+                        match Nat/try_lt(cur, Bytes/len(input))
                         | none() => (cur, false)
                         | some(ok) =>
-                            match Option/unwrap_or(Bin/get(lit, step), 0) == Bin/at(input, cur, ok)
+                            match Option/unwrap_or(Bytes/get(lit, step), 0) == Bytes/at(input, cur, ok)
                             | true => (cur + 1, true)
                             | false => (cur, false)
                             end
@@ -111,7 +112,7 @@ let parse_num : Parse(Json) =
         run(input, pos) =
             match Parse/take_while(is_num_byte).run(input, pos)
             | success((next, chunk)) =>
-                match Flt/of_str(Option/unwrap_or(Str/of_bin(chunk), ""))
+                match Flt/of_str(Option/unwrap_or(Str/of_bytes(chunk), ""))
                 | some(value) => Result/success((next, Json/num(value)))
                 | none() => Result/failure("expected number")
                 end
@@ -140,9 +141,9 @@ let hex4 : Parse(Nat) =
     let d = hex_digit!;
     Parse/pure(a * 0x1000 + b * 0x100 + c * 0x10 + d);
 
-let parse_unicode : Parse(Bin) =
+let parse_unicode : Parse(Bytes) =
     let hi = hex4!;
-    match hi >= 0xD800 && hi <= 0xDBFF : Parse(Bin)
+    match hi >= 0xD800 && hi <= 0xDBFF : Parse(Bytes)
     | true =>
         let _ = Parse/take_byte('\\')!;
         let _ = Parse/take_byte('u')!;
@@ -151,33 +152,33 @@ let parse_unicode : Parse(Bin) =
     | false => Parse/pure(Char/to_utf8(hi))
     end;
 
-let parse_str_escape : Parse(Bin) =
+let parse_str_escape : Parse(Bytes) =
     let _ = Parse/take_byte('\\')!;
     let byte = Parse/any_byte!;
-    match byte : Parse(Bin)
-    | '"' => Parse/pure(Str/to_bin("\""))
-    | '\\' => Parse/pure(Str/to_bin("\\"))
-    | '/' => Parse/pure(Str/to_bin("/"))
-    | 'b' => Parse/pure(Bin/append(\\, 8))
-    | 'f' => Parse/pure(Bin/append(\\, 12))
-    | 'n' => Parse/pure(Str/to_bin("\n"))
-    | 'r' => Parse/pure(Str/to_bin("\r"))
-    | 't' => Parse/pure(Str/to_bin("\t"))
+    match byte : Parse(Bytes)
+    | '"' => Parse/pure(Str/to_bytes("\""))
+    | '\\' => Parse/pure(Str/to_bytes("\\"))
+    | '/' => Parse/pure(Str/to_bytes("/"))
+    | 'b' => Parse/pure(Bytes/append(x\, 8))
+    | 'f' => Parse/pure(Bytes/append(x\, 12))
+    | 'n' => Parse/pure(Str/to_bytes("\n"))
+    | 'r' => Parse/pure(Str/to_bytes("\r"))
+    | 't' => Parse/pure(Str/to_bytes("\t"))
     | 'u' => parse_unicode
     | _ => Parse/fail("unknown escape")
     end;
 
-let parse_str_segment : Parse(Bin) =
+let parse_str_segment : Parse(Bytes) =
     Parse/take_while(is_not_string_special);
 
-let parse_str_body : Parse(Lst(Bin)) =
+let parse_str_body : Parse(Lst(Bytes)) =
     Parse/many0(Parse/or(parse_str_escape, parse_str_segment));
 
 let parse_raw_str : Parse(Str) =
     let _ = Parse/take_byte('"')!;
     let chunks = parse_str_body!;
     let _ = Parse/take_byte('"')!;
-    match Str/of_bin(Bin/flatten(chunks)) : Parse(Str)
+    match Str/of_bytes(Bytes/flatten(chunks)) : Parse(Str)
     | some(s) => Parse/pure(s)
     | none() => Parse/fail("invalid UTF-8 in string")
     end;
@@ -207,10 +208,10 @@ pub rec decode : Parse(Json) =
             match ws.run(input, pos)
             | failure(msg) => Result/failure(msg)
             | success((start, _)) =>
-                match Nat/try_lt(start, Bin/len(input))
+                match Nat/try_lt(start, Bytes/len(input))
                 | none() => Result/failure("unexpected end of input")
                 | some(ok) =>
-                    match Bin/at(input, start, ok)
+                    match Byte/to_nat(Bytes/at(input, start, ok))
                     | 'n' => parse_null.run(input, start)
                     | 't' => parse_true_val.run(input, start)
                     | 'f' => parse_false_val.run(input, start)

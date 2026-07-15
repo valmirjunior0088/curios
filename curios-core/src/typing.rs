@@ -384,7 +384,9 @@ pub(crate) fn check_prim_head(expected: PrimHead, head_type: Term) -> Result<Ter
     let matches = match expected {
         PrimHead::Nat => matches!(&*head_type, Subterm::Prim(Prim::NatType)),
         PrimHead::Bln => matches!(&*head_type, Subterm::Prim(Prim::BlnType)),
-        PrimHead::Bin => matches!(&*head_type, Subterm::Prim(Prim::BinType)),
+        PrimHead::Bin(grain) => {
+            matches!(&*head_type, Subterm::Prim(Prim::BinType(actual)) if *actual == grain)
+        }
     };
 
     match matches {
@@ -392,7 +394,7 @@ pub(crate) fn check_prim_head(expected: PrimHead, head_type: Term) -> Result<Ter
         false => Err(match expected {
             PrimHead::Nat => Error::not_nat_type(head_type),
             PrimHead::Bln => Error::not_bln_type(head_type),
-            PrimHead::Bin => Error::not_bin_type(head_type),
+            PrimHead::Bin(_) => Error::not_bin_type(head_type),
         }),
     }
 }

@@ -1,5 +1,7 @@
 use {
     super::{Cont, ContMany, Frame, LowerResult, Work},
+    crate::PurePrim,
+    curios_base::{Grain, PackedBin},
     curios_cont::{BlockName, CellTarget, Code, Data, HostTarget, Tail, Value, ValueName},
     num_bigint::BigUint,
     std::sync::Arc,
@@ -162,7 +164,7 @@ fn lower_ternary_code<'b>(
 impl Work<'_, '_, '_> {
     pub(super) fn lower_pure_prim(
         &mut self,
-        prim: &crate::PurePrim,
+        prim: &PurePrim,
         frame: &Frame,
     ) -> LowerResult<ValueName> {
         let work = self;
@@ -327,11 +329,11 @@ impl Work<'_, '_, '_> {
             crate::PurePrim::FltNearest(operand) => {
                 lower_pure_unary_code(work, operand, frame, Code::FltNearest)?
             }
-            crate::PurePrim::FltToLeBin(operand) => {
-                lower_pure_unary_code(work, operand, frame, Code::FltToLeBin)?
+            crate::PurePrim::FltToLeBytes(operand) => {
+                lower_pure_unary_code(work, operand, frame, Code::FltToLeBytes)?
             }
-            crate::PurePrim::FltOfLeBin(operand) => {
-                lower_pure_unary_code(work, operand, frame, Code::FltOfLeBin)?
+            crate::PurePrim::FltOfLeBytes(operand) => {
+                lower_pure_unary_code(work, operand, frame, Code::FltOfLeBytes)?
             }
             crate::PurePrim::NatToInt(operand) => {
                 lower_pure_unary_code(work, operand, frame, Code::NatToInt)?
@@ -351,28 +353,42 @@ impl Work<'_, '_, '_> {
             crate::PurePrim::FltToInt(operand) => {
                 lower_pure_unary_code(work, operand, frame, Code::FltToInt)?
             }
-            crate::PurePrim::Bin(bytes) => work.fresh(Value::Pure(Data::Bin(bytes.clone()))),
-            crate::PurePrim::BinLen(bin) => lower_pure_unary_code(work, bin, frame, Code::BinLen)?,
-            crate::PurePrim::BinEql(left, right) => {
-                lower_pure_binary_code(work, left, right, frame, Code::BinEql)?
+            crate::PurePrim::Bin(grain, value) => {
+                work.fresh(Value::Pure(Data::Bin(*grain, value.clone())))
+            }
+            crate::PurePrim::BinLen(grain, bin) => {
+                lower_pure_unary_code(work, bin, frame, |bin| Code::BinLen(*grain, bin))?
+            }
+            crate::PurePrim::BinEql(grain, left, right) => {
+                lower_pure_binary_code(work, left, right, frame, |left, right| {
+                    Code::BinEql(*grain, left, right)
+                })?
             }
             // Handle identity is byte identity: the rep is bytes from here down.
             crate::PurePrim::IoEql(left, right) => {
-                lower_pure_binary_code(work, left, right, frame, Code::BinEql)?
+                lower_pure_binary_code(work, left, right, frame, |left, right| {
+                    Code::BinEql(Grain::X, left, right)
+                })?
             }
-            crate::PurePrim::BinGet(bin, idx) => {
-                lower_pure_binary_code(work, bin, idx, frame, Code::BinGet)?
+            crate::PurePrim::BinGet(grain, bin, idx) => {
+                lower_pure_binary_code(work, bin, idx, frame, |bin, idx| {
+                    Code::BinGet(*grain, bin, idx)
+                })?
             }
-            crate::PurePrim::BinSlice(bin, start, end) => {
-                lower_pure_ternary_code(work, bin, start, end, frame, Code::BinSlice)?
+            crate::PurePrim::BinSlice(grain, bin, start, end) => {
+                lower_pure_ternary_code(work, bin, start, end, frame, |bin, start, end| {
+                    Code::BinSlice(*grain, bin, start, end)
+                })?
             }
-            crate::PurePrim::BinAppend(bin, byte) => {
-                lower_pure_binary_code(work, bin, byte, frame, Code::BinAppend)?
+            crate::PurePrim::BinAppend(grain, bin, atom) => {
+                lower_pure_binary_code(work, bin, atom, frame, |bin, atom| {
+                    Code::BinAppend(*grain, bin, atom)
+                })?
             }
-            crate::PurePrim::BinConcat(operands) => {
+            crate::PurePrim::BinConcat(grain, operands) => {
                 let names = lower_pure_names(work, operands, frame)?;
 
-                work.fresh(Value::Eval(Code::BinConcat(names)))
+                work.fresh(Value::Eval(Code::BinConcat(*grain, names)))
             }
             crate::PurePrim::Lst(elements) => {
                 let names = lower_pure_names(work, elements, frame)?;
@@ -400,9 +416,10 @@ impl Work<'_, '_, '_> {
             // A handle erases to its host token bytes: the LE encoding of the token
             // integer, the same `BigUint::to_bytes_le` the runtime mints and keys on.
             // This is the lone spot in the pipeline that knows a handle is bytes.
-            crate::PurePrim::Io(token) => {
-                work.fresh(Value::Pure(Data::Bin(BigUint::from(*token).to_bytes_le())))
-            }
+            crate::PurePrim::Io(token) => work.fresh(Value::Pure(Data::Bin(
+                Grain::X,
+                PackedBin::from_bytes(BigUint::from(*token).to_bytes_le()),
+            ))),
         })
     }
 
@@ -490,7 +507,7 @@ impl Work<'_, '_, '_> {
 
     fn lower_value_pure_prim<'b>(
         &mut self,
-        prim: &'b crate::PurePrim,
+        prim: &'b PurePrim,
         frame: &'b Frame,
         cont: Cont<'b>,
     ) -> LowerResult<Tail> {
@@ -504,7 +521,10 @@ impl Work<'_, '_, '_> {
             }
             // A handle erases to its host token bytes (see the pure-position arm).
             crate::PurePrim::Io(token) => {
-                let value = work.fresh(Value::Pure(Data::Bin(BigUint::from(*token).to_bytes_le())));
+                let value = work.fresh(Value::Pure(Data::Bin(
+                    Grain::X,
+                    PackedBin::from_bytes(BigUint::from(*token).to_bytes_le()),
+                )));
 
                 cont.call(work, value)
             }
@@ -674,11 +694,11 @@ impl Work<'_, '_, '_> {
             crate::PurePrim::FltNearest(operand) => {
                 lower_unary_code(work, operand, frame, cont, Code::FltNearest)
             }
-            crate::PurePrim::FltToLeBin(operand) => {
-                lower_unary_code(work, operand, frame, cont, Code::FltToLeBin)
+            crate::PurePrim::FltToLeBytes(operand) => {
+                lower_unary_code(work, operand, frame, cont, Code::FltToLeBytes)
             }
-            crate::PurePrim::FltOfLeBin(operand) => {
-                lower_unary_code(work, operand, frame, cont, Code::FltOfLeBin)
+            crate::PurePrim::FltOfLeBytes(operand) => {
+                lower_unary_code(work, operand, frame, cont, Code::FltOfLeBytes)
             }
             crate::PurePrim::NatToInt(operand) => {
                 lower_unary_code(work, operand, frame, cont, Code::NatToInt)
@@ -698,34 +718,50 @@ impl Work<'_, '_, '_> {
             crate::PurePrim::FltToNat(operand) => {
                 lower_unary_code(work, operand, frame, cont, Code::FltToNat)
             }
-            crate::PurePrim::Bin(bytes) => {
-                let value = work.fresh(Value::Pure(Data::Bin(bytes.clone())));
+            crate::PurePrim::Bin(grain, packed) => {
+                let value = work.fresh(Value::Pure(Data::Bin(*grain, packed.clone())));
 
                 cont.call(work, value)
             }
-            crate::PurePrim::BinLen(bin) => lower_unary_code(work, bin, frame, cont, Code::BinLen),
-            crate::PurePrim::BinEql(left, right) => {
-                lower_binary_code(work, left, right, frame, cont, Code::BinEql)
+            crate::PurePrim::BinLen(grain, bin) => {
+                lower_unary_code(work, bin, frame, cont, move |bin| Code::BinLen(*grain, bin))
+            }
+            crate::PurePrim::BinEql(grain, left, right) => {
+                lower_binary_code(work, left, right, frame, cont, move |left, right| {
+                    Code::BinEql(*grain, left, right)
+                })
             }
             // Handle identity is byte identity: the rep is bytes from here down.
             crate::PurePrim::IoEql(left, right) => {
-                lower_binary_code(work, left, right, frame, cont, Code::BinEql)
+                lower_binary_code(work, left, right, frame, cont, |left, right| {
+                    Code::BinEql(Grain::X, left, right)
+                })
             }
-            crate::PurePrim::BinGet(bin, idx) => {
-                lower_binary_code(work, bin, idx, frame, cont, Code::BinGet)
+            crate::PurePrim::BinGet(grain, bin, idx) => {
+                lower_binary_code(work, bin, idx, frame, cont, move |bin, idx| {
+                    Code::BinGet(*grain, bin, idx)
+                })
             }
-            crate::PurePrim::BinSlice(bin, start, end) => {
-                lower_ternary_code(work, bin, start, end, frame, cont, Code::BinSlice)
+            crate::PurePrim::BinSlice(grain, bin, start, end) => lower_ternary_code(
+                work,
+                bin,
+                start,
+                end,
+                frame,
+                cont,
+                move |bin, start, end| Code::BinSlice(*grain, bin, start, end),
+            ),
+            crate::PurePrim::BinAppend(grain, bin, atom) => {
+                lower_binary_code(work, bin, atom, frame, cont, move |bin, atom| {
+                    Code::BinAppend(*grain, bin, atom)
+                })
             }
-            crate::PurePrim::BinAppend(bin, byte) => {
-                lower_binary_code(work, bin, byte, frame, cont, Code::BinAppend)
-            }
-            crate::PurePrim::BinConcat(operands) => work.lower_names(
+            crate::PurePrim::BinConcat(grain, operands) => work.lower_names(
                 operands,
                 frame,
                 vec![],
                 ContMany::new(move |work, names| {
-                    let value = work.fresh(Value::Eval(Code::BinConcat(names)));
+                    let value = work.fresh(Value::Eval(Code::BinConcat(*grain, names)));
 
                     cont.call(work, value)
                 }),

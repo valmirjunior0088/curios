@@ -1,4 +1,7 @@
-use super::*;
+use {
+    super::*,
+    curios_base::{Grain, PackedBin},
+};
 
 #[test]
 fn lowers_and_runs_flt_floor() {
@@ -7,7 +10,7 @@ fn lowers_and_runs_flt_floor() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -31,7 +34,7 @@ fn lowers_and_runs_flt_floor() {
                     ),
                     (
                         curios_cont::ValueName::from("str"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBytes(
                             curios_cont::ValueName::from("result"),
                         )),
                     ),
@@ -76,7 +79,7 @@ fn lowers_and_runs_flt_ceil() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -100,7 +103,7 @@ fn lowers_and_runs_flt_ceil() {
                     ),
                     (
                         curios_cont::ValueName::from("str"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBytes(
                             curios_cont::ValueName::from("result"),
                         )),
                     ),
@@ -145,7 +148,7 @@ fn lowers_and_runs_flt_trunc() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -169,7 +172,7 @@ fn lowers_and_runs_flt_trunc() {
                     ),
                     (
                         curios_cont::ValueName::from("str"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBytes(
                             curios_cont::ValueName::from("result"),
                         )),
                     ),
@@ -214,7 +217,7 @@ fn lowers_and_runs_flt_nearest() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -238,7 +241,7 @@ fn lowers_and_runs_flt_nearest() {
                     ),
                     (
                         curios_cont::ValueName::from("str"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBytes(
                             curios_cont::ValueName::from("result"),
                         )),
                     ),
@@ -283,7 +286,7 @@ fn lowers_and_runs_flt_div() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -312,7 +315,7 @@ fn lowers_and_runs_flt_div() {
                     ),
                     (
                         curios_cont::ValueName::from("str"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBytes(
                             curios_cont::ValueName::from("result"),
                         )),
                     ),
@@ -357,7 +360,7 @@ fn lowers_and_runs_flt_eql() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -402,7 +405,7 @@ fn lowers_and_runs_flt_sqrt() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -426,7 +429,7 @@ fn lowers_and_runs_flt_sqrt() {
                     ),
                     (
                         curios_cont::ValueName::from("str"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBytes(
                             curios_cont::ValueName::from("result"),
                         )),
                     ),
@@ -471,7 +474,7 @@ fn lowers_and_runs_flt_to_int() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -511,7 +514,7 @@ fn lowers_and_runs_flt_neq() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -556,7 +559,7 @@ fn lowers_and_runs_flt_min() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -585,7 +588,7 @@ fn lowers_and_runs_flt_min() {
                     ),
                     (
                         curios_cont::ValueName::from("str"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBytes(
                             curios_cont::ValueName::from("result"),
                         )),
                     ),
@@ -630,7 +633,7 @@ fn lowers_and_runs_flt_max() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -659,7 +662,7 @@ fn lowers_and_runs_flt_max() {
                     ),
                     (
                         curios_cont::ValueName::from("str"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBytes(
                             curios_cont::ValueName::from("result"),
                         )),
                     ),
@@ -704,7 +707,7 @@ fn flt_to_int_overflow_traps() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
     module.add_const(
         curios_cont::ValueName::from("TOO_BIG"),
@@ -734,20 +737,20 @@ fn flt_to_int_overflow_traps() {
     assert!(traps(&module));
 }
 
-/// `Flt/of_le_bin` then `Flt/to_le_bin` over a `Bin` const, bytes to stdout:
+/// `Flt/of_le_bytes` then `Flt/to_le_bytes` over a `Bin` const, bytes to stdout:
 /// the round-trip surfaces the assembled float's exact bit pattern.
-fn of_le_bin_roundtrip_module(input: Vec<u8>) -> curios_cont::Module {
+fn of_le_bytes_roundtrip_module(input: Vec<u8>) -> curios_cont::Module {
     let mut module = curios_cont::Module::new();
     module.set_entry(curios_cont::FuncName::from("main"));
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
         curios_cont::ValueName::from("IN"),
-        curios_cont::Data::Bin(input),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(input)),
     );
 
     module.add_func(
@@ -760,13 +763,13 @@ fn of_le_bin_roundtrip_module(input: Vec<u8>) -> curios_cont::Module {
                 values: vec![
                     (
                         curios_cont::ValueName::from("f"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltOfLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltOfLeBytes(
                             curios_cont::ValueName::from("IN"),
                         )),
                     ),
                     (
                         curios_cont::ValueName::from("str"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBytes(
                             curios_cont::ValueName::from("f"),
                         )),
                     ),
@@ -805,7 +808,7 @@ fn of_le_bin_roundtrip_module(input: Vec<u8>) -> curios_cont::Module {
 }
 
 #[test]
-fn lowers_and_runs_flt_of_le_bin() {
+fn lowers_and_runs_flt_of_le_bytes() {
     for bytes in [
         2.5f32.to_le_bytes(),     // ordinary normal
         0.0f32.to_le_bytes(),     // +0.0
@@ -816,16 +819,16 @@ fn lowers_and_runs_flt_of_le_bin() {
         [0x00, 0x00, 0x80, 0xFF], // -Inf
     ] {
         assert_eq!(
-            bytes_result(&of_le_bin_roundtrip_module(bytes.to_vec())),
+            bytes_result(&of_le_bytes_roundtrip_module(bytes.to_vec())),
             bytes
         );
     }
 }
 
 #[test]
-fn flt_of_le_bin_wrong_length_traps() {
-    assert!(traps(&of_le_bin_roundtrip_module(vec![0, 0, 0])));
-    assert!(traps(&of_le_bin_roundtrip_module(vec![0, 0, 0, 0, 0])));
+fn flt_of_le_bytes_wrong_length_traps() {
+    assert!(traps(&of_le_bytes_roundtrip_module(vec![0, 0, 0])));
+    assert!(traps(&of_le_bytes_roundtrip_module(vec![0, 0, 0, 0, 0])));
 }
 
 // A region with a single block whose body never branches back into it has no

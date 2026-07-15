@@ -109,7 +109,10 @@ fn fold_region(region: &mut Region, lits: &Lits) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {
+        super::*,
+        curios_base::{Grain, PackedBin},
+    };
 
     fn v(name: &str) -> ValueName {
         ValueName::from(name)
@@ -343,16 +346,18 @@ mod tests {
     }
 
     #[test]
-    fn folds_flt_to_le_bin() {
+    fn folds_flt_to_le_bytes() {
         let data = folded(
             vec![
                 (v("a"), Value::Pure(Data::Flt(1.5))),
-                (v("b"), Value::Eval(Code::FltToLeBin(v("a")))),
+                (v("b"), Value::Eval(Code::FltToLeBytes(v("a")))),
             ],
             "b",
         );
         match data {
-            Data::Bin(bytes) => assert_eq!(bytes, 1.5f32.to_le_bytes().to_vec()),
+            Data::Bin(Grain::X, bytes) => {
+                assert_eq!(bytes.as_bytes(), Some(1.5f32.to_le_bytes().as_slice()))
+            }
             other => panic!("expected bin, got {other:?}"),
         }
     }
@@ -361,14 +366,25 @@ mod tests {
     fn folds_bin_concat() {
         let data = folded(
             vec![
-                (v("a"), Value::Pure(Data::Bin(vec![1, 2]))),
-                (v("b"), Value::Pure(Data::Bin(vec![3]))),
-                (v("c"), Value::Eval(Code::BinConcat(vec![v("a"), v("b")]))),
+                (
+                    v("a"),
+                    Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))),
+                ),
+                (
+                    v("b"),
+                    Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![3]))),
+                ),
+                (
+                    v("c"),
+                    Value::Eval(Code::BinConcat(Grain::X, vec![v("a"), v("b")])),
+                ),
             ],
             "c",
         );
         match data {
-            Data::Bin(bytes) => assert_eq!(bytes, vec![1, 2, 3]),
+            Data::Bin(Grain::X, bytes) => {
+                assert_eq!(bytes.as_bytes(), Some(&[1, 2, 3][..]))
+            }
             other => panic!("expected bin, got {other:?}"),
         }
     }
@@ -393,8 +409,14 @@ mod tests {
     fn does_not_fold_concat_with_non_literal_operand() {
         stays_eval(
             vec![
-                (v("a"), Value::Pure(Data::Bin(vec![1]))),
-                (v("c"), Value::Eval(Code::BinConcat(vec![v("a"), v("p")]))),
+                (
+                    v("a"),
+                    Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![1]))),
+                ),
+                (
+                    v("c"),
+                    Value::Eval(Code::BinConcat(Grain::X, vec![v("a"), v("p")])),
+                ),
             ],
             "c",
         );
@@ -462,8 +484,11 @@ mod tests {
 
         let bin_len = folded(
             vec![
-                (v("b"), Value::Pure(Data::Bin(vec![1, 2, 3, 4]))),
-                (v("n"), Value::Eval(Code::BinLen(v("b")))),
+                (
+                    v("b"),
+                    Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2, 3, 4]))),
+                ),
+                (v("n"), Value::Eval(Code::BinLen(Grain::X, v("b")))),
             ],
             "n",
         );
@@ -474,9 +499,12 @@ mod tests {
     fn folds_bin_get_to_byte() {
         let data = folded(
             vec![
-                (v("b"), Value::Pure(Data::Bin(vec![10, 20, 30]))),
+                (
+                    v("b"),
+                    Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![10, 20, 30]))),
+                ),
                 (v("i"), Value::Pure(Data::Nat(1))),
-                (v("w"), Value::Eval(Code::BinGet(v("b"), v("i")))),
+                (v("w"), Value::Eval(Code::BinGet(Grain::X, v("b"), v("i")))),
             ],
             "w",
         );
@@ -774,11 +802,19 @@ mod tests {
     #[test]
     fn folds_bin_eql() {
         assert!(matches!(
-            binary(Data::Bin(vec![1, 2]), Data::Bin(vec![1, 2]), Code::BinEql),
+            binary(
+                Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2])),
+                Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2])),
+                |left, right| Code::BinEql(Grain::X, left, right)
+            ),
             Data::Nat(1)
         ));
         assert!(matches!(
-            binary(Data::Bin(vec![1, 2]), Data::Bin(vec![1, 3]), Code::BinEql),
+            binary(
+                Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2])),
+                Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 3])),
+                |left, right| Code::BinEql(Grain::X, left, right)
+            ),
             Data::Nat(0)
         ));
     }
@@ -787,15 +823,23 @@ mod tests {
     fn folds_bin_slice_in_bounds() {
         let data = folded(
             vec![
-                (v("b"), Value::Pure(Data::Bin(vec![1, 2, 3, 4]))),
+                (
+                    v("b"),
+                    Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2, 3, 4]))),
+                ),
                 (v("s"), Value::Pure(Data::Nat(1))),
                 (v("e"), Value::Pure(Data::Nat(3))),
-                (v("r"), Value::Eval(Code::BinSlice(v("b"), v("s"), v("e")))),
+                (
+                    v("r"),
+                    Value::Eval(Code::BinSlice(Grain::X, v("b"), v("s"), v("e"))),
+                ),
             ],
             "r",
         );
         match data {
-            Data::Bin(bytes) => assert_eq!(bytes, vec![2, 3]),
+            Data::Bin(Grain::X, bytes) => {
+                assert_eq!(bytes.as_bytes(), Some(&[2, 3][..]))
+            }
             other => panic!("expected bin, got {other:?}"),
         }
     }
@@ -821,28 +865,41 @@ mod tests {
     fn does_not_fold_out_of_bounds_slice() {
         stays_eval(
             vec![
-                (v("b"), Value::Pure(Data::Bin(vec![1, 2]))),
+                (
+                    v("b"),
+                    Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))),
+                ),
                 (v("s"), Value::Pure(Data::Nat(0))),
                 (v("e"), Value::Pure(Data::Nat(9))),
-                (v("r"), Value::Eval(Code::BinSlice(v("b"), v("s"), v("e")))),
+                (
+                    v("r"),
+                    Value::Eval(Code::BinSlice(Grain::X, v("b"), v("s"), v("e"))),
+                ),
             ],
             "r",
         );
     }
 
     #[test]
-    fn folds_bin_append_truncating_the_byte() {
-        // 258 & 0xFF == 2: the byte is stored modulo 256, as the array set does.
+    fn folds_bin_append_with_a_byte() {
         let data = folded(
             vec![
-                (v("b"), Value::Pure(Data::Bin(vec![1, 2]))),
-                (v("x"), Value::Pure(Data::Nat(258))),
-                (v("r"), Value::Eval(Code::BinAppend(v("b"), v("x")))),
+                (
+                    v("b"),
+                    Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))),
+                ),
+                (v("x"), Value::Pure(Data::Nat(255))),
+                (
+                    v("r"),
+                    Value::Eval(Code::BinAppend(Grain::X, v("b"), v("x"))),
+                ),
             ],
             "r",
         );
         match data {
-            Data::Bin(bytes) => assert_eq!(bytes, vec![1, 2, 2]),
+            Data::Bin(Grain::X, bytes) => {
+                assert_eq!(bytes.as_bytes(), Some(&[1, 2, 255][..]))
+            }
             other => panic!("expected bin, got {other:?}"),
         }
     }

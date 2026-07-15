@@ -1,6 +1,6 @@
 # Representation specification PT3 — certified `Char` and Unicode-scalar `Str`
 
-Working implementation specification for introducing a real `Char` type in Curios and changing `Str`'s logical element from an unrefined `Nat` code point to a certified Unicode scalar value. This is the third specification in the representation series: [PT1](REPRESENTATION_SPEC_PT1_BIN.md) supplies primitive `Byte` and `Bin/X`; [PT2](REPRESENTATION_SPEC_PT2_NUMERIC.md) completes the packed integer layers and conversion work; [PT4](REPRESENTATION_SPEC_PT4_BIGFLT.md) subsequently handles `BigFlt` and its exclusive obligations.
+Working implementation specification for introducing a real `Char` type in Curios and changing `Str`'s logical element from an unrefined `Nat` code point to a certified Unicode scalar value. This is the third specification in the representation series: [packed Bits, Bytes, and Byte syntax](SYNTAX.md#literals) supplies primitive `Byte` and `Bytes`; [PT2](REPRESENTATION_SPEC_PT2_NUMERIC.md) completes the packed integer layers and conversion work; [PT4](REPRESENTATION_SPEC_PT4_BIGFLT.md) subsequently handles `BigFlt` and its exclusive obligations.
 
 This file owns character and string semantics only. Durable conclusions must move into `SYNTAX.md`, `ROADMAP.md`, `AGENTS.md`, and standard-library/module documentation when the implementation lands; delete this working series after PT4.
 
@@ -17,7 +17,7 @@ The same `Nat` type consequently denotes unrelated domains: sequence indices, co
 PT3 begins after PT1 and PT2 are stable. The hard dependency is PT1's final X contract:
 
 ```text
-Bin/X = empty | Byte × Bin/X
+Bytes = empty | Byte × Bytes
 ```
 
 PT2 is ordered before PT3 to keep the numeric/conversion experiment isolated from Unicode proof migration. PT3 must not modify conversion machinery or the packed carrier contract.
@@ -32,7 +32,7 @@ PT4 may use `Str` for presentation but must consume the finished PT3 API rather 
 
 **The wrapper is zero-cost.** A `Char` contains one runtime-relevant `Nat` plus a `Prop` certificate. Proof erasure and single-field struct collapse make its runtime representation the same i31 scalar currently used for decoded code points.
 
-**`Str` remains UTF-8-backed.** A string is still certified `Bin/X`, not `Lst(Char)`. Logical folds decode `Char`; storage, equality, slicing infrastructure, literals, and I/O remain compact UTF-8 bytes.
+**`Str` remains UTF-8-backed.** A string is still certified `Bytes`, not `Lst(Char)`. Logical folds decode `Char`; storage, equality, slicing infrastructure, literals, and I/O remain compact UTF-8 bytes.
 
 **Unicode scalar semantics are stable; Unicode databases are library policy.** Scalar validity belongs to the foundational type. Character categories, case mappings, normalization, grapheme segmentation, and their Unicode-version policy remain standard-library data and algorithms.
 
@@ -97,7 +97,7 @@ Future Unicode escape syntax, if added, must reject surrogates and values above 
 ```crs
 Char/to_nat : Char -> Nat
 Char/of_nat : Nat -> Option(Char)
-Char/to_utf8 : Char -> Bin/X
+Char/to_utf8 : Char -> Bytes
 
 Char/eql : Char -> Char -> Bln
 Char/cmp : Char -> Char -> Order
@@ -110,7 +110,7 @@ Char/is_alpha : Char -> Bln
 Char/is_alphanumeric : Char -> Bln
 ```
 
-`Char/of_nat` performs the scalar check and returns the certificate on success. `Char/to_utf8` is total because invalid scalar values cannot inhabit `Char`; this corrects the current API, whose `Nat -> Bin` signature can be called with a surrogate or an out-of-range value.
+`Char/of_nat` performs the scalar check and returns the certificate on success. `Char/to_utf8` is total because invalid scalar values cannot inhabit `Char`; this corrects the current API, whose `Nat -> Bytes` signature can be called with a surrogate or an out-of-range value.
 
 ASCII-oriented helpers become typed:
 
@@ -150,7 +150,7 @@ The existing `/syn/Str` state machine already enforces valid Unicode scalar sequ
 - `0xF4` caps values at `U+10FFFF`;
 - leads above `0xF4`, stray continuations, and incomplete sequences are rejected.
 
-PT1 changes each structural X head from Nat to `Byte`. The validation state machine should reflect a byte to Nat only at the arithmetic/classification boundary. Its public proof indices continue to describe `Bin/X`.
+PT1 changes each structural Bytes head from Nat to `Byte`. The validation state machine should reflect a byte to Nat only at the arithmetic/classification boundary. Its public proof indices continue to describe `Bytes`.
 
 Add the theorem that a successfully decoded character is scalar-valid. The existing `classify`, continuation bounds, `Utf8`, `peel_byte`, `cont_len`, and `take_conts` structure contains the necessary evidence; the work is to preserve and expose it in the decoded result rather than discarding it.
 
@@ -168,12 +168,12 @@ Do not add a trusted primitive UTF-8 decoder. Closed literals may still reduce t
 
 ```crs
 record Str : Type {
-    bytes : Bin/X,
+    bytes : Bytes,
     valid : Valid(bytes)
 }
 ```
 
-Its runtime representation remains only the packed byte sequence. `Str/to_bin` and `Str/of_bin` become `Bin/X` boundaries.
+Its runtime representation remains only the packed byte sequence. `Str/to_bytes` and `Str/of_bytes` become `Bytes` boundaries.
 
 Change logical character operations to use `Char`:
 
@@ -193,7 +193,7 @@ Case-insensitive comparison must not lowercase raw bytes. The current `lower_byt
 
 ### String literals
 
-String literals remain compiler-meta-emitted UTF-8 `Str` values. Their runtime cost remains one packed `Bin/X` literal; the proof spine erases. PT1 changes emitted byte heads in the derivation to `Byte`, and PT3 changes decoded logical values to `Char`, but the source string syntax and UTF-8 storage do not change.
+String literals remain compiler-meta-emitted UTF-8 `Str` values. Their runtime cost remains one packed `Bytes` literal; the proof spine erases. PT1 changes emitted byte heads in the derivation to `Byte`, and PT3 changes decoded logical values to `Char`, but the source string syntax and UTF-8 storage do not change.
 
 ## Part 6 — standard-library migration
 
@@ -223,7 +223,7 @@ Infix comparison between a `Char` and a `Nat` or `Byte` is rejected. Users write
 
 Printers must preserve character literal spelling and escaping. Diagnostics should print Char literals recognizably where the core term still carries syntax-level presentation; certified library values reduced after elaboration may print through their nominal type or ordinary term form.
 
-Update `SYNTAX.md` to state that `'…'` has type `Char`, numeric literals remain polymorphic numeric scalars, `x\HH` atoms are bytes within `Bin/X`, and strings are UTF-8 `Str` values indexed by Unicode scalar rather than grapheme.
+Update `SYNTAX.md` to state that `'…'` has type `Char`, numeric literals remain polymorphic numeric scalars, `x\HH` atoms are bytes within `Bytes`, and strings are UTF-8 `Str` values indexed by Unicode scalar rather than grapheme.
 
 ## Verification
 
@@ -276,7 +276,7 @@ Property-test `Char/of_nat` and `Char/to_utf8` against Rust's Unicode scalar and
 ## Background facts verified against the codebase
 
 - `/std/Char` currently exists only as a namespace of Nat functions. `Char/to_utf8` currently accepts any Nat, including invalid scalar values.
-- `/syn/Str` stores `Bin` plus `Utf8` evidence. `/std/Str` decodes code points as Nat through `fold`, `get`, and `at`.
+- `/syn/Str` stores `Bytes` plus `Utf8` evidence. `/std/Str` decodes code points as Nat through `fold`, `get`, and `at`.
 - The current validator's lead and continuation bounds already exclude overlong encodings, surrogate values, and values above `U+10FFFF`.
 - Character literals are parsed separately but lower to `Prim::Nat`; the text AST retains `NatLiteral::Char` long enough to change this cleanly.
 - String literals already use a `/syn/Str` meta-emitter that constructs a private certified value and one `Utf8/more` proof node per byte. This is the precedent for syntax-emitted `/syn/Char` construction.

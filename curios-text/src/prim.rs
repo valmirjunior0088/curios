@@ -1,7 +1,7 @@
 use {
     super::{Nat, Term},
     curios_abi::ForeignFunction,
-    curios_base::{Flt, Int},
+    curios_base::{Flt, Grain, Int},
     std::sync::Arc,
 };
 
@@ -16,8 +16,8 @@ pub enum LstEntry {
     Spread(Term),
 }
 
-/// One segment of a `Bin` literal `\00\..bytes\01` — a run of literal bytes,
-/// or a `\..`-spread whose term contributes a whole `Bin` run. The literal is
+/// One segment of a `Bytes` literal `x\00\..bytes\01` — a run of literal bytes,
+/// or a `\..`-spread whose term contributes a whole `Bytes` run. The literal is
 /// a single whitespace-free lexical unit; a spread operand is a glued name
 /// path (projections included) or a parenthesized term.
 #[derive(Debug, Clone, PartialEq)]
@@ -28,7 +28,7 @@ pub enum BinSegment {
     Spread(Term),
 }
 
-/// The hardcoded primitive vocabulary, shaped after `curios_core::Prim` rather than after the written syntax (`Nat`'s payload still differs, keeping surface-only detail like radix and spread segments — `Int`/`Flt` share `curios_base::Int`/`Flt` verbatim, since neither carries any surface-only presentation state): the scalar carriers (`Bln`/`Nat`/`Int`/`Flt`) with their type formers, literal values, and operators, the conversions between them, the `Bin`/`Lst` free-monoid carriers with their literals and accessors, `Io` with the store-described `Foreign` host calls, and the `Cell` mutable reference. The parser only ever produces the literal-value variants (`Bln`/`Nat`/`Flt`/`Bin`/`Lst`); every other variant — type formers and operations alike — is baked directly into the embedded `sys` prelude's definition bodies (see `prelude`), so user code reaches them as ordinary named bindings rather than syntax.
+/// The hardcoded primitive vocabulary, shaped after `curios_core::Prim` rather than after the written syntax (`Nat`'s payload still differs, keeping surface-only detail like radix and spread segments — `Int`/`Flt` share `curios_base::Int`/`Flt` verbatim, since neither carries any surface-only presentation state): the scalar carriers (`Bln`/`Nat`/`Int`/`Flt`) with their type formers, literal values, and operators, the conversions between them, the packed `Bits`/`Bytes` and `Lst` free-monoid carriers with their literals and accessors, `Io` with the store-described `Foreign` host calls, and the `Cell` mutable reference. The parser only ever produces the literal-value variants (`Bln`/`Nat`/`Flt`/packed binary/`Lst`); every other variant — type formers and operations alike — is baked directly into the embedded `sys` prelude's definition bodies (see `prelude`), so user code reaches them as ordinary named bindings rather than syntax.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Prim {
     BlnType,
@@ -56,6 +56,15 @@ pub enum Prim {
     NatXor(Term, Term),
     NatShl(Term, Term),
     NatShr(Term, Term),
+    ByteType,
+    Byte(u8),
+    ByteToNat(Term),
+    NatToByte(Term),
+    ByteEql(Term, Term),
+    ByteLt(Term, Term),
+    ByteLte(Term, Term),
+    ByteGt(Term, Term),
+    ByteGte(Term, Term),
     IntType,
     Int(Int),
     IntEql(Term, Term),
@@ -101,17 +110,17 @@ pub enum Prim {
     IntToNat(Term),
     IntToFlt(Term),
     FltToNat(Term),
-    FltToLeBin(Term),
-    FltOfLeBin(Term),
+    FltToLeBytes(Term),
+    FltOfLeBytes(Term),
     FltToInt(Term),
-    BinType,
-    Bin(Vec<BinSegment>),
-    BinLen(Term),
-    BinEql(Term, Term),
-    BinGet(Term, Term),
-    BinSlice(Term, Term, Term),
-    BinAppend(Term, Term),
-    BinConcat(Term, Term),
+    BinType(Grain),
+    Bin(Grain, Vec<BinSegment>),
+    BinLen(Grain, Term),
+    BinEql(Grain, Term, Term),
+    BinGet(Grain, Term, Term),
+    BinSlice(Grain, Term, Term, Term),
+    BinAppend(Grain, Term, Term),
+    BinConcat(Grain, Term, Term),
     LstType(Term),
     Lst(Vec<LstEntry>),
     LstLen(Term, Term),

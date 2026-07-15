@@ -325,7 +325,7 @@ fn is_ctor_literal(term: &Term) -> bool {
                 PurePrim::Nat(_)
                 | PurePrim::Int(_)
                 | PurePrim::Flt(_)
-                | PurePrim::Bin(_)
+                | PurePrim::Bin(curios_base::Grain::X, _)
                 | PurePrim::Io(_) => {
                     *budget -= 1;
                     true

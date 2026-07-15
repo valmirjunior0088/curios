@@ -1,10 +1,10 @@
-use /std/{Result, Nat, Bin, Str, Bln, Lst};
+use /std/{Result, Nat, Byte, Bytes, Str, Bln, Lst};
 
 pub record Parse(A : Type) : Type {
-    run(input : Bin, pos : Nat) -> Result({Nat, A}, Str)
+    run(input : Bytes, pos : Nat) -> Result({Nat, A}, Str)
 }
 
-pub let run(@A : Type, p : Parse(A), input : Bin) -> Result(A, Str) =
+pub let run(@A : Type, p : Parse(A), input : Bytes) -> Result(A, Str) =
     match p.run(input, 0)
     | success((_, a)) => Result/success(a)
     | failure(msg) => Result/failure(msg)
@@ -59,28 +59,28 @@ pub let and(@A : Type, @B : Type, p : Parse(A), q : Parse(B)) -> Parse({A, B}) =
 pub let any_byte : Parse(Nat) =
     Parse {
         run(input, pos) =
-            match Nat/try_lt(pos, Bin/len(input))
+            match Nat/try_lt(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of input")
-            | some(ok) => Result/success((pos + 1, Bin/at(input, pos, ok)))
+            | some(ok) => Result/success((pos + 1, Byte/to_nat(Bytes/at(input, pos, ok))))
             end
     };
 
 pub let peek_byte : Parse(Nat) =
     Parse {
         run(input, pos) =
-            match Nat/try_lt(pos, Bin/len(input))
+            match Nat/try_lt(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of input")
-            | some(ok) => Result/success((pos, Bin/at(input, pos, ok)))
+            | some(ok) => Result/success((pos, Byte/to_nat(Bytes/at(input, pos, ok))))
             end
     };
 
 pub let take_byte(expected : Nat) -> Parse(Nat) =
     Parse {
         run(input, pos) =
-            match Nat/try_lt(pos, Bin/len(input))
+            match Nat/try_lt(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of input")
             | some(ok) =>
-                let byte = Bin/at(input, pos, ok);
+                let byte = Byte/to_nat(Bytes/at(input, pos, ok));
                 match byte == expected
                 | true => Result/success((pos + 1, byte))
                 | false => Result/failure("unexpected byte")
@@ -88,28 +88,28 @@ pub let take_byte(expected : Nat) -> Parse(Nat) =
             end
     };
 
-pub let take_while(pred : (Nat) -> Bln) -> Parse(Bin) =
+pub let take_while(pred : (Nat) -> Bln) -> Parse(Bytes) =
     Parse {
         run(input, pos) =
             let (stop, _) =
-                match Bin/len(input) - pos : {Nat, Bln}
+                match Bytes/len(input) - pos : {Nat, Bln}
                 | 0 => (pos, false)
                 | step + 1; ih =>
                     let (cur, stopped) = ih;
                     match stopped
                     | true => ih
                     | false =>
-                        match Nat/try_lt(cur, Bin/len(input))
+                        match Nat/try_lt(cur, Bytes/len(input))
                         | none() => (cur, true)
                         | some(ok) =>
-                            match pred(Bin/at(input, cur, ok))
+                            match pred(Byte/to_nat(Bytes/at(input, cur, ok)))
                             | true => (cur + 1, false)
                             | false => (cur, true)
                             end
                         end
                     end
                 end;
-            Result/success((stop, Bin/slice(input, pos, stop)))
+            Result/success((stop, Bytes/slice(input, pos, stop)))
     };
 
 pub let many0(@A : Type, p : Parse(A)) -> Parse(Lst(A)) =

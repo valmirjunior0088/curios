@@ -24,7 +24,7 @@ rec sum(t : Tree) -> Nat =
 
 match Io/input() : {}
 | some(bytes) =>
-    match Str/of_bin(bytes) : {}
+    match Str/of_bytes(bytes) : {}
     | some(s) =>
         match Nat/of_str(Str/trim(s)) : {}
         | some(d) => Io/print(Str/concat(Nat/to_str(sum(build(d, 1))), "\n"))

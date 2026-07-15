@@ -27,10 +27,10 @@ fn nullary_closure_survives_erasure_and_codegen() {
             end;
         let prog : Susp({}) =
             Susp/later(() =>
-                let w = Io/write(Io/stdout, Str/to_bin("ok"));
+                let w = Io/write(Io/stdout, Str/to_bytes("ok"));
                 Susp/now(()));
         let r = force(prog);
-        Io/write(Io/stdout, Str/to_bin("!"))
+        Io/write(Io/stdout, Str/to_bytes("!"))
         "#,
         system,
     )
@@ -51,7 +51,7 @@ fn end_to_end() {
             | left(_) => +42
             | right(_) => +7
             end;
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(score(pair))))
+        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Int/to_str(score(pair))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -79,7 +79,7 @@ fn local_binders_shadow_module_bindings_without_leaking() {
                 let probe : /std/Nat = (let go : /std/Nat = 3; go);
                 go;
         end
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling))))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -98,7 +98,7 @@ fn triangular_sum() {
             | 0 => 0
             | pred + 1; ih => std/Nat/add(ih, pred)
             end;
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(result)))
+        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -110,7 +110,7 @@ fn triangular_sum() {
 fn multi_arg_function() {
     let source = r#"
         let add : (std/Int, std/Int) -> std/Int = (x, y) => std/Int/add(x, y);
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(add(+3, +4))))
+        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3, +4))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -122,7 +122,7 @@ fn multi_arg_function() {
 fn curried_function() {
     let source = r#"
         let add : (std/Int) -> (std/Int) -> std/Int = (x) => (y) => std/Int/add(x, y);
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Int/to_str(add(+3)(+4))))
+        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3)(+4))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -168,7 +168,7 @@ fn bang_std_parse_threads_bangs_left_to_right() {
         let parser : Parse/Parse(Nat) =
             Parse/pure(Nat/sub(Parse/any_byte!, Parse/any_byte!));
 
-        match Parse/run(parser, /std/Str/to_bin("BA")) : {}
+        match Parse/run(parser, /std/Str/to_bytes("BA")) : {}
         | success(n) => Io/print(Nat/to_str(n))
         | failure(msg) => Io/print(msg)
         end
@@ -189,23 +189,23 @@ fn bang_std_parse_threads_bangs_left_to_right() {
 #[test]
 fn bang_region_mixes_action_types() {
     // A single region sequences two actions of *different* payload types: a
-    // `Parse(Bin)` (`take_while`) and a `Parse(Nat)` (`any_byte`). Each `!`
+    // `Parse(Bytes)` (`take_while`) and a `Parse(Nat)` (`any_byte`). Each `!`
     // site elaborates its own `/syn/Monad/bind` application with fresh
-    // implicits (`?A := Bin` for the first, `?A := Nat` for the second), while
+    // implicits (`?A := Bytes` for the first, `?A := Nat` for the second), while
     // the shared continuation typing forces one monad for the region. On "AB":
     // `take_while(is_a)` reads "A" (stops at 'B'), then `any_byte` reads 'B'
-    // (66); `Bin/append("A", 66)` is "AB".
+    // (66); `Bytes/append("A", 66)` is "AB".
     let source = r#"
-        use /std/{Parse, Nat, Bin, Bln, Result, Io, Str};
+        use /std/{Parse, Nat, Bytes, Bln, Result, Io, Str};
 
         let is_a : (Nat) -> Bln = (b) => match b : Bln | 'A' => true | _ => false end;
 
-        let parser : Parse/Parse(Bin) =
-            Parse/pure(Bin/append(Parse/take_while(is_a)!, Parse/any_byte!));
+        let parser : Parse/Parse(Bytes) =
+            Parse/pure(Bytes/append(Parse/take_while(is_a)!, Nat/to_byte(Parse/any_byte!)));
 
-        match Parse/run(parser, /std/Str/to_bin("AB")) : {}
+        match Parse/run(parser, /std/Str/to_bytes("AB")) : {}
         | success(s) =>
-            match Str/of_bin(s) : {}
+            match Str/of_bytes(s) : {}
             | some(t) => Io/print(t)
             | none() => Io/print("invalid utf-8")
             end
@@ -320,11 +320,11 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     // those. The assert pins a comfortable upper bound on the residual funcs
     // while leaving headroom for legitimate std/Fmt drift.
     let source = r#"
-        use /std/{Str, Io, Bin, Fmt};
+        use /std/{Str, Io, Bytes, Fmt};
 
         match Io/read(Io/stdin, 1024) : {}
         | chunk(bytes) =>
-            match Str/of_bin(bytes) : {}
+            match Str/of_bytes(bytes) : {}
             | some(s) => Fmt/print("%s is %d")(Str/trim(s))(30)
             | none() => Io/print("invalid input")
             end
@@ -372,11 +372,11 @@ fn fmt_print_runtime_args_specializes_spine() {
     // the minted spine items and neither the format-string parser nor the
     // generic fold survives to codegen.
     let source = r#"
-        use /std/{Str, Io, Bin, Fmt};
+        use /std/{Str, Io, Bytes, Fmt};
 
         match Io/read(Io/stdin, 1024) : {}
         | chunk(bytes) =>
-            match Str/of_bin(bytes) : {}
+            match Str/of_bytes(bytes) : {}
             | some(s) => Fmt/print("%s is %d")(Str/trim(s))(30)
             | none() => Io/print("invalid input")
             end
@@ -478,7 +478,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     let ersd = ersd_optm.expect("Stage::ErsdOptm observed");
     // "x = 42, s = hello\n", already formatted, as the residual call's operand.
     assert!(
-        ersd.contains("#/std/Io/print(\\78\\20\\3d\\20\\34\\32\\2c\\20\\73\\20\\3d\\20\\68\\65\\6c\\6c\\6f\\0a)"),
+        ersd.contains("#/std/Io/print(x\\78\\20\\3d\\20\\34\\32\\2c\\20\\73\\20\\3d\\20\\68\\65\\6c\\6c\\6f\\0a)"),
         "expected the folded print residual, got:\n{ersd}",
     );
     assert!(
@@ -636,7 +636,7 @@ fn nat_of_str_returns_option() {
         let ok = Option/unwrap_or(Nat/of_str("123"), 0);
         let bad = Option/unwrap_or(Nat/of_str("12a"), 7);
         let empty = Option/unwrap_or(Nat/of_str(""), 9);
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/add(ok, bad), empty))))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(ok, bad), empty))))
         "#,
         system,
     )
@@ -656,7 +656,7 @@ fn int_of_str_returns_option() {
         let neg = Int/abs(Option/unwrap_or(Int/of_str("-5"), +0));
         let pos = Int/abs(Option/unwrap_or(Int/of_str("+7"), +0));
         let bad = Int/abs(Option/unwrap_or(Int/of_str("x"), +3));
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/add(neg, pos), bad))))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(neg, pos), bad))))
         "#,
         system,
     )
@@ -679,7 +679,7 @@ fn flt_of_str_returns_option() {
         let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(".5"), +0.0), +2.0));
         let exp = Flt/to_nat(Option/unwrap_or(Flt/of_str("1e3"), +0.0));
         let bad = Flt/to_nat(Option/unwrap_or(Flt/of_str("abc"), +4.0));
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad)))))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad)))))
         "#,
         system,
     )
@@ -699,7 +699,7 @@ fn option_result_char_helpers() {
         let res0 : Result(Nat, Nat) = Result/success(5);
         let res = Result/unwrap_or(Result/map_success((x : Nat) => Nat/mul(x, 2), res0), 0);
         let up = Char/to_upper('a');
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(Nat/add(opt, res), up))))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(opt, res), up))))
         "#,
         system,
     )
@@ -724,7 +724,7 @@ fn clock_diff_of_two_distinct_now_readings() {
         let a = /std/time/Instant/now();
         let b = /std/time/Instant/now();
         let d = /std/time/Instant/diff(b, a);
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/time/Duration/secs(d))))
+        std/Io/write(std/Io/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(d))))
         "#,
         system,
     )
@@ -740,7 +740,7 @@ fn clock_mono_reads_scripted_elapsed() {
         Duration::from_secs(10),
         r#"
         let e = /std/time/Instant/elapsed();
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(/std/Nat/to_str(/std/time/Duration/secs(e))))
+        std/Io/write(std/Io/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(e))))
         "#,
         system,
     )
@@ -820,7 +820,7 @@ fn match_reads_an_effectful_scrutinee_once() {
 
 #[test]
 fn accumulation_loops_are_linear_by_construction() {
-    // The rope representation's whole promise: a naive 100k-step `Bin/concat`
+    // The rope representation's whole promise: a naive 100k-step `Bytes/concat`
     // accumulation loop is O(n) with no optimizer recognition anywhere — each
     // step is one node allocation, and the single read at the end forces once.
     // The pre-rope representation copied the accumulator per step (Θ(n²), tens
@@ -830,16 +830,16 @@ fn accumulation_loops_are_linear_by_construction() {
     crate::run_text(
         Duration::from_secs(60),
         r#"
-        use /std/{Io, Bin, Nat, Str};
-        rec go(i : Nat, acc : Bin) -> Bin =
+        use /std/{Io, Bytes, Nat, Str};
+        rec go(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
-            | k + 1; ih => go(k, Bin/concat(acc, Str/to_bin("0123456789")))
+            | k + 1; ih => go(k, Bytes/concat(acc, Str/to_bytes("0123456789")))
             end;
-        let built = go(100000, \\);
-        let head = Bin/slice(built, 0, 10);
+        let built = go(100000, x\);
+        let head = Bytes/slice(built, 0, 10);
         let _ = Io/write(Io/stdout, head);
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Bin/len(built))))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Bytes/len(built))))
         "#,
         system,
     )
@@ -863,27 +863,27 @@ fn peel_loops_are_linear_by_construction() {
     crate::run_text(
         Duration::from_secs(60),
         r#"
-        use /std/{Io, Bin, Nat, Str, Cell};
-        rec build(i : Nat, acc : Bin) -> Bin =
+        use /std/{Io, Byte, Bytes, Nat, Str, Cell};
+        rec build(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
-            | k + 1; ih => build(k, Bin/concat(acc, Str/to_bin("0123456789")))
+            | k + 1; ih => build(k, Bytes/concat(acc, Str/to_bytes("0123456789")))
             end;
-        let built = build(10000, \\);
+        let built = build(10000, x\);
         let c = Cell/new(built);
         rec drain(fuel : Nat, acc : Nat) -> Nat =
             match fuel
             | 0 => acc
             | f + 1; ih =>
                 match Cell/get(c)
-                | \\ => acc
-                | \h\..t; ih2 =>
+                | x\ => acc
+                | x\h\..t; ih2 =>
                     let _ = Cell/set(c, t);
-                    drain(f, acc + (h - 48))
+                    drain(f, acc + (Byte/to_nat(h) - 48))
                 end
             end;
-        let total = drain(Bin/len(built) + 1, 0);
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(total)))
+        let total = drain(Bytes/len(built) + 1, 0);
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(total)))
         "#,
         system,
     )
@@ -901,7 +901,7 @@ fn nested_local_rec_runs_correctly() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Nat, Str, Bin};
+        use /std/{Io, Nat, Str, Bytes};
         rec f(n : Nat) -> Nat =
             (rec go(i : Nat) -> Nat =
                 match i
@@ -909,7 +909,7 @@ fn nested_local_rec_runs_correctly() {
                 | k + 1; ih => go(k) + 1
                 end;
              go(n));
-        Io/print(Nat/to_str(f(Bin/len(/std/rand/bin(4)))))
+        Io/print(Nat/to_str(f(Bytes/len(/std/rand/bin(4)))))
         "#,
         system,
     )
@@ -928,7 +928,7 @@ fn local_rec_calls_enclosing_rec_member() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Nat, Str, Bin};
+        use /std/{Io, Nat, Str, Bytes};
         rec f(n : Nat) -> Nat =
             (rec go(i : Nat) -> Nat =
                 match i
@@ -936,7 +936,7 @@ fn local_rec_calls_enclosing_rec_member() {
                 | k + 1; ih => f(k) + go(k)
                 end;
              go(n));
-        Io/print(Nat/to_str(f(Bin/len(/std/rand/bin(3)))))
+        Io/print(Nat/to_str(f(Bytes/len(/std/rand/bin(3)))))
         "#,
         system,
     )
@@ -955,11 +955,11 @@ fn self_referential_value_rec_never_forced_compiles_and_runs() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Nat, Str, Bin};
+        use /std/{Io, Nat, Str, Bytes};
         let make(n : Nat) -> Nat =
             rec loop : Nat = loop;
             n;
-        Io/print(Nat/to_str(make(Bin/len(/std/rand/bin(5)))))
+        Io/print(Nat/to_str(make(Bytes/len(/std/rand/bin(5)))))
         "#,
         system,
     )
@@ -981,7 +981,7 @@ fn sibling_proof_forces_conversion_during_rec_members_raw_window() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Nat, Str, Bin, Eq};
+        use /std/{Io, Nat, Str, Bytes, Eq};
         rec f(n : Nat) -> Nat =
             (rec go(i : Nat) -> Nat =
                 match i
@@ -991,7 +991,7 @@ fn sibling_proof_forces_conversion_during_rec_members_raw_window() {
              go(n))
         and prf(n : Nat) -> Eq(f(0), 0) =
             Eq/refl();
-        Io/print(Nat/to_str(f(Bin/len(/std/rand/bin(3)))))
+        Io/print(Nat/to_str(f(Bytes/len(/std/rand/bin(3)))))
         "#,
         system,
     )
@@ -1014,13 +1014,13 @@ fn sibling_proof_forces_conversion_on_value_rec_member_raw_window() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Nat, Str, Bin, Eq};
+        use /std/{Io, Nat, Str, Bytes, Eq};
         rec x : Nat =
             (rec loop : Nat = loop;
              5)
         and prf : Eq(x, 5) =
             Eq/refl();
-        Io/print(Nat/to_str(x + Bin/len(/std/rand/bin(0))))
+        Io/print(Nat/to_str(x + Bytes/len(/std/rand/bin(0))))
         "#,
         system,
     )
@@ -1042,14 +1042,14 @@ fn type_family_reduces_on_concrete_arg_during_rec_members_raw_window() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Nat, Str, Bin};
+        use /std/{Io, Nat, Str, Bytes};
         rec T(n : Nat) -> Type =
             match n
             | 0 => Nat
             | k + 1; ih => T(k)
             end
         and val : T(2) =
-            Bin/len(/std/rand/bin(3));
+            Bytes/len(/std/rand/bin(3));
         Io/print(Nat/to_str(val))
         "#,
         system,
@@ -1071,13 +1071,13 @@ fn wrapped_transient_in_value_rec_member_raw_window() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Nat, Str, Bin, Eq};
+        use /std/{Io, Nat, Str, Bytes, Eq};
         rec x : Nat =
             (let y : Nat = (rec loop : Nat = loop; 5);
              y)
         and prf : Eq(x, 5) =
             Eq/refl();
-        Io/print(Nat/to_str(x + Bin/len(/std/rand/bin(0))))
+        Io/print(Nat/to_str(x + Bytes/len(/std/rand/bin(0))))
         "#,
         system,
     )
@@ -1098,7 +1098,7 @@ fn sibling_proof_in_local_rec_group_resolves_after_frame_pops() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Nat, Str, Bin, Eq};
+        use /std/{Io, Nat, Str, Bytes, Eq};
         let outer(n : Nat) -> Nat =
             (rec f(i : Nat) -> Nat =
                 match i
@@ -1108,7 +1108,7 @@ fn sibling_proof_in_local_rec_group_resolves_after_frame_pops() {
              and prf : Eq(f(0), 0) =
                 Eq/refl();
              f(n));
-        Io/print(Nat/to_str(outer(Bin/len(/std/rand/bin(3)))))
+        Io/print(Nat/to_str(outer(Bytes/len(/std/rand/bin(3)))))
         "#,
         system,
     )

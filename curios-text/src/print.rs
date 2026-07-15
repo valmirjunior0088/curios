@@ -308,13 +308,23 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer<'static> {
             pure("]"),
             print_cons_ih(ih_label),
         ]),
-        MatchPattern::Bin(BinPattern::End) => pure("\\\\"),
-        MatchPattern::Bin(BinPattern::Byte {
+        MatchPattern::Bin(BinPattern::End(grain)) => pure(format!(
+            "{}\\",
+            match grain {
+                curios_base::Grain::B => "b",
+                curios_base::Grain::X => "x",
+            }
+        )),
+        MatchPattern::Bin(BinPattern::Atom {
+            grain,
             head_label,
             tail_label,
             ih_label,
         }) => flat([
-            pure("\\"),
+            pure(match grain {
+                curios_base::Grain::B => "b\\",
+                curios_base::Grain::X => "x\\",
+            }),
             pure(head_label),
             pure("\\.."),
             pure(tail_label),
@@ -475,37 +485,110 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::FltCeil(operand) => print_prim_call("Flt.ceil", vec![operand]),
         Prim::FltTrunc(operand) => print_prim_call("Flt.trunc", vec![operand]),
         Prim::FltNearest(operand) => print_prim_call("Flt.nearest", vec![operand]),
-        Prim::FltToLeBin(operand) => print_prim_call("Flt.to_le_bin", vec![operand]),
-        Prim::FltOfLeBin(operand) => print_prim_call("Flt.of_le_bin", vec![operand]),
+        Prim::FltToLeBytes(operand) => print_prim_call("Flt.to_le_bytes", vec![operand]),
+        Prim::FltOfLeBytes(operand) => print_prim_call("Flt.of_le_bytes", vec![operand]),
         Prim::NatToInt(operand) => print_prim_call("Nat.to_int", vec![operand]),
         Prim::NatToFlt(operand) => print_prim_call("Nat.to_flt", vec![operand]),
+        Prim::ByteType => pure("Byte"),
+        Prim::Byte(value) => pure(format!("0x{value:02X}")),
+        Prim::ByteToNat(operand) => print_prim_call("Byte.to_nat", vec![operand]),
+        Prim::NatToByte(operand) => print_prim_call("Nat.to_byte", vec![operand]),
+        Prim::ByteEql(left, right) => print_prim_call("Byte.eql", vec![left, right]),
+        Prim::ByteLt(left, right) => print_prim_call("Byte.lt", vec![left, right]),
+        Prim::ByteLte(left, right) => print_prim_call("Byte.lte", vec![left, right]),
+        Prim::ByteGt(left, right) => print_prim_call("Byte.gt", vec![left, right]),
+        Prim::ByteGte(left, right) => print_prim_call("Byte.gte", vec![left, right]),
         Prim::IntToNat(operand) => print_prim_call("Int.to_nat", vec![operand]),
         Prim::IntToFlt(operand) => print_prim_call("Int.to_flt", vec![operand]),
         Prim::FltToNat(operand) => print_prim_call("Flt.to_nat", vec![operand]),
         Prim::FltToInt(operand) => print_prim_call("Flt.to_int", vec![operand]),
-        Prim::BinType => pure("Bin"),
-        Prim::Bin(segments) => match segments.is_empty() {
-            true => pure("\\\\"),
-            false => flat(segments.into_iter().map(|segment| {
-                match segment {
-                    BinSegment::Bytes(bytes) => pure(
-                        bytes
-                            .iter()
-                            .map(|byte| format!("\\{:02x}", byte))
-                            .collect::<String>(),
-                    ),
-                    BinSegment::Spread(operand) => {
-                        flat([pure("\\.."), print_bin_spread_operand(operand)])
+        Prim::BinType(grain) => pure(match grain {
+            curios_base::Grain::B => "Bits",
+            curios_base::Grain::X => "Bytes",
+        }),
+        Prim::Bin(grain, segments) => flat([
+            pure(format!("{grain:?}").to_lowercase()),
+            match segments.is_empty() {
+                true => pure("\\"),
+                false => flat(segments.into_iter().map(move |segment| {
+                    match segment {
+                        BinSegment::Bytes(atoms) => pure(match grain {
+                            curios_base::Grain::B => atoms
+                                .iter()
+                                .map(|bit| format!("\\{bit}"))
+                                .collect::<String>(),
+                            curios_base::Grain::X => atoms
+                                .iter()
+                                .map(|byte| format!("\\{byte:02x}"))
+                                .collect::<String>(),
+                        }),
+                        BinSegment::Spread(operand) => {
+                            flat([pure("\\.."), print_bin_spread_operand(operand)])
+                        }
                     }
+                })),
+            },
+        ]),
+        Prim::BinLen(grain, operand) => print_prim_call(
+            format!(
+                "{}.len",
+                match grain {
+                    curios_base::Grain::B => "Bits",
+                    curios_base::Grain::X => "Bytes",
                 }
-            })),
-        },
-        Prim::BinLen(operand) => print_prim_call("Bin.len", vec![operand]),
-        Prim::BinEql(left, right) => print_prim_call("Bin.eql", vec![left, right]),
-        Prim::BinGet(bin, index) => print_prim_call("Bin.get", vec![bin, index]),
-        Prim::BinSlice(bin, start, end) => print_prim_call("Bin.slice", vec![bin, start, end]),
-        Prim::BinAppend(bin, byte) => print_prim_call("Bin.append", vec![bin, byte]),
-        Prim::BinConcat(left, right) => print_prim_call("Bin.concat", vec![left, right]),
+            ),
+            vec![operand],
+        ),
+        Prim::BinEql(grain, left, right) => print_prim_call(
+            format!(
+                "{}.eql",
+                match grain {
+                    curios_base::Grain::B => "Bits",
+                    curios_base::Grain::X => "Bytes",
+                }
+            ),
+            vec![left, right],
+        ),
+        Prim::BinGet(grain, bin, index) => print_prim_call(
+            format!(
+                "{}.get",
+                match grain {
+                    curios_base::Grain::B => "Bits",
+                    curios_base::Grain::X => "Bytes",
+                }
+            ),
+            vec![bin, index],
+        ),
+        Prim::BinSlice(grain, bin, start, end) => print_prim_call(
+            format!(
+                "{}.slice",
+                match grain {
+                    curios_base::Grain::B => "Bits",
+                    curios_base::Grain::X => "Bytes",
+                }
+            ),
+            vec![bin, start, end],
+        ),
+        Prim::BinAppend(grain, bin, atom) => print_prim_call(
+            format!(
+                "{}.append",
+                match grain {
+                    curios_base::Grain::B => "Bits",
+                    curios_base::Grain::X => "Bytes",
+                }
+            ),
+            vec![bin, atom],
+        ),
+        Prim::BinConcat(grain, left, right) => print_prim_call(
+            format!(
+                "{}.concat",
+                match grain {
+                    curios_base::Grain::B => "Bits",
+                    curios_base::Grain::X => "Bytes",
+                }
+            ),
+            vec![left, right],
+        ),
         Prim::LstType(elem) => print_prim_call("Lst", vec![elem]),
         Prim::Lst(entries) => flat([
             pure("["),

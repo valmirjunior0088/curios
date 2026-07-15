@@ -18,7 +18,11 @@
 //! two passes need — `literals`, `simplify`, `eval`, `project`, `decide_match` —
 //! are `pub`.
 
-use {super::*, std::rc::Rc};
+use {
+    super::*,
+    curios_base::{Grain, PackedBin},
+    std::rc::Rc,
+};
 
 /// What `eval_scalar` produces: a scalar or bytestring, owned outright. A
 /// dedicated carrier rather than [`Data`], whose aggregate variants hold
@@ -29,7 +33,7 @@ pub(crate) enum Scalar {
     Nat(u32),
     Int(i32),
     Flt(f32),
-    Bin(Vec<u8>),
+    Bin(Grain, PackedBin),
 }
 
 impl Scalar {
@@ -65,9 +69,10 @@ impl Scalar {
 
     /// `bytes[start..end]` as a fresh `Bin`, when the bounds are in range; an
     /// out-of-range slice traps, so it is left unfolded.
-    fn bin_slice(bytes: &[u8], start: u32, end: u32) -> Option<Self> {
-        let (start, end) = (start as usize, end as usize);
-        (start <= end && end <= bytes.len()).then(|| Self::Bin(bytes[start..end].to_vec()))
+    fn bin_slice(grain: Grain, value: &PackedBin, start: u32, end: u32) -> Option<Self> {
+        value
+            .slice(grain, start as usize, end as usize)
+            .map(|value| Self::Bin(grain, value))
     }
 
     /// The snapshot of an owned scalar result — total, since a [`Scalar`]
@@ -77,7 +82,7 @@ impl Scalar {
             Scalar::Nat(value) => Snapshot::Nat(value),
             Scalar::Int(value) => Snapshot::Int(value),
             Scalar::Flt(value) => Snapshot::Flt(value),
-            Scalar::Bin(bytes) => Snapshot::Bin(Rc::new(bytes)),
+            Scalar::Bin(grain, value) => Snapshot::Bin(grain, Rc::new(value)),
         }
     }
 }
@@ -122,12 +127,21 @@ fn project<E: EvalEnv>(code: &Code, env: &E) -> Option<Evaluated<E::Elem>> {
             .lst(a)?
             .get(env.nat(i)? as usize)
             .map(|elem| forward(elem, env)),
-        BinGet(b, i) => env
-            .bin(b)?
-            .get(env.nat(i)? as usize)
-            .map(|byte| Evaluated::Scalar(Scalar::Nat(*byte as u32))),
+        BinGet(grain, b, i) => {
+            let value = env.bin(b, *grain)?;
+            let index = env.nat(i)? as usize;
+            match grain {
+                Grain::B => value
+                    .bit(index)
+                    .map(|bit| Evaluated::Scalar(Scalar::bln(bit))),
+                Grain::X => value
+                    .byte(index)
+                    .map(|byte| Evaluated::Scalar(Scalar::Nat(byte as u32))),
+            }
+        }
         LstLen(a) => fits31u(env.lst(a)?.len() as u64).map(|n| Evaluated::Scalar(Scalar::Nat(n))),
-        BinLen(b) => fits31u(env.bin(b)?.len() as u64).map(|n| Evaluated::Scalar(Scalar::Nat(n))),
+        BinLen(grain, b) => fits31u(env.bin(b, *grain)?.len(*grain) as u64)
+            .map(|n| Evaluated::Scalar(Scalar::Nat(n))),
         _ => None,
     }
 }
@@ -291,36 +305,51 @@ fn eval_scalar<E: EvalEnv>(code: &Code, env: &E) -> Option<Scalar> {
         FltToNat(a) => Scalar::flt_to_nat(env.flt(a)?),
         FltToInt(a) => Scalar::flt_to_int(env.flt(a)?),
 
-        FltToLeBin(a) => Some(Scalar::Bin(env.flt(a)?.to_le_bytes().to_vec())),
+        FltToLeBytes(a) => Some(Scalar::Bin(
+            Grain::X,
+            PackedBin::from_bytes(env.flt(a)?.to_le_bytes().to_vec()),
+        )),
 
         // Fold only an exact 4-byte literal; a wrong-length literal is the
         // runtime trap, so it is left unfolded.
-        FltOfLeBin(a) => match <[u8; 4]>::try_from(env.bin(a)?) {
-            Ok(le_bytes) => Some(Scalar::Flt(f32::from_le_bytes(le_bytes))),
-            Err(_) => None,
-        },
+        FltOfLeBytes(a) => {
+            match <[u8; 4]>::try_from(env.bin(a, Grain::X)?.to_bytes()?.as_slice()) {
+                Ok(le_bytes) => Some(Scalar::Flt(f32::from_le_bytes(le_bytes))),
+                Err(_) => None,
+            }
+        }
 
         // Bytewise equality — total whenever both operands are known.
-        BinEql(a, b) => Some(Scalar::bln(env.bin(a)? == env.bin(b)?)),
+        BinEql(grain, a, b) => Some(Scalar::bln(env.bin(a, *grain)? == env.bin(b, *grain)?)),
 
         // Variadic concatenation — total, so always foldable when every operand is
         // a literal of the matching kind.
-        BinConcat(operands) => {
-            let mut bytes = Vec::new();
-            for name in operands {
-                bytes.extend_from_slice(env.bin(name)?);
-            }
-            Some(Scalar::Bin(bytes))
-        }
+        BinConcat(grain, operands) => Some(Scalar::Bin(
+            *grain,
+            PackedBin::concat(
+                operands
+                    .iter()
+                    .map(|name| env.bin(name, *grain))
+                    .collect::<Option<Vec<_>>>()?,
+            ),
+        )),
 
         // `Bin` builders. A slice needs in-bounds literal indices; an append needs
         // a literal byte. Each yields a fresh literal bytestring, so it cascades
         // through further projection and concatenation.
-        BinSlice(b, start, end) => Scalar::bin_slice(env.bin(b)?, env.nat(start)?, env.nat(end)?),
-        BinAppend(b, byte) => {
-            let mut bytes = env.bin(b)?.to_vec();
-            bytes.push(env.nat(byte)? as u8);
-            Some(Scalar::Bin(bytes))
+        BinSlice(grain, b, start, end) => {
+            Scalar::bin_slice(*grain, env.bin(b, *grain)?, env.nat(start)?, env.nat(end)?)
+        }
+        BinAppend(grain, b, atom) => {
+            let value = env.bin(b, *grain)?;
+            let atom = env.nat(atom)?;
+            match grain {
+                Grain::B if atom <= 1 => Some(Scalar::Bin(*grain, value.append_bit(atom != 0))),
+                Grain::X if atom <= u8::MAX as u32 => {
+                    Some(Scalar::Bin(*grain, value.append_byte(atom as u8)?))
+                }
+                _ => None,
+            }
         }
 
         // Aggregate *projection* is handled in `project`; the `Lst` builders are

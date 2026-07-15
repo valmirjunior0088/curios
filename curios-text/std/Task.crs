@@ -1,4 +1,4 @@
-use /std/{Io, Bin, Nat, Bln, Lst, Option, Result, Cell};
+use /std/{Io, Bytes, Nat, Bln, Lst, Option, Result, Cell};
 
 pub induct Pause : Type
 | wait(Io, Nat)
@@ -81,13 +81,13 @@ pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
         | _ => pure(Io/Read/error(Io/error_of(r.status)))
         end);
 
-pub rec write(h : Io, b : Bin) -> Task(Result({}, Io/Error)) =
+pub rec write(h : Io, b : Bytes) -> Task(Result({}, Io/Error)) =
     defer(() =>
         let r = /sys/Io/write(h, b);
         match
         | r.status == /sys/Io/Status/would_block => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, b))
         | r.status != /sys/Io/Status/ok => pure(Result/failure(Io/error_of(r.status)))
-        | r.written < Bin/len(b) => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, Bin/slice(b, r.written, Bin/len(b))))
+        | r.written < Bytes/len(b) => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, Bytes/slice(b, r.written, Bytes/len(b))))
         | _ => pure(Result/success(()))
         end);
 
@@ -100,15 +100,15 @@ pub rec accept(l : Io) -> Task(Result(Io, Io/Error)) =
         | _ => pure(Result/failure(Io/error_of(r.status)))
         end);
 
-pub let drain(read : (Nat) -> Task(Io/Read)) -> Task(Bin) =
-    rec go(acc : Bin) -> Task(Bin) =
+pub let drain(read : (Nat) -> Task(Io/Read)) -> Task(Bytes) =
+    rec go(acc : Bytes) -> Task(Bytes) =
         bind(read(4096), (r) =>
-            match r : Task(Bin)
-            | chunk(bytes) => go(\..acc\..bytes)
+            match r : Task(Bytes)
+            | chunk(bytes) => go(x\..acc\..bytes)
             | eof() => pure(acc)
             | error(_) => pure(acc)
             end);
-    go(\\);
+    go(x\);
 
 pub induct Fut(A : Type) : Type
 | pending(Lst(Waker))

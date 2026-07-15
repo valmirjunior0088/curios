@@ -1,4 +1,7 @@
-use super::{HeadKey, WitnessKey};
+use {
+    super::{HeadKey, WitnessKey},
+    curios_base::Grain,
+};
 
 // Arity one displays bare, so single-parameter diagnostics keep today's
 // spelling ("for head 'Nat'", never "for head '(Nat)'").
@@ -22,6 +25,6 @@ fn witness_key_displays_as_a_tuple_for_higher_arities() {
 #[test]
 fn witness_keys_differ_beyond_the_first_head() {
     let a = WitnessKey(vec![HeadKey::Nat, HeadKey::Bln]);
-    let b = WitnessKey(vec![HeadKey::Nat, HeadKey::Bin]);
+    let b = WitnessKey(vec![HeadKey::Nat, HeadKey::Bin(Grain::X)]);
     assert_ne!(a, b);
 }

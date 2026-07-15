@@ -1,16 +1,16 @@
-use /std/{Bin, Nat, Str, Io, Result, Task};
+use /std/{Bytes, Nat, Str, Io, Result, Task};
 
 pub struct File : Type { Io }
 
 pub let read(f : File, n : Nat) -> Task(Io/Read) =
     Task/read(f.0, n);
 
-pub let write(f : File, b : Bin) -> Task(Result({}, Io/Error)) =
+pub let write(f : File, b : Bytes) -> Task(Result({}, Io/Error)) =
     Task/write(f.0, b);
 
 pub let open(path : Str, mode : Io/Mode) -> Task(Result(File, Io/Error)) =
     Task/defer(() =>
-        let r = /sys/Io/open(Str/to_bin(path), Io/of_mode(mode));
+        let r = /sys/Io/open(Str/to_bytes(path), Io/of_mode(mode));
         match r.status == /sys/Io/Status/ok : Task(Result(File, Io/Error))
         | true =>
             let _ = Task/nonblocking(r.handle);
@@ -31,8 +31,8 @@ pub let with(@A : Type, path : Str, mode : Io/Mode, body : (File) -> Task(A)) ->
         | failure(e) => Task/pure(Result/failure(e))
         end);
 
-let drain(f : File) -> Task(Bin) =
+let drain(f : File) -> Task(Bytes) =
     Task/drain((n) => read(f, n));
 
-pub let read_all(path : Str) -> Task(Result(Bin, Io/Error)) =
+pub let read_all(path : Str) -> Task(Result(Bytes, Io/Error)) =
     with(path, Io/Mode/read(), (f) => drain(f));

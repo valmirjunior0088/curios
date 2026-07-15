@@ -23,9 +23,11 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
 
     match (this, that) {
         (Prim::NatType, Prim::NatType)
+        | (Prim::ByteType, Prim::ByteType)
         | (Prim::IntType, Prim::IntType)
         | (Prim::FltType, Prim::FltType)
-        | (Prim::BinType, Prim::BinType)
+        | (Prim::BinType(curios_base::Grain::X), Prim::BinType(curios_base::Grain::X))
+        | (Prim::BinType(curios_base::Grain::B), Prim::BinType(curios_base::Grain::B))
         | (Prim::IoType, Prim::IoType) => Ok(true),
         (Prim::Io(this), Prim::Io(that)) => Ok(this == that),
         // Two `Nat`s are the free monoid on one generator: peel the shared
@@ -39,8 +41,14 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             }
         }),
         (Prim::Int(this), Prim::Int(that)) => Ok(this == that),
+        (Prim::Byte(this), Prim::Byte(that)) => Ok(this == that),
         (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
-        (Prim::Bin(this), Prim::Bin(that)) => Ok(this == that),
+        (Prim::Bin(curios_base::Grain::X, this), Prim::Bin(curios_base::Grain::X, that)) => {
+            Ok(this == that)
+        }
+        (Prim::Bin(curios_base::Grain::B, this), Prim::Bin(curios_base::Grain::B, that)) => {
+            Ok(this == that)
+        }
         (Prim::IoEql(this_left, this_right), Prim::IoEql(that_left, that_right))
         | (Prim::NatEql(this_left, this_right), Prim::NatEql(that_left, that_right))
         | (Prim::NatNeq(this_left, this_right), Prim::NatNeq(that_left, that_right))
@@ -58,6 +66,11 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         | (Prim::NatXor(this_left, this_right), Prim::NatXor(that_left, that_right))
         | (Prim::NatShl(this_left, this_right), Prim::NatShl(that_left, that_right))
         | (Prim::NatShr(this_left, this_right), Prim::NatShr(that_left, that_right))
+        | (Prim::ByteEql(this_left, this_right), Prim::ByteEql(that_left, that_right))
+        | (Prim::ByteLt(this_left, this_right), Prim::ByteLt(that_left, that_right))
+        | (Prim::ByteLte(this_left, this_right), Prim::ByteLte(that_left, that_right))
+        | (Prim::ByteGt(this_left, this_right), Prim::ByteGt(that_left, that_right))
+        | (Prim::ByteGte(this_left, this_right), Prim::ByteGte(that_left, that_right))
         | (Prim::BlnAnd(this_left, this_right), Prim::BlnAnd(that_left, that_right))
         | (Prim::BlnOr(this_left, this_right), Prim::BlnOr(that_left, that_right))
         | (Prim::BlnXor(this_left, this_right), Prim::BlnXor(that_left, that_right))
@@ -92,12 +105,37 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         | (Prim::FltGte(this_left, this_right), Prim::FltGte(that_left, that_right))
         | (Prim::FltMin(this_left, this_right), Prim::FltMin(that_left, that_right))
         | (Prim::FltMax(this_left, this_right), Prim::FltMax(that_left, that_right))
-        | (Prim::BinEql(this_left, this_right), Prim::BinEql(that_left, that_right))
-        | (Prim::BinGet(this_left, this_right), Prim::BinGet(that_left, that_right))
-        | (Prim::BinAppend(this_left, this_right), Prim::BinAppend(that_left, that_right)) => {
+        | (
+            Prim::BinEql(curios_base::Grain::X, this_left, this_right),
+            Prim::BinEql(curios_base::Grain::X, that_left, that_right),
+        )
+        | (
+            Prim::BinGet(curios_base::Grain::X, this_left, this_right),
+            Prim::BinGet(curios_base::Grain::X, that_left, that_right),
+        )
+        | (
+            Prim::BinAppend(curios_base::Grain::X, this_left, this_right),
+            Prim::BinAppend(curios_base::Grain::X, that_left, that_right),
+        ) => {
             cmp.enqueue(Term::type_(), this_left, that_left);
             cmp.enqueue(Term::type_(), this_right, that_right);
 
+            Ok(true)
+        }
+        (
+            Prim::BinEql(curios_base::Grain::B, this_left, this_right),
+            Prim::BinEql(curios_base::Grain::B, that_left, that_right),
+        )
+        | (
+            Prim::BinGet(curios_base::Grain::B, this_left, this_right),
+            Prim::BinGet(curios_base::Grain::B, that_left, that_right),
+        )
+        | (
+            Prim::BinAppend(curios_base::Grain::B, this_left, this_right),
+            Prim::BinAppend(curios_base::Grain::B, that_left, that_right),
+        ) => {
+            cmp.enqueue(Term::type_(), this_left, that_left);
+            cmp.enqueue(Term::type_(), this_right, that_right);
             Ok(true)
         }
         (Prim::FltNeg(this), Prim::FltNeg(that))
@@ -107,15 +145,18 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         | (Prim::FltCeil(this), Prim::FltCeil(that))
         | (Prim::FltTrunc(this), Prim::FltTrunc(that))
         | (Prim::FltNearest(this), Prim::FltNearest(that))
-        | (Prim::FltToLeBin(this), Prim::FltToLeBin(that))
-        | (Prim::FltOfLeBin(this), Prim::FltOfLeBin(that))
+        | (Prim::FltToLeBytes(this), Prim::FltToLeBytes(that))
+        | (Prim::FltOfLeBytes(this), Prim::FltOfLeBytes(that))
         | (Prim::NatToInt(this), Prim::NatToInt(that))
         | (Prim::NatToFlt(this), Prim::NatToFlt(that))
         | (Prim::IntToNat(this), Prim::IntToNat(that))
         | (Prim::IntToFlt(this), Prim::IntToFlt(that))
         | (Prim::FltToNat(this), Prim::FltToNat(that))
         | (Prim::FltToInt(this), Prim::FltToInt(that))
-        | (Prim::BinLen(this), Prim::BinLen(that))
+        | (Prim::ByteToNat(this), Prim::ByteToNat(that))
+        | (Prim::NatToByte(this), Prim::NatToByte(that))
+        | (Prim::BinLen(curios_base::Grain::X, this), Prim::BinLen(curios_base::Grain::X, that))
+        | (Prim::BinLen(curios_base::Grain::B, this), Prim::BinLen(curios_base::Grain::B, that))
         | (Prim::LstType(this), Prim::LstType(that))
         | (Prim::CellType(this), Prim::CellType(that)) => {
             cmp.enqueue(Term::type_(), this, that);
@@ -123,13 +164,22 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             Ok(true)
         }
         (
-            Prim::BinSlice(this_bin, this_start, this_end),
-            Prim::BinSlice(that_bin, that_start, that_end),
+            Prim::BinSlice(curios_base::Grain::X, this_bin, this_start, this_end),
+            Prim::BinSlice(curios_base::Grain::X, that_bin, that_start, that_end),
         ) => {
             cmp.enqueue(Term::type_(), this_bin, that_bin);
             cmp.enqueue(Term::type_(), this_start, that_start);
             cmp.enqueue(Term::type_(), this_end, that_end);
 
+            Ok(true)
+        }
+        (
+            Prim::BinSlice(curios_base::Grain::B, this_bin, this_start, this_end),
+            Prim::BinSlice(curios_base::Grain::B, that_bin, that_start, that_end),
+        ) => {
+            cmp.enqueue(Term::type_(), this_bin, that_bin);
+            cmp.enqueue(Term::type_(), this_start, that_start);
+            cmp.enqueue(Term::type_(), this_end, that_end);
             Ok(true)
         }
         (
@@ -170,7 +220,14 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
             Ok(true)
         }
         (Prim::Lst(this_ops), Prim::Lst(that_ops))
-        | (Prim::BinConcat(this_ops), Prim::BinConcat(that_ops)) => {
+        | (
+            Prim::BinConcat(curios_base::Grain::X, this_ops),
+            Prim::BinConcat(curios_base::Grain::X, that_ops),
+        )
+        | (
+            Prim::BinConcat(curios_base::Grain::B, this_ops),
+            Prim::BinConcat(curios_base::Grain::B, that_ops),
+        ) => {
             if this_ops.len() != that_ops.len() {
                 return Ok(false);
             }

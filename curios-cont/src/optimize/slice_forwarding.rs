@@ -140,13 +140,15 @@ fn forward_eval(name: &ValueName, code: Code, ctx: &mut ForwardCtx) -> Value {
 fn classify(code: &Code) -> Option<(ValueName, Carrier, SuffixRead<ValueName>)> {
     Some(match code {
         Code::LstLen(operand) => (operand.clone(), Carrier::Lst, SuffixRead::Len),
-        Code::BinLen(operand) => (operand.clone(), Carrier::Bin, SuffixRead::Len),
+        Code::BinLen(curios_base::Grain::X, operand) => {
+            (operand.clone(), Carrier::Bin, SuffixRead::Len)
+        }
         Code::LstGet(operand, index) => (
             operand.clone(),
             Carrier::Lst,
             SuffixRead::Get(index.clone()),
         ),
-        Code::BinGet(operand, index) => (
+        Code::BinGet(curios_base::Grain::X, operand, index) => (
             operand.clone(),
             Carrier::Bin,
             SuffixRead::Get(index.clone()),
@@ -156,7 +158,7 @@ fn classify(code: &Code) -> Option<(ValueName, Carrier, SuffixRead<ValueName>)> 
             Carrier::Lst,
             SuffixRead::Slice(start.clone(), end.clone()),
         ),
-        Code::BinSlice(operand, start, end) => (
+        Code::BinSlice(curios_base::Grain::X, operand, start, end) => (
             operand.clone(),
             Carrier::Bin,
             SuffixRead::Slice(start.clone(), end.clone()),
@@ -212,14 +214,14 @@ fn rebased_index(base: &ValueName, index: &ValueName, ctx: &mut ForwardCtx) -> V
 fn rebuild_slice(carrier: Carrier, base: ValueName, start: ValueName, end: ValueName) -> Code {
     match carrier {
         Carrier::Lst => Code::LstSlice(base, start, end),
-        Carrier::Bin => Code::BinSlice(base, start, end),
+        Carrier::Bin => Code::BinSlice(curios_base::Grain::X, base, start, end),
     }
 }
 
 fn rebuild_get(carrier: Carrier, base: ValueName, index: ValueName) -> Code {
     match carrier {
         Carrier::Lst => Code::LstGet(base, index),
-        Carrier::Bin => Code::BinGet(base, index),
+        Carrier::Bin => Code::BinGet(curios_base::Grain::X, base, index),
     }
 }
 
@@ -342,13 +344,16 @@ mod tests {
         // Carriers never cross in well-typed code; guard against it anyway.
         let mut module = module_with(vec![
             (v("w"), Value::Eval(Code::LstSlice(v("xs"), v("s"), v("e")))),
-            (v("x"), Value::Eval(Code::BinGet(v("w"), v("j")))),
+            (
+                v("x"),
+                Value::Eval(Code::BinGet(curios_base::Grain::X, v("w"), v("j"))),
+            ),
         ]);
 
         forward_slices(&mut module);
 
         match &body(&module).last().unwrap().1 {
-            Value::Eval(Code::BinGet(operand, index)) => {
+            Value::Eval(Code::BinGet(curios_base::Grain::X, operand, index)) => {
                 assert_eq!((operand, index), (&v("w"), &v("j")));
             }
             other => panic!("expected the bin get to be left alone, got {other:?}"),

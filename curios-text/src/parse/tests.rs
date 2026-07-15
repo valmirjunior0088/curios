@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_abi::{WireSignature, WireType},
-    curios_base::{Flt, NumOp, Plicity, Qualifier},
+    curios_base::{Flt, Grain, NumOp, Plicity, Qualifier},
 };
 
 #[test]
@@ -1562,38 +1562,47 @@ fn bin_literal_spread_segments() {
 
     // Bytes coalesce into runs around the spread segments.
     assert_eq!(
-        r"\00\..xs\01".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(vec![
-            BinSegment::Bytes(vec![0x00]),
-            BinSegment::Spread(name("xs")),
-            BinSegment::Bytes(vec![0x01]),
-        ]))
+        r"x\00\..xs\01".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(
+            Grain::X,
+            vec![
+                BinSegment::Bytes(vec![0x00]),
+                BinSegment::Spread(name("xs")),
+                BinSegment::Bytes(vec![0x01]),
+            ]
+        ))
         .into()
     );
     assert_eq!(
-        r"\00\01\..x\02\03".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(vec![
-            BinSegment::Bytes(vec![0x00, 0x01]),
-            BinSegment::Spread(name("x")),
-            BinSegment::Bytes(vec![0x02, 0x03]),
-        ]))
+        r"x\00\01\..x\02\03".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(
+            Grain::X,
+            vec![
+                BinSegment::Bytes(vec![0x00, 0x01]),
+                BinSegment::Spread(name("x")),
+                BinSegment::Bytes(vec![0x02, 0x03]),
+            ]
+        ))
         .into()
     );
 
     // The glued operand admits projections and absolute paths.
     assert_eq!(
-        r"\..hdr.bytes".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(vec![BinSegment::Spread(
-            Subterm::Proj(Proj {
-                head: name("hdr"),
-                field: Field::Label("bytes".to_string()),
-            })
-            .into()
-        )]))
+        r"x\..hdr.bytes".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(
+            Grain::X,
+            vec![BinSegment::Spread(
+                Subterm::Proj(Proj {
+                    head: name("hdr"),
+                    field: Field::Label("bytes".to_string()),
+                })
+                .into()
+            )]
+        ))
         .into()
     );
-    let term = r"\../std/x".parse::<Term>().unwrap();
-    let Subterm::Prim(Prim::Bin(segments)) = term.as_subterm() else {
+    let term = r"x\../std/x".parse::<Term>().unwrap();
+    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     let BinSegment::Spread(operand) = &segments[0] else {
@@ -1604,16 +1613,16 @@ fn bin_literal_spread_segments() {
     // A call is atomic: its argument list is self-delimiting, so it glues
     // without parens — interior whitespace included — and the literal
     // continues at the raw closing paren. A glued `!` binds to the operand.
-    let term = r"\..f( x , y )\01".parse::<Term>().unwrap();
-    let Subterm::Prim(Prim::Bin(segments)) = term.as_subterm() else {
+    let term = r"x\..f( x , y )\01".parse::<Term>().unwrap();
+    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
         matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Apply(_)))
     );
     assert!(matches!(&segments[1], BinSegment::Bytes(bytes) if bytes == &vec![0x01]));
-    let term = r"\..read()!\01".parse::<Term>().unwrap();
-    let Subterm::Prim(Prim::Bin(segments)) = term.as_subterm() else {
+    let term = r"x\..read()!\01".parse::<Term>().unwrap();
+    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -1622,8 +1631,8 @@ fn bin_literal_spread_segments() {
 
     // A parenthesized operand takes a full term (interior whitespace is
     // invisible), for the non-atomic shapes — and admits glued suffixes.
-    let term = r"\..( f(x) )\01".parse::<Term>().unwrap();
-    let Subterm::Prim(Prim::Bin(segments)) = term.as_subterm() else {
+    let term = r"x\..( f(x) )\01".parse::<Term>().unwrap();
+    let Subterm::Prim(Prim::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -1631,37 +1640,52 @@ fn bin_literal_spread_segments() {
     );
     assert!(matches!(&segments[1], BinSegment::Bytes(bytes) if bytes == &vec![0x01]));
 
-    // The empty literal stays `\\`, an empty segment list.
+    // Each grain has an empty prefixed literal.
     assert_eq!(
-        r"\\".parse::<Term>().unwrap(),
-        Subterm::Prim(Prim::Bin(vec![])).into()
+        "x\\".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(Grain::X, vec![])).into()
+    );
+    assert_eq!(
+        "b\\".parse::<Term>().unwrap(),
+        Subterm::Prim(Prim::Bin(Grain::B, vec![])).into()
     );
 
     // TIGHT: the literal is one whitespace-free lexical unit. A spaced byte
     // after an operand is not part of the literal (and strands as trailing
     // junk here), and the operand itself must be glued to the `\..`.
-    assert!(r"\..xs \01".parse::<Term>().is_err());
-    assert!(r"\.. xs".parse::<Term>().is_err());
+    assert!(r"x\..xs \01".parse::<Term>().is_err());
+    assert!(r"x\.. xs".parse::<Term>().is_err());
     // A reserved keyword is not a name, glued or otherwise.
-    assert!(r"\..use".parse::<Term>().is_err());
+    assert!(r"x\..use".parse::<Term>().is_err());
 }
 
 #[test]
-fn lst_and_bin_spreads_round_trip() {
-    // String equality pins the printer's canonical (tight, glued) forms —
-    // including `\\` for the empty Bin literal.
+fn list_bits_and_bytes_spreads_round_trip() {
+    // String equality pins the printer's canonical tight, glued forms for both
+    // grains, including their distinct empty literals.
     for source in [
         "[1, ..xs, 2]",
         "[..xs]",
-        r"\00\..xs\01",
-        r"\..hdr.bytes",
-        r"\../std/x",
-        r"\..f(x)",
-        r"\..Io/read!.bytes",
-        r"\..(x + y)",
-        r"\\",
+        r"x\00\..xs\01",
+        r"x\..hdr.bytes",
+        r"x\../std/x",
+        r"x\..f(x)",
+        r"x\..Io/read!.bytes",
+        r"x\..(x + y)",
+        r"x\",
+        r"b\0\..xs\1",
+        r"b\..bits",
+        r"b\",
     ] {
         assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+    }
+
+    for removed in [r"\00", r"\0", r"\\", r"\..xs"] {
+        assert!(removed.parse::<Term>().is_err());
+    }
+
+    for malformed in [r"b\2", r"b\00", r"x\0", r"x\000"] {
+        assert!(malformed.parse::<Term>().is_err());
     }
 }
 
@@ -1769,9 +1793,9 @@ fn matrix_match_round_trips() {
         // the optional induction hypothesis.
         "match p | (x, []) => x | (x, [h, ..t]) => h end",
         "match p | (x, [h, ..t]; ih) => h | (x, []) => x end",
-        // Bin literal leaves nested inside a constructor payload.
-        r#"match o | some(\\) => y | some(\h\..t) => y | none() => y end"#,
-        r#"match o | some(\h\..t; ih) => y | some(\\) => y | none() => y end"#,
+        // Bits and Bytes literal leaves nested inside a constructor payload.
+        r#"match o | some(x\) => y | some(x\h\..t) => y | none() => y end"#,
+        r#"match o | some(b\h\..t; ih) => y | some(b\) => y | none() => y end"#,
         // Bln literal leaves nested inside a constructor payload.
         "match p | pair(true, y) => y | pair(false, y) => y end",
         // The four hardcoded carriers as *headed* matches — no longer separate
@@ -1784,7 +1808,8 @@ fn matrix_match_round_trips() {
         // the mandatory `| _ =>` default.
         "match d | 0 => a | 5 => b | _ => c end",
         "match a | [] => b | [h, ..t]; ih => c end",
-        r#"match a | \\ => b | \h\..t; ih => c end"#,
+        r#"match a | x\ => b | x\h\..t; ih => c end"#,
+        r#"match a | b\ => b | b\h\..t; ih => c end"#,
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(

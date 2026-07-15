@@ -1,15 +1,15 @@
-use /std/{Str, Nat, Bin, Io, Result, Option, Lst, Task};
+use /std/{Str, Nat, Bytes, Io, Result, Option, Lst, Task};
 
-pub let resolve(host : Str, port : Nat) -> Task(Result(Bin, Io/Error)) =
-    let r = /sys/Io/lookup(Str/to_bin(host), port);
-    match r.status == /sys/Io/Status/ok : Task(Result(Bin, Io/Error))
+pub let resolve(host : Str, port : Nat) -> Task(Result(Bytes, Io/Error)) =
+    let r = /sys/Io/lookup(Str/to_bytes(host), port);
+    match r.status == /sys/Io/Status/ok : Task(Result(Bytes, Io/Error))
     | false => Task/pure(Result/failure(Io/error_of(r.status)))
     | true =>
         Task/using(r.handle, () => /sys/Io/close(r.handle),
             Task/bind(Task/wait(r.handle, /sys/Io/Poll/read), (_) =>
                 let a = /sys/Io/resolve(r.handle);
-                match a.status == /sys/Io/Status/ok : Task(Result(Bin, Io/Error))
+                match a.status == /sys/Io/Status/ok : Task(Result(Bytes, Io/Error))
                 | false => Task/pure(Result/failure(Io/error_of(a.status)))
-                | true => Task/pure(Result/success(Option/unwrap_or(Lst/get(a.addresses, 0), \\)))
+                | true => Task/pure(Result/success(Option/unwrap_or(Lst/get(a.addresses, 0), x\)))
                 end))
     end;

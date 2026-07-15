@@ -1,6 +1,6 @@
 pub use /sys/{Flt};
-pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte, neg, abs, sqrt, floor, ceil, trunc, nearest, to_nat, to_int, to_le_bin, of_le_bin};
-use /std/{Nat, Int, Str, Bln, Option, Bin, Lst, Order, BigNat};
+pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte, neg, abs, sqrt, floor, ceil, trunc, nearest, to_nat, to_int, to_le_bytes, of_le_bytes};
+use /std/{Nat, Byte, Int, Str, Bln, Option, Bytes, Lst, Order, BigNat};
 
 let pow2(k : Nat) -> BigNat =
     BigNat/mul_pow2(BigNat/of_nat(1), k);
@@ -146,11 +146,11 @@ pub let cmp(x : Flt, y : Flt) -> Order =
     end;
 
 pub let to_str(f : Flt) -> Str =
-    let b = Flt/to_le_bin(f);
-    let b0 = Option/unwrap_or(Bin/get(b, 0), 0);
-    let b1 = Option/unwrap_or(Bin/get(b, 1), 0);
-    let b2 = Option/unwrap_or(Bin/get(b, 2), 0);
-    let b3 = Option/unwrap_or(Bin/get(b, 3), 0);
+    let b = Flt/to_le_bytes(f);
+    let b0 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 0), 0));
+    let b1 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 1), 0));
+    let b2 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 2), 0));
+    let b3 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 3), 0));
     let exp_field = b3 % 0x80 * 2 + b2 / 0x80;
     let mant_field = b2 % 0x80 * 0x10000 + b1 * 0x100 + b0;
     let sign =

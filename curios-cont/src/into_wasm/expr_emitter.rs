@@ -1,5 +1,6 @@
 use {
     super::{BlockData, CodeEmitter, Context, Frame, LoadAs, LocalData, Table},
+    curios_base::Grain,
     curios_wasm::{
         BlockType, DataName, DataSegment, Expr, Instr, LabelName, LocalName, Module, NumType,
         ValType,
@@ -118,27 +119,29 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: tpl_n_type,
                 });
             }
-            crate::Data::Bin(bytes) => {
+            crate::Data::Bin(grain, value) => {
                 let rope = self.context.table().bin_rope();
+                let bytes = match grain {
+                    Grain::B => value.to_packed_bytes(),
+                    Grain::X => value
+                        .to_bytes()
+                        .expect("X literals are always byte-aligned"),
+                };
+                let payload_length = bytes.len() as i32;
+                let length = value.len(*grain) as i32;
                 let data_name = DataName::from(format!(
                     "{}${}",
                     value_name.as_string(),
                     self.module.datas().len()
                 ));
-                self.module.add_data(
-                    data_name.clone(),
-                    DataSegment {
-                        bytes: bytes.clone(),
-                    },
-                );
+                self.module
+                    .add_data(data_name.clone(), DataSegment { bytes });
                 // A literal is a leaf: tag 0, the static length, the payload.
                 self.emit_instr(Instr::I32Const { value: 0 });
-                self.emit_instr(Instr::I32Const {
-                    value: bytes.len() as i32,
-                });
+                self.emit_instr(Instr::I32Const { value: length });
                 self.emit_instr(Instr::I32Const { value: 0 });
                 self.emit_instr(Instr::I32Const {
-                    value: bytes.len() as i32,
+                    value: payload_length,
                 });
                 self.emit_instr(Instr::ArrayNewData {
                     type_name: rope.payload,

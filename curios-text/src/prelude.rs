@@ -27,6 +27,10 @@ fn nat() -> Term {
     prim(Prim::NatType)
 }
 
+fn byte() -> Term {
+    prim(Prim::ByteType)
+}
+
 // A `Nat` literal value term, built exactly as the parser builds one: `0` is
 // bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire
 // codes (`curios_abi::{status, poll, mode}`) into the `/sys/Io` constant mirror.
@@ -48,8 +52,8 @@ fn flt() -> Term {
     prim(Prim::FltType)
 }
 
-fn bin() -> Term {
-    prim(Prim::BinType)
+fn bin(grain: curios_base::Grain) -> Term {
+    prim(Prim::BinType(grain))
 }
 
 fn bln() -> Term {
@@ -195,7 +199,7 @@ fn wire_type(type_: &WireType) -> Term {
         WireType::Nat => nat(),
         WireType::Int => int(),
         WireType::Bln => bln(),
-        WireType::Bin => bin(),
+        WireType::Bin => bin(curios_base::Grain::X),
         WireType::Io => io(),
         WireType::Lst(element) => lst_of(wire_type(element)),
     }
@@ -312,6 +316,18 @@ fn nat_ops() -> Vec<TopItem> {
         binary("shr", nat(), nat(), Prim::NatShr),
         unary("to_int", nat(), int(), Prim::NatToInt),
         unary("to_flt", nat(), flt(), Prim::NatToFlt),
+        unary("to_byte", nat(), byte(), Prim::NatToByte),
+    ]
+}
+
+fn byte_ops() -> Vec<TopItem> {
+    vec![
+        unary("to_nat", byte(), nat(), Prim::ByteToNat),
+        binary("eql", byte(), bln(), Prim::ByteEql),
+        binary("lt", byte(), bln(), Prim::ByteLt),
+        binary("lte", byte(), bln(), Prim::ByteLte),
+        binary("gt", byte(), bln(), Prim::ByteGt),
+        binary("gte", byte(), bln(), Prim::ByteGte),
     ]
 }
 
@@ -379,34 +395,64 @@ fn flt_ops() -> Vec<TopItem> {
         unary("nearest", flt(), flt(), Prim::FltNearest),
         unary("to_nat", flt(), nat(), Prim::FltToNat),
         unary("to_int", flt(), int(), Prim::FltToInt),
-        unary("to_le_bin", flt(), bin(), Prim::FltToLeBin),
-        unary("of_le_bin", bin(), flt(), Prim::FltOfLeBin),
+        unary(
+            "to_le_bytes",
+            flt(),
+            bin(curios_base::Grain::X),
+            Prim::FltToLeBytes,
+        ),
+        unary(
+            "of_le_bytes",
+            bin(curios_base::Grain::X),
+            flt(),
+            Prim::FltOfLeBytes,
+        ),
     ]
 }
 
-fn bin_ops() -> Vec<TopItem> {
+fn bin_ops(grain: curios_base::Grain) -> Vec<TopItem> {
+    let type_ = bin(grain);
+    let atom = match grain {
+        curios_base::Grain::B => bln(),
+        curios_base::Grain::X => byte(),
+    };
     vec![
-        unary("len", bin(), nat(), Prim::BinLen),
-        binary("eql", bin(), bln(), Prim::BinEql),
+        pub_fn(
+            "len",
+            vec![("b", type_.clone())],
+            nat(),
+            prim(Prim::BinLen(grain, name("b"))),
+        ),
+        pub_fn(
+            "eql",
+            vec![("a", type_.clone()), ("b", type_.clone())],
+            bln(),
+            prim(Prim::BinEql(grain, name("a"), name("b"))),
+        ),
         pub_fn(
             "get",
-            vec![("b", bin()), ("i", nat())],
-            nat(),
-            prim(Prim::BinGet(name("b"), name("i"))),
+            vec![("b", type_.clone()), ("i", nat())],
+            atom.clone(),
+            prim(Prim::BinGet(grain, name("b"), name("i"))),
         ),
         pub_fn(
             "slice",
-            vec![("b", bin()), ("s", nat()), ("e", nat())],
-            bin(),
-            prim(Prim::BinSlice(name("b"), name("s"), name("e"))),
+            vec![("b", type_.clone()), ("s", nat()), ("e", nat())],
+            type_.clone(),
+            prim(Prim::BinSlice(grain, name("b"), name("s"), name("e"))),
         ),
         pub_fn(
             "append",
-            vec![("b", bin()), ("x", nat())],
-            bin(),
-            prim(Prim::BinAppend(name("b"), name("x"))),
+            vec![("b", type_.clone()), ("x", atom)],
+            type_.clone(),
+            prim(Prim::BinAppend(grain, name("b"), name("x"))),
         ),
-        binary("concat", bin(), bin(), Prim::BinConcat),
+        pub_fn(
+            "concat",
+            vec![("a", type_.clone()), ("b", type_.clone())],
+            type_,
+            prim(Prim::BinConcat(grain, name("a"), name("b"))),
+        ),
     ]
 }
 
@@ -597,12 +643,29 @@ fn sys_module(foreigns: &ForeignStore) -> Module {
         items: vec![
             pub_mod("Nat", with_type(pub_let("Nat", type_(), nat()), nat_ops())),
             pub_use("Nat"),
+            pub_mod(
+                "Byte",
+                with_type(pub_let("Byte", type_(), byte()), byte_ops()),
+            ),
+            pub_use("Byte"),
             pub_mod("Int", with_type(pub_let("Int", type_(), int()), int_ops())),
             pub_use("Int"),
             pub_mod("Flt", with_type(pub_let("Flt", type_(), flt()), flt_ops())),
             pub_use("Flt"),
-            pub_mod("Bin", with_type(pub_let("Bin", type_(), bin()), bin_ops())),
-            pub_use("Bin"),
+            pub_mod(
+                "Bits",
+                with_type(
+                    pub_let("Bits", type_(), bin(curios_base::Grain::B)),
+                    bin_ops(curios_base::Grain::B),
+                ),
+            ),
+            pub_mod(
+                "Bytes",
+                with_type(
+                    pub_let("Bytes", type_(), bin(curios_base::Grain::X)),
+                    bin_ops(curios_base::Grain::X),
+                ),
+            ),
             pub_mod("Bln", with_type(pub_let("Bln", type_(), bln()), bln_ops())),
             pub_use("Bln"),
             pub_mod(
@@ -638,8 +701,10 @@ const STD: &[(&[&str], &str)] = &[
     (&["std"], include_str!("../std.crs")),
     (&["std", "Lst"], include_str!("../std/Lst.crs")),
     (&["std", "Cell"], include_str!("../std/Cell.crs")),
-    (&["std", "Bin"], include_str!("../std/Bin.crs")),
+    (&["std", "Bits"], include_str!("../std/Bits.crs")),
+    (&["std", "Bytes"], include_str!("../std/Bytes.crs")),
     (&["std", "Nat"], include_str!("../std/Nat.crs")),
+    (&["std", "Byte"], include_str!("../std/Byte.crs")),
     (&["std", "Int"], include_str!("../std/Int.crs")),
     (&["std", "Bln"], include_str!("../std/Bln.crs")),
     (&["std", "Io"], include_str!("../std/Io.crs")),

@@ -1,4 +1,7 @@
-use super::*;
+use {
+    super::*,
+    curios_base::{Grain, PackedBin},
+};
 
 #[test]
 fn lowers_unreachable_tail_to_trap() {
@@ -7,7 +10,7 @@ fn lowers_unreachable_tail_to_trap() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_func(
@@ -38,7 +41,7 @@ fn lowers_and_runs_mutually_recursive_closures() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -268,7 +271,7 @@ fn lowers_and_runs_direct_call() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -345,7 +348,7 @@ fn lowers_and_runs_unit_result() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_func(
@@ -378,7 +381,7 @@ fn lowers_and_runs_float_result() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -408,7 +411,7 @@ fn lowers_and_runs_float_result() {
                     ),
                     (
                         curios_cont::ValueName::from("str"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBytes(
                             curios_cont::ValueName::from("sum"),
                         )),
                     ),
@@ -453,7 +456,7 @@ fn lowers_and_runs_global_tuple() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -505,7 +508,7 @@ fn lowers_and_runs_global_closure() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -591,7 +594,7 @@ fn lowers_and_runs_sparse_match() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(

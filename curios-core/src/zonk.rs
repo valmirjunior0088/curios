@@ -358,9 +358,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                             cons_case: cons_case.map_body(|b| zonk_term(context, b))?,
                         },
                         Carrier::Bin {
+                            grain,
                             empty_case,
                             cons_case,
                         } => Carrier::Bin {
+                            grain: *grain,
                             empty_case: zonk_term(context, empty_case)?,
                             cons_case: cons_case.map_body(|b| zonk_term(context, b))?,
                         },
@@ -456,12 +458,16 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         | Prim::Bln(_)
         | Prim::NatType
         | Prim::Nat(Nat::Zero)
+        | Prim::ByteType
+        | Prim::Byte(_)
         | Prim::IntType
         | Prim::Int(_)
         | Prim::FltType
         | Prim::Flt(_)
-        | Prim::BinType
-        | Prim::Bin(_)
+        | Prim::BinType(curios_base::Grain::X)
+        | Prim::Bin(curios_base::Grain::X, _)
+        | Prim::BinType(curios_base::Grain::B)
+        | Prim::Bin(curios_base::Grain::B, _)
         | Prim::IoType
         | Prim::Io(_) => prim.clone(),
 
@@ -486,6 +492,13 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::NatXor(a, b) => Prim::NatXor(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::NatShl(a, b) => Prim::NatShl(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::NatShr(a, b) => Prim::NatShr(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::ByteToNat(t) => Prim::ByteToNat(zonk_term(context, t)?),
+        Prim::NatToByte(t) => Prim::NatToByte(zonk_term(context, t)?),
+        Prim::ByteEql(a, b) => Prim::ByteEql(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::ByteLt(a, b) => Prim::ByteLt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::ByteLte(a, b) => Prim::ByteLte(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::ByteGt(a, b) => Prim::ByteGt(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::ByteGte(a, b) => Prim::ByteGte(zonk_term(context, a)?, zonk_term(context, b)?),
 
         Prim::BlnAnd(a, b) => Prim::BlnAnd(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::BlnOr(a, b) => Prim::BlnOr(zonk_term(context, a)?, zonk_term(context, b)?),
@@ -532,8 +545,8 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::FltTrunc(t) => Prim::FltTrunc(zonk_term(context, t)?),
         Prim::FltNearest(t) => Prim::FltNearest(zonk_term(context, t)?),
 
-        Prim::FltToLeBin(t) => Prim::FltToLeBin(zonk_term(context, t)?),
-        Prim::FltOfLeBin(t) => Prim::FltOfLeBin(zonk_term(context, t)?),
+        Prim::FltToLeBytes(t) => Prim::FltToLeBytes(zonk_term(context, t)?),
+        Prim::FltOfLeBytes(t) => Prim::FltOfLeBytes(zonk_term(context, t)?),
         Prim::NatToInt(t) => Prim::NatToInt(zonk_term(context, t)?),
         Prim::NatToFlt(t) => Prim::NatToFlt(zonk_term(context, t)?),
         Prim::IntToNat(t) => Prim::IntToNat(zonk_term(context, t)?),
@@ -541,16 +554,60 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::FltToNat(t) => Prim::FltToNat(zonk_term(context, t)?),
         Prim::FltToInt(t) => Prim::FltToInt(zonk_term(context, t)?),
 
-        Prim::BinLen(t) => Prim::BinLen(zonk_term(context, t)?),
-        Prim::BinEql(a, b) => Prim::BinEql(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::BinGet(a, b) => Prim::BinGet(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::BinAppend(a, b) => Prim::BinAppend(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::BinSlice(a, b, c) => Prim::BinSlice(
+        Prim::BinLen(curios_base::Grain::X, t) => {
+            Prim::BinLen(curios_base::Grain::X, zonk_term(context, t)?)
+        }
+        Prim::BinEql(curios_base::Grain::X, a, b) => Prim::BinEql(
+            curios_base::Grain::X,
+            zonk_term(context, a)?,
+            zonk_term(context, b)?,
+        ),
+        Prim::BinGet(curios_base::Grain::X, a, b) => Prim::BinGet(
+            curios_base::Grain::X,
+            zonk_term(context, a)?,
+            zonk_term(context, b)?,
+        ),
+        Prim::BinAppend(curios_base::Grain::X, a, b) => Prim::BinAppend(
+            curios_base::Grain::X,
+            zonk_term(context, a)?,
+            zonk_term(context, b)?,
+        ),
+        Prim::BinSlice(curios_base::Grain::X, a, b, c) => Prim::BinSlice(
+            curios_base::Grain::X,
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
         ),
-        Prim::BinConcat(terms) => Prim::BinConcat(zonk_terms(context, terms)?),
+        Prim::BinConcat(curios_base::Grain::X, terms) => {
+            Prim::BinConcat(curios_base::Grain::X, zonk_terms(context, terms)?)
+        }
+        Prim::BinLen(curios_base::Grain::B, t) => {
+            Prim::BinLen(curios_base::Grain::B, zonk_term(context, t)?)
+        }
+        Prim::BinEql(curios_base::Grain::B, a, b) => Prim::BinEql(
+            curios_base::Grain::B,
+            zonk_term(context, a)?,
+            zonk_term(context, b)?,
+        ),
+        Prim::BinGet(curios_base::Grain::B, a, b) => Prim::BinGet(
+            curios_base::Grain::B,
+            zonk_term(context, a)?,
+            zonk_term(context, b)?,
+        ),
+        Prim::BinAppend(curios_base::Grain::B, a, b) => Prim::BinAppend(
+            curios_base::Grain::B,
+            zonk_term(context, a)?,
+            zonk_term(context, b)?,
+        ),
+        Prim::BinSlice(curios_base::Grain::B, a, b, c) => Prim::BinSlice(
+            curios_base::Grain::B,
+            zonk_term(context, a)?,
+            zonk_term(context, b)?,
+            zonk_term(context, c)?,
+        ),
+        Prim::BinConcat(curios_base::Grain::B, terms) => {
+            Prim::BinConcat(curios_base::Grain::B, zonk_terms(context, terms)?)
+        }
 
         Prim::LstType(t) => Prim::LstType(zonk_term(context, t)?),
         Prim::Lst(elems) => Prim::Lst(zonk_terms(context, elems)?),

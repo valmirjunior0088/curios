@@ -631,6 +631,7 @@ impl Term {
     /// Build the structural `Bin` eliminator ([`Carrier::Bin`]): an empty arm plus a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
     #[allow(clippy::too_many_arguments)]
     pub fn bin_match<H, M, EC, HL, TL, IL, CC>(
+        grain: curios_base::Grain,
         head: H,
         motive_label: Option<&str>,
         motive: M,
@@ -658,6 +659,7 @@ impl Term {
             motive: Self::motive_scope(motive_label, motive.into()),
             cases: Cases::FreeMonoid {
                 carrier: Carrier::Bin {
+                    grain,
                     empty_case: empty_case.into(),
                     cons_case: Scope::close(
                         Three,
@@ -1145,6 +1147,7 @@ pub enum Carrier {
         cons_case: Scope<Two>,
     },
     Bin {
+        grain: curios_base::Grain,
         empty_case: Term,
         cons_case: Scope<Three>,
     },
@@ -1475,6 +1478,7 @@ impl Subterm {
                             Carrier::Bin {
                                 empty_case,
                                 cons_case,
+                                ..
                             } => {
                                 empty_case.contains_transient()
                                     || cons_case.body().contains_transient()
@@ -1656,6 +1660,7 @@ impl Subterm {
                         Carrier::Bin {
                             empty_case,
                             cons_case,
+                            ..
                         } => {
                             empty_case.collect_construction_names(names);
                             cons_case.body().collect_construction_names(names);
@@ -1770,6 +1775,7 @@ impl Subterm {
                             Carrier::Bin {
                                 empty_case,
                                 cons_case,
+                                ..
                             } => empty_case.any_metavar(pred) || cons_case.body().any_metavar(pred),
                             Carrier::Lst {
                                 elem,
@@ -1953,9 +1959,11 @@ impl Bound for Subterm {
                                 cons_case: visit.visit_scope(cons_case),
                             },
                             Carrier::Bin {
+                                grain,
                                 empty_case,
                                 cons_case,
                             } => Carrier::Bin {
+                                grain: *grain,
                                 empty_case: visit.visit_subterm(empty_case),
                                 cons_case: visit.visit_scope(cons_case),
                             },
@@ -2107,6 +2115,7 @@ impl Bound for Subterm {
                     Carrier::Bin {
                         empty_case,
                         cons_case,
+                        ..
                     } => empty_case.reach().max(cons_case.reach()),
                     Carrier::Lst {
                         elem,

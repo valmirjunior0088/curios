@@ -73,7 +73,7 @@ pub(crate) fn walk_value_uses(value: &Value, sink: &mut impl Sink) {
 
 fn walk_data(data: &Data, sink: &mut impl Sink) {
     match data {
-        Data::Nat(_) | Data::Int(_) | Data::Flt(_) | Data::Bin(_) => {}
+        Data::Nat(_) | Data::Int(_) | Data::Flt(_) | Data::Bin(_, _) => {}
         Data::Lst(elems) | Data::Tpl(elems) => walk_uses(elems, sink),
         Data::Clsr(clsr, captures) => {
             sink.clsr_ref(clsr);
@@ -209,9 +209,9 @@ macro_rules! walk_code_operands {
             | FltMin(a, b)
             | FltMax(a, b)
             | FltCopysign(a, b)
-            | BinEql(a, b)
-            | BinGet(a, b)
-            | BinAppend(a, b)
+            | BinEql(_, a, b)
+            | BinGet(_, a, b)
+            | BinAppend(_, a, b)
             | LstGet(a, b)
             | LstAppend(a, b)
             | LstMap(a, b) => {
@@ -220,7 +220,7 @@ macro_rules! walk_code_operands {
             }
 
             // Ternary operands.
-            BinSlice(a, b, c) | LstSlice(a, b, c) => {
+            BinSlice(_, a, b, c) | LstSlice(a, b, c) => {
                 $sink.value_use(a);
                 $sink.value_use(b);
                 $sink.value_use(c);
@@ -247,15 +247,15 @@ macro_rules! walk_code_operands {
             | FltTrunc(a)
             | FltNearest(a)
             | FltToNat(a)
-            | FltToLeBin(a)
-            | FltOfLeBin(a)
+            | FltToLeBytes(a)
+            | FltOfLeBytes(a)
             | FltToInt(a)
-            | BinLen(a)
+            | BinLen(_, a)
             | LstLen(a)
             | TplGet(a, _) => $sink.value_use(a),
 
             // Variadic operands.
-            BinConcat(operands) | LstConcat(operands) => {
+            BinConcat(_, operands) | LstConcat(operands) => {
                 for name in operands {
                     $sink.value_use(name);
                 }
@@ -327,7 +327,7 @@ fn walk_value_mut(value: &mut Value, sink: &mut impl SinkMut) {
 
 fn walk_data_mut(data: &mut Data, sink: &mut impl SinkMut) {
     match data {
-        Data::Nat(_) | Data::Int(_) | Data::Flt(_) | Data::Bin(_) => {}
+        Data::Nat(_) | Data::Int(_) | Data::Flt(_) | Data::Bin(_, _) => {}
         Data::Lst(elems) | Data::Tpl(elems) => walk_uses_mut(elems, sink),
         Data::Clsr(_, captures) => walk_uses_mut(captures, sink),
     }

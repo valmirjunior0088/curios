@@ -117,6 +117,9 @@ pub enum Error {
     /// two select incompatible core forms (the `Nat` eliminator vs. a value
     /// `switch`) and cannot share one column — write one or the other.
     MatrixMixedNatDispatch,
+    /// A binary-pattern column mixes bit and byte grains. A single scrutinee
+    /// has one binary type, so every row in the column must use the same prefix.
+    MatrixMixedBinGrain,
     /// A headless-ladder bind arm `| pattern = value =>` whose `pattern` is a
     /// bare binder — irrefutable, so it always fires and the rest of the ladder
     /// is dead. A bind is for *refutable* matching; use a `let` for an
@@ -257,6 +260,9 @@ impl fmt::Display for Error {
                     f,
                     "a `Nat` match arm mixes successor-peeling (`n + 1; ih`) with literal dispatch (`5`) in one column; use one or the other"
                 )
+            }
+            Error::MatrixMixedBinGrain => {
+                write!(f, "binary match arms mix `b\\` and `x\\` patterns")
             }
             Error::BindArmIrrefutable => {
                 write!(

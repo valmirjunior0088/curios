@@ -1,0 +1,10 @@
+pub use /sys/{Byte};
+pub use /sys/Byte/{to_nat, eql, lt, lte, gt, gte};
+use /std/{Order};
+
+pub let cmp(a : Byte, b : Byte) -> Order =
+    match
+    | Byte/lt(a, b) => Order/lt()
+    | Byte/eql(a, b) => Order/eq()
+    | _ => Order/gt()
+    end;

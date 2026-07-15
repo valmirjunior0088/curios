@@ -1,6 +1,7 @@
 use {
     super::into_cont,
     crate::{Apply, Func, Let, Module, Name, NatMatch, Prim, PurePrim, Rec, Subterm, Term, Tuple},
+    curios_base::{Grain, PackedBin},
     curios_cont::{CallTarget, Data, MatchTarget, Tail, Value},
     std::collections::BTreeMap,
 };
@@ -213,13 +214,16 @@ fn lowers_nat_match_as_sparse_match() {
 
 #[test]
 fn lowers_bin_literal() {
-    let term = Subterm::Prim(Prim::Pure(PurePrim::Bin(vec![1, 2, 3])));
+    let term = Subterm::Prim(Prim::Pure(PurePrim::Bin(
+        Grain::X,
+        PackedBin::from_bytes(vec![1, 2, 3]),
+    )));
     let module = lower(term.into());
 
     let func = &module.funcs()[0].1;
     let has_bin =
         func.region.values.iter().any(
-            |(_, value)| matches!(value, Value::Pure(Data::Bin(bytes)) if bytes == &[1, 2, 3]),
+            |(_, value)| matches!(value, Value::Pure(Data::Bin(Grain::X, bytes)) if bytes.as_bytes() == Some(&[1, 2, 3])),
         );
 
     assert!(has_bin);

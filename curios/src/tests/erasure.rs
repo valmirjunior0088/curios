@@ -11,7 +11,7 @@ fn prop_irrelevance_equates_distinct_proofs() {
         let irrelevant(a : Nat, b : Nat, p : Nat/Lte(a, b), q : Nat/Lte(a, b))
             -> Eq(p, q) =
             Eq/refl();
-        Io/write(Io/stdout, Str/to_bin("ok"))
+        Io/write(Io/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -24,7 +24,7 @@ fn data_is_not_proof_irrelevant() {
     let source = r#"
         use /std/{Io, Str, Eq, Nat};
         let bad(x : Nat, y : Nat) -> Eq(x, y) = Eq/refl();
-        Io/write(Io/stdout, Str/to_bin("ok"))
+        Io/write(Io/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
@@ -57,7 +57,7 @@ fn large_elimination_of_a_prop_is_rejected() {
             | z(_) => 0
             | s(_, _, _) => 1
             end;
-        Io/write(Io/stdout, Str/to_bin("ok"))
+        Io/write(Io/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
@@ -71,7 +71,7 @@ fn erased_param_unused_is_accepted() {
         use /std/{Io, Str, Nat};
         let f : (T : Type, m : Nat) -> Nat = (T, m) => m;
         let r : Nat = f(Nat, 3);
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"3");
 }
@@ -88,7 +88,7 @@ fn erased_param_is_dropped_at_runtime() {
         let h : (m : Type) -> Nat = (m) => 0;
         let g : (n : Type) -> Nat = (n) => h(n);
         let r : Nat = g(Nat);
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"0");
 }
@@ -105,7 +105,7 @@ fn erased_struct_field_collapses_to_bare_value() {
         record Wrap : Type { val : Nat, ghost : Type }
         let make : (n : Type) -> Wrap = (n) => Wrap { val = 5, ghost = n };
         let r : Nat = make(Nat).val;
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"5");
 }
@@ -119,7 +119,7 @@ fn erased_tuple_field_is_a_subset_type() {
         use /std/{Io, Str, Nat};
         let make : (n : Type) -> { val : Nat, Type } = (n) => (5, n);
         let r : Nat = make(Nat).0;
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"5");
 }
@@ -133,7 +133,7 @@ fn erased_definition_param_is_dropped_at_runtime() {
         let h(m : Type) -> Nat = 0;
         let g(n : Type) -> Nat = h(n);
         let r : Nat = g(Nat);
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"0");
 }
@@ -155,7 +155,7 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
             | box(ghost, val) => val
             end;
         let r : Nat = get(make(Nat));
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(r)))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"5");
 }

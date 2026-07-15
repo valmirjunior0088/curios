@@ -193,7 +193,7 @@ fn data_key(
     let (clsr, elems) = match data {
         // Scalars and bytestrings are already interned by constant folding and
         // literal hoisting; keying them here would only duplicate that work.
-        Data::Nat(_) | Data::Int(_) | Data::Flt(_) | Data::Bin(_) => return None,
+        Data::Nat(_) | Data::Int(_) | Data::Flt(_) | Data::Bin(_, _) => return None,
         Data::Lst(elems) | Data::Tpl(elems) => (None, elems),
         Data::Clsr(clsr, captures) => (Some(clsr.clone()), captures),
     };

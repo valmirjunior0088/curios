@@ -103,7 +103,7 @@ fn is_invariant(value: &Value, varying: &HashSet<ValueName>) -> bool {
             // Immediates — nothing saved by moving them.
             Data::Nat(_) | Data::Int(_) => false,
             // Everything else allocates per execution.
-            Data::Flt(_) | Data::Bin(_) | Data::Lst(_) | Data::Tpl(_) | Data::Clsr(..) => true,
+            Data::Flt(_) | Data::Bin(_, _) | Data::Lst(_) | Data::Tpl(_) | Data::Clsr(..) => true,
         },
     };
 

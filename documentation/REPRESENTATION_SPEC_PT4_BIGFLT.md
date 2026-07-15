@@ -1,6 +1,6 @@
 # Representation specification PT4 — exact `BigFlt` and native-float boundaries
 
-Working implementation specification for exact binary-rational arithmetic (`BigFlt`), proof-carrying conversion to and from native `Flt` byte patterns, and the obligations needed exclusively by that layer. This is the final part of the ordered representation series: [PT1](REPRESENTATION_SPEC_PT1_BIN.md) supplies primitive `Byte` and packed Bin; [PT2](REPRESENTATION_SPEC_PT2_NUMERIC.md) supplies packed `BigNat` and `BigInt`; [PT3](REPRESENTATION_SPEC_PT3_CHARACTER.md) supplies the final `Char`/`Str` presentation layer.
+Working implementation specification for exact binary-rational arithmetic (`BigFlt`), proof-carrying conversion to and from native `Flt` byte patterns, and the obligations needed exclusively by that layer. This is the final part of the ordered representation series: [packed Bits, Bytes, and Byte syntax](SYNTAX.md#literals) supplies primitive `Byte`, `Bits`, and `Bytes`; [PT2](REPRESENTATION_SPEC_PT2_NUMERIC.md) supplies packed `BigNat` and `BigInt`; [PT3](REPRESENTATION_SPEC_PT3_CHARACTER.md) supplies the final `Char`/`Str` presentation layer.
 
 Stage 1 ships `BigFlt` as a certified dyadic rational, an arbitrary-precision element of ℤ[1/2]. Stage 2 is deferred until a real workload demands exact interior division; it extends the same private carrier with an odd denominator, yielding full ℚ while preserving dyadics as the `denominator = 1` stratum.
 
@@ -12,7 +12,7 @@ This is a working reference rather than permanent architecture documentation. Fo
 
 PT4 therefore owns every requirement forced exclusively by `BigFlt`:
 
-- the `Flt/of_le_bin` primitive and its byte-pattern tests;
+- the `Flt/of_le_bytes` primitive and its byte-pattern tests;
 - BigNat helpers used only for float top-bit, guard, sticky, or quotient extraction;
 - BigFlt-specific canonicity, arithmetic, order, and reflection lemmas;
 - `widen_b`, `narrow_b`, and `narrow_ratio_b`;
@@ -26,13 +26,13 @@ General BigNat and BigInt operations and ring/order laws remain in PT2 even wher
 
 Native `Flt` arithmetic compiles to opaque `/sys/Flt` Wasm primitives. It carries no algebraic laws and cannot have a structural induction principle: IEEE-754 addition and multiplication are not associative and `Flt` is not a free monoid on a generator.
 
-The opacity also fixes the boundary architecture. Primitive applications on open terms are stuck, conversion over them is congruence-only, and there is no Flt eliminator. A quantified theorem mentioning `Flt/to_le_bin(f)` or `Flt/of_le_bin(bytes)` for open `f` cannot prove even that the resulting byte sequence has length four. Consequently every theorem in PT4 is stated at the byte level:
+The opacity also fixes the boundary architecture. Primitive applications on open terms are stuck, conversion over them is congruence-only, and there is no Flt eliminator. A quantified theorem mentioning `Flt/to_le_bytes(f)` or `Flt/of_le_bytes(bytes)` for open `f` cannot prove even that the resulting byte sequence has length four. Consequently every theorem in PT4 is stated at the byte level:
 
 ```text
-Bin/X -> BigFlt -> Bin/X
+Bytes -> BigFlt -> Bytes
 ```
 
-Flt-facing functions are thin unproved wrappers around `to_le_bin` and `of_le_bin`. Those reinterpret primitives are the explicit trust boundary. Do not add a conversion rule asserting `of_le_bin(to_le_bin(x)) ≡ x`; that would be a postulate disguised as reduction.
+Flt-facing functions are thin unproved wrappers around `to_le_bytes` and `of_le_bytes`. Those reinterpret primitives are the explicit trust boundary. Do not add a conversion rule asserting `of_le_bytes(to_le_bytes(x)) ≡ x`; that would be a postulate disguised as reduction.
 
 `BigFlt` represents `mantissa · 2^exponent` with `mantissa : BigInt` and `exponent : BigInt`. Every finite `f32` is exactly dyadic, so widening loses nothing. Addition, subtraction, and multiplication are closed and exact; canonicalization requires only stripping powers of two from the mantissa. Interior division is deliberately absent from stage 1. Formulas can clear denominators, while boundary quotients use a correctly rounded `narrow_ratio`, which is stronger and more useful than exact-divide-then-round.
 
@@ -55,9 +55,9 @@ Flocq and HOL float formalizations provide the relevant precedent: reason about 
 - `BigFlt` as a certified, representation-private canonical dyadic rational.
 - Exact closed `add`, `sub`, `mul`, `neg`, and `abs` with ring and cancellation laws.
 - An order layer sufficient for boundary correctness: `cmp`, Bln comparisons, reflected Props, antisymmetry, transitivity, and required monotonicity/absolute-difference lemmas.
-- `widen_b : Bin/X -> Option(BigFlt)`, exact and total on byte sequences.
-- `narrow_b : BigFlt -> Bin/X`, correctly rounded to an IEEE-754 binary32 byte pattern using round-to-nearest-even.
-- `narrow_ratio_b : (BigFlt, BigFlt) -> Bin/X`, the only division in stage 1, correctly rounding the exact quotient at the boundary.
+- `widen_b : Bytes -> Option(BigFlt)`, exact and total on byte sequences.
+- `narrow_b : BigFlt -> Bytes`, correctly rounded to an IEEE-754 binary32 byte pattern using round-to-nearest-even.
+- `narrow_ratio_b : (BigFlt, BigFlt) -> Bytes`, the only division in stage 1, correctly rounding the exact quotient at the boundary.
 - Byte-level round-trip, nearest-value, tie-to-even, half-ulp, and denominator-cleared quotient theorems.
 - Thin `widen`, `narrow`, and `narrow_ratio` wrappers over native Flt reinterpretation.
 - Zero postulates and proof definitions acceptable to a future termination/positivity checker.
@@ -75,8 +75,8 @@ Flocq and HOL float formalizations provide the relevant precedent: reason about 
 ## Background facts verified against the codebase
 
 - Native `Flt` is IEEE-754 single precision stored bitwise in `curios-base/src/flt.rs`. Term identity is bitwise: NaN equals itself as a term and `+0.0` differs from `-0.0`, unlike IEEE `==`.
-- `Flt/to_le_bin` exists and emits the four little-endian bytes through `I32ReinterpretF32`. `F32ReinterpretI32` already exists in `curios-wasm`.
-- `Flt/of_le_bin` was delivered in commit `3ed05d35`; PT4 retains its contract and migrates its type from bare Bin/Nat-byte conventions to `Bin/X`/`Byte`.
+- `Flt/to_le_bytes` exists and emits the four little-endian bytes through `I32ReinterpretF32`. `F32ReinterpretI32` already exists in `curios-wasm`.
+- `Flt/of_le_bytes` was delivered in commit `3ed05d35`; PT4 retains its contract and migrates its type from bare Bytes/Nat-byte conventions to `Bytes`/`Byte`.
 - Open-term primitive opacity is the reason all theorems are byte-level.
 - `Flt/of_str` is not correctly rounded, so PT4 cannot reuse it as a proof boundary.
 - Native Int is type-level ℤ but runtime i31. BigFlt uses BigInt for its exponent so pathological exact computations do not acquire a runtime exponent overflow absent from type-level proofs.
@@ -84,14 +84,14 @@ Flocq and HOL float formalizations provide the relevant precedent: reason about 
 - Proof irrelevance and single-field collapse make certificates runtime-free.
 - Curios has no user-code trap primitive, termination checker, strict-positivity checker, or strong-induction library. Stage 1 is designed not to require strong induction.
 
-## Part 1 — `Flt/of_le_bin`
+## Part 1 — `Flt/of_le_bytes`
 
-The primitive assembles a native Flt from exactly four little-endian bytes by OR-ing their reflected Nat values into an i32 and emitting `F32ReinterpretI32`. It traps through the primitive-level `Unreachable` precedent unless the `Bin/X` length is exactly four.
+The primitive assembles a native Flt from exactly four little-endian bytes by OR-ing their reflected Nat values into an i32 and emitting `F32ReinterpretI32`. It traps through the primitive-level `Unreachable` precedent unless the `Bytes` length is exactly four.
 
 Its contract after PT1 is:
 
 ```crs
-Flt/of_le_bin : Bin/X -> Flt
+Flt/of_le_bytes : Bytes -> Flt
 ```
 
 The primitive implementation uses `Byte/to_nat` semantics internally; no user-visible Nat-byte convention remains.
@@ -104,7 +104,7 @@ The delivered implementation footprint, which must be preserved during the PT1 m
 - `curios-text/src/prim.rs`, `prelude.rs`, `into_core/lowerer.rs`, `print.rs`, and the `curios-text/std/Flt.crs` re-export;
 - `curios/src/tests/codegen/code_flt.rs` and codegen registration.
 
-Round-trip fixtures cover `0.0`, `-0.0`, normal values, subnormals, payloaded NaNs, and both infinities. Compare their `to_le_bin` bytes; never use native Flt equality for these tests.
+Round-trip fixtures cover `0.0`, `-0.0`, normal values, subnormals, payloaded NaNs, and both infinities. Compare their `to_le_bytes` bytes; never use native Flt equality for these tests.
 
 ## Part 2 — prerequisite integer helpers owned by PT4
 
@@ -186,7 +186,7 @@ Antisymmetry concludes structural `Eq` because the type is certified. These BigF
 ## Part 6 — exact widening
 
 ```crs
-BigFlt/widen_b : Bin/X -> Option(BigFlt)
+BigFlt/widen_b : Bytes -> Option(BigFlt)
 ```
 
 Return `none` unless the input length is exactly four. Reflect Byte fields to Nat for extraction, following the same bit layout used by native `Flt/to_str`:
@@ -201,7 +201,7 @@ The field extraction is ordinary byte arithmetic, for example `exponent_field = 
 Nothing rounds. The wrapper is:
 
 ```text
-widen(f) = widen_b(Flt/to_le_bin(f))
+widen(f) = widen_b(Flt/to_le_bytes(f))
 ```
 
 The sign collapse for `-0.0` is deliberate and must be documented because native Flt term identity distinguishes the two zeros while mathematical BigFlt does not.
@@ -209,7 +209,7 @@ The sign collapse for `-0.0` is deliberate and must be documented because native
 ## Part 7 — correctly rounded narrowing
 
 ```crs
-BigFlt/narrow_b : BigFlt -> Bin/X
+BigFlt/narrow_b : BigFlt -> Bytes
 ```
 
 Compute the unbiased exponent from magnitude bit length plus the exact exponent. Then:
@@ -222,7 +222,7 @@ Compute the unbiased exponent from magnitude bit length plus the exact exponent.
 Use shifts, structural bit views, and comparisons. Do not implement narrowing through opaque general division.
 
 ```crs
-BigFlt/narrow_ratio_b : BigFlt -> BigFlt -> Bin/X
+BigFlt/narrow_ratio_b : BigFlt -> BigFlt -> Bytes
 ```
 
 This is stage 1's only division. Use a base-2 compare-subtract-double digit loop against the denominator magnitude, producing enough leading, guard, and sticky information to round the exact quotient once. Edge semantics are explicit:
@@ -236,8 +236,8 @@ This loop is also stage 2's future `narrow` engine, so implementing it now prepa
 Wrappers are:
 
 ```text
-narrow = Flt/of_le_bin ∘ narrow_b
-narrow_ratio = Flt/of_le_bin ∘ narrow_ratio_b
+narrow = Flt/of_le_bytes ∘ narrow_b
+narrow_ratio = Flt/of_le_bytes ∘ narrow_ratio_b
 ```
 
 ## Part 8 — byte-level boundary theorems
@@ -246,7 +246,7 @@ Statements avoid postfix `!` in types by carrying successful decode hypotheses a
 
 ### Round-trip
 
-For `b : Bin/X`, `Eq(widen_b(b), Option/some(x))`, and `b` not equal to the negative-zero pattern, prove `Eq(narrow_b(x), b)`. Prove separately that negative zero widens to canonical zero and canonical zero narrows to positive zero. No stronger bitwise statement is true.
+For `b : Bytes`, `Eq(widen_b(b), Option/some(x))`, and `b` not equal to the negative-zero pattern, prove `Eq(narrow_b(x), b)`. Prove separately that negative zero widens to canonical zero and canonical zero narrows to positive zero. No stronger bitwise statement is true.
 
 ### Correct rounding
 
@@ -320,7 +320,7 @@ PT1, PT2's general integer theorem base, the stage-1 dyadic canonicity kernel as
 
 ## Build order
 
-1. Confirm PT1–PT3 and migrate delivered `Flt/of_le_bin` to `Bin/X`/`Byte`.
+1. Confirm PT1–PT3 and migrate delivered `Flt/of_le_bytes` to `Bytes`/`Byte`.
 2. Add only the BigNat/BigInt helpers listed in Part 2 and their structural specifications.
 3. Implement BigFlt representation, stripping, certificate, uniqueness, and `mk`; these proofs gate all later value construction.
 4. Implement arithmetic and ring laws.
@@ -334,7 +334,7 @@ The exact widening and narrowing implementations can proceed in parallel with so
 
 ## Verification
 
-- Preserve the delivered `Flt/of_le_bin` pattern tests across the PT1 byte migration.
+- Preserve the delivered `Flt/of_le_bytes` pattern tests across the PT1 byte migration.
 - Test widening for normals, subnormals, both zeros, infinities, and multiple NaN payloads.
 - Test narrowing at every normal/subnormal boundary, exponent overflow, underflow, exact halfway case, and significand carry.
 - Compare emitted bytes with a trusted IEEE-754 reference for a broad generated corpus.

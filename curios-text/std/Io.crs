@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{stdin, stdout, stderr};
-use /std/{Bin, Str, Nat, Option, Result, Lst};
+use /std/{Bytes, Byte, Str, Nat, Option, Result, Lst};
 
 pub induct Error : Type
 | not_found()
@@ -43,7 +43,7 @@ pub let of_mode(mode : Mode) -> Nat =
     end;
 
 pub induct Read : Type
-| chunk(Bin)
+| chunk(Bytes)
 | eof()
 | error(Error)
 end
@@ -56,29 +56,29 @@ pub let read(h : Io, n : Nat) -> Read =
     | _ => Read/error(error_of(r.status))
     end;
 
-pub rec write(h : Io, b : Bin) -> Result({}, Error) =
+pub rec write(h : Io, b : Bytes) -> Result({}, Error) =
     let r = /sys/Io/write(h, b);
     match
     | r.status != /sys/Io/Status/ok => Result/failure(error_of(r.status))
-    | r.written < Bin/len(b) => write(h, Bin/slice(b, r.written, Bin/len(b)))
+    | r.written < Bytes/len(b) => write(h, Bytes/slice(b, r.written, Bytes/len(b)))
     | _ => Result/success(())
     end;
 
 pub let print(s : Str) -> {} =
-    let _ = write(stdout, Str/to_bin(s));
+    let _ = write(stdout, Str/to_bytes(s));
     ();
 
 pub let print_err(s : Str) -> {} =
-    let _ = write(stderr, Str/to_bin(s));
+    let _ = write(stderr, Str/to_bytes(s));
     ();
 
-pub let input() -> Option(Bin) =
-    rec go(acc : Bin) -> Option(Bin) =
+pub let input() -> Option(Bytes) =
+    rec go(acc : Bytes) -> Option(Bytes) =
         let r = /sys/Io/read(stdin, 1);
         match
-        | r.status != /sys/Io/Status/ok && Bin/len(acc) == 0 => Option/none()
+        | r.status != /sys/Io/Status/ok && Bytes/len(acc) == 0 => Option/none()
         | r.status != /sys/Io/Status/ok => Option/some(acc)
-        | Option/unwrap_or(Bin/get(r.bytes, 0), 0) == '\n' => Option/some(acc)
-        | _ => go(\..acc\..r.bytes)
+        | Byte/to_nat(Option/unwrap_or(Bytes/get(r.bytes, 0), 0)) == '\n' => Option/some(acc)
+        | _ => go(x\..acc\..r.bytes)
         end;
-    go(\\);
+    go(x\);

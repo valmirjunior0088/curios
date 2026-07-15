@@ -11,6 +11,7 @@
 
 use {
     super::{Nat, Prim, Subterm, Term},
+    curios_base::{Grain, PackedBin},
     num_traits::Zero,
     std::{cmp::Ordering, collections::VecDeque},
 };
@@ -220,19 +221,20 @@ fn against_identity<E>(atom: &Atom<E>) -> Peel {
 /// peeling cannot decide). `None` means the pair is not two `Bin` values, so the
 /// caller keeps its own handling.
 ///
-/// Prefix-only, mirroring `peel_nat`: a common *suffix* (`x ++ \01 ~ y ++ \01`)
+/// Prefix-only, mirroring `peel_nat`: a common *suffix* (`x ++ x\01 ~ y ++ x\01`)
 /// is sound to cancel but not yet attempted. Symbolic chunks and windows are
 /// matched by syntactic equality, so two convertible-but-unequal chunks
 /// (`append(\\, h1)` vs `append(\\, h2)`) — or two windows whose bounds differ
 /// only up to arithmetic — are left to the caller's structural comparison rather
 /// than decided here.
 pub(crate) fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
-    if !bin_valued(left) || !bin_valued(right) {
+    let grain = bin_grain(left)?;
+    if bin_grain(right) != Some(grain) {
         return None;
     }
 
-    let mut left = bin_atoms(left);
-    let mut right = bin_atoms(right);
+    let mut left = bin_atoms(grain, left);
+    let mut right = bin_atoms(grain, right);
     let peeled = peel_prefix(&mut left, &mut right);
 
     Some(match (left.front(), right.front()) {
@@ -245,7 +247,7 @@ pub(crate) fn peel_bin(left: &Prim, right: &Prim) -> Option<Peel> {
         // common prefix was peeled the residual tails go back to the caller;
         // otherwise nothing here is decidable by peeling.
         _ => match peeled {
-            true => Peel::Continue(reassemble_bin(left), reassemble_bin(right)),
+            true => Peel::Continue(reassemble_bin(grain, left), reassemble_bin(grain, right)),
             false => Peel::Stuck,
         },
     })
@@ -294,20 +296,22 @@ pub(crate) fn peel_lst(left: &Prim, right: &Prim) -> Option<Peel> {
 /// slices of one base fuse and equal slices cancel; `BinAppend` rides in as its base
 /// followed by the appended byte. Any other producer stays an opaque symbolic
 /// chunk left to the caller's own (structural) comparison.
-fn bin_valued(prim: &Prim) -> bool {
-    matches!(
-        prim,
-        Prim::Bin(_) | Prim::BinConcat(_) | Prim::BinSlice(..) | Prim::BinAppend(..)
-    )
+fn bin_grain(prim: &Prim) -> Option<Grain> {
+    match prim {
+        Prim::Bin(grain, _)
+        | Prim::BinConcat(grain, _)
+        | Prim::BinSlice(grain, ..)
+        | Prim::BinAppend(grain, ..) => Some(*grain),
+        _ => None,
+    }
 }
 
 /// The concrete byte an already-reduced `Bin/append` operand carries, taken mod 256
 /// (matching the runtime's packed store), or `None` for a symbolic byte.
-fn byte_as_u8(term: &Term) -> Option<u8> {
-    match &**term {
-        Subterm::Prim(Prim::Nat(n)) => {
-            Some(n.to_big_uint()?.to_bytes_le().first().copied().unwrap_or(0))
-        }
+fn bin_atom(grain: Grain, term: &Term) -> Option<u8> {
+    match (grain, &**term) {
+        (Grain::B, Subterm::Prim(Prim::Bln(bit))) => Some(u8::from(*bit)),
+        (Grain::X, Subterm::Prim(Prim::Byte(byte))) => Some(*byte),
         _ => None,
     }
 }
@@ -339,17 +343,27 @@ fn lst_elem(prim: &Prim) -> Option<Term> {
 
 /// Flatten a `Bin` value to its segment list, normalising the monoid laws: nested
 /// `BinConcat`s splice in, empty runs drop out, adjacent runs merge.
-fn bin_atoms(prim: &Prim) -> VecDeque<Atom<u8>> {
+fn bin_atoms(grain: Grain, prim: &Prim) -> VecDeque<Atom<u8>> {
     let mut out = Vec::new();
-    bin_collect_prim(prim, &mut out);
+    bin_collect_prim(grain, prim, &mut out);
     out.into()
 }
 
-fn bin_collect_prim(prim: &Prim, out: &mut Vec<Atom<u8>>) {
+fn bin_collect_prim(grain: Grain, prim: &Prim, out: &mut Vec<Atom<u8>>) {
     match prim {
-        Prim::Bin(bytes) => push(out, Atom::Literal(bytes.clone())),
-        Prim::BinConcat(operands) => operands.iter().for_each(|op| bin_collect_term(op, out)),
-        Prim::BinSlice(base, lo, hi) => push(
+        Prim::Bin(found, value) if *found == grain => push(
+            out,
+            Atom::Literal(match grain {
+                Grain::B => (0..value.bit_length())
+                    .map(|index| u8::from(value.bit(index).unwrap()))
+                    .collect(),
+                Grain::X => value.to_bytes().unwrap(),
+            }),
+        ),
+        Prim::BinConcat(found, operands) if *found == grain => operands
+            .iter()
+            .for_each(|op| bin_collect_term(grain, op, out)),
+        Prim::BinSlice(found, base, lo, hi) if *found == grain => push(
             out,
             Atom::Window {
                 base: base.clone(),
@@ -361,14 +375,14 @@ fn bin_collect_prim(prim: &Prim, out: &mut Vec<Atom<u8>>) {
         // A concrete byte is a length-1 literal run (so it merges with an abutting run
         // and unifies with `concat(base, \b)`); a symbolic byte is the canonical
         // one-byte chunk `append(\\, b)` — opaque, so its emptiness stays undecidable.
-        Prim::BinAppend(base, byte) => {
-            bin_collect_term(base, out);
+        Prim::BinAppend(found, base, atom) if *found == grain => {
+            bin_collect_term(grain, base, out);
 
-            match byte_as_u8(byte) {
+            match bin_atom(grain, atom) {
                 Some(b) => push(out, Atom::Literal(vec![b])),
                 None => {
-                    let empty = Subterm::Prim(Prim::Bin(Vec::new()));
-                    let chunk = Term::prim(Prim::bin_append(empty, byte.clone()));
+                    let empty = Subterm::Prim(Prim::Bin(grain, PackedBin::empty()));
+                    let chunk = Term::prim(Prim::bin_append(grain, empty, atom.clone()));
                     push(out, Atom::Symbolic(chunk));
                 }
             }
@@ -377,9 +391,9 @@ fn bin_collect_prim(prim: &Prim, out: &mut Vec<Atom<u8>>) {
     }
 }
 
-fn bin_collect_term(term: &Term, out: &mut Vec<Atom<u8>>) {
+fn bin_collect_term(grain: Grain, term: &Term, out: &mut Vec<Atom<u8>>) {
     match &**term {
-        Subterm::Prim(prim) => bin_collect_prim(prim, out),
+        Subterm::Prim(prim) => bin_collect_prim(grain, prim, out),
         _ => push(out, Atom::Symbolic(term.clone())),
     }
 }
@@ -426,16 +440,25 @@ fn lst_collect_term(term: &Term, out: &mut Vec<Atom<Term>>) {
 /// literal, a window is its `BinSlice`, a lone symbolic chunk is itself (so the
 /// inverter sees the bare binder it must solve), and a mixture is their
 /// `BinConcat`.
-fn reassemble_bin(atoms: VecDeque<Atom<u8>>) -> Term {
+fn reassemble_bin(grain: Grain, atoms: VecDeque<Atom<u8>>) -> Term {
     let into_term = |atom| match atom {
-        Atom::Literal(bytes) => Term::prim(Prim::Bin(bytes)),
-        Atom::Window { base, lo, hi } => Term::prim(Prim::bin_slice(base, lo, hi)),
+        Atom::Literal(atoms) => Term::prim(Prim::Bin(
+            grain,
+            match grain {
+                Grain::B => PackedBin::from_bits(atoms.into_iter().map(|bit| bit != 0)),
+                Grain::X => PackedBin::from_bytes(atoms),
+            },
+        )),
+        Atom::Window { base, lo, hi } => Term::prim(Prim::bin_slice(grain, base, lo, hi)),
         Atom::Symbolic(term) => term,
     };
 
     match atoms.len() {
         1 => into_term(atoms.into_iter().next().unwrap()),
-        _ => Term::prim(Prim::BinConcat(atoms.into_iter().map(into_term).collect())),
+        _ => Term::prim(Prim::BinConcat(
+            grain,
+            atoms.into_iter().map(into_term).collect(),
+        )),
     }
 }
 

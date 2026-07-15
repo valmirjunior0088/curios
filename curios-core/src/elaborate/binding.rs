@@ -229,6 +229,7 @@ pub(super) fn elaborate_num_lit(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let nat_type: Term = Subterm::Prim(Prim::NatType).into();
+    let byte_type: Term = Subterm::Prim(Prim::ByteType).into();
     let int_type: Term = Subterm::Prim(Prim::IntType).into();
     let flt_type: Term = Subterm::Prim(Prim::FltType).into();
 
@@ -257,6 +258,14 @@ pub(super) fn elaborate_num_lit(
     let (prim, type_) = match &target {
         Subterm::Prim(Prim::NatType) if !num_lit.negative => {
             (Prim::Nat(Nat::new(num_lit.magnitude.clone())), nat_type)
+        }
+        Subterm::Prim(Prim::ByteType) if !num_lit.negative => {
+            let Some(value) = num_lit.magnitude.to_u8() else {
+                return Err(Error::ByteLiteralOutOfRange {
+                    value: num_lit.magnitude.to_string(),
+                });
+            };
+            (Prim::Byte(value), byte_type)
         }
         Subterm::Prim(Prim::IntType) => {
             let magnitude = BigInt::from(num_lit.magnitude.clone());

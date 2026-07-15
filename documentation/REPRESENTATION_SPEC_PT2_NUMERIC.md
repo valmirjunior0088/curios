@@ -1,6 +1,6 @@
 # Representation specification PT2 — packed `BigNat`, `BigInt`, and conversion
 
-Working implementation specification for moving Curios's arbitrary-precision natural and integer layers onto the packed `Bin/B` substrate from [PT1](REPRESENTATION_SPEC_PT1_BIN.md), preserving their machine-checked algebra, keeping Dragon4 operational, and testing whether conversion can return to a smaller uniform coinductive bisimulation. [PT3](REPRESENTATION_SPEC_PT3_CHARACTER.md) is the subsequent character/string migration. [PT4](REPRESENTATION_SPEC_PT4_BIGFLT.md) deliberately postpones `BigFlt`, `Flt/of_le_bin`, correctly rounded float boundaries, and every helper or proof obligation required only by that work.
+Working implementation specification for moving Curios's arbitrary-precision natural and integer layers onto the packed `Bits` substrate from [packed Bits, Bytes, and Byte syntax](SYNTAX.md#literals), preserving their machine-checked algebra, keeping Dragon4 operational, and testing whether conversion can return to a smaller uniform coinductive bisimulation. [PT3](REPRESENTATION_SPEC_PT3_CHARACTER.md) is the subsequent character/string migration. [PT4](REPRESENTATION_SPEC_PT4_BIGFLT.md) deliberately postpones `BigFlt`, `Flt/of_le_bytes`, correctly rounded float boundaries, and every helper or proof obligation required only by that work.
 
 This is a working implementation reference, not permanent architecture documentation. Once the work lands, fold durable conclusions into `AGENTS.md`, `ROADMAP.md`, relevant rustdoc, and standard-library documentation, then delete this working series.
 
@@ -20,7 +20,7 @@ PT1 supplies the upstream correction: structural bit computation remains transpa
 
 PT2 begins only after PT1's packed B carrier and property tests pass. It owns:
 
-- `BigNat` as a certified canonical interpretation of `Bin/B`;
+- `BigNat` as a certified canonical interpretation of `Bits`;
 - a packaged nonzero magnitude type;
 - `BigInt` as the signed arbitrary-precision layer;
 - the existing algebraic and order proof corpus for those types;
@@ -29,19 +29,19 @@ PT2 begins only after PT1's packed B carrier and property tests pass. It owns:
 
 PT2 does not own:
 
-- `Byte`, `Grain`, Bin syntax, packed cursors, or carrier operations, all fixed by PT1;
+- `Byte`, `Grain`, Bits/Bytes syntax, packed cursors, or carrier operations, all fixed by PT1;
 - `Char` or `Str`, fixed by PT3;
-- `BigFlt`, `Flt/of_le_bin`, `widen_b`, `narrow_b`, `narrow_ratio_b`, float boundary theorems, BigFlt-specific order lemmas, or the rational denominator extension, all fixed by PT4.
+- `BigFlt`, `Flt/of_le_bytes`, `widen_b`, `narrow_b`, `narrow_ratio_b`, float boundary theorems, BigFlt-specific order lemmas, or the rational denominator extension, all fixed by PT4.
 
 Helpers such as top-bit extraction, guard/sticky computation, or any additional division loop are not PT2 obligations when their only consumer would be PT4. General BigNat and BigInt operations and laws remain in PT2 even where PT4 will later consume them, because they are part of the standalone numeric types' honest API.
 
 ## Design keystones
 
-**Privilege the packed substrate, not the number tower.** `BigNat`, `NonZero`, and `BigInt` remain ordinary `.crs` types. The compiler privilege ends at `Bin/B`; no arbitrary-precision arithmetic primitive or decision procedure is introduced.
+**Privilege the packed substrate, not the number tower.** `BigNat`, `NonZero`, and `BigInt` remain ordinary `.crs` types. The compiler privilege ends at `Bits`; no arbitrary-precision arithmetic primitive or decision procedure is introduced.
 
-**The bit remains the arithmetic atom.** Addition, carry, subtraction, multiplication, comparison, and shifts bottom out in Bln case analysis and structural `Bin/B` views. Proofs never depend on native limb division, remainder, or subtraction on symbolic values.
+**The bit remains the arithmetic atom.** Addition, carry, subtraction, multiplication, comparison, and shifts bottom out in Bln case analysis and structural `Bits` views. Proofs never depend on native limb division, remainder, or subtraction on symbolic values.
 
-**Canonicity is certified at the numeric boundary.** `Bin/B` is a sequence: `b\1` and `b\1\0` are distinct even if a little-endian interpretation assigns them the same number. `BigNat` adds a proof-irrelevant certificate excluding high zero bits.
+**Canonicity is certified at the numeric boundary.** `Bits` is a sequence: `b\1` and `b\1\0` are distinct even if a little-endian interpretation assigns them the same number. `BigNat` adds a proof-irrelevant certificate excluding high zero bits.
 
 **Equality remains structural identity.** A canonical representation is unique, so ordinary `Eq` and rewriting remain valid. Do not replace identity with a setoid equality over noncanonical bitstrings.
 
@@ -105,11 +105,11 @@ Operator witnesses for BigNat and BigInt remain in the `/std` operator facades (
 
 ## Part 2 — packed `BigNat`
 
-`BigNat` becomes a representation-private certified wrapper over little-endian `Bin/B`:
+`BigNat` becomes a representation-private certified wrapper over little-endian `Bits`:
 
 ```text
 BigNat = struct {
-    rep       : Bin/B,
+    rep       : Bits,
     canonical : Canonical(rep),
 }
 ```
@@ -140,7 +140,7 @@ Keep the Dragon4-facing names and contracts stable where possible. Additional he
 
 Every operation finishes through a proof-producing constructor that trims logical high zero bits and returns `Canonical`. Trimming must respect logical bit length; physical byte padding is never part of the value.
 
-The wrapper erases to its single relevant `Bin/B` field. There must be no runtime certificate, wrapper tuple, per-number tag, or per-bit allocation.
+The wrapper erases to its single relevant `Bits` field. There must be no runtime certificate, wrapper tuple, per-number tag, or per-bit allocation.
 
 ## Part 3 — canonicity
 
@@ -162,11 +162,11 @@ Requirements:
 
 This certificate burden replaces canonicity-by-construction. It is the explicit cost of using a general packed sequence as the privileged substrate. The B view makes the proofs feasible because they remain bit-constructor algebra; the earlier trimmed-limb certificate failed because symbolic limb `/`, `%`, and `-` were opaque.
 
-Prototype `Canonical`, trimming, and `add` end-to-end before porting the full corpus. Confirm proof elaboration, erasure to bare `Bin/B`, and absence of per-bit allocation. This is the go/no-go gate for PT2.
+Prototype `Canonical`, trimming, and `add` end-to-end before porting the full corpus. Confirm proof elaboration, erasure to bare `Bits`, and absence of per-bit allocation. This is the go/no-go gate for PT2.
 
 ## Part 4 — `NonZero` and packed `BigInt`
 
-Define a canonical nonzero magnitude without admitting zero. It may be a private nonempty certified `Bin/B` wrapper or a `BigNat` paired with a nonzero proof, provided it erases to the packed magnitude and gives structural access needed by proofs.
+Define a canonical nonzero magnitude without admitting zero. It may be a private nonempty certified `Bits` wrapper or a `BigNat` paired with a nonzero proof, provided it erases to the packed magnitude and gives structural access needed by proofs.
 
 `BigInt` remains:
 
@@ -273,7 +273,7 @@ The success criterion is not parity with a native bignum library. It is enough p
 
 ## Goals
 
-- `BigNat` and `BigInt` stored over packed `Bin/B` with erased certificates and no per-bit allocation.
+- `BigNat` and `BigInt` stored over packed `Bits` with erased certificates and no per-bit allocation.
 - Unique canonical representations preserving structural `Eq` and ordinary rewriting.
 - No signed zero.
 - Existing algebraic, comparison, cancellation, and ordering theorem strength preserved.
@@ -287,7 +287,7 @@ The success criterion is not parity with a native bignum library. It is enough p
 - `BigFlt`, exact dyadic arithmetic, correctly rounded float boundaries, or rational denominators; see PT4.
 - Native single-instruction bignum arithmetic or operation lowering.
 - An annotation electing a library type into a compiler carrier.
-- Treating decimal as a Bin fold; decimal rendering remains arithmetic.
+- Treating decimal as a Bits fold; decimal rendering remains arithmetic.
 - Unifying native `Nat` with `BigNat` or changing Nat's i31 runtime contract.
 - Deleting raw-body isolation merely because packed values are faster.
 - Termination checking, positivity checking, postulates, or a general arithmetic decision procedure.
@@ -298,10 +298,10 @@ The success criterion is not parity with a native bignum library. It is enough p
 - The conversion subsystem under review spans `6dfde58` (`RecId`, match-guarded delta, `DefEntry.recursive`), `ba9dfa6` (`RecId(0)` collision), and `6387921` (transient leak, raw window, and `contains_transient`). Keep `ced3ba5` and `0858150`.
 - Commit `76c870f9` made stuck recursive applications reliable through match-guarded delta, stable memoized openings, and lazy-delta comparison; the delivered BigInt work also exposed that erasure's fresh context had to mark recursive definitions. These are the behaviors PT2 attempts to make unnecessary through representation performance, not regressions to reintroduce accidentally while disabling them.
 - The current numbers are `curios-text/std/BigNat.crs` and `BigInt.crs`. Dragon4 is in `curios-text/std/Flt.crs` and calls only the BigNat surface listed above.
-- `Prop` is definitionally proof-irrelevant in conversion. Erasure collapses a struct with one runtime-relevant field to the bare field, so a certified BigNat can erase to `Bin/B` alone.
+- `Prop` is definitionally proof-irrelevant in conversion. Erasure collapses a struct with one runtime-relevant field to the bare field, so a certified BigNat can erase to `Bits` alone.
 - Native Nat uses `BigUint` at type level but i31 at runtime; native Int uses `BigInt` at type level but signed i31 at runtime. Workspace dependencies already include `num_bigint`.
 - Open primitive applications are stuck. The useful definitional fragment of Nat includes literal successor floors and cancellation of shared floors, while symbolic `-`, `/`, and `%` remain opaque.
-- Checked structural eliminators exist for Nat, Lst, and Bin. Inductive matches provide checked case analysis and index-driven impossible-arm pruning but no automatic induction hypothesis.
+- Checked structural eliminators exist for Nat, Lst, Bits, and Bytes. Inductive matches provide checked case analysis and index-driven impossible-arm pruning but no automatic induction hypothesis.
 - The stdlib provides `Eq/{sym,trans,cong,subst}` and Nat `Lte`. There is no user-code panic/unwrap trap primitive.
 
 ## Open questions and risks

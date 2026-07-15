@@ -1,6 +1,7 @@
 use {
     super::Term,
     curios_abi::ForeignFunction,
+    curios_base::PackedBin,
     std::{collections::BTreeSet, sync::Arc},
 };
 
@@ -67,16 +68,16 @@ pub enum PurePrim {
     IntToNat(Term),
     IntToFlt(Term),
     FltToNat(Term),
-    FltToLeBin(Term),
-    FltOfLeBin(Term),
+    FltToLeBytes(Term),
+    FltOfLeBytes(Term),
     FltToInt(Term),
-    Bin(Vec<u8>),
-    BinLen(Term),
-    BinEql(Term, Term),
-    BinGet(Term, Term),
-    BinSlice(Term, Term, Term),
-    BinAppend(Term, Term),
-    BinConcat(Vec<Term>),
+    Bin(curios_base::Grain, PackedBin),
+    BinLen(curios_base::Grain, Term),
+    BinEql(curios_base::Grain, Term, Term),
+    BinGet(curios_base::Grain, Term, Term),
+    BinSlice(curios_base::Grain, Term, Term, Term),
+    BinAppend(curios_base::Grain, Term, Term),
+    BinConcat(curios_base::Grain, Vec<Term>),
     Lst(Vec<Term>),
     LstLen(Term),
     LstGet(Term, Term),
@@ -95,10 +96,30 @@ impl PurePrim {
         use PurePrim::*;
 
         match self {
-            Nat(_) | Int(_) | Flt(_) | Bin(_) | Io(_) => vec![],
-            NatToInt(a) | NatToFlt(a) | IntToNat(a) | IntToFlt(a) | FltToNat(a) | FltToLeBin(a)
-            | FltOfLeBin(a) | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a) | FltFloor(a)
-            | FltCeil(a) | FltTrunc(a) | FltNearest(a) | BinLen(a) | LstLen(a) => vec![a],
+            Nat(_)
+            | Int(_)
+            | Flt(_)
+            | Bin(curios_base::Grain::X, _)
+            | Bin(curios_base::Grain::B, _)
+            | Io(_) => vec![],
+            NatToInt(a)
+            | NatToFlt(a)
+            | IntToNat(a)
+            | IntToFlt(a)
+            | FltToNat(a)
+            | FltToLeBytes(a)
+            | FltOfLeBytes(a)
+            | FltToInt(a)
+            | FltNeg(a)
+            | FltAbs(a)
+            | FltSqrt(a)
+            | FltFloor(a)
+            | FltCeil(a)
+            | FltTrunc(a)
+            | FltNearest(a)
+            | BinLen(curios_base::Grain::X, a)
+            | BinLen(curios_base::Grain::B, a)
+            | LstLen(a) => vec![a],
             NatEql(a, b)
             | NatNeq(a, b)
             | NatAdd(a, b)
@@ -144,15 +165,23 @@ impl PurePrim {
             | FltGte(a, b)
             | FltMin(a, b)
             | FltMax(a, b)
-            | BinEql(a, b)
+            | BinEql(curios_base::Grain::X, a, b)
             | IoEql(a, b)
-            | BinGet(a, b)
-            | BinAppend(a, b)
+            | BinGet(curios_base::Grain::X, a, b)
+            | BinAppend(curios_base::Grain::X, a, b)
+            | BinEql(curios_base::Grain::B, a, b)
+            | BinGet(curios_base::Grain::B, a, b)
+            | BinAppend(curios_base::Grain::B, a, b)
             | LstGet(a, b)
             | LstAppend(a, b)
             | LstMap(a, b) => vec![a, b],
-            BinSlice(a, b, c) | LstSlice(a, b, c) => vec![a, b, c],
-            BinConcat(operands) | LstConcat(operands) | Lst(operands) => operands.iter().collect(),
+            BinSlice(curios_base::Grain::X, a, b, c)
+            | BinSlice(curios_base::Grain::B, a, b, c)
+            | LstSlice(a, b, c) => vec![a, b, c],
+            BinConcat(curios_base::Grain::X, operands)
+            | BinConcat(curios_base::Grain::B, operands)
+            | LstConcat(operands)
+            | Lst(operands) => operands.iter().collect(),
         }
     }
 
@@ -160,10 +189,30 @@ impl PurePrim {
         use PurePrim::*;
 
         match self {
-            Nat(_) | Int(_) | Flt(_) | Bin(_) | Io(_) => vec![],
-            NatToInt(a) | NatToFlt(a) | IntToNat(a) | IntToFlt(a) | FltToNat(a) | FltToLeBin(a)
-            | FltOfLeBin(a) | FltToInt(a) | FltNeg(a) | FltAbs(a) | FltSqrt(a) | FltFloor(a)
-            | FltCeil(a) | FltTrunc(a) | FltNearest(a) | BinLen(a) | LstLen(a) => vec![a],
+            Nat(_)
+            | Int(_)
+            | Flt(_)
+            | Bin(curios_base::Grain::X, _)
+            | Bin(curios_base::Grain::B, _)
+            | Io(_) => vec![],
+            NatToInt(a)
+            | NatToFlt(a)
+            | IntToNat(a)
+            | IntToFlt(a)
+            | FltToNat(a)
+            | FltToLeBytes(a)
+            | FltOfLeBytes(a)
+            | FltToInt(a)
+            | FltNeg(a)
+            | FltAbs(a)
+            | FltSqrt(a)
+            | FltFloor(a)
+            | FltCeil(a)
+            | FltTrunc(a)
+            | FltNearest(a)
+            | BinLen(curios_base::Grain::X, a)
+            | BinLen(curios_base::Grain::B, a)
+            | LstLen(a) => vec![a],
             NatEql(a, b)
             | NatNeq(a, b)
             | NatAdd(a, b)
@@ -209,17 +258,23 @@ impl PurePrim {
             | FltGte(a, b)
             | FltMin(a, b)
             | FltMax(a, b)
-            | BinEql(a, b)
+            | BinEql(curios_base::Grain::X, a, b)
             | IoEql(a, b)
-            | BinGet(a, b)
-            | BinAppend(a, b)
+            | BinGet(curios_base::Grain::X, a, b)
+            | BinAppend(curios_base::Grain::X, a, b)
+            | BinEql(curios_base::Grain::B, a, b)
+            | BinGet(curios_base::Grain::B, a, b)
+            | BinAppend(curios_base::Grain::B, a, b)
             | LstGet(a, b)
             | LstAppend(a, b)
             | LstMap(a, b) => vec![a, b],
-            BinSlice(a, b, c) | LstSlice(a, b, c) => vec![a, b, c],
-            BinConcat(operands) | LstConcat(operands) | Lst(operands) => {
-                operands.iter_mut().collect()
-            }
+            BinSlice(curios_base::Grain::X, a, b, c)
+            | BinSlice(curios_base::Grain::B, a, b, c)
+            | LstSlice(a, b, c) => vec![a, b, c],
+            BinConcat(curios_base::Grain::X, operands)
+            | BinConcat(curios_base::Grain::B, operands)
+            | LstConcat(operands)
+            | Lst(operands) => operands.iter_mut().collect(),
         }
     }
 }

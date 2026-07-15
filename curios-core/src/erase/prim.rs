@@ -28,6 +28,10 @@ fn nat_type() -> Term {
     prim_type(Prim::NatType)
 }
 
+fn byte_type() -> Term {
+    prim_type(Prim::ByteType)
+}
+
 fn int_type() -> Term {
     prim_type(Prim::IntType)
 }
@@ -37,7 +41,7 @@ fn flt_type() -> Term {
 }
 
 fn bin_type() -> Term {
-    prim_type(Prim::BinType)
+    prim_type(Prim::BinType(curios_base::Grain::X))
 }
 
 fn bln_type() -> Term {
@@ -124,6 +128,18 @@ pub(crate) fn erase_prim(
         // `bln != bln` is xor on the `0`/`1` carrier, exactly like `BlnXor`.
         Prim::BlnNeq(l, r) => binary(context, l, r, bln_type, curios_ersd::PurePrim::NatXor),
         Prim::NatType => Ok(curios_ersd::Subterm::Erased.into()),
+        Prim::ByteType => Ok(curios_ersd::Subterm::Erased.into()),
+        Prim::Byte(value) => Ok(pure(curios_ersd::PurePrim::Nat(u32::from(*value)))),
+        Prim::ByteToNat(i) => erase(context, i, &Subterm::Prim(Prim::ByteType).into()),
+        Prim::NatToByte(i) => Ok(pure(curios_ersd::PurePrim::NatAnd(
+            erase(context, i, &nat_type())?,
+            pure(curios_ersd::PurePrim::Nat(0xff)),
+        ))),
+        Prim::ByteEql(l, r) => binary(context, l, r, byte_type, curios_ersd::PurePrim::NatEql),
+        Prim::ByteLt(l, r) => binary(context, l, r, byte_type, curios_ersd::PurePrim::NatLt),
+        Prim::ByteLte(l, r) => binary(context, l, r, byte_type, curios_ersd::PurePrim::NatLte),
+        Prim::ByteGt(l, r) => binary(context, l, r, byte_type, curios_ersd::PurePrim::NatGt),
+        Prim::ByteGte(l, r) => binary(context, l, r, byte_type, curios_ersd::PurePrim::NatGte),
         Prim::Nat(Nat::Zero) => Ok(pure(curios_ersd::PurePrim::Nat(0))),
         Prim::Nat(Nat::Succ(spine, inner)) => {
             if matches!(inner.as_ref(), Subterm::Prim(Prim::Nat(Nat::Zero))) {
@@ -194,37 +210,47 @@ pub(crate) fn erase_prim(
         Prim::FltGt(l, r) => binary(context, l, r, flt_type, curios_ersd::PurePrim::FltGt),
         Prim::FltLte(l, r) => binary(context, l, r, flt_type, curios_ersd::PurePrim::FltLte),
         Prim::FltGte(l, r) => binary(context, l, r, flt_type, curios_ersd::PurePrim::FltGte),
-        Prim::FltToLeBin(i) => unary(context, i, flt_type, curios_ersd::PurePrim::FltToLeBin),
-        Prim::FltOfLeBin(i) => unary(context, i, bin_type, curios_ersd::PurePrim::FltOfLeBin),
+        Prim::FltToLeBytes(i) => unary(context, i, flt_type, curios_ersd::PurePrim::FltToLeBytes),
+        Prim::FltOfLeBytes(i) => unary(context, i, bin_type, curios_ersd::PurePrim::FltOfLeBytes),
         Prim::NatToInt(i) => unary(context, i, nat_type, curios_ersd::PurePrim::NatToInt),
         Prim::IntToNat(i) => unary(context, i, int_type, curios_ersd::PurePrim::IntToNat),
         Prim::IntToFlt(i) => unary(context, i, int_type, curios_ersd::PurePrim::IntToFlt),
         Prim::NatToFlt(i) => unary(context, i, nat_type, curios_ersd::PurePrim::NatToFlt),
         Prim::FltToInt(i) => unary(context, i, flt_type, curios_ersd::PurePrim::FltToInt),
         Prim::FltToNat(i) => unary(context, i, flt_type, curios_ersd::PurePrim::FltToNat),
-        Prim::BinType => Ok(curios_ersd::Subterm::Erased.into()),
-        Prim::Bin(bytes) => Ok(pure(curios_ersd::PurePrim::Bin(bytes.clone()))),
-        Prim::BinLen(bin) => unary(context, bin, bin_type, curios_ersd::PurePrim::BinLen),
-        Prim::BinEql(l, r) => binary(context, l, r, bin_type, curios_ersd::PurePrim::BinEql),
-        Prim::BinGet(bin, index) => Ok(pure(curios_ersd::PurePrim::BinGet(
-            erase(context, bin, &bin_type())?,
+        Prim::BinType(_) => Ok(curios_ersd::Subterm::Erased.into()),
+        Prim::Bin(grain, value) => Ok(pure(curios_ersd::PurePrim::Bin(*grain, value.clone()))),
+        Prim::BinLen(grain, bin) => Ok(pure(curios_ersd::PurePrim::BinLen(
+            *grain,
+            erase(context, bin, &Term::prim(Prim::BinType(*grain)))?,
+        ))),
+        Prim::BinEql(grain, l, r) => Ok(pure(curios_ersd::PurePrim::BinEql(
+            *grain,
+            erase(context, l, &Term::prim(Prim::BinType(*grain)))?,
+            erase(context, r, &Term::prim(Prim::BinType(*grain)))?,
+        ))),
+        Prim::BinGet(grain, bin, index) => Ok(pure(curios_ersd::PurePrim::BinGet(
+            *grain,
+            erase(context, bin, &Term::prim(Prim::BinType(*grain)))?,
             erase(context, index, &nat_type())?,
         ))),
-        Prim::BinSlice(bin, start, end) => Ok(pure(curios_ersd::PurePrim::BinSlice(
-            erase(context, bin, &bin_type())?,
+        Prim::BinSlice(grain, bin, start, end) => Ok(pure(curios_ersd::PurePrim::BinSlice(
+            *grain,
+            erase(context, bin, &Term::prim(Prim::BinType(*grain)))?,
             erase(context, start, &nat_type())?,
             erase(context, end, &nat_type())?,
         ))),
-        Prim::BinAppend(bin, byte) => Ok(pure(curios_ersd::PurePrim::BinAppend(
-            erase(context, bin, &bin_type())?,
-            erase(context, byte, &nat_type())?,
+        Prim::BinAppend(grain, bin, atom) => Ok(pure(curios_ersd::PurePrim::BinAppend(
+            *grain,
+            erase(context, bin, &Term::prim(Prim::BinType(*grain)))?,
+            erase(context, atom, &nat_type())?,
         ))),
-        Prim::BinConcat(operands) => {
+        Prim::BinConcat(grain, operands) => {
             let erased = operands
                 .iter()
-                .map(|e| erase(context, e, &bin_type()))
+                .map(|e| erase(context, e, &Term::prim(Prim::BinType(*grain))))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(pure(curios_ersd::PurePrim::BinConcat(erased)))
+            Ok(pure(curios_ersd::PurePrim::BinConcat(*grain, erased)))
         }
         Prim::LstType(_) => Ok(curios_ersd::Subterm::Erased.into()),
         Prim::Lst(elems) => {

@@ -1333,7 +1333,7 @@ fn foreign_declaration_call_lowers() {
     // site checks against.
     let _ = run(r#"
         foreign frobnicate : (Nat, Bin) -> Nat;
-        frobnicate(5, \00\01)
+        frobnicate(5, x\00\01)
     "#);
 }
 

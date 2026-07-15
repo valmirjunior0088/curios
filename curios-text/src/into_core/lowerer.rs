@@ -4,7 +4,10 @@ use {
         BinSegment, CondMatch, Error, Field, LadderTest, Let, LetBinding, LstEntry, Match, Name,
         Nat, NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
-    curios_base::{MONAD_BIND, STR_SCAN_LEAD, STR_STEP, STR_STR, STR_UTF8_MORE, STR_UTF8_STOP},
+    curios_base::{
+        Grain, MONAD_BIND, PackedBin, STR_SCAN_LEAD, STR_STEP, STR_STR, STR_UTF8_MORE,
+        STR_UTF8_STOP,
+    },
     num_bigint::BigUint,
     std::{cell::RefCell, collections::BTreeSet, sync::Arc},
 };
@@ -121,17 +124,20 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     // The meta-emitter: a string literal becomes a proof-carrying `/syn/Str/Str`
-    // value `Str { bytes = <Bin>, valid = <Utf8 derivation> }`. The derivation is the
+    // value `Str { bytes = <Bytes>, valid = <Utf8 derivation> }`. The derivation is the
     // canonical `more`-spine (one `more` per byte, ending in `stop`), starting from
     // the `lead` state — `valid`'s type is `Valid(b) = Utf8(lead, b)`. `valid` is
-    // erased, so at runtime `Str` collapses to its `Bin` bytes — a literal costs
-    // exactly what a `Bin` literal did.
+    // erased, so at runtime `Str` collapses to its `Bytes` field — a literal costs
+    // exactly what a `Bytes` literal does.
     pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
         curios_core::Term::struct_(
             STR_STR,
             Vec::<curios_core::Term>::new(),
             [
-                curios_core::Term::prim(curios_core::Prim::Bin(bytes.to_vec())),
+                curios_core::Term::prim(curios_core::Prim::Bin(
+                    Grain::X,
+                    PackedBin::from_bytes(bytes.to_vec()),
+                )),
                 self.utf8_derivation(bytes, Self::scan_lead()),
             ],
         )
@@ -168,16 +174,18 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         match bytes.split_first() {
             None => Self::syn_call(STR_UTF8_STOP, []),
             Some((&head, tail)) => {
-                let byte: curios_core::Term = curios_core::Term::prim(curios_core::Prim::Nat(
-                    curios_core::Nat::new(head as usize),
-                ));
+                let byte: curios_core::Term =
+                    curios_core::Term::prim(curios_core::Prim::Byte(head));
                 let next = Self::syn_call(STR_STEP, [byte.clone(), state.clone()]);
                 Self::syn_call(
                     STR_UTF8_MORE,
                     [
                         byte,
                         state,
-                        curios_core::Term::prim(curios_core::Prim::Bin(tail.to_vec())),
+                        curios_core::Term::prim(curios_core::Prim::Bin(
+                            Grain::X,
+                            PackedBin::from_bytes(tail.to_vec()),
+                        )),
                         self.utf8_derivation(tail, next),
                     ],
                 )
@@ -610,10 +618,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Prim(Prim::Lst(entries)) => curios_core::Term::prim(
                 self.lower_lst_literal(entries, |term| self.collect(term, binds))?,
             ),
-            // A `Bin` literal's spread operands hoist likewise (a spread-free
-            // `Bin` has no subterms and lowers unchanged).
-            Subterm::Prim(Prim::Bin(segments)) => {
-                curios_core::Term::prim(Self::lower_bin_literal(segments, |term| {
+            // A `Bits`/`Bytes` literal's spread operands hoist likewise (a
+            // spread-free literal has no subterms and lowers unchanged).
+            Subterm::Prim(Prim::Bin(grain, segments)) => {
+                curios_core::Term::prim(Self::lower_bin_literal(*grain, segments, |term| {
                     self.collect(term, binds)
                 })?)
             }
@@ -842,10 +850,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         ))
     }
 
-    /// The `Bin` sibling of [`Self::lower_lst_literal`]: a spread-free literal
-    /// lowers to a plain `Bin`, and spreads splice their byte runs into an
-    /// n-ary `BinConcat` (no element-type slot — the bytes are `Bin`'s own).
+    /// The `Bits`/`Bytes` sibling of [`Self::lower_lst_literal`]: a spread-free
+    /// literal lowers to one packed value, and spreads splice their packed runs
+    /// into an n-ary `BinConcat` (the shared internal primitive has no element-type slot).
     pub(super) fn lower_bin_literal(
+        grain: Grain,
         segments: &[BinSegment],
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Prim, Error> {
@@ -855,7 +864,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         {
             // Zero or one run in practice (the parser coalesces); flattening
             // keeps this robust for hand-built literals too.
-            let bytes = segments
+            let atoms: Vec<u8> = segments
                 .iter()
                 .flat_map(|segment| match segment {
                     BinSegment::Bytes(run) => run.iter().copied(),
@@ -863,20 +872,30 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 })
                 .collect();
 
-            return Ok(curios_core::Prim::Bin(bytes));
+            let value = match grain {
+                Grain::B => PackedBin::from_bits(atoms.into_iter().map(|atom| atom != 0)),
+                Grain::X => PackedBin::from_bytes(atoms),
+            };
+            return Ok(curios_core::Prim::Bin(grain, value));
         }
 
         let operands = segments
             .iter()
             .map(|segment| match segment {
                 BinSegment::Bytes(run) => {
-                    Ok(curios_core::Term::prim(curios_core::Prim::Bin(run.clone())))
+                    let value = match grain {
+                        Grain::B => PackedBin::from_bits(run.iter().map(|atom| *atom != 0)),
+                        Grain::X => PackedBin::from_bytes(run.clone()),
+                    };
+                    Ok(curios_core::Term::prim(curios_core::Prim::Bin(
+                        grain, value,
+                    )))
                 }
                 BinSegment::Spread(term) => lower(term),
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
-        Ok(curios_core::Prim::BinConcat(operands))
+        Ok(curios_core::Prim::BinConcat(grain, operands))
     }
 
     pub(super) fn prim(&self, prim: &Prim) -> Result<curios_core::Prim, Error> {
@@ -906,6 +925,25 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Prim::Nat(Nat::Succ(NatLiteral::Char(c), inner)) => curios_core::Prim::Nat(
                 curios_core::Nat::Succ(BigUint::from(*c as usize), self.term(inner)?),
             ),
+            Prim::ByteType => curios_core::Prim::ByteType,
+            Prim::Byte(value) => curios_core::Prim::Byte(*value),
+            Prim::ByteToNat(inner) => curios_core::Prim::ByteToNat(self.term(inner)?),
+            Prim::NatToByte(inner) => curios_core::Prim::NatToByte(self.term(inner)?),
+            Prim::ByteEql(left, right) => {
+                curios_core::Prim::ByteEql(self.term(left)?, self.term(right)?)
+            }
+            Prim::ByteLt(left, right) => {
+                curios_core::Prim::ByteLt(self.term(left)?, self.term(right)?)
+            }
+            Prim::ByteLte(left, right) => {
+                curios_core::Prim::ByteLte(self.term(left)?, self.term(right)?)
+            }
+            Prim::ByteGt(left, right) => {
+                curios_core::Prim::ByteGt(self.term(left)?, self.term(right)?)
+            }
+            Prim::ByteGte(left, right) => {
+                curios_core::Prim::ByteGte(self.term(left)?, self.term(right)?)
+            }
             Prim::NatEql(left, right) => {
                 curios_core::Prim::nat_eql(self.term(left)?, self.term(right)?)
             }
@@ -1052,8 +1090,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Prim::FltCeil(inner) => curios_core::Prim::flt_ceil(self.term(inner)?),
             Prim::FltTrunc(inner) => curios_core::Prim::flt_trunc(self.term(inner)?),
             Prim::FltNearest(inner) => curios_core::Prim::flt_nearest(self.term(inner)?),
-            Prim::FltToLeBin(inner) => curios_core::Prim::flt_to_le_bin(self.term(inner)?),
-            Prim::FltOfLeBin(inner) => curios_core::Prim::flt_of_le_bin(self.term(inner)?),
+            Prim::FltToLeBytes(inner) => curios_core::Prim::flt_to_le_bytes(self.term(inner)?),
+            Prim::FltOfLeBytes(inner) => curios_core::Prim::flt_of_le_bytes(self.term(inner)?),
             Prim::NatToInt(inner) => curios_core::Prim::nat_to_int(self.term(inner)?),
             Prim::IoType => curios_core::Prim::IoType,
             Prim::Io(token) => curios_core::Prim::Io(*token),
@@ -1074,24 +1112,29 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Prim::IntToFlt(inner) => curios_core::Prim::int_to_flt(self.term(inner)?),
             Prim::FltToNat(inner) => curios_core::Prim::flt_to_nat(self.term(inner)?),
             Prim::FltToInt(inner) => curios_core::Prim::flt_to_int(self.term(inner)?),
-            Prim::BinType => curios_core::Prim::BinType,
+            Prim::BinType(grain) => curios_core::Prim::BinType(*grain),
             // `\hex` is a raw byte sequence; `\..` segments splice other `Bin`s.
-            Prim::Bin(segments) => Self::lower_bin_literal(segments, |term| self.term(term))?,
-            Prim::BinLen(inner) => curios_core::Prim::bin_len(self.term(inner)?),
-            Prim::BinEql(left, right) => {
-                curios_core::Prim::bin_eql(self.term(left)?, self.term(right)?)
+            Prim::Bin(grain, segments) => {
+                Self::lower_bin_literal(*grain, segments, |term| self.term(term))?
             }
-            Prim::BinGet(bin, index) => {
-                curios_core::Prim::bin_get(self.term(bin)?, self.term(index)?)
+            Prim::BinLen(grain, inner) => curios_core::Prim::bin_len(*grain, self.term(inner)?),
+            Prim::BinEql(grain, left, right) => {
+                curios_core::Prim::bin_eql(*grain, self.term(left)?, self.term(right)?)
             }
-            Prim::BinSlice(bin, start, end) => {
-                curios_core::Prim::bin_slice(self.term(bin)?, self.term(start)?, self.term(end)?)
+            Prim::BinGet(grain, bin, index) => {
+                curios_core::Prim::bin_get(*grain, self.term(bin)?, self.term(index)?)
             }
-            Prim::BinAppend(bin, byte) => {
-                curios_core::Prim::bin_append(self.term(bin)?, self.term(byte)?)
+            Prim::BinSlice(grain, bin, start, end) => curios_core::Prim::bin_slice(
+                *grain,
+                self.term(bin)?,
+                self.term(start)?,
+                self.term(end)?,
+            ),
+            Prim::BinAppend(grain, bin, atom) => {
+                curios_core::Prim::bin_append(*grain, self.term(bin)?, self.term(atom)?)
             }
-            Prim::BinConcat(left, right) => {
-                curios_core::Prim::bin_concat([self.term(left)?, self.term(right)?])
+            Prim::BinConcat(grain, left, right) => {
+                curios_core::Prim::bin_concat(*grain, [self.term(left)?, self.term(right)?])
             }
             Prim::LstType(inner) => curios_core::Prim::lst_type(self.term(inner)?),
             Prim::Lst(entries) => self.lower_lst_literal(entries, |term| self.term(term))?,

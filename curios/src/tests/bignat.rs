@@ -181,9 +181,9 @@ fn flt_to_str_matches_rust_shortest_format() {
 }
 
 #[test]
-fn flt_to_le_bin_prints_raw_bytes() {
+fn flt_to_le_bytes_prints_raw_bytes() {
     let source = r#"
-        std/Io/write(std/Io/stdout, std/Flt/to_le_bin(+1.5))
+        std/Io/write(std/Io/stdout, std/Flt/to_le_bytes(+1.5))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -192,12 +192,12 @@ fn flt_to_le_bin_prints_raw_bytes() {
 }
 
 #[test]
-fn flt_of_le_bin_roundtrips_raw_bytes() {
-    // Full-pipeline inverse of `to_le_bin`: assemble the float back from its
+fn flt_of_le_bytes_roundtrips_raw_bytes() {
+    // Full-pipeline inverse of `to_le_bytes`: assemble the float back from its
     // four little-endian bytes, then re-serialize. The program is closed, so
-    // this also exercises the type-level and optimizer folds of `of_le_bin`.
+    // this also exercises the type-level and optimizer folds of `of_le_bytes`.
     let source = r#"
-        std/Io/write(std/Io/stdout, std/Flt/to_le_bin(std/Flt/of_le_bin(std/Flt/to_le_bin(+1.5))))
+        std/Io/write(std/Io/stdout, std/Flt/to_le_bytes(std/Flt/of_le_bytes(std/Flt/to_le_bytes(+1.5))))
         "#;
 
     let (system, io) = MockHost::builder().build();

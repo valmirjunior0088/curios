@@ -1,4 +1,4 @@
-use /std/{Bin, Str, Nat, Bln, Char, Lst, Parse, Result, Option, Io, Task};
+use /std/{Bytes, Byte, Str, Nat, Bln, Char, Lst, Parse, Result, Option, Io, Task};
 use /std/tcp/{Settings, Socket};
 
 pub induct Method : Type
@@ -23,7 +23,7 @@ pub record Request : Type {
     port : Nat,
     path : Str,
     headers : Lst({Str, Str}),
-    body : Bin,
+    body : Bytes,
     settings : Settings
 }
 
@@ -34,11 +34,11 @@ pub let get(host : Str, port : Nat, path : Str) -> Request =
         port = port,
         path = path,
         headers = [],
-        body = \\,
+        body = x\,
         settings = Settings/default
     };
 
-pub let post(host : Str, port : Nat, path : Str, body : Bin) -> Request =
+pub let post(host : Str, port : Nat, path : Str, body : Bytes) -> Request =
     Request {
         method = Method/post(),
         host = host,
@@ -58,7 +58,7 @@ pub let secure(request : Request) -> Request =
 pub let get_tls(host : Str, port : Nat, path : Str) -> Request =
     secure(get(host, port, path));
 
-pub let post_tls(host : Str, port : Nat, path : Str, body : Bin) -> Request =
+pub let post_tls(host : Str, port : Nat, path : Str, body : Bytes) -> Request =
     secure(post(host, port, path, body));
 
 let until(target : Nat) -> (Nat) -> Bln =
@@ -70,14 +70,14 @@ let header_lookup(headers : Lst({Str, Str}), name : Str) -> Option(Str) =
 let render_header((name, value) : {Str, Str}) -> Str =
     Str/flatten([name, ": ", value, "\r\n"]);
 
-let content_length(body : Bin) -> Str =
-    match Bin/len(body) == 0 : Str
+let content_length(body : Bytes) -> Str =
+    match Bytes/len(body) == 0 : Str
     | true => ""
-    | false => Str/flatten(["Content-Length: ", Nat/to_str(Bin/len(body)), "\r\n"])
+    | false => Str/flatten(["Content-Length: ", Nat/to_str(Bytes/len(body)), "\r\n"])
     end;
 
-pub let render(request : Request) -> Bin =
-    \..Str/to_bin(Str/flatten([
+pub let render(request : Request) -> Bytes =
+    x\..Str/to_bytes(Str/flatten([
         method_str(request.method), " ", request.path, " HTTP/1.1\r\n",
         "Host: ", request.host, "\r\n",
         "Connection: close\r\n",
@@ -101,30 +101,30 @@ pub let status_line : Parse(Status) =
     let _ = Parse/take_byte('\r')!;
     let _ = Parse/take_byte('\n')!;
     Parse/pure(Status {
-        version = Option/unwrap_or(Str/of_bin(version), ""),
-        code = Option/unwrap_or(Nat/of_str(Option/unwrap_or(Str/of_bin(digits), "")), 0),
-        reason = Option/unwrap_or(Str/of_bin(reason), "")
+        version = Option/unwrap_or(Str/of_bytes(version), ""),
+        code = Option/unwrap_or(Nat/of_str(Option/unwrap_or(Str/of_bytes(digits), "")), 0),
+        reason = Option/unwrap_or(Str/of_bytes(reason), "")
     });
 
 pub record Response : Type {
     status : Status,
     headers : Lst({Str, Str}),
-    body : Bin
+    body : Bytes
 }
 
-let rest : Parse(Bin) =
+let rest : Parse(Bytes) =
     Parse {
         run(input, pos) =
-            Result/success((Bin/len(input), Bin/slice(input, pos, Bin/len(input))))
+            Result/success((Bytes/len(input), Bytes/slice(input, pos, Bytes/len(input))))
     };
 
 let guard_header : Parse({}) =
     Parse {
         run(input, pos) =
-            match Nat/try_lt(pos, Bin/len(input))
+            match Nat/try_lt(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of headers")
             | some(ok) =>
-                match Bin/at(input, pos, ok) == '\r'
+                match Byte/to_nat(Bytes/at(input, pos, ok)) == '\r'
                 | true => Result/failure("end of header block")
                 | false => Result/success((pos, ()))
                 end
@@ -138,13 +138,13 @@ let header_line : Parse({Str, Str}) =
     let value = Parse/take_while(until('\r'))!;
     let _ = Parse/take_byte('\r')!;
     let _ = Parse/take_byte('\n')!;
-    Parse/pure((Option/unwrap_or(Str/of_bin(name), ""), Str/trim(Option/unwrap_or(Str/of_bin(value), ""))));
+    Parse/pure((Option/unwrap_or(Str/of_bytes(name), ""), Str/trim(Option/unwrap_or(Str/of_bytes(value), ""))));
 
-let take_n(n : Nat) -> Parse(Bin) =
+let take_n(n : Nat) -> Parse(Bytes) =
     Parse {
         run(input, pos) =
-            let stop = Nat/min(pos + n, Bin/len(input));
-            Result/success((stop, Bin/slice(input, pos, stop)))
+            let stop = Nat/min(pos + n, Bytes/len(input));
+            Result/success((stop, Bytes/slice(input, pos, stop)))
     };
 
 let content_length_of(headers : Lst({Str, Str})) -> Option(Nat) =
@@ -153,8 +153,8 @@ let content_length_of(headers : Lst({Str, Str})) -> Option(Nat) =
     | none() => Option/none()
     end;
 
-let body_parser(headers : Lst({Str, Str})) -> Parse(Bin) =
-    match content_length_of(headers) : Parse(Bin)
+let body_parser(headers : Lst({Str, Str})) -> Parse(Bytes) =
+    match content_length_of(headers) : Parse(Bytes)
     | some(n) => take_n(n)
     | none() => rest
     end;

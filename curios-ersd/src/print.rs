@@ -3,7 +3,10 @@ use {
         Atom, CellPrim, Func, HostPrim, Let, Match, NatMatch, Prim, Proj, PurePrim, Rec, Subterm,
         Term, Tuple,
     },
-    curios_base::printer::{Printer, flat, indent, pure, sep_flat},
+    curios_base::{
+        Grain,
+        printer::{Printer, flat, indent, pure, sep_flat},
+    },
 };
 
 fn print_atom(atom: &Atom) -> Printer<'static> {
@@ -115,27 +118,57 @@ fn print_pure_prim<'a>(prim: &'a PurePrim) -> Printer<'a> {
         PurePrim::FltCeil(t) => print_unary("Flt.ceil", t),
         PurePrim::FltTrunc(t) => print_unary("Flt.trunc", t),
         PurePrim::FltNearest(t) => print_unary("Flt.nearest", t),
-        PurePrim::FltToLeBin(t) => print_unary("Flt.to_le_bin", t),
-        PurePrim::FltOfLeBin(t) => print_unary("Flt.of_le_bin", t),
+        PurePrim::FltToLeBytes(t) => print_unary("Flt.to_le_bytes", t),
+        PurePrim::FltOfLeBytes(t) => print_unary("Flt.of_le_bytes", t),
         PurePrim::NatToInt(t) => print_unary("Nat.to_int", t),
         PurePrim::NatToFlt(t) => print_unary("Nat.to_flt", t),
         PurePrim::IntToNat(t) => print_unary("Int.to_nat", t),
         PurePrim::IntToFlt(t) => print_unary("Int.to_flt", t),
         PurePrim::FltToNat(t) => print_unary("Flt.to_nat", t),
         PurePrim::FltToInt(t) => print_unary("Flt.to_int", t),
-        PurePrim::Bin(bytes) => pure(
+        PurePrim::Bin(Grain::X, bytes) => pure(format!(
+            "x{}",
             bytes
+                .to_bytes()
+                .unwrap()
                 .iter()
                 .map(|b| format!("\\{:02x}", b))
-                .collect::<String>(),
+                .collect::<String>()
+        )),
+        PurePrim::BinLen(Grain::X, t) => print_unary("Bytes.len", t),
+        PurePrim::BinEql(Grain::X, left, right) => print_binary("Bytes.eql", left, right),
+        PurePrim::BinGet(Grain::X, bin, index) => print_binary("Bytes.get", bin, index),
+        PurePrim::BinSlice(Grain::X, bin, start, end) => {
+            print_ternary("Bytes.slice", bin, start, end)
+        }
+        PurePrim::BinAppend(Grain::X, bin, byte) => print_binary("Bytes.append", bin, byte),
+        PurePrim::BinConcat(Grain::X, operands) => flat([
+            pure("Bytes.concat "),
+            sep_flat(operands.iter().map(|t| print_term(t)), || pure(", ")),
+        ]),
+        PurePrim::Bin(Grain::B, bits) => pure(
+            (0..bits.bit_length())
+                .map(|index| {
+                    if bits.bit(index).unwrap() {
+                        "\\1"
+                    } else {
+                        "\\0"
+                    }
+                })
+                .fold(String::from("b"), |mut out, bit| {
+                    out.push_str(bit);
+                    out
+                }),
         ),
-        PurePrim::BinLen(t) => print_unary("Bin.len", t),
-        PurePrim::BinEql(left, right) => print_binary("Bin.eql", left, right),
-        PurePrim::BinGet(bin, index) => print_binary("Bin.get", bin, index),
-        PurePrim::BinSlice(bin, start, end) => print_ternary("Bin.slice", bin, start, end),
-        PurePrim::BinAppend(bin, byte) => print_binary("Bin.append", bin, byte),
-        PurePrim::BinConcat(operands) => flat([
-            pure("Bin.concat "),
+        PurePrim::BinLen(Grain::B, t) => print_unary("Bits.len", t),
+        PurePrim::BinEql(Grain::B, left, right) => print_binary("Bits.eql", left, right),
+        PurePrim::BinGet(Grain::B, bin, index) => print_binary("Bits.get", bin, index),
+        PurePrim::BinSlice(Grain::B, bin, start, end) => {
+            print_ternary("Bits.slice", bin, start, end)
+        }
+        PurePrim::BinAppend(Grain::B, bin, bit) => print_binary("Bits.append", bin, bit),
+        PurePrim::BinConcat(Grain::B, operands) => flat([
+            pure("Bits.concat "),
             sep_flat(operands.iter().map(|t| print_term(t)), || pure(", ")),
         ]),
         PurePrim::Lst(elems) => flat([

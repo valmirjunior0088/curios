@@ -22,11 +22,12 @@ Option/some(x) -- qualified member
 
 | Kind               | Examples                                | Notes                                                                                                                                                                                                                  |
 | ------------------ | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Integer            | `0`, `42`, `0xFF`, `0b1010`, `-7`, `+3` | Decimal, hex (`0x`), or binary (`0b`). The concrete type (`Nat`/`Int`/`Flt`) is chosen by elaboration; a written sign rules out `Nat`. A sign must be glued to the digits — `-42` is a literal, `- 42` is subtraction. |
+| Integer            | `0`, `42`, `0xFF`, `0b1010`, `-7`, `+3` | Decimal, hex (`0x`), or binary (`0b`). The concrete type (`Nat`/`Byte`/`Int`/`Flt`) is chosen by elaboration; `Byte` is selected only by an expected `Byte` type and accepts `0..=255`; a written sign rules out `Nat` and `Byte`. A sign must be glued to the digits — `-42` is a literal, `- 42` is subtraction. |
 | Float              | `5.0`, `-0.5`, `1.0e9`                  | Must contain a dot **and** a following decimal digit. `5.0` is a `Flt`, not `5` projected. Supports sign and `e`/`E` exponent.                                                                                         |
 | Char               | `'c'`, `'\n'`, `'\''`                   | A fixed `Nat` codepoint (monomorphic). Escapes: `\n \t \r \\ \'`.                                                                                                                                                      |
 | String             | `"hi"`, `"a\tb\n"`                      | A `Str`. Escapes: `\n \t \r \\ \"`.                                                                                                                                                                                    |
-| Bytestring (`Bin`) | `\48\69`, `\\`, `\01\..rest`            | Each byte is `\` followed by exactly two hex digits. The empty bytestring is `\\`. A `\..` segment splices another `Bin` in place — any position, any count. The literal is one whitespace-free token: a spread operand is an atomic term in glued form (a name path with glued projections/calls/`!` — `\..hdr.bytes`, `\..f(x)`) or a parenthesized term `\..(term)`, and the literal continues only when the very next character is `\`, so `\..xs \01` ends at `xs`. |
+| Bits               | `b\0\1`, `b\`, `b\1\..rest`          | A packed `Bits` sequence. Each atom is exactly `\0` or `\1`; `b\` is empty. A `\..` segment splices another `Bits`. The first written bit occupies the least-significant available packed bit. |
+| Bytes              | `x\48\69`, `x\`, `x\01\..rest`       | A packed `Bytes` sequence. Each atom is `\` followed by exactly two hex digits; `x\` is empty. A `\..` segment splices another `Bytes`. Bits and Bytes spreads cannot be mixed. Both literal forms are one whitespace-free token: a spread operand is a glued atomic term (`x\..hdr.bytes`, `x\..f(x)`) or a parenthesized term (`x\..(term)`), and the literal continues only when the next character is `\`. Unprefixed bytestring syntax is not accepted. |
 | List (`Lst`)       | `[]`, `[1, 2, 3]`, `[1, ..xs, 4]`       | The native contiguous sequence. Element-type-checked: it borrows `Lst(T)`'s `T` from the expected type, and a non-empty literal can also synthesize `T` from its elements — but a bare empty `[]` with no expected type cannot, so annotate it (`[] : Lst(Nat)`). A `..xs` entry splices another list in place — any position, any count, full terms (brackets delimit, so `[.. xs]` may be spaced); the borrow covers spread operands and elements alike. |
 | Boolean            | `true`, `false`                         | Keywords.                                                                                                                                                                                                              |
 
@@ -106,13 +107,13 @@ Binary operators. Listed loosest to tightest binding; **all are left-associative
 | 4            | `+` `-`                     |
 | 5 (tightest) | `*` `/` `%`                 |
 
-Every operator, `&&`/`||` included, dispatches through a standard-library concept (see [Concepts](#concepts-witnesses-and-instance-arguments)): `+ - * / %` through `Add`/`Sub`/`Mul`/`Div`/`Rem`, `&&`/`||` through `And`/`Or`, `==`/`!=` through `Eql` (`!=` negates the result), and the comparisons through `Cmp`. Both operands must share one type; a bare integer literal defaults it to `Nat` (`Int` if signed). Primitive witnesses cover `Nat`/`Int`/`Flt` (plus `Eql`/`And`/`Or` on `Bln`, `Eql` on `Bin` and `Str`), and compile to the bare primitive instruction — declaring a witness (e.g. `satisfy Add(Point) { … }`) makes the operator work on your own type at no cost to the primitive cases.
+Every operator, `&&`/`||` included, dispatches through a standard-library concept (see [Concepts](#concepts-witnesses-and-instance-arguments)): `+ - * / %` through `Add`/`Sub`/`Mul`/`Div`/`Rem`, `&&`/`||` through `And`/`Or`, `==`/`!=` through `Eql` (`!=` negates the result), and the comparisons through `Cmp`. Both operands must share one type; a bare integer literal defaults it to `Nat` (`Int` if signed). Primitive witnesses cover `Nat`/`Int`/`Flt`, direct equality and ordering on `Byte`, equality on `Bits`/`Bytes`/`Str`, and `Eql`/`And`/`Or` on `Bln`; declaring a witness for a user type adds the same operator syntax without changing primitive lowering.
 
 ## Binders
 
 A `let` binder, lambda parameter, or function-definition-sugar parameter is either a single name (`_` to ignore) or a tuple/struct destructuring pattern — `(x, y)`, `Point { x, y }`, `Point { loc = (x, y) }` — nested arbitrarily, and mixed freely with plain names in the same parameter list. A pattern desugars to exactly the hand-written projection chain it stands for (`let (x, y) = pair;` is sugar for `let x = pair.0; let y = pair.1;`); a struct pattern's written head name is descriptive only, never resolved or validated — writing the wrong same-shape struct name is not an error. Field-punning (`Point { x, y }`) is the ordinary positional case, not separate syntax.
 
-A match-arm pattern may nest arbitrarily — see [Match](#match). A constructor's payload position accepts another full pattern (`some(some(x))`), the scrutinee itself may be a tuple or struct matched positionally (including a tuple of several independent scrutinees dispatched by row), and the `Bln`/`Nat`/`Lst`/`Bin` literal shapes can appear as sub-patterns too (`some([head, ..tail])`). A leaf position still binds a single name only (`_` to ignore) — there is no catch-all (`| x =>` / `| _ =>`) at any depth, so every arm names a concrete shape.
+A match-arm pattern may nest arbitrarily — see [Match](#match). A constructor's payload position accepts another full pattern (`some(some(x))`), the scrutinee itself may be a tuple or struct matched positionally (including a tuple of several independent scrutinees dispatched by row), and the `Bln`/`Nat`/`Lst`/`Bits`/`Bytes` literal shapes can appear as sub-patterns too (`some([head, ..tail])`). A leaf position still binds a single name only (`_` to ignore) — there is no catch-all (`| x =>` / `| _ =>`) at any depth, so every arm names a concrete shape.
 
 ## Match
 
@@ -126,7 +127,7 @@ match v : (v : Vec(A, k)) => Vec(B, k) ... -- scrutinee-bound motive
 match p : (q : Eq(A, s, t)) => Eq(t, s) ... -- annotated (names the type + its slots)
 ```
 
-**Inductive** (the general form). Each arm is `| pattern => body`, where `pattern` is a constructor applied to (possibly nested) sub-patterns (`tag(x, …)`, `some(some(x))`), a tuple (`(p, q, …)`) or struct (`Name { f, … }`) pattern matched positionally against a tuple/struct-valued scrutinee, or one of the `Bln`/`Nat`/`Lst`/`Bin` literal leaves, nested at any depth. A leaf binds a single name only (`_` to ignore). The concrete arms carry no row priority — each shape is handled by at most one arm — so every combination an arm needs to reach must be spelled out. Zero arms is legal (for scrutinees no constructor can inhabit):
+**Inductive** (the general form). Each arm is `| pattern => body`, where `pattern` is a constructor applied to (possibly nested) sub-patterns (`tag(x, …)`, `some(some(x))`), a tuple (`(p, q, …)`) or struct (`Name { f, … }`) pattern matched positionally against a tuple/struct-valued scrutinee, or one of the `Bln`/`Nat`/`Lst`/`Bits`/`Bytes` literal leaves, nested at any depth. A leaf binds a single name only (`_` to ignore). The concrete arms carry no row priority — each shape is handled by at most one arm — so every combination an arm needs to reach must be spelled out. Zero arms is legal (for scrutinees no constructor can inhabit):
 
 ```
 match m
@@ -135,7 +136,7 @@ match m
 end
 ```
 
-**The `_` default.** A single **final, top-level, bare** `| _ =>` arm may follow the concrete constructor arms of an inductive match; it covers every constructor no earlier arm names. Only a bare `_` is a default — a *named* final binder (`| rest =>`) among concrete arms is a mistake, not a catch-all, and is rejected. The default is still forbidden nested inside a payload (that mixes a binder with a concrete shape in one column, which stays an error) and absent from the `Bln` and fold (`Nat`-induction/`Lst`/`Bin`) forms, whose shapes are already exhaustive. A lone `_` with no concrete arms is not a default at all — it is the plain binder form (equivalent to a `let`). The default binds nothing and is checked at the unrefined scrutinee against the motive.
+**The `_` default.** A single **final, top-level, bare** `| _ =>` arm may follow the concrete constructor arms of an inductive match; it covers every constructor no earlier arm names. Only a bare `_` is a default — a *named* final binder (`| rest =>`) among concrete arms is a mistake, not a catch-all, and is rejected. The default is still forbidden nested inside a payload (that mixes a binder with a concrete shape in one column, which stays an error) and absent from the `Bln` and fold (`Nat`-induction/`Lst`/`Bits`/`Bytes`) forms, whose shapes are already exhaustive. A lone `_` with no concrete arms is not a default at all — it is the plain binder form (equivalent to a `let`). The default binds nothing and is checked at the unrefined scrutinee against the motive.
 
 ```
 match m
@@ -194,12 +195,17 @@ match a
 end
 ```
 
-**`Bin` fold** (identical in spirit, but the empty arm is the empty bytestring `\\` and the cons arm `\head\..tail; ih` mirrors the `Bin` literal's own backslash-delimited shape; `head` is the leading byte, a `Nat`):
+**`Bits` / `Bytes` fold.** The prefix selects the carrier. A Bits head is `Bln`; a Bytes head is `Byte`. The optional induction hypothesis is the fold of the tail.
 
 ```
-match b
-| \\ => base
-| \head\..tail; ih => step(head, ih)
+match bytes
+| x\ => base
+| x\head\..tail; ih => step(head, ih)
+end
+
+match bits
+| b\ => base
+| b\head\..tail; ih => step(head, ih)
 end
 ```
 
@@ -236,7 +242,7 @@ pub let map(@A : Type, @B : Type, f : (A) -> B, m : Option(A)) -> Option(B) =
 pub rec len(@A : Type, l : Lst(A)) -> Nat = ...;
 ```
 
-**`foreign`.** A binding implemented by the embedder rather than by Curios code — the user-facing FFI boundary. The type is a **wire signature**: `(T, ...) -> T` or a bare `T` for a zero-argument foreign (mirroring `sys_io`'s own `io_clock_wall`-style ops), where each `T` is one of the six wire types `Nat`, `Int`, `Bln`, `Bin`, `Io`, `Lst(T)` — not an arbitrary Curios `Type`, since these are exactly the shapes that can cross the host boundary. The name is the guest binding; the wasm import name is the declaration's fully qualified name (e.g. `/foo/frobnicate`), imported under the `ffi` namespace, so declarations in different modules never collide on the wire. An embedder supplies an implementation under that qualified name via `curios-rt::ForeignBindings` (native) or `hooks.foreign` (the JS harness).
+**`foreign`.** A binding implemented by the embedder rather than by Curios code — the user-facing FFI boundary. The type is a **wire signature**: `(T, ...) -> T` or a bare `T` for a zero-argument foreign, where each `T` is one of `Nat`, `Int`, `Bln`, `Bin`, `Io`, or `Lst(T)`. Wire `Bin` deliberately retains its ABI spelling and maps to the object-language `Bytes`; `Byte` and `Bits` are not separate wire types. The name is the guest binding; the wasm import name is the declaration's fully qualified name, imported under the `ffi` namespace.
 
 ```
 foreign frobnicate : (Nat, Bin) -> Nat;
@@ -291,12 +297,12 @@ pub record Pair(A : Type, B : Type) : Type { -- transparent
 
 pub record Meters : Type { Nat } -- newtype; project with `.0`; erases to the bare field
 
-pub struct Token : Type { Bin } -- opaque: representation private to this module
+pub struct Token : Type { Bytes } -- opaque: representation private to this module
 ```
 
 **Construction and projection.** Build with `Name { field = value, ... }` (or `Name(params) { ... }` when the type takes parameters); read fields with `.label` or `.0`. A function-valued field may use the definition sugar `name(args) = body` (shorthand for `name = (args) => body`), and the last field may carry a trailing comma — both also apply to tuple literals `(a = x, b = y)`.
 
-**Spread/update.** `Name { ..base, field = value, … }` copies `base` — which must itself be a `Name` — replacing the named fields. The spread must be the first entry and at most one is allowed; every override must be labeled, and overrides follow the declared field order (an order-preserving subsequence — written order stays check order, as everywhere). `Name { ..base }` is the identity copy, and the head may re-pin parameters so an update can change them — every copied field is checked against the new instantiation, so overriding a field that a copied field's type depends on is a type error unless the dependent field is overridden consistently too. The sequence literals spread too — `[a, ..xs, b]` and `\00\..bytes\01` (see the literal table) — but there spread means *concatenation*, so it is positional and repeatable rather than single, leading, and labeled. There is no tuple spread, and no string spread — a string literal's UTF-8 validity derivation needs concrete bytes.
+**Spread/update.** `Name { ..base, field = value, … }` copies `base` — which must itself be a `Name` — replacing the named fields. The spread must be the first entry and at most one is allowed; every override must be labeled, and overrides follow the declared field order (an order-preserving subsequence — written order stays check order, as everywhere). `Name { ..base }` is the identity copy, and the head may re-pin parameters so an update can change them — every copied field is checked against the new instantiation, so overriding a field that a copied field's type depends on is a type error unless the dependent field is overridden consistently too. The sequence literals spread too — `[a, ..xs, b]`, `b\1\..bits\0`, and `x\00\..bytes\01` (see the literal table) — but there spread means *concatenation*, so it is positional and repeatable rather than single, leading, and labeled. There is no tuple spread, and no string spread — a string literal's UTF-8 validity derivation needs concrete bytes.
 
 ```
 let p = Pair { fst = 1, snd = 2 };

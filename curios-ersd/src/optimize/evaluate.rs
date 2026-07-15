@@ -47,6 +47,7 @@ use {
     crate::{
         Apply, Atom, Func, HostPrim, Item, Module, NatMatch, Prim, PurePrim, Subterm, Term, Tuple,
     },
+    curios_base::{Grain, PackedBin},
     std::{
         cell::RefCell,
         collections::{HashMap, HashSet},
@@ -66,7 +67,7 @@ const PASS_BUDGET: usize = 500_000;
 /// Call-nesting cap: each interpreted call recurses into a host Rust frame.
 const MAX_CALL_DEPTH: usize = 256;
 
-/// Caps on one replacement term: total nodes, and total `Bin` bytes plus `Lst`
+/// Caps on one replacement term: total nodes, and total packed binary payload plus `Lst`
 /// elements. Reification past either declines the candidate.
 const MAX_REIFY_NODES: usize = 2_048;
 const MAX_REIFY_BYTES: usize = 65_536;
@@ -199,7 +200,7 @@ enum Value<'m> {
     Flt(f32),
     Io(u32),
     Tag(usize),
-    Bin(Rc<Vec<u8>>),
+    Bin(Grain, Rc<PackedBin>),
     Lst(Rc<Vec<Value<'m>>>),
     Tuple(Rc<Vec<Value<'m>>>),
     Clsr(Rc<ClsrVal<'m>>),
@@ -227,9 +228,9 @@ impl<'m> Value<'m> {
         }
     }
 
-    fn bin(&self) -> Result<&Rc<Vec<u8>>, Bail> {
+    fn bin(&self, expected: Grain) -> Result<&PackedBin, Bail> {
         match self {
-            Value::Bin(bytes) => Ok(bytes),
+            Value::Bin(grain, value) if *grain == expected => Ok(value),
             _ => Err(Bail::Unsupported),
         }
     }
@@ -736,8 +737,8 @@ impl<'m> Evaluator<'m> {
                     PurePrim::Int(value) => return Outcome::Done(Value::Int(*value)),
                     PurePrim::Flt(value) => return Outcome::Done(Value::Flt(*value)),
                     PurePrim::Io(token) => return Outcome::Done(Value::Io(*token)),
-                    PurePrim::Bin(bytes) => {
-                        return Outcome::Done(Value::Bin(Rc::new(bytes.clone())));
+                    PurePrim::Bin(grain, value) => {
+                        return Outcome::Done(Value::Bin(*grain, Rc::new(value.clone())));
                     }
                     PurePrim::LstMap(source, mapper) => {
                         return self.eval_map(source, mapper, env);
@@ -808,9 +809,9 @@ impl<'m> Evaluator<'m> {
             Value::Flt(value) => Subterm::Prim(Prim::Pure(PurePrim::Flt(*value))).into(),
             Value::Io(token) => Subterm::Prim(Prim::Pure(PurePrim::Io(*token))).into(),
             Value::Tag(index) => Subterm::Atom(Atom { index: *index }).into(),
-            Value::Bin(bytes) => {
-                budget.payload(bytes.len())?;
-                Subterm::Prim(Prim::Pure(PurePrim::Bin(bytes.as_ref().clone()))).into()
+            Value::Bin(grain, value) => {
+                budget.payload(value.to_packed_bytes().len())?;
+                Subterm::Prim(Prim::Pure(PurePrim::Bin(*grain, value.as_ref().clone()))).into()
             }
             Value::Lst(elements) => {
                 budget.payload(elements.len())?;
@@ -912,11 +913,13 @@ fn apply_pure<'m>(prim: &PurePrim, operands: &[Value<'m>]) -> Result<Value<'m>, 
     let nat = |index: usize| operands[index].nat();
     let int = |index: usize| operands[index].int();
     let flt = |index: usize| operands[index].flt();
-    let bin = |index: usize| operands[index].bin();
+    let bin_x = |index: usize| operands[index].bin(Grain::X);
+    let bin_b = |index: usize| operands[index].bin(Grain::B);
     let lst = |index: usize| operands[index].lst();
     let bln = |value: bool| Ok(Value::Nat(value as u32));
 
     match prim {
+        Bin(..) => Err(Bail::Unsupported),
         // Nat — 31-bit unsigned; add/mul trap on overflow, sub is monus,
         // div/rem trap on a zero divisor.
         NatAdd(..) => fits31u(nat(0)? as u64 + nat(1)? as u64).map(Value::Nat),
@@ -985,41 +988,65 @@ fn apply_pure<'m>(prim: &PurePrim, operands: &[Value<'m>]) -> Result<Value<'m>, 
         IntToFlt(..) => Ok(Value::Flt(int(0)? as f32)),
         FltToNat(..) => flt_to_nat(flt(0)?),
         FltToInt(..) => flt_to_int(flt(0)?),
-        FltToLeBin(..) => Ok(Value::Bin(Rc::new(flt(0)?.to_le_bytes().to_vec()))),
-        FltOfLeBin(..) => match <[u8; 4]>::try_from(bin(0)?.as_slice()) {
+        FltToLeBytes(..) => Ok(Value::Bin(
+            Grain::X,
+            Rc::new(PackedBin::from_bytes(flt(0)?.to_le_bytes().to_vec())),
+        )),
+        FltOfLeBytes(..) => match <[u8; 4]>::try_from(bin_x(0)?.to_bytes().unwrap().as_slice()) {
             Ok(le_bytes) => Ok(Value::Flt(f32::from_le_bytes(le_bytes))),
             Err(_) => Err(Bail::Trap),
         },
 
         // Bin — bounds-checked reads trap; append truncates the byte like the
         // backend; concat and equality are total.
-        BinLen(..) => fits31u(bin(0)?.len() as u64).map(Value::Nat),
-        BinEql(..) => bln(bin(0)?.as_slice() == bin(1)?.as_slice()),
-        BinGet(..) => match bin(0)?.get(nat(1)? as usize) {
-            Some(byte) => Ok(Value::Nat(*byte as u32)),
+        BinLen(Grain::X, ..) => fits31u(bin_x(0)?.len(Grain::X) as u64).map(Value::Nat),
+        BinEql(Grain::X, ..) => bln(bin_x(0)? == bin_x(1)?),
+        BinGet(Grain::X, ..) => match bin_x(0)?.byte(nat(1)? as usize) {
+            Some(byte) => Ok(Value::Nat(byte as u32)),
             None => Err(Bail::Trap),
         },
-        BinSlice(..) => {
-            let bytes = bin(0)?;
+        BinSlice(Grain::X, ..) => {
+            let bytes = bin_x(0)?;
             let (start, end) = (nat(1)? as usize, nat(2)? as usize);
-            if start <= end && end <= bytes.len() {
-                Ok(Value::Bin(Rc::new(bytes[start..end].to_vec())))
-            } else {
-                Err(Bail::Trap)
-            }
+            bytes
+                .slice(Grain::X, start, end)
+                .map(|value| Value::Bin(Grain::X, Rc::new(value)))
+                .ok_or(Bail::Trap)
         }
-        BinAppend(..) => {
-            let mut bytes = bin(0)?.as_ref().clone();
-            bytes.push(nat(1)? as u8);
-            Ok(Value::Bin(Rc::new(bytes)))
-        }
-        BinConcat(..) => {
-            let mut bytes = Vec::new();
-            for index in 0..operands.len() {
-                bytes.extend_from_slice(bin(index)?);
-            }
-            Ok(Value::Bin(Rc::new(bytes)))
-        }
+        BinAppend(Grain::X, ..) => Ok(Value::Bin(
+            Grain::X,
+            Rc::new(bin_x(0)?.append_byte(nat(1)? as u8).unwrap()),
+        )),
+        BinConcat(Grain::X, ..) => Ok(Value::Bin(
+            Grain::X,
+            Rc::new(PackedBin::concat(
+                (0..operands.len())
+                    .map(bin_x)
+                    .collect::<Result<Vec<_>, _>>()?,
+            )),
+        )),
+        BinLen(Grain::B, ..) => fits31u(bin_b(0)?.bit_length() as u64).map(Value::Nat),
+        BinEql(Grain::B, ..) => bln(bin_b(0)? == bin_b(1)?),
+        BinGet(Grain::B, ..) => bin_b(0)?
+            .bit(nat(1)? as usize)
+            .map(|bit| Value::Nat(bit as u32))
+            .ok_or(Bail::Trap),
+        BinSlice(Grain::B, ..) => bin_b(0)?
+            .slice(Grain::B, nat(1)? as usize, nat(2)? as usize)
+            .map(|value| Value::Bin(Grain::B, Rc::new(value)))
+            .ok_or(Bail::Trap),
+        BinAppend(Grain::B, ..) => Ok(Value::Bin(
+            Grain::B,
+            Rc::new(bin_b(0)?.append_bit(nat(1)? != 0)),
+        )),
+        BinConcat(Grain::B, ..) => Ok(Value::Bin(
+            Grain::B,
+            Rc::new(PackedBin::concat(
+                (0..operands.len())
+                    .map(bin_b)
+                    .collect::<Result<Vec<_>, _>>()?,
+            )),
+        )),
 
         // Lst — same discipline over elements.
         Lst(..) => Ok(Value::Lst(Rc::new(operands.to_vec()))),
@@ -1056,7 +1083,7 @@ fn apply_pure<'m>(prim: &PurePrim, operands: &[Value<'m>]) -> Result<Value<'m>, 
         },
 
         // Literals and `LstMap` are handled before operand evaluation.
-        Nat(..) | Int(..) | Flt(..) | Bin(..) | Io(..) | LstMap(..) => {
+        Nat(..) | Int(..) | Flt(..) | Io(..) | LstMap(..) => {
             unreachable!("handled in eval_prim")
         }
     }
@@ -1161,7 +1188,11 @@ mod tests {
     }
 
     fn bin(bytes: Vec<u8>) -> Term {
-        Subterm::Prim(Prim::Pure(PurePrim::Bin(bytes))).into()
+        Subterm::Prim(Prim::Pure(PurePrim::Bin(
+            Grain::X,
+            PackedBin::from_bytes(bytes),
+        )))
+        .into()
     }
 
     fn name(named: &str) -> Term {
@@ -1393,7 +1424,7 @@ mod tests {
             body: apply(name("mk"), vec![nat(2)]),
         };
         let printed = run(module);
-        assert!(printed.contains("(@0, 2n, \\68\\69)"), "{printed}");
+        assert!(printed.contains("(@0, 2n, x\\68\\69)"), "{printed}");
     }
 
     #[test]
@@ -1547,8 +1578,13 @@ mod tests {
                 Subterm::Prim(Prim::Pure(PurePrim::Int(1))).into(),
                 Subterm::Prim(Prim::Pure(PurePrim::Int(0))).into(),
             )),
-            prim(PurePrim::BinGet(bin(b"ab".to_vec()), nat(5))),
-            prim(PurePrim::BinSlice(bin(b"ab".to_vec()), nat(1), nat(9))),
+            prim(PurePrim::BinGet(Grain::X, bin(b"ab".to_vec()), nat(5))),
+            prim(PurePrim::BinSlice(
+                Grain::X,
+                bin(b"ab".to_vec()),
+                nat(1),
+                nat(9),
+            )),
             prim(PurePrim::LstGet(prim(PurePrim::Lst(vec![nat(1)])), nat(3))),
             prim(PurePrim::FltToNat(flt(1e10))),
             prim(PurePrim::FltToInt(flt(f32::NAN))),
@@ -1571,10 +1607,10 @@ mod tests {
                 func(
                     vec![],
                     vec![],
-                    prim(PurePrim::BinConcat(vec![
-                        bin(vec![0u8; 40_000]),
-                        bin(vec![0u8; 40_000]),
-                    ])),
+                    prim(PurePrim::BinConcat(
+                        Grain::X,
+                        vec![bin(vec![0u8; 40_000]), bin(vec![0u8; 40_000])],
+                    )),
                 ),
             )],
             body: apply(name("big"), vec![]),

@@ -9,13 +9,13 @@ use {
     },
 };
 
-/// A constructed value: the scalar immediates, `Bin` bytes, `Lst`/`Tpl` aggregates, and `Clsr` naming its definition plus the captures filling its environment. Aggregates are flat — elements are names of already-bound values, never nested `Data` — so constructing one is a single allocation. `Data` is also the payload of module consts, where codegen materialises it into a wasm global.
+/// A constructed value: the scalar immediates, packed `Bits`/`Bytes`, `Lst`/`Tpl` aggregates, and `Clsr` naming its definition plus the captures filling its environment. Aggregates are flat — elements are names of already-bound values, never nested `Data` — so constructing one is a single allocation. `Data` is also the payload of module consts, where codegen materialises it into a wasm global.
 #[derive(Debug, Clone)]
 pub enum Data {
     Nat(u32),
     Int(i32),
     Flt(f32),
-    Bin(Vec<u8>),
+    Bin(curios_base::Grain, curios_base::PackedBin),
     Lst(Vec<ValueName>),
     Tpl(Vec<ValueName>),
     Clsr(ClsrName, Vec<ValueName>),
@@ -27,7 +27,7 @@ impl From<Scalar> for Data {
             Scalar::Nat(value) => Data::Nat(value),
             Scalar::Int(value) => Data::Int(value),
             Scalar::Flt(value) => Data::Flt(value),
-            Scalar::Bin(bytes) => Data::Bin(bytes),
+            Scalar::Bin(grain, value) => Data::Bin(grain, value),
         }
     }
 }
@@ -105,15 +105,15 @@ pub enum Code {
     FltNearest(ValueName),
     FltCopysign(ValueName, ValueName),
     FltToNat(ValueName),
-    FltToLeBin(ValueName),
-    FltOfLeBin(ValueName),
+    FltToLeBytes(ValueName),
+    FltOfLeBytes(ValueName),
     FltToInt(ValueName),
-    BinLen(ValueName),
-    BinEql(ValueName, ValueName),
-    BinGet(ValueName, ValueName),
-    BinSlice(ValueName, ValueName, ValueName),
-    BinAppend(ValueName, ValueName),
-    BinConcat(Vec<ValueName>),
+    BinLen(curios_base::Grain, ValueName),
+    BinEql(curios_base::Grain, ValueName, ValueName),
+    BinGet(curios_base::Grain, ValueName, ValueName),
+    BinSlice(curios_base::Grain, ValueName, ValueName, ValueName),
+    BinAppend(curios_base::Grain, ValueName, ValueName),
+    BinConcat(curios_base::Grain, Vec<ValueName>),
     LstLen(ValueName),
     LstGet(ValueName, ValueName),
     LstSlice(ValueName, ValueName, ValueName),

@@ -5,6 +5,7 @@ use {
         rope_sub_sub_type,
     },
     curios_abi::WireType,
+    curios_base::{Grain, PackedBin},
     curios_wasm::{
         CompType, DataName, DataSegment, Export, Expr, FieldType, Func, FuncName, FuncType, Global,
         GlobalType, HeapType, Import, Instr, Module, Mutability, NumType, RefType, ResultType,
@@ -377,7 +378,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    fn emit_let_bin_data(&mut self, name: &'a crate::ValueName, bytes: &[u8]) {
+    fn emit_let_bin_data(&mut self, name: &'a crate::ValueName, grain: Grain, value: &PackedBin) {
+        let bytes = value.to_packed_bytes();
+        let payload_length = bytes.len() as i32;
+        let length = value.len(grain) as i32;
         let rope = self.table.bin_rope();
         let global_name = self.table.find_const(name);
         let data_name = DataName::from(format!(
@@ -386,12 +390,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             self.module.datas().len()
         ));
 
-        self.module.add_data(
-            data_name.clone(),
-            DataSegment {
-                bytes: bytes.to_vec(),
-            },
-        );
+        self.module
+            .add_data(data_name.clone(), DataSegment { bytes });
 
         // The placeholder init is an empty leaf — a wasm constant expression
         // cannot read a data segment (or call), so the real payload is built
@@ -425,12 +425,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             .add_export(global_name.as_string(), Export::Global(global_name.clone()));
 
         self.start_expr.push(Instr::I32Const { value: 0 });
-        self.start_expr.push(Instr::I32Const {
-            value: bytes.len() as i32,
-        });
+        self.start_expr.push(Instr::I32Const { value: length });
         self.start_expr.push(Instr::I32Const { value: 0 });
         self.start_expr.push(Instr::I32Const {
-            value: bytes.len() as i32,
+            value: payload_length,
         });
         self.start_expr.push(Instr::ArrayNewData {
             type_name: rope.payload,
@@ -452,8 +450,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// because its payload comes from a data segment.
     fn emit_let_data(&mut self, name: &'a crate::ValueName, value: &'a crate::Data) {
         match value {
-            crate::Data::Bin(bytes) => {
-                self.emit_let_bin_data(name, bytes);
+            crate::Data::Bin(grain, value) => {
+                self.emit_let_bin_data(name, *grain, value);
             }
             crate::Data::Nat(_) | crate::Data::Int(_) | crate::Data::Flt(_) => {
                 let mut expr = Default::default();
@@ -588,6 +586,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
+        if self.table.bits_eql_used() {
+            ropes.emit_bits_eql_func(self.table.bits_eql_func(), self.table.bits_read_func());
+        }
+
         if self.table.lst_map_used() {
             ropes.emit_map_func(self.table.lst_map_func(), self.table.lst_force_func());
         }
@@ -596,7 +598,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_slice_func(
                 &self.table.bin_rope(),
                 self.table.bin_slice_func(),
-                self.table.bin_force_func(),
+                Some(self.table.bin_force_func()),
+            );
+        }
+
+        if self.table.bits_slice_used() {
+            ropes.emit_slice_func(
+                &self.table.bin_rope(),
+                self.table.bits_slice_func(),
+                Some(self.table.bits_force_func()),
             );
         }
 
@@ -604,7 +614,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_slice_func(
                 &self.table.lst_rope(),
                 self.table.lst_slice_func(),
-                self.table.lst_force_func(),
+                Some(self.table.lst_force_func()),
             );
         }
 
@@ -614,6 +624,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 self.table.bin_read_func(),
                 self.table.bin_force_func(),
             );
+        }
+
+        if self.table.bits_read_used() {
+            ropes.emit_bits_read_func(self.table.bits_read_func(), self.table.bits_force_func());
         }
 
         if self.table.lst_read_used() {
@@ -626,6 +640,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         if self.table.bin_force_used() {
             ropes.emit_force_func(&self.table.bin_rope(), self.table.bin_force_func());
+        }
+
+        if self.table.bits_force_used() {
+            ropes.emit_bits_force_func(self.table.bits_force_func());
         }
 
         if self.table.lst_force_used() {

@@ -1,9 +1,9 @@
-use /std/{Bin, Str, Nat, Io, Result, Task};
+use /std/{Bytes, Str, Nat, Io, Result, Task};
 use /std/tcp/{resolve, Socket};
 
 pub struct Listener : Type { Io }
 
-let bind_listen(addr : Bin) -> Result(Listener, Io/Error) =
+let bind_listen(addr : Bytes) -> Result(Listener, Io/Error) =
     let s = /sys/Io/socket(addr);
     match s.status == /sys/Io/Status/ok : Result(Listener, Io/Error)
     | false => Result/failure(Io/error_of(s.status))
@@ -57,7 +57,7 @@ pub let serve(host : Str, port : Nat, handler : (Socket) -> Task({})) -> Task(Re
             let _ = Task/nonblocking(h);
             Task/go(() => Task/using(h, () => /sys/Io/close(h), handler(Socket/of(h))))));
 
-pub let serve_tls(host : Str, port : Nat, cert : Bin, key : Bin, handler : (Socket) -> Task({})) -> Task(Result({}, Io/Error)) =
+pub let serve_tls(host : Str, port : Nat, cert : Bytes, key : Bytes, handler : (Socket) -> Task({})) -> Task(Result({}, Io/Error)) =
     Task/defer(() =>
         let cfg = /sys/Io/tls_server_config(cert, key);
         match cfg.status == /sys/Io/Status/ok : Task(Result({}, Io/Error))

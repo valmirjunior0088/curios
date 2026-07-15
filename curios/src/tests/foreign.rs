@@ -12,7 +12,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     let source = r#"
         foreign double : (Nat) -> Nat;
         let _ : std/False = /std/proc/exit(double(21));
-        std/Io/write(std/Io/stdout, /std/Str/to_bin("unreachable"))
+        std/Io/write(std/Io/stdout, /std/Str/to_bytes("unreachable"))
         "#
     .parse::<curios_text::Entrypoint>()
     .expect("failed to parse source");

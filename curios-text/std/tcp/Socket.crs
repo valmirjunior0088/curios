@@ -1,4 +1,4 @@
-use /std/{Bin, Str, Nat, Bln, Io, Result, Option, Task};
+use /std/{Bytes, Str, Nat, Bln, Io, Result, Option, Task};
 use /std/tcp/{Settings, resolve};
 use /std/time/{Duration};
 
@@ -10,7 +10,7 @@ pub let of(h : Io) -> Socket =
 pub let read(c : Socket, n : Nat) -> Task(Io/Read) =
     Task/read(c.0, n);
 
-pub let write(c : Socket, b : Bin) -> Task(Result({}, Io/Error)) =
+pub let write(c : Socket, b : Bytes) -> Task(Result({}, Io/Error)) =
     Task/write(c.0, b);
 
 let configure(h : Io, settings : Settings) -> {} =
@@ -21,10 +21,10 @@ let configure(h : Io, settings : Settings) -> {} =
 let upgrade(h : Io, host : Str, tls : Bln) -> Nat =
     match tls : Nat
     | false => /sys/Io/Status/ok
-    | true => /sys/Io/start_tls(h, Str/to_bin(host))
+    | true => /sys/Io/start_tls(h, Str/to_bytes(host))
     end;
 
-let connect_addr(settings : Settings, host : Str, addr : Bin) -> Result(Socket, Io/Error) =
+let connect_addr(settings : Settings, host : Str, addr : Bytes) -> Result(Socket, Io/Error) =
     let s = /sys/Io/socket(addr);
     match s.status == /sys/Io/Status/ok : Result(Socket, Io/Error)
     | false => Result/failure(Io/error_of(s.status))
@@ -80,9 +80,9 @@ pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket
                 Task/bind(close(c), (_) => Task/pure(Result/success(a))))
         end);
 
-let drain(c : Socket) -> Task(Bin) =
+let drain(c : Socket) -> Task(Bytes) =
     Task/drain((n) => read(c, n));
 
-pub let call(settings : Settings, host : Str, port : Nat, request : Bin) -> Task(Result(Bin, Io/Error)) =
+pub let call(settings : Settings, host : Str, port : Nat, request : Bytes) -> Task(Result(Bytes, Io/Error)) =
     with(settings, host, port, (c) =>
         Task/bind(write(c, request), (_) => drain(c)));

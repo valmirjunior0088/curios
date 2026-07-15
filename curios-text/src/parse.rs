@@ -69,7 +69,7 @@ fn parse_literal<'a>(expected: &'static str) -> Parser<'a, ()> {
 }
 
 // The identifier characters alone, consuming no whitespace — the building
-// block of the tight (whitespace-free) positions like a `Bin` literal's
+// block of the tight (whitespace-free) positions like a `Bits`/`Bytes` literal's
 // `\..` spread operand.
 fn parse_identifier_raw<'a>() -> Parser<'a, &'a str> {
     take_while(|char| CHARACTERS.contains(&char) || char.is_alphanumeric()).flat_map(|identifier| {
@@ -120,7 +120,7 @@ fn parse_name<'a>() -> Parser<'a, Name> {
 // A strictly glued name path — no whitespace anywhere, not even trailing. The
 // tight sibling of [`parse_name`] (whose segments each eat trailing
 // whitespace, so `Foo /bar` is the path `Foo/bar` there), used where the
-// surrounding grammar is whitespace-sensitive: a `Bin` literal's `\..` spread
+// surrounding grammar is whitespace-sensitive: a `Bits`/`Bytes` literal's `\..` spread
 // operand.
 fn parse_name_raw<'a>() -> Parser<'a, Name> {
     spanned(

@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_base::{Flt, Int},
+    curios_base::{Flt, Grain, Int, PackedBin},
     std::time::{Duration, Instant},
 };
 
@@ -10,6 +10,15 @@ fn context() -> Context {
 
 fn nat(n: usize) -> Term {
     Term::prim(Prim::Nat(Nat::new(n)))
+}
+
+#[test]
+fn nat_to_byte_reflects_byte_to_nat() {
+    let mut context = context();
+    let byte = Term::free_var("byte");
+    let term = Term::prim(Prim::NatToByte(Term::prim(Prim::ByteToNat(byte.clone()))));
+
+    assert_eq!(reduce(&mut context, term), Ok(byte));
 }
 
 #[test]
@@ -360,31 +369,41 @@ fn reduce_lst_get_errors_on_out_of_bounds() {
 fn reduce_bin_append_adds_byte() {
     let mut context = context();
 
-    let bin = Subterm::Prim(Prim::Bin(vec![1, 2]));
-    let byte: Subterm = Subterm::Prim(Prim::Nat(Nat::new(3usize)));
+    let bin = Subterm::Prim(Prim::Bin(
+        curios_base::Grain::X,
+        PackedBin::from_bytes(vec![1, 2]),
+    ));
+    let byte: Subterm = Subterm::Prim(Prim::Byte(3));
 
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::bin_append(bin, byte)).into()
+            Subterm::Prim(Prim::bin_append(Grain::X, bin, byte)).into()
         ),
-        Ok(Subterm::Prim(Prim::Bin(vec![1, 2, 3])).into())
+        Ok(Subterm::Prim(Prim::Bin(
+            curios_base::Grain::X,
+            PackedBin::from_bytes(vec![1, 2, 3])
+        ))
+        .into())
     );
 }
 
 #[test]
-fn reduce_bin_append_truncates_byte_to_low_eight_bits() {
+fn reduce_bin_append_adds_the_full_byte_range() {
     let mut context = context();
 
-    let bin = Subterm::Prim(Prim::Bin(vec![1, 2]));
-    let byte: Subterm = Subterm::Prim(Prim::Nat(Nat::new(259usize)));
+    let bin = Subterm::Prim(Prim::Bin(
+        curios_base::Grain::X,
+        PackedBin::from_bytes(vec![1, 2]),
+    ));
+    let byte: Subterm = Subterm::Prim(Prim::Byte(255));
 
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Prim(Prim::bin_append(bin, byte)).into()
+            Subterm::Prim(Prim::bin_append(Grain::X, bin, byte)).into()
         ),
-        Ok(Subterm::Prim(Prim::Bin(vec![1, 2, 3])).into())
+        Ok(Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2, 255]))).into())
     );
 }
 
@@ -707,6 +726,7 @@ fn reduce_flt_to_int_is_exact_or_stuck() {
 mod prim {
     use {
         crate::{Context, Nat, Prim, Subterm, Term, reduce},
+        curios_base::{Grain, PackedBin},
         num_bigint::BigUint,
         std::time::Duration,
     };
@@ -1001,14 +1021,14 @@ mod prim {
     #[test]
     fn bin_eql_decides_structurally() {
         let mut context = context();
-        let bin = |bytes: Vec<u8>| Term::prim(Prim::Bin(bytes));
+        let bin = |bytes: Vec<u8>| Term::prim(Prim::Bin(Grain::X, PackedBin::from_bytes(bytes)));
         let x = Term::free_var("x");
 
         // Reflexivity over a symbolic value: `eql(x, x) = true`.
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::bin_eql(x.clone(), x.clone()))
+                Term::prim(Prim::bin_eql(Grain::X, x.clone(), x.clone()))
             ),
             Subterm::Prim(Prim::Bln(true)),
         );
@@ -1017,33 +1037,93 @@ mod prim {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::bin_eql(bin(vec![1, 2]), bin(vec![1, 2])))
+                Term::prim(Prim::bin_eql(Grain::X, bin(vec![1, 2]), bin(vec![1, 2])))
             ),
             Subterm::Prim(Prim::Bln(true)),
         );
         assert_eq!(
             reduced(
                 &mut context,
-                Term::prim(Prim::bin_eql(bin(vec![1, 2]), bin(vec![1, 3])))
+                Term::prim(Prim::bin_eql(Grain::X, bin(vec![1, 2]), bin(vec![1, 3])))
             ),
             Subterm::Prim(Prim::Bln(false)),
         );
 
         // A first-byte clash decides `false` even past a shared symbolic tail:
         // `eql([1] ++ x, [2] ++ x) = false`.
-        let lhs = Term::prim(Prim::bin_concat([bin(vec![1]), x.clone()]));
-        let rhs = Term::prim(Prim::bin_concat([bin(vec![2]), x.clone()]));
+        let lhs = Term::prim(Prim::bin_concat(Grain::X, [bin(vec![1]), x.clone()]));
+        let rhs = Term::prim(Prim::bin_concat(Grain::X, [bin(vec![2]), x.clone()]));
         assert_eq!(
-            reduced(&mut context, Term::prim(Prim::bin_eql(lhs, rhs))),
+            reduced(&mut context, Term::prim(Prim::bin_eql(Grain::X, lhs, rhs))),
             Subterm::Prim(Prim::Bln(false)),
         );
 
         // Distinct variables are undecidable: `eql(x, y)` stays neutral.
         let y = Term::free_var("y");
         assert!(matches!(
-            reduced(&mut context, Term::prim(Prim::bin_eql(x, y))),
-            Subterm::Prim(Prim::BinEql(..)),
+            reduced(&mut context, Term::prim(Prim::bin_eql(Grain::X, x, y))),
+            Subterm::Prim(Prim::BinEql(Grain::X, ..)),
         ));
+    }
+
+    #[test]
+    fn bits_reduce_through_symbolic_free_monoid_spines() {
+        let mut context = context();
+        let bits = |values: &[bool]| {
+            Term::prim(Prim::Bin(
+                Grain::B,
+                PackedBin::from_bits(values.iter().copied()),
+            ))
+        };
+        let tail = Term::free_var("tail");
+        let cons = Term::prim(Prim::bin_concat(Grain::B, [bits(&[true]), tail.clone()]));
+
+        assert_eq!(
+            reduced(
+                &mut context,
+                Term::prim(Prim::bin_get(Grain::B, cons.clone(), lit(0)))
+            ),
+            Subterm::Prim(Prim::Bln(true)),
+        );
+        assert_eq!(
+            reduced(
+                &mut context,
+                Term::prim(Prim::bin_slice(Grain::B, cons.clone(), lit(0), lit(1)))
+            ),
+            Term::unwrap_or_clone(bits(&[true])),
+        );
+        assert_eq!(
+            reduced(
+                &mut context,
+                Term::prim(Prim::bin_len(Grain::B, cons.clone()))
+            ),
+            reduced(
+                &mut context,
+                Term::prim(Prim::nat_add(
+                    lit(1),
+                    Term::prim(Prim::bin_len(Grain::B, tail.clone())),
+                ))
+            ),
+        );
+
+        let false_cons = Term::prim(Prim::bin_concat(Grain::B, [bits(&[false]), tail.clone()]));
+        assert_eq!(
+            reduced(
+                &mut context,
+                Term::prim(Prim::bin_eql(Grain::B, cons, false_cons))
+            ),
+            Subterm::Prim(Prim::Bln(false)),
+        );
+        assert_eq!(
+            reduced(
+                &mut context,
+                Term::prim(Prim::bin_concat(
+                    Grain::B,
+                    [bits(&[]), tail.clone(), bits(&[])],
+                ))
+            ),
+            Term::unwrap_or_clone(tail),
+        );
     }
 
     // A nested `Lst/slice` reassociates to one slice over the base, even when the

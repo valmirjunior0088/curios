@@ -8,7 +8,7 @@ fn io_write() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
-        r#"std/Io/write(std/Io/stdout, /std/Str/to_bin("hello"))"#,
+        r#"std/Io/write(std/Io/stdout, /std/Str/to_bytes("hello"))"#,
         system,
     )
     .expect("expected result");
@@ -20,7 +20,7 @@ fn io_write_stderr() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
-        r#"std/Io/write(std/Io/stderr, /std/Str/to_bin("oops"))"#,
+        r#"std/Io/write(std/Io/stderr, /std/Str/to_bytes("oops"))"#,
         system,
     )
     .expect("expected result");
@@ -74,7 +74,7 @@ fn file_read_all_reads_a_seeded_file() {
         use /std/{File, Io, Task};
         match Task/block_on(File/read_all("data.txt"))
         | success(contents) => Io/write(Io/stdout, contents)
-        | failure(_) => Io/write(Io/stdout, /std/Str/to_bin("error"))
+        | failure(_) => Io/write(Io/stdout, /std/Str/to_bytes("error"))
         end
         "#;
 
@@ -113,7 +113,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
 fn file_with_write_mode_persists_through_close() {
     let source = r#"
         use /std/{File, Io, Task};
-        match Task/block_on(File/with("out.txt", Io/Mode/write(), (f) => File/write(f, /std/Str/to_bin("written"))))
+        match Task/block_on(File/with("out.txt", Io/Mode/write(), (f) => File/write(f, /std/Str/to_bytes("written"))))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -131,16 +131,16 @@ fn file_with_write_mode_persists_through_close() {
 #[test]
 fn file_read_pulls_bytes_inside_the_bracket() {
     let source = r#"
-        use /std/{File, Io, Str, Bin, Task};
+        use /std/{File, Io, Str, Bytes, Task};
         match Task/block_on(File/with("lines.txt", Io/Mode/read(), (f) =>
             Task/bind(File/read(f, 1024), (r) =>
-                match r : Task(Bin)
+                match r : Task(Bytes)
                 | chunk(b) => Task/pure(b)
-                | eof() => Task/pure(\\)
-                | error(_) => Task/pure(\\)
+                | eof() => Task/pure(x\)
+                | error(_) => Task/pure(x\)
                 end)))
         | success(bytes) => Io/write(Io/stdout, bytes)
-        | failure(_) => Io/write(Io/stdout, Str/to_bin("error"))
+        | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
         end
         "#;
 
@@ -153,11 +153,11 @@ fn file_read_pulls_bytes_inside_the_bracket() {
 
 #[test]
 fn proc_args_indexes_the_argv_snapshot() {
-    // argv crosses as a host-built `Lst(Bin)`; indexing it round-trips one entry.
+    // argv crosses as a host-built `Lst(Bytes)`; indexing it round-trips one entry.
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     crate::run_text(
         Duration::from_secs(10),
-        r#"std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/Lst/get(/std/proc/args(), 1), \\))"#,
+        r#"std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/Lst/get(/std/proc/args(), 1), x\))"#,
         system,
     )
     .expect("expected result");
@@ -173,7 +173,7 @@ fn proc_env_found_unwraps_to_some() {
         r#"
         match /std/proc/env("HOME") : {}
         | some(v) => let _ = std/Io/write(std/Io/stdout, v); ()
-        | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bin("missing")); ()
+        | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("missing")); ()
         end
         "#,
         system,
@@ -191,7 +191,7 @@ fn proc_env_absent_is_none() {
         r#"
         match /std/proc/env("NOPE") : {}
         | some(v) => let _ = std/Io/write(std/Io/stdout, v); ()
-        | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bin("missing")); ()
+        | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("missing")); ()
         end
         "#,
         system,
@@ -206,7 +206,7 @@ fn proc_exit_halts_with_code() {
     // exit traps: it surfaces its code *and* the trailing write never runs.
     let entrypoint = r#"
         let _ : std/False = /std/proc/exit(7);
-        std/Io/write(std/Io/stdout, /std/Str/to_bin("unreachable"))
+        std/Io/write(std/Io/stdout, /std/Str/to_bytes("unreachable"))
         "#
     .parse::<curios_text::Entrypoint>()
     .expect("failed to parse source");

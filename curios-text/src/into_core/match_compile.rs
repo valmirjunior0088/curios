@@ -4,6 +4,7 @@ use {
         BinPattern, CondMatch, Error, LadderArm, LadderTest, LstPattern, Match, MatchPattern,
         MatrixArm, Motive, NatPattern, Subterm, Term,
     },
+    curios_base::Grain,
     std::{collections::BTreeMap, mem},
 };
 
@@ -972,21 +973,35 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let scrutinee = columns.remove(0);
         let rest = columns;
 
+        let mut grain: Option<&Grain> = None;
         let mut end_rows = Vec::new();
         let mut byte_rows: Vec<(String, String, Option<String>, MatrixRow<'_>)> = Vec::new();
         for mut row in rows {
             match row.patterns.remove(0) {
-                MatchPattern::Bin(BinPattern::End) => end_rows.push(row),
-                MatchPattern::Bin(BinPattern::Byte {
+                MatchPattern::Bin(BinPattern::End(row_grain)) => {
+                    if grain.is_some_and(|grain| *grain != *row_grain) {
+                        return Err(Error::MatrixMixedBinGrain);
+                    }
+                    grain.get_or_insert(row_grain);
+                    end_rows.push(row)
+                }
+                MatchPattern::Bin(BinPattern::Atom {
+                    grain: row_grain,
                     head_label,
                     tail_label,
                     ih_label,
-                }) => byte_rows.push((
-                    head_label.clone(),
-                    tail_label.clone(),
-                    ih_label.clone(),
-                    row,
-                )),
+                }) => {
+                    if grain.is_some_and(|grain| *grain != *row_grain) {
+                        return Err(Error::MatrixMixedBinGrain);
+                    }
+                    grain.get_or_insert(row_grain);
+                    byte_rows.push((
+                        head_label.clone(),
+                        tail_label.clone(),
+                        ih_label.clone(),
+                        row,
+                    ))
+                }
                 _ => unreachable!("every row classified as Bin"),
             }
         }
@@ -1053,6 +1068,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         };
 
         Ok(curios_core::Term::bin_match(
+            *grain.expect("a Bin group has at least one row"),
             scrutinee,
             label,
             motive_body,

@@ -1,5 +1,6 @@
 use {
     super::{Context, LoadAs, RopeData, Table},
+    curios_base::Grain,
     curios_wasm::{BlockType, HeapType, Instr, LocalName, NumType, RefType, ValType},
 };
 
@@ -915,7 +916,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 Instr::F32ConvertI32S,
                 WrapAs::Flt,
             ),
-            crate::Code::FltToLeBin(operand) => {
+            crate::Code::FltToLeBytes(operand) => {
                 // Reinterpret the f32 as its IEEE-754 bit pattern and split it into
                 // the four little-endian bytes. The `$bytes` payload is `i8`-packed, so
                 // `array.new_fixed` truncates each shifted i32 to its low byte --
@@ -949,8 +950,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            crate::Code::FltOfLeBin(operand) => {
-                // The inverse of `FltToLeBin`: trap (via the special label) unless
+            crate::Code::FltOfLeBytes(operand) => {
+                // The inverse of `FltToLeBytes`: trap (via the special label) unless
                 // the `Bin` is exactly 4 bytes, then OR the bytes back into an i32
                 // -- each `$bin/read` zero-extends its packed byte -- and
                 // reinterpret. Byte-for-byte `f32::from_le_bytes`, no host
@@ -1037,7 +1038,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            crate::Code::BinLen(bin) => {
+            crate::Code::BinLen(_, bin) => {
                 let rope = self.context.table().bin_rope();
                 self.emit_unary_op(
                     &result_local,
@@ -1047,8 +1048,11 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     WrapAs::I31,
                 );
             }
-            crate::Code::BinEql(left, right) => {
-                let eql = self.context.table().bin_eql_func();
+            crate::Code::BinEql(grain, left, right) => {
+                let eql = match grain {
+                    Grain::B => self.context.table().bits_eql_func(),
+                    Grain::X => self.context.table().bin_eql_func(),
+                };
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Bin));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Bin));
                 self.emit_instr(Instr::Call { func_name: eql });
@@ -1057,8 +1061,11 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            crate::Code::BinGet(bin, idx) => {
-                let read = self.context.table().bin_read_func();
+            crate::Code::BinGet(grain, bin, idx) => {
+                let read = match grain {
+                    Grain::B => self.context.table().bits_read_func(),
+                    Grain::X => self.context.table().bin_read_func(),
+                };
                 self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
                 self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Nat));
                 self.emit_instr(Instr::Call { func_name: read });
@@ -1067,16 +1074,19 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            crate::Code::BinSlice(bin, start, end) => {
-                let slice = self.context.table().bin_slice_func();
+            crate::Code::BinSlice(grain, bin, start, end) => {
+                let slice = match grain {
+                    Grain::B => self.context.table().bits_slice_func(),
+                    Grain::X => self.context.table().bin_slice_func(),
+                };
                 self.emit_rope_slice(&result_local, bin, start, end, LoadAs::Bin, slice);
             }
-            crate::Code::BinAppend(bin, byte) => {
+            crate::Code::BinAppend(_, bin, byte) => {
                 let rope = self.context.table().bin_rope();
                 let elem_instrs = self.context.load_value_instrs(byte, LoadAs::Nat);
                 self.emit_rope_append(&result_local, bin, elem_instrs, LoadAs::Bin, &rope);
             }
-            crate::Code::BinConcat(operands) => {
+            crate::Code::BinConcat(_, operands) => {
                 let rope = self.context.table().bin_rope();
                 self.emit_rope_concat(&result_local, operands, LoadAs::Bin, &rope);
             }

@@ -24,9 +24,10 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 
 - [x] Primitives as orthogonal builtins _(uniform `/sys` builtin declarations, not parser-special-cased)_
   - [x] `Nat`
+  - [x] `Byte` (i31 scalar; contextual literals `0..=255`; `Byte/to_nat` and wrapping `Nat/to_byte`)
   - [x] `Int`
   - [x] `Flt`
-  - [x] `Bin`
+  - [x] Packed `Bits` and `Bytes` (grain-specialized operations over shared immutable windows; O(1) slices and tails)
   - [x] `Lst`
 
 ## Type System
@@ -63,7 +64,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Destructuring patterns at `let`/lambda-parameter/function-sugar-parameter position (tuple/struct only, irrefutable; desugars to projections)
 - [x] Function-field sugar in every field list (`name(params) -> T` in tuple types and `struct`/`record` declarations, `name(args) = body` in tuple and struct literals — the forms concept/witness bodies always had) and trailing commas in field lists
 - [x] Struct spread/update syntax (`T { ..base, f = x }` — one leading spread; labeled, declaration-ordered overrides; unwritten fields copied from the base, concept superclass fields included, overridable with `use <term>`; no tuple spread)
-- [x] List/bytestring spread syntax (`[a, ..xs, b]`, `\00\..bytes\01` — positional splices, any position/count, desugared to the n-ary concat prims; `Bin` literals stay whitespace-free with glued atomic operands; no tuple/string spread)
+- [x] List/Bits/Bytes spread syntax (`[a, ..xs, b]`, `b\1\..bits\0`, `x\00\..bytes\01` — positional splices, any position/count, desugared to n-ary concat prims; packed literals stay whitespace-free with glued atomic operands and require their grain prefix; no tuple/string spread)
 - [x] Nested/tuple/struct match-arm patterns (the pattern-matrix compiler — full enumeration, no row priority)
 - [x] Headless match (a headless `Bln` condition ladder `match | cond => … | _ => … end` with a mandatory `_` default; arms inherit their condition's definitional refinement)
 - [x] Bind-arms (`| pattern = value =>`, Rust `if let`, in the headless ladder; refutable LHS, nested patterns, fallthrough shared through a nullary thunk)
@@ -131,7 +132,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Module system
   - [x] Private-item-in-public-interface check (signature-only; hidden `struct` fields exempt)
 - [x] Browser playground
-  - [x] Run harness owned by `curios-js` (`compile`/`run`, with wire codes from `curios-abi` and a local bridge for the compiler's `Bin` payload shape)
+  - [x] Run harness owned by `curios-js` (`compile`/`run`, with wire codes from `curios-abi` and a local bridge for the compiler's wire-ABI `Bin` payload shape)
 - [ ] Developer tooling
   - [ ] Code formatter
   - [ ] Terminal REPL
@@ -157,6 +158,6 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Proof-carrying UTF-8 string decoding (`std/Str`, `std/Char`)
 - [x] Parser-combinator library (`std/Parse`)
 - [x] Core collections (`std/Lst` and its helpers, length-indexed `std/Vec`)
-- [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bin` keys — same entries, same shape — with injective key encodings via its `Key` concept)
+- [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bytes` keys — same entries, same shape — with injective key encodings via its `Key` concept)
 - [x] Equality and ordering (`std/Eq`, `std/Order`)
 - [x] Foundational proof/logic types (`std/True`, `std/False`)

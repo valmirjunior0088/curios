@@ -426,19 +426,19 @@ pub enum MatchPattern {
     /// A nested `Lst` literal leaf — the `[]`/`[head,..tail][; ih]` shapes a
     /// headed `Lst` match takes.
     Lst(LstPattern),
-    /// A nested `Bin` literal leaf — the `\\`/`\head\..tail[; ih]` shapes a
-    /// headed `Bin` match takes.
+    /// A nested `Bits`/`Bytes` literal leaf — the prefixed empty and
+    /// `\head\..tail[; ih]` shapes a headed packed-sequence match takes.
     Bin(BinPattern),
 }
 
 impl MatchPattern {
     /// Whether this leaf is a genuine single-dispatch shape
-    /// (`Ctor`/`Bln`/`Nat`/`Lst`/`Bin`), as opposed to `Binder`/`Tuple`/
+    /// (`Ctor`/`Bln`/`Nat`/`Lst`/`Bits`/`Bytes`), as opposed to `Binder`/`Tuple`/
     /// `Struct`, which never produce a core `Match` node at all (a binder
     /// never splits, a tuple/struct explodes into projections) — so there
     /// is nothing for a dependent motive to attach to. Used by the matrix
     /// compiler's (`into_core::match_compile`) dependent-motive gate: `Nat`/`Lst`/
-    /// `Bin` each nest their own two-case sub-pattern, so a plain
+    /// `Bits`/`Bytes` each nest their own two-case sub-pattern, so a plain
     /// [`std::mem::discriminant`] comparison on the outer variant already
     /// treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same
     /// dispatchable shape, with no separate classifier needed.
@@ -458,7 +458,7 @@ pub enum NatPattern {
     /// The `pred + 1; ih` leaf. `pred_label`/`ih_label` are always plain
     /// binder names, never a further nested sub-pattern — deep peeling in
     /// one arm stays expressible only via hand-nested matches. `ih_label`
-    /// is mandatory here, unlike the optional `; ih` on the `Lst`/`Bin` cons
+    /// is mandatory here, unlike the optional `; ih` on the `Lst`/`Bits`/`Bytes` cons
     /// leaves below.
     Succ {
         pred_label: String,
@@ -488,14 +488,15 @@ pub enum LstPattern {
     },
 }
 
-/// The two shapes a nested `Bin` leaf can take — see [`MatchPattern::Bin`].
+/// The two shapes a nested `Bits`/`Bytes` leaf can take — see [`MatchPattern::Bin`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinPattern {
     /// The `\\` leaf.
-    End,
+    End(curios_base::Grain),
     /// The `\head\..tail[; ih]` leaf; `ih_label` is optional exactly as on the
     /// `Lst` cons leaf.
-    Byte {
+    Atom {
+        grain: curios_base::Grain,
         head_label: String,
         tail_label: String,
         ih_label: Option<String>,

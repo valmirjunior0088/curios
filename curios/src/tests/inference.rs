@@ -11,7 +11,7 @@ fn match_omitted_motive_infers() {
             | 0 => 0
             | pred + 1; ih => std/Nat/add(ih, pred)
             end;
-        std/Io/write(std/Io/stdout, /std/Str/to_bin(std/Nat/to_str(result)))
+        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -29,7 +29,7 @@ fn implicit_inductive_type_param_executes() {
     // names a sibling binder, and without the delayed substitution the two
     // spellings of the same domain compare as distinct.
     let source = r#"
-        use /std/{Nat, Bin, Io};
+        use /std/{Nat, Bytes, Io};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
@@ -41,7 +41,7 @@ fn implicit_inductive_type_param_executes() {
         let proof : Eq2(2, 2) = Eq2/refl();
         let inferred : Eq2(2, 2) = sym2(proof);
         match inferred : {}
-        | refl(z) => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z))); ()
+        | refl(z) => let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
         end
         "#;
 
@@ -61,7 +61,7 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(Nat, 2, 2) = Eq2/refl();
-        Io/write(Io/stdout, /std/Str/to_bin("no"))
+        Io/write(Io/stdout, /std/Str/to_bytes("no"))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -88,7 +88,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         let direct : Eq2(2, 2) = sym2(Eq2/refl());
         let chained : Eq2(3, 3) = sym2(sym2(Eq2/refl()));
         match chained : {}
-        | refl(z) => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(z))); ()
+        | refl(z) => let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
         end
         "#;
 
@@ -108,7 +108,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(2, 3) = Eq2/refl();
-        Io/write(Io/stdout, /std/Str/to_bin("no"))
+        Io/write(Io/stdout, /std/Str/to_bytes("no"))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -150,13 +150,13 @@ fn bare_tuple_continuation_tail_infers() {
     // postponement defers the tuple, the constraint store parks the flex–flex
     // codomain pair across the inner apply, and the outer pin wakes both.
     let source = r#"
-        use /std/{Parse, Nat, Bin, Io};
+        use /std/{Parse, Nat, Bytes, Io};
         let pairer : Parse({ Nat, Nat }) =
             Parse/bind(Parse/any_byte, (a) => Parse/pure((a, a)));
         rec with_sugar : Parse({ Nat, Nat }) =
             let a = Parse/any_byte!;
             Parse/pure((a, 0));
-        match Parse/run(pairer, /std/Str/to_bin("hi"))
+        match Parse/run(pairer, /std/Str/to_bytes("hi"))
         | success(pair) => Io/print(Nat/to_str(pair.0))
         | failure(_) => Io/print("error")
         end
@@ -181,7 +181,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
         match v : {}
         | [] => ()
-        | [p, ..rest] => let _ = Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(p.1))); ()
+        | [p, ..rest] => let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(p.1))); ()
         end
         "#;
 
@@ -198,7 +198,7 @@ fn checking_problem_without_a_pin_still_rejects() {
         use /std/{Nat, Io};
         let swallow(@A : Type, a : A) -> Nat = 0;
         let n : Nat = swallow((1, 2));
-        Io/write(Io/stdout, /std/Str/to_bin(Nat/to_str(n)))
+        Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(n)))
         "#;
 
     let (system, _io) = MockHost::builder().build();

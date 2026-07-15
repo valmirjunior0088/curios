@@ -850,10 +850,12 @@ impl Convert {
                     Carrier::Bin {
                         empty_case: this_empty,
                         cons_case: this_cons,
+                        ..
                     },
                     Carrier::Bin {
                         empty_case: that_empty,
                         cons_case: that_cons,
+                        ..
                     },
                 ) => {
                     self.enqueue(Term::type_(), this_empty, that_empty);

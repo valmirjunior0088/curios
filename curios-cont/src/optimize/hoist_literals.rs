@@ -158,7 +158,7 @@ fn collect_entry_points(
 fn is_entry_point(data: &Data) -> bool {
     matches!(
         data,
-        Data::Bin(_) | Data::Lst(_) | Data::Tpl(_) | Data::Clsr(..)
+        Data::Bin(_, _) | Data::Lst(_) | Data::Tpl(_) | Data::Clsr(..)
     )
 }
 
@@ -215,7 +215,7 @@ fn lower_data(
         Data::Nat(value) => Data::Nat(*value),
         Data::Int(value) => Data::Int(*value),
         Data::Flt(value) => Data::Flt(*value),
-        Data::Bin(bytes) => Data::Bin(bytes.clone()),
+        Data::Bin(grain, value) => Data::Bin(*grain, value.clone()),
         Data::Lst(elems) => Data::Lst(lower_children(elems, defs, interner, memo, stack)?),
         Data::Tpl(elems) => Data::Tpl(lower_children(elems, defs, interner, memo, stack)?),
         Data::Clsr(clsr, captures) => Data::Clsr(
@@ -252,7 +252,7 @@ enum ConstKey {
     Nat(u32),
     Int(i32),
     Flt(u32),
-    Bin(Vec<u8>),
+    Bin(curios_base::Grain, curios_base::PackedBin),
     Lst(Vec<ValueName>),
     Tpl(Vec<ValueName>),
     Clsr(ClsrName, Vec<ValueName>),
@@ -266,7 +266,7 @@ fn key_of(data: &Data) -> ConstKey {
         Data::Nat(value) => ConstKey::Nat(*value),
         Data::Int(value) => ConstKey::Int(*value),
         Data::Flt(value) => ConstKey::Flt(value.to_bits()),
-        Data::Bin(bytes) => ConstKey::Bin(bytes.clone()),
+        Data::Bin(grain, value) => ConstKey::Bin(*grain, value.clone()),
         Data::Lst(elems) => ConstKey::Lst(elems.clone()),
         Data::Tpl(elems) => ConstKey::Tpl(elems.clone()),
         Data::Clsr(clsr, captures) => ConstKey::Clsr(clsr.clone(), captures.clone()),
@@ -333,7 +333,7 @@ fn kind_of(data: &Data) -> &'static str {
         Data::Nat(_) => "nat",
         Data::Int(_) => "int",
         Data::Flt(_) => "flt",
-        Data::Bin(_) => "bin",
+        Data::Bin(_, _) => "bin",
         Data::Lst(_) => "lst",
         Data::Tpl(_) => "tpl",
         Data::Clsr(..) => "clsr",
@@ -357,7 +357,7 @@ fn rewrite_body(region: &mut Region, rewrites: &HashMap<ValueName, ValueName>) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {super::*, curios_base::PackedBin};
 
     fn v(name: &str) -> ValueName {
         ValueName::from(name)
@@ -429,9 +429,27 @@ mod tests {
         // v0 and v2 share bytes; v1 is distinct → two consts, v0 and v2 alias one.
         let mut module = main_func(region(
             vec![
-                (v("v0"), Value::Pure(Data::Bin(vec![1, 2, 3]))),
-                (v("v1"), Value::Pure(Data::Bin(vec![9]))),
-                (v("v2"), Value::Pure(Data::Bin(vec![1, 2, 3]))),
+                (
+                    v("v0"),
+                    Value::Pure(Data::Bin(
+                        curios_base::Grain::X,
+                        PackedBin::from_bytes(vec![1, 2, 3]),
+                    )),
+                ),
+                (
+                    v("v1"),
+                    Value::Pure(Data::Bin(
+                        curios_base::Grain::X,
+                        PackedBin::from_bytes(vec![9]),
+                    )),
+                ),
+                (
+                    v("v2"),
+                    Value::Pure(Data::Bin(
+                        curios_base::Grain::X,
+                        PackedBin::from_bytes(vec![1, 2, 3]),
+                    )),
+                ),
             ],
             vec![],
         ));
@@ -445,9 +463,13 @@ mod tests {
             .collect();
         assert_eq!(consts.len(), 2);
         assert_eq!(consts[0].0, "lit@bin#0");
-        assert!(matches!(&consts[0].1, Data::Bin(bytes) if bytes == &vec![1, 2, 3]));
+        assert!(
+            matches!(&consts[0].1, Data::Bin(curios_base::Grain::X, bytes) if bytes.as_bytes() == Some(&[1, 2, 3][..]))
+        );
         assert_eq!(consts[1].0, "lit@bin#1");
-        assert!(matches!(&consts[1].1, Data::Bin(bytes) if bytes == &vec![9]));
+        assert!(
+            matches!(&consts[1].1, Data::Bin(curios_base::Grain::X, bytes) if bytes.as_bytes() == Some(&[9][..]))
+        );
 
         let values = &main_region(&module).values;
         assert_eq!(alias(&values[0].1), &v("lit@bin#0"));
@@ -459,7 +481,16 @@ mod tests {
     fn hoists_bytestrings_inside_nested_blocks() {
         let inner = Block {
             params: vec![],
-            region: region(vec![(v("w"), Value::Pure(Data::Bin(vec![7, 7])))], vec![]),
+            region: region(
+                vec![(
+                    v("w"),
+                    Value::Pure(Data::Bin(
+                        curios_base::Grain::X,
+                        PackedBin::from_bytes(vec![7, 7]),
+                    )),
+                )],
+                vec![],
+            ),
         };
         let mut module = main_func(region(vec![], vec![(b("blk"), inner)]));
 
@@ -619,7 +650,13 @@ mod tests {
         // same bytestring plus a new one; the second run must alias the existing
         // const for the duplicate and mint a non-colliding name for the new value.
         let mut module = main_func(region(
-            vec![(v("v0"), Value::Pure(Data::Bin(vec![1, 2, 3])))],
+            vec![(
+                v("v0"),
+                Value::Pure(Data::Bin(
+                    curios_base::Grain::X,
+                    PackedBin::from_bytes(vec![1, 2, 3]),
+                )),
+            )],
             vec![],
         ));
         hoist_literals(&mut module);
@@ -632,8 +669,20 @@ mod tests {
                 resume: BlockName::from("rl"),
                 region: region(
                     vec![
-                        (v("w0"), Value::Pure(Data::Bin(vec![1, 2, 3]))),
-                        (v("w1"), Value::Pure(Data::Bin(vec![9]))),
+                        (
+                            v("w0"),
+                            Value::Pure(Data::Bin(
+                                curios_base::Grain::X,
+                                PackedBin::from_bytes(vec![1, 2, 3]),
+                            )),
+                        ),
+                        (
+                            v("w1"),
+                            Value::Pure(Data::Bin(
+                                curios_base::Grain::X,
+                                PackedBin::from_bytes(vec![9]),
+                            )),
+                        ),
                     ],
                     vec![],
                 ),

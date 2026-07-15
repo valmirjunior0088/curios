@@ -5,7 +5,7 @@ use {
         Three, Tuple, TupleType, Two, Var, Variant,
     },
     curios_base::{
-        Flt, Plicity,
+        Flt, Grain, Plicity,
         printer::{Printer, flat, indent, pure, sep_flat},
     },
     std::{
@@ -222,6 +222,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
                     Carrier::Bin {
                         empty_case,
                         cons_case,
+                        ..
                     } => {
                         collect_labels(empty_case, out);
                         scope(out, cons_case);
@@ -441,7 +442,7 @@ fn infix_symbol(prim: &Prim) -> Option<&'static str> {
         | Prim::IntEql(..)
         | Prim::FltEql(..)
         | Prim::BlnEql(..)
-        | Prim::BinEql(..)
+        | Prim::BinEql(Grain::X, ..)
         | Prim::IoEql(..) => "==",
         Prim::NatNeq(..) | Prim::IntNeq(..) | Prim::FltNeq(..) | Prim::BlnNeq(..) => "!=",
         Prim::NatLt(..) | Prim::IntLt(..) | Prim::FltLt(..) => "<",
@@ -522,6 +523,15 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::NatXor(l, r) => print_binary("Nat.xor ", l, r, depth),
         Prim::NatShl(l, r) => print_binary("Nat.shl ", l, r, depth),
         Prim::NatShr(l, r) => print_binary("Nat.shr ", l, r, depth),
+        Prim::ByteType => pure("Byte"),
+        Prim::Byte(value) => pure(format!("0x{value:02X}")),
+        Prim::ByteToNat(i) => print_unary("Byte.to_nat ", i, depth),
+        Prim::NatToByte(i) => print_unary("Nat.to_byte ", i, depth),
+        Prim::ByteEql(l, r) => print_binary("Byte.eql ", l, r, depth),
+        Prim::ByteLt(l, r) => print_binary("Byte.lt ", l, r, depth),
+        Prim::ByteLte(l, r) => print_binary("Byte.lte ", l, r, depth),
+        Prim::ByteGt(l, r) => print_binary("Byte.gt ", l, r, depth),
+        Prim::ByteGte(l, r) => print_binary("Byte.gte ", l, r, depth),
         Prim::IntType => pure("Int"),
         Prim::Int(value) => pure(format!("{value:+}")),
         Prim::IntEql(l, r) => print_infix("==", l, r, depth),
@@ -562,35 +572,72 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
         Prim::FltCeil(i) => print_unary("Flt.ceil ", i, depth),
         Prim::FltTrunc(i) => print_unary("Flt.trunc ", i, depth),
         Prim::FltNearest(i) => print_unary("Flt.nearest ", i, depth),
-        Prim::FltToLeBin(i) => print_unary("Flt.to_le_bin ", i, depth),
-        Prim::FltOfLeBin(i) => print_unary("Flt.of_le_bin ", i, depth),
+        Prim::FltToLeBytes(i) => print_unary("Flt.to_le_bytes ", i, depth),
+        Prim::FltOfLeBytes(i) => print_unary("Flt.of_le_bytes ", i, depth),
         Prim::NatToInt(i) => print_unary("Nat.to_int ", i, depth),
         Prim::NatToFlt(i) => print_unary("Nat.to_flt ", i, depth),
         Prim::IntToNat(i) => print_unary("Int.to_nat ", i, depth),
         Prim::IntToFlt(i) => print_unary("Int.to_flt ", i, depth),
         Prim::FltToNat(i) => print_unary("Flt.to_nat ", i, depth),
         Prim::FltToInt(i) => print_unary("Flt.to_int ", i, depth),
-        Prim::BinType => pure("Bin"),
-        Prim::Bin(bytes) => pure(
+        Prim::BinType(Grain::X) => pure("Bytes"),
+        Prim::Bin(Grain::X, bytes) => pure(format!(
+            "x{}",
             bytes
+                .as_bytes()
+                .unwrap()
                 .iter()
                 .map(|b| format!("\\{:02x}", b))
-                .collect::<String>(),
-        ),
-        Prim::BinLen(b) => print_unary("Bin.len ", b, depth),
-        Prim::BinEql(l, r) => print_binary("Bin.eql ", l, r, depth),
-        Prim::BinGet(b, i) => print_binary("Bin.get ", b, i, depth),
-        Prim::BinSlice(bin, start, end) => flat([
-            pure("Bin.slice "),
+                .collect::<String>()
+        )),
+        Prim::BinLen(Grain::X, b) => print_unary("Bytes.len ", b, depth),
+        Prim::BinEql(Grain::X, l, r) => print_binary("Bytes.eql ", l, r, depth),
+        Prim::BinGet(Grain::X, b, i) => print_binary("Bytes.get ", b, i, depth),
+        Prim::BinSlice(Grain::X, bin, start, end) => flat([
+            pure("Bytes.slice "),
             print_term(bin, depth),
             pure(" "),
             print_term(start, depth),
             pure(" "),
             print_term(end, depth),
         ]),
-        Prim::BinAppend(b, byte) => print_binary("Bin.append ", b, byte, depth),
-        Prim::BinConcat(operands) => flat([
-            pure("Bin.concat "),
+        Prim::BinAppend(Grain::X, b, byte) => print_binary("Bytes.append ", b, byte, depth),
+        Prim::BinConcat(Grain::X, operands) => flat([
+            pure("Bytes.concat "),
+            sep_flat(
+                operands.into_iter().map(move |e| print_term(e, depth)),
+                || pure(", "),
+            ),
+        ]),
+        Prim::BinType(Grain::B) => pure("Bits"),
+        Prim::Bin(Grain::B, bits) => pure(
+            (0..bits.bit_length())
+                .map(|index| {
+                    if bits.bit(index).unwrap() {
+                        "\\1"
+                    } else {
+                        "\\0"
+                    }
+                })
+                .fold(String::from("b"), |mut out, bit| {
+                    out.push_str(bit);
+                    out
+                }),
+        ),
+        Prim::BinLen(Grain::B, b) => print_unary("Bits.len ", b, depth),
+        Prim::BinEql(Grain::B, l, r) => print_binary("Bits.eql ", l, r, depth),
+        Prim::BinGet(Grain::B, b, i) => print_binary("Bits.get ", b, i, depth),
+        Prim::BinSlice(Grain::B, bin, start, end) => flat([
+            pure("Bits.slice "),
+            print_term(bin, depth),
+            pure(" "),
+            print_term(start, depth),
+            pure(" "),
+            print_term(end, depth),
+        ]),
+        Prim::BinAppend(Grain::B, b, bit) => print_binary("Bits.append ", b, bit, depth),
+        Prim::BinConcat(Grain::B, operands) => flat([
+            pure("Bits.concat "),
             sep_flat(
                 operands.into_iter().map(move |e| print_term(e, depth)),
                 || pure(", "),
@@ -1018,11 +1065,14 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 Cases::FreeMonoid { carrier } => {
                     // The cons arm mirrors each carrier's own literal delimiters:
                     // `\head\..tail; ih` for `Bin`, `[head, ..tail]; ih` for `Lst`.
-                    let cons_bin = |cons_case: Scope<Three>| {
+                    let cons_bin = |grain: Grain, cons_case: Scope<Three>| {
                         let ((head_label, tail_label, ih_label), cons_case) =
                             open_scope_three(cons_case, depth);
                         flat([
-                            pure("\n| \\"),
+                            pure(match grain {
+                                Grain::B => "\n| b\\",
+                                Grain::X => "\n| x\\",
+                            }),
                             pure(display_label(&head_label)),
                             pure("\\.."),
                             pure(display_label(&tail_label)),
@@ -1068,9 +1118,17 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                             ("\n| 0n =>\n", empty_case, cons_arm)
                         }
                         Carrier::Bin {
+                            grain,
                             empty_case,
                             cons_case,
-                        } => ("\n| \\\\ =>\n", empty_case, cons_bin(cons_case)),
+                        } => (
+                            match grain {
+                                Grain::B => "\n| b\\ =>\n",
+                                Grain::X => "\n| x\\ =>\n",
+                            },
+                            empty_case,
+                            cons_bin(grain, cons_case),
+                        ),
                         Carrier::Lst {
                             empty_case,
                             cons_case,

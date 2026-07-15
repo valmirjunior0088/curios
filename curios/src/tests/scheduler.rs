@@ -14,7 +14,7 @@ fn task_scheduler_parks_polls_and_resumes() {
         use /std/{Task, Io, Str};
         let prog : Task({}) =
             Task/bind(Task/wait(Io/stdin, 1), (_) =>
-                let wrote = Io/write(Io/stdout, Str/to_bin("ok"));
+                let wrote = Io/write(Io/stdout, Str/to_bytes("ok"));
                 Task/pure(()));
         Task/run(prog)
         "#,
@@ -67,12 +67,12 @@ fn block_on_returns_a_typed_value_and_awaits_a_spawned_child() {
         let root : Task(Nat) =
             let f = Task/spawn(() =>
                 Task/bind(Task/wait(Io/stdin, 1), (_) =>
-                    let w = Io/write(Io/stdout, Str/to_bin("child;"));
+                    let w = Io/write(Io/stdout, Str/to_bytes("child;"));
                     Task/pure(5)))!;
-            let w = Io/write(Io/stdout, Str/to_bin("root;"));
+            let w = Io/write(Io/stdout, Str/to_bytes("root;"));
             let c = Task/await(f.result)!;
             Task/pure(Nat/add(c, 2));
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Task/block_on(root))))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Task/block_on(root))))
         "#,
         system,
     )
@@ -94,13 +94,13 @@ fn join_all_runs_children_concurrently_and_collects_in_order() {
         let main : Task({}) =
             let rs = Task/join_all([
                 () =>
-                    let w = Io/write(Io/stdout, Str/to_bin("a;"));
+                    let w = Io/write(Io/stdout, Str/to_bytes("a;"));
                     Task/pure(1),
                 () =>
-                    let w = Io/write(Io/stdout, Str/to_bin("b;"));
+                    let w = Io/write(Io/stdout, Str/to_bytes("b;"));
                     Task/pure(2)
             ])!;
-            let s = Io/write(Io/stdout, Str/to_bin(Nat/to_str(Nat/add(/std/Option/unwrap_or(Lst/get(rs, 0), 0), /std/Option/unwrap_or(Lst/get(rs, 1), 0)))));
+            let s = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(/std/Option/unwrap_or(Lst/get(rs, 0), 0), /std/Option/unwrap_or(Lst/get(rs, 1), 0)))));
             Task/pure(());
         Task/run(main)
         "#,
@@ -121,7 +121,7 @@ fn map_transforms_a_tasks_result() {
         use /std/{Task, Io, Str, Nat};
         let main : Task({}) =
             let s = Task/map(Nat/to_str, Task/pure(42))!;
-            let w = Io/write(Io/stdout, Str/to_bin(s));
+            let w = Io/write(Io/stdout, Str/to_bytes(s));
             Task/pure(());
         Task/run(main)
         "#,
@@ -147,15 +147,15 @@ fn race_returns_the_first_and_runs_a_cancelled_losers_finalizer() {
         let main : Task({}) =
             let v = Task/race([
                 () =>
-                    let x = Io/write(Io/stdout, Str/to_bin("fast;"));
+                    let x = Io/write(Io/stdout, Str/to_bytes("fast;"));
                     Task/pure(10),
                 () =>
-                    Task/using(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bin("released;")); (),
+                    Task/using(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bytes("released;")); (),
                         Task/bind(Task/wait(Io/stdin, 1), (_) =>
-                            let y = Io/write(Io/stdout, Str/to_bin("slow;"));
+                            let y = Io/write(Io/stdout, Str/to_bytes("slow;"));
                             Task/pure(20)))
             ])!;
-            let z = Io/write(Io/stdout, Str/to_bin(Nat/to_str(v)));
+            let z = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(v)));
             Task/pure(());
         Task/run(main)
         "#,
@@ -179,11 +179,11 @@ fn block_on_drops_a_parked_child_when_root_done() {
         use /std/{Task, Io, Str};
         let child : Task({}) =
             Task/bind(Task/wait(Io/stdin, 1), (_) =>
-                let w = Io/write(Io/stdout, Str/to_bin("child;"));
+                let w = Io/write(Io/stdout, Str/to_bytes("child;"));
                 Task/pure(()));
         let main : Task({}) =
             Task/bind(Task/go(() => child), (started) =>
-                let w = Io/write(Io/stdout, Str/to_bin("root;"));
+                let w = Io/write(Io/stdout, Str/to_bytes("root;"));
                 Task/pure(()));
         Task/run(main)
         "#,
@@ -210,8 +210,8 @@ fn constructing_a_leaf_task_performs_no_effect() {
         let r = Io/read(Io/stdin, 100);
         match r : {}
         | chunk(bytes) => let _ = Io/write(Io/stdout, bytes); ()
-        | eof() => let _ = Io/write(Io/stdout, Str/to_bin("<eof>")); ()
-        | error(_) => let _ = Io/write(Io/stdout, Str/to_bin("<err>")); ()
+        | eof() => let _ = Io/write(Io/stdout, Str/to_bytes("<eof>")); ()
+        | error(_) => let _ = Io/write(Io/stdout, Str/to_bytes("<err>")); ()
         end
         "#,
         system,
@@ -238,9 +238,9 @@ fn finalizer_runs_for_a_child_parked_on_an_unfulfilled_future() {
         let main : Task({}) =
             let f : Task/Future({}) = Task/new_future(@{});
             let started = Task/go(() =>
-                Task/using(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bin("released;")); (),
+                Task/using(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bytes("released;")); (),
                     Task/await(f)))!;
-            let w = Io/write(Io/stdout, Str/to_bin("root;"));
+            let w = Io/write(Io/stdout, Str/to_bytes("root;"));
             Task/pure(());
         Task/run(main)
         "#,
@@ -262,8 +262,8 @@ fn an_acquired_finalizer_runs_when_the_fiber_completes() {
         r#"
         use /std/{Task, Io, Str};
         let main : Task({}) =
-            let _ = Task/acquire(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bin("closed;")); ())!;
-            let _ = Io/write(Io/stdout, Str/to_bin("body;"));
+            let _ = Task/acquire(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bytes("closed;")); ())!;
+            let _ = Io/write(Io/stdout, Str/to_bytes("body;"));
             Task/pure(());
         Task/run(main)
         "#,
@@ -286,10 +286,10 @@ fn manual_release_runs_a_finalizer_once_and_completion_does_not_repeat_it() {
         r#"
         use /std/{Task, Io, Str};
         let main : Task({}) =
-            let _ = Task/acquire(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bin("closed;")); ())!;
-            let _ = Io/write(Io/stdout, Str/to_bin("body;"));
+            let _ = Task/acquire(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bytes("closed;")); ())!;
+            let _ = Io/write(Io/stdout, Str/to_bytes("body;"));
             let _ = Task/release(Io/stdin)!;
-            let _ = Io/write(Io/stdout, Str/to_bin("after;"));
+            let _ = Io/write(Io/stdout, Str/to_bytes("after;"));
             Task/pure(());
         Task/run(main)
         "#,
@@ -323,7 +323,7 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
             | now(a) => (b.A, Susp/now(a))
             | later(k) => (b.A, k())
             end, boxes);
-        Io/write(Io/stdout, Str/to_bin(Nat/to_str(Lst/len(stepped))))
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Lst/len(stepped))))
         "#,
         system,
     )

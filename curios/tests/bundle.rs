@@ -22,7 +22,7 @@ fn compile_produces_a_runnable_executable() {
     let output = dir.join("curios_bundle_e2e.out");
     fs::write(
         &source,
-        r#"std/Io/write(std/Io/stdout, /std/Str/to_bin("hello"))"#,
+        r#"std/Io/write(std/Io/stdout, /std/Str/to_bytes("hello"))"#,
     )
     .expect("write the temp source");
 

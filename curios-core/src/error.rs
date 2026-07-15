@@ -111,6 +111,9 @@ pub enum Error {
     DivisionByZero {
         kind: &'static str,
     },
+    ByteLiteralOutOfRange {
+        value: String,
+    },
     TypeMismatch {
         inferred: Box<Term>,
         expected: Box<Term>,
@@ -1440,6 +1443,9 @@ impl fmt::Display for Error {
             }
             Error::DivisionByZero { kind } => {
                 write!(f, "division by zero in {kind}")
+            }
+            Error::ByteLiteralOutOfRange { value } => {
+                write!(f, "Byte literal {value} is out of range (expected 0..=255)")
             }
             Error::Located { error, .. } => {
                 write!(f, "{error}")

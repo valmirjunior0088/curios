@@ -1,7 +1,7 @@
-use /std/{Bin, Nat, Bln, Str, Lst, Option};
+use /std/{Bytes, Byte, Nat, Bln, Str, Lst, Option};
 
 induct Node(V : Type) : Type
-| leaf(key : Bin, value : V)
+| leaf(key : Bytes, value : V)
 | fork(crit : Nat, zero : Node(V), one : Node(V))
 end
 
@@ -11,48 +11,48 @@ pub struct Map(V : Type) : Type {
 }
 
 pub concept Key(K : Type) : Type {
-    to_bin(K) -> Bin
+    to_bin(K) -> Bytes
 }
 
-satisfy Key(Bin) {
+satisfy Key(Bytes) {
     to_bin(b) = b
 }
 
 satisfy Key(Str) {
-    to_bin(s) = Str/to_bin(s)
+    to_bin(s) = Str/to_bytes(s)
 }
 
 satisfy Key(Nat) {
     to_bin(n) =
-        rec go(x : Nat) -> Bin =
+        rec go(x : Nat) -> Bytes =
             match x
-            | 0 => \\
-            | _ => Bin/append(go(x / 256), x % 256)
+            | 0 => x\
+            | _ => Bytes/append(go(x / 256), Nat/to_byte(x % 256))
             end;
         go(n)
 }
 
-let bit(k : Bin, j : Nat) -> Nat =
+let bit(k : Bytes, j : Nat) -> Nat =
     let g = j / 9;
     let o = j % 9;
     match
-    | g >= Bin/len(k) => 0
+    | g >= Bytes/len(k) => 0
     | o == 0 => 1
-    | _ => Nat/and(Nat/shr(/sys/Bin/get(k, g), 8 - o), 1)
+    | _ => Nat/and(Nat/shr(Byte/to_nat(/sys/Bytes/get(k, g)), 8 - o), 1)
     end;
 
-let crit(a : Bin, b : Bin) -> Nat =
+let crit(a : Bytes, b : Bytes) -> Nat =
     rec bits(x : Nat, y : Nat, g : Nat, o : Nat) -> Nat =
         match Nat/and(Nat/shr(x, 8 - o), 1) == Nat/and(Nat/shr(y, 8 - o), 1)
         | true => bits(x, y, g, o + 1)
         | false => g * 9 + o
         end;
     rec bytes(g : Nat) -> Nat =
-        match g < Bin/len(a) && g < Bin/len(b)
+        match g < Bytes/len(a) && g < Bytes/len(b)
         | false => g * 9
         | true =>
-            let x = /sys/Bin/get(a, g);
-            let y = /sys/Bin/get(b, g);
+            let x = Byte/to_nat(/sys/Bytes/get(a, g));
+            let y = Byte/to_nat(/sys/Bytes/get(b, g));
             match x == y
             | true => bytes(g + 1)
             | false => bits(x, y, g, 1)
@@ -60,7 +60,7 @@ let crit(a : Bin, b : Bin) -> Nat =
         end;
     bytes(0);
 
-rec lookup(@V : Type, t : Node(V), k : Bin) -> {Bin, V} =
+rec lookup(@V : Type, t : Node(V), k : Bytes) -> {Bytes, V} =
     match t
     | leaf(k0, v0) => (k0, v0)
     | fork(c, z, o) =>
@@ -70,7 +70,7 @@ rec lookup(@V : Type, t : Node(V), k : Bin) -> {Bin, V} =
         end
     end;
 
-rec replace(@V : Type, t : Node(V), k : Bin, v : V) -> Node(V) =
+rec replace(@V : Type, t : Node(V), k : Bytes, v : V) -> Node(V) =
     match t
     | leaf(k0, v0) => Node/leaf(k, v)
     | fork(c, z, o) =>
@@ -80,13 +80,13 @@ rec replace(@V : Type, t : Node(V), k : Bin, v : V) -> Node(V) =
         end
     end;
 
-let wedge(@V : Type, c : Nat, b : Nat, k : Bin, v : V, t : Node(V)) -> Node(V) =
+let wedge(@V : Type, c : Nat, b : Nat, k : Bytes, v : V, t : Node(V)) -> Node(V) =
     match b
     | 0 => Node/fork(c, Node/leaf(k, v), t)
     | _ => Node/fork(c, t, Node/leaf(k, v))
     end;
 
-rec insert(@V : Type, t : Node(V), c : Nat, b : Nat, k : Bin, v : V) -> Node(V) =
+rec insert(@V : Type, t : Node(V), c : Nat, b : Nat, k : Bytes, v : V) -> Node(V) =
     match t
     | leaf(k0, v0) => wedge(c, b, k, v, Node/leaf(k0, v0))
     | fork(tc, z, o) =>
@@ -100,7 +100,7 @@ rec insert(@V : Type, t : Node(V), c : Nat, b : Nat, k : Bin, v : V) -> Node(V) 
         end
     end;
 
-rec remove(@V : Type, t : Node(V), k : Bin) -> Option(Node(V)) =
+rec remove(@V : Type, t : Node(V), k : Bytes) -> Option(Node(V)) =
     match t
     | leaf(k0, v0) => Option/none()
     | fork(c, z, o) =>
@@ -130,7 +130,7 @@ pub let get(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Option(V) 
     | none() => Option/none()
     | some(n) =>
         let (k0, v0) = lookup(n, k);
-        match Bin/eql(k0, k)
+        match Bytes/eql(k0, k)
         | true => Option/some(v0)
         | false => Option/none()
         end
@@ -145,7 +145,7 @@ pub let set(@K : Type, @V : Type, use Key(K), m : Map(V), key : K, v : V) -> Map
     | none() => Map { size = 1, root = Option/some(Node/leaf(k, v)) }
     | some(n) =>
         let (k0, _) = lookup(n, k);
-        match Bin/eql(k0, k)
+        match Bytes/eql(k0, k)
         | true => Map { size = m.size, root = Option/some(replace(n, k, v)) }
         | false =>
             let c = crit(k, k0);
@@ -159,13 +159,13 @@ pub let del(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Map(V) =
     | none() => m
     | some(n) =>
         let (k0, _) = lookup(n, k);
-        match Bin/eql(k0, k)
+        match Bytes/eql(k0, k)
         | true => Map { size = m.size - 1, root = remove(n, k) }
         | false => m
         end
     end;
 
-pub let fold(@V : Type, @A : Type, m : Map(V), init : A, f : (Bin, V, A) -> A) -> A =
+pub let fold(@V : Type, @A : Type, m : Map(V), init : A, f : (Bytes, V, A) -> A) -> A =
     match m.root
     | none() => init
     | some(n) =>
@@ -177,10 +177,10 @@ pub let fold(@V : Type, @A : Type, m : Map(V), init : A, f : (Bin, V, A) -> A) -
         go(n, init)
     end;
 
-pub let entries(@V : Type, m : Map(V)) -> Lst({Bin, V}) =
+pub let entries(@V : Type, m : Map(V)) -> Lst({Bytes, V}) =
     fold(m, [], (k, v, acc) => [..acc, (k, v)]);
 
-pub let keys(@V : Type, m : Map(V)) -> Lst(Bin) =
+pub let keys(@V : Type, m : Map(V)) -> Lst(Bytes) =
     fold(m, [], (k, _, acc) => [..acc, k]);
 
 pub let values(@V : Type, m : Map(V)) -> Lst(V) =

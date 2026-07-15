@@ -1,8 +1,8 @@
 pub use /sys/Io/{args};
-use /std/{Bin, Nat, Str, Option, False};
+use /std/{Bytes, Nat, Str, Option, False};
 
-pub let env(name : Str) -> Option(Bin) =
-    let r = /sys/Io/env(Str/to_bin(name));
+pub let env(name : Str) -> Option(Bytes) =
+    let r = /sys/Io/env(Str/to_bytes(name));
     match r.status == /sys/Io/Status/ok
     | true => Option/some(r.value)
     | false => Option/none()

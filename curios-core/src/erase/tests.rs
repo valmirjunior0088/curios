@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_abi::RootId,
-    curios_base::{Flt, Int},
+    curios_base::{Flt, Grain, Int, PackedBin},
     std::{collections::BTreeMap, time::Duration},
 };
 
@@ -178,28 +178,29 @@ fn erase_lst_nat_type_literal_len_and_get() {
 fn erase_bin_type_literal_len_and_get() {
     let mut context = context();
 
-    let bin_type = Subterm::Prim(Prim::BinType).into();
+    let bin_type = Subterm::Prim(Prim::BinType(Grain::X)).into();
     erase(&mut context, &bin_type, &Term::type_()).unwrap();
 
-    let literal = Subterm::Prim(Prim::Bin(vec![1, 2, 3])).into();
+    let literal = Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2, 3]))).into();
     assert_eq!(infer(&mut context, &literal).unwrap(), bin_type);
     erase(&mut context, &literal, &bin_type).unwrap();
 
     context.assume("b", &bin_type);
-    let len = Subterm::Prim(Prim::bin_len(Term::free_var("b"))).into();
+    let len = Subterm::Prim(Prim::bin_len(Grain::X, Term::free_var("b"))).into();
     assert_eq!(
         infer(&mut context, &len).unwrap(),
         Subterm::Prim(Prim::NatType).into()
     );
 
     let get = Subterm::Prim(Prim::bin_get(
+        Grain::X,
         Term::free_var("b"),
         Subterm::Prim(Prim::Nat(Nat::new(0usize))),
     ))
     .into();
     assert_eq!(
         infer(&mut context, &get).unwrap(),
-        Subterm::Prim(Prim::NatType).into()
+        Subterm::Prim(Prim::ByteType).into()
     );
 }
 
@@ -207,11 +208,16 @@ fn erase_bin_type_literal_len_and_get() {
 fn erase_bin_append() {
     let mut context = context();
 
-    let bin_type = Subterm::Prim(Prim::BinType).into();
+    let bin_type = Subterm::Prim(Prim::BinType(Grain::X)).into();
     context.assume("b", &bin_type);
-    context.assume("n", &Subterm::Prim(Prim::NatType).into());
+    context.assume("byte", &Subterm::Prim(Prim::ByteType).into());
 
-    let append = Subterm::Prim(Prim::bin_append(Term::free_var("b"), Term::free_var("n"))).into();
+    let append = Subterm::Prim(Prim::bin_append(
+        Grain::X,
+        Term::free_var("b"),
+        Term::free_var("byte"),
+    ))
+    .into();
     assert_eq!(infer(&mut context, &append).unwrap(), bin_type);
     erase(&mut context, &append, &bin_type).unwrap();
 }
@@ -220,14 +226,62 @@ fn erase_bin_append() {
 fn erase_bin_eql() {
     let mut context = context();
 
-    let bin_type = Subterm::Prim(Prim::BinType).into();
+    let bin_type = Subterm::Prim(Prim::BinType(curios_base::Grain::X)).into();
     let bool_type = Subterm::Prim(Prim::BlnType).into();
     context.assume("a", &bin_type);
     context.assume("b", &bin_type);
 
-    let eql = Subterm::Prim(Prim::bin_eql(Term::free_var("a"), Term::free_var("b"))).into();
+    let eql = Subterm::Prim(Prim::bin_eql(
+        Grain::X,
+        Term::free_var("a"),
+        Term::free_var("b"),
+    ))
+    .into();
     assert_eq!(infer(&mut context, &eql).unwrap(), bool_type);
     erase(&mut context, &eql, &bool_type).unwrap();
+}
+
+#[test]
+fn erase_bits_match_preserves_grain_in_indexed_operations() {
+    let mut context = context();
+    let bits_type = Term::prim(Prim::BinType(Grain::B));
+    let result_type = Term::tuple_type([
+        ("head", Term::prim(Prim::BlnType)),
+        ("tail", bits_type.clone()),
+    ]);
+    context.assume("bits", &bits_type);
+
+    let term = Term::bin_match(
+        Grain::B,
+        Term::free_var("bits"),
+        Some("whole"),
+        result_type.clone(),
+        Term::tuple([
+            Term::prim(Prim::Bln(false)),
+            Term::prim(Prim::Bin(Grain::B, PackedBin::empty())),
+        ]),
+        "head",
+        "tail",
+        "ih",
+        Term::tuple([Term::free_var("head"), Term::free_var("tail")]),
+    );
+
+    let erased = erase(&mut context, &term, &result_type).unwrap();
+    let printed = erased.to_string();
+
+    assert!(
+        printed.contains("Bits.len"),
+        "missing bit length:\n{printed}"
+    );
+    assert!(printed.contains("Bits.get"), "missing bit read:\n{printed}");
+    assert!(
+        printed.contains("Bits.slice"),
+        "missing bit slice:\n{printed}"
+    );
+    assert!(
+        !printed.contains("Bytes."),
+        "bit match emitted byte-grain operations:\n{printed}"
+    );
 }
 
 #[test]
@@ -371,11 +425,20 @@ fn erase_three_field_tuple_type_and_value() {
 fn erase_bin_concat() {
     let mut context = context();
 
-    let bin_type = Subterm::Prim(Prim::BinType).into();
-    let concat = Subterm::Prim(Prim::bin_concat([
-        Subterm::Prim(Prim::Bin(vec![1, 2])),
-        Subterm::Prim(Prim::Bin(vec![3, 4])),
-    ]))
+    let bin_type = Subterm::Prim(Prim::BinType(curios_base::Grain::X)).into();
+    let concat = Subterm::Prim(Prim::bin_concat(
+        Grain::X,
+        [
+            Subterm::Prim(Prim::Bin(
+                curios_base::Grain::X,
+                PackedBin::from_bytes(vec![1, 2]),
+            )),
+            Subterm::Prim(Prim::Bin(
+                curios_base::Grain::X,
+                PackedBin::from_bytes(vec![3, 4]),
+            )),
+        ],
+    ))
     .into();
 
     erase(&mut context, &concat, &bin_type).unwrap();

@@ -1,4 +1,7 @@
-use super::*;
+use {
+    super::*,
+    curios_base::{Grain, PackedBin},
+};
 
 #[test]
 fn lowers_and_runs_nat_add() {
@@ -7,7 +10,7 @@ fn lowers_and_runs_nat_add() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -52,7 +55,7 @@ fn lowers_and_runs_nat_div() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -97,7 +100,7 @@ fn lowers_and_runs_nat_rem() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -142,7 +145,7 @@ fn lowers_and_runs_nat_lt() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -187,7 +190,7 @@ fn lowers_and_runs_nat_to_flt() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -211,7 +214,7 @@ fn lowers_and_runs_nat_to_flt() {
                     ),
                     (
                         curios_cont::ValueName::from("str"),
-                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBin(
+                        curios_cont::Value::Eval(curios_cont::Code::FltToLeBytes(
                             curios_cont::ValueName::from("result"),
                         )),
                     ),
@@ -256,7 +259,7 @@ fn lowers_and_runs_nat_to_int() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -296,7 +299,7 @@ fn lowers_and_runs_nat_neq() {
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
 
     module.add_const(
@@ -340,7 +343,7 @@ fn nat_op_module(op: curios_cont::Code, left: u32, right: u32) -> curios_cont::M
 
     module.add_const(
         curios_cont::ValueName::from("STDOUT"),
-        curios_cont::Data::Bin(vec![1]),
+        curios_cont::Data::Bin(Grain::X, PackedBin::from_bytes(vec![1])),
     );
     module.add_const(
         curios_cont::ValueName::from("LEFT"),

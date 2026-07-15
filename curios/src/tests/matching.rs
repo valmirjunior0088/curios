@@ -23,6 +23,25 @@ fn flat_option_match_lowers_without_synthetic_indirection() {
     assert_eq!(io.output(), b"5");
 }
 
+#[test]
+fn bits_structural_fold_preserves_heads_and_bit_unit_tails() {
+    let source = r#"
+        use /std/{Bits, Nat, Io};
+        let value(bits : Bits) -> Nat =
+            match bits
+            | b\ => 0
+            | b\head\..tail; ih =>
+                let digit : Nat = match head | false => 0 | true => 1 end;
+                digit + 2 * ih
+            end;
+        Io/print(Nat/to_str(value(b\1\0\1\1\0\0\1\0\1\1)))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"845");
+}
+
 // The spec's own motivating example: a single tupled head, fully enumerated
 // over two independent `Option`-shaped columns.
 #[test]
@@ -281,17 +300,17 @@ fn nested_lst_pattern_dispatches_by_shape() {
     assert_eq!(io.output(), b"7");
 }
 
-// A `Bin` literal leaf (`\\`/`\h\..t`) nested inside a tuple field.
+// A `Bytes` literal leaf (`x\`/`x\h\..t`) nested inside a tuple field.
 #[test]
 fn nested_bin_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Nat, Bin, Str, Io};
-        let f(p : { Nat, Bin }) -> Nat =
+        use /std/{Nat, Byte, Bytes, Str, Io};
+        let f(p : { Nat, Bytes }) -> Nat =
             match p
-            | (x, \\) => x
-            | (x, \h\..t) => h
+            | (x, x\) => x
+            | (x, x\h\..t) => Byte/to_nat(h)
             end;
-        Io/print(Nat/to_str(f((0, Str/to_bin("A")))))
+        Io/print(Nat/to_str(f((0, Str/to_bytes("A")))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -402,8 +421,8 @@ fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
 #[test]
 fn nested_nat_literal_dispatch_selects_matching_case() {
     let source = r#"
-        use /std/{Option, Nat, Bin, rand, Io};
-        let z = Bin/len(rand/bin(0));
+        use /std/{Option, Nat, Bytes, rand, Io};
+        let z = Bytes/len(rand/bin(0));
         let n = Nat/add(z, 5);
         let hit =
             match Option/some(n)
@@ -421,8 +440,8 @@ fn nested_nat_literal_dispatch_selects_matching_case() {
 #[test]
 fn nested_nat_literal_dispatch_falls_through_to_default() {
     let source = r#"
-        use /std/{Option, Nat, Bin, rand, Io};
-        let z = Bin/len(rand/bin(0));
+        use /std/{Option, Nat, Bytes, rand, Io};
+        let z = Bytes/len(rand/bin(0));
         let n = Nat/add(z, 6);
         let miss =
             match Option/some(n)
@@ -441,7 +460,7 @@ fn nested_nat_literal_dispatch_falls_through_to_default() {
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
         use /std/{File, Io, Task};
-        match Task/block_on(File/with("log.txt", Io/Mode/append(), (f) => File/write(f, /std/Str/to_bin("x"))))
+        match Task/block_on(File/with("log.txt", Io/Mode/append(), (f) => File/write(f, /std/Str/to_bytes("x"))))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -460,8 +479,8 @@ fn effectful_match_scrutinee_runs_once() {
 #[test]
 fn headless_cond_ladder_selects_first_true_arm() {
     let source = r#"
-        use /std/{Nat, Bin, rand, Io};
-        let z = Bin/len(rand/bin(0));
+        use /std/{Nat, Bytes, rand, Io};
+        let z = Bytes/len(rand/bin(0));
         let n = Nat/add(z, 2);
         let result =
             match
@@ -483,8 +502,8 @@ fn headless_cond_ladder_selects_first_true_arm() {
 #[test]
 fn headless_cond_ladder_default_only() {
     let source = r#"
-        use /std/{Nat, Bin, rand, Io};
-        let z = Bin/len(rand/bin(0));
+        use /std/{Nat, Bytes, rand, Io};
+        let z = Bytes/len(rand/bin(0));
         let result =
             match
             | _ => Nat/add(z, 42)
@@ -504,8 +523,8 @@ fn headless_cond_ladder_default_only() {
 #[test]
 fn headless_cond_ladder_evaluates_conditions_lazily() {
     let source = r#"
-        use /std/{Nat, Bin, rand, Io, Bln, Str};
-        let z = Bin/len(rand/bin(0));
+        use /std/{Nat, Bytes, rand, Io, Bln, Str};
+        let z = Bytes/len(rand/bin(0));
         let probe(tag : Str, r : Bln) -> Bln =
             let _ = Io/print(tag);
             r;
@@ -529,13 +548,13 @@ fn headless_cond_ladder_evaluates_conditions_lazily() {
 #[test]
 fn inductive_match_catch_all_covers_unenumerated_constructors() {
     let source = r#"
-        use /std/{Option, Nat, Bin, rand, Io};
+        use /std/{Option, Nat, Bytes, rand, Io};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(x) => x + 10
             | _ => 99
             end;
-        let z = Bin/len(rand/bin(0));
+        let z = Bytes/len(rand/bin(0));
         Io/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
         "#;
 
@@ -550,13 +569,13 @@ fn inductive_match_catch_all_covers_unenumerated_constructors() {
 #[test]
 fn headless_ladder_bind_arm_destructures_or_falls_through() {
     let source = r#"
-        use /std/{Option, Nat, Bin, rand, Io};
+        use /std/{Option, Nat, Bytes, rand, Io};
         let f(o : Option(Nat)) -> Nat =
             match
             | some(x) = o => x + 10
             | _ => 99
             end;
-        let z = Bin/len(rand/bin(0));
+        let z = Bytes/len(rand/bin(0));
         Io/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
         "#;
 
@@ -571,13 +590,13 @@ fn headless_ladder_bind_arm_destructures_or_falls_through() {
 #[test]
 fn headless_ladder_nested_bind_shares_the_fallthrough() {
     let source = r#"
-        use /std/{Option, Lst, Nat, Bin, rand, Io};
+        use /std/{Option, Lst, Nat, Bytes, rand, Io};
         let f(o : Option(Lst(Nat))) -> Nat =
             match
             | some([h, ..t]) = o => h + 1
             | _ => 99
             end;
-        let z = Bin/len(rand/bin(0));
+        let z = Bytes/len(rand/bin(0));
         let a = f(Option/some([5, 6, 7]));
         let b = f(Option/some([]));
         let c = f(Option/none());

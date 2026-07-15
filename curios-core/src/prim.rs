@@ -1,7 +1,7 @@
 use {
     super::{Bound, MetavarId, Nat, Subterm, Term, Var, Visit},
     curios_abi::{ForeignFunction, WireType},
-    curios_base::{Flt, Int},
+    curios_base::{Flt, Int, PackedBin},
     std::{collections::BTreeSet, sync::Arc},
 };
 
@@ -13,7 +13,7 @@ pub(crate) fn wire_term(wire_type: &WireType) -> Term {
         WireType::Nat => Prim::NatType,
         WireType::Int => Prim::IntType,
         WireType::Bln => Prim::BlnType,
-        WireType::Bin => Prim::BinType,
+        WireType::Bin => Prim::BinType(curios_base::Grain::X),
         WireType::Io => Prim::IoType,
         WireType::Lst(element) => Prim::LstType(wire_term(element)),
     };
@@ -51,6 +51,15 @@ pub enum Prim {
     NatXor(Term, Term),
     NatShl(Term, Term),
     NatShr(Term, Term),
+    ByteType,
+    Byte(u8),
+    ByteToNat(Term),
+    NatToByte(Term),
+    ByteEql(Term, Term),
+    ByteLt(Term, Term),
+    ByteLte(Term, Term),
+    ByteGt(Term, Term),
+    ByteGte(Term, Term),
     IntType,
     Int(Int),
     IntEql(Term, Term),
@@ -96,17 +105,17 @@ pub enum Prim {
     IntToNat(Term),
     IntToFlt(Term),
     FltToNat(Term),
-    FltToLeBin(Term),
-    FltOfLeBin(Term),
+    FltToLeBytes(Term),
+    FltOfLeBytes(Term),
     FltToInt(Term),
-    BinType,
-    Bin(Vec<u8>),
-    BinLen(Term),
-    BinEql(Term, Term),
-    BinGet(Term, Term),
-    BinSlice(Term, Term, Term),
-    BinAppend(Term, Term),
-    BinConcat(Vec<Term>),
+    BinType(curios_base::Grain),
+    Bin(curios_base::Grain, PackedBin),
+    BinLen(curios_base::Grain, Term),
+    BinEql(curios_base::Grain, Term, Term),
+    BinGet(curios_base::Grain, Term, Term),
+    BinSlice(curios_base::Grain, Term, Term, Term),
+    BinAppend(curios_base::Grain, Term, Term),
+    BinConcat(curios_base::Grain, Vec<Term>),
     LstType(Term),
     Lst(Vec<Term>),
     LstLen(Term, Term),
@@ -557,74 +566,74 @@ impl Prim {
         Self::FltToNat(inner.into())
     }
 
-    /// A `FltToLeBin` node (a float's four little-endian bytes as a `Bin`) from anything term-shaped.
-    pub fn flt_to_le_bin<T>(inner: T) -> Self
+    /// A `FltToLeBytes` node (a float's four little-endian bytes as a `Bin`) from anything term-shaped.
+    pub fn flt_to_le_bytes<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltToLeBin(inner.into())
+        Self::FltToLeBytes(inner.into())
     }
 
-    /// A `FltOfLeBin` node (a float assembled from its four little-endian bytes) from anything term-shaped.
-    pub fn flt_of_le_bin<T>(inner: T) -> Self
+    /// A `FltOfLeBytes` node (a float assembled from its four little-endian bytes) from anything term-shaped.
+    pub fn flt_of_le_bytes<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::FltOfLeBin(inner.into())
+        Self::FltOfLeBytes(inner.into())
     }
 
     /// A `BinLen` node from anything term-shaped.
-    pub fn bin_len<B>(bin: B) -> Self
+    pub fn bin_len<B>(grain: curios_base::Grain, bin: B) -> Self
     where
         B: Into<Term>,
     {
-        Self::BinLen(bin.into())
+        Self::BinLen(grain, bin.into())
     }
 
     /// A `BinEql` node from anything term-shaped.
-    pub fn bin_eql<F, S>(left: F, right: S) -> Self
+    pub fn bin_eql<F, S>(grain: curios_base::Grain, left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::BinEql(left.into(), right.into())
+        Self::BinEql(grain, left.into(), right.into())
     }
 
     /// A `BinGet` node from term-shaped bytes and index.
-    pub fn bin_get<B, I>(bin: B, index: I) -> Self
+    pub fn bin_get<B, I>(grain: curios_base::Grain, bin: B, index: I) -> Self
     where
         B: Into<Term>,
         I: Into<Term>,
     {
-        Self::BinGet(bin.into(), index.into())
+        Self::BinGet(grain, bin.into(), index.into())
     }
 
     /// A `BinSlice` node from term-shaped bytes, start, and end.
-    pub fn bin_slice<B, S, E>(bin: B, start: S, end: E) -> Self
+    pub fn bin_slice<B, S, E>(grain: curios_base::Grain, bin: B, start: S, end: E) -> Self
     where
         B: Into<Term>,
         S: Into<Term>,
         E: Into<Term>,
     {
-        Self::BinSlice(bin.into(), start.into(), end.into())
+        Self::BinSlice(grain, bin.into(), start.into(), end.into())
     }
 
     /// A `BinAppend` node from term-shaped bytes and byte.
-    pub fn bin_append<B, E>(bin: B, byte: E) -> Self
+    pub fn bin_append<B, E>(grain: curios_base::Grain, bin: B, byte: E) -> Self
     where
         B: Into<Term>,
         E: Into<Term>,
     {
-        Self::BinAppend(bin.into(), byte.into())
+        Self::BinAppend(grain, bin.into(), byte.into())
     }
 
     /// A `BinConcat` node from any iterator of term-shaped operands.
-    pub fn bin_concat<I>(operands: I) -> Self
+    pub fn bin_concat<I>(grain: curios_base::Grain, operands: I) -> Self
     where
         I: IntoIterator,
         I::Item: Into<Term>,
     {
-        Self::BinConcat(operands.into_iter().map(|e| e.into()).collect())
+        Self::BinConcat(grain, operands.into_iter().map(|e| e.into()).collect())
     }
 
     /// A `LstType` node from a term-shaped element type.
@@ -747,25 +756,31 @@ impl Prim {
             | Prim::Bln(_)
             | Prim::NatType
             | Prim::Nat(Nat::Zero)
+            | Prim::ByteType
+            | Prim::Byte(_)
             | Prim::IntType
             | Prim::Int(_)
             | Prim::FltType
             | Prim::Flt(_)
-            | Prim::BinType
-            | Prim::Bin(_)
+            | Prim::BinType(curios_base::Grain::X)
+            | Prim::Bin(curios_base::Grain::X, _)
+            | Prim::BinType(curios_base::Grain::B)
+            | Prim::Bin(curios_base::Grain::B, _)
             | Prim::IoType
             | Prim::Io(_) => {}
 
             Prim::Nat(Nat::Succ(_, inner)) => visit(inner),
 
-            Prim::FltToLeBin(t)
-            | Prim::FltOfLeBin(t)
+            Prim::FltToLeBytes(t)
+            | Prim::FltOfLeBytes(t)
             | Prim::NatToInt(t)
             | Prim::NatToFlt(t)
             | Prim::IntToNat(t)
             | Prim::IntToFlt(t)
             | Prim::FltToNat(t)
             | Prim::FltToInt(t)
+            | Prim::ByteToNat(t)
+            | Prim::NatToByte(t)
             | Prim::FltNeg(t)
             | Prim::FltAbs(t)
             | Prim::FltSqrt(t)
@@ -773,10 +788,16 @@ impl Prim {
             | Prim::FltCeil(t)
             | Prim::FltTrunc(t)
             | Prim::FltNearest(t)
-            | Prim::BinLen(t)
+            | Prim::BinLen(curios_base::Grain::X, t)
+            | Prim::BinLen(curios_base::Grain::B, t)
             | Prim::LstType(t) => visit(t),
 
             Prim::IoEql(a, b)
+            | Prim::ByteEql(a, b)
+            | Prim::ByteLt(a, b)
+            | Prim::ByteLte(a, b)
+            | Prim::ByteGt(a, b)
+            | Prim::ByteGte(a, b)
             | Prim::NatEql(a, b)
             | Prim::NatNeq(a, b)
             | Prim::NatAdd(a, b)
@@ -827,16 +848,22 @@ impl Prim {
             | Prim::FltGte(a, b)
             | Prim::FltMin(a, b)
             | Prim::FltMax(a, b)
-            | Prim::BinEql(a, b)
-            | Prim::BinGet(a, b)
-            | Prim::BinAppend(a, b)
+            | Prim::BinEql(curios_base::Grain::X, a, b)
+            | Prim::BinGet(curios_base::Grain::X, a, b)
+            | Prim::BinAppend(curios_base::Grain::X, a, b)
+            | Prim::BinEql(curios_base::Grain::B, a, b)
+            | Prim::BinGet(curios_base::Grain::B, a, b)
+            | Prim::BinAppend(curios_base::Grain::B, a, b)
             | Prim::LstLen(a, b)
             | Prim::IoExit(a, b) => {
                 visit(a);
                 visit(b);
             }
 
-            Prim::BinSlice(a, b, c) | Prim::LstGet(a, b, c) | Prim::LstAppend(a, b, c) => {
+            Prim::BinSlice(curios_base::Grain::X, a, b, c)
+            | Prim::BinSlice(curios_base::Grain::B, a, b, c)
+            | Prim::LstGet(a, b, c)
+            | Prim::LstAppend(a, b, c) => {
                 visit(a);
                 visit(b);
                 visit(c);
@@ -851,7 +878,9 @@ impl Prim {
 
             Prim::Foreign(_, args) => args.iter().for_each(&mut *visit),
 
-            Prim::BinConcat(terms) | Prim::Lst(terms) => terms.iter().for_each(&mut *visit),
+            Prim::BinConcat(curios_base::Grain::X, terms)
+            | Prim::BinConcat(curios_base::Grain::B, terms)
+            | Prim::Lst(terms) => terms.iter().for_each(&mut *visit),
             Prim::LstConcat(ty, terms) => {
                 visit(ty);
                 terms.iter().for_each(&mut *visit);
@@ -927,6 +956,15 @@ impl Prim {
             Prim::NatXor(l, r) => traverse_binary(l, r, visit, Prim::NatXor),
             Prim::NatShl(l, r) => traverse_binary(l, r, visit, Prim::NatShl),
             Prim::NatShr(l, r) => traverse_binary(l, r, visit, Prim::NatShr),
+            Prim::ByteType => Prim::ByteType,
+            Prim::Byte(value) => Prim::Byte(*value),
+            Prim::ByteToNat(inner) => Prim::ByteToNat(visit.visit_subterm(inner)),
+            Prim::NatToByte(inner) => Prim::NatToByte(visit.visit_subterm(inner)),
+            Prim::ByteEql(l, r) => traverse_binary(l, r, visit, Prim::ByteEql),
+            Prim::ByteLt(l, r) => traverse_binary(l, r, visit, Prim::ByteLt),
+            Prim::ByteLte(l, r) => traverse_binary(l, r, visit, Prim::ByteLte),
+            Prim::ByteGt(l, r) => traverse_binary(l, r, visit, Prim::ByteGt),
+            Prim::ByteGte(l, r) => traverse_binary(l, r, visit, Prim::ByteGte),
             Prim::BlnAnd(l, r) => traverse_binary(l, r, visit, Prim::BlnAnd),
             Prim::BlnOr(l, r) => traverse_binary(l, r, visit, Prim::BlnOr),
             Prim::BlnXor(l, r) => traverse_binary(l, r, visit, Prim::BlnXor),
@@ -972,28 +1010,36 @@ impl Prim {
             Prim::FltCeil(inner) => Prim::FltCeil(visit.visit_subterm(inner)),
             Prim::FltTrunc(inner) => Prim::FltTrunc(visit.visit_subterm(inner)),
             Prim::FltNearest(inner) => Prim::FltNearest(visit.visit_subterm(inner)),
-            Prim::FltToLeBin(inner) => Prim::FltToLeBin(visit.visit_subterm(inner)),
-            Prim::FltOfLeBin(inner) => Prim::FltOfLeBin(visit.visit_subterm(inner)),
+            Prim::FltToLeBytes(inner) => Prim::FltToLeBytes(visit.visit_subterm(inner)),
+            Prim::FltOfLeBytes(inner) => Prim::FltOfLeBytes(visit.visit_subterm(inner)),
             Prim::NatToInt(inner) => Prim::NatToInt(visit.visit_subterm(inner)),
             Prim::NatToFlt(inner) => Prim::NatToFlt(visit.visit_subterm(inner)),
             Prim::IntToNat(inner) => Prim::IntToNat(visit.visit_subterm(inner)),
             Prim::IntToFlt(inner) => Prim::IntToFlt(visit.visit_subterm(inner)),
             Prim::FltToNat(inner) => Prim::FltToNat(visit.visit_subterm(inner)),
             Prim::FltToInt(inner) => Prim::FltToInt(visit.visit_subterm(inner)),
-            Prim::BinType => Prim::BinType,
-            Prim::Bin(bytes) => Prim::Bin(bytes.clone()),
-            Prim::BinLen(bin) => Prim::BinLen(visit.visit_subterm(bin)),
-            Prim::BinEql(l, r) => traverse_binary(l, r, visit, Prim::BinEql),
-            Prim::BinGet(b, i) => traverse_binary(b, i, visit, Prim::BinGet),
-            Prim::BinSlice(bin, start, end) => Prim::BinSlice(
+            Prim::BinType(grain) => Prim::BinType(*grain),
+            Prim::Bin(grain, value) => Prim::Bin(*grain, value.clone()),
+            Prim::BinLen(grain, bin) => Prim::BinLen(*grain, visit.visit_subterm(bin)),
+            Prim::BinEql(grain, l, r) => {
+                traverse_binary(l, r, visit, |l, r| Prim::BinEql(*grain, l, r))
+            }
+            Prim::BinGet(grain, b, i) => {
+                traverse_binary(b, i, visit, |b, i| Prim::BinGet(*grain, b, i))
+            }
+            Prim::BinSlice(grain, bin, start, end) => Prim::BinSlice(
+                *grain,
                 visit.visit_subterm(bin),
                 visit.visit_subterm(start),
                 visit.visit_subterm(end),
             ),
-            Prim::BinAppend(b, byte) => traverse_binary(b, byte, visit, Prim::BinAppend),
-            Prim::BinConcat(operands) => {
-                Prim::BinConcat(operands.iter().map(|e| visit.visit_subterm(e)).collect())
+            Prim::BinAppend(grain, b, atom) => {
+                traverse_binary(b, atom, visit, |b, atom| Prim::BinAppend(*grain, b, atom))
             }
+            Prim::BinConcat(grain, operands) => Prim::BinConcat(
+                *grain,
+                operands.iter().map(|e| visit.visit_subterm(e)).collect(),
+            ),
             Prim::LstType(elem) => Prim::LstType(visit.visit_subterm(elem)),
             Prim::Lst(elems) => Prim::Lst(elems.iter().map(|e| visit.visit_subterm(e)).collect()),
             Prim::LstLen(ty, list) => traverse_binary(ty, list, visit, Prim::LstLen),
@@ -1050,7 +1096,7 @@ impl Prim {
 pub(crate) enum PrimHead {
     Nat,
     Bln,
-    Bin,
+    Bin(curios_base::Grain),
 }
 
 #[cfg(test)]
