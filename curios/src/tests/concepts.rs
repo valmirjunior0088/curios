@@ -213,7 +213,7 @@ fn orphan_witness_is_rejected() {
 fn witness_for_a_locally_owned_type_is_not_an_orphan() {
     let source = r#"
         use /std/{Nat, Io, Str, Show};
-        pub record Wrapper : Type { inner : Nat }
+        pub struct Wrapper : pub Type { inner : Nat }
         satisfy Show(Wrapper) {
             show(w) = Nat/to_str(w.inner)
         }
@@ -460,13 +460,13 @@ fn monad_over_prim_constructor_resolves_by_imitation() {
 
 // The syn-homed operator concepts: `Add/add` resolves on a primitive type
 // through the `/std` witness (also proving the cached-prelude replay path
-// registers the syn concepts and std witnesses), on a user record through a
+// registers the syn concepts and std witnesses), on a user struct through a
 // user witness, and in generic code through a local `use Add(A)` premise.
 #[test]
 fn syn_add_concept_resolves_everywhere() {
     let source = r#"
         use /std/{Nat, Io, Str, Add};
-        record Point : Type { x : Nat, y : Nat }
+        struct Point : pub Type { x : Nat, y : Nat }
         satisfy Add(Point) {
             add(a, b) = Point { x = Nat/add(a.x, b.x), y = Nat/add(a.y, b.y) }
         }
@@ -581,7 +581,7 @@ fn labeled_fill_of_a_former_superclass_is_unknown() {
 fn misplaced_use_entries_are_errors() {
     let non_concept = r#"
         use /std/{Nat, Io, Str};
-        pub record Pair : Type { fst : Nat, snd : Nat }
+        pub struct Pair : pub Type { fst : Nat, snd : Nat }
         let p = Pair { use 1, snd = 2 };
         Io/print("no")
         "#;
@@ -700,7 +700,7 @@ fn concept_literal_spread_use_override() {
 fn concept_literal_spread_use_on_non_concept_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, use 1 };
         Io/print("no")

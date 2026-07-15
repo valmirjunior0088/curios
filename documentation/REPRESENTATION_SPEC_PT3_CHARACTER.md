@@ -167,7 +167,7 @@ Do not add a trusted primitive UTF-8 decoder. Closed literals may still reduce t
 `Str` remains conceptually:
 
 ```crs
-record Str : Type {
+struct Str : pub Type {
     bytes : Bytes,
     valid : Valid(bytes)
 }

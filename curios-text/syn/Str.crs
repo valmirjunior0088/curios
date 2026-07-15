@@ -1,6 +1,6 @@
 use /std/{Nat, Byte, Bytes, Bln};
 
-pub induct Class : Type
+pub induct Class : pub Type
 | ascii()
 | lead(Nat, Nat, Nat, Nat)
 | bad()
@@ -22,7 +22,7 @@ pub let classify(c : Byte) -> Class =
     | _ => Class/bad()
     end;
 
-pub induct Scan : Type
+pub induct Scan : pub Type
 | lead()
 | cont(Nat, Nat, Nat)
 | bad()
@@ -46,7 +46,7 @@ pub let step(c : Byte, s : Scan) -> Scan =
         end
     end;
 
-pub induct Utf8 : (s : Scan, b : Bytes) -> Prop
+pub induct Utf8 : (s : Scan, b : Bytes) -> pub Prop
 | stop() : (Scan/lead(), x\)
 | more(c : Byte, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
     : (st, Bytes/cons(c, t))
@@ -55,7 +55,7 @@ end
 pub let Valid(b : Bytes) -> Prop =
     Utf8(Scan/lead(), b);
 
-pub record Str : Type {
+pub struct Str : pub Type {
     bytes : Bytes,
     valid : Valid(bytes)
 }

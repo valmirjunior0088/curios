@@ -3,8 +3,8 @@
 //! stores, carried on the [`Module`](super::Module) and mirrored into the
 //! [`Context`](super::Context) exactly like `inductives`/`structures`.
 //!
-//! A concept lowers to an ordinary nominal record (its [`Structure`]
-//! (super::Structure) entry drives literals and projections); the [`Concept`]
+//! A concept lowers to a representation-public nominal structure (its
+//! [`Structure`] (super::Structure) entry drives literals and projections); the [`Concept`]
 //! entry here adds what resolution needs on top: the field labels, the
 //! superclass mask, the parameter telescope, and the input mask. A witness
 //! lowers to an ordinary top-level definition; its [`Witness`] entry keys that

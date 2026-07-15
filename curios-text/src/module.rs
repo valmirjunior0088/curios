@@ -16,14 +16,14 @@ use {
 #[derive(Debug, Clone)]
 pub struct TopMod {
     pub span: Option<Span>,
-    pub is_pub: bool,
+    pub vis_pub: bool,
     pub label: String,
     pub module: Option<Module>,
 }
 
 impl PartialEq for TopMod {
     fn eq(&self, other: &Self) -> bool {
-        self.is_pub == other.is_pub && self.label == other.label && self.module == other.module
+        self.vis_pub == other.vis_pub && self.label == other.label && self.module == other.module
     }
 }
 
@@ -53,7 +53,7 @@ pub enum UseGroup {
 /// A `use` declaration: imports the `group`'s items from the module `name` names into the local scope at its own source position (scoping is point-of-use, not file-wide). `pub use` additionally re-exports the items from the declaring module — that interface effect is computed in resolution's fixed point, separately from the lexical one.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopUse {
-    pub is_pub: bool,
+    pub vis_pub: bool,
     pub name: Name,
     pub group: UseGroup,
 }
@@ -61,7 +61,7 @@ pub struct TopUse {
 /// A top-level `let` (or one member of a `rec … and …;` group — see `TopItem::Rec`): a plain label, never a destructuring pattern, and a signature whose type annotation the parser makes mandatory at top level.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopLet {
-    pub is_pub: bool,
+    pub vis_pub: bool,
     pub label: String,
     pub signature: LetSignature,
 }
@@ -73,7 +73,7 @@ pub struct TopLet {
 /// so there is no name resolution to do and no `= body` form.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopForeign {
-    pub is_pub: bool,
+    pub vis_pub: bool,
     pub label: String,
     pub signature: curios_abi::WireSignature,
 }
@@ -104,7 +104,10 @@ pub struct TopCase {
 /// An `induct` declaration: one inductive family — a parameter telescope, an index telescope with its result sort, and the value-constructor cases. Lowering registers the family and derives both the type-constructor function and one value-constructor function per case; see the field docs for the plicity and dependency rules each part obeys.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopInduct {
-    pub is_pub: bool,
+    pub vis_pub: bool,
+    /// Whether construction and elimination are available outside the exact
+    /// declaring module. Written as `pub` immediately before the result sort.
+    pub rep_pub: bool,
     pub label: String,
     /// Inductive parameters are *implicit* on every value constructor regardless
     /// of any mark (the desugar applies those marks), with the call-site `@`
@@ -125,16 +128,15 @@ pub struct TopInduct {
     pub cases: Vec<TopCase>,
 }
 
-/// A `struct`/`record` declaration: a nominal record. `is_pub` is the outer
-/// `pub` (the type-former's visibility); `rep_pub` is the kind keyword —
-/// `record` (representation exported, reaching wherever the type name is
-/// visible) vs `struct` (representation private to the exact declaring module).
+/// A `struct` declaration: a nominal record. `vis_pub` is the outer `pub` (the
+/// type-former's visibility); `rep_pub` is the declaration-local `pub` before
+/// the result sort (representation exported wherever the type name is visible).
 /// The two markers are orthogonal; every combination is legal. `params` are
 /// written exactly like an inductive's; `fields` reuse the Σ-type field grammar
 /// (label optional, like tuple-type fields).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopStruct {
-    pub is_pub: bool,
+    pub vis_pub: bool,
     pub rep_pub: bool,
     pub label: String,
     pub params: Vec<(Plicity, String, Term)>,
@@ -175,7 +177,7 @@ impl ConceptField {
     }
 }
 
-/// One concept parameter: a `record`-style binder plus the `out` polarity
+/// One concept parameter: a structure binder plus the `out` polarity
 /// marker. An `out`-marked parameter is an output position — excluded from
 /// the witness key and pinned by the resolved witness (functional
 /// dependencies); unmarked parameters are inputs.
@@ -187,14 +189,12 @@ pub struct ConceptParam {
     pub type_: Term,
 }
 
-/// A `concept` declaration: a record-shaped interface. It lowers to a nominal
-/// `record` (representation public) plus a concept-registry entry and, into its
-/// own namespace, one method-wrapper `let` per field (§4.1). `params` are
-/// written like a `record`'s, each optionally `out`-marked; the result sort is
-/// `Type` or `Prop`.
+/// A `concept` declaration: a record-shaped interface. It lowers to a
+/// representation-public nominal structure plus a concept-registry entry and,
+/// into its own namespace, one method-wrapper `let` per field (§4.1).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopConcept {
-    pub is_pub: bool,
+    pub vis_pub: bool,
     pub label: String,
     pub params: Vec<ConceptParam>,
     pub result_sort: Term,

@@ -185,6 +185,10 @@ pub(super) fn elaborate_variant(
         return Err(Error::unbound_variable(Term::free_var(name)));
     };
 
+    if !inductive.rep_public && *context.island() != inductive.module {
+        return Err(Error::private_representation(name.clone()));
+    }
+
     let Some(signature) = inductive.constructors.get(tag).map(|c| c.telescope.clone()) else {
         return Err(Error::match_case_missing(term.clone(), tag.clone()));
     };

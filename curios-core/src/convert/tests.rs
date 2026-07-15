@@ -838,7 +838,9 @@ fn convert_variant_unit_payload_is_irrelevant() {
                     },
                 )]),
                 result_sort: Term::type_(),
+                module: Qualifier::empty(),
                 root: RootId::Entry,
+                rep_public: true,
             },
         )
         .unwrap();
@@ -1475,7 +1477,9 @@ fn register_lst(context: &mut Context) {
                 indices: Telescope::build([("A", Term::type_())], ()),
                 constructors: BTreeMap::new(),
                 result_sort: Term::type_(),
+                module: Qualifier::empty(),
                 root: RootId::Entry,
+                rep_public: true,
             },
         )
         .unwrap();
@@ -1494,7 +1498,9 @@ fn register_vec(context: &mut Context) {
                 ),
                 constructors: BTreeMap::new(),
                 result_sort: Term::type_(),
+                module: Qualifier::empty(),
                 root: RootId::Entry,
+                rep_public: true,
             },
         )
         .unwrap();

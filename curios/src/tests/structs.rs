@@ -25,7 +25,7 @@ fn named_fields_run_end_to_end() {
 fn struct_transparent_pair_projects() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair(Nat, Nat) { fst = 2, snd = 5 };
         Io/print(Nat/to_str(Nat/add(p.fst, p.1)))
         "#;
@@ -41,7 +41,7 @@ fn struct_transparent_pair_projects() {
 fn struct_parameter_inference_at_construction() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         Io/print(Nat/to_str(Nat/mul(p.fst, p.snd)))
         "#;
@@ -57,7 +57,7 @@ fn struct_parameter_inference_at_construction() {
 fn struct_newtype_projects() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Meters : Type { Nat }
+        pub struct Meters : pub Type { Nat }
         let m : Meters = Meters { 5 };
         Io/print(Nat/to_str(m.0))
         "#;
@@ -73,7 +73,7 @@ fn struct_newtype_projects() {
 fn struct_dependent_fields_run_end_to_end() {
     let source = r#"
         use /std/{Vec, Nat, Io};
-        pub record Sized : Type { n : Nat, v : Vec(Nat, n) }
+        pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
             match v : Nat
@@ -160,7 +160,7 @@ fn struct_private_projection_rejected() {
 fn struct_is_not_a_tuple() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : { fst : Nat, snd : Nat } = Pair { fst = 1, snd = 2 };
         Io/print("no")
         "#;
@@ -174,7 +174,7 @@ fn struct_is_not_a_tuple() {
 fn struct_wrong_field_count_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1 };
         Io/print("no")
         "#;
@@ -188,7 +188,7 @@ fn struct_wrong_field_count_rejected() {
 fn struct_field_label_out_of_order_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { snd = 1, fst = 2 };
         Io/print("no")
         "#;
@@ -222,7 +222,7 @@ fn struct_literal_non_struct_head_rejected() {
 fn prop_struct_with_prop_fields_runs() {
     let source = r#"
         use /std/{Nat, Eq, Io};
-        record And(A : Prop, B : Prop) : Prop { fst : A, snd : B }
+        struct And(A : Prop, B : Prop) : pub Prop { fst : A, snd : B }
         let p : And(Eq(0, 0), Eq(1, 1)) = And { Eq/refl(), Eq/refl() };
         let proof : Eq(0, 0) = p.fst;
         Io/print(Nat/to_str(7))
@@ -241,7 +241,7 @@ fn prop_struct_with_prop_fields_runs() {
 fn prop_struct_with_informative_field_rejected() {
     let source = r#"
         use /std/{Nat, Eq, Io};
-        record Box : Prop { val : Nat }
+        struct Box : pub Prop { val : Nat }
         let b0 : Box = Box { 0 };
         let b1 : Box = Box { 1 };
         let irrelevant : Eq(b0, b1) = Eq/refl();
@@ -263,7 +263,7 @@ fn prop_struct_with_informative_field_rejected() {
 fn type_struct_distinct_values_not_convertible() {
     let source = r#"
         use /std/{Nat, Eq, Io};
-        record Box : Type { val : Nat }
+        struct Box : pub Type { val : Nat }
         let b0 : Box = Box { 0 };
         let b1 : Box = Box { 1 };
         let irrelevant : Eq(b0, b1) = Eq/refl();
@@ -274,7 +274,7 @@ fn type_struct_distinct_values_not_convertible() {
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
 }
 
-// The function-field sugar, end to end: `label(params) -> T` in a record
+// The function-field sugar, end to end: `label(params) -> T` in a struct
 // declaration and a Σ-type, `label(params) = body` in a struct literal and a
 // tuple literal. The parser keeps the sugar in the AST; `into_core` undoes it —
 // this pins the lowering, not just the grammar.
@@ -282,7 +282,7 @@ fn type_struct_distinct_values_not_convertible() {
 fn function_field_sugar_runs_end_to_end() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Api : Type { base : Nat, bump(x : Nat) -> Nat }
+        pub struct Api : pub Type { base : Nat, bump(x : Nat) -> Nat }
         let api : Api = Api { base = 3, bump(x) = x + 1 };
         let pair : { seed : Nat, twice(x : Nat) -> Nat } =
             (seed = api.bump(api.base), twice(x) = x + x);
@@ -327,7 +327,7 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
         mod M
             mod Inner
                 use /std/{Nat};
-                pub record T : Type { n : Nat }
+                pub struct T : pub Type { n : Nat }
             end
             use Inner/{T};
             pub let g(t : T) -> T = t;
@@ -380,7 +380,7 @@ fn pub_inductive_with_private_payload_type_is_rejected() {
             induct Secret : Type
             | mk()
             end
-            pub induct Box : Type
+             pub induct Box : pub Type
             | wrap(Secret)
             end
         end
@@ -395,15 +395,15 @@ fn pub_inductive_with_private_payload_type_is_rejected() {
     );
 }
 
-// A `struct` hides its representation, so its field types are NOT interface —
-// a private helper type inside is legal; a `record`'s fields are interface.
+// An opaque struct's field types are not interface, while an inner-`pub`
+// struct's fields are.
 #[test]
-fn hidden_struct_fields_are_not_interface_but_record_fields_are() {
+fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
     let hidden = r#"
         use /std/{Nat, Io};
         mod M
             use /std/{Nat};
-            record Secret : Type { n : Nat }
+            struct Secret : pub Type { n : Nat }
             pub struct Opaque : Type { Secret }
             pub let mk() -> Opaque = Opaque { Secret { n = 1 } };
         end
@@ -418,8 +418,8 @@ fn hidden_struct_fields_are_not_interface_but_record_fields_are() {
         use /std/{Nat, Io};
         mod M
             use /std/{Nat};
-            record Secret : Type { n : Nat }
-            pub record Open : Type { s : Secret }
+            struct Secret : pub Type { n : Nat }
+            pub struct Open : pub Type { s : Secret }
         end
         Io/print("no")
         "#;
@@ -437,7 +437,7 @@ fn hidden_struct_fields_are_not_interface_but_record_fields_are() {
 fn struct_spread_identity_copy() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         let q : Pair(Nat, Nat) = Pair { ..p };
         Io/print(Nat/to_str(Nat/mul(q.fst, q.snd)))
@@ -453,7 +453,7 @@ fn struct_spread_identity_copy() {
 fn struct_spread_single_override() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         let q : Pair(Nat, Nat) = Pair { ..p, snd = 9 };
         Io/print(Nat/to_str(Nat/add(q.fst, q.snd)))
@@ -470,7 +470,7 @@ fn struct_spread_single_override() {
 fn struct_spread_multi_override_with_gap() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Tri : Type { fst : Nat, snd : Nat, thd : Nat }
+        pub struct Tri : pub Type { fst : Nat, snd : Nat, thd : Nat }
         let t : Tri = Tri { fst = 1, snd = 2, thd = 3 };
         let u : Tri = Tri { ..t, fst = 10, thd = 30 };
         Io/print(Nat/to_str(Nat/add(Nat/add(u.fst, u.snd), u.thd)))
@@ -487,7 +487,7 @@ fn struct_spread_multi_override_with_gap() {
 fn struct_spread_dependent_override_runs() {
     let source = r#"
         use /std/{Nat, Vec, Io};
-        pub record Sized : Type { n : Nat, v : Vec(Nat, n) }
+        pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         let t : Sized = Sized { ..s, n = 1, v = Vec/cons(42, Vec/nil()) };
         rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
@@ -509,7 +509,7 @@ fn struct_spread_dependent_override_runs() {
 fn struct_spread_dependent_field_mismatch_rejected() {
     let source = r#"
         use /std/{Nat, Vec, Io};
-        pub record Sized : Type { n : Nat, v : Vec(Nat, n) }
+        pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(1, Vec/cons(2, Vec/nil())) };
         let bad : Sized = Sized { ..s, n = 3 };
         Io/print("no")
@@ -526,7 +526,7 @@ fn struct_spread_dependent_field_mismatch_rejected() {
 fn struct_spread_parameter_changing_update() {
     let source = r#"
         use /std/{Nat, Str, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 42 };
         let q : Pair(Str, Nat) = Pair { ..p, fst = "x" };
         Io/print(Nat/to_str(q.snd))
@@ -543,7 +543,7 @@ fn struct_spread_parameter_changing_update() {
 fn struct_spread_bare_head_inference() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         let q = Pair { ..p, snd = 9 };
         Io/print(Nat/to_str(Nat/add(q.fst, q.snd)))
@@ -559,7 +559,7 @@ fn struct_spread_bare_head_inference() {
 fn struct_spread_function_field_override() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Api : Type { base : Nat, bump : (Nat) -> Nat }
+        pub struct Api : pub Type { base : Nat, bump : (Nat) -> Nat }
         let api : Api = Api { base = 40, bump(x) = x };
         let api2 : Api = Api { ..api, bump(x) = Nat/add(x, 2) };
         Io/print(Nat/to_str(api2.bump(api2.base)))
@@ -575,7 +575,7 @@ fn struct_spread_function_field_override() {
 fn struct_spread_unlabeled_override_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, 5 };
         Io/print("no")
@@ -592,7 +592,7 @@ fn struct_spread_unlabeled_override_rejected() {
 fn struct_spread_out_of_order_override_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Tri : Type { fst : Nat, snd : Nat, thd : Nat }
+        pub struct Tri : pub Type { fst : Nat, snd : Nat, thd : Nat }
         let t : Tri = Tri { fst = 1, snd = 2, thd = 3 };
         let bad = Tri { ..t, thd = 30, fst = 10 };
         Io/print("no")
@@ -608,7 +608,7 @@ fn struct_spread_out_of_order_override_rejected() {
 fn struct_spread_duplicate_override_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, fst = 3, fst = 4 };
         Io/print("no")
@@ -624,7 +624,7 @@ fn struct_spread_duplicate_override_rejected() {
 fn struct_spread_unknown_field_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, nope = 3 };
         Io/print("no")
@@ -640,7 +640,7 @@ fn struct_spread_unknown_field_rejected() {
 fn struct_spread_not_first_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { fst = 3, ..p };
         Io/print("no")
@@ -656,7 +656,7 @@ fn struct_spread_not_first_rejected() {
 fn struct_spread_multiple_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, ..p };
         Io/print("no")
@@ -673,7 +673,7 @@ fn struct_spread_multiple_rejected() {
 fn struct_spread_non_struct_base_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let bad = Pair { ..(fst = 1, snd = 2) };
         Io/print("no")
         "#;
@@ -691,8 +691,8 @@ fn struct_spread_non_struct_base_rejected() {
 fn struct_spread_wrong_struct_base_rejected() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
-        pub record Dup(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
+        pub struct Dup(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let d : Dup(Nat, Nat) = Dup { fst = 1, snd = 2 };
         let bad = Pair { ..d };
         Io/print("no")

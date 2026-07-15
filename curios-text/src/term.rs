@@ -157,7 +157,7 @@ pub struct Apply {
     pub params: Vec<(Plicity, Term)>,
 }
 
-/// A Σ-/tuple type `(fst : A, snd : B(fst))`: a dependent telescope of fields — a later field's type may mention an earlier field's label. Its field grammar ([`TupleTypeParam`]) is also what `struct`/`record` declarations reuse.
+/// A Σ-/tuple type `(fst : A, snd : B(fst))`: a dependent telescope of fields — a later field's type may mention an earlier field's label. Its field grammar ([`TupleTypeParam`]) is also what `struct` declarations reuse.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleType {
     pub fields: Vec<TupleTypeParam>,
@@ -410,7 +410,7 @@ pub enum MatchPattern {
     },
     /// A tuple pattern — field grammar mirrors [`PatternField`] exactly.
     Tuple(Vec<MatchPatternField>),
-    /// A struct/record pattern — the same labeled/punned/positional grammar
+    /// A struct pattern — the same labeled/punned/positional grammar
     /// as struct literals and today's irrefutable [`Pattern::Struct`], not
     /// the positional constructor-call shape (structs have field labels;
     /// inductive constructors don't).

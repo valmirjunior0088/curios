@@ -1,6 +1,6 @@
 use /std/{Result, Nat, Byte, Bytes, Str, Bln, Lst};
 
-pub record Parse(A : Type) : Type {
+pub struct Parse(A : Type) : pub Type {
     run(input : Bytes, pos : Nat) -> Result({Nat, A}, Str)
 }
 

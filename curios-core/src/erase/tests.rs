@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_abi::RootId,
-    curios_base::{Flt, Grain, Int, PackedBin},
+    curios_base::{Flt, Grain, Int, PackedBin, Qualifier},
     std::{collections::BTreeMap, time::Duration},
 };
 
@@ -45,7 +45,9 @@ fn register_opt(context: &mut Context) {
                     ),
                 ]),
                 result_sort: Term::type_(),
+                module: Qualifier::empty(),
                 root: RootId::Entry,
+                rep_public: true,
             },
         )
         .unwrap();

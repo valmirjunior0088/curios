@@ -8,7 +8,7 @@ A pragmatic reference for the Curios surface language (`.crs`). It covers every 
 
 Comments run from `--` to end of line; there are no block comments. Whitespace is insignificant except that it separates tokens and disambiguates a few operators (see [Operators](#operators)).
 
-Identifiers are runs of alphanumeric characters and `_`. The reserved keywords are `let`, `match`, `rec`, `mod`, `use`, `pub`, `end`, `false`, `true`, `induct`, `struct`, `record` (plus the contextual `and`, and the sort words `Type` and `Prop`). A keyword may not appear as a path segment.
+Identifiers are runs of alphanumeric characters and `_`. The reserved keywords are `let`, `match`, `rec`, `mod`, `use`, `pub`, `end`, `false`, `true`, `induct`, and `struct` (plus the contextual `and`, and the sort words `Type` and `Prop`). A keyword may not appear as a path segment; `record` is an ordinary identifier.
 
 **Paths.** Names are segments joined by `/`. A leading `/` makes the path absolute (rooted at the module tree); otherwise it is relative to the current scope. Examples: `Nat` (relative), `Option/none` (member of `Option`), `/std/Lst` (absolute), `/sys/Io` (the primitives module). `_` is a valid identifier character, so `to_str` and `is_none` are single segments.
 
@@ -37,7 +37,7 @@ Option/some(x) -- qualified member
 
 **Function types (Π).** `(p : A, q : B) -> R`. Parameters may be unlabeled (`(A) -> B`) and may be marked implicit with `@` (`(@A : Type, x : A) -> A`). Dependent: later parameters and the result may mention earlier labels.
 
-**Tuple types (Σ).** `{x : A, y : B}`, with later fields able to depend on earlier ones. Fields may be unlabeled (`{A, B}`). The empty tuple type `{}` is the unit type. A function-typed field may use the signature sugar `name(params) -> T` (shorthand for `name : (params) -> T`), and the last field may carry a trailing comma — both also apply to `struct`/`record` declarations, which share this field grammar.
+**Tuple types (Σ).** `{x : A, y : B}`, with later fields able to depend on earlier ones. Fields may be unlabeled (`{A, B}`). The empty tuple type `{}` is the unit type. A function-typed field may use the signature sugar `name(params) -> T` (shorthand for `name : (params) -> T`), and the last field may carry a trailing comma — both also apply to `struct` declarations, which share this field grammar.
 
 ```
 (@A : Type, x : A, y : A) -> Eq(x, y) -- dependent Π with an implicit parameter
@@ -228,7 +228,7 @@ The ladder desugars to nested `Bln` matches (for conditions) and single-row indu
 
 A module is a sequence of items; an entrypoint file is items followed by a final term. Every item except `use`/`mod` headers may be prefixed with `pub` to export it.
 
-**Private items stay out of public interfaces.** A `pub` item's declared signature must only mention items that are themselves publicly reachable: the annotation of a `pub let`/`rec`, a `pub concept`'s parameter and field types (superclasses included), a `pub induct`'s parameter, index, and constructor payload types, and a `pub struct`/`record`'s parameter types (plus field types when the representation is public — a `struct`'s hidden fields are not interface). Violations are a compile error naming both items. Bodies are exempt — a public function may call private helpers freely — which also means a transparent type alias (`pub let X : Type = <private>`) can still leak definitionally; the check covers declared signatures.
+**Private items stay out of public interfaces.** A publicly exposed nominal type must only mention items publicly reachable from that interface. Parameters, indices, and the result sort belong to the nominal interface; struct fields and inductive constructor signatures join it only when the declaration-local `pub` exposes the representation. The audit runs after `pub use` resolution and follows straightforward transparent type aliases, so a private-name/public-representation declaration may use private helpers while hidden but must expose those helpers if a facade later exposes its representation. Ordinary public definition bodies remain exempt and this is not computational sealing.
 
 **`let` / `rec`.** Top-level definitions. Unlike local `let`, the type is **required** (function sugar or `: T =`). `rec ... and ...` defines mutually-recursive groups.
 
@@ -267,35 +267,37 @@ pub use Lst/{let Lst}; -- re-export only the value `Lst`
 use /syn/Str/{classify, step}; -- import specific members
 ```
 
-**`induct`.** An inductive type. After the name come optional parameters `(p : T)` (mark with `@` to make them implicit at the type constructor; they are always implicit at value constructors). A **required** `: Sort` declares the result sort — `Type` or `Prop` — written `: Sort` for a plain type or `: (indices) -> Sort` to also declare an index telescope. Each case is `| name(payload)` with an optional `: (targets)` stating its index instantiation — required exactly when the type is indexed. Mutually-recursive families join with `and`; the block ends with `end`.
+**`induct`.** An inductive type. After the name come optional parameters `(p : T)` (mark with `@` to make them implicit at the type constructor; they are always implicit at value constructors). A **required** representation sort declares the result sort — `Type` or `Prop` — written `: pub? Sort` for a plain type or `: (indices) -> pub? Sort` to also declare an index telescope. The declaration-local `pub` exposes construction and elimination outside the exact declaring module; without it, clients can name the type but cannot reach its constructor namespace or eliminate values, including through default, empty, dependent, or index-inverting matches. Each case is `| name(payload)` with an optional `: (targets)` stating its index instantiation — required exactly when the type is indexed. Mutually-recursive families join with `and`, and every member has independent outer and representation visibility; the block ends with `end`.
 
 ```
-pub induct Option(A : Type) : Type -- parameterized, lands in Type
+pub induct Option(A : Type) : pub Type -- public name and representation
 | some(A)
 | none()
 end
 
-pub induct Vec(T : Type) : (n : Nat) -> Type -- indexed by a Nat
+pub induct Vec(T : Type) : (n : Nat) -> pub Type -- indexed by a Nat
 | nil() : (0)
 | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
 end
 
-pub induct Eq(@A : Type) : (x : A, y : A) -> Prop -- a proposition
+pub induct Eq(@A : Type) : (x : A, y : A) -> pub Prop -- a proposition
 | refl(@z : A) : (z, z)
 end
 ```
 
 Payload binders may be named (`x : T`), named-implicit (`@m : T`, in scope for later binders and the target), or bare positional types (`A`).
 
-**`struct` / `record`.** A nominal record type. The keyword sets _representation visibility_: `record` makes the representation **public** (callers construct and project directly); `struct` makes it **private** to the declaring module (construct/project only via exported helpers, else a `PrivateRepresentation` error). Optional parameters and a **required** `: Sort` work as for `induct` (a struct has no indices, so its sort is the bare `: Type` or `: Prop`; a `Prop` struct's fields must all be non-informative). Fields are labeled (`x : A`) or a single unlabeled field forms a newtype.
+**`struct`.** A nominal record type. Optional parameters and a **required** representation sort work as for `induct` (a struct has no indices, so it uses `: pub? Type` or `: pub? Prop`; a `Prop` struct's fields must all be non-informative). The declaration-local `pub` exposes direct construction and projection; without it those operations are private to the exact declaring module. Fields are labeled (`x : A`) or a single unlabeled field forms a newtype.
+
+The outer and declaration-local markers are independent for both `struct` and `induct`: no `pub` means a private name and private representation; outer `pub` alone exports an opaque type; inner `pub` alone keeps a public representation available for a later valid facade or transparent alias; both markers export the name and representation. A re-export cannot upgrade an opaque representation.
 
 ```
-pub record Pair(A : Type, B : Type) : Type { -- transparent
+pub struct Pair(A : Type, B : Type) : pub Type { -- transparent
     fst : A,
     snd : B
 }
 
-pub record Meters : Type { Nat } -- newtype; project with `.0`; erases to the bare field
+pub struct Meters : pub Type { Nat } -- newtype; project with `.0`; erases to the bare field
 
 pub struct Token : Type { Bytes } -- opaque: representation private to this module
 ```
@@ -317,7 +319,7 @@ let r : Pair(Str, Nat) = Pair { ..p, fst = "x" }; -- parameter-changing update
 
 Ad-hoc polymorphism is expressed with three constructs. A **concept** is a record-shaped interface; a **witness** is a registered inhabitant of a concept for a given type; a **`use` binder** is a third parameter plicity the elaborator fills by resolution rather than unification. `concept` and `satisfy` are contextual keywords — legal identifiers and path segments everywhere else, recognized only at item start (`concept` optionally after `pub`; a witness is anonymous, so `pub` does not apply).
 
-**`concept`.** A concept lowers to an ordinary `record` (its representation is always public) plus a method wrapper synthesized into the concept's namespace for each non-`use` field. Fields are signatures — `name : T`, or the function sugar `name(params) -> T` (shorthand for `name : (params) -> T`, the same sugar any record field admits). A field prefixed with `use` is a **superclass** edge — anonymous, and given no wrapper: its type must be a concept application, and an instance of the outer concept in scope yields the inner one by resolution. The result sort (`Type` or `Prop`) is required; a `Prop` concept's witnesses erase entirely. Concept and witness field lists admit a trailing comma, like every field list.
+**`concept`.** A concept lowers to a representation-public nominal structure plus a method wrapper synthesized into the concept's namespace for each non-`use` field. Fields are signatures — `name : T`, or the function sugar `name(params) -> T` (shorthand for `name : (params) -> T`, the same sugar any structure field admits). A field prefixed with `use` is a **superclass** edge — anonymous, and given no wrapper: its type must be a concept application, and an instance of the outer concept in scope yields the inner one by resolution. The result sort (`Type` or `Prop`) is required; concepts do not accept the declaration-local representation marker. A `Prop` concept's witnesses erase entirely. Concept and witness field lists admit a trailing comma, like every field list.
 
 A parameter marked with the contextual keyword `out` is an **output position** (a functional dependency): it is excluded from the witness key and pinned by whichever witness the input positions select. At least one parameter must be an input. `out` stays a valid identifier — the marker form needs a binder after it, so a parameter *named* `out` still parses.
 
@@ -356,7 +358,7 @@ satisfy(@A : Type, use Show(A)) Show(Lst(A)) {
 }
 ```
 
-Every concept–key pair has **at most one** witness, program-wide (global coherence); a duplicate registration is a compile error wherever it is declared — module visibility never scopes the table, only names, and a witness has none. A witness keys on the concept and the tuple of *rigid heads* of the concept's input parameters (each an inductive, a struct/record, or a primitive type constructor); `out` parameters are excluded from the key and pinned by the resolved witness, and everything else is checked by unification at resolution time. For a *second* instance of the same key — a descending order, a case-insensitive equality — declare an ordinary value of the concept type (`let desc : Ord(Nat) = Ord { cmp(a, b) = … };`) and pass it where wanted with `use desc`.
+Every concept–key pair has **at most one** witness, program-wide (global coherence); a duplicate registration is a compile error wherever it is declared — module visibility never scopes the table, only names, and a witness has none. A witness keys on the concept and the tuple of *rigid heads* of the concept's input parameters (each an inductive, a struct, or a primitive type constructor); `out` parameters are excluded from the key and pinned by the resolved witness, and everything else is checked by unification at resolution time. For a *second* instance of the same key — a descending order, a case-insensitive equality — declare an ordinary value of the concept type (`let desc : Ord(Nat) = Ord { cmp(a, b) = … };`) and pass it where wanted with `use desc`.
 
 **The orphan rule.** A witness may be declared only where the concept it witnesses, or at least one rigid type in its key, is already declared — never by an unrelated third party. Without this, two independently-developed packages could each legally `satisfy` the same concept+type, a collision that is unfixable once both are linked into one program. The standard library (`/sys`/`/syn`/`/std`) is exempt from this check against itself — the three are one coordinated implementation, not independent packages, so e.g. a `/std`-declared `Eql(Str)` witness bridging `/sys`'s `Eql` concept and `/syn`'s `Str` type is the sanctioned pattern, not an orphan instance. A violation reports as an orphan-witness error naming the concept, the key, and the offending declaration.
 

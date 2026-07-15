@@ -306,14 +306,14 @@ fn infix_mismatched_operand_types_are_rejected() {
 
 // === Concept-dispatched operators (one path, no overload table) =============
 
-// `+` on a user record resolves the user's `Add` witness — the operator
+// `+` on a user struct resolves the user's `Add` witness — the operator
 // surface is witness-governed.
 #[test]
 fn infix_add_on_a_user_record_resolves_its_witness() {
     assert_eq!(
         run(r#"
             use /std/{Nat, Io, Str, Add};
-            record Point : Type { x : Nat, y : Nat }
+            struct Point : pub Type { x : Nat, y : Nat }
             satisfy Add(Point) {
                 add(a, b) = Point { x = a.x + b.x, y = a.y + b.y }
             }
@@ -376,7 +376,7 @@ fn infix_literal_against_a_user_type_is_rejected() {
     let (system, _io) = MockHost::builder().build();
     let source = r#"
         use /std/{Nat, Io, Str, Add};
-        record Point : Type { x : Nat, y : Nat }
+        struct Point : pub Type { x : Nat, y : Nat }
         satisfy Add(Point) {
             add(a, b) = Point { x = a.x + b.x, y = a.y + b.y }
         }

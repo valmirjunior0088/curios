@@ -472,7 +472,7 @@ fn rejects_re_export_through_other_modules_private_child() {
 fn re_exports_inductive_constructor_by_name() {
     let term = run(r#"
         pub mod Foo
-            pub induct U : Type
+             pub induct U : pub Type
             | A()
             | B()
             end
@@ -491,7 +491,7 @@ fn re_exports_inductive_constructor_by_name() {
 fn re_exports_inductive_constructors_by_glob() {
     let term = run(r#"
         pub mod Foo
-            pub induct U : Type
+             pub induct U : pub Type
             | A()
             | B()
             end
@@ -504,6 +504,102 @@ fn re_exports_inductive_constructors_by_glob() {
     "#);
 
     assert!(format!("{term:?}").contains("Foo/U/A"));
+}
+
+#[test]
+fn opaque_inductive_constructor_namespace_cannot_be_re_exported() {
+    let error = run_err(
+        r#"
+        pub mod Foo
+            pub induct U : Type
+            | A()
+            end
+        end
+        pub mod Bar
+            pub use /Foo/U/*;
+        end
+        Type
+    "#,
+    );
+
+    assert!(
+        error.contains("private child module"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn unexposed_public_representation_may_use_private_helpers() {
+    run(r#"
+        mod M
+            struct Hidden : Type { Type }
+            struct Open : pub Type { Hidden }
+        end
+        Type
+    "#);
+}
+
+#[test]
+fn transparent_alias_exposure_audits_the_complete_representation() {
+    let error = run_err(
+        r#"
+        mod M
+            struct Hidden : Type { Type }
+            struct Open : pub Type { Hidden }
+            pub let Alias : Type = Open;
+        end
+        Type
+    "#,
+    );
+
+    assert!(
+        error.contains("exposes private item '/M/Hidden'"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn parameterized_transparent_alias_preserves_representation_provenance() {
+    let error = run_err(
+        r#"
+        mod M
+            struct Hidden : Type { Type }
+            struct Open(A : Type) : pub Type { hidden : Hidden, value : A }
+            pub let Alias(A : Type) -> Type = Open(A);
+        end
+        Type
+    "#,
+    );
+
+    assert!(
+        error.contains("exposes private item '/M/Hidden'"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn exposure_audit_accepts_a_separately_exposed_dependency() {
+    run(r#"
+        mod M
+            struct Hidden : Type { Type }
+            pub let PublicHidden : Type = Hidden;
+            struct Open : pub Type { Hidden }
+            pub let PublicOpen : Type = Open;
+        end
+        Type
+    "#);
+}
+
+#[test]
+fn direct_representation_exposure_accepts_a_separately_exposed_dependency() {
+    run(r#"
+        mod M
+            struct Hidden : Type { Type }
+            pub let PublicHidden : Type = Hidden;
+            pub struct Open : pub Type { Hidden }
+        end
+        Type
+    "#);
 }
 
 // A re-exports x from B; B re-exports x from A; nobody declares x. Following the

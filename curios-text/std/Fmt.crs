@@ -1,6 +1,6 @@
 use /std/{Bytes, Byte, Str, Nat, Option, Io, Bln};
 
-pub induct Fmt : Type
+pub induct Fmt : pub Type
 | nil()
 | lit(Str, Fmt)
 | str(Fmt)

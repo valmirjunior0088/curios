@@ -9,7 +9,7 @@
 use /std/{Nat, Int, Bln, Str, Order, BigNat, NonZero};
 use /std/NonZero/{non_zero_add, non_zero_mul, non_zero_cmp, Split};
 
-pub induct BigInt : Type
+pub induct BigInt : pub Type
 | neg(NonZero)
 | zero()
 | pos(NonZero)

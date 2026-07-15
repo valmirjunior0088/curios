@@ -30,6 +30,10 @@ impl PublicInterface {
 pub(super) struct Entry {
     pub target: Qualifier,
     pub source: Source,
+    /// The nominal declaration whose representation this export exposes. Kept
+    /// distinct from `target` so re-exports cannot manufacture representation
+    /// visibility and aliases can inherit it during the post-lowering audit.
+    pub representation: Option<Qualifier>,
 }
 
 // Provenance of an export entry. A slot may be claimed by at most one source; a
@@ -136,6 +140,7 @@ fn seed(
             Entry {
                 target,
                 source: Source::Direct,
+                representation: None,
             },
         );
     }
@@ -147,15 +152,49 @@ fn seed(
             Entry {
                 target,
                 source: Source::Direct,
+                representation: None,
             },
         );
     }
 
     public.insert(prefix.clone(), interface);
 
+    // Attach declaration provenance to directly exposed nominal bindings. The
+    // fixed point copies this bit alongside the canonical target.
+    if let Some(interface) = public.get_mut(prefix) {
+        for item in items {
+            match item {
+                TopItem::Struct(item) if item.vis_pub && item.rep_pub => {
+                    interface
+                        .bindings
+                        .get_mut(&item.label)
+                        .expect("direct struct binding")
+                        .representation = Some(prefix.with(&item.label));
+                }
+                TopItem::Induct(group) => {
+                    for item in group.iter().filter(|item| item.vis_pub && item.rep_pub) {
+                        interface
+                            .bindings
+                            .get_mut(&item.label)
+                            .expect("direct inductive binding")
+                            .representation = Some(prefix.with(&item.label));
+                    }
+                }
+                TopItem::Concept(item) if item.vis_pub => {
+                    interface
+                        .bindings
+                        .get_mut(&item.label)
+                        .expect("direct concept binding")
+                        .representation = Some(prefix.with(&item.label));
+                }
+                _ => {}
+            }
+        }
+    }
+
     for item in items {
         match item {
-            TopItem::Use(use_item) if use_item.is_pub => {
+            TopItem::Use(use_item) if use_item.vis_pub => {
                 pub_uses.push(PubUse {
                     module: prefix.clone(),
                     id: counter.fresh(),
@@ -167,14 +206,10 @@ fn seed(
                 for inductive in group {
                     let ctor = prefix.with(&inductive.label);
 
-                    // Constructors are always public *within their nested
-                    // module* — its direct info and public interface are both
-                    // seeded unconditionally, exactly like an ordinary module
-                    // whose bindings are all `pub`. Visibility is governed
-                    // entirely by the inductive itself: the child-module flag in
-                    // the parent's info gates every walk from outside, so a
-                    // constructor is exactly as visible as its inductive and the
-                    // declaring module can always use a non-`pub` inductive.
+                    // Constructor bindings are public within their synthetic
+                    // namespace. The parent's child bit, seeded separately as
+                    // `vis_pub && rep_pub`, gates all external walks while the
+                    // declaring module retains direct access.
                     let mut direct = ModuleInfo::new(RootId::of_segment(prefix.root_segment()));
                     for case in &inductive.cases {
                         direct.insert_binding(case.label.clone(), true)?;
@@ -189,6 +224,7 @@ fn seed(
                             Entry {
                                 target,
                                 source: Source::Direct,
+                                representation: None,
                             },
                         );
                     }
@@ -218,6 +254,7 @@ fn seed(
                         Entry {
                             target,
                             source: Source::Direct,
+                            representation: None,
                         },
                     );
                 }
@@ -255,10 +292,11 @@ fn fixed_point(
         let mut changed = false;
 
         for use_ in pub_uses {
-            for (ns, label, target) in resolvable(public, table, use_) {
+            for (ns, label, target, representation) in resolvable(public, table, use_) {
                 let entry = Entry {
                     target,
                     source: Source::ReExport(use_.id),
+                    representation,
                 };
                 changed |= insert(public, &use_.module, ns, label, entry)?;
             }
@@ -279,7 +317,7 @@ fn resolvable(
     public: &HashMap<Qualifier, PublicInterface>,
     table: &HashMap<Qualifier, ModuleInfo>,
     use_: &PubUse,
-) -> Vec<(Ns, String, Qualifier)> {
+) -> Vec<(Ns, String, Qualifier, Option<Qualifier>)> {
     let Some(provider) = provider(public, table, &use_.module, &use_.name) else {
         return Vec::new();
     };
@@ -293,10 +331,15 @@ fn resolvable(
     match &use_.group {
         UseGroup::Glob => {
             for (label, entry) in &interface.children {
-                out.push((Ns::Module, label.clone(), entry.target.clone()));
+                out.push((Ns::Module, label.clone(), entry.target.clone(), None));
             }
             for (label, entry) in &interface.bindings {
-                out.push((Ns::Binding, label.clone(), entry.target.clone()));
+                out.push((
+                    Ns::Binding,
+                    label.clone(),
+                    entry.target.clone(),
+                    entry.representation.clone(),
+                ));
             }
         }
         UseGroup::Named(items) => {
@@ -304,20 +347,30 @@ fn resolvable(
                 match item {
                     GroupItem::Mod(label) => {
                         if let Some(entry) = interface.children.get(label) {
-                            out.push((Ns::Module, label.clone(), entry.target.clone()));
+                            out.push((Ns::Module, label.clone(), entry.target.clone(), None));
                         }
                     }
                     GroupItem::Let(label) => {
                         if let Some(entry) = interface.bindings.get(label) {
-                            out.push((Ns::Binding, label.clone(), entry.target.clone()));
+                            out.push((
+                                Ns::Binding,
+                                label.clone(),
+                                entry.target.clone(),
+                                entry.representation.clone(),
+                            ));
                         }
                     }
                     GroupItem::Both(label) => {
                         if let Some(entry) = interface.children.get(label) {
-                            out.push((Ns::Module, label.clone(), entry.target.clone()));
+                            out.push((Ns::Module, label.clone(), entry.target.clone(), None));
                         }
                         if let Some(entry) = interface.bindings.get(label) {
-                            out.push((Ns::Binding, label.clone(), entry.target.clone()));
+                            out.push((
+                                Ns::Binding,
+                                label.clone(),
+                                entry.target.clone(),
+                                entry.representation.clone(),
+                            ));
                         }
                     }
                 }

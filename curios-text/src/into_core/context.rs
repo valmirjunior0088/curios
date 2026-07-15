@@ -9,6 +9,7 @@ use {
 #[derive(Clone)]
 pub(super) struct FlatLet {
     pub name: Qualifier,
+    pub island: Qualifier,
     pub root: RootId,
     pub type_: curios_core::Term,
     pub body: curios_core::Term,
@@ -16,11 +17,9 @@ pub(super) struct FlatLet {
 
 impl FlatLet {
     pub(super) fn into_core(self) -> curios_core::Definition {
-        let island = self.name.without_last();
-
         curios_core::Definition {
             root: self.root,
-            island,
+            island: self.island,
             name: self.name.join(),
             type_: self.type_,
             body: self.body,
@@ -107,21 +106,21 @@ impl ModuleInfo {
         }
     }
 
-    pub(super) fn insert_child(&mut self, label: String, is_pub: bool) -> Result<(), Error> {
+    pub(super) fn insert_child(&mut self, label: String, vis_pub: bool) -> Result<(), Error> {
         if self.children.contains_key(&label) {
             return Err(Error::DuplicatePublicDeclaration { label });
         }
 
-        self.children.insert(label, is_pub);
+        self.children.insert(label, vis_pub);
         Ok(())
     }
 
-    pub(super) fn insert_binding(&mut self, label: String, is_pub: bool) -> Result<(), Error> {
+    pub(super) fn insert_binding(&mut self, label: String, vis_pub: bool) -> Result<(), Error> {
         if self.bindings.contains_key(&label) {
             return Err(Error::DuplicatePublicDeclaration { label });
         }
 
-        self.bindings.insert(label, is_pub);
+        self.bindings.insert(label, vis_pub);
         Ok(())
     }
 
@@ -136,7 +135,7 @@ impl ModuleInfo {
     pub(super) fn public_children(&self) -> Vec<String> {
         self.children
             .iter()
-            .filter(|(_, is_pub)| **is_pub)
+            .filter(|(_, vis_pub)| **vis_pub)
             .map(|(label, _)| label.clone())
             .collect()
     }
@@ -144,7 +143,7 @@ impl ModuleInfo {
     pub(super) fn public_bindings(&self) -> Vec<String> {
         self.bindings
             .iter()
-            .filter(|(_, is_pub)| **is_pub)
+            .filter(|(_, vis_pub)| **vis_pub)
             .map(|(label, _)| label.clone())
             .collect()
     }
@@ -250,6 +249,11 @@ impl<'a> Context<'a> {
 
     pub(super) fn prefixed(&self, label: &str) -> Qualifier {
         self.prefix.with(label)
+    }
+
+    /// The exact source module declarations lowered in this context belong to.
+    pub(super) fn island(&self) -> Qualifier {
+        self.prefix.clone()
     }
 
     pub(super) fn bindings(&self) -> &HashMap<String, Qualifier> {

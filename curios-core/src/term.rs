@@ -53,6 +53,39 @@ impl Term {
         }
     }
 
+    /// Return the canonical target when this term is a straightforward
+    /// transparent alias body: either a single free variable or its
+    /// eta-expanded parameterized form `(xs) => Original(xs)`. The text-stage
+    /// interface audit uses this after name resolution to preserve
+    /// representation provenance; computed bodies are not classified as aliases.
+    pub fn transparent_alias_target(&self) -> Option<String> {
+        match &*self.inner {
+            Subterm::Var(var) => var.as_free().map(str::to_string),
+            Subterm::Func(Func { telescope }) => {
+                let fresh = (0..telescope.len())
+                    .map(|index| format!("#alias{index}"))
+                    .collect::<Vec<_>>();
+                let args = fresh.iter().map(Term::free_var).collect::<Vec<_>>();
+                let refs = args.iter().collect::<Vec<_>>();
+                let Subterm::Apply(Apply { head, params, .. }) =
+                    Term::unwrap_or_clone(telescope.open(&refs))
+                else {
+                    return None;
+                };
+                let Subterm::Var(target) = &*head else {
+                    return None;
+                };
+                (params.len() == fresh.len()
+                    && params.iter().zip(&fresh).all(|(param, label)| {
+                        matches!(&**param, Subterm::Var(var) if var.as_free() == Some(label))
+                    }))
+                .then(|| target.as_free().map(str::to_string))
+                .flatten()
+            }
+            _ => None,
+        }
+    }
+
     pub(crate) fn span(&self) -> Option<Span> {
         self.span.clone()
     }

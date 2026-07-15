@@ -286,8 +286,8 @@ pub enum Error {
         name: String,
         field: String,
     },
-    /// Building a struct whose representation is private, from outside the
-    /// declaring module (§7) — the construction counterpart of `PrivateField`.
+    /// Constructing or eliminating a nominal type whose representation is
+    /// private, from outside the declaring module (§7).
     PrivateRepresentation {
         name: String,
     },
@@ -1220,7 +1220,7 @@ impl fmt::Display for Error {
             Error::PrivateRepresentation { name } => {
                 write!(
                     f,
-                    "the representation of struct '{name}' is private to its declaring module"
+                    "the representation of type '{name}' is private to its declaring module"
                 )
             }
             Error::CtorArityMismatch {
@@ -1359,7 +1359,7 @@ impl fmt::Display for Error {
             } => {
                 write!(
                     f,
-                    "witness '{witness}' cannot be keyed: its concept's parameter {n} reduces to {head}\n  every input parameter's head must be an inductive, a struct/record, or a primitive type",
+                    "witness '{witness}' cannot be keyed: its concept's parameter {n} reduces to {head}\n  every input parameter's head must be an inductive, a struct, or a primitive type",
                     n = position + 1
                 )
             }

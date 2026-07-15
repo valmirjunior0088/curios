@@ -1,13 +1,13 @@
 use /std/{Io, Bytes, Nat, Bln, Lst, Option, Result, Cell};
 
-pub induct Pause : Type
+pub induct Pause : pub Type
 | wait(Io, Nat)
 | fork(() -> Task({}), Cell(Bln))
 | park((() -> {}) -> {})
 | acquire(Io, () -> {})
 | release(Io)
 | defer()
-pub and Task(A : Type) : Type
+pub and Task(A : Type) : pub Type
 | done(A)
 | step(Pause, () -> Task(A))
 end
@@ -110,7 +110,7 @@ pub let drain(read : (Nat) -> Task(Io/Read)) -> Task(Bytes) =
             end);
     go(x\);
 
-pub induct Fut(A : Type) : Type
+pub induct Fut(A : Type) : pub Type
 | pending(Lst(Waker))
 | ready(A)
 end
@@ -139,7 +139,7 @@ pub rec await(@A : Type, f : Future(A)) -> Task(A) =
         bind(park((w) => Cell/set(f, Fut/pending(@A, Lst/cons(w, ws)))), (_) => await(f))
     end;
 
-record Job : Type {
+struct Job : pub Type {
     resume : Fiber,
     token : Token,
     fins : Lst(Guard)
@@ -148,7 +148,7 @@ record Job : Type {
 let Slot : Type =
     Cell(Option(Job));
 
-record Parked : Type {
+struct Parked : pub Type {
     handle : Io,
     interest : Nat,
     resume : Fiber,

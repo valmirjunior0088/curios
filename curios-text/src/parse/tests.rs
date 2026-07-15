@@ -236,7 +236,7 @@ fn parse_top_let_without_pub() {
     assert_eq!(
         "let x : Type = Type;".parse::<Module>().unwrap().items,
         vec![TopItem::Let(TopLet {
-            is_pub: false,
+            vis_pub: false,
             label: "x".to_string(),
             signature: LetSignature::Name {
                 type_: Some(Subterm::Type.into()),
@@ -254,7 +254,7 @@ fn parse_top_foreign_without_pub() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
-            is_pub: false,
+            vis_pub: false,
             label: "frobnicate".to_string(),
             signature: WireSignature {
                 params: vec![
@@ -275,7 +275,7 @@ fn parse_top_foreign_with_pub() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
-            is_pub: true,
+            vis_pub: true,
             label: "frobnicate".to_string(),
             signature: WireSignature {
                 params: vec![
@@ -293,7 +293,7 @@ fn parse_top_foreign_zero_arg() {
     assert_eq!(
         "foreign clock : Nat;".parse::<Module>().unwrap().items,
         vec![TopItem::Foreign(TopForeign {
-            is_pub: false,
+            vis_pub: false,
             label: "clock".to_string(),
             signature: WireSignature {
                 params: vec![],
@@ -311,7 +311,7 @@ fn parse_top_foreign_nested_lst() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
-            is_pub: false,
+            vis_pub: false,
             label: "frobnicate".to_string(),
             signature: WireSignature {
                 params: vec![(
@@ -352,7 +352,7 @@ fn parse_top_let_with_pub() {
     assert_eq!(
         "pub let x : Type = Type;".parse::<Module>().unwrap().items,
         vec![TopItem::Let(TopLet {
-            is_pub: true,
+            vis_pub: true,
             label: "x".to_string(),
             signature: LetSignature::Name {
                 type_: Some(Subterm::Type.into()),
@@ -374,7 +374,7 @@ fn parse_top_rec_mixed_pub() {
         .items,
         vec![TopItem::Rec(vec![
             TopLet {
-                is_pub: true,
+                vis_pub: true,
                 label: "id".to_string(),
                 signature: LetSignature::Name {
                     type_: Some(
@@ -396,7 +396,7 @@ fn parse_top_rec_mixed_pub() {
                 },
             },
             TopLet {
-                is_pub: false,
+                vis_pub: false,
                 label: "helper".to_string(),
                 signature: LetSignature::Name {
                     type_: Some(Subterm::Type.into()),
@@ -420,7 +420,7 @@ fn parse_module_roundtrip() {
     assert!(matches!(m.items[0], TopItem::Use(_)));
     assert!(matches!(
         m.items[1],
-        TopItem::Let(TopLet { is_pub: true, .. })
+        TopItem::Let(TopLet { vis_pub: true, .. })
     ));
     assert!(matches!(m.items[2], TopItem::Rec(_)));
 }
@@ -438,11 +438,11 @@ fn parse_nested_module() {
         m.items,
         vec![TopItem::Mod(TopMod {
             span: None,
-            is_pub: false,
+            vis_pub: false,
             label: "Inner".to_string(),
             module: Some(Module {
                 items: vec![TopItem::Let(TopLet {
-                    is_pub: true,
+                    vis_pub: true,
                     label: "x".to_string(),
                     signature: LetSignature::Name {
                         type_: Some(Subterm::Type.into()),
@@ -471,7 +471,7 @@ fn parse_entrypoint_roundtrip() {
     assert!(matches!(entrypoint.module.items[2], TopItem::Rec(_)));
     assert!(matches!(
         entrypoint.module.items[3],
-        TopItem::Let(TopLet { is_pub: false, .. })
+        TopItem::Let(TopLet { vis_pub: false, .. })
     ));
     assert_eq!(
         entrypoint.tail,
@@ -531,7 +531,7 @@ fn parse_use_brace_group() {
     assert_eq!(
         "use /std/{Bin, Lst};".parse::<Module>().unwrap().items,
         vec![TopItem::Use(TopUse {
-            is_pub: false,
+            vis_pub: false,
             name: Name::new(true, Qualifier::from(["std".to_string()])),
             group: UseGroup::Named(vec![
                 GroupItem::Both("Bin".to_string()),
@@ -549,7 +549,7 @@ fn parse_use_brace_group_kinds() {
             .unwrap()
             .items,
         vec![TopItem::Use(TopUse {
-            is_pub: false,
+            vis_pub: false,
             name: Name::new(true, Qualifier::from(["std".to_string()])),
             group: UseGroup::Named(vec![
                 GroupItem::Mod("Bin".to_string()),
@@ -565,7 +565,7 @@ fn parse_use_brace_group_empty() {
     assert_eq!(
         "use /std/{};".parse::<Module>().unwrap().items,
         vec![TopItem::Use(TopUse {
-            is_pub: false,
+            vis_pub: false,
             name: Name::new(true, Qualifier::from(["std".to_string()])),
             group: UseGroup::Named(vec![]),
         })]
@@ -577,7 +577,7 @@ fn parse_use_glob() {
     assert_eq!(
         "use /sys/Nat/*;".parse::<Module>().unwrap().items,
         vec![TopItem::Use(TopUse {
-            is_pub: false,
+            vis_pub: false,
             name: Name::new(
                 true,
                 Qualifier::from(["sys".to_string(), "Nat".to_string()])
@@ -726,7 +726,8 @@ fn parse_top_inductive_single_variant() {
     assert_eq!(
         m.items,
         vec![TopItem::Induct(vec![TopInduct {
-            is_pub: false,
+            vis_pub: false,
+            rep_pub: false,
             label: "Foo".to_string(),
             params: vec![],
             indices: vec![],
@@ -746,7 +747,8 @@ fn parse_top_inductive_empty() {
     assert_eq!(
         m.items,
         vec![TopItem::Induct(vec![TopInduct {
-            is_pub: false,
+            vis_pub: false,
+            rep_pub: false,
             label: "False".to_string(),
             params: vec![],
             indices: vec![],
@@ -758,12 +760,12 @@ fn parse_top_inductive_empty() {
 
 #[test]
 fn parse_top_inductive_multi_variant() {
-    let m = "pub induct Color : Type\n| red()\n| green()\n| blue()\nend"
+    let m = "pub induct Color : pub Type\n| red()\n| green()\n| blue()\nend"
         .parse::<Module>()
         .unwrap();
     assert!(matches!(
         &m.items[0],
-        TopItem::Induct(group) if group[0].cases.len() == 3 && group[0].is_pub
+        TopItem::Induct(group) if group[0].cases.len() == 3 && group[0].vis_pub
     ));
 }
 
@@ -1214,21 +1216,79 @@ fn bang_round_trips() {
 
 #[test]
 fn parse_struct_visibility_spellings() {
-    // The two orthogonal markers: the outer `pub` (`is_pub`) exports the type,
-    // the kind keyword (`rep_pub`) exports the representation — `record` vs
-    // `struct`. All four combinations are legal.
-    for (source, is_pub, rep_pub) in [
+    // The two orthogonal markers: the outer `pub` (`vis_pub`) exports the type,
+    // while the declaration-local `pub` (`rep_pub`) exports its representation.
+    for (source, vis_pub, rep_pub) in [
         ("struct Foo : Type { x : Type } u", false, false),
-        ("record Foo : Type { x : Type } u", false, true),
+        ("struct Foo : pub Type { x : Type } u", false, true),
         ("pub struct Foo : Type { x : Type } u", true, false),
-        ("pub record Foo : Type { x : Type } u", true, true),
+        ("pub struct Foo : pub Type { x : Type } u", true, true),
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         let TopItem::Struct(s) = &entrypoint.module.items[0] else {
             panic!("expected a struct declaration for {source:?}");
         };
-        assert_eq!((s.is_pub, s.rep_pub), (is_pub, rep_pub), "for {source:?}");
+        assert_eq!((s.vis_pub, s.rep_pub), (vis_pub, rep_pub), "for {source:?}");
     }
+}
+
+#[test]
+fn parse_inductive_visibility_spellings() {
+    for (source, vis_pub, rep_pub) in [
+        ("induct U : Type | u() end u", false, false),
+        ("induct U : pub Type | u() end u", false, true),
+        ("pub induct U : Type | u() end u", true, false),
+        ("pub induct U : pub Type | u() end u", true, true),
+    ] {
+        let entrypoint = source.parse::<Entrypoint>().unwrap();
+        let TopItem::Induct(group) = &entrypoint.module.items[0] else {
+            panic!("expected an inductive declaration for {source:?}");
+        };
+        assert_eq!(
+            (group[0].vis_pub, group[0].rep_pub),
+            (vis_pub, rep_pub),
+            "for {source:?}"
+        );
+        assert_eq!(
+            entrypoint.to_string().parse::<Entrypoint>().unwrap(),
+            entrypoint,
+            "round-trip failed for {source:?}"
+        );
+    }
+}
+
+#[test]
+fn indexed_mutual_inductive_representation_sorts_round_trip() {
+    let source = "pub induct Eq(@A : Type) : (x : A, y : A) -> pub Prop | refl(@z : A) : (z, z) pub and Box(A : Type) : Type | box(A) end u";
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    let TopItem::Induct(group) = &entrypoint.module.items[0] else {
+        panic!("expected a mutual inductive group");
+    };
+    assert_eq!(group.len(), 2);
+    assert_eq!((group[0].vis_pub, group[0].rep_pub), (true, true));
+    assert_eq!((group[1].vis_pub, group[1].rep_pub), (true, false));
+    assert_eq!(
+        entrypoint.to_string().parse::<Entrypoint>().unwrap(),
+        entrypoint
+    );
+}
+
+#[test]
+fn record_is_an_identifier_and_legacy_declarations_are_not_grammar() {
+    "let record : Type = Type; record"
+        .parse::<Entrypoint>()
+        .expect("record should be an ordinary identifier");
+    assert!("record R : Type { Type } r".parse::<Entrypoint>().is_err());
+}
+
+#[test]
+fn representation_pub_is_declaration_local() {
+    assert!(
+        "pub concept C : pub Type {} c"
+            .parse::<Entrypoint>()
+            .is_err()
+    );
+    assert!("let x : pub Type = Type; x".parse::<Entrypoint>().is_err());
 }
 
 #[test]
@@ -1277,10 +1337,10 @@ fn struct_round_trips() {
     // and positional fields) survive a print → re-parse cycle unchanged.
     for source in [
         "struct Foo : Type { x : Type } u",
-        "record Foo : Type { x : Type } u",
+        "struct Foo : pub Type { x : Type } u",
         "pub struct Foo : Type { x : Type } u",
-        "pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B } u",
-        "pub record Meters : Type { Nat } u",
+        "pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B } u",
+        "pub struct Meters : pub Type { Nat } u",
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(
@@ -1313,7 +1373,7 @@ fn struct_round_trips() {
 #[test]
 fn parse_function_field_sugar_in_types() {
     // The signature sugar `label(params) -> T` is admitted by every Σ-type-
-    // shaped field list — tuple types and struct/record declarations — and is
+    // shaped field list — tuple types and struct declarations — and is
     // kept as written: the AST node carries the parameter list (`func_params`)
     // and the output type; `into_core` undoes the sugar.
     let term = "{ len(s : Str) -> Nat, x : Nat }".parse::<Term>().unwrap();
@@ -1332,11 +1392,11 @@ fn parse_function_field_sugar_in_types() {
     ));
     assert_eq!(fields[1].func_params, None);
 
-    let entrypoint = "record Api : Type { version : Nat, ping(x : Nat) -> Nat } u"
+    let entrypoint = "struct Api : pub Type { version : Nat, ping(x : Nat) -> Nat } u"
         .parse::<Entrypoint>()
         .unwrap();
     let TopItem::Struct(s) = &entrypoint.module.items[0] else {
-        panic!("expected a record declaration");
+        panic!("expected a struct declaration");
     };
     assert_eq!(s.fields[0].func_params, None);
     assert!(s.fields[1].func_params.is_some());
@@ -1406,7 +1466,7 @@ fn positional_fields_that_start_like_the_sugar_backtrack() {
 #[test]
 fn function_field_sugar_round_trips() {
     // The retained sugar survives print → re-parse unchanged in every
-    // position: Σ-types, record declarations, tuple literals (incl. the
+    // position: Σ-types, struct declarations, tuple literals (incl. the
     // one-element form), struct literals, concepts, and witnesses.
     for source in [
         "{ len(s : Str) -> Nat, x : Nat }",
@@ -1423,7 +1483,7 @@ fn function_field_sugar_round_trips() {
     }
 
     for source in [
-        "record Api : Type { version : Nat, ping(x : Nat) -> Nat } u",
+        "struct Api : pub Type { version : Nat, ping(x : Nat) -> Nat } u",
         "concept Ord(A : Type) : Type { use Eql(A), cmp(A, A) -> Order } u",
         "satisfy Ord(Nat) { use eql_nat, cmp(a, b) = f(a, b) } u",
         "satisfy Ord(Nat) { cmp(a, b) = f(a, b) } u",
@@ -1691,7 +1751,7 @@ fn list_bits_and_bytes_spreads_round_trip() {
 
 #[test]
 fn field_lists_admit_a_trailing_comma() {
-    // Every brace/paren field list — Σ-types, struct/record declarations,
+    // Every brace/paren field list — Σ-types, struct declarations,
     // tuple literals, struct literals, concepts, witnesses — admits (and
     // drops) one trailing comma after its last field.
     for (with, without) in [
@@ -1712,8 +1772,8 @@ fn field_lists_admit_a_trailing_comma() {
 
     for (with, without) in [
         (
-            "record Foo : Type { x : Type, } u",
-            "record Foo : Type { x : Type } u",
+            "struct Foo : pub Type { x : Type, } u",
+            "struct Foo : pub Type { x : Type } u",
         ),
         (
             "concept Show(A : Type) : Type { show(A) -> Str, } u",

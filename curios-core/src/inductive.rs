@@ -1,6 +1,7 @@
 use {
     super::{Atom, Telescope, Term},
     curios_abi::RootId,
+    curios_base::Qualifier,
     std::collections::BTreeMap,
 };
 
@@ -49,9 +50,16 @@ pub struct Inductive {
     /// type-constructor's kind. A fully-applied `InductiveType { name, .. }`
     /// has this sort, which `sort_of` reads to decide propositional irrelevance.
     pub result_sort: Term,
+    /// The exact source module that owns construction and elimination rights.
+    /// This is finer-grained than `root`: nested modules in the same compilation
+    /// root do not share representation access.
+    pub module: Qualifier,
     /// The compilation root that declares this inductive — consulted by the
     /// orphan-rule ownership check in `register_witness`.
     pub root: RootId,
+    /// Whether construction and elimination are available outside `module`.
+    /// This metadata is elaboration-only and does not affect erased layouts.
+    pub rep_public: bool,
 }
 
 impl Inductive {

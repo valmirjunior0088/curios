@@ -835,8 +835,8 @@ fn print_let_signature(signature: LetSignature) -> Printer<'static> {
     }
 }
 
-fn print_pub(is_pub: bool) -> Printer<'static> {
-    if is_pub { pure("pub ") } else { pure("") }
+fn print_pub(vis_pub: bool) -> Printer<'static> {
+    if vis_pub { pure("pub ") } else { pure("") }
 }
 
 fn print_group_item(item: &GroupItem) -> String {
@@ -849,7 +849,7 @@ fn print_group_item(item: &GroupItem) -> String {
 
 fn print_top_use(item: TopUse) -> Printer<'static> {
     flat([
-        print_pub(item.is_pub),
+        print_pub(item.vis_pub),
         pure("use "),
         pure(item.name.join()),
         match item.group {
@@ -869,7 +869,7 @@ fn print_top_use(item: TopUse) -> Printer<'static> {
 
 fn print_top_let(item: TopLet) -> Printer<'static> {
     flat([
-        print_pub(item.is_pub),
+        print_pub(item.vis_pub),
         pure("let "),
         pure(item.label),
         print_let_signature(item.signature),
@@ -916,7 +916,7 @@ fn print_wire_signature(signature: WireSignature) -> Printer<'static> {
 
 fn print_top_foreign(item: TopForeign) -> Printer<'static> {
     flat([
-        print_pub(item.is_pub),
+        print_pub(item.vis_pub),
         pure("foreign "),
         pure(item.label),
         pure(" : "),
@@ -931,7 +931,7 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer<'static> {
     let rest = iter.collect::<Vec<_>>();
 
     flat([
-        print_pub(first.is_pub),
+        print_pub(first.vis_pub),
         pure("rec "),
         pure(first.label),
         print_let_signature(first.signature),
@@ -940,7 +940,7 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer<'static> {
                 .map(|item| {
                     flat([
                         pure("\nand "),
-                        print_pub(item.is_pub),
+                        print_pub(item.vis_pub),
                         pure(item.label),
                         print_let_signature(item.signature),
                     ])
@@ -954,13 +954,13 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer<'static> {
 fn print_top_mod(item: TopMod) -> Printer<'static> {
     match item.module {
         None => flat([
-            print_pub(item.is_pub),
+            print_pub(item.vis_pub),
             pure("mod "),
             pure(item.label),
             pure(";"),
         ]),
         Some(module) => flat([
-            print_pub(item.is_pub),
+            print_pub(item.vis_pub),
             pure("mod "),
             pure(item.label),
             pure("\n"),
@@ -1036,16 +1036,18 @@ fn print_top_inductive_params(params: Vec<(Plicity, String, Term)>) -> Printer<'
 /// accepts, so a printed declaration round-trips.
 fn print_top_inductive_arity(
     indices: Vec<(Option<String>, Term)>,
+    rep_pub: bool,
     result_sort: Term,
 ) -> Printer<'static> {
     if indices.is_empty() {
-        return flat([pure(" : "), print_term(result_sort)]);
+        return flat([pure(" : "), print_pub(rep_pub), print_term(result_sort)]);
     }
 
     flat([
         pure(" : ("),
         sep_flat(indices.into_iter().map(print_labeled), || pure(", ")),
         pure(") -> "),
+        print_pub(rep_pub),
         print_term(result_sort),
     ])
 }
@@ -1056,11 +1058,11 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer<'static> {
     let rest = iter.collect::<Vec<_>>();
 
     flat([
-        print_pub(first.is_pub),
+        print_pub(first.vis_pub),
         pure("induct "),
         pure(first.label),
         print_top_inductive_params(first.params),
-        print_top_inductive_arity(first.indices, first.result_sort),
+        print_top_inductive_arity(first.indices, first.rep_pub, first.result_sort),
         flat(
             first
                 .cases
@@ -1073,11 +1075,11 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer<'static> {
                 .map(|u| {
                     flat([
                         pure("\n"),
-                        print_pub(u.is_pub),
+                        print_pub(u.vis_pub),
                         pure("and "),
                         pure(u.label),
                         print_top_inductive_params(u.params),
-                        print_top_inductive_arity(u.indices, u.result_sort),
+                        print_top_inductive_arity(u.indices, u.rep_pub, u.result_sort),
                         flat(
                             u.cases
                                 .into_iter()
@@ -1094,11 +1096,12 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer<'static> {
 
 fn print_top_struct(item: TopStruct) -> Printer<'static> {
     flat([
-        print_pub(item.is_pub),
-        pure(if item.rep_pub { "record " } else { "struct " }),
+        print_pub(item.vis_pub),
+        pure("struct "),
         pure(item.label),
         print_top_inductive_params(item.params),
         pure(" : "),
+        print_pub(item.rep_pub),
         print_term(item.result_sort),
         pure(" "),
         pure("{ "),
@@ -1154,7 +1157,7 @@ fn print_top_concept_params(params: Vec<ConceptParam>) -> Printer<'static> {
 
 fn print_top_concept(item: TopConcept) -> Printer<'static> {
     flat([
-        print_pub(item.is_pub),
+        print_pub(item.vis_pub),
         pure("concept "),
         pure(item.label),
         print_top_concept_params(item.params),

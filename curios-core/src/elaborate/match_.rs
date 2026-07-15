@@ -634,6 +634,13 @@ fn elaborate_inductive_match(
         return Err(Error::unbound_variable(Term::free_var(&name)));
     };
 
+    // Opacity covers every eliminator, including defaults and vacuous or
+    // inversion-discharged matches. Check before motives, coverage, or index
+    // refinement can reveal representation facts.
+    if !inductive.rep_public && *context.island() != inductive.module {
+        return Err(Error::private_representation(name));
+    }
+
     let (motive_elaborated, pattern_elaborated, plan, generalized) = match pattern {
         Some(pattern) => {
             let (motive_elaborated, pattern_elaborated, plan) =

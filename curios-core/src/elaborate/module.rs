@@ -76,7 +76,9 @@ fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), 
             indices,
             constructors: inductive.constructors,
             result_sort: inductive.result_sort,
+            module: inductive.module,
             root: inductive.root,
+            rep_public: inductive.rep_public,
         },
     );
 
@@ -128,7 +130,9 @@ fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result
             indices: inductive.indices,
             constructors,
             result_sort: inductive.result_sort,
+            module: inductive.module,
             root: inductive.root,
+            rep_public: inductive.rep_public,
         },
     );
 

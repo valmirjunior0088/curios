@@ -1073,7 +1073,7 @@ impl Convert {
                 }
                 Ok(true)
             }
-            // A nominal struct/record is a named tuple with no constructor tag
+            // A nominal struct is a named tuple with no constructor tag
             // (`structure.rs`'s own doc: "an Inductive minus the indices and
             // the per-constructor map"), so it gets the same η treatment —
             // recover the field count from the registry (`compare_struct`

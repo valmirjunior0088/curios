@@ -1,7 +1,7 @@
 use /std/{Bytes, Byte, Str, Nat, Bln, Char, Lst, Parse, Result, Option, Io, Task};
 use /std/tcp/{Settings, Socket};
 
-pub induct Method : Type
+pub induct Method : pub Type
 | get()
 | post()
 end
@@ -12,12 +12,12 @@ let method_str(m : Method) -> Str =
     | post() => "POST"
     end;
 
-pub induct Error : Type
+pub induct Error : pub Type
 | net(Io/Error)
 | malformed(Str)
 end
 
-pub record Request : Type {
+pub struct Request : pub Type {
     method : Method,
     host : Str,
     port : Nat,
@@ -86,7 +86,7 @@ pub let render(request : Request) -> Bytes =
         "\r\n"
     ]))\..request.body;
 
-pub record Status : Type {
+pub struct Status : pub Type {
     version : Str,
     code : Nat,
     reason : Str
@@ -106,7 +106,7 @@ pub let status_line : Parse(Status) =
         reason = Option/unwrap_or(Str/of_bytes(reason), "")
     });
 
-pub record Response : Type {
+pub struct Response : pub Type {
     status : Status,
     headers : Lst({Str, Str}),
     body : Bytes

@@ -1,5 +1,51 @@
 use {curios_rt::MockHost, std::time::Duration};
 
+#[test]
+fn opaque_inductive_is_usable_through_declaring_module_api() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub mod Secret
+            use /std/{Nat};
+            pub induct T : Type
+            | wrap(Nat)
+            end
+            pub let make(n : Nat) -> T = T/wrap(n);
+            pub let reveal(t : T) -> Nat =
+                match t
+                | wrap(n) => n
+                end;
+        end
+        Io/print(Nat/to_str(Secret/reveal(Secret/make(7))))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"7");
+}
+
+#[test]
+fn opaque_inductive_empty_elimination_is_private() {
+    let source = r#"
+        use /std/{Nat, Io};
+        pub mod Secret
+            use /std/{Nat};
+            pub induct T : Type
+            | wrap(Nat)
+            end
+            pub let make(n : Nat) -> T = T/wrap(n);
+        end
+        let reveal(t : Secret/T) -> Nat = match t : Nat end;
+        Io/print(Nat/to_str(reveal(Secret/make(7))))
+        "#;
+
+    let (system, _io) = MockHost::builder().build();
+    let error = crate::run_text(Duration::from_secs(10), source, system).unwrap_err();
+    assert!(
+        error.contains("representation of type '/Secret/T' is private"),
+        "unexpected error: {error}"
+    );
+}
+
 // Regression test for a bug found while building the matrix pattern compiler:
 // minting a synthetic binder for a single, unnested constructor arm (rather
 // than reusing the written name directly) produced a core binder whose only
@@ -107,7 +153,7 @@ fn tuple_match_target_projects_fields() {
 fn struct_match_target_projects_fields() {
     let source = r#"
         use /std/{Nat, Io};
-        pub record Pair(A : Type, B : Type) : Type { fst : A, snd : B }
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let f(p : Pair(Nat, Nat)) -> Nat =
             match p
             | Pair { fst, snd } => fst + snd
@@ -326,7 +372,7 @@ fn nested_bin_pattern_dispatches_by_shape() {
 fn nested_bln_pattern_dispatches_by_shape() {
     let source = r#"
         use /std/{Bln, Nat, Io};
-        pub induct Pair(A : Type, B : Type) : Type
+         pub induct Pair(A : Type, B : Type) : pub Type
         | pair(A, B)
         end
         let f(p : Pair(Bln, Nat)) -> Nat =

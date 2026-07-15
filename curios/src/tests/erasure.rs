@@ -102,7 +102,7 @@ fn erased_struct_field_collapses_to_bare_value() {
     // record must still yield `val`, not `ghost`.
     let source = r#"
         use /std/{Io, Str, Nat};
-        record Wrap : Type { val : Nat, ghost : Type }
+        struct Wrap : pub Type { val : Nat, ghost : Type }
         let make : (n : Type) -> Wrap = (n) => Wrap { val = 5, ghost = n };
         let r : Nat = make(Nat).val;
         Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))

@@ -5,13 +5,13 @@ pub(super) fn parse_pub<'a>() -> Parser<'a, bool> {
 }
 
 pub(super) fn parse_top_let<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("let"))).flat_map(|(is_pub, ())| {
+    catch(parse_pub().and(parse_keyword("let"))).flat_map(|(vis_pub, ())| {
         parse_identifier()
             .and(parse_let_signature())
             .and_drop(parse_literal(";"))
             .map(move |(label, signature)| {
                 TopItem::Let(TopLet {
-                    is_pub,
+                    vis_pub,
                     label: label.to_string(),
                     signature,
                 })
@@ -70,14 +70,14 @@ pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
 // host-provided implementation at link time. Mirrors `parse_top_let`, but ends
 // after the signature instead of parsing `= body`.
 pub(super) fn parse_top_foreign<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("foreign"))).flat_map(|(is_pub, ())| {
+    catch(parse_pub().and(parse_keyword("foreign"))).flat_map(|(vis_pub, ())| {
         parse_identifier()
             .and_drop(parse_literal(":"))
             .and(parse_wire_signature())
             .and_drop(parse_literal(";"))
             .map(move |(label, signature)| {
                 TopItem::Foreign(TopForeign {
-                    is_pub,
+                    vis_pub,
                     label: label.to_string(),
                     signature,
                 })
@@ -87,17 +87,17 @@ pub(super) fn parse_top_foreign<'a>() -> Parser<'a, TopItem> {
 
 pub(super) fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("rec")))
-        .flat_map(|(is_pub, ())| {
+        .flat_map(|(vis_pub, ())| {
             parse_binding().map(move |item| TopLet {
-                is_pub,
+                vis_pub,
                 label: item.label,
                 signature: item.signature,
             })
         })
         .and(many0(|| {
-            catch(parse_pub().and(parse_keyword("and"))).flat_map(|(is_pub, ())| {
+            catch(parse_pub().and(parse_keyword("and"))).flat_map(|(vis_pub, ())| {
                 parse_binding().map(move |item| TopLet {
-                    is_pub,
+                    vis_pub,
                     label: item.label,
                     signature: item.signature,
                 })
@@ -110,7 +110,7 @@ pub(super) fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
 
 pub(super) fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
     spanned(
-        catch(parse_pub().and(parse_keyword("mod"))).flat_map(|(is_pub, ())| {
+        catch(parse_pub().and(parse_keyword("mod"))).flat_map(|(vis_pub, ())| {
             parse_identifier().flat_map(move |name| {
                 catch(
                     many0(parse_top_item)
@@ -118,14 +118,14 @@ pub(super) fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
                         .map(|items| Some(Module { items })),
                 )
                 .or(parse_literal(";").map(|()| None))
-                .map(move |module| (is_pub, name.to_string(), module))
+                .map(move |module| (vis_pub, name.to_string(), module))
             })
         }),
     )
-    .map(|(span, (is_pub, label, module))| {
+    .map(|(span, (vis_pub, label, module))| {
         TopItem::Mod(TopMod {
             span: Some(span),
-            is_pub,
+            vis_pub,
             label,
             module,
         })
@@ -206,13 +206,13 @@ pub(super) fn parse_use_group<'a>() -> Parser<'a, UseGroup> {
 }
 
 pub(super) fn parse_top_use<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("use"))).flat_map(|(is_pub, ())| {
+    catch(parse_pub().and(parse_keyword("use"))).flat_map(|(vis_pub, ())| {
         parse_use_path()
             .and(parse_use_group())
             .and_drop(parse_literal(";"))
             .map(move |(name, group)| {
                 TopItem::Use(TopUse {
-                    is_pub,
+                    vis_pub,
                     name,
                     group,
                 })
@@ -298,7 +298,14 @@ pub(super) fn parse_inductive_index<'a>() -> Parser<'a, (Option<String>, Term)> 
 
 /// A parsed inductive head arity: the index telescope (each binder optionally
 /// named) and the sort it lands in.
-type InductiveArity = (Vec<(Option<String>, Term)>, Term);
+type InductiveArity = (Vec<(Option<String>, Term)>, bool, Term);
+
+/// A declaration-local result sort, with an independent representation
+/// visibility marker. This parser is deliberately not used for ordinary sort
+/// positions: `pub Type` and `pub Prop` are not terms.
+fn parse_representation_sort<'a>() -> Parser<'a, (bool, Term)> {
+    parse_pub().and(parse_sort())
+}
 
 // The head's arity after the `:` — either an index telescope landing in a sort,
 // `(n : Nat) -> Prop`, or a bare sort, `Prop`. The sort is mandatory: an index
@@ -310,11 +317,12 @@ pub(super) fn parse_inductive_arity<'a>() -> Parser<'a, InductiveArity> {
             .and_keep(sep_by0(parse_inductive_index, || parse_literal(",")))
             .and_drop(parse_literal(")")),
     )
-    .and(parse_literal("->").and_keep(parse_sort()))
-    .or(parse_sort().map(|sort| (Vec::new(), sort)))
+    .and(parse_literal("->").and_keep(parse_representation_sort()))
+    .map(|(indices, (rep_pub, sort))| (indices, rep_pub, sort))
+    .or(parse_representation_sort().map(|(rep_pub, sort)| (Vec::new(), rep_pub, sort)))
 }
 
-pub(super) fn parse_top_inductive_body<'a>(is_pub: bool) -> Parser<'a, TopInduct> {
+pub(super) fn parse_top_inductive_body<'a>(vis_pub: bool) -> Parser<'a, TopInduct> {
     parse_identifier()
         .and(
             catch(
@@ -328,56 +336,59 @@ pub(super) fn parse_top_inductive_body<'a>(is_pub: bool) -> Parser<'a, TopInduct
         // required — there is no implicit `Type`.
         .and(parse_literal(":").and_keep(parse_inductive_arity()))
         .and(many0(parse_top_inductive_case))
-        .flat_map(move |(((label, params), (indices, result_sort)), cases)| {
-            // Targets are required on every case iff the head declares
-            // indices, with arity equal to the index telescope's.
-            for case in &cases {
-                match (&case.target, indices.len()) {
-                    (None, 0) => {}
-                    (None, _) => {
-                        return fail(format!(
-                            "case '{}' of indexed inductive '{label}' must state its \
+        .flat_map(
+            move |(((label, params), (indices, rep_pub, result_sort)), cases)| {
+                // Targets are required on every case iff the head declares
+                // indices, with arity equal to the index telescope's.
+                for case in &cases {
+                    match (&case.target, indices.len()) {
+                        (None, 0) => {}
+                        (None, _) => {
+                            return fail(format!(
+                                "case '{}' of indexed inductive '{label}' must state its \
                              index target: `{}(...) : (...)`",
-                            case.label, case.label,
-                        ));
-                    }
-                    (Some(_), 0) => {
-                        return fail(format!(
-                            "case '{}' states an index target, but inductive '{label}' \
+                                case.label, case.label,
+                            ));
+                        }
+                        (Some(_), 0) => {
+                            return fail(format!(
+                                "case '{}' states an index target, but inductive '{label}' \
                              declares no indices",
-                            case.label,
-                        ));
-                    }
-                    (Some(target), arity) if target.len() != arity => {
-                        return fail(format!(
-                            "case '{}' of inductive '{label}' states {} index \
+                                case.label,
+                            ));
+                        }
+                        (Some(target), arity) if target.len() != arity => {
+                            return fail(format!(
+                                "case '{}' of inductive '{label}' states {} index \
                              expression(s), but the head declares {arity}",
-                            case.label,
-                            target.len(),
-                        ));
+                                case.label,
+                                target.len(),
+                            ));
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
-            }
 
-            let label = label.to_string();
-            pure(TopInduct {
-                is_pub,
-                label,
-                params,
-                indices,
-                result_sort,
-                cases,
-            })
-        })
+                let label = label.to_string();
+                pure(TopInduct {
+                    vis_pub,
+                    rep_pub,
+                    label,
+                    params,
+                    indices,
+                    result_sort,
+                    cases,
+                })
+            },
+        )
 }
 
 pub(super) fn parse_top_inductive<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("induct"))).flat_map(|(is_pub, ())| {
-        parse_top_inductive_body(is_pub)
+    catch(parse_pub().and(parse_keyword("induct"))).flat_map(|(vis_pub, ())| {
+        parse_top_inductive_body(vis_pub)
             .and(many0(|| {
                 catch(parse_pub().and(parse_keyword("and")))
-                    .flat_map(|(is_pub2, ())| parse_top_inductive_body(is_pub2))
+                    .flat_map(|(vis_pub2, ())| parse_top_inductive_body(vis_pub2))
             }))
             .and_drop(parse_keyword("end"))
             .map(|(first, rest)| TopItem::Induct(iter::once(first).chain(rest).collect()))
@@ -387,19 +398,14 @@ pub(super) fn parse_top_inductive<'a>() -> Parser<'a, TopItem> {
 /// A universe sort: exactly `Type` or `Prop`. The result sort of a struct or an
 /// inductive head is always one of these two — the only universes — so the sort
 /// position parses this targeted form rather than a generic `lazy(parse_term)`.
-/// A generic term parser is both too loose (admitting terms the elaborator only
-/// ever treats as `Type`) and, for a struct, actively wrong: it greedily eats
-/// the `{` opening the field block, so `record X : Prop { … }` fails to parse.
+/// A generic term parser is both too loose and, for a struct, greedily eats the
+/// `{` opening the field block.
 pub(super) fn parse_sort<'a>() -> Parser<'a, Term> {
     parse_prop().or(parse_type())
 }
 
 pub(super) fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
-    // `pub`? then the kind keyword: `struct` (rep private) or `record` (rep public).
-    let kind = catch(parse_keyword("struct"))
-        .map(|()| false)
-        .or(parse_keyword("record").map(|()| true));
-    catch(parse_pub().and(kind)).flat_map(|(is_pub, rep_pub)| {
+    catch(parse_pub().and(parse_keyword("struct"))).flat_map(|(vis_pub, ())| {
         parse_identifier()
             .and(
                 catch(
@@ -410,16 +416,15 @@ pub(super) fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
                 .or(pure(vec![])),
             )
             // The result sort: `: Type` or `: Prop` after the parameters. Required.
-            .and(parse_literal(":").and_keep(parse_sort()))
-            // Representation visibility comes from the keyword, not an inner `pub`.
+            .and(parse_literal(":").and_keep(parse_representation_sort()))
             .and_drop(parse_literal("{"))
             .and(sep_by0_trailing(parse_tuple_type_field, || {
                 parse_literal(",")
             }))
             .and_drop(parse_literal("}"))
-            .map(move |(((label, params), result_sort), fields)| {
+            .map(move |(((label, params), (rep_pub, result_sort)), fields)| {
                 TopItem::Struct(TopStruct {
-                    is_pub,
+                    vis_pub,
                     rep_pub,
                     label: label.to_string(),
                     params,
@@ -491,7 +496,7 @@ pub(super) fn parse_concept_param<'a>() -> Parser<'a, ConceptParam> {
 }
 
 pub(super) fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("concept"))).flat_map(|(is_pub, ())| {
+    catch(parse_pub().and(parse_keyword("concept"))).flat_map(|(vis_pub, ())| {
         parse_identifier()
             .and(
                 catch(
@@ -507,7 +512,7 @@ pub(super) fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
             .and_drop(parse_literal("}"))
             .map(move |(((label, params), result_sort), fields)| {
                 TopItem::Concept(TopConcept {
-                    is_pub,
+                    vis_pub,
                     label: label.to_string(),
                     params,
                     result_sort,

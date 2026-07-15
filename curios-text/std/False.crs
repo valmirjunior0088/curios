@@ -1,4 +1,4 @@
-pub induct False : Prop
+pub induct False : pub Prop
 end
 
 pub let absurd(@A : Type, contradiction : False) -> A =

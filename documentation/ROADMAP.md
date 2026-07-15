@@ -39,8 +39,9 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
   - [x] Multi-parameter keying (tuple of input heads) and functional dependencies (`out` parameters)
   - [x] Orphan rule (a witness must be declared where its concept, or a type in its key, is already declared; the standard library's three roots — `sys`/`syn`/`std` — are exempt from the check against each other, one coordinated implementation rather than independent packages)
   - [x] Concept-based operators (every infix, `&&`/`||` included, dispatches through `Add`/`Sub`/`Mul`/`Div`/`Rem`/`And`/`Or`/`Eql`/`Cmp` with `/sys` witnesses; primitive codegen unchanged)
-- [x] `struct`/`record` declarations (nominal types with representation-visibility control)
+- [x] Unified `struct` declarations (independent nominal and declaration-local representation visibility)
 - [x] Inductive types (`induct` declarations)
+  - [x] Independent nominal/representation visibility with opaque construction and elimination
   - [x] Constructor registry & dependent eliminators
   - [x] Indexed families (e.g. `Vec`)
   - [x] Variant arity checking
@@ -62,7 +63,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Monadic sequencing syntax (postfix `!`, dispatched through the `/syn/Monad` concept — no `let !` header; every value body is a region)
 - [x] Field projection sugar (`.0`/`.label`)
 - [x] Destructuring patterns at `let`/lambda-parameter/function-sugar-parameter position (tuple/struct only, irrefutable; desugars to projections)
-- [x] Function-field sugar in every field list (`name(params) -> T` in tuple types and `struct`/`record` declarations, `name(args) = body` in tuple and struct literals — the forms concept/witness bodies always had) and trailing commas in field lists
+- [x] Function-field sugar in every field list (`name(params) -> T` in tuple types and `struct` declarations, `name(args) = body` in tuple and struct literals — the forms concept/witness bodies always had) and trailing commas in field lists
 - [x] Struct spread/update syntax (`T { ..base, f = x }` — one leading spread; labeled, declaration-ordered overrides; unwritten fields copied from the base, concept superclass fields included, overridable with `use <term>`; no tuple spread)
 - [x] List/Bits/Bytes spread syntax (`[a, ..xs, b]`, `b\1\..bits\0`, `x\00\..bytes\01` — positional splices, any position/count, desugared to n-ary concat prims; packed literals stay whitespace-free with glued atomic operands and require their grain prefix; no tuple/string spread)
 - [x] Nested/tuple/struct match-arm patterns (the pattern-matrix compiler — full enumeration, no row priority)
@@ -130,7 +131,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] CI pipeline (fmt/check/clippy/test)
 - [x] Multi-platform release automation (Linux x86_64/aarch64, macOS aarch64 native binaries + wasm playground bundle, via tag-triggered GitHub Releases)
 - [x] Module system
-  - [x] Private-item-in-public-interface check (signature-only; hidden `struct` fields exempt)
+  - [x] Exact private-item-in-public-interface audit (signature-only; representation signatures checked only where exposed, through re-exports and transparent aliases)
 - [x] Browser playground
   - [x] Run harness owned by `curios-js` (`compile`/`run`, with wire codes from `curios-abi` and a local bridge for the compiler's wire-ABI `Bin` payload shape)
 - [ ] Developer tooling

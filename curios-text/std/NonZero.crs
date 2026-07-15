@@ -36,7 +36,7 @@ pub let of_trimmed_bits(rep : Bits, p : Eq(is_trimmed(rep), true)) -> BigNat =
 pub let is_cons(rep : Bits) -> Prop =
     match rep : Prop | b\ => False | b\_\.._ => True end;
 
-pub record NonZero : Type {
+pub struct NonZero : pub Type {
     magnitude : BigNat,
     non_zero  : is_cons(magnitude.rep),
 }
@@ -197,7 +197,7 @@ pub let non_zero_cmp(p : NonZero, q : NonZero) -> Order =
 
 -- reflect a BigNat as zero-or-nonzero, rebuilding the NonZero certificate bit by
 -- bit through the smart constructors (recursion over BigNat's view, as in bit_len).
-pub induct Split : Type
+pub induct Split : pub Type
 | zero()
 | pos(NonZero)
 end

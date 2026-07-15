@@ -1,6 +1,6 @@
 use /std/{Bytes, Byte, Str, Bln, Char, Flt, Nat, Parse, Result, Option, Lst};
 
-pub induct Json : Type
+pub induct Json : pub Type
 | null()
 | bln(Bln)
 | num(Flt)

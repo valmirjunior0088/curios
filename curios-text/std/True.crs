@@ -1,4 +1,4 @@
-pub induct True : Prop
+pub induct True : pub Prop
 | qed()
 end
 

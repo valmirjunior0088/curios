@@ -70,7 +70,9 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                         })
                         .collect::<Result<_, Error>>()?,
                     result_sort: inductive.result_sort.clone(),
+                    module: inductive.module.clone(),
                     root: inductive.root,
+                    rep_public: inductive.rep_public,
                 },
             ))
         })

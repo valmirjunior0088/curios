@@ -1,6 +1,7 @@
 use {
     crate::*,
     curios_abi::RootId,
+    curios_base::Qualifier,
     std::{collections::BTreeMap, time::Duration},
 };
 
@@ -47,10 +48,73 @@ fn register_opt(context: &mut Context) {
                     ),
                 ]),
                 result_sort: Term::type_(),
+                module: Qualifier::empty(),
                 root: RootId::Entry,
+                rep_public: true,
             },
         )
         .unwrap();
+}
+
+fn make_opt_opaque(context: &mut Context) {
+    let mut inductive = context.inductive("Opt").unwrap().clone();
+    inductive.module = Qualifier::from(["Owner"]);
+    inductive.rep_public = false;
+    context.update_inductive("Opt", inductive);
+}
+
+#[test]
+fn opaque_inductive_construction_is_rejected_outside_declaring_module() {
+    let mut context = context();
+    register_opt(&mut context);
+    make_opt_opaque(&mut context);
+
+    let term = Term::variant("Opt", Vec::<Term>::new(), "none", Vec::<Term>::new());
+    assert!(matches!(
+        elaborate(&mut context, &term, Mode::Infer),
+        Err(Error::PrivateRepresentation { name }) if name == "Opt"
+    ));
+
+    context.set_island(Qualifier::from(["Owner"]));
+    assert!(elaborate(&mut context, &term, Mode::Infer).is_ok());
+}
+
+#[test]
+fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
+    let mut context = context();
+    register_opt(&mut context);
+    make_opt_opaque(&mut context);
+    context.assume("x", &opt_type());
+
+    let empty = Term::inductive_match(
+        Term::free_var("x"),
+        Some("x"),
+        nat(),
+        Vec::<(Atom, Vec<&str>, Term)>::new(),
+    );
+    let named = Term::inductive_match(
+        Term::free_var("x"),
+        Some("x"),
+        nat(),
+        [
+            ("none", Vec::<&str>::new(), nat_lit(0)),
+            ("some", vec!["n"], nat_lit(1)),
+        ],
+    );
+    let defaulted = Term::inductive_match_default(
+        Term::free_var("x"),
+        Some("x"),
+        nat(),
+        [("none", Vec::<&str>::new(), nat_lit(0))],
+        nat_lit(1),
+    );
+
+    for term in [empty, named, defaulted] {
+        assert!(matches!(
+            elaborate(&mut context, &term, Mode::Infer),
+            Err(Error::PrivateRepresentation { name }) if name == "Opt"
+        ));
+    }
 }
 
 #[test]

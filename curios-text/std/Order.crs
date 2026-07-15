@@ -1,6 +1,6 @@
 use /std/{Bln, Eq, False, True};
 
-pub induct Order : Type
+pub induct Order : pub Type
 | lt()
 | eq()
 | gt()

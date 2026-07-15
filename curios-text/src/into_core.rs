@@ -184,35 +184,35 @@ fn scan_module_info(items: &[TopItem], root: RootId) -> Result<ModuleInfo, Error
 
     for item in items {
         match item {
-            TopItem::Mod(m) => info.insert_child(m.label.clone(), m.is_pub)?,
-            TopItem::Let(l) => info.insert_binding(l.label.clone(), l.is_pub)?,
+            TopItem::Mod(m) => info.insert_child(m.label.clone(), m.vis_pub)?,
+            TopItem::Let(l) => info.insert_binding(l.label.clone(), l.vis_pub)?,
             TopItem::Rec(ls) => {
                 for l in ls {
-                    info.insert_binding(l.label.clone(), l.is_pub)?;
+                    info.insert_binding(l.label.clone(), l.vis_pub)?;
                 }
             }
             TopItem::Induct(group) => {
                 for u in group {
-                    info.insert_child(u.label.clone(), u.is_pub)?;
-                    info.insert_binding(u.label.clone(), u.is_pub)?;
+                    info.insert_child(u.label.clone(), u.vis_pub && u.rep_pub)?;
+                    info.insert_binding(u.label.clone(), u.vis_pub)?;
                 }
             }
             // A struct declares one binding (the type-former), like a `let` —
             // there are no value constructors and no nested namespace, so no
             // child module.
-            TopItem::Struct(s) => info.insert_binding(s.label.clone(), s.is_pub)?,
+            TopItem::Struct(s) => info.insert_binding(s.label.clone(), s.vis_pub)?,
             // A concept declares the type-former binding *and* a nested namespace
             // (its method wrappers), like an inductive.
             TopItem::Concept(c) => {
-                info.insert_child(c.label.clone(), c.is_pub)?;
-                info.insert_binding(c.label.clone(), c.is_pub)?;
+                info.insert_child(c.label.clone(), c.vis_pub)?;
+                info.insert_binding(c.label.clone(), c.vis_pub)?;
             }
             // A witness is anonymous: it declares no binding and occupies no
             // lexical scope — its backing definition gets a compiler name.
             TopItem::Witness(_) => {}
             // A `foreign` declaration is an ordinary binding, like a `let` —
             // it has no body of its own, but it is called the same way.
-            TopItem::Foreign(f) => info.insert_binding(f.label.clone(), f.is_pub)?,
+            TopItem::Foreign(f) => info.insert_binding(f.label.clone(), f.vis_pub)?,
             _ => {}
         }
     }
@@ -412,12 +412,13 @@ fn process_items(
             TopItem::Let(let_item) => {
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&let_item.signature.type_())?;
-                if let_item.is_pub {
+                if let_item.vis_pub {
                     context.check_public_interface(&let_item.label, &type_)?;
                 }
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&let_item.label),
+                    island: context.island(),
                     root: context.root(),
                     type_,
                     body: lower.value(&let_item.signature.body())?,
@@ -433,12 +434,13 @@ fn process_items(
 
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&signature.type_())?;
-                if f.is_pub {
+                if f.vis_pub {
                     context.check_public_interface(&f.label, &type_)?;
                 }
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name,
+                    island: context.island(),
                     root: context.root(),
                     type_,
                     body: lower.value(&signature.body())?,
@@ -450,12 +452,13 @@ fn process_items(
                     .map(|let_item| {
                         let lower = Lowerer::new(context);
                         let type_ = lower.term(&let_item.signature.type_())?;
-                        if let_item.is_pub {
+                        if let_item.vis_pub {
                             context.check_public_interface(&let_item.label, &type_)?;
                         }
 
                         Ok(FlatLet {
                             name: context.prefixed(&let_item.label),
+                            island: context.island(),
                             root: context.root(),
                             type_,
                             body: lower.value(&let_item.signature.body())?,
@@ -583,7 +586,9 @@ fn process_items(
                                 ),
                                 constructors,
                                 result_sort: result_sort.clone(),
+                                module: context.island(),
                                 root: context.root(),
+                                rep_public: u.rep_pub,
                             },
                         );
 
@@ -619,12 +624,9 @@ fn process_items(
                                 ),
                             )
                         };
-                        if u.is_pub {
-                            context.check_public_interface(&u.label, &type_)?;
-                        }
-
                         Ok(FlatLet {
                             name: context.prefixed(&u.label),
+                            island: context.island(),
                             root: context.root(),
                             type_,
                             body,
@@ -703,15 +705,6 @@ fn process_items(
                             param_tys.clone(),
                             lower.term(&output_type)?,
                         );
-                        // A constructor is exactly as visible as its inductive:
-                        // a pub inductive's payload types are interface.
-                        if u.is_pub {
-                            context.check_public_interface(
-                                &format!("{}/{}", u.label, c.label),
-                                &ctor_type,
-                            )?;
-                        }
-
                         // Constructor body: (params..., _0, ...) => the variant's
                         // injection, a primitive `Variant` normal form.
                         let args: Vec<curios_core::Term> = c
@@ -741,6 +734,7 @@ fn process_items(
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             name: context.prefixed(&u.label).with(&c.label),
+                            island: context.island(),
                             root: context.root(),
                             type_: ctor_type,
                             body: ctor_body,
@@ -789,21 +783,6 @@ fn process_items(
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
-                // A pub struct's parameter types are interface; its field
-                // types are interface only when the representation is visible
-                // (`record`) — hidden fields are already fenced by the island
-                // model, so a private helper type inside them is fine.
-                if s.is_pub {
-                    for (_, _, ty) in &param_tys {
-                        context.check_public_interface(&s.label, ty)?;
-                    }
-                    if s.rep_pub {
-                        for (_, ty) in &field_tys {
-                            context.check_public_interface(&s.label, ty)?;
-                        }
-                    }
-                }
-
                 // Registry entry: the parameter telescope, and the full field
                 // telescope (parameter binders first — field types may mention
                 // them — then field binders), as in `Inductive::indices`.
@@ -845,13 +824,14 @@ fn process_items(
 
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&s.label),
+                    island: context.island(),
                     root: context.root(),
                     type_,
                     body,
                 }));
             }
-            // A concept lowers to exactly what a `record` lowers to — a nominal
-            // `Structure` with `rep_public = true` and its type-former `let` —
+            // A concept lowers to a representation-public nominal `Structure`
+            // and its type-former `let` —
             // plus a concept-registry entry (field labels, superclass edges, the
             // parameter telescope) and one method-wrapper `let` per field, synthed
             // into the concept's own namespace (§4.1).
@@ -933,17 +913,6 @@ fn process_items(
                     lower.term(&concept.result_sort)?
                 };
 
-                // A concept's representation is always public, so a pub
-                // concept's parameter and field types are all interface.
-                if concept.is_pub {
-                    for (_, _, ty) in &param_tys {
-                        context.check_public_interface(&concept.label, ty)?;
-                    }
-                    for (_, ty) in &field_tys {
-                        context.check_public_interface(&concept.label, ty)?;
-                    }
-                }
-
                 // The record shape drives struct literals and projections.
                 structures.insert(
                     name.clone(),
@@ -988,7 +957,7 @@ fn process_items(
                     },
                 );
 
-                // The type-former, exactly like a `record`'s.
+                // The type-former, exactly like a representation-public struct's.
                 let struct_type = curios_core::Term::struct_type(&name, param_vars);
                 let (type_, body) = if param_tys.is_empty() {
                     (result_sort, struct_type)
@@ -1003,6 +972,7 @@ fn process_items(
                 };
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&concept.label),
+                    island: context.island(),
                     root: context.root(),
                     type_,
                     body,
@@ -1044,6 +1014,7 @@ fn process_items(
                     let lower = Lowerer::new(context);
                     flat_items.push(FlatItem::Let(FlatLet {
                         name: context.prefixed(&concept.label).with(&field.label),
+                        island: context.island(),
                         root: context.root(),
                         type_: lower.term(&signature.type_())?,
                         body: lower.value(&signature.body())?,
@@ -1092,6 +1063,7 @@ fn process_items(
                 let lower = Lowerer::new(context);
                 flat_items.push(FlatItem::Let(FlatLet {
                     name: context.prefixed(&label),
+                    island: context.island(),
                     root: context.root(),
                     type_: lower.term(&signature.type_())?,
                     body: lower.value(&signature.body())?,
@@ -1364,6 +1336,191 @@ fn structure_free_vars(structure: &curios_core::Structure) -> HashSet<String> {
         .collect()
 }
 
+fn flat_aliases(items: &[FlatItem]) -> HashMap<String, String> {
+    let lets = items.iter().flat_map(|item| match item {
+        FlatItem::Let(let_) => std::slice::from_ref(let_),
+        FlatItem::Rec(lets) => lets.as_slice(),
+    });
+
+    lets.filter_map(|let_| {
+        let target = let_.body.transparent_alias_target()?;
+        target.starts_with('/').then(|| (let_.name.join(), target))
+    })
+    .collect()
+}
+
+/// Follow a directly attached representation provenance or a chain of bare,
+/// transparent type aliases to the underlying nominal registry entry.
+fn exposed_nominal(
+    entry: &Entry,
+    aliases: &HashMap<String, String>,
+    inductives: &BTreeMap<String, curios_core::Inductive>,
+    structures: &BTreeMap<String, curios_core::Structure>,
+) -> Option<String> {
+    let mut current = entry
+        .representation
+        .as_ref()
+        .unwrap_or(&entry.target)
+        .join();
+    let mut seen = HashSet::new();
+
+    loop {
+        if inductives.contains_key(&current) || structures.contains_key(&current) {
+            return Some(current);
+        }
+        if !seen.insert(current.clone()) {
+            return None;
+        }
+        current = aliases.get(&current)?.clone();
+    }
+}
+
+fn target_reachable(
+    public: &HashMap<Qualifier, PublicInterface>,
+    start: &Qualifier,
+    target: &str,
+    aliases: &HashMap<String, String>,
+) -> bool {
+    let mut pending = vec![start.clone()];
+    let mut visited = HashSet::new();
+
+    while let Some(module) = pending.pop() {
+        if !visited.insert(module.clone()) {
+            continue;
+        }
+        let Some(interface) = public.get(&module) else {
+            continue;
+        };
+        for entry in interface.bindings.values() {
+            let mut candidate = entry.target.join();
+            let mut aliases_seen = HashSet::new();
+            loop {
+                if candidate == target {
+                    return true;
+                }
+                if !aliases_seen.insert(candidate.clone()) {
+                    break;
+                }
+                let Some(next) = aliases.get(&candidate) else {
+                    break;
+                };
+                candidate = next.clone();
+            }
+        }
+        pending.extend(
+            interface
+                .children
+                .values()
+                .map(|entry| entry.target.clone()),
+        );
+    }
+
+    false
+}
+
+fn audit_dependencies(
+    public: &HashMap<Qualifier, PublicInterface>,
+    exposure: &Qualifier,
+    item: &str,
+    owner: &Qualifier,
+    aliases: &HashMap<String, String>,
+    dependencies: impl IntoIterator<Item = String>,
+) -> Result<(), Error> {
+    let owner = owner.join();
+    for referent in dependencies {
+        if !referent.starts_with('/') {
+            continue;
+        }
+        let owned = owner.is_empty()
+            || referent == owner
+            || referent
+                .strip_prefix(&owner)
+                .is_some_and(|suffix| suffix.starts_with('/'));
+        if owned && !target_reachable(public, exposure, &referent, aliases) {
+            return Err(Error::PrivateItemInPublicInterface {
+                item: item.to_string(),
+                referent,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Audit the exact representation exposed by every resolved public interface.
+/// This runs after lowering because registry telescopes contain the complete
+/// signatures and transparent aliases have become canonical free-variable
+/// references. Re-export entries retain their representation provenance through
+/// the fixed point, so no `pub use` can upgrade an opaque declaration.
+fn audit_public_exposures(
+    public: &HashMap<Qualifier, PublicInterface>,
+    items: &[FlatItem],
+    inductives: &BTreeMap<String, curios_core::Inductive>,
+    structures: &BTreeMap<String, curios_core::Structure>,
+) -> Result<(), Error> {
+    let aliases = flat_aliases(items);
+
+    for (module, interface) in public {
+        for (label, entry) in &interface.bindings {
+            let Some(nominal) = exposed_nominal(entry, &aliases, inductives, structures) else {
+                continue;
+            };
+            let item = module.with(label).join();
+
+            if let Some(inductive) = inductives.get(&nominal) {
+                let nominal_dependencies = inductive
+                    .params
+                    .free_vars()
+                    .into_iter()
+                    .chain(inductive.indices.free_vars());
+                audit_dependencies(
+                    public,
+                    module,
+                    &item,
+                    &inductive.module,
+                    &aliases,
+                    nominal_dependencies,
+                )?;
+
+                if inductive.rep_public {
+                    audit_dependencies(
+                        public,
+                        module,
+                        &item,
+                        &inductive.module,
+                        &aliases,
+                        inductive
+                            .constructors
+                            .values()
+                            .flat_map(|case| case.telescope.free_vars()),
+                    )?;
+                }
+            } else if let Some(structure) = structures.get(&nominal) {
+                audit_dependencies(
+                    public,
+                    module,
+                    &item,
+                    &structure.module,
+                    &aliases,
+                    structure.params.free_vars(),
+                )?;
+
+                if structure.rep_public {
+                    audit_dependencies(
+                        public,
+                        module,
+                        &item,
+                        &structure.module,
+                        &aliases,
+                        structure.fields.free_vars(),
+                    )?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 // The three embedded roots, in the fixed order every compile mounts them —
 // also `order_flat_items`'s topological-sort tiebreak order (sys, then syn,
 // then std): `sys` (the primitives) comes first; `syn` (the names the
@@ -1452,6 +1609,8 @@ pub fn into_core(
         .map(|type_| lower.term(type_))
         .transpose()?;
     let tail = lower.value(&entrypoint.tail)?;
+
+    audit_public_exposures(&public, &flat_items, &inductives, &structures)?;
 
     // Emit the program as a flat list of named top-level definitions rather than
     // folding it into one N-deep nested `let`/`rec` term (BUG.md). Cross-references

@@ -110,7 +110,7 @@ fn type_() -> Term {
 
 fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
     TopItem::Let(TopLet {
-        is_pub: true,
+        vis_pub: true,
         label: label.to_string(),
         signature: LetSignature::Name {
             type_: Some(type_),
@@ -122,7 +122,7 @@ fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
 fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
     TopItem::Mod(TopMod {
         span: None,
-        is_pub: true,
+        vis_pub: true,
         label: label.to_string(),
         module: Some(Module { items }),
     })
@@ -132,7 +132,7 @@ fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
 // own type binding up to the library root, so `/sys/{Label}` names the type.
 fn pub_use(label: &str) -> TopItem {
     TopItem::Use(TopUse {
-        is_pub: true,
+        vis_pub: true,
         name: Name::from([label.to_string()]),
         group: UseGroup::Named(vec![GroupItem::Let(label.to_string())]),
     })
@@ -168,14 +168,14 @@ fn pub_fn_marked(
 }
 
 fn fn_marked(
-    is_pub: bool,
+    vis_pub: bool,
     label: &str,
     params: Vec<(Plicity, &str, Term)>,
     output: Term,
     body: Term,
 ) -> TopLet {
     TopLet {
-        is_pub,
+        vis_pub,
         label: label.to_string(),
         signature: LetSignature::Func {
             params: params
@@ -209,9 +209,9 @@ fn wire_type(type_: &WireType) -> Term {
 /// names/types and the result shape (unit, bare type, named record) come off
 /// the `WireSignature`, and the body bakes the generic `Foreign` prim applied
 /// to the parameter names. Used both for `/sys/Io`'s rows (always `pub`) and,
-/// via [`foreign_signature`], for a user's own `foreign` declaration (`is_pub`
+/// via [`foreign_signature`], for a user's own `foreign` declaration (`vis_pub`
 /// follows what they wrote).
-fn host_fn(function: &Arc<ForeignFunction>, is_pub: bool) -> TopLet {
+fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
     let signature = &function.signature;
 
     let output = match signature.results.as_slice() {
@@ -226,7 +226,7 @@ fn host_fn(function: &Arc<ForeignFunction>, is_pub: bool) -> TopLet {
     };
 
     fn_marked(
-        is_pub,
+        vis_pub,
         &function.label,
         signature
             .params
@@ -270,7 +270,7 @@ pub(crate) fn foreign_signature(
 
     foreigns.register(function.clone());
 
-    host_fn(&Arc::new(function), declaration.is_pub).signature
+    host_fn(&Arc::new(function), declaration.vis_pub).signature
 }
 
 fn binary(label: &str, operand: Term, output: Term, ctor: fn(Term, Term) -> Prim) -> TopItem {

@@ -139,7 +139,7 @@ fn bang_dispatches_through_a_user_monad_witness() {
     // path a std monad takes, exercised end-to-end on a user type.
     let source = r#"
         use /std/{Nat, Io, Str, Monad};
-        pub record Box(A : Type) : Type { unbox : A }
+        pub struct Box(A : Type) : pub Type { unbox : A }
         satisfy Monad(Box) {
             pure(A, x) = Box { unbox = x },
             bind(A, B, m, f) = f(m.unbox)
