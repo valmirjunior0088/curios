@@ -191,7 +191,7 @@ fn recursive_matcher(head: &str, none_value: usize) -> Term {
 #[test]
 fn convert_folded_recursive_call_against_its_unfolding() {
     let mut context = context();
-    context.define_recursive("f", &recursive_matcher("f", 0));
+    context.define("f", &recursive_matcher("f", 0));
 
     let folded = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
 
@@ -225,7 +225,7 @@ fn convert_folded_recursive_call_against_its_unfolding() {
 #[test]
 fn convert_same_recursive_head_compares_spines() {
     let mut context = context();
-    context.define_recursive("f", &recursive_matcher("f", 0));
+    context.define("f", &recursive_matcher("f", 0));
 
     // Convertible (but not syntactically equal) spines: true.
     let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
@@ -282,8 +282,8 @@ fn convert_distinct_recursive_heads_with_identical_bodies_converge_coinductively
     // entropy, so the canonicalized history recognizes the cycle and assumes
     // it. No finite disagreement exists: the functions are bisimilar. Before
     // goal canonicalization this pair spun to `Err(Preempted)`.
-    context.define_recursive("f", &recursive_matcher("f", 0));
-    context.define_recursive("g", &recursive_matcher("g", 0));
+    context.define("f", &recursive_matcher("f", 0));
+    context.define("g", &recursive_matcher("g", 0));
 
     let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
     let that = Term::apply(Term::free_var("g"), [Term::free_var("a")]);
@@ -295,8 +295,8 @@ fn convert_distinct_recursive_heads_with_differing_bodies_is_false() {
     let mut context = context();
     // The `none` arms disagree: the first unfolding round surfaces the
     // finite disagreement on a sibling goal, well before any deadline.
-    context.define_recursive("f", &recursive_matcher("f", 0));
-    context.define_recursive("g", &recursive_matcher("g", 1));
+    context.define("f", &recursive_matcher("f", 0));
+    context.define("g", &recursive_matcher("g", 1));
 
     let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
     let that = Term::apply(Term::free_var("g"), [Term::free_var("a")]);
@@ -334,8 +334,8 @@ fn convert_growing_recursive_unfolding_spends_the_deadline() {
             ),
         )
     };
-    context.define_recursive("f", &growing("f"));
-    context.define_recursive("g", &growing("g"));
+    context.define("f", &growing("f"));
+    context.define("g", &growing("g"));
 
     let this = Term::apply(Term::free_var("f"), [Term::free_var("a")]);
     let that = Term::apply(Term::free_var("g"), [Term::free_var("a")]);
@@ -359,8 +359,8 @@ fn convert_recursive_values_are_bisimilar() {
             [nat(1), Term::free_var(name)],
         )
     };
-    context.define_recursive("xs", &stream("xs"));
-    context.define_recursive("ys", &stream("ys"));
+    context.define("xs", &stream("xs"));
+    context.define("ys", &stream("ys"));
 
     assert_eq!(
         conv(&mut context, &Term::free_var("xs"), &Term::free_var("ys")),
@@ -371,7 +371,7 @@ fn convert_recursive_values_are_bisimilar() {
 #[test]
 fn convert_folded_recursive_call_against_neutral_head_is_false() {
     let mut context = context();
-    context.define_recursive("f", &recursive_matcher("f", 0));
+    context.define("f", &recursive_matcher("f", 0));
 
     // The recursive side unfolds to its stuck match, the neutral side
     // cannot unfold at all: a structural mismatch, decided well within the

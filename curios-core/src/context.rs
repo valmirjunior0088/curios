@@ -430,16 +430,6 @@ impl Context {
         self.define_entry(label.into(), DefEntry { term: term.clone() });
     }
 
-    /// Test-only named recursive definition used by the legacy conversion
-    /// fixtures. Production recursion is represented by `RecGroup` members.
-    #[cfg(test)]
-    pub(crate) fn define_recursive<A>(&mut self, label: A, term: &Term)
-    where
-        A: Into<String>,
-    {
-        self.define(label, term);
-    }
-
     pub(crate) fn define_assuming<A>(&mut self, label: A, type_: &Term, term: &Term)
     where
         A: Into<String>,
