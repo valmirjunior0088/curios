@@ -34,8 +34,8 @@ impl FieldData {
     }
 }
 
-/// The name bundle for one internal rope carrier (`$bin` or `$lst`): the base struct the
-/// emitter casts carrier refs to, its `leaf`/`node`/`sub` subtypes, the flat
+/// The name bundle for one internal rope carrier (`$rope/bin` or `$rope/lst`): the base
+/// struct the emitter casts carrier refs to, its `leaf`/`node`/`view` subtypes, the flat
 /// payload array, and every field name — one handle to thread through the op
 /// emitters so packed `Bits`/`Bytes` and `Lst` share their lowering code.
 #[derive(Debug, Clone)]
@@ -43,7 +43,7 @@ pub(super) struct RopeData {
     pub base: TypeName,
     pub leaf: TypeName,
     pub node: TypeName,
-    pub sub: TypeName,
+    pub view: TypeName,
     pub payload: TypeName,
     pub tag_field: FieldName,
     pub len_field: FieldName,
@@ -232,36 +232,36 @@ pub(super) struct Table<'a> {
     special_local: LocalName,
     special_label: LabelName,
     flt_type: TypeName,
-    bin_type: TypeName,
-    lst_type: TypeName,
+    bin_rope_type: TypeName,
+    lst_rope_type: TypeName,
     bytes_type: TypeName,
     elems_type: TypeName,
-    bin_leaf_type: TypeName,
-    bin_node_type: TypeName,
-    bin_sub_type: TypeName,
-    lst_leaf_type: TypeName,
-    lst_node_type: TypeName,
-    lst_sub_type: TypeName,
+    bin_rope_leaf_type: TypeName,
+    bin_rope_node_type: TypeName,
+    bin_rope_view_type: TypeName,
+    lst_rope_leaf_type: TypeName,
+    lst_rope_node_type: TypeName,
+    lst_rope_view_type: TypeName,
     cell_type: TypeName,
     io_exit: OnceCell<FuncName>,
     // The shared rope helpers, minted lazily like `io_exit`: the first call
     // site recorded during emission names the function, and the module
     // emitter then adds exactly the recorded set after the program's own
     // functions (see `emit_rope_funcs`).
-    bin_force: OnceCell<FuncName>,
+    bytes_force: OnceCell<FuncName>,
     bits_force: OnceCell<FuncName>,
     lst_force: OnceCell<FuncName>,
     lst_bin_force: OnceCell<FuncName>,
-    bin_wrap: OnceCell<FuncName>,
-    lst_wrap: OnceCell<FuncName>,
-    lst_bin_wrap: OnceCell<FuncName>,
-    bin_slice: OnceCell<FuncName>,
+    bytes_embed: OnceCell<FuncName>,
+    lst_embed: OnceCell<FuncName>,
+    lst_bin_embed: OnceCell<FuncName>,
+    bytes_slice: OnceCell<FuncName>,
     bits_slice: OnceCell<FuncName>,
     lst_slice: OnceCell<FuncName>,
-    bin_read: OnceCell<FuncName>,
+    bytes_read: OnceCell<FuncName>,
     bits_read: OnceCell<FuncName>,
     lst_read: OnceCell<FuncName>,
-    bin_eql: OnceCell<FuncName>,
+    bytes_eql: OnceCell<FuncName>,
     bits_eql: OnceCell<FuncName>,
     lst_map: OnceCell<FuncName>,
     // The foreign functions the emitted code calls, keyed by the minted
@@ -314,32 +314,32 @@ impl<'a> Table<'a> {
             special_local: LocalName::from("!"),
             special_label: LabelName::from("!"),
             flt_type: TypeName::from("flt"),
-            bin_type: TypeName::from("bin"),
-            lst_type: TypeName::from("lst"),
+            bin_rope_type: TypeName::from("rope/bin"),
+            lst_rope_type: TypeName::from("rope/lst"),
             bytes_type: TypeName::from("bytes"),
             elems_type: TypeName::from("elems"),
-            bin_leaf_type: TypeName::from("bin/leaf"),
-            bin_node_type: TypeName::from("bin/node"),
-            bin_sub_type: TypeName::from("bin/sub"),
-            lst_leaf_type: TypeName::from("lst/leaf"),
-            lst_node_type: TypeName::from("lst/node"),
-            lst_sub_type: TypeName::from("lst/sub"),
+            bin_rope_leaf_type: TypeName::from("rope/bin/leaf"),
+            bin_rope_node_type: TypeName::from("rope/bin/node"),
+            bin_rope_view_type: TypeName::from("rope/bin/view"),
+            lst_rope_leaf_type: TypeName::from("rope/lst/leaf"),
+            lst_rope_node_type: TypeName::from("rope/lst/node"),
+            lst_rope_view_type: TypeName::from("rope/lst/view"),
             cell_type: TypeName::from("cell"),
             io_exit: OnceCell::new(),
-            bin_force: OnceCell::new(),
+            bytes_force: OnceCell::new(),
             bits_force: OnceCell::new(),
             lst_force: OnceCell::new(),
             lst_bin_force: OnceCell::new(),
-            bin_wrap: OnceCell::new(),
-            lst_wrap: OnceCell::new(),
-            lst_bin_wrap: OnceCell::new(),
-            bin_slice: OnceCell::new(),
+            bytes_embed: OnceCell::new(),
+            lst_embed: OnceCell::new(),
+            lst_bin_embed: OnceCell::new(),
+            bytes_slice: OnceCell::new(),
             bits_slice: OnceCell::new(),
             lst_slice: OnceCell::new(),
-            bin_read: OnceCell::new(),
+            bytes_read: OnceCell::new(),
             bits_read: OnceCell::new(),
             lst_read: OnceCell::new(),
-            bin_eql: OnceCell::new(),
+            bytes_eql: OnceCell::new(),
             bits_eql: OnceCell::new(),
             lst_map: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
@@ -431,12 +431,12 @@ impl<'a> Table<'a> {
         self.flt_type.clone()
     }
 
-    pub(super) fn bin_type(&self) -> TypeName {
-        self.bin_type.clone()
+    pub(super) fn bin_rope_type(&self) -> TypeName {
+        self.bin_rope_type.clone()
     }
 
-    pub(super) fn lst_type(&self) -> TypeName {
-        self.lst_type.clone()
+    pub(super) fn lst_rope_type(&self) -> TypeName {
+        self.lst_rope_type.clone()
     }
 
     pub(super) fn bytes_type(&self) -> TypeName {
@@ -450,10 +450,10 @@ impl<'a> Table<'a> {
     /// The shared packed `Bits`/`Bytes` rope's name bundle.
     pub(super) fn bin_rope(&self) -> RopeData {
         RopeData {
-            base: self.bin_type.clone(),
-            leaf: self.bin_leaf_type.clone(),
-            node: self.bin_node_type.clone(),
-            sub: self.bin_sub_type.clone(),
+            base: self.bin_rope_type.clone(),
+            leaf: self.bin_rope_leaf_type.clone(),
+            node: self.bin_rope_node_type.clone(),
+            view: self.bin_rope_view_type.clone(),
             payload: self.bytes_type.clone(),
             tag_field: FieldName::from("tag"),
             len_field: FieldName::from("len"),
@@ -469,10 +469,10 @@ impl<'a> Table<'a> {
     /// The `Lst` rope's name bundle.
     pub(super) fn lst_rope(&self) -> RopeData {
         RopeData {
-            base: self.lst_type.clone(),
-            leaf: self.lst_leaf_type.clone(),
-            node: self.lst_node_type.clone(),
-            sub: self.lst_sub_type.clone(),
+            base: self.lst_rope_type.clone(),
+            leaf: self.lst_rope_leaf_type.clone(),
+            node: self.lst_rope_node_type.clone(),
+            view: self.lst_rope_view_type.clone(),
             payload: self.elems_type.clone(),
             tag_field: FieldName::from("tag"),
             len_field: FieldName::from("len"),
@@ -525,19 +525,19 @@ impl<'a> Table<'a> {
         self.io_exit.get().is_some()
     }
 
-    /// `$bin/force (ref $bin) -> (ref $bytes)`: flatten a `Bytes` rope to its
+    /// `$bytes/force (ref $rope/bin) -> (ref $bytes)`: flatten a `Bytes` rope to its
     /// payload, memoizing in the entry node. First use marks it for emission.
-    pub(super) fn bin_force_func(&self) -> FuncName {
-        self.bin_force
-            .get_or_init(|| FuncName::from("bin/force"))
+    pub(super) fn bytes_force_func(&self) -> FuncName {
+        self.bytes_force
+            .get_or_init(|| FuncName::from("bytes/force"))
             .clone()
     }
 
-    pub(super) fn bin_force_used(&self) -> bool {
-        self.bin_force.get().is_some()
+    pub(super) fn bytes_force_used(&self) -> bool {
+        self.bytes_force.get().is_some()
     }
 
-    /// `$bits/force (ref $bin) -> (ref $bytes)`: flatten a bit-grain rope to
+    /// `$bits/force (ref $rope/bin) -> (ref $bytes)`: flatten a bit-grain rope to
     /// its packed payload, memoizing in the entry node. First use marks it for
     /// emission.
     pub(super) fn bits_force_func(&self) -> FuncName {
@@ -550,8 +550,8 @@ impl<'a> Table<'a> {
         self.bits_force.get().is_some()
     }
 
-    /// `$lst/force (ref $lst) -> (ref $elems)`: the `Lst` mirror of
-    /// [`bin_force_func`](Self::bin_force_func).
+    /// `$lst/force (ref $rope/lst) -> (ref $elems)`: the `Lst` mirror of
+    /// [`bytes_force_func`](Self::bytes_force_func).
     pub(super) fn lst_force_func(&self) -> FuncName {
         self.lst_force
             .get_or_init(|| FuncName::from("lst/force"))
@@ -562,7 +562,7 @@ impl<'a> Table<'a> {
         self.lst_force.get().is_some()
     }
 
-    /// `$lst/bin/force (ref $lst) -> (ref $elems)`: force an `Lst(Bin)` /
+    /// `$lst/bin/force (ref $rope/lst) -> (ref $elems)`: force an `Lst(Bin)` /
     /// `Lst(Io)` host argument *deeply* — the outer rope to a fresh payload
     /// whose every element is itself forced to `$bytes`, the element shape
     /// the host lifts.
@@ -576,55 +576,55 @@ impl<'a> Table<'a> {
         self.lst_bin_force.get().is_some()
     }
 
-    /// `$bin/wrap (ref $bytes) -> (ref $bin)`: wrap a host-built flat payload
-    /// into a fresh leaf on re-entry.
-    pub(super) fn bin_wrap_func(&self) -> FuncName {
-        self.bin_wrap
-            .get_or_init(|| FuncName::from("bin/wrap"))
+    /// `$bytes/embed (ref $bytes) -> (ref $rope/bin)`: embed a host-built flat
+    /// payload into a fresh leaf on re-entry.
+    pub(super) fn bytes_embed_func(&self) -> FuncName {
+        self.bytes_embed
+            .get_or_init(|| FuncName::from("bytes/embed"))
             .clone()
     }
 
-    pub(super) fn bin_wrap_used(&self) -> bool {
-        self.bin_wrap.get().is_some()
+    pub(super) fn bytes_embed_used(&self) -> bool {
+        self.bytes_embed.get().is_some()
     }
 
-    /// `$lst/wrap (ref $elems) -> (ref $lst)`: the `Lst` mirror of
-    /// [`bin_wrap_func`](Self::bin_wrap_func), for scalar-element results.
-    pub(super) fn lst_wrap_func(&self) -> FuncName {
-        self.lst_wrap
-            .get_or_init(|| FuncName::from("lst/wrap"))
+    /// `$lst/embed (ref $elems) -> (ref $rope/lst)`: the `Lst` mirror of
+    /// [`bytes_embed_func`](Self::bytes_embed_func), for scalar-element results.
+    pub(super) fn lst_embed_func(&self) -> FuncName {
+        self.lst_embed
+            .get_or_init(|| FuncName::from("lst/embed"))
             .clone()
     }
 
-    pub(super) fn lst_wrap_used(&self) -> bool {
-        self.lst_wrap.get().is_some()
+    pub(super) fn lst_embed_used(&self) -> bool {
+        self.lst_embed.get().is_some()
     }
 
-    /// `$lst/bin/wrap (ref $elems) -> (ref $lst)`: wrap an `Lst(Bin)` host
-    /// result *deeply* — each raw `$bytes` element into a leaf (in place; the
-    /// host-built array is fresh), then the outer array.
-    pub(super) fn lst_bin_wrap_func(&self) -> FuncName {
-        self.lst_bin_wrap
-            .get_or_init(|| FuncName::from("lst/bin/wrap"))
+    /// `$lst/bin/embed (ref $elems) -> (ref $rope/lst)`: embed an `Lst(Bin)`
+    /// host result *deeply* — each raw `$bytes` element into a leaf (in place;
+    /// the host-built array is fresh), then the outer array.
+    pub(super) fn lst_bin_embed_func(&self) -> FuncName {
+        self.lst_bin_embed
+            .get_or_init(|| FuncName::from("lst/bin/embed"))
             .clone()
     }
 
-    pub(super) fn lst_bin_wrap_used(&self) -> bool {
-        self.lst_bin_wrap.get().is_some()
+    pub(super) fn lst_bin_embed_used(&self) -> bool {
+        self.lst_bin_embed.get().is_some()
     }
 
-    /// `$bin/slice (ref $bin, i32, i32) -> (ref $bin)`: the `Bytes` O(1) window
-    /// constructor — bounds-check, answer the empty leaf or the whole rope on
-    /// the trivial windows, collapse a sub-of-sub, and force an uncached node
-    /// base so every `sub` it builds reads through in O(1).
-    pub(super) fn bin_slice_func(&self) -> FuncName {
-        self.bin_slice
-            .get_or_init(|| FuncName::from("bin/slice"))
+    /// `$bytes/slice (ref $rope/bin, i32, i32) -> (ref $rope/bin)`: the `Bytes`
+    /// O(1) view constructor — bounds-check, answer the empty leaf or the whole
+    /// rope on the trivial windows, collapse a view-of-view, and force an uncached node
+    /// base so every `view` it builds reads through in O(1).
+    pub(super) fn bytes_slice_func(&self) -> FuncName {
+        self.bytes_slice
+            .get_or_init(|| FuncName::from("bytes/slice"))
             .clone()
     }
 
-    pub(super) fn bin_slice_used(&self) -> bool {
-        self.bin_slice.get().is_some()
+    pub(super) fn bytes_slice_used(&self) -> bool {
+        self.bytes_slice.get().is_some()
     }
 
     pub(super) fn bits_slice_func(&self) -> FuncName {
@@ -637,8 +637,8 @@ impl<'a> Table<'a> {
         self.bits_slice.get().is_some()
     }
 
-    /// `$lst/slice (ref $lst, i32, i32) -> (ref $lst)`: the `Lst` mirror of
-    /// [`bin_slice_func`](Self::bin_slice_func).
+    /// `$lst/slice (ref $rope/lst, i32, i32) -> (ref $rope/lst)`: the `Lst` mirror of
+    /// [`bytes_slice_func`](Self::bytes_slice_func).
     pub(super) fn lst_slice_func(&self) -> FuncName {
         self.lst_slice
             .get_or_init(|| FuncName::from("lst/slice"))
@@ -649,17 +649,17 @@ impl<'a> Table<'a> {
         self.lst_slice.get().is_some()
     }
 
-    /// `$bin/read (ref $bin, i32) -> i32`: one byte read — straight off a
-    /// leaf payload, through a `sub`'s window without forcing, and via
-    /// `$bin/force` (memoized) on a node.
-    pub(super) fn bin_read_func(&self) -> FuncName {
-        self.bin_read
-            .get_or_init(|| FuncName::from("bin/read"))
+    /// `$bytes/read (ref $rope/bin, i32) -> i32`: one byte read — straight off
+    /// a leaf payload, through a `view`'s window without forcing, and via
+    /// `$bytes/force` (memoized) on a node.
+    pub(super) fn bytes_read_func(&self) -> FuncName {
+        self.bytes_read
+            .get_or_init(|| FuncName::from("bytes/read"))
             .clone()
     }
 
-    pub(super) fn bin_read_used(&self) -> bool {
-        self.bin_read.get().is_some()
+    pub(super) fn bytes_read_used(&self) -> bool {
+        self.bytes_read.get().is_some()
     }
 
     pub(super) fn bits_read_func(&self) -> FuncName {
@@ -672,8 +672,8 @@ impl<'a> Table<'a> {
         self.bits_read.get().is_some()
     }
 
-    /// `$lst/read (ref $lst, i32) -> anyref`: the `Lst` mirror of
-    /// [`bin_read_func`](Self::bin_read_func).
+    /// `$lst/read (ref $rope/lst, i32) -> anyref`: the `Lst` mirror of
+    /// [`bytes_read_func`](Self::bytes_read_func).
     pub(super) fn lst_read_func(&self) -> FuncName {
         self.lst_read
             .get_or_init(|| FuncName::from("lst/read"))
@@ -684,17 +684,17 @@ impl<'a> Table<'a> {
         self.lst_read.get().is_some()
     }
 
-    /// `$bin/eql (ref $bin, ref $bin) -> i32`: whole-value byte equality —
-    /// unequal rope lengths answer without forcing, equal lengths force both
-    /// payloads once and compare bytewise.
-    pub(super) fn bin_eql_func(&self) -> FuncName {
-        self.bin_eql
-            .get_or_init(|| FuncName::from("bin/eql"))
+    /// `$bytes/eql (ref $rope/bin, ref $rope/bin) -> i32`: whole-value byte
+    /// equality — unequal rope lengths answer without forcing, equal lengths
+    /// force both payloads once and compare bytewise.
+    pub(super) fn bytes_eql_func(&self) -> FuncName {
+        self.bytes_eql
+            .get_or_init(|| FuncName::from("bytes/eql"))
             .clone()
     }
 
-    pub(super) fn bin_eql_used(&self) -> bool {
-        self.bin_eql.get().is_some()
+    pub(super) fn bytes_eql_used(&self) -> bool {
+        self.bytes_eql.get().is_some()
     }
 
     pub(super) fn bits_eql_func(&self) -> FuncName {
@@ -707,7 +707,7 @@ impl<'a> Table<'a> {
         self.bits_eql.get().is_some()
     }
 
-    /// `$lst/map (ref $lst, ref $envr/1) -> (ref $lst)`: apply a unary
+    /// `$lst/map (ref $rope/lst, ref $envr/1) -> (ref $rope/lst)`: apply a unary
     /// closure to every element of the forced payload, filling a fresh leaf.
     pub(super) fn lst_map_func(&self) -> FuncName {
         self.lst_map
@@ -829,5 +829,50 @@ impl<'a> Table<'a> {
         self.funcs
             .get(func_name)
             .unwrap_or_else(|| panic!("`Table` lacks func `{}`", func_name))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rope_names_match_the_wasm_vocabulary() {
+        let module = crate::Module::new();
+        let table = Table::new(&module);
+        let bin = table.bin_rope();
+        let lst = table.lst_rope();
+
+        assert_eq!(bin.base.as_str(), "rope/bin");
+        assert_eq!(bin.leaf.as_str(), "rope/bin/leaf");
+        assert_eq!(bin.node.as_str(), "rope/bin/node");
+        assert_eq!(bin.view.as_str(), "rope/bin/view");
+        assert_eq!(bin.payload.as_str(), "bytes");
+
+        assert_eq!(lst.base.as_str(), "rope/lst");
+        assert_eq!(lst.leaf.as_str(), "rope/lst/leaf");
+        assert_eq!(lst.node.as_str(), "rope/lst/node");
+        assert_eq!(lst.view.as_str(), "rope/lst/view");
+        assert_eq!(lst.payload.as_str(), "elems");
+
+        assert_eq!(table.bits_force_func().as_str(), "bits/force");
+        assert_eq!(table.bits_slice_func().as_str(), "bits/slice");
+        assert_eq!(table.bits_read_func().as_str(), "bits/read");
+        assert_eq!(table.bits_eql_func().as_str(), "bits/eql");
+
+        assert_eq!(table.bytes_force_func().as_str(), "bytes/force");
+        assert_eq!(table.bytes_embed_func().as_str(), "bytes/embed");
+        assert_eq!(table.bytes_slice_func().as_str(), "bytes/slice");
+        assert_eq!(table.bytes_read_func().as_str(), "bytes/read");
+        assert_eq!(table.bytes_eql_func().as_str(), "bytes/eql");
+
+        assert_eq!(table.lst_force_func().as_str(), "lst/force");
+        assert_eq!(table.lst_embed_func().as_str(), "lst/embed");
+        assert_eq!(table.lst_slice_func().as_str(), "lst/slice");
+        assert_eq!(table.lst_read_func().as_str(), "lst/read");
+        assert_eq!(table.lst_map_func().as_str(), "lst/map");
+
+        assert_eq!(table.lst_bin_force_func().as_str(), "lst/bin/force");
+        assert_eq!(table.lst_bin_embed_func().as_str(), "lst/bin/embed");
     }
 }

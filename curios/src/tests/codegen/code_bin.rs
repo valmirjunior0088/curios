@@ -193,6 +193,30 @@ fn lowers_and_runs_bin_eql_equal() {
         },
     );
 
+    let wat = curios_cont::into_wasm(&module).to_string();
+    for name in [
+        "type $rope/bin ",
+        "type $rope/bin/leaf ",
+        "type $rope/bin/node ",
+        "type $rope/bin/view ",
+        "type $rope/lst ",
+        "type $rope/lst/leaf ",
+        "type $rope/lst/node ",
+        "type $rope/lst/view ",
+        "func $bytes/eql ",
+        "func $bytes/force ",
+    ] {
+        assert!(wat.contains(name), "missing Wasm name `{name}`:\n{wat}");
+    }
+    assert!(
+        !wat.contains("type $bin "),
+        "legacy `$bin` type remains:\n{wat}"
+    );
+    assert!(
+        !wat.contains("func $bin/"),
+        "legacy `$bin/*` helper remains:\n{wat}"
+    );
+
     assert_eq!(i32_result(&module), 1);
 }
 
@@ -569,7 +593,7 @@ fn packed_bits_reuse_node_cache_after_first_read() {
         "bit forcing helper was not emitted:\n{wat}"
     );
     assert!(
-        !wat.contains("func $bin/force"),
+        !wat.contains("func $bytes/force"),
         "unused byte forcing helper was emitted:\n{wat}"
     );
     assert_eq!(i32_result(&module), 2);

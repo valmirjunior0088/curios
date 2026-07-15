@@ -12,23 +12,23 @@
 //! # The rope representation
 //!
 //! `Bits`, `Bytes`, and `Lst` are *ropes*: the two packed grains share one
-//! three-shape tagged union behind the non-final `$bin` struct base, while
-//! lists use `$lst` (both have fields `tag` + `len`). A `leaf` holds a flat
+//! three-shape tagged union behind the non-final `$rope/bin` struct base, while
+//! lists use `$rope/lst` (both have fields `tag` + `len`). A `leaf` holds a flat
 //! payload array (`$bytes` / `$elems`); a `node` holds two children plus a
-//! memoization `cache`; a `sub` is a window — a `base` rope plus an `offset`.
+//! memoization `cache`; a `view` is a window — a `base` rope plus an `offset`.
 //! The cost model this buys:
 //!
 //! - `concat`/`append` are O(1): one `node` allocation, no copying.
 //! - `len` is O(1): every shape carries it.
-//! - `slice` is O(1): one `sub` allocation over the source (collapsing a
-//!   sub-of-sub, so windows never stack). A `sub`'s base is always
+//! - `slice` is O(1): one `view` allocation over the source (collapsing a
+//!   view-of-view, so windows never stack). A `view`'s base is always
 //!   *flat-available* — a leaf or an already-cached node (slicing an uncached
 //!   node forces it first, which memoizes) — so `get` reads straight through
 //!   a window without forcing or copying.
 //! - The first *whole-value read* (`eql` on equal lengths, `map`, a host
 //!   call) forces the rope — one O(n) fill into a fresh flat payload, memoized
 //!   in the entry node's `cache` (its children are then nulled, releasing the
-//!   tree). Later reads are O(1) to reach the payload. (A `sub` is not
+//!   tree). Later reads are O(1) to reach the payload. (A `view` is not
 //!   memoized: forcing one is a single window copy of exactly its own size.)
 //! - The documented hazard: *alternating* append and whole-value reads
 //!   re-forces per read (the new node above a cached one is uncached), which
@@ -41,7 +41,7 @@
 //!
 //! The host ABI is untouched by the rope: wire `Bin` payloads cross the boundary as the
 //! flat `$bytes`/`$elems` arrays (params are forced before the call, results
-//! are wrapped into fresh leaves after it), so curios-rt and the curios-js
+//! are embedded into fresh leaves after it), so curios-rt and the curios-js
 //! bridge only ever see flat arrays.
 
 use curios_wasm::{
@@ -113,9 +113,9 @@ fn ref_field(type_name: TypeName, is_nullable: bool, mutability: Mutability) -> 
     }
 }
 
-/// A rope base (`$bin` / `$lst`) — the non-final struct every carrier ref is
+/// A rope base (`$rope/bin` / `$rope/lst`) — the non-final struct every carrier ref is
 /// cast to: `struct (field $tag (i32)) (field $len (i32))`. `tag` is 0 for a
-/// leaf, 1 for a node, 2 for a sub; `len` is the carrier's element count, so
+/// leaf, 1 for a node, 2 for a view; `len` is the carrier's element count, so
 /// `len` and the tag dispatch never force.
 pub(crate) fn rope_base_sub_type(tag_field: FieldName, len_field: FieldName) -> SubType {
     SubType {
@@ -128,7 +128,7 @@ pub(crate) fn rope_base_sub_type(tag_field: FieldName, len_field: FieldName) -> 
     }
 }
 
-/// A rope leaf (`$bin/leaf` / `$lst/leaf`) — final, subtype of the base: adds
+/// A rope leaf (`$rope/bin/leaf` / `$rope/lst/leaf`) — final, subtype of the base: adds
 /// the flat payload (`$bytes` / `$elems`).
 pub(crate) fn rope_leaf_sub_type(
     base_type: TypeName,
@@ -151,7 +151,7 @@ pub(crate) fn rope_leaf_sub_type(
     }
 }
 
-/// A rope node (`$bin/node` / `$lst/node`) — final, subtype of the base: adds
+/// A rope node (`$rope/bin/node` / `$rope/lst/node`) — final, subtype of the base: adds
 /// two children and the memoization `cache`. All three are mutable and
 /// nullable: forcing writes the flat payload into `cache` and nulls the
 /// children, releasing the tree while the memo stays live.
@@ -180,13 +180,13 @@ pub(crate) fn rope_node_sub_type(
     }
 }
 
-/// A rope sub (`$bin/sub` / `$lst/sub`) — final, subtype of the base: a
+/// A rope view (`$rope/bin/view` / `$rope/lst/view`) — final, subtype of the base: a
 /// window into a `base` rope starting at `offset`. All fields are immutable;
 /// the invariant that makes windows read-through is *representational*: a
-/// `sub`'s base is always flat-available (a leaf, or a node whose `cache` is
+/// `view`'s base is always flat-available (a leaf, or a node whose `cache` is
 /// already set), enforced by the only constructor, the emitted `slice`
 /// helper.
-pub(crate) fn rope_sub_sub_type(
+pub(crate) fn rope_view_sub_type(
     base_type: TypeName,
     tag_field: FieldName,
     len_field: FieldName,

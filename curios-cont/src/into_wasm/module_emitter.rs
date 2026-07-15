@@ -2,7 +2,7 @@ use {
     super::{
         Context, ExprEmitter, RopeEmitter, Table, bytes_sub_type, cell_sub_type, elems_sub_type,
         flt_sub_type, rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type,
-        rope_sub_sub_type,
+        rope_view_sub_type,
     },
     curios_abi::WireType,
     curios_base::{Grain, PackedBin},
@@ -30,12 +30,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// The `Bin` rope family: the flat `$bytes` payload (the host-boundary
-    /// shape), the `$bin` base, and its `leaf`/`node`/`sub` subtypes. Each is its
+    /// The binary rope family: the flat `$bytes` payload (the host-boundary
+    /// shape), the `$rope/bin` base, and its `leaf`/`node`/`view` subtypes. Each is its
     /// own singleton recursion group — `$bytes` must canonicalize equal to
     /// the type curios-js's bridge declares standalone, and a subtype may
     /// reference any *earlier* group.
-    fn emit_bin_types(&mut self) {
+    fn emit_bin_rope_types(&mut self) {
         let rope = self.table.bin_rope();
 
         self.module.add_type(rope.payload.clone(), bytes_sub_type());
@@ -66,8 +66,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ),
         );
         self.module.add_type(
-            rope.sub.clone(),
-            rope_sub_sub_type(
+            rope.view.clone(),
+            rope_view_sub_type(
                 rope.base,
                 rope.tag_field,
                 rope.len_field,
@@ -180,8 +180,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// The `Lst` mirror of [`emit_bin_types`](Self::emit_bin_types).
-    fn emit_lst_types(&mut self) {
+    /// The `Lst` mirror of [`emit_bin_rope_types`](Self::emit_bin_rope_types).
+    fn emit_lst_rope_types(&mut self) {
         let rope = self.table.lst_rope();
 
         self.module
@@ -213,8 +213,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ),
         );
         self.module.add_type(
-            rope.sub.clone(),
-            rope_sub_sub_type(
+            rope.view.clone(),
+            rope_view_sub_type(
                 rope.base,
                 rope.tag_field,
                 rope.len_field,
@@ -566,7 +566,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// call other helpers go first: *building* a body references its callees
     /// through the table, so the callee used-flags must settle before they
     /// are read — deep host-boundary forms, then everything else whose body
-    /// calls `force` (`eql`, `map`, `slice`, `read`), then `force`/`wrap`.
+    /// calls `force` (`eql`, `map`, `slice`, `read`), then `force`/`embed`.
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
 
@@ -574,15 +574,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_lst_bin_force_func(self.table.lst_bin_force_func());
         }
 
-        if self.table.lst_bin_wrap_used() {
-            ropes.emit_lst_bin_wrap_func(self.table.lst_bin_wrap_func());
+        if self.table.lst_bin_embed_used() {
+            ropes.emit_lst_bin_embed_func(self.table.lst_bin_embed_func());
         }
 
-        if self.table.bin_eql_used() {
+        if self.table.bytes_eql_used() {
             ropes.emit_eql_func(
                 &self.table.bin_rope(),
-                self.table.bin_eql_func(),
-                self.table.bin_force_func(),
+                self.table.bytes_eql_func(),
+                self.table.bytes_force_func(),
             );
         }
 
@@ -594,11 +594,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_map_func(self.table.lst_map_func(), self.table.lst_force_func());
         }
 
-        if self.table.bin_slice_used() {
+        if self.table.bytes_slice_used() {
             ropes.emit_slice_func(
                 &self.table.bin_rope(),
-                self.table.bin_slice_func(),
-                Some(self.table.bin_force_func()),
+                self.table.bytes_slice_func(),
+                Some(self.table.bytes_force_func()),
             );
         }
 
@@ -618,11 +618,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
-        if self.table.bin_read_used() {
+        if self.table.bytes_read_used() {
             ropes.emit_read_func(
                 &self.table.bin_rope(),
-                self.table.bin_read_func(),
-                self.table.bin_force_func(),
+                self.table.bytes_read_func(),
+                self.table.bytes_force_func(),
             );
         }
 
@@ -638,8 +638,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
-        if self.table.bin_force_used() {
-            ropes.emit_force_func(&self.table.bin_rope(), self.table.bin_force_func());
+        if self.table.bytes_force_used() {
+            ropes.emit_force_func(&self.table.bin_rope(), self.table.bytes_force_func());
         }
 
         if self.table.bits_force_used() {
@@ -650,19 +650,19 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_force_func(&self.table.lst_rope(), self.table.lst_force_func());
         }
 
-        if self.table.bin_wrap_used() {
-            ropes.emit_wrap_func(&self.table.bin_rope(), self.table.bin_wrap_func());
+        if self.table.bytes_embed_used() {
+            ropes.emit_embed_func(&self.table.bin_rope(), self.table.bytes_embed_func());
         }
 
-        if self.table.lst_wrap_used() {
-            ropes.emit_wrap_func(&self.table.lst_rope(), self.table.lst_wrap_func());
+        if self.table.lst_embed_used() {
+            ropes.emit_embed_func(&self.table.lst_rope(), self.table.lst_embed_func());
         }
     }
 
     pub(super) fn emit_module(&mut self, module: &'a crate::Module) {
         self.emit_flt_type();
-        self.emit_bin_types();
-        self.emit_lst_types();
+        self.emit_bin_rope_types();
+        self.emit_lst_rope_types();
         self.emit_cell_type();
         self.emit_tpl_types();
         self.emit_clsr_arity_types();

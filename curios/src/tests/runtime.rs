@@ -849,7 +849,7 @@ fn accumulation_loops_are_linear_by_construction() {
 
 #[test]
 fn peel_loops_are_linear_by_construction() {
-    // The window (`sub`) shape's whole promise, the consumption-side mirror of
+    // The window (`view`) shape's whole promise, the consumption-side mirror of
     // `accumulation_loops_are_linear_by_construction`: a naive head/tail peel
     // over 100k bytes is O(n) with no optimizer recognition anywhere — the
     // first read forces once, then every tail is an O(1) collapsed window and

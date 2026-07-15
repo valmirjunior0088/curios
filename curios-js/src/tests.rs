@@ -1,5 +1,5 @@
 //! Tests for the browser bridge helpers. Program-side `Bytes` is a rope
-//! (`$bin/leaf` / `$bin/node` structs); what crosses to a host is always the
+//! (`$rope/bin/leaf` / `$rope/bin/node` structs); what crosses to a host is always the
 //! forced flat payload, which is what the bridge accessors read and write.
 
 use {

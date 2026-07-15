@@ -323,7 +323,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     }
 
     /// Lower a rope slice: one call to the shared `slice` helper — an O(1)
-    /// window (`sub`) over the source, with the bounds trap and the
+    /// window (`view`) over the source, with the bounds trap and the
     /// read-through invariant maintained inside the helper.
     fn emit_rope_slice(
         &mut self,
@@ -953,11 +953,11 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             crate::Code::FltOfLeBytes(operand) => {
                 // The inverse of `FltToLeBytes`: trap (via the special label) unless
                 // the `Bin` is exactly 4 bytes, then OR the bytes back into an i32
-                // -- each `$bin/read` zero-extends its packed byte -- and
+                // -- each `$bytes/read` zero-extends its packed byte -- and
                 // reinterpret. Byte-for-byte `f32::from_le_bytes`, no host
                 // round-trip.
                 let rope = self.context.table().bin_rope();
-                let read = self.context.table().bin_read_func();
+                let read = self.context.table().bytes_read_func();
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Bin));
                 self.emit_instr(Self::rope_get(&rope, &rope.len_field));
                 self.emit_instr(Instr::I32Const { value: 4 });
@@ -1051,7 +1051,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             crate::Code::BinEql(grain, left, right) => {
                 let eql = match grain {
                     Grain::B => self.context.table().bits_eql_func(),
-                    Grain::X => self.context.table().bin_eql_func(),
+                    Grain::X => self.context.table().bytes_eql_func(),
                 };
                 self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Bin));
                 self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Bin));
@@ -1064,7 +1064,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             crate::Code::BinGet(grain, bin, idx) => {
                 let read = match grain {
                     Grain::B => self.context.table().bits_read_func(),
-                    Grain::X => self.context.table().bin_read_func(),
+                    Grain::X => self.context.table().bytes_read_func(),
                 };
                 self.emit_instrs(self.context.load_value_instrs(bin, LoadAs::Bin));
                 self.emit_instrs(self.context.load_value_instrs(idx, LoadAs::Nat));
@@ -1077,7 +1077,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             crate::Code::BinSlice(grain, bin, start, end) => {
                 let slice = match grain {
                     Grain::B => self.context.table().bits_slice_func(),
-                    Grain::X => self.context.table().bin_slice_func(),
+                    Grain::X => self.context.table().bytes_slice_func(),
                 };
                 self.emit_rope_slice(&result_local, bin, start, end, LoadAs::Bin, slice);
             }

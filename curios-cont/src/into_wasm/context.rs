@@ -241,7 +241,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 vec![Instr::RefCast {
                     ref_type: RefType {
                         is_nullable: false,
-                        heap_type: HeapType::Concrete(self.table().bin_type()),
+                        heap_type: HeapType::Concrete(self.table().bin_rope_type()),
                     },
                 }]
             }
@@ -249,7 +249,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 vec![Instr::RefCast {
                     ref_type: RefType {
                         is_nullable: false,
-                        heap_type: HeapType::Concrete(self.table().lst_type()),
+                        heap_type: HeapType::Concrete(self.table().lst_rope_type()),
                     },
                 }]
             }
@@ -589,7 +589,7 @@ impl<'a, 'b> Context<'a, 'b> {
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<Instr> {
         let force = match wire_type {
             WireType::Nat | WireType::Bln | WireType::Int => return vec![],
-            WireType::Bin | WireType::Io => self.table().bin_force_func(),
+            WireType::Bin | WireType::Io => self.table().bytes_force_func(),
             WireType::Lst(inner) => match **inner {
                 WireType::Bin | WireType::Io => self.table().lst_bin_force_func(),
                 _ => self.table().lst_force_func(),
@@ -600,19 +600,19 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     /// The wire→rope step for one host result: a reference re-enters as a
-    /// host-built flat payload and is wrapped into a fresh leaf — deeply for
+    /// host-built flat payload and is embedded into a fresh leaf — deeply for
     /// `Lst(Bin)`, whose elements the host lowered as raw `$bytes`.
-    fn wire_wrap_instrs(&self, wire_type: &WireType) -> Vec<Instr> {
-        let wrap = match wire_type {
+    fn wire_embed_instrs(&self, wire_type: &WireType) -> Vec<Instr> {
+        let embed = match wire_type {
             WireType::Nat | WireType::Bln | WireType::Int => return vec![],
-            WireType::Bin | WireType::Io => self.table().bin_wrap_func(),
+            WireType::Bin | WireType::Io => self.table().bytes_embed_func(),
             WireType::Lst(inner) => match **inner {
-                WireType::Bin | WireType::Io => self.table().lst_bin_wrap_func(),
-                _ => self.table().lst_wrap_func(),
+                WireType::Bin | WireType::Io => self.table().lst_bin_embed_func(),
+                _ => self.table().lst_embed_func(),
             },
         };
 
-        vec![Instr::Call { func_name: wrap }]
+        vec![Instr::Call { func_name: embed }]
     }
 
     /// Emit a host primitive call in tail position, then branch to its resume.
@@ -647,9 +647,9 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().host_func(function),
                 });
 
-                // Wrap a reference result back into a rope. Only the *final*
+                // Embed a reference result back into a rope. Only the *final*
                 // result may be a reference: an earlier one would sit under
-                // later stack values, and rewrapping it would need juggling
+                // later stack values, and embedding it would need juggling
                 // through locals. Every host signature keeps references last.
                 for (_, wire_type) in signature.results.iter().rev().skip(1) {
                     debug_assert!(
@@ -660,7 +660,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 }
 
                 if let Some((_, wire_type)) = signature.results.last() {
-                    output.extend(self.wire_wrap_instrs(wire_type));
+                    output.extend(self.wire_embed_instrs(wire_type));
                 }
 
                 match signature.results.len() {
