@@ -1,4 +1,4 @@
-# Anonymous Match Functions
+# Anonymous match functions
 
 Working implementation specification for a surface form analogous to OCaml's `function`, expressed in Curios as `match =>`.
 
@@ -6,7 +6,7 @@ This document is the implementation handoff for the feature. Once the implementa
 
 ## Status and dependency
 
-This is the second of two related projects. It should preferably follow [`PARKED_LAMBDA_INFERENCE_SPEC.md`](PARKED_LAMBDA_INFERENCE_SPEC.md), allowing anonymous match functions to inherit the same monomorphic, use-driven inference as ordinary lambdas.
+This is the second of two related projects. It should preferably follow [`10_LAMBDA_INFERENCE_SPEC.md`](10_LAMBDA_INFERENCE_SPEC.md), allowing anonymous match functions to inherit the same monomorphic, use-driven inference as ordinary lambdas.
 
 The syntax can technically be parsed and lowered before that project lands, but it would then require an expected function type in cases where its scrutinee carrier cannot be inferred from the arms. The implementation must not add a match-function-specific inference mechanism.
 

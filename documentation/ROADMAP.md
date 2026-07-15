@@ -18,7 +18,8 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] AOT `.cwasm` precompilation (deserialized and run without re-JITting)
 - [x] Crate-boundary split isolating the Cranelift/Binaryen-free launcher (`curios-rt`) from the JIT-capable compiler
 - [x] Pure pipeline driver crate (`curios-pipeline`) decoupled from runtime/Binaryen/CLI, enabling a wasm32 (browser) build
-- [ ] Bootstrap the compiler in Curios itself (self-hosting)
+- [x] Per-thread elaborated-prelude cache and replay (the fixed `sys`/`syn`/`std` prefix is checked once per compiler thread, then restored into each fresh elaboration context)
+- [ ] [Bootstrap the compiler in Curios itself](06_BOOTSTRAP_SPEC.md) (self-host every language-specific stage through raw WebAssembly generation while retaining Rust as the native host and stage-zero seed)
 
 ## Primitive Types
 
@@ -26,7 +27,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
   - [x] `Nat`
   - [x] `Byte` (i31 scalar; contextual literals `0..=255`; `Byte/to_nat` and wrapping `Nat/to_byte`)
   - [x] `Int`
-  - [x] `Flt`
+  - [x] `Flt` (bit-preserving binary32 identity, including `to_le_bytes`/`of_le_bytes` reinterpretation across every compiler stage)
   - [x] Packed `Bits` and `Bytes` (grain-specialized operations over shared immutable windows; O(1) slices and tails)
   - [x] `Lst`
 
@@ -56,6 +57,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
   - [ ] Pruning of out-of-scope metavariables
   - [ ] η-equate metavariable heads
   - [ ] Surface residual unification constraints (distinguish postponed vs. rigid-mismatch diagnostics)
+- [ ] [Monomorphic, use-driven inference for unannotated lambda parameters](10_LAMBDA_INFERENCE_SPEC.md) (park structurally blocked inference within one enclosing item)
 
 ## Syntax Sugar
 
@@ -70,20 +72,25 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Headless match (a headless `Bln` condition ladder `match | cond => … | _ => … end` with a mandatory `_` default; arms inherit their condition's definitional refinement)
 - [x] Bind-arms (`| pattern = value =>`, Rust `if let`, in the headless ladder; refutable LHS, nested patterns, fallthrough shared through a nullary thunk)
 - [x] Final `| _ =>` catch-all in headed inductive matches (bare/final/top-level only; lowers to the core `Cases::Inductive` default)
+- [ ] [Anonymous match functions](11_ANONYMOUS_MATCH_FUNCTION_SPEC.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match)
 
 ## Optimizations
 
 - [x] Core calculus machinery (reduction & conversion performance)
 - [x] Ersd (ersd→ersd) optimization passes
   - [x] Dead-item pruning via call-graph reachability
+  - [x] Closed-term evaluation and recursive literal-spine specialization
   - [x] Worker/wrapper transform for non-tail self-recursion
 - [x] CPS (cont→cont) optimization passes
   - [x] Constant folding
+  - [x] Common-subexpression elimination
   - [x] Dead code elimination
   - [x] Tag threading (known-argument case/callee specialization)
   - [x] Closure lifting and call-site specialization
+  - [x] Function inlining
   - [x] Tail-recursion-to-loop conversion
-  - [x] Copy propagation, pure-call evaluation, literal hoisting, jump threading, dead-argument elimination, and slice forwarding
+  - [x] Loop-invariant code motion
+  - [x] Copy propagation, pure-call evaluation, literal hoisting, jump and jump-argument threading, dead-argument elimination, map simplification, and slice forwarding
 - [x] Wasm-emission optimizations
   - [x] `struct.new` construction with immutable fields
   - [x] Direct `br` for single-target regions
@@ -114,6 +121,8 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Diagnostics
   - [x] Span-based error quality across all stages
   - [x] Diagnostic terms printed with names in scope
+  - [x] Bare written goals (`?`) report their local scope, expected type, and optional inferred solution
+  - [ ] [Required labeled written goals (`?label`), complete goal batches, and a typed incomplete checking outcome](12_WRITTEN_GOALS_SPEC.md)
 
 ## Testing & Documentation
 
@@ -135,6 +144,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Browser playground
   - [x] Run harness owned by `curios-js` (`compile`/`run`, with wire codes from `curios-abi` and a local bridge for the compiler's wire-ABI `Bin` payload shape)
 - [ ] Developer tooling
+  - [ ] [`curios wonder` structured program-analysis interface](13_WONDER_SPEC.md) (source and semantic indexes, diagnostics, references, dependencies, witnesses, and snapshot queries)
   - [ ] Code formatter
   - [ ] Terminal REPL
   - [ ] Language server (hover, go-to-definition, highlighting)
@@ -155,9 +165,19 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] JSON codec (`std/Json`)
 - [x] HTTP client (`std/http`, built on `tcp` + `Task`)
 - [x] Typed format strings (`std/Fmt`)
-- [x] Arbitrary-precision naturals (`std/BigNat`, packed over `Bits`)
+- [x] Arbitrary-precision naturals (`std/BigNat`, canonical and packed over `Bits`)
+  - [x] Machine-checked additive and multiplicative laws, additive cancellation, order reflection/transitivity, and power-of-two interaction lemmas
+- [x] Certified strictly-positive arbitrary-precision naturals (`std/NonZero`)
 - [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/NonZero`)
-- [x] Proof-carrying UTF-8 string decoding (`std/Str`, `std/Char`)
+- [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`; decoded scalar values are currently exposed as `Nat` through the `std/Char` namespace)
+- [ ] [Certified Unicode-scalar `Char` type and `Str` migration](01_CHAR_AND_STR_SPEC.md) (`'…' : Char`, typed character APIs, and explicit Byte/Char/Nat boundaries)
+- [ ] [`BigFlt`: certified exact dyadic arithmetic and correctly rounded binary32 boundaries](02_BIG_FLT_SPEC.md)
+  - [ ] [`BigInt` algebra, order, and power-of-two laws required by `BigFlt`](03_BIG_INT_LAWS_SPEC.md)
+  - [ ] [`BigFlt` canonical representation, exact core operations, comparison, and witnesses](04_BIG_FLT_CORE_SPEC.md)
+  - [ ] [`BigFlt` exact binary32 widening and correctly rounded narrowing](05_BIG_FLT_BINARY32_SPEC.md)
+  - [ ] [`BigFlt` algebra and order theorem corpus](07_BIG_FLT_LAWS_SPEC.md)
+  - [ ] [Correctly rounded `BigFlt` ratio narrowing](08_BIG_FLT_RATIO_NARROWING_SPEC.md)
+  - [ ] [`BigFlt` binary32 boundary proofs](09_BIG_FLT_BOUNDARY_PROOFS_SPEC.md)
 - [x] Parser-combinator library (`std/Parse`)
 - [x] Core collections (`std/Lst` and its helpers, length-indexed `std/Vec`)
 - [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bytes` keys — same entries, same shape — with injective key encodings via its `Key` concept)

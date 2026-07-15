@@ -1,4 +1,4 @@
-# Parked Lambda Inference
+# Lambda inference
 
 Working implementation specification for monomorphic, use-driven inference of unannotated lambda parameters.
 
@@ -6,7 +6,7 @@ This document is the implementation handoff for the feature. Once the implementa
 
 ## Status and relationship to anonymous match functions
 
-This is the first of two related projects. It is independently useful and should land before the proposed [`match =>` anonymous match-function syntax](MATCH_FUNCTION_SPEC.md), so anonymous match functions inherit the same inference behavior as ordinary lambdas instead of introducing a syntax-specific typing rule.
+This is the first of two related projects. It is independently useful and should land before the proposed [`match =>` anonymous match-function syntax](11_ANONYMOUS_MATCH_FUNCTION_SPEC.md), so anonymous match functions inherit the same inference behavior as ordinary lambdas instead of introducing a syntax-specific typing rule.
 
 The intended feature is deliberately smaller than Hindley–Milner inference: a lambda may acquire constraints from later uses within the same enclosing item, but it is never generalized and inference never crosses an item boundary.
 

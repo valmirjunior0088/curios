@@ -1,6 +1,6 @@
-# Representation specification PT3 — certified `Char` and Unicode-scalar `Str`
+# `Char` and `Str` specification — certified Unicode scalars
 
-Working implementation specification for introducing a real `Char` type in Curios and changing `Str`'s logical element from an unrefined `Nat` code point to a certified Unicode scalar value. This is the third specification in the representation series: [packed Bits, Bytes, and Byte syntax](SYNTAX.md#literals) supplies primitive `Byte` and `Bytes`; PT2 (landed) completed the packed integer layers (`std/BigNat`, `std/NonZero`, `std/BigInt`) and conversion work; [PT4](REPRESENTATION_SPEC_PT4_BIGFLT.md) subsequently handles `BigFlt` and its exclusive obligations.
+Working implementation specification for introducing a real `Char` type in Curios and changing `Str`'s logical element from an unrefined `Nat` code point to a certified Unicode scalar value. This is the third specification in the representation series: [packed Bits, Bytes, and Byte syntax](SYNTAX.md#literals) supplies primitive `Byte` and `Bytes`; PT2 (landed) completed the packed integer layers (`std/BigNat`, `std/NonZero`, `std/BigInt`) and conversion work; [PT4](02_BIG_FLT_SPEC.md) subsequently handles `BigFlt` and its exclusive obligations.
 
 This file owns character and string semantics only. Durable conclusions must move into `SYNTAX.md`, `ROADMAP.md`, `AGENTS.md`, and standard-library/module documentation when the implementation lands; delete this working series after PT4.
 
