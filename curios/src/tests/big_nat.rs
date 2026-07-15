@@ -1,7 +1,7 @@
 use {super::run, curios_rt::MockHost, std::time::Duration};
 
 #[test]
-fn bignat_add_ripples_carry() {
+fn big_nat_add_ripples_carry() {
     // `add` propagates carry along the binary numeral: 99_999_999 ends in eight
     // set bits, so adding 1 ripples the carry through all of them (the
     // `pos_add`/`pos_add_c` twin recursion) before it lands.
@@ -13,7 +13,7 @@ fn bignat_add_ripples_carry() {
 }
 
 #[test]
-fn bignat_sub_borrows() {
+fn big_nat_sub_borrows() {
     // `sub` runs the mask-based borrow recursion: 100_000_000 ends in eight
     // clear bits, so subtracting 1 borrows through all of them. The result is
     // canonical by construction — no trailing-zero cleanup exists to get wrong.
@@ -25,7 +25,7 @@ fn bignat_sub_borrows() {
 }
 
 #[test]
-fn bignat_mul_small_propagates_carry() {
+fn big_nat_mul_small_propagates_carry() {
     // `mul_small` is `mul` against a decoded native operand: 9999 * 99999 =
     // 999_890_001 crosses well past both inputs' bit widths, so every carry of
     // the shift-and-add recursion has to land.
@@ -37,7 +37,7 @@ fn bignat_mul_small_propagates_carry() {
 }
 
 #[test]
-fn bignat_mul_crosses_word_width() {
+fn big_nat_mul_crosses_word_width() {
     // Full big-by-big `mul`: 123_456_789 × 987_654_321 = 121_932_631_112_635_269
     // needs 57 bits, so a correct rendering proves the product lives in the
     // numeral itself, never in a fixed-width intermediate.
@@ -49,7 +49,7 @@ fn bignat_mul_crosses_word_width() {
 }
 
 #[test]
-fn bignat_mul_pow2_builds_large_powers() {
+fn big_nat_mul_pow2_builds_large_powers() {
     // `mul_pow2` doubles past every fixed-width integer: 2^40 = 1_099_511_627_776
     // far exceeds the 31-bit `Nat` carrier, so a correct result proves each
     // doubling is a low-bit prepend on the numeral, not native arithmetic.
@@ -61,7 +61,7 @@ fn bignat_mul_pow2_builds_large_powers() {
 }
 
 #[test]
-fn bignat_div2_and_parity() {
+fn big_nat_div2_and_parity() {
     // `div2` drops the low bit in O(1) and `is_even` reads it: 101 is odd and
     // floor-halves to 50, which is even.
     let source = r#"
@@ -80,7 +80,7 @@ fn bignat_div2_and_parity() {
 }
 
 #[test]
-fn bignat_bit_len_counts_binary_digits() {
+fn big_nat_bit_len_counts_binary_digits() {
     // `bit_len` is the numeral's length: zero has no bits, 1 is a single bit,
     // and the 255 → 256 step is where the count grows from 8 to 9.
     let source = r#"
@@ -95,7 +95,7 @@ fn bignat_bit_len_counts_binary_digits() {
 }
 
 #[test]
-fn bignat_cmp_orders_by_magnitude() {
+fn big_nat_cmp_orders_by_magnitude() {
     // `cmp` lets the high bits decide (the recursion on the numeral tails),
     // breaking ties on the low bit only afterward, so two values differing only
     // in the lowest bit still order correctly: 12345678 < 12345679, equal to
@@ -116,7 +116,7 @@ fn bignat_cmp_orders_by_magnitude() {
 }
 
 #[test]
-fn bignat_zero_renders_and_roundtrips() {
+fn big_nat_zero_renders_and_roundtrips() {
     // Zero is its own constructor, which `to_str` renders as "0" (not the empty
     // string), and a value with clear low bits round-trips through the binary
     // long division that produces the decimal digits.

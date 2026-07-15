@@ -1305,7 +1305,7 @@ fn erase_rec(
     rec: &Rec,
     expected: &Term,
 ) -> Result<curios_ersd::Term, Error> {
-    let Rec { items, tail, .. } = rec;
+    let Rec { group, tail } = rec;
 
     let names = tail
         .label_iter()
@@ -1320,7 +1320,8 @@ fn erase_rec(
 
     let label_terms = label_terms.iter().collect::<Vec<_>>();
 
-    let items = items
+    let items = group
+        .items()
         .iter()
         .map(|(type_, body)| (type_.open(&label_terms), body.open(&label_terms)))
         .collect::<Vec<_>>();
@@ -1332,17 +1333,9 @@ fn erase_rec(
             context.assume(name, type_);
         }
 
-        // One call for the whole group marks every member recursive by
-        // construction (see `Context::define_rec_members`) — the direct fix
-        // for the bug this design started from: a per-item loop here once
-        // omitted the mark, and match-guarded delta silently stopped
-        // covering erasure.
-        let members = names
-            .iter()
-            .cloned()
-            .zip(items.iter().map(|(_, body)| body.clone()))
-            .collect::<Vec<_>>();
-        context.define_rec_members(&members);
+        for (index, name) in names.iter().enumerate() {
+            context.define(name, &Term::rec_member(group.clone(), index));
+        }
 
         let erased_items = items
             .iter()
@@ -1394,10 +1387,7 @@ pub fn erase_module(
         // would be wrongly rejected, the island defaulting to the root.
         let item_module = match item {
             Item::Let(def) => def.island.clone(),
-            Item::Rec(defs) => defs
-                .first()
-                .map(|def| def.island.clone())
-                .unwrap_or_default(),
+            Item::Rec(rec) => rec.island(),
         };
         context.set_island(item_module);
 
@@ -1411,13 +1401,14 @@ pub fn erase_module(
                     body,
                 });
             }
-            Item::Rec(defs) => {
-                for def in defs {
+            Item::Rec(rec) => {
+                let defs = rec.definitions();
+                for def in &defs {
                     context.assume(&def.name, &def.type_);
                 }
 
-                for def in defs {
-                    context.define(&def.name, &def.body);
+                for (index, def) in defs.iter().enumerate() {
+                    context.define(&def.name, &Term::rec_member(rec.group.clone(), index));
                 }
 
                 let names = defs.iter().map(|def| def.name.clone()).collect::<Vec<_>>();
@@ -1483,6 +1474,16 @@ fn erase_subterm(
         Subterm::Proj(proj) => erase_proj(context, proj),
         Subterm::Let(let_) => erase_let(context, let_, expected),
         Subterm::Rec(lr) => erase_rec(context, lr, expected),
+        Subterm::RecMember(member) => {
+            let rec = Rec {
+                group: member.group.clone(),
+                tail: Scope::constant(
+                    Many(member.group.len()),
+                    Term::var(Var::bound(member.index)),
+                ),
+            };
+            erase_rec(context, &rec, expected)
+        }
         Subterm::Var(var) => {
             Ok(curios_ersd::Subterm::Name(curios_ersd::Name::from(var.unwrap())).into())
         }

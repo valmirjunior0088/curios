@@ -5,8 +5,8 @@ use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
         InductiveParam, InductiveType, Item, Let, Match, Metavar, MetavarId, MetavarOrigin, Module,
-        MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, Struct, StructType, Structure, Subterm,
-        Term, Tuple, TupleType, Variant,
+        MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, RecItem, Struct, StructType, Structure,
+        Subterm, Term, Tuple, TupleType, Variant,
     },
     std::sync::Arc,
 };
@@ -111,11 +111,12 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
 fn zonk_item(context: &Context, item: &Item) -> Result<Item, Error> {
     match item {
         Item::Let(def) => Ok(Item::Let(zonk_definition(context, def)?)),
-        Item::Rec(defs) => Ok(Item::Rec(
-            defs.iter()
+        Item::Rec(rec) => Ok(Item::Rec(RecItem::new(
+            rec.definitions()
+                .iter()
                 .map(|def| zonk_definition(context, def))
                 .collect::<Result<Vec<_>, Error>>()?,
-        )),
+        ))),
     }
 }
 
@@ -431,18 +432,37 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             tail: tail.map_body(|b| zonk_term(context, b))?,
         }),
 
-        Subterm::Rec(Rec { id, items, tail }) => Subterm::Rec(Rec {
-            id: *id,
-            items: items
-                .iter()
-                .map(|(type_, body)| {
-                    Ok((
-                        type_.map_body(|t| zonk_term(context, t))?,
-                        body.map_body(|b| zonk_term(context, b))?,
-                    ))
-                })
-                .collect::<Result<_, Error>>()?,
+        Subterm::Rec(Rec { group, tail }) => Subterm::Rec(Rec {
+            group: super::RecGroup::new(
+                group
+                    .items()
+                    .iter()
+                    .map(|(type_, body)| {
+                        Ok((
+                            type_.map_body(|t| zonk_term(context, t))?,
+                            body.map_body(|b| zonk_term(context, b))?,
+                        ))
+                    })
+                    .collect::<Result<_, Error>>()?,
+            ),
             tail: tail.map_body(|b| zonk_term(context, b))?,
+        }),
+
+        Subterm::RecMember(member) => Subterm::RecMember(super::RecMember {
+            group: super::RecGroup::new(
+                member
+                    .group
+                    .items()
+                    .iter()
+                    .map(|(type_, body)| {
+                        Ok((
+                            type_.map_body(|t| zonk_term(context, t))?,
+                            body.map_body(|b| zonk_term(context, b))?,
+                        ))
+                    })
+                    .collect::<Result<_, Error>>()?,
+            ),
+            index: member.index,
         }),
 
         // Handled in `zonk_term` before dispatch.

@@ -81,9 +81,9 @@ impl FlatItem {
     pub(super) fn into_core(self) -> curios_core::Item {
         match self {
             FlatItem::Let(let_) => curios_core::Item::Let(let_.into_core()),
-            FlatItem::Rec(items) => {
-                curios_core::Item::Rec(items.into_iter().map(FlatLet::into_core).collect())
-            }
+            FlatItem::Rec(items) => curios_core::Item::Rec(curios_core::RecItem::new(
+                items.into_iter().map(FlatLet::into_core).collect(),
+            )),
         }
     }
 }

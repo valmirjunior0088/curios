@@ -5,17 +5,6 @@ use /std/BigNat/{pos_cmp_refl, pos_cmp_eq, pos_cmp_flip, pos_cmp_trans, pos_cmp_
 use /std/BigNat/{pos_lt_witness, pos_mul_cancel_l};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 
--- Arbitrary-precision integers as sign-adjoined binary numerals, Coq's `Z`
--- design: the strictly positive stratum `Pos` (from /std/BigNat) is wrapped
--- by a constructor per sign, so every integer has exactly one representation
--- — a negative zero cannot even be written — and structural equality is value
--- equality by construction.
---
--- All sign-case analysis for the arithmetic tower lives here, once: `add`
--- works through `pos_sub`, the signed difference of two positives, which
--- returns its sign directly from the borrow recursion instead of consulting a
--- comparison that proofs would then have to reason about separately.
-
 pub induct BigInt : Type
 | neg(Pos)
 | zero()
@@ -32,8 +21,6 @@ pub let is_zero(a : BigInt) -> Bln =
     | pos(_) => false
     end;
 
--- 2z, 2z + 1, and 2z − 1 on the signed carrier: the value-level building
--- blocks of the signed borrow recursion.
 let dbl(z : BigInt) -> BigInt =
     match z
     | neg(p) => BigInt/neg(Pos/o(p))
@@ -55,7 +42,6 @@ let dbl_pred(z : BigInt) -> BigInt =
     | pos(p) => BigInt/pos(pos_pred_dbl(p))
     end;
 
--- The signed difference of two positives (Coq's `Z.pos_sub`).
 pub rec pos_sub(x : Pos, y : Pos) -> BigInt =
     match (x, y)
     | (one(), one()) => BigInt/zero()
@@ -87,7 +73,6 @@ pub let neg(a : BigInt) -> BigInt =
     | pos(p) => BigInt/neg(p)
     end;
 
--- Total: ℤ has inverses, unlike `BigNat`'s truncating `sub`.
 pub let sub(a : BigInt, b : BigInt) -> BigInt =
     add(a, neg(b));
 
@@ -159,18 +144,17 @@ pub let gte(a : BigInt, b : BigInt) -> Bln =
     | _ => true
     end;
 
-pub let of_bignat(a : BigNat) -> BigInt =
+pub let of_big_nat(a : BigNat) -> BigInt =
     match a
     | zero() => BigInt/zero()
     | pos(p) => BigInt/pos(p)
     end;
 
 pub let of_nat(n : Nat) -> BigInt =
-    of_bignat(BigNat/of_nat(n));
+    of_big_nat(BigNat/of_nat(n));
 
--- The i31 boundary: native `Int` crosses over on runtime values only.
 pub let of_int(n : Int) -> BigInt =
-    let mag = of_bignat(BigNat/of_nat(Int/abs(n)));
+    let mag = of_big_nat(BigNat/of_nat(Int/abs(n)));
     match n < +0
     | true => neg(mag)
     | false => mag
@@ -179,27 +163,19 @@ pub let of_int(n : Int) -> BigInt =
 pub let is_even(a : BigInt) -> Bln =
     BigNat/is_even(magnitude(a));
 
--- Halving toward zero: the low bit of the magnitude is dropped.
 pub let div2(a : BigInt) -> BigInt =
     match a
-    | neg(p) => neg(of_bignat(BigNat/div2(BigNat/pos(p))))
+    | neg(p) => neg(of_big_nat(BigNat/div2(BigNat/pos(p))))
     | zero() => BigInt/zero()
-    | pos(p) => of_bignat(BigNat/div2(BigNat/pos(p)))
+    | pos(p) => of_big_nat(BigNat/div2(BigNat/pos(p)))
     end;
 
--- Signed rendering, following `Int/to_str`'s explicit-sign convention.
 pub let to_str(a : BigInt) -> Str =
     match a
     | neg(p) => Str/concat("-", BigNat/to_str(BigNat/pos(p)))
     | zero() => "+0"
     | pos(p) => Str/concat("+", BigNat/to_str(BigNat/pos(p)))
     end;
-
--- ===================== the lemma base =====================
--- Compile-time only. The spine characterizes `pos_sub` against `pos_add`
--- (diag, the two witness transports, the flip antisymmetry); every ring law
--- then falls to comparison trichotomy plus `Pos` algebra — no bit-level
--- induction happens outside the spine.
 
 let qed(@A : Type, x : A) -> Eq(x, x) =
     Eq/refl();
@@ -249,9 +225,6 @@ let cong_mul_l(w : BigInt, @s : BigInt, @t : BigInt, p : Eq(s, t)) -> Eq(mul(w, 
     | refl(z) => Eq/refl()
     end;
 
--- Congruence in each `pos_sub` slot, and in each `pos_add` slot (the `Pos`
--- congruences of /std/BigNat are module-private, so the signed layer carries
--- its own).
 let cong_psub_l(w : Pos, @s : Pos, @t : Pos, p : Eq(s, t)) -> Eq(pos_sub(w, s), pos_sub(w, t)) =
     match p : (q : Eq(Pos, a, b)) => Eq(pos_sub(w, a), pos_sub(w, b))
     | refl(z) => Eq/refl()
@@ -277,7 +250,6 @@ let cong_pmul_l(w : Pos, @s : Pos, @t : Pos, p : Eq(s, t)) -> Eq(pos_mul(w, s), 
     | refl(z) => Eq/refl()
     end;
 
--- Negation commutes with the doubling helpers.
 let neg_dbl(z : BigInt) -> Eq(neg(dbl(z)), dbl(neg(z))) =
     match z : (a) => Eq(@BigInt, neg(dbl(a)), dbl(neg(a)))
     | neg(p) => qed(BigInt/pos(Pos/o(p)))
@@ -299,7 +271,6 @@ let neg_dbl_pred(z : BigInt) -> Eq(neg(dbl_pred(z)), dbl_succ(neg(z))) =
     | pos(p) => qed(BigInt/neg(pos_pred_dbl(p)))
     end;
 
--- Antisymmetry of the signed difference.
 rec pos_sub_flip(x : Pos, y : Pos) -> Eq(pos_sub(y, x), neg(pos_sub(x, y))) =
     match x : (a) => Eq(@BigInt, pos_sub(y, a), neg(pos_sub(a, y)))
     | one() =>
@@ -344,9 +315,6 @@ rec pos_sub_succ(t : Pos) -> Eq(pos_sub(pos_succ(t), t), BigInt/pos(Pos/one())) 
     | i(u) => cong_dbl_pred(pos_sub_succ(u))
     end;
 
--- Subtracting the base from a sum leaves the other summand — the two witness
--- transports every trichotomy argument stands on. The carry-successor twin
--- handles the `(i, i)` addition row.
 rec pos_sub_add_l(x : Pos, d : Pos) -> Eq(pos_sub(pos_add(x, d), x), BigInt/pos(d)) =
     match x : (a) => Eq(@BigInt, pos_sub(pos_add(a, d), a), BigInt/pos(d))
     | one() =>
@@ -413,7 +381,6 @@ and pos_sub_succ_add(x : Pos, d : Pos)
         end
     end;
 
--- Subtracting a sum from its base: the mirror transport, via antisymmetry.
 let pos_sub_add_r(x : Pos, d : Pos) -> Eq(pos_sub(x, pos_add(x, d)), BigInt/neg(d)) =
     Eq/trans(@BigInt,
         @(pos_sub(x, pos_add(x, d))),
@@ -422,8 +389,6 @@ let pos_sub_add_r(x : Pos, d : Pos) -> Eq(pos_sub(x, pos_add(x, d)), BigInt/neg(
         pos_sub_flip(pos_add(x, d), x),
         cong_neg(pos_sub_add_l(x, d)));
 
--- The two witness transports: a comparison witness pins `pos_sub` to a
--- signed constructor, so trichotomy arguments never reopen the recursion.
 let pos_sub_of_lt(x : Pos, y : Pos, d : Pos, e : Eq(pos_add(x, d), y))
     -> Eq(pos_sub(x, y), BigInt/neg(d)) =
     Eq/trans(cong_psub_l(x, Eq/sym(e)), pos_sub_add_r(x, d));
@@ -431,8 +396,6 @@ let pos_sub_of_lt(x : Pos, y : Pos, d : Pos, e : Eq(pos_add(x, d), y))
 let pos_sub_of_gt(x : Pos, y : Pos, d : Pos, e : Eq(pos_add(y, d), x))
     -> Eq(pos_sub(x, y), BigInt/pos(d)) =
     Eq/trans(cong_psub_r(y, Eq/sym(e)), pos_sub_add_l(y, d));
-
--- ===================== group laws =====================
 
 pub let add_zero_r(a : BigInt) -> Eq(add(a, BigInt/zero()), a) =
     match a : (x) => Eq(@BigInt, add(x, BigInt/zero()), x)
@@ -501,10 +464,6 @@ pub let neg_add(a : BigInt, b : BigInt) -> Eq(neg(add(a, b)), add(neg(a), neg(b)
         end
     end;
 
--- ===================== the decomposition laws =====================
--- Trichotomy on the comparison, with the witness transports doing the work:
--- no arm ever inducts on the numerals again.
-
 let pos_add_perm(x : Pos, d : Pos, c : Pos)
     -> Eq(pos_add(pos_add(x, d), c), pos_add(pos_add(x, c), d)) =
     let s1 : Eq(pos_add(pos_add(x, d), c), pos_add(x, pos_add(d, c))) =
@@ -517,7 +476,6 @@ let pos_add_perm(x : Pos, d : Pos, c : Pos)
         Eq/trans(s1, s2);
     Eq/trans(t1, s3);
 
--- `pos_sub` is invariant under a common addend.
 let pos_sub_cancel(x : Pos, y : Pos, c : Pos)
     -> Eq(pos_sub(pos_add(x, c), pos_add(y, c)), pos_sub(x, y)) =
     (match pos_cmp(x, y) : (r) => (w : Eq(pos_cmp(x, y), r))
@@ -566,7 +524,6 @@ let pos_sub_cancel(x : Pos, y : Pos, c : Pos)
          Eq/trans(t2, Eq/sym(pos_sub_of_gt(x, y, d, e)))
      end)(qed(pos_cmp(x, y)));
 
--- L1: pulling a summand out of the minuend.
 let pos_sub_add(p : Pos, q : Pos, r : Pos)
     -> Eq(pos_sub(pos_add(p, q), r), add(BigInt/pos(p), pos_sub(q, r))) =
     (match pos_cmp(q, r) : (s) => (w : Eq(pos_cmp(q, r), s))
@@ -651,7 +608,6 @@ let pos_sub_add(p : Pos, q : Pos, r : Pos)
              t4, r1s)
      end)(qed(pos_cmp(q, r)));
 
--- L2: pulling a summand out of the subtrahend.
 let pos_sub_sub(x : Pos, y : Pos, z : Pos)
     -> Eq(pos_sub(x, pos_add(y, z)), add(pos_sub(x, y), BigInt/neg(z))) =
     let s1 : Eq(pos_sub(x, pos_add(y, z)), neg(pos_sub(pos_add(y, z), x))) =
@@ -696,8 +652,6 @@ let pos_sub_sub(x : Pos, y : Pos, z : Pos)
         @(add(BigInt/neg(z), pos_sub(x, y))),
         @(add(pos_sub(x, y), BigInt/neg(z))),
         t3, s5);
-
--- ===================== ring laws =====================
 
 pub let add_assoc(a : BigInt, b : BigInt, c : BigInt)
     -> Eq(add(add(a, b), c), add(a, add(b, c))) =
@@ -984,7 +938,6 @@ pub let mul_assoc(a : BigInt, b : BigInt, c : BigInt)
         end
     end;
 
--- Negation commutes out of either multiplicand.
 let neg_mul_r(a : BigInt, b : BigInt) -> Eq(mul(a, neg(b)), neg(mul(a, b))) =
     match a : (x) => Eq(@BigInt, mul(x, neg(b)), neg(mul(x, b)))
     | neg(p) =>
@@ -1002,11 +955,6 @@ let neg_mul_r(a : BigInt, b : BigInt) -> Eq(mul(a, neg(b)), neg(mul(a, b))) =
         end
     end;
 
--- M1: a positive scalar distributes over the signed difference. Stated per
--- verdict with the comparison evidence as a plain variable — inlining a
--- derived witness (`pos_cmp_gt_to_lt(...)` as the witness argument) makes
--- every occurrence of the projected difference drag the whole proof term
--- through reduction, which blows the type-checker's budget.
 let mul_pos_sub_eq(p : Pos, x : Pos, y : Pos, w : Eq(pos_cmp(x, y), Order/eq()))
     -> Eq(mul(BigInt/pos(p), pos_sub(x, y)), pos_sub(pos_mul(p, x), pos_mul(p, y))) =
     let e : Eq(x, y) = pos_cmp_eq(x, y, w);
@@ -1053,8 +1001,6 @@ let mul_pos_sub_lt(p : Pos, x : Pos, y : Pos, w : Eq(pos_cmp(x, y), Order/lt()))
         Eq/sym(@BigInt, @(pos_sub(pos_mul(p, x), pos_mul(p, y))),
             @(BigInt/neg(pos_mul(p, d))), rt));
 
--- The `gt` case is the `lt` case seen through `pos_sub`'s antisymmetry: no
--- second witness extraction happens.
 let mul_pos_sub_gt(p : Pos, x : Pos, y : Pos, w : Eq(pos_cmp(y, x), Order/lt()))
     -> Eq(mul(BigInt/pos(p), pos_sub(x, y)), pos_sub(pos_mul(p, x), pos_mul(p, y))) =
     let g1 : Eq(mul(BigInt/pos(p), pos_sub(x, y)), mul(BigInt/pos(p), neg(pos_sub(y, x)))) =
@@ -1210,8 +1156,6 @@ pub let distrib_r(a : BigInt, b : BigInt, c : BigInt)
         @(add(mul(a, c), mul(b, c))),
         t2, s4);
 
--- Inverting the sign constructors: the no-confusion toolkit, via a boolean
--- discriminator per clash and a defaulted projection per injection.
 let bigint_is_neg(z : BigInt) -> Bln =
     match z
     | neg(_) => true
@@ -1330,8 +1274,6 @@ pub let mul_cancel_r(p : Pos, b : BigInt, c : BigInt,
                 mul_comm(BigInt/pos(p), b), w),
             mul_comm(c, BigInt/pos(p)));
     mul_cancel_l(p, b, c, w2);
-
--- ===================== order laws =====================
 
 pub let cmp_refl(a : BigInt) -> Eq(cmp(a, a), Order/eq()) =
     match a : (x) => Eq(@Order, cmp(x, x), Order/eq())

@@ -23,7 +23,7 @@ pub(crate) fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term
 }
 
 pub(crate) fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
-    super::reduce(context, term.clone())
+    super::reduce_forced(context, term.clone())
         .map_err(|error| error.into_error(|| Error::reduce_preempted(term.clone())))
 }
 

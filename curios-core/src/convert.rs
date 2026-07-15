@@ -6,10 +6,10 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, GuardedUnfold, InductiveType,
-        Match, Metavar, Prim, Proj, Rec, RecId, ReduceError, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, Variant, Visit, check, reduce,
-        unfold_guarded_apply, unfold_rec,
+        Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, InductiveType, Match,
+        Metavar, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
+        Three, Tuple, TupleType, Variant, Visit, check, reduce, reduce_forced, unfold_rec,
+        unfold_rec_apply,
     },
     crate::Instant,
     std::collections::{HashMap, HashSet, VecDeque},
@@ -153,7 +153,7 @@ impl Sort {
     /// the reverse (a non-prop reported as a prop) is the unsound direction and
     /// never happens.
     pub(crate) fn of(context: &mut Context, type_: &Term) -> Result<Sort, ReduceError> {
-        let reduced = reduce(context, type_.clone())?;
+        let reduced = reduce_forced(context, type_.clone())?;
 
         Ok(match &*reduced {
             Subterm::InductiveType(InductiveType { name, .. }) => {
@@ -475,6 +475,52 @@ impl Convert {
         }
 
         Ok(true)
+    }
+
+    /// Compare applications of the same structural recursive member without
+    /// assuming that member is injective. Convertible spines establish the
+    /// result by congruence. A genuinely different spine instead triggers one
+    /// symmetric delta step: distinct arguments may still produce equal
+    /// results for a recursive function.
+    fn compare_same_rec_apply(
+        &mut self,
+        context: &mut Context,
+        this: Apply,
+        that: Apply,
+        type_: Term,
+    ) -> Result<bool, ReduceError> {
+        if this.params.len() != that.params.len() {
+            return Ok(false);
+        }
+
+        let param_types = apply_param_types(context, &this.head, &this.params)?;
+        let mut blocked = false;
+        for (index, (a, b)) in this.params.iter().zip(&that.params).enumerate() {
+            let param_type = param_types
+                .as_ref()
+                .and_then(|types| types.get(index).cloned())
+                .unwrap_or_else(Term::type_);
+            match convert_outcome(context, &param_type, a, b)? {
+                Outcome::Converts => {}
+                Outcome::Blocked(_) => blocked = true,
+                Outcome::Mismatch => {
+                    let this = unfold_rec_apply(context, this)?;
+                    let that = unfold_rec_apply(context, that)?;
+                    return match (this, that) {
+                        (Some(this), Some(that)) => {
+                            self.enqueue(type_, this, that);
+                            Ok(true)
+                        }
+                        _ => Ok(false),
+                    };
+                }
+            }
+        }
+
+        match blocked {
+            true => self.compare_apply(context, this, that),
+            false => Ok(true),
+        }
     }
 
     fn compare_tuple_type(
@@ -897,30 +943,18 @@ impl Convert {
         this: Rec,
         that: Rec,
     ) -> Result<bool, ReduceError> {
-        // Same *elaborated* id: provably the same group by the minting-once
-        // invariant (see `RecId`) — a sound fast path ahead of the
-        // structural walk below. `RecId::Unelaborated` is the shared
-        // not-yet-elaborated placeholder (`Term::rec`), so it proves nothing
-        // about two raw groups being the same and must fall through to the
-        // structural walk like any other mismatch.
-        if let (RecId::Elaborated(a), RecId::Elaborated(b)) = (this.id, that.id)
-            && a == b
-        {
-            return Ok(true);
-        }
-
-        if this.items.len() != that.items.len() {
+        if this.group.len() != that.group.len() {
             return Ok(false);
         }
 
-        let labels = (0..this.items.len())
+        let labels = (0..this.group.len())
             .map(|_| Term::free_var(context.fresh(None)))
             .collect::<Vec<_>>();
 
         let labels = labels.iter().collect::<Vec<_>>();
 
         for ((this_type, this_body), (that_type, that_body)) in
-            this.items.into_iter().zip(that.items)
+            this.group.items().iter().zip(that.group.items())
         {
             self.enqueue(
                 Term::type_(),
@@ -980,6 +1014,33 @@ impl Convert {
         Ok(true)
     }
 
+    fn eta_expand_struct(
+        &mut self,
+        context: &mut Context,
+        struct_: Struct,
+        other: Term,
+        type_: Term,
+    ) -> Result<bool, ReduceError> {
+        let n = struct_.fields.len();
+
+        // Recover the field types from the registry, exactly as `compare_struct`
+        // does — a `Struct` value carries no telescope of its own, unlike a
+        // `Tuple`'s inline `TupleType`.
+        let cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
+            Subterm::StructType(StructType { name, params }) if name == struct_.name => context
+                .structure(&name)
+                .map(|structure| structure.fields_at(&params)),
+            _ => None,
+        };
+
+        let projections = (0..n)
+            .map(|i| Term::proj(other.clone(), i))
+            .collect::<Vec<_>>();
+        self.enqueue_fields(struct_.fields, projections, cur);
+
+        Ok(true)
+    }
+
     fn eta_expand_neutral(
         &mut self,
         context: &mut Context,
@@ -1012,6 +1073,28 @@ impl Convert {
                 }
                 Ok(true)
             }
+            // A nominal struct/record is a named tuple with no constructor tag
+            // (`structure.rs`'s own doc: "an Inductive minus the indices and
+            // the per-constructor map"), so it gets the same η treatment —
+            // recover the field count from the registry (`compare_struct`
+            // recovers the field *types* the same way) since, unlike a
+            // `TupleType`, a `StructType` doesn't carry its telescope inline.
+            Subterm::StructType(StructType { name, .. }) => {
+                let n = context
+                    .structure(&name)
+                    .map(|structure| structure.fields.len() - structure.params.len());
+                let Some(n) = n else {
+                    return Ok(false);
+                };
+                for i in 0..n {
+                    self.enqueue(
+                        Term::type_(),
+                        Term::proj(this.clone(), i),
+                        Term::proj(that.clone(), i),
+                    );
+                }
+                Ok(true)
+            }
             _ => Ok(false),
         }
     }
@@ -1028,6 +1111,9 @@ impl Convert {
         t: &Term,
     ) -> Result<Solved, ReduceError> {
         let id = metavar.id;
+        if context.is_rec_slot(id) {
+            return Ok(Solved::Postponed);
+        }
         let metavars = t.metavars();
 
         // Occurs check: a candidate mentioning `id` itself is an infinite solution.
@@ -1042,19 +1128,6 @@ impl Convert {
             .iter()
             .any(|other| context.metavar_solution(*other).is_none())
         {
-            return Ok(Solved::Postponed);
-        }
-
-        // Transient guard: a candidate carrying elaboration-transient material
-        // (see `Term::contains_transient`) is a raw, not-yet-elaborated body
-        // that leaked through a rec group's mutual-checking window. Committing
-        // it would freeze a disconnected copy in the store — resolved at every
-        // occurrence forever, never updated by the rebuilt registration.
-        // Postpone, like an embedded unsolved metavariable: the retry
-        // re-derives the candidate once the owning group has elaborated. (The
-        // drain's backstop parks such goals before they reach here; this
-        // guards the remaining callers.)
-        if t.contains_transient() {
             return Ok(Solved::Postponed);
         }
 
@@ -1517,6 +1590,13 @@ impl Convert {
     /// when the queue empties (possibly leaving `blocked` constraints).
     fn drain(&mut self, context: &mut Context) -> Result<bool, ReduceError> {
         while let Some(Goal { type_, this, that }) = self.dequeue(context)? {
+            // Reflexivity needs no evaluation. In particular, do not force an
+            // identical folded recursive computation merely because it sits
+            // under a strict primitive operation.
+            if this == that {
+                continue;
+            }
+
             // The unreduced spellings, kept for the flex–rigid case: the
             // reductions below apply counterfactual match-arm refinements,
             // and a candidate *solution* must be derived without them (see
@@ -1529,31 +1609,6 @@ impl Convert {
             let type_ = reduce(context, type_)?;
 
             if this == that {
-                continue;
-            }
-
-            // Transient backstop: a side carrying elaboration-transient
-            // material (see `Term::contains_transient`) is a raw,
-            // not-yet-elaborated body that leaked through a rec group's
-            // mutual-checking window — the reducer's refolds keep the common
-            // shapes name-rooted, but a raw value can still surface whole
-            // (e.g. a bare raw `Func` member compared at function type).
-            // Neither decomposing it (a sub-goal would freeze a dead copy of
-            // raw material nothing ever updates) nor solving against it (a
-            // metavariable pinned to the copy) can ever succeed, so park the
-            // *un-reduced* spellings — they still name the definitions the
-            // raw material came from, and the retry after the group finishes
-            // re-derives through the rebuilt bodies. Placed after the
-            // syntactic short-circuit (two references to the same raw body
-            // are equal without inspection) and before the flexible-head
-            // dispatch (a flex–rigid goal with a raw rigid side must park,
-            // not solve).
-            if this.contains_transient() || that.contains_transient() {
-                self.blocked.push(Goal {
-                    type_,
-                    this: this_raw,
-                    that: that_raw,
-                });
                 continue;
             }
 
@@ -1587,12 +1642,21 @@ impl Convert {
                         }
                     }
 
+                    if context.is_rec_slot(this_m.id) || context.is_rec_slot(that_m.id) {
+                        self.blocked.push(Goal { type_, this, that });
+                        continue;
+                    }
+
                     // Distinct heads (or an undecided probe): v1 flex–flex
                     // does no intersection — postpone.
                     self.blocked.push(Goal { type_, this, that });
                     continue;
                 }
                 (Some(metavar), None) => {
+                    if context.is_rec_slot(metavar.id) {
+                        self.blocked.push(Goal { type_, this, that });
+                        continue;
+                    }
                     match self.solve_refinement_free(context, &metavar, &that, &that_raw)? {
                         Solved::Done => continue,
                         Solved::Postponed => {
@@ -1603,6 +1667,10 @@ impl Convert {
                     }
                 }
                 (None, Some(metavar)) => {
+                    if context.is_rec_slot(metavar.id) {
+                        self.blocked.push(Goal { type_, this, that });
+                        continue;
+                    }
                     match self.solve_refinement_free(context, &metavar, &this, &this_raw)? {
                         Solved::Done => continue,
                         Solved::Postponed => {
@@ -1656,60 +1724,59 @@ impl Convert {
                 (other, Subterm::Func(func)) => {
                     self.eta_expand_func(context, func, other.into(), type_.clone())?
                 }
-                // Same-head applications compare spine-wise. Different heads
-                // may still denote the same value when a side is a *folded*
-                // recursive call (the reducer's match-guarded delta keeps a
-                // stuck recursive application folded): lazy delta — unfold
-                // whichever sides unfold and retry. Two distinct recursive
-                // names whose unfoldings never structurally disagree recur
-                // here; the canonicalized `history` (see `history_key`)
-                // recognizes the recurrence and assumes it coinductively,
-                // while a genuinely growing unfolding — never recurring —
-                // spends the deadline. Deliberate: conversion is incomplete
-                // only through the deadline's bound on semantic effort, never
-                // through deciding by name identity — a nominal rule here
-                // rejects equalities the unfolding proves (an alias member
-                // `rec { f = …, g = f }` applied, whose sides unfold to one
-                // cached stuck body).
+                // Both sides already reached `reduce`'s weak-head normal form
+                // before this dispatch (see `drain`), so a surviving `Apply`
+                // is genuinely stuck — same head or not, there is nothing
+                // further unfolding could reveal; `compare_apply` handles both
+                // uniformly (enqueuing the heads themselves when they differ,
+                // which recurs to a hard mismatch or resolves through whatever
+                // solves the head). The canonicalized `history` (see
+                // `history_key`) still recognizes a coinductive recurrence
+                // across repeated rounds of an unfolding cycle; a genuinely
+                // growing comparison spends the deadline instead.
                 (Subterm::Apply(this_a), Subterm::Apply(that_a)) => {
-                    let same_head = matches!(
-                        (&*this_a.head, &*that_a.head),
-                        (Subterm::Var(a), Subterm::Var(b)) if a.unwrap() == b.unwrap()
-                    );
-
-                    if same_head {
-                        self.compare_apply(context, this_a, that_a)?
-                    } else {
-                        match (
-                            unfold_guarded_apply(context, &this_a)?,
-                            unfold_guarded_apply(context, &that_a)?,
-                        ) {
-                            (GuardedUnfold::NotApplicable, GuardedUnfold::NotApplicable) => {
-                                self.compare_apply(context, this_a, that_a)?
-                            }
-                            // Either side's registered body is still raw
-                            // (mid rec-group elaboration): park rather than
-                            // compare — see `GuardedUnfold::StillElaborating`.
-                            (GuardedUnfold::StillElaborating, _)
-                            | (_, GuardedUnfold::StillElaborating) => {
-                                let key = self.history_key(context, &goal);
-                                self.history.remove(&key);
-                                self.blocked.push(goal);
-                                continue;
-                            }
-                            (l, r) => {
-                                let l = match l {
-                                    GuardedUnfold::Unfolded(t) => t,
-                                    _ => Subterm::Apply(this_a).into(),
-                                };
-                                let r = match r {
-                                    GuardedUnfold::Unfolded(t) => t,
-                                    _ => Subterm::Apply(that_a).into(),
-                                };
-                                self.enqueue(type_.clone(), l, r);
-                                true
+                    match (&*this_a.head, &*that_a.head) {
+                        (Subterm::RecMember(this), Subterm::RecMember(that)) if this == that => {
+                            self.compare_same_rec_apply(context, this_a, that_a, type_.clone())?
+                        }
+                        // Applications of *different* folded members (or a
+                        // folded member against another stuck head) may still
+                        // compute the same value, so congruence proves
+                        // nothing: take one symmetric delta step instead.
+                        (Subterm::RecMember(_), _) | (_, Subterm::RecMember(_)) => {
+                            let this_unfolded = unfold_rec_apply(context, this_a.clone())?;
+                            let that_unfolded = unfold_rec_apply(context, that_a.clone())?;
+                            match (this_unfolded, that_unfolded) {
+                                (None, None) => self.compare_apply(context, this_a, that_a)?,
+                                (this_unfolded, that_unfolded) => {
+                                    let this = this_unfolded
+                                        .unwrap_or_else(|| Subterm::Apply(this_a).into());
+                                    let that = that_unfolded
+                                        .unwrap_or_else(|| Subterm::Apply(that_a).into());
+                                    self.enqueue(type_.clone(), this, that);
+                                    true
+                                }
                             }
                         }
+                        _ => self.compare_apply(context, this_a, that_a)?,
+                    }
+                }
+                (Subterm::Apply(apply), other) if matches!(&*apply.head, Subterm::RecMember(_)) => {
+                    match unfold_rec_apply(context, apply)? {
+                        Some(unfolded) => {
+                            self.enqueue(type_, unfolded, other.into());
+                            true
+                        }
+                        None => false,
+                    }
+                }
+                (other, Subterm::Apply(apply)) if matches!(&*apply.head, Subterm::RecMember(_)) => {
+                    match unfold_rec_apply(context, apply)? {
+                        Some(unfolded) => {
+                            self.enqueue(type_, other.into(), unfolded);
+                            true
+                        }
+                        None => false,
                     }
                 }
                 (Subterm::TupleType(this), Subterm::TupleType(that)) => {
@@ -1737,14 +1804,51 @@ impl Convert {
                 (Subterm::Struct(this), Subterm::Struct(that)) => {
                     self.compare_struct(context, this, that)?
                 }
+                (Subterm::Struct(struct_), other) => {
+                    self.eta_expand_struct(context, struct_, other.into(), type_.clone())?
+                }
+                (other, Subterm::Struct(struct_)) => {
+                    self.eta_expand_struct(context, struct_, other.into(), type_.clone())?
+                }
                 (Subterm::Rec(this), Subterm::Rec(that)) => {
                     self.compare_rec(context, this, that)?
                 }
-                // A `Rec` here is necessarily elaborated (id-bearing): a raw
-                // group carries `RecId::Unelaborated`, which makes the whole
-                // node transient — the backstop above parked it before this
-                // dispatch. So the unfolding below is always the memoized,
-                // stable opening, never a disconnected raw copy.
+                (Subterm::RecMember(this), Subterm::RecMember(that)) => {
+                    if this.index != that.index {
+                        self.enqueue(
+                            type_,
+                            this.group.member_body(this.index),
+                            that.group.member_body(that.index),
+                        );
+                        true
+                    } else {
+                        self.compare_rec(
+                            context,
+                            Rec {
+                                tail: Scope::constant(
+                                    super::Many(this.group.len()),
+                                    Term::var(super::Var::bound(this.index)),
+                                ),
+                                group: this.group,
+                            },
+                            Rec {
+                                tail: Scope::constant(
+                                    super::Many(that.group.len()),
+                                    Term::var(super::Var::bound(that.index)),
+                                ),
+                                group: that.group,
+                            },
+                        )?
+                    }
+                }
+                (Subterm::RecMember(member), other) => {
+                    self.enqueue(type_, member.group.member_body(member.index), other.into());
+                    true
+                }
+                (other, Subterm::RecMember(member)) => {
+                    self.enqueue(type_, other.into(), member.group.member_body(member.index));
+                    true
+                }
                 (Subterm::Rec(rec), other) => {
                     let tail = unfold_rec(context, rec);
                     self.enqueue(type_, tail, other.into());
@@ -1754,87 +1858,6 @@ impl Convert {
                     let tail = unfold_rec(context, rec);
                     self.enqueue(type_, other.into(), tail);
                     true
-                }
-                // A recursive value member still inside its raw window:
-                // `var_reduct` withheld its body, so it surfaces as this bare
-                // name — which carries no transient marker of its own, putting
-                // it past the backstop's reach. Like a folded recursive
-                // *application* meeting `StillElaborating`, park the
-                // un-reduced, name-bearing sides and let the retry re-derive
-                // once the rebuilt body lands. Without this the neutral name
-                // falls through to a hard mismatch (`eta_expand_neutral` at a
-                // non-function type).
-                (Subterm::Var(var), _) if context.is_withheld_rec_member(var.unwrap()) => {
-                    let key = self.history_key(context, &goal);
-                    self.history.remove(&key);
-                    self.blocked.push(Goal {
-                        type_,
-                        this: this_raw,
-                        that: that_raw,
-                    });
-                    continue;
-                }
-                (_, Subterm::Var(var)) if context.is_withheld_rec_member(var.unwrap()) => {
-                    let key = self.history_key(context, &goal);
-                    self.history.remove(&key);
-                    self.blocked.push(Goal {
-                        type_,
-                        this: this_raw,
-                        that: that_raw,
-                    });
-                    continue;
-                }
-                // A folded recursive call against any other shape: the only
-                // way they can agree is through the unfolding.
-                (Subterm::Apply(apply), other)
-                    if matches!(
-                        &*apply.head,
-                        Subterm::Var(var) if context.is_recursive(var.unwrap())
-                    ) =>
-                {
-                    match unfold_guarded_apply(context, &apply)? {
-                        GuardedUnfold::Unfolded(unfolded) => {
-                            self.enqueue(type_.clone(), unfolded, other.into());
-                            true
-                        }
-                        GuardedUnfold::StillElaborating => {
-                            let key = self.history_key(context, &goal);
-                            self.history.remove(&key);
-                            self.blocked.push(goal);
-                            continue;
-                        }
-                        GuardedUnfold::NotApplicable => self.eta_expand_neutral(
-                            context,
-                            Term::from(Subterm::Apply(apply)),
-                            other.into(),
-                            type_,
-                        )?,
-                    }
-                }
-                (other, Subterm::Apply(apply))
-                    if matches!(
-                        &*apply.head,
-                        Subterm::Var(var) if context.is_recursive(var.unwrap())
-                    ) =>
-                {
-                    match unfold_guarded_apply(context, &apply)? {
-                        GuardedUnfold::Unfolded(unfolded) => {
-                            self.enqueue(type_.clone(), other.into(), unfolded);
-                            true
-                        }
-                        GuardedUnfold::StillElaborating => {
-                            let key = self.history_key(context, &goal);
-                            self.history.remove(&key);
-                            self.blocked.push(goal);
-                            continue;
-                        }
-                        GuardedUnfold::NotApplicable => self.eta_expand_neutral(
-                            context,
-                            other.into(),
-                            Term::from(Subterm::Apply(apply)),
-                            type_,
-                        )?,
-                    }
                 }
                 // Flex-apply imitation: a stuck application against a nominal
                 // type constructor. The unsolved-metavariable-head guard (and
@@ -1892,7 +1915,6 @@ impl Convert {
                     self.blocked.push(goal);
                     continue;
                 }
-
                 return Ok(false);
             }
         }

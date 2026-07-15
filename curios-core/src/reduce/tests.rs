@@ -34,6 +34,52 @@ fn reduce_apply_beta_reduces() {
 }
 
 #[test]
+fn recursive_application_stays_folded_until_its_result_is_demanded() {
+    let mut context = context();
+    let nat_type = Term::prim(Prim::NatType);
+    let body = Term::func(
+        [("n", nat_type.clone())],
+        Term::nat_match(
+            Term::free_var("n"),
+            Some("m"),
+            nat_type.clone(),
+            nat(0),
+            "pred",
+            "ih",
+            Term::apply(Term::free_var("countdown"), [Term::free_var("pred")]),
+        ),
+    );
+
+    let neutral = Term::rec(
+        [(
+            "countdown",
+            Term::func_type([("n", nat_type.clone())], nat_type.clone()),
+            body.clone(),
+        )],
+        Term::apply(Term::free_var("countdown"), [Term::free_var("x")]),
+    );
+    let Subterm::Rec(rec) = Term::unwrap_or_clone(neutral) else {
+        unreachable!()
+    };
+    let opened = unfold_rec(&mut context, rec);
+    let reduced = reduce(&mut context, opened).expect("ordinary reduction should terminate");
+    assert!(matches!(
+        &*reduced,
+        Subterm::Apply(Apply { head, .. }) if matches!(&**head, Subterm::RecMember(_))
+    ));
+
+    let concrete = Term::rec(
+        [(
+            "countdown",
+            Term::func_type([("n", nat_type.clone())], nat_type),
+            body,
+        )],
+        Term::apply(Term::free_var("countdown"), [nat(2)]),
+    );
+    assert_eq!(reduce_forced(&mut context, concrete), Ok(nat(0)));
+}
+
+#[test]
 fn reduce_inductive_match_selects_case_and_projects_payload() {
     let mut context = context();
 

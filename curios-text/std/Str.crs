@@ -2,7 +2,6 @@ pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /std/{Char, Nat, Byte, Bytes, Bln, Lst, Option, True, False};
 
-
 rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
     -> Utf8(s, x\..a\..b) =
     match va : (w : Utf8(q, x)) => Utf8(q, x\..x\..b)

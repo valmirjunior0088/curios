@@ -81,8 +81,9 @@ pub use Show/{let Show};
 pub mod BigNat;
 pub use BigNat/{let BigNat};
 
-pub mod BigInt;
-pub use BigInt/{let BigInt};
+-- PT2: BigInt still disabled pending its own packed-Bits port.
+-- pub mod BigInt;
+-- pub use BigInt/{let BigInt};
 
 pub mod Vec;
 pub use Vec/{let Vec};

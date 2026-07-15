@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Arity, Atom, Bound, Carrier, Cases, Field, Func, FuncType, InductiveType, Infix,
-        Let, Match, Nat, Prim, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term,
-        Three, Tuple, TupleType, Two, Var, Variant,
+        Let, Many, Match, Nat, Prim, Proj, Rec, RecMember, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
     },
     curios_base::{
         Flt, Grain, Plicity,
@@ -181,12 +181,18 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
             }
             scope(out, tail);
         }
-        Subterm::Rec(Rec { items, tail, .. }) => {
-            for (type_, value) in items {
+        Subterm::Rec(Rec { group, tail }) => {
+            for (type_, value) in group.items() {
                 scope(out, type_);
                 scope(out, value);
             }
             scope(out, tail);
+        }
+        Subterm::RecMember(RecMember { group, .. }) => {
+            for (type_, value) in group.items() {
+                scope(out, type_);
+                scope(out, value);
+            }
         }
         Subterm::Match(Match {
             head,
@@ -1174,14 +1180,16 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(tail.open(&label_terms), depth + labels.len()),
             ])
         }
-        Subterm::Rec(Rec { items, tail, .. }) => {
+        Subterm::Rec(Rec { group, tail }) => {
             let labels = scope_labels(tail.label_iter(), depth);
             let label_terms = label_terms(&labels);
             let label_terms = label_terms.iter().collect::<Vec<_>>();
             let inner_depth = depth + labels.len();
 
-            let bindings = items
-                .into_iter()
+            let bindings = group
+                .items()
+                .iter()
+                .cloned()
                 .enumerate()
                 .map(|(index, (type_, body))| {
                     let type_ = type_.open(&label_terms);
@@ -1205,6 +1213,10 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 pure(";\n"),
                 print_term(tail, inner_depth),
             ])
+        }
+        Subterm::RecMember(RecMember { group, index }) => {
+            let tail = Scope::constant(Many(group.len()), Term::var(Var::bound(index)));
+            print_term(Subterm::Rec(Rec { group, tail }).into(), depth)
         }
         Subterm::Var(var) => print_var(var),
         Subterm::NumLit(num_lit) => {

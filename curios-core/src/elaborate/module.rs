@@ -1,9 +1,9 @@
 use {
     super::{Bound, Context, Error, Mode, check, elaborate},
     crate::{
-        Definition, Inductive, InductiveParam, Item, Module, Structure, Subterm, Telescope, Term,
-        check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with, register_witness,
-        retry_deferred_witnesses, zonk, zonk_module,
+        Definition, Inductive, InductiveParam, Item, Module, RecItem, Structure, Subterm,
+        Telescope, Term, check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with,
+        register_witness, retry_deferred_witnesses, zonk, zonk_module,
     },
     curios_base::Qualifier,
     std::collections::BTreeMap,
@@ -245,21 +245,18 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     })
 }
 
-/// Type-check a top-level `rec` group, `define` every member into the current
-/// frame, and return their rebuilt forms. The flat analogue of `elaborate_rec` —
-/// assume all signatures, check the types, define all bodies, then check the
-/// bodies — but with no de Bruijn open/close: members already reference each
-/// other by free name.
-fn elaborate_module_rec(
-    context: &mut Context,
-    defs: &[Definition],
-) -> Result<Vec<Definition>, Error> {
-    for def in defs {
+/// Type-check a flat top-level `rec` item and return its rebuilt structural
+/// group. The input is opened over the export names for elaboration; the output
+/// captures those names back into one [`RecItem`] and publishes each export as
+/// its folded structural member.
+fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem, Error> {
+    let defs = rec.definitions();
+    for def in &defs {
         context.assume(&def.name, &def.type_);
     }
 
     let mut types = Vec::with_capacity(defs.len());
-    for def in defs {
+    for def in &defs {
         types.push(check(context, &def.type_, Term::type_())?);
     }
 
@@ -275,44 +272,36 @@ fn elaborate_module_rec(
     // names are the registry keys. Rebuild the registry index telescopes here
     // — after the rebuilt signatures are assumed (index types may mention the
     // group), before any body's `InductiveType` node checks against them.
-    for def in defs {
+    for def in &defs {
         elaborate_inductive_indices(context, &def.name)?;
     }
 
-    // One call for the whole group marks every member recursive by
-    // construction (see `Context::define_rec_members`).
-    let raw_members = defs
+    let slots = defs
         .iter()
-        .map(|def| (def.name.clone(), def.body.clone()))
+        .zip(&types)
+        .map(|(def, type_)| {
+            let (id, slot) = context.fresh_rec_slot(type_.clone());
+            context.define(&def.name, &slot);
+            id
+        })
         .collect::<Vec<_>>();
-    context.define_rec_members(&raw_members);
 
     let mut bodies = Vec::with_capacity(defs.len());
-    for (def, type_) in defs.iter().zip(&types) {
-        bodies.push(check(context, &def.body, type_.clone())?);
+    for ((def, type_), slot) in defs.iter().zip(&types).zip(slots) {
+        let body = check(context, &def.body, type_.clone())?;
+        context.fill_rec_slot(slot, body.clone());
+        bodies.push(body);
     }
-
-    // Re-define every member with its rebuilt body: insertion saturates
-    // applications during elaboration, and later items' type-level evaluation
-    // must not reduce through the lowered (under-applied) originals. The
-    // originals were only needed above, while the members checked each other.
-    // Again through `define_rec_members`, so the upgrade cannot silently drop
-    // the recursive mark.
-    let rebuilt_members = defs
-        .iter()
-        .zip(&bodies)
-        .map(|(def, body)| (def.name.clone(), body.clone()))
-        .collect::<Vec<_>>();
-    context.define_rec_members(&rebuilt_members);
+    context.retry_parked()?;
 
     // Registry rebuild, phase two: constructor payload types may apply the
     // group's type constructors, so their signatures (and `InductiveType`
     // terminals) elaborate only now that the rebuilt bodies are defined.
-    for def in defs {
+    for def in &defs {
         elaborate_inductive_constructors(context, &def.name)?;
     }
 
-    Ok(defs
+    let definitions = defs
         .iter()
         .zip(types)
         .zip(bodies)
@@ -323,7 +312,17 @@ fn elaborate_module_rec(
             type_,
             body,
         })
-        .collect())
+        .collect();
+    let rec = RecItem::new(definitions);
+
+    for (index, definition) in rec.definitions.iter().enumerate() {
+        context.define(
+            &definition.name,
+            &Term::rec_member(rec.group.clone(), index),
+        );
+    }
+
+    Ok(rec)
 }
 
 /// Elaborate a whole [`Module`] (§9). Each top-level item is checked and `define`d
@@ -378,13 +377,13 @@ pub fn elaborate_module(
         // the entrypoint body below runs under the root module.
         let item_module = match item {
             Item::Let(def) => def.island.clone(),
-            Item::Rec(defs) => defs.first().map(|d| d.island.clone()).unwrap_or_default(),
+            Item::Rec(rec) => rec.island(),
         };
         context.set_island(item_module);
 
         items.push(match item {
             Item::Let(def) => Item::Let(elaborate_module_let(context, def)?),
-            Item::Rec(defs) => Item::Rec(elaborate_module_rec(context, defs)?),
+            Item::Rec(rec) => Item::Rec(elaborate_module_rec(context, rec)?),
         });
         // Witness goals deferred on a missing table entry may be unblocked by
         // a witness this item registered — retry them before the drain, so
@@ -531,17 +530,14 @@ pub fn elaborate_and_zonk_with_prelude(
                     register_witness(context, &def.name, &def.type_, def.root)?;
                 }
             }
-            Item::Rec(defs) => {
-                for def in defs {
-                    context.assume(&def.name, &def.type_);
+            Item::Rec(rec) => {
+                for (index, definition) in rec.definitions.iter().enumerate() {
+                    context.assume(&definition.name, &rec.group.member_type(index));
+                    context.define(
+                        &definition.name,
+                        &Term::rec_member(rec.group.clone(), index),
+                    );
                 }
-                // One call for the whole group marks every member recursive
-                // by construction (see `Context::define_rec_members`).
-                let members = defs
-                    .iter()
-                    .map(|def| (def.name.clone(), def.body.clone()))
-                    .collect::<Vec<_>>();
-                context.define_rec_members(&members);
             }
         }
     }
@@ -556,13 +552,13 @@ pub fn elaborate_and_zonk_with_prelude(
     for item in module.items.iter().skip(prelude.items.len()) {
         let item_module = match item {
             Item::Let(def) => def.island.clone(),
-            Item::Rec(defs) => defs.first().map(|d| d.island.clone()).unwrap_or_default(),
+            Item::Rec(rec) => rec.island(),
         };
         context.set_island(item_module);
 
         user_items.push(match item {
             Item::Let(def) => Item::Let(elaborate_module_let(context, def)?),
-            Item::Rec(defs) => Item::Rec(elaborate_module_rec(context, defs)?),
+            Item::Rec(rec) => Item::Rec(elaborate_module_rec(context, rec)?),
         });
         retry_deferred_witnesses(context)?;
         context.drain_parked()?;

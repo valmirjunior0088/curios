@@ -243,6 +243,36 @@ fn convert_same_recursive_head_compares_spines() {
     assert_eq!(conv(&mut context, &this, &other), Ok(false));
 }
 
+fn structural_rec_member(body: Term) -> Term {
+    let nat_type = Term::prim(Prim::NatType);
+    let rec = Term::rec(
+        [(
+            "f",
+            Term::func_type([("x", nat_type.clone())], nat_type),
+            Term::func([("x", Term::prim(Prim::NatType))], body),
+        )],
+        Term::free_var("f"),
+    );
+    let Subterm::Rec(rec) = Term::unwrap_or_clone(rec) else {
+        unreachable!()
+    };
+    Term::rec_member(rec.group, 0)
+}
+
+#[test]
+fn same_structural_recursive_head_does_not_assume_injective_spines() {
+    let mut context = context();
+    let constant = structural_rec_member(nat(0));
+    let this = Term::apply(constant.clone(), [Term::free_var("a")]);
+    let that = Term::apply(constant, [Term::free_var("b")]);
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+
+    let identity = structural_rec_member(Term::free_var("x"));
+    let this = Term::apply(identity.clone(), [Term::free_var("a")]);
+    let that = Term::apply(identity, [Term::free_var("b")]);
+    assert_eq!(conv(&mut context, &this, &that), Ok(false));
+}
+
 #[test]
 fn convert_distinct_recursive_heads_with_identical_bodies_converge_coinductively() {
     let mut context = context();
@@ -949,6 +979,22 @@ fn flex_flex_distinct_is_residual() {
         conv(&mut context, &Term::metavar(0), &Term::metavar(1)),
         Ok(false)
     );
+}
+
+#[test]
+fn conversion_cannot_solve_a_protected_recursive_slot() {
+    let mut context = context();
+    let (id, slot) = context.fresh_rec_slot(Term::type_());
+    let nat_type = Term::prim(Prim::NatType);
+
+    assert!(matches!(
+        convert_outcome(&mut context, &Term::type_(), &slot, &nat_type),
+        Ok(Outcome::Blocked(_))
+    ));
+    assert!(context.metavar_solution(id).is_none());
+
+    context.fill_rec_slot(id, nat_type.clone());
+    assert_eq!(reduce(&mut context, slot), Ok(nat_type));
 }
 
 #[test]

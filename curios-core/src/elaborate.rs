@@ -85,6 +85,7 @@ fn elaborate_subterm(
         Subterm::Proj(proj) => elaborate_proj(context, proj)?,
         Subterm::Let(let_) => return elaborate_let(context, let_, mode),
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
+        Subterm::RecMember(member) => (term.clone(), member.group.member_type(member.index)),
         Subterm::Var(var) => match context.assumption(var.unwrap()) {
             Some(type_) => (term.clone(), type_.clone()),
             None => return Err(Error::unbound_variable(Term::var(var.clone()))),

@@ -1,5 +1,5 @@
 use {
-    super::reduce,
+    super::{reduce, reduce_forced},
     crate::{
         Context, Nat, Peel, Prim, ReduceError, Subterm, Term, normalize_concat, peel_bin,
         peel_first_atom, peel_first_elem,
@@ -26,8 +26,8 @@ fn reduce_bln_binary(
     fold: impl FnOnce(bool, bool) -> bool,
     rebuild: impl FnOnce(Term, Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
-    let left = reduce(context, left.clone())?;
-    let right = reduce(context, right.clone())?;
+    let left = reduce_forced(context, left.clone())?;
+    let right = reduce_forced(context, right.clone())?;
 
     Ok(Subterm::Prim(match (left.as_bln(), right.as_bln()) {
         (Some(l), Some(r)) => Prim::Bln(fold(l, r)),
@@ -42,8 +42,8 @@ fn reduce_byte_binary(
     fold: impl FnOnce(u8, u8) -> bool,
     rebuild: impl FnOnce(Term, Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
-    let left = reduce(context, left.clone())?;
-    let right = reduce(context, right.clone())?;
+    let left = reduce_forced(context, left.clone())?;
+    let right = reduce_forced(context, right.clone())?;
 
     Ok(Subterm::Prim(match (&*left, &*right) {
         (Subterm::Prim(Prim::Byte(left)), Subterm::Prim(Prim::Byte(right))) => {
@@ -62,8 +62,8 @@ fn reduce_nat_binary(
     fold: impl FnOnce(Nat, Nat) -> Option<Prim>,
     rebuild: impl FnOnce(Term, Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
-    let left = reduce(context, left.clone())?;
-    let right = reduce(context, right.clone())?;
+    let left = reduce_forced(context, left.clone())?;
+    let right = reduce_forced(context, right.clone())?;
 
     let folded = match (left.as_nat(), right.as_nat()) {
         (Some(l), Some(r)) => fold(l, r),
@@ -89,8 +89,8 @@ fn reduce_nat_division(
     rebuild: impl FnOnce(Term, Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
     let span = right.span().or_else(|| left.span());
-    let left = reduce(context, left.clone())?;
-    let right = reduce(context, right.clone())?;
+    let left = reduce_forced(context, left.clone())?;
+    let right = reduce_forced(context, right.clone())?;
 
     if right
         .as_nat()
@@ -122,8 +122,8 @@ fn reduce_int_binary(
     fold: impl FnOnce(Int, Int) -> Option<Prim>,
     rebuild: impl FnOnce(Term, Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
-    let left = reduce(context, left.clone())?;
-    let right = reduce(context, right.clone())?;
+    let left = reduce_forced(context, left.clone())?;
+    let right = reduce_forced(context, right.clone())?;
 
     let folded = match (left.as_int(), right.as_int()) {
         (Some(l), Some(r)) => fold(l, r),
@@ -149,8 +149,8 @@ fn reduce_int_division(
     rebuild: impl FnOnce(Term, Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
     let span = right.span().or_else(|| left.span());
-    let left = reduce(context, left.clone())?;
-    let right = reduce(context, right.clone())?;
+    let left = reduce_forced(context, left.clone())?;
+    let right = reduce_forced(context, right.clone())?;
 
     if right.as_int().is_some_and(|divisor| divisor.is_zero()) {
         return Err(ReduceError::DivisionByZero { kind, span });
@@ -175,8 +175,8 @@ fn reduce_flt_binary(
     fold: impl FnOnce(Flt, Flt) -> Prim,
     rebuild: impl FnOnce(Term, Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
-    let left = reduce(context, left.clone())?;
-    let right = reduce(context, right.clone())?;
+    let left = reduce_forced(context, left.clone())?;
+    let right = reduce_forced(context, right.clone())?;
 
     Ok(Subterm::Prim(match (left.as_flt(), right.as_flt()) {
         (Some(l), Some(r)) => fold(l, r),
@@ -192,7 +192,7 @@ fn reduce_nat_unary(
     fold: impl FnOnce(Nat) -> Option<Prim>,
     rebuild: impl FnOnce(Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
-    let inner = reduce(context, inner.clone())?;
+    let inner = reduce_forced(context, inner.clone())?;
 
     Ok(Subterm::Prim(match inner.as_nat().and_then(fold) {
         Some(prim) => prim,
@@ -209,7 +209,7 @@ fn reduce_int_unary(
     fold: impl FnOnce(Int) -> Option<Prim>,
     rebuild: impl FnOnce(Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
-    let inner = reduce(context, inner.clone())?;
+    let inner = reduce_forced(context, inner.clone())?;
 
     Ok(Subterm::Prim(match inner.as_int().and_then(fold) {
         Some(prim) => prim,
@@ -224,7 +224,7 @@ fn reduce_flt_unary(
     fold: impl FnOnce(Flt) -> Prim,
     rebuild: impl FnOnce(Term) -> Prim,
 ) -> Result<Subterm, ReduceError> {
-    let inner = reduce(context, inner.clone())?;
+    let inner = reduce_forced(context, inner.clone())?;
 
     Ok(Subterm::Prim(match inner.as_flt() {
         Some(value) => fold(value),
@@ -274,8 +274,8 @@ fn compare_nat(
     left: Term,
     right: Term,
 ) -> Result<(Comparison, Term, Term), ReduceError> {
-    let (sl, il) = Nat::decompose(&reduce(context, left)?);
-    let (sr, ir) = Nat::decompose(&reduce(context, right)?);
+    let (sl, il) = Nat::decompose(&reduce_forced(context, left)?);
+    let (sr, ir) = Nat::decompose(&reduce_forced(context, right)?);
 
     // Same inner ⇒ the floors alone decide: `cmp(x + sl, x + sr) = cmp(sl, sr)`
     // (so `lt(pred, succ pred) = true`). Two literals — inner `0` on both sides —
@@ -424,7 +424,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         Prim::NatType => Ok(Subterm::Prim(Prim::NatType)),
         Prim::Nat(Nat::Zero) => Ok(Subterm::Prim(Prim::Nat(Nat::Zero))),
         Prim::Nat(Nat::Succ(spine, inner)) => {
-            let inner = reduce(context, inner.clone())?;
+            let inner = reduce_forced(context, inner.clone())?;
 
             Ok(match Term::unwrap_or_clone(inner) {
                 Subterm::Prim(Prim::Nat(Nat::Succ(j, tail))) => {
@@ -436,14 +436,14 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         Prim::ByteType => Ok(Subterm::Prim(Prim::ByteType)),
         Prim::Byte(value) => Ok(Subterm::Prim(Prim::Byte(*value))),
         Prim::ByteToNat(inner) => {
-            let inner = reduce(context, inner.clone())?;
+            let inner = reduce_forced(context, inner.clone())?;
             Ok(Subterm::Prim(match &*inner {
                 Subterm::Prim(Prim::Byte(value)) => Prim::Nat(Nat::new(usize::from(*value))),
                 _ => Prim::ByteToNat(inner),
             }))
         }
         Prim::NatToByte(inner) => {
-            let inner = reduce(context, inner.clone())?;
+            let inner = reduce_forced(context, inner.clone())?;
             if let Subterm::Prim(Prim::ByteToNat(byte)) = &*inner {
                 return reduce(context, byte.clone()).map(Term::unwrap_or_clone);
             }
@@ -499,8 +499,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         // motive's expected index without unification. The floor only ever moves
         // outward, so the rewrite terminates.
         Prim::NatAdd(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
+            let left = reduce_forced(context, left.clone())?;
+            let right = reduce_forced(context, right.clone())?;
             let (sl, il) = Nat::decompose(&left);
             let (sr, ir) = Nat::decompose(&right);
 
@@ -520,8 +520,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         // instead of stalling on a stuck `Nat/sub`. Both-literal subtraction with `k`
         // overshooting the floor truncates to zero; anything else stays neutral.
         Prim::NatSub(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
+            let left = reduce_forced(context, left.clone())?;
+            let right = reduce_forced(context, right.clone())?;
             let (sl, il) = Nat::decompose(&left);
             let (k, ir) = Nat::decompose(&right);
 
@@ -543,8 +543,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         // x · 2 + 2`) the same way `n + k` does. Whichever side is the literal drives;
         // two symbolic operands have no literal factor, so the product stays neutral.
         Prim::NatMul(left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
+            let left = reduce_forced(context, left.clone())?;
+            let right = reduce_forced(context, right.clone())?;
             let (sl, il) = Nat::decompose(&left);
             let (sr, ir) = Nat::decompose(&right);
 
@@ -917,7 +917,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         // Assemble a float from an exact 4-byte literal; anything else —
         // symbolic, or a wrong-length literal (the runtime trap) — stays stuck.
         Prim::FltOfLeBytes(inner) => {
-            let inner = reduce(context, inner.clone())?;
+            let inner = reduce_forced(context, inner.clone())?;
             Ok(Subterm::Prim(match &*inner {
                 Subterm::Prim(Prim::Bin(Grain::X, bytes)) if bytes.len(Grain::X) == 4 => {
                     Prim::Flt(Flt::from_f32(f32::from_le_bytes(
@@ -973,7 +973,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         // range. A float with no integer part at all (NaN, ±inf) folds to
         // nothing and the term stays stuck.
         Prim::FltToInt(inner) => {
-            let inner = reduce(context, inner.clone())?;
+            let inner = reduce_forced(context, inner.clone())?;
             Ok(Subterm::Prim(
                 match inner.as_flt().and_then(|v| Int::from_f32_trunc(v.to_f32())) {
                     Some(int) => Prim::Int(int),
@@ -984,7 +984,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         Prim::BinType(Grain::X) => Ok(Subterm::Prim(Prim::BinType(Grain::X))),
         Prim::Bin(Grain::X, bytes) => Ok(Subterm::Prim(Prim::Bin(Grain::X, bytes.clone()))),
         Prim::BinLen(Grain::X, bin) => {
-            let bin = reduce(context, bin.clone())?;
+            let bin = reduce_forced(context, bin.clone())?;
             reduce_homomorphism(
                 context,
                 bin_shape(Grain::X, bin),
@@ -1000,8 +1000,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             )
         }
         Prim::BinEql(Grain::X, left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
+            let left = reduce_forced(context, left.clone())?;
+            let right = reduce_forced(context, right.clone())?;
 
             // Reflexivity: any value equals itself. Catches a shared variable, which
             // the peel below cannot — a bare variable is not a `Bin`-valued prim.
@@ -1029,8 +1029,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             )))
         }
         Prim::BinGet(Grain::X, bin, index) => {
-            let bin = reduce(context, bin.clone())?;
-            let index_reduced = reduce(context, index.clone())?;
+            let bin = reduce_forced(context, bin.clone())?;
+            let index_reduced = reduce_forced(context, index.clone())?;
             let i = as_index(&index_reduced);
             // A concrete index into a literal run.
             if let (Subterm::Prim(Prim::Bin(Grain::X, bytes)), Some(i)) = (&*bin, i) {
@@ -1073,9 +1073,9 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             Ok(Subterm::Prim(Prim::bin_get(Grain::X, bin, index_reduced)))
         }
         Prim::BinSlice(Grain::X, bin, start, end) => {
-            let bin = reduce(context, bin.clone())?;
-            let start_reduced = reduce(context, start.clone())?;
-            let end_reduced = reduce(context, end.clone())?;
+            let bin = reduce_forced(context, bin.clone())?;
+            let start_reduced = reduce_forced(context, start.clone())?;
+            let end_reduced = reduce_forced(context, end.clone())?;
             // The full slice is the identity: `slice(b, 0, len b) = b`. Sound even
             // for a symbolic `b` — `0..len` is always in range, never trapping —
             // and the runtime partner of `core::spine`'s window-collapse: it lets a
@@ -1158,8 +1158,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             )))
         }
         Prim::BinAppend(Grain::X, bin, byte) => {
-            let bin = reduce(context, bin.clone())?;
-            let byte = reduce(context, byte.clone())?;
+            let bin = reduce_forced(context, bin.clone())?;
+            let byte = reduce_forced(context, byte.clone())?;
             // A concrete byte is taken mod 256 — its low 8 bits — matching the
             // runtime's packed-`i8` store and the optimizer's `as u8`. A symbolic
             // operand has no `as_nat`, so it stays stuck rather than truncating.
@@ -1177,7 +1177,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         Prim::BinConcat(Grain::X, operands) => {
             let reduced: Vec<Term> = operands
                 .iter()
-                .map(|e| reduce(context, e.clone()))
+                .map(|e| reduce_forced(context, e.clone()))
                 .collect::<Result<_, _>>()?;
             // Normalise by the monoid unit/associativity laws — drop the empty
             // bytestring (so `concat(\\, a)`/`concat(a, \\)` collapse to `a`), merge
@@ -1200,7 +1200,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         Prim::BinType(Grain::B) => Ok(Subterm::Prim(Prim::BinType(Grain::B))),
         Prim::Bin(Grain::B, bits) => Ok(Subterm::Prim(Prim::Bin(Grain::B, bits.clone()))),
         Prim::BinLen(Grain::B, bin) => {
-            let bin = reduce(context, bin.clone())?;
+            let bin = reduce_forced(context, bin.clone())?;
             reduce_homomorphism(
                 context,
                 bin_shape(Grain::B, bin),
@@ -1216,8 +1216,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             )
         }
         Prim::BinEql(Grain::B, left, right) => {
-            let left = reduce(context, left.clone())?;
-            let right = reduce(context, right.clone())?;
+            let left = reduce_forced(context, left.clone())?;
+            let right = reduce_forced(context, right.clone())?;
             if left == right {
                 return Ok(Subterm::Prim(Prim::Bln(true)));
             }
@@ -1232,8 +1232,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         }
         Prim::BinGet(Grain::B, bin, index) => {
             let span = index.span();
-            let bin = reduce(context, bin.clone())?;
-            let index_reduced = reduce(context, index.clone())?;
+            let bin = reduce_forced(context, bin.clone())?;
+            let index_reduced = reduce_forced(context, index.clone())?;
             if let (Subterm::Prim(Prim::Bin(Grain::B, bits)), Some(index)) =
                 (&*bin, as_index(&index_reduced))
             {
@@ -1274,9 +1274,9 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         }
         Prim::BinSlice(Grain::B, bin, start, end) => {
             let span = start.span().or_else(|| end.span());
-            let bin = reduce(context, bin.clone())?;
-            let start_reduced = reduce(context, start.clone())?;
-            let end_reduced = reduce(context, end.clone())?;
+            let bin = reduce_forced(context, bin.clone())?;
+            let start_reduced = reduce_forced(context, start.clone())?;
+            let end_reduced = reduce_forced(context, end.clone())?;
             if matches!(&*start_reduced, Subterm::Prim(Prim::Nat(Nat::Zero)))
                 && matches!(&*end_reduced, Subterm::Prim(Prim::BinLen(Grain::B, whole)) if *whole == bin)
             {
@@ -1354,8 +1354,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             )))
         }
         Prim::BinAppend(Grain::B, bin, bit) => {
-            let bin = reduce(context, bin.clone())?;
-            let bit = reduce(context, bit.clone())?;
+            let bin = reduce_forced(context, bin.clone())?;
+            let bit = reduce_forced(context, bit.clone())?;
             Ok(Subterm::Prim(match (&*bin, bit.as_bln()) {
                 (Subterm::Prim(Prim::Bin(Grain::B, bits)), Some(bit)) => {
                     Prim::Bin(Grain::B, bits.append_bit(bit))
@@ -1366,7 +1366,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         Prim::BinConcat(Grain::B, operands) => {
             let mut operands = operands
                 .iter()
-                .map(|operand| reduce(context, operand.clone()))
+                .map(|operand| reduce_forced(context, operand.clone()))
                 .collect::<Result<Vec<_>, _>>()?
                 .into_iter()
                 .filter(|operand| {
@@ -1399,7 +1399,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         }
         Prim::LstLen(type_, list) => {
             let type_ = reduce(context, type_.clone())?;
-            let list = reduce(context, list.clone())?;
+            let list = reduce_forced(context, list.clone())?;
             reduce_homomorphism(
                 context,
                 lst_shape(list),
@@ -1416,8 +1416,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         }
         Prim::LstGet(type_, list, index) => {
             let type_ = reduce(context, type_.clone())?;
-            let list = reduce(context, list.clone())?;
-            let index_reduced = reduce(context, index.clone())?;
+            let list = reduce_forced(context, list.clone())?;
+            let index_reduced = reduce_forced(context, index.clone())?;
             let i = as_index(&index_reduced);
             // A concrete index into a literal run.
             if let (Subterm::Prim(Prim::Lst(elems)), Some(i)) = (&*list, i) {
@@ -1450,9 +1450,9 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         }
         Prim::LstSlice(type_, list, start, end) => {
             let type_ = reduce(context, type_.clone())?;
-            let list = reduce(context, list.clone())?;
-            let start_reduced = reduce(context, start.clone())?;
-            let end_reduced = reduce(context, end.clone())?;
+            let list = reduce_forced(context, list.clone())?;
+            let start_reduced = reduce_forced(context, start.clone())?;
+            let end_reduced = reduce_forced(context, end.clone())?;
             // The full slice is the identity: `slice(a, 0, len a) = a`. Sound even for
             // a symbolic `a` — `0..len` is always in range — the `Lst` twin of
             // `BinSlice`'s full-window identity, letting a full-length `Lst/slice`
@@ -1539,7 +1539,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         }
         Prim::LstAppend(type_, list, elem) => {
             let type_ = reduce(context, type_.clone())?;
-            let list = reduce(context, list.clone())?;
+            let list = reduce_forced(context, list.clone())?;
             let elem = reduce(context, elem.clone())?;
             Ok(match Term::unwrap_or_clone(list) {
                 Subterm::Prim(Prim::Lst(mut elems)) => {
@@ -1553,7 +1553,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             let type_ = reduce(context, type_.clone())?;
             let reduced: Vec<Term> = operands
                 .iter()
-                .map(|e| reduce(context, e.clone()))
+                .map(|e| reduce_forced(context, e.clone()))
                 .collect::<Result<_, _>>()?;
             // The `Lst` twin of `BinConcat` normalisation: drop the empty list (so
             // `concat([], a)`/`concat(a, [])` collapse to `a`), merge adjacent literal
@@ -1582,7 +1582,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             let a = reduce(context, a.clone())?;
             let b = reduce(context, b.clone())?;
             let f = reduce(context, f.clone())?;
-            let lst = reduce(context, lst.clone())?;
+            let lst = reduce_forced(context, lst.clone())?;
             reduce_homomorphism(
                 context,
                 lst_shape(lst),

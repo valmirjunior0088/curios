@@ -1,5 +1,7 @@
 use {
-    super::{Concept, Inductive, Structure, Term, build_shorten, with_short_names},
+    super::{
+        Concept, Inductive, Many, RecGroup, Scope, Structure, Term, build_shorten, with_short_names,
+    },
     curios_abi::RootId,
     curios_base::Qualifier,
     std::{
@@ -11,11 +13,10 @@ use {
 
 /// A single top-level definition: `name` bound to `body` of declared `type_`.
 ///
-/// Unlike a local `Subterm::Let`, the binder is *not* a de Bruijn scope: every
-/// top-level cross-reference stays a free `Var` keyed by `name`. The passes
-/// `define` each one into the `Context` as they go, so `reduce`/`convert`
-/// delta-reduce through them — exactly the named global signature the kernel
-/// already maintained behind the (now removed) nested spine (§9, BUG.md).
+/// A standalone top-level `let` uses free `Var`s keyed by `name`. A definition
+/// returned by [`RecItem::definitions`] is the opened view of a scoped
+/// recursive member and likewise uses the group's export names; the
+/// authoritative recursive type and body remain in [`RecItem::group`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct Definition {
     pub name: String,
@@ -35,6 +36,85 @@ pub struct Definition {
     pub body: Term,
 }
 
+/// Export metadata for one member of a flat top-level recursive group. The
+/// member's type and body live only in [`RecItem::group`], scoped over every
+/// export in the group.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RecDefinition {
+    pub name: String,
+    pub island: Qualifier,
+    pub root: RootId,
+}
+
+/// A flat top-level recursive item backed by the same structural fixed-point
+/// representation as a local [`super::Rec`]. Keeping the export metadata
+/// separate preserves the module's flat architecture without retaining a
+/// second, free-name copy of each recursive type and body.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecItem {
+    pub(crate) definitions: Vec<RecDefinition>,
+    pub(crate) group: RecGroup,
+}
+
+impl RecItem {
+    pub fn new(definitions: Vec<Definition>) -> Self {
+        let labels = definitions
+            .iter()
+            .map(|definition| definition.name.as_str())
+            .collect::<Vec<_>>();
+        let arity = Many(labels.len());
+        let group = RecGroup::new(
+            definitions
+                .iter()
+                .map(|definition| {
+                    (
+                        Scope::close(arity, &labels, definition.type_.clone()),
+                        Scope::close(arity, &labels, definition.body.clone()),
+                    )
+                })
+                .collect(),
+        );
+        let definitions = definitions
+            .into_iter()
+            .map(|definition| RecDefinition {
+                name: definition.name,
+                island: definition.island,
+                root: definition.root,
+            })
+            .collect();
+
+        Self { definitions, group }
+    }
+
+    pub(crate) fn definitions(&self) -> Vec<Definition> {
+        let names = self
+            .definitions
+            .iter()
+            .map(|definition| Term::free_var(&definition.name))
+            .collect::<Vec<_>>();
+        let name_refs = names.iter().collect::<Vec<_>>();
+
+        self.definitions
+            .iter()
+            .zip(self.group.items())
+            .map(|(definition, (type_, body))| Definition {
+                name: definition.name.clone(),
+                island: definition.island.clone(),
+                root: definition.root,
+                type_: type_.open(&name_refs),
+                body: body.open(&name_refs),
+            })
+            .collect()
+    }
+
+    pub(crate) fn island(&self) -> Qualifier {
+        self.definitions
+            .first()
+            .map(|definition| definition.island.clone())
+            .unwrap_or_default()
+    }
+}
+
 impl Definition {
     fn print(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "{} : {} = {}", self.name, self.type_, self.body)
@@ -46,7 +126,7 @@ impl Definition {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
     Let(Definition),
-    Rec(Vec<Definition>),
+    Rec(RecItem),
 }
 
 /// The whole program as a *flat* list of top-level `items`, the entrypoint
@@ -98,8 +178,10 @@ impl Module {
             .rev()
             .fold(self.body, |acc, item| match item {
                 Item::Let(def) => Term::let_(def.name, def.type_, def.body, acc),
-                Item::Rec(defs) => Term::rec(
-                    defs.into_iter().map(|def| (def.name, def.type_, def.body)),
+                Item::Rec(rec) => Term::rec(
+                    rec.definitions()
+                        .into_iter()
+                        .map(|def| (def.name, def.type_, def.body)),
                     acc,
                 ),
             })
@@ -112,7 +194,11 @@ impl Module {
         for item in &self.items {
             match item {
                 Item::Let(def) => symbols.push(def.name.clone()),
-                Item::Rec(defs) => symbols.extend(defs.iter().map(|def| def.name.clone())),
+                Item::Rec(rec) => symbols.extend(
+                    rec.definitions
+                        .iter()
+                        .map(|definition| definition.name.clone()),
+                ),
             }
         }
         symbols.extend(self.inductives.keys().cloned());
@@ -134,9 +220,9 @@ impl fmt::Display for Module {
                         def.print(formatter)?;
                         writeln!(formatter, ";")?;
                     }
-                    Item::Rec(defs) => {
+                    Item::Rec(rec) => {
                         write!(formatter, "rec ")?;
-                        for (index, def) in defs.iter().enumerate() {
+                        for (index, def) in rec.definitions().iter().enumerate() {
                             if index > 0 {
                                 write!(formatter, "and ")?;
                             }
@@ -156,5 +242,31 @@ impl fmt::Display for Module {
 
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn top_level_rec_item_captures_its_exports_into_the_shared_group() {
+        let rec = RecItem::new(vec![Definition {
+            name: "loop".into(),
+            island: Qualifier::empty(),
+            root: RootId::Entry,
+            type_: Term::type_(),
+            body: Term::free_var("loop"),
+        }]);
+
+        assert!(rec.group.items()[0].1.body().free_vars().is_empty());
+        assert!(matches!(
+            &*rec.group.member_body(0),
+            super::super::Subterm::RecMember(member)
+                if member.index == 0 && member.group == rec.group
+        ));
+
+        let opened = rec.definitions();
+        assert_eq!(opened[0].body, Term::free_var("loop"));
     }
 }

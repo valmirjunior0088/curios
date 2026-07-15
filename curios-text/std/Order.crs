@@ -8,7 +8,6 @@ end
 
 pub use Order/*;
 
--- The verdict with its operands swapped.
 pub let flip(r : Order) -> Order =
     match r
     | lt() => Order/gt()
@@ -21,7 +20,6 @@ pub let cong_flip(@s : Order, @t : Order, p : Eq(s, t)) -> Eq(flip(s), flip(t)) 
     | refl(z) => Eq/refl()
     end;
 
--- No-confusion: the six verdict clashes, via a boolean discriminator each.
 let is_lt(r : Order) -> Bln =
     match r
     | lt() => true

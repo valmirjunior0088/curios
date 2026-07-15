@@ -84,12 +84,6 @@ pub(super) fn elaborate_rec(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     context.with_frame(|context| {
-        // The group's identity (see `RecId`): minted once, here, and carried
-        // by the elaborated `Rec` this function returns — `unfold_rec`'s memo
-        // keys off it, and it's stable across every subsequent capture,
-        // release, or clone of the resulting term.
-        let id = context.fresh_rec();
-
         let labels = rec
             .tail
             .label_iter()
@@ -104,7 +98,8 @@ pub(super) fn elaborate_rec(
         let label_refs = label_terms.iter().collect::<Vec<_>>();
 
         let items = rec
-            .items
+            .group
+            .items()
             .iter()
             .map(|(type_, body)| (type_.open(&label_refs), body.open(&label_refs)))
             .collect::<Vec<_>>();
@@ -125,37 +120,26 @@ pub(super) fn elaborate_rec(
             context.reassume(label, type_);
         }
 
-        // One call for the whole group marks every member recursive by
-        // construction (see `Context::define_rec_members`).
-        let raw_members = labels
+        // Recursive names point at protected slots, never lowered bodies. A
+        // sibling that productively needs an earlier member sees its rebuilt
+        // solution; a dependency on a later member parks on the unsolved slot.
+        let slots = labels
             .iter()
-            .cloned()
-            .zip(items.iter().map(|(_, body)| body.clone()))
+            .zip(&types_elaborated)
+            .map(|(label, type_)| {
+                let (id, slot) = context.fresh_rec_slot(type_.clone());
+                context.define(label, &slot);
+                id
+            })
             .collect::<Vec<_>>();
-        context.define_rec_members(&raw_members);
 
         let mut bodies_elaborated = Vec::with_capacity(items.len());
-        for ((_, body), type_) in items.iter().zip(&types_elaborated) {
-            bodies_elaborated.push(check(context, body, type_.clone())?);
+        for (((_, body), type_), slot) in items.iter().zip(&types_elaborated).zip(slots) {
+            let body = check(context, body, type_.clone())?;
+            context.fill_rec_slot(slot, body.clone());
+            bodies_elaborated.push(body);
         }
-
-        // Re-define with the rebuilt bodies before the tail, for the same
-        // reason — again through `define_rec_members`, so the upgrade cannot
-        // silently drop the recursive mark.
-        let rebuilt_members = labels
-            .iter()
-            .cloned()
-            .zip(bodies_elaborated.iter().cloned())
-            .collect::<Vec<_>>();
-        context.define_rec_members(&rebuilt_members);
-
-        // Goals parked while the group's raw window was open froze this local
-        // frame — raw member bodies included — and their retries run under
-        // that frozen copy after the frame pops, where the upgrade above can
-        // never reach them. Upgrade the frozen entries too, or a retry
-        // re-reduces through the raw copy forever (see
-        // `Context::refresh_parked_rec_members`).
-        context.refresh_parked_rec_members(&rebuilt_members);
+        context.retry_parked()?;
 
         let triples = labels
             .iter()
@@ -169,7 +153,7 @@ pub(super) fn elaborate_rec(
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
 
-        Ok((Term::rec_with_id(id, triples, tail_elaborated), tail_type))
+        Ok((Term::rec(triples, tail_elaborated), tail_type))
     })
 }
 
