@@ -131,7 +131,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] CI pipeline (fmt/check/clippy/test)
 - [x] Multi-platform release automation (Linux x86_64/aarch64, macOS aarch64 native binaries + wasm playground bundle, via tag-triggered GitHub Releases)
 - [x] Module system
-  - [x] Exact private-item-in-public-interface audit (signature-only; representation signatures checked only where exposed, through re-exports and transparent aliases)
+  - [x] Exact private-item-in-public-interface audit (signature-only; representation signatures checked only where exposed, through re-exports, identity aliases, and structurally direct-headed type-family aliases; opaque constructor namespaces cannot be re-exported)
 - [x] Browser playground
   - [x] Run harness owned by `curios-js` (`compile`/`run`, with wire codes from `curios-abi` and a local bridge for the compiler's wire-ABI `Bin` payload shape)
 - [ ] Developer tooling

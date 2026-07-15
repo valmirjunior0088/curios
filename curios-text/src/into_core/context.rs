@@ -91,9 +91,31 @@ impl FlatItem {
 // in each namespace, with its visibility. This is the per-module body view used
 // for lexical scope during elaboration, and to tell private from absent when a
 // public lookup misses.
+#[derive(Clone, Copy)]
+enum ChildInfo {
+    Ordinary { vis_pub: bool },
+    InductiveConstructors { vis_pub: bool, rep_pub: bool },
+}
+
+impl ChildInfo {
+    fn is_public(self) -> bool {
+        match self {
+            ChildInfo::Ordinary { vis_pub } => vis_pub,
+            ChildInfo::InductiveConstructors { vis_pub, rep_pub } => vis_pub && rep_pub,
+        }
+    }
+
+    fn is_opaque_constructor_namespace(self) -> bool {
+        matches!(
+            self,
+            ChildInfo::InductiveConstructors { rep_pub: false, .. }
+        )
+    }
+}
+
 pub(super) struct ModuleInfo {
     pub(super) root: RootId,
-    children: HashMap<String, bool>,
+    children: HashMap<String, ChildInfo>,
     bindings: HashMap<String, bool>,
 }
 
@@ -111,7 +133,22 @@ impl ModuleInfo {
             return Err(Error::DuplicatePublicDeclaration { label });
         }
 
-        self.children.insert(label, vis_pub);
+        self.children.insert(label, ChildInfo::Ordinary { vis_pub });
+        Ok(())
+    }
+
+    pub(super) fn insert_inductive_child(
+        &mut self,
+        label: String,
+        vis_pub: bool,
+        rep_pub: bool,
+    ) -> Result<(), Error> {
+        if self.children.contains_key(&label) {
+            return Err(Error::DuplicatePublicDeclaration { label });
+        }
+
+        self.children
+            .insert(label, ChildInfo::InductiveConstructors { vis_pub, rep_pub });
         Ok(())
     }
 
@@ -125,7 +162,14 @@ impl ModuleInfo {
     }
 
     pub(super) fn get_child(&self, label: &str) -> Option<bool> {
-        self.children.get(label).copied()
+        self.children.get(label).copied().map(ChildInfo::is_public)
+    }
+
+    pub(super) fn is_opaque_constructor_child(&self, label: &str) -> bool {
+        self.children
+            .get(label)
+            .copied()
+            .is_some_and(ChildInfo::is_opaque_constructor_namespace)
     }
 
     pub(super) fn get_binding(&self, label: &str) -> Option<bool> {
@@ -135,7 +179,7 @@ impl ModuleInfo {
     pub(super) fn public_children(&self) -> Vec<String> {
         self.children
             .iter()
-            .filter(|(_, vis_pub)| **vis_pub)
+            .filter(|(_, info)| info.is_public())
             .map(|(label, _)| label.clone())
             .collect()
     }

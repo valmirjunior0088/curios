@@ -193,7 +193,7 @@ fn scan_module_info(items: &[TopItem], root: RootId) -> Result<ModuleInfo, Error
             }
             TopItem::Induct(group) => {
                 for u in group {
-                    info.insert_child(u.label.clone(), u.vis_pub && u.rep_pub)?;
+                    info.insert_inductive_child(u.label.clone(), u.vis_pub, u.rep_pub)?;
                     info.insert_binding(u.label.clone(), u.vis_pub)?;
                 }
             }
@@ -1336,15 +1336,34 @@ fn structure_free_vars(structure: &curios_core::Structure) -> HashSet<String> {
         .collect()
 }
 
-fn flat_aliases(items: &[FlatItem]) -> HashMap<String, String> {
+#[derive(Clone)]
+struct AliasEdge {
+    target: String,
+    module: Qualifier,
+    dependencies: Option<BTreeSet<String>>,
+}
+
+fn flat_aliases(items: &[FlatItem]) -> HashMap<String, AliasEdge> {
     let lets = items.iter().flat_map(|item| match item {
         FlatItem::Let(let_) => std::slice::from_ref(let_),
         FlatItem::Rec(lets) => lets.as_slice(),
     });
 
     lets.filter_map(|let_| {
-        let target = let_.body.transparent_alias_target()?;
-        target.starts_with('/').then(|| (let_.name.join(), target))
+        let direct = let_.body.direct_type_alias_target(&let_.type_);
+        let target = direct.clone().or_else(|| {
+            let target = let_.body.transparent_alias_target()?;
+            target.starts_with('/').then_some(target)
+        })?;
+
+        Some((
+            let_.name.join(),
+            AliasEdge {
+                target,
+                module: let_.island.clone(),
+                dependencies: direct.map(|_| let_.body.free_vars()),
+            },
+        ))
     })
     .collect()
 }
@@ -1353,25 +1372,28 @@ fn flat_aliases(items: &[FlatItem]) -> HashMap<String, String> {
 /// transparent type aliases to the underlying nominal registry entry.
 fn exposed_nominal(
     entry: &Entry,
-    aliases: &HashMap<String, String>,
+    aliases: &HashMap<String, AliasEdge>,
     inductives: &BTreeMap<String, curios_core::Inductive>,
     structures: &BTreeMap<String, curios_core::Structure>,
-) -> Option<String> {
+) -> Option<(String, Vec<AliasEdge>)> {
     let mut current = entry
         .representation
         .as_ref()
         .unwrap_or(&entry.target)
         .join();
     let mut seen = HashSet::new();
+    let mut traversed = Vec::new();
 
     loop {
         if inductives.contains_key(&current) || structures.contains_key(&current) {
-            return Some(current);
+            return Some((current, traversed));
         }
         if !seen.insert(current.clone()) {
             return None;
         }
-        current = aliases.get(&current)?.clone();
+        let edge = aliases.get(&current)?.clone();
+        current = edge.target.clone();
+        traversed.push(edge);
     }
 }
 
@@ -1379,7 +1401,7 @@ fn target_reachable(
     public: &HashMap<Qualifier, PublicInterface>,
     start: &Qualifier,
     target: &str,
-    aliases: &HashMap<String, String>,
+    aliases: &HashMap<String, AliasEdge>,
 ) -> bool {
     let mut pending = vec![start.clone()];
     let mut visited = HashSet::new();
@@ -1404,7 +1426,7 @@ fn target_reachable(
                 let Some(next) = aliases.get(&candidate) else {
                     break;
                 };
-                candidate = next.clone();
+                candidate = next.target.clone();
             }
         }
         pending.extend(
@@ -1423,7 +1445,7 @@ fn audit_dependencies(
     exposure: &Qualifier,
     item: &str,
     owner: &Qualifier,
-    aliases: &HashMap<String, String>,
+    aliases: &HashMap<String, AliasEdge>,
     dependencies: impl IntoIterator<Item = String>,
 ) -> Result<(), Error> {
     let owner = owner.join();
@@ -1461,10 +1483,25 @@ fn audit_public_exposures(
 
     for (module, interface) in public {
         for (label, entry) in &interface.bindings {
-            let Some(nominal) = exposed_nominal(entry, &aliases, inductives, structures) else {
+            let Some((nominal, traversed)) =
+                exposed_nominal(entry, &aliases, inductives, structures)
+            else {
                 continue;
             };
             let item = module.with(label).join();
+
+            for alias in traversed {
+                if let Some(dependencies) = alias.dependencies {
+                    audit_dependencies(
+                        public,
+                        module,
+                        &item,
+                        &alias.module,
+                        &aliases,
+                        dependencies,
+                    )?;
+                }
+            }
 
             if let Some(inductive) = inductives.get(&nominal) {
                 let nominal_dependencies = inductive

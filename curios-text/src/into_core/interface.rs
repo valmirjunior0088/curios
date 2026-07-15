@@ -559,11 +559,16 @@ fn resolve_provider(
         let first = &segments[0];
         let start = match public.get(module).and_then(|i| i.children.get(first)) {
             Some(entry) => entry.target.clone(),
-            None => match table.get(module).and_then(|i| i.get_child(first)) {
+            None => match table.get(module) {
+                Some(info) if info.is_opaque_constructor_child(first) => {
+                    return Err(Error::OpaqueConstructorsCannotBeReExported {
+                        inductive: module.with(first).join(),
+                    });
+                }
                 // Own direct child (any visibility) is a valid start; only an
                 // outright non-child fails here.
-                Some(_) => module.with(first),
-                None => {
+                Some(info) if info.get_child(first).is_some() => module.with(first),
+                _ => {
                     return Err(Error::ChildModuleNotFound {
                         segment: first.clone(),
                     });

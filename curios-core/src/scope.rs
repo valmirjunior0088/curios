@@ -445,6 +445,18 @@ impl<B: Bound> Telescope<B> {
         matches!(self, Telescope::Done(_))
     }
 
+    /// The final payload beneath every binder, without opening the telescope or
+    /// substituting for any of its bound variables.
+    pub(crate) fn terminal(&self) -> &B {
+        let mut current = self;
+        loop {
+            match current {
+                Telescope::Done(body) => return body,
+                Telescope::Cons(_, rest) => current = &rest.body,
+            }
+        }
+    }
+
     /// The binder name at each position (`""` when unnamed), walking the spine
     /// without opening — names are structural, no substitution needed.
     pub(crate) fn labels(&self) -> Vec<&str> {

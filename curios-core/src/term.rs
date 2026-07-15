@@ -86,6 +86,47 @@ impl Term {
         }
     }
 
+    /// Return the absolute free-variable head of a direct type-family alias.
+    ///
+    /// The declared type must structurally end in a literal [`Subterm::Type`]
+    /// or [`Subterm::Prop`] after peeling only function-type telescopes. The
+    /// body is then peeled through function literals and application spines,
+    /// again structurally and without reduction or substitution. Computed
+    /// heads, local heads, and aliased universe annotations are deliberately
+    /// excluded.
+    pub fn direct_type_alias_target(&self, declared_type: &Term) -> Option<String> {
+        fn ends_in_literal_sort(term: &Term) -> bool {
+            match &**term {
+                Subterm::Type | Subterm::Prop => true,
+                Subterm::FuncType(FuncType { telescope, .. }) => {
+                    ends_in_literal_sort(telescope.terminal())
+                }
+                _ => false,
+            }
+        }
+
+        fn application_head(term: &Term) -> Option<&str> {
+            match &**term {
+                Subterm::Apply(Apply { head, .. }) => application_head(head),
+                Subterm::Var(var) => var.as_free(),
+                _ => None,
+            }
+        }
+
+        fn direct_head(term: &Term) -> Option<&str> {
+            match &**term {
+                Subterm::Func(Func { telescope }) => direct_head(telescope.terminal()),
+                _ => application_head(term),
+            }
+        }
+
+        ends_in_literal_sort(declared_type)
+            .then(|| direct_head(self))
+            .flatten()
+            .filter(|target| target.starts_with('/'))
+            .map(str::to_string)
+    }
+
     pub(crate) fn span(&self) -> Option<Span> {
         self.span.clone()
     }

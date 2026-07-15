@@ -18,6 +18,11 @@ pub enum Error {
     PrivateChildModule {
         segment: String,
     },
+    /// A `pub use` in an inductive's declaring module attempted to expose the
+    /// constructors of a representation-private inductive.
+    OpaqueConstructorsCannotBeReExported {
+        inductive: String,
+    },
     /// A root module reachable only from the standard library (e.g. `sys`) was
     /// referenced from user code. Such modules are the trusted primitive
     /// substrate; user code reaches them through their `/std` wrappers.
@@ -173,6 +178,10 @@ impl fmt::Display for Error {
                 write!(f, "child module not found: {segment}")
             }
             Error::PrivateChildModule { segment } => write!(f, "private child module: {segment}"),
+            Error::OpaqueConstructorsCannotBeReExported { inductive } => write!(
+                f,
+                "constructors of opaque inductive '{inductive}' cannot be re-exported\n  mark its representation public (`: pub Type` or `: pub Prop`)"
+            ),
             Error::InternalRootModule { segment } => write!(
                 f,
                 "`{segment}` is internal to the standard library; use the corresponding `/std` module"
