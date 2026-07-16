@@ -40,6 +40,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
+          cache-directories: |
+            target/curios
+            target/binaryen
 
       - name: Build
         shell: bash
@@ -68,6 +71,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-unknown-unknown
+          cache-directories: |
+            target/curios
+            target/binaryen
 
       - name: Install wasm-bindgen-cli
         run: |
@@ -99,6 +105,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: docs
+          cache-directories: |
+            target/curios
+            target/binaryen
 
       - name: Build runtime launcher
         run: make curios/runtime
