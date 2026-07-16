@@ -8,6 +8,14 @@ description = "The curios pipeline: compile_entrypoint driving text -> core -> e
 [lints]
 workspace = true
 
+[features]
+profiling = [
+    "dep:tracing",
+    "curios-core/profiling",
+    "curios-ersd/profiling",
+    "curios-cont/profiling",
+]
+
 [dependencies]
 curios-abi = { workspace = true }
 curios-text = { workspace = true }
@@ -15,3 +23,4 @@ curios-core = { workspace = true }
 curios-ersd = { workspace = true }
 curios-cont = { workspace = true }
 curios-wasm = { workspace = true }
+tracing = { workspace = true, optional = true }

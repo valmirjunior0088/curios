@@ -8,6 +8,9 @@ description = "The curios pipeline library and command-line compiler driver"
 [lints]
 workspace = true
 
+[features]
+profiling = ["curios-pipeline/profiling"]
+
 # Lib (the pipeline facade + compile/precompile/run-from-source helpers
 # + the integration suite) + bin (the clap front-end). This is the only crate
 # that declares Cranelift and Binaryen, so they are confined to compiler builds.
