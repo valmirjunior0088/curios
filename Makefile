@@ -33,3 +33,15 @@ curios/web:
 		--target web \
 		--out-dir "$(CURIOS_WEB_BUNDLE)" \
 		"$(CURIOS_WEB_BIN)"
+
+.PHONY: curios/profile
+CURIOS_PROFILE_SOURCE ?= samples/main.crs
+
+curios/profile:
+	cargo run \
+		--release \
+		--package curios \
+		--bin profile \
+		--features profile \
+		--target-dir "$(CARGO_TARGET_DIR)" \
+		-- "$(CURIOS_PROFILE_SOURCE)"
