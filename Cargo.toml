@@ -31,3 +31,4 @@ wasmtime = { version = "46.0.1", default-features = false, features = ["runtime"
 num-bigint = { version = "0.5.1" }
 num-traits = { version = "0.2.19" }
 tracing = { version = "0.1.44", default-features = false, features = ["std", "attributes"] }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "registry"] }

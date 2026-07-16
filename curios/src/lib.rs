@@ -3,5 +3,8 @@
 mod compile;
 pub use compile::*;
 
+#[cfg(feature = "profiling")]
+pub mod profile;
+
 #[cfg(test)]
 mod tests;
