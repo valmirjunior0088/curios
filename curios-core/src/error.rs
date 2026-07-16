@@ -352,7 +352,7 @@ pub enum Error {
         second: String,
     },
     /// A witness registered by a root that owns neither the concept nor any
-    /// input head's declaring root — the orphan rule: a coherence-relevant
+    /// key head's declaring root — the orphan rule: a coherence-relevant
     /// registration must happen where the concept or a type it mentions is
     /// already declared, so two unrelated roots cannot independently
     /// `satisfy` the same concept+type and collide unfixably downstream.
@@ -378,9 +378,9 @@ pub enum Error {
         concept: String,
         target: String,
     },
-    /// A witness's concept parameter at an input `position` (0-based) does
-    /// not reduce to a rigid nominal or primitive head — nothing to key the
-    /// table entry on.
+    /// A witness's concept parameter at `position` (0-based) does not reduce
+    /// to a rigid nominal or primitive head — nothing to key the table entry
+    /// on.
     InvalidWitnessHead {
         witness: String,
         position: usize,
@@ -1359,7 +1359,7 @@ impl fmt::Display for Error {
             } => {
                 write!(
                     f,
-                    "witness '{witness}' cannot be keyed: its concept's parameter {n} reduces to {head}\n  every input parameter's head must be an inductive, a struct, or a primitive type",
+                    "witness '{witness}' cannot be keyed: its concept's parameter {n} reduces to {head}\n  every parameter's head must be an inductive, a struct, or a primitive type",
                     n = position + 1
                 )
             }

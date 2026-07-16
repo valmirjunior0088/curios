@@ -193,7 +193,7 @@ pub struct Context {
     // registers into `witness_table` when its signature elaborates
     // (`elaborate_module_let` → `register_witness`).
     witness_declarations: BTreeSet<String>,
-    // The program-wide witness table: one witness per (concept, input-head
+    // The program-wide witness table: one witness per (concept, parameter-head
     // tuple) key — global coherence, checked at registration.
     witness_table: BTreeMap<(String, WitnessKey), Witness>,
     // The `use`-plicity binders currently in scope, in binding order (a

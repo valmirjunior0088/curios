@@ -6,10 +6,10 @@
 //! A concept lowers to a representation-public nominal structure (its
 //! [`Structure`] (super::Structure) entry drives literals and projections); the [`Concept`]
 //! entry here adds what resolution needs on top: the field labels, the
-//! superclass mask, the parameter telescope, and the input mask. A witness
-//! lowers to an ordinary top-level definition; its [`Witness`] entry keys that
-//! definition in the program-wide table under `(concept name, tuple of the
-//! rigid heads of the input parameters)`, the [`WitnessKey`] of [`HeadKey`]s.
+//! superclass mask, and the parameter telescope. A witness lowers to an
+//! ordinary top-level definition; its [`Witness`] entry keys that definition
+//! in the program-wide table under `(concept name, tuple of parameter heads)`,
+//! the [`WitnessKey`] of [`HeadKey`]s.
 
 #[cfg(test)]
 mod tests;
@@ -34,12 +34,6 @@ pub struct Concept {
     /// each `use`-marked field. The graph over all concepts must be acyclic
     /// (checked when the registries are seeded).
     pub supers: Vec<(usize, String)>,
-    /// The parameter positions witnesses key on, in declaration order — every
-    /// position not marked `out` in the declaration. A concept without `out`
-    /// markers has `inputs = [0, 1, …, n-1]`; `out` positions are excluded
-    /// from the key and pinned by the witness's terminal unification instead
-    /// (functional dependencies).
-    pub inputs: Vec<usize>,
     /// The compilation root that declares this concept — consulted by the
     /// orphan-rule ownership check in `register_witness`.
     pub root: RootId,
@@ -60,8 +54,8 @@ pub(crate) struct Witness {
     pub root: RootId,
 }
 
-/// The tuple of rigid heads a witness is keyed on: one [`HeadKey`] per input
-/// position of its concept, in declaration order. Displays bare for arity one
+/// The tuple of rigid heads a witness is keyed on: one [`HeadKey`] per concept
+/// parameter, in declaration order. Displays bare for arity one
 /// (`Nat`) and as a tuple otherwise (`(Nat, Str)`).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WitnessKey(pub Vec<HeadKey>);

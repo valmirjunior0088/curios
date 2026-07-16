@@ -223,7 +223,7 @@ fn scan_module_info(items: &[TopItem], root: RootId) -> Result<ModuleInfo, Error
 // The surface concept application `C(p₁, …)` for a method wrapper's `use w`
 // binder: the concept name applied to its parameters, each carrying the
 // parameter's declared plicity so the application matches the type-former.
-fn concept_application(label: &str, params: &[ConceptParam]) -> Term {
+fn concept_application(label: &str, params: &[(Plicity, String, Term)]) -> Term {
     let head: Term = Subterm::Name(Name::from(vec![label.to_string()])).into();
     if params.is_empty() {
         return head;
@@ -233,10 +233,10 @@ fn concept_application(label: &str, params: &[ConceptParam]) -> Term {
         head,
         params: params
             .iter()
-            .map(|param| {
+            .map(|(plicity, label, _)| {
                 (
-                    param.plicity,
-                    Subterm::Name(Name::from(vec![param.label.clone()])).into(),
+                    *plicity,
+                    Subterm::Name(Name::from(vec![label.clone()])).into(),
                 )
             })
             .collect(),
@@ -845,7 +845,7 @@ fn process_items(
                     concept
                         .params
                         .iter()
-                        .map(|p| Ok((p.plicity, p.label.clone(), lower.term(&p.type_)?)))
+                        .map(|(p, n, t)| Ok((*p, n.clone(), lower.term(t)?)))
                         .collect::<Result<Vec<_>, Error>>()?
                 };
                 let param_tys_unmarked = param_tys
@@ -855,24 +855,8 @@ fn process_items(
                 let param_vars = concept
                     .params
                     .iter()
-                    .map(|p| curios_core::Term::var(curios_core::Var::free(&p.label)))
+                    .map(|(_, n, _)| curios_core::Term::var(curios_core::Var::free(n)))
                     .collect::<Vec<_>>();
-
-                // The input mask: every position not marked `out` keys the
-                // witness table. Marking every parameter `out` leaves nothing
-                // to key on — rejected here, where the marker lives.
-                let inputs = concept
-                    .params
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, p)| !p.is_out)
-                    .map(|(position, _)| position)
-                    .collect::<Vec<_>>();
-                if !concept.params.is_empty() && inputs.is_empty() {
-                    return Err(Error::ConceptWithoutInputs {
-                        label: concept.label.clone(),
-                    });
-                }
 
                 // Superclass fields are anonymous in the surface syntax; mint a
                 // unique internal label per super so the record telescope and the
@@ -952,7 +936,6 @@ fn process_items(
                         params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: field_labels.clone(),
                         supers,
-                        inputs,
                         root,
                     },
                 );
@@ -989,10 +972,10 @@ fn process_items(
                     let mut params = concept
                         .params
                         .iter()
-                        .map(|p| FuncSugarParam {
+                        .map(|(_, label, type_)| FuncSugarParam {
                             plicity: Plicity::Implicit,
-                            label: Pattern::Binder(Some(p.label.clone())),
-                            type_: p.type_.clone(),
+                            label: Pattern::Binder(Some(label.clone())),
+                            type_: type_.clone(),
                         })
                         .collect::<Vec<_>>();
                     params.push(FuncSugarParam {

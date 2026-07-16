@@ -68,11 +68,6 @@ pub enum Error {
     MalformedSuperField {
         concept: String,
     },
-    /// A concept declaration marks every parameter `out`, leaving an empty
-    /// witness key — at least one input position is required.
-    ConceptWithoutInputs {
-        label: String,
-    },
     /// A `pub` item's declared signature references an item that is not itself
     /// publicly reachable. Cross-module references are vetted during
     /// resolution; this closes the two privately-resolvable paths (the item's
@@ -223,12 +218,6 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "concept `{concept}` has a `use` field whose type is not a concept application"
-                )
-            }
-            Error::ConceptWithoutInputs { label } => {
-                write!(
-                    f,
-                    "concept `{label}` marks every parameter `out`; at least one input parameter is required to key witnesses on"
                 )
             }
             Error::BangInTypePosition => {

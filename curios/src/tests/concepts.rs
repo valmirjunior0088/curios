@@ -224,8 +224,8 @@ fn witness_for_a_locally_owned_type_is_not_an_orphan() {
     assert_eq!(run(source), b"7");
 }
 
-// Multi-parameter concepts key on the tuple of every input head: two
-// witnesses may share a first head as long as the full input tuple differs,
+// Multi-parameter concepts key on the tuple of every parameter head: two
+// witnesses may share a first head as long as the full parameter tuple differs,
 // and each resolves once both parameters are pinned.
 #[test]
 fn multi_param_witnesses_share_a_first_head() {
@@ -248,11 +248,11 @@ fn multi_param_witnesses_share_a_first_head() {
     assert_eq!(run(source), b"false");
 }
 
-// Without an `out` marker every parameter is an input, so a goal whose second
-// parameter is never pinned parks on the flex input and surfaces as an error
-// at the end of the module — no accidental output inference from the witness.
+// Every concept parameter participates in the witness key, so a goal whose
+// second parameter is never pinned parks and surfaces as an error at the end
+// of the module — no accidental inference from the witness.
 #[test]
-fn open_input_parameter_does_not_infer_from_the_witness() {
+fn open_parameter_does_not_infer_from_the_witness() {
     let source = r#"
         use /std/{Nat, Io, Str};
         pub concept Into(A : Type, B : Type) : Type {
@@ -269,88 +269,8 @@ fn open_input_parameter_does_not_infer_from_the_witness() {
     assert!(message.contains("witness") || message.contains("infer"));
 }
 
-// An `out` parameter is excluded from the witness key: the goal
-// `Convert(Nat, ?B)` resolves on `Nat` alone and the witness's terminal
-// unification pins `?B := Str` — nothing else constrains `B`.
-#[test]
-fn out_parameter_is_inferred_from_the_witness() {
-    let source = r#"
-        use /std/{Nat, Io, Str};
-        pub concept Convert(A : Type, out B : Type) : Type {
-            convert(A) -> B
-        }
-        satisfy Convert(Nat, Str) {
-            convert(n) = Nat/to_str(n)
-        }
-        pub let ignore(@A : Type, x : A) -> Nat = 7;
-        Io/print(Nat/to_str(ignore(Convert/convert(1))))
-        "#;
-
-    assert_eq!(run(source), b"7");
-}
-
-// Same input tuple + different outputs is a functional-dependency violation:
-// both witnesses key on `Nat` once `B` is `out`, so the second registration
-// collides.
-#[test]
-fn fundep_violation_is_a_duplicate_witness_error() {
-    let source = r#"
-        use /std/{Nat, Bln, Io, Str};
-        pub concept Convert(A : Type, out B : Type) : Type {
-            convert(A) -> B
-        }
-        satisfy Convert(Nat, Str) {
-            convert(n) = Nat/to_str(n)
-        }
-        satisfy Convert(Nat, Bln) {
-            convert(n) = Nat/eql(n, 1)
-        }
-        let s : Str = Convert/convert(1);
-        Io/print(s)
-        "#;
-
-    assert!(error(source).to_lowercase().contains("witness"));
-}
-
-// A local `use` binder pins an open `out` parameter through step 1's
-// committing match: inside `go`, the goal `Convert(Nat, ?B)` matches the
-// binder `w : Convert(Nat, Str)` and commits `?B := Str`.
-#[test]
-fn local_binder_pins_an_out_parameter() {
-    let source = r#"
-        use /std/{Nat, Io, Str};
-        pub concept Convert(A : Type, out B : Type) : Type {
-            convert(A) -> B
-        }
-        satisfy Convert(Nat, Str) {
-            convert(n) = Nat/to_str(n)
-        }
-        pub let ignore(@A : Type, x : A) -> Nat = 9;
-        pub let go(use Convert(Nat, Str), x : Nat) -> Nat = ignore(Convert/convert(x));
-        Io/print(Nat/to_str(go(1)))
-        "#;
-
-    assert_eq!(run(source), b"9");
-}
-
-// Marking every parameter `out` leaves an empty witness key — rejected at
-// lowering.
-#[test]
-fn all_out_concept_is_rejected() {
-    let source = r#"
-        use /std/{Nat, Io, Str};
-        pub concept Make(out A : Type) : Type {
-            make() -> A
-        }
-        let n : Nat = 1;
-        Io/print(Nat/to_str(n))
-        "#;
-
-    assert!(error(source).contains("out"));
-}
-
 // The full higher-kinded chain: `Monad/bind(o, f)` parks its `Monad(?M)` goal
-// on the flex input, checking `o : Option(Nat)` against `?M(?A)` fires the
+// on the flex parameter, checking `o : Option(Nat)` against `?M(?A)` fires the
 // flex-apply imitation rule inside the conversion checker, and the committed
 // `?M := Option` wakes the parked goal, which the table resolves to the
 // prelude's `monad_option`. Also covers the cached-prelude replay of a

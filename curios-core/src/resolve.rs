@@ -9,13 +9,11 @@
 //!    binders through the (acyclic) superclass graph, breadth-first by depth;
 //!    two matches at the same minimal depth are ambiguous.
 //! 3. **Global table** — pure lookup by `(concept, tuple of the rigid heads
-//!    of the input parameters)`; a hit instantiates the witness's telescope
-//!    (fresh metavariables for `@` binders, recursive goals for `use`
-//!    premises) and unifies its result type against the goal — which also pins
-//!    any `out` parameters. No projections here.
-//! 4. **Flex head** — an *input* parameter still headed by a metavariable
-//!    parks the goal, woken when a watched metavariable solves. Output
-//!    (`out`-marked) parameters may stay flex; the witness pins them.
+//!    of every parameter)`; a hit instantiates the witness's telescope (fresh
+//!    metavariables for `@` binders, recursive goals for `use` premises) and
+//!    unifies its result type against the goal. No projections here.
+//! 4. **Flex head** — any parameter still headed by a metavariable parks the
+//!    goal, woken when a watched metavariable solves.
 //!
 //! A rigid, keyable head with no table entry *defers* rather than failing:
 //! items elaborate in order, and a later item may register the witness. The
@@ -138,22 +136,14 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
 
     let concept_app = as_concept_app(context, &goal_whnf);
 
-    // Step 4 gates steps 1–3 for concept goals: a flex *input* parameter must
+    // Step 4 gates steps 1–3 for concept goals: a flex parameter must
     // park rather than match eagerly, or an in-scope binder of the same
     // concept would overcommit the hole (`Show(?T)` grabbing a local
-    // `Show(Nat)` while `?T` was headed for `Bin`). Every input position
-    // gates — a first-param-only gate would let `Into(Nat, ?B)` reach the
-    // table with an incomplete key and wrongly defer. Output (`out`-marked)
-    // positions may stay flex: pinning them is the point.
-    if let Some((name, params)) = &concept_app {
-        let inputs = context
-            .concept(name)
-            .map(|concept| concept.inputs.clone())
-            .unwrap_or_default();
-        for position in inputs {
-            let Some(param) = params.get(position) else {
-                continue;
-            };
+    // `Show(Nat)` while `?T` was headed for `Bin`). Every parameter gates — a
+    // first-param-only gate would let `Into(Nat, ?B)` reach the table with an
+    // incomplete key and wrongly defer.
+    if let Some((_, params)) = &concept_app {
+        for param in params {
             let head = reduce_with(context, param)?;
             if flex_head(context, &head) {
                 return Ok(Resolution::Flex);
@@ -246,19 +236,10 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
         frontier = next;
     }
 
-    // Step 3: the global table — pure lookup by (concept, tuple of the heads
-    // of the input parameters). Output positions never enter the key; the
-    // witness's terminal unification pins them.
-    let inputs = context
-        .concept(&concept_name)
-        .map(|concept| concept.inputs.clone())
-        .unwrap_or_default();
-    let mut heads = Vec::with_capacity(inputs.len());
-    for position in inputs {
-        let Some(param) = params.get(position) else {
-            heads.clear();
-            break;
-        };
+    // Step 3: the global table — pure lookup by (concept, tuple of every
+    // parameter head).
+    let mut heads = Vec::with_capacity(params.len());
+    for param in &params {
         let head = reduce_with(context, param)?;
         match HeadKey::of_whnf(&head) {
             Some(head) => heads.push(head),
@@ -269,7 +250,7 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
         }
     }
     if heads.is_empty() {
-        // A non-keyable input head, or a concept with nothing to key on.
+        // A non-keyable parameter head, or a concept with nothing to key on.
         return Ok(match saw_undecided {
             true => Resolution::Flex,
             false => Resolution::NoMatch,
@@ -586,7 +567,7 @@ pub(crate) fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Err
 
 /// Register an elaborated definition as a witness: validate its telescope
 /// (no explicit binders, regular premises), key it on the tuple of rigid
-/// heads of the concept's input parameters, and insert it into the
+/// heads of the concept's parameters, and insert it into the
 /// program-wide table — rejecting a duplicate key. `signature` is the
 /// definition's *elaborated* type; `root` is its declaring `Definition`'s
 /// own precomputed root (consulted by the orphan-rule check below, never
@@ -638,25 +619,12 @@ pub(crate) fn register_witness(
         return Err(Error::not_a_concept(name, terminal.clone()));
     }
 
-    // Key on every input position: each must reduce to a rigid, keyable head.
-    // Output positions are unconstrained here — arbitrary terms, checked only
-    // by unification at resolution time.
-    let inputs = context
-        .concept(concept_name)
-        .map(|concept| concept.inputs.clone())
-        .expect("the concept was looked up above");
-    if inputs.is_empty() {
+    // Key on every parameter: each must reduce to a rigid, keyable head.
+    if params.is_empty() {
         return Err(Error::invalid_witness_head(name, 0, terminal.clone()));
     }
-    let mut heads = Vec::with_capacity(inputs.len());
-    for position in inputs {
-        let Some(param) = params.get(position) else {
-            return Err(Error::invalid_witness_head(
-                name,
-                position,
-                terminal.clone(),
-            ));
-        };
+    let mut heads = Vec::with_capacity(params.len());
+    for (position, param) in params.iter().enumerate() {
         let head = reduce_with(context, param)?;
         let Some(head) = HeadKey::of_whnf(&head) else {
             return Err(Error::invalid_witness_head(name, position, head));

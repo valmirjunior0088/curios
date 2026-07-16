@@ -37,7 +37,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Instance arguments (ad-hoc polymorphism: `concept` declarations, anonymous `satisfy` (witness) declarations, the `use` binder plicity, deterministic witness resolution with local-scope, superclass-projection, and global-table steps; `use`-marked concept fields resolve by omission and fill explicitly with `use <term>` entries)
   - [x] `Show`/`Eql`/`Ord`/`Monad` in the standard library
   - [x] Higher-kinded concepts (`Monad(M : (Type) -> Type)`, via the flex-apply imitation rule in `convert.rs`)
-  - [x] Multi-parameter keying (tuple of input heads) and functional dependencies (`out` parameters)
+  - [x] Multi-parameter keying (tuple of every parameter head)
   - [x] Orphan rule (a witness must be declared where its concept, or a type in its key, is already declared; the standard library's three roots — `sys`/`syn`/`std` — are exempt from the check against each other, one coordinated implementation rather than independent packages)
   - [x] Concept-based operators (every infix, `&&`/`||` included, dispatches through `Add`/`Sub`/`Mul`/`Div`/`Rem`/`And`/`Or`/`Eql`/`Cmp` with `/sys` witnesses; primitive codegen unchanged)
 - [x] Unified `struct` declarations (independent nominal and declaration-local representation visibility)

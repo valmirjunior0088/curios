@@ -1,11 +1,11 @@
 use {
     super::{
-        Apply, BinPattern, BinSegment, ConceptField, ConceptParam, CondMatch, Field, Func,
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, LadderArm, LadderTest, Let,
-        LetSignature, LstEntry, LstPattern, Match, MatchPattern, MatchPatternField, MatrixMatch,
-        Motive, Nat, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec,
-        StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct,
-        TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        Apply, BinPattern, BinSegment, ConceptField, CondMatch, Field, Func, FuncSugarParam,
+        FuncType, FuncTypeParam, GroupItem, Infix, LadderArm, LadderTest, Let, LetSignature,
+        LstEntry, LstPattern, Match, MatchPattern, MatchPatternField, MatrixMatch, Motive, Nat,
+        NatLiteral, NatPattern, NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec, StructLit,
+        StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
+        TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
         TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_abi::{WireSignature, WireType},
@@ -1129,38 +1129,12 @@ fn print_concept_field(field: ConceptField) -> Printer<'static> {
     }
 }
 
-// Concept parameters print like an inductive's, plus the `out` marker —
-// which `print_top_inductive_params` cannot carry, hence the dedicated
-// printer.
-fn print_top_concept_params(params: Vec<ConceptParam>) -> Printer<'static> {
-    if params.is_empty() {
-        return pure("");
-    }
-
-    flat([
-        pure("("),
-        sep_flat(
-            params.into_iter().map(|param| {
-                flat([
-                    if param.is_out { pure("out ") } else { pure("") },
-                    print_plicity(param.plicity),
-                    pure(param.label),
-                    pure(" : "),
-                    print_term(param.type_),
-                ])
-            }),
-            || pure(", "),
-        ),
-        pure(")"),
-    ])
-}
-
 fn print_top_concept(item: TopConcept) -> Printer<'static> {
     flat([
         print_pub(item.vis_pub),
         pure("concept "),
         pure(item.label),
-        print_top_concept_params(item.params),
+        print_top_inductive_params(item.params),
         pure(" : "),
         print_term(item.result_sort),
         pure(" { "),
