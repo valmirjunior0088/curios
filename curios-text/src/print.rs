@@ -1150,11 +1150,11 @@ fn print_top_witness(item: TopWitness) -> Printer<'static> {
         pure("")
     } else {
         flat([
-            pure("("),
+            pure(" ("),
             sep_flat(item.params.into_iter().map(print_func_sugar_param), || {
                 pure(", ")
             }),
-            pure(")"),
+            pure(") =>"),
         ])
     };
 

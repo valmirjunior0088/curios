@@ -2079,7 +2079,7 @@ fn parse_witness_item() {
     // `use <term>` fill for the concept's superclass field, and the definition
     // sugar (`cmp(a, b) = ...`).
     let source = "\
-        satisfy(@A : Type, use Ord(A)) Ord(Lst(A)) { \
+        satisfy (@A : Type, use Ord(A)) => Ord(Lst(A)) { \
             use eql_lst, \
             cmp(a, b) = Order/lt() \
         } u";
@@ -2159,7 +2159,7 @@ fn concept_witness_use_round_trip() {
         "pub concept Ord(A : Type) : Type { use Eql(A), cmp : A } u",
         "concept Convert(A : Type, B : Type) : Type { convert : A } u",
         "satisfy Show(Nat) { show = f } u",
-        "satisfy(@A : Type, use Show(A)) Show(Lst(A)) { show = g } u",
+        "satisfy (@A : Type, use Show(A)) => Show(Lst(A)) { show = g } u",
         "f(use dict, x)",
         "(@A : Type, use Show(A), x : A) -> A",
     ] {
@@ -2168,6 +2168,27 @@ fn concept_witness_use_round_trip() {
             entrypoint.to_string().parse::<Entrypoint>().unwrap(),
             entrypoint,
             "round-trip failed for {source:?}"
+        );
+    }
+}
+
+#[test]
+fn parameterized_witness_prints_separator_syntax() {
+    let source = "satisfy (@A : Type, use Show(A)) => Show(Lst(A)) { show = g }\nu";
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    assert_eq!(entrypoint.to_string(), source);
+}
+
+#[test]
+fn witness_telescope_requires_nonempty_separator_form() {
+    for source in [
+        "satisfy(@A : Type) Show(A) { show = f } u",
+        "satisfy (@A : Type) -> Show(A) { show = f } u",
+        "satisfy () => Show(Nat) { show = f } u",
+    ] {
+        assert!(
+            source.parse::<Entrypoint>().is_err(),
+            "unexpectedly parsed {source:?}"
         );
     }
 }

@@ -43,7 +43,7 @@ fn premised_witness_resolves_recursively() {
         satisfy Show(Nat) {
             show(n) = Nat/to_str(n)
         }
-        satisfy(@A : Type, use Show(A)) Show(Lst(A)) {
+        satisfy (@A : Type, use Show(A)) => Show(Lst(A)) {
             show(l) =
                 Lst/fold(l, "[", (x, acc) => Str/concat(acc, Show/show(x)))
         }
@@ -546,10 +546,10 @@ fn omitted_superclass_resolves_from_a_premise() {
         satisfy Eq6(Nat) {
             eq6(a, b) = a == b
         }
-        satisfy(@A : Type, use Eq6(A)) Eq6(Lst(A)) {
+        satisfy (@A : Type, use Eq6(A)) => Eq6(Lst(A)) {
             eq6(a, b) = Lst/len(a) == Lst/len(b)
         }
-        satisfy(@A : Type, use Ord6(A)) Ord6(Lst(A)) {
+        satisfy (@A : Type, use Ord6(A)) => Ord6(Lst(A)) {
             cmp6(a, b) = Order/lt()
         }
         satisfy Ord6(Nat) {

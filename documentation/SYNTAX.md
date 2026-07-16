@@ -696,10 +696,10 @@ satisfy Show(Nat) {
 }
 ```
 
-A witness may quantify over implicit parameters and require other witnesses. It cannot declare explicit parameters because resolution has no explicit arguments to supply.
+A witness may quantify over implicit parameters and require other witnesses. A nonempty telescope is separated from the concept application by `=>`. It cannot declare explicit parameters because resolution has no explicit arguments to supply.
 
 ```crs
-satisfy(@A : Type, use Show(A)) Show(Lst(A)) {
+satisfy (@A : Type, use Show(A)) => Show(Lst(A)) {
     show(values) = Lst/fold(values, "", (value, result) => Str/concat(result, Show/show(value))),
 }
 ```
@@ -811,3 +811,4 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `match term ... end` | Typed elimination or dispatch |
 | `match ... end` | Ordered condition ladder |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
+| `satisfy (@A : Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |

@@ -1,6 +1,8 @@
 **/.DS_Store
 /target
 /.claude
+/.agents
+/.codex
 /.antigravitycli
 /*.wasm
 /curios/runtime

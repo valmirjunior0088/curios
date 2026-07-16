@@ -523,17 +523,18 @@ pub(super) fn parse_witness_entry<'a>() -> Parser<'a, WitnessEntry> {
         .or(parse_witness_field().map(WitnessEntry::Field))
 }
 
-// A witness declaration is anonymous: `satisfy (params)? Concept(args) { … }`.
-// The keyword is the commit point, exactly as before — nothing else at item
-// position begins with `satisfy`. No separator sits between the optional
-// telescope and the concept: the telescope is a parenthesized group and the
-// concept is a name, so the two never run together.
+// A witness declaration is anonymous: `satisfy Concept(args) { … }`, or
+// `satisfy (params) => Concept(args) { … }` with a nonempty telescope. The
+// keyword is the commit point — nothing else at item position begins with
+// `satisfy`. The separator makes the parameterized form's terminal concept
+// application explicit; an empty telescope must use the bare form instead.
 pub(super) fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
     catch(parse_keyword("satisfy")).flat_map(|()| {
         catch(
             parse_literal("(")
-                .and_keep(sep_by0(parse_func_sugar_param, || parse_literal(",")))
-                .and_drop(parse_literal(")")),
+                .and_keep(sep_by1(parse_func_sugar_param, || parse_literal(",")))
+                .and_drop(parse_literal(")"))
+                .and_drop(parse_literal("=>")),
         )
         .or(pure(vec![]))
         .and(parse_name())

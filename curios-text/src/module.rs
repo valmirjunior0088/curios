@@ -216,9 +216,11 @@ pub enum WitnessEntry {
 /// no `pub`. The declaration desugars to a compiler-named top-level definition
 /// `let witness#N(tele) -> C(args) = C(args) { … }` (§4.3) registered in the
 /// program-wide witness table; diagnostics identify it by concept, key, and
-/// declaring module. The telescope admits only `@` and `use` parameters
-/// (explicit binders are rejected at lowering); `concept`/`args` are the
-/// witnessed concept application, reused verbatim as the struct-literal head.
+/// declaring module. Surface syntax writes a nonempty telescope as
+/// `satisfy (tele) => C(args) { … }`; the telescope admits only `@` and `use`
+/// parameters (explicit binders are rejected at lowering). `concept`/`args`
+/// are the witnessed concept application, reused verbatim as the
+/// struct-literal head.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopWitness {
     pub params: Vec<FuncSugarParam>,
