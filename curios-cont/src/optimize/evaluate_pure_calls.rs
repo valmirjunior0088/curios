@@ -255,7 +255,7 @@ fn materialise_snapshot(
 
 #[cfg(test)]
 mod tests {
-    use {super::*, curios_abi::sys_io, std::sync::Arc};
+    use {super::*, curios_abi::sys_io, curios_base::Grain, std::sync::Arc};
 
     fn v(name: &str) -> ValueName {
         ValueName::from(name)
@@ -680,7 +680,7 @@ mod tests {
     fn folds_conversion_call_at_compile_time() {
         // f(n) = Flt::to_le_bytes(n) — pure under the classification (see
         // `pure_conversion_code_is_pure`). With a literal argument, partial eval
-        // folds the call to a `Pure(Data::Bin(curios_base::Grain::X, ..))` plus a jump to the original
+        // folds the call to a `Pure(Data::Bin(Grain::X, ..))` plus a jump to the original
         // resume; the runtime conversion disappears.
         let mut module = module_with_main_calling("f", vec![(v("a"), Data::Flt(7.0))]);
         module.add_func(
@@ -708,7 +708,7 @@ mod tests {
             region
                 .values
                 .iter()
-                .any(|(_, v)| matches!(v, Value::Pure(Data::Bin(curios_base::Grain::X, b)) if b.as_bytes() == Some(expected.as_slice()))),
+                .any(|(_, v)| matches!(v, Value::Pure(Data::Bin(Grain::X, b)) if b.as_bytes() == Some(expected.as_slice()))),
             "expected a Pure(Bin) binding from the folded FltToLeBytes, got {:?}",
             region.values,
         );

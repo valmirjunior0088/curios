@@ -17,6 +17,10 @@ use {
 /// Erasure is sort-driven: `erase` drops a payload field whose type is a proof
 /// or a type — no per-payload mark is stored.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct InductiveParam {
     pub telescope: Telescope<Term>,
 }
@@ -31,6 +35,10 @@ pub struct InductiveParam {
 /// count is arity-checked against that telescope statically. `erase` consults
 /// it again to type constructor payloads and order runtime tags.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Inductive {
     /// The declaration's parameter telescope, e.g. `(A : Type, E : Type)` for
     /// `induct Result(A : Type, E : Type)`. Ends in `()` like a `TupleType`'s

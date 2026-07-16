@@ -263,17 +263,17 @@ pub(super) fn coalesce_bin_segments(raw: Vec<RawBinSegment>) -> Vec<BinSegment> 
 // and `\..operand` segments. One whitespace-free lexical unit: after a spread
 // operand the literal continues only when the very next character is `\`.
 pub(super) fn parse_bin_literal<'a>() -> Parser<'a, Term> {
-    let empty_bits = catch(take_exact("b\\").and_drop(parse_whitespace()))
-        .map(|()| (curios_base::Grain::B, Vec::new()));
+    let empty_bits =
+        catch(take_exact("b\\").and_drop(parse_whitespace())).map(|()| (Grain::B, Vec::new()));
     let bits = catch(take_exact("b").and_keep(many1(parse_bit_segment).map(coalesce_bin_segments)))
         .and_drop(parse_whitespace())
-        .map(|segments| (curios_base::Grain::B, segments));
-    let empty_bytes = catch(take_exact("x\\").and_drop(parse_whitespace()))
-        .map(|()| (curios_base::Grain::X, Vec::new()));
+        .map(|segments| (Grain::B, segments));
+    let empty_bytes =
+        catch(take_exact("x\\").and_drop(parse_whitespace())).map(|()| (Grain::X, Vec::new()));
     let bytes =
         catch(take_exact("x").and_keep(many1(parse_bin_segment).map(coalesce_bin_segments)))
             .and_drop(parse_whitespace())
-            .map(|segments| (curios_base::Grain::X, segments));
+            .map(|segments| (Grain::X, segments));
 
     bits.or(empty_bits)
         .or(bytes)

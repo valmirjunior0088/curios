@@ -332,6 +332,7 @@ mod tests {
     use {
         super::*,
         crate::{CellPrim, Match, NatMatch},
+        curios_base::Grain,
     };
 
     fn call(head: &str, args: Vec<Term>) -> Term {
@@ -347,20 +348,15 @@ mod tests {
     }
 
     fn bin_len(buffer: Term) -> Term {
-        prim(PurePrim::BinLen(curios_base::Grain::X, buffer))
+        prim(PurePrim::BinLen(Grain::X, buffer))
     }
 
     fn bin_get(buffer: Term, index: Term) -> Term {
-        prim(PurePrim::BinGet(curios_base::Grain::X, buffer, index))
+        prim(PurePrim::BinGet(Grain::X, buffer, index))
     }
 
     fn bin_slice(buffer: Term, from: Term, upto: Term) -> Term {
-        prim(PurePrim::BinSlice(
-            curios_base::Grain::X,
-            buffer,
-            from,
-            upto,
-        ))
+        prim(PurePrim::BinSlice(Grain::X, buffer, from, upto))
     }
 
     fn lst_len(buffer: Term) -> Term {
@@ -473,11 +469,7 @@ mod tests {
         // `b` flows into `Bin.eql` (a whole-buffer read), so the virtual suffix would
         // have to be materialised — the recursion is left untouched.
         let body = value_match(
-            prim(PurePrim::BinEql(
-                curios_base::Grain::X,
-                name_term("b"),
-                name_term("b"),
-            )),
+            prim(PurePrim::BinEql(Grain::X, name_term("b"), name_term("b"))),
             vec![
                 call(
                     "f",

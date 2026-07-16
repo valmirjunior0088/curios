@@ -1,7 +1,7 @@
 use {
     super::{Bound, MetavarId, Nat, Subterm, Term, Var, Visit},
     curios_abi::{ForeignFunction, WireType},
-    curios_base::{Flt, Int, PackedBin},
+    curios_base::{Flt, Grain, Int, PackedBin},
     std::{collections::BTreeSet, sync::Arc},
 };
 
@@ -13,7 +13,7 @@ pub(crate) fn wire_term(wire_type: &WireType) -> Term {
         WireType::Nat => Prim::NatType,
         WireType::Int => Prim::IntType,
         WireType::Bln => Prim::BlnType,
-        WireType::Bin => Prim::BinType(curios_base::Grain::X),
+        WireType::Bin => Prim::BinType(Grain::X),
         WireType::Io => Prim::IoType,
         WireType::Lst(element) => Prim::LstType(wire_term(element)),
     };
@@ -25,6 +25,10 @@ pub(crate) fn wire_term(wire_type: &WireType) -> Term {
 ///
 /// The `impl` block's constructor helpers (`nat_add`, `bin_slice`, …) take `impl Into<Term>` operands, sparing builder call sites — reduction's neutral rebuilds and curios-text's lowering — the `.into()` noise.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Prim {
     BlnType,
     Bln(bool),
@@ -108,14 +112,14 @@ pub enum Prim {
     FltToLeBytes(Term),
     FltOfLeBytes(Term),
     FltToInt(Term),
-    BinType(curios_base::Grain),
-    Bin(curios_base::Grain, PackedBin),
-    BinLen(curios_base::Grain, Term),
-    BinEql(curios_base::Grain, Term, Term),
-    BinGet(curios_base::Grain, Term, Term),
-    BinSlice(curios_base::Grain, Term, Term, Term),
-    BinAppend(curios_base::Grain, Term, Term),
-    BinConcat(curios_base::Grain, Vec<Term>),
+    BinType(Grain),
+    Bin(Grain, PackedBin),
+    BinLen(Grain, Term),
+    BinEql(Grain, Term, Term),
+    BinGet(Grain, Term, Term),
+    BinSlice(Grain, Term, Term, Term),
+    BinAppend(Grain, Term, Term),
+    BinConcat(Grain, Vec<Term>),
     LstType(Term),
     Lst(Vec<Term>),
     LstLen(Term, Term),
@@ -583,7 +587,7 @@ impl Prim {
     }
 
     /// A `BinLen` node from anything term-shaped.
-    pub fn bin_len<B>(grain: curios_base::Grain, bin: B) -> Self
+    pub fn bin_len<B>(grain: Grain, bin: B) -> Self
     where
         B: Into<Term>,
     {
@@ -591,7 +595,7 @@ impl Prim {
     }
 
     /// A `BinEql` node from anything term-shaped.
-    pub fn bin_eql<F, S>(grain: curios_base::Grain, left: F, right: S) -> Self
+    pub fn bin_eql<F, S>(grain: Grain, left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
@@ -600,7 +604,7 @@ impl Prim {
     }
 
     /// A `BinGet` node from term-shaped bytes and index.
-    pub fn bin_get<B, I>(grain: curios_base::Grain, bin: B, index: I) -> Self
+    pub fn bin_get<B, I>(grain: Grain, bin: B, index: I) -> Self
     where
         B: Into<Term>,
         I: Into<Term>,
@@ -609,7 +613,7 @@ impl Prim {
     }
 
     /// A `BinSlice` node from term-shaped bytes, start, and end.
-    pub fn bin_slice<B, S, E>(grain: curios_base::Grain, bin: B, start: S, end: E) -> Self
+    pub fn bin_slice<B, S, E>(grain: Grain, bin: B, start: S, end: E) -> Self
     where
         B: Into<Term>,
         S: Into<Term>,
@@ -619,7 +623,7 @@ impl Prim {
     }
 
     /// A `BinAppend` node from term-shaped bytes and byte.
-    pub fn bin_append<B, E>(grain: curios_base::Grain, bin: B, byte: E) -> Self
+    pub fn bin_append<B, E>(grain: Grain, bin: B, byte: E) -> Self
     where
         B: Into<Term>,
         E: Into<Term>,
@@ -628,7 +632,7 @@ impl Prim {
     }
 
     /// A `BinConcat` node from any iterator of term-shaped operands.
-    pub fn bin_concat<I>(grain: curios_base::Grain, operands: I) -> Self
+    pub fn bin_concat<I>(grain: Grain, operands: I) -> Self
     where
         I: IntoIterator,
         I::Item: Into<Term>,
@@ -762,10 +766,10 @@ impl Prim {
             | Prim::Int(_)
             | Prim::FltType
             | Prim::Flt(_)
-            | Prim::BinType(curios_base::Grain::X)
-            | Prim::Bin(curios_base::Grain::X, _)
-            | Prim::BinType(curios_base::Grain::B)
-            | Prim::Bin(curios_base::Grain::B, _)
+            | Prim::BinType(Grain::X)
+            | Prim::Bin(Grain::X, _)
+            | Prim::BinType(Grain::B)
+            | Prim::Bin(Grain::B, _)
             | Prim::IoType
             | Prim::Io(_) => {}
 
@@ -788,8 +792,8 @@ impl Prim {
             | Prim::FltCeil(t)
             | Prim::FltTrunc(t)
             | Prim::FltNearest(t)
-            | Prim::BinLen(curios_base::Grain::X, t)
-            | Prim::BinLen(curios_base::Grain::B, t)
+            | Prim::BinLen(Grain::X, t)
+            | Prim::BinLen(Grain::B, t)
             | Prim::LstType(t) => visit(t),
 
             Prim::IoEql(a, b)
@@ -848,20 +852,20 @@ impl Prim {
             | Prim::FltGte(a, b)
             | Prim::FltMin(a, b)
             | Prim::FltMax(a, b)
-            | Prim::BinEql(curios_base::Grain::X, a, b)
-            | Prim::BinGet(curios_base::Grain::X, a, b)
-            | Prim::BinAppend(curios_base::Grain::X, a, b)
-            | Prim::BinEql(curios_base::Grain::B, a, b)
-            | Prim::BinGet(curios_base::Grain::B, a, b)
-            | Prim::BinAppend(curios_base::Grain::B, a, b)
+            | Prim::BinEql(Grain::X, a, b)
+            | Prim::BinGet(Grain::X, a, b)
+            | Prim::BinAppend(Grain::X, a, b)
+            | Prim::BinEql(Grain::B, a, b)
+            | Prim::BinGet(Grain::B, a, b)
+            | Prim::BinAppend(Grain::B, a, b)
             | Prim::LstLen(a, b)
             | Prim::IoExit(a, b) => {
                 visit(a);
                 visit(b);
             }
 
-            Prim::BinSlice(curios_base::Grain::X, a, b, c)
-            | Prim::BinSlice(curios_base::Grain::B, a, b, c)
+            Prim::BinSlice(Grain::X, a, b, c)
+            | Prim::BinSlice(Grain::B, a, b, c)
             | Prim::LstGet(a, b, c)
             | Prim::LstAppend(a, b, c) => {
                 visit(a);
@@ -878,8 +882,8 @@ impl Prim {
 
             Prim::Foreign(_, args) => args.iter().for_each(&mut *visit),
 
-            Prim::BinConcat(curios_base::Grain::X, terms)
-            | Prim::BinConcat(curios_base::Grain::B, terms)
+            Prim::BinConcat(Grain::X, terms)
+            | Prim::BinConcat(Grain::B, terms)
             | Prim::Lst(terms) => terms.iter().for_each(&mut *visit),
             Prim::LstConcat(ty, terms) => {
                 visit(ty);
@@ -1087,7 +1091,7 @@ impl Prim {
 pub(crate) enum PrimHead {
     Nat,
     Bln,
-    Bin(curios_base::Grain),
+    Bin(Grain),
 }
 
 #[cfg(test)]

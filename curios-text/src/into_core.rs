@@ -19,7 +19,6 @@ use {
     curios_base::{Entropy, Plicity, Qualifier},
     curios_core::Bound,
     std::{
-        cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
     },
@@ -73,6 +72,102 @@ struct Resolved {
     table: HashMap<Qualifier, ModuleInfo>,
 }
 
+/// Build-time source set for the fixed compilation roots. The prelude owner
+/// supplies already parsed modules keyed by canonical qualifier; `curios-text`
+/// retains no embedded `/syn` or `/std` source table.
+pub struct PreludeModules {
+    roots: Vec<(String, RootId)>,
+    modules: BTreeMap<Qualifier, Module>,
+}
+
+impl PreludeModules {
+    pub fn new() -> Self {
+        Self {
+            roots: Vec::new(),
+            modules: BTreeMap::new(),
+        }
+    }
+
+    pub fn insert_root(&mut self, name: impl Into<String>, root: RootId, module: Module) {
+        let name = name.into();
+        assert!(
+            root != RootId::Entry,
+            "a prepared root cannot be the entry root"
+        );
+        assert!(
+            !self.roots.iter().any(|(existing, _)| existing == &name),
+            "prelude root '{name}' is already registered"
+        );
+        self.modules.insert(Qualifier::from([name.clone()]), module);
+        self.roots.push((name, root));
+    }
+
+    pub fn insert_module(&mut self, path: Qualifier, module: Module) {
+        assert!(
+            !path.segments().is_empty(),
+            "a prelude module path cannot be empty"
+        );
+        assert!(
+            self.modules.insert(path.clone(), module).is_none(),
+            "prelude module '{}' is already registered",
+            path.join()
+        );
+    }
+
+    fn roots(&self) -> Vec<(String, RootId)> {
+        self.roots.clone()
+    }
+
+    fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
+        self.modules
+            .get(qualifier)
+            .cloned()
+            .ok_or_else(|| Error::ModuleNotFound {
+                path: qualifier.join(),
+            })
+    }
+}
+
+impl Default for PreludeModules {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Opaque fixed Text state restored from the build-scoped prelude artifact.
+#[derive(Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct PreparedPrelude {
+    roots: Vec<(String, RootId)>,
+    table: BTreeMap<Qualifier, ModuleInfo>,
+    public: BTreeMap<Qualifier, PublicInterface>,
+    core: curios_core::Module,
+    metavariable_floor: usize,
+    binder_floor: usize,
+    interface_floor: usize,
+}
+
+impl PreparedPrelude {
+    pub fn core(&self) -> &curios_core::Module {
+        &self.core
+    }
+
+    pub fn metavariable_floor(&self) -> usize {
+        self.metavariable_floor
+    }
+
+    pub fn binder_floor(&self) -> usize {
+        self.binder_floor
+    }
+
+    pub fn interface_floor(&self) -> usize {
+        self.interface_floor
+    }
+}
+
 impl Resolved {
     fn new() -> Self {
         Self {
@@ -83,7 +178,7 @@ impl Resolved {
 
     fn for_entrypoint(entrypoint: &Entrypoint, loader: &RootSource) -> Result<Self, Error> {
         let mut resolved = Self::new();
-        resolved.resolve(entrypoint, loader)?;
+        resolved.resolve(entrypoint, loader, &[])?;
 
         Ok(resolved)
     }
@@ -95,26 +190,19 @@ impl Resolved {
     // leading string segment. `insert_child` (hardened to reject any
     // collision, not just pub/pub) is what catches a user's own `mod std`
     // colliding with this registration, in either direction.
-    fn resolve(&mut self, entrypoint: &Entrypoint, loader: &RootSource) -> Result<(), Error> {
+    fn resolve(
+        &mut self,
+        entrypoint: &Entrypoint,
+        loader: &RootSource,
+        mounted_roots: &[(String, RootId)],
+    ) -> Result<(), Error> {
         let mut root_info = scan_module_info(&entrypoint.module.items, RootId::Entry)?;
 
-        if loader.has_embedded_roots() {
-            for &(name, _) in &FIXED_ROOTS {
-                root_info.insert_child(name.to_string(), true)?;
-            }
+        for (name, _) in mounted_roots {
+            root_info.insert_child(name.clone(), true)?;
         }
 
         self.table.insert(Qualifier::empty(), root_info);
-
-        if loader.has_embedded_roots() {
-            for &(name, root) in &FIXED_ROOTS {
-                let path = Qualifier::empty().with(name);
-                let content = Rc::new(loader.load(&path)?);
-
-                self.modules.insert(path.clone(), Rc::clone(&content));
-                self.discover(&content.items, &path, loader, root)?;
-            }
-        }
 
         self.discover_children(
             &entrypoint.module.items,
@@ -175,6 +263,56 @@ impl Resolved {
             }
         }
 
+        Ok(())
+    }
+
+    fn for_prelude(input: &PreludeModules) -> Result<(Self, Vec<(String, RootId)>), Error> {
+        let mut resolved = Self::new();
+        let roots = input.roots();
+        let mut root_info = ModuleInfo::new(RootId::Entry);
+        for (name, _) in &roots {
+            root_info.insert_child(name.clone(), true)?;
+        }
+        resolved.table.insert(Qualifier::empty(), root_info);
+
+        for (name, root) in &roots {
+            let path = Qualifier::empty().with(name);
+            let content = Rc::new(input.load(&path)?);
+            resolved.modules.insert(path.clone(), Rc::clone(&content));
+            resolved.discover_input(&content.items, &path, input, *root)?;
+        }
+
+        Ok((resolved, roots))
+    }
+
+    fn discover_input(
+        &mut self,
+        items: &[TopItem],
+        prefix: &Qualifier,
+        input: &PreludeModules,
+        root: RootId,
+    ) -> Result<(), Error> {
+        self.table
+            .insert(prefix.clone(), scan_module_info(items, root)?);
+        for item in items {
+            if let TopItem::Mod(module_item) = item {
+                let path = prefix.with(&module_item.label);
+                match &module_item.module {
+                    Some(module) => self.discover_input(&module.items, &path, input, root)?,
+                    None => {
+                        let module =
+                            Rc::new(input.load(&path).map_err(
+                                |error| match &module_item.span {
+                                    Some(span) => error.at(span.clone()),
+                                    None => error,
+                                },
+                            )?);
+                        self.modules.insert(path.clone(), Rc::clone(&module));
+                        self.discover_input(&module.items, &path, input, root)?;
+                    }
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -1076,20 +1214,6 @@ fn process_items(
 // order to split them into independently. `sys` is not a distinct partition
 // here as a result: it is always internally consistent with `syn`/`std`
 // because all three are elaborated as one prelude block.
-thread_local! {
-    // The fixed prelude's topological order, as a *relative permutation* of its
-    // declaration order: emit position `j` of the prelude is the prelude item at
-    // relative declaration index `permutation[j]`. Program-independent — the
-    // embedded prelude is fixed and always lowered in the same relative order —
-    // so the dep-graph build + O(N²) topo-sort happen once, and every compile
-    // just indexes through it (no `free_vars`, no name hashing, no sort): the
-    // `order_flat_items` hot path was ~⅔ of `into_core` (samply). A
-    // `RefCell<Option<_>>`, not `OnceCell`: a `into_core` call without a prelude (a
-    // bare-loader test) must not poison the cache, and a prelude of a different
-    // size — the only way a custom loader could change the order — refreshes it.
-    static PRELUDE_PERMUTATION: RefCell<Option<Vec<usize>>> = const { RefCell::new(None) };
-}
-
 /// The full set of names one node's declaration references: its own free
 /// vars, plus (for a declared inductive/struct) its registry entry's free
 /// vars. An inductive's declaration is wider than its items: the registry
@@ -1163,8 +1287,7 @@ fn topological_order(nodes: &[usize], deps: &HashMap<usize, HashSet<usize>>) -> 
 }
 
 /// The prelude's topological order as positions *relative to* `prelude_nodes`
-/// (ascending), so it can be replayed against a later compile's prelude block
-/// wherever it lands. Run once, behind the [`PRELUDE_PERMUTATION`] cache.
+/// (ascending), so the whole fixed-root block can be emitted before user code.
 ///
 /// Also the one place the cross-root backward-reference invariant is checked:
 /// a privileged declaration referencing a name `rest_owner` maps (i.e. a name
@@ -1172,12 +1295,7 @@ fn topological_order(nodes: &[usize], deps: &HashMap<usize, HashSet<usize>>) -> 
 /// always emitted first. This can only mean a bug in the embedded `sys`/
 /// `syn`/`std` source itself — never anything a user's own program can
 /// trigger — so it panics rather than surfacing as a normal `Error`.
-/// Checking here — rather than as a standalone pass over every compile —
-/// piggybacks on work this function already does on a cache miss, and is
-/// sound to skip on a cache hit: the prelude's own referenced names are a
-/// property of its fixed embedded text, invariant across compiles, so a
-/// violation that doesn't exist on the first (cache-populating) call cannot
-/// appear later.
+/// This runs only while constructing the build-scoped prepared prelude.
 fn prelude_permutation(
     items: &[FlatItem],
     prelude_nodes: &[usize],
@@ -1239,28 +1357,11 @@ fn order_flat_items(
 
     let mut order = Vec::with_capacity(count);
 
-    // Prelude prefix: replay the cached relative permutation — pure indexing,
-    // no name handling. Prelude items depend only on each other, so emitting the
-    // whole block (in that order) ahead of everything else is always valid.
-    PRELUDE_PERMUTATION.with(|cell| {
-        let mut slot = cell.borrow_mut();
-        if slot
-            .as_ref()
-            .is_none_or(|perm| perm.len() != prelude_nodes.len())
-            && !prelude_nodes.is_empty()
-        {
-            *slot = Some(prelude_permutation(
-                &items,
-                &prelude_nodes,
-                inductives,
-                structures,
-                &rest_owner,
-            ));
-        }
-        if let Some(perm) = slot.as_ref() {
-            order.extend(perm.iter().map(|&rel| prelude_nodes[rel]));
-        }
-    });
+    if !prelude_nodes.is_empty() {
+        let permutation =
+            prelude_permutation(&items, &prelude_nodes, inductives, structures, &rest_owner);
+        order.extend(permutation.into_iter().map(|rel| prelude_nodes[rel]));
+    }
 
     // Everything else (user code, plus any non-prelude library a custom loader
     // serves): topologically ordered among itself, after the whole prelude. Its
@@ -1541,23 +1642,6 @@ fn audit_public_exposures(
     Ok(())
 }
 
-// The three embedded roots, in the fixed order every compile mounts them —
-// also `order_flat_items`'s topological-sort tiebreak order (sys, then syn,
-// then std): `sys` (the primitives) comes first; `syn` (the names the
-// compiler emits — the operator concepts, the string-literal and `!`
-// desugaring targets) precedes `std` so those names lower before the library
-// code that elaborates against them. `std` and `syn` genuinely cross-reference
-// each other in both directions, so the whole trio is topo-sorted as one
-// graph; this tuple only fixes the tiebreak when there is no real dependency
-// edge. Each root's `RootId` is a literal here — never derived from the name
-// string — so a user's own top-level declaration can never be mistaken for
-// one of these regardless of what it's named.
-const FIXED_ROOTS: [(&str, RootId); 3] = [
-    ("sys", RootId::Sys),
-    ("syn", RootId::Syn),
-    ("std", RootId::Std),
-];
-
 /// Lower an [`Entrypoint`] to a [`curios_core::Module`]. Also returns how many
 /// metavariable ids were minted for the module's holes: the floor
 /// `elaborate_module` needs so the ids it mints for implicit-argument
@@ -1566,18 +1650,14 @@ const FIXED_ROOTS: [(&str, RootId); 3] = [
 pub fn into_core(
     entrypoint: &Entrypoint,
     loader: &RootSource,
+    syntax: &SyntaxRegistry,
 ) -> Result<(curios_core::Module, usize, ForeignStore), Error> {
     let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
-    let public = interface::resolve(entrypoint, loader, &modules, &mut table)?;
+    let public = interface::resolve(entrypoint, &modules, &mut table)?;
     let metavars = Entropy::<usize>::new();
     let binders = Entropy::<usize>::new();
 
-    let mut context = Context::new(&table, &public, RootId::Entry, &metavars, &binders);
-    if loader.has_embedded_roots() {
-        for &(name, _) in &FIXED_ROOTS {
-            context.insert_scope(name.to_string(), Qualifier::empty().with(name))?;
-        }
-    }
+    let mut context = Context::new(&table, &public, RootId::Entry, &metavars, &binders, syntax);
 
     let mut flat_items = Vec::new();
     let mut inductives = BTreeMap::new();
@@ -1591,25 +1671,6 @@ pub fn into_core(
     // never merged with, the built-in `sys_io()` store the caller's prelude
     // loader was built from.
     let mut foreigns = ForeignStore::new();
-
-    if loader.has_embedded_roots() {
-        for &(name, root) in &FIXED_ROOTS {
-            let path = Qualifier::empty().with(name);
-            let content = modules.get(&path).expect("loaded during discovery");
-
-            process_items(
-                &content.items,
-                &mut context.nested_root(name, root),
-                &mut flat_items,
-                &mut inductives,
-                &mut structures,
-                &mut concepts,
-                &mut witnesses,
-                &mut foreigns,
-                &modules,
-            )?;
-        }
-    }
 
     process_items(
         &entrypoint.module.items,
@@ -1653,6 +1714,152 @@ pub fn into_core(
             witnesses,
             type_,
             body: tail,
+        },
+        metavars.count(),
+        foreigns,
+    ))
+}
+
+/// Resolve and lower the fixed roots once for build-time archival.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
+pub fn prepare_prelude(
+    input: &PreludeModules,
+    syntax: &SyntaxRegistry,
+) -> Result<PreparedPrelude, Error> {
+    let (Resolved { mut table, modules }, roots) = Resolved::for_prelude(input)?;
+    let (public, interface_floor) = interface::resolve_prelude(&roots, &modules, &mut table)?;
+    let metavars = Entropy::<usize>::new();
+    let binders = Entropy::<usize>::new();
+    let mut context = Context::new(&table, &public, RootId::Entry, &metavars, &binders, syntax);
+    for (name, _) in &roots {
+        context.insert_scope(name.clone(), Qualifier::empty().with(name))?;
+    }
+
+    let mut flat_items = Vec::new();
+    let mut inductives = BTreeMap::new();
+    let mut structures = BTreeMap::new();
+    let mut concepts = BTreeMap::new();
+    let mut witnesses = BTreeSet::new();
+    let mut foreigns = ForeignStore::new();
+
+    for (name, root) in &roots {
+        let path = Qualifier::empty().with(name);
+        let content = modules
+            .get(&path)
+            .expect("prelude root loaded during discovery");
+        process_items(
+            &content.items,
+            &mut context.nested_root(name, *root),
+            &mut flat_items,
+            &mut inductives,
+            &mut structures,
+            &mut concepts,
+            &mut witnesses,
+            &mut foreigns,
+            &modules,
+        )?;
+    }
+
+    audit_public_exposures(&public, &flat_items, &inductives, &structures)?;
+    let items = order_flat_items(flat_items, &inductives, &structures)
+        .into_iter()
+        .map(FlatItem::into_core)
+        .collect();
+    let core = curios_core::Module {
+        items,
+        inductives,
+        structures,
+        concepts,
+        witnesses,
+        type_: None,
+        body: curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero)),
+    };
+
+    Ok(PreparedPrelude {
+        roots,
+        table: table.into_iter().collect(),
+        public: public.into_iter().collect(),
+        core,
+        metavariable_floor: metavars.count(),
+        binder_floor: binders.count(),
+        interface_floor,
+    })
+}
+
+/// Lower only entry-owned modules and merge them onto a restored fixed prefix.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
+pub fn into_core_with_prelude(
+    entrypoint: &Entrypoint,
+    loader: &RootSource,
+    prepared: &PreparedPrelude,
+    syntax: &SyntaxRegistry,
+) -> Result<(curios_core::Module, usize, ForeignStore), Error> {
+    let mut resolved = Resolved {
+        modules: HashMap::new(),
+        table: prepared.table.clone().into_iter().collect(),
+    };
+    resolved.resolve(entrypoint, loader, &prepared.roots)?;
+    let Resolved { mut table, modules } = resolved;
+    let public = interface::resolve_with_prelude(
+        entrypoint,
+        &modules,
+        &mut table,
+        prepared.public.clone().into_iter().collect(),
+        prepared.interface_floor,
+    )?;
+
+    let metavars = Entropy::<usize>::new();
+    metavars.seed(prepared.metavariable_floor);
+    let binders = Entropy::<usize>::new();
+    binders.seed(prepared.binder_floor);
+    let mut context = Context::new(&table, &public, RootId::Entry, &metavars, &binders, syntax);
+    for (name, _) in &prepared.roots {
+        context.insert_scope(name.clone(), Qualifier::empty().with(name))?;
+    }
+
+    let mut flat_items = Vec::new();
+    let mut inductives = prepared.core.inductives.clone();
+    let mut structures = prepared.core.structures.clone();
+    let mut concepts = prepared.core.concepts.clone();
+    let mut witnesses = prepared.core.witnesses.clone();
+    let mut foreigns = ForeignStore::new();
+    process_items(
+        &entrypoint.module.items,
+        &mut context,
+        &mut flat_items,
+        &mut inductives,
+        &mut structures,
+        &mut concepts,
+        &mut witnesses,
+        &mut foreigns,
+        &modules,
+    )?;
+
+    let lower = Lowerer::new(&context);
+    let type_ = entrypoint
+        .type_
+        .as_ref()
+        .map(|type_| lower.term(type_))
+        .transpose()?;
+    let body = lower.value(&entrypoint.tail)?;
+    audit_public_exposures(&public, &flat_items, &inductives, &structures)?;
+
+    let mut items = prepared.core.items.clone();
+    items.extend(
+        order_flat_items(flat_items, &inductives, &structures)
+            .into_iter()
+            .map(FlatItem::into_core),
+    );
+
+    Ok((
+        curios_core::Module {
+            items,
+            inductives,
+            structures,
+            concepts,
+            witnesses,
+            type_,
+            body,
         },
         metavars.count(),
         foreigns,

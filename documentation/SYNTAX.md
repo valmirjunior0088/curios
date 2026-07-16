@@ -2,7 +2,7 @@
 
 This document defines the surface language accepted in `.crs` files. It is a reference for writing and reading Curios programs, not a description of compiler internals. An implementation disagreement is a language conformance bug: either the implementation or this document must be corrected.
 
-Examples use declarations from `/std` and `/syn`. The embedded libraries under `curios-text/std/` and `curios-text/syn/` are the main corpus of complete programs.
+Examples use declarations from `/std` and `/syn`. The authored libraries under `curios-prelude/std/` and `curios-prelude/syn/` are the main corpus of complete programs.
 
 ## Lexical structure
 

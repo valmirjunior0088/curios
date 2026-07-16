@@ -33,7 +33,7 @@ use {
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{
-        Flt, NumOp, Plicity, Qualifier,
+        Flt, Grain, NumOp, Plicity, Qualifier,
         parser::{
             Parser, catch, fail, lazy, many0, many1, mark, memoize, not_ahead, preceded_by_space,
             pure, sep_by0, sep_by0_trailing, sep_by1, spanned, take_exact, take_n, take_while,

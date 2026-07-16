@@ -5,11 +5,21 @@ use {
     std::fmt,
 };
 
+#[cfg(feature = "archive")]
+use curios_base::BigUintBytes;
+
 /// A type-level natural in successor-floor form: `Zero`, or `Succ(floor, inner)` — a `BigUint` count of successors stacked on a tail term `inner`, so a closed literal is one node and `x + 3` is `Succ(3, x)`, never a unary chain. Unbounded — the type level pretends ℕ, like `Int`'s ℤ; the runtime's 31-bit range is enforced only where a literal must materialize (`erase`'s narrowing) and by the runtime's own overflow traps. Reduction keeps the form canonical — nested `Succ` flattened, zero floors collapsed (see `Nat::decompose` and `Nat::rebuild`) — so arithmetic on the floor is `BigUint` arithmetic.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Nat {
     Zero,
-    Succ(BigUint, Term),
+    Succ(
+        #[cfg_attr(feature = "archive", rkyv(with = BigUintBytes))] BigUint,
+        Term,
+    ),
 }
 
 impl Nat {

@@ -1,3 +1,3 @@
 use curios_base::name;
 
-name!(Name);
+name!(Name; archive);

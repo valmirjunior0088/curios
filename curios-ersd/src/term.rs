@@ -10,7 +10,20 @@ use {
 
 /// An owned term of the erased IR: the boxed handle around one [`Subterm`] (it `Deref`s to it; build one with `Subterm::….into()`). Deliberately not `Clone` — a pass that wants a copy must route through `optimize`'s `deep_copy`, so duplicating a term is a conscious act rather than an accidental `.clone()`.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(
+    feature = "archive",
+    rkyv(
+        serialize_bounds(__S: rkyv::ser::Writer + rkyv::ser::Allocator + rkyv::ser::Sharing, __S::Error: rkyv::rancor::Source),
+        deserialize_bounds(__D: rkyv::de::Pooling, __D::Error: rkyv::rancor::Source),
+        bytecheck(bounds(__C: rkyv::validation::ArchiveContext + rkyv::validation::SharedContext, __C::Error: rkyv::rancor::Source))
+    )
+)]
 pub struct Term {
+    #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
     inner: Box<Subterm>,
 }
 
@@ -242,6 +255,10 @@ impl fmt::Display for Term {
 
 /// The two erased shapes of a `Nat` eliminator (and, through the length desugaring, of the `Lst`/`Bin` eliminators too). `Induction` is a genuine fold — `succ_case` binds the predecessor `pred` and the induction hypothesis `ih`, and lowers to an n-iteration loop. `Dispatch` is a literal-keyed switch with a `default` arm: the form `switch` matches erase to, and what the case-split erasure emits as a single peel when the successor arm ignores its `ih` (emitting a fold there would make a re-recursing caller O(2^n)).
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum NatMatch {
     Induction {
         head: Term,
@@ -263,6 +280,10 @@ pub enum NatMatch {
 /// `cont`, glued to the name so the two can never desync. Defaults to
 /// non-candidate, so a binder built from a bare name (`"x".into()`) is not one.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Argument {
     pub name: String,
     pub candidate: bool,
@@ -285,6 +306,10 @@ impl<S: Into<String>> From<S> for Argument {
 
 /// A closure with its environment made explicit: `params` is the uncurried runtime parameter telescope (erasable binders already dropped) and `captures` is exactly the erased body's free names minus those params — precomputed by erasure and thereafter maintained by hand, since [`Term::free_names`] reads a `Func`'s capture list *instead of* descending into its body. A rewrite that changes which names the body frees must refresh the captures (`optimize`'s `refresh_captures`) or the closure threads the wrong environment.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Func {
     pub captures: Vec<Argument>,
     pub params: Vec<Argument>,
@@ -293,6 +318,10 @@ pub struct Func {
 
 /// Application of `head` to its full argument list — saturated against the callee's type, with arguments in erasable (proof/type) slots already dropped by erasure, so `params` lines up one-to-one with the callee [`Func`]'s `params`.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Apply {
     pub head: Term,
     pub params: Vec<Term>,
@@ -300,12 +329,20 @@ pub struct Apply {
 
 /// The one aggregate data shape of the erased IR: a flat record of runtime-relevant fields. An inductive value is its constructor's [`Atom`] tag at field 0 followed by the kept payload fields; a multi-field struct is the fields alone (tagless). A single-field struct never reaches here — it erases to its bare field.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Tuple {
     pub fields: Vec<Term>,
 }
 
 /// Positional field read `head.(index)`. On a variant tuple field 0 is the tag, so payload projections start at 1 — and since erasable payload fields are absent from the runtime tuple, a binder's slot is 1 plus the count of *relevant* fields before it, not its source position.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Proj {
     pub head: Term,
     pub index: usize,
@@ -313,12 +350,20 @@ pub struct Proj {
 
 /// A constructor tag: the constructor's index within its inductive. Erasure seats one at field 0 of every variant [`Tuple`], and [`Match`] dispatches on it.
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Atom {
     pub index: usize,
 }
 
 /// Constructor dispatch: `head` evaluates to an [`Atom`] and selects `cases` by its index, falling through to `default` when no key matches. Sparse, mirroring [`NatMatch::Dispatch`]: only constructors with a distinct arm appear in `cases`, sorted iteration preserving their positional order. `default: None` is the invariant that the arms cover *every* constructor — a pruned (elaboration-proved-impossible) arm then still occupies its slot as `Unreachable`; `Some` supplies a `| _ =>` catch-all for every omitted constructor, so omission from `cases` is used only when a default exists. Payload access is not part of the node: erasure let-binds the scrutinee and each arm projects the fields it uses from that binding.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Match {
     pub head: Term,
     pub cases: BTreeMap<usize, Term>,
@@ -327,6 +372,10 @@ pub struct Match {
 
 /// A sequential block of bindings: evaluate each `body` in order — performing any effect it contains — binding its result in scope as `name` for the later bindings and the `tail`. A whole run of source `let`s is one node, not a nest, so every walk over it is a loop over `bindings` rather than one native stack frame per binding. Beyond user `let`s, erasure leans on it for sharing: a matched scrutinee is bound once, then dispatched on and projected from many times without re-evaluating.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Let {
     pub bindings: Vec<(String, Term)>,
     pub tail: Term,
@@ -334,6 +383,10 @@ pub struct Let {
 
 /// A block of mutually-recursive bindings: `names` and `items` are parallel vectors, every name in scope in every item and in `tail`. The local twin of the top-level `Item::Rec`; `into_cont` computes the group's initialization order from the dependency graph over each item's [`Term::free_names`].
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Rec {
     pub names: Vec<String>,
     pub items: Vec<Term>,
@@ -342,6 +395,10 @@ pub struct Rec {
 
 /// One node of the erased term language. Control is [`Match`]/[`NatMatch`]/[`Let`]/[`Rec`], data is [`Tuple`]/[`Atom`]/[`Proj`] plus the [`Prim`] alphabet, and [`Func`]/[`Apply`] carry closures with explicit captures. `Erased` is the residue a proof or type leaves behind in a relevant slot (never inspected at runtime), and `Unreachable` is a trap seated where elaboration proved an arm impossible. [`Term`] is the boxed handle; build one with `Subterm::….into()`.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Subterm {
     Erased,
     Unreachable,

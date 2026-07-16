@@ -1,12 +1,12 @@
 //! The compile driver: the one crate that strings the pipeline stages together, from a parsed `curios_text::Entrypoint` to a `curios_wasm::Module`. [`compile_entrypoint`] runs the full `into_core → elaborate → zonk → erase → ersd optimize → into_cont → cont optimize → into_wasm` sequence. Each stage is passed to the caller's observer as a borrowed [`Stage`], which is how `--print` dumps IRs without the driver retaining them.
 //!
-//! The fixed `sys`/`syn`/`std` prelude is elaborated once per thread and cached; every compile replays it into a fresh context and type-checks only the user code on top. Everything wasm-native — Binaryen, Cranelift precompilation, execution — lives downstream in `curios`/`curios-runtime`: this crate stops at the wasm module plus the program's harvested `ForeignStore`.
+//! The fixed `sys`/`syn`/`std` prelude is restored from `curios-prelude`'s build-scoped archive; every compile replays prepared Text/Core state and restores a fresh Ersd prefix, so production compilation never source-builds the prelude. Everything wasm-native — Binaryen, Cranelift precompilation, execution — lives downstream in `curios`/`curios-runtime`: this crate stops at the wasm module plus the program's harvested `ForeignStore`.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    curios_abi::{ForeignStore, sys_io},
+    curios_abi::ForeignStore,
     std::{fmt, time::Duration},
 };
 
@@ -63,59 +63,6 @@ impl fmt::Display for Stage<'_> {
     }
 }
 
-thread_local! {
-    // The fixed `sys`/`syn`/`std` prelude, elaborated and zonked once per thread
-    // and reused for every compile. Since the reachability prune no longer runs
-    // in `curios_text::into_core`, every program lowers the *same* prelude prefix, so its
-    // (expensive) type-checking is program-independent and cacheable — the whole
-    // point of removing the prune. `Term` is not `Sync`, so this is thread-local
-    // (like the loader's parse caches), built once per `cargo test` worker thread
-    // rather than once per test. A malformed prelude is a compiler invariant, so
-    // a failure here is a `panic!`.
-    static PRELUDE: curios_core::Module = build_prelude();
-}
-
-/// Elaborate the bare `sys`/`syn`/`std` prelude (no user code) once, to seed
-/// [`PRELUDE`]. Lowers a trivial entrypoint under the standard prelude loader —
-/// the embedded prelude is identical regardless of any inner loader — then
-/// elaborates and zonks it. The result is an ordinary (meta-free) `curios_core::Module`
-/// whose `items` are the whole prelude; its trivial `body`/`type_` go unused.
-/// A generous timeout: this is a one-time, per-thread cost amortized across
-/// every compile.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-fn build_prelude() -> curios_core::Module {
-    let entrypoint = "0"
-        .parse::<curios_text::Entrypoint>()
-        .expect("the trivial prelude entrypoint parses");
-
-    // The trivial entrypoint declares no `foreign` items, so the harvested
-    // store is always empty here — this is the fixed `sys`/`syn`/`std`
-    // prelude, cached independently of any user compilation.
-    let (module, metavars, _foreigns) = curios_text::into_core(
-        &entrypoint,
-        &curios_text::prelude(&sys_io(), curios_text::RootSource::none()),
-    )
-    .unwrap_or_else(|error| panic!("the embedded prelude failed to lower: {}", error.format()));
-
-    let mut context = curios_core::Context::new(Duration::from_secs(300));
-
-    let (module, _) =
-        curios_core::elaborate_module(&mut context, &module, metavars, curios_core::Mode::Infer)
-            .unwrap_or_else(|error| {
-                panic!(
-                    "the embedded prelude failed to elaborate: {}",
-                    error.format_with(&module)
-                )
-            });
-
-    curios_core::zonk_module(&context, &module).unwrap_or_else(|error| {
-        panic!(
-            "the embedded prelude failed to zonk: {}",
-            error.format_with(&module)
-        )
-    })
-}
-
 /// The type-checking prologue of [`compile_entrypoint`] (and the tests'
 /// typecheck-only path): lower to core, elaborate (checking against the
 /// entrypoint's type when it carries one, else synthesizing), then zonk
@@ -128,9 +75,9 @@ fn build_prelude() -> curios_core::Module {
 /// and zonking share one context (the solutions live in its `MetaStore`); the
 /// returned module is self-contained, so the caller's `erase` runs over a fresh one.
 ///
-/// The `sys`/`syn`/`std` prelude is not re-elaborated per call: the cached
-/// [`PRELUDE`] is replayed into the fresh context and only the user code is
-/// type-checked on top (see [`curios_core::elaborate_and_zonk_with_prelude`]).
+/// The `sys`/`syn`/`std` prelude is neither lowered nor elaborated per call:
+/// prepared Text state is merged with the user graph, then the archived Core
+/// prefix is replayed and only the user suffix is type-checked.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn elaborate_and_zonk<O>(
     timeout: Duration,
@@ -143,17 +90,15 @@ where
 {
     observe(Stage::Text(entrypoint));
 
-    // The built-in `/sys/Io` store: the prelude mints the `/sys/Io`
-    // declarations from it, and the rows ride the IR nodes from there, so no
-    // later stage needs *this* store back. `into_core` separately harvests any
-    // user-declared `foreign` items into its own store as it walks the
-    // program's module graph, returned below — the two are never merged into
-    // one (see `curios-abi::host`'s store-per-provenance note).
-    let sys_foreigns = sys_io();
-
-    let (lowered, metavars, user_foreigns) =
-        curios_text::into_core(entrypoint, &curios_text::prelude(&sys_foreigns, loader))
-            .map_err(|error| error.format())?;
+    let (lowered, metavars, user_foreigns) = curios_prelude::with_prelude(|prelude| {
+        curios_text::into_core_with_prelude(
+            entrypoint,
+            &loader,
+            prelude.prepared(),
+            &curios_prelude::SYNTAX,
+        )
+    })
+    .map_err(|error| error.format())?;
 
     observe(Stage::Core(&lowered));
 
@@ -162,25 +107,18 @@ where
         None => curios_core::Mode::Infer,
     };
 
-    // Reuse the cached, pre-elaborated prelude: only the user items and the
-    // entrypoint body are type-checked here, not the whole `sys`/`syn`/`std`
-    // prelude (the bulk of the work). See `curios_core::elaborate_and_zonk_with_prelude`.
-    // The timed context is created *inside* `with` so the one-time, per-thread
-    // prelude build (which `with` triggers on first access) does not count
-    // against the caller's `timeout` — the deadline bounds only the user work.
-    let (module, core_type) = PRELUDE
-        .with(|prelude| {
-            let mut context = curios_core::Context::new(timeout);
+    let (module, core_type) = curios_prelude::with_prelude(|prelude| {
+        let mut context = curios_core::Context::new(timeout);
 
-            curios_core::elaborate_and_zonk_with_prelude(
-                &mut context,
-                prelude,
-                &lowered,
-                metavars,
-                core_mode,
-            )
-        })
-        .map_err(|error| error.format_with(&lowered))?;
+        curios_core::elaborate_and_zonk_with_prelude(
+            &mut context,
+            prelude.core(),
+            &lowered,
+            metavars,
+            core_mode,
+        )
+    })
+    .map_err(|error| error.format_with(&lowered))?;
 
     Ok((module, core_type, user_foreigns))
 }
@@ -199,13 +137,17 @@ where
     let (module, core_type, foreigns) =
         elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
 
-    // The whole elaborated module (the entire `sys`/`syn`/`std` prelude included)
-    // is erased: there is no source-level prune, so std is type-checked in full on
-    // every compile and its bugs surface instead of hiding behind an unreached
-    // path.
-    let ersd_module =
-        curios_core::erase_module(&mut curios_core::Context::new(timeout), &module, &core_type)
-            .map_err(|error| error.format_with(&module))?;
+    let prefix = curios_prelude::restore_ersd_items();
+    let ersd_module = curios_prelude::with_prelude(|prelude| {
+        curios_core::erase_module_with_prelude(
+            &mut curios_core::Context::new(timeout),
+            prelude.core(),
+            &module,
+            &core_type,
+            prefix,
+        )
+    })
+    .map_err(|error| error.format_with(&module))?;
 
     observe(Stage::Ersd(&ersd_module));
 

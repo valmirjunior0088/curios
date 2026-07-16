@@ -495,7 +495,7 @@ impl<'a> Table<'a> {
     /// `emit_sys_imports`.
     ///
     /// A row's identity is its `(namespace, name)` pair (see
-    /// `curios_abi::ForeignFunction`), and its name is chosen outside the
+    /// [`ForeignFunction`]), and its name is chosen outside the
     /// emitter, so the minted name embeds both components under the reserved
     /// `host/` family prefix — a foreign name can never collide with a
     /// runtime helper, another minted family, or a same-named row from

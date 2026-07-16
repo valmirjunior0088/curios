@@ -1,5 +1,6 @@
 use {
     super::*,
+    curios_base::{Grain, PackedBin},
     std::collections::{HashMap, HashSet},
 };
 
@@ -253,7 +254,7 @@ enum ConstKey {
     Nat(u32),
     Int(i32),
     Flt(u32),
-    Bin(curios_base::Grain, curios_base::PackedBin),
+    Bin(Grain, PackedBin),
     Lst(Vec<ValueName>),
     Tpl(Vec<ValueName>),
     Clsr(ClsrName, Vec<ValueName>),
@@ -358,7 +359,7 @@ fn rewrite_body(region: &mut Region, rewrites: &HashMap<ValueName, ValueName>) {
 
 #[cfg(test)]
 mod tests {
-    use {super::*, curios_base::PackedBin};
+    use super::*;
 
     fn v(name: &str) -> ValueName {
         ValueName::from(name)
@@ -432,24 +433,15 @@ mod tests {
             vec![
                 (
                     v("v0"),
-                    Value::Pure(Data::Bin(
-                        curios_base::Grain::X,
-                        PackedBin::from_bytes(vec![1, 2, 3]),
-                    )),
+                    Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2, 3]))),
                 ),
                 (
                     v("v1"),
-                    Value::Pure(Data::Bin(
-                        curios_base::Grain::X,
-                        PackedBin::from_bytes(vec![9]),
-                    )),
+                    Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![9]))),
                 ),
                 (
                     v("v2"),
-                    Value::Pure(Data::Bin(
-                        curios_base::Grain::X,
-                        PackedBin::from_bytes(vec![1, 2, 3]),
-                    )),
+                    Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2, 3]))),
                 ),
             ],
             vec![],
@@ -465,11 +457,11 @@ mod tests {
         assert_eq!(consts.len(), 2);
         assert_eq!(consts[0].0, "lit@bin#0");
         assert!(
-            matches!(&consts[0].1, Data::Bin(curios_base::Grain::X, bytes) if bytes.as_bytes() == Some(&[1, 2, 3][..]))
+            matches!(&consts[0].1, Data::Bin(Grain::X, bytes) if bytes.as_bytes() == Some(&[1, 2, 3][..]))
         );
         assert_eq!(consts[1].0, "lit@bin#1");
         assert!(
-            matches!(&consts[1].1, Data::Bin(curios_base::Grain::X, bytes) if bytes.as_bytes() == Some(&[9][..]))
+            matches!(&consts[1].1, Data::Bin(Grain::X, bytes) if bytes.as_bytes() == Some(&[9][..]))
         );
 
         let values = &main_region(&module).values;
@@ -485,10 +477,7 @@ mod tests {
             region: region(
                 vec![(
                     v("w"),
-                    Value::Pure(Data::Bin(
-                        curios_base::Grain::X,
-                        PackedBin::from_bytes(vec![7, 7]),
-                    )),
+                    Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![7, 7]))),
                 )],
                 vec![],
             ),
@@ -653,10 +642,7 @@ mod tests {
         let mut module = main_func(region(
             vec![(
                 v("v0"),
-                Value::Pure(Data::Bin(
-                    curios_base::Grain::X,
-                    PackedBin::from_bytes(vec![1, 2, 3]),
-                )),
+                Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2, 3]))),
             )],
             vec![],
         ));
@@ -672,17 +658,11 @@ mod tests {
                     vec![
                         (
                             v("w0"),
-                            Value::Pure(Data::Bin(
-                                curios_base::Grain::X,
-                                PackedBin::from_bytes(vec![1, 2, 3]),
-                            )),
+                            Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2, 3]))),
                         ),
                         (
                             v("w1"),
-                            Value::Pure(Data::Bin(
-                                curios_base::Grain::X,
-                                PackedBin::from_bytes(vec![9]),
-                            )),
+                            Value::Pure(Data::Bin(Grain::X, PackedBin::from_bytes(vec![9]))),
                         ),
                     ],
                     vec![],

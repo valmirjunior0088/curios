@@ -308,7 +308,7 @@ The analysis substrate lives in a new pure `curios-analysis` crate rather than i
 
 Its entry point accepts an `AnalysisInput` carrying a parsed entrypoint, `RootSource`, logical input identity, analysis configuration, and front-end observation callback. A path-based helper constructs that input for `wonder`; embedders can supply it directly without a filesystem.
 
-`curios-pipeline` depends on `curios-analysis`. Its `compile_entrypoint` asks the analysis crate for a clean checked program and then continues through erasure, Ersd, continuations, and wasm. The fixed prelude cache moves with the front end so checking and compilation use one implementation and one cached artifact.
+`curios-pipeline` depends on `curios-analysis`. Its `compile_entrypoint` asks the analysis crate for a clean checked program and then continues through erasure, Ersd, continuations, and wasm. The fixed build-scoped prelude restoration path moves with the front end so checking and compilation use one implementation and one compiler-local artifact.
 
 The front-end analysis entry point preserves the existing borrowed observation hooks for the text and lowered-core stages. `curios-pipeline::compile_entrypoint` forwards those observations into its `Stage` callback before continuing with the downstream stages, so moving ownership of the front end does not remove or retain whole IR dumps merely to support `--print`.
 
@@ -364,7 +364,7 @@ No on-disk analysis cache is part of the first slice. Every response is tied to 
 ## Milestones
 
 1. **Resolved source index.** Add the `curios-analysis` crate, explicit entrypoint-based analysis identity, reusable resolved source graph, universal item origins and ranges, source items versus symbol selectors, and the `overview`, `module`, `item`, and source-level `at` queries.
-2. **Checked analysis.** Move the reusable load-through-zonk front end and prelude cache into `curios-analysis`; add structured diagnostics, elaborated symbol types, witness snapshots, and the written-goal outcome from [12_WRITTEN_GOALS_SPEC.md](12_WRITTEN_GOALS_SPEC.md); implement `symbol`, `diagnostics`, and `witnesses`.
+2. **Checked analysis.** Move the reusable load-through-zonk front end and prelude replay boundary into `curios-analysis`; add structured diagnostics, elaborated symbol types, witness snapshots, and the written-goal outcome from [12_WRITTEN_GOALS_SPEC.md](12_WRITTEN_GOALS_SPEC.md); implement `symbol`, `diagnostics`, and `witnesses`.
 3. **Semantic relationships.** Retain resolved reference edges and inserted dependency provenance; implement `references`, `dependencies`, canonical type rendering, and the filtered `snapshot` query.
 4. **Persistent consumers.** Add a session transport when repeated-query measurements justify it, then build the planned language-server features over the same analysis and query APIs.
 

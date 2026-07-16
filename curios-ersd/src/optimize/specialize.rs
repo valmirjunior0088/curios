@@ -35,6 +35,7 @@ use {
         term_at_mut,
     },
     crate::{Apply, Argument, Func, Item, Module, Name, NatMatch, Prim, PurePrim, Subterm, Term},
+    curios_base::Grain,
     std::{
         collections::{HashMap, HashSet},
         mem,
@@ -326,7 +327,7 @@ fn is_ctor_literal(term: &Term) -> bool {
                 PurePrim::Nat(_)
                 | PurePrim::Int(_)
                 | PurePrim::Flt(_)
-                | PurePrim::Bin(curios_base::Grain::X, _)
+                | PurePrim::Bin(Grain::X, _)
                 | PurePrim::Io(_) => {
                     *budget -= 1;
                     true

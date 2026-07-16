@@ -315,9 +315,9 @@ pub(super) fn parse_lst_cons_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 // The `\\` leaf of a nested `Bin` pattern (the empty bytestring literal).
 pub(super) fn parse_bin_end_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(take_exact("b\\").and_drop(parse_whitespace()))
-        .map(|()| MatchPattern::Bin(BinPattern::End(curios_base::Grain::B)))
+        .map(|()| MatchPattern::Bin(BinPattern::End(Grain::B)))
         .or(catch(take_exact("x\\").and_drop(parse_whitespace()))
-            .map(|()| MatchPattern::Bin(BinPattern::End(curios_base::Grain::X))))
+            .map(|()| MatchPattern::Bin(BinPattern::End(Grain::X))))
 }
 
 // The `\head\..tail[; ih]` leaf of a nested `Bin` pattern — mirrors
@@ -333,7 +333,7 @@ pub(super) fn parse_bin_byte_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     .and(parse_cons_ih())
     .map(|((head, tail), ih_label)| {
         MatchPattern::Bin(BinPattern::Atom {
-            grain: curios_base::Grain::B,
+            grain: Grain::B,
             head_label: head.to_string(),
             tail_label: tail.to_string(),
             ih_label,
@@ -349,7 +349,7 @@ pub(super) fn parse_bin_byte_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     .and(parse_cons_ih())
     .map(|((head, tail), ih_label)| {
         MatchPattern::Bin(BinPattern::Atom {
-            grain: curios_base::Grain::X,
+            grain: Grain::X,
             head_label: head.to_string(),
             tail_label: tail.to_string(),
             ih_label,

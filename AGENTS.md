@@ -54,7 +54,8 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | --- | --- | --- |
 | Shared foundations | `curios-base` | Spans, names, entropy, parser/printer utilities, packed values, and other stage-independent primitives |
 | Host/guest contract | `curios-abi` | Wire constants and self-describing foreign-function rows shared by compiler and runtime |
-| Surface language | `curios-text` | Lexer, parser, surface AST, printer, lowering to core, and embedded `/std` and `/syn` libraries |
+| Surface language | `curios-text` | Lexer, parser, surface AST, printer, module resolution, generated `/sys`, and lowering to core |
+| Fixed prelude | `curios-prelude` | Authored `/syn` and `/std` sources, canonical syntax names, and the compiler-build-scoped Text/Core/Ersd archive |
 | Type theory | `curios-core` | Elaboration, typing, conversion, reduction, inductives, structures, concepts, zonking, and erasure |
 | Erased optimization | `curios-ersd` | Post-erasure IR, compile-time evaluation and specialization, worker/wrapper transforms, and lowering to CPS |
 | Continuation IR | `curios-cont` | CPS optimization and WebAssembly emission |
@@ -81,7 +82,8 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Pipeline orchestration | `curios-pipeline/src/lib.rs` | Native and browser callers |
 | Runtime or bundle format | `curios-runtime/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
 | CLI or native compile behavior | `curios/src/` | `README.md`, public helpers, and integration tests |
-| Standard or syntax library | `curios-text/std/`, `curios-text/syn/` | Module indices, `prelude.rs`, `SYNTAX.md`, and Curios integration tests |
+| Standard or syntax library | `curios-prelude/std/`, `curios-prelude/syn/` | Module indices, canonical syntax registry, `SYNTAX.md`, and Curios integration tests |
+| Prelude archive or replay | `curios-prelude/build.rs`, `curios-prelude/src/` | Text preparation, Core elaboration/erasure replay APIs, pipeline integration, and archive validation tests |
 | Browser compiler or harness | `curios-web/` | Host ABI, wasm32 build, wasm-bindgen version, and CI release steps |
 | Binaryen version, build, or FFI | `curios-binaryen/` | Shared cache behavior, native compiler linkage, and optimize round-trip tests |
 
@@ -94,8 +96,9 @@ Data flows downward through the diagram, while Rust dependencies between compile
 - The workspace uses crate boundaries, not Cargo features, to separate the compiler, runtime, and browser products.
 - `curios` and `curios-runtime` use the same workspace-pinned Wasmtime version so compiler-produced `.cwasm` modules match the runtime that deserializes them.
 - `curios-abi` is the source of truth for the host/guest wire contract. A host operation is incomplete until its ABI row, compiler use, native runtime implementation, and applicable JavaScript implementation agree.
-- `/std` and `/syn` modules are embedded at build time. Every module must be registered in its Curios index and in the `include_str!` table in `curios-text/src/prelude.rs`.
-- Compiler-emitted proof-certified literals are owned by `/syn`: character literals construct transparent `/syn/Char` values and string literals construct `/syn/Str` values. Rust spellings of those hidden lowering targets belong in `curios-base/src/syn.rs`; the erased runtime carriers remain `Nat` and packed `Bytes`, respectively.
+- `/std` and `/syn` are owned by `curios-prelude` and compiled into an rkyv image in that crate's `OUT_DIR`. Every source module must be registered in its Curios index; the build script discovers every `.crs` input, fingerprints it, and emits the matching Cargo rebuild directives.
+- Production compilation has no fixed-prelude source fallback or cache-miss branch. Archive construction or restoration failure is a compiler invariant and fails loudly. The image is scoped to one compiler build and is not a stable interchange format.
+- Compiler-emitted proof-certified literals are owned by `/syn`: character literals construct transparent `/syn/Char` values and string literals construct `/syn/Str` values. The canonical Rust registry of those hidden lowering targets belongs in `curios-prelude/src/syntax.rs`; the registry contract belongs to `curios-text`, and the erased runtime carriers remain `Nat` and packed `Bytes`.
 - Binaryen is built from a verified source release. Its expensive C++ build is shared through the locked, target-specific cache under `target/binaryen`, not a Cargo fingerprint-specific `OUT_DIR`.
 - Recursive lowering and packed-value interpretation must work on the default test-thread stack. Do not use `RUST_MIN_STACK` to hide a regression.
 - Generated `.wasm` files and other build products are not source. Do not commit them. `Cargo.lock` is source and must remain synchronized with dependency changes.
@@ -112,8 +115,8 @@ Data flows downward through the diagram, while Rust dependencies between compile
 ## Writing Curios
 
 - Read [SYNTAX.md](documentation/SYNTAX.md) in full before editing any `.crs` file. It is the normative surface-language reference; `curios-text/src/parse.rs` implements the contract.
-- Use `curios-text/std/` as the reference for idiomatic code.
-- Register a new `curios-text/std/Foo.crs` module in both `curios-text/std.crs` and `curios-text/src/prelude.rs`. Apply the corresponding rule to `curios-text/syn/` and `curios-text/syn.crs`.
+- Use `curios-prelude/std/` as the reference for idiomatic code.
+- Register a new `curios-prelude/std/Foo.crs` module in `curios-prelude/std.crs`. Apply the corresponding rule to `curios-prelude/syn/` and `curios-prelude/syn.crs`; update `curios-prelude/src/syntax.rs` only when Rust lowering directly emits the new `/syn` name.
 - Remember that names use `/` qualification, `{}` is the unit type, `()` is the unit value, and visibility of a nominal name is independent from visibility of its representation. Consult `SYNTAX.md` for the full rules rather than extending this reminder list.
 - Run Curios programs through the native CLI: `cargo run --package curios -- run <file.crs>`.
 

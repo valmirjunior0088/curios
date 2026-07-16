@@ -12,7 +12,12 @@ use {
 /// where a literal must materialize (`erase`'s narrowing) and by the
 /// runtime's own overflow traps.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Int {
+    #[cfg_attr(feature = "archive", rkyv(with = crate::BigIntBytes))]
     value: BigInt,
 }
 

@@ -38,7 +38,7 @@ pub fn run_wasm<H: Host + Send + Sync + 'static>(
 
 /// Compile an already-parsed entrypoint under `loader` and run it.
 ///
-/// Drops any `foreign` declarations' [`ForeignStore`](curios_abi::ForeignStore)
+/// Drops any `foreign` declarations' `ForeignStore`
 /// — this is the fused compile-and-run convenience path with no point to hand
 /// it back to the caller; an embedder with `foreign` declarations to satisfy
 /// calls [`compile_entrypoint`] directly instead, building [`ForeignBindings`]

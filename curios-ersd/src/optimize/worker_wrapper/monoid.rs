@@ -27,6 +27,7 @@ use {
         Argument, Func, Match, NatMatch, Prim, PurePrim, Subterm, Term,
         optimize::{CallGraph, rewrite},
     },
+    curios_base::{Grain, PackedBin},
     std::mem,
 };
 
@@ -107,9 +108,7 @@ impl Monoid {
             Monoid::NatMul => PurePrim::Nat(1),
             Monoid::IntAdd | Monoid::IntOr => PurePrim::Int(0),
             Monoid::IntMul => PurePrim::Int(1),
-            Monoid::BinAppend => {
-                PurePrim::Bin(curios_base::Grain::X, curios_base::PackedBin::empty())
-            }
+            Monoid::BinAppend => PurePrim::Bin(Grain::X, PackedBin::empty()),
             Monoid::LstAppend => PurePrim::Lst(Vec::new()),
         };
         Subterm::Prim(Prim::Pure(prim)).into()
@@ -130,7 +129,7 @@ impl Monoid {
             Monoid::IntAdd => PurePrim::IntAdd(left, right),
             Monoid::IntMul => PurePrim::IntMul(left, right),
             Monoid::IntOr => PurePrim::IntOr(left, right),
-            Monoid::BinAppend => PurePrim::BinAppend(curios_base::Grain::X, left, right),
+            Monoid::BinAppend => PurePrim::BinAppend(Grain::X, left, right),
             Monoid::LstAppend => PurePrim::LstAppend(left, right),
         };
         Subterm::Prim(Prim::Pure(prim)).into()
@@ -145,7 +144,7 @@ impl Monoid {
             | (Monoid::IntAdd, PurePrim::IntAdd(l, r))
             | (Monoid::IntMul, PurePrim::IntMul(l, r))
             | (Monoid::IntOr, PurePrim::IntOr(l, r))
-            | (Monoid::BinAppend, PurePrim::BinAppend(curios_base::Grain::X, l, r))
+            | (Monoid::BinAppend, PurePrim::BinAppend(Grain::X, l, r))
             | (Monoid::LstAppend, PurePrim::LstAppend(l, r)) => Ok((l, r)),
             (_, other) => Err(other),
         }
@@ -162,7 +161,7 @@ fn monoid_combine(prim: &PurePrim) -> Option<(Monoid, &Term, &Term)> {
         PurePrim::IntAdd(l, r) => (Monoid::IntAdd, l, r),
         PurePrim::IntMul(l, r) => (Monoid::IntMul, l, r),
         PurePrim::IntOr(l, r) => (Monoid::IntOr, l, r),
-        PurePrim::BinAppend(curios_base::Grain::X, l, r) => (Monoid::BinAppend, l, r),
+        PurePrim::BinAppend(Grain::X, l, r) => (Monoid::BinAppend, l, r),
         PurePrim::LstAppend(l, r) => (Monoid::LstAppend, l, r),
         _ => return None,
     })

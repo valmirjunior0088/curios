@@ -7,3 +7,9 @@ description = "Host/guest ABI wire constants shared by the curios compiler and r
 
 [lints]
 workspace = true
+
+[features]
+archive = ["dep:rkyv"]
+
+[dependencies]
+rkyv = { workspace = true, optional = true }

@@ -8,6 +8,10 @@
 /// born in `into_core`, consumed by `elaborate` (replaced with a `Prim` term), so
 /// they never reach reduce/convert/zonk/erase.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum NumOp {
     Add,
     Sub,

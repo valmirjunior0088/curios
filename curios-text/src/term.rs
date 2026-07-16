@@ -2,7 +2,7 @@ use {
     super::{Name, Prim, Radix, print_term},
     crate::parse::{parse_term, parse_whitespace},
     curios_base::{
-        NumOp, Plicity, Source, Span,
+        Grain, NumOp, Plicity, Source, Span,
         parser::{ParserError, run_parser, take_eof},
         printer::run_printer,
     },
@@ -492,11 +492,11 @@ pub enum LstPattern {
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinPattern {
     /// The `\\` leaf.
-    End(curios_base::Grain),
+    End(Grain),
     /// The `\head\..tail[; ih]` leaf; `ih_label` is optional exactly as on the
     /// `Lst` cons leaf.
     Atom {
-        grain: curios_base::Grain,
+        grain: Grain,
         head_label: String,
         tail_label: String,
         ih_label: Option<String>,

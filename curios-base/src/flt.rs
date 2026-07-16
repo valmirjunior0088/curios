@@ -5,6 +5,10 @@ use std::{
 
 /// A type-level float literal, stored as the raw bits of an `f32` so `Eq` and `Hash` are derivable — terms must be hashable and decidably equal, which IEEE `f32` is not. Identity is therefore bitwise (`NaN == NaN` as terms, `0.0 != -0.0`), while the arithmetic and comparison ops below unwrap to `f32` and follow IEEE semantics, matching what the runtime's wasm `f32` ops will compute.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Flt {
     bits: u32,
 }

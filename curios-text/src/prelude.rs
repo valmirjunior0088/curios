@@ -1,12 +1,12 @@
 use {
     super::{
         FuncSugarParam, FuncType, FuncTypeParam, GroupItem, LetSignature, Module, Name, Nat,
-        NatLiteral, Pattern, Prim, RootSource, Subterm, Term, TopForeign, TopItem, TopLet, TopMod,
-        TopUse, TupleType, TupleTypeParam, UseGroup,
+        NatLiteral, Pattern, Prim, Subterm, Term, TopForeign, TopItem, TopLet, TopMod, TopUse,
+        TupleType, TupleTypeParam, UseGroup,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status, stdio},
-    curios_base::{Plicity, Qualifier, Source},
-    std::{rc::Rc, sync::Arc},
+    curios_base::{Grain, Plicity},
+    std::sync::Arc,
 };
 
 // The `sys` module is the home of every primitive type and operation. It is
@@ -33,7 +33,7 @@ fn byte() -> Term {
 
 // A `Nat` literal value term, built exactly as the parser builds one: `0` is
 // bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire
-// codes (`curios_abi::{status, poll, mode}`) into the `/sys/Io` constant mirror.
+// codes (`status`, `poll`, and `mode`) into the `/sys/Io` constant mirror.
 fn nat_lit(n: u32) -> Term {
     match n {
         0 => prim(Prim::Nat(Nat::Zero)),
@@ -52,7 +52,7 @@ fn flt() -> Term {
     prim(Prim::FltType)
 }
 
-fn bin(grain: curios_base::Grain) -> Term {
+fn bin(grain: Grain) -> Term {
     prim(Prim::BinType(grain))
 }
 
@@ -199,7 +199,7 @@ fn wire_type(type_: &WireType) -> Term {
         WireType::Nat => nat(),
         WireType::Int => int(),
         WireType::Bln => bln(),
-        WireType::Bin => bin(curios_base::Grain::X),
+        WireType::Bin => bin(Grain::X),
         WireType::Io => io(),
         WireType::Lst(element) => lst_of(wire_type(element)),
     }
@@ -395,26 +395,16 @@ fn flt_ops() -> Vec<TopItem> {
         unary("nearest", flt(), flt(), Prim::FltNearest),
         unary("to_nat", flt(), nat(), Prim::FltToNat),
         unary("to_int", flt(), int(), Prim::FltToInt),
-        unary(
-            "to_le_bytes",
-            flt(),
-            bin(curios_base::Grain::X),
-            Prim::FltToLeBytes,
-        ),
-        unary(
-            "of_le_bytes",
-            bin(curios_base::Grain::X),
-            flt(),
-            Prim::FltOfLeBytes,
-        ),
+        unary("to_le_bytes", flt(), bin(Grain::X), Prim::FltToLeBytes),
+        unary("of_le_bytes", bin(Grain::X), flt(), Prim::FltOfLeBytes),
     ]
 }
 
-fn bin_ops(grain: curios_base::Grain) -> Vec<TopItem> {
+fn bin_ops(grain: Grain) -> Vec<TopItem> {
     let type_ = bin(grain);
     let atom = match grain {
-        curios_base::Grain::B => bln(),
-        curios_base::Grain::X => byte(),
+        Grain::B => bln(),
+        Grain::X => byte(),
     };
     vec![
         pub_fn(
@@ -592,7 +582,7 @@ fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
             name("A"),
             prim(Prim::IoExit(name("A"), name("n"))),
         ),
-        // The wire-code mirror: the guest counterpart of `curios_abi::wire`, so the
+        // The wire-code mirror: the guest counterpart of ABI wire codes, so the
         // standard library compares against named constants the host derives from
         // the same source. `read`/`write` already name ops here, so each family
         // is a sub-module.
@@ -635,10 +625,14 @@ fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
     ops
 }
 
-// The `sys` module body of primitive types and operations, served to discovery
-// like any other loaded module (see [`load_embedded`]). The host operations
-// under `Io` come off `foreigns` — the compilation's foreign store.
-fn sys_module(foreigns: &ForeignStore) -> Module {
+// The `sys` module body of primitive types and operations. The prelude artifact
+// builder supplies it to fixed-root discovery alongside authored `/syn` and
+// `/std`; production compilation restores the prepared result. The host
+// operations under `Io` come off `foreigns`.
+/// Construct the generated `/sys` surface module from the authoritative host
+/// function store. This is exposed for the build-time prelude artifact builder;
+/// production compilation never lowers it at runtime.
+pub fn sys_module(foreigns: &ForeignStore) -> Module {
     Module {
         items: vec![
             pub_mod("Nat", with_type(pub_let("Nat", type_(), nat()), nat_ops())),
@@ -654,17 +648,11 @@ fn sys_module(foreigns: &ForeignStore) -> Module {
             pub_use("Flt"),
             pub_mod(
                 "Bits",
-                with_type(
-                    pub_let("Bits", type_(), bin(curios_base::Grain::B)),
-                    bin_ops(curios_base::Grain::B),
-                ),
+                with_type(pub_let("Bits", type_(), bin(Grain::B)), bin_ops(Grain::B)),
             ),
             pub_mod(
                 "Bytes",
-                with_type(
-                    pub_let("Bytes", type_(), bin(curios_base::Grain::X)),
-                    bin_ops(curios_base::Grain::X),
-                ),
+                with_type(pub_let("Bytes", type_(), bin(Grain::X)), bin_ops(Grain::X)),
             ),
             pub_mod("Bln", with_type(pub_let("Bln", type_(), bln()), bln_ops())),
             pub_use("Bln"),
@@ -691,169 +679,4 @@ fn sys_module(foreigns: &ForeignStore) -> Module {
             pub_use("Cell"),
         ],
     }
-}
-
-// The `std` standard library, authored as real Curios source kept alongside the
-// compiler (`std/*.crs`) and embedded in the binary. The `["std"]` entry is the
-// manifest of `pub mod`/`pub use` declarations; each leaf is its own module. `std`
-// being well-formed is a compiler invariant, so a parse failure is a `panic!`.
-const STD: &[(&[&str], &str)] = &[
-    (&["std"], include_str!("../std.crs")),
-    (&["std", "Lst"], include_str!("../std/Lst.crs")),
-    (&["std", "Cell"], include_str!("../std/Cell.crs")),
-    (&["std", "Bits"], include_str!("../std/Bits.crs")),
-    (&["std", "Bytes"], include_str!("../std/Bytes.crs")),
-    (&["std", "Nat"], include_str!("../std/Nat.crs")),
-    (&["std", "Byte"], include_str!("../std/Byte.crs")),
-    (&["std", "Int"], include_str!("../std/Int.crs")),
-    (&["std", "Bln"], include_str!("../std/Bln.crs")),
-    (&["std", "Io"], include_str!("../std/Io.crs")),
-    (&["std", "File"], include_str!("../std/File.crs")),
-    (&["std", "tcp"], include_str!("../std/tcp.crs")),
-    (
-        &["std", "tcp", "Settings"],
-        include_str!("../std/tcp/Settings.crs"),
-    ),
-    (
-        &["std", "tcp", "resolve"],
-        include_str!("../std/tcp/resolve.crs"),
-    ),
-    (
-        &["std", "tcp", "Socket"],
-        include_str!("../std/tcp/Socket.crs"),
-    ),
-    (
-        &["std", "tcp", "Listener"],
-        include_str!("../std/tcp/Listener.crs"),
-    ),
-    (&["std", "Task"], include_str!("../std/Task.crs")),
-    (&["std", "http"], include_str!("../std/http.crs")),
-    (&["std", "Char"], include_str!("../std/Char.crs")),
-    (&["std", "Result"], include_str!("../std/Result.crs")),
-    (&["std", "Option"], include_str!("../std/Option.crs")),
-    (&["std", "Order"], include_str!("../std/Order.crs")),
-    (&["std", "Eql"], include_str!("../std/Eql.crs")),
-    (&["std", "Add"], include_str!("../std/Add.crs")),
-    (&["std", "Sub"], include_str!("../std/Sub.crs")),
-    (&["std", "Mul"], include_str!("../std/Mul.crs")),
-    (&["std", "Div"], include_str!("../std/Div.crs")),
-    (&["std", "Rem"], include_str!("../std/Rem.crs")),
-    (&["std", "And"], include_str!("../std/And.crs")),
-    (&["std", "Or"], include_str!("../std/Or.crs")),
-    (&["std", "Cmp"], include_str!("../std/Cmp.crs")),
-    (&["std", "Ord"], include_str!("../std/Ord.crs")),
-    (&["std", "Show"], include_str!("../std/Show.crs")),
-    (&["std", "Monad"], include_str!("../std/Monad.crs")),
-    (&["std", "BigNat"], include_str!("../std/BigNat.crs")),
-    (&["std", "NonZero"], include_str!("../std/NonZero.crs")),
-    (&["std", "BigInt"], include_str!("../std/BigInt.crs")),
-    (&["std", "Vec"], include_str!("../std/Vec.crs")),
-    (&["std", "Map"], include_str!("../std/Map.crs")),
-    (&["std", "Eq"], include_str!("../std/Eq.crs")),
-    (&["std", "False"], include_str!("../std/False.crs")),
-    (&["std", "True"], include_str!("../std/True.crs")),
-    (&["std", "Flt"], include_str!("../std/Flt.crs")),
-    (&["std", "Str"], include_str!("../std/Str.crs")),
-    (&["std", "Parse"], include_str!("../std/Parse.crs")),
-    (&["std", "Json"], include_str!("../std/Json.crs")),
-    (&["std", "Fmt"], include_str!("../std/Fmt.crs")),
-    (&["std", "time"], include_str!("../std/time.crs")),
-    (
-        &["std", "time", "Instant"],
-        include_str!("../std/time/Instant.crs"),
-    ),
-    (
-        &["std", "time", "Duration"],
-        include_str!("../std/time/Duration.crs"),
-    ),
-    (&["std", "rand"], include_str!("../std/rand.crs")),
-    (&["std", "proc"], include_str!("../std/proc.crs")),
-];
-
-// Parse one embedded module under a synthetic path (`std/Bln.crs` — the file's
-// location within this crate), so spans into it render a `--> path:line` header
-// like any file-backed source instead of an anonymous inline snippet.
-// Well-formedness of the embedded libraries is a compiler invariant, so a parse
-// failure is a `panic!`.
-fn parse_embedded(segments: &[&str], text: &str) -> Module {
-    let source = Rc::new(Source {
-        path: Some(format!("{}.crs", segments.join("/")).into()),
-        text: text.to_string(),
-    });
-
-    Module::parse(&source).unwrap_or_else(|error| {
-        panic!(
-            "embedded module {} is malformed: {}",
-            segments.join("/"),
-            error.format()
-        )
-    })
-}
-
-thread_local! {
-    // Parse every embedded `std` module once per thread; `load` then hands out
-    // clones. Discovery loads the full `std` manifest (and its leaves) on
-    // every compile, so without this each compile re-parses all of `std`. `Module`
-    // is not `Sync`, so this is thread-local rather than a `static` (§ loader cache).
-    static STD_MODULES: Vec<Module> = STD
-        .iter()
-        .map(|(segments, source)| parse_embedded(segments, source))
-        .collect();
-}
-
-// The `syn` library: modules the compiler's desugaring targets, kept alongside the
-// compiler (`syn/*.crs`) and embedded in the binary. Unlike `sys`, `syn` is *not*
-// internal (`RootId::Syn`'s kind is `Privileged`, not `Internal` — see
-// `curios_abi::RootKind`): desugaring emits absolute `/syn/…` references, so the
-// names must be resolvable like any ordinary library — they are not walled from
-// user code. `syn` is still privileged, so it may reach the `/sys` primitives, and
-// in practice it is consumed through `/std` re-exports. Well-formedness is a
-// compiler invariant, so a parse failure is a `panic!`.
-const SYN: &[(&[&str], &str)] = &[
-    (&["syn"], include_str!("../syn.crs")),
-    (&["syn", "True"], include_str!("../syn/True.crs")),
-    (&["syn", "False"], include_str!("../syn/False.crs")),
-    (&["syn", "Char"], include_str!("../syn/Char.crs")),
-    (&["syn", "Str"], include_str!("../syn/Str.crs")),
-];
-
-thread_local! {
-    // Parse every embedded `syn` module once per thread; `load` hands out clones.
-    // Mirrors `STD_MODULES` (§ loader cache).
-    static SYN_MODULES: Vec<Module> = SYN
-        .iter()
-        .map(|(segments, source)| parse_embedded(segments, source))
-        .collect();
-}
-
-/// The three privileged roots' fixed content, matched by full qualifier —
-/// `sys` (a single AST value built once per compile) then the embedded
-/// `std`/`syn` tables (each parsed once per thread; see `STD_MODULES`/
-/// `SYN_MODULES`). `None` falls through to whatever [`RootSource`] wraps
-/// this one. Shared by every [`RootSource`] with `sys` attached, so it lives
-/// here (alongside the tables it reads) rather than in `root_source`.
-pub(crate) fn load_embedded(sys: &Module, qualifier: &Qualifier) -> Option<Module> {
-    let path = qualifier.iter().collect::<Vec<_>>();
-
-    if path == ["sys"] {
-        return Some(sys.clone());
-    }
-    if let Some(index) = STD.iter().position(|(segments, _)| path == **segments) {
-        return Some(STD_MODULES.with(|modules| modules[index].clone()));
-    }
-    if let Some(index) = SYN.iter().position(|(segments, _)| path == **segments) {
-        return Some(SYN_MODULES.with(|modules| modules[index].clone()));
-    }
-
-    None
-}
-
-/// Wrap a root source so `sys`, `syn`, and `std` resolve from the binary and
-/// everything else falls through to `base`'s own entry-filesystem setting.
-/// `into_core` discovers them explicitly once `has_embedded_roots()` reports
-/// them attached (see `into_core::FIXED_ROOTS`). `foreigns` is the compilation's
-/// foreign store — the host operations `/sys/Io` declares; today always
-/// `curios_abi::sys_io()`, created per compilation by the pipeline driver.
-pub fn prelude(foreigns: &ForeignStore, base: RootSource) -> RootSource {
-    base.with_sys(sys_module(foreigns))
 }

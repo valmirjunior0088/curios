@@ -18,7 +18,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] AOT `.cwasm` precompilation (deserialized and run without re-JITting)
 - [x] Crate-boundary split isolating the Cranelift/Binaryen-free launcher (`curios-runtime`) from the JIT-capable compiler
 - [x] Pure pipeline driver crate (`curios-pipeline`) decoupled from runtime/Binaryen/CLI, enabling a wasm32 (browser) build
-- [x] Per-thread elaborated-prelude cache and replay (the fixed `sys`/`syn`/`std` prefix is checked once per compiler thread, then restored into each fresh elaboration context)
+- [x] Build-scoped archived prelude and replay (`curios-prelude` compiles and validates fixed Text/Core/Ersd state in `OUT_DIR`; production compilations restore it with no source fallback and lower/elaborate/erase only the user suffix)
 - [ ] [Bootstrap the compiler in Curios itself](06_BOOTSTRAP_SPEC.md) (self-host every language-specific stage through raw WebAssembly generation while retaining Rust as the native host and stage-zero seed)
 
 ## Primitive Types

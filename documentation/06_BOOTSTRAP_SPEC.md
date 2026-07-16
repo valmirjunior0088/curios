@@ -385,11 +385,13 @@ Mark the Rust pipeline as frozen bootstrap code or move it behind an explicit st
 
 ## Prelude strategy
 
-Do not introduce a pre-bootstrap cache that serializes Rust Core and Ersd structures. Such an artifact would not be the permanent cache design for the self-hosted compiler: implementing it immediately before the port would create a format and restoration path that the Curios compiler must replace.
+The frozen Rust stage-zero compiler uses a build-scoped prelude image generated automatically in `curios-prelude`'s `OUT_DIR`. It archives prepared Text resolver state, elaborated and zonked Core state, and the erased item prefix. Production S0 compilation always restores that image and has no runtime source-compilation fallback or cache-miss path.
+
+This rkyv image is an internal implementation detail of one compiler build, not a stable interchange format and not the permanent self-hosted cache design. Its explicit schema and source fingerprint detect stale or incompatible build products; Cargo regenerates it together with the compiler. It is never committed, distributed independently, or consumed by a different compiler build.
 
 The bootstrap uses this sequence:
 
-1. Preserve the existing S0 cache behavior for the frozen Rust seed.
+1. Preserve the build-scoped archived S0 behavior for the frozen Rust seed.
 2. Compile the prelude from source in the early Curios frontend to establish correctness.
 3. Measure parsing, lowering, elaboration, erasure, artifact size, and restoration independently.
 4. Add a Curios-owned, versioned prelude artifact when measurements show it is required for usable compiler iteration.
@@ -397,7 +399,7 @@ The bootstrap uses this sequence:
 
 The Curios artifact may contain separate elaborated and erased sections, but its identities, tables, schema, validation, and replay semantics belong to the self-hosted compiler. Its cache key includes the compiler artifact identity, embedded prelude source hashes, format version, target-independent semantic options, and any other input that can affect the restored state.
 
-The cleanup that expresses prelude replay as ordinary context preparation remains conceptually useful and may be applied to S0 before the port if chosen independently. An unversioned Rust-layout serialization is not promoted into the permanent architecture.
+The S0 cleanup expresses prelude replay as ordinary context preparation and cached-prefix replay. Its Rust-layout serialization is explicitly confined to stage zero and is not promoted into the permanent architecture.
 
 ## Relationship to planned language and tooling work
 

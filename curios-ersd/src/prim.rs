@@ -1,12 +1,16 @@
 use {
     super::Term,
     curios_abi::ForeignFunction,
-    curios_base::PackedBin,
+    curios_base::{Grain, PackedBin},
     std::{collections::BTreeSet, sync::Arc},
 };
 
 /// The effect-free primitive alphabet: literals plus arithmetic/comparison/conversion over `Nat` (u32), `Int` (i32), and `Flt` (f32), the `Bin`/`Lst` sequence operations, and `Io` descriptor equality. Purity here is structural — `Term::contains_effect` classifies every variant of this enum pure without inspection — so an operation with observable behavior must live in [`HostPrim`] or [`CellPrim`] instead.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum PurePrim {
     Nat(u32),
     NatEql(Term, Term),
@@ -71,13 +75,13 @@ pub enum PurePrim {
     FltToLeBytes(Term),
     FltOfLeBytes(Term),
     FltToInt(Term),
-    Bin(curios_base::Grain, PackedBin),
-    BinLen(curios_base::Grain, Term),
-    BinEql(curios_base::Grain, Term, Term),
-    BinGet(curios_base::Grain, Term, Term),
-    BinSlice(curios_base::Grain, Term, Term, Term),
-    BinAppend(curios_base::Grain, Term, Term),
-    BinConcat(curios_base::Grain, Vec<Term>),
+    Bin(Grain, PackedBin),
+    BinLen(Grain, Term),
+    BinEql(Grain, Term, Term),
+    BinGet(Grain, Term, Term),
+    BinSlice(Grain, Term, Term, Term),
+    BinAppend(Grain, Term, Term),
+    BinConcat(Grain, Vec<Term>),
     Lst(Vec<Term>),
     LstLen(Term),
     LstGet(Term, Term),
@@ -96,12 +100,7 @@ impl PurePrim {
         use PurePrim::*;
 
         match self {
-            Nat(_)
-            | Int(_)
-            | Flt(_)
-            | Bin(curios_base::Grain::X, _)
-            | Bin(curios_base::Grain::B, _)
-            | Io(_) => vec![],
+            Nat(_) | Int(_) | Flt(_) | Bin(Grain::X, _) | Bin(Grain::B, _) | Io(_) => vec![],
             NatToInt(a)
             | NatToFlt(a)
             | IntToNat(a)
@@ -117,8 +116,8 @@ impl PurePrim {
             | FltCeil(a)
             | FltTrunc(a)
             | FltNearest(a)
-            | BinLen(curios_base::Grain::X, a)
-            | BinLen(curios_base::Grain::B, a)
+            | BinLen(Grain::X, a)
+            | BinLen(Grain::B, a)
             | LstLen(a) => vec![a],
             NatEql(a, b)
             | NatNeq(a, b)
@@ -165,21 +164,21 @@ impl PurePrim {
             | FltGte(a, b)
             | FltMin(a, b)
             | FltMax(a, b)
-            | BinEql(curios_base::Grain::X, a, b)
+            | BinEql(Grain::X, a, b)
             | IoEql(a, b)
-            | BinGet(curios_base::Grain::X, a, b)
-            | BinAppend(curios_base::Grain::X, a, b)
-            | BinEql(curios_base::Grain::B, a, b)
-            | BinGet(curios_base::Grain::B, a, b)
-            | BinAppend(curios_base::Grain::B, a, b)
+            | BinGet(Grain::X, a, b)
+            | BinAppend(Grain::X, a, b)
+            | BinEql(Grain::B, a, b)
+            | BinGet(Grain::B, a, b)
+            | BinAppend(Grain::B, a, b)
             | LstGet(a, b)
             | LstAppend(a, b)
             | LstMap(a, b) => vec![a, b],
-            BinSlice(curios_base::Grain::X, a, b, c)
-            | BinSlice(curios_base::Grain::B, a, b, c)
-            | LstSlice(a, b, c) => vec![a, b, c],
-            BinConcat(curios_base::Grain::X, operands)
-            | BinConcat(curios_base::Grain::B, operands)
+            BinSlice(Grain::X, a, b, c) | BinSlice(Grain::B, a, b, c) | LstSlice(a, b, c) => {
+                vec![a, b, c]
+            }
+            BinConcat(Grain::X, operands)
+            | BinConcat(Grain::B, operands)
             | LstConcat(operands)
             | Lst(operands) => operands.iter().collect(),
         }
@@ -189,12 +188,7 @@ impl PurePrim {
         use PurePrim::*;
 
         match self {
-            Nat(_)
-            | Int(_)
-            | Flt(_)
-            | Bin(curios_base::Grain::X, _)
-            | Bin(curios_base::Grain::B, _)
-            | Io(_) => vec![],
+            Nat(_) | Int(_) | Flt(_) | Bin(Grain::X, _) | Bin(Grain::B, _) | Io(_) => vec![],
             NatToInt(a)
             | NatToFlt(a)
             | IntToNat(a)
@@ -210,8 +204,8 @@ impl PurePrim {
             | FltCeil(a)
             | FltTrunc(a)
             | FltNearest(a)
-            | BinLen(curios_base::Grain::X, a)
-            | BinLen(curios_base::Grain::B, a)
+            | BinLen(Grain::X, a)
+            | BinLen(Grain::B, a)
             | LstLen(a) => vec![a],
             NatEql(a, b)
             | NatNeq(a, b)
@@ -258,21 +252,21 @@ impl PurePrim {
             | FltGte(a, b)
             | FltMin(a, b)
             | FltMax(a, b)
-            | BinEql(curios_base::Grain::X, a, b)
+            | BinEql(Grain::X, a, b)
             | IoEql(a, b)
-            | BinGet(curios_base::Grain::X, a, b)
-            | BinAppend(curios_base::Grain::X, a, b)
-            | BinEql(curios_base::Grain::B, a, b)
-            | BinGet(curios_base::Grain::B, a, b)
-            | BinAppend(curios_base::Grain::B, a, b)
+            | BinGet(Grain::X, a, b)
+            | BinAppend(Grain::X, a, b)
+            | BinEql(Grain::B, a, b)
+            | BinGet(Grain::B, a, b)
+            | BinAppend(Grain::B, a, b)
             | LstGet(a, b)
             | LstAppend(a, b)
             | LstMap(a, b) => vec![a, b],
-            BinSlice(curios_base::Grain::X, a, b, c)
-            | BinSlice(curios_base::Grain::B, a, b, c)
-            | LstSlice(a, b, c) => vec![a, b, c],
-            BinConcat(curios_base::Grain::X, operands)
-            | BinConcat(curios_base::Grain::B, operands)
+            BinSlice(Grain::X, a, b, c) | BinSlice(Grain::B, a, b, c) | LstSlice(a, b, c) => {
+                vec![a, b, c]
+            }
+            BinConcat(Grain::X, operands)
+            | BinConcat(Grain::B, operands)
             | LstConcat(operands)
             | Lst(operands) => operands.iter_mut().collect(),
         }
@@ -281,6 +275,10 @@ impl PurePrim {
 
 /// The primitives that leave the module: a store-described foreign import call, or process exit. Both are effectful by definition (`Prim::is_effectful`), and `into_cont` lowers each as the *tail* of its region — the impure boundary of the region tree — never as an in-region value.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum HostPrim {
     /// A store-described host call: the function's `WireSignature` fixes the
     /// operand order/types and how many results the continuation receives.
@@ -310,6 +308,10 @@ impl HostPrim {
 
 /// The mutable-cell primitives — the IR's only stateful values (the design law confines mutation to single emitted instructions; `Cell` is the sanctioned exception that gives the guest a mutable reference). Classified effectful so no pass folds, reorders, or duplicates cell traffic.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum CellPrim {
     New(Term),       // init
     Set(Term, Term), // cell, value
@@ -334,6 +336,10 @@ impl CellPrim {
 
 /// A primitive operation, partitioned by purity: `Pure` computations may be folded, reordered, and duplicated freely, while `Host` and `Cell` are effectful (`is_effectful`) and pin the evaluation order around them. This partition is the IR's entire impurity story — `Term::contains_effect`, `optimize`'s effect-taint analyses, and `into_cont`'s synchronous/CPS split all reduce to which arm a primitive sits in.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Prim {
     Pure(PurePrim),
     Host(HostPrim),

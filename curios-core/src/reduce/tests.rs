@@ -415,10 +415,7 @@ fn reduce_lst_get_errors_on_out_of_bounds() {
 fn reduce_bin_append_adds_byte() {
     let mut context = context();
 
-    let bin = Subterm::Prim(Prim::Bin(
-        curios_base::Grain::X,
-        PackedBin::from_bytes(vec![1, 2]),
-    ));
+    let bin = Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2])));
     let byte: Subterm = Subterm::Prim(Prim::Byte(3));
 
     assert_eq!(
@@ -426,11 +423,7 @@ fn reduce_bin_append_adds_byte() {
             &mut context,
             Subterm::Prim(Prim::bin_append(Grain::X, bin, byte)).into()
         ),
-        Ok(Subterm::Prim(Prim::Bin(
-            curios_base::Grain::X,
-            PackedBin::from_bytes(vec![1, 2, 3])
-        ))
-        .into())
+        Ok(Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2, 3]))).into())
     );
 }
 
@@ -438,10 +431,7 @@ fn reduce_bin_append_adds_byte() {
 fn reduce_bin_append_adds_the_full_byte_range() {
     let mut context = context();
 
-    let bin = Subterm::Prim(Prim::Bin(
-        curios_base::Grain::X,
-        PackedBin::from_bytes(vec![1, 2]),
-    ));
+    let bin = Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2])));
     let byte: Subterm = Subterm::Prim(Prim::Byte(255));
 
     assert_eq!(

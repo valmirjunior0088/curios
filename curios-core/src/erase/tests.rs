@@ -228,7 +228,7 @@ fn erase_bin_append() {
 fn erase_bin_eql() {
     let mut context = context();
 
-    let bin_type = Subterm::Prim(Prim::BinType(curios_base::Grain::X)).into();
+    let bin_type = Subterm::Prim(Prim::BinType(Grain::X)).into();
     let bool_type = Subterm::Prim(Prim::BlnType).into();
     context.assume("a", &bin_type);
     context.assume("b", &bin_type);
@@ -427,18 +427,12 @@ fn erase_three_field_tuple_type_and_value() {
 fn erase_bin_concat() {
     let mut context = context();
 
-    let bin_type = Subterm::Prim(Prim::BinType(curios_base::Grain::X)).into();
+    let bin_type = Subterm::Prim(Prim::BinType(Grain::X)).into();
     let concat = Subterm::Prim(Prim::bin_concat(
         Grain::X,
         [
-            Subterm::Prim(Prim::Bin(
-                curios_base::Grain::X,
-                PackedBin::from_bytes(vec![1, 2]),
-            )),
-            Subterm::Prim(Prim::Bin(
-                curios_base::Grain::X,
-                PackedBin::from_bytes(vec![3, 4]),
-            )),
+            Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))),
+            Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![3, 4]))),
         ],
     ))
     .into();

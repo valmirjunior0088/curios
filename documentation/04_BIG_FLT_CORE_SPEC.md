@@ -67,7 +67,7 @@ The deeper algebraic and order theorem corpus belongs to [`07_BIG_FLT_LAWS_SPEC.
 
 ## Module and witness placement
 
-`curios-text/std/BigFlt.crs` is registered after BigNat and BigInt in `curios-text/std.crs` and in the `include_str!` table in `curios-text/src/prelude.rs`.
+`curios-prelude/std/BigFlt.crs` is registered after BigNat and BigInt in `curios-prelude/std.crs`; the prelude build script discovers and fingerprints the registered source automatically.
 
 `Add`, `Sub`, `Mul`, `Eql`, and `Cmp` witnesses belong in the `/std` operator facade modules, following project convention. `Show` and `Ord` may be supplied where useful. There is no `Div(BigFlt)` witness.
 

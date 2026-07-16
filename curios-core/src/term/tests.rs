@@ -4,6 +4,30 @@ use {
     std::{collections::BTreeSet, rc::Rc},
 };
 
+#[cfg(feature = "archive")]
+#[test]
+fn archive_resets_caches_and_preserves_rc_sharing() {
+    let shared = Term::free_var("shared");
+    let term = Term::tuple([shared.clone(), shared]);
+    term.get_or_init_hash();
+    term.reach();
+    term.free_vars();
+    assert!(term.hash.get().is_some());
+    assert!(term.reach.get().is_some());
+    assert!(term.free_vars.get().is_some());
+
+    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&term).unwrap();
+    let restored = rkyv::from_bytes::<Term, rkyv::rancor::Error>(&bytes).unwrap();
+    assert!(restored.hash.get().is_none());
+    assert!(restored.reach.get().is_none());
+    assert!(restored.free_vars.get().is_none());
+
+    let Subterm::Tuple(tuple) = restored.as_ref() else {
+        panic!("restored term changed shape");
+    };
+    assert!(Rc::ptr_eq(&tuple.fields[0].inner, &tuple.fields[1].inner));
+}
+
 #[test]
 fn close_open_substitutes_label_name() {
     let term = Scope::close(One, &["x"], Term::free_var("x")).open(&[&Term::free_var("y")]);

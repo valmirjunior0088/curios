@@ -23,7 +23,7 @@
 //! tier. [`sys_io`] seeds the fixed `/sys/Io` builtin tier, consumable only by
 //! the standard library, created per compilation by the pipeline driver; a
 //! second store, accumulated from a program's own `foreign` declarations
-//! (`curios_text::prelude::foreign_signature`), holds the `ffi` tier. The two
+//! (`curios_text`'s generated foreign signature), holds the `ffi` tier. The two
 //! are never merged, but the wasm namespace is the row's own `namespace`
 //! field, stamped at declaration time — the store split only governs who may
 //! consume a tier. `exit` is deliberately absent from either store: it traps
@@ -49,13 +49,25 @@ use std::{
 /// `Io` rides the same wire shape as `Bin` (a handle is its token bytes) but
 /// stays a distinct guest type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(
+    feature = "archive",
+    rkyv(
+        serialize_bounds(__S: rkyv::ser::Writer + rkyv::ser::Allocator, __S::Error: rkyv::rancor::Source),
+        deserialize_bounds(__D::Error: rkyv::rancor::Source),
+        bytecheck(bounds(__C: rkyv::validation::ArchiveContext))
+    )
+)]
 pub enum WireType {
     Nat,
     Int,
     Bln,
     Bin,
     Io,
-    Lst(Box<WireType>),
+    Lst(#[cfg_attr(feature = "archive", rkyv(omit_bounds))] Box<WireType>),
 }
 
 /// The signature of one foreign function: named operands and named results.
@@ -64,6 +76,10 @@ pub enum WireType {
 /// (the labels are load-bearing: the standard library projects `.status`,
 /// `.secs_hi`, …).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct WireSignature {
     pub params: Vec<(String, WireType)>,
     pub results: Vec<(String, WireType)>,
@@ -77,7 +93,12 @@ pub struct WireSignature {
 /// qualified name (leading `/`). `label` is the binding name the function
 /// surfaces under in the guest.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct ForeignFunction {
+    #[cfg_attr(feature = "archive", rkyv(with = crate::Namespace))]
     pub namespace: &'static str,
     pub name: String,
     pub label: String,
@@ -109,6 +130,10 @@ impl Hash for ForeignFunction {
 /// order the prelude surfaces them under `/sys/Io`. Rows are `Arc`ed so the IR
 /// nodes share them; cloning a store is a handful of reference bumps.
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct ForeignStore {
     functions: Vec<Arc<ForeignFunction>>,
 }

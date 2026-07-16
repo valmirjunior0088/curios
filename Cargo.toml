@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["curios-abi", "curios-base", "curios-wasm", "curios-cont", "curios-ersd", "curios-core", "curios-text", "curios-pipeline", "curios-web", "curios", "curios-binaryen", "curios-runtime"]
+members = ["curios-abi", "curios-base", "curios-wasm", "curios-cont", "curios-ersd", "curios-core", "curios-text", "curios-prelude", "curios-pipeline", "curios-web", "curios", "curios-binaryen", "curios-runtime"]
 
 [workspace.package]
 version = "0.4.0"
@@ -23,6 +23,7 @@ curios-cont = { path = "curios-cont" }
 curios-ersd = { path = "curios-ersd" }
 curios-core = { path = "curios-core" }
 curios-text = { path = "curios-text" }
+curios-prelude = { path = "curios-prelude" }
 curios-pipeline = { path = "curios-pipeline" }
 curios-web = { path = "curios-web" }
 curios-binaryen = { path = "curios-binaryen" }
@@ -32,3 +33,4 @@ num-bigint = { version = "0.5.1" }
 num-traits = { version = "0.2.19" }
 tracing = { version = "0.1.44", default-features = false, features = ["std", "attributes"] }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "registry"] }
+rkyv = { version = "0.8.16", default-features = false, features = ["alloc", "bytecheck", "little_endian", "pointer_width_32", "std", "unaligned"] }

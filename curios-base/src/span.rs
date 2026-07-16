@@ -8,7 +8,12 @@ use std::{
 
 /// One unit of input text — a file with its path, or pathless inline text — always handed out as `Rc<Source>` so every [`Span`] into it shares the one allocation instead of copying or re-reading the text.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Source {
+    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Map<rkyv::with::AsString>))]
     pub path: Option<PathBuf>,
     pub text: String,
 }
@@ -40,6 +45,10 @@ impl Source {
 
 /// A half-open byte range `[start, end)` into a shared [`Source`] — how every pipeline stage points a diagnostic back at the text that caused it. Equality and hashing identify the source by `Rc` pointer rather than content, so spans from separately loaded sources never alias even when their texts match, and hashing never walks the text.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Span {
     pub source: Rc<Source>,
     pub start: usize,

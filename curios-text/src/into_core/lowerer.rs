@@ -4,10 +4,7 @@ use {
         BinSegment, CondMatch, Error, Field, LadderTest, Let, LetBinding, LstEntry, Match, Name,
         Nat, NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
-    curios_base::{
-        CHAR_CHAR, CHAR_SCALAR_ABOVE, CHAR_SCALAR_BELOW, Grain, MONAD_BIND, PackedBin, Plicity,
-        STR_SCAN_LEAD, STR_STEP, STR_STR, STR_UTF8_MORE, STR_UTF8_STOP, TRUE_QED,
-    },
+    curios_base::{Grain, PackedBin, Plicity},
     num_bigint::BigUint,
     std::{cell::RefCell, collections::BTreeSet, sync::Arc},
 };
@@ -131,38 +128,45 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // exactly what a `Bytes` literal does.
     pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
         curios_core::Term::struct_(
-            STR_STR,
+            self.context.syntax().string().string(),
             Vec::<curios_core::Term>::new(),
             [
                 curios_core::Term::prim(curios_core::Prim::Bin(
                     Grain::X,
                     PackedBin::from_bytes(bytes.to_vec()),
                 )),
-                self.utf8_derivation(bytes, Self::scan_lead()),
+                self.utf8_derivation(bytes, self.scan_lead()),
             ],
         )
     }
 
     /// A Rust `char` is already a Unicode scalar, so the literal meta-emitter selects the corresponding `/syn/Char/Scalar` range constructor and supplies a closed reflected proof. The proof erases and the single relevant `code` field collapses to the ordinary Nat carrier.
-    pub(super) fn char_literal(character: char) -> curios_core::Term {
+    pub(super) fn char_literal(&self, character: char) -> curios_core::Term {
         let code = curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Succ(
             BigUint::from(character as u32),
             curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero)),
         )));
         let constructor = if (character as u32) < 0xD800 {
-            CHAR_SCALAR_BELOW
+            self.context.syntax().character().scalar_below()
         } else {
-            CHAR_SCALAR_ABOVE
+            self.context.syntax().character().scalar_above()
         };
         let scalar = curios_core::Term::apply_marked(
             curios_core::Term::var(curios_core::Var::free(constructor)),
             [
                 (Plicity::Implicit, code.clone()),
-                (Plicity::Explicit, Self::syn_call(TRUE_QED, [])),
+                (
+                    Plicity::Explicit,
+                    Self::syn_call(self.context.syntax().proof().true_qed(), []),
+                ),
             ],
         );
 
-        curios_core::Term::struct_(CHAR_CHAR, Vec::<curios_core::Term>::new(), [code, scalar])
+        curios_core::Term::struct_(
+            self.context.syntax().character().character(),
+            Vec::<curios_core::Term>::new(),
+            [code, scalar],
+        )
     }
 
     // A constructor/function `Var` applied to `args` — the absolute core name as the
@@ -178,8 +182,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         )
     }
 
-    pub(super) fn scan_lead() -> curios_core::Term {
-        Self::syn_call(STR_SCAN_LEAD, [])
+    pub(super) fn scan_lead(&self) -> curios_core::Term {
+        Self::syn_call(self.context.syntax().string().scan_lead(), [])
     }
 
     // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term —
@@ -194,13 +198,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         state: curios_core::Term,
     ) -> curios_core::Term {
         match bytes.split_first() {
-            None => Self::syn_call(STR_UTF8_STOP, []),
+            None => Self::syn_call(self.context.syntax().string().utf8_stop(), []),
             Some((&head, tail)) => {
                 let byte: curios_core::Term =
                     curios_core::Term::prim(curios_core::Prim::Byte(head));
-                let next = Self::syn_call(STR_STEP, [byte.clone(), state.clone()]);
+                let next = Self::syn_call(
+                    self.context.syntax().string().step(),
+                    [byte.clone(), state.clone()],
+                );
                 Self::syn_call(
-                    STR_UTF8_MORE,
+                    self.context.syntax().string().utf8_more(),
                     [
                         byte,
                         state,
@@ -219,7 +226,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // rather than lowered to a core primitive.
     pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_core::Term, Error> {
         match syn {
-            Syn::Char(character) => Ok(Self::char_literal(*character)),
+            Syn::Char(character) => Ok(self.char_literal(*character)),
             Syn::Str(string) => Ok(self.str_literal(string.as_bytes())),
         }
     }
@@ -823,7 +830,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let cont = curios_core::Term::func([(name, domain)], acc);
                 // The already-resolved core name: the `Monad` concept at
                 // `/syn`'s top level, method wrapper `bind`.
-                Ok(Self::syn_call(MONAD_BIND, [action, cont]))
+                Ok(Self::syn_call(
+                    self.context.syntax().monad().bind(),
+                    [action, cont],
+                ))
             })
     }
 

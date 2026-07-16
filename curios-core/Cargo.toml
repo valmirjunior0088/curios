@@ -9,6 +9,7 @@ description = "The curios core language: elaboration, typing, reduction, convers
 workspace = true
 
 [features]
+archive = ["dep:rkyv", "curios-abi/archive", "curios-base/archive", "curios-ersd/archive"]
 profile = ["dep:tracing"]
 
 [dependencies]
@@ -17,6 +18,7 @@ curios-base = { workspace = true }
 curios-ersd = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
+rkyv = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

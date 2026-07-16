@@ -1434,6 +1434,111 @@ pub fn erase_module(
     Ok(curios_ersd::Module { items, body })
 }
 
+/// Replay an already-erased fixed prefix and erase only the user suffix and
+/// entrypoint body from a module produced by cached Core elaboration replay.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
+pub fn erase_module_with_prelude(
+    context: &mut Context,
+    prelude: &Module,
+    module: &Module,
+    expected: &Term,
+    mut items: Vec<curios_ersd::Item>,
+) -> Result<curios_ersd::Module, Error> {
+    assert_eq!(
+        prelude.items.len(),
+        items.len(),
+        "restored Ersd prefix length does not match cached Core prelude"
+    );
+    for (core, erased) in prelude.items.iter().zip(&items) {
+        let core_names = match core {
+            Item::Let(definition) => vec![definition.name.as_str()],
+            Item::Rec(rec) => rec
+                .definitions
+                .iter()
+                .map(|definition| definition.name.as_str())
+                .collect(),
+        };
+        assert_eq!(
+            core_names,
+            erased.declared_names().collect::<Vec<_>>(),
+            "restored Ersd prefix names do not match cached Core prelude"
+        );
+    }
+
+    for (name, inductive) in &module.inductives {
+        context.register_inductive(name, inductive.clone())?;
+    }
+    for (name, structure) in &module.structures {
+        context.register_structure(name, structure.clone())?;
+    }
+
+    for item in &prelude.items {
+        match item {
+            Item::Let(definition) => {
+                context.define_assuming(&definition.name, &definition.type_, &definition.body);
+            }
+            Item::Rec(rec) => {
+                let definitions = rec.definitions();
+                for definition in &definitions {
+                    context.assume(&definition.name, &definition.type_);
+                }
+                for (index, definition) in definitions.iter().enumerate() {
+                    context.define(
+                        &definition.name,
+                        &Term::rec_member(rec.group.clone(), index),
+                    );
+                }
+            }
+        }
+    }
+
+    for item in module.items.iter().skip(prelude.items.len()) {
+        let item_module = match item {
+            Item::Let(definition) => definition.island.clone(),
+            Item::Rec(rec) => rec.island(),
+        };
+        context.set_island(item_module);
+        match item {
+            Item::Let(definition) => {
+                let body = erase(context, &definition.body, &definition.type_)?;
+                context.define_assuming(&definition.name, &definition.type_, &definition.body);
+                items.push(curios_ersd::Item::Let {
+                    name: definition.name.clone(),
+                    body,
+                });
+            }
+            Item::Rec(rec) => {
+                let definitions = rec.definitions();
+                for definition in &definitions {
+                    context.assume(&definition.name, &definition.type_);
+                }
+                for (index, definition) in definitions.iter().enumerate() {
+                    context.define(
+                        &definition.name,
+                        &Term::rec_member(rec.group.clone(), index),
+                    );
+                }
+                let names = definitions
+                    .iter()
+                    .map(|definition| definition.name.clone())
+                    .collect();
+                let erased = definitions
+                    .iter()
+                    .map(|definition| erase(context, &definition.body, &definition.type_))
+                    .collect::<Result<Vec<_>, Error>>()?;
+                items.push(curios_ersd::Item::Rec {
+                    names,
+                    items: erased,
+                });
+            }
+        }
+    }
+
+    context.set_island(Qualifier::empty());
+    let body = erase(context, &module.body, expected)?;
+    Ok(curios_ersd::Module { items, body })
+}
+
 pub(crate) fn erase(
     context: &mut Context,
     term: &Term,

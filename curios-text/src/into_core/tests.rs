@@ -1,13 +1,36 @@
+use curios_abi::{RootId, WireType, sys_io};
 use std::{
     fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
+const SYNTAX: crate::SyntaxRegistry = crate::SyntaxRegistry::new(
+    crate::MonadSyntax::new("/syn/Monad/bind"),
+    crate::CharacterSyntax::new(
+        "/syn/Char/Char",
+        "/syn/Char/Scalar/below",
+        "/syn/Char/Scalar/above",
+    ),
+    crate::StringSyntax::new(
+        "/syn/Str/Str",
+        "/syn/Str/Scan/lead",
+        "/syn/Str/Utf8/stop",
+        "/syn/Str/Utf8/more",
+        "/syn/Str/step",
+    ),
+    crate::ProofSyntax::new("/syn/True/True/qed", "/syn/False/absurd"),
+);
+
+fn syntax() -> &'static crate::SyntaxRegistry {
+    &SYNTAX
+}
+
 fn run(src: &str) -> curios_core::Term {
     let (module, _, _) = super::into_core(
         &src.parse::<crate::Entrypoint>().unwrap(),
         &crate::RootSource::none(),
+        syntax(),
     )
     .unwrap();
 
@@ -18,6 +41,7 @@ fn run_err(src: &str) -> String {
     super::into_core(
         &src.parse::<crate::Entrypoint>().unwrap(),
         &crate::RootSource::none(),
+        syntax(),
     )
     .unwrap_err()
     .to_string()
@@ -26,9 +50,29 @@ fn run_err(src: &str) -> String {
 // Lower against the real prelude (so `sys` and `std` are served and rooted),
 // returning only success/error — the lens for the internal-root gate.
 fn lower_with_prelude(src: &str) -> Result<(), String> {
-    super::into_core(
+    let mut modules = crate::PreludeModules::new();
+    modules.insert_root("sys", RootId::Sys, crate::sys_module(&sys_io()));
+    modules.insert_root(
+        "std",
+        RootId::Std,
+        r#"
+            pub mod Str
+                pub let Valid : Type = Type;
+            end
+            pub mod Nat
+                pub let Nat : Type = Type;
+                pub let add : Type = Type;
+            end
+        "#
+        .parse()
+        .unwrap(),
+    );
+    let prepared = super::prepare_prelude(&modules, syntax()).map_err(|error| error.to_string())?;
+    super::into_core_with_prelude(
         &src.parse::<crate::Entrypoint>().unwrap(),
-        &crate::prelude(&curios_abi::sys_io(), crate::RootSource::none()),
+        &crate::RootSource::none(),
+        &prepared,
+        syntax(),
     )
     .map(|_| ())
     .map_err(|error| error.to_string())
@@ -1505,7 +1549,7 @@ fn file_loader_prepares_sibling_modules_before_to_core() {
     .unwrap();
     let loader = crate::RootSource::file_system(base.clone());
 
-    super::into_core(&entrypoint, &loader).unwrap();
+    super::into_core(&entrypoint, &loader, syntax()).unwrap();
 
     fs::remove_dir_all(base).unwrap();
 }
@@ -1520,7 +1564,7 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
     .unwrap();
 
     assert!(matches!(
-        super::into_core(&entrypoint, &crate::RootSource::none()).unwrap_err(),
+        super::into_core(&entrypoint, &crate::RootSource::none(), syntax()).unwrap_err(),
         crate::Error::Located { error, .. }
             if matches!(error.as_ref(), crate::Error::ModuleNotFound { path } if path == "/A")
     ));
@@ -1664,6 +1708,7 @@ fn foreign_declaration_populates_the_store() {
             .parse::<crate::Entrypoint>()
             .unwrap(),
         &crate::RootSource::none(),
+        syntax(),
     )
     .unwrap();
 
@@ -1671,13 +1716,13 @@ fn foreign_declaration_populates_the_store() {
     assert_eq!(
         function.signature.params,
         vec![
-            ("a0".to_string(), curios_abi::WireType::Nat),
-            ("a1".to_string(), curios_abi::WireType::Bin),
+            ("a0".to_string(), WireType::Nat),
+            ("a1".to_string(), WireType::Bin),
         ]
     );
     assert_eq!(
         function.signature.results,
-        vec![("_".to_string(), curios_abi::WireType::Nat)]
+        vec![("_".to_string(), WireType::Nat)]
     );
 }
 
@@ -1688,6 +1733,7 @@ fn foreign_declaration_zero_arg_populates_the_store() {
             .parse::<crate::Entrypoint>()
             .unwrap(),
         &crate::RootSource::none(),
+        syntax(),
     )
     .unwrap();
 
@@ -1737,6 +1783,7 @@ fn foreign_declarations_across_modules_get_distinct_import_names() {
         .parse::<crate::Entrypoint>()
         .unwrap(),
         &crate::RootSource::none(),
+        syntax(),
     )
     .unwrap();
 

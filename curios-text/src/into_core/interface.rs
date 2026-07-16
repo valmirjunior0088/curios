@@ -1,6 +1,6 @@
 use {
-    super::{FIXED_ROOTS, ModuleInfo},
-    crate::{Entrypoint, Error, GroupItem, Module, Name, RootSource, TopItem, UseGroup},
+    super::ModuleInfo,
+    crate::{Entrypoint, Error, GroupItem, Module, Name, TopItem, UseGroup},
     curios_abi::RootId,
     curios_base::{Entropy, Qualifier},
     std::{
@@ -12,8 +12,14 @@ use {
 // The export view of a module: public names only, each pointing at the canonical
 // declaration site. Built to a fixed point before any body is elaborated.
 #[derive(Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub(super) struct PublicInterface {
+    #[cfg_attr(feature = "archive", rkyv(with = crate::OrderedMap))]
     pub children: HashMap<String, Entry>,
+    #[cfg_attr(feature = "archive", rkyv(with = crate::OrderedMap))]
     pub bindings: HashMap<String, Entry>,
 }
 
@@ -27,6 +33,10 @@ impl PublicInterface {
 }
 
 #[derive(Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub(super) struct Entry {
     pub target: Qualifier,
     pub source: Source,
@@ -39,6 +49,10 @@ pub(super) struct Entry {
 // Provenance of an export entry. A slot may be claimed by at most one source; a
 // re-derivation by the same source is idempotent, a different source conflicts.
 #[derive(Clone, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub(super) enum Source {
     Direct,
     ReExport(usize),
@@ -74,30 +88,12 @@ struct PubUse {
 // reference into them.
 pub(super) fn resolve(
     entrypoint: &Entrypoint,
-    loader: &RootSource,
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &mut HashMap<Qualifier, ModuleInfo>,
 ) -> Result<HashMap<Qualifier, PublicInterface>, Error> {
     let mut public = HashMap::new();
     let mut pub_uses = Vec::new();
     let counter = Entropy::<usize>::new();
-
-    if loader.has_embedded_roots() {
-        for &(name, _) in &FIXED_ROOTS {
-            let path = Qualifier::empty().with(name);
-            let content = modules.get(&path).expect("loaded during discovery");
-
-            seed(
-                &content.items,
-                &path,
-                modules,
-                table,
-                &mut public,
-                &mut pub_uses,
-                &counter,
-            )?;
-        }
-    }
 
     seed(
         &entrypoint.module.items,
@@ -112,6 +108,75 @@ pub(super) fn resolve(
     fixed_point(&mut public, table, &pub_uses)?;
     classify_dead(&public, table, &pub_uses)?;
 
+    Ok(public)
+}
+
+pub(super) fn resolve_prelude(
+    roots: &[(String, RootId)],
+    modules: &HashMap<Qualifier, Rc<Module>>,
+    table: &mut HashMap<Qualifier, ModuleInfo>,
+) -> Result<(HashMap<Qualifier, PublicInterface>, usize), Error> {
+    let mut public = HashMap::new();
+    let mut pub_uses = Vec::new();
+    let counter = Entropy::<usize>::new();
+
+    // Seed the synthetic compilation root as well: its public children are the
+    // explicitly mounted `/sys`, `/syn`, and `/std` roots. Absolute references
+    // resolve through this interface even though it has no source items.
+    seed(
+        &[],
+        &Qualifier::empty(),
+        modules,
+        table,
+        &mut public,
+        &mut pub_uses,
+        &counter,
+    )?;
+
+    for (name, _) in roots {
+        let path = Qualifier::empty().with(name);
+        let content = modules
+            .get(&path)
+            .expect("prelude root loaded during discovery");
+        seed(
+            &content.items,
+            &path,
+            modules,
+            table,
+            &mut public,
+            &mut pub_uses,
+            &counter,
+        )?;
+    }
+
+    fixed_point(&mut public, table, &pub_uses)?;
+    classify_dead(&public, table, &pub_uses)?;
+    Ok((public, counter.count()))
+}
+
+pub(super) fn resolve_with_prelude(
+    entrypoint: &Entrypoint,
+    modules: &HashMap<Qualifier, Rc<Module>>,
+    table: &mut HashMap<Qualifier, ModuleInfo>,
+    prepared: HashMap<Qualifier, PublicInterface>,
+    interface_floor: usize,
+) -> Result<HashMap<Qualifier, PublicInterface>, Error> {
+    let mut public = prepared;
+    let mut pub_uses = Vec::new();
+    let counter = Entropy::<usize>::new();
+    counter.seed(interface_floor);
+
+    seed(
+        &entrypoint.module.items,
+        &Qualifier::empty(),
+        modules,
+        table,
+        &mut public,
+        &mut pub_uses,
+        &counter,
+    )?;
+    fixed_point(&mut public, table, &pub_uses)?;
+    classify_dead(&public, table, &pub_uses)?;
     Ok(public)
 }
 

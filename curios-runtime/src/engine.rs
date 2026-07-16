@@ -40,7 +40,7 @@ pub fn shared_engine() -> &'static Engine {
     &ENGINE
 }
 
-/// The wasmtime type of one host import, derived from its [`WireSignature`] —
+/// The wasmtime type of one host import, derived from its `WireSignature` —
 /// the same derivation `cont`'s wasm emitter applies to the module's import
 /// section, so the two ends cannot drift (and wasmtime validates them against
 /// each other at instantiation). Scalar params cross raw `i32`, scalar results
@@ -49,7 +49,6 @@ pub fn shared_engine() -> &'static Engine {
 /// `bytes_sub_type`/`elems_sub_type` (the flat rope payloads every reference
 /// crosses the boundary as); keep the two ends in sync.
 ///
-/// [`WireSignature`]: curios_abi::WireSignature
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
     let bin_ref = ValType::Ref(RefType::new(
         false,

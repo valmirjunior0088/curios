@@ -3,10 +3,15 @@
 //! parser/printer monad combinators, the slice `suffix_view` re-base laws, the
 //! resolved-module-path `Qualifier` identity, the value types the surface
 //! (`curios-text`) and core (`curios-core`) `Term` representations share
-//! verbatim (`Plicity`, `NumOp`, `Int`, `Flt`), and the `/syn` path-literal
-//! registry both crates reference (`syn.rs`, kept separate from `NumOp` in `num_op.rs`).
+//! verbatim (`Plicity`, `NumOp`, `Int`, `Flt`). Compiler-known `/syn` names
+//! belong to `curios-prelude`, alongside the source declarations they name.
 
 mod macros;
+
+#[cfg(feature = "archive")]
+mod archive;
+#[cfg(feature = "archive")]
+pub use archive::*;
 
 mod entropy;
 pub use entropy::*;
@@ -22,9 +27,6 @@ pub use plicity::*;
 
 mod num_op;
 pub use num_op::*;
-
-mod syn;
-pub use syn::*;
 
 mod int;
 pub use int::*;

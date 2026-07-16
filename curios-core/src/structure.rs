@@ -13,6 +13,10 @@ use {
 /// boundary needs. Elaboration consults it to check a struct literal's fields
 /// and to type a projection; `erase` consults it to lower the fields.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Structure {
     /// The declaration's parameter telescope, e.g. `(A : Type, B : Type)` for
     /// `struct Pair(A : Type, B : Type)`. Ends in `()` like a `TupleType`'s

@@ -8,6 +8,10 @@ use {
 /// after erasure — `Rec` keeps `names`/`items` as parallel vectors so the lowerer
 /// can feed it straight to `lower_letrec_bindings`, exactly like a local `Rec`.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Item {
     Let {
         name: String,
@@ -28,6 +32,11 @@ impl Item {
         }
         .iter()
         .map(String::as_str)
+    }
+
+    /// The names this item declares, for cached-prefix correspondence checks.
+    pub fn declared_names(&self) -> impl Iterator<Item = &str> {
+        self.names()
     }
 
     /// The free names this item's body (or, for a `rec` group, every member)
@@ -63,6 +72,10 @@ impl Item {
 /// `into_cont` then recursed along (BUG.md, §scope/notes). Local `Let`/`Rec` are
 /// unchanged.
 #[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Module {
     pub items: Vec<Item>,
     pub body: Term,

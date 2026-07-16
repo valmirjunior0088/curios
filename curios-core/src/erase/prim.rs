@@ -1,7 +1,7 @@
 use {
     super::erase,
     crate::{Context, Error, Nat, Prim, Subterm, Term, reduce_with, wire_term},
-    curios_base::Int,
+    curios_base::{Grain, Int},
     num_bigint::BigUint,
     num_traits::ToPrimitive,
     std::sync::Arc,
@@ -41,7 +41,7 @@ fn flt_type() -> Term {
 }
 
 fn bin_type() -> Term {
-    prim_type(Prim::BinType(curios_base::Grain::X))
+    prim_type(Prim::BinType(Grain::X))
 }
 
 fn bln_type() -> Term {

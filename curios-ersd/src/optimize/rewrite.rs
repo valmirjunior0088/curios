@@ -19,6 +19,7 @@ use {
         Apply, Argument, CellPrim, Func, HostPrim, Item, Let, Match, Module, NatMatch, Prim, Proj,
         PurePrim, Rec, Subterm, Term, Tuple,
     },
+    curios_base::Grain,
     std::{
         collections::{HashMap, HashSet},
         iter,
@@ -275,8 +276,8 @@ fn copy_pure(prim: &PurePrim) -> PurePrim {
         Nat(value) => Nat(*value),
         Int(value) => Int(*value),
         Flt(value) => Flt(*value),
-        Bin(curios_base::Grain::X, bytes) => Bin(curios_base::Grain::X, bytes.clone()),
-        Bin(curios_base::Grain::B, bits) => Bin(curios_base::Grain::B, bits.clone()),
+        Bin(Grain::X, bytes) => Bin(Grain::X, bytes.clone()),
+        Bin(Grain::B, bits) => Bin(Grain::B, bits.clone()),
         Io(token) => Io(*token),
         NatEql(a, b) => copy!(NatEql, a, b),
         NatNeq(a, b) => copy!(NatNeq, a, b),

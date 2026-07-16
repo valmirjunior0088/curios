@@ -1,7 +1,7 @@
 use {
     super::{BlockName, ClsrName, FuncName, Scalar, ValueName, print_module},
     curios_abi::ForeignFunction,
-    curios_base::printer::run_printer,
+    curios_base::{Grain, PackedBin, printer::run_printer},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
@@ -15,7 +15,7 @@ pub enum Data {
     Nat(u32),
     Int(i32),
     Flt(f32),
-    Bin(curios_base::Grain, curios_base::PackedBin),
+    Bin(Grain, PackedBin),
     Lst(Vec<ValueName>),
     Tpl(Vec<ValueName>),
     Clsr(ClsrName, Vec<ValueName>),
@@ -108,12 +108,12 @@ pub enum Code {
     FltToLeBytes(ValueName),
     FltOfLeBytes(ValueName),
     FltToInt(ValueName),
-    BinLen(curios_base::Grain, ValueName),
-    BinEql(curios_base::Grain, ValueName, ValueName),
-    BinGet(curios_base::Grain, ValueName, ValueName),
-    BinSlice(curios_base::Grain, ValueName, ValueName, ValueName),
-    BinAppend(curios_base::Grain, ValueName, ValueName),
-    BinConcat(curios_base::Grain, Vec<ValueName>),
+    BinLen(Grain, ValueName),
+    BinEql(Grain, ValueName, ValueName),
+    BinGet(Grain, ValueName, ValueName),
+    BinSlice(Grain, ValueName, ValueName, ValueName),
+    BinAppend(Grain, ValueName, ValueName),
+    BinConcat(Grain, Vec<ValueName>),
     LstLen(ValueName),
     LstGet(ValueName, ValueName),
     LstSlice(ValueName, ValueName, ValueName),
@@ -202,12 +202,11 @@ pub enum CallTarget {
 /// as the impure boundary of its enclosing region tree.
 #[derive(Debug, Clone)]
 pub enum HostTarget {
-    /// A store-described host call: `function`'s [`WireSignature`] fixes the
+    /// A store-described host call: `function`'s `WireSignature` fixes the
     /// operand order/types and the resume shape — `resume` takes one block
     /// parameter per signature result (the multi-result records arrive as
     /// parallel block parameters, exactly like the per-op variants did).
     ///
-    /// [`WireSignature`]: curios_abi::WireSignature
     Foreign {
         function: Arc<ForeignFunction>,
         operands: Vec<ValueName>,

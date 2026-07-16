@@ -1,6 +1,6 @@
 use {
     super::PublicInterface,
-    crate::{Error, Name},
+    crate::{Error, Name, SyntaxRegistry},
     curios_abi::RootId,
     curios_base::{Entropy, Qualifier},
     std::collections::{HashMap, HashSet},
@@ -92,6 +92,10 @@ impl FlatItem {
 // for lexical scope during elaboration, and to tell private from absent when a
 // public lookup misses.
 #[derive(Clone, Copy)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 enum ChildInfo {
     Ordinary { vis_pub: bool },
     InductiveConstructors { vis_pub: bool, rep_pub: bool },
@@ -113,9 +117,16 @@ impl ChildInfo {
     }
 }
 
+#[derive(Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub(super) struct ModuleInfo {
     pub(super) root: RootId,
+    #[cfg_attr(feature = "archive", rkyv(with = crate::OrderedMap))]
     children: HashMap<String, ChildInfo>,
+    #[cfg_attr(feature = "archive", rkyv(with = crate::OrderedMap))]
     bindings: HashMap<String, bool>,
 }
 
@@ -225,6 +236,7 @@ pub(super) struct Context<'a> {
     // `curios_core::Scope`'s `PartialEq` compares binder *names*, so term-equality in
     // tests must be order-stable.
     binders: &'a Entropy,
+    syntax: &'a SyntaxRegistry,
 }
 
 impl<'a> Context<'a> {
@@ -234,6 +246,7 @@ impl<'a> Context<'a> {
         root: RootId,
         metavars: &'a Entropy,
         binders: &'a Entropy,
+        syntax: &'a SyntaxRegistry,
     ) -> Context<'a> {
         Context {
             prefix: Qualifier::empty(),
@@ -244,6 +257,7 @@ impl<'a> Context<'a> {
             bindings: HashMap::new(),
             metavars,
             binders,
+            syntax,
         }
     }
 
@@ -257,6 +271,7 @@ impl<'a> Context<'a> {
             bindings: HashMap::new(),
             metavars: self.metavars,
             binders: self.binders,
+            syntax: self.syntax,
         }
     }
 
@@ -289,6 +304,10 @@ impl<'a> Context<'a> {
     /// names or qualified references.
     pub(super) fn fresh_binder(&self) -> String {
         format!("#{}", self.binders.fresh())
+    }
+
+    pub(super) fn syntax(&self) -> SyntaxRegistry {
+        *self.syntax
     }
 
     pub(super) fn prefixed(&self, label: &str) -> Qualifier {

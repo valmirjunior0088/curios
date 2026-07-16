@@ -8,6 +8,10 @@ description = "Foundational utilities shared across the curios pipeline: spans, 
 [lints]
 workspace = true
 
+[features]
+archive = ["dep:rkyv"]
+
 [dependencies]
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
+rkyv = { workspace = true, optional = true }

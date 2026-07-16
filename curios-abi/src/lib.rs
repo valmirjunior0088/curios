@@ -15,6 +15,11 @@
 mod codes;
 pub use codes::*;
 
+#[cfg(feature = "archive")]
+mod archive;
+#[cfg(feature = "archive")]
+pub use archive::*;
+
 mod host;
 pub use host::*;
 

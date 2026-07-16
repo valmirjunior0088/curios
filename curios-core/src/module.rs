@@ -18,6 +18,10 @@ use {
 /// recursive member and likewise uses the group's export names; the
 /// authoritative recursive type and body remain in [`RecItem::group`].
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Definition {
     pub name: String,
     /// This definition's declaring module — `name`'s qualifier prefix,
@@ -40,6 +44,10 @@ pub struct Definition {
 /// member's type and body live only in [`RecItem::group`], scoped over every
 /// export in the group.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub(crate) struct RecDefinition {
     pub name: String,
     pub island: Qualifier,
@@ -51,6 +59,10 @@ pub(crate) struct RecDefinition {
 /// separate preserves the module's flat architecture without retaining a
 /// second, free-name copy of each recursive type and body.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct RecItem {
     pub(crate) definitions: Vec<RecDefinition>,
     pub(crate) group: RecGroup,
@@ -124,9 +136,27 @@ impl Definition {
 /// A top-level item: a single `let` definition, or a `rec` group of
 /// mutually-recursive definitions (which may reference each other by `name`).
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Item {
     Let(Definition),
     Rec(RecItem),
+}
+
+impl Item {
+    /// The names exported by this top-level item, in declaration order.
+    pub fn declared_names(&self) -> Vec<&str> {
+        match self {
+            Item::Let(definition) => vec![definition.name.as_str()],
+            Item::Rec(rec) => rec
+                .definitions
+                .iter()
+                .map(|definition| definition.name.as_str())
+                .collect(),
+        }
+    }
 }
 
 /// The whole program as a *flat* list of top-level `items`, the entrypoint
@@ -139,6 +169,10 @@ pub enum Item {
 /// prelude depth (BUG.md). `Subterm::Let`/`Rec` remain for genuine *local*,
 /// in-expression bindings, which are shallow.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Module {
     pub items: Vec<Item>,
     /// Inductive declarations' registry entries, keyed by the type's qualified

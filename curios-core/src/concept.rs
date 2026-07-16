@@ -23,6 +23,10 @@ use {
 
 /// One concept declaration's registry entry.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Concept {
     /// The declaration's parameter telescope, e.g. `(A : Type)` for
     /// `concept Show(A : Type)`. Ends in `()` like a `Structure`'s.
@@ -43,6 +47,10 @@ pub struct Concept {
 /// that definition's elaborated type `∀ tele. C(t₁, …)`. Resolution
 /// instantiates the telescope fresh at every use.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub(crate) struct Witness {
     pub name: String,
     pub signature: Term,
@@ -58,6 +66,10 @@ pub(crate) struct Witness {
 /// parameter, in declaration order. Displays bare for arity one
 /// (`Nat`) and as a tuple otherwise (`(Nat, Str)`).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct WitnessKey(pub Vec<HeadKey>);
 
 impl std::fmt::Display for WitnessKey {
@@ -82,6 +94,10 @@ impl std::fmt::Display for WitnessKey {
 /// qualified name, or a primitive type constructor. Parameters past the heads
 /// are checked by unification at resolution time, not by the key.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum HeadKey {
     Nominal(String),
     Nat,

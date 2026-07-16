@@ -11,7 +11,15 @@
 mod tests;
 
 /// A resolved module path: the segment sequence from the module root (see the module docs above for why it lives in this crate). The empty qualifier *is* the root, not a degenerate case.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(
+    feature = "archive",
+    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
+)]
 pub struct Qualifier {
     segments: Vec<String>,
 }

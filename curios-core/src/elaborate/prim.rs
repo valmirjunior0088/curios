@@ -1,6 +1,7 @@
 use {
     super::{Context, Error, ImplicitOrigin, Mode, elaborate, expect},
     crate::{Prim, Subterm, Term, reduce_with, wire_term},
+    curios_base::Grain,
     std::sync::Arc,
 };
 
@@ -41,10 +42,10 @@ fn unary(
 fn infer_bin(context: &mut Context, bin: &Term) -> Result<Term, Error> {
     let (bin, actual) = elaborate(context, bin, Mode::Infer)?;
     match &*reduce_with(context, &actual)? {
-        Subterm::Prim(Prim::BinType(curios_base::Grain::X)) => Ok(bin),
+        Subterm::Prim(Prim::BinType(Grain::X)) => Ok(bin),
         other => Err(Error::type_mismatch(
             other.clone(),
-            Subterm::Prim(Prim::BinType(curios_base::Grain::X)),
+            Subterm::Prim(Prim::BinType(Grain::X)),
         )),
     }
 }
@@ -81,8 +82,8 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
     let int_type: Term = Subterm::Prim(Prim::IntType).into();
     let flt_type: Term = Subterm::Prim(Prim::FltType).into();
     let bln_type: Term = Subterm::Prim(Prim::BlnType).into();
-    let bin_type: Term = Subterm::Prim(Prim::BinType(curios_base::Grain::X)).into();
-    let bin_b_type: Term = Subterm::Prim(Prim::BinType(curios_base::Grain::B)).into();
+    let bin_type: Term = Subterm::Prim(Prim::BinType(Grain::X)).into();
+    let bin_b_type: Term = Subterm::Prim(Prim::BinType(Grain::B)).into();
     let io_type: Term = Subterm::Prim(Prim::IoType).into();
 
     Ok(match prim {
@@ -177,85 +178,76 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::IntToFlt(i) => unary(context, i, &int_type, flt_type.clone(), Prim::IntToFlt)?,
         Prim::FltToNat(i) => unary(context, i, &flt_type, nat_type.clone(), Prim::FltToNat)?,
         Prim::FltToInt(i) => unary(context, i, &flt_type, int_type.clone(), Prim::FltToInt)?,
-        Prim::BinType(curios_base::Grain::X) => (prim.clone(), Term::type_()),
-        Prim::Bin(curios_base::Grain::X, _) => (prim.clone(), bin_type),
-        Prim::BinLen(curios_base::Grain::X, bin) => {
+        Prim::BinType(Grain::X) => (prim.clone(), Term::type_()),
+        Prim::Bin(Grain::X, _) => (prim.clone(), bin_type),
+        Prim::BinLen(Grain::X, bin) => {
             let bin = infer_bin(context, bin)?;
-            (Prim::BinLen(curios_base::Grain::X, bin), nat_type)
+            (Prim::BinLen(Grain::X, bin), nat_type)
         }
-        Prim::BinEql(curios_base::Grain::X, left, right) => {
+        Prim::BinEql(Grain::X, left, right) => {
             let left = elaborate(context, left, Mode::Check(bin_type.clone()))?.0;
             let right = elaborate(context, right, Mode::Check(bin_type))?.0;
-            (Prim::BinEql(curios_base::Grain::X, left, right), bln_type)
+            (Prim::BinEql(Grain::X, left, right), bln_type)
         }
-        Prim::BinGet(curios_base::Grain::X, bin, index) => {
+        Prim::BinGet(Grain::X, bin, index) => {
             let bin = infer_bin(context, bin)?;
             let index = elaborate(context, index, Mode::Check(nat_type.clone()))?.0;
             (
-                Prim::BinGet(curios_base::Grain::X, bin, index),
+                Prim::BinGet(Grain::X, bin, index),
                 Term::prim(Prim::ByteType),
             )
         }
-        Prim::BinSlice(curios_base::Grain::X, bin, start, end) => {
+        Prim::BinSlice(Grain::X, bin, start, end) => {
             let bin = infer_bin(context, bin)?;
             let start = elaborate(context, start, Mode::Check(nat_type.clone()))?.0;
             let end = elaborate(context, end, Mode::Check(nat_type))?.0;
-            (
-                Prim::BinSlice(curios_base::Grain::X, bin, start, end),
-                bin_type,
-            )
+            (Prim::BinSlice(Grain::X, bin, start, end), bin_type)
         }
-        Prim::BinAppend(curios_base::Grain::X, bin, byte) => {
+        Prim::BinAppend(Grain::X, bin, byte) => {
             let bin = infer_bin(context, bin)?;
             let byte = elaborate(context, byte, Mode::Check(Term::prim(Prim::ByteType)))?.0;
-            (Prim::BinAppend(curios_base::Grain::X, bin, byte), bin_type)
+            (Prim::BinAppend(Grain::X, bin, byte), bin_type)
         }
-        Prim::BinConcat(curios_base::Grain::X, operands) => {
+        Prim::BinConcat(Grain::X, operands) => {
             let mut elaborated = Vec::with_capacity(operands.len());
             for operand in operands {
                 elaborated.push(elaborate(context, operand, Mode::Check(bin_type.clone()))?.0);
             }
-            (Prim::BinConcat(curios_base::Grain::X, elaborated), bin_type)
+            (Prim::BinConcat(Grain::X, elaborated), bin_type)
         }
-        Prim::BinType(curios_base::Grain::B) => (prim.clone(), Term::type_()),
-        Prim::Bin(curios_base::Grain::B, _) => (prim.clone(), bin_b_type.clone()),
-        Prim::BinLen(curios_base::Grain::B, bin) => {
+        Prim::BinType(Grain::B) => (prim.clone(), Term::type_()),
+        Prim::Bin(Grain::B, _) => (prim.clone(), bin_b_type.clone()),
+        Prim::BinLen(Grain::B, bin) => {
             let bin = elaborate(context, bin, Mode::Check(bin_b_type.clone()))?.0;
-            (Prim::BinLen(curios_base::Grain::B, bin), nat_type)
+            (Prim::BinLen(Grain::B, bin), nat_type)
         }
-        Prim::BinEql(curios_base::Grain::B, left, right) => {
+        Prim::BinEql(Grain::B, left, right) => {
             let left = elaborate(context, left, Mode::Check(bin_b_type.clone()))?.0;
             let right = elaborate(context, right, Mode::Check(bin_b_type))?.0;
-            (Prim::BinEql(curios_base::Grain::B, left, right), bln_type)
+            (Prim::BinEql(Grain::B, left, right), bln_type)
         }
-        Prim::BinGet(curios_base::Grain::B, bin, index) => {
+        Prim::BinGet(Grain::B, bin, index) => {
             let bin = elaborate(context, bin, Mode::Check(bin_b_type))?.0;
             let index = elaborate(context, index, Mode::Check(nat_type.clone()))?.0;
-            (Prim::BinGet(curios_base::Grain::B, bin, index), bln_type)
+            (Prim::BinGet(Grain::B, bin, index), bln_type)
         }
-        Prim::BinSlice(curios_base::Grain::B, bin, start, end) => {
+        Prim::BinSlice(Grain::B, bin, start, end) => {
             let bin = elaborate(context, bin, Mode::Check(bin_b_type.clone()))?.0;
             let start = elaborate(context, start, Mode::Check(nat_type.clone()))?.0;
             let end = elaborate(context, end, Mode::Check(nat_type))?.0;
-            (
-                Prim::BinSlice(curios_base::Grain::B, bin, start, end),
-                bin_b_type,
-            )
+            (Prim::BinSlice(Grain::B, bin, start, end), bin_b_type)
         }
-        Prim::BinAppend(curios_base::Grain::B, bin, bit) => {
+        Prim::BinAppend(Grain::B, bin, bit) => {
             let bin = elaborate(context, bin, Mode::Check(bin_b_type.clone()))?.0;
             let bit = elaborate(context, bit, Mode::Check(bln_type))?.0;
-            (Prim::BinAppend(curios_base::Grain::B, bin, bit), bin_b_type)
+            (Prim::BinAppend(Grain::B, bin, bit), bin_b_type)
         }
-        Prim::BinConcat(curios_base::Grain::B, operands) => {
+        Prim::BinConcat(Grain::B, operands) => {
             let mut elaborated = Vec::with_capacity(operands.len());
             for operand in operands {
                 elaborated.push(elaborate(context, operand, Mode::Check(bin_b_type.clone()))?.0);
             }
-            (
-                Prim::BinConcat(curios_base::Grain::B, elaborated),
-                bin_b_type,
-            )
+            (Prim::BinConcat(Grain::B, elaborated), bin_b_type)
         }
         Prim::LstType(elem) => {
             let elem = elaborate(context, elem, Mode::Check(Term::type_()))?.0;

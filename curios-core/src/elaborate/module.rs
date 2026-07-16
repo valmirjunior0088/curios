@@ -451,6 +451,22 @@ pub fn elaborate_module(
     Ok((module, body_type))
 }
 
+/// Elaborate and zonk a module and its inferred body type together. Artifact
+/// construction uses this paired operation so the cached module and body type
+/// can never come from different metavariable stores.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
+pub fn elaborate_and_zonk_module(
+    context: &mut Context,
+    module: &Module,
+    metavar_floor: usize,
+    mode: Mode,
+) -> Result<(Module, Term), Error> {
+    let (module, body_type) = elaborate_module(context, module, metavar_floor, mode)?;
+    let module = zonk_module(context, &module)?;
+    let body_type = zonk(context, &body_type)?;
+    Ok((module, body_type))
+}
+
 /// Elaborate a [`Module`] whose `sys`/`syn`/`std` prelude prefix is already
 /// elaborated, reusing the cached result instead of re-type-checking it.
 ///

@@ -38,6 +38,17 @@ fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, Str
 }
 
 #[test]
+fn repeated_compilation_restores_an_unmutated_ersd_prefix() {
+    let source = "/std/Nat/add(20, 22)";
+    let first = compile(source, None).unwrap();
+    let second = compile(source, None).unwrap();
+    assert_eq!(
+        curios_wasm::to_bytes(&first),
+        curios_wasm::to_bytes(&second)
+    );
+}
+
+#[test]
 fn foreign_declaration_produces_a_wasm_import() {
     // Must actually call `frobnicate` — an unreferenced declaration is
     // pruned by `curios_ersd::optimize` before codegen ever sees it.

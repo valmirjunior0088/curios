@@ -10,7 +10,7 @@ use {
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{
-        Plicity,
+        Grain, Plicity,
         printer::{Printer, flat, indent, pure, sep_flat},
     },
     num_bigint::BigUint,
@@ -311,8 +311,8 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer<'static> {
         MatchPattern::Bin(BinPattern::End(grain)) => pure(format!(
             "{}\\",
             match grain {
-                curios_base::Grain::B => "b",
-                curios_base::Grain::X => "x",
+                Grain::B => "b",
+                Grain::X => "x",
             }
         )),
         MatchPattern::Bin(BinPattern::Atom {
@@ -322,8 +322,8 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer<'static> {
             ih_label,
         }) => flat([
             pure(match grain {
-                curios_base::Grain::B => "b\\",
-                curios_base::Grain::X => "x\\",
+                Grain::B => "b\\",
+                Grain::X => "x\\",
             }),
             pure(head_label),
             pure("\\.."),
@@ -486,8 +486,8 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::FltToNat(operand) => print_prim_call("Flt.to_nat", vec![operand]),
         Prim::FltToInt(operand) => print_prim_call("Flt.to_int", vec![operand]),
         Prim::BinType(grain) => pure(match grain {
-            curios_base::Grain::B => "Bits",
-            curios_base::Grain::X => "Bytes",
+            Grain::B => "Bits",
+            Grain::X => "Bytes",
         }),
         Prim::Bin(grain, segments) => flat([
             pure(format!("{grain:?}").to_lowercase()),
@@ -496,11 +496,11 @@ fn print_prim(prim: Prim) -> Printer<'static> {
                 false => flat(segments.into_iter().map(move |segment| {
                     match segment {
                         BinSegment::Bytes(atoms) => pure(match grain {
-                            curios_base::Grain::B => atoms
+                            Grain::B => atoms
                                 .iter()
                                 .map(|bit| format!("\\{bit}"))
                                 .collect::<String>(),
-                            curios_base::Grain::X => atoms
+                            Grain::X => atoms
                                 .iter()
                                 .map(|byte| format!("\\{byte:02x}"))
                                 .collect::<String>(),
@@ -516,8 +516,8 @@ fn print_prim(prim: Prim) -> Printer<'static> {
             format!(
                 "{}.len",
                 match grain {
-                    curios_base::Grain::B => "Bits",
-                    curios_base::Grain::X => "Bytes",
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
                 }
             ),
             vec![operand],
@@ -526,8 +526,8 @@ fn print_prim(prim: Prim) -> Printer<'static> {
             format!(
                 "{}.eql",
                 match grain {
-                    curios_base::Grain::B => "Bits",
-                    curios_base::Grain::X => "Bytes",
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
                 }
             ),
             vec![left, right],
@@ -536,8 +536,8 @@ fn print_prim(prim: Prim) -> Printer<'static> {
             format!(
                 "{}.get",
                 match grain {
-                    curios_base::Grain::B => "Bits",
-                    curios_base::Grain::X => "Bytes",
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
                 }
             ),
             vec![bin, index],
@@ -546,8 +546,8 @@ fn print_prim(prim: Prim) -> Printer<'static> {
             format!(
                 "{}.slice",
                 match grain {
-                    curios_base::Grain::B => "Bits",
-                    curios_base::Grain::X => "Bytes",
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
                 }
             ),
             vec![bin, start, end],
@@ -556,8 +556,8 @@ fn print_prim(prim: Prim) -> Printer<'static> {
             format!(
                 "{}.append",
                 match grain {
-                    curios_base::Grain::B => "Bits",
-                    curios_base::Grain::X => "Bytes",
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
                 }
             ),
             vec![bin, atom],
@@ -566,8 +566,8 @@ fn print_prim(prim: Prim) -> Printer<'static> {
             format!(
                 "{}.concat",
                 match grain {
-                    curios_base::Grain::B => "Bits",
-                    curios_base::Grain::X => "Bytes",
+                    Grain::B => "Bits",
+                    Grain::X => "Bytes",
                 }
             ),
             vec![left, right],

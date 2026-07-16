@@ -8,6 +8,7 @@ use {
         MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, RecItem, Struct, StructType, Structure,
         Subterm, Term, Tuple, TupleType, Variant,
     },
+    curios_base::Grain,
     std::sync::Arc,
 };
 
@@ -487,10 +488,10 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         | Prim::Int(_)
         | Prim::FltType
         | Prim::Flt(_)
-        | Prim::BinType(curios_base::Grain::X)
-        | Prim::Bin(curios_base::Grain::X, _)
-        | Prim::BinType(curios_base::Grain::B)
-        | Prim::Bin(curios_base::Grain::B, _)
+        | Prim::BinType(Grain::X)
+        | Prim::Bin(Grain::X, _)
+        | Prim::BinType(Grain::B)
+        | Prim::Bin(Grain::B, _)
         | Prim::IoType
         | Prim::Io(_) => prim.clone(),
 
@@ -577,60 +578,40 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::FltToNat(t) => Prim::FltToNat(zonk_term(context, t)?),
         Prim::FltToInt(t) => Prim::FltToInt(zonk_term(context, t)?),
 
-        Prim::BinLen(curios_base::Grain::X, t) => {
-            Prim::BinLen(curios_base::Grain::X, zonk_term(context, t)?)
+        Prim::BinLen(Grain::X, t) => Prim::BinLen(Grain::X, zonk_term(context, t)?),
+        Prim::BinEql(Grain::X, a, b) => {
+            Prim::BinEql(Grain::X, zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Prim::BinEql(curios_base::Grain::X, a, b) => Prim::BinEql(
-            curios_base::Grain::X,
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::BinGet(curios_base::Grain::X, a, b) => Prim::BinGet(
-            curios_base::Grain::X,
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::BinAppend(curios_base::Grain::X, a, b) => Prim::BinAppend(
-            curios_base::Grain::X,
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::BinSlice(curios_base::Grain::X, a, b, c) => Prim::BinSlice(
-            curios_base::Grain::X,
+        Prim::BinGet(Grain::X, a, b) => {
+            Prim::BinGet(Grain::X, zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Prim::BinAppend(Grain::X, a, b) => {
+            Prim::BinAppend(Grain::X, zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Prim::BinSlice(Grain::X, a, b, c) => Prim::BinSlice(
+            Grain::X,
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
         ),
-        Prim::BinConcat(curios_base::Grain::X, terms) => {
-            Prim::BinConcat(curios_base::Grain::X, zonk_terms(context, terms)?)
+        Prim::BinConcat(Grain::X, terms) => Prim::BinConcat(Grain::X, zonk_terms(context, terms)?),
+        Prim::BinLen(Grain::B, t) => Prim::BinLen(Grain::B, zonk_term(context, t)?),
+        Prim::BinEql(Grain::B, a, b) => {
+            Prim::BinEql(Grain::B, zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Prim::BinLen(curios_base::Grain::B, t) => {
-            Prim::BinLen(curios_base::Grain::B, zonk_term(context, t)?)
+        Prim::BinGet(Grain::B, a, b) => {
+            Prim::BinGet(Grain::B, zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Prim::BinEql(curios_base::Grain::B, a, b) => Prim::BinEql(
-            curios_base::Grain::B,
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::BinGet(curios_base::Grain::B, a, b) => Prim::BinGet(
-            curios_base::Grain::B,
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::BinAppend(curios_base::Grain::B, a, b) => Prim::BinAppend(
-            curios_base::Grain::B,
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-        ),
-        Prim::BinSlice(curios_base::Grain::B, a, b, c) => Prim::BinSlice(
-            curios_base::Grain::B,
+        Prim::BinAppend(Grain::B, a, b) => {
+            Prim::BinAppend(Grain::B, zonk_term(context, a)?, zonk_term(context, b)?)
+        }
+        Prim::BinSlice(Grain::B, a, b, c) => Prim::BinSlice(
+            Grain::B,
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
         ),
-        Prim::BinConcat(curios_base::Grain::B, terms) => {
-            Prim::BinConcat(curios_base::Grain::B, zonk_terms(context, terms)?)
-        }
+        Prim::BinConcat(Grain::B, terms) => Prim::BinConcat(Grain::B, zonk_terms(context, terms)?),
 
         Prim::LstType(t) => Prim::LstType(zonk_term(context, t)?),
         Prim::Lst(elems) => Prim::Lst(zonk_terms(context, elems)?),

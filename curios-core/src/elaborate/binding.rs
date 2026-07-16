@@ -317,7 +317,7 @@ impl Infix {
 ///
 /// Dispatch is then **one path**: every operator, `&&`/`||` included,
 /// desugars to a projection of a witness of its `/syn` concept
-/// ([`NumOp::concept_field`](curios_base::NumOp::concept_field)) — `a + b` ≙
+/// ([`NumOp::concept_field`](NumOp::concept_field)) — `a + b` ≙
 /// `Add/add(a, b)`, primitives included,
 /// resolved by the same engine that fills `use` slots (so `no witness of
 /// Add(Point)` is the single error vocabulary, and what an operator means at

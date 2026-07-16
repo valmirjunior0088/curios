@@ -484,8 +484,8 @@ fn convert_prim_lst_rejects_different_lengths() {
 fn convert_prim_bin_type_is_equal_to_itself() {
     let mut context = context();
 
-    let this = Subterm::Prim(Prim::BinType(curios_base::Grain::X)).into();
-    let that = Subterm::Prim(Prim::BinType(curios_base::Grain::X)).into();
+    let this = Subterm::Prim(Prim::BinType(Grain::X)).into();
+    let that = Subterm::Prim(Prim::BinType(Grain::X)).into();
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
@@ -497,16 +497,8 @@ fn convert_prim_bin_literal_compares_bytes() {
     assert_eq!(
         conv(
             &mut context,
-            &Subterm::Prim(Prim::Bin(
-                curios_base::Grain::X,
-                PackedBin::from_bytes(vec![1, 2])
-            ))
-            .into(),
-            &Subterm::Prim(Prim::Bin(
-                curios_base::Grain::X,
-                PackedBin::from_bytes(vec![1, 2])
-            ))
-            .into(),
+            &Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))).into(),
+            &Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))).into(),
         ),
         Ok(true)
     );
@@ -514,16 +506,8 @@ fn convert_prim_bin_literal_compares_bytes() {
     assert_eq!(
         conv(
             &mut context,
-            &Subterm::Prim(Prim::Bin(
-                curios_base::Grain::X,
-                PackedBin::from_bytes(vec![1, 2])
-            ))
-            .into(),
-            &Subterm::Prim(Prim::Bin(
-                curios_base::Grain::X,
-                PackedBin::from_bytes(vec![1, 3])
-            ))
-            .into(),
+            &Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 2]))).into(),
+            &Subterm::Prim(Prim::Bin(Grain::X, PackedBin::from_bytes(vec![1, 3]))).into(),
         ),
         Ok(false)
     );

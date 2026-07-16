@@ -4,6 +4,7 @@ use {
         TupleTypeParam, print_module_items, print_term,
     },
     crate::parse::{parse_term, parse_top_item, parse_whitespace},
+    curios_abi::WireSignature,
     curios_base::{
         Plicity, Source, Span,
         parser::{ParserError, lazy, many0, run_parser, take_eof},
@@ -68,14 +69,14 @@ pub struct TopLet {
 
 /// A `foreign` declaration: a name and a wire signature, bound to a
 /// host-provided implementation at link time rather than a Curios definition.
-/// `signature` is parsed directly as a [`WireSignature`](curios_abi::WireSignature) (`(Nat, Bin) -> Nat`)
+/// `signature` is parsed directly as a [`WireSignature`] (`(Nat, Bin) -> Nat`)
 /// — a closed grammar of the six wire shapes, not an ordinary Curios type —
 /// so there is no name resolution to do and no `= body` form.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopForeign {
     pub vis_pub: bool,
     pub label: String,
-    pub signature: curios_abi::WireSignature,
+    pub signature: WireSignature,
 }
 
 /// One payload binder of an `induct` case. The name is optional (`success(A)`
@@ -260,7 +261,11 @@ impl Module {
         )
     }
 
-    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
+    /// Read and parse a standalone module while retaining its source path for
+    /// diagnostics. The prelude artifact builder uses this for `/syn` and
+    /// `/std`; ordinary compilation reaches file-backed modules through
+    /// [`RootSource`](crate::RootSource).
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
         let path = path.as_ref();
         let source = Source::read(path).map_err(|error| LoadError::Read {
             path: path.into(),
@@ -323,7 +328,7 @@ impl Entrypoint {
         )
     }
 
-    /// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression). The file-path counterpart of the `FromStr` impl below, distinguished by keeping the real path in the [`Source`](curios_base::Source) so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`](crate::RootSource) the caller pairs it with.
+    /// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression). The file-path counterpart of the `FromStr` impl below, distinguished by keeping the real path in the [`Source`](Source) so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`](crate::RootSource) the caller pairs it with.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
         let path = path.as_ref();
         let source = Source::read(path).map_err(|error| LoadError::Read {

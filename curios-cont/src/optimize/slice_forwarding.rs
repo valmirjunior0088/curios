@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_base::{Carrier, Entropy, SuffixRead},
+    curios_base::{Carrier, Entropy, Grain, SuffixRead},
     std::collections::HashMap,
 };
 
@@ -14,7 +14,7 @@ use {
 /// consumes its tail copies an `i`-long suffix on iteration `i` — `Θ(n²)` over the
 /// whole walk. But a slice is only ever *read* through the three suffix-view
 /// primitives, each reading through to the base in `O(1)` — see the canonical
-/// re-base laws on [`Carrier`](curios_base::Carrier).
+/// re-base laws on [`Carrier`](Carrier).
 ///
 /// Rewriting each consumer this way drops the slice's last use; the now-dead
 /// pure slice is reclaimed by the dead-code sweep that follows, turning the
@@ -141,15 +141,13 @@ fn forward_eval(name: &ValueName, code: Code, ctx: &mut ForwardCtx) -> Value {
 fn classify(code: &Code) -> Option<(ValueName, Carrier, SuffixRead<ValueName>)> {
     Some(match code {
         Code::LstLen(operand) => (operand.clone(), Carrier::Lst, SuffixRead::Len),
-        Code::BinLen(curios_base::Grain::X, operand) => {
-            (operand.clone(), Carrier::Bin, SuffixRead::Len)
-        }
+        Code::BinLen(Grain::X, operand) => (operand.clone(), Carrier::Bin, SuffixRead::Len),
         Code::LstGet(operand, index) => (
             operand.clone(),
             Carrier::Lst,
             SuffixRead::Get(index.clone()),
         ),
-        Code::BinGet(curios_base::Grain::X, operand, index) => (
+        Code::BinGet(Grain::X, operand, index) => (
             operand.clone(),
             Carrier::Bin,
             SuffixRead::Get(index.clone()),
@@ -159,7 +157,7 @@ fn classify(code: &Code) -> Option<(ValueName, Carrier, SuffixRead<ValueName>)> 
             Carrier::Lst,
             SuffixRead::Slice(start.clone(), end.clone()),
         ),
-        Code::BinSlice(curios_base::Grain::X, operand, start, end) => (
+        Code::BinSlice(Grain::X, operand, start, end) => (
             operand.clone(),
             Carrier::Bin,
             SuffixRead::Slice(start.clone(), end.clone()),
@@ -215,14 +213,14 @@ fn rebased_index(base: &ValueName, index: &ValueName, ctx: &mut ForwardCtx) -> V
 fn rebuild_slice(carrier: Carrier, base: ValueName, start: ValueName, end: ValueName) -> Code {
     match carrier {
         Carrier::Lst => Code::LstSlice(base, start, end),
-        Carrier::Bin => Code::BinSlice(curios_base::Grain::X, base, start, end),
+        Carrier::Bin => Code::BinSlice(Grain::X, base, start, end),
     }
 }
 
 fn rebuild_get(carrier: Carrier, base: ValueName, index: ValueName) -> Code {
     match carrier {
         Carrier::Lst => Code::LstGet(base, index),
-        Carrier::Bin => Code::BinGet(curios_base::Grain::X, base, index),
+        Carrier::Bin => Code::BinGet(Grain::X, base, index),
     }
 }
 
@@ -345,16 +343,13 @@ mod tests {
         // Carriers never cross in well-typed code; guard against it anyway.
         let mut module = module_with(vec![
             (v("w"), Value::Eval(Code::LstSlice(v("xs"), v("s"), v("e")))),
-            (
-                v("x"),
-                Value::Eval(Code::BinGet(curios_base::Grain::X, v("w"), v("j"))),
-            ),
+            (v("x"), Value::Eval(Code::BinGet(Grain::X, v("w"), v("j")))),
         ]);
 
         forward_slices(&mut module);
 
         match &body(&module).last().unwrap().1 {
-            Value::Eval(Code::BinGet(curios_base::Grain::X, operand, index)) => {
+            Value::Eval(Code::BinGet(Grain::X, operand, index)) => {
                 assert_eq!((operand, index), (&v("w"), &v("j")));
             }
             other => panic!("expected the bin get to be left alone, got {other:?}"),

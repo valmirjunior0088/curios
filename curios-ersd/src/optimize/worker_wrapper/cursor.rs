@@ -8,7 +8,7 @@
 //! materialised. A recursion whose buffer parameter `b` is recursed only as a
 //! drop-front suffix `slice(b, k, len b)` and otherwise read only through `len b`,
 //! `get b i`, and `slice b p q` (the `suffix_view` laws — see
-//! [`Carrier`](curios_base::Carrier)) can thread an integer `offset` over the
+//! [`Carrier`](Carrier)) can thread an integer `offset` over the
 //! original buffer instead:
 //!
 //! ```text
@@ -30,7 +30,7 @@ use {
         Apply, Argument, Func, Prim, PurePrim, Subterm, Term,
         optimize::{CallGraph, rewrite},
     },
-    curios_base::Carrier,
+    curios_base::{Carrier, Grain},
     std::mem,
 };
 
@@ -129,13 +129,13 @@ fn legible(term: &Term, name: &str, base: &str, index: usize, carrier: Carrier) 
         // bounds must themselves be legible.
         subterm if is_base_len(subterm, base, carrier) => true,
         Subterm::Prim(Prim::Pure(prim)) => match (carrier, prim) {
-            (Carrier::Bin, PurePrim::BinGet(curios_base::Grain::X, buffer, place))
+            (Carrier::Bin, PurePrim::BinGet(Grain::X, buffer, place))
             | (Carrier::Lst, PurePrim::LstGet(buffer, place))
                 if is_named(buffer, base) =>
             {
                 legible(place, name, base, index, carrier)
             }
-            (Carrier::Bin, PurePrim::BinSlice(curios_base::Grain::X, buffer, from, upto))
+            (Carrier::Bin, PurePrim::BinSlice(Grain::X, buffer, from, upto))
             | (Carrier::Lst, PurePrim::LstSlice(buffer, from, upto))
                 if is_named(buffer, base) =>
             {
@@ -186,7 +186,7 @@ fn rewrite(term: &mut Term, ctx: &Lower, base: &str, offset: &str, index: usize,
         }
         Subterm::Prim(Prim::Pure(prim)) => match (carrier, &mut *prim) {
             // `get base i` becomes `get base (offset + i)`.
-            (Carrier::Bin, PurePrim::BinGet(curios_base::Grain::X, buffer, place))
+            (Carrier::Bin, PurePrim::BinGet(Grain::X, buffer, place))
             | (Carrier::Lst, PurePrim::LstGet(buffer, place))
                 if is_named(buffer, base) =>
             {
@@ -194,7 +194,7 @@ fn rewrite(term: &mut Term, ctx: &Lower, base: &str, offset: &str, index: usize,
                 shift(place, offset);
             }
             // `slice base p q` becomes `slice base (offset + p) (offset + q)`.
-            (Carrier::Bin, PurePrim::BinSlice(curios_base::Grain::X, buffer, from, upto))
+            (Carrier::Bin, PurePrim::BinSlice(Grain::X, buffer, from, upto))
             | (Carrier::Lst, PurePrim::LstSlice(buffer, from, upto))
                 if is_named(buffer, base) =>
             {
@@ -267,10 +267,7 @@ fn shift(place: &mut Term, offset: &str) {
 /// one buffer read with no further operands.
 fn is_base_len(subterm: &Subterm, base: &str, carrier: Carrier) -> bool {
     match (carrier, subterm) {
-        (
-            Carrier::Bin,
-            Subterm::Prim(Prim::Pure(PurePrim::BinLen(curios_base::Grain::X, buffer))),
-        )
+        (Carrier::Bin, Subterm::Prim(Prim::Pure(PurePrim::BinLen(Grain::X, buffer))))
         | (Carrier::Lst, Subterm::Prim(Prim::Pure(PurePrim::LstLen(buffer)))) => {
             is_named(buffer, base)
         }
@@ -281,9 +278,7 @@ fn is_base_len(subterm: &Subterm, base: &str, carrier: Carrier) -> bool {
 /// The carrier of a `slice` term, or `None` if it is not a slice.
 fn slice_carrier(term: &Term) -> Option<Carrier> {
     match term.as_subterm() {
-        Subterm::Prim(Prim::Pure(PurePrim::BinSlice(curios_base::Grain::X, ..))) => {
-            Some(Carrier::Bin)
-        }
+        Subterm::Prim(Prim::Pure(PurePrim::BinSlice(Grain::X, ..))) => Some(Carrier::Bin),
         Subterm::Prim(Prim::Pure(PurePrim::LstSlice(..))) => Some(Carrier::Lst),
         _ => None,
     }
@@ -294,7 +289,7 @@ fn is_drop_front(term: &Term, base: &str, carrier: Carrier) -> bool {
     match (carrier, term.as_subterm()) {
         (
             Carrier::Bin,
-            Subterm::Prim(Prim::Pure(PurePrim::BinSlice(curios_base::Grain::X, buffer, _, upto))),
+            Subterm::Prim(Prim::Pure(PurePrim::BinSlice(Grain::X, buffer, _, upto))),
         )
         | (Carrier::Lst, Subterm::Prim(Prim::Pure(PurePrim::LstSlice(buffer, _, upto)))) => {
             is_named(buffer, base) && is_base_len(upto.as_subterm(), base, carrier)
@@ -306,7 +301,7 @@ fn is_drop_front(term: &Term, base: &str, carrier: Carrier) -> bool {
 /// The start operand of a slice term (borrowed).
 fn slice_start(term: &Term) -> &Term {
     match term.as_subterm() {
-        Subterm::Prim(Prim::Pure(PurePrim::BinSlice(curios_base::Grain::X, _, from, _)))
+        Subterm::Prim(Prim::Pure(PurePrim::BinSlice(Grain::X, _, from, _)))
         | Subterm::Prim(Prim::Pure(PurePrim::LstSlice(_, from, _))) => from,
         _ => unreachable!("a drop-front slot is a slice"),
     }
@@ -318,7 +313,7 @@ fn into_slice_start(term: Term, carrier: Carrier) -> Term {
         unreachable!("a drop-front slot is a slice")
     };
     match (carrier, slice) {
-        (Carrier::Bin, PurePrim::BinSlice(curios_base::Grain::X, _, from, _))
+        (Carrier::Bin, PurePrim::BinSlice(Grain::X, _, from, _))
         | (Carrier::Lst, PurePrim::LstSlice(_, from, _)) => from,
         _ => unreachable!("a drop-front slot is a carrier slice"),
     }
