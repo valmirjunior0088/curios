@@ -7,6 +7,7 @@ A throwaway, run-once-every-never harness to place Curios against industry langu
 | Run | Captured | Environment |
 | --- | --- | --- |
 | [00 — The most surprising night in a long while](00_RESULTS.md) | 2026-06-30 | Apple Silicon, Docker Desktop Linux VM, one pinned arm64 core |
+| [01 — This is what growing a language looks like](01_RESULT.md) | 2026-07-16 | Apple Silicon, Docker Desktop Linux VM, one pinned arm64 core |
 
 ## Contestants
 

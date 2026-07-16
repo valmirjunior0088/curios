@@ -91,6 +91,7 @@ COPY curios-wasm curios-wasm
 COPY curios-cont curios-cont
 COPY curios-ersd curios-ersd
 COPY curios-core curios-core
+COPY curios-prelude curios-prelude
 COPY curios-text curios-text
 COPY curios-pipeline curios-pipeline
 COPY curios-web curios-web
