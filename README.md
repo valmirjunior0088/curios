@@ -1,12 +1,12 @@
 <div align="center">
 
-# curios
+# [Curios](https://valmirjunior0088.github.io/curios/)
 
 **A small language, fully dependent.**
 
 Curios is a dependently typed programming language that compiles to WebAssembly. Types can depend on values, proofs live beside ordinary code, and the compiler is happy to double-check your math homework.
 
-[Playground](https://valmirjunior0088.github.io/curios/playground) · [Language reference](documentation/SYNTAX.md) · [Releases](https://github.com/valmirjunior0088/curios/releases) · [Roadmap](documentation/ROADMAP.md)
+[Playground](https://valmirjunior0088.github.io/curios/playground) · [Documentation](https://valmirjunior0088.github.io/curios/docs/curios/index.html) · [Language reference](documentation/SYNTAX.md) · [Releases](https://github.com/valmirjunior0088/curios/releases) · [Roadmap](documentation/ROADMAP.md)
 
 [![Build](https://github.com/valmirjunior0088/curios/actions/workflows/check.yml/badge.svg)](https://github.com/valmirjunior0088/curios/actions/workflows/check.yml)
 [![Release](https://img.shields.io/github/v/release/valmirjunior0088/curios)](https://github.com/valmirjunior0088/curios/releases)
