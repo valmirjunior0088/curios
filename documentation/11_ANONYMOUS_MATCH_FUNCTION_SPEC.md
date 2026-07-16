@@ -2,11 +2,11 @@
 
 Working implementation specification for a surface form analogous to OCaml's `function`, expressed in Curios as `match =>`.
 
-This document is the implementation handoff for the feature. Once the implementation lands, its durable user-facing semantics belong in `SYNTAX.md`, its project status belongs in `ROADMAP.md`, and this file may be removed.
+This document is the implementation handoff for the feature. Its durable user-facing semantics belong in `SYNTAX.md`, while lowering invariants belong in `curios-text` module documentation and tests.
 
 ## Status and dependency
 
-This is the second of two related projects. It should preferably follow [`10_LAMBDA_INFERENCE_SPEC.md`](10_LAMBDA_INFERENCE_SPEC.md), allowing anonymous match functions to inherit the same monomorphic, use-driven inference as ordinary lambdas.
+This is the second of two related projects. It should preferably follow landed monomorphic, use-driven lambda inference, allowing anonymous match functions to inherit the same behavior as ordinary lambdas.
 
 The syntax can technically be parsed and lowered before that project lands, but it would then require an expected function type in cases where its scrutinee carrier cannot be inferred from the arms. The implementation must not add a match-function-specific inference mechanism.
 
@@ -291,3 +291,7 @@ cargo test --workspace --all-targets --all-features
 ```
 
 Because `curios-text` is in the browser compiler's dependency graph, also run the `curios-web` wasm32 build and matching `wasm-bindgen --target web` step described in `AGENTS.md`.
+
+## Retirement criteria
+
+- Before this specification is deleted, `match =>` grammar and semantics are recorded in `SYNTAX.md`, parsing, printing, and lowering invariants are recorded in the owning `curios-text` module documentation and tests, remaining plans refer to the landed syntax rather than this file, the roadmap entry is a checked unlinked summary, and no reference to this filename remains.

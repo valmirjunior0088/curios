@@ -1,15 +1,15 @@
-# Correctly rounded `BigFlt` ratio narrowing
+# Correctly rounded dyadic `BigFlt` ratio narrowing
 
-Working implementation specification for rounding an exact quotient of two BigFlt values directly to binary32 without adding exact interior division to the BigFlt API.
+Post-bootstrap implementation specification for rounding an exact quotient of two `BigFlt` values directly to binary32 without adding exact interior division to the `BigFlt` API.
 
-This work depends on [`04_BIG_FLT_CORE_SPEC.md`](04_BIG_FLT_CORE_SPEC.md), shares binary32 packing rules with [`05_BIG_FLT_BINARY32_SPEC.md`](05_BIG_FLT_BINARY32_SPEC.md), and supplies the executable basis for the ratio theorem in [`09_BIG_FLT_BOUNDARY_PROOFS_SPEC.md`](09_BIG_FLT_BOUNDARY_PROOFS_SPEC.md).
+This work depends on the landed dyadic `BigFlt` API, shares the binary32 packing rules used by `BigFlt/to_flt_bytes`, and supplies the executable basis for the ratio-correctness theorem.
 
 ## Objective
 
 Provide the only division-shaped operation in stage 1:
 
 ```crs
-BigFlt/narrow_ratio_b : BigFlt -> BigFlt -> Bytes
+BigFlt/ratio_to_flt_bytes : BigFlt -> BigFlt -> Bytes
 ```
 
 The function rounds the exact mathematical quotient once, directly to a binary32 byte pattern using round-to-nearest-even. It does not construct an interior rational value and does not justify a `Div(BigFlt)` witness.
@@ -35,12 +35,12 @@ Specify and test one explicit sign and zero table before implementing the loop:
 - nonzero divided by zero produces signed infinity;
 - zero divided by a finite nonzero value produces signed zero according to the sign rule;
 - finite nonzero operands use round-to-nearest-even;
-- overflow, subnormal results, underflow, halfway cases, and carry use the same binary32 policy as `narrow_b`.
+- overflow, subnormal results, underflow, halfway cases, and carry use the same binary32 policy as `to_flt_bytes`.
 
 The native wrapper is:
 
 ```text
-narrow_ratio = Flt/of_le_bytes ∘ narrow_ratio_b
+ratio_to_flt = Flt/of_le_bytes ∘ ratio_to_flt_bytes
 ```
 
 ## Structural obligations
@@ -70,7 +70,8 @@ These obligations expose facts for the later formal proof; they do not by themse
 
 ## Completion criteria
 
-- `narrow_ratio_b` has fully specified behavior for every numerator and denominator pair.
+- `ratio_to_flt_bytes` has fully specified behavior for every numerator and denominator pair.
 - Generated reference tests agree with exact rational rounding.
 - The algorithm exports or proves the structural invariants required by the formal ratio-correctness proof.
-- Its binary32 packing behavior is shared with or demonstrably identical to `narrow_b`.
+- Its binary32 packing behavior is shared with or demonstrably identical to `to_flt_bytes`.
+- Before this specification is deleted, the zero and sign table, digit-loop contract, rounding policy, and structural invariants are recorded in the owning `/std/BigFlt` documentation and tests; remaining plans refer to `ratio_to_flt_bytes` and its landed lemmas rather than this file; the roadmap subitem is a checked unlinked summary; and no reference to this filename remains.

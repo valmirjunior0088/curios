@@ -2,11 +2,11 @@
 
 Working implementation specification for monomorphic, use-driven inference of unannotated lambda parameters.
 
-This document is the implementation handoff for the feature. Once the implementation lands, its durable user-facing semantics belong in `SYNTAX.md`, its project status belongs in `ROADMAP.md`, and this file may be removed.
+This document is the implementation handoff for the feature. Its durable user-facing semantics belong in `SYNTAX.md`, while elaborator invariants belong in `curios-core` module documentation and tests.
 
 ## Status and relationship to anonymous match functions
 
-This is the first of two related projects. It is independently useful and should land before the proposed [`match =>` anonymous match-function syntax](11_ANONYMOUS_MATCH_FUNCTION_SPEC.md), so anonymous match functions inherit the same inference behavior as ordinary lambdas instead of introducing a syntax-specific typing rule.
+This is the first of two related projects. It is independently useful and should land before the proposed `match =>` anonymous match-function syntax, so anonymous match functions inherit the same inference behavior as ordinary lambdas instead of introducing a syntax-specific typing rule.
 
 The intended feature is deliberately smaller than Hindley–Milner inference: a lambda may acquire constraints from later uses within the same enclosing item, but it is never generalized and inference never crosses an item boundary.
 
@@ -322,3 +322,7 @@ cargo test --workspace --all-targets --all-features
 ```
 
 Because `curios-core` is in the browser compiler's dependency graph, also run the `curios-web` wasm32 build and matching `wasm-bindgen --target web` step described in `AGENTS.md`.
+
+## Retirement criteria
+
+- Before this specification is deleted, lambda inference semantics are recorded in `SYNTAX.md`, parking and retry invariants are recorded in the owning `curios-core` module documentation and tests, remaining plans refer to the landed elaborator behavior rather than this file, the roadmap entry is a checked unlinked summary, and no reference to this filename remains.

@@ -2,6 +2,8 @@
 
 Tracks Curios development by feature area. Checkboxes reflect current codebase state, not chronological history — items whose description was later superseded by a rework are folded into the item that replaced them.
 
+Unchecked items may link to working implementation specifications. When an item lands completely, transfer every durable contract and invariant to its owning source, module or crate documentation and tests; update remaining specifications to depend on the landed API rather than the working document; replace the linked checkbox with a checked plain-text summary; verify that nothing still references the specification filename; and delete the specification.
+
 ## Core Pipeline
 
 - [x] Π-types, λ-abstractions, and application
@@ -19,7 +21,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Crate-boundary split isolating the Cranelift/Binaryen-free launcher (`curios-runtime`) from the JIT-capable compiler
 - [x] Pure pipeline driver crate (`curios-pipeline`) decoupled from runtime/Binaryen/CLI, enabling a wasm32 (browser) build
 - [x] Build-scoped archived prelude and replay (`curios-prelude` compiles and validates fixed Text/Core/Ersd state in `OUT_DIR`; production compilations restore it with no source fallback and lower/elaborate/erase only the user suffix)
-- [ ] [Bootstrap the compiler in Curios itself](06_BOOTSTRAP_SPEC.md) (self-host every language-specific stage through raw WebAssembly generation while retaining Rust as the native host and stage-zero seed)
+- [ ] [Bootstrap the compiler in Curios itself](05_BOOTSTRAP_SPEC.md) (self-host every language-specific stage through raw WebAssembly generation while retaining Rust as the native host and stage-zero seed)
 
 ## Primitive Types
 
@@ -169,17 +171,25 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
   - [x] Machine-checked additive and multiplicative laws, additive cancellation, order reflection/transitivity, and power-of-two interaction lemmas
 - [x] Certified strictly-positive arbitrary-precision naturals (`std/NonZero`)
 - [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/NonZero`)
+- [ ] [`std/Toml`: native-`Int`/binary32 TOML codec](02_TOML_SPEC.md) _(next implementation effort; useful but explicitly not fully TOML-conforming because numeric storage is native-width)_
+- [ ] [Dyadic `BigFlt` canonical representation, exact core operations, comparison, and witnesses](03_BIG_FLT_DYADIC_CORE_SPEC.md)
+- [ ] [Dyadic `BigFlt` exact binary32 conversion and correctly rounded output](04_BIG_FLT_DYADIC_BINARY32_SPEC.md)
+- [ ] [`BigInt` certified algebra, order, and binary-scale laws](06_BIG_INT_LAWS_SPEC.md) _(first effort immediately after bootstrap; the dyadic core lands only its required normalization and uniqueness subset)_
+- [ ] Post-bootstrap dyadic `BigFlt` proof and quotient-boundary completion
+  - [ ] [Algebra and order theorem corpus](07_BIG_FLT_DYADIC_LAWS_SPEC.md)
+  - [ ] [Correctly rounded exact quotient conversion to binary32](08_BIG_FLT_DYADIC_RATIO_NARROWING_SPEC.md)
+  - [ ] [Binary32 round-trip and correct-rounding proofs](09_BIG_FLT_DYADIC_BOUNDARY_PROOFS_SPEC.md)
 - [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`; decoded scalar values are exposed as certified `Char` values while storage remains packed `Bytes`)
 - [x] Certified Unicode-scalar `Char` type and `Str` migration (`'…' : Char`, typed character APIs, explicit Byte/Char/Nat boundaries, and ASCII-explicit classification and casing policy)
-- [ ] [`BigFlt`: certified exact dyadic arithmetic and correctly rounded binary32 boundaries](02_BIG_FLT_SPEC.md)
-  - [ ] [`BigInt` algebra, order, and power-of-two laws required by `BigFlt`](03_BIG_INT_LAWS_SPEC.md)
-  - [ ] [`BigFlt` canonical representation, exact core operations, comparison, and witnesses](04_BIG_FLT_CORE_SPEC.md)
-  - [ ] [`BigFlt` exact binary32 widening and correctly rounded narrowing](05_BIG_FLT_BINARY32_SPEC.md)
-  - [ ] [`BigFlt` algebra and order theorem corpus](07_BIG_FLT_LAWS_SPEC.md)
-  - [ ] [Correctly rounded `BigFlt` ratio narrowing](08_BIG_FLT_RATIO_NARROWING_SPEC.md)
-  - [ ] [`BigFlt` binary32 boundary proofs](09_BIG_FLT_BOUNDARY_PROOFS_SPEC.md)
 - [x] Parser-combinator library (`std/Parse`)
 - [x] Core collections (`std/Lst` and its helpers, length-indexed `std/Vec`)
 - [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bytes` keys — same entries, same shape — with injective key encodings via its `Key` concept)
 - [x] Equality and ordering (`std/Eq`, `std/Order`)
 - [x] Foundational proof/logic types (`std/True`, `std/False`)
+- [ ] General rational `BigFlt` sequence _(explicitly after `wonder`; no umbrella-only implementation step)_
+  - [ ] [`BigNat` certified Euclidean division, GCD, divisibility, and coprimality](14_BIG_NAT_EUCLIDEAN_SPEC.md)
+  - [ ] [General `BigFlt` reduced rational representation and exact operations](15_BIG_FLT_GENERAL_CORE_SPEC.md)
+  - [ ] [General canonical uniqueness, ring, and order laws](16_BIG_FLT_GENERAL_LAWS_SPEC.md)
+  - [ ] [General division and field laws](17_BIG_FLT_GENERAL_FIELD_LAWS_SPEC.md)
+  - [ ] [General rational binary32 boundaries](18_BIG_FLT_GENERAL_BINARY32_SPEC.md)
+  - [ ] [Exact decimal parsing and presentation](19_BIG_FLT_GENERAL_DECIMAL_SPEC.md)

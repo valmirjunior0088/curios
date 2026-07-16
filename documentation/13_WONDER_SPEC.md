@@ -4,7 +4,7 @@ This document specifies `curios wonder`, a read-only interface through which an 
 
 The goal is not to replace text search or file reads. It is to expose facts the compiler uniquely knows, return the exact source associated with those facts when useful, and keep every answer tied to one coherent compilation snapshot.
 
-Required labeled written goals (`?label`) are specified separately in [12_WRITTEN_GOALS_SPEC.md](12_WRITTEN_GOALS_SPEC.md). `wonder` reports them through the ordinary diagnostic model while leaving their compiler semantics to the checked front end.
+Required labeled written goals (`?label`) are a landed checked-front-end capability. `wonder` reports them through the ordinary diagnostic model while leaving their compiler semantics to that front end.
 
 ## Objective
 
@@ -182,7 +182,7 @@ A public type value initially has two textual forms:
 
 Diagnostics are public records rather than serialized `curios_text::Error` or `curios_core::Error` values. Every diagnostic has a stable code, kind, severity, compiler phase, message, optional primary location, and zero or more related locations. Variant-specific payloads carry structured facts such as inferred and expected types, witness keys, or written-goal scopes.
 
-Written goals use diagnostic kind `goal` and are specified in [12_WRITTEN_GOALS_SPEC.md](12_WRITTEN_GOALS_SPEC.md). Every written-goal diagnostic carries its required source label; labels are metadata rather than unique identities, so the same label may occur in several diagnostics.
+Written goals use diagnostic kind `goal`. Every written-goal diagnostic carries its required source label; labels are metadata rather than unique identities, so the same label may occur in several diagnostics.
 
 ## Analysis phases and status
 
@@ -203,7 +203,7 @@ The overall program status is:
 
 Each query declares its minimum required phase. If that phase was not reached, the response contains no fabricated result and reports the phase-limiting diagnostic. For example, `item` can succeed after parsing while a symbol's elaborated type cannot be returned after a lowering error.
 
-The initial parser and elaborator remain fail-fast for hard errors. The schema permits multiple diagnostics, but the first implementation does not claim general multi-error recovery. Written goals are the deliberate exception described in [12_WRITTEN_GOALS_SPEC.md](12_WRITTEN_GOALS_SPEC.md).
+The initial parser and elaborator remain fail-fast for hard errors. The schema permits multiple diagnostics, but the first implementation does not claim general multi-error recovery. Written goals are the deliberate exception implemented by the typed incomplete checking outcome.
 
 ## Query surface
 
@@ -364,8 +364,12 @@ No on-disk analysis cache is part of the first slice. Every response is tied to 
 ## Milestones
 
 1. **Resolved source index.** Add the `curios-analysis` crate, explicit entrypoint-based analysis identity, reusable resolved source graph, universal item origins and ranges, source items versus symbol selectors, and the `overview`, `module`, `item`, and source-level `at` queries.
-2. **Checked analysis.** Move the reusable load-through-zonk front end and prelude replay boundary into `curios-analysis`; add structured diagnostics, elaborated symbol types, witness snapshots, and the written-goal outcome from [12_WRITTEN_GOALS_SPEC.md](12_WRITTEN_GOALS_SPEC.md); implement `symbol`, `diagnostics`, and `witnesses`.
+2. **Checked analysis.** Move the reusable load-through-zonk front end and prelude replay boundary into `curios-analysis`; add structured diagnostics, elaborated symbol types, witness snapshots, and the landed written-goal outcome; implement `symbol`, `diagnostics`, and `witnesses`.
 3. **Semantic relationships.** Retain resolved reference edges and inserted dependency provenance; implement `references`, `dependencies`, canonical type rendering, and the filtered `snapshot` query.
 4. **Persistent consumers.** Add a session transport when repeated-query measurements justify it, then build the planned language-server features over the same analysis and query APIs.
 
 Each milestone must preserve the response envelope, analysis identity, phase availability, and source-versus-semantic distinction. Later milestones add facts; they do not reinterpret earlier ones.
+
+## Retirement criteria
+
+- Before this specification is deleted, the public command and response contracts are recorded in public CLI and analysis documentation, snapshot, phase, identity, diagnostic, and query invariants are recorded in `curios-analysis` and owning compiler module documentation and tests, remaining plans refer to the landed query API rather than this file, the roadmap subitem is a checked unlinked summary, and no reference to this filename remains.

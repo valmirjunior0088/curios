@@ -1,12 +1,12 @@
-# `BigFlt` algebra and order laws
+# Dyadic `BigFlt` algebra and order laws
 
-Working implementation specification for the abstract theorem corpus over the canonical type defined by [`04_BIG_FLT_CORE_SPEC.md`](04_BIG_FLT_CORE_SPEC.md).
+Post-bootstrap implementation specification for the abstract theorem corpus over the landed canonical dyadic `BigFlt` type.
 
-The proofs consume [`03_BIG_INT_LAWS_SPEC.md`](03_BIG_INT_LAWS_SPEC.md) and the BigFlt canonicity kernel. They do not reason about native `Flt` instructions or byte encodings.
+The proofs consume the exported `/std/BigInt` law layer and the `BigFlt` canonicity kernel. They do not reason about native `Flt` instructions or byte encodings.
 
 ## Objective
 
-Provide exactly the algebraic and order facts needed by ordinary exact clients and by [`09_BIG_FLT_BOUNDARY_PROOFS_SPEC.md`](09_BIG_FLT_BOUNDARY_PROOFS_SPEC.md), without attempting a field theory for a type that deliberately lacks interior division.
+Provide exactly the algebraic and order facts needed by ordinary exact clients and by the binary32 boundary proofs, without attempting a field theory for a type that deliberately lacks interior division.
 
 ## Algebraic laws
 
@@ -30,9 +30,9 @@ For each operation:
 
 1. establish the value equation on raw aligned pairs using `BigInt` laws and power-of-two interaction lemmas;
 2. prove the executable operation denotes that raw value;
-3. transport the equality through `mk` using canonical uniqueness.
+3. transport the equality through `of_dyadic` using canonical uniqueness.
 
-Do not repeat sign cases inside every BigFlt theorem; missing reusable sign reasoning belongs in [`03_BIG_INT_LAWS_SPEC.md`](03_BIG_INT_LAWS_SPEC.md).
+Do not repeat sign cases inside every `BigFlt` theorem; missing reusable sign reasoning belongs in `/std/BigInt`.
 
 ## Order laws
 
@@ -75,3 +75,4 @@ Every proof uses checked structural elimination, checked inductive case analysis
 - The exported theorem corpus is sufficient for the byte-boundary proofs without opening the private representation.
 - No proof relies on opaque native arithmetic or an unstated BigInt fact.
 - All definitions remain compatible with future termination and positivity checking.
+- Before this specification is deleted, the public algebra and order theorem surface and its abstraction constraints are recorded in the owning `/std/BigFlt` documentation, theorem signatures, and tests; remaining plans refer to landed laws rather than this file; the roadmap subitem is a checked unlinked summary; and no reference to this filename remains.

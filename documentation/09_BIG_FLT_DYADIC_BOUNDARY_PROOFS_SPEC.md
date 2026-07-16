@@ -1,8 +1,8 @@
-# `BigFlt` binary32 boundary proofs
+# Dyadic `BigFlt` binary32 boundary proofs
 
-Working implementation specification for the formal round-trip and correct-rounding results over the executable boundaries defined by [`05_BIG_FLT_BINARY32_SPEC.md`](05_BIG_FLT_BINARY32_SPEC.md) and [`08_BIG_FLT_RATIO_NARROWING_SPEC.md`](08_BIG_FLT_RATIO_NARROWING_SPEC.md).
+Post-bootstrap implementation specification for the formal round-trip and correct-rounding results over the landed `of_flt_bytes`, `to_flt_bytes`, and `ratio_to_flt_bytes` boundaries.
 
-This is the final BigFlt layer. It depends on the abstract algebra and order corpus from [`07_BIG_FLT_LAWS_SPEC.md`](07_BIG_FLT_LAWS_SPEC.md) and on structural correctness lemmas exposed by both executable conversion specifications.
+This is the final dyadic `BigFlt` layer. It depends on the exported abstract algebra and order corpus and on structural correctness lemmas exposed by both executable conversion paths.
 
 ## Boundary discipline
 
@@ -14,10 +14,10 @@ Reference tests validate executable behavior but do not replace Curios proofs. C
 
 ## Widening and narrowing round-trip
 
-For `b : Bytes`, `Eq(widen_b(b), Option/some(x))`, and `b` not equal to the negative-zero pattern, prove:
+For `b : Bytes`, `Eq(of_flt_bytes(b), Option/some(x))`, and `b` not equal to the negative-zero pattern, prove:
 
 ```text
-Eq(narrow_b(x), b)
+Eq(to_flt_bytes(x), b)
 ```
 
 Prove separately that negative zero widens to canonical zero and canonical zero narrows to positive zero. No stronger bitwise round-trip statement is true.
@@ -43,7 +43,7 @@ Refine the nearest-value result with:
 
 ## Correct rounding of exact ratios
 
-For a nonzero denominator, prove that `narrow_ratio_b` is the correctly rounded exact quotient.
+For a nonzero denominator, prove that `ratio_to_flt_bytes` is the correctly rounded exact quotient.
 
 State comparisons denominator-cleared: cross-multiply inequalities and use absolute value to account for denominator sign. The theorem must not require constructing an interior quotient value.
 
@@ -82,3 +82,4 @@ Use the abstract BigFlt law layer for error manipulation. If a proof requires op
 - Direct narrowing is proved nearest with the stated overflow premise and ties-to-even refinement.
 - Ratio narrowing is proved nearest through denominator-cleared comparisons.
 - The formal statements depend only on public abstract laws and byte-level boundary functions.
+- Before this specification is deleted, the round-trip, nearest-value, ties-to-even, overflow, and denominator-cleared theorem contracts are recorded in the owning `/std/BigFlt` documentation, theorem signatures, and tests; remaining plans refer to landed theorems rather than this file; the roadmap subitem is a checked unlinked summary; and no reference to this filename remains.

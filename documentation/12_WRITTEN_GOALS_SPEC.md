@@ -2,7 +2,7 @@
 
 This document specifies Curios's labeled written-goal form, complete goal reporting after successful elaboration, and the typed incomplete outcome shared by compilation and program analysis.
 
-Written goals are a front-end capability rather than an interactive prover. They let a programmer or agent ask what belongs at several source locations, receive every answer one successful elaboration can establish, and then edit the source and analyze the new snapshot. The general `wonder` interface consumes these reports through its diagnostic model; see [13_WONDER_SPEC.md](13_WONDER_SPEC.md).
+Written goals are a front-end capability rather than an interactive prover. They let a programmer or agent ask what belongs at several source locations, receive every answer one successful elaboration can establish, and then edit the source and analyze the new snapshot. The general `wonder` interface consumes these reports through its diagnostic model.
 
 ## Objective
 
@@ -297,3 +297,7 @@ The implementation is pinned at four levels:
 3. **Analysis integration.** Convert reports into the shared diagnostic schema, assign snapshot-local IDs, correlate source ownership, and expose the complete batch through `wonder diagnostics`.
 
 The first milestone is deliberately breaking: unlabeled written goals become parse errors immediately. The later milestones improve reporting and expose it to tools without adding tactics, recovery, or another goal language.
+
+## Retirement criteria
+
+- Before this specification is deleted, written-goal syntax is recorded in `SYNTAX.md`, checking outcomes and report contracts are recorded in the owning text, core, pipeline, and analysis documentation and tests, remaining plans refer to the landed diagnostics API rather than this file, the roadmap subitem is a checked unlinked summary, and no reference to this filename remains.

@@ -78,6 +78,10 @@ For this gate, the representation series means every already-planned project who
 
 The set is enumerated and agreed before the bootstrap begins. The gate does not claim that Curios representations can never change again; it says that the known representation series is completed in Rust and becomes the coherent S0 baseline, while representation projects proposed after the ownership cutover are implemented in the authoritative Curios stages.
 
+For the current numeric sequence, the representation gate includes the landed private dyadic `BigFlt` layout and its executable binary32 boundary. The native-width `Toml` codec is scheduled before them but does not alter compiler representations. The complete standalone `BigInt` law corpus begins immediately after bootstrap; the dyadic core lands only the focused normalization and uniqueness facts it actually requires.
+
+The dyadic theorem corpus, exact quotient rounding, and boundary proofs in specifications 07–09 are explicitly post-bootstrap proof and library work. The general odd-denominator extension in specifications 14–19 is explicitly post-Wonder private standard-library evolution. Those deferred projects are known but excluded from the S0 representation gate because they change no language syntax, compiler IR, host ABI, or compiler-owned runtime representation; prelude artifacts are rebuilt and versioned when the private library layout later changes.
+
 The representation-series gate is complete only when:
 
 - Every included specification has landed across all affected stages, libraries, tests, and durable documentation.
@@ -405,11 +409,11 @@ The S0 cleanup expresses prelude replay as ordinary context preparation and cach
 
 The complete representation series is the hard prerequisite described above. The gate includes planned representation work across the surface language, Core, Ersd, Cont, Wasm, and the host ABI even when a project introduces no new surface syntax.
 
-[Parked lambda inference](10_LAMBDA_INFERENCE_SPEC.md) and [anonymous match functions](11_ANONYMOUS_MATCH_FUNCTION_SPEC.md) are optional before the baseline freeze. The bootstrap-first default defers them until Curios owns Core and text respectively. If their near-term user value outweighs the duplication, they land in Rust in their specified order before Phase 3 begins and become part of the frozen oracle baseline.
+Parked lambda inference and anonymous match functions are optional before the baseline freeze. The bootstrap-first default defers them until Curios owns Core and text respectively. If their near-term user value outweighs the duplication, they land in Rust in their specified order before Phase 3 begins and become part of the frozen oracle baseline.
 
-[Labeled written goals](12_WRITTEN_GOALS_SPEC.md) wait until the Curios elaborator is authoritative. Their metavariable origins, birth-time registry, tolerant reification, incomplete outcome, and structured diagnostics then have one production implementation.
+Labeled written goals wait until the Curios elaborator is authoritative. Their metavariable origins, birth-time registry, tolerant reification, incomplete outcome, and structured diagnostics then have one production implementation.
 
-[`wonder`](13_WONDER_SPEC.md) keeps its public, transport-neutral schema and conceptual source-versus-semantic model, but its resolved source graph, universal origins, reference capture, semantic indexes, witness snapshots, and query engine are implemented over the Curios frontend after Phase 5. The bootstrap substrate deliberately preserves the information needed by that work without building the full index early.
+`wonder` keeps its public, transport-neutral schema and conceptual source-versus-semantic model, but its resolved source graph, universal origins, reference capture, semantic indexes, witness snapshots, and query engine are implemented over the Curios frontend after Phase 5. The bootstrap substrate deliberately preserves the information needed by that work without building the full index early.
 
 Formatter, language-server, linter, and documentation tooling should likewise consume the Curios-owned parser and source index after the frontend cutover. Host-only work such as Wasmtime integration, Binaryen upgrades, bundling, release automation, and OS services may proceed independently because it stays in Rust.
 
@@ -479,6 +483,7 @@ The bootstrap is complete when:
 - The prelude path is correct from source, with any cache defined by the Curios compiler rather than Rust object layout.
 - CI builds the native host, builds the self-hosted compiler, checks the generation fixed point, runs the language suite through the self-hosted compiler, and preserves the existing slim-launcher and browser obligations where applicable.
 - `AGENTS.md`, `ROADMAP.md`, build instructions, release automation, and public CLI documentation describe the self-hosted architecture.
+- Before this specification is deleted, permanent ownership boundaries and architectural invariants are recorded in `AGENTS.md` and the owning crate or module documentation, operational procedures are recorded in build and release documentation, remaining plans refer to the authoritative self-hosted pipeline rather than this file, the roadmap entry is a checked unlinked summary, and no reference to this filename remains.
 
 ## Effort estimate
 
