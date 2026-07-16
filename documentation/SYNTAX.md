@@ -74,7 +74,7 @@ Floating-point literals have type `Flt`. `5.` is not a floating-point literal.
 
 ### Character and string literals
 
-A character literal contains one character or one supported escape and currently has type `Nat`, representing that character's code point.
+A character literal contains one Unicode scalar value or one supported escape and has the proof-certified type `Char`. `Char` excludes the surrogate range and values above `U+10FFFF`; use `Char/to_nat` for an explicit code-point conversion. Character literals are expressions only and are not accepted as `Nat` or `Byte` pattern spellings.
 
 ```crs
 'c'
@@ -92,6 +92,8 @@ A string literal has type `Str`.
 ```
 
 String escapes are `\n`, `\t`, `\r`, `\\`, and `\"`.
+
+`Str` stores certified UTF-8 bytes. Its logical length, indexing, slicing, folding, and search operations count Unicode scalar values (`Char`), not bytes or grapheme clusters.
 
 ### Boolean literals
 
@@ -462,6 +464,8 @@ end
 ```
 
 Induction arms and literal-dispatch arms cannot be mixed in one match.
+
+Natural-number pattern literals are numeric literals only. Character literals do not provide character, natural-number, or byte patterns.
 
 ### List fold and case split
 

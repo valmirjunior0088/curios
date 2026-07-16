@@ -25,10 +25,7 @@ pub(super) fn parse_num_lit<'a>() -> Parser<'a, Term> {
             .and(parse_nat_digits()),
     )
     .map(|((signed, negative), lit)| {
-        let (magnitude, radix) = match lit {
-            NatLiteral::Number(value, radix) => (value, radix),
-            NatLiteral::Char(character) => (BigUint::from(character as u32), Radix::Dec),
-        };
+        let NatLiteral(magnitude, radix) = lit;
         Subterm::NumLit(NumLit {
             magnitude,
             radix,
@@ -39,8 +36,7 @@ pub(super) fn parse_num_lit<'a>() -> Parser<'a, Term> {
     .map(Into::into)
 }
 
-// A character literal `'c'` is a fixed `Nat` codepoint — monomorphic, unlike a
-// bare integer literal.
+// A character literal is a monomorphic, proof-certified `/syn/Char` value.
 pub(super) fn parse_char_lit<'a>() -> Parser<'a, Term> {
     catch(
         take_exact("'")
@@ -48,12 +44,7 @@ pub(super) fn parse_char_lit<'a>() -> Parser<'a, Term> {
             .and_drop(take_exact("'"))
             .and_drop(parse_whitespace()),
     )
-    .map(|character| {
-        Subterm::Prim(Prim::Nat(Nat::Succ(
-            NatLiteral::Char(character),
-            Subterm::Prim(Prim::Nat(Nat::Zero)).into(),
-        )))
-    })
+    .map(|character| Subterm::Syn(Syn::Char(character)))
     .map(Into::into)
 }
 
@@ -73,7 +64,7 @@ pub(super) fn parse_radix<'a>(
 ) -> Parser<'a, NatLiteral> {
     take_exact(prefix).and_keep(take_while(move |char: char| char.is_digit(radix)).flat_map(
         move |digits| match BigUint::parse_bytes(digits.as_bytes(), radix) {
-            Some(value) => pure(NatLiteral::Number(value, tag)),
+            Some(value) => pure(NatLiteral(value, tag)),
             None => fail(format!("expected base-{radix} digits after '{prefix}'")),
         },
     ))
@@ -85,7 +76,7 @@ pub(super) fn parse_nat_digits<'a>() -> Parser<'a, NatLiteral> {
         .or(
             take_while(|char: char| char.is_ascii_digit()).flat_map(|digits| {
                 match digits.parse::<BigUint>() {
-                    Ok(value) => pure(NatLiteral::Number(value, Radix::Dec)),
+                    Ok(value) => pure(NatLiteral(value, Radix::Dec)),
                     Err(_) => fail("expected nat"),
                 }
             }),
@@ -94,22 +85,12 @@ pub(super) fn parse_nat_digits<'a>() -> Parser<'a, NatLiteral> {
 }
 
 pub(super) fn parse_nat<'a>() -> Parser<'a, NatLiteral> {
-    catch(
-        take_exact("'")
-            .and_keep(parse_char_value())
-            .and_drop(take_exact("'"))
-            .and_drop(parse_whitespace()),
-    )
-    .map(NatLiteral::Char)
-    .or(catch(parse_nat_digits()))
+    parse_nat_digits()
 }
 
 pub(super) fn parse_nat_literal_u32<'a>() -> Parser<'a, u32> {
     parse_nat().flat_map(|lit| {
-        let n = match lit {
-            NatLiteral::Number(n, _) => n,
-            NatLiteral::Char(c) => BigUint::from(c as u32),
-        };
+        let NatLiteral(n, _) = lit;
         match n.to_u32() {
             Some(k) => pure(k),
             None => fail("nat literal too large for u32"),

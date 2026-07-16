@@ -62,6 +62,7 @@ pub mod Task;
 pub use Task/{let Task};
 
 pub mod Char;
+pub use Char/{let Char};
 
 pub mod Result;
 pub use Result/{let Result};

@@ -56,31 +56,31 @@ pub let and(@A : Type, @B : Type, p : Parse(A), q : Parse(B)) -> Parse({A, B}) =
             end
     };
 
-pub let any_byte : Parse(Nat) =
+pub let any_byte : Parse(Byte) =
     Parse {
         run(input, pos) =
             match Nat/try_lt(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of input")
-            | some(ok) => Result/success((pos + 1, Byte/to_nat(Bytes/at(input, pos, ok))))
+            | some(ok) => Result/success((pos + 1, Bytes/at(input, pos, ok)))
             end
     };
 
-pub let peek_byte : Parse(Nat) =
+pub let peek_byte : Parse(Byte) =
     Parse {
         run(input, pos) =
             match Nat/try_lt(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of input")
-            | some(ok) => Result/success((pos, Byte/to_nat(Bytes/at(input, pos, ok))))
+            | some(ok) => Result/success((pos, Bytes/at(input, pos, ok)))
             end
     };
 
-pub let take_byte(expected : Nat) -> Parse(Nat) =
+pub let take_byte(expected : Byte) -> Parse(Byte) =
     Parse {
         run(input, pos) =
             match Nat/try_lt(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of input")
             | some(ok) =>
-                let byte = Byte/to_nat(Bytes/at(input, pos, ok));
+                let byte = Bytes/at(input, pos, ok);
                 match byte == expected
                 | true => Result/success((pos + 1, byte))
                 | false => Result/failure("unexpected byte")
@@ -88,7 +88,7 @@ pub let take_byte(expected : Nat) -> Parse(Nat) =
             end
     };
 
-pub let take_while(pred : (Nat) -> Bln) -> Parse(Bytes) =
+pub let take_while(pred : (Byte) -> Bln) -> Parse(Bytes) =
     Parse {
         run(input, pos) =
             let (stop, _) =
@@ -102,7 +102,7 @@ pub let take_while(pred : (Nat) -> Bln) -> Parse(Bytes) =
                         match Nat/try_lt(cur, Bytes/len(input))
                         | none() => (cur, true)
                         | some(ok) =>
-                            match pred(Byte/to_nat(Bytes/at(input, cur, ok)))
+                            match pred(Bytes/at(input, cur, ok))
                             | true => (cur + 1, false)
                             | false => (cur, true)
                             end

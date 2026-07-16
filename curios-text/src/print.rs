@@ -397,32 +397,15 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::Nat(Nat::Zero) => pure("0"),
         Prim::Nat(Nat::Succ(nat, inner)) => {
             if matches!(inner.as_subterm(), Subterm::Prim(Prim::Nat(Nat::Zero))) {
-                match nat {
-                    NatLiteral::Number(n, radix) => pure(format_radix(&n, radix)),
-                    NatLiteral::Char(c) => {
-                        let escaped = match c {
-                            '\'' => "\\'".to_string(),
-                            '\\' => "\\\\".to_string(),
-                            '\n' => "\\n".to_string(),
-                            '\t' => "\\t".to_string(),
-                            '\r' => "\\r".to_string(),
-                            _ => c.to_string(),
-                        };
-                        pure(format!("'{escaped}'"))
-                    }
-                }
+                let NatLiteral(n, radix) = nat;
+                pure(format_radix(&n, radix))
             } else {
                 match nat {
-                    NatLiteral::Number(n, _) if n.is_one() => {
+                    NatLiteral(n, _) if n.is_one() => {
                         flat([pure("Nat.succ("), print_term(inner), pure(")")])
                     }
-                    NatLiteral::Number(n, radix) => flat([
+                    NatLiteral(n, radix) => flat([
                         pure(format!("Nat.succ({}, ", format_radix(&n, radix))),
-                        print_term(inner),
-                        pure(")"),
-                    ]),
-                    NatLiteral::Char(c) => flat([
-                        pure(format!("Nat.succ({}, ", c as usize)),
                         print_term(inner),
                         pure(")"),
                     ]),
@@ -630,6 +613,17 @@ pub(crate) fn print_term(term: Term) -> Printer<'static> {
         // Both spell `?`: the written/desugared distinction matters to zonk's
         // reporting, not to how the term reads.
         Subterm::Hole | Subterm::Goal => pure("?"),
+        Subterm::Syn(Syn::Char(character)) => {
+            let escaped = match character {
+                '\'' => "\\'".to_string(),
+                '\\' => "\\\\".to_string(),
+                '\n' => "\\n".to_string(),
+                '\t' => "\\t".to_string(),
+                '\r' => "\\r".to_string(),
+                _ => character.to_string(),
+            };
+            pure(format!("'{escaped}'"))
+        }
         Subterm::Syn(Syn::Str(content)) => pure(format!(
             "\"{}\"",
             content

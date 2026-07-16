@@ -182,14 +182,14 @@ fn utf8_decode_lemmas_type_check() {
 #[test]
 fn str_get_indexes_codepoints_of_every_width() {
     let source = r#"
-        use /std/{Str, Nat, Io, Option};
+        use /std/{Str, Char, Nat, Io, Option};
         match Str/of_bytes(x\61\e2\82\ac\f0\9f\98\80) : {}
         | some(s) =>
             Io/print(Str/flatten([
                 Nat/to_str(Str/len(s)), ",",
-                Nat/to_str(Option/unwrap_or(Str/get(s, 0), 0)), ",",
-                Nat/to_str(Option/unwrap_or(Str/get(s, 1), 0)), ",",
-                Nat/to_str(Option/unwrap_or(Str/get(s, 2), 0))
+                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/get(s, 0), '?'))), ",",
+                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/get(s, 1), '?'))), ",",
+                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/get(s, 2), '?')))
             ]))
         | none() => Io/print("bad")
         end
@@ -206,7 +206,7 @@ fn str_get_indexes_codepoints_of_every_width() {
 #[test]
 fn str_at_reads_codepoints_with_the_proof() {
     let source = r#"
-        use /std/{Str, Nat, Io, Option};
+        use /std/{Str, Char, Nat, Io, Option};
         match Str/of_bytes(x\61\e2\82\ac\f0\9f\98\80) : {}
         | some(s) =>
             let out =
@@ -220,9 +220,9 @@ fn str_at_reads_codepoints_with_the_proof() {
                 | some(p1) => match r2 : Option(Str)
                 | none() => Option/none()
                 | some(p2) => Option/some(Str/flatten([
-                    Nat/to_str(Str/at(s, 0, p0)), ",",
-                    Nat/to_str(Str/at(s, 1, p1)), ",",
-                    Nat/to_str(Str/at(s, 2, p2))]))
+                    Nat/to_str(Char/to_nat(Str/at(s, 0, p0))), ",",
+                    Nat/to_str(Char/to_nat(Str/at(s, 1, p1))), ",",
+                    Nat/to_str(Char/to_nat(Str/at(s, 2, p2)))]))
                 end end end;
             Io/print(Option/unwrap_or(out, "oob"))
         | none() => Io/print("bad")
@@ -306,6 +306,127 @@ fn str_trim_all_whitespace_is_empty() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"!");
+}
+
+#[test]
+fn char_of_nat_accepts_exact_unicode_scalar_boundaries() {
+    let source = r#"
+        use /std/{Char, Nat, Str, Option, Lst, Io};
+        let render(n : Nat) -> Str =
+            match Char/of_nat(n)
+            | some(c) => Nat/to_str(Char/to_nat(c))
+            | none() => "x"
+            end;
+        Io/print(Str/join(",", Lst/map(render,
+            [0, 0xD7FF, 0xD800, 0xDFFF, 0xE000, 0x10FFFF, 0x110000])))
+        "#;
+
+    assert_eq!(run(source), b"0,55295,x,x,57344,1114111,x");
+}
+
+#[test]
+fn char_to_utf8_matches_rust_across_widths_and_boundaries() {
+    let scalars = [
+        0x0, 0x7f, 0x80, 0x3bb, 0x7ff, 0x800, 0xd7ff, 0xe000, 0xffff, 0x10000, 0x1f600, 0x10ffff,
+    ];
+    let source = r#"
+        use /std/{Char, Nat, Bytes, Option, Lst, Io};
+        let encode(n : Nat) -> Bytes =
+            Char/to_utf8(Option/unwrap_or(Char/of_nat(n), '?'));
+        Io/write(Io/stdout, Bytes/flatten(Lst/map(encode,
+            [0, 0x7F, 0x80, 0x3BB, 0x7FF, 0x800, 0xD7FF, 0xE000, 0xFFFF,
+             0x10000, 0x1F600, 0x10FFFF])))
+        "#;
+
+    let expected = scalars
+        .into_iter()
+        .flat_map(|scalar| {
+            char::from_u32(scalar)
+                .expect("test scalar")
+                .to_string()
+                .into_bytes()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(run(source), expected);
+}
+
+#[test]
+fn str_logical_operations_use_certified_chars() {
+    let source = r#"
+        use /std/{Char, Str, Nat, Option, Show, Io};
+        let s = "a€😀";
+        let rebuilt = Str/fold(s, "", (c, acc) => Str/concat(acc, Show/show(c)));
+        let second = Show/show(Option/unwrap_or(Str/get(s, 1), '?'));
+        let euro = Option/unwrap_or(Str/find(s, '€'), 99);
+        let supplementary = Option/unwrap_or(Str/find_index(s, (c) => Char/to_nat(c) > 0xFFFF), 99);
+        let shown = Show/show('😀');
+        let folded = Str/eql_ascii_ci("AbÉ", "aBÉ");
+        let not_unicode_folded = Str/eql_ascii_ci("É", "é");
+        Io/print(Str/flatten([
+            rebuilt, "|", second, "|", Nat/to_str(euro), "|",
+            Nat/to_str(supplementary), "|", shown, "|",
+            /std/Bln/to_str(folded), "|", /std/Bln/to_str(not_unicode_folded), "|",
+            Nat/to_str(Str/len(s)), "|", Str/slice(s, 1, 2)
+        ]))
+        "#;
+
+    assert_eq!(run(source), "a€😀|€|1|2|😀|true|false|3|€".as_bytes());
+}
+
+#[test]
+fn str_rejects_every_invalid_utf8_shape() {
+    let source = r#"
+        use /std/{Str, Bln, Lst, Bytes, Io};
+        let rejected(bytes : Bytes) -> Bln =
+            match Str/of_bytes(bytes)
+            | some(_) => false
+            | none() => true
+            end;
+        Io/print(Bln/to_str(Lst/fold([
+            x\c0\af, x\e0\80\80, x\ed\a0\80, x\f4\90\80\80,
+            x\80, x\c2, x\e2\82, x\f0\9f\98
+        ], true, (bytes, ok) => ok && rejected(bytes))))
+        "#;
+
+    assert_eq!(run(source), b"true");
+}
+
+#[test]
+fn json_unicode_escapes_require_well_formed_surrogate_pairs() {
+    let source = r#"
+        use /std/{Json, Parse, Result, Str, Io};
+        use /std/Json/{str};
+        let decoded(input : Str) -> Str =
+            match Parse/run(Json/decode, Str/to_bytes(input)) : Str
+            | success(value) =>
+                match value : Str
+                | str(s) => s
+                | _ => "wrong"
+                end
+            | failure(_) => "rejected"
+            end;
+        Io/print(Str/join("|", [
+            decoded("\"\\uD83D\\uDE00\""),
+            decoded("\"\\uD83D\""),
+            decoded("\"\\uD83D\\u0041\""),
+            decoded("\"\\uDE00\"")
+        ]))
+        "#;
+
+    assert_eq!(run(source), "😀|rejected|rejected|rejected".as_bytes());
+}
+
+#[test]
+fn character_literals_do_not_coerce_to_numeric_domains() {
+    for source in [
+        "use /std/{Nat}; let n : Nat = 'a'; n",
+        "use /std/{Byte}; let b : Byte = 'a'; b",
+        "use /std/{Char, Nat}; let c : Char = 'a'; c == 97",
+        "use /std/{Char, Byte}; let c : Char = 'a'; c == (0x61 : Byte)",
+    ] {
+        let (system, _io) = MockHost::builder().build();
+        assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
+    }
 }
 
 // A *non-productive* inner `rec` forced in a type position must degrade to the

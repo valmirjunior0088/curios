@@ -160,10 +160,7 @@ fn parse_infix_requires_spaces_and_disambiguates_signs() {
 fn parse_char_literal_ascii() {
     assert_eq!(
         "'a'".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
-            NatLiteral::Char('a'),
-            Subterm::Prim(Prim::Nat(Nat::Zero)).into()
-        ))))
+        Term::from(Subterm::Syn(Syn::Char('a')))
     );
 }
 
@@ -171,11 +168,22 @@ fn parse_char_literal_ascii() {
 fn parse_char_literal_escape() {
     assert_eq!(
         "'\\n'".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Nat(Nat::Succ(
-            NatLiteral::Char('\n'),
-            Subterm::Prim(Prim::Nat(Nat::Zero)).into()
-        ))))
+        Term::from(Subterm::Syn(Syn::Char('\n')))
     );
+}
+
+#[test]
+fn char_literals_round_trip_unicode_and_supported_escapes() {
+    for source in [
+        "'a'", "'λ'", "'😀'", "'\\n'", "'\\t'", "'\\r'", "'\\''", "'\\\\'",
+    ] {
+        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+    }
+}
+
+#[test]
+fn character_literal_is_not_a_natural_pattern() {
+    assert!("match 97 | 'a' => 0 | _ => 1 end".parse::<Term>().is_err());
 }
 
 #[test]

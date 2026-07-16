@@ -4,7 +4,7 @@
 //! resolved-module-path `Qualifier` identity, the value types the surface
 //! (`curios-text`) and core (`curios-core`) `Term` representations share
 //! verbatim (`Plicity`, `NumOp`, `Int`, `Flt`), and the `/syn` path-literal
-//! registry both crates reference (alongside `NumOp` in `num_op.rs`).
+//! registry both crates reference (`syn.rs`, kept separate from `NumOp` in `num_op.rs`).
 
 mod macros;
 
@@ -22,6 +22,9 @@ pub use plicity::*;
 
 mod num_op;
 pub use num_op::*;
+
+mod syn;
+pub use syn::*;
 
 mod int;
 pub use int::*;

@@ -44,5 +44,14 @@ pub concept Monad(M : (Type) -> Type) : Type {
     bind(@A : Type, @B : Type, M(A), (A) -> M(B)) -> M(B)
 }
 
+pub mod True;
+pub use True/{let True};
+
+pub mod False;
+pub use False/{let False};
+
+pub mod Char;
+pub use Char/{let Char};
+
 pub mod Str;
 pub use Str/{let Str};

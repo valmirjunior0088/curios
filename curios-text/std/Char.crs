@@ -1,61 +1,115 @@
-use /std/{Nat, Bln, Bytes, Option};
+-- Unicode scalar values are certified by /syn/Char. Classification and case
+-- conversion in this initial API are deliberately ASCII-only; Unicode database
+-- policy remains outside the foundational scalar type.
 
-pub let is_whitespace(c : Nat) -> Bln =
-    c == ' ' || Nat/in_range(c, '\t', '\r');
+pub use /syn/{Char};
+pub use /syn/Char/{Below, InRange, Scalar};
+use /std/{Nat, Byte, Bln, Bytes, Option, Order, Eq, True};
 
-pub let is_digit(c : Nat) -> Bln =
-    Nat/in_range(c, '0', '9');
+pub let to_nat(c : Char) -> Nat =
+    c.code;
 
-pub let is_lower(c : Nat) -> Bln =
-    Nat/in_range(c, 'a', 'z');
+pub let of_nat(code : Nat) -> Option(Char) =
+    match Nat/lt(code, 0xD800)
+    | true =>
+        Option/some(Char { code = code, scalar = Scalar/below(@code, True/qed()) })
+    | false =>
+        match Nat/gte(code, 0xE000)
+        | false => Option/none()
+        | true =>
+            match Nat/lte(code, 0x10FFFF)
+            | true => Option/some(Char { code = code, scalar = Scalar/above(@code, True/qed()) })
+            | false => Option/none()
+            end
+        end
+    end;
 
-pub let is_upper(c : Nat) -> Bln =
-    Nat/in_range(c, 'A', 'Z');
+pub let eq_of_code(a : Char, b : Char, proof : Eq(a.code, b.code)) -> Eq(a, b) =
+    Eq/subst(
+        (code : Nat) => (scalar : Scalar(code)) -> Eq(a, Char { code = code, scalar = scalar }),
+        proof,
+        (scalar : Scalar(a.code)) => Eq/refl())(b.scalar);
 
-pub let is_alpha(c : Nat) -> Bln =
-    is_lower(c) || is_upper(c);
+pub let eql(a : Char, b : Char) -> Bln =
+    Nat/eql(a.code, b.code);
 
-pub let is_alphanumeric(c : Nat) -> Bln =
-    is_alpha(c) || is_digit(c);
+pub let cmp(a : Char, b : Char) -> Order =
+    Nat/cmp(a.code, b.code);
 
-pub let to_lower(c : Nat) -> Nat =
+pub let is_whitespace(c : Char) -> Bln =
+    Bln/or(Nat/eql(c.code, 0x20), Nat/in_range(c.code, 0x09, 0x0D));
+
+pub let is_digit(c : Char) -> Bln =
+    Nat/in_range(c.code, 0x30, 0x39);
+
+pub let is_lower(c : Char) -> Bln =
+    Nat/in_range(c.code, 0x61, 0x7A);
+
+pub let is_upper(c : Char) -> Bln =
+    Nat/in_range(c.code, 0x41, 0x5A);
+
+pub let is_alpha(c : Char) -> Bln =
+    Bln/or(is_lower(c), is_upper(c));
+
+pub let is_alphanumeric(c : Char) -> Bln =
+    Bln/or(is_alpha(c), is_digit(c));
+
+pub let to_ascii_lower(c : Char) -> Char =
     match is_upper(c)
-    | true => c + 0x20
+    | true => Option/unwrap_or(of_nat(c.code + 0x20), c)
     | false => c
     end;
 
-pub let to_upper(c : Nat) -> Nat =
+pub let to_ascii_upper(c : Char) -> Char =
     match is_lower(c)
-    | true => c - 0x20
+    | true => Option/unwrap_or(of_nat(c.code - 0x20), c)
     | false => c
     end;
 
-pub let hex_digit(nibble : Nat) -> Nat =
-    match nibble < 10
-    | true => nibble + '0'
-    | false => nibble - 10 + 'a'
-    end;
+let ascii_zero : Char =
+    Char { code = 0x30, scalar = Scalar/below(@0x30, True/qed()) };
 
-pub let of_hex_digit(c : Nat) -> Option(Nat) =
+pub let hex_digit(nibble : Nat) -> Char =
+    let digit =
+        match Nat/lt(Nat/rem(nibble, 0x10), 10)
+        | true => Nat/add(Nat/rem(nibble, 0x10), 0x30)
+        | false => Nat/add(Nat/sub(Nat/rem(nibble, 0x10), 10), 0x61)
+        end;
+    Option/unwrap_or(of_nat(digit), ascii_zero);
+
+pub let of_hex_digit(c : Char) -> Option(Nat) =
     match
-    | is_digit(c) => Option/some(c - '0')
-    | Nat/in_range(c, 'a', 'f') => Option/some(c - 'a' + 10)
-    | Nat/in_range(c, 'A', 'F') => Option/some(c - 'A' + 10)
+    | is_digit(c) => Option/some(c.code - 0x30)
+    | Nat/in_range(c.code, 0x61, 0x66) => Option/some(c.code - 0x61 + 10)
+    | Nat/in_range(c.code, 0x41, 0x46) => Option/some(c.code - 0x41 + 10)
     | _ => Option/none()
     end;
 
-rec emit_continuations(acc : Bytes, codepoint : Nat, shift : Nat) -> Bytes =
-    match shift == 0
-    | true => acc
-    | false =>
-        let group = codepoint / shift % 0x40;
-        emit_continuations(Bytes/append(acc, Nat/to_byte(0x80 + group)), codepoint, shift / 0x40)
+pub let of_ascii(byte : Byte) -> Option(Char) =
+    match Nat/lt(Byte/to_nat(byte), 0x80)
+    | true => of_nat(Byte/to_nat(byte))
+    | false => Option/none()
     end;
 
-pub let to_utf8(codepoint : Nat) -> Bytes =
+pub let to_ascii(c : Char) -> Option(Byte) =
+    match Nat/lt(c.code, 0x80)
+    | true => Option/some(Nat/to_byte(c.code))
+    | false => Option/none()
+    end;
+
+rec emit_continuations(acc : Bytes, codepoint : Nat, shift : Nat) -> Bytes =
+    match Nat/eql(shift, 0)
+    | true => acc
+    | false =>
+        let group = Nat/rem(Nat/div(codepoint, shift), 0x40);
+        emit_continuations(Bytes/append(acc, Nat/to_byte(Nat/add(0x80, group))), codepoint, Nat/div(shift, 0x40))
+    end;
+
+pub let to_utf8(c : Char) -> Bytes =
+    let codepoint = c.code;
     match
-    | codepoint < 0x80 => Bytes/append(x\, Nat/to_byte(codepoint))
-    | codepoint < 0x800 => emit_continuations(Bytes/append(x\, Nat/to_byte(0xC0 + codepoint / 0x40)), codepoint, 1)
-    | codepoint < 0x10000 => emit_continuations(Bytes/append(x\, Nat/to_byte(0xE0 + codepoint / 0x1000)), codepoint, 0x40)
-    | _ => emit_continuations(Bytes/append(x\, Nat/to_byte(0xF0 + codepoint / 0x40000)), codepoint, 0x1000)
+    | Nat/lt(codepoint, 0x80) => Bytes/append(x\, Nat/to_byte(codepoint))
+    | Nat/lt(codepoint, 0x800) => emit_continuations(Bytes/append(x\, Nat/to_byte(Nat/add(0xC0, Nat/div(codepoint, 0x40)))), codepoint, 1)
+    | Nat/lt(codepoint, 0x10000) => emit_continuations(Bytes/append(x\, Nat/to_byte(Nat/add(0xE0, Nat/div(codepoint, 0x1000)))), codepoint, 0x40)
+    | _ => emit_continuations(Bytes/append(x\, Nat/to_byte(Nat/add(0xF0, Nat/div(codepoint, 0x40000)))), codepoint, 0x1000)
     end;

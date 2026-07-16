@@ -150,14 +150,14 @@ fn bare_tuple_continuation_tail_infers() {
     // postponement defers the tuple, the constraint store parks the flex–flex
     // codomain pair across the inner apply, and the outer pin wakes both.
     let source = r#"
-        use /std/{Parse, Nat, Bytes, Io};
-        let pairer : Parse({ Nat, Nat }) =
+        use /std/{Parse, Byte, Nat, Bytes, Io};
+        let pairer : Parse({ Byte, Byte }) =
             Parse/bind(Parse/any_byte, (a) => Parse/pure((a, a)));
-        rec with_sugar : Parse({ Nat, Nat }) =
+        rec with_sugar : Parse({ Byte, Byte }) =
             let a = Parse/any_byte!;
             Parse/pure((a, 0));
         match Parse/run(pairer, /std/Str/to_bytes("hi"))
-        | success(pair) => Io/print(Nat/to_str(pair.0))
+        | success(pair) => Io/print(Nat/to_str(Byte/to_nat(pair.0)))
         | failure(_) => Io/print("error")
         end
         "#;

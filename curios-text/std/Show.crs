@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bln, Str, BigNat, BigInt};
+use /std/{Nat, Int, Flt, Bln, Char, Str, Option, BigNat, BigInt};
 
 pub concept Show(A : Type) : Type {
     show(A) -> Str
@@ -24,6 +24,10 @@ satisfy Show(Bln) {
 
 satisfy Show(Str) {
     show(s) = s
+}
+
+satisfy Show(Char) {
+    show(c) = Option/unwrap_or(Str/of_bytes(Char/to_utf8(c)), "")
 }
 
 satisfy Show(BigNat) {

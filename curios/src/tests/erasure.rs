@@ -111,6 +111,40 @@ fn erased_struct_field_collapses_to_bare_value() {
 }
 
 #[test]
+fn char_and_str_certificates_erase_to_their_existing_carriers() {
+    let source = r#"
+        use /std/{Char, Str};
+        (Char/to_nat('😀'), Str/to_bytes("é😀"))
+        "#;
+    let entrypoint = source
+        .parse::<curios_text::Entrypoint>()
+        .expect("source parses");
+    let mut ersd = None;
+
+    curios_pipeline::compile_entrypoint(
+        Duration::from_secs(15),
+        &entrypoint,
+        curios_text::RootSource::none(),
+        |stage| {
+            if let curios_pipeline::Stage::Ersd(module) = stage {
+                ersd = Some(format!("{module}"));
+            }
+        },
+    )
+    .expect("source compiles");
+
+    let ersd = ersd.expect("ersd stage observed");
+    assert!(
+        ersd.contains("#/std/Char/to_nat(128512n)"),
+        "Char literal did not collapse to its Nat carrier:\n{ersd}"
+    );
+    assert!(
+        ersd.contains("#/std/Str/to_bytes(x\\c3\\a9\\f0\\9f\\98\\80)"),
+        "Str literal did not collapse to its packed Bytes carrier:\n{ersd}"
+    );
+}
+
+#[test]
 fn erased_tuple_field_is_a_subset_type() {
     // The anonymous Σ form of the same idea: `(val : Nat, Type)` is a subset type
     // whose type-valued witness is dropped, collapsing to the bare relevant

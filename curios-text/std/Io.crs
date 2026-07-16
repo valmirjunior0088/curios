@@ -78,7 +78,7 @@ pub let input() -> Option(Bytes) =
         match
         | r.status != /sys/Io/Status/ok && Bytes/len(acc) == 0 => Option/none()
         | r.status != /sys/Io/Status/ok => Option/some(acc)
-        | Byte/to_nat(Option/unwrap_or(Bytes/get(r.bytes, 0), 0)) == '\n' => Option/some(acc)
+        | Byte/to_nat(Option/unwrap_or(Bytes/get(r.bytes, 0), 0)) == 0x0A => Option/some(acc)
         | _ => go(x\..acc\..r.bytes)
         end;
     go(x\);

@@ -95,6 +95,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 - `curios` and `curios-rt` use the same workspace-pinned Wasmtime version so compiler-produced `.cwasm` modules match the runtime that deserializes them.
 - `curios-abi` is the source of truth for the host/guest wire contract. A host operation is incomplete until its ABI row, compiler use, native runtime implementation, and applicable JavaScript implementation agree.
 - `/std` and `/syn` modules are embedded at build time. Every module must be registered in its Curios index and in the `include_str!` table in `curios-text/src/prelude.rs`.
+- Compiler-emitted proof-certified literals are owned by `/syn`: character literals construct transparent `/syn/Char` values and string literals construct `/syn/Str` values. Rust spellings of those hidden lowering targets belong in `curios-base/src/syn.rs`; the erased runtime carriers remain `Nat` and packed `Bytes`, respectively.
 - Binaryen is built from a verified source release. Its expensive C++ build is shared through the locked, target-specific cache under `target/binaryen`, not a Cargo fingerprint-specific `OUT_DIR`.
 - Recursive lowering and packed-value interpretation must work on the default test-thread stack. Do not use `RUST_MIN_STACK` to hide a regression.
 - Generated `.wasm` files and other build products are not source. Do not commit them. `Cargo.lock` is source and must remain synchronized with dependency changes.

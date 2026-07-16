@@ -159,14 +159,15 @@ fn bang_dispatches_through_a_user_monad_witness() {
 fn bang_std_parse_threads_bangs_left_to_right() {
     // The real `std/Parse` monad, sequenced with bare `!` — each site resolves
     // the `Monad(Parse)` witness from the action's type.
-    // Two `any_byte!`s read consecutive bytes; using a *non-commutative* `Nat/sub`
+    // Two `any_byte!`s read consecutive bytes; reflecting through `Byte/to_nat`
+    // and using a *non-commutative* `Nat/sub`
     // pins the evaluation order: on "BA" the first byte is 'B' (66) and the second
     // 'A' (65), so the result is 66 - 65 = 1 (the reversed order would saturate to 0).
     let source = r#"
-        use /std/{Parse, Nat, Result, Io};
+        use /std/{Parse, Byte, Nat, Result, Io};
 
         let parser : Parse/Parse(Nat) =
-            Parse/pure(Nat/sub(Parse/any_byte!, Parse/any_byte!));
+            Parse/pure(Nat/sub(Byte/to_nat(Parse/any_byte!), Byte/to_nat(Parse/any_byte!)));
 
         match Parse/run(parser, /std/Str/to_bytes("BA")) : {}
         | success(n) => Io/print(Nat/to_str(n))
@@ -189,19 +190,19 @@ fn bang_std_parse_threads_bangs_left_to_right() {
 #[test]
 fn bang_region_mixes_action_types() {
     // A single region sequences two actions of *different* payload types: a
-    // `Parse(Bytes)` (`take_while`) and a `Parse(Nat)` (`any_byte`). Each `!`
+    // `Parse(Bytes)` (`take_while`) and a `Parse(Byte)` (`any_byte`). Each `!`
     // site elaborates its own `/syn/Monad/bind` application with fresh
-    // implicits (`?A := Bytes` for the first, `?A := Nat` for the second), while
+    // implicits (`?A := Bytes` for the first, `?A := Byte` for the second), while
     // the shared continuation typing forces one monad for the region. On "AB":
     // `take_while(is_a)` reads "A" (stops at 'B'), then `any_byte` reads 'B'
     // (66); `Bytes/append("A", 66)` is "AB".
     let source = r#"
-        use /std/{Parse, Nat, Bytes, Bln, Result, Io, Str};
+        use /std/{Parse, Byte, Bytes, Bln, Result, Io, Str};
 
-        let is_a : (Nat) -> Bln = (b) => match b : Bln | 'A' => true | _ => false end;
+        let is_a : (Byte) -> Bln = (b) => b == 0x41;
 
         let parser : Parse/Parse(Bytes) =
-            Parse/pure(Bytes/append(Parse/take_while(is_a)!, Nat/to_byte(Parse/any_byte!)));
+            Parse/pure(Bytes/append(Parse/take_while(is_a)!, Parse/any_byte!));
 
         match Parse/run(parser, /std/Str/to_bytes("AB")) : {}
         | success(s) =>
@@ -698,8 +699,8 @@ fn option_result_char_helpers() {
         let opt = Option/unwrap_or(Option/map((x : Nat) => Nat/add(x, 1), Option/some(4)), 0);
         let res0 : Result(Nat, Nat) = Result/success(5);
         let res = Result/unwrap_or(Result/map_success((x : Nat) => Nat/mul(x, 2), res0), 0);
-        let up = Char/to_upper('a');
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(opt, res), up))))
+        let up = Char/to_ascii_upper('a');
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(opt, res), Char/to_nat(up)))))
         "#,
         system,
     )

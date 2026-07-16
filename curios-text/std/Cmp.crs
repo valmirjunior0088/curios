@@ -1,6 +1,6 @@
 pub use /syn/{Cmp};
 pub use /syn/Cmp/{lt, lte, gt, gte};
-use /std/{Nat, Byte, Int, Flt, BigNat, BigInt};
+use /std/{Nat, Byte, Int, Flt, Char, BigNat, BigInt};
 
 satisfy Cmp(Nat) {
     lt(a, b) = Nat/lt(a, b),
@@ -14,6 +14,13 @@ satisfy Cmp(Byte) {
     lte(a, b) = Byte/lte(a, b),
     gt(a, b) = Byte/gt(a, b),
     gte(a, b) = Byte/gte(a, b)
+}
+
+satisfy Cmp(Char) {
+    lt(a, b) = Nat/lt(Char/to_nat(a), Char/to_nat(b)),
+    lte(a, b) = Nat/lte(Char/to_nat(a), Char/to_nat(b)),
+    gt(a, b) = Nat/gt(Char/to_nat(a), Char/to_nat(b)),
+    gte(a, b) = Nat/gte(Char/to_nat(a), Char/to_nat(b))
 }
 
 satisfy Cmp(Int) {

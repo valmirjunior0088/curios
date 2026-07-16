@@ -238,7 +238,7 @@ pub(super) fn parse_bln_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 // literal is `parse_nat_lit_match_pattern`.
 pub(super) fn parse_nat_zero_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_nat().flat_map(|lit| match lit {
-        NatLiteral::Number(n, _) if n.is_zero() => pure(MatchPattern::Nat(NatPattern::Zero)),
+        NatLiteral(n, _) if n.is_zero() => pure(MatchPattern::Nat(NatPattern::Zero)),
         _ => fail("expected 0 as a nested Nat zero pattern"),
     }))
 }

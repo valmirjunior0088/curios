@@ -1,10 +1,4 @@
-//! Also holds the shared `/syn` path-literal registry: not a mirror of
-//! `syn.crs`'s full surface, only the names Rust code actually mentions —
-//! [`NumOp::concept_field`]'s operator table, and the desugaring targets
-//! `curios-text`'s `into_core::lowerer` emits calls to (the `/syn/Str`
-//! meta-emitter, the `/syn/Monad/bind` region wrapper). Both `curios-core`
-//! and `curios-text` depend on `curios-base`, so this is the one place a
-//! `/syn` rename in `syn.crs`/`Str.crs` needs to be echoed.
+//! Fixed infix operators and their `/syn` concept dispatch targets.
 
 /// A fixed infix operator. The surface parser maps an operator symbol (with
 /// its precedence) onto one of these; elaboration dispatches it through its
@@ -82,15 +76,3 @@ impl NumOp {
         }
     }
 }
-
-/// `/syn/Monad/bind` — the desugaring target for each `!`-collected bang
-/// (`curios-text`'s `into_core::lowerer::wrap`).
-pub const MONAD_BIND: &str = "/syn/Monad/bind";
-
-/// `/syn/Str`'s desugaring targets — the string-literal meta-emitter
-/// (`curios-text`'s `into_core::lowerer::str_literal`/`utf8_derivation`).
-pub const STR_STR: &str = "/syn/Str/Str";
-pub const STR_SCAN_LEAD: &str = "/syn/Str/Scan/lead";
-pub const STR_UTF8_STOP: &str = "/syn/Str/Utf8/stop";
-pub const STR_UTF8_MORE: &str = "/syn/Str/Utf8/more";
-pub const STR_STEP: &str = "/syn/Str/step";

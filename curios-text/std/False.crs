@@ -1,9 +1,2 @@
-pub induct False : pub Prop
-end
-
-pub let absurd(@A : Type, contradiction : False) -> A =
-    match contradiction : A
-    end;
-
-pub let Not(P : Type) -> Type =
-    (P) -> False;
+pub use /syn/{False};
+pub use /syn/False/{absurd, Not};

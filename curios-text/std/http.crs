@@ -61,11 +61,14 @@ pub let get_tls(host : Str, port : Nat, path : Str) -> Request =
 pub let post_tls(host : Str, port : Nat, path : Str, body : Bytes) -> Request =
     secure(post(host, port, path, body));
 
-let until(target : Nat) -> (Nat) -> Bln =
+let until(target : Byte) -> (Byte) -> Bln =
     (byte) => Bln/not(byte == target);
 
 let header_lookup(headers : Lst({Str, Str}), name : Str) -> Option(Str) =
-    Option/map(((_, value)) => value, Lst/find(headers, ((key, _)) => Str/eql_ci(key, name)));
+    Option/map(((_, value)) => value, Lst/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)));
+
+let is_ascii_digit(byte : Byte) -> Bln =
+    Nat/in_range(Byte/to_nat(byte), 0x30, 0x39);
 
 let render_header((name, value) : {Str, Str}) -> Str =
     Str/flatten([name, ": ", value, "\r\n"]);
@@ -93,13 +96,13 @@ pub struct Status : pub Type {
 }
 
 pub let status_line : Parse(Status) =
-    let version = Parse/take_while(until(' '))!;
-    let _ = Parse/take_byte(' ')!;
-    let digits = Parse/take_while(Char/is_digit)!;
-    let _ = Parse/take_byte(' ')!;
-    let reason = Parse/take_while(until('\r'))!;
-    let _ = Parse/take_byte('\r')!;
-    let _ = Parse/take_byte('\n')!;
+    let version = Parse/take_while(until(0x20))!;
+    let _ = Parse/take_byte(0x20)!;
+    let digits = Parse/take_while(is_ascii_digit)!;
+    let _ = Parse/take_byte(0x20)!;
+    let reason = Parse/take_while(until(0x0D))!;
+    let _ = Parse/take_byte(0x0D)!;
+    let _ = Parse/take_byte(0x0A)!;
     Parse/pure(Status {
         version = Option/unwrap_or(Str/of_bytes(version), ""),
         code = Option/unwrap_or(Nat/of_str(Option/unwrap_or(Str/of_bytes(digits), "")), 0),
@@ -124,7 +127,7 @@ let guard_header : Parse({}) =
             match Nat/try_lt(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of headers")
             | some(ok) =>
-                match Byte/to_nat(Bytes/at(input, pos, ok)) == '\r'
+                match Bytes/at(input, pos, ok) == 0x0D
                 | true => Result/failure("end of header block")
                 | false => Result/success((pos, ()))
                 end
@@ -133,11 +136,11 @@ let guard_header : Parse({}) =
 
 let header_line : Parse({Str, Str}) =
     let _ = guard_header!;
-    let name = Parse/take_while(until(':'))!;
-    let _ = Parse/take_byte(':')!;
-    let value = Parse/take_while(until('\r'))!;
-    let _ = Parse/take_byte('\r')!;
-    let _ = Parse/take_byte('\n')!;
+    let name = Parse/take_while(until(0x3A))!;
+    let _ = Parse/take_byte(0x3A)!;
+    let value = Parse/take_while(until(0x0D))!;
+    let _ = Parse/take_byte(0x0D)!;
+    let _ = Parse/take_byte(0x0A)!;
     Parse/pure((Option/unwrap_or(Str/of_bytes(name), ""), Str/trim(Option/unwrap_or(Str/of_bytes(value), ""))));
 
 let take_n(n : Nat) -> Parse(Bytes) =
@@ -162,8 +165,8 @@ let body_parser(headers : Lst({Str, Str})) -> Parse(Bytes) =
 pub let decode : Parse(Response) =
     let status = status_line!;
     let headers = Parse/many0(header_line)!;
-    let _ = Parse/take_byte('\r')!;
-    let _ = Parse/take_byte('\n')!;
+    let _ = Parse/take_byte(0x0D)!;
+    let _ = Parse/take_byte(0x0A)!;
     let body = body_parser(headers)!;
     Parse/pure(Response {
         status = status,

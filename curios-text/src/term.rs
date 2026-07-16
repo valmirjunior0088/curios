@@ -702,10 +702,10 @@ pub enum Subterm {
     NumLit(NumLit),
 }
 
-/// The literals the lowerer desugars to a `/syn` construction: a string becomes
-/// a proof-carrying `/syn/Str` value. Held as a dedicated [`Subterm`] variant
+/// The literals the lowerer desugars to a `/syn` construction: a character becomes a proof-carrying `/syn/Char`, and a string becomes a proof-carrying `/syn/Str`. Held as a dedicated [`Subterm`] variant
 /// (not a `Prim`) because the result is a core term, never a core primitive.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Syn {
+    Char(char),
     Str(String),
 }

@@ -169,8 +169,8 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
   - [x] Machine-checked additive and multiplicative laws, additive cancellation, order reflection/transitivity, and power-of-two interaction lemmas
 - [x] Certified strictly-positive arbitrary-precision naturals (`std/NonZero`)
 - [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/NonZero`)
-- [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`; decoded scalar values are currently exposed as `Nat` through the `std/Char` namespace)
-- [ ] [Certified Unicode-scalar `Char` type and `Str` migration](01_CHAR_AND_STR_SPEC.md) (`'…' : Char`, typed character APIs, and explicit Byte/Char/Nat boundaries)
+- [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`; decoded scalar values are exposed as certified `Char` values while storage remains packed `Bytes`)
+- [x] Certified Unicode-scalar `Char` type and `Str` migration (`'…' : Char`, typed character APIs, explicit Byte/Char/Nat boundaries, and ASCII-explicit classification and casing policy)
 - [ ] [`BigFlt`: certified exact dyadic arithmetic and correctly rounded binary32 boundaries](02_BIG_FLT_SPEC.md)
   - [ ] [`BigInt` algebra, order, and power-of-two laws required by `BigFlt`](03_BIG_INT_LAWS_SPEC.md)
   - [ ] [`BigFlt` canonical representation, exact core operations, comparison, and witnesses](04_BIG_FLT_CORE_SPEC.md)

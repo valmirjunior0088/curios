@@ -2,7 +2,7 @@
 
 Umbrella specification for exact dyadic arithmetic, conversion to and from native binary32 values, and the proof obligations shared by those capabilities. The work is divided into focused implementation specifications so each prerequisite, executable layer, and theorem layer can be reviewed and completed independently.
 
-The representation series supplies primitive `Byte`, `Bits`, and `Bytes`; packed `BigNat` and `BigInt`; and the final [`Char`/`Str` presentation layer](01_CHAR_AND_STR_SPEC.md). `BigFlt` completes the series without changing those representations.
+The representation series supplies primitive `Byte`, `Bits`, and `Bytes`; packed `BigNat` and `BigInt`; and the final [`Char`/`Str` presentation layer](SYNTAX.md#character-and-string-literals). `BigFlt` completes the series without changing those representations.
 
 This is a working reference rather than permanent architecture documentation. Fold durable conclusions into `AGENTS.md`, `ROADMAP.md`, relevant rustdoc, and standard-library documentation as they land, then delete the working specifications when the arc is complete.
 

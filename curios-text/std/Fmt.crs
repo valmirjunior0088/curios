@@ -25,7 +25,7 @@ rec parse_at(bytes : Bytes, pos : Nat) -> Fmt =
     match Nat/try_lt(pos, Bytes/len(bytes))
     | none() => Fmt/nil()
     | some(ok) =>
-        match Byte/to_nat(Bytes/at(bytes, pos, ok)) == '%'
+        match Bytes/at(bytes, pos, ok) == 0x25
         | true => parse_spec_at(bytes, pos + 1)
         | false => parse_lit_at(bytes, pos, pos + 1)
         end
@@ -35,8 +35,8 @@ and parse_spec_at(bytes : Bytes, pos : Nat) -> Fmt =
     | none() => Fmt/lit("%", Fmt/nil())
     | some(ok) =>
         match Byte/to_nat(Bytes/at(bytes, pos, ok))
-        | 's' => Fmt/str(parse_at(bytes, pos + 1))
-        | 'd' => Fmt/nat(parse_at(bytes, pos + 1))
+        | 0x73 => Fmt/str(parse_at(bytes, pos + 1))
+        | 0x64 => Fmt/nat(parse_at(bytes, pos + 1))
         | _ => parse_at(bytes, pos + 1)
         end
     end
@@ -44,7 +44,7 @@ and parse_lit_at(bytes : Bytes, start : Nat, pos : Nat) -> Fmt =
     match Nat/try_lt(pos, Bytes/len(bytes))
     | none() => flush(bytes, start, pos, Fmt/nil())
     | some(ok) =>
-        match Byte/to_nat(Bytes/at(bytes, pos, ok)) == '%'
+        match Bytes/at(bytes, pos, ok) == 0x25
         | true => flush(bytes, start, pos, parse_spec_at(bytes, pos + 1))
         | false => parse_lit_at(bytes, start, pos + 1)
         end

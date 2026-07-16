@@ -1,5 +1,2 @@
-pub induct True : pub Prop
-| qed()
-end
-
-pub use True/*;
+pub use /syn/{True};
+pub use /syn/True/{qed};

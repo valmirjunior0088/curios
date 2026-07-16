@@ -203,9 +203,9 @@ pub let of_str(s : Str) -> Option(Flt) =
         let first = Str/get(s, 0)!;
         let is_neg = first == '-';
         let start =
-            match first
-            | '+' => 1
-            | '-' => 1
+            match
+            | first == '+' => 1
+            | first == '-' => 1
             | _ => 0
             end;
         let len = Str/len(s);

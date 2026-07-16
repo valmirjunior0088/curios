@@ -1,6 +1,7 @@
 pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
-use /std/{Char, Nat, Byte, Bytes, Bln, Lst, Option, True, False};
+use /std/{Char, Nat, Byte, Bytes, Bln, Lst, Option};
+use /syn/{True, False};
 
 rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
     -> Utf8(s, x\..a\..b) =
@@ -131,11 +132,20 @@ pub let flatten(parts : Lst(Str)) -> Str =
 pub let eql(a : Str, b : Str) -> Bln =
     Bytes/eql(to_bytes(a), to_bytes(b));
 
-let lower_bytes(b : Bytes) -> Bytes =
-    Bytes/fold(b, x\, (byte, acc) => Bytes/append(acc, Nat/to_byte(Char/to_lower(Byte/to_nat(byte)))));
+-- ASCII-insensitive equality folds only encoded ASCII letters. Every non-ASCII
+-- UTF-8 byte is left untouched, so this is not Unicode case folding.
+let lower_ascii_byte(byte : Byte) -> Byte =
+    let n = Byte/to_nat(byte);
+    match Nat/in_range(n, 0x41, 0x5A)
+    | true => Nat/to_byte(n + 0x20)
+    | false => byte
+    end;
 
-pub let eql_ci(a : Str, b : Str) -> Bln =
-    Bytes/eql(lower_bytes(to_bytes(a)), lower_bytes(to_bytes(b)));
+let lower_ascii_bytes(b : Bytes) -> Bytes =
+    Bytes/fold(b, x\, (byte, acc) => Bytes/append(acc, lower_ascii_byte(byte)));
+
+pub let eql_ascii_ci(a : Str, b : Str) -> Bln =
+    Bytes/eql(lower_ascii_bytes(to_bytes(a)), lower_ascii_bytes(to_bytes(b)));
 
 pub let repeat(s : Str, n : Nat) -> Str =
     Lst/balanced(n, "", (i) => s, (l, r) => concat(l, r));
@@ -205,7 +215,7 @@ pub rec count_w(s : Scan, b : Bytes) -> Nat =
         end
     end;
 
-pub let decode_head(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), Bytes/cons(c, t))) -> Nat =
+pub let decode_head_raw(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), Bytes/cons(c, t))) -> Nat =
     match classify(c)
     | ascii() => Byte/to_nat(c)
     | lead(k, lo, hi, payload) =>
@@ -218,7 +228,13 @@ pub let decode_head(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), Bytes/cons(c, t)
                 peel_byte(@Scan/lead(), @Bytes/cons(c, t), True/qed(), w)))
     end;
 
-pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
+let certify_decoded(code : Nat) -> Char =
+    Option/unwrap_or(Char/of_nat(code), '?');
+
+pub let decode_head(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), Bytes/cons(c, t))) -> Char =
+    certify_decoded(decode_head_raw(c, @t, w));
+
+pub let fold(@A : Type, s : Str, init : A, f : (Char, A) -> A) -> A =
     (match s.bytes : (b) => (sc : Scan, valid : Utf8(sc, b), acc : {A, Nat}) -> {A, Nat}
     | x\ => (sc, valid, acc) => acc
     | x\h\..t; ih => (sc, valid, acc) =>
@@ -227,7 +243,7 @@ pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
             ih(step(h, Scan/lead()),
                 peel_byte(@Scan/lead(), @Bytes/cons(h, t), True/qed(), valid),
                 match classify(h)
-                | ascii() => (f(Byte/to_nat(h), acc.0), 0)
+                | ascii() => (f(certify_decoded(Byte/to_nat(h)), acc.0), 0)
                 | lead(width, lo, hi, payload) => (acc.0, payload)
                 | bad() => acc
                 end)
@@ -236,7 +252,7 @@ pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
             ih(step(h, Scan/cont(rem, lo, hi)),
                 peel_byte(@Scan/cont(rem, lo, hi), @Bytes/cons(h, t), True/qed(), valid),
                 match rem == 1
-                | true => (f(partial, acc.0), 0)
+                | true => (f(certify_decoded(partial), acc.0), 0)
                 | false => (acc.0, partial)
                 end)
         | bad() =>
@@ -248,7 +264,7 @@ pub let fold(@A : Type, s : Str, init : A, f : (Nat, A) -> A) -> A =
 pub let len(s : Str) -> Nat =
     count_w(Scan/lead(), s.bytes);
 
-pub let find_index(s : Str, pred : (Nat) -> Bln) -> Option(Nat) =
+pub let find_index(s : Str, pred : (Char) -> Bln) -> Option(Nat) =
     let (_, found) : {Nat, Option(Nat)} =
         fold(s, (0, Option/none()), (codepoint, (i, found)) =>
             match found
@@ -262,11 +278,11 @@ pub let find_index(s : Str, pred : (Nat) -> Bln) -> Option(Nat) =
             end);
     found;
 
-pub let find(s : Str, target : Nat) -> Option(Nat) =
+pub let find(s : Str, target : Char) -> Option(Nat) =
     find_index(s, (codepoint) => codepoint == target);
 
-pub let get(s : Str, i : Nat) -> Option(Nat) =
-    let (_, found) : {Nat, Option(Nat)} =
+pub let get(s : Str, i : Nat) -> Option(Char) =
+    let (_, found) : {Nat, Option(Char)} =
         fold(s, (0, Option/none()), (codepoint, (idx, found)) =>
             match found
             | some(_) => (idx, found)
@@ -288,11 +304,11 @@ rec lte_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Lte(i + 1, n) =
         end
     end;
 
-pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Nat =
+pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Char =
     rec go(sc : Scan, b : Bytes, valid : Utf8(sc, b), i : Nat,
-        le : Nat/Lte(i + 1, count_w(sc, b))) -> Nat =
+        le : Nat/Lte(i + 1, count_w(sc, b))) -> Char =
         match b
-        | x\ => match le : Nat end
+        | x\ => match le : Char end
         | x\h\..t; ih =>
             match sc
             | lead() =>

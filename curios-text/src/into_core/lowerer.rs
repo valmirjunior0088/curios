@@ -5,8 +5,8 @@ use {
         Nat, NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     curios_base::{
-        Grain, MONAD_BIND, PackedBin, STR_SCAN_LEAD, STR_STEP, STR_STR, STR_UTF8_MORE,
-        STR_UTF8_STOP,
+        CHAR_CHAR, CHAR_SCALAR_ABOVE, CHAR_SCALAR_BELOW, Grain, MONAD_BIND, PackedBin, Plicity,
+        STR_SCAN_LEAD, STR_STEP, STR_STR, STR_UTF8_MORE, STR_UTF8_STOP, TRUE_QED,
     },
     num_bigint::BigUint,
     std::{cell::RefCell, collections::BTreeSet, sync::Arc},
@@ -143,6 +143,28 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         )
     }
 
+    /// A Rust `char` is already a Unicode scalar, so the literal meta-emitter selects the corresponding `/syn/Char/Scalar` range constructor and supplies a closed reflected proof. The proof erases and the single relevant `code` field collapses to the ordinary Nat carrier.
+    pub(super) fn char_literal(character: char) -> curios_core::Term {
+        let code = curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Succ(
+            BigUint::from(character as u32),
+            curios_core::Term::prim(curios_core::Prim::Nat(curios_core::Nat::Zero)),
+        )));
+        let constructor = if (character as u32) < 0xD800 {
+            CHAR_SCALAR_BELOW
+        } else {
+            CHAR_SCALAR_ABOVE
+        };
+        let scalar = curios_core::Term::apply_marked(
+            curios_core::Term::var(curios_core::Var::free(constructor)),
+            [
+                (Plicity::Implicit, code.clone()),
+                (Plicity::Explicit, Self::syn_call(TRUE_QED, [])),
+            ],
+        );
+
+        curios_core::Term::struct_(CHAR_CHAR, Vec::<curios_core::Term>::new(), [code, scalar])
+    }
+
     // A constructor/function `Var` applied to `args` — the absolute core name as the
     // parser would resolve it (privacy is a surface-resolution concern; these are
     // already-resolved core `Var`s, so referencing a private `/syn` helper is fine).
@@ -197,6 +219,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // rather than lowered to a core primitive.
     pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_core::Term, Error> {
         match syn {
+            Syn::Char(character) => Ok(Self::char_literal(*character)),
             Syn::Str(string) => Ok(self.str_literal(string.as_bytes())),
         }
     }
@@ -919,12 +942,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             Prim::NatType => curios_core::Prim::NatType,
             Prim::Nat(Nat::Zero) => curios_core::Prim::Nat(curios_core::Nat::Zero),
-            Prim::Nat(Nat::Succ(NatLiteral::Number(spine, _), inner)) => {
+            Prim::Nat(Nat::Succ(NatLiteral(spine, _), inner)) => {
                 curios_core::Prim::Nat(curios_core::Nat::Succ(spine.clone(), self.term(inner)?))
             }
-            Prim::Nat(Nat::Succ(NatLiteral::Char(c), inner)) => curios_core::Prim::Nat(
-                curios_core::Nat::Succ(BigUint::from(*c as usize), self.term(inner)?),
-            ),
             Prim::ByteType => curios_core::Prim::ByteType,
             Prim::Byte(value) => curios_core::Prim::Byte(*value),
             Prim::ByteToNat(inner) => curios_core::Prim::ByteToNat(self.term(inner)?),

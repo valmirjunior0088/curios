@@ -1017,13 +1017,13 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
     // the tail solely through each bind's result metavar `?B`, which the turnaround
     // solves *after* the continuation is checked. Elaboration must postpone the
     // continuation lambda (its codomain `M(?B)` carries a result metavar) until
-    // `expect` grounds `?B` against the concrete `Parse({ Nat, Nat })`, then re-check
+    // `expect` grounds `?B` against the concrete `Parse({ Byte, Byte })`, then re-check
     // it. Guards the codomain arm of `blocked_on_metavar`; without it the tail fails
     // "introduced a tuple where the expected type is not a tuple type".
     let source = r#"
         use /std/{Parse};
-        use /std/{Nat};
-        let pair : Parse({ Nat, Nat }) =
+        use /std/{Byte};
+        let pair : Parse({ Byte, Byte }) =
             let x = Parse/any_byte!;
             Parse/pure((x, x));
         pair

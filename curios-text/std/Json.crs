@@ -13,7 +13,7 @@ pub use Json/*;
 
 let encode_num(n : Flt) -> Str =
     let raw = Flt/to_str(n);
-    match Option/unwrap_or(Str/get(raw, 0), 0) == '+'
+    match Option/unwrap_or(Str/get(raw, 0), '0') == '+'
     | true => Str/slice(raw, 1, Str/len(raw))
     | false => raw
     end;
@@ -21,19 +21,19 @@ let encode_num(n : Flt) -> Str =
 let escape_byte(byte : Byte) -> Bytes =
     let n = Byte/to_nat(byte);
     match n
-    | '"' => Str/to_bytes("\\\"")
-    | '\\' => Str/to_bytes("\\\\")
-    | '\n' => Str/to_bytes("\\n")
-    | '\r' => Str/to_bytes("\\r")
-    | '\t' => Str/to_bytes("\\t")
+    | 0x22 => Str/to_bytes("\\\"")
+    | 0x5C => Str/to_bytes("\\\\")
+    | 0x0A => Str/to_bytes("\\n")
+    | 0x0D => Str/to_bytes("\\r")
+    | 0x09 => Str/to_bytes("\\t")
     | 0x08 => Str/to_bytes("\\b")
     | 0x0C => Str/to_bytes("\\f")
     | _ =>
         match n < 0x20
         | true =>
             Bytes/append(
-                Bytes/append(Str/to_bytes("\\u00"), Nat/to_byte(Char/hex_digit(n / 0x10))),
-                Nat/to_byte(Char/hex_digit(n % 0x10)))
+                Bytes/append(Str/to_bytes("\\u00"), Option/unwrap_or(Char/to_ascii(Char/hex_digit(n / 0x10)), 0)),
+                Option/unwrap_or(Char/to_ascii(Char/hex_digit(n % 0x10)), 0))
         | false => Bytes/append(x\, byte)
         end
     end;
@@ -60,14 +60,14 @@ pub rec encode(v : Json) -> Str =
             "}")
     end;
 
-let is_num_byte(byte : Nat) -> Bln =
-    match byte
-    | '-' => true
-    | '+' => true
-    | '.' => true
-    | 'e' => true
-    | 'E' => true
-    | _ => Char/is_digit(byte)
+let is_num_byte(byte : Byte) -> Bln =
+    match Byte/to_nat(byte)
+    | 0x2D => true
+    | 0x2B => true
+    | 0x2E => true
+    | 0x65 => true
+    | 0x45 => true
+    | _ => Nat/in_range(Byte/to_nat(byte), 0x30, 0x39)
     end;
 
 let take_literal(literal : Str) -> Parse({}) =
@@ -120,17 +120,21 @@ let parse_num : Parse(Json) =
             end
     };
 
-let is_not_string_special(byte : Nat) -> Bln =
-    match byte
-    | '"' => false
-    | '\\' => false
+let is_not_string_special(byte : Byte) -> Bln =
+    match Byte/to_nat(byte)
+    | 0x22 => false
+    | 0x5C => false
     | _ => true
     end;
 
 let hex_digit : Parse(Nat) =
     let byte = Parse/any_byte!;
-    match Char/of_hex_digit(byte) : Parse(Nat)
-    | some(v) => Parse/pure(v)
+    match Char/of_ascii(byte) : Parse(Nat)
+    | some(c) =>
+        match Char/of_hex_digit(c) : Parse(Nat)
+        | some(v) => Parse/pure(v)
+        | none() => Parse/fail("invalid hex digit")
+        end
     | none() => Parse/fail("invalid hex digit")
     end;
 
@@ -145,26 +149,37 @@ let parse_unicode : Parse(Bytes) =
     let hi = hex4!;
     match hi >= 0xD800 && hi <= 0xDBFF : Parse(Bytes)
     | true =>
-        let _ = Parse/take_byte('\\')!;
-        let _ = Parse/take_byte('u')!;
+        let _ = Parse/take_byte(0x5C)!;
+        let _ = Parse/take_byte(0x75)!;
         let lo = hex4!;
-        Parse/pure(Char/to_utf8(0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00)))
-    | false => Parse/pure(Char/to_utf8(hi))
+        match lo >= 0xDC00 && lo <= 0xDFFF : Parse(Bytes)
+        | false => Parse/fail("invalid low surrogate")
+        | true =>
+            match Char/of_nat(0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00)) : Parse(Bytes)
+            | some(c) => Parse/pure(Char/to_utf8(c))
+            | none() => Parse/fail("invalid Unicode scalar")
+            end
+        end
+    | false =>
+        match Char/of_nat(hi) : Parse(Bytes)
+        | some(c) => Parse/pure(Char/to_utf8(c))
+        | none() => Parse/fail("invalid Unicode scalar")
+        end
     end;
 
 let parse_str_escape : Parse(Bytes) =
-    let _ = Parse/take_byte('\\')!;
+    let _ = Parse/take_byte(0x5C)!;
     let byte = Parse/any_byte!;
-    match byte : Parse(Bytes)
-    | '"' => Parse/pure(Str/to_bytes("\""))
-    | '\\' => Parse/pure(Str/to_bytes("\\"))
-    | '/' => Parse/pure(Str/to_bytes("/"))
-    | 'b' => Parse/pure(Bytes/append(x\, 8))
-    | 'f' => Parse/pure(Bytes/append(x\, 12))
-    | 'n' => Parse/pure(Str/to_bytes("\n"))
-    | 'r' => Parse/pure(Str/to_bytes("\r"))
-    | 't' => Parse/pure(Str/to_bytes("\t"))
-    | 'u' => parse_unicode
+    match Byte/to_nat(byte) : Parse(Bytes)
+    | 0x22 => Parse/pure(Str/to_bytes("\""))
+    | 0x5C => Parse/pure(Str/to_bytes("\\"))
+    | 0x2F => Parse/pure(Str/to_bytes("/"))
+    | 0x62 => Parse/pure(Bytes/append(x\, 8))
+    | 0x66 => Parse/pure(Bytes/append(x\, 12))
+    | 0x6E => Parse/pure(Str/to_bytes("\n"))
+    | 0x72 => Parse/pure(Str/to_bytes("\r"))
+    | 0x74 => Parse/pure(Str/to_bytes("\t"))
+    | 0x75 => parse_unicode
     | _ => Parse/fail("unknown escape")
     end;
 
@@ -175,9 +190,9 @@ let parse_str_body : Parse(Lst(Bytes)) =
     Parse/many0(Parse/or(parse_str_escape, parse_str_segment));
 
 let parse_raw_str : Parse(Str) =
-    let _ = Parse/take_byte('"')!;
+    let _ = Parse/take_byte(0x22)!;
     let chunks = parse_str_body!;
-    let _ = Parse/take_byte('"')!;
+    let _ = Parse/take_byte(0x22)!;
     match Str/of_bytes(Bytes/flatten(chunks)) : Parse(Str)
     | some(s) => Parse/pure(s)
     | none() => Parse/fail("invalid UTF-8 in string")
@@ -186,19 +201,19 @@ let parse_raw_str : Parse(Str) =
 let parse_str_value : Parse(Json) =
     Parse/map((s) => Json/str(s), parse_raw_str);
 
-let is_ws(byte : Nat) -> Bln =
-    match byte
-    | ' ' => true
-    | '\t' => true
-    | '\n' => true
-    | '\r' => true
+let is_ws(byte : Byte) -> Bln =
+    match Byte/to_nat(byte)
+    | 0x20 => true
+    | 0x09 => true
+    | 0x0A => true
+    | 0x0D => true
     | _ => false
     end;
 
 let ws : Parse({}) =
     Parse/map((_) => (), Parse/take_while(is_ws));
 
-let symbol(b : Nat) -> Parse(Nat) =
+let symbol(b : Byte) -> Parse(Byte) =
     let _ = ws!;
     Parse/take_byte(b);
 
@@ -212,30 +227,30 @@ pub rec decode : Parse(Json) =
                 | none() => Result/failure("unexpected end of input")
                 | some(ok) =>
                     match Byte/to_nat(Bytes/at(input, start, ok))
-                    | 'n' => parse_null.run(input, start)
-                    | 't' => parse_true_val.run(input, start)
-                    | 'f' => parse_false_val.run(input, start)
-                    | '"' => parse_str_value.run(input, start)
-                    | '[' => parse_arr.run(input, start)
-                    | '{' => parse_obj.run(input, start)
+                    | 0x6E => parse_null.run(input, start)
+                    | 0x74 => parse_true_val.run(input, start)
+                    | 0x66 => parse_false_val.run(input, start)
+                    | 0x22 => parse_str_value.run(input, start)
+                    | 0x5B => parse_arr.run(input, start)
+                    | 0x7B => parse_obj.run(input, start)
                     | _ => parse_num.run(input, start)
                     end
                 end
             end
     }
 and parse_arr : Parse(Json) =
-    let _ = symbol('[')!;
-    let elems = Parse/sep_by0(decode, symbol(','))!;
-    let _ = symbol(']')!;
+    let _ = symbol(0x5B)!;
+    let elems = Parse/sep_by0(decode, symbol(0x2C))!;
+    let _ = symbol(0x5D)!;
     Parse/pure(Json/arr(elems))
 and parse_obj : Parse(Json) =
-    let _ = symbol('{')!;
-    let pairs = Parse/sep_by0(parse_pair, symbol(','))!;
-    let _ = symbol('}')!;
+    let _ = symbol(0x7B)!;
+    let pairs = Parse/sep_by0(parse_pair, symbol(0x2C))!;
+    let _ = symbol(0x7D)!;
     Parse/pure(Json/obj(pairs))
 and parse_pair : Parse({Str, Json}) =
     let _ = ws!;
     let key = parse_raw_str!;
-    let _ = symbol(':')!;
+    let _ = symbol(0x3A)!;
     let val = decode!;
     Parse/pure((key, val));

@@ -25,7 +25,7 @@ use {
         Apply, BinPattern, BinSegment, CasePayloadParam, ConceptField, CondMatch, Field, Func,
         FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, LadderArm, LadderTest, Let,
         LetBinding, LetSignature, LstEntry, LstPattern, Match, MatchPattern, MatchPatternField,
-        MatrixArm, MatrixMatch, Module, Motive, Name, Nat, NatLiteral, NatPattern, NumLit, Pattern,
+        MatrixArm, MatrixMatch, Module, Motive, Name, NatLiteral, NatPattern, NumLit, Pattern,
         PatternField, Prim, Proj, Radix, Rec, RecItem, StructLit, StructLitEntry, Subterm, Syn,
         Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
         TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,

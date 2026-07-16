@@ -811,6 +811,9 @@ thread_local! {
 // compiler invariant, so a parse failure is a `panic!`.
 const SYN: &[(&[&str], &str)] = &[
     (&["syn"], include_str!("../syn.crs")),
+    (&["syn", "True"], include_str!("../syn/True.crs")),
+    (&["syn", "False"], include_str!("../syn/False.crs")),
+    (&["syn", "Char"], include_str!("../syn/Char.crs")),
     (&["syn", "Str"], include_str!("../syn/Str.crs")),
 ];
 
