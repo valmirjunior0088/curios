@@ -1,5 +1,5 @@
 [package]
-name = "curios-rt"
+name = "curios-runtime"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,7 +10,7 @@ workspace = true
 
 # Lib (the engine/host API, reused by curios) + bin (the launcher stub).
 # Declares no compile-ish feature and never names Cranelift or Binaryen: building
-# `-p curios-rt` yields a slim, runtime-only launcher.
+# `-p curios-runtime` yields a slim, runtime-only launcher.
 
 [dependencies]
 curios-abi = { workspace = true }        # for the host<->guest wire ABI constants

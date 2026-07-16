@@ -1,4 +1,4 @@
-use {super::run, curios_rt::MockHost, std::time::Duration};
+use {super::run, curios_runtime::MockHost, std::time::Duration};
 
 #[test]
 fn big_nat_add_ripples_carry() {

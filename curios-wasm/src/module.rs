@@ -112,7 +112,7 @@ impl Module {
         &self.types
     }
 
-    /// Looks up a declared type by name across all recursion groups — type names form one flat module-wide namespace, so this is how consumers read a type's shape back out (e.g. curios-js recovering the bridge's `bytes` layout).
+    /// Looks up a declared type by name across all recursion groups — type names form one flat module-wide namespace, so this is how consumers read a type's shape back out (e.g. curios-web recovering the bridge's `bytes` layout).
     pub fn get_type(&self, target_name: &TypeName) -> Option<&SubType> {
         self.types
             .iter()

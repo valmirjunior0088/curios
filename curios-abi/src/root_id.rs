@@ -5,7 +5,7 @@
 //! equality instead of re-deriving "which root does this belong to" from a
 //! qualified-name string. This lives in `curios-abi` (a pure leaf) because it
 //! is needed both by `curios-core` (on `Concept`, `Structure`, `Inductive`
-//! registry entries) and by `curios-rt` (on the wasm import-namespace/
+//! registry entries) and by `curios-runtime` (on the wasm import-namespace/
 //! link-loop side), and those two crates share no other common dependency.
 
 #[cfg(test)]

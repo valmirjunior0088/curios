@@ -85,7 +85,7 @@ fn bridge_bytes_encode_a_wasm_module() {
 
 #[test]
 fn bridge_accessors_roundtrip() {
-    let mut store = Store::new(curios_rt::shared_engine(), ());
+    let mut store = Store::new(curios_runtime::shared_engine(), ());
     let bridge = instantiate(&mut store, &crate::bridge_bytes());
 
     let bin_new = export(&mut store, &bridge, "bin_new");

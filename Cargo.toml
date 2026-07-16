@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["curios-abi", "curios-base", "curios-wasm", "curios-cont", "curios-ersd", "curios-core", "curios-text", "curios-pipeline", "curios-js", "curios", "curios-binaryen", "curios-rt"]
+members = ["curios-abi", "curios-base", "curios-wasm", "curios-cont", "curios-ersd", "curios-core", "curios-text", "curios-pipeline", "curios-web", "curios", "curios-binaryen", "curios-runtime"]
 
 [workspace.package]
 version = "0.4.0"
@@ -24,9 +24,9 @@ curios-ersd = { path = "curios-ersd" }
 curios-core = { path = "curios-core" }
 curios-text = { path = "curios-text" }
 curios-pipeline = { path = "curios-pipeline" }
-curios-js = { path = "curios-js" }
+curios-web = { path = "curios-web" }
 curios-binaryen = { path = "curios-binaryen" }
-curios-rt = { path = "curios-rt" }
+curios-runtime = { path = "curios-runtime" }
 wasmtime = { version = "46.0.1", default-features = false, features = ["runtime", "gc", "gc-copying", "std"] }
 num-bigint = { version = "0.5.1" }
 num-traits = { version = "0.2.19" }

@@ -1,4 +1,4 @@
-use {curios_rt::MockHost, std::time::Duration};
+use {curios_runtime::MockHost, std::time::Duration};
 
 #[test]
 fn opaque_inductive_is_usable_through_declaring_module_api() {

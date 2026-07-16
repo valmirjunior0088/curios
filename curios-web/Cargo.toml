@@ -1,5 +1,5 @@
 [package]
-name = "curios-js"
+name = "curios-web"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,7 +11,7 @@ workspace = true
 [features]
 profile = ["curios-pipeline/profile"]
 
-# cdylib for the wasm-bindgen build; rlib so `cargo test -p curios-js` still has something to link against.
+# cdylib for the wasm-bindgen build; rlib so `cargo test -p curios-web` still has something to link against.
 [lib]
 crate-type = ["cdylib", "rlib"]
 
@@ -24,5 +24,5 @@ wasm-bindgen = { version = "0.2.126" }
 js-sys = { version = "0.3.103" }
 
 [dev-dependencies]
-curios-rt = { workspace = true }
+curios-runtime = { workspace = true }
 wasmtime = { workspace = true, features = ["cranelift"] }

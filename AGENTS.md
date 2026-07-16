@@ -40,10 +40,10 @@ Curios is a functional, dependently typed language implemented in Rust 2024. It 
 Native compiler path:
   → curios-binaryen   optimize emitted WebAssembly
   → curios            precompile with Wasmtime, run, or bundle
-  → curios-rt         deserialize and execute the precompiled module
+  → curios-runtime         deserialize and execute the precompiled module
 
 Browser path:
-  → curios-js         expose curios-pipeline through wasm-bindgen
+  → curios-web         expose curios-pipeline through wasm-bindgen
 ```
 
 Data flows downward through the diagram, while Rust dependencies between compiler stages point in the opposite direction: lowering code depends on the representation it constructs. `curios-text` depends on `curios-core`, which depends on `curios-ersd`, which depends on `curios-cont`, which depends on `curios-wasm`.
@@ -61,9 +61,9 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | WebAssembly model | `curios-wasm` | Wasm AST, parser, encoder, and binary writer |
 | Pure compiler driver | `curios-pipeline` | `compile_entrypoint`, `Stage`, and orchestration without runtime, Binaryen, or CLI dependencies |
 | Binaryen integration | `curios-binaryen` | Binaryen source build, static FFI, and Wasm optimization |
-| Runtime | `curios-rt` | Wasmtime engine, host bindings, `.cwasm` deserialization, bundle payload format, and slim launcher |
+| Runtime | `curios-runtime` | Wasmtime engine, host bindings, `.cwasm` deserialization, bundle payload format, and slim launcher |
 | Native product | `curios` | Public compile/run helpers, CLI, Binaryen optimization, Wasmtime precompilation, and executable bundling |
-| Browser product | `curios-js` | wasm-bindgen compiler exports and JavaScript execution harness |
+| Browser product | `curios-web` | wasm-bindgen compiler exports and JavaScript execution harness |
 
 ## Change routing
 
@@ -79,20 +79,20 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Wasm representation or encoding | `curios-wasm/src/` | Continuation emission and parser/round-trip tests |
 | Host operations or foreign calls | `curios-abi/src/` | Core validation, Wasm imports, runtime bindings, and the JavaScript harness |
 | Pipeline orchestration | `curios-pipeline/src/lib.rs` | Native and browser callers |
-| Runtime or bundle format | `curios-rt/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
+| Runtime or bundle format | `curios-runtime/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
 | CLI or native compile behavior | `curios/src/` | `README.md`, public helpers, and integration tests |
 | Standard or syntax library | `curios-text/std/`, `curios-text/syn/` | Module indices, `prelude.rs`, `SYNTAX.md`, and Curios integration tests |
-| Browser compiler or harness | `curios-js/` | Host ABI, wasm32 build, wasm-bindgen version, and CI release steps |
+| Browser compiler or harness | `curios-web/` | Host ABI, wasm32 build, wasm-bindgen version, and CI release steps |
 | Binaryen version, build, or FFI | `curios-binaryen/` | Shared cache behavior, native compiler linkage, and optimize round-trip tests |
 
 ## Architectural invariants
 
 - Compiler stages own their representations. A lowering belongs to the crate holding the source representation and depends on the crate holding the destination representation.
 - `curios-pipeline` is the pure compiler boundary. It must not depend on Binaryen, Wasmtime, the runtime, or the CLI.
-- `curios-rt` is the runtime-only boundary. It must not depend on `curios`, Binaryen, or Wasmtime's Cranelift compiler.
+- `curios-runtime` is the runtime-only boundary. It must not depend on `curios`, Binaryen, or Wasmtime's Cranelift compiler.
 - `curios` is the only workspace crate that combines Binaryen with Cranelift-enabled Wasmtime.
 - The workspace uses crate boundaries, not Cargo features, to separate the compiler, runtime, and browser products.
-- `curios` and `curios-rt` use the same workspace-pinned Wasmtime version so compiler-produced `.cwasm` modules match the runtime that deserializes them.
+- `curios` and `curios-runtime` use the same workspace-pinned Wasmtime version so compiler-produced `.cwasm` modules match the runtime that deserializes them.
 - `curios-abi` is the source of truth for the host/guest wire contract. A host operation is incomplete until its ABI row, compiler use, native runtime implementation, and applicable JavaScript implementation agree.
 - `/std` and `/syn` modules are embedded at build time. Every module must be registered in its Curios index and in the `include_str!` table in `curios-text/src/prelude.rs`.
 - Compiler-emitted proof-certified literals are owned by `/syn`: character literals construct transparent `/syn/Char` values and string literals construct `/syn/Str` values. Rust spellings of those hidden lowering targets belong in `curios-base/src/syn.rs`; the erased runtime carriers remain `Nat` and packed `Bytes`, respectively.
@@ -119,7 +119,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 
 ## Build and validation
 
-The native compiler embeds the slim `curios-rt` launcher with `include_bytes!`. Build that launcher in isolation before building `curios`:
+The native compiler embeds the slim `curios-runtime` launcher with `include_bytes!`. Build that launcher in isolation before building `curios`:
 
 ```sh
 make curios/runtime
@@ -127,7 +127,7 @@ cargo build --package curios
 cargo run --package curios -- <args>
 ```
 
-`make curios/runtime` is load-bearing: it builds `curios-rt` without workspace feature unification, keeping Cranelift and Binaryen out, and copies the resulting launcher to `curios/runtime` for embedding. A `curios-rt` binary produced by a workspace build is not evidence that the isolated launcher remains slim.
+`make curios/runtime` is load-bearing: it builds `curios-runtime` without workspace feature unification, keeping Cranelift and Binaryen out, and copies the resulting launcher to the target-scoped `target/curios/<target>/runtime` path for embedding. A `curios-runtime` binary produced by a workspace build is not evidence that the isolated launcher remains slim.
 
 ### While iterating
 
@@ -155,9 +155,9 @@ Documentation-only changes do not require rebuilding the compiler unless they al
 
 ### Additional gates
 
-- Changes to `curios-js` or its dependencies must also pass the wasm32 build used by CI: build `curios-js` for `wasm32-unknown-unknown`, then run the exactly version-matched `wasm-bindgen-cli --target web` step from the workflow.
+- Changes to `curios-web` or its dependencies must also pass `make curios/web` with the exactly version-matched `wasm-bindgen-cli` installed.
 - Changes to `curios-binaryen/build.rs` must verify an empty-cache build and a cache hit from a different Cargo mode or build-script fingerprint. Bump `BUILD_SCHEMA` when the CMake configuration or installed-library contract changes.
-- Changes to runtime dependencies must rebuild `curios-rt` in isolation through `make curios/runtime` and confirm that neither Cranelift nor Binaryen entered its dependency graph.
+- Changes to runtime dependencies must rebuild `curios-runtime` in isolation through `make curios/runtime` and confirm that neither Cranelift nor Binaryen entered its dependency graph.
 - Changes to the bundle format must run the ignored end-to-end test in `curios/tests/bundle.rs` explicitly.
 
 ## Documentation ownership
@@ -173,7 +173,6 @@ Document each fact at the narrowest authoritative level and link to it elsewhere
 | Crate and module rustdoc | Local architecture, algorithms, invariants, and public APIs |
 | `Cargo.toml` descriptions | One-line crate purposes for Cargo tooling |
 | `benchmarks/README.md` | Benchmark harness mechanics |
-| `benchmarks/RESULTS.md` | Results from a specific benchmark run |
 
 Do not hardwrap Markdown prose. Write one source line per paragraph or list item and let the renderer soft-wrap it. Fenced code blocks and tables retain their deliberate line structure.
 
@@ -187,5 +186,5 @@ Do not hardwrap Markdown prose. Write one source line per paragraph or list item
 ## Known build constraints
 
 - `curios-binaryen` downloads, verifies, and builds a pinned Binaryen source release with CMake. The first cache population takes minutes and requires a C++ toolchain; subsequent Cargo modes must reuse `target/binaryen`. A full `cargo clean` removes the cache.
-- `curios-js` deliberately uses plain `cargo build` plus `wasm-bindgen-cli`; do not introduce `wasm-pack` or `wasm-opt` without an explicit design decision. Binaryen optimization belongs only to the native `curios` product.
+- `curios-web` deliberately uses plain `cargo build` plus `wasm-bindgen-cli`; do not introduce `wasm-pack` or `wasm-opt` without an explicit design decision. Binaryen optimization belongs only to the native `curios` product.
 - The wasm32 build requires the installed `wasm-bindgen-cli` version to match the `wasm-bindgen` crate version in `Cargo.lock` exactly.

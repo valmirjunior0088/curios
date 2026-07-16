@@ -20,7 +20,7 @@ pub struct RootSource {
 impl RootSource {
     /// No further modules resolve — every `mod` declaration in the program
     /// must carry an inline body. Used by tests exercising resolution logic
-    /// in isolation, and by embedders (`curios-js`) with no filesystem.
+    /// in isolation, and by embedders (`curios-web`) with no filesystem.
     pub fn none() -> RootSource {
         RootSource {
             sys: None,

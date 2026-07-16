@@ -60,7 +60,7 @@ curios wonder <ENTRYPOINT> <QUERY> [QUERY OPTIONS]
 
 `ENTRYPOINT` is parsed exactly like the input to `run` and `compile`. Its containing directory is the filesystem module root, its own module path is `/`, and the fixed `/sys`, `/syn`, and `/std` roots are attached through the ordinary prelude loader. Once Curios gains project manifests, a manifest may supply the resolver configuration, but the effective entrypoint and project identity must remain explicit in every response.
 
-The Rust analysis API also accepts a caller-provided parsed entrypoint, root source, and logical input identity. This preserves filesystem-free embedders such as `curios-js` and focused tests; the `wonder` CLI always constructs that input from an explicit path.
+The Rust analysis API also accepts a caller-provided parsed entrypoint, root source, and logical input identity. This preserves filesystem-free embedders such as `curios-web` and focused tests; the `wonder` CLI always constructs that input from an explicit path.
 
 An analysis identity is derived from:
 

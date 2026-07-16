@@ -2,6 +2,12 @@
 
 A throwaway, run-once-every-never harness to place Curios against industry languages with a single number per workload. It is **not** a rigorous benchmark suite — its job is orientation: "Curios is ~Nx off Rust on integer loops, ~Mx on allocation." Everything runs in one kitchen-sink arm64 container so nothing has to be installed locally.
 
+## Results
+
+| Run | Captured | Environment |
+| --- | --- | --- |
+| [00 — The most surprising night in a long while](00_RESULTS.md) | 2026-06-30 | Apple Silicon, Docker Desktop Linux VM, one pinned arm64 core |
+
 ## Contestants
 
 Two sections, with Curios as the subject compared against each:

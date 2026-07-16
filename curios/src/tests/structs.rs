@@ -1,4 +1,4 @@
-use {curios_rt::MockHost, std::time::Duration};
+use {curios_runtime::MockHost, std::time::Duration};
 
 #[test]
 fn named_fields_run_end_to_end() {

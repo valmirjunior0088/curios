@@ -3,10 +3,11 @@
 //!
 //! Gated with `#[ignore]` because it execs a produced binary. The compiler embeds
 //! its launcher, so the produced executable is self-contained — but the compiler
-//! itself only builds once `make` has generated `curios/runtime`. Run it with:
+//! itself only builds once `make` has generated its target-scoped runtime launcher.
+//! Run it with:
 //!
 //! ```sh
-//! make
+//! make curios/runtime
 //! cargo test -p curios --test bundle -- --ignored
 //! ```
 

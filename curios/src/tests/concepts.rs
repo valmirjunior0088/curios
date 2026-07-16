@@ -1,4 +1,4 @@
-use {super::run, curios_rt::MockHost, std::time::Duration};
+use {super::run, curios_runtime::MockHost, std::time::Duration};
 
 fn error(source: &str) -> String {
     let (system, _io) = MockHost::builder().build();

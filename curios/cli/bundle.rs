@@ -1,10 +1,10 @@
 //! Emitting a self-contained native executable: the embedded slim launcher with
 //! the program's `.cwasm` payload appended. The trailing footer layout lives in
-//! `curios_rt::bundle` (shared with the launcher that recovers it); this
+//! `curios_runtime::bundle` (shared with the launcher that recovers it); this
 //! module only embeds the launcher image and writes the result to disk.
 
 use {
-    curios_rt::append_payload,
+    curios_runtime::append_payload,
     std::{
         fs,
         os::unix::fs::PermissionsExt,
@@ -12,12 +12,12 @@ use {
     },
 };
 
-/// The slim `curios-rt` launcher stub, embedded at build time. Produced by
-/// `make curios/runtime` (an isolated `--package curios-rt` build,
-/// kept Cranelift/Binaryen-free) which copies it next to this crate's manifest.
+/// The slim `curios-runtime` launcher stub, embedded at build time. Produced by
+/// `make curios/runtime` (an isolated `--package curios-runtime` build,
+/// kept Cranelift/Binaryen-free) under Cargo's target directory.
 /// If the file is absent this `include_bytes!` fails the build — run `make`. So
 /// `compile` needs no launcher lookup at runtime.
-const LAUNCHER: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/runtime"));
+const LAUNCHER: &[u8] = include_bytes!(env!("CURIOS_RUNTIME_BIN"));
 
 /// Default executable name: the input's file stem, no extension.
 pub(crate) fn exe_output_path(input_path: &Path) -> PathBuf {
@@ -26,7 +26,7 @@ pub(crate) fn exe_output_path(input_path: &Path) -> PathBuf {
 
 /// Build a self-contained executable: the embedded launcher stub with the
 /// `.cwasm` payload and its footer appended to the tail (see
-/// [`curios_rt::append_payload`]).
+/// [`curios_runtime::append_payload`]).
 pub(crate) fn emit_exe(cwasm: &[u8], output: &Path) -> Result<(), String> {
     let mut bytes = LAUNCHER.to_vec();
 

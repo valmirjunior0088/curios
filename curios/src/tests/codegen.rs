@@ -2,7 +2,7 @@
 //! wasm via `curios_cont::into_wasm`, and execute it through the compiler's run path
 //! (`crate::run_wasm`). Executing emitted wasm needs the runtime; these tests
 //! live here, alongside the rest of the integration suite, because `curios`
-//! can depend on `curios-rt` without a cycle (`curios-rt` depends only on
+//! can depend on `curios-runtime` without a cycle (`curios-runtime` depends only on
 //! `curios-abi`).
 
 mod code_bin;
@@ -17,7 +17,7 @@ mod parity;
 use {
     curios_abi::{ForeignFunction, sys_io},
     curios_cont::into_wasm,
-    curios_rt::{ForeignBindings, MockHost},
+    curios_runtime::{ForeignBindings, MockHost},
     std::sync::Arc,
 };
 

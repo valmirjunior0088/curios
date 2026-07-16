@@ -16,7 +16,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Binary WebAssembly serialization
 - [x] WebAssembly execution via a shared, GC-enabled wasmtime engine
 - [x] AOT `.cwasm` precompilation (deserialized and run without re-JITting)
-- [x] Crate-boundary split isolating the Cranelift/Binaryen-free launcher (`curios-rt`) from the JIT-capable compiler
+- [x] Crate-boundary split isolating the Cranelift/Binaryen-free launcher (`curios-runtime`) from the JIT-capable compiler
 - [x] Pure pipeline driver crate (`curios-pipeline`) decoupled from runtime/Binaryen/CLI, enabling a wasm32 (browser) build
 - [x] Per-thread elaborated-prelude cache and replay (the fixed `sys`/`syn`/`std` prefix is checked once per compiler thread, then restored into each fresh elaboration context)
 - [ ] [Bootstrap the compiler in Curios itself](06_BOOTSTRAP_SPEC.md) (self-host every language-specific stage through raw WebAssembly generation while retaining Rust as the native host and stage-zero seed)
@@ -114,7 +114,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 
 - [x] Self-describing foreign-function store (`curios-abi`'s `ForeignFunction`/`WireSignature`/`ForeignStore`): the `/sys/Io` prelude declarations, elaboration, wasm `sys.*` imports, and runtime linking all derive from one per-compilation store of named signature rows — the generic `Foreign` IR nodes carry the row itself, and the runtime links by pulling the module's imports from a name-keyed registry
 - [x] Surface `foreign` declarations (user-visible FFI syntax): a program's own declarations accumulate a second, `ffi`-tier store `compile_entrypoint` hands back
-- [x] Embedder-extensible host-function registry (`curios-rt::ForeignBindings`, threaded through `run_bytes`/`instantiate`/`run_wasm`)
+- [x] Embedder-extensible host-function registry (`curios-runtime::ForeignBindings`, threaded through `run_bytes`/`instantiate`/`run_wasm`)
 
 ## Error Messages
 
@@ -142,7 +142,7 @@ Tracks Curios development by feature area. Checkboxes reflect current codebase s
 - [x] Module system
   - [x] Exact private-item-in-public-interface audit (signature-only; representation signatures checked only where exposed, through re-exports, identity aliases, and structurally direct-headed type-family aliases; opaque constructor namespaces cannot be re-exported)
 - [x] Browser playground
-  - [x] Run harness owned by `curios-js` (`compile`/`run`, with wire codes from `curios-abi` and a local bridge for the compiler's wire-ABI `Bin` payload shape)
+  - [x] Run harness owned by `curios-web` (`compile`/`run`, with wire codes from `curios-abi` and a local bridge for the compiler's wire-ABI `Bin` payload shape)
 - [ ] Developer tooling
   - [ ] [`curios wonder` structured program-analysis interface](13_WONDER_SPEC.md) (source and semantic indexes, diagnostics, references, dependencies, witnesses, and snapshot queries)
   - [ ] Code formatter

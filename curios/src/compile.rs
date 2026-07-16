@@ -1,10 +1,10 @@
 //! Compile, precompile, and run-from-source helpers, reused by the `curios`
 //! binary and the integration suite. `curios` is the only crate that links
-//! Cranelift (via wasmtime) and Binaryen (via `curios-binaryen`); `curios-rt`
+//! Cranelift (via wasmtime) and Binaryen (via `curios-binaryen`); `curios-runtime`
 //! stays slim.
 
 use {
-    curios_rt::{ForeignBindings, Host, run_bytes, shared_engine},
+    curios_runtime::{ForeignBindings, Host, run_bytes, shared_engine},
     std::path::Path,
 };
 
@@ -13,7 +13,7 @@ use {curios_pipeline::compile_entrypoint, std::time::Duration};
 
 /// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm`
 /// payload the runtime deserializes — the same payload a bundled executable
-/// carries. Uses `curios-rt`'s shared engine so the precompiled artifact
+/// carries. Uses `curios-runtime`'s shared engine so the precompiled artifact
 /// matches the configuration `run_bytes` deserializes against.
 pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
     let bytes = curios_binaryen::optimize(curios_wasm::to_bytes(module));

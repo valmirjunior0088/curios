@@ -125,7 +125,7 @@ No production Core interchange format is introduced. Core may have test-only nor
 
 ## Temporary FFI services
 
-The existing Curios foreign-function mechanism and `curios-rt::ForeignBindings` are sufficient for the bootstrap services. Both temporary services exchange `Bin` payloads and ordinary scalar status values; neither requires a general Wasmtime FFI layer.
+The existing Curios foreign-function mechanism and `curios-runtime::ForeignBindings` are sufficient for the bootstrap services. Both temporary services exchange `Bin` payloads and ordinary scalar status values; neither requires a general Wasmtime FFI layer.
 
 The names below are conceptual. The implementation may choose repository-consistent qualified names, but the two responsibilities must remain separate.
 
@@ -531,7 +531,7 @@ Re-elaborating the full prelude inside the early self-hosted compiler may domina
 
 ## Verification
 
-Documentation-only changes to this specification require Markdown and link review rather than the compiler done bar. Each implementation milestone runs the repository checks required by `AGENTS.md` for the crates and Curios sources it changes, including the browser build whenever the self-hosted compiler or its host path affects `curios-js`.
+Documentation-only changes to this specification require Markdown and link review rather than the compiler done bar. Each implementation milestone runs the repository checks required by `AGENTS.md` for the crates and Curios sources it changes, including the browser build whenever the self-hosted compiler or its host path affects `curios-web`.
 
 The final bootstrap gate includes, in order:
 
@@ -543,7 +543,7 @@ cargo clippy --workspace --all-targets --all-features
 cargo test --workspace --all-targets --all-features
 ```
 
-It additionally builds S1, S2, and S3 in a clean environment, compares S2 and S3 raw Wasm byte-for-byte, runs the full language suite through S2 and S3, verifies the production compiler's import set, and runs the `curios-js` wasm32 and matching `wasm-bindgen` build when that path consumes the self-hosted artifact.
+It additionally builds S1, S2, and S3 in a clean environment, compares S2 and S3 raw Wasm byte-for-byte, runs the full language suite through S2 and S3, verifies the production compiler's import set, and runs the `curios-web` wasm32 and matching `wasm-bindgen` build when that path consumes the self-hosted artifact.
 
 ## Open decisions to resolve at their phase gates
 

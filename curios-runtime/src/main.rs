@@ -4,7 +4,7 @@
 //! it on the runtime-only engine.
 
 use {
-    curios_rt::{ForeignBindings, OsHost, extract_payload, run_bytes},
+    curios_runtime::{ForeignBindings, OsHost, extract_payload, run_bytes},
     std::{
         env, fs,
         process::{self, ExitCode},
@@ -12,7 +12,7 @@ use {
 };
 
 /// Recover the appended `.cwasm` payload from this executable's own tail. The
-/// footer format lives in `curios_rt::bundle`, shared with the bundler.
+/// footer format lives in `curios_runtime::bundle`, shared with the bundler.
 fn payload() -> Result<Vec<u8>, String> {
     let exe =
         env::current_exe().map_err(|error| format!("cannot locate own executable: {error}"))?;

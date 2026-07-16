@@ -17,7 +17,7 @@ mod scheduler;
 mod strings;
 mod structs;
 
-use {curios_rt::MockHost, std::time::Duration};
+use {curios_runtime::MockHost, std::time::Duration};
 
 fn run(source: &str) -> Vec<u8> {
     let (system, io) = MockHost::builder().build();

@@ -12,7 +12,7 @@ use pipeline::*;
 use {
     clap::Parser,
     curios::{run_wasm, to_cwasm},
-    curios_rt::{ForeignBindings, OsHost},
+    curios_runtime::{ForeignBindings, OsHost},
     std::{
         iter,
         process::{self, ExitCode},

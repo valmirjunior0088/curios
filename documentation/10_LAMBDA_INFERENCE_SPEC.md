@@ -321,4 +321,4 @@ cargo clippy --workspace --all-targets --all-features
 cargo test --workspace --all-targets --all-features
 ```
 
-Because `curios-core` is in the browser compiler's dependency graph, also run the `curios-js` wasm32 build and matching `wasm-bindgen --target web` step described in `AGENTS.md`.
+Because `curios-core` is in the browser compiler's dependency graph, also run the `curios-web` wasm32 build and matching `wasm-bindgen --target web` step described in `AGENTS.md`.

@@ -2,10 +2,10 @@
 //! representations (`Flt`, packed binary sequences, `Lst`, `Cell`) whose structure is
 //! program-independent, unlike the per-program families (`tpl/N`, closures,
 //! environments, `func/N`) the emitter derives from the module. Kept in one
-//! file so the emitter has one spelling for each shape. curios-js's bridge
+//! file so the emitter has one spelling for each shape. curios-web's bridge
 //! builder declares its own structurally identical `$bytes` type: wasm-GC
 //! canonicalizes structural types, so any module declaring the exact shape
-//! can exchange byte-payload refs with a compiled program. curios-rt's
+//! can exchange byte-payload refs with a compiled program. curios-runtime's
 //! `host_func_type` mirrors `$bytes` and `$elems` in wasmtime's type
 //! universe — keep the two ends in sync.
 //!
@@ -41,7 +41,7 @@
 //!
 //! The host ABI is untouched by the rope: wire `Bin` payloads cross the boundary as the
 //! flat `$bytes`/`$elems` arrays (params are forced before the call, results
-//! are embedded into fresh leaves after it), so curios-rt and the curios-js
+//! are embedded into fresh leaves after it), so curios-runtime and the curios-web
 //! bridge only ever see flat arrays.
 
 use curios_wasm::{

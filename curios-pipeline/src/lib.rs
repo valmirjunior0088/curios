@@ -1,6 +1,6 @@
 //! The compile driver: the one crate that strings the pipeline stages together, from a parsed `curios_text::Entrypoint` to a `curios_wasm::Module`. [`compile_entrypoint`] runs the full `into_core → elaborate → zonk → erase → ersd optimize → into_cont → cont optimize → into_wasm` sequence. Each stage is passed to the caller's observer as a borrowed [`Stage`], which is how `--print` dumps IRs without the driver retaining them.
 //!
-//! The fixed `sys`/`syn`/`std` prelude is elaborated once per thread and cached; every compile replays it into a fresh context and type-checks only the user code on top. Everything wasm-native — Binaryen, Cranelift precompilation, execution — lives downstream in `curios`/`curios-rt`: this crate stops at the wasm module plus the program's harvested `ForeignStore`.
+//! The fixed `sys`/`syn`/`std` prelude is elaborated once per thread and cached; every compile replays it into a fresh context and type-checks only the user code on top. Everything wasm-native — Binaryen, Cranelift precompilation, execution — lives downstream in `curios`/`curios-runtime`: this crate stops at the wasm module plus the program's harvested `ForeignStore`.
 
 #[cfg(test)]
 mod tests;
@@ -183,7 +183,7 @@ where
     Ok((module, core_type, user_foreigns))
 }
 
-/// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-rt`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
+/// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn compile_entrypoint<O>(
     timeout: Duration,

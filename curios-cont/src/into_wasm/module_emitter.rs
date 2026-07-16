@@ -33,7 +33,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// The binary rope family: the flat `$bytes` payload (the host-boundary
     /// shape), the `$rope/bin` base, and its `leaf`/`node`/`view` subtypes. Each is its
     /// own singleton recursion group — `$bytes` must canonicalize equal to
-    /// the type curios-js's bridge declares standalone, and a subtype may
+    /// the type curios-web's bridge declares standalone, and a subtype may
     /// reference any *earlier* group.
     fn emit_bin_rope_types(&mut self) {
         let rope = self.table.bin_rope();

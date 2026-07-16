@@ -1,6 +1,6 @@
 use {
     super::run,
-    curios_rt::{ForeignBindings, MockHost},
+    curios_runtime::{ForeignBindings, MockHost},
     std::{path::Path, time::Duration},
 };
 
