@@ -338,6 +338,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
 ///
 /// Elaboration is authoritative: the returned module — not the lowered input — is
 /// what `zonk_module` then makes meta-free for `erase`.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn elaborate_module(
     context: &mut Context,
     module: &Module,
@@ -472,6 +473,7 @@ pub fn elaborate_module(
 /// the solutions (and the zonked output) are identical. The cached prelude is
 /// meta-free, so its ids never collide with the user metavariable range that
 /// `seed_metavars(metavar_floor)` floors.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn elaborate_and_zonk_with_prelude(
     context: &mut Context,
     prelude: &Module,

@@ -58,6 +58,7 @@ impl std::fmt::Display for Error {
 type LowerResult<T> = Result<T, Error>;
 
 /// Lower an (optimized) erased module into the continuation IR. The flat `items` list and the entrypoint `body` become the region of a single parameterless `main` — synchronous items are lowered inline into that top-level region, effectful ones through the CPS machinery — with every closure encountered split out as its own `Clsr` in the output module, and `main` set as its entry.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn into_cont(erased: &crate::Module) -> Result<Module, Error> {
     let mut cont_module = Module::new();
 

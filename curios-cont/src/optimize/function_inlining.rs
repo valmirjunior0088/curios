@@ -88,6 +88,7 @@ enum Tier {
 /// `dead_code_elimination`'s name-keyed reachability
 /// index (it assumes names are unique) and prunes a still-referenced block. A shared
 /// gensym hands every splice — across every pass — its own never-recurring id.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn inline_calls_with(module: &mut Module, entropy: &Entropy) {
     loop {
         let counts = direct_call_counts(module);

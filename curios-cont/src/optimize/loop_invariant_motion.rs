@@ -38,6 +38,7 @@ use {super::*, std::collections::HashSet};
 /// subtree — anything else is an enclosing-scope or const name, invariant by
 /// the scoping law. Hoisted names are removed from the varying set as the scan
 /// walks, so a chain of invariant work cascades out in one pass.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn hoist_loop_invariants(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         hoist_in_region(&mut func.region);

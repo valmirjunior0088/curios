@@ -45,6 +45,7 @@ use {
 /// `rec` inside one — exactly the recursions whose self-name is in scope. A
 /// multi-binding (mutual) `rec` declines naturally: recognition keys on each
 /// member's own name, and a mutual member makes no direct self-call.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn introduce_worker_wrappers(module: &mut Module) {
     let graph = CallGraph::build(module);
 

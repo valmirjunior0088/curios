@@ -33,6 +33,7 @@ use {super::*, std::collections::HashMap};
 /// - **Cross-level targets** — a single predecessor that sits in a *descendant*
 ///   region rather than the block's own region. Sound to thread, but it is a
 ///   two-location move; left for later.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn thread_jumps(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         thread_tree(&mut func.region);

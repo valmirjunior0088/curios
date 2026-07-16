@@ -41,6 +41,7 @@ use {
 /// with the fields threaded as leading arguments. This is what later lets the
 /// recursion be seen as a direct self-cycle (and converted to a loop) instead
 /// of hiding behind the closure value forever.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn lift_closures(module: &mut Module) {
     let self_captures = self_capture_fields(module);
     let mut to_lift = HashSet::new();

@@ -42,6 +42,7 @@ use {
 /// its edge arguments in place, now dead — the same leave-it-to-cleanup
 /// protocol as CSE's aliases: dead-argument elimination drops the slot and
 /// every coordinated argument.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn propagate_jump_arguments(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         propagate_in_body(&mut func.region);

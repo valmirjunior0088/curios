@@ -17,6 +17,7 @@ use {
 /// projection (`to_bin` and friends) has erased to the identity, and dead-code
 /// elimination then drops the now-unreferenced closure value and its lifted
 /// function.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn simplify_maps(module: &mut Module) {
     let identity = collect_identity_closures(module);
 

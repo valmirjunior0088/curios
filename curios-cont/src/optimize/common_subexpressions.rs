@@ -36,6 +36,7 @@ use {
 /// truncated when a block's subtree is left, so only the shared ancestor
 /// prefix survives into the next arm — a match arm cannot alias into a
 /// computation of a sibling arm that may never run.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn eliminate_common_subexpressions(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         dedup_tree(&mut func.region);

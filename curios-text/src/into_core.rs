@@ -1562,6 +1562,7 @@ const FIXED_ROOTS: [(&str, RootId); 3] = [
 /// metavariable ids were minted for the module's holes: the floor
 /// `elaborate_module` needs so the ids it mints for implicit-argument
 /// insertion never collide with these.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn into_core(
     entrypoint: &Entrypoint,
     loader: &RootSource,

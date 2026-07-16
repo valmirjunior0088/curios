@@ -111,6 +111,7 @@ use {
 ///   join whose *every* predecessor edge is a deciding `Jump` — threading them
 ///   all leaves the original unreferenced for dead-code elimination, so the
 ///   clones are net-neutral and the budget does not apply.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn thread_decided_dispatch(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         thread_tree(&mut func.region);

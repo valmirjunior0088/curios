@@ -56,6 +56,7 @@ use super::*;
 /// can both reproduce the result and prove the runtime would not trap, returning
 /// `None` otherwise. Unsupported operations also return `None` and are left
 /// untouched — the supported set can grow without changing the structure.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn fold_constants(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         fold_tree(&mut func.region);

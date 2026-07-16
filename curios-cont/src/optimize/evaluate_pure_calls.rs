@@ -35,6 +35,7 @@ use {
 /// materialised result of compile-time interpretation, plus a `Jump` to the
 /// original resume continuation. Indirect calls through a known pure-closure
 /// value are handled symmetrically.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn evaluate_pure_calls(module: &mut Module) {
     let (pure_funcs, pure_clsrs) = purity(module);
 

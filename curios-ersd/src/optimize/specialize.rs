@@ -50,6 +50,7 @@ const MAX_SPECIALIZATIONS: usize = 64;
 const MAX_SPINE_NODES: usize = 256;
 
 /// Specialize every eligible call site, module-wide.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn specialize_literal_spines(module: &mut Module) {
     let plan = plan(module);
     apply(module, plan);

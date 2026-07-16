@@ -189,6 +189,7 @@ use {super::*, curios_base::Entropy};
 ///    elimination finishes type erasure, and dead-code elimination — last, so
 ///    it sees everything — reclaims the unreferenced bindings, aggregates,
 ///    closures, and untaken arms.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn optimize(module: &mut Module) {
     // One gensym shared across every inlining pass below, so the `@{callee}#{n}`
     // freshening suffix stays unique even when a re-lifted closure is inlined by

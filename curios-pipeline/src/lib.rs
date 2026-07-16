@@ -82,6 +82,7 @@ thread_local! {
 /// whose `items` are the whole prelude; its trivial `body`/`type_` go unused.
 /// A generous timeout: this is a one-time, per-thread cost amortized across
 /// every compile.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn build_prelude() -> curios_core::Module {
     let entrypoint = "0"
         .parse::<curios_text::Entrypoint>()
@@ -130,6 +131,7 @@ fn build_prelude() -> curios_core::Module {
 /// The `sys`/`syn`/`std` prelude is not re-elaborated per call: the cached
 /// [`PRELUDE`] is replayed into the fresh context and only the user code is
 /// type-checked on top (see [`curios_core::elaborate_and_zonk_with_prelude`]).
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn elaborate_and_zonk<O>(
     timeout: Duration,
     entrypoint: &curios_text::Entrypoint,

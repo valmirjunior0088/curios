@@ -84,6 +84,7 @@ use {
 /// specialization is built at most once. The statically-known closures in any one
 /// body form a finite acyclic set (a name's binding precedes its uses), so the
 /// reachable family of clones is finite and the loop converges.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn specialize_calls(module: &mut Module) {
     loop {
         let candidates = candidate_positions(module);

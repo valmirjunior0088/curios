@@ -44,6 +44,7 @@ pub(crate) use worker_wrapper::*;
 use super::Module;
 
 /// Run the Ersd optimization pipeline in place.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn optimize(module: &mut Module) {
     // Drop the items the entrypoint cannot reach, so only the program's actual
     // slice is lowered. This keeps `into_cont` from eagerly initializing the

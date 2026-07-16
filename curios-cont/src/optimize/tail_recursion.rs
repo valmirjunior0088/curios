@@ -32,6 +32,7 @@ use super::*;
 /// A function with any *non*-tail self-call is left untouched: converting only
 /// the tail sites would keep the function in a cycle, paying the rewrite for
 /// no structural gain. Mutual recursion is out of scope — only self-cycles.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn convert_tail_recursion(module: &mut Module) {
     for (name, func) in module.funcs_mut() {
         func.convert_tail_recursion(name);

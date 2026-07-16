@@ -37,6 +37,7 @@ use {
 /// `constant_folding` relies on) and nothing compares them by reference identity
 /// (`BinEql` is bytewise), so sharing one instance across every use — and across
 /// bodies, via dedup — is observationally identical to rebuilding it.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn hoist_literals(module: &mut Module) {
     let mut interner = Interner::over(module.consts());
 

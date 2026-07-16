@@ -27,6 +27,7 @@ use crate::{Item, Module, optimize::call_graph::CallGraph};
 /// indistinguishable from a live, possibly-effectful call sequence. Items keep
 /// their original relative order, so `into_cont`'s dependency ordering (a
 /// definition precedes its uses) is preserved.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn prune_unreachable(module: &mut Module) {
     let count = module.items.len();
 

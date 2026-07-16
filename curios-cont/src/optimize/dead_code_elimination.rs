@@ -29,6 +29,7 @@ use {
 /// a dead-but-trapping op would erase an observable trap. This still eliminates
 /// the entire prelude (every builtin is a `Pure` closure value). A later pass can
 /// relax this with a precise effect/totality classification of `Code`.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub(crate) fn eliminate_dead_code(module: &mut Module) {
     for (_, func) in module.funcs_mut() {
         dce_region_tree(&mut func.region);

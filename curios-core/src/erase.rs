@@ -1359,6 +1359,7 @@ fn erase_rec(
 /// erased against `expected`. The flat analogue of `erase_let`/`erase_rec`, minus
 /// the de Bruijn open/close — top-level cross-references are already free `Var`s,
 /// which erase to `curios_ersd::Name`.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn erase_module(
     context: &mut Context,
     module: &Module,
