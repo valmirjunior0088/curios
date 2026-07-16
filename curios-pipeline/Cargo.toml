@@ -9,11 +9,12 @@ description = "The curios pipeline: compile_entrypoint driving text -> core -> e
 workspace = true
 
 [features]
-profiling = [
+profile = [
     "dep:tracing",
-    "curios-core/profiling",
-    "curios-ersd/profiling",
-    "curios-cont/profiling",
+    "curios-text/profile",
+    "curios-core/profile",
+    "curios-ersd/profile",
+    "curios-cont/profile",
 ]
 
 [dependencies]

@@ -9,7 +9,7 @@ description = "The curios core language: elaboration, typing, reduction, convers
 workspace = true
 
 [features]
-profiling = ["dep:tracing"]
+profile = ["dep:tracing"]
 
 [dependencies]
 curios-abi = { workspace = true }

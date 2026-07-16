@@ -9,7 +9,7 @@ description = "The curios <-> JavaScript boundary: wasm-bindgen exports of the p
 workspace = true
 
 [features]
-profiling = ["curios-pipeline/profiling"]
+profile = ["curios-pipeline/profile"]
 
 # cdylib for the wasm-bindgen build; rlib so `cargo test -p curios-js` still has something to link against.
 [lib]

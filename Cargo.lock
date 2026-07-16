@@ -563,6 +563,7 @@ dependencies = [
  "curios-core",
  "num-bigint",
  "num-traits",
+ "tracing",
 ]
 
 [[package]]

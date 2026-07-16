@@ -8,11 +8,20 @@ description = "The curios pipeline library and command-line compiler driver"
 [lints]
 workspace = true
 
+[[bin]]
+name = "curios"
+path = "cli/main.rs"
+
+[[bin]]
+name = "profile"
+path = "profile/main.rs"
+required-features = ["profile"]
+
 [features]
-profiling = [
+profile = [
     "dep:tracing",
     "dep:tracing-subscriber",
-    "curios-pipeline/profiling",
+    "curios-pipeline/profile",
 ]
 
 # Lib (the pipeline facade + compile/precompile/run-from-source helpers

@@ -9,7 +9,7 @@ description = "The curios erased IR: ersd->ersd optimization and lowering to con
 workspace = true
 
 [features]
-profiling = ["dep:tracing"]
+profile = ["dep:tracing"]
 
 [dependencies]
 curios-abi = { workspace = true }
