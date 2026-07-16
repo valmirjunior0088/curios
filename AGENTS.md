@@ -1,194 +1,190 @@
 # AGENTS.md
 
-Agent guide to Curios. Operational reference plus an orientation map. Read this before touching the code.
-
-## Overview
-
-Curios is a work-in-progress functional, dependently-typed programming language, implemented in Rust (edition 2024, ~88k lines). It compiles `.crs` source through a series of intermediate representations down to WebAssembly, and runs the result on an embedded `wasmtime` engine.
-
-The repo is a **Cargo workspace** (virtual manifest at the root) of twelve crates, layered along the pipeline:
-
-- **`curios-abi`** — the host/guest contract: wire ABI constants (`/sys/Io`'s status, poll-event, and open-mode codes) plus the `ForeignStore` of self-describing `ForeignFunction` rows (import name, `WireSignature`) describing every host operation. `sys_io()` seeds the fixed `sys`-tier store the `/sys/Io` prelude declarations, elaboration checks, wasm `sys.*` imports, and runtime linker types all derive from; a program's own `foreign` declarations accumulate a second, `ffi`-tier store that `compile_entrypoint` hands back for an embedder to satisfy via `curios-rt::ForeignBindings`. The IR nodes carry the row itself (an `Arc<ForeignFunction>`), so adding a `/sys/Io` host op is one `sys_io` row, one `ForeignBindings::define` closure in `curios-rt`'s `sys_impls`, and the `Host` trait method/impls. A pure leaf, shared by the compiler stages and the runtime.
-- **`curios-base`** — foundational utilities shared by every stage: source spans, the fresh-name `Entropy`/`Mint` supply, the `name!` newtype macro, parser/printer monads, slice `suffix_view` re-base laws, and the immutable packed `PackedBin` window shared by the B/X grains. Packed atoms are LSB-first; equality and hashing observe only the logical window, and X windows remain byte-aligned.
-- **`curios-wasm`** — the wasm module model, parser, and binary writer/encoder. A pristine leaf on top of `curios-base`.
-- **`curios-cont`** — the continuation-passing IR: cont→cont optimization (`optimize/`) and wasm emission (`into_wasm/`).
-- **`curios-ersd`** — the erased IR (post type-erasure): ersd→ersd optimization (`optimize/`) and lowering to CPS (`into_cont/`).
-- **`curios-core`** — the core language: elaboration, typing, reduction, conversion, inductives, erasure, zonking.
-- **`curios-text`** — the surface syntax: lexer/parser, lowering to core (`into_core/`), plus the embedded standard library (`curios-text/std/`, `curios-text/syn/`).
-- **`curios-binaryen`** — FFI to Binaryen, built from a source release fetched and compiled by `build.rs` (no vendored source).
-- **`curios-pipeline`** — the pure pipeline driver: `compile_entrypoint`/`Stage`, chaining `text` → `core` → `ersd` → `cont` → `wasm` with no runtime/Binaryen/CLI dependencies. Extracted from `curios` so a wasm32 build of the compiler doesn't have to drag those in.
-- **`curios-js`** — the Curios ↔ JavaScript boundary: `wasm-bindgen` exports of `curios-pipeline` (`compile`) and the browser run harness (`run`; the JS host itself ships as the wasm-bindgen snippet `curios-js/js/harness.js`), built for `wasm32-unknown-unknown` with `cargo build` + `wasm-bindgen-cli --target web` for a browser playground (no `wasm-pack`, no `wasm-opt` — see Gotchas). The harness spells the wire names (`sys`/`ffi` namespaces, `sys.io_*` keys, the entry export) directly, like any embedder; the numeric status/stdio codes it answers with derive from `curios-abi`, the same source the compiler and runtime cite.
-- **`curios-rt`** — runtime-only engine (lib) + the launcher stub (bin `curios-rt`). Deserializes a precompiled module and runs it on wasmtime; **never** links Cranelift or Binaryen. Depends only on `curios-abi` (for the wire constants), not on `curios` — that's what keeps it slim and lets `curios` depend back on it without a cycle.
-- **`curios`** — the driver + CLI: the compile/precompile/run-from-source helpers (`compile.rs`, built on `curios-pipeline`'s `compile_entrypoint`/`Stage`) and the clap-based CLI (bin `curios`, in `cli.rs`/`pipeline.rs`/`bundle.rs`/`main.rs`). The **only** crate that links Cranelift (via `wasmtime`'s `cranelift` feature) and Binaryen.
-
-Code dependencies between the pipeline-stage crates run the *opposite* direction of data flow: `curios-text` depends on `curios-core` (its `into_core` lowering constructs core terms), `curios-core` depends on `curios-ersd` (`erase` constructs ersd terms), `curios-ersd` depends on `curios-cont` (`into_cont` constructs cont terms), and `curios-cont` depends on `curios-wasm` (`into_wasm` constructs a wasm module). `curios-wasm` is a leaf.
-
-The JIT-vs-deserialize split is a _crate boundary_, not a feature flag — see [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher) for the full mechanism. `curios` and `curios-rt` share one `wasmtime`, version-pinned once in `[workspace.dependencies]`, so the `.cwasm` `curios` produces matches what `curios-rt` deserializes.
-
-Two languages live in this repo: **Rust** (the compiler) and **Curios** itself (the object language, with a standard library under `curios-text/std/`). Work touches one or both.
-
-For what's already built vs. still planned, see [ROADMAP.md](documentation/ROADMAP.md) — check it before starting work on a new capability, both to confirm it's genuinely unstarted and to see how finished, related features are described.
+Operational guide for working on Curios. Read this before investigating or changing the repository.
 
 ## Working with the user
 
-- **Do not change any code without explicit instruction to do so.** Investigating, explaining, and proposing are always fine; editing is not, until the user asks for it.
-- **Do not proactively solve problems you were not asked to solve.** Noticing an unrelated bug, inefficiency, or cleanup opportunity is useful — say so and ask — but fixing it unprompted is not.
-- **Run every decision through the user.** Where there is more than one reasonable way to proceed, present the options and their trade-offs and let the user choose, rather than picking one yourself.
-- **Do not spiral into self-doubt.** State findings and recommendations plainly and move on; don't hedge, second-guess, or re-litigate a conclusion you already reached without new information forcing it.
-- **Do not spawn subagents/Task-tool agents unless explicitly asked to.** Since June 2026, Claude Code's "Dynamic Workflows" update lets the lead agent fan out subagents on its own judgment of task complexity, which burns tokens re-deriving context that's already in hand. In this repo, investigate and edit directly; only delegate to a subagent when the user names one or explicitly requests parallel/delegated work.
+- **Do not change anything without explicit instruction to do so.** Investigation, explanation, and proposals are read-only activities. Do not edit, format, generate, delete, stage, commit, or otherwise mutate the repository unless the user has authorized that action.
+- **Treat authorization as narrowly scoped.** A request to implement one change does not authorize adjacent refactors, cleanup, dependency upgrades, documentation rewrites, or fixes for unrelated problems.
+- **Do not proactively solve problems you were not asked to solve.** If you discover an unrelated bug, inefficiency, inconsistency, or cleanup opportunity, report it and ask whether the user wants it addressed.
+- **Run every decision through the user.** Where there is more than one reasonable design, present the alternatives and their trade-offs, recommend one plainly, and wait for the user to choose.
+- **Do not silently broaden the task to make implementation easier.** If the requested result requires a material change in scope, explain why and request permission.
+- **Preserve existing work.** Assume every uncommitted change belongs to the user. Do not overwrite, revert, reformat, stage, or incorporate it unless the user explicitly includes it in the task.
+- **Do not commit or push unless explicitly asked.** When asked to commit, include only the authorized changes and follow the requested attribution and message constraints.
+- **Do not spiral into self-doubt.** State findings, uncertainties, and recommendations plainly. Do not hedge, repeatedly reopen settled decisions, or defer to the user without first presenting the available evidence.
+- **Do not spawn subagents or delegate work unless explicitly asked.** Investigate and implement directly unless the user requests parallel or delegated work.
+- **Stop when authorization is ambiguous.** Ask before taking an action whose effects extend beyond the clear scope of the request.
 
-## Before you write code
+## Before starting
 
-Refresh the relevant reference into working memory _before_ writing, every time — do not rely on a stale recollection from earlier in the session or from training.
+- Read [ROADMAP.md](documentation/ROADMAP.md) before proposing or implementing a capability. Confirm whether the work is new, pending, or already represented differently.
+- Inspect the worktree before editing. Preserve unrelated changes and avoid files outside the authorized scope.
+- Identify the subsystem that owns the behavior, then read its crate-level and relevant module-level `//!` documentation before changing Rust.
+- Read [SYNTAX.md](documentation/SYNTAX.md) in full immediately before writing or modifying Curios source. Do not rely on remembered syntax.
+- Trace public contracts to their consumers before changing them. Pipeline stages, the host ABI, the runtime, the JavaScript harness, and embedded standard-library modules often impose downstream obligations.
+- Prefer focused investigation first. Search with `rg` or `rg --files`, read the narrowest authoritative source, and widen only when the evidence requires it.
 
-- **Writing Curios (`.crs`)?** Read [SYNTAX.md](documentation/SYNTAX.md) in full first. The surface language has many specialized forms (per-scrutinee `match` shapes, motives, glued literal signs, postfix-`!` do-notation) that are easy to get subtly wrong from memory.
-- **Writing Rust (the compiler)?** Re-read [The pipeline](#the-pipeline) and [Where things live](#where-things-live) below, then open the `//!` module docs of the stage(s) you are touching, so the full architecture and the stage's local invariants are fresh. A change in one stage usually has obligations in the next.
+## System at a glance
 
-This is cheap insurance: both languages reward precision and punish half-remembered syntax or architecture.
+Curios is a functional, dependently typed language implemented in Rust 2024. It compiles `.crs` source through several intermediate representations to WebAssembly and executes precompiled modules with Wasmtime.
 
-## The pipeline
-
-The compiler is a chain of stages, each its own crate (module root `src/`). This chain is the backbone — when orienting yourself in unfamiliar code, find the stage first.
-
-```
+```text
 .crs source
-  → text/   (crate: curios-text)   parse surface syntax; lower to core (text/into_core)
-  → core/   (crate: curios-core)   elaborate, typecheck, reduce/convert, then erase types
-  → ersd/   (crate: curios-ersd)   "erased" IR (types gone); ersd→ersd optimization (ersd/optimize), then lower to continuations (ersd/into_cont)
-  → cont/   (crate: curios-cont)   continuation-passing-style IR; cont→cont optimization (cont/optimize), then emit wasm (cont/into_wasm)
-  → wasm/   (crate: curios-wasm)   wasm module model, encoder/writer, parser
-  → lib.rs  (crate: curios-pipeline)   the pipeline driver: compile_entrypoint / Stage
+  → curios-text       parse surface syntax and lower it to core
+  → curios-core       elaborate, typecheck, normalize, and erase types
+  → curios-ersd       optimize erased terms and lower them to continuations
+  → curios-cont       optimize continuation IR and emit WebAssembly
+  → curios-wasm       model, parse, and encode WebAssembly modules
+  → curios-pipeline   drive the pure compiler pipeline
 
-then, in curios itself:
-  → optimize (curios-binaryen) + precompile to .cwasm (to_cwasm)
-  → run on wasmtime via curios-rt::run_bytes  (or bundle into an executable)
+Native compiler path:
+  → curios-binaryen   optimize emitted WebAssembly
+  → curios            precompile with Wasmtime, run, or bundle
+  → curios-rt         deserialize and execute the precompiled module
+
+Browser path:
+  → curios-js         expose curios-pipeline through wasm-bindgen
 ```
 
-`curios-binaryen/build.rs` fetches Binaryen's source release and builds it into a static lib via CMake, linked via FFI from `curios-binaryen/src/` to optimize emitted wasm. The wasmtime engine + host stack live in `curios-rt/src/` (`run_bytes` deserializes a `.cwasm` and runs it; `instantiate` wires the `sys.io_*` host imports and, via the required `ForeignBindings` argument, any `ffi.*` bindings an embedder supplies for the program's own `foreign` declarations).
+Data flows downward through the diagram, while Rust dependencies between compiler stages point in the opposite direction: lowering code depends on the representation it constructs. `curios-text` depends on `curios-core`, which depends on `curios-ersd`, which depends on `curios-cont`, which depends on `curios-wasm`.
 
-## Where things live
+### Ownership map
 
-| Path                                              | Role                                                                                                                                             |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `curios-text/src/`                               | Lexer/parser, surface AST, lowering to core (`into_core/`)                                                                                         |
-| `curios-core/src/`                               | Core language: elaboration, typing, reduction, conversion, inductives, erasure, zonking                                                          |
-| `curios-ersd/src/`                               | Erased IR (post type-erasure); ersd→ersd optimization (`optimize/`: prune, the `evaluate` closed-term interpreter + `specialize` literal-spine unroller — the compile-time staging that folds e.g. a literal format string's parse — and the `worker_wrapper` engine — monoid accumulator + suffix cursor — over a shared `call_graph`/`curios_base::suffix_view`); lowering to CPS (`into_cont/`) |
-| `curios-cont/src/`                               | Continuation-passing IR; cont→cont optimization (`optimize/`: inlining, DCE, copy/tag/jump threading, tail recursion, …); wasm emission (`into_wasm/`) |
-| `curios-wasm/src/`                               | Wasm module model, parser, binary writer/encoder                                                                                                 |
-| `curios-pipeline/src/lib.rs`                     | Pipeline driver: `compile_entrypoint`, `Stage`                                                                                                   |
-| `curios-js/{src,js}/`                            | `wasm-bindgen` exports for a browser build (`compile`, `run`) + the JS harness snippet                                                          |
-| `curios-base/src/monads/`                        | Parser/printer monad combinators                                                                                                                 |
-| `curios-base/src/{span,entropy,macros,suffix_view,packed}.rs` | Foundational utilities, including grain-aware packed sequence windows, shared by every stage                                                                                               |
-| `curios-abi/src/{lib,host}.rs`                   | Host↔guest contract: wire ABI constants and the `ForeignFunction`/`ForeignStore` host-op rows (`sys_io()` seed)                                  |
-| `curios-text/{std,syn}/`                         | curios standard / support libraries (`*.crs`), indexed by `curios-text/{std,syn}.crs`                                                            |
-| `curios-binaryen/src/`                           | FFI bindings to Binaryen (`sys.rs`); `optimize(bytes)`                                                                                            |
-| `curios-binaryen/build.rs`                       | Downloads, verifies, and builds Binaryen's source release via CMake (no vendored source — see Gotchas)                                          |
-| `curios-rt/src/`                                 | wasmtime engine + host stack (`run_bytes`, `instantiate`, `shared_engine`); OS + mock hosts                                                      |
-| `curios-rt/src/bundle.rs`                        | Bundled-executable footer format (`append_payload`/`extract_payload`), shared by bundler + launcher                                              |
-| `curios-rt/src/main.rs`                          | The launcher stub (bin `curios-rt`): reads its appended `.cwasm` tail and runs it                                                                |
-| `curios/src/compile.rs`                          | `to_cwasm`, `run_wasm`, `load`, run-from-source helpers (public `curios` API; host types come from `curios_rt` directly)                         |
-| `curios/src/main.rs`                             | clap-based CLI (bin `curios`): module wiring + subcommand dispatch                                                                               |
-| `curios/src/{cli,pipeline,bundle}.rs`            | CLI surface (clap), pipeline driving + `--print` stage dumps, and the `compile`→executable bundler                                               |
-| `Makefile`                                       | Builds the slim `curios-rt` and copies it to `curios/runtime` for `bundle.rs` to `include_bytes!`                                                |
-| `curios/src/tests/`                              | Cross-stage integration tests (incl. `codegen/` and the relocated Binaryen optimize-roundtrip test)                                              |
-| `curios/tests/bundle.rs`                         | Gated (`#[ignore]`) end-to-end test of the `compile`→executable path                                                                             |
-| `benchmarks/`                                     | Throwaway cross-language performance harness (Docker + hyperfine); see `benchmarks/README.md`                                                    |
+| Area | Owner | Responsibility |
+| --- | --- | --- |
+| Shared foundations | `curios-base` | Spans, names, entropy, parser/printer utilities, packed values, and other stage-independent primitives |
+| Host/guest contract | `curios-abi` | Wire constants and self-describing foreign-function rows shared by compiler and runtime |
+| Surface language | `curios-text` | Lexer, parser, surface AST, printer, lowering to core, and embedded `/std` and `/syn` libraries |
+| Type theory | `curios-core` | Elaboration, typing, conversion, reduction, inductives, structures, concepts, zonking, and erasure |
+| Erased optimization | `curios-ersd` | Post-erasure IR, compile-time evaluation and specialization, worker/wrapper transforms, and lowering to CPS |
+| Continuation IR | `curios-cont` | CPS optimization and WebAssembly emission |
+| WebAssembly model | `curios-wasm` | Wasm AST, parser, encoder, and binary writer |
+| Pure compiler driver | `curios-pipeline` | `compile_entrypoint`, `Stage`, and orchestration without runtime, Binaryen, or CLI dependencies |
+| Binaryen integration | `curios-binaryen` | Binaryen source build, static FFI, and Wasm optimization |
+| Runtime | `curios-rt` | Wasmtime engine, host bindings, `.cwasm` deserialization, bundle payload format, and slim launcher |
+| Native product | `curios` | Public compile/run helpers, CLI, Binaryen optimization, Wasmtime precompilation, and executable bundling |
+| Browser product | `curios-js` | wasm-bindgen compiler exports and JavaScript execution harness |
 
-## Documentation
+## Change routing
 
-Documentation lives in several places, each with a different audience and job. When something changes, update whichever of these it affects — and don't restate one source in another beyond a sentence of orientation; each location should link to the deeper one rather than duplicate it, or the same fact rots in multiple places.
+| If changing… | Start in… | Also inspect… |
+| --- | --- | --- |
+| Surface grammar, syntax tree, or printing | `curios-text/src/parse*`, `module.rs`, `print.rs` | `into_core/`, parser tests, `documentation/SYNTAX.md` |
+| Surface-to-core lowering | `curios-text/src/into_core/` | Core constructors and cross-stage integration tests |
+| Elaboration, typing, or conversion | `curios-core/src/` | Text lowering, erasure, diagnostics, and integration tests |
+| Concepts or witness resolution | `curios-core/src/concept.rs`, `resolve.rs` | Surface declarations, standard-library witnesses, and syntax documentation |
+| Type erasure | `curios-core/src/erase*` | `curios-ersd` representation and downstream tests |
+| Erased optimization | `curios-ersd/src/optimize/` | `into_cont/`, call-graph utilities, deep-input and specialization tests |
+| CPS optimization or Wasm emission | `curios-cont/src/` | `curios-wasm`, codegen tests, and runtime behavior |
+| Wasm representation or encoding | `curios-wasm/src/` | Continuation emission and parser/round-trip tests |
+| Host operations or foreign calls | `curios-abi/src/` | Core validation, Wasm imports, runtime bindings, and the JavaScript harness |
+| Pipeline orchestration | `curios-pipeline/src/lib.rs` | Native and browser callers |
+| Runtime or bundle format | `curios-rt/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
+| CLI or native compile behavior | `curios/src/` | `README.md`, public helpers, and integration tests |
+| Standard or syntax library | `curios-text/std/`, `curios-text/syn/` | Module indices, `prelude.rs`, `SYNTAX.md`, and Curios integration tests |
+| Browser compiler or harness | `curios-js/` | Host ABI, wasm32 build, wasm-bindgen version, and CI release steps |
+| Binaryen version, build, or FFI | `curios-binaryen/` | Shared cache behavior, native compiler linkage, and optimize round-trip tests |
 
-| Location                          | Audience                                | Job                                                                                                    | Update when                                                                                    |
-| ---------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `README.md` (root)                | Newcomers on GitHub                     | Project pitch, quickstart, CLI usage, repo-layout summary                                             | The public API, build steps, or crate layout changes                                            |
-| `AGENTS.md` (this file)           | Agents/contributors, before any change  | Architecture, pipeline, build/test/conventions — the deep source of truth                             | Any command, convention, or layout change                                                       |
-| `documentation/SYNTAX.md`          | Anyone writing `.crs`                   | Full Curios language reference                                                                         | The surface language changes                                                                     |
-| `documentation/ROADMAP.md`         | Anyone planning work                    | What's built vs. still planned                                                                          | A feature lands or is scoped                                                                     |
-| `Cargo.toml` `description`        | Cargo/crates.io tooling                 | One-line crate summary                                                                                  | A crate's purpose changes                                                                       |
-| `//!` / `///` rustdoc comments     | IDE hover, `cargo doc`                  | API-level documentation of modules and items                                                            | Any public item is added, renamed, or changes behavior                                          |
-| `benchmarks/README.md` / `benchmarks/RESULTS.md` | Anyone evaluating perf        | Harness mechanics (evergreen) vs. one dated run's numbers (point-in-time) — deliberately not merged     | The harness changes / a new benchmark run is captured                                           |
+## Architectural invariants
 
-**No `.md` file should contain hardwrapped lines.** Write one line per paragraph (or per list item) and let the editor/viewer soft-wrap; this keeps diffs to the sentence that actually changed instead of reflowing the whole paragraph. Fenced code blocks and tables keep their own line structure and are exempt.
+- Compiler stages own their representations. A lowering belongs to the crate holding the source representation and depends on the crate holding the destination representation.
+- `curios-pipeline` is the pure compiler boundary. It must not depend on Binaryen, Wasmtime, the runtime, or the CLI.
+- `curios-rt` is the runtime-only boundary. It must not depend on `curios`, Binaryen, or Wasmtime's Cranelift compiler.
+- `curios` is the only workspace crate that combines Binaryen with Cranelift-enabled Wasmtime.
+- The workspace uses crate boundaries, not Cargo features, to separate the compiler, runtime, and browser products.
+- `curios` and `curios-rt` use the same workspace-pinned Wasmtime version so compiler-produced `.cwasm` modules match the runtime that deserializes them.
+- `curios-abi` is the source of truth for the host/guest wire contract. A host operation is incomplete until its ABI row, compiler use, native runtime implementation, and applicable JavaScript implementation agree.
+- `/std` and `/syn` modules are embedded at build time. Every module must be registered in its Curios index and in the `include_str!` table in `curios-text/src/prelude.rs`.
+- Binaryen is built from a verified source release. Its expensive C++ build is shared through the locked, target-specific cache under `target/binaryen`, not a Cargo fingerprint-specific `OUT_DIR`.
+- Recursive lowering and packed-value interpretation must work on the default test-thread stack. Do not use `RUST_MIN_STACK` to hide a regression.
+- Generated `.wasm` files and other build products are not source. Do not commit them. `Cargo.lock` is source and must remain synchronized with dependency changes.
 
-## Build & test
+## Writing Rust
 
-**Run `make curios/runtime` first, then build with `cargo` as usual.** `curios` embeds the slim launcher via `include_bytes!`, so it must sit at `curios/runtime` before the compiler is built; `make` builds it in isolation and copies it there. If the file is missing, the build **fails** at the `include_bytes!` with a clear "couldn't read" error — run `make curios/runtime` and rebuild. The isolated build is also what keeps the launcher slim ([Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher)).
+- Re-read the pipeline and ownership map above, then open the `//!` documentation for every stage being changed.
+- Follow the established module layout: `foo.rs` declares and usually re-exports focused submodules from a sibling `foo/` directory.
+- Place unit tests beside their implementation in a `*_tests.rs` module gated by `#[cfg(test)]`. Put programs that cross compiler stages in `curios/src/tests/`; codegen tests live in `curios/src/tests/codegen/`.
+- When changing one stage, check the next representation or consumer explicitly. Parsing changes usually affect printing and lowering; core changes usually affect erasure; IR changes usually affect the next lowering and its tests.
+- Use `//!` for module purpose and invariants, and `///` for public API contracts. Do not duplicate detailed subsystem documentation in this file.
+- Use stock rustfmt and Clippy settings. There is no repository-specific `rustfmt.toml` or `clippy.toml`.
+
+## Writing Curios
+
+- Read [SYNTAX.md](documentation/SYNTAX.md) in full before editing any `.crs` file. It is the normative surface-language reference; `curios-text/src/parse.rs` implements the contract.
+- Use `curios-text/std/` as the reference for idiomatic code.
+- Register a new `curios-text/std/Foo.crs` module in both `curios-text/std.crs` and `curios-text/src/prelude.rs`. Apply the corresponding rule to `curios-text/syn/` and `curios-text/syn.crs`.
+- Remember that names use `/` qualification, `{}` is the unit type, `()` is the unit value, and visibility of a nominal name is independent from visibility of its representation. Consult `SYNTAX.md` for the full rules rather than extending this reminder list.
+- Run Curios programs through the native CLI: `cargo run --package curios -- run <file.crs>`.
+
+## Build and validation
+
+The native compiler embeds the slim `curios-rt` launcher with `include_bytes!`. Build that launcher in isolation before building `curios`:
 
 ```sh
-make curios/runtime                  # build the slim launcher, place it for embedding
-cargo build --package curios         # the CLI (Binaryen C++ build on first run)
-cargo run   --package curios -- <args> # invoke the CLI
+make curios/runtime
+cargo build --package curios
+cargo run --package curios -- <args>
+```
+
+`make curios/runtime` is load-bearing: it builds `curios-rt` without workspace feature unification, keeping Cranelift and Binaryen out, and copies the resulting launcher to `curios/runtime` for embedding. A `curios-rt` binary produced by a workspace build is not evidence that the isolated launcher remains slim.
+
+### While iterating
+
+- Run the smallest check or test that exercises the changed behavior.
+- Prefer stage-local crate checks while developing. Do not repeatedly build the whole workspace merely to obtain feedback.
+- The full workspace test suite can take more than five minutes. Run it deliberately in the background, redirect output to a file, and inspect the file after completion instead of piping or continuously scrolling it.
+
+```sh
+cargo test --workspace --all-targets --all-features > /tmp/curios-tests.txt 2>&1
+```
+
+### Before handing off code changes
+
+Run the same gate as CI, in order. All commands must pass, and Clippy warnings are errors in CI.
+
+```sh
+make curios/runtime
+cargo fmt --all -- --check
+cargo check --workspace --all-targets --all-features
+RUSTFLAGS="-Dwarnings" cargo clippy --workspace --all-targets --all-features
 cargo test --workspace --all-targets --all-features
 ```
 
-`curios compile foo.crs` produces a native executable `foo` (the embedded launcher with the program's `.cwasm` appended — no launcher file is consulted at compile time); `curios run foo.crs` compiles and runs in-process.
+Documentation-only changes do not require rebuilding the compiler unless they alter documented commands or make claims that need executable verification. Check their diff, links, filenames, and hardwrapping directly.
 
-**`cargo test --workspace` takes upwards of 5 minutes on a fairly capable machine.** Invoke it deliberately, not as a reflex or chained onto other commands just to see output. Don't pipe it directly into another command or scroll through it live; redirect stdout/stderr to a file and read the file after it finishes, e.g. `cargo test --workspace --all-targets --all-features > /tmp/test-output.txt 2>&1; cat /tmp/test-output.txt`.
+### Additional gates
 
-### Crates, features, and the slim launcher
+- Changes to `curios-js` or its dependencies must also pass the wasm32 build used by CI: build `curios-js` for `wasm32-unknown-unknown`, then run the exactly version-matched `wasm-bindgen-cli --target web` step from the workflow.
+- Changes to `curios-binaryen/build.rs` must verify an empty-cache build and a cache hit from a different Cargo mode or build-script fingerprint. Bump `BUILD_SCHEMA` when the CMake configuration or installed-library contract changes.
+- Changes to runtime dependencies must rebuild `curios-rt` in isolation through `make curios/runtime` and confirm that neither Cranelift nor Binaryen entered its dependency graph.
+- Changes to the bundle format must run the ignored end-to-end test in `curios/tests/bundle.rs` explicitly.
 
-There are **no Cargo features** on the workspace crates. The JIT/Cranelift split is a crate boundary instead:
+## Documentation ownership
 
-- `curios-rt` declares only a runtime-only `wasmtime` (no `cranelift`) and never depends on `curios-binaryen`. **`cargo build --package curios-rt` is a slim, Cranelift/Binaryen-free launcher** — that is the build embedded into the compiler as the stub.
-- `curios` adds the `cranelift` feature to its own `wasmtime` dependency and depends on `curios-binaryen`. Feature unification makes Cranelift available throughout a `curios` build (and a `--workspace` build), so the `curios-rt` _bin_ produced by a `--workspace` build is **not** the slim one. This is why `make curios/runtime` builds the launcher with an isolated `cargo build --release --package curios-rt` _before_ the compiler and copies it to `curios/runtime`: building it alone keeps Cranelift out. Do not hand-build the launcher via `--workspace` and expect it to be slim — it will be the fat (Cranelift-linked) one.
-- The done bar lists no separate `cargo check --package curios-rt`: the isolated `cargo build --release --package curios-rt` that `make curios/runtime` runs already proves the runtime-only configuration compiles — something `--workspace --all-features` cannot do, since feature unification pulls Cranelift in.
+Document each fact at the narrowest authoritative level and link to it elsewhere. Do not maintain parallel explanations that can drift.
 
-Building `curios-binaryen` downloads Binaryen's source release and compiles it via CMake on first build (see Gotchas) — expect minutes, not seconds, and a C++ toolchain + CMake on the machine. Anything depending on it (`curios-binaryen`, `curios`, the whole `--workspace`) pays that cost once; the pipeline-stage crates (`curios-text`, `curios-core`, `curios-ersd`, `curios-cont`, `curios-wasm`) and `curios-rt` on their own do not.
+| Location | Owns |
+| --- | --- |
+| `README.md` | Public introduction, setup, CLI usage, and repository overview |
+| `AGENTS.md` | Contributor behavior, ownership boundaries, durable invariants, and validation |
+| `documentation/SYNTAX.md` | Complete Curios surface-language reference |
+| `documentation/ROADMAP.md` | Implemented capabilities and pending specifications |
+| Crate and module rustdoc | Local architecture, algorithms, invariants, and public APIs |
+| `Cargo.toml` descriptions | One-line crate purposes for Cargo tooling |
+| `benchmarks/README.md` | Benchmark harness mechanics |
+| `benchmarks/RESULTS.md` | Results from a specific benchmark run |
 
-## The done bar
+Do not hardwrap Markdown prose. Write one source line per paragraph or list item and let the renderer soft-wrap it. Fenced code blocks and tables retain their deliberate line structure.
 
-Before considering any change complete, run the same gate CI enforces, in order. All five must pass; `clippy` runs with warnings denied.
+## Repository conventions
 
-```sh
-make curios/runtime                                        # provide the launcher curios embeds
-cargo fmt --all -- --check
-cargo check  --workspace --all-targets --all-features
-cargo clippy --workspace --all-targets --all-features      # CI sets RUSTFLAGS="-Dwarnings"
-cargo test   --workspace --all-targets --all-features
-```
+- Use imperative, capitalized, descriptive commit subjects. Do not add co-authors unless the user requests them.
+- Do not mix vendored changes, generated files, or unrelated formatting into a feature commit.
+- Use non-interactive Git commands and never discard work with destructive reset or checkout operations unless the user explicitly requests that exact action.
+- Keep source files focused. Prefer extending an existing ownership boundary over creating a parallel abstraction for the same responsibility.
 
-The first line is load-bearing twice over: it provides the launcher binary `bundle.rs` embeds, and its isolated build doubles as the slim-configuration check (see [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher)).
+## Known build constraints
 
-There is no `rustfmt.toml` or `clippy.toml` — stock toolchain defaults apply. Run `cargo fmt --all` to fix formatting rather than hand-aligning.
-
-## Rust conventions
-
-- **Module pattern.** A module is `foo.rs` (declaring submodules and re-exporting them, usually `mod x; pub use x::*;`) alongside a sibling `foo/` directory. Match this when adding modules; keep files focused (the history favors splitting large files into thematic submodules).
-- **Tests.** Unit tests live beside the code as a `*_tests.rs` submodule gated with `#[cfg(test)]` (e.g. `core/typing.rs` ↔ `core/typing_tests.rs`). Cross-stage integration tests (which compile and run programs) live in `curios/src/tests/`.
-- **Docs.** Use `//!` module-level doc comments to explain a module's purpose; `curios-binaryen/build.rs` is a good model. See [Documentation](#documentation) for the full map of where documentation lives and what to update where.
-- **Commits.** Imperative mood, capitalized, descriptive — e.g. "Split term.rs and elaborate.rs into focused submodules". Do not patch vendored files in a feature commit.
-
-## Writing Curios (`.crs`)
-
-The standard library under `curios-text/std/` is the reference for idiomatic Curios. Each module is one file (`curios-text/std/Foo.crs`) and must be registered in two places: `curios-text/std.crs` (`pub mod Foo; pub use Foo/{let Foo};`) **and** the `include_str!` table in `curios-text/src/prelude.rs` (the modules are embedded into the compiler at build time, not read from disk). The same applies to `curios-text/syn/` via `curios-text/syn.crs`.
-
-[SYNTAX.md](documentation/SYNTAX.md) is the surface-language reference and covers every construct with examples; `curios-text/src/parse.rs` implements that contract. A few essentials that are easy to trip on from memory:
-
-- Names are path-qualified with `/`: `Option/none`, `/std/Lst`, `/syn/Str`; a leading `/` is absolute.
-- `@x : T` is an implicit (type-erased) parameter; ordinary `x : T` is explicit; `use T` is an anonymous **instance argument** filled by witness resolution.
-- **Concepts / witnesses / instance arguments** are the ad-hoc-polymorphism layer (see [SYNTAX.md](documentation/SYNTAX.md#concepts-and-witnesses) for the surface syntax). The Rust-side implementation, file by file:
-  - A `concept` lowers to a representation-public nominal structure plus a `Concept` registry entry (`curios-core/src/concept.rs`) and per-field method wrappers.
-  - A witness (declared with `satisfy`) is anonymous (no name, no `pub` — a second instance of a key is an ordinary concept-typed `let` passed via `use <term>`) and lowers to a compiler-named definition (`witness#N`), registered in a program-wide table keyed by `(concept, tuple of the rigid heads of every concept parameter)`.
-  - A concept's `use`-marked (superclass) fields leave the positional sequence in every concept literal: omitted → resolved as a witness goal, explicitly filled with a `use <term>` entry (`elaborate_struct` in `curios-core/src/elaborate.rs`).
-  - The `Plicity::Witness` binder is filled by the resolution engine in `curios-core/src/resolve.rs`; conversion and erasure stay plicity-blind.
-  - Registries mirror the `inductives`/`structures` pattern: carried on `Module`, seeded into each `Context`.
-  - `Show`/`Ord` live in `curios-text/std/`; `Eql` (operator dispatch) and `Monad` (the postfix `!` desugars each site to `/syn/Monad/bind(action, continuation)` in `into_core/lower.rs` — every value body is a region root, there is no `let !` header, and the action's type resolves the witness) are homed in `/syn`, each with a `/std` facade. `/syn` holds only what the compiler emits names for; witnesses live in `/std` — the operator witnesses inside the operator facade modules themselves (`std/Add.crs`, `std/Eql.crs`, …, declared first in `std.crs` so every later module can use the operators on any witnessed type), `Monad` witnesses collected in `std/Monad.crs` alongside the concept facade rather than scattered across each instance type's own module. A witness binds at its topological position (its body's dependencies, not its declaration site, decide where it lands in the flat order), and consumers reference it with no topo edge — so a module consuming a witness must come later in `std.crs` than everything the witness's body depends on. That is why `Bln` sits after `Str` in `std.crs`: `Bln/of_str`'s `==` on `Str` needs the `Eql(Str)` witness, which lands just after `Str/eql`.
-  - Higher-kinded concepts (e.g. `Monad(M : (Type) -> Type)`) are supported via the flex-apply imitation rule in `convert.rs` (`?M(?A) ≡ Option(Nat)` commits `?M := (A) => Option(A)`; exact arity, imitation-only, nominal rigid heads).
-  - Every infix operator, `&&`/`||` included, dispatches through the `/syn` operator concepts (`Add`/`Sub`/`Mul`/`Div`/`Rem`/`And`/`Or`/`Eql`/`Cmp`, declared in `curios-text/syn.crs` with their primitive witnesses in the `/std` operator facades; the operator→concept table is `NumOp::concept_field` in `curios-base/src/num_op.rs`, which also holds the `/syn/Str`/`/syn/Monad` path literals `curios-text`'s `into_core::lowerer` emits calls to — the one shared place both crates' `/syn` references are kept in sync; the rewrite itself is `elaborate_infix` in `curios-core`) — there is no separate primitive-operator path, and codegen parity with the bare prims is pinned by `curios/src/tests/codegen/parity.rs`.
-  - The function-field sugar (`name(params) -> T` / `name(args) = body`, legal in every field list) is kept verbatim in the text AST (`func_params` on the field nodes) and undone in `into_core` — the parser never desugars it.
-- `{}` is the unit type; `()` is the unit value.
-- `struct` and `induct` each have independent visibility markers: the outer `pub` exports the nominal name, while the declaration-local `pub` before the terminal `Type`/`Prop` exports the representation. Without the inner marker, construction and projection (`struct`) or construction and every form of elimination (`induct`) are private to the exact declaring module.
-- A publicly exposed signature may not mention a private item (`PrivateItemInPublicInterface`). The post-resolution audit follows re-exports, identity aliases, and direct-headed type-family aliases whose declared result structurally ends in literal `Type`/`Prop`; it peels only function telescopes and application spines, never evaluates computed heads. Alias-body free-variable dependencies are audited when the chain reaches a registered nominal. Parameter/index dependencies are always interface, while fields and constructor signatures are checked only where the representation is exposed. Ordinary definition bodies remain exempt. An opaque inductive's synthetic constructor namespace cannot supply an owning-module `pub use` facade, though ordinary private-child facades and lexical constructor access remain valid.
-
-To run or test `.crs` code, use the CLI (`cargo run --package curios -- run …`), which drives a `.crs` program through the pipeline.
-
-## Gotchas
-
-- **`curios-binaryen` has no vendored source.** `build.rs` downloads and verifies Binaryen's tagged source release, then builds it with CMake (static lib, no shared libs/tools/tests). The expensive C++ build lives in a locked, target-specific cache beneath Cargo's target directory rather than fingerprint-specific `$OUT_DIR`, so ordinary builds, tests, and Clippy reuse it; a full `cargo clean` removes it. Upstream only ships a prebuilt static lib for Linux — macOS/Windows releases are dylib/import-lib only — so building from source is what makes a static link work on every platform Curios targets. If the download fails, the error prints the release URL, checksum, and exact cache path for a manually supplied archive. To bump Binaryen, update `VERSION` and `SOURCE_SHA256`; bump `BUILD_SCHEMA` when the CMake configuration or installed library contract changes.
-- **Keep the slim launcher slim.** `cargo build --package curios-rt` must stay free of Cranelift and Binaryen; keep any new runtime dependency out of that crate's graph. A change can pass `--workspace --all-features` and still break `--package curios-rt` (or vice versa) — run both. For the full mechanism see [Crates, features, and the slim launcher](#crates-features-and-the-slim-launcher).
-- **The codegen tests live in `curios/src/tests/codegen/`.** They execute emitted wasm, which needs the runtime (`curios-rt`); `curios-rt` depends only on `curios-abi`, not on `curios`, so `curios` depending on `curios-rt` is not a cycle — that's what lets these tests live alongside the rest of the integration suite instead of in a separate crate.
-- **Generated `.wasm` files** are gitignored (`/*.wasm`); don't commit build output.
-- **`Cargo.lock` is committed** — keep it in sync when changing dependencies.
-- **Tests use the default libtest stack.** Recursive lowering and packed-value interpretation must remain pointer-sized/iterative enough for the ordinary 2 MB test thread; do not mask a stack regression with `RUST_MIN_STACK`. Deep rope forcing is an explicit iterative Wasm worklist, and the 100k accumulation/peeling tests pin that behavior.
-- **The `curios-js` wasm32 build is gated by the `wasm` job in `check.yml`** (`cargo build --release --target wasm32-unknown-unknown --package curios-js` then `wasm-bindgen --target web`, same steps as `release.yml`'s `build-wasm`). The host-target done bar does not cover it — `cargo check --workspace` type-checks `curios-js` for the host, where the wasm-bindgen externs are panicking stubs — so when touching `curios-js` or its dependencies, run this build locally too rather than discovering the breakage in CI. `wasm-bindgen-cli`'s installed version must exactly match the `wasm-bindgen` crate version in `Cargo.lock` or it refuses to run.
-- **`curios-js` deliberately skips `wasm-pack` and `wasm-opt`.** `wasm-pack`'s bundled `wasm-opt` binary segfaults on `curios-js`'s output (a known class of bug — `wasm-opt` crashing on wasm-bindgen's reference-types-shaped code, especially on Linux). Since `curios-js` is a browser playground build, not a published package, none of `wasm-pack`'s npm-packaging is needed either — plain `cargo build` + `wasm-bindgen-cli` produces the same `.wasm`/`.js`/`.d.ts` output `wasm-pack --target web` would. Binaryen optimization stays exclusive to the native `curios` CLI build (via `curios-binaryen`); the playground wasm ships unoptimized.
+- `curios-binaryen` downloads, verifies, and builds a pinned Binaryen source release with CMake. The first cache population takes minutes and requires a C++ toolchain; subsequent Cargo modes must reuse `target/binaryen`. A full `cargo clean` removes the cache.
+- `curios-js` deliberately uses plain `cargo build` plus `wasm-bindgen-cli`; do not introduce `wasm-pack` or `wasm-opt` without an explicit design decision. Binaryen optimization belongs only to the native `curios` product.
+- The wasm32 build requires the installed `wasm-bindgen-cli` version to match the `wasm-bindgen` crate version in `Cargo.lock` exactly.
