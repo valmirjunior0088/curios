@@ -1,50 +1,53 @@
 use {
-    super::{BlockData, ClsrData, FieldData, Frame, FuncData, LocalData, Table},
+    crate::{
+        BlockData, ClsrData, EmissionBlockName, EmissionCallTarget, EmissionCellTarget,
+        EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
+        EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table,
+    },
     curios_abi::WireType,
     curios_base::Entropy,
-    curios_wasm::{BlockType, HeapType, Instr, LabelName, LocalName, RefType, TypeName, ValType},
     std::{
         collections::{BTreeMap, HashMap},
         iter,
     },
 };
 
-fn is_sequential_from_zero(cases: &BTreeMap<u32, crate::JumpTarget>) -> bool {
+fn is_sequential_from_zero(cases: &BTreeMap<u32, EmissionJumpTarget>) -> bool {
     cases.keys().enumerate().all(|(i, &k)| k == i as u32)
 }
 
 #[derive(Debug)]
-pub(super) enum Context<'a, 'b> {
+pub(crate) enum Context<'a, 'b> {
     Const {
         table: &'a Table<'a>,
     },
-    Clsr {
+    Closure {
         table: &'a Table<'a>,
         data: &'a ClsrData<'a>,
         entropy: Entropy,
-        locals: &'b mut Vec<(LocalName, ValType)>,
+        locals: &'b mut Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
         frames: Vec<Frame<'a>>,
     },
-    Func {
+    Function {
         table: &'a Table<'a>,
         data: &'a FuncData<'a>,
         entropy: Entropy,
-        locals: &'b mut Vec<(LocalName, ValType)>,
+        locals: &'b mut Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
         frames: Vec<Frame<'a>>,
     },
 }
 
 impl<'a, 'b> Context<'a, 'b> {
-    pub(super) fn new_const(table: &'a Table<'a>) -> Self {
+    pub(crate) fn new_const(table: &'a Table<'a>) -> Self {
         Self::Const { table }
     }
 
-    pub(super) fn new_clsr(
+    pub(crate) fn new_clsr(
         table: &'a Table<'a>,
         data: &'a ClsrData<'a>,
-        locals: &'b mut Vec<(LocalName, ValType)>,
+        locals: &'b mut Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
     ) -> Self {
-        Self::Clsr {
+        Self::Closure {
             table,
             data,
             entropy: Entropy::<usize>::new(),
@@ -53,12 +56,12 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(super) fn new_func(
+    pub(crate) fn new_func(
         table: &'a Table<'a>,
         data: &'a FuncData<'a>,
-        locals: &'b mut Vec<(LocalName, ValType)>,
+        locals: &'b mut Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
     ) -> Self {
-        Self::Func {
+        Self::Function {
             table,
             data,
             entropy: Entropy::<usize>::new(),
@@ -67,28 +70,30 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(super) fn table(&self) -> &'a Table<'a> {
+    pub(crate) fn table(&self) -> &'a Table<'a> {
         match self {
-            Self::Const { table } | Self::Clsr { table, .. } | Self::Func { table, .. } => table,
+            Self::Const { table } | Self::Closure { table, .. } | Self::Function { table, .. } => {
+                table
+            }
         }
     }
 
-    pub(super) fn find_field(&self, value_name: &crate::ValueName) -> Option<FieldData> {
+    pub(crate) fn find_field(&self, value_name: &EmissionValueName) -> Option<FieldData> {
         match self {
-            Self::Const { .. } | Self::Func { .. } => None,
-            Self::Clsr { data, .. } => data.find_field(value_name),
+            Self::Const { .. } | Self::Function { .. } => None,
+            Self::Closure { data, .. } => data.find_field(value_name),
         }
     }
 
-    pub(super) fn params(&self) -> HashMap<&'a crate::ValueName, LocalData> {
+    pub(crate) fn params(&self) -> HashMap<&'a EmissionValueName, LocalData> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks params"),
-            Self::Clsr { data, .. } => data
+            Self::Closure { data, .. } => data
                 .params()
                 .into_iter()
                 .map(|(value_name, local_name)| (value_name, LocalData::new(local_name, false)))
                 .collect(),
-            Self::Func { data, .. } => data
+            Self::Function { data, .. } => data
                 .params()
                 .into_iter()
                 .map(|(value_name, local_name)| (value_name, LocalData::new(local_name, false)))
@@ -96,28 +101,32 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(super) fn is_resume(&self, block_name: &crate::BlockName) -> bool {
+    pub(crate) fn is_resume(&self, block_name: &EmissionBlockName) -> bool {
         match self {
             Self::Const { .. } => false,
-            Self::Clsr { data, .. } => data.is_resume(block_name),
-            Self::Func { data, .. } => data.is_resume(block_name),
+            Self::Closure { data, .. } => data.is_resume(block_name),
+            Self::Function { data, .. } => data.is_resume(block_name),
         }
     }
 
-    pub(super) fn push_local(&mut self, string: &str, val_type: ValType) -> LocalName {
+    pub(crate) fn push_local(
+        &mut self,
+        string: &str,
+        val_type: curios_wasm::ValType,
+    ) -> curios_wasm::LocalName {
         match self {
             Self::Const { .. } => panic!("`Context` lacks locals"),
-            Self::Clsr {
+            Self::Closure {
                 entropy, locals, ..
             }
-            | Self::Func {
+            | Self::Function {
                 entropy, locals, ..
             } => {
                 let entropy = entropy.fresh();
                 let local_name = if string.is_empty() {
-                    LocalName::from(format!("{entropy}"))
+                    curios_wasm::LocalName::from(format!("{entropy}"))
                 } else {
-                    LocalName::from(format!("{entropy}${string}"))
+                    curios_wasm::LocalName::from(format!("{entropy}${string}"))
                 };
 
                 locals.push((local_name.clone(), val_type));
@@ -127,33 +136,33 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(super) fn enter_frame(&mut self, frame: Frame<'a>) {
+    pub(crate) fn enter_frame(&mut self, frame: Frame<'a>) {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
-            Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames.push(frame),
+            Self::Closure { frames, .. } | Self::Function { frames, .. } => frames.push(frame),
         }
     }
 
-    pub(super) fn leave_frame(&mut self) -> Vec<Instr> {
+    pub(crate) fn leave_frame(&mut self) -> Vec<curios_wasm::Instr> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
-            Self::Clsr { frames, .. } | Self::Func { frames, .. } => {
+            Self::Closure { frames, .. } | Self::Function { frames, .. } => {
                 frames.pop().expect("`Context` lacks frame").instrs
             }
         }
     }
 
-    pub(super) fn this_frame(&mut self) -> Option<&mut Frame<'a>> {
+    pub(crate) fn this_frame(&mut self) -> Option<&mut Frame<'a>> {
         match self {
             Self::Const { .. } => None,
-            Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames.last_mut(),
+            Self::Closure { frames, .. } | Self::Function { frames, .. } => frames.last_mut(),
         }
     }
 
-    pub(super) fn find_local(&self, value_name: &crate::ValueName) -> Option<LocalData> {
+    pub(crate) fn find_local(&self, value_name: &EmissionValueName) -> Option<LocalData> {
         match self {
             Self::Const { .. } => None,
-            Self::Clsr { frames, .. } | Self::Func { frames, .. } => {
+            Self::Closure { frames, .. } | Self::Function { frames, .. } => {
                 frames.iter().rev().find_map(|frame| {
                     frame
                         .values
@@ -165,19 +174,19 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(super) fn is_prealloc(&self, value_name: &crate::ValueName) -> bool {
+    pub(crate) fn is_shell(&self, value_name: &EmissionValueName) -> bool {
         match self {
             Self::Const { .. } => false,
-            Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames
-                .iter()
-                .any(|frame| frame.preallocs.contains(value_name)),
+            Self::Closure { frames, .. } | Self::Function { frames, .. } => {
+                frames.iter().any(|frame| frame.shells.contains(value_name))
+            }
         }
     }
 
-    pub(super) fn find_block(&self, block_name: &crate::BlockName) -> &BlockData<'a> {
+    pub(crate) fn find_block(&self, block_name: &EmissionBlockName) -> &BlockData<'a> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
-            Self::Clsr { frames, .. } | Self::Func { frames, .. } => frames
+            Self::Closure { frames, .. } | Self::Function { frames, .. } => frames
                 .iter()
                 .rev()
                 .find_map(|frame| {
@@ -192,89 +201,89 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    fn load_as_instrs(&self, load_as: LoadAs, is_nullable: bool) -> Vec<Instr> {
+    fn load_as_instrs(&self, load_as: LoadAs, is_nullable: bool) -> Vec<curios_wasm::Instr> {
         match load_as {
             LoadAs::Null => vec![],
             LoadAs::NonNull => match is_nullable {
-                true => vec![Instr::RefAsNonNull],
+                true => vec![curios_wasm::Instr::RefAsNonNull],
                 false => vec![],
             },
             LoadAs::Concrete(type_name) => {
-                vec![Instr::RefCast {
-                    ref_type: RefType {
+                vec![curios_wasm::Instr::RefCast {
+                    ref_type: curios_wasm::RefType {
                         is_nullable: false,
-                        heap_type: HeapType::Concrete(type_name),
+                        heap_type: curios_wasm::HeapType::Concrete(type_name),
                     },
                 }]
             }
             LoadAs::Nat => {
                 vec![
-                    Instr::RefCast {
+                    curios_wasm::Instr::RefCast {
                         ref_type: Table::int_type(false),
                     },
-                    Instr::I31GetU,
+                    curios_wasm::Instr::I31GetU,
                 ]
             }
             LoadAs::Int => {
                 vec![
-                    Instr::RefCast {
+                    curios_wasm::Instr::RefCast {
                         ref_type: Table::int_type(false),
                     },
-                    Instr::I31GetS,
+                    curios_wasm::Instr::I31GetS,
                 ]
             }
             LoadAs::Flt => {
                 vec![
-                    Instr::RefCast {
-                        ref_type: RefType {
+                    curios_wasm::Instr::RefCast {
+                        ref_type: curios_wasm::RefType {
                             is_nullable: false,
-                            heap_type: HeapType::Concrete(self.table().flt_type()),
+                            heap_type: curios_wasm::HeapType::Concrete(self.table().flt_type()),
                         },
                     },
-                    Instr::StructGet {
+                    curios_wasm::Instr::StructGet {
                         type_name: self.table().flt_type(),
                         field_name: self.table().special_field(),
                     },
                 ]
             }
             LoadAs::Bin => {
-                vec![Instr::RefCast {
-                    ref_type: RefType {
+                vec![curios_wasm::Instr::RefCast {
+                    ref_type: curios_wasm::RefType {
                         is_nullable: false,
-                        heap_type: HeapType::Concrete(self.table().bin_rope_type()),
+                        heap_type: curios_wasm::HeapType::Concrete(self.table().bin_rope_type()),
                     },
                 }]
             }
             LoadAs::Lst => {
-                vec![Instr::RefCast {
-                    ref_type: RefType {
+                vec![curios_wasm::Instr::RefCast {
+                    ref_type: curios_wasm::RefType {
                         is_nullable: false,
-                        heap_type: HeapType::Concrete(self.table().lst_rope_type()),
+                        heap_type: curios_wasm::HeapType::Concrete(self.table().lst_rope_type()),
                     },
                 }]
             }
         }
     }
 
-    pub(super) fn load_value_instrs(
+    pub(crate) fn load_value_instrs(
         &self,
-        value_name: &'a crate::ValueName,
+        value_name: &'a EmissionValueName,
         load_as: LoadAs,
-    ) -> Vec<Instr> {
+    ) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 
         if let Some(field_data) = self.find_field(value_name) {
             output.extend([
-                Instr::LocalGet {
+                curios_wasm::Instr::LocalGet {
                     local_name: self.table().special_local(),
                 },
-                Instr::RefCast {
-                    ref_type: RefType {
+                curios_wasm::Instr::RefCast {
+                    ref_type: curios_wasm::RefType {
                         is_nullable: false,
-                        heap_type: HeapType::Concrete(field_data.type_name()),
+                        heap_type: curios_wasm::HeapType::Concrete(field_data.type_name()),
                     },
                 },
-                Instr::StructGet {
+                curios_wasm::Instr::StructGet {
                     type_name: field_data.type_name(),
                     field_name: field_data.field_name(),
                 },
@@ -282,13 +291,13 @@ impl<'a, 'b> Context<'a, 'b> {
 
             output.extend(self.load_as_instrs(load_as, true));
         } else if let Some(local_data) = self.find_local(value_name) {
-            output.push(Instr::LocalGet {
+            output.push(curios_wasm::Instr::LocalGet {
                 local_name: local_data.local_name,
             });
 
             output.extend(self.load_as_instrs(load_as, local_data.is_nullable));
         } else {
-            output.push(Instr::GlobalGet {
+            output.push(curios_wasm::Instr::GlobalGet {
                 global_name: self.table().find_const(value_name),
             });
 
@@ -298,7 +307,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub(super) fn jump_instrs(&self, target: &'a crate::JumpTarget) -> Vec<Instr> {
+    pub(crate) fn jump_instrs(&self, target: &'a EmissionJumpTarget) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 
         for value_name in &target.params {
@@ -314,7 +323,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 );
             }
 
-            output.push(Instr::Return);
+            output.push(curios_wasm::Instr::Return);
         } else {
             let block_data = self.find_block(&target.target);
             output.extend(block_data.enter(target.params.len()));
@@ -323,17 +332,17 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub(super) fn match_instrs(&self, target: &'a crate::MatchTarget) -> Vec<Instr> {
+    pub(crate) fn match_instrs(&self, target: &'a EmissionMatchTarget) -> Vec<curios_wasm::Instr> {
         if target.cases.is_empty() && target.default.is_none() {
-            return vec![Instr::Unreachable];
+            return vec![curios_wasm::Instr::Unreachable];
         }
 
         let default_instructions = match &target.default {
             Some(target) => self.jump_instrs(target),
-            None => vec![Instr::Unreachable],
+            None => vec![curios_wasm::Instr::Unreachable],
         };
 
-        let sorted: Vec<(u32, &crate::JumpTarget)> =
+        let sorted: Vec<(u32, &EmissionJumpTarget)> =
             target.cases.iter().map(|(&k, v)| (k, v)).collect();
 
         if is_sequential_from_zero(&target.cases) {
@@ -341,10 +350,10 @@ impl<'a, 'b> Context<'a, 'b> {
                 self.load_value_instrs(&target.operand, LoadAs::Nat)
                     .into_iter()
                     .chain([
-                        Instr::I32Eqz,
-                        Instr::If {
+                        curios_wasm::Instr::I32Eqz,
+                        curios_wasm::Instr::If {
                             label_name: self.table().special_label(),
-                            block_type: BlockType::Empty,
+                            block_type: curios_wasm::BlockType::Empty,
                             then_instructions: self.jump_instrs(jump_target),
                             else_instructions: default_instructions,
                         },
@@ -356,18 +365,18 @@ impl<'a, 'b> Context<'a, 'b> {
                     .enumerate()
                     .map(|(index, (_, jump_target))| {
                         (
-                            LabelName::from(format!("case${index}")),
+                            curios_wasm::LabelName::from(format!("case${index}")),
                             self.jump_instrs(jump_target),
                         )
                     })
                     .collect::<Vec<_>>();
 
-                let label_name = LabelName::from("tail");
+                let label_name = curios_wasm::LabelName::from("tail");
 
                 let instructions = self
                     .load_value_instrs(&target.operand, LoadAs::Nat)
                     .into_iter()
-                    .chain([Instr::BrTable {
+                    .chain([curios_wasm::Instr::BrTable {
                         label_names: label_names
                             .iter()
                             .map(|(label_name, _)| label_name.clone())
@@ -381,9 +390,9 @@ impl<'a, 'b> Context<'a, 'b> {
                     .chain([(label_name, default_instructions)])
                     .rev()
                     .fold(instructions, |instructions, (block_label, block_body)| {
-                        iter::once(Instr::Block {
+                        iter::once(curios_wasm::Instr::Block {
                             label_name: block_label,
-                            block_type: BlockType::Empty,
+                            block_type: curios_wasm::BlockType::Empty,
                             instructions,
                         })
                         .chain(block_body)
@@ -397,23 +406,23 @@ impl<'a, 'b> Context<'a, 'b> {
 
     fn binary_search_instrs(
         &self,
-        operand: &'a crate::ValueName,
-        cases: &[(u32, &'a crate::JumpTarget)],
-        default_instructions: Vec<Instr>,
-    ) -> Vec<Instr> {
+        operand: &'a EmissionValueName,
+        cases: &[(u32, &'a EmissionJumpTarget)],
+        default_instructions: Vec<curios_wasm::Instr>,
+    ) -> Vec<curios_wasm::Instr> {
         match cases {
             [] => default_instructions,
             [(value, jump_target)] => self
                 .load_value_instrs(operand, LoadAs::Nat)
                 .into_iter()
                 .chain([
-                    Instr::I32Const {
+                    curios_wasm::Instr::I32Const {
                         value: *value as i32,
                     },
-                    Instr::I32Eq,
-                    Instr::If {
-                        label_name: LabelName::from("eq"),
-                        block_type: BlockType::Empty,
+                    curios_wasm::Instr::I32Eq,
+                    curios_wasm::Instr::If {
+                        label_name: curios_wasm::LabelName::from("eq"),
+                        block_type: curios_wasm::BlockType::Empty,
                         then_instructions: self.jump_instrs(jump_target),
                         else_instructions: default_instructions,
                     },
@@ -428,13 +437,13 @@ impl<'a, 'b> Context<'a, 'b> {
                 self.load_value_instrs(operand, LoadAs::Nat)
                     .into_iter()
                     .chain([
-                        Instr::I32Const {
+                        curios_wasm::Instr::I32Const {
                             value: pivot as i32,
                         },
-                        Instr::I32LtU,
-                        Instr::If {
-                            label_name: LabelName::from("lt"),
-                            block_type: BlockType::Empty,
+                        curios_wasm::Instr::I32LtU,
+                        curios_wasm::Instr::If {
+                            label_name: curios_wasm::LabelName::from("lt"),
+                            block_type: curios_wasm::BlockType::Empty,
                             then_instructions: left,
                             else_instructions: right,
                         },
@@ -444,12 +453,12 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(super) fn call_direct_instrs(
+    pub(crate) fn call_direct_instrs(
         &self,
-        target: &'a crate::FuncName,
-        params: &'a [crate::ValueName],
-        resume: &'a crate::BlockName,
-    ) -> Vec<Instr> {
+        target: &'a EmissionFunctionName,
+        params: &'a [EmissionValueName],
+        resume: &'a EmissionBlockName,
+    ) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 
         if params.len() != self.table().find_func(target).arity() {
@@ -466,11 +475,11 @@ impl<'a, 'b> Context<'a, 'b> {
         }
 
         if self.is_resume(resume) {
-            output.push(Instr::ReturnCall {
+            output.push(curios_wasm::Instr::ReturnCall {
                 func_name: self.table().find_func(target).func_name(),
             });
         } else {
-            output.push(Instr::Call {
+            output.push(curios_wasm::Instr::Call {
                 func_name: self.table().find_func(target).func_name(),
             });
 
@@ -480,12 +489,12 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub(super) fn call_indirect_instrs(
+    pub(crate) fn call_indirect_instrs(
         &self,
-        target: &'a crate::ValueName,
-        params: &'a [crate::ValueName],
-        resume: &'a crate::BlockName,
-    ) -> Vec<Instr> {
+        target: &'a EmissionValueName,
+        params: &'a [EmissionValueName],
+        resume: &'a EmissionBlockName,
+    ) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
         let arity = params.len();
         let envr_type = self.table().find_envr_type(arity);
@@ -499,19 +508,19 @@ impl<'a, 'b> Context<'a, 'b> {
 
         output.extend(self.load_value_instrs(target, LoadAs::Concrete(envr_type.clone())));
 
-        output.push(Instr::StructGet {
+        output.push(curios_wasm::Instr::StructGet {
             type_name: envr_type,
             field_name: self.table().special_field(),
         });
 
-        output.push(Instr::RefAsNonNull);
+        output.push(curios_wasm::Instr::RefAsNonNull);
 
         if self.is_resume(resume) {
-            output.push(Instr::ReturnCallRef {
+            output.push(curios_wasm::Instr::ReturnCallRef {
                 type_name: clsr_type,
             });
         } else {
-            output.push(Instr::CallRef {
+            output.push(curios_wasm::Instr::CallRef {
                 type_name: clsr_type,
             });
 
@@ -522,23 +531,23 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub(super) fn tail_instrs(&self, tail: &'a crate::Tail) -> Vec<Instr> {
+    pub(crate) fn tail_instrs(&self, tail: &'a EmissionTail) -> Vec<curios_wasm::Instr> {
         match tail {
-            crate::Tail::Jump(target) => self.jump_instrs(target),
-            crate::Tail::Match(target) => self.match_instrs(target),
-            crate::Tail::Call(crate::CallTarget::Direct {
+            EmissionTail::Jump(target) => self.jump_instrs(target),
+            EmissionTail::Match(target) => self.match_instrs(target),
+            EmissionTail::Call(EmissionCallTarget::Direct {
                 target,
                 params,
                 resume,
             }) => self.call_direct_instrs(target, params, resume),
-            crate::Tail::Call(crate::CallTarget::Indirect {
+            EmissionTail::Call(EmissionCallTarget::Indirect {
                 target,
                 params,
                 resume,
             }) => self.call_indirect_instrs(target, params, resume),
-            crate::Tail::Host(host) => self.host_instrs(host),
-            crate::Tail::Cell(cell) => self.cell_instrs(cell),
-            crate::Tail::Unreachable => vec![Instr::Unreachable],
+            EmissionTail::Host(host) => self.host_instrs(host),
+            EmissionTail::Cell(cell) => self.cell_instrs(cell),
+            EmissionTail::Unreachable => vec![curios_wasm::Instr::Unreachable],
         }
     }
 
@@ -547,8 +556,8 @@ impl<'a, 'b> Context<'a, 'b> {
     /// never be the bare-forwarder sentinel.
     fn host_multi_resume(
         &self,
-        output: &mut Vec<Instr>,
-        resume: &crate::BlockName,
+        output: &mut Vec<curios_wasm::Instr>,
+        resume: &EmissionBlockName,
         results: usize,
     ) {
         assert!(
@@ -561,9 +570,9 @@ impl<'a, 'b> Context<'a, 'b> {
     /// Resume after a host op whose single result already matches the
     /// function's anyref return shape: return it directly on the sentinel, else
     /// enter the resume block with one value.
-    fn host_single_resume(&self, output: &mut Vec<Instr>, resume: &crate::BlockName) {
+    fn host_single_resume(&self, output: &mut Vec<curios_wasm::Instr>, resume: &EmissionBlockName) {
         if self.is_resume(resume) {
-            output.push(Instr::Return);
+            output.push(curios_wasm::Instr::Return);
         } else {
             output.extend(self.find_block(resume).enter(1));
         }
@@ -572,12 +581,12 @@ impl<'a, 'b> Context<'a, 'b> {
     /// Resume after a host op with no payload: materialise a unit for the
     /// single-value return sentinel, else enter the resume block with no
     /// values.
-    fn host_unit_resume(&self, output: &mut Vec<Instr>, resume: &crate::BlockName) {
+    fn host_unit_resume(&self, output: &mut Vec<curios_wasm::Instr>, resume: &EmissionBlockName) {
         if self.is_resume(resume) {
-            output.push(Instr::StructNew {
+            output.push(curios_wasm::Instr::StructNew {
                 type_name: self.table().find_tpl_type(0),
             });
-            output.push(Instr::Return);
+            output.push(curios_wasm::Instr::Return);
         } else {
             output.extend(self.find_block(resume).enter(0));
         }
@@ -586,7 +595,7 @@ impl<'a, 'b> Context<'a, 'b> {
     /// The rope→wire step for one host argument: a reference param crosses as
     /// its flat payload, so the loaded rope is forced first — deeply for
     /// `Lst(Bin)`/`Lst(Io)`, whose *elements* the host lifts as raw `$bytes`.
-    fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<Instr> {
+    fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let force = match wire_type {
             WireType::Nat | WireType::Bln | WireType::Int => return vec![],
             WireType::Bin | WireType::Io => self.table().bytes_force_func(),
@@ -596,13 +605,13 @@ impl<'a, 'b> Context<'a, 'b> {
             },
         };
 
-        vec![Instr::Call { func_name: force }]
+        vec![curios_wasm::Instr::Call { func_name: force }]
     }
 
     /// The wire→rope step for one host result: a reference re-enters as a
     /// host-built flat payload and is embedded into a fresh leaf — deeply for
     /// `Lst(Bin)`, whose elements the host lowered as raw `$bytes`.
-    fn wire_embed_instrs(&self, wire_type: &WireType) -> Vec<Instr> {
+    fn wire_embed_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let embed = match wire_type {
             WireType::Nat | WireType::Bln | WireType::Int => return vec![],
             WireType::Bin | WireType::Io => self.table().bytes_embed_func(),
@@ -612,7 +621,7 @@ impl<'a, 'b> Context<'a, 'b> {
             },
         };
 
-        vec![Instr::Call { func_name: embed }]
+        vec![curios_wasm::Instr::Call { func_name: embed }]
     }
 
     /// Emit a host primitive call in tail position, then branch to its resume.
@@ -620,11 +629,11 @@ impl<'a, 'b> Context<'a, 'b> {
     /// either fall through to the function's return (when the resume happens
     /// to be the sentinel) or set up the dispatcher and branch into the resume
     /// block.
-    pub(super) fn host_instrs(&self, host: &'a crate::HostTarget) -> Vec<Instr> {
+    pub(crate) fn host_instrs(&self, host: &'a EmissionHostTarget) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 
         match host {
-            crate::HostTarget::Foreign {
+            EmissionHostTarget::Foreign {
                 function,
                 operands,
                 resume,
@@ -643,7 +652,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     output.extend(self.wire_force_instrs(wire_type));
                 }
 
-                output.push(Instr::Call {
+                output.push(curios_wasm::Instr::Call {
                     func_name: self.table().host_func(function),
                 });
 
@@ -669,33 +678,31 @@ impl<'a, 'b> Context<'a, 'b> {
                     results => self.host_multi_resume(&mut output, resume, results),
                 }
             }
-            crate::HostTarget::IoExit { code, resume } => {
+            EmissionHostTarget::IoExit { code } => {
                 output.extend(self.load_value_instrs(code, LoadAs::Nat));
-                output.push(Instr::Call {
+                output.push(curios_wasm::Instr::Call {
                     func_name: self.table().io_exit_func().clone(),
                 });
 
-                // The host traps, so control never returns; the resume path is
-                // dead code but must stay well-typed, exactly like `IoClose`.
-                self.host_unit_resume(&mut output, resume);
+                output.push(curios_wasm::Instr::Unreachable);
             }
         }
 
         output
     }
 
-    pub(super) fn cell_instrs(&self, cell: &'a crate::CellTarget) -> Vec<Instr> {
+    pub(crate) fn cell_instrs(&self, cell: &'a EmissionCellTarget) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 
         match cell {
-            crate::CellTarget::New { init, resume } => {
+            EmissionCellTarget::New { init, resume } => {
                 output.extend(self.load_value_instrs(init, LoadAs::NonNull));
-                output.push(Instr::StructNew {
+                output.push(curios_wasm::Instr::StructNew {
                     type_name: self.table().cell_type(),
                 });
                 self.host_single_resume(&mut output, resume);
             }
-            crate::CellTarget::Set {
+            EmissionCellTarget::Set {
                 cell,
                 value,
                 resume,
@@ -704,17 +711,17 @@ impl<'a, 'b> Context<'a, 'b> {
                     self.load_value_instrs(cell, LoadAs::Concrete(self.table().cell_type())),
                 );
                 output.extend(self.load_value_instrs(value, LoadAs::NonNull));
-                output.push(Instr::StructSet {
+                output.push(curios_wasm::Instr::StructSet {
                     type_name: self.table().cell_type(),
                     field_name: self.table().special_field(),
                 });
                 self.host_unit_resume(&mut output, resume);
             }
-            crate::CellTarget::Get { cell, resume } => {
+            EmissionCellTarget::Get { cell, resume } => {
                 output.extend(
                     self.load_value_instrs(cell, LoadAs::Concrete(self.table().cell_type())),
                 );
-                output.push(Instr::StructGet {
+                output.push(curios_wasm::Instr::StructGet {
                     type_name: self.table().cell_type(),
                     field_name: self.table().special_field(),
                 });
@@ -725,20 +732,20 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub(super) fn bloink_instrs(
+    pub(crate) fn bloink_instrs(
         &self,
-        bloink_local: LocalName,
-        bloink_label: LabelName,
-        regions: Vec<(LabelName, Vec<Instr>)>,
-        tail: &'a crate::Tail,
-    ) -> Vec<Instr> {
-        let label_name = LabelName::from("tail");
+        bloink_local: curios_wasm::LocalName,
+        bloink_label: curios_wasm::LabelName,
+        regions: Vec<(curios_wasm::LabelName, Vec<curios_wasm::Instr>)>,
+        tail: &'a EmissionTail,
+    ) -> Vec<curios_wasm::Instr> {
+        let label_name = curios_wasm::LabelName::from("tail");
 
         let instructions = vec![
-            Instr::LocalGet {
+            curios_wasm::Instr::LocalGet {
                 local_name: bloink_local.clone(),
             },
-            Instr::BrTable {
+            curios_wasm::Instr::BrTable {
                 label_names: regions
                     .iter()
                     .map(|(block_label, _)| block_label.clone())
@@ -752,9 +759,9 @@ impl<'a, 'b> Context<'a, 'b> {
             .chain([(label_name, self.tail_instrs(tail))])
             .rev()
             .fold(instructions, |instructions, (block_label, block_body)| {
-                iter::once(Instr::Block {
+                iter::once(curios_wasm::Instr::Block {
                     label_name: block_label.clone(),
-                    block_type: BlockType::Empty,
+                    block_type: curios_wasm::BlockType::Empty,
                     instructions,
                 })
                 .chain(block_body)
@@ -762,25 +769,25 @@ impl<'a, 'b> Context<'a, 'b> {
             });
 
         vec![
-            Instr::I32Const { value: -1 },
-            Instr::LocalSet {
+            curios_wasm::Instr::I32Const { value: -1 },
+            curios_wasm::Instr::LocalSet {
                 local_name: bloink_local,
             },
-            Instr::Loop {
+            curios_wasm::Instr::Loop {
                 label_name: bloink_label,
-                block_type: BlockType::Empty,
+                block_type: curios_wasm::BlockType::Empty,
                 instructions,
             },
-            Instr::Unreachable,
+            curios_wasm::Instr::Unreachable,
         ]
     }
 }
 
 #[derive(Debug, Clone)]
-pub(super) enum LoadAs {
+pub(crate) enum LoadAs {
     Null,
     NonNull,
-    Concrete(TypeName),
+    Concrete(curios_wasm::TypeName),
     Nat,
     Int,
     Flt,

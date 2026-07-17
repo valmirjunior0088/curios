@@ -16,8 +16,8 @@ pub enum Stage<'a> {
     Core(&'a curios_core::Module),
     Ersd(&'a curios_ersd::Module),
     ErsdOptm(&'a curios_ersd::Module),
-    Cont(&'a curios_cont::Module),
-    ContOptm(&'a curios_cont::Module),
+    Cont(&'a curios_cont::CpsModule),
+    ContOptm(&'a curios_cont::CpsModule),
     Wasm(&'a curios_wasm::Module),
 }
 

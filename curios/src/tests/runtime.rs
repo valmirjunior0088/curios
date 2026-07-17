@@ -228,11 +228,8 @@ fn bang_region_mixes_action_types() {
 
 #[test]
 fn folds_constant_arg_through_let_function() {
-    // `let f(x) = Nat/add(x, 1); f(3)` must fold end-to-end to a literal `4` in
-    // `main`. Without the interim DCE before `inline_calls`, `specialize_calls`
-    // leaves a dead closure body in `module.clsrs` whose direct call to the
-    // lifted clone of `f` inflates the inliner's call-site count, blocking the
-    // splice that ultimately lets constant folding see `3` next to the successor.
+    // `let f(x) = Nat/add(x, 1); f(3)` must fold end-to-end to a literal `4`
+    // returned through main's bodyless return continuation.
     let source = r#"
         use /std/{Nat};
         let f(x : Nat) -> Nat = Nat/add(x, 1);
@@ -241,69 +238,39 @@ fn folds_constant_arg_through_let_function() {
 
     let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
 
-    let mut main_func: Option<curios_cont::Func> = None;
+    let mut optimized = None;
     curios_pipeline::compile_entrypoint(
         Duration::from_secs(10),
         &entrypoint,
         curios_text::RootSource::none(),
         |stage| {
             if let curios_pipeline::Stage::ContOptm(module) = stage {
-                let entry = module.entry().expect("module has entry").clone();
-                let (_, func) = module
-                    .funcs()
-                    .iter()
-                    .find(|(name, _)| name == &entry)
-                    .expect("entry function present in module");
-                main_func = Some(func.clone());
+                optimized = Some(module.clone());
             }
         },
     )
     .expect("compile succeeded");
 
-    let main = main_func.expect("Stage::ContOptm observed");
-
+    let optimized = optimized.expect("Stage::ContOptm observed");
+    let entry = optimized.entry().expect("module has entry");
+    let main = optimized
+        .function(entry)
+        .expect("entry function is defined");
+    let returns_four = optimized.nodes().iter().flatten().any(|node| {
+        matches!(
+            node,
+            curios_cont::CpsNode::ApplyCont(curios_cont::CpsEdge { target, args })
+                if *target == main.return_cont
+                    && matches!(args.as_slice(), [curios_cont::CpsAtom::Literal(
+                        curios_cont::CpsLiteral::Nat(4)
+                    )])
+        )
+    });
     assert!(
-        main.region.preallocs.is_empty(),
-        "expected main to have no preallocs, got {:?}",
-        main.region.preallocs,
+        returns_four,
+        "expected main to return literal 4 through {}, got:\n{optimized}",
+        main.return_cont,
     );
-    assert!(
-        main.region.blocks.is_empty(),
-        "expected main to have no nested blocks, got {} block(s)",
-        main.region.blocks.len(),
-    );
-
-    let folded: Vec<&curios_cont::ValueName> = main
-        .region
-        .values
-        .iter()
-        .filter_map(|(name, val)| match val {
-            curios_cont::Value::Pure(curios_cont::Data::Nat(4)) => Some(name),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(
-        folded.len(),
-        1,
-        "expected exactly one Pure(Data::Nat(4)) in main, got values {:?}",
-        main.region.values,
-    );
-    let folded_name = folded[0].clone();
-
-    match &main.region.tail {
-        curios_cont::Tail::Jump(jump) => {
-            assert_eq!(
-                jump.target, main.resume,
-                "expected main to jump to its resume sentinel",
-            );
-            assert_eq!(
-                jump.params,
-                vec![folded_name],
-                "expected main to return the folded Pure(Data::Nat(4))",
-            );
-        }
-        other => panic!("expected resume jump in main, got {other:?}"),
-    }
 }
 
 #[test]
@@ -314,12 +281,11 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     // (Parse combinators and the segment UTF-8 revalidation included) runs at
     // compile time and `Fmt/print(lit)` reifies as the curried hole-filling
     // closure over a constant `Fmt` spine. What stays runtime is exactly the
-    // runtime work: `go_with` over the spine, the `%s` path (`Str/trim` and
-    // the stdin UTF-8 validation through `classify`), and the `%d` path
-    // (`Nat/to_str`'s digit producer); cont's `evaluate_pure_calls` and
-    // size-bounded multi-site inlining then dissolve the wrappers around
-    // those. The assert pins a comfortable upper bound on the residual funcs
-    // while leaving headroom for legitimate std/Fmt drift.
+    // runtime work: specialized `go_with` over the spine, the `%s` path
+    // (`Str/trim` and stdin UTF-8 validation through `classify`), and the `%d`
+    // path (`Nat/to_str`'s digit producer). The normalized high-CPS assertion
+    // pins that specialization boundary without depending on a legacy backend
+    // function-count metric.
     let source = r#"
         use /std/{Str, Io, Bytes, Fmt};
 
@@ -339,7 +305,7 @@ fn fmt_print_partial_evaluation_reduces_residual() {
         .expect("failed to parse source")
         .with_type("()".parse().unwrap());
 
-    let mut cont_optm_funcs: Option<usize> = None;
+    let mut cont_optm = None;
 
     let (wasm_module, _foreigns) = curios_pipeline::compile_entrypoint(
         Duration::from_secs(15),
@@ -347,17 +313,18 @@ fn fmt_print_partial_evaluation_reduces_residual() {
         curios_text::RootSource::none(),
         |stage| {
             if let curios_pipeline::Stage::ContOptm(module) = stage {
-                cont_optm_funcs = Some(module.funcs().len());
+                cont_optm = Some(format!("{module}"));
             }
         },
     )
     .expect("compile succeeded");
 
-    let funcs = cont_optm_funcs.expect("Stage::ContOptm observed");
+    let cont = cont_optm.expect("Stage::ContOptm observed");
     assert!(
-        funcs <= 10,
-        "expected at most 10 residual funcs after ersd staging and cont \
-         partial evaluation, got {funcs}",
+        cont.contains("/std/Fmt/go_with@")
+            && !cont.contains("/std/Fmt/print")
+            && !cont.contains("/std/Parse/"),
+        "expected only the specialized formatting spine after staging, got:\n{cont}",
     );
 
     let (system, io) = MockHost::builder().stdin_lines(["Alice"]).build();
@@ -460,7 +427,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
         .with_type("()".parse().unwrap());
 
     let mut ersd_optm = None;
-    let mut cont_optm_funcs = None;
+    let mut cont_optm = None;
 
     let (wasm_module, _foreigns) = curios_pipeline::compile_entrypoint(
         Duration::from_secs(15),
@@ -468,9 +435,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
         curios_text::RootSource::none(),
         |stage| match stage {
             curios_pipeline::Stage::ErsdOptm(module) => ersd_optm = Some(format!("{module}")),
-            curios_pipeline::Stage::ContOptm(module) => {
-                cont_optm_funcs = Some(module.funcs().len())
-            }
+            curios_pipeline::Stage::ContOptm(module) => cont_optm = Some(format!("{module}")),
             _ => {}
         },
     )
@@ -487,10 +452,10 @@ fn fmt_print_constant_args_collapses_at_ersd() {
         "expected the parser web pruned, got:\n{ersd}",
     );
 
-    let funcs = cont_optm_funcs.expect("Stage::ContOptm observed");
+    let cont = cont_optm.expect("Stage::ContOptm observed");
     assert!(
-        funcs <= 4,
-        "expected the constant program to collapse to the write loop, got {funcs} funcs",
+        !cont.contains("/std/Fmt/") && !cont.contains("/std/Parse/") && !cont.contains("[lambda]"),
+        "expected the constant program to collapse to the write loop, got:\n{cont}",
     );
 
     let (system, io) = MockHost::builder().build();

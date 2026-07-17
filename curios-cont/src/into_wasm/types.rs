@@ -44,21 +44,18 @@
 //! are embedded into fresh leaves after it), so curios-runtime and the curios-web
 //! bridge only ever see flat arrays.
 
-use curios_wasm::{
-    ArrayType, CompType, FieldName, FieldType, HeapType, Mutability, NumType, PackedType, RefType,
-    StorageType, StructType, SubType, TypeName, ValType,
-};
-
 /// `Flt` — a boxed `f32`: `struct (field $special (f32))`.
-pub(crate) fn flt_sub_type(special_field: FieldName) -> SubType {
-    SubType {
+pub(crate) fn flt_sub_type(special_field: curios_wasm::FieldName) -> curios_wasm::SubType {
+    curios_wasm::SubType {
         is_final: true,
         super_types: vec![],
-        comp_type: CompType::Struct(StructType::from([(
+        comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([(
             special_field,
-            FieldType {
-                storage_type: StorageType::Val(ValType::Num(NumType::F32)),
-                mutability: Mutability::Const,
+            curios_wasm::FieldType {
+                storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Num(
+                    curios_wasm::NumType::F32,
+                )),
+                mutability: curios_wasm::Mutability::Const,
             },
         )])),
     }
@@ -66,14 +63,14 @@ pub(crate) fn flt_sub_type(special_field: FieldName) -> SubType {
 
 /// `$bytes` — a `Bits`/`Bytes` rope's flat packed payload, and the wire-`Bin` host-boundary shape:
 /// `array (mut i8)`.
-pub(crate) fn bytes_sub_type() -> SubType {
-    SubType {
+pub(crate) fn bytes_sub_type() -> curios_wasm::SubType {
+    curios_wasm::SubType {
         is_final: true,
         super_types: vec![],
-        comp_type: CompType::Array(ArrayType {
-            field_type: FieldType {
-                storage_type: StorageType::Packed(PackedType::I8),
-                mutability: Mutability::Var,
+        comp_type: curios_wasm::CompType::Array(curios_wasm::ArrayType {
+            field_type: curios_wasm::FieldType {
+                storage_type: curios_wasm::StorageType::Packed(curios_wasm::PackedType::I8),
+                mutability: curios_wasm::Mutability::Var,
             },
         }),
     }
@@ -83,32 +80,40 @@ pub(crate) fn bytes_sub_type() -> SubType {
 /// shape: `array (mut <top>)`. The element field stays mutable regardless of
 /// cyclicity: payloads are built with `array.new_default` + per-element
 /// `array.set`, so it must be writable.
-pub(crate) fn elems_sub_type(top_type: ValType) -> SubType {
-    SubType {
+pub(crate) fn elems_sub_type(top_type: curios_wasm::ValType) -> curios_wasm::SubType {
+    curios_wasm::SubType {
         is_final: true,
         super_types: vec![],
-        comp_type: CompType::Array(ArrayType {
-            field_type: FieldType {
-                storage_type: StorageType::Val(top_type),
-                mutability: Mutability::Var,
+        comp_type: curios_wasm::CompType::Array(curios_wasm::ArrayType {
+            field_type: curios_wasm::FieldType {
+                storage_type: curios_wasm::StorageType::Val(top_type),
+                mutability: curios_wasm::Mutability::Var,
             },
         }),
     }
 }
 
-fn i32_const_field() -> FieldType {
-    FieldType {
-        storage_type: StorageType::Val(ValType::Num(NumType::I32)),
-        mutability: Mutability::Const,
+fn i32_const_field() -> curios_wasm::FieldType {
+    curios_wasm::FieldType {
+        storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Num(
+            curios_wasm::NumType::I32,
+        )),
+        mutability: curios_wasm::Mutability::Const,
     }
 }
 
-fn ref_field(type_name: TypeName, is_nullable: bool, mutability: Mutability) -> FieldType {
-    FieldType {
-        storage_type: StorageType::Val(ValType::Ref(RefType {
-            is_nullable,
-            heap_type: HeapType::Concrete(type_name),
-        })),
+fn ref_field(
+    type_name: curios_wasm::TypeName,
+    is_nullable: bool,
+    mutability: curios_wasm::Mutability,
+) -> curios_wasm::FieldType {
+    curios_wasm::FieldType {
+        storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Ref(
+            curios_wasm::RefType {
+                is_nullable,
+                heap_type: curios_wasm::HeapType::Concrete(type_name),
+            },
+        )),
         mutability,
     }
 }
@@ -117,11 +122,14 @@ fn ref_field(type_name: TypeName, is_nullable: bool, mutability: Mutability) -> 
 /// cast to: `struct (field $tag (i32)) (field $len (i32))`. `tag` is 0 for a
 /// leaf, 1 for a node, 2 for a view; `len` is the carrier's element count, so
 /// `len` and the tag dispatch never force.
-pub(crate) fn rope_base_sub_type(tag_field: FieldName, len_field: FieldName) -> SubType {
-    SubType {
+pub(crate) fn rope_base_sub_type(
+    tag_field: curios_wasm::FieldName,
+    len_field: curios_wasm::FieldName,
+) -> curios_wasm::SubType {
+    curios_wasm::SubType {
         is_final: false,
         super_types: vec![],
-        comp_type: CompType::Struct(StructType::from([
+        comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([
             (tag_field, i32_const_field()),
             (len_field, i32_const_field()),
         ])),
@@ -131,21 +139,21 @@ pub(crate) fn rope_base_sub_type(tag_field: FieldName, len_field: FieldName) -> 
 /// A rope leaf (`$rope/bin/leaf` / `$rope/lst/leaf`) — final, subtype of the base: adds
 /// the flat payload (`$bytes` / `$elems`).
 pub(crate) fn rope_leaf_sub_type(
-    base_type: TypeName,
-    tag_field: FieldName,
-    len_field: FieldName,
-    payload_field: FieldName,
-    payload_type: TypeName,
-) -> SubType {
-    SubType {
+    base_type: curios_wasm::TypeName,
+    tag_field: curios_wasm::FieldName,
+    len_field: curios_wasm::FieldName,
+    payload_field: curios_wasm::FieldName,
+    payload_type: curios_wasm::TypeName,
+) -> curios_wasm::SubType {
+    curios_wasm::SubType {
         is_final: true,
         super_types: vec![base_type],
-        comp_type: CompType::Struct(StructType::from([
+        comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([
             (tag_field, i32_const_field()),
             (len_field, i32_const_field()),
             (
                 payload_field,
-                ref_field(payload_type, false, Mutability::Const),
+                ref_field(payload_type, false, curios_wasm::Mutability::Const),
             ),
         ])),
     }
@@ -156,26 +164,32 @@ pub(crate) fn rope_leaf_sub_type(
 /// nullable: forcing writes the flat payload into `cache` and nulls the
 /// children, releasing the tree while the memo stays live.
 pub(crate) fn rope_node_sub_type(
-    base_type: TypeName,
-    tag_field: FieldName,
-    len_field: FieldName,
-    left_field: FieldName,
-    right_field: FieldName,
-    cache_field: FieldName,
-    payload_type: TypeName,
-) -> SubType {
-    SubType {
+    base_type: curios_wasm::TypeName,
+    tag_field: curios_wasm::FieldName,
+    len_field: curios_wasm::FieldName,
+    left_field: curios_wasm::FieldName,
+    right_field: curios_wasm::FieldName,
+    cache_field: curios_wasm::FieldName,
+    payload_type: curios_wasm::TypeName,
+) -> curios_wasm::SubType {
+    curios_wasm::SubType {
         is_final: true,
         super_types: vec![base_type.clone()],
-        comp_type: CompType::Struct(StructType::from([
+        comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([
             (tag_field, i32_const_field()),
             (len_field, i32_const_field()),
             (
                 left_field,
-                ref_field(base_type.clone(), true, Mutability::Var),
+                ref_field(base_type.clone(), true, curios_wasm::Mutability::Var),
             ),
-            (right_field, ref_field(base_type, true, Mutability::Var)),
-            (cache_field, ref_field(payload_type, true, Mutability::Var)),
+            (
+                right_field,
+                ref_field(base_type, true, curios_wasm::Mutability::Var),
+            ),
+            (
+                cache_field,
+                ref_field(payload_type, true, curios_wasm::Mutability::Var),
+            ),
         ])),
     }
 }
@@ -187,34 +201,40 @@ pub(crate) fn rope_node_sub_type(
 /// already set), enforced by the only constructor, the emitted `slice`
 /// helper.
 pub(crate) fn rope_view_sub_type(
-    base_type: TypeName,
-    tag_field: FieldName,
-    len_field: FieldName,
-    base_field: FieldName,
-    offset_field: FieldName,
-) -> SubType {
-    SubType {
+    base_type: curios_wasm::TypeName,
+    tag_field: curios_wasm::FieldName,
+    len_field: curios_wasm::FieldName,
+    base_field: curios_wasm::FieldName,
+    offset_field: curios_wasm::FieldName,
+) -> curios_wasm::SubType {
+    curios_wasm::SubType {
         is_final: true,
         super_types: vec![base_type.clone()],
-        comp_type: CompType::Struct(StructType::from([
+        comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([
             (tag_field, i32_const_field()),
             (len_field, i32_const_field()),
-            (base_field, ref_field(base_type, false, Mutability::Const)),
+            (
+                base_field,
+                ref_field(base_type, false, curios_wasm::Mutability::Const),
+            ),
             (offset_field, i32_const_field()),
         ])),
     }
 }
 
 /// `Cell` — a mutable reference cell: `struct (field $special (mut <top>))`.
-pub(crate) fn cell_sub_type(special_field: FieldName, top_type: ValType) -> SubType {
-    SubType {
+pub(crate) fn cell_sub_type(
+    special_field: curios_wasm::FieldName,
+    top_type: curios_wasm::ValType,
+) -> curios_wasm::SubType {
+    curios_wasm::SubType {
         is_final: true,
         super_types: vec![],
-        comp_type: CompType::Struct(StructType::from([(
+        comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([(
             special_field,
-            FieldType {
-                storage_type: StorageType::Val(top_type),
-                mutability: Mutability::Var,
+            curios_wasm::FieldType {
+                storage_type: curios_wasm::StorageType::Val(top_type),
+                mutability: curios_wasm::Mutability::Var,
             },
         )])),
     }

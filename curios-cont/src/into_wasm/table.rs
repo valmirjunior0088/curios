@@ -1,9 +1,10 @@
 use {
-    curios_abi::ForeignFunction,
-    curios_wasm::{
-        AbsHeapType, FieldName, FuncName, GlobalName, HeapType, LabelName, LocalName, Mutability,
-        RefType, TypeName, ValType,
+    crate::{
+        EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName, EmissionCode,
+        EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
+        EmissionValueName,
     },
+    curios_abi::ForeignFunction,
     std::{
         cell::{OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -12,24 +13,27 @@ use {
 };
 
 #[derive(Debug, Clone)]
-pub(super) struct FieldData {
-    type_name: TypeName,
-    field_name: FieldName,
+pub(crate) struct FieldData {
+    type_name: curios_wasm::TypeName,
+    field_name: curios_wasm::FieldName,
 }
 
 impl FieldData {
-    pub(super) fn new(type_name: TypeName, field_name: FieldName) -> Self {
+    pub(crate) fn new(
+        type_name: curios_wasm::TypeName,
+        field_name: curios_wasm::FieldName,
+    ) -> Self {
         Self {
             type_name,
             field_name,
         }
     }
 
-    pub(super) fn type_name(&self) -> TypeName {
+    pub(crate) fn type_name(&self) -> curios_wasm::TypeName {
         self.type_name.clone()
     }
 
-    pub(super) fn field_name(&self) -> FieldName {
+    pub(crate) fn field_name(&self) -> curios_wasm::FieldName {
         self.field_name.clone()
     }
 }
@@ -39,75 +43,85 @@ impl FieldData {
 /// payload array, and every field name — one handle to thread through the op
 /// emitters so packed `Bits`/`Bytes` and `Lst` share their lowering code.
 #[derive(Debug, Clone)]
-pub(super) struct RopeData {
-    pub base: TypeName,
-    pub leaf: TypeName,
-    pub node: TypeName,
-    pub view: TypeName,
-    pub payload: TypeName,
-    pub tag_field: FieldName,
-    pub len_field: FieldName,
-    pub payload_field: FieldName,
-    pub left_field: FieldName,
-    pub right_field: FieldName,
-    pub cache_field: FieldName,
-    pub base_field: FieldName,
-    pub offset_field: FieldName,
+pub(crate) struct RopeData {
+    pub base: curios_wasm::TypeName,
+    pub leaf: curios_wasm::TypeName,
+    pub node: curios_wasm::TypeName,
+    pub view: curios_wasm::TypeName,
+    pub payload: curios_wasm::TypeName,
+    pub tag_field: curios_wasm::FieldName,
+    pub len_field: curios_wasm::FieldName,
+    pub payload_field: curios_wasm::FieldName,
+    pub left_field: curios_wasm::FieldName,
+    pub right_field: curios_wasm::FieldName,
+    pub cache_field: curios_wasm::FieldName,
+    pub base_field: curios_wasm::FieldName,
+    pub offset_field: curios_wasm::FieldName,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct ClsrData<'a> {
-    name: &'a crate::ClsrName,
-    func_name: FuncName,
-    clsr_type: TypeName,
-    envr_type: TypeName,
-    fields: Vec<(&'a crate::ValueName, FieldName)>,
-    params: HashMap<&'a crate::ValueName, LocalName>,
-    resume: &'a crate::BlockName,
+pub(crate) struct ClsrData<'a> {
+    name: &'a EmissionClosureName,
+    func_name: curios_wasm::FuncName,
+    clsr_type: curios_wasm::TypeName,
+    envr_type: curios_wasm::TypeName,
+    fields: Vec<(&'a EmissionValueName, curios_wasm::FieldName)>,
+    params: HashMap<&'a EmissionValueName, curios_wasm::LocalName>,
+    resume: &'a EmissionBlockName,
 }
 
 impl<'a> ClsrData<'a> {
-    pub(super) fn new(clsr_name: &'a crate::ClsrName, clsr: &'a crate::Clsr) -> Self {
+    pub(crate) fn new(clsr_name: &'a EmissionClosureName, clsr: &'a EmissionClosure) -> Self {
         Self {
             name: clsr_name,
-            func_name: FuncName::from(format!("clsr/{}", clsr_name)),
-            clsr_type: TypeName::from(format!("clsr/{}", clsr_name)),
-            envr_type: TypeName::from(format!("envr/{}", clsr_name)),
+            func_name: curios_wasm::FuncName::from(format!("clsr/{}", clsr_name)),
+            clsr_type: curios_wasm::TypeName::from(format!("clsr/{}", clsr_name)),
+            envr_type: curios_wasm::TypeName::from(format!("envr/{}", clsr_name)),
             fields: clsr
                 .fields
                 .iter()
-                .map(|field| (&field.name, FieldName::from(format!("${}", field.name))))
+                .map(|field| {
+                    (
+                        &field.name,
+                        curios_wasm::FieldName::from(format!("${}", field.name)),
+                    )
+                })
                 .collect(),
             params: clsr
                 .params
                 .iter()
-                .map(|param| (&param.name, LocalName::from(format!("${}", param.name))))
+                .map(|param| {
+                    (
+                        &param.name,
+                        curios_wasm::LocalName::from(format!("${}", param.name)),
+                    )
+                })
                 .collect(),
             resume: &clsr.resume,
         }
     }
 
-    pub(super) fn name(&self) -> &'a crate::ClsrName {
+    pub(crate) fn name(&self) -> &'a EmissionClosureName {
         self.name
     }
 
-    pub(super) fn func_name(&self) -> FuncName {
+    pub(crate) fn func_name(&self) -> curios_wasm::FuncName {
         self.func_name.clone()
     }
 
-    pub(super) fn clsr_type(&self) -> TypeName {
+    pub(crate) fn clsr_type(&self) -> curios_wasm::TypeName {
         self.clsr_type.clone()
     }
 
-    pub(super) fn envr_type(&self) -> TypeName {
+    pub(crate) fn envr_type(&self) -> curios_wasm::TypeName {
         self.envr_type.clone()
     }
 
-    pub(super) fn fields(&self) -> impl Iterator<Item = FieldName> {
+    pub(crate) fn fields(&self) -> impl Iterator<Item = curios_wasm::FieldName> {
         self.fields.iter().map(|(_, field_name)| field_name.clone())
     }
 
-    pub(super) fn find_field(&self, value_name: &crate::ValueName) -> Option<FieldData> {
+    pub(crate) fn find_field(&self, value_name: &EmissionValueName) -> Option<FieldData> {
         self.fields
             .iter()
             .find_map(|(field_name, mapped_field_name)| {
@@ -117,82 +131,93 @@ impl<'a> ClsrData<'a> {
             .map(|field_name| FieldData::new(self.envr_type(), field_name))
     }
 
-    pub(super) fn params(&self) -> HashMap<&'a crate::ValueName, LocalName> {
+    pub(crate) fn params(&self) -> HashMap<&'a EmissionValueName, curios_wasm::LocalName> {
         self.params.clone()
     }
 
-    pub(super) fn find_param(&self, value_name: &crate::ValueName) -> Option<LocalName> {
+    pub(crate) fn find_param(
+        &self,
+        value_name: &EmissionValueName,
+    ) -> Option<curios_wasm::LocalName> {
         self.params.get(value_name).cloned()
     }
 
-    pub(super) fn arity(&self) -> usize {
+    pub(crate) fn arity(&self) -> usize {
         self.params.len()
     }
 
-    pub(super) fn is_resume(&self, block_name: &crate::BlockName) -> bool {
+    pub(crate) fn is_resume(&self, block_name: &EmissionBlockName) -> bool {
         self.resume == block_name
     }
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct FuncData<'a> {
-    func_name: FuncName,
-    params: HashMap<&'a crate::ValueName, LocalName>,
-    resume: &'a crate::BlockName,
+pub(crate) struct FuncData<'a> {
+    func_name: curios_wasm::FuncName,
+    params: HashMap<&'a EmissionValueName, curios_wasm::LocalName>,
+    resume: &'a EmissionBlockName,
 }
 
 impl<'a> FuncData<'a> {
-    pub(super) fn new(func_name: &'a crate::FuncName, func: &'a crate::Func) -> Self {
+    pub(crate) fn new(func_name: &'a EmissionFunctionName, func: &'a EmissionFunction) -> Self {
         Self {
             // The `func/` prefix is why the exported entrypoint is
             // `func/main`: the entry is always `main`, and the export reuses
             // the function's emitted name.
-            func_name: FuncName::from(format!("func/{}", func_name)),
+            func_name: curios_wasm::FuncName::from(format!("func/{}", func_name)),
             params: func
                 .params
                 .iter()
-                .map(|param| (&param.name, LocalName::from(format!("${}", param.name))))
+                .map(|param| {
+                    (
+                        &param.name,
+                        curios_wasm::LocalName::from(format!("${}", param.name)),
+                    )
+                })
                 .collect(),
             resume: &func.resume,
         }
     }
 
-    pub(super) fn func_name(&self) -> FuncName {
+    pub(crate) fn func_name(&self) -> curios_wasm::FuncName {
         self.func_name.clone()
     }
 
-    pub(super) fn arity(&self) -> usize {
+    pub(crate) fn arity(&self) -> usize {
         self.params.len()
     }
 
-    pub(super) fn params(&self) -> HashMap<&'a crate::ValueName, LocalName> {
+    pub(crate) fn params(&self) -> HashMap<&'a EmissionValueName, curios_wasm::LocalName> {
         self.params.clone()
     }
 
-    pub(super) fn find_param(&self, value_name: &crate::ValueName) -> Option<LocalName> {
+    pub(crate) fn find_param(
+        &self,
+        value_name: &EmissionValueName,
+    ) -> Option<curios_wasm::LocalName> {
         self.params.get(value_name).cloned()
     }
 
-    pub(super) fn is_resume(&self, block_name: &crate::BlockName) -> bool {
+    pub(crate) fn is_resume(&self, block_name: &EmissionBlockName) -> bool {
         self.resume == block_name
     }
 }
 
-fn max_tpl_arity(data: &crate::Data) -> usize {
+fn max_tpl_arity(data: &EmissionData) -> usize {
     match data {
-        crate::Data::Tpl(fields) => fields.len(),
+        EmissionData::Tpl(fields) => fields.len(),
         _ => 0,
     }
 }
 
-fn max_value_tpl_arity(value: &crate::Value) -> usize {
+fn max_value_tpl_arity(value: &EmissionValue) -> usize {
     match value {
-        crate::Value::Pure(data) => max_tpl_arity(data),
+        EmissionValue::Pure(data) => max_tpl_arity(data),
         // Projecting field `index` reads through a tuple type of arity at least
         // `index + 1`, even when no tuple of that arity is ever *built* in the module
         // (e.g. the projected tuple only ever arrives from outside, or the producing
         // array is empty). Sizing the tuple types from constructions alone misses it.
-        crate::Value::Eval(crate::Code::TplGet(_, index)) => index + 1,
+        EmissionValue::Eval(EmissionCode::TplGet(_, index)) => index + 1,
         _ => 0,
     }
 }
@@ -200,8 +225,8 @@ fn max_value_tpl_arity(value: &crate::Value) -> usize {
 /// Collect every closure that is reserved as a recursive shell anywhere in `region` (and its
 /// nested blocks). These are the only closures whose `envr` fields are back-patched, so they
 /// are the only ones whose wasm struct fields must stay mutable.
-fn collect_cyclic_clsrs(region: &crate::Region, out: &mut BTreeSet<crate::ClsrName>) {
-    for (_, clsr) in &region.preallocs {
+fn collect_cyclic_clsrs(region: &EmissionBody, out: &mut BTreeSet<EmissionClosureName>) {
+    for (_, clsr) in &region.shells {
         out.insert(clsr.clone());
     }
 
@@ -210,8 +235,8 @@ fn collect_cyclic_clsrs(region: &crate::Region, out: &mut BTreeSet<crate::ClsrNa
     }
 }
 
-fn max_region_tpl_arity(region: &crate::Region) -> usize {
-    // Preallocs are closure shells only, so they contribute no tuple arity; the arities all
+fn max_region_tpl_arity(region: &EmissionBody) -> usize {
+    // Recursive fallback entries are closure shells only, so they contribute no tuple arity; the arities all
     // come from tuple constructions and projections in `values` (and nested blocks).
     let values = region
         .values
@@ -227,43 +252,43 @@ fn max_region_tpl_arity(region: &crate::Region) -> usize {
 }
 
 #[derive(Debug)]
-pub(super) struct Table<'a> {
-    special_field: FieldName,
-    special_local: LocalName,
-    special_label: LabelName,
-    flt_type: TypeName,
-    bin_rope_type: TypeName,
-    lst_rope_type: TypeName,
-    bytes_type: TypeName,
-    elems_type: TypeName,
-    bin_rope_leaf_type: TypeName,
-    bin_rope_node_type: TypeName,
-    bin_rope_view_type: TypeName,
-    lst_rope_leaf_type: TypeName,
-    lst_rope_node_type: TypeName,
-    lst_rope_view_type: TypeName,
-    cell_type: TypeName,
-    io_exit: OnceCell<FuncName>,
+pub(crate) struct Table<'a> {
+    special_field: curios_wasm::FieldName,
+    special_local: curios_wasm::LocalName,
+    special_label: curios_wasm::LabelName,
+    flt_type: curios_wasm::TypeName,
+    bin_rope_type: curios_wasm::TypeName,
+    lst_rope_type: curios_wasm::TypeName,
+    bytes_type: curios_wasm::TypeName,
+    elems_type: curios_wasm::TypeName,
+    bin_rope_leaf_type: curios_wasm::TypeName,
+    bin_rope_node_type: curios_wasm::TypeName,
+    bin_rope_view_type: curios_wasm::TypeName,
+    lst_rope_leaf_type: curios_wasm::TypeName,
+    lst_rope_node_type: curios_wasm::TypeName,
+    lst_rope_view_type: curios_wasm::TypeName,
+    cell_type: curios_wasm::TypeName,
+    io_exit: OnceCell<curios_wasm::FuncName>,
     // The shared rope helpers, minted lazily like `io_exit`: the first call
     // site recorded during emission names the function, and the module
     // emitter then adds exactly the recorded set after the program's own
     // functions (see `emit_rope_funcs`).
-    bytes_force: OnceCell<FuncName>,
-    bits_force: OnceCell<FuncName>,
-    lst_force: OnceCell<FuncName>,
-    lst_bin_force: OnceCell<FuncName>,
-    bytes_embed: OnceCell<FuncName>,
-    lst_embed: OnceCell<FuncName>,
-    lst_bin_embed: OnceCell<FuncName>,
-    bytes_slice: OnceCell<FuncName>,
-    bits_slice: OnceCell<FuncName>,
-    lst_slice: OnceCell<FuncName>,
-    bytes_read: OnceCell<FuncName>,
-    bits_read: OnceCell<FuncName>,
-    lst_read: OnceCell<FuncName>,
-    bytes_eql: OnceCell<FuncName>,
-    bits_eql: OnceCell<FuncName>,
-    lst_map: OnceCell<FuncName>,
+    bytes_force: OnceCell<curios_wasm::FuncName>,
+    bits_force: OnceCell<curios_wasm::FuncName>,
+    lst_force: OnceCell<curios_wasm::FuncName>,
+    lst_bin_force: OnceCell<curios_wasm::FuncName>,
+    bytes_embed: OnceCell<curios_wasm::FuncName>,
+    lst_embed: OnceCell<curios_wasm::FuncName>,
+    lst_bin_embed: OnceCell<curios_wasm::FuncName>,
+    bytes_slice: OnceCell<curios_wasm::FuncName>,
+    bits_slice: OnceCell<curios_wasm::FuncName>,
+    lst_slice: OnceCell<curios_wasm::FuncName>,
+    bytes_read: OnceCell<curios_wasm::FuncName>,
+    bits_read: OnceCell<curios_wasm::FuncName>,
+    lst_read: OnceCell<curios_wasm::FuncName>,
+    bytes_eql: OnceCell<curios_wasm::FuncName>,
+    bits_eql: OnceCell<curios_wasm::FuncName>,
+    lst_map: OnceCell<curios_wasm::FuncName>,
     // The foreign functions the emitted code calls, keyed by the minted
     // internal name (see `host_func`). Same lazy used-tracking as the
     // `io_exit` cell: the first call-site reference during emission records
@@ -271,23 +296,23 @@ pub(super) struct Table<'a> {
     // recorded set (in minted-name order — wasmtime links by name, so
     // import order is cosmetic).
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
-    tpl_types: BTreeMap<usize, TypeName>,
-    envr_types: BTreeMap<usize, TypeName>,
-    clsr_types: BTreeMap<usize, TypeName>,
-    func_types: BTreeMap<usize, TypeName>,
-    consts: HashMap<&'a crate::ValueName, GlobalName>,
-    clsrs: HashMap<&'a crate::ClsrName, ClsrData<'a>>,
-    funcs: HashMap<&'a crate::FuncName, FuncData<'a>>,
-    // Closures that are ever prealloc'd as a recursive shell — their `envr` fields are
+    tpl_types: BTreeMap<usize, curios_wasm::TypeName>,
+    envr_types: BTreeMap<usize, curios_wasm::TypeName>,
+    clsr_types: BTreeMap<usize, curios_wasm::TypeName>,
+    func_types: BTreeMap<usize, curios_wasm::TypeName>,
+    consts: HashMap<&'a EmissionValueName, curios_wasm::GlobalName>,
+    clsrs: HashMap<&'a EmissionClosureName, ClsrData<'a>>,
+    funcs: HashMap<&'a EmissionFunctionName, FuncData<'a>>,
+    // Closures that are ever shell'd as a recursive shell — their `envr` fields are
     // back-patched (`struct.set`), so those fields must stay mutable. Every other aggregate
     // field is immutable. `cyclic_clsr_arities` carries the same fact at arity granularity,
     // for the shared `envr/N` special field (which must agree across all its subtypes).
-    cyclic_clsrs: BTreeSet<crate::ClsrName>,
+    cyclic_clsrs: BTreeSet<EmissionClosureName>,
     cyclic_clsr_arities: BTreeSet<usize>,
 }
 
 impl<'a> Table<'a> {
-    pub(super) fn new(module: &'a crate::Module) -> Self {
+    pub(crate) fn new(module: &'a EmissionModule) -> Self {
         let mut cyclic_clsrs = BTreeSet::new();
         for (_, clsr) in module.clsrs() {
             collect_cyclic_clsrs(&clsr.region, &mut cyclic_clsrs);
@@ -300,7 +325,7 @@ impl<'a> Table<'a> {
             .clsrs()
             .iter()
             .map(|(name, clsr)| (name.clone(), clsr.params.len()))
-            .collect::<HashMap<crate::ClsrName, usize>>();
+            .collect::<HashMap<EmissionClosureName, usize>>();
 
         let cyclic_clsr_arities = cyclic_clsrs
             .iter()
@@ -310,21 +335,21 @@ impl<'a> Table<'a> {
         Self {
             cyclic_clsrs,
             cyclic_clsr_arities,
-            special_field: FieldName::from("!"),
-            special_local: LocalName::from("!"),
-            special_label: LabelName::from("!"),
-            flt_type: TypeName::from("flt"),
-            bin_rope_type: TypeName::from("rope/bin"),
-            lst_rope_type: TypeName::from("rope/lst"),
-            bytes_type: TypeName::from("bytes"),
-            elems_type: TypeName::from("elems"),
-            bin_rope_leaf_type: TypeName::from("rope/bin/leaf"),
-            bin_rope_node_type: TypeName::from("rope/bin/node"),
-            bin_rope_view_type: TypeName::from("rope/bin/view"),
-            lst_rope_leaf_type: TypeName::from("rope/lst/leaf"),
-            lst_rope_node_type: TypeName::from("rope/lst/node"),
-            lst_rope_view_type: TypeName::from("rope/lst/view"),
-            cell_type: TypeName::from("cell"),
+            special_field: curios_wasm::FieldName::from("!"),
+            special_local: curios_wasm::LocalName::from("!"),
+            special_label: curios_wasm::LabelName::from("!"),
+            flt_type: curios_wasm::TypeName::from("flt"),
+            bin_rope_type: curios_wasm::TypeName::from("rope/bin"),
+            lst_rope_type: curios_wasm::TypeName::from("rope/lst"),
+            bytes_type: curios_wasm::TypeName::from("bytes"),
+            elems_type: curios_wasm::TypeName::from("elems"),
+            bin_rope_leaf_type: curios_wasm::TypeName::from("rope/bin/leaf"),
+            bin_rope_node_type: curios_wasm::TypeName::from("rope/bin/node"),
+            bin_rope_view_type: curios_wasm::TypeName::from("rope/bin/view"),
+            lst_rope_leaf_type: curios_wasm::TypeName::from("rope/lst/leaf"),
+            lst_rope_node_type: curios_wasm::TypeName::from("rope/lst/node"),
+            lst_rope_view_type: curios_wasm::TypeName::from("rope/lst/view"),
+            cell_type: curios_wasm::TypeName::from("cell"),
             io_exit: OnceCell::new(),
             bytes_force: OnceCell::new(),
             bits_force: OnceCell::new(),
@@ -364,29 +389,49 @@ impl<'a> Table<'a> {
                     .unwrap_or(0);
 
                 (0..=max)
-                    .map(|arity| (arity, TypeName::from(format!("tpl/{}", arity))))
+                    .map(|arity| (arity, curios_wasm::TypeName::from(format!("tpl/{}", arity))))
                     .collect()
             },
             envr_types: module
                 .clsr_arities()
                 .into_iter()
-                .map(|arity| (arity, TypeName::from(format!("envr/{}", arity))))
+                .map(|arity| {
+                    (
+                        arity,
+                        curios_wasm::TypeName::from(format!("envr/{}", arity)),
+                    )
+                })
                 .collect(),
             clsr_types: module
                 .clsr_arities()
                 .into_iter()
-                .map(|arity| (arity, TypeName::from(format!("clsr/{}", arity))))
+                .map(|arity| {
+                    (
+                        arity,
+                        curios_wasm::TypeName::from(format!("clsr/{}", arity)),
+                    )
+                })
                 .collect(),
             func_types: module
                 .funcs()
                 .iter()
                 .map(|(_, func)| func.params.len())
-                .map(|arity| (arity, TypeName::from(format!("func/{}", arity))))
+                .map(|arity| {
+                    (
+                        arity,
+                        curios_wasm::TypeName::from(format!("func/{}", arity)),
+                    )
+                })
                 .collect(),
             consts: module
                 .consts()
                 .iter()
-                .map(|(const_name, _)| (const_name, GlobalName::from(format!("${}", const_name))))
+                .map(|(const_name, _)| {
+                    (
+                        const_name,
+                        curios_wasm::GlobalName::from(format!("${}", const_name)),
+                    )
+                })
                 .collect(),
             clsrs: module
                 .clsrs()
@@ -401,91 +446,91 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub(super) fn special_field(&self) -> FieldName {
+    pub(crate) fn special_field(&self) -> curios_wasm::FieldName {
         self.special_field.clone()
     }
 
-    pub(super) fn special_local(&self) -> LocalName {
+    pub(crate) fn special_local(&self) -> curios_wasm::LocalName {
         self.special_local.clone()
     }
 
-    pub(super) fn special_label(&self) -> LabelName {
+    pub(crate) fn special_label(&self) -> curios_wasm::LabelName {
         self.special_label.clone()
     }
 
-    pub(super) fn top_type(is_nullable: bool) -> ValType {
-        ValType::Ref(RefType {
+    pub(crate) fn top_type(is_nullable: bool) -> curios_wasm::ValType {
+        curios_wasm::ValType::Ref(curios_wasm::RefType {
             is_nullable,
-            heap_type: HeapType::Abstract(AbsHeapType::Any),
+            heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::Any),
         })
     }
 
-    pub(super) fn int_type(is_nullable: bool) -> RefType {
-        RefType {
+    pub(crate) fn int_type(is_nullable: bool) -> curios_wasm::RefType {
+        curios_wasm::RefType {
             is_nullable,
-            heap_type: HeapType::Abstract(AbsHeapType::I31),
+            heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::I31),
         }
     }
 
-    pub(super) fn flt_type(&self) -> TypeName {
+    pub(crate) fn flt_type(&self) -> curios_wasm::TypeName {
         self.flt_type.clone()
     }
 
-    pub(super) fn bin_rope_type(&self) -> TypeName {
+    pub(crate) fn bin_rope_type(&self) -> curios_wasm::TypeName {
         self.bin_rope_type.clone()
     }
 
-    pub(super) fn lst_rope_type(&self) -> TypeName {
+    pub(crate) fn lst_rope_type(&self) -> curios_wasm::TypeName {
         self.lst_rope_type.clone()
     }
 
-    pub(super) fn bytes_type(&self) -> TypeName {
+    pub(crate) fn bytes_type(&self) -> curios_wasm::TypeName {
         self.bytes_type.clone()
     }
 
-    pub(super) fn elems_type(&self) -> TypeName {
+    pub(crate) fn elems_type(&self) -> curios_wasm::TypeName {
         self.elems_type.clone()
     }
 
     /// The shared packed `Bits`/`Bytes` rope's name bundle.
-    pub(super) fn bin_rope(&self) -> RopeData {
+    pub(crate) fn bin_rope(&self) -> RopeData {
         RopeData {
             base: self.bin_rope_type.clone(),
             leaf: self.bin_rope_leaf_type.clone(),
             node: self.bin_rope_node_type.clone(),
             view: self.bin_rope_view_type.clone(),
             payload: self.bytes_type.clone(),
-            tag_field: FieldName::from("tag"),
-            len_field: FieldName::from("len"),
-            payload_field: FieldName::from("bytes"),
-            left_field: FieldName::from("left"),
-            right_field: FieldName::from("right"),
-            cache_field: FieldName::from("cache"),
-            base_field: FieldName::from("base"),
-            offset_field: FieldName::from("offset"),
+            tag_field: curios_wasm::FieldName::from("tag"),
+            len_field: curios_wasm::FieldName::from("len"),
+            payload_field: curios_wasm::FieldName::from("bytes"),
+            left_field: curios_wasm::FieldName::from("left"),
+            right_field: curios_wasm::FieldName::from("right"),
+            cache_field: curios_wasm::FieldName::from("cache"),
+            base_field: curios_wasm::FieldName::from("base"),
+            offset_field: curios_wasm::FieldName::from("offset"),
         }
     }
 
     /// The `Lst` rope's name bundle.
-    pub(super) fn lst_rope(&self) -> RopeData {
+    pub(crate) fn lst_rope(&self) -> RopeData {
         RopeData {
             base: self.lst_rope_type.clone(),
             leaf: self.lst_rope_leaf_type.clone(),
             node: self.lst_rope_node_type.clone(),
             view: self.lst_rope_view_type.clone(),
             payload: self.elems_type.clone(),
-            tag_field: FieldName::from("tag"),
-            len_field: FieldName::from("len"),
-            payload_field: FieldName::from("elems"),
-            left_field: FieldName::from("left"),
-            right_field: FieldName::from("right"),
-            cache_field: FieldName::from("cache"),
-            base_field: FieldName::from("base"),
-            offset_field: FieldName::from("offset"),
+            tag_field: curios_wasm::FieldName::from("tag"),
+            len_field: curios_wasm::FieldName::from("len"),
+            payload_field: curios_wasm::FieldName::from("elems"),
+            left_field: curios_wasm::FieldName::from("left"),
+            right_field: curios_wasm::FieldName::from("right"),
+            cache_field: curios_wasm::FieldName::from("cache"),
+            base_field: curios_wasm::FieldName::from("base"),
+            offset_field: curios_wasm::FieldName::from("offset"),
         }
     }
 
-    pub(super) fn cell_type(&self) -> TypeName {
+    pub(crate) fn cell_type(&self) -> curios_wasm::TypeName {
         self.cell_type.clone()
     }
 
@@ -501,8 +546,9 @@ impl<'a> Table<'a> {
     /// runtime helper, another minted family, or a same-named row from
     /// another namespace. The embedding is injective because namespaces are
     /// compiler-chosen and never contain `/`.
-    pub(super) fn host_func(&self, function: &Arc<ForeignFunction>) -> FuncName {
-        let func_name = FuncName::from(format!("host/{}/{}", function.namespace, function.name));
+    pub(crate) fn host_func(&self, function: &Arc<ForeignFunction>) -> curios_wasm::FuncName {
+        let func_name =
+            curios_wasm::FuncName::from(format!("host/{}/{}", function.namespace, function.name));
 
         self.host_funcs
             .borrow_mut()
@@ -513,52 +559,53 @@ impl<'a> Table<'a> {
     }
 
     /// The foreign functions the emitted code referenced, in minted-name order.
-    pub(super) fn host_funcs(&self) -> Vec<Arc<ForeignFunction>> {
+    pub(crate) fn host_funcs(&self) -> Vec<Arc<ForeignFunction>> {
         self.host_funcs.borrow().values().cloned().collect()
     }
 
-    pub(super) fn io_exit_func(&self) -> &FuncName {
-        self.io_exit.get_or_init(|| FuncName::from("io_exit"))
+    pub(crate) fn io_exit_func(&self) -> &curios_wasm::FuncName {
+        self.io_exit
+            .get_or_init(|| curios_wasm::FuncName::from("io_exit"))
     }
 
-    pub(super) fn io_exit_used(&self) -> bool {
+    pub(crate) fn io_exit_used(&self) -> bool {
         self.io_exit.get().is_some()
     }
 
     /// `$bytes/force (ref $rope/bin) -> (ref $bytes)`: flatten a `Bytes` rope to its
     /// payload, memoizing in the entry node. First use marks it for emission.
-    pub(super) fn bytes_force_func(&self) -> FuncName {
+    pub(crate) fn bytes_force_func(&self) -> curios_wasm::FuncName {
         self.bytes_force
-            .get_or_init(|| FuncName::from("bytes/force"))
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/force"))
             .clone()
     }
 
-    pub(super) fn bytes_force_used(&self) -> bool {
+    pub(crate) fn bytes_force_used(&self) -> bool {
         self.bytes_force.get().is_some()
     }
 
     /// `$bits/force (ref $rope/bin) -> (ref $bytes)`: flatten a bit-grain rope to
     /// its packed payload, memoizing in the entry node. First use marks it for
     /// emission.
-    pub(super) fn bits_force_func(&self) -> FuncName {
+    pub(crate) fn bits_force_func(&self) -> curios_wasm::FuncName {
         self.bits_force
-            .get_or_init(|| FuncName::from("bits/force"))
+            .get_or_init(|| curios_wasm::FuncName::from("bits/force"))
             .clone()
     }
 
-    pub(super) fn bits_force_used(&self) -> bool {
+    pub(crate) fn bits_force_used(&self) -> bool {
         self.bits_force.get().is_some()
     }
 
     /// `$lst/force (ref $rope/lst) -> (ref $elems)`: the `Lst` mirror of
     /// [`bytes_force_func`](Self::bytes_force_func).
-    pub(super) fn lst_force_func(&self) -> FuncName {
+    pub(crate) fn lst_force_func(&self) -> curios_wasm::FuncName {
         self.lst_force
-            .get_or_init(|| FuncName::from("lst/force"))
+            .get_or_init(|| curios_wasm::FuncName::from("lst/force"))
             .clone()
     }
 
-    pub(super) fn lst_force_used(&self) -> bool {
+    pub(crate) fn lst_force_used(&self) -> bool {
         self.lst_force.get().is_some()
     }
 
@@ -566,50 +613,50 @@ impl<'a> Table<'a> {
     /// `Lst(Io)` host argument *deeply* — the outer rope to a fresh payload
     /// whose every element is itself forced to `$bytes`, the element shape
     /// the host lifts.
-    pub(super) fn lst_bin_force_func(&self) -> FuncName {
+    pub(crate) fn lst_bin_force_func(&self) -> curios_wasm::FuncName {
         self.lst_bin_force
-            .get_or_init(|| FuncName::from("lst/bin/force"))
+            .get_or_init(|| curios_wasm::FuncName::from("lst/bin/force"))
             .clone()
     }
 
-    pub(super) fn lst_bin_force_used(&self) -> bool {
+    pub(crate) fn lst_bin_force_used(&self) -> bool {
         self.lst_bin_force.get().is_some()
     }
 
     /// `$bytes/embed (ref $bytes) -> (ref $rope/bin)`: embed a host-built flat
     /// payload into a fresh leaf on re-entry.
-    pub(super) fn bytes_embed_func(&self) -> FuncName {
+    pub(crate) fn bytes_embed_func(&self) -> curios_wasm::FuncName {
         self.bytes_embed
-            .get_or_init(|| FuncName::from("bytes/embed"))
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/embed"))
             .clone()
     }
 
-    pub(super) fn bytes_embed_used(&self) -> bool {
+    pub(crate) fn bytes_embed_used(&self) -> bool {
         self.bytes_embed.get().is_some()
     }
 
     /// `$lst/embed (ref $elems) -> (ref $rope/lst)`: the `Lst` mirror of
     /// [`bytes_embed_func`](Self::bytes_embed_func), for scalar-element results.
-    pub(super) fn lst_embed_func(&self) -> FuncName {
+    pub(crate) fn lst_embed_func(&self) -> curios_wasm::FuncName {
         self.lst_embed
-            .get_or_init(|| FuncName::from("lst/embed"))
+            .get_or_init(|| curios_wasm::FuncName::from("lst/embed"))
             .clone()
     }
 
-    pub(super) fn lst_embed_used(&self) -> bool {
+    pub(crate) fn lst_embed_used(&self) -> bool {
         self.lst_embed.get().is_some()
     }
 
     /// `$lst/bin/embed (ref $elems) -> (ref $rope/lst)`: embed an `Lst(Bin)`
     /// host result *deeply* — each raw `$bytes` element into a leaf (in place;
     /// the host-built array is fresh), then the outer array.
-    pub(super) fn lst_bin_embed_func(&self) -> FuncName {
+    pub(crate) fn lst_bin_embed_func(&self) -> curios_wasm::FuncName {
         self.lst_bin_embed
-            .get_or_init(|| FuncName::from("lst/bin/embed"))
+            .get_or_init(|| curios_wasm::FuncName::from("lst/bin/embed"))
             .clone()
     }
 
-    pub(super) fn lst_bin_embed_used(&self) -> bool {
+    pub(crate) fn lst_bin_embed_used(&self) -> bool {
         self.lst_bin_embed.get().is_some()
     }
 
@@ -617,215 +664,218 @@ impl<'a> Table<'a> {
     /// O(1) view constructor — bounds-check, answer the empty leaf or the whole
     /// rope on the trivial windows, collapse a view-of-view, and force an uncached node
     /// base so every `view` it builds reads through in O(1).
-    pub(super) fn bytes_slice_func(&self) -> FuncName {
+    pub(crate) fn bytes_slice_func(&self) -> curios_wasm::FuncName {
         self.bytes_slice
-            .get_or_init(|| FuncName::from("bytes/slice"))
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/slice"))
             .clone()
     }
 
-    pub(super) fn bytes_slice_used(&self) -> bool {
+    pub(crate) fn bytes_slice_used(&self) -> bool {
         self.bytes_slice.get().is_some()
     }
 
-    pub(super) fn bits_slice_func(&self) -> FuncName {
+    pub(crate) fn bits_slice_func(&self) -> curios_wasm::FuncName {
         self.bits_slice
-            .get_or_init(|| FuncName::from("bits/slice"))
+            .get_or_init(|| curios_wasm::FuncName::from("bits/slice"))
             .clone()
     }
 
-    pub(super) fn bits_slice_used(&self) -> bool {
+    pub(crate) fn bits_slice_used(&self) -> bool {
         self.bits_slice.get().is_some()
     }
 
     /// `$lst/slice (ref $rope/lst, i32, i32) -> (ref $rope/lst)`: the `Lst` mirror of
     /// [`bytes_slice_func`](Self::bytes_slice_func).
-    pub(super) fn lst_slice_func(&self) -> FuncName {
+    pub(crate) fn lst_slice_func(&self) -> curios_wasm::FuncName {
         self.lst_slice
-            .get_or_init(|| FuncName::from("lst/slice"))
+            .get_or_init(|| curios_wasm::FuncName::from("lst/slice"))
             .clone()
     }
 
-    pub(super) fn lst_slice_used(&self) -> bool {
+    pub(crate) fn lst_slice_used(&self) -> bool {
         self.lst_slice.get().is_some()
     }
 
     /// `$bytes/read (ref $rope/bin, i32) -> i32`: one byte read — straight off
     /// a leaf payload, through a `view`'s window without forcing, and via
     /// `$bytes/force` (memoized) on a node.
-    pub(super) fn bytes_read_func(&self) -> FuncName {
+    pub(crate) fn bytes_read_func(&self) -> curios_wasm::FuncName {
         self.bytes_read
-            .get_or_init(|| FuncName::from("bytes/read"))
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/read"))
             .clone()
     }
 
-    pub(super) fn bytes_read_used(&self) -> bool {
+    pub(crate) fn bytes_read_used(&self) -> bool {
         self.bytes_read.get().is_some()
     }
 
-    pub(super) fn bits_read_func(&self) -> FuncName {
+    pub(crate) fn bits_read_func(&self) -> curios_wasm::FuncName {
         self.bits_read
-            .get_or_init(|| FuncName::from("bits/read"))
+            .get_or_init(|| curios_wasm::FuncName::from("bits/read"))
             .clone()
     }
 
-    pub(super) fn bits_read_used(&self) -> bool {
+    pub(crate) fn bits_read_used(&self) -> bool {
         self.bits_read.get().is_some()
     }
 
     /// `$lst/read (ref $rope/lst, i32) -> anyref`: the `Lst` mirror of
     /// [`bytes_read_func`](Self::bytes_read_func).
-    pub(super) fn lst_read_func(&self) -> FuncName {
+    pub(crate) fn lst_read_func(&self) -> curios_wasm::FuncName {
         self.lst_read
-            .get_or_init(|| FuncName::from("lst/read"))
+            .get_or_init(|| curios_wasm::FuncName::from("lst/read"))
             .clone()
     }
 
-    pub(super) fn lst_read_used(&self) -> bool {
+    pub(crate) fn lst_read_used(&self) -> bool {
         self.lst_read.get().is_some()
     }
 
     /// `$bytes/eql (ref $rope/bin, ref $rope/bin) -> i32`: whole-value byte
     /// equality — unequal rope lengths answer without forcing, equal lengths
     /// force both payloads once and compare bytewise.
-    pub(super) fn bytes_eql_func(&self) -> FuncName {
+    pub(crate) fn bytes_eql_func(&self) -> curios_wasm::FuncName {
         self.bytes_eql
-            .get_or_init(|| FuncName::from("bytes/eql"))
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/eql"))
             .clone()
     }
 
-    pub(super) fn bytes_eql_used(&self) -> bool {
+    pub(crate) fn bytes_eql_used(&self) -> bool {
         self.bytes_eql.get().is_some()
     }
 
-    pub(super) fn bits_eql_func(&self) -> FuncName {
+    pub(crate) fn bits_eql_func(&self) -> curios_wasm::FuncName {
         self.bits_eql
-            .get_or_init(|| FuncName::from("bits/eql"))
+            .get_or_init(|| curios_wasm::FuncName::from("bits/eql"))
             .clone()
     }
 
-    pub(super) fn bits_eql_used(&self) -> bool {
+    pub(crate) fn bits_eql_used(&self) -> bool {
         self.bits_eql.get().is_some()
     }
 
     /// `$lst/map (ref $rope/lst, ref $envr/1) -> (ref $rope/lst)`: apply a unary
     /// closure to every element of the forced payload, filling a fresh leaf.
-    pub(super) fn lst_map_func(&self) -> FuncName {
+    pub(crate) fn lst_map_func(&self) -> curios_wasm::FuncName {
         self.lst_map
-            .get_or_init(|| FuncName::from("lst/map"))
+            .get_or_init(|| curios_wasm::FuncName::from("lst/map"))
             .clone()
     }
 
-    pub(super) fn lst_map_used(&self) -> bool {
+    pub(crate) fn lst_map_used(&self) -> bool {
         self.lst_map.get().is_some()
     }
 
-    pub(super) fn tpl_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
+    pub(crate) fn tpl_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
         self.tpl_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    pub(super) fn find_tpl_type(&self, arity: usize) -> TypeName {
+    pub(crate) fn find_tpl_type(&self, arity: usize) -> curios_wasm::TypeName {
         self.tpl_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks tuple type for arity `{}`", arity))
             .clone()
     }
 
-    pub(super) fn tpl_field(index: usize) -> FieldName {
-        FieldName::from(index.to_string())
+    pub(crate) fn tpl_field(index: usize) -> curios_wasm::FieldName {
+        curios_wasm::FieldName::from(index.to_string())
     }
 
     /// Whether this closure is ever reserved as a recursive shell, i.e. its `envr` payload
     /// fields are back-patched and so must be declared mutable.
-    pub(super) fn is_cyclic_clsr(&self, name: &crate::ClsrName) -> bool {
+    pub(crate) fn is_cyclic_clsr(&self, name: &EmissionClosureName) -> bool {
         self.cyclic_clsrs.contains(name)
     }
 
     /// Whether *any* closure of this arity is cyclic. The shared `envr/N` special field (and
     /// thus every `envr/<clsr>` of that arity, by subtyping invariance) must be mutable iff so.
-    pub(super) fn arity_has_cyclic_clsr(&self, arity: usize) -> bool {
+    pub(crate) fn arity_has_cyclic_clsr(&self, arity: usize) -> bool {
         self.cyclic_clsr_arities.contains(&arity)
     }
 
-    fn field_mutability(is_mutable: bool) -> Mutability {
+    fn field_mutability(is_mutable: bool) -> curios_wasm::Mutability {
         if is_mutable {
-            Mutability::Var
+            curios_wasm::Mutability::Var
         } else {
-            Mutability::Const
+            curios_wasm::Mutability::Const
         }
     }
 
-    pub(super) fn tpl_field_mutability() -> Mutability {
+    pub(crate) fn tpl_field_mutability() -> curios_wasm::Mutability {
         // Tuples are never cyclic (rejected in `into_cont`), so they are never back-patched.
         Self::field_mutability(false)
     }
 
-    pub(super) fn envr_special_mutability(&self, arity: usize) -> Mutability {
+    pub(crate) fn envr_special_mutability(&self, arity: usize) -> curios_wasm::Mutability {
         Self::field_mutability(self.arity_has_cyclic_clsr(arity))
     }
 
-    pub(super) fn envr_payload_mutability(&self, name: &crate::ClsrName) -> Mutability {
+    pub(crate) fn envr_payload_mutability(
+        &self,
+        name: &EmissionClosureName,
+    ) -> curios_wasm::Mutability {
         Self::field_mutability(self.is_cyclic_clsr(name))
     }
 
-    pub(super) fn envr_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
+    pub(crate) fn envr_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
         self.envr_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    pub(super) fn find_envr_type(&self, arity: usize) -> TypeName {
+    pub(crate) fn find_envr_type(&self, arity: usize) -> curios_wasm::TypeName {
         self.envr_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks environment type for arity `{}`", arity))
             .clone()
     }
 
-    pub(super) fn clsr_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
+    pub(crate) fn clsr_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
         self.clsr_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    pub(super) fn find_clsr_type(&self, arity: usize) -> TypeName {
+    pub(crate) fn find_clsr_type(&self, arity: usize) -> curios_wasm::TypeName {
         self.clsr_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks closure type for arity `{}`", arity))
             .clone()
     }
 
-    pub(super) fn func_types(&self) -> impl Iterator<Item = (usize, TypeName)> {
+    pub(crate) fn func_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
         self.func_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    pub(super) fn find_func_type(&self, arity: usize) -> TypeName {
+    pub(crate) fn find_func_type(&self, arity: usize) -> curios_wasm::TypeName {
         self.func_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks function type for arity `{}`", arity))
             .clone()
     }
 
-    pub(super) fn find_const(&self, const_name: &crate::ValueName) -> GlobalName {
+    pub(crate) fn find_const(&self, const_name: &EmissionValueName) -> curios_wasm::GlobalName {
         self.consts
             .get(const_name)
             .unwrap_or_else(|| panic!("`Table` lacks const `{}`", const_name))
             .clone()
     }
 
-    pub(super) fn clsrs(&self) -> impl Iterator<Item = &ClsrData<'a>> {
+    pub(crate) fn clsrs(&self) -> impl Iterator<Item = &ClsrData<'a>> {
         self.clsrs.values()
     }
 
-    pub(super) fn find_clsr(&self, clsr_name: &crate::ClsrName) -> &ClsrData<'a> {
+    pub(crate) fn find_clsr(&self, clsr_name: &EmissionClosureName) -> &ClsrData<'a> {
         self.clsrs
             .get(clsr_name)
             .unwrap_or_else(|| panic!("`Table` lacks closure `{}`", clsr_name))
     }
 
-    pub(super) fn find_func(&self, func_name: &crate::FuncName) -> &FuncData<'a> {
+    pub(crate) fn find_func(&self, func_name: &EmissionFunctionName) -> &FuncData<'a> {
         self.funcs
             .get(func_name)
             .unwrap_or_else(|| panic!("`Table` lacks func `{}`", func_name))
@@ -834,11 +884,11 @@ impl<'a> Table<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {super::Table, crate::EmissionModule};
 
     #[test]
     fn rope_names_match_the_wasm_vocabulary() {
-        let module = crate::Module::new();
+        let module = EmissionModule::new();
         let table = Table::new(&module);
         let bin = table.bin_rope();
         let lst = table.lst_rope();

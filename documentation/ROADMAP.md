@@ -78,6 +78,8 @@ Unchecked items may link to working implementation specifications. When an item 
 
 ## Optimizations
 
+- [ ] [Continuation IR v2](00_CONT_V2_SPEC.md) (replace region-based post-closure CPS with a pre-closure CPS graph, delayed closure conversion, SCC-wide known-argument propagation, and structured Wasm control flow before the bootstrap representation baseline is frozen)
+- [ ] [Ersd v2](01_ERSD_V2_SPEC.md) (after Continuation IR v2 lands, replace the recursive erased-term representation with verified arena-backed scoped ANF, centralized semantic contracts, derived specialization facts, and direct lowering into the landed continuation interface)
 - [x] Core calculus machinery (reduction & conversion performance)
 - [x] Ersd (ersd→ersd) optimization passes
   - [x] Dead-item pruning via call-graph reachability

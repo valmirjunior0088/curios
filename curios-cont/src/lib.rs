@@ -1,18 +1,26 @@
-//! The continuation IR — the compiler's last stop before wasm. `curios_ersd::into_cont` lowers the erased first-order IR into a [`Module`] of functions, closures, and consts whose bodies are region trees: straight-line bindings of pure [`Value`]s ended by a single [`Tail`] transfer, with all control flow — jumps, matches, calls, host ops — explicit. Every call names the block that receives its result, and returning is a jump to the body's `resume` sentinel, so a tail call is a syntactic condition (`resume` == the sentinel) rather than an analysis; effects exist only as `Tail::Host`/`Tail::Cell` transfers, never inside a binding.
+//! Arena-backed pre-closure CPS and its Wasm backend.
 //!
-//! The crate has three faces: the IR itself (`module`, with the `ValueName`/`BlockName`/`ClsrName`/`FuncName` namespaces minted by curios-base's `name!` in `names`), the in-place optimization pipeline [`optimize()`](optimize), and [`into_wasm()`], which emits the optimized module as a `curios_wasm::Module`. The private `print` module supplies the `Display` rendering the pipeline's stage dumps and the snapshot tests read.
+//! `curios_ersd::into_cont` constructs the public [`CpsModule`]. [`optimize`] rewrites that high-CPS graph before [`into_wasm`] performs delayed closure conversion, verifies a private closed machine CFG, structurizes reducible control into Wasm blocks and loops, and localizes dispatcher fallback to irreducible scopes.
+//!
+//! Every CPS function owns a globally unique bodyless return continuation. Ordinary return is `ApplyCont(function.return_cont, [value])`; machine lowering recognizes that ID in the current-function context and emits `Return` without allocating a block. `Exit` is reserved for direct process termination.
 
-mod names;
-pub use names::*;
+mod cps;
+pub use cps::*;
 
-mod module;
-pub use module::*;
+mod machine;
+pub(crate) use machine::*;
 
 mod into_wasm;
-pub use into_wasm::*;
+pub(crate) use into_wasm::*;
 
-mod optimize;
-pub use optimize::*;
+/// Run the deterministic high-CPS optimization pipeline in place.
+pub fn optimize(module: &mut CpsModule) {
+    optimize_cps(module);
+}
 
-mod print;
-use print::*;
+/// Close high CPS, build the private machine representation, and emit Wasm.
+pub fn into_wasm(module: &CpsModule) -> curios_wasm::Module {
+    let machine = machine::lower(module);
+    let structured = machine::structurize(&machine);
+    into_wasm::emit(&structured)
+}

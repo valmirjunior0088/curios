@@ -1,28 +1,24 @@
 use {
-    super::{
-        Context, ExprEmitter, RopeEmitter, Table, bytes_sub_type, cell_sub_type, elems_sub_type,
-        flt_sub_type, rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type,
-        rope_view_sub_type,
+    crate::{
+        Context, EmissionClosure, EmissionClosureName, EmissionData, EmissionFunction,
+        EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter, RopeEmitter, Table,
+        bytes_sub_type, cell_sub_type, elems_sub_type, flt_sub_type, rope_base_sub_type,
+        rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
     },
     curios_abi::WireType,
     curios_base::{Grain, PackedBin},
-    curios_wasm::{
-        CompType, DataName, DataSegment, Export, Expr, FieldType, Func, FuncName, FuncType, Global,
-        GlobalType, HeapType, Import, Instr, Module, Mutability, NumType, RefType, ResultType,
-        StorageType, StructType, SubType, TypeName, ValType,
-    },
     std::iter,
 };
 
 #[derive(Debug)]
-pub(super) struct ModuleEmitter<'a, 'b> {
+pub(crate) struct ModuleEmitter<'a, 'b> {
     table: &'a Table<'a>,
-    start_expr: Expr,
-    module: &'b mut Module,
+    start_expr: curios_wasm::Expr,
+    module: &'b mut curios_wasm::Module,
 }
 
 impl<'a, 'b> ModuleEmitter<'a, 'b> {
-    pub(super) fn new(table: &'a Table<'a>, module: &'b mut Module) -> Self {
+    pub(crate) fn new(table: &'a Table<'a>, module: &'b mut curios_wasm::Module) -> Self {
         Self {
             table,
             start_expr: Default::default(),
@@ -81,16 +77,18 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// type: scalars cross as raw `i32` (the call site unboxes the i31 carrier
     /// via `LoadAs::Nat`/`LoadAs::Int`), references as their concrete
     /// non-nullable heap type (a handle is its `Bin` token).
-    fn wire_param_type(&self, wire_type: &WireType) -> ValType {
+    fn wire_param_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type {
-            WireType::Nat | WireType::Bln | WireType::Int => ValType::Num(NumType::I32),
-            WireType::Bin | WireType::Io => ValType::Ref(RefType {
+            WireType::Nat | WireType::Bln | WireType::Int => {
+                curios_wasm::ValType::Num(curios_wasm::NumType::I32)
+            }
+            WireType::Bin | WireType::Io => curios_wasm::ValType::Ref(curios_wasm::RefType {
                 is_nullable: false,
-                heap_type: HeapType::Concrete(self.table.bytes_type()),
+                heap_type: curios_wasm::HeapType::Concrete(self.table.bytes_type()),
             }),
-            WireType::Lst(_) => ValType::Ref(RefType {
+            WireType::Lst(_) => curios_wasm::ValType::Ref(curios_wasm::RefType {
                 is_nullable: false,
-                heap_type: HeapType::Concrete(self.table.elems_type()),
+                heap_type: curios_wasm::HeapType::Concrete(self.table.elems_type()),
             }),
         }
     }
@@ -99,9 +97,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// pre-boxed as i31 refs so they land directly in anyref block params
     /// (no host op returns an `Int` today; mapping it like `Nat` keeps the
     /// function total), references exactly as in parameter position.
-    fn wire_result_type(&self, wire_type: &WireType) -> ValType {
+    fn wire_result_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type {
-            WireType::Nat | WireType::Bln | WireType::Int => ValType::Ref(Table::int_type(false)),
+            WireType::Nat | WireType::Bln | WireType::Int => {
+                curios_wasm::ValType::Ref(Table::int_type(false))
+            }
             reference => self.wire_param_type(reference),
         }
     }
@@ -112,23 +112,23 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         &mut self,
         namespace: &str,
         name: &str,
-        type_name: TypeName,
-        func_name: FuncName,
-        inputs: ResultType,
-        outputs: ResultType,
+        type_name: curios_wasm::TypeName,
+        func_name: curios_wasm::FuncName,
+        inputs: curios_wasm::ResultType,
+        outputs: curios_wasm::ResultType,
     ) {
         self.module.add_type(
             type_name.clone(),
-            SubType {
+            curios_wasm::SubType {
                 is_final: true,
                 super_types: vec![],
-                comp_type: CompType::Func(FuncType { inputs, outputs }),
+                comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType { inputs, outputs }),
             },
         );
         self.module.add_import(
             namespace,
             name,
-            Import::Func {
+            curios_wasm::Import::Func {
                 func_name,
                 type_name,
             },
@@ -136,7 +136,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     fn emit_sys_imports(&mut self) {
-        let i32_val = ValType::Num(NumType::I32);
+        let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
 
         // The store-described imports — exactly the functions whose call sites
         // recorded themselves in the table, in minted-name order. Each
@@ -151,15 +151,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             self.add_host_import(
                 function.namespace,
                 &function.name,
-                TypeName::from(func_name.as_str()),
+                curios_wasm::TypeName::from(func_name.as_str()),
                 func_name.clone(),
-                ResultType::from(
+                curios_wasm::ResultType::from(
                     signature
                         .params
                         .iter()
                         .map(|(_, wire_type)| self.wire_param_type(wire_type)),
                 ),
-                ResultType::from(
+                curios_wasm::ResultType::from(
                     signature
                         .results
                         .iter()
@@ -172,10 +172,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             self.add_host_import(
                 "sys",
                 "io_exit",
-                TypeName::from("io_exit"),
+                curios_wasm::TypeName::from("io_exit"),
                 self.table.io_exit_func().clone(),
-                ResultType::from([i32_val.clone()]),
-                ResultType::from([]),
+                curios_wasm::ResultType::from([i32_val.clone()]),
+                curios_wasm::ResultType::from([]),
             );
         }
     }
@@ -247,18 +247,22 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
             self.module.add_type(
                 type_name,
-                SubType {
+                curios_wasm::SubType {
                     is_final: false,
                     super_types,
-                    comp_type: CompType::Struct(StructType::from((0..arity).map(|index| {
-                        (
-                            Table::tpl_field(index),
-                            FieldType {
-                                storage_type: StorageType::Val(Table::top_type(true)),
-                                mutability: Table::tpl_field_mutability(),
-                            },
-                        )
-                    }))),
+                    comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from(
+                        (0..arity).map(|index| {
+                            (
+                                Table::tpl_field(index),
+                                curios_wasm::FieldType {
+                                    storage_type: curios_wasm::StorageType::Val(Table::top_type(
+                                        true,
+                                    )),
+                                    mutability: Table::tpl_field_mutability(),
+                                },
+                            )
+                        }),
+                    )),
                 },
             );
         }
@@ -268,16 +272,20 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         for (arity, type_name) in self.table.envr_types() {
             self.module.add_type(
                 type_name,
-                SubType {
+                curios_wasm::SubType {
                     is_final: false,
                     super_types: vec![],
-                    comp_type: CompType::Struct(StructType::from([(
+                    comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([(
                         self.table.special_field(),
-                        FieldType {
-                            storage_type: StorageType::Val(ValType::Ref(RefType {
-                                is_nullable: true,
-                                heap_type: HeapType::Concrete(self.table.find_clsr_type(arity)),
-                            })),
+                        curios_wasm::FieldType {
+                            storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Ref(
+                                curios_wasm::RefType {
+                                    is_nullable: true,
+                                    heap_type: curios_wasm::HeapType::Concrete(
+                                        self.table.find_clsr_type(arity),
+                                    ),
+                                },
+                            )),
                             mutability: self.table.envr_special_mutability(arity),
                         },
                     )])),
@@ -290,19 +298,21 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         for data in self.table.clsrs() {
             self.module.add_type(
                 data.envr_type(),
-                SubType {
+                curios_wasm::SubType {
                     is_final: true,
                     super_types: vec![self.table.find_envr_type(data.arity())],
-                    comp_type: CompType::Struct(StructType::from(
+                    comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from(
                         iter::once((
                             self.table.special_field(),
-                            FieldType {
-                                storage_type: StorageType::Val(ValType::Ref(RefType {
-                                    is_nullable: true,
-                                    heap_type: HeapType::Concrete(
-                                        self.table.find_clsr_type(data.arity()),
-                                    ),
-                                })),
+                            curios_wasm::FieldType {
+                                storage_type: curios_wasm::StorageType::Val(
+                                    curios_wasm::ValType::Ref(curios_wasm::RefType {
+                                        is_nullable: true,
+                                        heap_type: curios_wasm::HeapType::Concrete(
+                                            self.table.find_clsr_type(data.arity()),
+                                        ),
+                                    }),
+                                ),
                                 // Must agree with the shared `envr/N` special field above.
                                 mutability: self.table.envr_special_mutability(data.arity()),
                             },
@@ -310,8 +320,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                         .chain(data.fields().map(|field_name| {
                             (
                                 field_name,
-                                FieldType {
-                                    storage_type: StorageType::Val(Table::top_type(true)),
+                                curios_wasm::FieldType {
+                                    storage_type: curios_wasm::StorageType::Val(Table::top_type(
+                                        true,
+                                    )),
                                     // Payload captures are back-patched only when this closure
                                     // is itself a recursive shell; otherwise they're immutable.
                                     mutability: self.table.envr_payload_mutability(data.name()),
@@ -328,15 +340,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         for (arity, type_name) in self.table.clsr_types() {
             self.module.add_type(
                 type_name,
-                SubType {
+                curios_wasm::SubType {
                     is_final: false,
                     super_types: vec![],
-                    comp_type: CompType::Func(FuncType {
-                        inputs: ResultType::from(
+                    comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
+                        inputs: curios_wasm::ResultType::from(
                             iter::once(Table::top_type(false))
                                 .chain((0..arity).map(|_| Table::top_type(false))),
                         ),
-                        outputs: ResultType::from([Table::top_type(false)]),
+                        outputs: curios_wasm::ResultType::from([Table::top_type(false)]),
                     }),
                 },
             );
@@ -347,15 +359,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         for data in self.table.clsrs() {
             self.module.add_type(
                 data.clsr_type(),
-                SubType {
+                curios_wasm::SubType {
                     is_final: true,
                     super_types: vec![self.table.find_clsr_type(data.arity())],
-                    comp_type: CompType::Func(FuncType {
-                        inputs: ResultType::from(
+                    comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
+                        inputs: curios_wasm::ResultType::from(
                             iter::once(Table::top_type(false))
                                 .chain((0..data.arity()).map(|_| Table::top_type(false))),
                         ),
-                        outputs: ResultType::from([Table::top_type(false)]),
+                        outputs: curios_wasm::ResultType::from([Table::top_type(false)]),
                     }),
                 },
             );
@@ -366,121 +378,129 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         for (arity, type_name) in self.table.func_types() {
             self.module.add_type(
                 type_name,
-                SubType {
+                curios_wasm::SubType {
                     is_final: true,
                     super_types: vec![],
-                    comp_type: CompType::Func(FuncType {
-                        inputs: ResultType::from((0..arity).map(|_| Table::top_type(false))),
-                        outputs: ResultType::from([Table::top_type(false)]),
+                    comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
+                        inputs: curios_wasm::ResultType::from(
+                            (0..arity).map(|_| Table::top_type(false)),
+                        ),
+                        outputs: curios_wasm::ResultType::from([Table::top_type(false)]),
                     }),
                 },
             );
         }
     }
 
-    fn emit_let_bin_data(&mut self, name: &'a crate::ValueName, grain: Grain, value: &PackedBin) {
+    fn emit_let_bin_data(&mut self, name: &'a EmissionValueName, grain: Grain, value: &PackedBin) {
         let bytes = value.to_packed_bytes();
         let payload_length = bytes.len() as i32;
         let length = value.len(grain) as i32;
         let rope = self.table.bin_rope();
         let global_name = self.table.find_const(name);
-        let data_name = DataName::from(format!(
+        let data_name = curios_wasm::DataName::from(format!(
             "{}${}",
             name.as_string(),
             self.module.datas().len()
         ));
 
         self.module
-            .add_data(data_name.clone(), DataSegment { bytes });
+            .add_data(data_name.clone(), curios_wasm::DataSegment { bytes });
 
         // The placeholder init is an empty leaf — a wasm constant expression
         // cannot read a data segment (or call), so the real payload is built
         // in the start function below.
-        let mut init_expr: Expr = Default::default();
-        init_expr.push(Instr::I32Const { value: 0 });
-        init_expr.push(Instr::I32Const { value: 0 });
-        init_expr.push(Instr::I32Const { value: 0 });
-        init_expr.push(Instr::ArrayNewDefault {
+        let mut init_expr: curios_wasm::Expr = Default::default();
+        init_expr.push(curios_wasm::Instr::I32Const { value: 0 });
+        init_expr.push(curios_wasm::Instr::I32Const { value: 0 });
+        init_expr.push(curios_wasm::Instr::I32Const { value: 0 });
+        init_expr.push(curios_wasm::Instr::ArrayNewDefault {
             type_name: rope.payload.clone(),
         });
-        init_expr.push(Instr::StructNew {
+        init_expr.push(curios_wasm::Instr::StructNew {
             type_name: rope.leaf.clone(),
         });
 
         self.module.add_global(
             global_name.clone(),
-            Global {
-                global_type: GlobalType {
-                    val_type: ValType::Ref(RefType {
+            curios_wasm::Global {
+                global_type: curios_wasm::GlobalType {
+                    val_type: curios_wasm::ValType::Ref(curios_wasm::RefType {
                         is_nullable: false,
-                        heap_type: HeapType::Concrete(rope.base),
+                        heap_type: curios_wasm::HeapType::Concrete(rope.base),
                     }),
-                    mutability: Mutability::Var,
+                    mutability: curios_wasm::Mutability::Var,
                 },
                 expr: init_expr,
             },
         );
 
-        self.module
-            .add_export(global_name.as_string(), Export::Global(global_name.clone()));
+        self.module.add_export(
+            global_name.as_string(),
+            curios_wasm::Export::Global(global_name.clone()),
+        );
 
-        self.start_expr.push(Instr::I32Const { value: 0 });
-        self.start_expr.push(Instr::I32Const { value: length });
-        self.start_expr.push(Instr::I32Const { value: 0 });
-        self.start_expr.push(Instr::I32Const {
+        self.start_expr
+            .push(curios_wasm::Instr::I32Const { value: 0 });
+        self.start_expr
+            .push(curios_wasm::Instr::I32Const { value: length });
+        self.start_expr
+            .push(curios_wasm::Instr::I32Const { value: 0 });
+        self.start_expr.push(curios_wasm::Instr::I32Const {
             value: payload_length,
         });
-        self.start_expr.push(Instr::ArrayNewData {
+        self.start_expr.push(curios_wasm::Instr::ArrayNewData {
             type_name: rope.payload,
             data_name,
         });
-        self.start_expr.push(Instr::StructNew {
+        self.start_expr.push(curios_wasm::Instr::StructNew {
             type_name: rope.leaf,
         });
-        self.start_expr.push(Instr::GlobalSet { global_name });
+        self.start_expr
+            .push(curios_wasm::Instr::GlobalSet { global_name });
     }
 
     /// Emit a module-level const. Every global is declared mutable so that
-    /// aggregate (`Tpl`/`Lst`/`Clsr`) consts can `global.get` their dependencies
+    /// aggregate (`Tpl`/`Lst`/`EmissionClosure`) consts can `global.get` their dependencies
     /// inside the start function — wasm constant expressions can only read
     /// immutable globals. Scalars (`Nat`/`Int`/`Flt`) keep a self-contained
     /// const initializer (mutability is harmless when the init is constant);
     /// `Bin` and aggregates declare a placeholder init and build the real value
     /// in the start function. `Bin` is special-cased via [`Self::emit_let_bin_data`]
     /// because its payload comes from a data segment.
-    fn emit_let_data(&mut self, name: &'a crate::ValueName, value: &'a crate::Data) {
+    fn emit_let_data(&mut self, name: &'a EmissionValueName, value: &'a EmissionData) {
         match value {
-            crate::Data::Bin(grain, value) => {
+            EmissionData::Bin(grain, value) => {
                 self.emit_let_bin_data(name, *grain, value);
             }
-            crate::Data::Nat(_) | crate::Data::Int(_) | crate::Data::Flt(_) => {
+            EmissionData::Nat(_) | EmissionData::Int(_) | EmissionData::Flt(_) => {
                 let mut expr = Default::default();
                 ExprEmitter::new(Context::new_const(self.table), self.module, &mut expr)
                     .emit_data(name, value);
                 self.module.add_global(
                     self.table.find_const(name),
-                    Global {
-                        global_type: GlobalType {
+                    curios_wasm::Global {
+                        global_type: curios_wasm::GlobalType {
                             val_type: Table::top_type(false),
-                            mutability: Mutability::Var,
+                            mutability: curios_wasm::Mutability::Var,
                         },
                         expr,
                     },
                 );
             }
-            crate::Data::Tpl(_) | crate::Data::Lst(_) | crate::Data::Clsr(_, _) => {
+            EmissionData::Tpl(_) | EmissionData::Lst(_) | EmissionData::Closure(_, _) => {
                 let global_name = self.table.find_const(name);
 
-                let mut init_expr: Expr = Default::default();
-                init_expr.push(Instr::I32Const { value: 0 });
-                init_expr.push(Instr::RefI31);
+                let mut init_expr: curios_wasm::Expr = Default::default();
+                init_expr.push(curios_wasm::Instr::I32Const { value: 0 });
+                init_expr.push(curios_wasm::Instr::RefI31);
 
                 self.module.add_global(
                     global_name.clone(),
-                    Global {
-                        global_type: GlobalType {
+                    curios_wasm::Global {
+                        global_type: curios_wasm::GlobalType {
                             val_type: Table::top_type(false),
-                            mutability: Mutability::Var,
+                            mutability: curios_wasm::Mutability::Var,
                         },
                         expr: init_expr,
                     },
@@ -492,12 +512,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     &mut self.start_expr,
                 )
                 .emit_data(name, value);
-                self.start_expr.push(Instr::GlobalSet { global_name });
+                self.start_expr
+                    .push(curios_wasm::Instr::GlobalSet { global_name });
             }
         }
     }
 
-    fn emit_let_clsr(&mut self, name: &'a crate::ClsrName, clsr: &'a crate::Clsr) {
+    fn emit_let_clsr(&mut self, name: &'a EmissionClosureName, clsr: &'a EmissionClosure) {
         let mut locals = Default::default();
         let mut expr = Default::default();
 
@@ -510,7 +531,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         self.module.add_func(
             self.table.find_clsr(name).func_name(),
-            Func {
+            curios_wasm::Func {
                 type_name: self.table.find_clsr(name).clsr_type(),
                 params: iter::once(self.table.special_local())
                     .chain(clsr.params.iter().map(|param| {
@@ -531,7 +552,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             .declare_func(self.table.find_clsr(name).func_name());
     }
 
-    fn emit_let_func(&mut self, name: &'a crate::FuncName, func: &'a crate::Func) {
+    fn emit_let_func(&mut self, name: &'a EmissionFunctionName, func: &'a EmissionFunction) {
         let mut locals = Default::default();
         let mut expr = Default::default();
 
@@ -544,7 +565,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         self.module.add_func(
             self.table.find_func(name).func_name(),
-            Func {
+            curios_wasm::Func {
                 type_name: self.table.find_func_type(func.params.len()),
                 params: func
                     .params
@@ -659,7 +680,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    pub(super) fn emit_module(&mut self, module: &'a crate::Module) {
+    pub(crate) fn emit_module(&mut self, module: &'a EmissionModule) {
         self.emit_flt_type();
         self.emit_bin_rope_types();
         self.emit_lst_rope_types();
@@ -688,31 +709,31 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         if let Some(name) = module.entry() {
             let func_name = self.table.find_func(name).func_name();
             self.module
-                .add_export(func_name.as_string(), Export::Func(func_name));
+                .add_export(func_name.as_string(), curios_wasm::Export::Func(func_name));
         }
 
         self.emit_rope_funcs();
         self.emit_sys_imports();
 
-        let start_type_name = TypeName::from("start");
+        let start_type_name = curios_wasm::TypeName::from("start");
 
         self.module.add_type(
             start_type_name.clone(),
-            SubType {
+            curios_wasm::SubType {
                 is_final: true,
                 super_types: vec![],
-                comp_type: CompType::Func(FuncType {
-                    inputs: ResultType::from([]),
-                    outputs: ResultType::from([]),
+                comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
+                    inputs: curios_wasm::ResultType::from([]),
+                    outputs: curios_wasm::ResultType::from([]),
                 }),
             },
         );
 
-        let start_func_name = FuncName::from("start");
+        let start_func_name = curios_wasm::FuncName::from("start");
 
         self.module.add_func(
             start_func_name.clone(),
-            Func {
+            curios_wasm::Func {
                 type_name: start_type_name,
                 params: vec![],
                 locals: vec![],

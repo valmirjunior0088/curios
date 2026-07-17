@@ -1,16 +1,16 @@
 use {
-    curios_wasm::{Instr, LabelName, LocalName},
+    crate::{EmissionBlockName, EmissionBody, EmissionValueName},
     std::collections::{HashMap, HashSet},
 };
 
 #[derive(Debug, Clone)]
-pub(super) struct LocalData {
-    pub local_name: LocalName,
+pub(crate) struct LocalData {
+    pub local_name: curios_wasm::LocalName,
     pub is_nullable: bool,
 }
 
 impl LocalData {
-    pub(super) fn new(local_name: LocalName, is_nullable: bool) -> Self {
+    pub(crate) fn new(local_name: curios_wasm::LocalName, is_nullable: bool) -> Self {
         Self {
             local_name,
             is_nullable,
@@ -26,29 +26,32 @@ impl LocalData {
 #[derive(Debug, Clone)]
 enum Dispatch {
     Loop {
-        bloink_label: LabelName,
-        bloink_local: LocalName,
+        bloink_label: curios_wasm::LabelName,
+        bloink_local: curios_wasm::LocalName,
         index: usize,
+    },
+    NaturalLoop {
+        loop_label: curios_wasm::LabelName,
     },
     Direct,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct BlockData<'a> {
+pub(crate) struct BlockData<'a> {
     dispatch: Dispatch,
-    pub label_name: LabelName,
-    params: Vec<(&'a crate::ValueName, LocalData)>,
-    pub region: &'a crate::Region,
+    pub label_name: curios_wasm::LabelName,
+    params: Vec<(&'a EmissionValueName, LocalData)>,
+    pub region: &'a EmissionBody,
 }
 
 impl<'a> BlockData<'a> {
-    pub(super) fn new(
-        bloink_label: LabelName,
-        bloink_local: LocalName,
+    pub(crate) fn new(
+        bloink_label: curios_wasm::LabelName,
+        bloink_local: curios_wasm::LocalName,
         index: usize,
-        block_name: &'a crate::BlockName,
-        params: Vec<(&'a crate::ValueName, LocalData)>,
-        region: &'a crate::Region,
+        block_name: &'a EmissionBlockName,
+        params: Vec<(&'a EmissionValueName, LocalData)>,
+        region: &'a EmissionBody,
     ) -> Self {
         Self {
             dispatch: Dispatch::Loop {
@@ -56,7 +59,7 @@ impl<'a> BlockData<'a> {
                 bloink_local,
                 index,
             },
-            label_name: LabelName::from(format!("${}", block_name)),
+            label_name: curios_wasm::LabelName::from(format!("${}", block_name)),
             params,
             region,
         }
@@ -64,20 +67,36 @@ impl<'a> BlockData<'a> {
 
     /// A single-target block reached only by forward branches — no dispatcher,
     /// no loop. `enter` branches straight out of `label_name` into the body.
-    pub(super) fn new_direct(
-        block_name: &'a crate::BlockName,
-        params: Vec<(&'a crate::ValueName, LocalData)>,
-        region: &'a crate::Region,
+    pub(crate) fn new_direct(
+        block_name: &'a EmissionBlockName,
+        params: Vec<(&'a EmissionValueName, LocalData)>,
+        region: &'a EmissionBody,
     ) -> Self {
         Self {
             dispatch: Dispatch::Direct,
-            label_name: LabelName::from(format!("${}", block_name)),
+            label_name: curios_wasm::LabelName::from(format!("${}", block_name)),
             params,
             region,
         }
     }
 
-    pub(super) fn enter(&self, arity: usize) -> Vec<Instr> {
+    pub(crate) fn new_natural_loop(
+        block_name: &'a EmissionBlockName,
+        params: Vec<(&'a EmissionValueName, LocalData)>,
+        region: &'a EmissionBody,
+    ) -> Self {
+        let label_name = curios_wasm::LabelName::from(format!("${}", block_name));
+        Self {
+            dispatch: Dispatch::NaturalLoop {
+                loop_label: label_name.clone(),
+            },
+            label_name,
+            params,
+            region,
+        }
+    }
+
+    pub(crate) fn bind(&self, arity: usize) -> Vec<curios_wasm::Instr> {
         assert_eq!(
             self.params.len(),
             arity,
@@ -87,13 +106,17 @@ impl<'a> BlockData<'a> {
             arity,
         );
 
-        let bind = self
-            .params
+        self.params
             .iter()
             .rev()
-            .map(|(_, local_data)| Instr::LocalSet {
+            .map(|(_, local_data)| curios_wasm::Instr::LocalSet {
                 local_name: local_data.local_name.clone(),
-            });
+            })
+            .collect()
+    }
+
+    pub(crate) fn enter(&self, arity: usize) -> Vec<curios_wasm::Instr> {
+        let bind = self.bind(arity);
 
         let branch = match &self.dispatch {
             Dispatch::Loop {
@@ -101,48 +124,51 @@ impl<'a> BlockData<'a> {
                 bloink_local,
                 index,
             } => vec![
-                Instr::I32Const {
+                curios_wasm::Instr::I32Const {
                     value: *index as i32,
                 },
-                Instr::LocalSet {
+                curios_wasm::Instr::LocalSet {
                     local_name: bloink_local.clone(),
                 },
-                Instr::Br {
+                curios_wasm::Instr::Br {
                     label_name: bloink_label.clone(),
                 },
             ],
-            Dispatch::Direct => vec![Instr::Br {
+            Dispatch::NaturalLoop { loop_label } => vec![curios_wasm::Instr::Br {
+                label_name: loop_label.clone(),
+            }],
+            Dispatch::Direct => vec![curios_wasm::Instr::Br {
                 label_name: self.label_name.clone(),
             }],
         };
 
-        bind.chain(branch).collect()
+        bind.into_iter().chain(branch).collect()
     }
 
-    pub(super) fn params_map(&self) -> HashMap<&'a crate::ValueName, LocalData> {
+    pub(crate) fn params_map(&self) -> HashMap<&'a EmissionValueName, LocalData> {
         self.params.iter().cloned().collect()
     }
 }
 
 #[derive(Debug)]
-pub(super) struct Frame<'a> {
-    pub params: HashMap<&'a crate::ValueName, LocalData>,
-    pub values: HashMap<&'a crate::ValueName, LocalName>,
-    pub preallocs: HashSet<&'a crate::ValueName>,
-    pub blocks: Vec<(&'a crate::BlockName, BlockData<'a>)>,
-    pub instrs: Vec<Instr>,
+pub(crate) struct Frame<'a> {
+    pub params: HashMap<&'a EmissionValueName, LocalData>,
+    pub values: HashMap<&'a EmissionValueName, curios_wasm::LocalName>,
+    pub shells: HashSet<&'a EmissionValueName>,
+    pub blocks: Vec<(&'a EmissionBlockName, BlockData<'a>)>,
+    pub instrs: Vec<curios_wasm::Instr>,
 }
 
 impl<'a> Frame<'a> {
-    pub(super) fn new(
-        params: HashMap<&'a crate::ValueName, LocalData>,
-        preallocs: HashSet<&'a crate::ValueName>,
-        blocks: Vec<(&'a crate::BlockName, BlockData<'a>)>,
+    pub(crate) fn new(
+        params: HashMap<&'a EmissionValueName, LocalData>,
+        shells: HashSet<&'a EmissionValueName>,
+        blocks: Vec<(&'a EmissionBlockName, BlockData<'a>)>,
     ) -> Self {
         Self {
             params,
             values: HashMap::new(),
-            preallocs,
+            shells,
             blocks,
             instrs: Default::default(),
         }

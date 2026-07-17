@@ -2,13 +2,11 @@ use {
     super::into_cont,
     crate::{Apply, Func, Let, Module, Name, NatMatch, Prim, PurePrim, Rec, Subterm, Term, Tuple},
     curios_base::{Grain, PackedBin},
-    curios_cont::{CallTarget, Data, MatchTarget, Tail, Value},
+    curios_cont::{CpsAtom, CpsCallee, CpsLiteral, CpsNode, CpsValueExpr},
     std::collections::BTreeMap,
 };
 
-// These tests exercise the lowerer on whole erased *terms*; wrap each as the
-// entrypoint `body` of an item-less `Module` (the shape `into_cont` now takes).
-fn lower(term: Term) -> curios_cont::Module {
+fn lower(term: Term) -> curios_cont::CpsModule {
     into_cont(&Module {
         items: vec![],
         body: term,
@@ -24,34 +22,30 @@ fn identity_func() -> Func {
     }
 }
 
-#[test]
-fn lowers_tail_apply_as_indirect_call_to_resume() {
-    let term = Subterm::Apply(Apply {
-        head: Subterm::Func(Func {
-            captures: vec![],
-            params: vec!["x".into()],
-            body: Subterm::Name(Name::from("x")).into(),
-        })
-        .into(),
-        params: vec![Subterm::Prim(Prim::Pure(PurePrim::Int(7))).into()],
-    });
-
-    let module = lower(term.into());
-
-    assert_eq!(module.clsrs().len(), 1);
-
-    let func = &module.funcs()[0].1;
-    assert!(func.region.blocks.is_empty());
-
-    let Tail::Call(CallTarget::Indirect { resume, .. }) = &func.region.tail else {
-        panic!("expected indirect call in main tail");
-    };
-
-    assert_eq!(resume.as_str(), func.resume.as_str());
+fn nodes(module: &curios_cont::CpsModule) -> impl Iterator<Item = &CpsNode> {
+    module.nodes().iter().flatten()
 }
 
 #[test]
-fn lowers_arr_into_main_region_value() {
+fn lowers_tail_apply_as_indirect_call_to_resume() {
+    let term = Subterm::Apply(Apply {
+        head: Subterm::Func(identity_func()).into(),
+        params: vec![Subterm::Prim(Prim::Pure(PurePrim::Int(7))).into()],
+    });
+    let module = lower(term.into());
+
+    assert_eq!(module.functions().iter().flatten().count(), 2);
+    assert!(nodes(&module).any(|node| matches!(
+        node,
+        CpsNode::ApplyFun {
+            callee: CpsCallee::Closure(_),
+            ..
+        }
+    )));
+}
+
+#[test]
+fn lowers_arr_into_high_cps_value() {
     let term = Subterm::Let(Let {
         bindings: vec![(
             "a".into(),
@@ -70,93 +64,65 @@ fn lowers_arr_into_main_region_value() {
         })
         .into(),
     });
-
     let module = lower(term.into());
-    let func = &module.funcs()[0].1;
 
-    assert!(func.region.values.iter().any(|(_, value)| matches!(
-        value,
-        Value::Pure(Data::Lst(elems)) if elems.len() == 2
+    assert!(nodes(&module).any(|node| matches!(
+        node,
+        CpsNode::LetValue {
+            value: CpsValueExpr::List(elements),
+            ..
+        } if elements.len() == 2
     )));
 }
 
 #[test]
-fn lowers_arr_with_apply_element_through_join_block() {
+fn lowers_arr_with_apply_element_through_continuation() {
     let term = Subterm::Prim(Prim::Pure(PurePrim::Lst(vec![
         Subterm::Apply(Apply {
-            head: Subterm::Func(Func {
-                captures: vec![],
-                params: vec!["x".into()],
-                body: Subterm::Name(Name::from("x")).into(),
-            })
-            .into(),
+            head: Subterm::Func(identity_func()).into(),
             params: vec![Subterm::Prim(Prim::Pure(PurePrim::Nat(1))).into()],
         })
         .into(),
         Subterm::Prim(Prim::Pure(PurePrim::Nat(2))).into(),
     ])));
-
     let module = lower(term.into());
-    let func = &module.funcs()[0].1;
 
-    assert_eq!(func.region.blocks.len(), 1);
-
-    let (_, block) = &func.region.blocks[0];
-
-    assert!(block.region.values.iter().any(|(_, value)| matches!(
-        value,
-        Value::Pure(Data::Lst(elems)) if elems.len() == 2
+    assert!(module.continuations().iter().flatten().count() >= 2);
+    assert!(nodes(&module).any(|node| matches!(
+        node,
+        CpsNode::LetValue {
+            value: CpsValueExpr::List(elements),
+            ..
+        } if elements.len() == 2
     )));
 }
 
 #[test]
-fn lowers_apply_in_value_position_through_join_block() {
+fn lowers_apply_in_value_position_through_continuation() {
     let term = Subterm::Tuple(Tuple {
         fields: vec![
             Subterm::Apply(Apply {
-                head: Subterm::Func(Func {
-                    captures: vec![],
-                    params: vec!["x".into()],
-                    body: Subterm::Name(Name::from("x")).into(),
-                })
-                .into(),
+                head: Subterm::Func(identity_func()).into(),
                 params: vec![Subterm::Prim(Prim::Pure(PurePrim::Int(7))).into()],
             })
             .into(),
             Subterm::Prim(Prim::Pure(PurePrim::Int(1))).into(),
         ],
     });
-
     let module = lower(term.into());
-    let func = &module.funcs()[0].1;
 
-    assert_eq!(func.region.blocks.len(), 1);
-
-    let Tail::Call(CallTarget::Indirect { resume, .. }) = &func.region.tail else {
-        panic!("expected root indirect call");
-    };
-
-    let (block_name, block) = &func.region.blocks[0];
-    assert_eq!(block_name.as_str(), resume.as_str());
-    assert_eq!(block.params.len(), 1);
-    assert!(
-        block
-            .region
-            .values
-            .iter()
-            .any(|(_, value)| matches!(value, Value::Pure(Data::Tpl(_))))
-    );
+    assert!(nodes(&module).any(|node| matches!(node, CpsNode::ApplyFun { .. })));
+    assert!(nodes(&module).any(|node| matches!(
+        node,
+        CpsNode::LetValue {
+            value: CpsValueExpr::Tuple(fields),
+            ..
+        } if fields.len() == 2
+    )));
 }
 
 #[test]
 fn peels_a_let_whose_tuple_body_hides_an_apply_field() {
-    // A `let` bound to a *tuple that contains a call* is a legal, ordinary
-    // shape. The peeling prologue must not classify it pure from the `Tuple`
-    // head alone — the field call needs the CPS join-block path — so it falls
-    // through to `lower_value_name`'s `Let` arm, which lowers the tuple via a
-    // resume block and continues the chain. Head-only classification used to
-    // route it through `lower_pure_name`, which rejects the inner `Apply` with
-    // `UnsupportedSyncRecItem`. Guards `is_pure_term`'s recursion into children.
     let term = Subterm::Let(Let {
         bindings: vec![(
             "t".into(),
@@ -174,23 +140,20 @@ fn peels_a_let_whose_tuple_body_hides_an_apply_field() {
         )],
         tail: Subterm::Name(Name::from("t")).into(),
     });
-
     let module = lower(term.into());
-    let func = &module.funcs()[0].1;
 
-    assert_eq!(func.region.blocks.len(), 1);
-    let (_, block) = &func.region.blocks[0];
-    assert!(
-        block
-            .region
-            .values
-            .iter()
-            .any(|(_, value)| matches!(value, Value::Pure(Data::Tpl(_))))
-    );
+    assert!(nodes(&module).any(|node| matches!(node, CpsNode::ApplyFun { .. })));
+    assert!(nodes(&module).any(|node| matches!(
+        node,
+        CpsNode::LetValue {
+            value: CpsValueExpr::Tuple(_),
+            ..
+        }
+    )));
 }
 
 #[test]
-fn lowers_nat_match_as_sparse_match() {
+fn lowers_nat_match_as_sparse_switch() {
     let term = Subterm::NatMatch(NatMatch::Dispatch {
         head: Subterm::Prim(Prim::Pure(PurePrim::Nat(7))).into(),
         cases: BTreeMap::from([
@@ -199,42 +162,33 @@ fn lowers_nat_match_as_sparse_match() {
         ]),
         default: Subterm::Prim(Prim::Pure(PurePrim::Nat(0))).into(),
     });
-
     let module = lower(term.into());
-    let func = &module.funcs()[0].1;
 
-    let Tail::Match(MatchTarget { cases, default, .. }) = &func.region.tail else {
-        panic!("expected Tail::Match");
-    };
-
-    let keys: Vec<u32> = cases.keys().copied().collect();
-    assert_eq!(keys, vec![2, 7]);
-    assert!(default.is_some());
+    assert!(nodes(&module).any(|node| matches!(
+        node,
+        CpsNode::Switch { cases, default: Some(_), .. }
+            if cases.keys().copied().collect::<Vec<_>>() == vec![2, 7]
+    )));
 }
 
 #[test]
-fn lowers_bin_literal() {
+fn lowers_bin_literal_as_an_atom() {
     let term = Subterm::Prim(Prim::Pure(PurePrim::Bin(
         Grain::X,
         PackedBin::from_bytes(vec![1, 2, 3]),
     )));
     let module = lower(term.into());
 
-    let func = &module.funcs()[0].1;
-    let has_bin =
-        func.region.values.iter().any(
-            |(_, value)| matches!(value, Value::Pure(Data::Bin(Grain::X, bytes)) if bytes.as_bytes() == Some(&[1, 2, 3])),
-        );
-
-    assert!(has_bin);
+    assert!(nodes(&module).any(|node| matches!(
+        node,
+        CpsNode::ApplyCont(edge)
+            if matches!(edge.args.as_slice(), [CpsAtom::Literal(CpsLiteral::Bin(Grain::X, bytes))]
+                if bytes.as_bytes() == Some(&[1, 2, 3]))
+    )));
 }
 
 #[test]
 fn rejects_mutually_referential_tuples() {
-    // `rec x = (y, 1) and y = (2, x)`: genuinely self-referential data. Tuples are lowered as
-    // computed items now (not prealloc'd shells), so the x→y→x cycle is caught by
-    // `rec_computed_order` and rejected — cyclic recursion is confined to closures, which is
-    // what keeps `tpl`/`lst` fields immutable.
     let term = Subterm::Rec(Rec {
         names: vec!["x".into(), "y".into()],
         items: vec![
@@ -255,21 +209,16 @@ fn rejects_mutually_referential_tuples() {
         ],
         tail: Subterm::Name(Name::from("x")).into(),
     });
-
     let error = into_cont(&Module {
         items: vec![],
         body: term.into(),
     })
     .expect_err("mutually referential tuples must be rejected");
-
     assert!(error.to_string().contains("value-level mutual recursion"));
 }
 
 #[test]
-fn lowers_cross_region_rec_through_resume_block() {
-    // `rec f = (x) => g and g = id(f)`: the aggregate `f` captures the call-valued `g`,
-    // while `g`'s call references `f`. `f` must be prealloc'd (shell before the call) and
-    // filled in the resume region after `g` returns.
+fn lowers_cross_region_rec_as_explicit_rec_init() {
     let term = Subterm::Rec(Rec {
         names: vec!["f".into(), "g".into()],
         items: vec![
@@ -287,16 +236,8 @@ fn lowers_cross_region_rec_through_resume_block() {
         ],
         tail: Subterm::Name(Name::from("f")).into(),
     });
-
     let module = lower(term.into());
-    let func = &module.funcs()[0].1;
-
-    // `f`'s closure shell is declared at region entry (preallocs are closure shells only).
-    assert!(!func.region.preallocs.is_empty());
-
-    // `g`'s call leaves the region, so its fill lands in a resume block, not the entry region.
-    assert!(matches!(func.region.tail, Tail::Call(_)));
-    assert!(!func.region.blocks.is_empty());
+    assert!(nodes(&module).any(|node| matches!(node, CpsNode::RecInit { .. })));
 }
 
 #[test]
@@ -317,25 +258,17 @@ fn rejects_apply_apply_cycle() {
         ],
         tail: Subterm::Name(Name::from("a")).into(),
     });
-
     let error = into_cont(&Module {
         items: vec![],
         body: term.into(),
     })
     .expect_err("an apply/apply cycle must be rejected");
-
     assert!(error.to_string().contains("value-level mutual recursion"));
 }
 
 #[test]
 fn lowers_a_long_straight_line_let_chain_without_overflowing_the_stack() {
-    // A long sequence of local `let`s — a plausible shape for generated or
-    // desugared code — used to recurse in `lower_value_name`/`lower_tail` one
-    // Rust stack frame per binding and could overflow well before reaching
-    // this depth. The peeling loop in those functions (and in
-    // `lower_pure_name`) makes this O(1) in stack, bounded only by time.
     const N: usize = 2_000;
-
     let mut term: Term = Subterm::Name(Name::from(format!("x{}", N - 1))).into();
     for i in (0..N).rev() {
         term = Subterm::Let(Let {
@@ -347,9 +280,6 @@ fn lowers_a_long_straight_line_let_chain_without_overflowing_the_stack() {
         })
         .into();
     }
-
     let module = lower(term);
-    let func = &module.funcs()[0].1;
-
-    assert_eq!(func.region.values.len(), N);
+    module.verify().unwrap();
 }
