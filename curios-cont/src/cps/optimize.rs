@@ -2,9 +2,8 @@
 
 use {
     crate::{
-        CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsLiteral, CpsModule,
-        CpsNode, CpsNodeId, CpsPrimOp, CpsUseTarget, CpsValueExpr, CpsValueId, atoms,
-        visit_atoms_mut,
+        CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral,
+        CpsModule, CpsNode, CpsNodeId, CpsPrimOp, CpsValueExpr, CpsValueId, atoms, visit_atoms_mut,
     },
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
@@ -16,7 +15,7 @@ pub(super) const PURE_EVALUATION_DEPTH_LIMIT: usize = 256;
 pub(super) const SCC_CLONE_LIMIT: usize = 64;
 pub(super) const SCC_CLONE_NODE_LIMIT: usize = 256;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 enum Knowledge {
     Unknown,
     Known(CpsAtom),
@@ -33,6 +32,24 @@ impl Knowledge {
             (Self::Known(_), Some(_)) => *self = Self::Conflict,
         }
     }
+
+    /// Lattice join for the SCC-invariant fixpoint, ordered
+    /// `Unknown < Known(_) < Conflict`. Unlike `merge`, `Unknown` is the
+    /// identity (not-yet-resolved), so a forwarded parameter still resolving to
+    /// `Unknown` contributes nothing rather than forcing a conflict.
+    fn join(&mut self, incoming: Knowledge) {
+        *self = match (std::mem::replace(self, Knowledge::Unknown), incoming) {
+            (Knowledge::Conflict, _) | (_, Knowledge::Conflict) => Knowledge::Conflict,
+            (Knowledge::Unknown, other) | (other, Knowledge::Unknown) => other,
+            (Knowledge::Known(current), Knowledge::Known(incoming)) => {
+                if current == incoming {
+                    Knowledge::Known(current)
+                } else {
+                    Knowledge::Conflict
+                }
+            }
+        }
+    }
 }
 
 /// Run the verifier-delimited, FIFO high-CPS simplifier. Phase analyses are
@@ -42,15 +59,16 @@ pub(crate) fn optimize(module: &mut CpsModule) {
         .verify()
         .expect("invalid high CPS before optimization");
 
-    let _fixed_limits = (
-        MULTI_SITE_INLINE_LIMIT,
+    // Budgets awaiting their enforcing pass: branch-specialization growth is
+    // consumed by general contification and the pure-evaluation limits by ported
+    // parity passes. Referenced here until those land so they are not dead code.
+    let _pending_limits = (
         BRANCH_SPECIALIZATION_GROWTH_LIMIT,
         PURE_EVALUATION_STEP_LIMIT,
         PURE_EVALUATION_DEPTH_LIMIT,
-        SCC_CLONE_LIMIT,
-        SCC_CLONE_NODE_LIMIT,
     );
 
+    let mut scc_clone_budget = SCC_CLONE_LIMIT;
     for _ in 0..32 {
         let substitutions = known_values(module);
         let changed = rewrite_atoms(module, &substitutions)
@@ -61,14 +79,15 @@ pub(crate) fn optimize(module: &mut CpsModule) {
             | eliminate_dead_parameters(module)
             | inline_single_use_continuations(module)
             | inline_known_calls(module)
-            | contify_self_tail_calls(module)
+            | contify_calls(module)
+            | specialize_scc_calls(module, &mut scc_clone_budget)
+            | dissolve_rec_init(module)
             | prune_unreachable(module);
         if !changed {
             break;
         }
     }
 
-    module.rebuild_uses();
     module
         .verify()
         .expect("invalid high CPS after optimization");
@@ -81,6 +100,98 @@ struct CallAnalysis {
     node_owners: BTreeMap<CpsNodeId, CpsFunId>,
     escaping: BTreeSet<CpsFunId>,
     recursive: BTreeSet<CpsFunId>,
+    sccs: SccAnalysis,
+}
+
+/// Function strongly-connected components of the known-callee call graph,
+/// computed at an explicit phase boundary. `SccId` is a dense index into
+/// `members`; each component lists its functions in `CpsFunId` order.
+type SccId = usize;
+
+#[derive(Default)]
+struct SccAnalysis {
+    component_of: BTreeMap<CpsFunId, SccId>,
+    members: Vec<Vec<CpsFunId>>,
+}
+
+/// Deterministic iterative Tarjan over the known-callee call graph. Uses an
+/// explicit frame stack rather than recursion so it stays within the default
+/// test-thread stack on deep call graphs. Components are numbered in the order
+/// their roots pop, and members are sorted, so the output is a pure function of
+/// the graph.
+fn analyze_sccs(call_graph: &BTreeMap<CpsFunId, BTreeSet<CpsFunId>>) -> SccAnalysis {
+    let mut analysis = SccAnalysis::default();
+    let mut index_of: BTreeMap<CpsFunId, u32> = BTreeMap::new();
+    let mut lowlink: BTreeMap<CpsFunId, u32> = BTreeMap::new();
+    let mut on_stack: BTreeSet<CpsFunId> = BTreeSet::new();
+    let mut stack: Vec<CpsFunId> = Vec::new();
+    let mut next_index: u32 = 0;
+
+    let successors = |function: CpsFunId| -> Vec<CpsFunId> {
+        call_graph
+            .get(&function)
+            .map(|edges| edges.iter().copied().collect())
+            .unwrap_or_default()
+    };
+
+    for &root in call_graph.keys() {
+        if index_of.contains_key(&root) {
+            continue;
+        }
+        index_of.insert(root, next_index);
+        lowlink.insert(root, next_index);
+        next_index += 1;
+        stack.push(root);
+        on_stack.insert(root);
+        let mut work: Vec<(CpsFunId, Vec<CpsFunId>, usize)> = vec![(root, successors(root), 0)];
+
+        while let Some(&(node, _, _)) = work.last() {
+            let position = work.last().unwrap().2;
+            if position < work.last().unwrap().1.len() {
+                let successor = work.last().unwrap().1[position];
+                work.last_mut().unwrap().2 += 1;
+                let visited = index_of.contains_key(&successor);
+                if !visited {
+                    index_of.insert(successor, next_index);
+                    lowlink.insert(successor, next_index);
+                    next_index += 1;
+                    stack.push(successor);
+                    on_stack.insert(successor);
+                    let edges = successors(successor);
+                    work.push((successor, edges, 0));
+                } else if on_stack.contains(&successor) {
+                    let reached = index_of[&successor];
+                    let link = lowlink.get_mut(&node).unwrap();
+                    *link = (*link).min(reached);
+                }
+            } else {
+                work.pop();
+                if lowlink[&node] == index_of[&node] {
+                    let mut component = Vec::new();
+                    loop {
+                        let popped = stack.pop().unwrap();
+                        on_stack.remove(&popped);
+                        component.push(popped);
+                        if popped == node {
+                            break;
+                        }
+                    }
+                    component.sort();
+                    let id = analysis.members.len();
+                    for &function in &component {
+                        analysis.component_of.insert(function, id);
+                    }
+                    analysis.members.push(component);
+                }
+                if let Some(&(parent, _, _)) = work.last() {
+                    let child = lowlink[&node];
+                    let link = lowlink.get_mut(&parent).unwrap();
+                    *link = (*link).min(child);
+                }
+            }
+        }
+    }
+    analysis
 }
 
 fn analyze_calls(module: &CpsModule) -> CallAnalysis {
@@ -123,24 +234,21 @@ fn analyze_calls(module: &CpsModule) -> CallAnalysis {
         }
     }
 
-    for &start in analysis.call_graph.keys() {
-        let mut work = analysis.call_graph[&start]
-            .iter()
-            .copied()
-            .collect::<Vec<_>>();
-        let mut visited = BTreeSet::new();
-        while let Some(function) = work.pop() {
-            if function == start {
-                analysis.recursive.insert(start);
-                break;
-            }
-            if visited.insert(function)
-                && let Some(next) = analysis.call_graph.get(&function)
-            {
-                work.extend(next.iter().copied());
-            }
+    // A function is recursive exactly when it lies on a call cycle: it is in a
+    // multi-member SCC, or it is a singleton SCC with a self-edge. Deriving the
+    // set from the SCC phase keeps one source of truth for cyclicity.
+    let sccs = analyze_sccs(&analysis.call_graph);
+    for (&function, &component) in &sccs.component_of {
+        let multi_member = sccs.members[component].len() > 1;
+        let self_edge = analysis
+            .call_graph
+            .get(&function)
+            .is_some_and(|edges| edges.contains(&function));
+        if multi_member || self_edge {
+            analysis.recursive.insert(function);
         }
     }
+    analysis.sccs = sccs;
     analysis
 }
 
@@ -396,7 +504,6 @@ fn inline_continuation(
     for param in definition.params {
         module.values[param.index()] = None;
     }
-    module.rebuild_uses();
     true
 }
 
@@ -432,18 +539,24 @@ fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> {
     found.into_iter().collect()
 }
 
-fn contify_self_tail_calls(module: &mut CpsModule) -> bool {
+/// Contify a non-escaping function whose calls resolve to a single return
+/// context into a local continuation, covering both the single-entry recursive
+/// loop and the non-recursive join-point cases.
+///
+/// A function qualifies when it has exactly one external call site: any call
+/// from a third function would make `external` longer than one, so the only
+/// admissible calls are that single entry plus the function's own tail-recursive
+/// self-calls. This excludes mutual recursion and multi-return-context callers
+/// without a separate check. Common-dominator placement for genuinely
+/// multi-site contification is deferred to the machine-CFG analysis.
+fn contify_calls(module: &mut CpsModule) -> bool {
     let analysis = analyze_calls(module);
     let mut selected = None;
 
     for (index, function) in module.functions.iter().enumerate() {
         let Some(function) = function else { continue };
         let callee = CpsFunId(index as u32);
-        if Some(callee) == module.entry
-            || analysis.escaping.contains(&callee)
-            || !analysis.recursive.contains(&callee)
-            || !analysis.call_graph[&callee].contains(&callee)
-        {
+        if Some(callee) == module.entry || analysis.escaping.contains(&callee) {
             continue;
         }
 
@@ -482,7 +595,7 @@ fn contify_self_tail_calls(module: &mut CpsModule) -> bool {
     let Some((callee, call)) = selected else {
         return false;
     };
-    contify_self_tail_call(module, callee, call);
+    contify_call(module, callee, call);
     true
 }
 
@@ -506,7 +619,7 @@ fn function_reaches(
     false
 }
 
-fn contify_self_tail_call(module: &mut CpsModule, callee: CpsFunId, call: CpsNodeId) {
+fn contify_call(module: &mut CpsModule, callee: CpsFunId, call: CpsNodeId) {
     let function = module.function(callee).unwrap().clone();
     let CpsNode::ApplyFun {
         callee: CpsCallee::Known(found),
@@ -599,7 +712,6 @@ fn contify_self_tail_call(module: &mut CpsModule, callee: CpsFunId, call: CpsNod
             _ => {}
         }
     }
-    module.rebuild_uses();
 }
 
 fn owned_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<CpsValueId> {
@@ -863,7 +975,42 @@ fn inline_call(
     for (id, node) in cloned_nodes {
         module.nodes[id.index()] = Some(node);
     }
-    module.rebuild_uses();
+    true
+}
+
+/// Dissolve a `RecInit` knot into an ordinary `LetFun` once optimization has
+/// severed the function-to-value dependency. `RecInit` additionally binds its
+/// computed values so escaping closures may forward-reference them and emits a
+/// fallback shell for each escaping member that captures one; when no member
+/// still captures a computed value, that binding and those shells are
+/// unnecessary and the node is an ordinary recursive function group. The
+/// stronger "captures nothing computed" test (rather than merely "escapes
+/// nothing") also keeps every computed value in lexical scope after the rewrite.
+fn dissolve_rec_init(module: &mut CpsModule) -> bool {
+    let mut selected = None;
+    for (index, node) in module.nodes.iter().enumerate() {
+        let Some(CpsNode::RecInit {
+            functions,
+            values,
+            body,
+            ..
+        }) = node
+        else {
+            continue;
+        };
+        let computed: BTreeSet<CpsValueId> = values.iter().copied().collect();
+        let captures = functions
+            .iter()
+            .any(|function| !free_values(module, *function).is_disjoint(&computed));
+        if !captures {
+            selected = Some((CpsNodeId(index as u32), functions.clone(), *body));
+            break;
+        }
+    }
+    let Some((node, functions, body)) = selected else {
+        return false;
+    };
+    module.nodes[node.index()] = Some(CpsNode::LetFun { functions, body });
     true
 }
 
@@ -994,7 +1141,6 @@ fn prune_unreachable(module: &mut CpsModule) -> bool {
             *value = None;
         }
     }
-    module.rebuild_uses();
     old != (
         module.functions.iter().flatten().count(),
         module.continuations.iter().flatten().count(),
@@ -1017,7 +1163,8 @@ fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> {
         }
     }
 
-    let recursive_functions = analyze_calls(module).recursive;
+    let analysis = analyze_calls(module);
+    let recursive_functions = &analysis.recursive;
 
     let mut function_inputs = BTreeMap::<CpsFunId, Vec<Knowledge>>::new();
     for (index, function) in module.functions.iter().enumerate() {
@@ -1057,6 +1204,12 @@ fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> {
         record_known_literals(params, &inputs, &mut known);
     }
 
+    // Recursive members are skipped above because a self-forwarded argument
+    // pollutes the flat per-call join. Recover their provably-invariant known
+    // parameters with a dedicated SCC fixpoint and fold them in.
+    let invariant = scc_invariant_knowns(module, &analysis, &known);
+    known.extend(invariant);
+
     // Collapse deterministic substitution chains once at the phase boundary.
     let keys = known.keys().copied().collect::<Vec<_>>();
     for key in keys {
@@ -1074,6 +1227,517 @@ fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> {
         known.insert(key, value);
     }
     known
+}
+
+/// Compute the parameters of recursive SCC members that are provably a single
+/// literal or function reference at every entry, so they can be substituted in
+/// place and dropped as dead. This is a monotone constant-propagation fixpoint
+/// over the whole known-callee call graph, restricted to literal/function atoms
+/// with parameter forwarding, ordered `Unknown < Known < Conflict`.
+///
+/// Only members of an eligible SCC participate: the SCC must be recursive and
+/// must contain no escaping member and not the program entry, because an
+/// escaping or host-called function receives arguments this analysis cannot
+/// observe. `known_literals` seeds resolution of caller values already known to
+/// be constant.
+fn scc_invariant_knowns(
+    module: &CpsModule,
+    analysis: &CallAnalysis,
+    known_literals: &BTreeMap<CpsValueId, CpsAtom>,
+) -> BTreeMap<CpsValueId, CpsAtom> {
+    let mut params_of: BTreeMap<CpsFunId, Vec<CpsValueId>> = BTreeMap::new();
+    for members in eligible_sccs(module, analysis) {
+        for &function in &members {
+            params_of.insert(function, module.function(function).unwrap().params.clone());
+        }
+    }
+    if params_of.is_empty() {
+        return BTreeMap::new();
+    }
+
+    let mut constraints: Vec<(CpsFunId, Vec<CpsAtom>)> = Vec::new();
+    for node in module.nodes.iter().flatten() {
+        if let CpsNode::ApplyFun {
+            callee: CpsCallee::Known(callee),
+            args,
+            ..
+        } = node
+            && params_of.contains_key(callee)
+        {
+            constraints.push((*callee, args.clone()));
+        }
+    }
+
+    let class = invariant_fixpoint(&params_of, &constraints, known_literals);
+    useful_knowns(class)
+}
+
+/// The members of every SCC eligible for known-argument analysis: recursive, and
+/// containing neither an escaping member nor the program entry, because those
+/// receive arguments the analysis cannot observe.
+fn eligible_sccs(module: &CpsModule, analysis: &CallAnalysis) -> Vec<Vec<CpsFunId>> {
+    analysis
+        .sccs
+        .members
+        .iter()
+        .filter(|members| {
+            let recursive = members.len() > 1
+                || members.iter().any(|function| {
+                    analysis
+                        .call_graph
+                        .get(function)
+                        .is_some_and(|edges| edges.contains(function))
+                });
+            let observable = members.iter().all(|function| {
+                !analysis.escaping.contains(function) && Some(*function) != module.entry
+            });
+            recursive && observable
+        })
+        .cloned()
+        .collect()
+}
+
+/// Run the monotone `Unknown < Known < Conflict` join to a fixpoint over the
+/// given parameter positions and call constraints.
+fn invariant_fixpoint(
+    params_of: &BTreeMap<CpsFunId, Vec<CpsValueId>>,
+    constraints: &[(CpsFunId, Vec<CpsAtom>)],
+    known_literals: &BTreeMap<CpsValueId, CpsAtom>,
+) -> BTreeMap<CpsValueId, Knowledge> {
+    let mut class: BTreeMap<CpsValueId, Knowledge> = params_of
+        .values()
+        .flatten()
+        .map(|&param| (param, Knowledge::Unknown))
+        .collect();
+    loop {
+        let mut changed = false;
+        for (callee, args) in constraints {
+            let Some(params) = params_of.get(callee) else {
+                continue;
+            };
+            for (index, arg) in args.iter().enumerate() {
+                let Some(&param) = params.get(index) else {
+                    continue;
+                };
+                let incoming = resolve_atom(arg, &class, known_literals);
+                let mut updated = class[&param].clone();
+                updated.join(incoming);
+                if updated != class[&param] {
+                    class.insert(param, updated);
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    class
+}
+
+/// Extract the parameters resolved to a single literal or function reference.
+fn useful_knowns(class: BTreeMap<CpsValueId, Knowledge>) -> BTreeMap<CpsValueId, CpsAtom> {
+    let mut result = BTreeMap::new();
+    for (param, knowledge) in class {
+        if let Knowledge::Known(atom @ (CpsAtom::Literal(_) | CpsAtom::Fun(_))) = knowledge {
+            result.insert(param, atom);
+        }
+    }
+    result
+}
+
+/// Specialize a recursive SCC for one external call context whose known
+/// arguments the module-wide analysis cannot use because other callers disagree.
+///
+/// The SCC is cloned verbatim and the disagreeing call site (with any siblings
+/// passing the same arguments) is repointed to the private copy. The clone then
+/// has a single agreeing external caller, so the ordinary invariant-known
+/// propagation folds those arguments in place on a later iteration while the
+/// original stays polymorphic for its other callers. At most `SCC_CLONE_LIMIT`
+/// clones are made per module and only SCCs within `SCC_CLONE_NODE_LIMIT` live
+/// nodes are cloned. One clone is performed per call so the outer fixpoint stays
+/// deterministic.
+fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -> bool {
+    if *budget == 0 {
+        return false;
+    }
+    let analysis = analyze_calls(module);
+    let literals = literal_value_map(module);
+    let global = scc_invariant_knowns(module, &analysis, &literals);
+
+    for members in eligible_sccs(module, &analysis) {
+        let member_set: BTreeSet<CpsFunId> = members.iter().copied().collect();
+        let node_count: usize = members
+            .iter()
+            .map(|&m| function_nodes(module, m).len())
+            .sum();
+        if node_count > SCC_CLONE_NODE_LIMIT {
+            continue;
+        }
+        let Some(intro) = introducing_letfun(module, &member_set) else {
+            continue;
+        };
+
+        let params_of: BTreeMap<CpsFunId, Vec<CpsValueId>> = members
+            .iter()
+            .map(|&m| (m, module.function(m).unwrap().params.clone()))
+            .collect();
+        let mut internal: Vec<(CpsFunId, Vec<CpsAtom>)> = Vec::new();
+        let mut external: Vec<(CpsNodeId, CpsFunId, Vec<CpsAtom>)> = Vec::new();
+        for (&node_id, &owner) in &analysis.node_owners {
+            let Some(CpsNode::ApplyFun {
+                callee: CpsCallee::Known(callee),
+                args,
+                ..
+            }) = module.node(node_id)
+            else {
+                continue;
+            };
+            if !member_set.contains(callee) {
+                continue;
+            }
+            if member_set.contains(&owner) {
+                internal.push((*callee, args.clone()));
+            } else {
+                external.push((node_id, *callee, args.clone()));
+            }
+        }
+
+        // Find the first external context that unlocks a known the module-wide
+        // analysis could not, in deterministic call-site order.
+        let mut chosen: Option<(CpsFunId, Vec<CpsAtom>)> = None;
+        for (_, callee, args) in &external {
+            let mut constraints = internal.clone();
+            constraints.push((*callee, args.clone()));
+            let context = useful_knowns(invariant_fixpoint(&params_of, &constraints, &literals));
+            if context
+                .iter()
+                .any(|(param, atom)| global.get(param) != Some(atom))
+            {
+                chosen = Some((*callee, args.clone()));
+                break;
+            }
+        }
+        let Some((entry, context_args)) = chosen else {
+            continue;
+        };
+
+        let Some(clones) = clone_scc(module, &member_set) else {
+            continue;
+        };
+        let clone_entry = clones[&entry];
+        if let Some(CpsNode::LetFun { functions, .. }) = module.nodes[intro.index()].as_mut() {
+            functions.extend(clones.values().copied());
+        }
+        for (node_id, callee, args) in &external {
+            if *callee == entry
+                && *args == context_args
+                && let Some(CpsNode::ApplyFun { callee, .. }) =
+                    module.nodes[node_id.index()].as_mut()
+            {
+                *callee = CpsCallee::Known(clone_entry);
+            }
+        }
+        *budget -= 1;
+        return true;
+    }
+    false
+}
+
+/// The literal results of `LetValue` bindings, used to resolve caller values
+/// already known to be constant.
+fn literal_value_map(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> {
+    let mut literals = BTreeMap::new();
+    for node in module.nodes.iter().flatten() {
+        if let CpsNode::LetValue {
+            result,
+            value: CpsValueExpr::Literal(literal),
+            ..
+        } = node
+        {
+            literals.insert(*result, CpsAtom::Literal(literal.clone()));
+        }
+    }
+    literals
+}
+
+/// The single `LetFun` node introducing every member, or `None` if the members
+/// are split across nodes or introduced by a `RecInit` knot. The clones are
+/// added to this node so they share the members' lexical scope.
+fn introducing_letfun(module: &CpsModule, members: &BTreeSet<CpsFunId>) -> Option<CpsNodeId> {
+    for (index, node) in module.nodes.iter().enumerate() {
+        if let Some(CpsNode::LetFun { functions, .. }) = node {
+            let introduced: BTreeSet<CpsFunId> = functions.iter().copied().collect();
+            if members.is_subset(&introduced) {
+                return Some(CpsNodeId(index as u32));
+            }
+        }
+    }
+    None
+}
+
+/// Verbatim-clone every member of an SCC into fresh functions with fresh return
+/// continuations, local continuations, owned values, and nodes. Internal
+/// known-callee edges and return continuations are rewired to the clones while
+/// free values, external callees, and external continuations are shared. Returns
+/// the old-to-new function map, or `None` if a member body nests a function
+/// definition, which this verbatim clone does not reproduce.
+fn clone_scc(
+    module: &mut CpsModule,
+    members: &BTreeSet<CpsFunId>,
+) -> Option<BTreeMap<CpsFunId, CpsFunId>> {
+    let member_defs: BTreeMap<CpsFunId, CpsFunction> = members
+        .iter()
+        .map(|&m| (m, module.function(m).unwrap().clone()))
+        .collect();
+
+    let mut node_ids: Vec<CpsNodeId> = Vec::new();
+    for &m in members {
+        node_ids.extend(function_nodes(module, m));
+    }
+    let node_defs: BTreeMap<CpsNodeId, CpsNode> = node_ids
+        .iter()
+        .map(|&id| (id, module.node(id).unwrap().clone()))
+        .collect();
+    if node_defs
+        .values()
+        .any(|node| matches!(node, CpsNode::LetFun { .. } | CpsNode::RecInit { .. }))
+    {
+        return None;
+    }
+
+    let cont_ids: BTreeSet<CpsContId> = node_defs
+        .values()
+        .filter_map(|node| match node {
+            CpsNode::LetCont { continuations, .. } => Some(continuations.clone()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    let cont_defs: BTreeMap<CpsContId, CpsContinuation> = cont_ids
+        .iter()
+        .map(|&id| (id, module.continuation(id).unwrap().clone()))
+        .collect();
+
+    // Mint fresh owned values: member params, let-bound results, local
+    // continuation parameters. Values defined outside the SCC are shared.
+    let mut values: BTreeMap<CpsValueId, CpsValueId> = BTreeMap::new();
+    let mut owned: Vec<CpsValueId> = Vec::new();
+    for def in member_defs.values() {
+        owned.extend(def.params.iter().copied());
+    }
+    for node in node_defs.values() {
+        if let CpsNode::LetValue { result, .. } | CpsNode::LetPrim { result, .. } = node {
+            owned.push(*result);
+        }
+    }
+    for cont in cont_defs.values() {
+        owned.extend(cont.params.iter().copied());
+    }
+    for old in owned {
+        let definition = module.values[old.index()].as_ref().unwrap().clone();
+        let fresh = module.add_value(definition.debug_name, definition.candidate);
+        values.insert(old, fresh);
+    }
+
+    let mut conts: BTreeMap<CpsContId, CpsContId> = BTreeMap::new();
+    for &id in cont_defs.keys() {
+        conts.insert(id, module.reserve_continuation());
+    }
+    let mut functions: BTreeMap<CpsFunId, CpsFunId> = BTreeMap::new();
+    let mut returns: BTreeMap<CpsContId, CpsContId> = BTreeMap::new();
+    for (&m, def) in &member_defs {
+        functions.insert(m, module.reserve_function(def.debug_name.clone()));
+        returns.insert(def.return_cont, module.reserve_continuation());
+    }
+    let mut nodes: BTreeMap<CpsNodeId, CpsNodeId> = BTreeMap::new();
+    for &id in node_defs.keys() {
+        nodes.insert(id, module.reserve_node());
+    }
+
+    let map_value = |value: CpsValueId| values.get(&value).copied().unwrap_or(value);
+    let map_atom = |atom: &CpsAtom| match atom {
+        CpsAtom::Value(value) => CpsAtom::Value(map_value(*value)),
+        CpsAtom::Fun(function) => {
+            CpsAtom::Fun(functions.get(function).copied().unwrap_or(*function))
+        }
+        CpsAtom::Literal(literal) => CpsAtom::Literal(literal.clone()),
+    };
+    let map_cont = |target: CpsContId| {
+        returns
+            .get(&target)
+            .copied()
+            .or_else(|| conts.get(&target).copied())
+            .unwrap_or(target)
+    };
+    let map_edge = |edge: &CpsEdge| CpsEdge {
+        target: map_cont(edge.target),
+        args: edge.args.iter().map(&map_atom).collect(),
+    };
+    let map_callee = |callee: &CpsCallee| match callee {
+        CpsCallee::Known(function) => {
+            CpsCallee::Known(functions.get(function).copied().unwrap_or(*function))
+        }
+        CpsCallee::Closure(value) => CpsCallee::Closure(map_value(*value)),
+    };
+
+    let mut cloned_nodes: Vec<(CpsNodeId, CpsNode)> = Vec::new();
+    for (&old, node) in &node_defs {
+        let cloned = match node {
+            CpsNode::LetValue {
+                result,
+                value,
+                next,
+            } => CpsNode::LetValue {
+                result: map_value(*result),
+                value: match value {
+                    CpsValueExpr::Literal(literal) => CpsValueExpr::Literal(literal.clone()),
+                    CpsValueExpr::List(atoms) => {
+                        CpsValueExpr::List(atoms.iter().map(&map_atom).collect())
+                    }
+                    CpsValueExpr::Tuple(atoms) => {
+                        CpsValueExpr::Tuple(atoms.iter().map(&map_atom).collect())
+                    }
+                },
+                next: nodes[next],
+            },
+            CpsNode::LetPrim {
+                result,
+                op,
+                args,
+                next,
+            } => CpsNode::LetPrim {
+                result: map_value(*result),
+                op: *op,
+                args: args.iter().map(&map_atom).collect(),
+                next: nodes[next],
+            },
+            CpsNode::LetCont {
+                continuations: members,
+                body,
+            } => CpsNode::LetCont {
+                continuations: members.iter().map(|id| conts[id]).collect(),
+                body: nodes[body],
+            },
+            CpsNode::ApplyFun {
+                callee,
+                args,
+                return_to,
+            } => CpsNode::ApplyFun {
+                callee: map_callee(callee),
+                args: args.iter().map(&map_atom).collect(),
+                return_to: map_cont(*return_to),
+            },
+            CpsNode::ApplyCont(edge) => CpsNode::ApplyCont(map_edge(edge)),
+            CpsNode::Switch {
+                scrutinee,
+                cases,
+                default,
+            } => CpsNode::Switch {
+                scrutinee: map_atom(scrutinee),
+                cases: cases
+                    .iter()
+                    .map(|(tag, edge)| (*tag, map_edge(edge)))
+                    .collect(),
+                default: default.as_ref().map(map_edge),
+            },
+            CpsNode::Foreign {
+                function,
+                args,
+                return_to,
+            } => CpsNode::Foreign {
+                function: function.clone(),
+                args: args.iter().map(&map_atom).collect(),
+                return_to: map_cont(*return_to),
+            },
+            CpsNode::Cell {
+                op,
+                args,
+                return_to,
+            } => CpsNode::Cell {
+                op: *op,
+                args: args.iter().map(&map_atom).collect(),
+                return_to: map_cont(*return_to),
+            },
+            CpsNode::Intrinsic {
+                op,
+                args,
+                return_to,
+            } => CpsNode::Intrinsic {
+                op: *op,
+                args: args.iter().map(&map_atom).collect(),
+                return_to: map_cont(*return_to),
+            },
+            CpsNode::Exit { value } => CpsNode::Exit {
+                value: value.as_ref().map(&map_atom),
+            },
+            CpsNode::Unreachable => CpsNode::Unreachable,
+            CpsNode::LetFun { .. } | CpsNode::RecInit { .. } => return None,
+        };
+        cloned_nodes.push((nodes[&old], cloned));
+    }
+
+    let mut cloned_conts: Vec<(CpsContId, CpsContinuation)> = Vec::new();
+    for (&old, cont) in &cont_defs {
+        cloned_conts.push((
+            conts[&old],
+            CpsContinuation {
+                debug_name: cont.debug_name.clone(),
+                params: cont.params.iter().map(|&p| map_value(p)).collect(),
+                body: nodes[&cont.body],
+            },
+        ));
+    }
+
+    let mut cloned_functions: Vec<(CpsFunId, CpsFunction)> = Vec::new();
+    for (&m, def) in &member_defs {
+        cloned_functions.push((
+            functions[&m],
+            CpsFunction {
+                debug_name: def.debug_name.clone(),
+                params: def.params.iter().map(|&p| map_value(p)).collect(),
+                return_cont: returns[&def.return_cont],
+                body: nodes[&def.body],
+            },
+        ));
+    }
+
+    for (id, node) in cloned_nodes {
+        module.nodes[id.index()] = Some(node);
+    }
+    for (id, cont) in cloned_conts {
+        module.continuations[id.index()] = Some(cont);
+    }
+    for (id, function) in cloned_functions {
+        module.define_function(id, function);
+    }
+    Some(functions)
+}
+
+/// Resolve an argument atom to its lattice value: literals and function
+/// references are known; a value is a forwarded SCC parameter (its current
+/// class), a caller constant (`known_literals`), or otherwise an unobservable
+/// runtime value that forces `Conflict`.
+fn resolve_atom(
+    atom: &CpsAtom,
+    class: &BTreeMap<CpsValueId, Knowledge>,
+    known_literals: &BTreeMap<CpsValueId, CpsAtom>,
+) -> Knowledge {
+    match atom {
+        CpsAtom::Literal(literal) => Knowledge::Known(CpsAtom::Literal(literal.clone())),
+        CpsAtom::Fun(function) => Knowledge::Known(CpsAtom::Fun(*function)),
+        CpsAtom::Value(value) => {
+            if let Some(knowledge) = class.get(value) {
+                knowledge.clone()
+            } else if let Some(atom @ (CpsAtom::Literal(_) | CpsAtom::Fun(_))) =
+                known_literals.get(value)
+            {
+                Knowledge::Known(atom.clone())
+            } else {
+                Knowledge::Conflict
+            }
+        }
+    }
 }
 
 fn merge_inputs(inputs: &mut [Knowledge], args: Option<&[CpsAtom]>) {
@@ -1115,9 +1779,6 @@ fn rewrite_atoms(module: &mut CpsModule, known: &BTreeMap<CpsValueId, CpsAtom>) 
             changed = true;
         }
     }
-    if changed {
-        module.rebuild_uses();
-    }
     changed
 }
 
@@ -1131,9 +1792,7 @@ fn forward_continuations(module: &mut CpsModule) -> bool {
             let CpsNode::ApplyCont(edge) = module.node(continuation.body)? else {
                 return None;
             };
-            if module.continuation(edge.target).is_none() {
-                return None;
-            }
+            module.continuation(edge.target)?;
             Some((
                 CpsContId(index as u32),
                 (continuation.params.clone(), edge.clone()),
@@ -1189,9 +1848,6 @@ fn forward_continuations(module: &mut CpsModule) -> bool {
             }
             _ => {}
         }
-    }
-    if changed {
-        module.rebuild_uses();
     }
     changed
 }
@@ -1281,9 +1937,6 @@ fn simplify_nodes(module: &mut CpsModule) -> bool {
             _ => {}
         }
     }
-    if changed {
-        module.rebuild_uses();
-    }
     changed
 }
 
@@ -1327,7 +1980,6 @@ fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
         rewire_node(module, node, next);
         module.nodes[node.index()] = None;
         module.values[result.index()] = None;
-        module.rebuild_uses();
         changed = true;
     }
     changed
@@ -1336,17 +1988,18 @@ fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
 fn eliminate_dead_bindings(module: &mut CpsModule) -> bool {
     let mut changed = false;
     loop {
+        let counts = module.value_use_counts();
         let selected = module.nodes.iter().enumerate().find_map(|(index, node)| {
             let id = CpsNodeId(index as u32);
             match node.as_ref()? {
                 CpsNode::LetValue { result, next, .. }
-                    if module.uses_of(CpsUseTarget::Value(*result)).count() == 0 =>
+                    if counts.get(result).copied().unwrap_or(0) == 0 =>
                 {
                     Some((id, *next, Some(*result)))
                 }
                 CpsNode::LetPrim {
                     result, op, next, ..
-                } if op.is_total() && module.uses_of(CpsUseTarget::Value(*result)).count() == 0 => {
+                } if op.is_total() && counts.get(result).copied().unwrap_or(0) == 0 => {
                     Some((id, *next, Some(*result)))
                 }
                 CpsNode::LetFun { functions, body } if functions.is_empty() => {
@@ -1367,7 +2020,6 @@ fn eliminate_dead_bindings(module: &mut CpsModule) -> bool {
         if let Some(value) = value {
             module.values[value.index()] = None;
         }
-        module.rebuild_uses();
         changed = true;
     }
     changed
@@ -1417,6 +2069,7 @@ fn rewire_node(module: &mut CpsModule, from: CpsNodeId, to: CpsNodeId) {
 }
 
 fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
+    let counts = module.value_use_counts();
     let mut continuation = None;
     for (index, definition) in module.continuations.iter().enumerate() {
         let Some(definition) = definition else {
@@ -1440,7 +2093,7 @@ fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
             .iter()
             .enumerate()
             .filter_map(|(index, value)| {
-                (module.uses_of(CpsUseTarget::Value(*value)).count() == 0).then_some(index)
+                (counts.get(value).copied().unwrap_or(0) == 0).then_some(index)
             })
             .collect::<BTreeSet<_>>();
         if !dead.is_empty() {
@@ -1474,7 +2127,6 @@ fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
         for value in removed {
             module.values[value.index()] = None;
         }
-        module.rebuild_uses();
         return true;
     }
 
@@ -1502,7 +2154,7 @@ fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
             .iter()
             .enumerate()
             .filter_map(|(index, value)| {
-                (module.uses_of(CpsUseTarget::Value(*value)).count() == 0).then_some(index)
+                (counts.get(value).copied().unwrap_or(0) == 0).then_some(index)
             })
             .collect::<BTreeSet<_>>();
         if !dead.is_empty() {
@@ -1531,21 +2183,18 @@ fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
     for value in removed {
         module.values[value.index()] = None;
     }
-    module.rebuild_uses();
     true
 }
 
 fn remove_parameter_indices<T>(values: &mut Vec<T>, removed: &BTreeSet<usize>) -> Vec<T> {
-    let mut index = 0;
     let mut removed_values = Vec::new();
     let mut retained = Vec::with_capacity(values.len() - removed.len());
-    for value in std::mem::take(values) {
+    for (index, value) in std::mem::take(values).into_iter().enumerate() {
         if removed.contains(&index) {
             removed_values.push(value);
         } else {
             retained.push(value);
         }
-        index += 1;
     }
     *values = retained;
     removed_values
@@ -1684,16 +2333,53 @@ fn evaluate(op: CpsPrimOp, args: &[CpsAtom]) -> Option<CpsLiteral> {
 mod tests {
     use {
         super::{
-            atoms, eliminate_dead_bindings, eliminate_dead_parameters, evaluate,
-            forward_continuations, inline_known_calls, inline_single_use_continuations,
-            known_values, optimize,
+            SCC_CLONE_LIMIT, analyze_sccs, atoms, contify_calls, dissolve_rec_init,
+            eliminate_dead_bindings, eliminate_dead_parameters, evaluate, forward_continuations,
+            inline_known_calls, inline_single_use_continuations, known_values, optimize,
+            specialize_scc_calls,
         },
         crate::{
-            CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsLiteral, CpsModule,
-            CpsNode, CpsPrimOp,
+            CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral,
+            CpsModule, CpsNode, CpsNodeId, CpsPrimOp,
         },
-        std::collections::BTreeMap,
+        std::collections::{BTreeMap, BTreeSet},
     };
+
+    fn call_graph(edges: &[(u32, &[u32])]) -> BTreeMap<CpsFunId, BTreeSet<CpsFunId>> {
+        edges
+            .iter()
+            .map(|(function, successors)| {
+                (
+                    CpsFunId(*function),
+                    successors.iter().map(|s| CpsFunId(*s)).collect(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn sccs_group_cycles_and_stay_deterministic() {
+        // 0 <-> 1 form a cycle; 1 -> 2 and 2 -> 2 leaves 2 a self-looping
+        // singleton; 3 is isolated.
+        let graph = call_graph(&[(0, &[1]), (1, &[0, 2]), (2, &[2]), (3, &[])]);
+        let sccs = analyze_sccs(&graph);
+
+        let component = |function: u32| sccs.component_of[&CpsFunId(function)];
+        assert_eq!(component(0), component(1));
+        assert_ne!(component(0), component(2));
+        assert_ne!(component(2), component(3));
+        assert_eq!(sccs.members.len(), 3);
+        assert_eq!(
+            sccs.members[component(0)],
+            vec![CpsFunId(0), CpsFunId(1)],
+            "cycle members are reported in CpsFunId order"
+        );
+        assert_eq!(sccs.members[component(2)], vec![CpsFunId(2)]);
+
+        let again = analyze_sccs(&graph);
+        assert_eq!(sccs.component_of, again.component_of);
+        assert_eq!(sccs.members, again.members);
+    }
 
     #[test]
     fn preserves_traps_and_folds_wasm_faithful_nat_add() {
@@ -2250,5 +2936,611 @@ mod tests {
         };
         assert_ne!(cases[&0].target, entry_return);
         module.verify().unwrap();
+    }
+
+    #[test]
+    fn scc_invariant_known_argument_propagates_into_recursive_member() {
+        let mut module = CpsModule::new();
+        let entry = module.reserve_function(Some("main".into()));
+        let entry_return = module.reserve_continuation();
+
+        // A trivial helper used only as an invariant first-class argument.
+        let helper = module.reserve_function(Some("helper".into()));
+        let helper_return = module.reserve_continuation();
+        let helper_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+            target: helper_return,
+            args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        }));
+        module.define_function(
+            helper,
+            CpsFunction {
+                debug_name: Some("helper".into()),
+                params: vec![],
+                return_cont: helper_return,
+                body: helper_body,
+            },
+        );
+
+        // loop(invariant, counter): the recursive call forwards `invariant`
+        // unchanged and replaces `counter`, so `invariant` is loop-invariant and
+        // `counter` is not.
+        let loop_function = module.reserve_function(Some("loop".into()));
+        let loop_return = module.reserve_continuation();
+        let invariant = module.add_value(Some("invariant".into()), false);
+        let counter = module.add_value(Some("counter".into()), false);
+        let recur = module.reserve_continuation();
+        let recur_param = module.add_value(Some("recur".into()), false);
+        let recur_body = module.add_node(CpsNode::ApplyFun {
+            callee: CpsCallee::Known(loop_function),
+            args: vec![CpsAtom::Value(invariant), CpsAtom::Value(recur_param)],
+            return_to: loop_return,
+        });
+        module.define_continuation(
+            recur,
+            CpsContinuation {
+                debug_name: Some("recur".into()),
+                params: vec![recur_param],
+                body: recur_body,
+            },
+        );
+        let switch = module.add_node(CpsNode::Switch {
+            scrutinee: CpsAtom::Value(counter),
+            cases: BTreeMap::from([(
+                0,
+                CpsEdge {
+                    target: loop_return,
+                    args: vec![CpsAtom::Value(counter)],
+                },
+            )]),
+            default: Some(CpsEdge {
+                target: recur,
+                args: vec![CpsAtom::Value(counter)],
+            }),
+        });
+        let loop_body = module.add_node(CpsNode::LetCont {
+            continuations: vec![recur],
+            body: switch,
+        });
+        module.define_function(
+            loop_function,
+            CpsFunction {
+                debug_name: Some("loop".into()),
+                params: vec![invariant, counter],
+                return_cont: loop_return,
+                body: loop_body,
+            },
+        );
+
+        let call = module.add_node(CpsNode::ApplyFun {
+            callee: CpsCallee::Known(loop_function),
+            args: vec![CpsAtom::Fun(helper), CpsAtom::Literal(CpsLiteral::Nat(3))],
+            return_to: entry_return,
+        });
+        let body = module.add_node(CpsNode::LetFun {
+            functions: vec![loop_function, helper],
+            body: call,
+        });
+        module.define_function(
+            entry,
+            CpsFunction {
+                debug_name: Some("main".into()),
+                params: vec![],
+                return_cont: entry_return,
+                body,
+            },
+        );
+        module.set_entry(entry);
+        module.verify().unwrap();
+
+        let known = known_values(&module);
+        assert_eq!(
+            known.get(&invariant),
+            Some(&CpsAtom::Fun(helper)),
+            "the invariant recursive parameter is recognized as the known function"
+        );
+        assert!(
+            !known.contains_key(&counter),
+            "the varying recursive parameter stays unknown"
+        );
+    }
+
+    struct PolymorphicLoop {
+        module: CpsModule,
+        call1: CpsNodeId,
+        call2: CpsNodeId,
+        loop_fn: CpsFunId,
+    }
+
+    /// Build `loop(op, n)` which indirectly calls `op(n)` and recurses forwarding
+    /// `op`, called from `entry` as `loop(add, 3)` then `loop(second, 4)`. When
+    /// `second` differs from `add` the two contexts disagree. `padding` prepends
+    /// dead `LetPrim` nodes to `loop`'s body to inflate its node count.
+    fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
+        let mut module = CpsModule::new();
+        let entry = module.reserve_function(Some("main".into()));
+        let entry_return = module.reserve_continuation();
+
+        let trivial = |module: &mut CpsModule, name: &str| {
+            let function = module.reserve_function(Some(name.into()));
+            let function_return = module.reserve_continuation();
+            let param = module.add_value(Some(format!("{name} x")), false);
+            let function_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+                target: function_return,
+                args: vec![CpsAtom::Value(param)],
+            }));
+            module.define_function(
+                function,
+                CpsFunction {
+                    debug_name: Some(name.into()),
+                    params: vec![param],
+                    return_cont: function_return,
+                    body: function_body,
+                },
+            );
+            function
+        };
+        let add = trivial(&mut module, "add");
+        let mul = trivial(&mut module, "mul");
+
+        let loop_fn = module.reserve_function(Some("loop".into()));
+        let loop_return = module.reserve_continuation();
+        let op = module.add_value(Some("op".into()), false);
+        let n = module.add_value(Some("n".into()), false);
+        let after = module.reserve_continuation();
+        let after_r = module.add_value(Some("after r".into()), false);
+        let after_body = module.add_node(CpsNode::ApplyFun {
+            callee: CpsCallee::Known(loop_fn),
+            args: vec![CpsAtom::Value(op), CpsAtom::Value(after_r)],
+            return_to: loop_return,
+        });
+        module.define_continuation(
+            after,
+            CpsContinuation {
+                debug_name: Some("after".into()),
+                params: vec![after_r],
+                body: after_body,
+            },
+        );
+        let recur = module.reserve_continuation();
+        let recur_m = module.add_value(Some("recur m".into()), false);
+        let recur_body = module.add_node(CpsNode::ApplyFun {
+            callee: CpsCallee::Closure(op),
+            args: vec![CpsAtom::Value(recur_m)],
+            return_to: after,
+        });
+        module.define_continuation(
+            recur,
+            CpsContinuation {
+                debug_name: Some("recur".into()),
+                params: vec![recur_m],
+                body: recur_body,
+            },
+        );
+        let switch = module.add_node(CpsNode::Switch {
+            scrutinee: CpsAtom::Value(n),
+            cases: BTreeMap::from([(
+                0,
+                CpsEdge {
+                    target: loop_return,
+                    args: vec![CpsAtom::Value(n)],
+                },
+            )]),
+            default: Some(CpsEdge {
+                target: recur,
+                args: vec![CpsAtom::Value(n)],
+            }),
+        });
+        let scope = module.add_node(CpsNode::LetCont {
+            continuations: vec![recur, after],
+            body: switch,
+        });
+        let mut loop_body = scope;
+        for _ in 0..padding {
+            let dead = module.add_value(None, false);
+            loop_body = module.add_node(CpsNode::LetPrim {
+                result: dead,
+                op: CpsPrimOp::NatAdd,
+                args: vec![
+                    CpsAtom::Literal(CpsLiteral::Nat(0)),
+                    CpsAtom::Literal(CpsLiteral::Nat(0)),
+                ],
+                next: loop_body,
+            });
+        }
+        module.define_function(
+            loop_fn,
+            CpsFunction {
+                debug_name: Some("loop".into()),
+                params: vec![op, n],
+                return_cont: loop_return,
+                body: loop_body,
+            },
+        );
+
+        let second = if second_is_mul { mul } else { add };
+        let x1 = module.add_value(Some("x1".into()), false);
+        let call2 = module.add_node(CpsNode::ApplyFun {
+            callee: CpsCallee::Known(loop_fn),
+            args: vec![CpsAtom::Fun(second), CpsAtom::Literal(CpsLiteral::Nat(4))],
+            return_to: entry_return,
+        });
+        let k1 = module.reserve_continuation();
+        module.define_continuation(
+            k1,
+            CpsContinuation {
+                debug_name: Some("k1".into()),
+                params: vec![x1],
+                body: call2,
+            },
+        );
+        let call1 = module.add_node(CpsNode::ApplyFun {
+            callee: CpsCallee::Known(loop_fn),
+            args: vec![CpsAtom::Fun(add), CpsAtom::Literal(CpsLiteral::Nat(3))],
+            return_to: k1,
+        });
+        let outer = module.add_node(CpsNode::LetCont {
+            continuations: vec![k1],
+            body: call1,
+        });
+        let body = module.add_node(CpsNode::LetFun {
+            functions: vec![loop_fn, add, mul],
+            body: outer,
+        });
+        module.define_function(
+            entry,
+            CpsFunction {
+                debug_name: Some("main".into()),
+                params: vec![],
+                return_cont: entry_return,
+                body,
+            },
+        );
+        module.set_entry(entry);
+        module.verify().unwrap();
+        PolymorphicLoop {
+            module,
+            call1,
+            call2,
+            loop_fn,
+        }
+    }
+
+    fn known_callee(module: &CpsModule, node: CpsNodeId) -> CpsFunId {
+        match module.node(node).unwrap() {
+            CpsNode::ApplyFun {
+                callee: CpsCallee::Known(callee),
+                ..
+            } => *callee,
+            _ => panic!("call site changed shape"),
+        }
+    }
+
+    #[test]
+    fn specializes_a_polymorphic_recursive_scc_per_call_context() {
+        let PolymorphicLoop {
+            mut module,
+            call1,
+            call2,
+            loop_fn,
+        } = polymorphic_loop(true, 0);
+
+        let mut budget = SCC_CLONE_LIMIT;
+        assert!(
+            specialize_scc_calls(&mut module, &mut budget),
+            "a disagreeing call context is specialized"
+        );
+        assert_eq!(budget, SCC_CLONE_LIMIT - 1, "one clone consumed the budget");
+        module.verify().unwrap();
+
+        let first = known_callee(&module, call1);
+        let second = known_callee(&module, call2);
+        assert_ne!(
+            first, second,
+            "the two contexts now call different functions"
+        );
+        assert!(
+            first == loop_fn || second == loop_fn,
+            "one context keeps the original polymorphic function"
+        );
+        assert!(
+            first != loop_fn || second != loop_fn,
+            "one context is repointed to a fresh clone"
+        );
+    }
+
+    #[test]
+    fn agreeing_call_contexts_are_not_specialized() {
+        // Both sites pass `add`, so the module-wide analysis already knows the
+        // argument and cloning would add nothing.
+        let PolymorphicLoop {
+            mut module,
+            call1,
+            call2,
+            loop_fn,
+        } = polymorphic_loop(false, 0);
+
+        let mut budget = SCC_CLONE_LIMIT;
+        assert!(
+            !specialize_scc_calls(&mut module, &mut budget),
+            "no clone is made when callers agree"
+        );
+        assert_eq!(budget, SCC_CLONE_LIMIT);
+        assert_eq!(known_callee(&module, call1), loop_fn);
+        assert_eq!(known_callee(&module, call2), loop_fn);
+    }
+
+    #[test]
+    fn specialization_respects_the_clone_budget() {
+        let PolymorphicLoop {
+            mut module,
+            call1,
+            call2,
+            loop_fn,
+        } = polymorphic_loop(true, 0);
+
+        let mut budget = 0;
+        assert!(
+            !specialize_scc_calls(&mut module, &mut budget),
+            "an exhausted budget makes no clone"
+        );
+        assert_eq!(known_callee(&module, call1), loop_fn);
+        assert_eq!(known_callee(&module, call2), loop_fn);
+    }
+
+    #[test]
+    fn specialization_respects_the_node_budget() {
+        // Inflate `loop` past SCC_CLONE_NODE_LIMIT live nodes.
+        let PolymorphicLoop {
+            mut module,
+            call1,
+            call2,
+            loop_fn,
+        } = polymorphic_loop(true, super::SCC_CLONE_NODE_LIMIT + 1);
+
+        let mut budget = SCC_CLONE_LIMIT;
+        assert!(
+            !specialize_scc_calls(&mut module, &mut budget),
+            "an oversized SCC is not cloned"
+        );
+        assert_eq!(budget, SCC_CLONE_LIMIT);
+        assert_eq!(known_callee(&module, call1), loop_fn);
+        assert_eq!(known_callee(&module, call2), loop_fn);
+    }
+
+    #[test]
+    fn specialization_is_deterministic() {
+        let run = || {
+            let PolymorphicLoop {
+                mut module,
+                call1,
+                call2,
+                ..
+            } = polymorphic_loop(true, 0);
+            let mut budget = SCC_CLONE_LIMIT;
+            specialize_scc_calls(&mut module, &mut budget);
+            (
+                known_callee(&module, call1).0,
+                known_callee(&module, call2).0,
+            )
+        };
+        assert_eq!(run(), run(), "specialization output is a pure function");
+    }
+
+    #[test]
+    fn optimization_specializes_away_the_polymorphic_indirect_call() {
+        // With each caller peeled into its own clone, invariant-known propagation
+        // resolves every `op` to a direct callee, leaving no closure calls.
+        let PolymorphicLoop { mut module, .. } = polymorphic_loop(true, 0);
+        optimize(&mut module);
+        module.verify().unwrap();
+        assert!(
+            module.nodes.iter().flatten().all(|node| !matches!(
+                node,
+                CpsNode::ApplyFun {
+                    callee: CpsCallee::Closure(_),
+                    ..
+                }
+            )),
+            "specialization turned every recursive indirect call into a direct call"
+        );
+    }
+
+    // Build `helper(x) = x`, non-escaping, called from `entry` at one or two
+    // external sites. Returns the module and the helper function.
+    fn helper_called(two_sites: bool) -> (CpsModule, CpsFunId) {
+        let mut module = CpsModule::new();
+        let entry = module.reserve_function(Some("main".into()));
+        let entry_return = module.reserve_continuation();
+        let helper = module.reserve_function(Some("helper".into()));
+        let helper_return = module.reserve_continuation();
+        let x = module.add_value(Some("x".into()), false);
+        let helper_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+            target: helper_return,
+            args: vec![CpsAtom::Value(x)],
+        }));
+        module.define_function(
+            helper,
+            CpsFunction {
+                debug_name: Some("helper".into()),
+                params: vec![x],
+                return_cont: helper_return,
+                body: helper_body,
+            },
+        );
+
+        let inner = if two_sites {
+            let call2 = module.add_node(CpsNode::ApplyFun {
+                callee: CpsCallee::Known(helper),
+                args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
+                return_to: entry_return,
+            });
+            let param = module.add_value(None, false);
+            let bridge = module.reserve_continuation();
+            module.define_continuation(
+                bridge,
+                CpsContinuation {
+                    debug_name: None,
+                    params: vec![param],
+                    body: call2,
+                },
+            );
+            let call1 = module.add_node(CpsNode::ApplyFun {
+                callee: CpsCallee::Known(helper),
+                args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+                return_to: bridge,
+            });
+            module.add_node(CpsNode::LetCont {
+                continuations: vec![bridge],
+                body: call1,
+            })
+        } else {
+            module.add_node(CpsNode::ApplyFun {
+                callee: CpsCallee::Known(helper),
+                args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+                return_to: entry_return,
+            })
+        };
+        let body = module.add_node(CpsNode::LetFun {
+            functions: vec![helper],
+            body: inner,
+        });
+        module.define_function(
+            entry,
+            CpsFunction {
+                debug_name: Some("main".into()),
+                params: vec![],
+                return_cont: entry_return,
+                body,
+            },
+        );
+        module.set_entry(entry);
+        module.verify().unwrap();
+        (module, helper)
+    }
+
+    #[test]
+    fn contifies_a_nonrecursive_single_call_function() {
+        let (mut module, helper) = helper_called(false);
+        assert!(
+            contify_calls(&mut module),
+            "the single-call helper is contified"
+        );
+        assert!(
+            module.function(helper).is_none(),
+            "the contified function is replaced by a local continuation"
+        );
+        module.verify().unwrap();
+    }
+
+    #[test]
+    fn does_not_contify_a_multi_site_function() {
+        // Two return contexts: single-site placement cannot cover both, so this
+        // is left for common-dominator contification in the machine CFG.
+        let (mut module, helper) = helper_called(true);
+        assert!(
+            !contify_calls(&mut module),
+            "a function with two call sites is not contified here"
+        );
+        assert!(module.function(helper).is_some());
+    }
+
+    // Build `main` whose body is a `RecInit` over `f` and computed value `v`.
+    // `v` is produced by a `rec/v` continuation and returned at the ready point.
+    // When `captures` is set, `f` forward-references `v` (a live mixed knot);
+    // otherwise `f` is independent and the knot is already broken.
+    fn rec_init_module(captures: bool) -> (CpsModule, CpsNodeId) {
+        let mut module = CpsModule::new();
+        let entry = module.reserve_function(Some("main".into()));
+        let entry_return = module.reserve_continuation();
+
+        let f = module.reserve_function(Some("f".into()));
+        let f_return = module.reserve_continuation();
+        let a = module.add_value(Some("a".into()), false);
+        let v = module.add_value(Some("v".into()), false);
+        let f_result = if captures {
+            CpsAtom::Value(v)
+        } else {
+            CpsAtom::Value(a)
+        };
+        let f_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+            target: f_return,
+            args: vec![f_result],
+        }));
+        module.define_function(
+            f,
+            CpsFunction {
+                debug_name: Some("f".into()),
+                params: vec![a],
+                return_cont: f_return,
+                body: f_body,
+            },
+        );
+
+        let ready = module.add_node(CpsNode::ApplyCont(CpsEdge {
+            target: entry_return,
+            args: vec![CpsAtom::Value(v)],
+        }));
+        let rec_v = module.reserve_continuation();
+        module.define_continuation(
+            rec_v,
+            CpsContinuation {
+                debug_name: Some("rec/v".into()),
+                params: vec![v],
+                body: ready,
+            },
+        );
+        let enter = module.add_node(CpsNode::ApplyCont(CpsEdge {
+            target: rec_v,
+            args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        }));
+        let init_body = module.add_node(CpsNode::LetCont {
+            continuations: vec![rec_v],
+            body: enter,
+        });
+        let rec_init = module.add_node(CpsNode::RecInit {
+            functions: vec![f],
+            values: vec![v],
+            ready,
+            body: init_body,
+        });
+        module.define_function(
+            entry,
+            CpsFunction {
+                debug_name: Some("main".into()),
+                params: vec![],
+                return_cont: entry_return,
+                body: rec_init,
+            },
+        );
+        module.set_entry(entry);
+        module.verify().unwrap();
+        (module, rec_init)
+    }
+
+    #[test]
+    fn dissolves_a_broken_recursive_initializer() {
+        let (mut module, rec_init) = rec_init_module(false);
+        assert!(
+            dissolve_rec_init(&mut module),
+            "a knot no member still captures dissolves"
+        );
+        assert!(
+            matches!(module.node(rec_init), Some(CpsNode::LetFun { .. })),
+            "the initializer becomes an ordinary function group"
+        );
+        module.verify().unwrap();
+    }
+
+    #[test]
+    fn retains_a_live_recursive_initializer() {
+        let (mut module, rec_init) = rec_init_module(true);
+        assert!(
+            !dissolve_rec_init(&mut module),
+            "a member still capturing a computed value keeps the fallback"
+        );
+        assert!(matches!(
+            module.node(rec_init),
+            Some(CpsNode::RecInit { .. })
+        ));
     }
 }

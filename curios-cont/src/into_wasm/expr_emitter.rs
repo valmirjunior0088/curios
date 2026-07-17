@@ -703,13 +703,13 @@ fn natural_loop_plan(region: &EmissionBody) -> Option<NaturalLoopPlan> {
         .position(|(block, _)| block == &entry.target)?;
     let successors = block_graph(region);
     let mut reachable = vec![vec![false; successors.len()]; successors.len()];
-    for start in 0..successors.len() {
+    for (start, row) in reachable.iter_mut().enumerate() {
         let mut work = vec![start];
         while let Some(block) = work.pop() {
-            if reachable[start][block] {
+            if row[block] {
                 continue;
             }
-            reachable[start][block] = true;
+            row[block] = true;
             work.extend(successors[block].iter().copied());
         }
     }

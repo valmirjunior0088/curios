@@ -3,8 +3,9 @@
 //! The surface of this module is intentionally small: Ersd lowering constructs a
 //! [`CpsModule`], the optimizer mutates that graph through its checked mutation API,
 //! and backend lowering consumes it. Stable integer identities, tombstoned arena
-//! entries, explicit use records, and deterministic traversal are representation
-//! invariants rather than optimizer conventions.
+//! entries, and deterministic traversal are representation invariants rather than
+//! optimizer conventions. Use information is derived on demand (see
+//! [`CpsModule::value_use_counts`]) rather than maintained as a shadow arena.
 
 use {
     curios_abi::ForeignFunction,
@@ -39,7 +40,6 @@ id!(CpsNodeId, "n");
 id!(CpsValueId, "%v");
 id!(CpsFunId, "@f");
 id!(CpsContId, "@k");
-id!(CpsUseId, "u");
 
 impl CpsFunId {
     pub(crate) fn from_index(index: usize) -> Self {
@@ -399,29 +399,6 @@ pub enum CpsUseTarget {
     Cont(CpsContId),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum CpsUseOwner {
-    Node(CpsNodeId),
-    Function(CpsFunId),
-    Continuation(CpsContId),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum CpsUseKind {
-    Operand,
-    Callee,
-    Control,
-    Definition,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct CpsUseRecord {
-    pub target: CpsUseTarget,
-    pub owner: CpsUseOwner,
-    pub slot: u32,
-    pub kind: CpsUseKind,
-}
-
 #[derive(Debug, Clone)]
 pub struct CpsVerifyError(pub String);
 
@@ -441,7 +418,6 @@ pub struct CpsModule {
     values: Vec<Option<CpsValueDef>>,
     functions: Vec<Option<CpsFunction>>,
     continuations: Vec<Option<CpsContinuation>>,
-    uses: Vec<Option<CpsUseRecord>>,
     entry: Option<CpsFunId>,
 }
 
@@ -474,10 +450,6 @@ impl CpsModule {
         &self.continuations
     }
 
-    pub fn uses(&self) -> &[Option<CpsUseRecord>] {
-        &self.uses
-    }
-
     pub fn node(&self, id: CpsNodeId) -> Option<&CpsNode> {
         self.nodes.get(id.index()).and_then(Option::as_ref)
     }
@@ -490,14 +462,28 @@ impl CpsModule {
         self.continuations.get(id.index()).and_then(Option::as_ref)
     }
 
-    pub fn uses_of(&self, target: CpsUseTarget) -> impl Iterator<Item = (CpsUseId, &CpsUseRecord)> {
-        self.uses
-            .iter()
-            .enumerate()
-            .filter_map(move |(index, use_)| {
-                let use_ = use_.as_ref()?;
-                (use_.target == target).then_some((CpsUseId(index as u32), use_))
-            })
+    /// Count, per value, how many times it is referenced across the module.
+    /// A value's use sites are its operand occurrences plus its use as an
+    /// indirect callee; definitions (`LetValue`/`LetPrim` results, parameters)
+    /// are not uses, so an unreferenced value is absent from the map. Derived on
+    /// demand rather than maintained incrementally.
+    pub(crate) fn value_use_counts(&self) -> BTreeMap<CpsValueId, usize> {
+        let mut counts = BTreeMap::new();
+        for node in self.nodes.iter().flatten() {
+            for atom in atoms(node) {
+                if let CpsAtom::Value(value) = atom {
+                    *counts.entry(*value).or_insert(0) += 1;
+                }
+            }
+            if let CpsNode::ApplyFun {
+                callee: CpsCallee::Closure(value),
+                ..
+            } = node
+            {
+                *counts.entry(*value).or_insert(0) += 1;
+            }
+        }
+        counts
     }
 
     pub fn reserve_node(&mut self) -> CpsNodeId {
@@ -519,7 +505,6 @@ impl CpsModule {
             .unwrap_or_else(|| panic!("unknown node {id}"));
         assert!(slot.is_none(), "node {id} is already defined");
         *slot = Some(node);
-        self.rebuild_uses();
     }
 
     pub fn add_value(&mut self, debug_name: Option<String>, candidate: bool) -> CpsValueId {
@@ -549,13 +534,11 @@ impl CpsModule {
             .unwrap_or_else(|| panic!("unknown function {id}"));
         assert!(slot.is_none(), "function {id} is already defined");
         *slot = Some(function);
-        self.rebuild_uses();
     }
 
     pub fn add_function(&mut self, function: CpsFunction) -> CpsFunId {
         let id = CpsFunId(self.functions.len() as u32);
         self.functions.push(Some(function));
-        self.rebuild_uses();
         id
     }
 
@@ -572,22 +555,16 @@ impl CpsModule {
             .unwrap_or_else(|| panic!("unknown continuation {id}"));
         assert!(slot.is_none(), "continuation {id} is already defined");
         *slot = Some(continuation);
-        self.rebuild_uses();
     }
 
     pub fn add_continuation(&mut self, continuation: CpsContinuation) -> CpsContId {
         let id = CpsContId(self.continuations.len() as u32);
         self.continuations.push(Some(continuation));
-        self.rebuild_uses();
         id
     }
 
     pub fn remove_node(&mut self, id: CpsNodeId) -> Option<CpsNode> {
-        let removed = self.nodes.get_mut(id.index())?.take();
-        if removed.is_some() {
-            self.rebuild_uses();
-        }
-        removed
+        self.nodes.get_mut(id.index())?.take()
     }
 
     pub fn replace_atom(&mut self, from: CpsUseTarget, replacement: CpsAtom) {
@@ -603,10 +580,9 @@ impl CpsModule {
                 }
             });
         }
-        self.rebuild_uses();
     }
 
-    pub fn tombstones(&self) -> (usize, usize, usize, usize, usize) {
+    pub fn tombstones(&self) -> (usize, usize, usize, usize) {
         let return_continuations = self
             .functions
             .iter()
@@ -624,7 +600,6 @@ impl CpsModule {
                     slot.is_none() && !return_continuations.contains(&CpsContId(*index as u32))
                 })
                 .count(),
-            self.uses.iter().filter(|slot| slot.is_none()).count(),
         )
     }
 
@@ -710,11 +685,6 @@ impl CpsModule {
             ));
         }
 
-        let expected = collect_uses(self);
-        let actual = self.uses.iter().flatten().cloned().collect::<Vec<_>>();
-        if actual != expected {
-            return Err(CpsVerifyError("operand/use-record disagreement".into()));
-        }
         Ok(())
     }
 
@@ -1262,83 +1232,6 @@ impl CpsModule {
             .map(|_| ())
             .ok_or_else(|| CpsVerifyError(format!("{what} references missing {id}")))
     }
-
-    fn rebuild_uses(&mut self) {
-        self.uses = collect_uses(self).into_iter().map(Some).collect();
-    }
-}
-
-fn collect_uses(module: &CpsModule) -> Vec<CpsUseRecord> {
-    let mut uses = Vec::new();
-    for (index, function) in module.functions.iter().enumerate() {
-        let Some(function) = function else { continue };
-        uses.push(CpsUseRecord {
-            target: CpsUseTarget::Cont(function.return_cont),
-            owner: CpsUseOwner::Function(CpsFunId(index as u32)),
-            slot: 0,
-            kind: CpsUseKind::Control,
-        });
-    }
-    for (index, node) in module.nodes.iter().enumerate() {
-        let Some(node) = node else { continue };
-        let owner = CpsUseOwner::Node(CpsNodeId(index as u32));
-        let mut slot = 0;
-        for target in node_targets(node) {
-            uses.push(CpsUseRecord {
-                target,
-                owner,
-                slot,
-                kind: match target {
-                    CpsUseTarget::Cont(_) => CpsUseKind::Control,
-                    CpsUseTarget::Fun(_) => CpsUseKind::Callee,
-                    CpsUseTarget::Value(_) => CpsUseKind::Operand,
-                },
-            });
-            slot += 1;
-        }
-    }
-    uses
-}
-
-fn node_targets(node: &CpsNode) -> Vec<CpsUseTarget> {
-    let mut targets = Vec::new();
-    for atom in atoms(node) {
-        match atom {
-            CpsAtom::Value(value) => targets.push(CpsUseTarget::Value(*value)),
-            CpsAtom::Fun(function) => targets.push(CpsUseTarget::Fun(*function)),
-            CpsAtom::Literal(_) => {}
-        }
-    }
-    match node {
-        CpsNode::LetFun { functions, .. } | CpsNode::RecInit { functions, .. } => {
-            targets.extend(functions.iter().copied().map(CpsUseTarget::Fun));
-        }
-        CpsNode::LetCont { continuations, .. } => {
-            targets.extend(continuations.iter().copied().map(CpsUseTarget::Cont));
-        }
-        CpsNode::ApplyFun {
-            callee, return_to, ..
-        } => {
-            targets.push(match callee {
-                CpsCallee::Known(function) => CpsUseTarget::Fun(*function),
-                CpsCallee::Closure(value) => CpsUseTarget::Value(*value),
-            });
-            targets.push(CpsUseTarget::Cont(*return_to));
-        }
-        CpsNode::ApplyCont(edge) => targets.push(CpsUseTarget::Cont(edge.target)),
-        CpsNode::Switch { cases, default, .. } => {
-            targets.extend(cases.values().map(|edge| CpsUseTarget::Cont(edge.target)));
-            targets.extend(default.iter().map(|edge| CpsUseTarget::Cont(edge.target)));
-        }
-        CpsNode::Foreign { return_to, .. }
-        | CpsNode::Cell { return_to, .. }
-        | CpsNode::Intrinsic { return_to, .. } => targets.push(CpsUseTarget::Cont(*return_to)),
-        CpsNode::LetValue { .. }
-        | CpsNode::LetPrim { .. }
-        | CpsNode::Exit { .. }
-        | CpsNode::Unreachable => {}
-    }
-    targets
 }
 
 pub(crate) fn atoms(node: &CpsNode) -> Vec<&CpsAtom> {
@@ -1591,10 +1484,11 @@ mod tests {
             .unwrap()
             .params
             .push(replacement);
-        assert_eq!(module.uses_of(CpsUseTarget::Value(old)).count(), 1);
+        let count = |module: &CpsModule, value| module.value_use_counts().get(&value).copied();
+        assert_eq!(count(&module, old), Some(1));
         module.replace_atom(CpsUseTarget::Value(old), CpsAtom::Value(replacement));
-        assert_eq!(module.uses_of(CpsUseTarget::Value(old)).count(), 0);
-        assert_eq!(module.uses_of(CpsUseTarget::Value(replacement)).count(), 1);
+        assert_eq!(count(&module, old), None);
+        assert_eq!(count(&module, replacement), Some(1));
         module.verify().unwrap();
     }
 
@@ -1639,7 +1533,6 @@ mod tests {
         });
         let bad = CpsNodeId((module.nodes.len() - 1) as u32);
         module.functions[0].as_mut().unwrap().body = bad;
-        module.rebuild_uses();
         assert!(
             module
                 .verify()
@@ -1718,7 +1611,6 @@ mod tests {
             target: second_return,
             args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
         }));
-        module.rebuild_uses();
         assert!(
             module
                 .verify()
@@ -1738,7 +1630,6 @@ mod tests {
             target: undefined,
             args: vec![],
         }));
-        module.rebuild_uses();
         assert!(
             module
                 .verify()

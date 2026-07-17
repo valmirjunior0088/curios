@@ -124,9 +124,9 @@ impl Lowerer {
     /// Sequence operands left-to-right without heap-allocated Rust callbacks.
     /// Each operand gets a local continuation parameter allocated up front; the
     /// chain is then assembled from right to left.
-    fn lower_sequence<'a>(
+    fn lower_sequence(
         &mut self,
-        terms: Vec<&'a Term>,
+        terms: Vec<&Term>,
         env: &Env,
         finish: impl FnOnce(&mut Self, Vec<CpsAtom>) -> LowerResult<CpsNodeId>,
     ) -> LowerResult<CpsNodeId> {
@@ -199,10 +199,7 @@ impl Lowerer {
         let mut env = env.clone();
         let mut functions = Vec::new();
 
-        loop {
-            let Subterm::Let(let_) = &**term else {
-                break;
-            };
+        while let Subterm::Let(let_) = &**term {
             let mut index = 0;
             while index < let_.bindings.len() {
                 let (name, body) = &let_.bindings[index];
@@ -528,10 +525,10 @@ impl Lowerer {
         Ok(self.wrap_functions(functions, body))
     }
 
-    fn lower_rec<'a>(
+    fn lower_rec(
         &mut self,
         names: &[String],
-        items: Vec<&'a Term>,
+        items: Vec<&Term>,
         rest: &[Item],
         tail: &Term,
         env: &Env,

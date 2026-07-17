@@ -871,7 +871,7 @@ impl MachineModule {
             if !function.blocks.contains_key(&function.entry) {
                 return Err(MachineVerifyError(format!("{id} has no entry block")));
             }
-            self.verify_block_scopes(*id, function)?;
+            Self::verify_block_scopes(*id, function)?;
             self.verify_closure_construction(*id, function)?;
             for block in function.blocks.values() {
                 self.verify_block(*id, function, block)?;
@@ -896,7 +896,6 @@ impl MachineModule {
     }
 
     fn verify_block_scopes(
-        &self,
         owner: CpsFunId,
         function: &MachineFunction,
     ) -> Result<(), MachineVerifyError> {

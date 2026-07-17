@@ -283,9 +283,11 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     // closure over a constant `Fmt` spine. What stays runtime is exactly the
     // runtime work: specialized `go_with` over the spine, the `%s` path
     // (`Str/trim` and stdin UTF-8 validation through `classify`), and the `%d`
-    // path (`Nat/to_str`'s digit producer). The normalized high-CPS assertion
-    // pins that specialization boundary without depending on a legacy backend
-    // function-count metric.
+    // path (`Nat/to_str`'s digit producer). The single-entry `go_with` spine is
+    // then contified into the entry, so the boundary is pinned by the surviving
+    // `%d` digit producer together with the absence of the generic `Fmt/print`
+    // driver and the compile-time `Parse` combinators, without depending on a
+    // legacy backend function-count metric.
     let source = r#"
         use /std/{Str, Io, Bytes, Fmt};
 
@@ -321,7 +323,7 @@ fn fmt_print_partial_evaluation_reduces_residual() {
 
     let cont = cont_optm.expect("Stage::ContOptm observed");
     assert!(
-        cont.contains("/std/Fmt/go_with@")
+        cont.contains("/std/Nat/to_str")
             && !cont.contains("/std/Fmt/print")
             && !cont.contains("/std/Parse/"),
         "expected only the specialized formatting spine after staging, got:\n{cont}",
