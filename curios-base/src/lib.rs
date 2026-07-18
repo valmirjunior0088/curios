@@ -1,5 +1,5 @@
 //! Foundational utilities shared across every Curios pipeline stage: source
-//! spans, the fresh-name `Entropy`/`Mint` supply, the `name!` newtype macro, the
+//! spans, the fresh-name `Entropy`/`Mint` supply, the `name!` and `id!` newtype macros, the
 //! parser/printer monad combinators, the resolved-module-path `Qualifier`
 //! identity, the value types the surface
 //! (`curios-text`) and core (`curios-core`) `Term` representations share

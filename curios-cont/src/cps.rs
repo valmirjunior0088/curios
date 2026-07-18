@@ -9,32 +9,13 @@
 
 use {
     curios_abi::ForeignFunction,
-    curios_base::{Grain, PackedBin},
+    curios_base::{Grain, PackedBin, id},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
         sync::Arc,
     },
 };
-
-macro_rules! id {
-    ($name:ident, $prefix:literal) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        pub struct $name(pub(crate) u32);
-
-        impl $name {
-            pub fn index(self) -> usize {
-                self.0 as usize
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, concat!($prefix, "{}"), self.0)
-            }
-        }
-    };
-}
 
 id!(CpsNodeId, "n");
 id!(CpsValueId, "%v");

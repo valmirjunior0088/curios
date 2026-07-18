@@ -10,7 +10,7 @@ use {
         CpsNodeId, CpsPrimOp, CpsValueExpr,
     },
     curios_abi::ForeignFunction,
-    curios_base::{Entropy, Mint},
+    curios_base::{Entropy, id},
     std::{
         collections::{BTreeMap, BTreeSet, VecDeque},
         fmt,
@@ -21,27 +21,8 @@ use {
 mod structurize;
 pub(crate) use structurize::structurize;
 
-macro_rules! machine_id {
-    ($name:ident, $prefix:literal) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-        pub(crate) struct $name(u32);
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, concat!($prefix, "{}"), self.0)
-            }
-        }
-
-        impl Mint for $name {
-            fn mint(entropy: usize) -> Self {
-                Self(u32::try_from(entropy).expect("machine ID space exhausted"))
-            }
-        }
-    };
-}
-
-machine_id!(MachineBlockId, "b");
-machine_id!(MachineValueId, "%m");
+id!(MachineBlockId, "b", mint);
+id!(MachineValueId, "%m", mint);
 
 #[derive(Debug, Clone)]
 pub(crate) enum MachineOperand {

@@ -79,3 +79,35 @@ macro_rules! name {
         }
     };
 }
+
+/// Declares a `u32`-newtype identity type: `id!(Foo, "f")` generates a `pub struct Foo(pub(crate) u32)` with the standard identity derives, an `index()` accessor, and a `Display` that spells the prefix before the raw index (`f0`, `f1`, ...). The three-argument `id!(Foo, "f", mint)` form additionally implements `Mint`, making `Entropy<Foo>` a gensym source. IR crates that key arenas or gensym stable `u32` identities declare them this way, the numeric twin of the string-spelled `name!`.
+#[macro_export]
+macro_rules! id {
+    ($name:ident, $prefix:literal) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $name(pub(crate) u32);
+
+        impl $name {
+            /// The identity's raw arena index.
+            pub fn index(self) -> usize {
+                self.0 as usize
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, concat!($prefix, "{}"), self.0)
+            }
+        }
+    };
+
+    ($name:ident, $prefix:literal, mint) => {
+        $crate::id!($name, $prefix);
+
+        impl $crate::Mint for $name {
+            fn mint(entropy: usize) -> Self {
+                Self(u32::try_from(entropy).expect("ID space exhausted"))
+            }
+        }
+    };
+}
