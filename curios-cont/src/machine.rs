@@ -1726,4 +1726,125 @@ mod tests {
         let machine = lower(&source);
         assert_eq!(machine_shell_count(&machine), 0);
     }
+
+    /// A nullary `main` that immediately exits — the smallest valid machine
+    /// module, used to seed the verifier-rejection tests.
+    fn exiting_main() -> (CpsModule, CpsFunId) {
+        let mut source = CpsModule::new();
+        let main = source.reserve_function(Some("main".into()));
+        let return_cont = source.reserve_continuation();
+        let body = source.add_node(CpsNode::Exit {
+            value: Some(CpsAtom::Literal(CpsLiteral::Nat(0))),
+        });
+        source.define_function(
+            main,
+            CpsFunction {
+                debug_name: Some("main".into()),
+                params: vec![],
+                return_cont,
+                body,
+            },
+        );
+        source.set_entry(main);
+        (source, main)
+    }
+
+    #[test]
+    fn verify_rejects_a_function_without_its_entry_block() {
+        let (source, _) = exiting_main();
+        let mut machine = lower(&source);
+
+        let entry = machine.entry;
+        let function = machine.functions.get_mut(&entry).unwrap();
+        let entry_block = function.entry;
+        function.blocks.remove(&entry_block);
+
+        let error = machine.verify().unwrap_err();
+        assert!(
+            error.to_string().contains("has no entry block"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn verify_rejects_a_nested_block_with_no_lexical_owner() {
+        // A `LetCont` continuation becomes a block nested under the entry; drop
+        // the scope table and it is left without a lexical owner.
+        let mut source = CpsModule::new();
+        let main = source.reserve_function(Some("main".into()));
+        let return_cont = source.reserve_continuation();
+        let bound = source.add_value(Some("bound".into()), false);
+        let exit = source.add_node(CpsNode::Exit {
+            value: Some(CpsAtom::Value(bound)),
+        });
+        let resume = source.add_continuation(CpsContinuation {
+            debug_name: Some("resume".into()),
+            params: vec![bound],
+            body: exit,
+        });
+        let enter = source.add_node(CpsNode::ApplyCont(CpsEdge {
+            target: resume,
+            args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        }));
+        let body = source.add_node(CpsNode::LetCont {
+            continuations: vec![resume],
+            body: enter,
+        });
+        source.define_function(
+            main,
+            CpsFunction {
+                debug_name: Some("main".into()),
+                params: vec![],
+                return_cont,
+                body,
+            },
+        );
+        source.set_entry(main);
+
+        let mut machine = lower(&source);
+        let entry = machine.entry;
+        let function = machine.functions.get_mut(&entry).unwrap();
+        assert!(
+            function.blocks.len() >= 2,
+            "fixture must lower to a nested block"
+        );
+        function.block_scopes.clear();
+
+        let error = machine.verify().unwrap_err();
+        assert!(
+            error.to_string().contains("has no lexical owner"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn verify_rejects_a_fallback_shell_for_a_non_escaping_function() {
+        // The residual mixed-init fallback is reserved for escaping closures; a
+        // shell over a function with no wrapper is a function-only knot leaking
+        // into fallback lowering, which the verifier must reject.
+        let (mut source, _) = exiting_main();
+        let mut machine = lower(&source);
+
+        let result = value_id(source.add_value(None, false));
+        let entry = machine.entry;
+        let function = machine.functions.get_mut(&entry).unwrap();
+        let entry_block = function.entry;
+        function
+            .blocks
+            .get_mut(&entry_block)
+            .unwrap()
+            .instructions
+            .push(MachineInstruction::FallbackShell {
+                result,
+                function: entry,
+            });
+
+        let error = machine.verify().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("fallback shell for non-escaping"),
+            "unexpected error: {error}"
+        );
+    }
 }

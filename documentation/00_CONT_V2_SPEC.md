@@ -94,16 +94,7 @@ Treat these as required only if the revision comparison or final structural/benc
 
 ## 3. Restore complete test ownership
 
-The deleted direct region-builder fixtures must have equivalent coverage before landing. Do not restore the old construction API.
-
-- Port machine encoding and control fixtures to private `curios-cont` machine builders.
-- Keep end-to-end semantics as source or Ersd pipeline tests.
-- Restore exhaustive primitive lowering coverage for Nat, Int, Flt, packed values, lists, tuples, cells, foreign calls, and list map.
-- Restore rope construction, slicing, reading, equality, forcing, embedding, deep-chain stack safety, and helper-ABI coverage in the new emitter tests.
-- Add focused tests for foreign result arities, wrapper closure invocation, closure reuse, residual `RecInit`, function-only fallback rejection, block-scope verifier failures, and localized dispatch.
-- Assert structure through normalized CPS, private machine fixtures, and Wasm inspection. Do not assert generated numeric IDs or exact Wasm bytes.
-
-Retain the existing full native semantic corpus as an end-to-end gate, but do not treat it as a substitute for removed backend-unit coverage.
+Backend test ownership is restored without reviving the old construction API. Private `curios-cont` fixtures build a `CpsModule`, lower it with `into_wasm`, and assert the emitted wasm shape — never generated IDs or exact bytes — covering primitive lowering (Nat, Int, Flt, packed `Bin`, lists, tuples, cells, foreign calls, and list map), rope construction/slice/read/equality/force/embed/helper-ABI, deep-chain compile-time stack safety, foreign result arities, unknown-callee closure dispatch, block-scope and closure-construction verifier failures, function-only fallback rejection, and localized dispatch. Closure reuse and residual `RecInit` retain their machine-lowering fixtures. End-to-end semantics stay in the native `.crs` corpus, kept as a gate rather than a substitute for that backend-unit coverage.
 
 ## 4. Structural acceptance fixtures
 
