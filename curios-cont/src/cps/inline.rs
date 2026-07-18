@@ -77,6 +77,7 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
             .flatten()
             .copied()
             .collect::<BTreeSet<_>>();
+        let transfers_by_target = continuation_transfers(module);
         let mut selected = None;
         for (index, continuation) in module.continuations.iter().enumerate() {
             let Some(continuation) = continuation else {
@@ -90,15 +91,9 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
             {
                 continue;
             }
-            let transfers = module
-                .nodes
-                .iter()
-                .enumerate()
-                .filter_map(|(index, node)| {
-                    let node = node.as_ref()?;
-                    (control_target_count(node, target) != 0).then_some(CpsNodeId(index as u32))
-                })
-                .collect::<Vec<_>>();
+            let Some(transfers) = transfers_by_target.get(&target) else {
+                continue;
+            };
             if transfers.len() != 1 || transfers[0] == continuation.body {
                 continue;
             }
@@ -123,25 +118,49 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
     }
     changed
 }
-pub(super) fn control_target_count(node: &CpsNode, target: CpsContId) -> usize {
+/// Index every continuation to the nodes that transfer control to it, one entry
+/// per referencing node in ascending node order. Building this once per rewrite
+/// pass keeps single-use detection linear instead of rescanning every node for
+/// each continuation.
+fn continuation_transfers(module: &CpsModule) -> BTreeMap<CpsContId, Vec<CpsNodeId>> {
+    let mut transfers: BTreeMap<CpsContId, Vec<CpsNodeId>> = BTreeMap::new();
+    let mut targets = BTreeSet::new();
+    for (index, node) in module.nodes.iter().enumerate() {
+        let Some(node) = node.as_ref() else {
+            continue;
+        };
+        targets.clear();
+        collect_control_targets(node, &mut targets);
+        for &target in &targets {
+            transfers
+                .entry(target)
+                .or_default()
+                .push(CpsNodeId(index as u32));
+        }
+    }
+    transfers
+}
+fn collect_control_targets(node: &CpsNode, targets: &mut BTreeSet<CpsContId>) {
     match node {
         CpsNode::ApplyFun { return_to, .. }
         | CpsNode::Foreign { return_to, .. }
         | CpsNode::Cell { return_to, .. }
-        | CpsNode::Intrinsic { return_to, .. } => usize::from(*return_to == target),
-        CpsNode::ApplyCont(edge) => usize::from(edge.target == target),
-        CpsNode::Switch { cases, default, .. } => cases
-            .values()
-            .chain(default.iter())
-            .filter(|edge| edge.target == target)
-            .count(),
+        | CpsNode::Intrinsic { return_to, .. } => {
+            targets.insert(*return_to);
+        }
+        CpsNode::ApplyCont(edge) => {
+            targets.insert(edge.target);
+        }
+        CpsNode::Switch { cases, default, .. } => {
+            targets.extend(cases.values().chain(default.iter()).map(|edge| edge.target));
+        }
         CpsNode::LetValue { .. }
         | CpsNode::LetPrim { .. }
         | CpsNode::LetFun { .. }
         | CpsNode::LetCont { .. }
         | CpsNode::Exit { .. }
         | CpsNode::Unreachable
-        | CpsNode::RecInit { .. } => 0,
+        | CpsNode::RecInit { .. } => {}
     }
 }
 pub(super) fn inline_continuation(

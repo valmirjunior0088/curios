@@ -20,8 +20,6 @@ use super::{
 
 pub(super) const MULTI_SITE_INLINE_LIMIT: usize = 8;
 pub(super) const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
-pub(super) const PURE_EVALUATION_STEP_LIMIT: usize = 10_000;
-pub(super) const PURE_EVALUATION_DEPTH_LIMIT: usize = 256;
 pub(super) const SCC_CLONE_LIMIT: usize = 64;
 pub(super) const SCC_CLONE_NODE_LIMIT: usize = 256;
 pub(super) const BRANCH_CLONE_LIMIT: usize = 64;
@@ -32,11 +30,6 @@ pub fn optimize(module: &mut CpsModule) {
     module
         .verify()
         .expect("invalid high CPS before optimization");
-
-    // The pure-evaluation limits await their ported parity passes (residual
-    // optimization parity, deferred to the baseline comparison). Referenced here
-    // until those land so they are not dead code.
-    let _pending_limits = (PURE_EVALUATION_STEP_LIMIT, PURE_EVALUATION_DEPTH_LIMIT);
 
     let mut scc_clone_budget = SCC_CLONE_LIMIT;
     let mut branch_clone_budget = BRANCH_CLONE_LIMIT;
