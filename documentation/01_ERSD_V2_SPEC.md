@@ -90,7 +90,7 @@ By contrast, creating an unused function does not evaluate its body. A function 
 
 The current recursive form is simultaneous and can contain functions as well as computed items. Function-only recursion is ordinary lexical recursion. Mixed groups may contain a bidirectional initialization dependency in which a computed member needs a function value and the function captures that member.
 
-Ersd v2 preserves the source behavior accepted when Cont v2 lands. Computed-only initialization cycles continue to produce `CyclicRecComputed` unless a separate language decision changes that rule. Any restrictions represented by `UnsupportedSyncRecItem` are frozen from the landed pipeline during Phase 0 rather than silently weakened or strengthened.
+Ersd v2 preserves the source behavior accepted when Cont v2 lands. Computed-only initialization cycles continue to produce `CyclicRecComputed` unless a separate language decision changes that rule. The landed lowering emits no other recursive-initialization diagnostic: the previously specified `UnsupportedSyncRecItem` restriction was unreachable in the landed pipeline and has been removed, so a call/match-valued `rec` member is either sequenced into a supported mixed-initialization knot or rejected as a computed cycle.
 
 ### Sequence elimination has semantic structure
 
@@ -892,7 +892,7 @@ i31 boundary tests do not appear in Ersd semantic tests. They remain in Cont-to-
 - Nonrecursive functions, self recursion, mutual function recursion, and deep function groups.
 - Acyclic computed recursive groups with source-order tie-breaking.
 - Every mixed function/computed pattern accepted by the landed Cont contract.
-- Deterministic `CyclicRecComputed` and retained `UnsupportedSyncRecItem` cases.
+- Deterministic `CyclicRecComputed` cases.
 - Residual mixed knots lower to the exact landed Cont recursive-initialization form.
 - Derived free values agree before and after specialization and pruning.
 
