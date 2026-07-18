@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsFunId, CpsIntrinsicOp, CpsLiteral, CpsNode,
-        CpsNodeId, CpsPrimOp, CpsValueExpr,
+        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsicOp,
+        CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsPrimOp, CpsValueExpr, CpsValueId,
     },
     curios_abi::ForeignFunction,
     curios_base::{Entropy, id},
@@ -171,7 +171,7 @@ impl fmt::Display for MachineVerifyError {
     }
 }
 
-pub(crate) fn lower(source: &crate::CpsModule) -> MachineModule {
+pub(crate) fn lower(source: &CpsModule) -> MachineModule {
     source
         .verify()
         .expect("invalid high CPS at machine boundary");
@@ -241,7 +241,7 @@ pub(crate) fn lower(source: &crate::CpsModule) -> MachineModule {
     module
 }
 
-fn escaping_functions(source: &crate::CpsModule) -> BTreeSet<CpsFunId> {
+fn escaping_functions(source: &CpsModule) -> BTreeSet<CpsFunId> {
     let mut escaping = BTreeSet::new();
     for node in source.nodes().iter().flatten() {
         for atom in cps_atoms(node) {
@@ -253,7 +253,7 @@ fn escaping_functions(source: &crate::CpsModule) -> BTreeSet<CpsFunId> {
     escaping
 }
 
-fn free_runtime_values(source: &crate::CpsModule, function: CpsFunId) -> Vec<MachineValueId> {
+fn free_runtime_values(source: &CpsModule, function: CpsFunId) -> Vec<MachineValueId> {
     let definition = source.function(function).unwrap();
     let mut bound = definition
         .params
@@ -303,7 +303,7 @@ fn free_runtime_values(source: &crate::CpsModule, function: CpsFunId) -> Vec<Mac
     used.difference(&bound).copied().collect()
 }
 
-fn owned_runtime_values(source: &crate::CpsModule, function: CpsFunId) -> BTreeSet<MachineValueId> {
+fn owned_runtime_values(source: &CpsModule, function: CpsFunId) -> BTreeSet<MachineValueId> {
     let definition = source.function(function).unwrap();
     let mut owned = definition
         .params
@@ -333,7 +333,7 @@ fn owned_runtime_values(source: &crate::CpsModule, function: CpsFunId) -> BTreeS
     owned
 }
 
-fn referenced_functions(source: &crate::CpsModule, function: CpsFunId) -> BTreeSet<CpsFunId> {
+fn referenced_functions(source: &CpsModule, function: CpsFunId) -> BTreeSet<CpsFunId> {
     let mut dependencies = BTreeSet::new();
     for node_id in function_nodes(source, function) {
         let node = source.node(node_id).unwrap();
@@ -353,7 +353,7 @@ fn referenced_functions(source: &crate::CpsModule, function: CpsFunId) -> BTreeS
     dependencies
 }
 
-fn function_nodes(source: &crate::CpsModule, function: CpsFunId) -> Vec<CpsNodeId> {
+fn function_nodes(source: &CpsModule, function: CpsFunId) -> Vec<CpsNodeId> {
     let mut nodes = Vec::new();
     let mut work = vec![source.function(function).unwrap().body];
     let mut visited = BTreeSet::new();
@@ -381,9 +381,9 @@ fn function_nodes(source: &crate::CpsModule, function: CpsFunId) -> Vec<CpsNodeI
 }
 
 pub(crate) struct MachineFunctionLowerer<'a> {
-    source: &'a crate::CpsModule,
+    source: &'a CpsModule,
     id: CpsFunId,
-    function: &'a crate::CpsFunction,
+    function: &'a CpsFunction,
     free_values: &'a BTreeMap<CpsFunId, Vec<MachineValueId>>,
     blocks: BTreeMap<MachineBlockId, MachineBlock>,
     block_scopes: BTreeMap<MachineBlockId, Vec<MachineBlockId>>,
@@ -398,9 +398,9 @@ pub(crate) struct MachineFunctionLowerer<'a> {
 
 impl<'a> MachineFunctionLowerer<'a> {
     fn new(
-        source: &'a crate::CpsModule,
+        source: &'a CpsModule,
         id: CpsFunId,
-        function: &'a crate::CpsFunction,
+        function: &'a CpsFunction,
         free_values: &'a BTreeMap<CpsFunId, Vec<MachineValueId>>,
     ) -> Self {
         let block_entropy = Entropy::new();
@@ -601,7 +601,7 @@ impl<'a> MachineFunctionLowerer<'a> {
 
     fn lower_edge(
         &mut self,
-        edge: &crate::CpsEdge,
+        edge: &CpsEdge,
         instructions: &mut Vec<MachineInstruction>,
     ) -> MachineEdge {
         MachineEdge {
@@ -785,12 +785,12 @@ impl<'a> MachineFunctionLowerer<'a> {
     }
 }
 
-fn value_id(value: crate::CpsValueId) -> MachineValueId {
+fn value_id(value: CpsValueId) -> MachineValueId {
     MachineValueId(value.index() as u32)
 }
 
 fn initialization_function_atoms(
-    source: &crate::CpsModule,
+    source: &CpsModule,
     body: CpsNodeId,
     ready: CpsNodeId,
 ) -> BTreeSet<CpsFunId> {
@@ -1215,8 +1215,8 @@ mod tests {
         super::value_id,
         crate::{
             CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral,
-            CpsModule, CpsNode, EmissionHostTarget, EmissionTail, MachineInstruction,
-            MachineOperand, MachineTerminator, into_wasm, lower,
+            CpsModule, CpsNode, EmissionHostTarget, EmissionTail, MachineFunction,
+            MachineInstruction, MachineModule, MachineOperand, MachineTerminator, into_wasm, lower,
         },
     };
 
@@ -1444,7 +1444,7 @@ mod tests {
         let _wasm = into_wasm(&source);
     }
 
-    fn machine_make_closures(function: &crate::MachineFunction, target: CpsFunId) -> usize {
+    fn machine_make_closures(function: &MachineFunction, target: CpsFunId) -> usize {
         function
             .blocks
             .values()
@@ -1458,7 +1458,7 @@ mod tests {
             .count()
     }
 
-    fn machine_shell_count(machine: &crate::MachineModule) -> usize {
+    fn machine_shell_count(machine: &MachineModule) -> usize {
         machine
             .functions
             .values()

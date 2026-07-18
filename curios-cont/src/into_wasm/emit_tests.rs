@@ -10,14 +10,14 @@
 use {
     crate::{
         CpsAtom, CpsCallee, CpsCellOp, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsicOp,
-        CpsLiteral, CpsNode, CpsPrimOp, CpsValueExpr, into_wasm,
+        CpsLiteral, CpsModule, CpsNode, CpsPrimOp, CpsValueExpr, into_wasm,
     },
     curios_base::{Grain, PackedBin},
 };
 
 /// The emitted module rendered as WAT text — the public inspection surface
 /// (`Module`'s items are private; `Display` is how consumers read it back).
-fn wat(module: &crate::CpsModule) -> String {
+fn wat(module: &CpsModule) -> String {
     into_wasm(module).to_string()
 }
 
@@ -71,8 +71,8 @@ const fn flt(value: f32) -> CpsAtom {
 /// A nullary `main` that binds one primitive over `args` and exits with the
 /// result — the CPS analogue of the deleted fixtures' "compute one thing, exit
 /// with it". `into_wasm` does not fold, so the op lowers verbatim.
-fn prim_main(op: CpsPrimOp, args: Vec<CpsAtom>) -> crate::CpsModule {
-    let mut module = crate::CpsModule::new();
+fn prim_main(op: CpsPrimOp, args: Vec<CpsAtom>) -> CpsModule {
+    let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let result = module.add_value(Some("result".into()), false);
@@ -220,8 +220,8 @@ fn flt_to_int_truncates_and_guards_the_range() {
 // --- Aggregates / packed / cells -----------------------------------------
 
 /// Construct a tuple then project field 0 from it.
-fn tuple_project() -> crate::CpsModule {
-    let mut module = crate::CpsModule::new();
+fn tuple_project() -> CpsModule {
+    let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let tuple = module.add_value(Some("tuple".into()), false);
@@ -261,8 +261,8 @@ fn tuple_construction_and_projection() {
 }
 
 /// A list literal then its length.
-fn list_len() -> crate::CpsModule {
-    let mut module = crate::CpsModule::new();
+fn list_len() -> CpsModule {
+    let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let list = module.add_value(Some("list".into()), false);
@@ -302,8 +302,8 @@ fn list_literal_builds_a_rope_leaf() {
 }
 
 /// A packed-bytes literal then its length.
-fn bin_len() -> crate::CpsModule {
-    let mut module = crate::CpsModule::new();
+fn bin_len() -> CpsModule {
+    let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let bin = module.add_value(Some("bin".into()), false);
@@ -348,8 +348,8 @@ fn packed_bin_literal_builds_a_rope_leaf() {
 }
 
 /// Allocate a cell, read it back, and exit with the value.
-fn cell_roundtrip() -> crate::CpsModule {
-    let mut module = crate::CpsModule::new();
+fn cell_roundtrip() -> CpsModule {
+    let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let cell = module.add_value(Some("cell".into()), false);
@@ -405,7 +405,7 @@ fn cell_new_and_get_use_the_cell_struct() {
 
 /// A host call whose signature has `results` results, resuming into a
 /// continuation that binds them all and exits with the first.
-fn foreign_call(name: &str) -> crate::CpsModule {
+fn foreign_call(name: &str) -> CpsModule {
     let function = curios_abi::sys_io()
         .get(name)
         .unwrap_or_else(|| panic!("sys_io defines {name}"))
@@ -413,7 +413,7 @@ fn foreign_call(name: &str) -> crate::CpsModule {
     let arity = function.signature.params.len();
     let results = function.signature.results.len();
 
-    let mut module = crate::CpsModule::new();
+    let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let bound = (0..results)
@@ -473,8 +473,8 @@ fn foreign_result_arity_shapes_the_resume() {
 
 /// `main` builds a closure of `target` and passes it to `apply`, which invokes
 /// it indirectly — an unknown callee that must go through the closure ABI.
-fn indirect_apply() -> crate::CpsModule {
-    let mut module = crate::CpsModule::new();
+fn indirect_apply() -> CpsModule {
+    let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let target = module.reserve_function(Some("target".into()));
     let apply = module.reserve_function(Some("apply".into()));
@@ -599,8 +599,8 @@ fn bin_concat_builds_o1_nodes_inline_without_a_helper() {
 }
 
 /// A list literal read at an index — the list-rope read helper.
-fn list_read() -> crate::CpsModule {
-    let mut module = crate::CpsModule::new();
+fn list_read() -> CpsModule {
+    let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let list = module.add_value(Some("list".into()), false);
@@ -640,8 +640,8 @@ fn list_read_calls_the_list_read_helper() {
 /// Map a closure over a list literal — the `lst/map` intrinsic, which threads
 /// the mapping function through as a closure and services the fill via the
 /// shared helper.
-fn list_map() -> crate::CpsModule {
-    let mut module = crate::CpsModule::new();
+fn list_map() -> CpsModule {
+    let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let mapper = module.reserve_function(Some("mapper".into()));
 
@@ -712,8 +712,8 @@ fn list_map_calls_the_map_helper() {
 /// compile-time analogue of the deleted deep-rope fixtures. Lowering must stay
 /// on the default test-thread stack (iterative, per `AGENTS.md`), so the only
 /// assertion that matters is that `into_wasm` returns at all.
-fn deep_bin_chain(depth: usize) -> crate::CpsModule {
-    let mut module = crate::CpsModule::new();
+fn deep_bin_chain(depth: usize) -> CpsModule {
+    let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let values = (0..depth)
@@ -757,8 +757,8 @@ fn deep_rope_chain_lowers_on_the_default_stack() {
 // --- Control-flow structuring (loops vs. localized dispatch) ---------------
 
 /// A single self-recursive continuation: one entry, so a reducible natural loop.
-fn reducible_loop() -> crate::CpsModule {
-    let mut module = crate::CpsModule::new();
+fn reducible_loop() -> CpsModule {
+    let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let loop_cont = module.reserve_continuation();
@@ -799,10 +799,10 @@ fn reducible_loop() -> crate::CpsModule {
 /// Two continuations that jump to each other, entered from *both* arms of a
 /// switch — a two-entry (irreducible) component that only a localized
 /// dispatcher can structure.
-fn irreducible_pair() -> crate::CpsModule {
+fn irreducible_pair() -> CpsModule {
     use std::collections::BTreeMap;
 
-    let mut module = crate::CpsModule::new();
+    let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let k1 = module.reserve_continuation();

@@ -11,16 +11,5 @@ mod machine;
 pub(crate) use machine::*;
 
 mod into_wasm;
+pub use into_wasm::into_wasm;
 pub(crate) use into_wasm::*;
-
-/// Run the deterministic high-CPS optimization pipeline in place.
-pub fn optimize(module: &mut CpsModule) {
-    optimize_cps(module);
-}
-
-/// Close high CPS, build the private machine representation, and emit Wasm.
-pub fn into_wasm(module: &CpsModule) -> curios_wasm::Module {
-    let machine = machine::lower(module);
-    let structured = machine::structurize(&machine);
-    into_wasm::emit(&structured)
-}

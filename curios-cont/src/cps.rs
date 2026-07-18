@@ -1289,8 +1289,18 @@ pub(crate) fn visit_atoms_mut(node: &mut CpsNode, visitor: &mut impl FnMut(&mut 
     }
 }
 
+mod analysis;
+mod contify;
+mod evaluate;
+mod inline;
 mod optimize;
-pub(crate) use optimize::optimize as optimize_cps;
+mod reachable;
+mod simplify;
+mod specialize;
+pub use optimize::optimize;
+
+#[cfg(test)]
+mod optimize_tests;
 
 impl fmt::Display for CpsModule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
