@@ -20,11 +20,7 @@ use {
         PurePrim, Rec, Subterm, Term, Tuple,
     },
     curios_base::Grain,
-    std::{
-        collections::{HashMap, HashSet},
-        iter,
-        sync::Arc,
-    },
+    std::{collections::HashSet, iter, sync::Arc},
 };
 
 /// The immediate sub-terms of a term, in canonical child order, including
@@ -159,13 +155,12 @@ pub(super) fn refresh_touched(
     module: &mut Module,
     touched: &HashSet<(usize, usize)>,
     touched_body: bool,
-    introduced: &HashMap<String, bool>,
 ) {
     for &(item, member) in touched {
-        refresh_captures(root_mut(module, Loc::Item { item, member }), introduced);
+        refresh_captures(root_mut(module, Loc::Item { item, member }));
     }
     if touched_body {
-        refresh_captures(root_mut(module, Loc::Body), introduced);
+        refresh_captures(root_mut(module, Loc::Body));
     }
 }
 
@@ -174,7 +169,6 @@ pub(super) fn clone_args(args: &[Argument]) -> Vec<Argument> {
     args.iter()
         .map(|arg| Argument {
             name: arg.name.clone(),
-            candidate: arg.candidate,
         })
         .collect()
 }
@@ -374,25 +368,16 @@ fn copy_cell(prim: &CellPrim) -> CellPrim {
 }
 
 /// Fix up closure captures bottom-up after a rewrite: each nested closure's
-/// captures are exactly its body's free names minus its parameters. Candidate
-/// flags are preserved from each closure's prior captures, and the `introduced`
-/// names carry the flags the rewriting pass assigns. Bottom-up order matters:
-/// an outer body's free names depend on its inner closures' freshly-fixed
-/// captures. Unlike `worker_wrapper`'s structural walk, this one descends into
-/// primitive operands too — a closure value can sit inside `LstMap`.
-pub(super) fn refresh_captures(term: &mut Term, introduced: &HashMap<String, bool>) {
+/// captures are exactly its body's free names minus its parameters. Bottom-up
+/// order matters: an outer body's free names depend on its inner closures'
+/// freshly-fixed captures. Unlike `worker_wrapper`'s structural walk, this one
+/// descends into primitive operands too — a closure value can sit inside `LstMap`.
+pub(super) fn refresh_captures(term: &mut Term) {
     for child in children_mut(term) {
-        refresh_captures(child, introduced);
+        refresh_captures(child);
     }
 
     if let Subterm::Func(func) = term.as_subterm_mut() {
-        let mut candidate = func
-            .captures
-            .iter()
-            .map(|capture| (capture.name.clone(), capture.candidate))
-            .collect::<HashMap<String, bool>>();
-        candidate.extend(introduced.iter().map(|(name, cand)| (name.clone(), *cand)));
-
         let params = func
             .params
             .iter()
@@ -404,10 +389,7 @@ pub(super) fn refresh_captures(term: &mut Term, introduced: &HashMap<String, boo
             .free_names()
             .into_iter()
             .filter(|name| !params.contains(name.as_str()))
-            .map(|name| Argument {
-                candidate: candidate.get(&name).copied().unwrap_or(false),
-                name,
-            })
+            .map(|name| Argument { name })
             .collect();
     }
 }

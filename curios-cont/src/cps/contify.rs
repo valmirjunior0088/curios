@@ -96,7 +96,7 @@ pub(super) fn contify_call(module: &mut CpsModule, callee: CpsFunId, call: CpsNo
 
     let loop_cont = module.reserve_continuation();
     let return_bridge = module.reserve_continuation();
-    let return_value = module.add_value(Some("contified return".into()), false);
+    let return_value = module.add_value(Some("contified return".into()));
     let return_body = module.reserve_node();
     let loop_scope = module.reserve_node();
     for node_id in function_nodes(module, callee) {

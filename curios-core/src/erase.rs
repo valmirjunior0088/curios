@@ -12,7 +12,7 @@ use {
         Variant, expect_prim_head, infer, is_prop, reduce_with, refine_head,
     },
     curios_base::{Grain, Qualifier},
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeMap,
 };
 
 /// Whether a value of type `type_` is dropped at runtime. Erasure is sort-driven:
@@ -92,14 +92,13 @@ fn erase_func(
 
     // Walk the lambda's telescope (whose `Done` is the body) alongside the
     // checked function type's telescope (whose `Done` is the output type),
-    // generating a fresh name per parameter and recording the candidate flag
-    // from each expected domain. The lambda's own domains are erased away.
+    // generating a fresh name per relevant parameter. The lambda's own domains
+    // are erased away.
     fn walk(
         context: &mut Context,
         body: Telescope<Term>,
         type_: Telescope<Term>,
         names: &mut Vec<String>,
-        candidates: &mut Vec<bool>,
         dropped: &mut Vec<String>,
     ) -> Result<(Term, Term), Error> {
         match (body, type_) {
@@ -117,17 +116,13 @@ fn erase_func(
                 context.assume(&name, &type_);
                 match erasable {
                     true => dropped.push(name),
-                    false => {
-                        candidates.push(is_candidate(context, &type_)?);
-                        names.push(name);
-                    }
+                    false => names.push(name),
                 }
                 walk(
                     context,
                     body_rest.open(&[&x]),
                     type_rest.open(&[&x]),
                     names,
-                    candidates,
                     dropped,
                 )
             }
@@ -136,7 +131,6 @@ fn erase_func(
     }
 
     let mut param_names = Vec::new();
-    let mut candidates = Vec::new();
     let mut dropped = Vec::new();
 
     let (erased_body, captures) = context.with_frame(|context| {
@@ -145,7 +139,6 @@ fn erase_func(
             telescope.clone(),
             ft.telescope,
             &mut param_names,
-            &mut candidates,
             &mut dropped,
         )?;
 
@@ -175,27 +168,20 @@ fn erase_func(
         // is what keeps a variable that survives only inside an erased position —
         // an erased constructor field or a type-level index — from being threaded
         // as a capture with no runtime value (which would leave `into_cont`
-        // demanding an erased value). The candidate flag rides from here — the last
-        // point a binder's type is known — down to `cont`, where the optimizer
-        // specializes function-typed args.
+        // demanding an erased value).
         let captures = erased_body
             .free_names()
             .into_iter()
             .filter(|name| !param_names.contains(name) && !dropped.contains(name))
-            .map(|name| {
-                let type_ = infer(context, &Term::free_var(&name))?;
-                let candidate = is_candidate(context, &type_)?;
-                Ok(curios_ersd::Argument { name, candidate })
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
+            .map(|name| curios_ersd::Argument { name })
+            .collect::<Vec<_>>();
 
         Ok::<_, Error>((erased_body, captures))
     })?;
 
     let params = param_names
         .into_iter()
-        .zip(candidates)
-        .map(|(name, candidate)| curios_ersd::Argument { name, candidate })
+        .map(|name| curios_ersd::Argument { name })
         .collect();
 
     Ok(curios_ersd::Subterm::Func(curios_ersd::Func {
@@ -204,84 +190,6 @@ fn erase_func(
         body: erased_body,
     })
     .into())
-}
-
-/// Whether an argument of type `type_` is a specialization candidate, after
-/// reduction — i.e. its erased value is a shape the `cont` specializer can bake
-/// in as a compile-time constant:
-///
-/// - a **function type** — a first-class closure value, devirtualizable;
-/// - **`Type`** — an erased type argument (a unit at runtime);
-/// - a **record** (tuple or `struct`/`concept`) all of whose *relevant* fields are
-///   themselves candidates. This is what makes a **witness** a candidate: a
-///   one-method concept (`Mul(Nat)`) newtype-collapses to its bare method closure,
-///   a many-method concept (`Cmp(Nat)`) erases to a tuple of method closures, and
-///   an all-erasable record to unit — each a shape `specialize_calls` can bake, so
-///   resolved instance arguments devirtualize to their primitives. Mirrors
-///   [`erase_struct`]'s collapse: relevant-field count decides bare/tuple/unit, and
-///   every relevant field must itself be bakeable.
-///
-/// Reduction matters: an aliased or computed type only exposes its head in
-/// weak-head normal form.
-fn is_candidate(context: &mut Context, type_: &Term) -> Result<bool, Error> {
-    is_candidate_seen(context, type_, &mut BTreeSet::new())
-}
-
-/// [`is_candidate`] with a path set of the record types currently being inspected,
-/// so a self- or mutually-recursive record (`struct S { next : S }`) is judged a
-/// non-candidate rather than looping. Path-scoped (inserted on entry, removed on
-/// exit) so a type recurring in *sibling* field positions is still each considered.
-fn is_candidate_seen(
-    context: &mut Context,
-    type_: &Term,
-    seen: &mut BTreeSet<String>,
-) -> Result<bool, Error> {
-    Ok(match &*reduce_with(context, type_)? {
-        Subterm::FuncType(_) | Subterm::Type => true,
-        Subterm::TupleType(TupleType { telescope }) => {
-            all_relevant_candidate(context, telescope.clone(), seen)?
-        }
-        Subterm::StructType(StructType { name, params }) => {
-            if !seen.insert(name.clone()) {
-                return Ok(false);
-            }
-            let structure = context
-                .structure(name)
-                .cloned()
-                .expect("is_candidate: struct type names a registered struct");
-            let fields = structure.fields_at(params);
-            let result = all_relevant_candidate(context, fields, seen)?;
-            seen.remove(name);
-            result
-        }
-        _ => false,
-    })
-}
-
-/// Whether every *relevant* (non-erasable) field of a record's field telescope is
-/// itself a candidate — the condition under which the record erases to a bakeable
-/// value (a bare closure for one relevant field, a tuple of them for several, unit
-/// for none). Each binder is opened opaquely, exactly as [`erasure_mask`] does,
-/// since a later field's type may depend on an earlier binder.
-fn all_relevant_candidate(
-    context: &mut Context,
-    mut telescope: Telescope<()>,
-    seen: &mut BTreeSet<String>,
-) -> Result<bool, Error> {
-    loop {
-        match telescope {
-            Telescope::Cons(field_type, rest) => {
-                if !is_erasable(context, &field_type)?
-                    && !is_candidate_seen(context, &field_type, seen)?
-                {
-                    break Ok(false);
-                }
-                let x = Term::free_var(context.fresh(rest.first_label()));
-                telescope = rest.open(&[&x]);
-            }
-            Telescope::Done(_) => break Ok(true),
-        }
-    }
 }
 
 fn erase_apply(context: &mut Context, apply: &Apply) -> Result<curios_ersd::Term, Error> {

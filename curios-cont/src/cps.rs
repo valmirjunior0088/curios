@@ -355,7 +355,6 @@ pub enum CpsNode {
 #[derive(Debug, Clone)]
 pub struct CpsValueDef {
     pub debug_name: Option<String>,
-    pub candidate: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -488,12 +487,9 @@ impl CpsModule {
         *slot = Some(node);
     }
 
-    pub fn add_value(&mut self, debug_name: Option<String>, candidate: bool) -> CpsValueId {
+    pub fn add_value(&mut self, debug_name: Option<String>) -> CpsValueId {
         let id = CpsValueId(self.values.len() as u32);
-        self.values.push(Some(CpsValueDef {
-            debug_name,
-            candidate,
-        }));
+        self.values.push(Some(CpsValueDef { debug_name }));
         id
     }
 
@@ -1433,7 +1429,7 @@ mod tests {
         let mut module = CpsModule::new();
         let fun = module.reserve_function(Some("main".into()));
         let return_cont = module.reserve_continuation();
-        let result = module.add_value(Some("result".into()), false);
+        let result = module.add_value(Some("result".into()));
         let return_node = module.add_node(CpsNode::ApplyCont(CpsEdge {
             target: return_cont,
             args: vec![CpsAtom::Value(result)],
@@ -1468,7 +1464,7 @@ mod tests {
                     .then_some(CpsValueId(index as u32))
             })
             .unwrap();
-        let replacement = module.add_value(Some("replacement".into()), false);
+        let replacement = module.add_value(Some("replacement".into()));
         let entry = module.entry().unwrap();
         module.functions[entry.index()]
             .as_mut()
@@ -1495,7 +1491,7 @@ mod tests {
                     .then_some(CpsValueId(index as u32))
             })
             .unwrap();
-        let orphan = module.add_value(Some("orphan".into()), false);
+        let orphan = module.add_value(Some("orphan".into()));
         module.replace_atom(CpsUseTarget::Value(result), CpsAtom::Value(orphan));
 
         let error = module.verify().unwrap_err();
@@ -1514,7 +1510,7 @@ mod tests {
     #[test]
     fn verifier_rejects_primitive_arity_mismatch() {
         let mut module = minimal_module();
-        let result = module.add_value(None, false);
+        let result = module.add_value(None);
         let next = module.add_node(CpsNode::Unreachable);
         module.add_node(CpsNode::LetPrim {
             result,

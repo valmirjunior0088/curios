@@ -152,9 +152,8 @@ fn apply(module: &mut Module, rewrites: Vec<Rewrite>) {
     // captures, a residual call's item name) *under* enclosing closures whose
     // capture lists predate the rewrite. `into_cont` threads every global
     // through the enclosing captures, and `free_names`/prune read them — so
-    // every rewritten root's captures are recomputed. No names are introduced
-    // with flags: fresh global captures default to non-candidate.
-    refresh_touched(module, &touched, touched_body, &HashMap::new());
+    // every rewritten root's captures are recomputed.
+    refresh_touched(module, &touched, touched_body);
 }
 
 fn scan_root<'m>(evaluator: &mut Evaluator<'m>, root: &'m Term) -> Vec<(Vec<usize>, Term)> {

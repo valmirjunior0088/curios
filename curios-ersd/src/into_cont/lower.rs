@@ -86,7 +86,17 @@ impl Env {
     }
 }
 
-pub(super) fn lower(source: &ErsdModule) -> LowerResult<CpsModule> {
+/// Lower an optimized erased module into arena-backed high CPS.
+///
+/// The flat item list and module tail become a parameterless entry function.
+/// Lowering reserves recursive function and continuation identities before
+/// constructing their bodies, prunes unreachable recursive members from the
+/// continuation syntax, and preserves live mixed initialization knots as
+/// `CpsNode::RecInit`. Ordinary function return is an application of that
+/// function's bodyless `CpsFunction::return_cont`; only `IoExit` lowers to
+/// `CpsNode::Exit`.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
+pub fn lower(source: &ErsdModule) -> Result<CpsModule, Error> {
     let mut lowerer = Lowerer {
         module: CpsModule::new(),
     };
@@ -136,9 +146,7 @@ impl Lowerer {
             if let Some(atom) = Self::immediate_atom(term, env) {
                 atoms.push(atom);
             } else {
-                let value = self
-                    .module
-                    .add_value(Some(format!("operand{index}")), false);
+                let value = self.module.add_value(Some(format!("operand{index}")));
                 atoms.push(CpsAtom::Value(value));
                 dynamic.push((term, value));
             }
@@ -264,7 +272,7 @@ impl Lowerer {
             Subterm::Tuple(tuple) => {
                 let terms = tuple.fields.iter().collect();
                 self.lower_sequence(terms, env, move |lowerer, fields| {
-                    let result = lowerer.module.add_value(None, false);
+                    let result = lowerer.module.add_value(None);
                     let next = lowerer.jump(target, vec![CpsAtom::Value(result)]);
                     Ok(lowerer.module.add_node(CpsNode::LetValue {
                         result,
@@ -299,7 +307,7 @@ impl Lowerer {
         args: Vec<CpsAtom>,
         target: CpsContId,
     ) -> LowerResult<CpsNodeId> {
-        let result = self.module.add_value(None, false);
+        let result = self.module.add_value(None);
         let next = self.jump(target, vec![CpsAtom::Value(result)]);
         Ok(self.module.add_node(CpsNode::LetPrim {
             result,
@@ -328,9 +336,7 @@ impl Lowerer {
             .params
             .iter()
             .map(|param| {
-                let value = self
-                    .module
-                    .add_value(Some(param.name.clone()), param.candidate);
+                let value = self.module.add_value(Some(param.name.clone()));
                 body_env.insert(param.name.clone(), CpsAtom::Value(value));
                 value
             })
@@ -419,7 +425,7 @@ impl Lowerer {
                 continue;
             }
 
-            let value = self.module.add_value(Some(name.clone()), false);
+            let value = self.module.add_value(Some(name.clone()));
             let mut next_env = env.clone();
             next_env.insert(name.clone(), CpsAtom::Value(value));
             let continuation_body =
@@ -462,7 +468,7 @@ impl Lowerer {
                         continue;
                     }
 
-                    let value = self.module.add_value(Some(name.clone()), false);
+                    let value = self.module.add_value(Some(name.clone()));
                     let mut next_env = env.clone();
                     next_env.insert(name.clone(), CpsAtom::Value(value));
                     let continuation_body =
@@ -576,7 +582,7 @@ impl Lowerer {
                     functions.push((index, id, function));
                 }
                 _ => {
-                    let value = self.module.add_value(Some(name.clone()), false);
+                    let value = self.module.add_value(Some(name.clone()));
                     inner.insert(name.clone(), CpsAtom::Value(value));
                     computed.push((index, value, item));
                 }
@@ -713,7 +719,7 @@ impl Lowerer {
             None
         };
 
-        let head_value = self.module.add_value(Some("match/head".into()), false);
+        let head_value = self.module.add_value(Some("match/head".into()));
         let head_cont = self.module.reserve_continuation();
         let switch = self.module.add_node(CpsNode::Switch {
             scrutinee: CpsAtom::Value(head_value),
@@ -782,7 +788,7 @@ impl Lowerer {
                 );
                 continuations.push(default_cont);
 
-                let head_value = self.module.add_value(Some("nat/head".into()), false);
+                let head_value = self.module.add_value(Some("nat/head".into()));
                 let head_cont = self.module.reserve_continuation();
                 let switch = self.module.add_node(CpsNode::Switch {
                     scrutinee: CpsAtom::Value(head_value),
@@ -828,15 +834,15 @@ impl Lowerer {
         env: &Env,
         target: CpsContId,
     ) -> LowerResult<CpsNodeId> {
-        let head_value = self.module.add_value(Some("ind/head".into()), false);
-        let zero_value = self.module.add_value(Some("ind/zero".into()), false);
-        let loop_index = self.module.add_value(Some("ind/index".into()), false);
-        let loop_acc = self.module.add_value(Some("ind/acc".into()), false);
-        let step_index = self.module.add_value(Some(pred.into()), false);
-        let step_acc = self.module.add_value(Some(ih.into()), false);
-        let next_acc = self.module.add_value(Some("ind/next-acc".into()), false);
-        let next_index = self.module.add_value(Some("ind/next-index".into()), false);
-        let final_acc = self.module.add_value(Some("ind/result".into()), false);
+        let head_value = self.module.add_value(Some("ind/head".into()));
+        let zero_value = self.module.add_value(Some("ind/zero".into()));
+        let loop_index = self.module.add_value(Some("ind/index".into()));
+        let loop_acc = self.module.add_value(Some("ind/acc".into()));
+        let step_index = self.module.add_value(Some(pred.into()));
+        let step_acc = self.module.add_value(Some(ih.into()));
+        let next_acc = self.module.add_value(Some("ind/next-acc".into()));
+        let next_index = self.module.add_value(Some("ind/next-index".into()));
+        let final_acc = self.module.add_value(Some("ind/result".into()));
 
         let head_cont = self.module.reserve_continuation();
         let zero_cont = self.module.reserve_continuation();
@@ -894,7 +900,7 @@ impl Lowerer {
             },
         );
 
-        let comparison = self.module.add_value(Some("ind/done".into()), false);
+        let comparison = self.module.add_value(Some("ind/done".into()));
         let switch = self.module.add_node(CpsNode::Switch {
             scrutinee: CpsAtom::Value(comparison),
             cases: BTreeMap::from([(
@@ -991,12 +997,10 @@ impl Lowerer {
                         .map(|index| {
                             lowerer
                                 .module
-                                .add_value(Some(format!("foreign/result{index}")), false)
+                                .add_value(Some(format!("foreign/result{index}")))
                         })
                         .collect::<Vec<_>>();
-                    let record = lowerer
-                        .module
-                        .add_value(Some("foreign/record".into()), false);
+                    let record = lowerer.module.add_value(Some("foreign/record".into()));
                     let next = lowerer.jump(target, vec![CpsAtom::Value(record)]);
                     let pack = lowerer.module.add_node(CpsNode::LetValue {
                         result: record,
@@ -1045,7 +1049,7 @@ impl Lowerer {
             }
             Prim::Cell(CellPrim::Set(cell, value)) => {
                 self.lower_sequence(vec![cell, value], env, |lowerer, args| {
-                    let unit = lowerer.module.add_value(Some("cell/unit".into()), false);
+                    let unit = lowerer.module.add_value(Some("cell/unit".into()));
                     let next = lowerer.jump(target, vec![CpsAtom::Value(unit)]);
                     let pack = lowerer.module.add_node(CpsNode::LetValue {
                         result: unit,
@@ -1200,7 +1204,7 @@ impl Lowerer {
             }
             PurePrim::Lst(elements) => {
                 self.lower_sequence(elements.iter().collect(), env, |lowerer, elements| {
-                    let result = lowerer.module.add_value(None, false);
+                    let result = lowerer.module.add_value(None);
                     let next = lowerer.jump(target, vec![CpsAtom::Value(result)]);
                     Ok(lowerer.module.add_node(CpsNode::LetValue {
                         result,

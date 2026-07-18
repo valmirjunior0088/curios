@@ -75,7 +75,7 @@ fn prim_main(op: CpsPrimOp, args: Vec<CpsAtom>) -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
-    let result = module.add_value(Some("result".into()), false);
+    let result = module.add_value(Some("result".into()));
     let exit = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(result)),
     });
@@ -224,8 +224,8 @@ fn tuple_project() -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
-    let tuple = module.add_value(Some("tuple".into()), false);
-    let field = module.add_value(Some("field".into()), false);
+    let tuple = module.add_value(Some("tuple".into()));
+    let field = module.add_value(Some("field".into()));
     let exit = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(field)),
     });
@@ -265,8 +265,8 @@ fn list_len() -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
-    let list = module.add_value(Some("list".into()), false);
-    let len = module.add_value(Some("len".into()), false);
+    let list = module.add_value(Some("list".into()));
+    let len = module.add_value(Some("len".into()));
     let exit = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(len)),
     });
@@ -306,8 +306,8 @@ fn bin_len() -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
-    let bin = module.add_value(Some("bin".into()), false);
-    let len = module.add_value(Some("len".into()), false);
+    let bin = module.add_value(Some("bin".into()));
+    let len = module.add_value(Some("len".into()));
     let exit = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(len)),
     });
@@ -352,8 +352,8 @@ fn cell_roundtrip() -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
-    let cell = module.add_value(Some("cell".into()), false);
-    let value = module.add_value(Some("value".into()), false);
+    let cell = module.add_value(Some("cell".into()));
+    let value = module.add_value(Some("value".into()));
     let exit = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(value)),
     });
@@ -417,7 +417,7 @@ fn foreign_call(name: &str) -> CpsModule {
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let bound = (0..results)
-        .map(|i| module.add_value(Some(format!("result{i}")), false))
+        .map(|i| module.add_value(Some(format!("result{i}"))))
         .collect::<Vec<_>>();
     let exit = module.add_node(CpsNode::Exit {
         value: bound.first().copied().map(CpsAtom::Value),
@@ -494,7 +494,7 @@ fn indirect_apply() -> CpsModule {
         },
     );
 
-    let closure = module.add_value(Some("closure".into()), false);
+    let closure = module.add_value(Some("closure".into()));
     let apply_return = module.reserve_continuation();
     let apply_body = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Closure(closure),
@@ -603,8 +603,8 @@ fn list_read() -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
-    let list = module.add_value(Some("list".into()), false);
-    let elem = module.add_value(Some("elem".into()), false);
+    let list = module.add_value(Some("list".into()));
+    let elem = module.add_value(Some("elem".into()));
     let exit = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(elem)),
     });
@@ -646,7 +646,7 @@ fn list_map() -> CpsModule {
     let mapper = module.reserve_function(Some("mapper".into()));
 
     let mapper_return = module.reserve_continuation();
-    let element = module.add_value(Some("element".into()), false);
+    let element = module.add_value(Some("element".into()));
     let mapper_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: mapper_return,
         args: vec![CpsAtom::Value(element)],
@@ -661,8 +661,8 @@ fn list_map() -> CpsModule {
         },
     );
 
-    let list = module.add_value(Some("list".into()), false);
-    let mapped = module.add_value(Some("mapped".into()), false);
+    let list = module.add_value(Some("list".into()));
+    let mapped = module.add_value(Some("mapped".into()));
     let exit = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(mapped)),
     });
@@ -717,7 +717,7 @@ fn deep_bin_chain(depth: usize) -> CpsModule {
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let values = (0..depth)
-        .map(|i| module.add_value(Some(format!("v{i}")), false))
+        .map(|i| module.add_value(Some(format!("v{i}"))))
         .collect::<Vec<_>>();
     let mut next = module.add_node(CpsNode::Exit {
         value: Some(CpsAtom::Value(values[depth - 1])),
@@ -762,7 +762,7 @@ fn reducible_loop() -> CpsModule {
     let main = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let loop_cont = module.reserve_continuation();
-    let counter = module.add_value(Some("counter".into()), false);
+    let counter = module.add_value(Some("counter".into()));
     let again = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: loop_cont,
         args: vec![CpsAtom::Value(counter)],

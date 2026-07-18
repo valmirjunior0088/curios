@@ -274,11 +274,8 @@ pub enum NatMatch {
     },
 }
 
-/// A captured or parameter binder, plus its specialization-*candidate* flag: true
-/// when its (pre-erasure) type was a function, a `Type`, or unit. Computed during
-/// type-directed erasure (the last point types are available) and carried to
-/// `cont`, glued to the name so the two can never desync. Defaults to
-/// non-candidate, so a binder built from a bare name (`"x".into()`) is not one.
+/// A captured or parameter binder: the runtime name of a closure capture or
+/// function parameter. Built from a bare name (`"x".into()`).
 #[derive(Debug)]
 #[cfg_attr(
     feature = "archive",
@@ -286,7 +283,6 @@ pub enum NatMatch {
 )]
 pub struct Argument {
     pub name: String,
-    pub candidate: bool,
 }
 
 impl Argument {
@@ -297,10 +293,7 @@ impl Argument {
 
 impl<S: Into<String>> From<S> for Argument {
     fn from(name: S) -> Self {
-        Self {
-            name: name.into(),
-            candidate: false,
-        }
+        Self { name: name.into() }
     }
 }
 

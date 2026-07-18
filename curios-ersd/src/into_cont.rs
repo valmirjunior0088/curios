@@ -1,9 +1,9 @@
-mod v2;
+mod lower;
 
 #[cfg(test)]
 mod tests;
 
-use curios_cont::CpsModule;
+pub use lower::lower as into_cont;
 
 /// A `into_cont` lowering failure: a Curios language restriction earlier stages don't
 /// reject syntactically — only closures may be mutually recursive, and a call/match-valued
@@ -41,17 +41,3 @@ impl std::fmt::Display for Error {
 /// Shorthand for a lowering result: every fallible step in this module fails with the
 /// same [`Error`].
 type LowerResult<T> = Result<T, Error>;
-
-/// Lower an optimized erased module into arena-backed high CPS.
-///
-/// The flat item list and module tail become a parameterless entry function.
-/// Lowering reserves recursive function and continuation identities before
-/// constructing their bodies, prunes unreachable recursive members from the
-/// continuation syntax, and preserves live mixed initialization knots as
-/// `CpsNode::RecInit`. Ordinary function return is an application of that
-/// function's bodyless `CpsFunction::return_cont`; only `IoExit` lowers to
-/// `CpsNode::Exit`.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub fn into_cont(erased: &crate::Module) -> Result<CpsModule, Error> {
-    v2::lower(erased)
-}

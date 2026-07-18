@@ -259,7 +259,7 @@ pub(super) fn inline_call(
     for node in nodes.values() {
         if let CpsNode::LetValue { result, .. } | CpsNode::LetPrim { result, .. } = node {
             let definition = module.values[result.index()].as_ref().unwrap().clone();
-            let fresh = module.add_value(definition.debug_name, definition.candidate);
+            let fresh = module.add_value(definition.debug_name);
             values.insert(*result, CpsAtom::Value(fresh));
         }
     }
@@ -274,7 +274,7 @@ pub(super) fn inline_call(
         continuations.insert(id, fresh);
         for &param in &continuation.params {
             let definition = module.values[param.index()].as_ref().unwrap().clone();
-            let fresh = module.add_value(definition.debug_name, definition.candidate);
+            let fresh = module.add_value(definition.debug_name);
             values.insert(param, CpsAtom::Value(fresh));
         }
     }

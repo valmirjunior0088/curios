@@ -36,7 +36,7 @@ use {
     crate::{Apply, Argument, Func, Item, Module, Name, Prim, PurePrim, Rec, Subterm, Term},
     cursor::SliceCursor,
     monoid::MonoidAccumulator,
-    std::{collections::HashMap, iter, mem},
+    std::{iter, mem},
 };
 
 /// Introduce worker/wrapper transforms across the module, in place.
@@ -180,17 +180,6 @@ fn try_transform(name: &str, term: &mut Term, graph: &CallGraph) -> bool {
         MonoidAccumulator::lower(plan, &ctx, &mut worker_body);
     }
 
-    // The names the rewrite newly introduces, with the candidate flag each gets
-    // when it surfaces as a closure capture (the worker is a function — a
-    // specialization candidate; the offset and accumulator are scalars).
-    let introduced = iter::once((worker.clone(), true))
-        .chain(
-            threaded
-                .iter()
-                .map(|t| (t.param.name.clone(), t.param.candidate)),
-        )
-        .collect::<HashMap<String, bool>>();
-
     // Worker: `(orig…, threaded…) => worker_body`.
     let mut worker_params = clone_args(&params);
     worker_params.extend(threaded.iter().map(|t| clone_arg(&t.param)));
@@ -230,7 +219,7 @@ fn try_transform(name: &str, term: &mut Term, graph: &CallGraph) -> bool {
     // stale capture lists. Recompute every closure's captures bottom-up — exactly
     // once, after *both* changes have lowered — so each lists its body's free
     // variables; the wrapper recomputes too, dropping its now-unused self-ref.
-    refresh_captures(term, &introduced);
+    refresh_captures(term);
     true
 }
 
@@ -253,7 +242,6 @@ fn clone_args(args: &[Argument]) -> Vec<Argument> {
 fn clone_arg(arg: &Argument) -> Argument {
     Argument {
         name: arg.name.clone(),
-        candidate: arg.candidate,
     }
 }
 

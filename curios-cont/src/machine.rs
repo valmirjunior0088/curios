@@ -1334,7 +1334,7 @@ mod tests {
         let main = source.reserve_function(Some("main".into()));
         let function = source.reserve_function(Some("recursive closure".into()));
         let passive = source.reserve_function(Some("non-participating sibling".into()));
-        let computed = source.add_value(Some("computed capture".into()), false);
+        let computed = source.add_value(Some("computed capture".into()));
 
         let function_return = source.reserve_continuation();
         let function_body = source.add_node(CpsNode::ApplyCont(CpsEdge {
@@ -1490,8 +1490,8 @@ mod tests {
             },
         );
 
-        let first = source.add_value(Some("first".into()), false);
-        let second = source.add_value(Some("second".into()), false);
+        let first = source.add_value(Some("first".into()));
+        let second = source.add_value(Some("second".into()));
         let consumer_return = source.reserve_continuation();
         let consumer_body = source.add_node(CpsNode::ApplyCont(CpsEdge {
             target: consumer_return,
@@ -1554,7 +1554,7 @@ mod tests {
         );
 
         let main_return = source.reserve_continuation();
-        let result = source.add_value(Some("result".into()), false);
+        let result = source.add_value(Some("result".into()));
         let escape = source.add_node(CpsNode::ApplyCont(CpsEdge {
             target: main_return,
             args: vec![CpsAtom::Fun(target)],
@@ -1754,7 +1754,7 @@ mod tests {
         let mut source = CpsModule::new();
         let main = source.reserve_function(Some("main".into()));
         let return_cont = source.reserve_continuation();
-        let bound = source.add_value(Some("bound".into()), false);
+        let bound = source.add_value(Some("bound".into()));
         let exit = source.add_node(CpsNode::Exit {
             value: Some(CpsAtom::Value(bound)),
         });
@@ -1806,7 +1806,7 @@ mod tests {
         let (mut source, _) = exiting_main();
         let mut machine = lower(&source);
 
-        let result = value_id(source.add_value(None, false));
+        let result = value_id(source.add_value(None));
         let entry = machine.entry;
         let function = machine.functions.get_mut(&entry).unwrap();
         let entry_block = function.entry;

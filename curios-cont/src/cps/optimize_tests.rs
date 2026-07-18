@@ -100,7 +100,7 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
         target: return_cont,
         args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
     }));
-    let dead_total = module.add_value(Some("dead total".into()), false);
+    let dead_total = module.add_value(Some("dead total".into()));
     let total_node = module.add_node(CpsNode::LetPrim {
         result: dead_total,
         op: CpsPrimOp::NatEql,
@@ -110,7 +110,7 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
         ],
         next: return_node,
     });
-    let dead_trap = module.add_value(Some("dead trap".into()), false);
+    let dead_trap = module.add_value(Some("dead trap".into()));
     let trap_node = module.add_node(CpsNode::LetPrim {
         result: dead_trap,
         op: CpsPrimOp::NatDiv,
@@ -149,8 +149,8 @@ fn dead_parameter_elimination_rewrites_known_calls() {
     let mut module = CpsModule::new();
     let main = module.reserve_function(Some("main".into()));
     let callee = module.reserve_function(Some("callee".into()));
-    let kept = module.add_value(Some("kept".into()), false);
-    let removed = module.add_value(Some("removed".into()), false);
+    let kept = module.add_value(Some("kept".into()));
+    let removed = module.add_value(Some("removed".into()));
     let callee_return = module.reserve_continuation();
     let callee_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: callee_return,
@@ -204,11 +204,11 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
     let mut module = CpsModule::new();
     let entry = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
-    let seed = module.add_value(Some("seed".into()), false);
+    let seed = module.add_value(Some("seed".into()));
     let forwarding = module.reserve_continuation();
-    let forwarded = module.add_value(Some("forwarded".into()), false);
+    let forwarded = module.add_value(Some("forwarded".into()));
     let target = module.reserve_continuation();
-    let target_param = module.add_value(Some("target".into()), false);
+    let target_param = module.add_value(Some("target".into()));
     let target_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: return_cont,
         args: vec![CpsAtom::Value(target_param)],
@@ -271,7 +271,7 @@ fn known_value_analysis_leaves_local_continuation_parameters_to_beta_reduction()
     let entry = module.reserve_function(None);
     let return_cont = module.reserve_continuation();
     let continuation = module.reserve_continuation();
-    let parameter = module.add_value(None, false);
+    let parameter = module.add_value(None);
     let continuation_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: return_cont,
         args: vec![CpsAtom::Value(parameter)],
@@ -319,8 +319,8 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
     let entry = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let target = module.reserve_continuation();
-    let target_left = module.add_value(Some("target left".into()), false);
-    let target_right = module.add_value(Some("target right".into()), false);
+    let target_left = module.add_value(Some("target left".into()));
+    let target_right = module.add_value(Some("target right".into()));
     let target_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: return_cont,
         args: vec![CpsAtom::Value(target_right)],
@@ -334,7 +334,7 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
         },
     );
     let forwarding = module.reserve_continuation();
-    let forwarded = module.add_value(Some("forwarded".into()), false);
+    let forwarded = module.add_value(Some("forwarded".into()));
     let forwarding_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target,
         args: vec![
@@ -388,7 +388,7 @@ fn continuation_beta_rewrites_parameters_captured_by_nested_functions() {
     let entry = module.reserve_function(Some("main".into()));
     let return_cont = module.reserve_continuation();
     let continuation = module.reserve_continuation();
-    let captured = module.add_value(Some("captured".into()), false);
+    let captured = module.add_value(Some("captured".into()));
 
     let nested = module.reserve_function(Some("nested".into()));
     let nested_return = module.reserve_continuation();
@@ -456,9 +456,9 @@ fn known_call_inlining_clones_recursive_local_continuations() {
     let entry_return = module.reserve_continuation();
     let callee = module.reserve_function(None);
     let callee_return = module.reserve_continuation();
-    let callee_param = module.add_value(None, false);
+    let callee_param = module.add_value(None);
     let local_cont = module.reserve_continuation();
-    let local_param = module.add_value(None, false);
+    let local_param = module.add_value(None);
     let local_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: local_cont,
         args: vec![CpsAtom::Value(local_param)],
@@ -524,9 +524,9 @@ fn contifies_a_single_entry_tail_loop_and_bridges_switch_returns() {
     let entry_return = module.reserve_continuation();
     let loop_function = module.reserve_function(Some("loop".into()));
     let loop_return = module.reserve_continuation();
-    let loop_param = module.add_value(Some("loop argument".into()), false);
+    let loop_param = module.add_value(Some("loop argument".into()));
     let recur = module.reserve_continuation();
-    let recur_param = module.add_value(Some("recur argument".into()), false);
+    let recur_param = module.add_value(Some("recur argument".into()));
     let recur_body = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(loop_function),
         args: vec![CpsAtom::Value(recur_param)],
@@ -642,10 +642,10 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
     // `counter` is not.
     let loop_function = module.reserve_function(Some("loop".into()));
     let loop_return = module.reserve_continuation();
-    let invariant = module.add_value(Some("invariant".into()), false);
-    let counter = module.add_value(Some("counter".into()), false);
+    let invariant = module.add_value(Some("invariant".into()));
+    let counter = module.add_value(Some("counter".into()));
     let recur = module.reserve_continuation();
-    let recur_param = module.add_value(Some("recur".into()), false);
+    let recur_param = module.add_value(Some("recur".into()));
     let recur_body = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(loop_function),
         args: vec![CpsAtom::Value(invariant), CpsAtom::Value(recur_param)],
@@ -739,7 +739,7 @@ fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
     let trivial = |module: &mut CpsModule, name: &str| {
         let function = module.reserve_function(Some(name.into()));
         let function_return = module.reserve_continuation();
-        let param = module.add_value(Some(format!("{name} x")), false);
+        let param = module.add_value(Some(format!("{name} x")));
         let function_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
             target: function_return,
             args: vec![CpsAtom::Value(param)],
@@ -760,10 +760,10 @@ fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
 
     let loop_fn = module.reserve_function(Some("loop".into()));
     let loop_return = module.reserve_continuation();
-    let op = module.add_value(Some("op".into()), false);
-    let n = module.add_value(Some("n".into()), false);
+    let op = module.add_value(Some("op".into()));
+    let n = module.add_value(Some("n".into()));
     let after = module.reserve_continuation();
-    let after_r = module.add_value(Some("after r".into()), false);
+    let after_r = module.add_value(Some("after r".into()));
     let after_body = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(loop_fn),
         args: vec![CpsAtom::Value(op), CpsAtom::Value(after_r)],
@@ -778,7 +778,7 @@ fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
         },
     );
     let recur = module.reserve_continuation();
-    let recur_m = module.add_value(Some("recur m".into()), false);
+    let recur_m = module.add_value(Some("recur m".into()));
     let recur_body = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Closure(op),
         args: vec![CpsAtom::Value(recur_m)],
@@ -812,7 +812,7 @@ fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
     });
     let mut loop_body = scope;
     for _ in 0..padding {
-        let dead = module.add_value(None, false);
+        let dead = module.add_value(None);
         loop_body = module.add_node(CpsNode::LetPrim {
             result: dead,
             op: CpsPrimOp::NatAdd,
@@ -834,7 +834,7 @@ fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
     );
 
     let second = if second_is_mul { mul } else { add };
-    let x1 = module.add_value(Some("x1".into()), false);
+    let x1 = module.add_value(Some("x1".into()));
     let call2 = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(loop_fn),
         args: vec![CpsAtom::Fun(second), CpsAtom::Literal(CpsLiteral::Nat(4))],
@@ -1029,7 +1029,7 @@ fn helper_called(two_sites: bool) -> (CpsModule, CpsFunId) {
     let entry_return = module.reserve_continuation();
     let helper = module.reserve_function(Some("helper".into()));
     let helper_return = module.reserve_continuation();
-    let x = module.add_value(Some("x".into()), false);
+    let x = module.add_value(Some("x".into()));
     let helper_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: helper_return,
         args: vec![CpsAtom::Value(x)],
@@ -1050,7 +1050,7 @@ fn helper_called(two_sites: bool) -> (CpsModule, CpsFunId) {
             args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
             return_to: entry_return,
         });
-        let param = module.add_value(None, false);
+        let param = module.add_value(None);
         let bridge = module.reserve_continuation();
         module.define_continuation(
             bridge,
@@ -1131,8 +1131,8 @@ fn rec_init_module(captures: bool) -> (CpsModule, CpsNodeId) {
 
     let f = module.reserve_function(Some("f".into()));
     let f_return = module.reserve_continuation();
-    let a = module.add_value(Some("a".into()), false);
-    let v = module.add_value(Some("v".into()), false);
+    let a = module.add_value(Some("a".into()));
+    let v = module.add_value(Some("v".into()));
     let f_result = if captures {
         CpsAtom::Value(v)
     } else {
@@ -1233,9 +1233,9 @@ fn tagged_consumer(padding: usize, sites: &[u32]) -> (CpsModule, Vec<CpsNodeId>,
 
     let consume = module.reserve_function(Some("consume".into()));
     let consume_return = module.reserve_continuation();
-    let t = module.add_value(Some("t".into()), false);
-    let tag = module.add_value(Some("tag".into()), false);
-    let val = module.add_value(Some("val".into()), false);
+    let t = module.add_value(Some("t".into()));
+    let tag = module.add_value(Some("tag".into()));
+    let val = module.add_value(Some("val".into()));
     let switch = module.add_node(CpsNode::Switch {
         scrutinee: CpsAtom::Value(tag),
         cases: BTreeMap::from([
@@ -1272,7 +1272,7 @@ fn tagged_consumer(padding: usize, sites: &[u32]) -> (CpsModule, Vec<CpsNodeId>,
         next: project_val,
     });
     for _ in 0..padding {
-        let dead = module.add_value(None, false);
+        let dead = module.add_value(None);
         consume_body = module.add_node(CpsNode::LetPrim {
             result: dead,
             op: CpsPrimOp::NatAdd,
@@ -1298,7 +1298,7 @@ fn tagged_consumer(padding: usize, sites: &[u32]) -> (CpsModule, Vec<CpsNodeId>,
     // returning from site `i` runs site `i + 1`.
     let count = sites.len();
     let results: Vec<CpsValueId> = (0..count)
-        .map(|i| module.add_value(Some(format!("r{i}")), false))
+        .map(|i| module.add_value(Some(format!("r{i}"))))
         .collect();
     let ctors: Vec<CpsNodeId> = (0..count).map(|_| module.reserve_node()).collect();
     let calls: Vec<CpsNodeId> = (0..count).map(|_| module.reserve_node()).collect();
@@ -1312,7 +1312,7 @@ fn tagged_consumer(padding: usize, sites: &[u32]) -> (CpsModule, Vec<CpsNodeId>,
         }],
     }));
     for i in 0..count {
-        let value = module.add_value(Some(format!("v{i}")), false);
+        let value = module.add_value(Some(format!("v{i}")));
         module.define_node(
             ctors[i],
             CpsNode::LetValue {
@@ -1375,8 +1375,8 @@ fn rewrite_atoms_remaps_and_devirtualizes_a_closure_callee() {
     // when the original value is deleted), and a known function devirtualizes.
     let mut module = CpsModule::new();
     let ret = module.reserve_continuation();
-    let old = module.add_value(Some("old".into()), false);
-    let new = module.add_value(Some("new".into()), false);
+    let old = module.add_value(Some("old".into()));
+    let new = module.add_value(Some("new".into()));
     let target = module.reserve_function(Some("target".into()));
 
     let value_call = module.add_node(CpsNode::ApplyFun {
@@ -1535,9 +1535,9 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
 
     let consume = module.reserve_function(Some("consume".into()));
     let consume_return = module.reserve_continuation();
-    let t = module.add_value(Some("t".into()), false);
-    let tag = module.add_value(Some("tag".into()), false);
-    let child = module.add_value(Some("child".into()), false);
+    let t = module.add_value(Some("t".into()));
+    let tag = module.add_value(Some("tag".into()));
+    let child = module.add_value(Some("child".into()));
     let leaf = module.reserve_continuation();
     let node = module.reserve_continuation();
     let leaf_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
@@ -1605,7 +1605,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
         },
     );
 
-    let root = module.add_value(Some("root".into()), false);
+    let root = module.add_value(Some("root".into()));
     let call = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(consume),
         args: vec![CpsAtom::Value(root)],

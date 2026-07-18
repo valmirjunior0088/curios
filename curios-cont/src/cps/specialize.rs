@@ -361,7 +361,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
     let clone_body = clone_function.body;
     let old_param = params[index];
     let field_params: Vec<CpsValueId> = (1..arity)
-        .map(|field| module.add_value(Some(format!("field#{field}")), false))
+        .map(|field| module.add_value(Some(format!("field#{field}"))))
         .collect();
     let mut rebuilt = Vec::with_capacity(arity);
     rebuilt.push(CpsAtom::Literal(CpsLiteral::Nat(tag)));
@@ -550,7 +550,7 @@ pub(super) fn clone_scc(
     }
     for old in owned {
         let definition = module.values[old.index()].as_ref().unwrap().clone();
-        let fresh = module.add_value(definition.debug_name, definition.candidate);
+        let fresh = module.add_value(definition.debug_name);
         values.insert(old, fresh);
     }
 

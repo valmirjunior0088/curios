@@ -77,7 +77,6 @@ struct Minted {
 struct Plan {
     sites: Vec<Site>,
     minted: Vec<Minted>,
-    spec_names: HashMap<String, bool>,
 }
 
 fn plan(module: &Module) -> Plan {
@@ -109,25 +108,14 @@ fn plan(module: &Module) -> Plan {
         &mut sites,
     );
 
-    let spec_names = minter
-        .minted
-        .iter()
-        .map(|minted| (minted.name.clone(), true))
-        .collect();
-
     Plan {
         sites,
         minted: minter.minted,
-        spec_names,
     }
 }
 
 fn apply(module: &mut Module, plan: Plan) {
-    let Plan {
-        mut sites,
-        minted,
-        spec_names,
-    } = plan;
+    let Plan { mut sites, minted } = plan;
 
     // Descendant sites first: rewriting an ancestor `Apply` removes one of its
     // params, which would shift a descendant's recorded child index.
@@ -154,7 +142,7 @@ fn apply(module: &mut Module, plan: Plan) {
 
     // Call-site rewrites free new names (the spec items) under enclosing
     // closures; recompute their captures.
-    refresh_touched(module, &touched, touched_body, &spec_names);
+    refresh_touched(module, &touched, touched_body);
 
     // Insert each target's batch right after the target. `minted` is already
     // callee-first (a body's sub-requests push before the body itself), and
@@ -165,7 +153,7 @@ fn apply(module: &mut Module, plan: Plan) {
     let mut batches: HashMap<usize, Vec<(String, Term)>> = HashMap::new();
     for minted in minted {
         let mut body = minted.body;
-        refresh_captures(&mut body, &spec_names);
+        refresh_captures(&mut body);
         batches
             .entry(minted.target)
             .or_default()
@@ -449,7 +437,6 @@ impl<'m> Minter<'m> {
                 .filter(|(index, _)| *index != position)
                 .map(|(_, param)| Argument {
                     name: param.name.clone(),
-                    candidate: param.candidate,
                 })
                 .collect(),
             body,
