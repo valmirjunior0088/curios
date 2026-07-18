@@ -107,11 +107,35 @@ Add small, stable source fixtures and raw-Wasm inspection for the following gate
 
 ## 5. Baseline and performance comparison
 
-- Identify and record the committed pre-v2 revision used as the comparison baseline.
-- Reproduce representative LCG, trees, ordinary and mixed recursion, higher-order calls, host arities, cells, Nat induction, formatting, BigNat, and deep-let cases in revision worktrees.
-- Compare compiler time, peak memory where practical, raw and post-Binaryen Wasm size, direct/indirect calls, closure allocation, fallback shells, loop shape, and runtime.
-- Add temporary counters only for a concrete comparison question and remove them immediately afterward.
-- Do not add a permanent metrics surface merely to satisfy this working specification.
+The native comparison is complete and recorded below. The one remaining item is the single Docker correctness and benchmark run.
+
+### Baseline revision
+
+The committed pre-v2 baseline is `ec55850e` ("Link README to hosted documentation"), the parent of `30461f25` ("Advance continuation IR v2"): the first commit that adds `curios-cont/src/cps.rs` and `machine.rs` and removes the legacy `curios-cont/src/module.rs` and `optimize/*` region optimizer. It is the last revision with the full legacy Cont pipeline intact, and it shares the current `Stage::NAMES` and `profile` bin, so the measurement surface is identical to the compared v2 revision `c62c2fb`.
+
+### Native comparison result
+
+Six representative probes (LCG, trees, higher-order, mutual recursion, deep-let, BigNat/formatting), each runtime-tainted, compiled through the real prelude on both revisions in separate worktrees. All six outputs were identical on both revisions, and the LCG and trees anchors verified. Measurement used the emitted raw WAT, `curios_wasm::to_bytes`/`curios_binaryen::optimize` byte sizes, the `profile` bin, and native-executable wall-clock — no permanent metrics surface and no retained instrumentation.
+
+v2 improves every output-quality axis on every probe:
+
+- Raw Wasm size −16% to −42%; post-Binaryen size −34% to −63%.
+- Indirect calls collapse (LCG `call_ref` 141 → 8; BigNat 65 → 0); mutual recursion, deep-let, and BigNat become fully first-order.
+- Closure allocations drop sharply (BigNat 23 → 0); zero irreducible dispatchers and zero mutable closure shells on any probe, including the RecInit-heavy BigNat and mutual recursion.
+- Runtime is faster: LCG −6%, trees −41%.
+
+The one regression is compile time on recursion-heavy programs: v2 is ~3x slower to compile LCG and trees (781 ms vs 265 ms; 828 ms vs 263 ms release, min-of-4) and ~1.3–1.4x on deep-let and BigNat, with higher-order and mutual recursion at parity. The cost is concentrated entirely in the CPS optimizer (≈560 ms of LCG's 794 ms compile). It is accepted: Cont v2's objective is output quality, the compile remains sub-second, and no deferred optimization pass would reduce it. It is orthogonal to the decision below.
+
+### Comparison decision
+
+The residual-parity port (§1.3), the deep `RecInit` cleanup (§1.4), and the backend-local cleanup (§2) are all **not warranted** and are closed:
+
+- **§1.3 residual parity.** The baseline ran all seven candidate passes — common-subexpression elimination, bounded pure-call evaluation, literal hoisting, tag and callee threading, loop-invariant motion, list-map simplification, and slice/window forwarding — plus function inlining and call specialization, and still produced larger, slower, more-indirect code than v2. None of the seven produces a demonstrated structural, code-size, compile-time, or runtime advantage the new pipeline lacks; they are redundant here and are removed from the plan.
+- **§1.4 deep `RecInit` cleanup.** No probe, including the RecInit-heavy BigNat and mutual recursion, produced a non-dissolving-but-breakable knot, an extra shell, or a mutable closure field. There is no regression for the deferred generalizations to fix.
+- **§2 backend-local cleanup.** v2's post-Binaryen code is far smaller than the baseline's, and Binaryen performs local coalescing and stackification in the native path. No size or shape regression appears without a separate CPS-stage pass.
+
+### Remaining
+
 - Run the full Docker correctness and benchmark suite once, only after implementation and all other landing gates are complete. Verify output anchors before accepting timings.
 
 ## 6. Documentation and repository retirement
