@@ -14,6 +14,7 @@ pub(super) const PURE_EVALUATION_STEP_LIMIT: usize = 10_000;
 pub(super) const PURE_EVALUATION_DEPTH_LIMIT: usize = 256;
 pub(super) const SCC_CLONE_LIMIT: usize = 64;
 pub(super) const SCC_CLONE_NODE_LIMIT: usize = 256;
+pub(super) const BRANCH_CLONE_LIMIT: usize = 64;
 
 #[derive(Clone, PartialEq)]
 enum Knowledge {
@@ -59,16 +60,13 @@ pub(crate) fn optimize(module: &mut CpsModule) {
         .verify()
         .expect("invalid high CPS before optimization");
 
-    // Budgets awaiting their enforcing pass: branch-specialization growth is
-    // consumed by general contification and the pure-evaluation limits by ported
-    // parity passes. Referenced here until those land so they are not dead code.
-    let _pending_limits = (
-        BRANCH_SPECIALIZATION_GROWTH_LIMIT,
-        PURE_EVALUATION_STEP_LIMIT,
-        PURE_EVALUATION_DEPTH_LIMIT,
-    );
+    // The pure-evaluation limits await their ported parity passes (residual
+    // optimization parity, deferred to the baseline comparison). Referenced here
+    // until those land so they are not dead code.
+    let _pending_limits = (PURE_EVALUATION_STEP_LIMIT, PURE_EVALUATION_DEPTH_LIMIT);
 
     let mut scc_clone_budget = SCC_CLONE_LIMIT;
+    let mut branch_clone_budget = BRANCH_CLONE_LIMIT;
     for _ in 0..32 {
         let substitutions = known_values(module);
         let changed = rewrite_atoms(module, &substitutions)
@@ -81,6 +79,7 @@ pub(crate) fn optimize(module: &mut CpsModule) {
             | inline_known_calls(module)
             | contify_calls(module)
             | specialize_scc_calls(module, &mut scc_clone_budget)
+            | specialize_call_patterns(module, &mut branch_clone_budget)
             | dissolve_rec_init(module)
             | prune_unreachable(module);
         if !changed {
@@ -1444,6 +1443,208 @@ fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -> bool {
     false
 }
 
+/// SpecConstr-style call-pattern specialization. When a known-callee call passes
+/// a statically-known tagged tuple into a parameter the callee deconstructs,
+/// clone the callee with that constructor rebuilt at its entry so the existing
+/// aggregate-projection and known-switch simplifications collapse the
+/// deconstruction on a later iteration. The constructor's dynamic fields are
+/// threaded as fresh parameters (a worker/wrapper rebuild) and the clone's
+/// recursive self-calls fall back to the general function, so it peels the one
+/// matched level rather than assuming the recursion stays in pattern. Every call
+/// sharing the `(callee, index, tag, arity)` pattern repoints to the single
+/// clone, so equivalent sites specialize once. Bounded by
+/// `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide
+/// clone-count `budget`.
+fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usize) -> bool {
+    if *budget == 0 {
+        return false;
+    }
+    let constructors = tagged_tuple_values(module);
+    if constructors.is_empty() {
+        return false;
+    }
+
+    // The first specializable pattern in deterministic (node, then argument)
+    // order: a known-callee call whose argument is a known tagged tuple that the
+    // callee deconstructs, whose callee has a lexical `LetFun` owner and a
+    // clonable body within the growth budget.
+    let mut chosen: Option<(CpsFunId, usize, u32, usize)> = None;
+    'search: for node in module.nodes.iter().flatten() {
+        let CpsNode::ApplyFun {
+            callee: CpsCallee::Known(callee),
+            args,
+            ..
+        } = node
+        else {
+            continue;
+        };
+        if Some(*callee) == module.entry {
+            continue;
+        }
+        let params = &module.function(*callee).unwrap().params;
+        for (index, arg) in args.iter().enumerate() {
+            let CpsAtom::Value(value) = arg else { continue };
+            let Some((tag, fields)) = constructors.get(value) else {
+                continue;
+            };
+            let Some(&param) = params.get(index) else {
+                continue;
+            };
+            if !deconstructs_param(module, *callee, param) {
+                continue;
+            }
+            let member = BTreeSet::from([*callee]);
+            if introducing_letfun(module, &member).is_none() {
+                continue;
+            }
+            let body = function_nodes(module, *callee);
+            let unclonable = body.iter().any(|&id| {
+                matches!(
+                    module.node(id),
+                    Some(CpsNode::LetFun { .. } | CpsNode::RecInit { .. })
+                )
+            });
+            if unclonable || body.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
+                continue;
+            }
+            chosen = Some((*callee, index, *tag, fields.len()));
+            break 'search;
+        }
+    }
+    let Some((callee, index, tag, arity)) = chosen else {
+        return false;
+    };
+
+    let member = BTreeSet::from([callee]);
+    let intro = introducing_letfun(module, &member).unwrap();
+    let Some(clones) = clone_scc(module, &member) else {
+        return false;
+    };
+    let clone = clones[&callee];
+
+    // Peel: the clone recurses into the general function, not itself, so a
+    // recursive call that does not carry the matched constructor stays valid.
+    for node_id in function_nodes(module, clone) {
+        let node = module.nodes[node_id.index()].as_mut().unwrap();
+        if let CpsNode::ApplyFun {
+            callee: CpsCallee::Known(target),
+            ..
+        } = node
+            && *target == clone
+        {
+            *target = callee;
+        }
+        visit_atoms_mut(node, &mut |atom| {
+            if let CpsAtom::Fun(function) = atom
+                && *function == clone
+            {
+                *atom = CpsAtom::Fun(callee);
+            }
+        });
+    }
+
+    // Rebuild the constructor at the clone entry, threading its dynamic fields as
+    // fresh parameters in place of the specialized parameter.
+    let clone_function = module.function(clone).unwrap();
+    let mut params = clone_function.params.clone();
+    let clone_body = clone_function.body;
+    let old_param = params[index];
+    let field_params: Vec<CpsValueId> = (1..arity)
+        .map(|field| module.add_value(Some(format!("field#{field}")), false))
+        .collect();
+    let mut rebuilt = Vec::with_capacity(arity);
+    rebuilt.push(CpsAtom::Literal(CpsLiteral::Nat(tag)));
+    rebuilt.extend(field_params.iter().map(|&p| CpsAtom::Value(p)));
+    let entry = module.add_node(CpsNode::LetValue {
+        result: old_param,
+        value: CpsValueExpr::Tuple(rebuilt),
+        next: clone_body,
+    });
+    params.splice(index..=index, field_params);
+    let clone_function = module.functions[clone.index()].as_mut().unwrap();
+    clone_function.params = params;
+    clone_function.body = entry;
+
+    // Introduce the clone in the callee's lexical scope.
+    if let Some(CpsNode::LetFun { functions, .. }) = module.nodes[intro.index()].as_mut() {
+        functions.push(clone);
+    }
+
+    // Repoint every call sharing the pattern to the single clone, splicing each
+    // site's own constructor fields in place of the tuple argument.
+    for node_id in 0..module.nodes.len() {
+        let Some(CpsNode::ApplyFun {
+            callee: CpsCallee::Known(target),
+            args,
+            ..
+        }) = module.node(CpsNodeId(node_id as u32))
+        else {
+            continue;
+        };
+        if *target != callee {
+            continue;
+        }
+        let Some(CpsAtom::Value(value)) = args.get(index) else {
+            continue;
+        };
+        let Some((site_tag, site_fields)) = constructors.get(value) else {
+            continue;
+        };
+        if *site_tag != tag || site_fields.len() != arity {
+            continue;
+        }
+        let spliced = site_fields[1..].to_vec();
+        let Some(CpsNode::ApplyFun {
+            callee: target,
+            args,
+            ..
+        }) = module.nodes[node_id].as_mut()
+        else {
+            unreachable!()
+        };
+        *target = CpsCallee::Known(clone);
+        args.splice(index..=index, spliced);
+    }
+
+    *budget -= 1;
+    true
+}
+
+/// The `LetValue`-bound tagged tuples: values whose defining expression is a
+/// tuple whose first field is a `Nat` literal tag. These are the constructor
+/// call patterns branch specialization can bake into a callee.
+fn tagged_tuple_values(module: &CpsModule) -> BTreeMap<CpsValueId, (u32, Vec<CpsAtom>)> {
+    let mut result = BTreeMap::new();
+    for node in module.nodes.iter().flatten() {
+        if let CpsNode::LetValue {
+            result: value,
+            value: CpsValueExpr::Tuple(fields),
+            ..
+        } = node
+            && let Some(CpsAtom::Literal(CpsLiteral::Nat(tag))) = fields.first()
+        {
+            result.insert(*value, (*tag, fields.clone()));
+        }
+    }
+    result
+}
+
+/// Whether `function` projects a field out of `param`, i.e. contains a `TplGet`
+/// on it. This is the profitability gate: baking a known tuple into a parameter
+/// only pays off when the body actually deconstructs it.
+fn deconstructs_param(module: &CpsModule, function: CpsFunId, param: CpsValueId) -> bool {
+    function_nodes(module, function).iter().any(|&id| {
+        matches!(
+            module.node(id),
+            Some(CpsNode::LetPrim {
+                op: CpsPrimOp::TplGet(_),
+                args,
+                ..
+            }) if args.first() == Some(&CpsAtom::Value(param))
+        )
+    })
+}
+
 /// The literal results of `LetValue` bindings, used to resolve caller values
 /// already known to be constant.
 fn literal_value_map(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> {
@@ -1771,12 +1972,24 @@ fn rewrite_atoms(module: &mut CpsModule, known: &BTreeMap<CpsValueId, CpsAtom>) 
             }
         });
 
+        // A closure callee holds its callee in a value, which `visit_atoms_mut`
+        // does not reach. Remap it here: a known function devirtualizes the call,
+        // and a forwarded value (e.g. a projected constructor field) keeps the
+        // callee pointing at a live value rather than a deleted one.
         if let CpsNode::ApplyFun { callee, .. } = node
             && let CpsCallee::Closure(value) = *callee
-            && let Some(CpsAtom::Fun(function)) = known.get(&value)
         {
-            *callee = CpsCallee::Known(*function);
-            changed = true;
+            match known.get(&value) {
+                Some(CpsAtom::Fun(function)) => {
+                    *callee = CpsCallee::Known(*function);
+                    changed = true;
+                }
+                Some(CpsAtom::Value(replacement)) if *replacement != value => {
+                    *callee = CpsCallee::Closure(*replacement);
+                    changed = true;
+                }
+                _ => {}
+            }
         }
     }
     changed
@@ -2333,14 +2546,16 @@ fn evaluate(op: CpsPrimOp, args: &[CpsAtom]) -> Option<CpsLiteral> {
 mod tests {
     use {
         super::{
-            SCC_CLONE_LIMIT, analyze_sccs, atoms, contify_calls, dissolve_rec_init,
-            eliminate_dead_bindings, eliminate_dead_parameters, evaluate, forward_continuations,
-            inline_known_calls, inline_single_use_continuations, known_values, optimize,
-            specialize_scc_calls,
+            BRANCH_CLONE_LIMIT, BRANCH_SPECIALIZATION_GROWTH_LIMIT, SCC_CLONE_LIMIT, analyze_sccs,
+            atoms, contify_calls, dissolve_rec_init, eliminate_dead_bindings,
+            eliminate_dead_parameters, evaluate, forward_aggregate_projections,
+            forward_continuations, function_nodes, inline_known_calls,
+            inline_single_use_continuations, known_values, optimize, rewrite_atoms, simplify_nodes,
+            specialize_call_patterns, specialize_scc_calls,
         },
         crate::{
-            CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral,
-            CpsModule, CpsNode, CpsNodeId, CpsPrimOp,
+            CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
+            CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsPrimOp, CpsValueExpr, CpsValueId,
         },
         std::collections::{BTreeMap, BTreeSet},
     };
@@ -3542,5 +3757,443 @@ mod tests {
             module.node(rec_init),
             Some(CpsNode::RecInit { .. })
         ));
+    }
+
+    // Build `main` calling a non-recursive `consume(t)` once per entry in
+    // `sites`. `consume` projects the tag and a field out of its tuple parameter
+    // and switches on the tag, so a known tagged tuple at a call site unlocks the
+    // fold. Each site `i` passes the tuple `(sites[i], i)`. `padding` pads
+    // `consume` with dead bindings to grow its live-node count. Returns the
+    // module, the call node per site (in `sites` order), and `consume`.
+    fn tagged_consumer(padding: usize, sites: &[u32]) -> (CpsModule, Vec<CpsNodeId>, CpsFunId) {
+        let mut module = CpsModule::new();
+        let entry = module.reserve_function(Some("main".into()));
+        let entry_return = module.reserve_continuation();
+
+        let consume = module.reserve_function(Some("consume".into()));
+        let consume_return = module.reserve_continuation();
+        let t = module.add_value(Some("t".into()), false);
+        let tag = module.add_value(Some("tag".into()), false);
+        let val = module.add_value(Some("val".into()), false);
+        let switch = module.add_node(CpsNode::Switch {
+            scrutinee: CpsAtom::Value(tag),
+            cases: BTreeMap::from([
+                (
+                    0,
+                    CpsEdge {
+                        target: consume_return,
+                        args: vec![CpsAtom::Value(val)],
+                    },
+                ),
+                (
+                    1,
+                    CpsEdge {
+                        target: consume_return,
+                        args: vec![CpsAtom::Literal(CpsLiteral::Nat(999))],
+                    },
+                ),
+            ]),
+            default: Some(CpsEdge {
+                target: consume_return,
+                args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+            }),
+        });
+        let project_val = module.add_node(CpsNode::LetPrim {
+            result: val,
+            op: CpsPrimOp::TplGet(1),
+            args: vec![CpsAtom::Value(t)],
+            next: switch,
+        });
+        let mut consume_body = module.add_node(CpsNode::LetPrim {
+            result: tag,
+            op: CpsPrimOp::TplGet(0),
+            args: vec![CpsAtom::Value(t)],
+            next: project_val,
+        });
+        for _ in 0..padding {
+            let dead = module.add_value(None, false);
+            consume_body = module.add_node(CpsNode::LetPrim {
+                result: dead,
+                op: CpsPrimOp::NatAdd,
+                args: vec![
+                    CpsAtom::Literal(CpsLiteral::Nat(0)),
+                    CpsAtom::Literal(CpsLiteral::Nat(0)),
+                ],
+                next: consume_body,
+            });
+        }
+        module.define_function(
+            consume,
+            CpsFunction {
+                debug_name: Some("consume".into()),
+                params: vec![t],
+                return_cont: consume_return,
+                body: consume_body,
+            },
+        );
+
+        // Build the call chain forward so the search visits `sites[0]` first.
+        // Each site's return continuation is introduced by its own `LetCont`, and
+        // returning from site `i` runs site `i + 1`.
+        let count = sites.len();
+        let results: Vec<CpsValueId> = (0..count)
+            .map(|i| module.add_value(Some(format!("r{i}")), false))
+            .collect();
+        let ctors: Vec<CpsNodeId> = (0..count).map(|_| module.reserve_node()).collect();
+        let calls: Vec<CpsNodeId> = (0..count).map(|_| module.reserve_node()).collect();
+        let scopes: Vec<CpsNodeId> = (0..count).map(|_| module.reserve_node()).collect();
+        let conts: Vec<CpsContId> = (0..count).map(|_| module.reserve_continuation()).collect();
+        let tail = module.add_node(CpsNode::ApplyCont(CpsEdge {
+            target: entry_return,
+            args: vec![match results.last() {
+                Some(&last) => CpsAtom::Value(last),
+                None => CpsAtom::Literal(CpsLiteral::Nat(0)),
+            }],
+        }));
+        for i in 0..count {
+            let value = module.add_value(Some(format!("v{i}")), false);
+            module.define_node(
+                ctors[i],
+                CpsNode::LetValue {
+                    result: value,
+                    value: CpsValueExpr::Tuple(vec![
+                        CpsAtom::Literal(CpsLiteral::Nat(sites[i])),
+                        CpsAtom::Literal(CpsLiteral::Nat(i as u32)),
+                    ]),
+                    next: calls[i],
+                },
+            );
+            module.define_node(
+                calls[i],
+                CpsNode::ApplyFun {
+                    callee: CpsCallee::Known(consume),
+                    args: vec![CpsAtom::Value(value)],
+                    return_to: conts[i],
+                },
+            );
+            module.define_node(
+                scopes[i],
+                CpsNode::LetCont {
+                    continuations: vec![conts[i]],
+                    body: ctors[i],
+                },
+            );
+            let next = if i + 1 < count { scopes[i + 1] } else { tail };
+            module.define_continuation(
+                conts[i],
+                CpsContinuation {
+                    debug_name: Some(format!("k{i}")),
+                    params: vec![results[i]],
+                    body: next,
+                },
+            );
+        }
+        let first = scopes.first().copied().unwrap_or(tail);
+        let body = module.add_node(CpsNode::LetFun {
+            functions: vec![consume],
+            body: first,
+        });
+        module.define_function(
+            entry,
+            CpsFunction {
+                debug_name: Some("main".into()),
+                params: vec![],
+                return_cont: entry_return,
+                body,
+            },
+        );
+        module.set_entry(entry);
+        module.verify().unwrap();
+        (module, calls, consume)
+    }
+
+    #[test]
+    fn rewrite_atoms_remaps_and_devirtualizes_a_closure_callee() {
+        // The closure callee holds its target in a value that `visit_atoms_mut`
+        // never reaches. A forwarded value must follow (else the callee dangles
+        // when the original value is deleted), and a known function devirtualizes.
+        let mut module = CpsModule::new();
+        let ret = module.reserve_continuation();
+        let old = module.add_value(Some("old".into()), false);
+        let new = module.add_value(Some("new".into()), false);
+        let target = module.reserve_function(Some("target".into()));
+
+        let value_call = module.add_node(CpsNode::ApplyFun {
+            callee: CpsCallee::Closure(old),
+            args: vec![],
+            return_to: ret,
+        });
+        assert!(rewrite_atoms(
+            &mut module,
+            &BTreeMap::from([(old, CpsAtom::Value(new))]),
+        ));
+        assert!(
+            matches!(module.node(value_call), Some(CpsNode::ApplyFun { callee: CpsCallee::Closure(v), .. }) if *v == new),
+            "a forwarded value keeps the closure callee pointing at a live value"
+        );
+
+        let fun_call = module.add_node(CpsNode::ApplyFun {
+            callee: CpsCallee::Closure(new),
+            args: vec![],
+            return_to: ret,
+        });
+        assert!(rewrite_atoms(
+            &mut module,
+            &BTreeMap::from([(new, CpsAtom::Fun(target))]),
+        ));
+        assert!(
+            matches!(module.node(fun_call), Some(CpsNode::ApplyFun { callee: CpsCallee::Known(f), .. }) if *f == target),
+            "a known function devirtualizes the closure call"
+        );
+    }
+
+    fn has_switch(module: &CpsModule, function: CpsFunId) -> bool {
+        function_nodes(module, function)
+            .iter()
+            .any(|&id| matches!(module.node(id), Some(CpsNode::Switch { .. })))
+    }
+
+    #[test]
+    fn specializes_a_constructor_argument_and_collapses_the_switch() {
+        let (mut module, calls, consume) = tagged_consumer(0, &[0]);
+        let mut budget = BRANCH_CLONE_LIMIT;
+        assert!(
+            specialize_call_patterns(&mut module, &mut budget),
+            "a known tagged-tuple argument is specialized"
+        );
+        assert_eq!(
+            budget,
+            BRANCH_CLONE_LIMIT - 1,
+            "one clone consumed the budget"
+        );
+        module.verify().unwrap();
+
+        let clone = known_callee(&module, calls[0]);
+        assert_ne!(clone, consume, "the call is repointed to a fresh clone");
+        assert!(
+            has_switch(&module, consume),
+            "the general function keeps its switch"
+        );
+
+        // The rebuilt constructor lets the existing folds collapse the switch.
+        while forward_aggregate_projections(&mut module) | simplify_nodes(&mut module) {}
+        assert!(
+            !has_switch(&module, clone),
+            "projection and known-switch folding collapse the clone's dispatch"
+        );
+        module.verify().unwrap();
+    }
+
+    #[test]
+    fn equivalent_constructor_sites_share_one_clone() {
+        // Two tag-0 sites match one pattern; a tag-1 site is a different pattern.
+        let (mut module, calls, consume) = tagged_consumer(0, &[0, 0, 1]);
+        let before = module.functions().iter().flatten().count();
+        let mut budget = BRANCH_CLONE_LIMIT;
+        assert!(specialize_call_patterns(&mut module, &mut budget));
+        module.verify().unwrap();
+
+        let clone = known_callee(&module, calls[0]);
+        assert_ne!(clone, consume);
+        assert_eq!(
+            known_callee(&module, calls[1]),
+            clone,
+            "an equivalent site reuses the one clone"
+        );
+        assert_eq!(
+            known_callee(&module, calls[2]),
+            consume,
+            "a non-matching pattern keeps the original function"
+        );
+        let after = module.functions().iter().flatten().count();
+        assert_eq!(after, before + 1, "exactly one clone is created");
+    }
+
+    #[test]
+    fn call_pattern_specialization_respects_the_growth_budget() {
+        // Inflate `consume` past BRANCH_SPECIALIZATION_GROWTH_LIMIT live nodes.
+        let (mut module, calls, consume) =
+            tagged_consumer(BRANCH_SPECIALIZATION_GROWTH_LIMIT + 1, &[0]);
+        let mut budget = BRANCH_CLONE_LIMIT;
+        assert!(
+            !specialize_call_patterns(&mut module, &mut budget),
+            "an oversized callee is not specialized"
+        );
+        assert_eq!(budget, BRANCH_CLONE_LIMIT);
+        assert_eq!(known_callee(&module, calls[0]), consume);
+    }
+
+    #[test]
+    fn call_pattern_specialization_respects_the_clone_budget() {
+        let (mut module, calls, consume) = tagged_consumer(0, &[0]);
+        let mut budget = 0;
+        assert!(
+            !specialize_call_patterns(&mut module, &mut budget),
+            "an exhausted budget makes no clone"
+        );
+        assert_eq!(known_callee(&module, calls[0]), consume);
+    }
+
+    #[test]
+    fn call_pattern_specialization_is_deterministic() {
+        let run = || {
+            let (mut module, calls, _) = tagged_consumer(0, &[0, 0]);
+            let mut budget = BRANCH_CLONE_LIMIT;
+            specialize_call_patterns(&mut module, &mut budget);
+            (
+                known_callee(&module, calls[0]).0,
+                known_callee(&module, calls[1]).0,
+            )
+        };
+        assert_eq!(run(), run(), "specialization output is a pure function");
+    }
+
+    #[test]
+    fn optimization_eliminates_a_constructor_dispatch() {
+        // A multi-site, oversized-for-inlining consumer: only specialization can
+        // resolve the tagged dispatch, and folding then removes every switch.
+        let (mut module, _, _) = tagged_consumer(8, &[0, 0]);
+        optimize(&mut module);
+        module.verify().unwrap();
+        assert!(
+            module
+                .nodes()
+                .iter()
+                .flatten()
+                .all(|node| !matches!(node, CpsNode::Switch { .. })),
+            "specialization and folding leave no residual tag dispatch"
+        );
+    }
+
+    #[test]
+    fn specialization_peels_a_recursive_callee_into_the_general_function() {
+        // consume(t): leaf returns the field; node recurses on the child.
+        let mut module = CpsModule::new();
+        let entry = module.reserve_function(Some("main".into()));
+        let entry_return = module.reserve_continuation();
+
+        let consume = module.reserve_function(Some("consume".into()));
+        let consume_return = module.reserve_continuation();
+        let t = module.add_value(Some("t".into()), false);
+        let tag = module.add_value(Some("tag".into()), false);
+        let child = module.add_value(Some("child".into()), false);
+        let leaf = module.reserve_continuation();
+        let node = module.reserve_continuation();
+        let leaf_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+            target: consume_return,
+            args: vec![CpsAtom::Value(child)],
+        }));
+        module.define_continuation(
+            leaf,
+            CpsContinuation {
+                debug_name: Some("leaf".into()),
+                params: vec![],
+                body: leaf_body,
+            },
+        );
+        let node_body = module.add_node(CpsNode::ApplyFun {
+            callee: CpsCallee::Known(consume),
+            args: vec![CpsAtom::Value(child)],
+            return_to: consume_return,
+        });
+        module.define_continuation(
+            node,
+            CpsContinuation {
+                debug_name: Some("node".into()),
+                params: vec![],
+                body: node_body,
+            },
+        );
+        let switch = module.add_node(CpsNode::Switch {
+            scrutinee: CpsAtom::Value(tag),
+            cases: BTreeMap::from([(
+                0,
+                CpsEdge {
+                    target: leaf,
+                    args: vec![],
+                },
+            )]),
+            default: Some(CpsEdge {
+                target: node,
+                args: vec![],
+            }),
+        });
+        let scope = module.add_node(CpsNode::LetCont {
+            continuations: vec![leaf, node],
+            body: switch,
+        });
+        let project_child = module.add_node(CpsNode::LetPrim {
+            result: child,
+            op: CpsPrimOp::TplGet(1),
+            args: vec![CpsAtom::Value(t)],
+            next: scope,
+        });
+        let project_tag = module.add_node(CpsNode::LetPrim {
+            result: tag,
+            op: CpsPrimOp::TplGet(0),
+            args: vec![CpsAtom::Value(t)],
+            next: project_child,
+        });
+        module.define_function(
+            consume,
+            CpsFunction {
+                debug_name: Some("consume".into()),
+                params: vec![t],
+                return_cont: consume_return,
+                body: project_tag,
+            },
+        );
+
+        let root = module.add_value(Some("root".into()), false);
+        let call = module.add_node(CpsNode::ApplyFun {
+            callee: CpsCallee::Known(consume),
+            args: vec![CpsAtom::Value(root)],
+            return_to: entry_return,
+        });
+        let ctor = module.add_node(CpsNode::LetValue {
+            result: root,
+            value: CpsValueExpr::Tuple(vec![
+                CpsAtom::Literal(CpsLiteral::Nat(0)),
+                CpsAtom::Literal(CpsLiteral::Nat(5)),
+            ]),
+            next: call,
+        });
+        let body = module.add_node(CpsNode::LetFun {
+            functions: vec![consume],
+            body: ctor,
+        });
+        module.define_function(
+            entry,
+            CpsFunction {
+                debug_name: Some("main".into()),
+                params: vec![],
+                return_cont: entry_return,
+                body,
+            },
+        );
+        module.set_entry(entry);
+        module.verify().unwrap();
+
+        let mut budget = BRANCH_CLONE_LIMIT;
+        assert!(specialize_call_patterns(&mut module, &mut budget));
+        module.verify().unwrap();
+
+        let clone = known_callee(&module, call);
+        assert_ne!(clone, consume);
+        let recursive_target =
+            function_nodes(&module, clone)
+                .into_iter()
+                .find_map(|id| match module.node(id) {
+                    Some(CpsNode::ApplyFun {
+                        callee: CpsCallee::Known(target),
+                        ..
+                    }) => Some(*target),
+                    _ => None,
+                });
+        assert_eq!(
+            recursive_target,
+            Some(consume),
+            "the clone peels one level and recurses into the general function"
+        );
     }
 }

@@ -32,37 +32,22 @@ The legacy region representation, optimizer, direct construction API, and Ersd l
 
 ## 1. Complete high-CPS optimization
 
-The current optimizer handles local rewiring, continuation forwarding and beta reduction, literal folding, known switches, effect-aware dead bindings, aggregate projection forwarding, basic known-callee propagation, dead parameters, bounded local inlining, self-tail contification, and reachability. The following interprocedural and parity work remains.
+The current optimizer handles local rewiring, continuation forwarding and beta reduction, literal folding, known switches, effect-aware dead bindings, aggregate projection forwarding, known-callee propagation, dead parameters, bounded local inlining, contification, recursive-SCC known-argument propagation and specialization, call-pattern specialization, and reachability. The interprocedural known-argument, specialization, contification, and branch-specialization work is landed; the residual parity port and the deeper recursive-initialization cleanup remain, both gated on the §5 baseline comparison whose pre-v2 revision they also need.
 
 ### SCC-wide known arguments and specialization
 
-- Compute function SCCs at an explicit phase boundary.
-- Classify each parameter across all entries as `Unknown | Known(CpsAtom) | Conflict`.
-- Propagate known values through complete recursive SCCs rather than skipping recursive functions.
-- Specialize a complete SCC when one call context supplies useful known arguments; never clone only part of a recursive SCC.
-- Memoize specializations deterministically and enforce both budgets:
-  - at most 64 specialized clones per module;
-  - at most 256 live CPS nodes per clone.
-- Run recursive dead-parameter elimination after specialization and rewrite every direct call consistently.
-- Add focused under-budget, at-budget, over-budget, conflict, and deterministic-output tests.
-
-The existing SCC and pure-evaluation constants must become enforced limits rather than an inert tuple retained only to silence unused warnings.
+Landed. Function SCCs are computed at an explicit phase boundary, each parameter is classified `Unknown | Known(CpsAtom) | Conflict`, known values propagate through complete recursive SCCs, and a complete SCC is cloned for one disagreeing call context, memoized deterministically and bounded by the enforced limits of 64 specialized clones per module and 256 live CPS nodes per clone. Recursive dead-parameter elimination runs after specialization and rewrites every direct call consistently. The under-budget, at-budget, over-budget, conflict, and deterministic-output tests exist.
 
 ### General contification and bounded inlining
 
-- Generalize contification beyond the current self-recursive case to non-escaping known-call functions with one compatible return context.
-- Preserve single-entry recursive loops and reject escaping, multi-return-context, or otherwise incompatible functions.
-- Apply the multi-site inline limit of 8 live nodes and the branch-specialization growth limit of 24 live nodes.
-- Memoize specialized inline bodies so repeated equivalent sites do not clone independently.
-- Keep recursive local-continuation cloning structural and name-independent; retain the synthetic regression that exercises it.
-- Add focused contification rejection and code-growth-budget tests.
+Landed for the cases the CPS stage owns. Non-escaping known-call functions with one external call site are contified into a local continuation, covering single-entry recursive loops and non-recursive join points, and escaping, multi-return-context, or otherwise incompatible functions are rejected. Bounded inlining enforces the multi-site limit of 8 live nodes, and SpecConstr-style branch specialization clones a callee per known tagged-tuple call pattern under the enforced growth limit of 24 live nodes, memoizing equivalent patterns to one clone and threading the constructor's dynamic fields so the existing projection and known-switch folds collapse the deconstruction. Recursive local-continuation cloning stays structural and name-independent, with its synthetic regression retained. Contification-rejection and growth-budget tests exist. Multi-site contification by common-dominator placement is deliberately left to the machine-CFG structuring, not the CPS stage.
 
 ### Residual optimization parity
 
-Use a committed pre-v2 revision in a separate worktree to determine which removed passes still materially affect representative programs. Port only transformations whose absence produces a demonstrated structural, compile-time, code-size, or runtime regression. The remaining candidates are:
+Deferred to the §5 baseline comparison, which stands up the committed pre-v2 revision this work also needs. Using that revision in a separate worktree, determine which removed passes still materially affect representative programs and port only transformations whose absence produces a demonstrated structural, compile-time, code-size, or runtime regression. The candidates are:
 
 - common-subexpression elimination for total, non-allocating primitives;
-- bounded pure-call evaluation with 10,000 steps and depth 256;
+- bounded pure-call evaluation with 10,000 steps and depth 256 (its `PURE_EVALUATION_*` limits are already defined, awaiting this pass);
 - deterministic literal hoisting;
 - tag and callee threading;
 - loop-invariant code motion for total, non-allocating expressions;
@@ -73,10 +58,7 @@ Each retained transformation needs a high-CPS test for its semantic precondition
 
 ### Recursive initialization cleanup
 
-- Optimize inside `CpsNode::RecInit` using the same safe rewrites as ordinary bodies.
-- Dissolve `RecInit` when dead members, aliases, specialization, or inlining break the mixed initialization knot.
-- Retain fallback only for a surviving bidirectional mixed knot.
-- Reject any function-only SCC that reaches fallback lowering.
+The common case is landed: a `RecInit` whose members no longer capture a computed value dissolves to an ordinary `LetFun`, a surviving bidirectional mixed knot is retained, and the ordinary rewrites already reach `RecInit` bodies through the flat node arena, all with tests. The remaining generalizations — pruning dead `RecInit` members so a knot whose only capturing member died dissolves, and values-first dissolution when the computed values do not depend on the members — are deferred to the §5 baseline: no representative program currently produces a non-dissolving-but-breakable knot, so they follow the same evidence-gated rule as the residual parity port. Rejecting a function-only SCC that reaches fallback lowering remains a machine-lowering invariant, already verified there.
 
 ## 2. Finish closure and machine lowering quality
 
