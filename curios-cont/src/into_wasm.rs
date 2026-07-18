@@ -16,6 +16,9 @@ pub(crate) use context::*;
 mod code_emitter;
 pub(crate) use code_emitter::*;
 
+mod structure;
+pub(crate) use structure::*;
+
 mod expr_emitter;
 pub(crate) use expr_emitter::*;
 

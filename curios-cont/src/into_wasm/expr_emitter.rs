@@ -1,11 +1,11 @@
 use {
     crate::{
-        BlockData, CodeEmitter, Context, EmissionBlockName, EmissionBody, EmissionCallTarget,
-        EmissionClosureName, EmissionData, EmissionHostTarget, EmissionTail, EmissionValue,
-        EmissionValueName, Frame, LoadAs, LocalData, Table,
+        BlockData, CodeEmitter, Context, EmissionBlockName, EmissionBody, EmissionClosureName,
+        EmissionData, EmissionValue, EmissionValueName, Frame, LayoutItem, LoadAs, LocalData,
+        Table, region_layout,
     },
     curios_base::Grain,
-    std::collections::{BTreeSet, HashMap, HashSet, VecDeque},
+    std::collections::{BTreeMap, HashMap, HashSet},
 };
 
 #[derive(Debug)]
@@ -294,352 +294,282 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    fn emit_let_blocks(
-        &mut self,
-        bloink_local: curios_wasm::LocalName,
-        bloink_label: curios_wasm::LabelName,
-        blocks: Vec<(&'a EmissionBlockName, BlockData<'a>)>,
-        tail: &'a EmissionTail,
-    ) {
-        let regions = blocks
-            .iter()
-            .map(|(_, block_data)| {
-                self.emit_region(block_data.params_map(), block_data.region);
-
-                (block_data.label_name.clone(), self.context.leave_frame())
-            })
-            .collect();
-
-        self.emit_instrs(
-            self.context
-                .bloink_instrs(bloink_local, bloink_label, regions, tail),
-        );
-    }
-
+    /// Emit one region: its bindings, then its blocks laid out as a structured
+    /// nesting of `loop`, forward `block`, and localized-dispatcher scopes
+    /// derived from the region's control-flow analysis ([`region_layout`]).
+    /// Enters a frame the caller is responsible for leaving.
     fn emit_region(
         &mut self,
         params: HashMap<&'a EmissionValueName, LocalData>,
         region: &'a EmissionBody,
     ) {
-        // Locals are allocated lazily, at the point each name is introduced (see `emit_shells`
-        // / `emit_let_values`), so the frame starts with no values and is filled as emission
-        // proceeds. Allocating after `enter_frame` is what lets a single `is_shell` check
-        // distinguish a fresh value from a fill — the current region's shells are now in scope.
         let shells = region.shells.iter().map(|(name, _)| name).collect();
-        let acyclic_order = acyclic_block_order(region);
-        let natural_loop_plan = natural_loop_plan(region);
 
-        match region.blocks.as_slice() {
-            [] => {
-                self.context.enter_frame(Frame::new(params, shells, vec![]));
-                self.emit_shells(&region.shells);
-                self.emit_let_values(&region.values);
-                self.emit_instrs(self.context.tail_instrs(&region.tail));
-            }
-            [(block_name, block)]
-                if region_targets_block(&block.region, block_name)
-                    && matches!(
-                        &region.tail,
-                        EmissionTail::Jump(target) if &target.target == block_name
-                    ) =>
-            {
-                let block_params = block
-                    .params
-                    .iter()
-                    .map(|value_name| {
-                        let local_name = self
-                            .context
-                            .push_local(value_name.as_str(), Table::top_type(true));
-                        (value_name, LocalData::new(local_name, true))
-                    })
-                    .collect::<Vec<_>>();
-                let block_data =
-                    BlockData::new_natural_loop(block_name, block_params, &block.region);
-                self.context.enter_frame(Frame::new(
-                    params,
-                    shells,
-                    vec![(block_name, block_data.clone())],
-                ));
-                self.emit_shells(&region.shells);
-                self.emit_let_values(&region.values);
-                self.emit_natural_loop(block_data, &region.tail);
-            }
-            // A region with a single block whose body never targets it has no
-            // back-edge: control only ever flows *forward* into the block, so the
-            // trampolining `loop` + `br_table` + `-1` seed collapse to a plain
-            // `block` the entry branches out of. See `emit_direct_block`.
-            [(block_name, block)] if !region_targets_block(&block.region, block_name) => {
-                let block_params = block
-                    .params
-                    .iter()
-                    .map(|value_name| {
-                        let local_name = self
-                            .context
-                            .push_local(value_name.as_str(), Table::top_type(true));
-
-                        (value_name, LocalData::new(local_name, true))
-                    })
-                    .collect::<Vec<_>>();
-
-                let block_data = BlockData::new_direct(block_name, block_params, &block.region);
-
-                self.context.enter_frame(Frame::new(
-                    params,
-                    shells,
-                    vec![(block_name, block_data.clone())],
-                ));
-
-                self.emit_shells(&region.shells);
-                self.emit_let_values(&region.values);
-                self.emit_direct_block(block_data, &region.tail);
-            }
-            _ if acyclic_order.is_some() => {
-                self.emit_acyclic_blocks(params, shells, region, acyclic_order.unwrap());
-            }
-            _ if natural_loop_plan.is_some() => {
-                self.emit_structured_loop(params, shells, region, natural_loop_plan.unwrap());
-            }
-            _ => {
-                let bloink_local = self
-                    .context
-                    .push_local("", curios_wasm::ValType::Num(curios_wasm::NumType::I32));
-
-                let bloink_label =
-                    curios_wasm::LabelName::from(format!("region${}", bloink_local.as_str()));
-
-                let blocks = region
-                    .blocks
-                    .iter()
-                    .enumerate()
-                    .map(|(index, (block_name, block))| {
-                        let block_params = block
-                            .params
-                            .iter()
-                            .map(|value_name| {
-                                let local_name = self
-                                    .context
-                                    .push_local(value_name.as_str(), Table::top_type(true));
-
-                                (value_name, LocalData::new(local_name, true))
-                            })
-                            .collect::<Vec<_>>();
-
-                        let block_data = BlockData::new(
-                            bloink_label.clone(),
-                            bloink_local.clone(),
-                            index,
-                            block_name,
-                            block_params,
-                            &block.region,
-                        );
-
-                        (block_name, block_data)
-                    })
-                    .collect::<Vec<_>>();
-
-                let frame_blocks = blocks
-                    .iter()
-                    .map(|(block_name, block_data)| (*block_name, block_data.clone()))
-                    .collect::<Vec<_>>();
-
-                self.context
-                    .enter_frame(Frame::new(params, shells, frame_blocks));
-
-                self.emit_shells(&region.shells);
-                self.emit_let_values(&region.values);
-                self.emit_let_blocks(bloink_local, bloink_label, blocks, &region.tail);
-            }
+        // A region with no join blocks is straight-line code ending in its tail;
+        // there is nothing to structure.
+        if region.blocks.is_empty() {
+            self.context.enter_frame(Frame::new(params, shells, vec![]));
+            self.emit_shells(&region.shells);
+            self.emit_let_values(&region.values);
+            let tail = self.context.tail_instrs(&region.tail);
+            self.emit_instrs(tail);
+            return;
         }
-    }
 
-    /// Emit a single-target region (one block, no back-edge). The block body is
-    /// laid out *after* a `block` wrapping the region's tail, so the tail — the
-    /// entry — runs first and reaches the body by branching forward out of the
-    /// block label, with no dispatcher loop:
-    ///
-    /// ```wat
-    /// (block $b  ;; the region's tail (entry); `br $b` exits here
-    ///   <tail>)
-    /// <body>     ;; the block body
-    /// ```
-    fn emit_direct_block(&mut self, block_data: BlockData<'a>, tail: &'a EmissionTail) {
-        self.emit_region(block_data.params_map(), block_data.region);
-        let body = self.context.leave_frame();
+        let layout = region_layout(region);
+        let block_params = self.block_param_locals(region);
+        let mut dispatch = BTreeMap::new();
+        self.collect_dispatch(&layout, region, &mut dispatch);
 
-        let entry = self.context.tail_instrs(tail);
-
-        self.emit_instr(curios_wasm::Instr::Block {
-            label_name: block_data.label_name.clone(),
-            block_type: curios_wasm::BlockType::Empty,
-            instructions: entry,
-        });
-        self.emit_instrs(body);
-    }
-
-    fn emit_natural_loop(&mut self, block_data: BlockData<'a>, tail: &'a EmissionTail) {
-        let EmissionTail::Jump(target) = tail else {
-            unreachable!()
-        };
-        for value in &target.params {
-            self.emit_instrs(self.context.load_value_instrs(value, LoadAs::NonNull));
-        }
-        self.emit_instrs(block_data.bind(target.params.len()));
-
-        self.emit_region(block_data.params_map(), block_data.region);
-        let body = self.context.leave_frame();
-        self.emit_instr(curios_wasm::Instr::Loop {
-            label_name: block_data.label_name,
-            block_type: curios_wasm::BlockType::Empty,
-            instructions: body,
-        });
-        self.emit_instr(curios_wasm::Instr::Unreachable);
-    }
-
-    fn emit_acyclic_blocks(
-        &mut self,
-        params: HashMap<&'a EmissionValueName, LocalData>,
-        shells: HashSet<&'a EmissionValueName>,
-        region: &'a EmissionBody,
-        order: Vec<usize>,
-    ) {
-        let blocks = region
-            .blocks
-            .iter()
-            .map(|(block_name, block)| {
-                let block_params = block
-                    .params
-                    .iter()
-                    .map(|value_name| {
-                        let local_name = self
-                            .context
-                            .push_local(value_name.as_str(), Table::top_type(true));
-                        (value_name, LocalData::new(local_name, true))
-                    })
-                    .collect::<Vec<_>>();
-                (
-                    block_name,
-                    BlockData::new_direct(block_name, block_params, &block.region),
-                )
-            })
-            .collect::<Vec<_>>();
-        self.context.enter_frame(Frame::new(
-            params,
-            shells,
-            blocks
-                .iter()
-                .map(|(block_name, block)| (*block_name, block.clone()))
-                .collect(),
-        ));
+        // The region frame registers the forward-entry block of every top-level
+        // item, so the tail and earlier items resolve their forward branches.
+        let registrations = scope_registrations(&layout, region, &block_params, &dispatch);
+        self.context
+            .enter_frame(Frame::new(params, shells, registrations));
         self.emit_shells(&region.shells);
         self.emit_let_values(&region.values);
 
-        let bodies = order
+        // The tail is the innermost code: every block wraps it, so the tail can
+        // branch forward to any of them.
+        let entry = self.context.tail_instrs(&region.tail);
+        let body = self.fold_items(entry, &layout, region, &block_params, &dispatch);
+        self.emit_instrs(body);
+    }
+
+    /// Reserve one wasm local per block parameter, keyed by block index. A
+    /// branch binds these before jumping and the block body reads them, so a
+    /// block referenced from more than one scope shares the same locals.
+    fn block_param_locals(
+        &mut self,
+        region: &'a EmissionBody,
+    ) -> Vec<Vec<(&'a EmissionValueName, LocalData)>> {
+        region
+            .blocks
             .iter()
-            .map(|&index| {
-                let block = &blocks[index].1;
-                self.emit_region(block.params_map(), block.region);
-                self.context.leave_frame()
+            .map(|(_, block)| {
+                block
+                    .params
+                    .iter()
+                    .map(|name| {
+                        let local_name = self
+                            .context
+                            .push_local(name.as_str(), Table::top_type(true));
+                        (name, LocalData::new(local_name, true))
+                    })
+                    .collect()
             })
-            .collect::<Vec<_>>();
-        let mut instructions = self.context.tail_instrs(&region.tail);
-        for (&index, body) in order.iter().zip(bodies) {
-            instructions = std::iter::once(curios_wasm::Instr::Block {
-                label_name: blocks[index].1.label_name.clone(),
+            .collect()
+    }
+
+    /// Allocate a dispatcher plan — its index local, enter and loop labels, and
+    /// per-member indices — for every irreducible component in the layout,
+    /// keyed by its least member. Recurses through loops so nested dispatchers
+    /// are covered too.
+    fn collect_dispatch(
+        &mut self,
+        items: &[LayoutItem],
+        region: &'a EmissionBody,
+        out: &mut BTreeMap<usize, DispatchPlan>,
+    ) {
+        for item in items {
+            match item {
+                LayoutItem::Block(_) => {}
+                LayoutItem::Loop { body, .. } => self.collect_dispatch(body, region, out),
+                LayoutItem::Dispatch { members } => {
+                    let bloink_local = self
+                        .context
+                        .push_local("", curios_wasm::ValType::Num(curios_wasm::NumType::I32));
+                    let anchor = &region.blocks[members[0]].0;
+                    let enter_label =
+                        curios_wasm::LabelName::from(format!("$dispatch/enter/{anchor}"));
+                    let dispatch_label =
+                        curios_wasm::LabelName::from(format!("$dispatch/{anchor}"));
+                    let index_of = members
+                        .iter()
+                        .enumerate()
+                        .map(|(index, &member)| (member, index))
+                        .collect();
+                    out.insert(
+                        members[0],
+                        DispatchPlan {
+                            enter_label,
+                            dispatch_label,
+                            bloink_local,
+                            index_of,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    /// Fold each item's body around `entry`, wrapping every item in a forward
+    /// `block` labeled by its entry point. Because the items are in a
+    /// topological order, item `i` is nested inside every later item, so a
+    /// forward branch to a later item exits outward as a plain `br`.
+    fn fold_items(
+        &mut self,
+        entry: Vec<curios_wasm::Instr>,
+        items: &[LayoutItem],
+        region: &'a EmissionBody,
+        block_params: &[Vec<(&'a EmissionValueName, LocalData)>],
+        dispatch: &BTreeMap<usize, DispatchPlan>,
+    ) -> Vec<curios_wasm::Instr> {
+        let mut result = entry;
+        for item in items {
+            let body = self.emit_item(item, region, block_params, dispatch);
+            let label = item_enter_label(item, region, dispatch);
+            result = std::iter::once(curios_wasm::Instr::Block {
+                label_name: label,
                 block_type: curios_wasm::BlockType::Empty,
-                instructions,
+                instructions: result,
             })
             .chain(body)
             .collect();
         }
-        self.emit_instrs(instructions);
+        result
     }
 
-    fn emit_structured_loop(
+    /// Emit one layout item's body: a plain block's code, a `loop` around a
+    /// reducible component's interior, or a localized dispatcher.
+    fn emit_item(
         &mut self,
-        params: HashMap<&'a EmissionValueName, LocalData>,
-        shells: HashSet<&'a EmissionValueName>,
+        item: &LayoutItem,
         region: &'a EmissionBody,
-        plan: NaturalLoopPlan,
-    ) {
-        let blocks = region
-            .blocks
-            .iter()
-            .enumerate()
-            .map(|(index, (block_name, block))| {
-                let block_params = block
-                    .params
-                    .iter()
-                    .map(|value_name| {
-                        let local_name = self
-                            .context
-                            .push_local(value_name.as_str(), Table::top_type(true));
-                        (value_name, LocalData::new(local_name, true))
-                    })
-                    .collect::<Vec<_>>();
-                let block = if index == plan.header {
-                    BlockData::new_natural_loop(block_name, block_params, &block.region)
-                } else {
-                    BlockData::new_direct(block_name, block_params, &block.region)
-                };
-                (block_name, block)
-            })
-            .collect::<Vec<_>>();
-        self.context.enter_frame(Frame::new(
-            params,
-            shells,
-            blocks
-                .iter()
-                .map(|(block_name, block)| (*block_name, block.clone()))
-                .collect(),
-        ));
-        self.emit_shells(&region.shells);
-        self.emit_let_values(&region.values);
-
-        let bodies = blocks
-            .iter()
-            .map(|(_, block)| {
-                self.emit_region(block.params_map(), block.region);
+        block_params: &[Vec<(&'a EmissionValueName, LocalData)>],
+        dispatch: &BTreeMap<usize, DispatchPlan>,
+    ) -> Vec<curios_wasm::Instr> {
+        match item {
+            LayoutItem::Block(block) => {
+                let params = block_params[*block].iter().cloned().collect();
+                self.emit_region(params, &region.blocks[*block].1.region);
                 self.context.leave_frame()
-            })
-            .collect::<Vec<_>>();
-        let EmissionTail::Jump(entry) = &region.tail else {
-            unreachable!()
-        };
-        let mut prefix = entry
-            .params
-            .iter()
-            .flat_map(|value| self.context.load_value_instrs(value, LoadAs::NonNull))
-            .collect::<Vec<_>>();
-        prefix.extend(blocks[plan.header].1.bind(entry.params.len()));
+            }
+            LayoutItem::Loop { header, body } => {
+                let anchor = &region.blocks[*header].0;
+                let loop_label = curios_wasm::LabelName::from(format!("$loop/{anchor}"));
+                let (head, rest) = body
+                    .split_first()
+                    .expect("a loop layout body is never empty");
+                debug_assert!(
+                    matches!(head, LayoutItem::Block(first) if first == header),
+                    "a loop layout leads with its header block",
+                );
 
-        let mut loop_body = bodies[plan.header].clone();
-        for &block in &plan.body_order {
-            loop_body = std::iter::once(curios_wasm::Instr::Block {
-                label_name: blocks[block].1.label_name.clone(),
-                block_type: curios_wasm::BlockType::Empty,
-                instructions: loop_body,
-            })
-            .chain(bodies[block].clone())
-            .collect();
+                // The loop frame shadows the header's forward-entry registration
+                // with the loop label, so back edges resolve to `br $loop`, and
+                // registers the interior's own forward-entry blocks.
+                let mut registrations = vec![(
+                    &region.blocks[*header].0,
+                    BlockData::new_loop(loop_label.clone(), block_params[*header].clone()),
+                )];
+                registrations.extend(scope_registrations(rest, region, block_params, dispatch));
+                self.context
+                    .enter_frame(Frame::new(HashMap::new(), HashSet::new(), registrations));
+
+                let header_params = block_params[*header].iter().cloned().collect();
+                self.emit_region(header_params, &region.blocks[*header].1.region);
+                let header_body = self.context.leave_frame();
+                let interior = self.fold_items(header_body, rest, region, block_params, dispatch);
+                self.context.leave_frame();
+
+                vec![
+                    curios_wasm::Instr::Loop {
+                        label_name: loop_label,
+                        block_type: curios_wasm::BlockType::Empty,
+                        instructions: interior,
+                    },
+                    curios_wasm::Instr::Unreachable,
+                ]
+            }
+            LayoutItem::Dispatch { members } => {
+                self.emit_dispatch(members, region, block_params, dispatch)
+            }
         }
-        let mut instructions = vec![
+    }
+
+    /// Emit a localized dispatcher for an irreducible component: a `loop` whose
+    /// `br_table` selects a member by index, each member wrapped in its own
+    /// block. Entries from outside set the index and fall into the loop; cross
+    /// edges inside set the index and branch back to the loop.
+    fn emit_dispatch(
+        &mut self,
+        members: &[usize],
+        region: &'a EmissionBody,
+        block_params: &[Vec<(&'a EmissionValueName, LocalData)>],
+        dispatch: &BTreeMap<usize, DispatchPlan>,
+    ) -> Vec<curios_wasm::Instr> {
+        let plan = &dispatch[&members[0]];
+
+        // Inside the dispatcher a member is reached by branching to the loop
+        // with its index set.
+        let registrations = members
+            .iter()
+            .map(|member| {
+                let name = &region.blocks[*member].0;
+                (
+                    name,
+                    BlockData::new(
+                        plan.dispatch_label.clone(),
+                        plan.bloink_local.clone(),
+                        plan.index_of[member],
+                        name,
+                        block_params[*member].clone(),
+                    ),
+                )
+            })
+            .collect();
+        self.context
+            .enter_frame(Frame::new(HashMap::new(), HashSet::new(), registrations));
+
+        let member_bodies = members
+            .iter()
+            .map(|member| {
+                let params = block_params[*member].iter().cloned().collect();
+                self.emit_region(params, &region.blocks[*member].1.region);
+                let label = curios_wasm::LabelName::from(format!("${}", region.blocks[*member].0));
+                (label, self.context.leave_frame())
+            })
+            .collect::<Vec<_>>();
+        self.context.leave_frame();
+
+        let member_labels = member_bodies
+            .iter()
+            .map(|(label, _)| label.clone())
+            .collect::<Vec<_>>();
+        // The indices are always in range, so the default is never taken; the
+        // first member's label is a valid, enclosing target for it.
+        let default = member_labels[0].clone();
+        let inner = vec![
+            curios_wasm::Instr::LocalGet {
+                local_name: plan.bloink_local.clone(),
+            },
+            curios_wasm::Instr::BrTable {
+                label_names: member_labels,
+                label_name: default,
+            },
+        ];
+        let folded = member_bodies
+            .into_iter()
+            .rev()
+            .fold(inner, |instructions, (label, body)| {
+                std::iter::once(curios_wasm::Instr::Block {
+                    label_name: label,
+                    block_type: curios_wasm::BlockType::Empty,
+                    instructions,
+                })
+                .chain(body)
+                .collect()
+            });
+
+        vec![
             curios_wasm::Instr::Loop {
-                label_name: blocks[plan.header].1.label_name.clone(),
+                label_name: plan.dispatch_label.clone(),
                 block_type: curios_wasm::BlockType::Empty,
-                instructions: loop_body,
+                instructions: folded,
             },
             curios_wasm::Instr::Unreachable,
-        ];
-        for &block in &plan.exit_order {
-            instructions = std::iter::once(curios_wasm::Instr::Block {
-                label_name: blocks[block].1.label_name.clone(),
-                block_type: curios_wasm::BlockType::Empty,
-                instructions,
-            })
-            .chain(bodies[block].clone())
-            .collect();
-        }
-        self.emit_instrs(prefix.into_iter().chain(instructions));
+        ]
     }
 
     pub(crate) fn emit_root_region(&mut self, region: &'a EmissionBody) {
@@ -648,324 +578,68 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     }
 }
 
-/// Whether `region`, or any region nested inside its blocks, branches into
-/// `block_name` — via a jump, a match arm, or a call/host resume. A single-block
-/// region whose block is *not* targeted from within its own body has no back-edge,
-/// so it can be emitted with `emit_direct_block` instead of the dispatcher loop.
-fn region_targets_block(region: &EmissionBody, block_name: &EmissionBlockName) -> bool {
-    fn tail_targets(tail: &EmissionTail, block_name: &EmissionBlockName) -> bool {
-        match tail {
-            EmissionTail::Jump(target) => &target.target == block_name,
-            EmissionTail::Match(target) => {
-                target.cases.values().any(|jump| &jump.target == block_name)
-                    || target
-                        .default
-                        .as_ref()
-                        .is_some_and(|jump| &jump.target == block_name)
+/// A localized dispatcher's shared state: the index local read by its
+/// `br_table`, the label a cross edge branches to and the label an outside
+/// entry falls in through, and each member's dispatch index.
+struct DispatchPlan {
+    enter_label: curios_wasm::LabelName,
+    dispatch_label: curios_wasm::LabelName,
+    bloink_local: curios_wasm::LocalName,
+    index_of: BTreeMap<usize, usize>,
+}
+
+/// The forward-entry registrations for a scope's items: a plain block or a
+/// loop's header enter as a forward `block`, and every member of an irreducible
+/// component enters through its dispatcher.
+fn scope_registrations<'a>(
+    items: &[LayoutItem],
+    region: &'a EmissionBody,
+    block_params: &[Vec<(&'a EmissionValueName, LocalData)>],
+    dispatch: &BTreeMap<usize, DispatchPlan>,
+) -> Vec<(&'a EmissionBlockName, BlockData<'a>)> {
+    let mut registrations = Vec::new();
+    for item in items {
+        match item {
+            LayoutItem::Block(block) | LayoutItem::Loop { header: block, .. } => {
+                let name = &region.blocks[*block].0;
+                registrations.push((
+                    name,
+                    BlockData::new_direct(name, block_params[*block].clone()),
+                ));
             }
-            EmissionTail::Call(EmissionCallTarget::Direct { resume, .. })
-            | EmissionTail::Call(EmissionCallTarget::Indirect { resume, .. }) => {
-                resume == block_name
-            }
-            EmissionTail::Host(EmissionHostTarget::Foreign { resume, .. }) => resume == block_name,
-            EmissionTail::Host(EmissionHostTarget::IoExit { .. }) => false,
-            EmissionTail::Cell(cell) => cell.resume() == block_name,
-            EmissionTail::Unreachable => false,
-        }
-    }
-
-    tail_targets(&region.tail, block_name)
-        || region
-            .blocks
-            .iter()
-            .any(|(_, block)| region_targets_block(&block.region, block_name))
-}
-
-fn acyclic_block_order(region: &EmissionBody) -> Option<Vec<usize>> {
-    let successors = block_graph(region);
-    topological_order(&successors, &(0..region.blocks.len()).collect(), None)
-}
-
-#[derive(Debug)]
-struct NaturalLoopPlan {
-    header: usize,
-    body_order: Vec<usize>,
-    exit_order: Vec<usize>,
-}
-
-fn natural_loop_plan(region: &EmissionBody) -> Option<NaturalLoopPlan> {
-    let EmissionTail::Jump(entry) = &region.tail else {
-        return None;
-    };
-    let header = region
-        .blocks
-        .iter()
-        .position(|(block, _)| block == &entry.target)?;
-    let successors = block_graph(region);
-    let mut reachable = vec![vec![false; successors.len()]; successors.len()];
-    for (start, row) in reachable.iter_mut().enumerate() {
-        let mut work = vec![start];
-        while let Some(block) = work.pop() {
-            if row[block] {
-                continue;
-            }
-            row[block] = true;
-            work.extend(successors[block].iter().copied());
-        }
-    }
-
-    let mut remaining = (0..successors.len()).collect::<BTreeSet<_>>();
-    let mut cyclic = Vec::new();
-    while let Some(&seed) = remaining.first() {
-        let component = remaining
-            .iter()
-            .copied()
-            .filter(|&block| reachable[seed][block] && reachable[block][seed])
-            .collect::<BTreeSet<_>>();
-        for block in &component {
-            remaining.remove(block);
-        }
-        if component.len() > 1 || successors[seed].contains(&seed) {
-            cyclic.push(component);
-        }
-    }
-    let [loop_blocks] = cyclic.as_slice() else {
-        return None;
-    };
-    if !loop_blocks.contains(&header) {
-        return None;
-    }
-    for (source, targets) in successors.iter().enumerate() {
-        if loop_blocks.contains(&source) {
-            continue;
-        }
-        if targets
-            .iter()
-            .any(|target| loop_blocks.contains(target) && *target != header)
-        {
-            return None;
-        }
-    }
-
-    let body_order = topological_order(&successors, loop_blocks, Some(header))?;
-    if body_order.first() != Some(&header) {
-        return None;
-    }
-    let exits = (0..successors.len())
-        .filter(|block| !loop_blocks.contains(block))
-        .collect::<BTreeSet<_>>();
-    let exit_order = topological_order(&successors, &exits, None)?;
-    Some(NaturalLoopPlan {
-        header,
-        body_order: body_order.into_iter().skip(1).collect(),
-        exit_order,
-    })
-}
-
-fn block_graph(region: &EmissionBody) -> Vec<BTreeSet<usize>> {
-    region
-        .blocks
-        .iter()
-        .map(|(_, block)| {
-            region
-                .blocks
-                .iter()
-                .enumerate()
-                .filter_map(|(target, (block_name, _))| {
-                    region_targets_block(&block.region, block_name).then_some(target)
-                })
-                .collect()
-        })
-        .collect()
-}
-
-fn topological_order(
-    successors: &[BTreeSet<usize>],
-    members: &BTreeSet<usize>,
-    ignored_target: Option<usize>,
-) -> Option<Vec<usize>> {
-    let mut indegree = vec![0usize; successors.len()];
-    for &source in members {
-        for &target in &successors[source] {
-            if members.contains(&target) && Some(target) != ignored_target {
-                indegree[target] += 1;
+            LayoutItem::Dispatch { members } => {
+                let plan = &dispatch[&members[0]];
+                for member in members {
+                    let name = &region.blocks[*member].0;
+                    registrations.push((
+                        name,
+                        BlockData::new_dispatch_enter(
+                            plan.enter_label.clone(),
+                            plan.bloink_local.clone(),
+                            plan.index_of[member],
+                            name,
+                            block_params[*member].clone(),
+                        ),
+                    ));
+                }
             }
         }
     }
-
-    let mut ready = members
-        .iter()
-        .copied()
-        .filter(|&block| indegree[block] == 0)
-        .collect::<VecDeque<_>>();
-    let mut order = Vec::with_capacity(members.len());
-    while let Some(block) = ready.pop_front() {
-        order.push(block);
-        for &successor in &successors[block] {
-            if members.contains(&successor) && Some(successor) != ignored_target {
-                indegree[successor] -= 1;
-            }
-            if members.contains(&successor)
-                && Some(successor) != ignored_target
-                && indegree[successor] == 0
-            {
-                ready.push_back(successor);
-            }
-        }
-    }
-    (order.len() == members.len()).then_some(order)
+    registrations
 }
 
-#[cfg(test)]
-mod tests {
-    use {
-        super::{acyclic_block_order, natural_loop_plan},
-        crate::{
-            EmissionBlock, EmissionBlockName, EmissionBody, EmissionJumpTarget,
-            EmissionMatchTarget, EmissionTail, EmissionValueName,
-        },
-        std::collections::BTreeMap,
-    };
-
-    fn body(tail: EmissionTail) -> EmissionBody {
-        EmissionBody {
-            shells: vec![],
-            values: vec![],
-            blocks: vec![],
-            tail,
+/// The label a forward branch to an item enters through: a block or loop enters
+/// at its header's own label; an irreducible component through its dispatcher's
+/// enter block.
+fn item_enter_label(
+    item: &LayoutItem,
+    region: &EmissionBody,
+    dispatch: &BTreeMap<usize, DispatchPlan>,
+) -> curios_wasm::LabelName {
+    match item {
+        LayoutItem::Block(block) | LayoutItem::Loop { header: block, .. } => {
+            curios_wasm::LabelName::from(format!("${}", region.blocks[*block].0))
         }
-    }
-
-    fn jump(target: &EmissionBlockName) -> EmissionTail {
-        EmissionTail::Jump(EmissionJumpTarget {
-            target: target.clone(),
-            params: vec![],
-        })
-    }
-
-    #[test]
-    fn orders_acyclic_machine_blocks_without_a_dispatcher() {
-        let first = EmissionBlockName::from("first");
-        let second = EmissionBlockName::from("second");
-        let region = EmissionBody {
-            shells: vec![],
-            values: vec![],
-            blocks: vec![
-                (
-                    first.clone(),
-                    EmissionBlock {
-                        params: vec![],
-                        region: body(jump(&second)),
-                    },
-                ),
-                (
-                    second,
-                    EmissionBlock {
-                        params: vec![],
-                        region: body(EmissionTail::Unreachable),
-                    },
-                ),
-            ],
-            tail: jump(&first),
-        };
-
-        assert_eq!(acyclic_block_order(&region), Some(vec![0, 1]));
-        assert!(natural_loop_plan(&region).is_none());
-    }
-
-    #[test]
-    fn finds_a_single_entry_loop_and_keeps_its_exit_outside() {
-        let header = EmissionBlockName::from("header");
-        let repeat = EmissionBlockName::from("repeat");
-        let exit = EmissionBlockName::from("exit");
-        let region = EmissionBody {
-            shells: vec![],
-            values: vec![],
-            blocks: vec![
-                (
-                    header.clone(),
-                    EmissionBlock {
-                        params: vec![],
-                        region: body(EmissionTail::Match(EmissionMatchTarget {
-                            operand: EmissionValueName::from("condition"),
-                            cases: BTreeMap::from([(
-                                0,
-                                EmissionJumpTarget {
-                                    target: exit.clone(),
-                                    params: vec![],
-                                },
-                            )]),
-                            default: Some(EmissionJumpTarget {
-                                target: repeat.clone(),
-                                params: vec![],
-                            }),
-                        })),
-                    },
-                ),
-                (
-                    repeat,
-                    EmissionBlock {
-                        params: vec![],
-                        region: body(jump(&header)),
-                    },
-                ),
-                (
-                    exit,
-                    EmissionBlock {
-                        params: vec![],
-                        region: body(EmissionTail::Unreachable),
-                    },
-                ),
-            ],
-            tail: jump(&header),
-        };
-
-        let plan = natural_loop_plan(&region).expect("loop is reducible");
-        assert_eq!(plan.header, 0);
-        assert_eq!(plan.body_order, vec![1]);
-        assert_eq!(plan.exit_order, vec![2]);
-    }
-
-    #[test]
-    fn leaves_a_multi_entry_cycle_for_local_dispatch() {
-        let left = EmissionBlockName::from("left");
-        let right = EmissionBlockName::from("right");
-        let region = EmissionBody {
-            shells: vec![],
-            values: vec![],
-            blocks: vec![
-                (
-                    left.clone(),
-                    EmissionBlock {
-                        params: vec![],
-                        region: body(jump(&right)),
-                    },
-                ),
-                (
-                    right.clone(),
-                    EmissionBlock {
-                        params: vec![],
-                        region: body(jump(&left)),
-                    },
-                ),
-            ],
-            tail: EmissionTail::Match(EmissionMatchTarget {
-                operand: EmissionValueName::from("entry"),
-                cases: BTreeMap::from([(
-                    0,
-                    EmissionJumpTarget {
-                        target: left,
-                        params: vec![],
-                    },
-                )]),
-                default: Some(EmissionJumpTarget {
-                    target: right,
-                    params: vec![],
-                }),
-            }),
-        };
-
-        assert!(acyclic_block_order(&region).is_none());
-        assert!(natural_loop_plan(&region).is_none());
+        LayoutItem::Dispatch { members } => dispatch[&members[0]].enter_label.clone(),
     }
 }

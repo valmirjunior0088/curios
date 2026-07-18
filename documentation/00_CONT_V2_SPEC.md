@@ -80,27 +80,7 @@ Each retained transformation needs a high-CPS test for its semantic precondition
 
 ## 2. Finish closure and machine lowering quality
 
-### Closure materialization
-
-- Reuse one escaping closure materialization within a valid lexical scope instead of emitting a fresh `MachineInstruction::MakeClosure` for every `CpsAtom::Fun` occurrence.
-- Preserve direct self, sibling, and external calls even when the same function also has an escaping wrapper.
-- Keep shells limited to escaping closures participating in a residual mixed initialization knot.
-- Add tests for repeated first-class uses, mixed direct/escaping uses, sibling recursion, and zero ordinary recursive shells.
-
-### CFG normalization and analysis
-
-Implement the explicit machine-CFG analyses required by the final backend rather than relying only on emission-tree pattern recognition:
-
-- predecessor and successor tables;
-- critical-edge splitting;
-- deterministic reverse postorder;
-- dominators;
-- SCCs;
-- loop forests and natural-loop membership.
-
-Use those results to structure arbitrary acyclic control and reducible single-entry loops with Wasm `block`, `loop`, `if`, `br`, `br_if`, and `br_table`. A dispatcher remains permitted only inside an irreducible or multi-entry SCC.
-
-Add private machine fixtures for critical edges, nested loops, multiple exits, switches, and one deliberately irreducible SCC. Assert that the irreducible fixture receives exactly one localized dispatcher and that ordinary fixtures receive none.
+Closure materialization reuse and explicit control-flow structuring are landed. One escaping-closure materialization is reused within its lexical scope, and direct self, sibling, and external calls stay direct even when the same function also has an escaping wrapper; shells remain limited to escaping closures in a residual mixed initialization knot. The emitter recovers control structure by strongly-connected-component condensation over the emission region graph rather than emission-tree pattern recognition: acyclic control uses forward `block`/`br`/`br_table`, a reducible single-entry component becomes a `loop` (nested for nested loops), and an irreducible or multi-entry component receives exactly one localized `br_table` dispatcher while ordinary reducible functions receive none. The condensation subsumes the machine-CFG dominator, reverse-postorder, and critical-edge-splitting analyses the earlier plan listed; none of those separate passes are part of the landed design. The `structure` module carries region-CFG construction, SCC condensation, and layout, with unit fixtures for acyclic layout, single and nested loops, and an irreducible dispatcher.
 
 ### Backend-local cleanup
 
@@ -120,7 +100,7 @@ The deleted direct region-builder fixtures must have equivalent coverage before 
 - Keep end-to-end semantics as source or Ersd pipeline tests.
 - Restore exhaustive primitive lowering coverage for Nat, Int, Flt, packed values, lists, tuples, cells, foreign calls, and list map.
 - Restore rope construction, slicing, reading, equality, forcing, embedding, deep-chain stack safety, and helper-ABI coverage in the new emitter tests.
-- Add focused tests for foreign result arities, wrapper closure invocation, closure reuse, residual `RecInit`, function-only fallback rejection, CFG verifier failures, critical-edge splitting, and localized dispatch.
+- Add focused tests for foreign result arities, wrapper closure invocation, closure reuse, residual `RecInit`, function-only fallback rejection, block-scope verifier failures, and localized dispatch.
 - Assert structure through normalized CPS, private machine fixtures, and Wasm inspection. Do not assert generated numeric IDs or exact Wasm bytes.
 
 Retain the existing full native semantic corpus as an end-to-end gate, but do not treat it as a substitute for removed backend-unit coverage.

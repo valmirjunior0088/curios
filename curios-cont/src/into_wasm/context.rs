@@ -731,56 +731,6 @@ impl<'a, 'b> Context<'a, 'b> {
 
         output
     }
-
-    pub(crate) fn bloink_instrs(
-        &self,
-        bloink_local: curios_wasm::LocalName,
-        bloink_label: curios_wasm::LabelName,
-        regions: Vec<(curios_wasm::LabelName, Vec<curios_wasm::Instr>)>,
-        tail: &'a EmissionTail,
-    ) -> Vec<curios_wasm::Instr> {
-        let label_name = curios_wasm::LabelName::from("tail");
-
-        let instructions = vec![
-            curios_wasm::Instr::LocalGet {
-                local_name: bloink_local.clone(),
-            },
-            curios_wasm::Instr::BrTable {
-                label_names: regions
-                    .iter()
-                    .map(|(block_label, _)| block_label.clone())
-                    .collect(),
-                label_name: label_name.clone(),
-            },
-        ];
-
-        let instructions = regions
-            .into_iter()
-            .chain([(label_name, self.tail_instrs(tail))])
-            .rev()
-            .fold(instructions, |instructions, (block_label, block_body)| {
-                iter::once(curios_wasm::Instr::Block {
-                    label_name: block_label.clone(),
-                    block_type: curios_wasm::BlockType::Empty,
-                    instructions,
-                })
-                .chain(block_body)
-                .collect()
-            });
-
-        vec![
-            curios_wasm::Instr::I32Const { value: -1 },
-            curios_wasm::Instr::LocalSet {
-                local_name: bloink_local,
-            },
-            curios_wasm::Instr::Loop {
-                label_name: bloink_label,
-                block_type: curios_wasm::BlockType::Empty,
-                instructions,
-            },
-            curios_wasm::Instr::Unreachable,
-        ]
-    }
 }
 
 #[derive(Debug, Clone)]
