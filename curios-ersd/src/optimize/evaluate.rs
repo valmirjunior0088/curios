@@ -6,10 +6,10 @@
 //! erasure that computation is ordinary first-order evaluation, so this pass
 //! runs it here: every **closed** `Apply` (its free names all resolve to module
 //! items) is handed to a fueled big-step call-by-value interpreter, and a
-//! successful run replaces the call with its reified result. Cont's
-//! `evaluate_pure_calls` cannot reach these — its purity classifier statically
-//! rejects any body with an indirect call, and combinator code is built from
-//! records of closures — while an interpreter simply follows the closures.
+//! successful run replaces the call with its reified result. A static purity
+//! classifier that rejects any body with an indirect call cannot reach these —
+//! combinator code is built from records of closures — whereas the interpreter
+//! simply follows the closures.
 //!
 //! Three result shapes are installed:
 //!

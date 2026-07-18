@@ -78,23 +78,13 @@ Unchecked items may link to working implementation specifications. When an item 
 
 ## Optimizations
 
-- [ ] [Continuation IR v2](00_CONT_V2_SPEC.md) (replace region-based post-closure CPS with a pre-closure CPS graph, delayed closure conversion, SCC-wide known-argument propagation, and structured Wasm control flow before the bootstrap representation baseline is frozen)
-- [ ] [Ersd v2](01_ERSD_V2_SPEC.md) (after Continuation IR v2 lands, replace the recursive erased-term representation with verified arena-backed scoped ANF, centralized semantic contracts, derived specialization facts, and direct lowering into the landed continuation interface)
+- [x] Continuation IR v2 (a pre-closure CPS graph replacing the region-based post-closure optimizer: arena-backed high CPS, delayed closure conversion, an interprocedural optimizer with literal folding, effect-aware dead-binding and dead-parameter elimination, bounded inlining, contification, and recursive-SCC known-argument propagation, specialization, and branch specialization, and structured Wasm control flow by SCC condensation into blocks, loops, and one localized dispatcher for irreducible scopes; the region optimizer's separate late passes — common-subexpression elimination, pure-call evaluation, literal hoisting, tag/callee threading, loop-invariant motion, list-map simplification, and slice forwarding — were measured redundant in the new pipeline and removed)
+- [ ] [Ersd v2](01_ERSD_V2_SPEC.md) (replace the recursive erased-term representation with verified arena-backed scoped ANF, centralized semantic contracts, derived specialization facts, and direct lowering into the landed continuation interface)
 - [x] Core calculus machinery (reduction & conversion performance)
 - [x] Ersd (ersd→ersd) optimization passes
   - [x] Dead-item pruning via call-graph reachability
   - [x] Closed-term evaluation and recursive literal-spine specialization
   - [x] Worker/wrapper transform for non-tail self-recursion
-- [x] CPS (cont→cont) optimization passes
-  - [x] Constant folding
-  - [x] Common-subexpression elimination
-  - [x] Dead code elimination
-  - [x] Tag threading (known-argument case/callee specialization)
-  - [x] Closure lifting and call-site specialization
-  - [x] Function inlining
-  - [x] Tail-recursion-to-loop conversion
-  - [x] Loop-invariant code motion
-  - [x] Copy propagation, pure-call evaluation, literal hoisting, jump and jump-argument threading, dead-argument elimination, map simplification, and slice forwarding
 - [x] Wasm-emission optimizations
   - [x] `struct.new` construction with immutable fields
   - [x] Direct `br` for single-target regions

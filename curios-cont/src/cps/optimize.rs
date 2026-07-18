@@ -1,4 +1,9 @@
 //! Deterministic high-CPS canonicalization and propagation.
+//!
+//! The pipeline never keys on input names: every rewrite depends only on graph
+//! structure and the enforced budget constants below, so the same module always
+//! optimizes identically. Performance is investigated with revision worktrees and
+//! temporary instrumentation, never a permanent metrics API.
 
 use {
     crate::{

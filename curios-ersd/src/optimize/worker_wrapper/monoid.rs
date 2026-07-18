@@ -86,7 +86,7 @@ pub(super) struct MonoidPlan {
 /// A monoid registered for accumulator reassociation, keyed in the *post-erasure*
 /// `ersd` operators. No `And`/`all` row: boolean `BlnAnd` and bitwise `NatAnd` erase
 /// to the same `NatAnd` with different, empty-observable identities, so no single
-/// erased seed is sound for both (`suffix_view` / spec §5.1). `NatOr` (the `any`
+/// erased seed is sound for both (the slice re-base laws / spec §5.1). `NatOr` (the `any`
 /// fold, identity `0`, shared by boolean-or and bitwise-or) does ship.
 #[derive(Clone, Copy, PartialEq)]
 enum Monoid {

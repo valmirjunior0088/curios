@@ -8,7 +8,7 @@ This project is part of the representation series that must settle before the bo
 
 Ersd v2 is a replacement of the `curios-ersd` representation, Core-to-Ersd erasure boundary, archived Ersd prelude prefix, Ersd optimizer, and Ersd-owned lowering into the landed Cont v2 representation. Reorganizing those components from scratch is permitted. The project must preserve language behavior, the public pipeline stages, the host ABI, the runtime ABI, the supported recursive initialization contract, and the downstream Cont contract unless this specification explicitly says otherwise.
 
-The project deliberately follows Cont v2 rather than changing both representations concurrently. Phase 0 records the Cont types and behaviors that actually landed, reconciles any stale statements in this document or `00_CONT_V2_SPEC.md`, and establishes a frozen lowering target before production Ersd migration begins.
+The project deliberately follows Cont v2 rather than changing both representations concurrently. Phase 0 records the Cont types and behaviors that actually landed, reconciles any stale statements in this document against the landed `curios-cont` interface, and establishes a frozen lowering target before production Ersd migration begins.
 
 The intended pipeline becomes:
 
@@ -823,7 +823,7 @@ Exit criterion: each enabled transform has a named profitable workload, sound la
 - Remove compatibility tests that assert obsolete structure while retaining their behavioral coverage.
 - Move durable invariants into crate and module documentation.
 - Update `AGENTS.md`, `ROADMAP.md`, and the bootstrap representation baseline to describe the landed architecture.
-- Reconcile or remove references in `00_CONT_V2_SPEC.md`, then delete this working specification when no active document depends on it.
+- Delete this working specification when no active document depends on it.
 
 Exit criterion: one production Ersd representation remains, all done-bar gates pass, and repository documentation describes actual code rather than the migration.
 

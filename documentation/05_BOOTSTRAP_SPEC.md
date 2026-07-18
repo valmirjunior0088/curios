@@ -354,7 +354,7 @@ The frozen Rust frontend remains in tests and S0. It does not receive post-cutov
 
 ### Phase 6 — Ersd and continuation backend
 
-Port Ersd semantics, correctness-preserving lowering to continuation form, the continuation IR, and lowering to the Curios Wasm model. Establish an unoptimized correctness path before porting the optimizer suite.
+Port Ersd semantics, correctness-preserving lowering to continuation form, the continuation IR (the landed pre-closure CPS graph, its private machine CFG, and structured Wasm emission), and lowering to the Curios Wasm model. Establish an unoptimized correctness path before porting the optimizer suite.
 
 Optimizers are restored in viability order rather than Rust source order. The first tier contains transformations required to keep compiler artifacts and self-compilation within practical memory, code-size, and execution bounds, including reachability pruning and the passes on which large recursive Curios programs rely. The second tier restores production performance and output quality. A pass may remain Rust-oracle-only temporarily if omitting it preserves semantics and does not prevent self-compilation.
 

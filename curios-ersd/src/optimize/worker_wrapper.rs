@@ -12,7 +12,7 @@
 //! - **Per-step cost** — the argument `d(x)` re-slices an `O(n)` buffer suffix.
 //!   When the buffer is only *observed* (`len`/`get`/drop-front `slice`), the copy
 //!   is unnecessary and an integer cursor over the fixed base replaces it:
-//!   [`SliceCursor`] (the [`suffix_view`](super::suffix_view) laws across recursion).
+//!   [`SliceCursor`] (the slice re-base laws across recursion).
 //!
 //! `count_w` (`Str/len`) needs both. The driver recognises each change on the
 //! *original* body, then lowers them in a fixed order — **cursor first, then

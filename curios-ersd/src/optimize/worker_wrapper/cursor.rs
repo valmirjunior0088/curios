@@ -7,9 +7,8 @@
 //! elements, turning an `O(n)` walk into `O(n²)`. But the suffix never needs to be
 //! materialised. A recursion whose buffer parameter `b` is recursed only as a
 //! drop-front suffix `slice(b, k, len b)` and otherwise read only through `len b`,
-//! `get b i`, and `slice b p q` (the `suffix_view` laws — see
-//! [`Carrier`](Carrier)) can thread an integer `offset` over the
-//! original buffer instead:
+//! `get b i`, and `slice b p q` (the slice re-base laws — see [`Carrier`]) can
+//! thread an integer `offset` over the original buffer instead:
 //!
 //! ```text
 //!   len b              ↦  len base − offset
@@ -30,9 +29,19 @@ use {
         Apply, Argument, Func, Prim, PurePrim, Subterm, Term,
         optimize::{CallGraph, rewrite},
     },
-    curios_base::{Carrier, Grain},
+    curios_base::Grain,
     std::mem,
 };
+
+/// The buffer carrier a slice cursor threads over: `Bin` or `Lst`. Selects which
+/// `len`/`get`/`slice` primitives are recognised and emitted; a consumer only
+/// forwards through a slice of its own carrier, though well-typed code never mixes
+/// them.
+#[derive(Clone, Copy, PartialEq)]
+enum Carrier {
+    Bin,
+    Lst,
+}
 
 /// The argument-side worker/wrapper change. See the module documentation.
 pub(super) struct SliceCursor;
