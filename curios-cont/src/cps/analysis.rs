@@ -174,7 +174,13 @@ pub(super) fn function_nodes(module: &CpsModule, function: CpsFunId) -> Vec<CpsN
             } => {
                 work.push(*body);
                 for continuation in continuations.iter().rev() {
-                    work.push(module.continuation(*continuation).unwrap().body);
+                    // Tolerate a tombstoned continuation: an inline sweep can leave a
+                    // `LetCont` transiently referencing an inlined-away continuation
+                    // until its sweep-ending prune. That continuation's body is dead,
+                    // so skipping it is correct.
+                    if let Some(continuation) = module.continuation(*continuation) {
+                        work.push(continuation.body);
+                    }
                 }
             }
             CpsNode::ApplyFun { .. }
@@ -205,7 +211,13 @@ pub(super) fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> 
             } => {
                 work.push(*body);
                 for continuation in continuations.iter().rev() {
-                    work.push(module.continuation(*continuation).unwrap().body);
+                    // Tolerate a tombstoned continuation: an inline sweep can leave a
+                    // `LetCont` transiently referencing an inlined-away continuation
+                    // until its sweep-ending prune. That continuation's body is dead,
+                    // so skipping it is correct.
+                    if let Some(continuation) = module.continuation(*continuation) {
+                        work.push(continuation.body);
+                    }
                 }
             }
             CpsNode::ApplyFun { .. }

@@ -10,25 +10,40 @@ use {
 
 pub(super) fn inline_known_calls(module: &mut CpsModule) -> bool {
     let mut changed = false;
+    // Inline in sweeps: build the whole-module call analysis once, then inline
+    // every candidate it exposes before rebuilding. Rebuilding per inline is what
+    // made this quadratic on a large unoptimized module. Per-callee facts
+    // (`free_values`, body shape) are stable across a sweep because inlining a call
+    // copies the callee rather than mutating it, and a surviving call node keeps
+    // its owner; only the site counts go stale within a sweep, and a stale count
+    // only tightens the size budget, so the calls it defers are picked up by the
+    // next sweep's fresh analysis. Inlining that exposes a call inside a copied body
+    // is likewise handled by the following sweep.
     for _ in 0..10_000 {
         let analysis = analyze_calls(module);
-        let mut selected = None;
-        for (index, node) in module.nodes.iter().enumerate() {
+        let mut inlined_any = false;
+        for index in 0..module.nodes.len() {
+            let node_id = CpsNodeId(index as u32);
+            // Re-read: an earlier inline in this sweep may have removed or rewritten
+            // this node.
             let Some(CpsNode::ApplyFun {
                 callee: CpsCallee::Known(callee),
                 args,
                 return_to,
-            }) = node
+            }) = module.node(node_id)
             else {
                 continue;
             };
-            if Some(*callee) == module.entry || analysis.recursive.contains(callee) {
+            let (callee, args, return_to) = (*callee, args.clone(), *return_to);
+            if Some(callee) == module.entry || analysis.recursive.contains(&callee) {
                 continue;
             }
-            let nodes = function_nodes(module, *callee);
-            let owner = analysis.node_owners[&CpsNodeId(index as u32)];
+            let Some(&owner) = analysis.node_owners.get(&node_id) else {
+                continue;
+            };
+            let nodes = function_nodes(module, callee);
             let owner_values = available_values(module, owner);
-            if !free_values(module, *callee).is_subset(&owner_values) {
+            if !free_values(module, callee).is_subset(&owner_values) {
                 continue;
             }
             if nodes.iter().any(|node| {
@@ -39,8 +54,8 @@ pub(super) fn inline_known_calls(module: &mut CpsModule) -> bool {
             }) {
                 continue;
             }
-            let sites = analysis.call_sites.get(callee).map_or(0, Vec::len);
-            let duplicated = sites > 1 || analysis.escaping.contains(callee);
+            let sites = analysis.call_sites.get(&callee).map_or(0, Vec::len);
+            let duplicated = sites > 1 || analysis.escaping.contains(&callee);
             let limit = if duplicated {
                 MULTI_SITE_INLINE_LIMIT
             } else {
@@ -49,22 +64,25 @@ pub(super) fn inline_known_calls(module: &mut CpsModule) -> bool {
             if nodes.len() > limit {
                 continue;
             }
-            selected = Some((CpsNodeId(index as u32), *callee, args.clone(), *return_to));
+            if inline_call(module, node_id, callee, &args, return_to) {
+                changed = true;
+                inlined_any = true;
+            }
+        }
+        if !inlined_any {
             break;
         }
-
-        let Some((call, callee, args, return_to)) = selected else {
-            break;
-        };
-        if !inline_call(module, call, callee, &args, return_to) {
-            break;
-        }
-        changed = true;
     }
     changed
 }
 pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
     let mut changed = false;
+    // Inline in sweeps: build the recursive-value set and the transfer index once
+    // per sweep rather than once per inline. Inlining a single-use continuation
+    // moves its one transfer without duplicating it, so it never changes another
+    // continuation's transfer count — the snapshot stays valid for the rest of the
+    // sweep. Each candidate is re-read against the live module, and the module is
+    // pruned once at the end of each sweep rather than after every inline.
     for _ in 0..10_000 {
         let recursive_values = module
             .nodes
@@ -78,12 +96,14 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
             .copied()
             .collect::<BTreeSet<_>>();
         let transfers_by_target = continuation_transfers(module);
-        let mut selected = None;
-        for (index, continuation) in module.continuations.iter().enumerate() {
-            let Some(continuation) = continuation else {
+        let mut inlined_any = false;
+        for index in 0..module.continuations.len() {
+            let target = CpsContId(index as u32);
+            // Re-read: an earlier inline (and its prune) in this sweep may have
+            // removed or rewritten this continuation.
+            let Some(continuation) = module.continuation(target) else {
                 continue;
             };
-            let target = CpsContId(index as u32);
             if continuation
                 .params
                 .iter()
@@ -98,23 +118,27 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
                 continue;
             }
             let call = transfers[0];
+            let params_len = continuation.params.len();
             let Some(CpsNode::ApplyCont(edge)) = module.node(call) else {
                 continue;
             };
-            if edge.target == target && edge.args.len() == continuation.params.len() {
-                selected = Some((target, call, edge.args.clone()));
-                break;
+            if edge.target != target || edge.args.len() != params_len {
+                continue;
+            }
+            let args = edge.args.clone();
+            if inline_continuation(module, target, call, &args) {
+                changed = true;
+                inlined_any = true;
             }
         }
-
-        let Some((continuation, call, args)) = selected else {
-            break;
-        };
-        if !inline_continuation(module, continuation, call, &args) {
+        if !inlined_any {
             break;
         }
+        // Prune once per sweep rather than once per inline: `nodes_from` tolerates
+        // the transient dangling `LetCont` references left within the sweep, so the
+        // repair only has to happen before the next sweep rebuilds its transfer
+        // index.
         prune_unreachable(module);
-        changed = true;
     }
     changed
 }
