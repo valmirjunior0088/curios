@@ -1314,7 +1314,7 @@ impl fmt::Display for CpsModule {
                 write!(f, "${name}")?;
             }
             write!(f, "(")?;
-            separated(f, function.params.iter())?;
+            params(self, f, &function.params)?;
             writeln!(f, ") -> {} = {}", function.return_cont, function.body)?;
         }
         for (index, continuation) in self.continuations.iter().enumerate() {
@@ -1323,7 +1323,7 @@ impl fmt::Display for CpsModule {
             };
             let id = CpsContId(index as u32);
             write!(f, "cont {id}(")?;
-            separated(f, continuation.params.iter())?;
+            params(self, f, &continuation.params)?;
             writeln!(f, ") = {}", continuation.body)?;
         }
         for (index, node) in self.nodes.iter().enumerate() {
@@ -1334,15 +1334,23 @@ impl fmt::Display for CpsModule {
     }
 }
 
-fn separated<T: fmt::Display>(
-    f: &mut fmt::Formatter<'_>,
-    items: impl Iterator<Item = T>,
-) -> fmt::Result {
-    for (index, item) in items.enumerate() {
+/// Render a parameter list, spelling each binder's source hint as `$name` — the
+/// definition-site form that matches function names and the wasm scheme, so a
+/// value's origin is legible where it is bound. A binder with no hint prints bare.
+fn params(module: &CpsModule, f: &mut fmt::Formatter<'_>, params: &[CpsValueId]) -> fmt::Result {
+    for (index, &param) in params.iter().enumerate() {
         if index != 0 {
             write!(f, ", ")?;
         }
-        write!(f, "{item}")?;
+        write!(f, "{param}")?;
+        if let Some(name) = module
+            .values()
+            .get(param.index())
+            .and_then(Option::as_ref)
+            .and_then(|def| def.debug_name.as_ref())
+        {
+            write!(f, "${name}")?;
+        }
     }
     Ok(())
 }
