@@ -177,6 +177,8 @@ It builds the `curios/profile` binary with `--features profile` and prints one r
 
 Add a measurement point by attributing the function with `#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]`; it compiles to nothing without the feature. Stage entrypoints and optimizer passes carry permanent spans; a span added to isolate one investigation is temporary instrumentation and is removed once the question is answered, never left as a metrics API.
 
+To break down the individual steps of a loop — for example each pass inside an optimizer's fixpoint, where instrumenting the pass function still aggregates all its calls but a per-step split needs a span around each call site — wrap each step with `curios_base::profile_span!("name", expr)`. It enters a `tracing` span for that expression under the invoking crate's `profile` feature and expands to the bare expression otherwise. Like the attribute, it is temporary instrumentation to remove once the breakdown is understood.
+
 The binary profiles `compile_entrypoint` by default. To profile a path it does not already exercise, point `curios/profile/main.rs` at the relevant entrypoint (for example `compile_entrypoint_via_arena`) for the duration of the investigation, then restore it.
 
 ## Documentation ownership
