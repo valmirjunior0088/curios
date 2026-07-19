@@ -43,6 +43,8 @@ pub use verify::*;
 mod build;
 pub use build::*;
 
+mod print;
+
 #[cfg(test)]
 mod module_tests;
 
@@ -51,3 +53,6 @@ mod build_tests;
 
 #[cfg(test)]
 mod verify_tests;
+
+#[cfg(test)]
+mod print_tests;
