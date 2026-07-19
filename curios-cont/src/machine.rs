@@ -160,6 +160,17 @@ pub(crate) struct MachineModule {
     functions: BTreeMap<CpsFunId, MachineFunction>,
     wrappers: BTreeMap<CpsFunId, MachineWrapper>,
     entry: CpsFunId,
+    /// Each function's source hint, carried from the Cont module so emission names
+    /// can spell a function's origin (`func/{index}$hint`). A hint never affects
+    /// identity — the `CpsFunId` index does — so a missing entry only omits the hint.
+    function_hints: BTreeMap<CpsFunId, String>,
+}
+
+impl MachineModule {
+    /// The source hint of a function, if it carries one.
+    pub(crate) fn function_hint(&self, id: CpsFunId) -> Option<&str> {
+        self.function_hints.get(&id).map(String::as_str)
+    }
 }
 
 #[derive(Debug)]
@@ -232,10 +243,20 @@ pub(crate) fn lower(source: &CpsModule) -> MachineModule {
         let lowered = MachineFunctionLowerer::new(source, id, function, &free_values).lower();
         functions.insert(id, lowered);
     }
+    let function_hints = source
+        .functions()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, function)| {
+            let name = function.as_ref()?.debug_name.clone()?;
+            Some((CpsFunId::from_index(index), name))
+        })
+        .collect();
     let module = MachineModule {
         functions,
         wrappers,
         entry: source.entry().unwrap(),
+        function_hints,
     };
     module.verify().expect("invalid closed machine CFG");
     module

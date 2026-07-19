@@ -17,11 +17,14 @@ use {
 pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
     let mut output = EmissionModule::new();
     for (function, wrapper) in &machine.wrappers {
-        output.add_clsr(wrapper_name(*function), convert_wrapper(wrapper));
+        output.add_clsr(
+            wrapper_name(machine, *function),
+            convert_wrapper(machine, wrapper),
+        );
     }
     for (id, function) in &machine.functions {
         let resume = return_name(*id);
-        let region = MachineFunctionBridge::new(*id, function, resume.clone()).convert();
+        let region = MachineFunctionBridge::new(machine, *id, function, resume.clone()).convert();
         let params = function
             .free_values
             .iter()
@@ -43,7 +46,7 @@ pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
     output
 }
 
-fn convert_wrapper(wrapper: &MachineWrapper) -> EmissionClosure {
+fn convert_wrapper(machine: &MachineModule, wrapper: &MachineWrapper) -> EmissionClosure {
     let resume = EmissionBlockName::from(format!("return/wrapper/{}", wrapper.function.index()));
     let fields = wrapper
         .captures
@@ -72,7 +75,7 @@ fn convert_wrapper(wrapper: &MachineWrapper) -> EmissionClosure {
             values: vec![],
             blocks: vec![],
             tail: EmissionTail::Call(EmissionCallTarget::Direct {
-                target: direct_name(wrapper.function),
+                target: direct_name(machine, wrapper.function),
                 params: call_params,
                 resume,
             }),
@@ -81,6 +84,7 @@ fn convert_wrapper(wrapper: &MachineWrapper) -> EmissionClosure {
 }
 
 struct MachineFunctionBridge<'a> {
+    machine: &'a MachineModule,
     function_id: CpsFunId,
     function: &'a MachineFunction,
     resume: EmissionBlockName,
@@ -90,12 +94,14 @@ struct MachineFunctionBridge<'a> {
 
 impl<'a> MachineFunctionBridge<'a> {
     fn new(
+        machine: &'a MachineModule,
         function_id: CpsFunId,
         function: &'a MachineFunction,
         resume: EmissionBlockName,
     ) -> Self {
         let block_captures = block_captures(function);
         Self {
+            machine,
             function_id,
             function,
             resume,
@@ -145,13 +151,13 @@ impl<'a> MachineFunctionBridge<'a> {
                     values.push((
                         value_name(*result),
                         EmissionValue::Pure(EmissionData::Closure(
-                            wrapper_name(*function),
+                            wrapper_name(self.machine, *function),
                             captures,
                         )),
                     ));
                 }
                 MachineInstruction::FallbackShell { result, function } => {
-                    shells.push((value_name(*result), wrapper_name(*function)));
+                    shells.push((value_name(*result), wrapper_name(self.machine, *function)));
                 }
                 MachineInstruction::FallbackFill {
                     shell,
@@ -162,7 +168,7 @@ impl<'a> MachineFunctionBridge<'a> {
                     values.push((
                         value_name(*shell),
                         EmissionValue::Pure(EmissionData::Closure(
-                            wrapper_name(*function),
+                            wrapper_name(self.machine, *function),
                             captures,
                         )),
                     ));
@@ -238,13 +244,13 @@ impl<'a> MachineFunctionBridge<'a> {
                 args,
                 resume,
             } => EmissionTail::Call(EmissionCallTarget::Direct {
-                target: direct_name(*function),
+                target: direct_name(self.machine, *function),
                 params: self.operands(args, values),
                 resume: self.resume_target(*resume, 1, blocks),
             }),
             MachineTerminator::TailDirectCall { function, args } => {
                 EmissionTail::Call(EmissionCallTarget::Direct {
-                    target: direct_name(*function),
+                    target: direct_name(self.machine, *function),
                     params: self.operands(args, values),
                     resume: self.resume.clone(),
                 })
@@ -861,14 +867,23 @@ fn primitive(op: CpsPrimOp, args: Vec<EmissionValueName>) -> EmissionCode {
     }
 }
 
+/// Spell an emission entity as `{index}$hint`, or bare `{index}` when it carries
+/// no source hint. The `$` marks a user-origin name (the wasm scheme's convention),
+/// while the leading index is the uniquifier that actually carries identity.
+fn hinted(index: usize, hint: Option<&str>) -> String {
+    match hint {
+        Some(hint) => format!("{index}${hint}"),
+        None => index.to_string(),
+    }
+}
 fn value_name(value: MachineValueId) -> EmissionValueName {
     EmissionValueName::from(format!("m{}", value.0))
 }
-fn direct_name(function: CpsFunId) -> EmissionFunctionName {
-    EmissionFunctionName::from(format!("f{}", function.index()))
+fn direct_name(machine: &MachineModule, function: CpsFunId) -> EmissionFunctionName {
+    EmissionFunctionName::from(hinted(function.index(), machine.function_hint(function)))
 }
-fn wrapper_name(function: CpsFunId) -> EmissionClosureName {
-    EmissionClosureName::from(format!("f{}", function.index()))
+fn wrapper_name(machine: &MachineModule, function: CpsFunId) -> EmissionClosureName {
+    EmissionClosureName::from(hinted(function.index(), machine.function_hint(function)))
 }
 fn return_name(function: CpsFunId) -> EmissionBlockName {
     EmissionBlockName::from(format!("return/{}", function.index()))
@@ -877,6 +892,6 @@ fn function_name(machine: &MachineModule, function: CpsFunId) -> EmissionFunctio
     if function == machine.entry {
         EmissionFunctionName::from("main")
     } else {
-        direct_name(function)
+        direct_name(machine, function)
     }
 }

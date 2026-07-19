@@ -4,12 +4,13 @@
 //! recursion, the closure ABI only where a call is genuinely unknown — and that
 //! the raw module validates and executes without Binaryen repairing control flow.
 //!
-//! Emitted function names are unstable `$func/f<N>` ids (a module-wide monotonic
-//! index over every reachable function, prelude included), so hot kernels are
-//! located by a distinctive literal constant baked into their arithmetic (`65537`
-//! for LCG, `1000003` for trees) or by name-independent structure (self-recursion,
-//! the shared `$func/fN`/`$clsr/fN` index of a function used both directly and as a
-//! closure), never by a source name. A genuine irreducible-cycle dispatcher is the
+//! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over
+//! every reachable function, prelude included — optionally suffixed with the source
+//! hint as `$func/<N>$hint`. The index carries identity; the hint is only origin
+//! annotation. Hot kernels are still located by a distinctive literal constant baked
+//! into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent
+//! structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function
+//! used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the
 //! `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an
 //! ordinary constructor-tag `switch` lowers to a `br_table` over `$case$N`/`$tail`
 //! labels and is not a dispatcher.
@@ -286,8 +287,9 @@ fn loop_containing<'a>(wat: &'a str, needle: &str) -> &'a str {
     &wat[start..end]
 }
 
-/// The `f<N>` indices following every occurrence of `prefix` (e.g. `"call $func/f"`
-/// for directly-called functions, `"ref.func $clsr/f"` for materialized closures).
+/// The `<N>` indices following every occurrence of `prefix` (e.g. `"call $func/"`
+/// for directly-called functions, `"ref.func $clsr/"` for materialized closures);
+/// the digit run stops at the optional `$hint` suffix.
 fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
     let mut set = BTreeSet::new();
     let mut cursor = 0;
@@ -433,7 +435,7 @@ fn trees_build_and_sum_stay_direct_recursive() {
 
     let build = functions
         .iter()
-        .filter(|f| f.name.starts_with("$func/f") && !f.body.contains("1000003"))
+        .filter(|f| f.name.starts_with("$func/") && !f.body.contains("1000003"))
         .find(|f| f.self_calls() >= 2)
         .expect("build recurses directly on both subtrees");
     assert!(
@@ -510,15 +512,15 @@ fn unknown_higher_order_call_uses_closure_abi_and_call_ref() {
 }
 
 /// G2: direct and escaping uses of the same function coexist. A function used both
-/// directly and as a first-class value is emitted once as `$func/f<N>` (the direct
-/// callee) and once as `$clsr/f<N>` (the escaping wrapper) under the same index, so
-/// the set of directly-called `$func/f<N>` indices and the set of `ref.func`'d
-/// `$clsr/f<N>` indices overlap.
+/// directly and as a first-class value is emitted once as `$func/<N>` (the direct
+/// callee) and once as `$clsr/<N>` (the escaping wrapper) under the same index, so
+/// the set of directly-called `$func/<N>` indices and the set of `ref.func`'d
+/// `$clsr/<N>` indices overlap.
 #[test]
 fn direct_and_escaping_uses_coexist() {
     let wat = wat(DIRECT_ESCAPING);
-    let called_directly = indices(&wat, "call $func/f");
-    let escaped = indices(&wat, "ref.func $clsr/f");
+    let called_directly = indices(&wat, "call $func/");
+    let escaped = indices(&wat, "ref.func $clsr/");
 
     assert!(
         called_directly.intersection(&escaped).next().is_some(),
