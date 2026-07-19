@@ -1,0 +1,419 @@
+use super::*;
+
+fn nat_atom(builder: &mut ErsdBuilder, value: u32) -> ErasedAtom {
+    let constant = builder.constant(Constant::Nat(value));
+    ErasedAtom::Constant(constant)
+}
+
+/// The `Task/join_all` idiom: a recursive group function called by the
+/// computed member's eager initializer. The first run's verifier over-rejected
+/// this shape; it is a supported program.
+#[test]
+fn a_join_all_shaped_knot_verifies() {
+    let mut builder = ErsdBuilder::new();
+
+    // rec { fn go(i) = go(i); result = go(0) }
+    let go = builder.reserve_function();
+    let i = builder.value(Some("i".into()));
+    builder.open_block();
+    let recur = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: ErasedAtom::Function(go),
+            arguments: vec![ErasedAtom::Value(i)],
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(ErasedAtom::Value(recur)));
+    builder.define_function(go, Some("go".into()), vec![i], body);
+
+    let result = builder.value(Some("result".into()));
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: ErasedAtom::Function(go),
+            arguments: vec![zero],
+        },
+    );
+    let init = builder.seal_block(Terminator::Return(ErasedAtom::Value(call)));
+    let group = builder.rec_group(vec![go], vec![(result, init)]);
+    builder.item_rec(group);
+
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(result)));
+    builder.set_entry(entry);
+    builder.finalize().expect("the join_all shape is supported");
+}
+
+/// The self-referential lazy value: a value-only group whose knot closes
+/// through a closure constructed by the initializer. The reference to the
+/// member under initialization is dormant, so it is admitted; the lowering
+/// knots it through a cell.
+#[test]
+fn a_self_referential_lazy_value_verifies() {
+    let mut builder = ErsdBuilder::new();
+    let schema = builder.product(ProductSchema {
+        debug_name: Some("Lazy".into()),
+        fields: vec![Some("force".into())],
+    });
+
+    // rec { lazy = Lazy { force: fn() = lazy } }
+    let lazy = builder.value(Some("lazy".into()));
+    builder.open_block();
+    let force = builder.reserve_function();
+    builder.open_block();
+    let force_body = builder.seal_block(Terminator::Return(ErasedAtom::Value(lazy)));
+    builder.define_function(force, Some("force".into()), vec![], force_body);
+    builder.let_functions(vec![force]);
+    let boxed = builder.let_value(
+        None,
+        Rhs::Product {
+            schema,
+            fields: vec![ErasedAtom::Function(force)],
+        },
+    );
+    let init = builder.seal_block(Terminator::Return(ErasedAtom::Value(boxed)));
+    let group = builder.rec_group(vec![], vec![(lazy, init)]);
+    builder.item_rec(group);
+
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(lazy)));
+    builder.set_entry(entry);
+    builder
+        .finalize()
+        .expect("the self-referential lazy value is supported");
+}
+
+/// A later computed member may evaluate an earlier one; only forward and self
+/// evaluation are unsatisfiable.
+#[test]
+fn a_backward_computed_reference_verifies() {
+    let mut builder = ErsdBuilder::new();
+    let first = builder.value(Some("first".into()));
+    let second = builder.value(Some("second".into()));
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let init_first = builder.seal_block(Terminator::Return(one));
+    builder.open_block();
+    let init_second = builder.seal_block(Terminator::Return(ErasedAtom::Value(first)));
+    let group = builder.rec_group(vec![], vec![(first, init_first), (second, init_second)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(second)));
+    builder.set_entry(entry);
+    builder
+        .finalize()
+        .expect("backward evaluation is supported");
+}
+
+/// A computed-only evaluation cycle has no satisfiable initialization order.
+#[test]
+fn a_computed_only_cycle_is_rejected() {
+    let mut builder = ErsdBuilder::new();
+    let first = builder.value(Some("first".into()));
+    let second = builder.value(Some("second".into()));
+    builder.open_block();
+    let init_first = builder.seal_block(Terminator::Return(ErasedAtom::Value(second)));
+    builder.open_block();
+    let init_second = builder.seal_block(Terminator::Return(ErasedAtom::Value(first)));
+    let group = builder.rec_group(vec![], vec![(first, init_first), (second, init_second)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(second)));
+    builder.set_entry(entry);
+    let error = builder.finalize().expect_err("the cycle cannot initialize");
+    assert!(error.0.contains("before its initialization"), "{error}");
+}
+
+#[test]
+fn a_direct_self_evaluation_is_rejected() {
+    let mut builder = ErsdBuilder::new();
+    let value = builder.value(Some("value".into()));
+    builder.open_block();
+    let init = builder.seal_block(Terminator::Return(ErasedAtom::Value(value)));
+    let group = builder.rec_group(vec![], vec![(value, init)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(value)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("self-evaluation cannot initialize");
+    assert!(error.0.contains("before its initialization"), "{error}");
+}
+
+#[test]
+fn an_unbound_value_use_is_out_of_scope() {
+    let mut builder = ErsdBuilder::new();
+    let unbound = builder.value(Some("unbound".into()));
+    builder.open_block();
+    let early = builder.let_value(None, Rhs::Alias(ErasedAtom::Value(unbound)));
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(early)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("an unbound use is out of scope");
+    assert!(error.0.contains("out of scope"), "{error}");
+}
+
+#[test]
+fn a_value_bound_inside_a_function_is_out_of_scope_after_it() {
+    let mut builder = ErsdBuilder::new();
+    let function = builder.reserve_function();
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let local = builder.let_value(Some("local".into()), Rhs::Alias(one));
+    let body = builder.seal_block(Terminator::Return(ErasedAtom::Value(local)));
+    builder.define_function(function, None, vec![], body);
+    builder.item_functions(vec![function]);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(local)));
+    builder.set_entry(entry);
+    let error = builder.finalize().expect_err("the local escaped its scope");
+    assert!(error.0.contains("out of scope"), "{error}");
+}
+
+#[test]
+fn an_operation_arity_mismatch_is_rejected() {
+    let mut builder = ErsdBuilder::new();
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![one],
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(sum)));
+    builder.set_entry(entry);
+    let error = builder.finalize().expect_err("NatAdd takes two operands");
+    assert!(error.0.contains("arity"), "{error}");
+}
+
+#[test]
+fn an_unsaturated_direct_application_is_rejected() {
+    let mut builder = ErsdBuilder::new();
+    let function = builder.reserve_function();
+    let param = builder.value(None);
+    builder.open_block();
+    let body = builder.seal_block(Terminator::Return(ErasedAtom::Value(param)));
+    builder.define_function(function, None, vec![param], body);
+    builder.item_functions(vec![function]);
+    builder.open_block();
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: ErasedAtom::Function(function),
+            arguments: vec![],
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(call)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("direct application is saturated");
+    assert!(error.0.contains("arity"), "{error}");
+}
+
+#[test]
+fn a_match_missing_a_constructor_is_rejected() {
+    let mut builder = ErsdBuilder::new();
+    let family = builder.family(Some("Shape".into()));
+    let circle = builder.constructor(family, Some("circle".into()), vec![None]);
+    let _square = builder.constructor(family, Some("square".into()), vec![None]);
+
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let shape = builder.let_value(
+        None,
+        Rhs::Construct {
+            constructor: circle,
+            fields: vec![one],
+        },
+    );
+    builder.open_block();
+    let radius = builder.value(Some("radius".into()));
+    let arm = builder.seal_block(Terminator::Return(ErasedAtom::Value(radius)));
+    let matched = builder.let_value(
+        None,
+        Rhs::MatchVariant {
+            family,
+            scrutinee: ErasedAtom::Value(shape),
+            arms: vec![VariantArm {
+                constructor: circle,
+                bindings: vec![radius],
+                block: arm,
+            }],
+            default: None,
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(matched)));
+    builder.set_entry(entry);
+    let error = builder.finalize().expect_err("the square arm is missing");
+    assert!(error.0.contains("without arm or default"), "{error}");
+}
+
+#[test]
+fn duplicate_switch_keys_are_rejected() {
+    let mut builder = ErsdBuilder::new();
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    builder.open_block();
+    let first = builder.seal_block(Terminator::Return(zero));
+    builder.open_block();
+    let second = builder.seal_block(Terminator::Return(zero));
+    builder.open_block();
+    let default = builder.seal_block(Terminator::Return(zero));
+    let switched = builder.let_value(
+        None,
+        Rhs::SwitchNat {
+            scrutinee: zero,
+            cases: vec![
+                NatCase {
+                    key: 3,
+                    block: first,
+                },
+                NatCase {
+                    key: 3,
+                    block: second,
+                },
+            ],
+            default,
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(switched)));
+    builder.set_entry(entry);
+    let error = builder.finalize().expect_err("keys must be distinct");
+    assert!(error.0.contains("two cases"), "{error}");
+}
+
+#[test]
+fn a_block_with_two_owners_is_rejected() {
+    let mut builder = ErsdBuilder::new();
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    builder.open_block();
+    let shared = builder.seal_block(Terminator::Return(zero));
+    let condition = nat_bool(&mut builder);
+    let switched = builder.let_value(
+        None,
+        Rhs::SwitchBool {
+            scrutinee: condition,
+            if_false: shared,
+            if_true: shared,
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(switched)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("both arms own the same block");
+    assert!(error.0.contains("more than one owner"), "{error}");
+}
+
+fn nat_bool(builder: &mut ErsdBuilder) -> ErasedAtom {
+    let constant = builder.constant(Constant::Bln(true));
+    ErasedAtom::Constant(constant)
+}
+
+#[test]
+fn a_leaked_block_is_rejected() {
+    let mut builder = ErsdBuilder::new();
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    let leaked = builder.seal_block(Terminator::Return(zero));
+    let _ = leaked;
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(zero));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("the sealed block has no owner");
+    assert!(error.0.contains("no owner"), "{error}");
+}
+
+#[test]
+fn a_projection_out_of_range_is_rejected() {
+    let mut builder = ErsdBuilder::new();
+    let schema = builder.product(ProductSchema {
+        debug_name: None,
+        fields: vec![None, None],
+    });
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    let one = nat_atom(&mut builder, 1);
+    let pair = builder.let_value(
+        None,
+        Rhs::Product {
+            schema,
+            fields: vec![zero, one],
+        },
+    );
+    let projected = builder.let_value(
+        None,
+        Rhs::Project {
+            schema,
+            product: ErasedAtom::Value(pair),
+            field: 2,
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(projected)));
+    builder.set_entry(entry);
+    let error = builder.finalize().expect_err("field 2 does not exist");
+    assert!(error.0.contains("width"), "{error}");
+}
+
+/// A deeply nested module verifies (and a malformed one diagnoses) on the
+/// default test-thread stack: the walk is iterative, so nesting depth costs
+/// heap, not native stack.
+#[test]
+fn a_deep_module_verifies_without_native_stack() {
+    let builder = deep_switch_chain(50_000, false);
+    builder.finalize().expect("the deep module verifies");
+}
+
+#[test]
+fn a_deep_malformed_module_diagnoses_without_native_stack() {
+    let builder = deep_switch_chain(50_000, true);
+    let error = builder
+        .finalize()
+        .expect_err("the innermost block is malformed");
+    assert!(error.0.contains("out of scope"), "{error}");
+}
+
+/// Build a `depth`-deep chain of nested `SwitchNat` defaults. With `malformed`
+/// the innermost block references a value that is never bound.
+fn deep_switch_chain(depth: usize, malformed: bool) -> ErsdBuilder {
+    let mut builder = ErsdBuilder::new();
+    let zero = nat_atom(&mut builder, 0);
+    let scrutinee = builder.item_value(Some("scrutinee".into()), Rhs::Alias(zero));
+
+    builder.open_block();
+    let innermost = if malformed {
+        ErasedAtom::Value(builder.value(Some("ghost".into())))
+    } else {
+        ErasedAtom::Value(scrutinee)
+    };
+    let mut chain = builder.seal_block(Terminator::Return(innermost));
+    for _ in 0..depth {
+        builder.open_block();
+        let leaf = builder.seal_block(Terminator::Return(ErasedAtom::Value(scrutinee)));
+        builder.open_block();
+        let switched = builder.let_value(
+            None,
+            Rhs::SwitchNat {
+                scrutinee: ErasedAtom::Value(scrutinee),
+                cases: vec![NatCase {
+                    key: 0,
+                    block: leaf,
+                }],
+                default: chain,
+            },
+        );
+        chain = builder.seal_block(Terminator::Return(ErasedAtom::Value(switched)));
+    }
+    builder.set_entry(chain);
+    builder
+}

@@ -2,6 +2,9 @@
 //!
 //! `curios_core::erase_module` is the sole producer. [`optimize()`](optimize) is the Ersd-level optimizer (reachability prune, closed-term evaluation, spine specialization, worker/wrapper), and [`into_cont`] lowers the optimized module to a `curios_cont::CpsModule`.
 
+pub mod ir;
+pub use ir::*;
+
 mod prim;
 pub use prim::*;
 

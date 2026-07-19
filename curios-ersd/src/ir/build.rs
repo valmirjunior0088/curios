@@ -1,0 +1,230 @@
+//! The checked builder — the construction surface of the representation.
+//!
+//! Every producer (erasure, the transformations' reification paths, and the
+//! tests) constructs modules through this type: it owns identity allocation,
+//! the open-block discipline that gives the operand law its home ("bound as a
+//! statement in the innermost open block"), schema and recursion registration,
+//! constant and foreign interning, and finalization, which runs the module
+//! verifier. The arena mutators on [`ErasedModule`] stay crate-private behind
+//! it.
+//!
+//! Statement emission is position-checked: `let_value`, `let_functions`, and
+//! `let_rec` require an open block, while the `item_*` forms require none and
+//! append to the module's top-level item list. Blocks nest as a stack —
+//! [`open_block`](ErsdBuilder::open_block) pushes,
+//! [`seal_block`](ErsdBuilder::seal_block) pops and freezes the block with its
+//! terminator.
+
+use {
+    super::{
+        Block, BlockId, Constant, ConstantId, ConstructorId, ErasedModule, FamilyId, ForeignId,
+        Function, FunctionId, ProductId, ProductSchema, RecGroup, RecGroupId, RecValue, Rhs,
+        Statement, StatementId, Terminator, ValueId, VerifyError,
+    },
+    curios_abi::ForeignFunction,
+    std::sync::Arc,
+};
+
+/// A checked module under construction. See the module documentation.
+#[derive(Debug, Default)]
+pub struct ErsdBuilder {
+    module: ErasedModule,
+    open_blocks: Vec<Vec<StatementId>>,
+}
+
+impl ErsdBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Read-only access to the module under construction.
+    pub fn module(&self) -> &ErasedModule {
+        &self.module
+    }
+
+    /// Mint a fresh value identity — a parameter, arm binder, or fold binder.
+    /// Statement results are minted by the emission methods themselves.
+    pub fn value(&mut self, debug_name: Option<String>) -> ValueId {
+        self.module.add_value(debug_name)
+    }
+
+    /// Intern a constant by exact bitwise identity.
+    pub fn constant(&mut self, constant: Constant) -> ConstantId {
+        self.module.intern_constant(constant)
+    }
+
+    /// Intern a canonical foreign row by wire identity.
+    pub fn foreign(&mut self, foreign: Arc<ForeignFunction>) -> ForeignId {
+        self.module.intern_foreign(foreign)
+    }
+
+    /// Register a product schema.
+    pub fn product(&mut self, schema: ProductSchema) -> ProductId {
+        self.module.add_product(schema)
+    }
+
+    /// Register a variant family; its constructors follow through
+    /// [`constructor`](Self::constructor), in declaration order.
+    pub fn family(&mut self, debug_name: Option<String>) -> FamilyId {
+        self.module.add_family(debug_name)
+    }
+
+    /// Register the next constructor of `family`; its position in the family
+    /// is its discriminant.
+    pub fn constructor(
+        &mut self,
+        family: FamilyId,
+        debug_name: Option<String>,
+        fields: Vec<Option<String>>,
+    ) -> ConstructorId {
+        self.module.add_constructor(family, debug_name, fields)
+    }
+
+    /// Mint a function identity whose definition follows later, so recursive
+    /// bodies can reference their own or a sibling's identity. Finalization
+    /// rejects a reservation that was never defined.
+    pub fn reserve_function(&mut self) -> FunctionId {
+        self.module.reserve_function()
+    }
+
+    /// Define a previously reserved function.
+    pub fn define_function(
+        &mut self,
+        id: FunctionId,
+        debug_name: Option<String>,
+        params: Vec<ValueId>,
+        body: BlockId,
+    ) {
+        self.module.define_function(
+            id,
+            Function {
+                debug_name,
+                params,
+                body,
+            },
+        );
+    }
+
+    /// Group a set of computed recursive-group members with their eager
+    /// initializer blocks into a registered group.
+    pub fn rec_group(
+        &mut self,
+        functions: Vec<FunctionId>,
+        values: Vec<(ValueId, BlockId)>,
+    ) -> RecGroupId {
+        self.module.add_rec_group(RecGroup {
+            functions,
+            values: values
+                .into_iter()
+                .map(|(value, init)| RecValue { value, init })
+                .collect(),
+        })
+    }
+
+    /// Open a nested block; subsequent `let_*` statements land in it until
+    /// [`seal_block`](Self::seal_block) closes it.
+    pub fn open_block(&mut self) {
+        self.open_blocks.push(Vec::new());
+    }
+
+    /// Seal the innermost open block with its terminator and return its
+    /// identity.
+    pub fn seal_block(&mut self, terminator: Terminator) -> BlockId {
+        let statements = self
+            .open_blocks
+            .pop()
+            .expect("seal_block requires an open block");
+        self.module.add_block(Block {
+            statements,
+            terminator,
+        })
+    }
+
+    /// Bind `rhs` to a fresh value in the innermost open block.
+    pub fn let_value(&mut self, debug_name: Option<String>, rhs: Rhs) -> ValueId {
+        let result = self.module.add_value(debug_name);
+        let statement = self.module.add_statement(Statement::Let { result, rhs });
+        self.emit(statement);
+        result
+    }
+
+    /// Introduce a function group in the innermost open block.
+    pub fn let_functions(&mut self, functions: Vec<FunctionId>) {
+        let statement = self
+            .module
+            .add_statement(Statement::Functions { functions });
+        self.emit(statement);
+    }
+
+    /// Introduce a mixed recursive group in the innermost open block.
+    pub fn let_rec(&mut self, group: RecGroupId) {
+        let statement = self.module.add_statement(Statement::Rec { group });
+        self.emit(statement);
+    }
+
+    /// Bind `rhs` to a fresh value as the next top-level item.
+    pub fn item_value(&mut self, debug_name: Option<String>, rhs: Rhs) -> ValueId {
+        self.require_top_level("item_value");
+        let result = self.module.add_value(debug_name);
+        let statement = self.module.add_statement(Statement::Let { result, rhs });
+        self.module.push_item(statement);
+        result
+    }
+
+    /// Introduce a function group as the next top-level item.
+    pub fn item_functions(&mut self, functions: Vec<FunctionId>) {
+        self.require_top_level("item_functions");
+        let statement = self
+            .module
+            .add_statement(Statement::Functions { functions });
+        self.module.push_item(statement);
+    }
+
+    /// Introduce a mixed recursive group as the next top-level item.
+    pub fn item_rec(&mut self, group: RecGroupId) {
+        self.require_top_level("item_rec");
+        let statement = self.module.add_statement(Statement::Rec { group });
+        self.module.push_item(statement);
+    }
+
+    /// Set the entry block, evaluated after the items to produce the program's
+    /// result.
+    pub fn set_entry(&mut self, entry: BlockId) {
+        self.module.set_entry(entry);
+    }
+
+    /// Finish construction: reject leftover open blocks and dangling function
+    /// reservations, then run the module verifier and hand the module over.
+    /// (An empty function slot is a construction error here; after removal
+    /// lands with its consumer, the same slot is an ordinary tombstone to the
+    /// verifier.)
+    pub fn finalize(self) -> Result<ErasedModule, VerifyError> {
+        if !self.open_blocks.is_empty() {
+            return Err(VerifyError(format!(
+                "finalize with {} unsealed open block(s)",
+                self.open_blocks.len()
+            )));
+        }
+        if let Some(index) = self.module.functions().iter().position(Option::is_none) {
+            return Err(VerifyError(format!(
+                "function ~f{index} was reserved but never defined"
+            )));
+        }
+        self.module.verify()?;
+        Ok(self.module)
+    }
+
+    fn emit(&mut self, statement: StatementId) {
+        self.open_blocks
+            .last_mut()
+            .expect("statement emission requires an open block")
+            .push(statement);
+    }
+
+    fn require_top_level(&self, operation: &str) {
+        assert!(
+            self.open_blocks.is_empty(),
+            "{operation} requires no open block"
+        );
+    }
+}
