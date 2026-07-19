@@ -163,6 +163,22 @@ Documentation-only changes do not require rebuilding the compiler unless they al
 - Changes to runtime dependencies must rebuild `curios-runtime` in isolation through `make curios/runtime` and confirm that neither Cranelift nor Binaryen entered its dependency graph.
 - Changes to the bundle format must run the ignored end-to-end test in `curios/tests/bundle.rs` explicitly.
 
+### Profiling
+
+Profile the compiler through the built-in `tracing` mechanism, not an external sampler. `perf`-based tools (`samply`, `perf`) may be unavailable under a restricted `perf_event_paranoid`, and the built-in path measures the exact stages under a deterministic subscriber.
+
+Run one compilation under the profiler with the `profile` recipe:
+
+```sh
+make curios/profile CURIOS_PROFILE_SOURCE=programs/hello_curios.crs
+```
+
+It builds the `curios/profile` binary with `--features profile` and prints one row per instrumented span — `total_ms`, `calls`, `min_ms`, `max_ms`, `target`, `name` — sorted by total time descending. The `profile` feature fans out from `curios` through `curios-pipeline` to every compiler crate (each crate exposes `profile = ["dep:tracing"]`), and `curios::profile::capture` installs a thread-local subscriber that aggregates per-span durations for the wrapped call.
+
+Add a measurement point by attributing the function with `#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]`; it compiles to nothing without the feature. Stage entrypoints and optimizer passes carry permanent spans; a span added to isolate one investigation is temporary instrumentation and is removed once the question is answered, never left as a metrics API.
+
+The binary profiles `compile_entrypoint` by default. To profile a path it does not already exercise, point `curios/profile/main.rs` at the relevant entrypoint (for example `compile_entrypoint_via_arena`) for the duration of the investigation, then restore it.
+
 ## Documentation ownership
 
 Document each fact at the narrowest authoritative level and link to it elsewhere. Do not maintain parallel explanations that can drift.
