@@ -348,11 +348,13 @@ fn lcg_kernel_is_single_entry_recursive_continuation() {
     for line in cont
         .lines()
         .map(str::trim_start)
-        .filter(|l| l.starts_with("fun @"))
+        .filter(|l| l.starts_with("fun ~f"))
     {
+        // A named function prints `fun ~fN$hint(...)`: the source hint is the run
+        // after the first `$` and before the parameter list.
         let provenance = line
-            .split_once('[')
-            .and_then(|(_, rest)| rest.split_once(']'))
+            .split_once('$')
+            .and_then(|(_, rest)| rest.split_once('('))
             .map(|(name, _)| name)
             .unwrap_or_default();
         assert!(

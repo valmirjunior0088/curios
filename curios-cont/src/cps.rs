@@ -17,10 +17,10 @@ use {
     },
 };
 
-id!(CpsNodeId, "n");
-id!(CpsValueId, "%v");
-id!(CpsFunId, "@f");
-id!(CpsContId, "@k");
+id!(CpsNodeId, "~n");
+id!(CpsValueId, "~v");
+id!(CpsFunId, "~f");
+id!(CpsContId, "~k");
 
 impl CpsFunId {
     pub(crate) fn from_index(index: usize) -> Self {
@@ -1311,7 +1311,7 @@ impl fmt::Display for CpsModule {
             let id = CpsFunId(index as u32);
             write!(f, "fun {id}")?;
             if let Some(name) = &function.debug_name {
-                write!(f, " [{name}]")?;
+                write!(f, "${name}")?;
             }
             write!(f, "(")?;
             separated(f, function.params.iter())?;
@@ -1603,7 +1603,7 @@ mod tests {
                 .verify()
                 .unwrap_err()
                 .0
-                .contains("references @f1's return continuation")
+                .contains("references ~f1's return continuation")
         );
     }
 

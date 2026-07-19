@@ -21,8 +21,8 @@ use {
 mod structurize;
 pub(crate) use structurize::structurize;
 
-id!(MachineBlockId, "b", mint);
-id!(MachineValueId, "%m", mint);
+id!(MachineBlockId, "~b", mint);
+id!(MachineValueId, "~v", mint);
 
 #[derive(Debug, Clone)]
 pub(crate) enum MachineOperand {

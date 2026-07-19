@@ -19,7 +19,7 @@ use {
 };
 
 /// The optimized cont-stage dump for `source`, with every digit run replaced
-/// by `#`: entropy-derived name counters (`%v37`, `b@c26@lifted#7`) are the
+/// by `#`: entropy-derived name counters (`~v37`, `~f26`) are the
 /// only expected difference between the compared programs, and both sources
 /// use identical numeric literals, so digit-blind comparison is exact for
 /// everything that matters.
@@ -42,7 +42,7 @@ fn normalized_cont_optm(source: &str) -> String {
     .expect("parity source compiles");
 
     // Collapse every digit run to one `#`, so counter-length differences
-    // (`%v9` vs `%v100`) normalize away.
+    // (`~v9` vs `~v100`) normalize away.
     let mut normalized = String::with_capacity(dump.len());
     let mut in_digits = false;
     for c in dump.chars() {
