@@ -2,7 +2,7 @@
 
 use {
     clap::Parser,
-    curios::profile::{ProfileReport, capture},
+    curios::{ProfileReport, capture},
     curios_pipeline::compile_entrypoint,
     std::{path::PathBuf, process::ExitCode, time::Duration},
 };

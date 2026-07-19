@@ -173,7 +173,7 @@ Run one compilation under the profiler with the `profile` recipe:
 make curios/profile CURIOS_PROFILE_SOURCE=programs/hello_curios.crs
 ```
 
-It builds the `curios/profile` binary with `--features profile` and prints one row per instrumented span — `total_ms`, `calls`, `min_ms`, `max_ms`, `target`, `name` — sorted by total time descending. The `profile` feature fans out from `curios` through `curios-pipeline` to every compiler crate (each crate exposes `profile = ["dep:tracing"]`), and `curios::profile::capture` installs a thread-local subscriber that aggregates per-span durations for the wrapped call.
+It builds the `curios/profile` binary with `--features profile` and prints one row per instrumented span — `total_ms`, `calls`, `min_ms`, `max_ms`, `target`, `name` — sorted by total time descending. The `profile` feature fans out from `curios` through `curios-pipeline` to every compiler crate (each crate exposes `profile = ["dep:tracing"]`), and `curios::capture` installs a thread-local subscriber that aggregates per-span durations for the wrapped call.
 
 Add a measurement point by attributing the function with `#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]`; it compiles to nothing without the feature. Stage entrypoints and optimizer passes carry permanent spans; a span added to isolate one investigation is temporary instrumentation and is removed once the question is answered, never left as a metrics API.
 
