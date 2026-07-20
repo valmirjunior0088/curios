@@ -386,3 +386,218 @@ entry {
 "
     );
 }
+
+#[test]
+fn a_bln_match_erases_to_a_switch_bool() {
+    let body = Term::bln_match(
+        Term::prim(Prim::Bln(true)),
+        None,
+        Term::prim(Prim::NatType),
+        nat_lit(10),
+        nat_lit(20),
+    );
+    let erased = erase(&module(Vec::new(), body), Term::prim(Prim::NatType));
+    assert_eq!(
+        erased.to_string(),
+        "\
+entry {
+  ~v0 = switch-bool true {
+    false => {
+      return 10
+    }
+    true => {
+      return 20
+    }
+  }
+  return ~v0
+}
+"
+    );
+}
+
+#[test]
+fn a_dead_hypothesis_nat_match_peels_to_a_dispatch() {
+    // match n | 0 => 0 | succ pred (ih dead) => pred — a case split, not a fold.
+    let items = vec![definition("n", Term::prim(Prim::NatType), nat_lit(5))];
+    let body = Term::nat_match(
+        Term::free_var("n"),
+        None,
+        Term::prim(Prim::NatType),
+        nat_lit(0),
+        "pred",
+        "ih",
+        Term::free_var("pred"),
+    );
+    let erased = erase(&module(items, body), Term::prim(Prim::NatType));
+    assert_eq!(
+        erased.to_string(),
+        "\
+entry {
+  ~v1 = switch-nat 5 {
+    0 => {
+      return 0
+    }
+    default => {
+      ~v0 = NatSub(5, 1)
+      return ~v0
+    }
+  }
+  return ~v1
+}
+"
+    );
+}
+
+#[test]
+fn a_live_hypothesis_nat_match_erases_to_a_fold() {
+    // match n | 0 => 0 | succ pred ih => ih + 2 — genuine induction.
+    let items = vec![definition("n", Term::prim(Prim::NatType), nat_lit(5))];
+    let body = Term::nat_match(
+        Term::free_var("n"),
+        None,
+        Term::prim(Prim::NatType),
+        nat_lit(0),
+        "pred",
+        "ih",
+        Term::prim(Prim::nat_add(Term::free_var("ih"), nat_lit(2))),
+    );
+    let erased = erase(&module(items, body), Term::prim(Prim::NatType));
+    assert_eq!(
+        erased.to_string(),
+        "\
+entry {
+  ~v3 = fold-nat 5 {
+    zero => {
+      return 0
+    }
+    step(~v0$pred, ~v1$ih) => {
+      ~v2 = NatAdd(~v1$ih, 2)
+      return ~v2
+    }
+  }
+  return ~v3
+}
+"
+    );
+}
+
+#[test]
+fn a_live_hypothesis_lst_match_erases_to_a_sequence_fold() {
+    // match xs | [] => 0 | h :: t (ih) => ih + 1 — a length fold over a list.
+    let lst_ty = Term::prim(Prim::LstType(Term::prim(Prim::NatType)));
+    let items = vec![definition(
+        "xs",
+        lst_ty.clone(),
+        Term::prim(Prim::Lst(vec![nat_lit(1)])),
+    )];
+    let body = Term::lst_match(
+        Term::free_var("xs"),
+        Term::prim(Prim::NatType),
+        None,
+        Term::prim(Prim::NatType),
+        nat_lit(0),
+        "h",
+        "t",
+        "ih",
+        Term::prim(Prim::nat_add(Term::free_var("ih"), nat_lit(1))),
+    );
+    let erased = erase(&module(items, body), Term::prim(Prim::NatType));
+    assert_eq!(
+        erased.to_string(),
+        "\
+~v0$xs = LstBuild(1)
+entry {
+  ~v5 = fold-seq[lst] ~v0$xs {
+    empty => {
+      return 0
+    }
+    step(~v1$h, ~v2$t, ~v3$ih) => {
+      ~v4 = NatAdd(~v3$ih, 1)
+      return ~v4
+    }
+  }
+  return ~v5
+}
+"
+    );
+}
+
+#[test]
+fn a_variant_match_binds_payload_without_projections() {
+    let mut inductives = BTreeMap::new();
+    inductives.insert("Opt".to_string(), opt_inductive());
+    let scrutinee = Term::variant("Opt", Vec::<Term>::new(), Atom::from("some"), [nat_lit(6)]);
+    let body = Term::inductive_match(
+        scrutinee,
+        None,
+        Term::prim(Prim::NatType),
+        [
+            ("none", Vec::<String>::new(), nat_lit(0)),
+            ("some", vec!["x".to_string()], Term::free_var("x")),
+        ],
+    );
+    let erased = erase_module_to_ir(
+        &mut context(),
+        &Module {
+            items: Vec::new(),
+            inductives,
+            structures: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            type_: None,
+            body,
+        },
+        &Term::prim(Prim::NatType),
+    )
+    .expect("the module erases");
+    assert_eq!(
+        erased.to_string(),
+        "\
+family ~d0$Opt { ~t0$none() ~t1$some(x) }
+entry {
+  ~v0$scrutinee = construct ~t1(6)
+  ~v2 = match ~d0 ~v0$scrutinee {
+    ~t0() => {
+      return 0
+    }
+    ~t1(~v1$x) => {
+      return ~v1$x
+    }
+  }
+  return ~v2
+}
+"
+    );
+}
+
+#[test]
+fn an_effectful_scrutinee_is_erased_once() {
+    // The peel path re-derives Core terms from the head (`n - 1`); an
+    // effectful compound head must still evaluate exactly once, through the
+    // alias.
+    let io_read = Term::apply(Term::free_var("read"), [nat_lit(0)]);
+    let items = vec![definition(
+        "read",
+        Term::func_type(
+            [("x", Term::prim(Prim::NatType))],
+            Term::prim(Prim::NatType),
+        ),
+        Term::func([("x", Term::type_())], Term::free_var("x")),
+    )];
+    let body = Term::nat_match(
+        io_read,
+        None,
+        Term::prim(Prim::NatType),
+        nat_lit(0),
+        "pred",
+        "ih",
+        Term::free_var("pred"),
+    );
+    let erased = erase(&module(items, body), Term::prim(Prim::NatType));
+    let printed = erased.to_string();
+    assert_eq!(
+        printed.matches("apply ~f0$read").count(),
+        1,
+        "the compound scrutinee is applied exactly once:\n{printed}"
+    );
+}

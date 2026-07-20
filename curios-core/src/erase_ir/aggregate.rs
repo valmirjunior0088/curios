@@ -129,7 +129,10 @@ impl Lowering {
                 .constructor(family, Some(tag.to_string()), relevant);
             constructors.push(super::ConstructorRow { id, mask });
         }
-        let row = super::FamilyRow { constructors };
+        let row = super::FamilyRow {
+            family,
+            constructors,
+        };
         self.environment.register_inductive_row(name, row.clone());
         Ok(row)
     }

@@ -144,9 +144,7 @@ impl Lowering {
                 }
             }
             Subterm::Let(binding) => self.erase_let(context, binding, expected, hint),
-            Subterm::Match(_) => {
-                unimplemented!("erase_ir: matches land in a later sub-step")
-            }
+            Subterm::Match(m) => self.erase_match(context, m, hint),
             Subterm::Variant(variant) => self.erase_variant(context, variant, hint),
             Subterm::Struct(value) => self.erase_struct(context, value, hint),
             Subterm::Tuple(tuple) => self.erase_tuple(context, tuple, expected, hint),

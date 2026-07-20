@@ -50,9 +50,11 @@ pub(super) struct ConstructorRow {
     pub(super) mask: Vec<bool>,
 }
 
-/// A registered inductive: its constructors in runtime-tag (registry) order.
+/// A registered inductive: its variant family and its constructors in
+/// runtime-tag (registry) order.
 #[derive(Debug, Clone)]
 pub(super) struct FamilyRow {
+    pub(super) family: curios_ersd::FamilyId,
     pub(super) constructors: Vec<ConstructorRow>,
 }
 
