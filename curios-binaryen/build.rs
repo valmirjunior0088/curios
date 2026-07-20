@@ -123,17 +123,27 @@ fn instructions_on_failure(archive_path: &Path, cause: &str) -> ! {
 }
 
 fn archive(archive_path: &Path) -> Vec<u8> {
-    let bytes = match fs::read(archive_path) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let bytes = download(&source_url())
-                .unwrap_or_else(|error| instructions_on_failure(archive_path, &error));
-            fs::write(archive_path, &bytes).expect("write downloaded Binaryen archive");
-            bytes
+    match fs::read(archive_path) {
+        Ok(bytes) => {
+            if sha256_hex(&bytes) == BINARYEN_SOURCE_SHA256 {
+                return bytes;
+            }
+            // A corrupted cache entry (e.g. a truncated download persisted by
+            // an earlier failure) must not wedge every subsequent build: drop
+            // it and fall through to a fresh download.
+            fs::remove_file(archive_path).unwrap_or_else(|error| {
+                panic!(
+                    "remove corrupted Binaryen archive {}: {error}",
+                    archive_path.display()
+                )
+            });
         }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => panic!("read Binaryen archive {}: {error}", archive_path.display()),
-    };
+    }
 
+    let bytes = download(&source_url())
+        .unwrap_or_else(|error| instructions_on_failure(archive_path, &error));
     let actual = sha256_hex(&bytes);
     if actual != BINARYEN_SOURCE_SHA256 {
         instructions_on_failure(
@@ -141,6 +151,7 @@ fn archive(archive_path: &Path) -> Vec<u8> {
             &format!("sha256 mismatch: expected {BINARYEN_SOURCE_SHA256}, got {actual}"),
         );
     }
+    fs::write(archive_path, &bytes).expect("write downloaded Binaryen archive");
 
     bytes
 }
