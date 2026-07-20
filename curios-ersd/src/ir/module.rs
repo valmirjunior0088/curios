@@ -224,6 +224,58 @@ impl ErasedModule {
         id
     }
 
+    /// Replace the top-level item list — the prune's retained, order-preserved
+    /// subset. Tombstoning what the dropped items owned is the caller's
+    /// responsibility.
+    pub(crate) fn set_items(&mut self, items: Vec<StatementId>) {
+        self.items = items;
+    }
+
+    /// Tombstone every function outside `keep`. Identities are never reused.
+    pub(crate) fn retain_functions(&mut self, keep: &std::collections::BTreeSet<FunctionId>) {
+        for (index, slot) in self.functions.iter_mut().enumerate() {
+            if slot.is_some() && !keep.contains(&FunctionId(index as u32)) {
+                *slot = None;
+            }
+        }
+    }
+
+    /// Tombstone every block outside `keep`.
+    pub(crate) fn retain_blocks(&mut self, keep: &std::collections::BTreeSet<BlockId>) {
+        for (index, slot) in self.blocks.iter_mut().enumerate() {
+            if slot.is_some() && !keep.contains(&BlockId(index as u32)) {
+                *slot = None;
+            }
+        }
+    }
+
+    /// Tombstone every statement outside `keep`.
+    pub(crate) fn retain_statements(&mut self, keep: &std::collections::BTreeSet<StatementId>) {
+        for (index, slot) in self.statements.iter_mut().enumerate() {
+            if slot.is_some() && !keep.contains(&StatementId(index as u32)) {
+                *slot = None;
+            }
+        }
+    }
+
+    /// Tombstone every value outside `keep`.
+    pub(crate) fn retain_values(&mut self, keep: &std::collections::BTreeSet<ValueId>) {
+        for (index, slot) in self.values.iter_mut().enumerate() {
+            if slot.is_some() && !keep.contains(&ValueId(index as u32)) {
+                *slot = None;
+            }
+        }
+    }
+
+    /// Tombstone every recursive group outside `keep`.
+    pub(crate) fn retain_rec_groups(&mut self, keep: &std::collections::BTreeSet<RecGroupId>) {
+        for (index, slot) in self.rec_groups.iter_mut().enumerate() {
+            if slot.is_some() && !keep.contains(&RecGroupId(index as u32)) {
+                *slot = None;
+            }
+        }
+    }
+
     /// Register the next constructor of `family`, in declaration order; its
     /// position in the family is its discriminant. The cross-links are correct
     /// by construction.

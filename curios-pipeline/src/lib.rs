@@ -143,12 +143,17 @@ where
     let (module, core_type, foreigns) =
         elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
 
-    let ersd_module = curios_core::erase_module_to_ir(
+    let mut ersd_module = curios_core::erase_module_to_ir(
         &mut curios_core::Context::new(timeout),
         &module,
         &core_type,
     )
     .map_err(|error| error.format_with(&module))?;
+
+    // Shrink before lowering: drop the items the program neither reaches nor
+    // runs for effect, so Cont's whole-module fixpoint sees only the live
+    // slice (see `curios_ersd::optimize_ir`).
+    curios_ersd::optimize_ir(&mut ersd_module);
 
     let cont_module = curios_ersd::lower_to_cont(&ersd_module);
     observe(Stage::Cont(&cont_module));

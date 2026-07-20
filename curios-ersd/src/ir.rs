@@ -53,6 +53,15 @@ pub use analysis::*;
 mod into_cont;
 pub use into_cont::lower_to_cont;
 
+mod semantics;
+pub use semantics::*;
+
+mod summary;
+pub use summary::*;
+
+mod optimize;
+pub use optimize::optimize_ir;
+
 #[cfg(test)]
 mod module_tests;
 
@@ -70,3 +79,6 @@ mod analysis_tests;
 
 #[cfg(test)]
 mod into_cont_tests;
+
+#[cfg(test)]
+mod semantics_tests;
