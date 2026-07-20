@@ -159,41 +159,7 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
     analysis
 }
 pub(super) fn function_nodes(module: &CpsModule, function: CpsFunId) -> Vec<CpsNodeId> {
-    let mut found = BTreeSet::new();
-    let mut work = vec![module.function(function).unwrap().body];
-    while let Some(node_id) = work.pop() {
-        if !found.insert(node_id) {
-            continue;
-        }
-        match module.node(node_id).unwrap() {
-            CpsNode::LetValue { next, .. } | CpsNode::LetPrim { next, .. } => work.push(*next),
-            CpsNode::LetFun { body, .. } | CpsNode::RecInit { body, .. } => work.push(*body),
-            CpsNode::LetCont {
-                continuations,
-                body,
-            } => {
-                work.push(*body);
-                for continuation in continuations.iter().rev() {
-                    // Tolerate a tombstoned continuation: an inline sweep can leave a
-                    // `LetCont` transiently referencing an inlined-away continuation
-                    // until its sweep-ending prune. That continuation's body is dead,
-                    // so skipping it is correct.
-                    if let Some(continuation) = module.continuation(*continuation) {
-                        work.push(continuation.body);
-                    }
-                }
-            }
-            CpsNode::ApplyFun { .. }
-            | CpsNode::ApplyCont(_)
-            | CpsNode::Switch { .. }
-            | CpsNode::Foreign { .. }
-            | CpsNode::Cell { .. }
-            | CpsNode::Intrinsic { .. }
-            | CpsNode::Exit { .. }
-            | CpsNode::Unreachable => {}
-        }
-    }
-    found.into_iter().collect()
+    nodes_from(module, module.function(function).unwrap().body)
 }
 pub(super) fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> {
     let mut found = BTreeSet::new();
