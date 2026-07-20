@@ -140,9 +140,12 @@ export async function run(config) {
     io_clock_mono: () => {
       const millis = performance.now();
 
+      // Floor, not round: a fractional millisecond just below 1000 would
+      // otherwise round the nanos limb up to exactly 10⁹, which the seconds
+      // limb owns.
       return [
         Math.floor(millis / 1000),
-        Math.round((millis % 1000) * 1_000_000),
+        Math.floor((millis % 1000) * 1_000_000),
       ];
     },
     io_random: (count) => {
