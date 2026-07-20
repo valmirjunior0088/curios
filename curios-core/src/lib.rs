@@ -72,5 +72,8 @@ pub use elaborate::*;
 mod erase;
 pub use erase::*;
 
+mod erase_ir;
+pub use erase_ir::*;
+
 mod zonk;
 pub use zonk::*;

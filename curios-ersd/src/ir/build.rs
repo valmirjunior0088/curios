@@ -8,10 +8,13 @@
 //! verifier. The arena mutators on [`ErasedModule`] stay crate-private behind
 //! it.
 //!
-//! Statement emission is position-checked: `let_value`, `let_functions`, and
-//! `let_rec` require an open block, while the `item_*` forms require none and
-//! append to the module's top-level item list. Blocks nest as a stack —
-//! [`open_block`](ErsdBuilder::open_block) pushes,
+//! The module's item list is the outermost block: `let_value`,
+//! `let_functions`, and `let_rec` emit into the innermost open block, and with
+//! no block open they append to the top-level item list — one uniform
+//! emission path, so a producer walking an expression never cares whether it
+//! is lowering an item body or a nested position. The `item_*` forms are the
+//! explicit top-level surface (they assert no block is open). Blocks nest as
+//! a stack — [`open_block`](ErsdBuilder::open_block) pushes,
 //! [`seal_block`](ErsdBuilder::seal_block) pops and freezes the block with its
 //! terminator.
 
@@ -140,7 +143,8 @@ impl ErsdBuilder {
         })
     }
 
-    /// Bind `rhs` to a fresh value in the innermost open block.
+    /// Bind `rhs` to a fresh value in the innermost open block, or as the next
+    /// top-level item when no block is open.
     pub fn let_value(&mut self, debug_name: Option<String>, rhs: Rhs) -> ValueId {
         let result = self.module.add_value(debug_name);
         let statement = self.module.add_statement(Statement::Let { result, rhs });
@@ -215,10 +219,10 @@ impl ErsdBuilder {
     }
 
     fn emit(&mut self, statement: StatementId) {
-        self.open_blocks
-            .last_mut()
-            .expect("statement emission requires an open block")
-            .push(statement);
+        match self.open_blocks.last_mut() {
+            Some(block) => block.push(statement),
+            None => self.module.push_item(statement),
+        }
     }
 
     fn require_top_level(&self, operation: &str) {

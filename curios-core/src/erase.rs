@@ -37,7 +37,7 @@ use {
 /// neither prop nor type); re-classifying it at a call where `A := SomeProp`
 /// would diverge the construction's arity from the constructor function's fixed
 /// arity. [`erasure_mask`] enforces the opaque-open discipline.
-fn is_erasable(context: &mut Context, type_: &Term) -> Result<bool, Error> {
+pub(crate) fn is_erasable(context: &mut Context, type_: &Term) -> Result<bool, Error> {
     match Term::unwrap_or_clone(reduce_with(context, type_)?) {
         Subterm::Type | Subterm::Prop => Ok(true),
         // A function erases iff what it ultimately returns does — a proof-/type-
@@ -60,7 +60,7 @@ fn is_erasable(context: &mut Context, type_: &Term) -> Result<bool, Error> {
 /// (see [`is_erasable`]). The terminal body is ignored. Pairs with a concrete
 /// walk over the actual values: the mask decides which to drop, the concrete
 /// walk erases the kept ones against their (dependent, instantiated) types.
-fn erasure_mask<B: Bound>(
+pub(crate) fn erasure_mask<B: Bound>(
     context: &mut Context,
     mut telescope: Telescope<B>,
 ) -> Result<Vec<bool>, Error> {
@@ -815,7 +815,10 @@ fn erase_struct(context: &mut Context, s: &Struct) -> Result<curios_ersd::Term, 
 /// `true` marks a parameter position (opened with the actual parameter),
 /// `false` an index position (opened with the case's target index). `Term`
 /// slots carry no binder and are dropped.
-fn pattern_binder_slots(pattern: Option<&MotivePattern>, n_params: usize) -> Vec<(bool, usize)> {
+pub(crate) fn pattern_binder_slots(
+    pattern: Option<&MotivePattern>,
+    n_params: usize,
+) -> Vec<(bool, usize)> {
     pattern
         .map(|p| {
             p.slots
