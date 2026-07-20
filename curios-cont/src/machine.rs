@@ -7,7 +7,7 @@
 use {
     crate::{
         CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsicOp,
-        CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsPrimOp, CpsValueExpr, CpsValueId,
+        CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsPrimOp, CpsValueExpr, CpsValueId, atoms,
     },
     curios_abi::ForeignFunction,
     curios_base::{Entropy, id},
@@ -265,7 +265,7 @@ pub(crate) fn lower(source: &CpsModule) -> MachineModule {
 fn escaping_functions(source: &CpsModule) -> BTreeSet<CpsFunId> {
     let mut escaping = BTreeSet::new();
     for node in source.nodes().iter().flatten() {
-        for atom in cps_atoms(node) {
+        for atom in atoms(node) {
             if let CpsAtom::Fun(function) = atom {
                 escaping.insert(*function);
             }
@@ -289,7 +289,7 @@ fn free_runtime_values(source: &CpsModule, function: CpsFunId) -> Vec<MachineVal
             continue;
         }
         let node = source.node(node_id).unwrap();
-        for atom in cps_atoms(node) {
+        for atom in atoms(node) {
             if let CpsAtom::Value(value) = atom {
                 used.insert(value_id(*value));
             }
@@ -365,7 +365,7 @@ fn referenced_functions(source: &CpsModule, function: CpsFunId) -> BTreeSet<CpsF
         {
             dependencies.insert(*function);
         }
-        for atom in cps_atoms(node) {
+        for atom in atoms(node) {
             if let CpsAtom::Fun(function) = atom {
                 dependencies.insert(*function);
             }
@@ -823,7 +823,7 @@ fn initialization_function_atoms(
             continue;
         }
         let node = source.node(node_id).unwrap();
-        for atom in cps_atoms(node) {
+        for atom in atoms(node) {
             if let CpsAtom::Fun(function) = atom {
                 functions.insert(*function);
             }
@@ -1196,38 +1196,6 @@ fn verify_block_resume(
         )));
     }
     Ok(())
-}
-
-fn cps_atoms(node: &CpsNode) -> Vec<&CpsAtom> {
-    let mut output = Vec::new();
-    match node {
-        CpsNode::LetValue { value, .. } => match value {
-            CpsValueExpr::Literal(_) => {}
-            CpsValueExpr::List(values) | CpsValueExpr::Tuple(values) => output.extend(values),
-        },
-        CpsNode::LetPrim { args, .. }
-        | CpsNode::ApplyFun { args, .. }
-        | CpsNode::Foreign { args, .. }
-        | CpsNode::Cell { args, .. }
-        | CpsNode::Intrinsic { args, .. } => output.extend(args),
-        CpsNode::ApplyCont(edge) => output.extend(&edge.args),
-        CpsNode::Switch {
-            scrutinee,
-            cases,
-            default,
-        } => {
-            output.push(scrutinee);
-            for edge in cases.values().chain(default.iter()) {
-                output.extend(&edge.args);
-            }
-        }
-        CpsNode::Exit { value } => output.extend(value),
-        CpsNode::LetFun { .. }
-        | CpsNode::LetCont { .. }
-        | CpsNode::Unreachable
-        | CpsNode::RecInit { .. } => {}
-    }
-    output
 }
 
 #[cfg(test)]
