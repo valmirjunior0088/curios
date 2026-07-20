@@ -74,8 +74,8 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Surface-to-core lowering | `curios-text/src/into_core/` | Core constructors and cross-stage integration tests |
 | Elaboration, typing, or conversion | `curios-core/src/` | Text lowering, erasure, diagnostics, and integration tests |
 | Concepts or witness resolution | `curios-core/src/concept.rs`, `resolve.rs` | Surface declarations, standard-library witnesses, and syntax documentation |
-| Type erasure | `curios-core/src/erase*` | `curios-ersd` representation and downstream tests |
-| Erased optimization | `curios-ersd/src/optimize/` | `into_cont/`, call-graph utilities, deep-input and specialization tests |
+| Type erasure | `curios-core/src/erase_ir*` | `curios-ersd` representation and downstream tests |
+| Erased optimization | `curios-ersd/src/optimize/` | `into_cont.rs`, derived analyses, deep-input and specialization tests |
 | CPS optimization or Wasm emission | `curios-cont/src/` | `curios-wasm`, codegen tests, and runtime behavior |
 | Wasm representation or encoding | `curios-wasm/src/` | Continuation emission and parser/round-trip tests |
 | Host operations or foreign calls | `curios-abi/src/` | Core validation, Wasm imports, runtime bindings, and the JavaScript harness |
