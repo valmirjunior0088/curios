@@ -108,6 +108,11 @@ impl PackedBin {
         self.bytes.get(self.bit_offset / 8 + index).copied()
     }
     pub fn to_packed_bytes(&self) -> Vec<u8> {
+        // An aligned window has no padding bits to mask, so its stored bytes
+        // already are the packed form.
+        if let Some(bytes) = self.as_bytes() {
+            return bytes.to_vec();
+        }
         let mut out = vec![0; self.bit_length.div_ceil(8)];
         for index in 0..self.bit_length {
             if self.bit(index).unwrap() {
@@ -134,6 +139,17 @@ impl PackedBin {
     }
 
     pub fn concat<'a>(values: impl IntoIterator<Item = &'a Self>) -> Self {
+        let values: Vec<_> = values.into_iter().collect();
+        // Aligned operands (every byte string) concatenate by bulk byte copy;
+        // only unaligned bit windows need the per-bit repack.
+        if values.iter().all(|value| value.is_x_aligned()) {
+            let mut bytes =
+                Vec::with_capacity(values.iter().map(|value| value.bit_length / 8).sum());
+            for value in &values {
+                bytes.extend_from_slice(value.as_bytes().unwrap());
+            }
+            return Self::from_bytes(bytes);
+        }
         Self::from_bits(
             values
                 .into_iter()
@@ -168,7 +184,12 @@ impl Eq for PackedBin {}
 impl Hash for PackedBin {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.bit_length.hash(state);
-        self.to_packed_bytes().hash(state);
+        // `Vec<u8>` hashes as its slice, so both arms feed the hasher the same
+        // logical packed bytes — the aligned arm just skips the allocation.
+        match self.as_bytes() {
+            Some(bytes) => bytes.hash(state),
+            None => self.to_packed_bytes().hash(state),
+        }
     }
 }
 
@@ -276,6 +297,26 @@ mod tests {
         assert!(!unaligned.is_x_aligned());
         assert!(unaligned.append_byte(0).is_none());
         assert!(unaligned.to_bytes().is_none());
+    }
+
+    #[test]
+    fn aligned_concat_matches_the_bit_path_and_stays_aligned() {
+        let left = PackedBin::from_bytes(vec![1, 2, 3]);
+        let right = PackedBin::from_bytes(vec![4, 5]);
+        let unaligned_twin = PackedBin::from_bits(
+            [false; 3]
+                .into_iter()
+                .chain((0..right.bit_length()).map(|index| right.bit(index).unwrap())),
+        )
+        .window(3, right.bit_length())
+        .unwrap();
+
+        let fast = PackedBin::concat([&left, &right]);
+        let slow = PackedBin::concat([&left, &unaligned_twin]);
+        assert!(fast.is_x_aligned());
+        assert_eq!(fast, slow);
+        assert_eq!(hash(&fast), hash(&slow));
+        assert_eq!(fast.to_bytes().unwrap(), vec![1, 2, 3, 4, 5]);
     }
 
     #[test]
