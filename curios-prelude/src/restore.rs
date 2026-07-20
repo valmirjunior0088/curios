@@ -47,23 +47,26 @@ thread_local! {
 }
 
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-fn validate_archive() -> Result<(), String> {
+fn validate_archive() -> Result<&'static ArchivedPreludeArchive, String> {
     validate_bytes(BYTES, SCHEMA, EXPECTED_FINGERPRINT, EXPECTED_ARCHIVE_DIGEST)
 }
 
-fn validate_bytes(
-    bytes: &[u8],
+/// Validate through the zero-copy view — bytecheck for structural validity,
+/// then the header fields — without deserializing the image, whose full
+/// restoration is per-thread and on demand.
+fn validate_bytes<'bytes>(
+    bytes: &'bytes [u8],
     schema: u32,
     fingerprint: &str,
     archive_digest: &str,
-) -> Result<(), String> {
+) -> Result<&'bytes ArchivedPreludeArchive, String> {
     if hex(&Sha256::digest(bytes)) != archive_digest {
         return Err("archived prelude content digest mismatch".into());
     }
-    let image = rkyv::from_bytes::<PreludeArchive, rkyv::rancor::Error>(bytes)
+    let image = rkyv::access::<ArchivedPreludeArchive, rkyv::rancor::Error>(bytes)
         .map_err(|error| format!("invalid archived prelude: {error}"))?;
 
-    if image.schema != schema {
+    if image.schema.to_native() != schema {
         return Err(format!(
             "archived prelude schema mismatch: expected {schema}, found {}",
             image.schema
@@ -74,15 +77,11 @@ fn validate_bytes(
         return Err("archived prelude source fingerprint mismatch".into());
     }
 
-    Ok(())
+    Ok(image)
 }
 
 fn archived() -> &'static ArchivedPreludeArchive {
-    match ARCHIVE.get_or_init(|| {
-        validate_archive()?;
-        rkyv::access::<ArchivedPreludeArchive, rkyv::rancor::Error>(BYTES)
-            .map_err(|error| format!("validated archived prelude became inaccessible: {error}"))
-    }) {
+    match ARCHIVE.get_or_init(validate_archive) {
         Ok(archived) => archived,
         Err(error) => panic!("{error}"),
     }
