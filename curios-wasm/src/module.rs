@@ -62,11 +62,12 @@ pub struct Global {
     pub expr: Expr,
 }
 
-/// The internal target of an export — a function or global, by name. The host-visible export string lives alongside it in the module's export list, so the same item can be exported under any name.
+/// The internal target of an export — a function or global by name, or the module's single memory. The host-visible export string lives alongside it in the module's export list, so the same item can be exported under any name.
 #[derive(Debug)]
 pub enum Export {
     Func(FuncName),
     Global(GlobalName),
+    Memory,
 }
 
 /// An in-memory wasm-GC module under construction — the crate's central type and the emitter's build target. Every item is registered under a symbolic name and every cross-reference is by name; numeric index spaces exist only inside the binary encoder, which derives them from insertion order (imports leading). Render it as WAT-style text via `Display`, parse that text back via `FromStr`, or encode it with [`to_bytes`](crate::to_bytes).

@@ -3,7 +3,7 @@ use super::{
     TypeName, ValType,
 };
 
-/// The backend's instruction set, one variant per wasm opcode the crate can encode. Every operand the binary format expresses as an index — labels, functions, types, struct fields, locals, globals, data segments — is carried here as a name and resolved by the encoder, so emitters never track index spaces. The roster is deliberately GC-only: struct/array/ref/`i31` operations plus the full numeric core, with no linear-memory instructions — the only route from raw bytes into values is `ArrayNewData` reading a passive data segment.
+/// The backend's instruction set, one variant per wasm opcode the crate can encode. Every operand the binary format expresses as an index — labels, functions, types, struct fields, locals, globals, data segments — is carried here as a name and resolved by the encoder, so emitters never track index spaces. The roster is deliberately GC-only for program values: struct/array/ref/`i31` operations plus the full numeric core, and the only route from raw bytes into values is `ArrayNewData` reading a passive data segment. The four memory instructions (`I32Load8U`/`I32Store8`/`MemorySize`/`MemoryGrow`) are not an exception to that rule — they serve the module's single always-emitted memory (empty until grown), a host-boundary bulk-copy lane that program values never inhabit.
 #[derive(Debug, Clone)]
 pub enum Instr {
     Unreachable,
@@ -139,6 +139,12 @@ pub enum Instr {
     RefI31,
     I31GetS,
     I31GetU,
+    // The memory lane: byte-granular access (align 0, offset 0) plus
+    // size/grow against the module's single always-emitted memory.
+    I32Load8U,
+    I32Store8,
+    MemorySize,
+    MemoryGrow,
     Drop,
     Select {
         val_types: Vec<ValType>,

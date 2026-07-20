@@ -59,6 +59,8 @@ fn accessors_are_exported_with_their_shapes() {
         ("bin_get", 2, 1),
         ("bin_new", 1, 1),
         ("bin_set", 3, 0),
+        ("bin_load", 1, 1),
+        ("bin_store", 1, 1),
     ] {
         let export = module
             .exports()
@@ -116,4 +118,41 @@ fn bridge_accessors_roundtrip() {
             value
         );
     }
+}
+
+/// The bulk lane end to end: bytes written into the exported memory become a
+/// `bytes` array via `bin_store`, and `bin_load` copies them back out.
+#[test]
+fn bulk_transfers_roundtrip_through_the_memory() {
+    let mut store = Store::new(curios_runtime::shared_engine(), ());
+    let bridge = instantiate(&mut store, &crate::bridge_bytes());
+
+    let memory = bridge
+        .get_memory(&mut store, "memory")
+        .expect("missing memory export");
+    assert_eq!(memory.size(&store), 0, "the memory starts empty");
+    memory.grow(&mut store, 1).expect("grow failed");
+
+    let payload = b"bulk lane";
+    memory
+        .write(&mut store, 0, payload)
+        .expect("memory write failed");
+
+    let bin_store = export(&mut store, &bridge, "bin_store");
+    let bin_load = export(&mut store, &bridge, "bin_load");
+    let bin = call(&mut store, &bin_store, &[Val::I32(payload.len() as i32)]);
+
+    memory
+        .write(&mut store, 0, &vec![0; payload.len()])
+        .expect("memory clear failed");
+    assert_eq!(
+        call(&mut store, &bin_load, std::slice::from_ref(&bin)).unwrap_i32(),
+        payload.len() as i32
+    );
+
+    let mut copied = vec![0; payload.len()];
+    memory
+        .read(&store, 0, &mut copied)
+        .expect("memory read failed");
+    assert_eq!(&copied, payload);
 }

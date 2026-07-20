@@ -444,6 +444,10 @@ fn print_instr<'a>(instr: &'a Instr) -> Printer<'a> {
         Instr::RefI31 => pure("ref.i31"),
         Instr::I31GetS => pure("i31.get_s"),
         Instr::I31GetU => pure("i31.get_u"),
+        Instr::I32Load8U => pure("i32.load8_u"),
+        Instr::I32Store8 => pure("i32.store8"),
+        Instr::MemorySize => pure("memory.size"),
+        Instr::MemoryGrow => pure("memory.grow"),
         Instr::Drop => pure("drop"),
         Instr::Select { val_types } => flat([
             pure("select"),
@@ -763,6 +767,7 @@ fn print_export<'a>(name: &'a str, export: &'a Export) -> Printer<'a> {
             Export::Global(global_name) => {
                 flat([pure(" (global "), print_global_name(global_name), pure(")")])
             }
+            Export::Memory => pure(" (memory)"),
         },
         pure(")"),
     ])

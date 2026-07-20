@@ -489,6 +489,13 @@ fn parse_aggregate_instr<'a>() -> Parser<'a, Instr> {
     .or(parse_literal("extern.convert_any").map(|()| Instr::ExternConvertAny))
 }
 
+fn parse_memory_instr<'a>() -> Parser<'a, Instr> {
+    (parse_literal("i32.load8_u").map(|()| Instr::I32Load8U))
+        .or(parse_literal("i32.store8").map(|()| Instr::I32Store8))
+        .or(parse_literal("memory.size").map(|()| Instr::MemorySize))
+        .or(parse_literal("memory.grow").map(|()| Instr::MemoryGrow))
+}
+
 fn parse_select_result<'a>() -> Parser<'a, Vec<ValType>> {
     (parse_result_type("result").map(|ResultType { val_types }| val_types)).or(pure(vec![]))
 }
@@ -676,6 +683,7 @@ fn parse_instr<'a>() -> Parser<'a, Instr> {
     parse_numeric_instr()
         .or(parse_reference_instr())
         .or(parse_aggregate_instr())
+        .or(parse_memory_instr())
         .or(parse_parametric_instr())
         .or(parse_variable_instr())
         .or(parse_control_instr())
@@ -792,10 +800,20 @@ fn parse_global_export_desc<'a>() -> Parser<'a, Export> {
         .map(Export::Global)
 }
 
+fn parse_memory_export_desc<'a>() -> Parser<'a, Export> {
+    catch(parse_literal("(").and_drop(parse_literal("memory")))
+        .and_drop(parse_literal(")"))
+        .map(|()| Export::Memory)
+}
+
 fn parse_export<'a>() -> Parser<'a, (String, Export)> {
     catch(parse_literal("(").and_drop(parse_literal("export")))
         .and_keep(parse_string().map(str::to_string))
-        .and((parse_func_export_desc()).or(parse_global_export_desc()))
+        .and(
+            (parse_func_export_desc())
+                .or(parse_global_export_desc())
+                .or(parse_memory_export_desc()),
+        )
         .and_drop(parse_literal(")"))
 }
 

@@ -25,12 +25,22 @@ fn round_trip() {
                 i32.const 5
                 array.new_data $bytes $greeting
                 drop
+                i32.const 0
+                i32.load8_u
+                i32.const 7
+                i32.store8
+                memory.size
+                drop
+                i32.const 1
+                memory.grow
+                drop
                 local.get $tmp)
             (global $answer (mut i32)
                 i32.const 41)
             (data $greeting "\68\65\6c\6c\6f")
             (export "demo" (func $demo))
             (export "answer" (global $answer))
+            (export "memory" (memory))
             (elem declare func $demo))
 "#;
 

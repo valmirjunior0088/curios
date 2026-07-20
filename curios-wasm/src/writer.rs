@@ -674,6 +674,25 @@ where
             Instr::RefI31 => self.gc_op(28)?,
             Instr::I31GetS => self.gc_op(29)?,
             Instr::I31GetU => self.gc_op(30)?,
+            // The memory lane's memargs are constant: align 0, offset 0.
+            Instr::I32Load8U => {
+                self.buffer.push_byte(0x2d)?;
+                self.buffer.push_byte(0x00)?;
+                self.buffer.push_byte(0x00)?;
+            }
+            Instr::I32Store8 => {
+                self.buffer.push_byte(0x3a)?;
+                self.buffer.push_byte(0x00)?;
+                self.buffer.push_byte(0x00)?;
+            }
+            Instr::MemorySize => {
+                self.buffer.push_byte(0x3f)?;
+                self.buffer.push_byte(0x00)?;
+            }
+            Instr::MemoryGrow => {
+                self.buffer.push_byte(0x40)?;
+                self.buffer.push_byte(0x00)?;
+            }
             Instr::Drop => self.buffer.push_byte(0x1a)?,
             Instr::Select { val_types } => {
                 if val_types.is_empty() {
@@ -937,6 +956,10 @@ where
                 self.buffer.push_byte(0x03)?;
                 self.write_global_name(global_name)?;
             }
+            Export::Memory => {
+                self.buffer.push_byte(0x02)?;
+                self.buffer.push_leb128_unsigned(0)?;
+            }
         }
 
         Ok(())
@@ -983,6 +1006,17 @@ where
     fn write_func_section(&mut self, funcs: &[(FuncName, Func)]) -> Result<()> {
         self.write_section_with(3, |writer| {
             writer.write_vec(funcs, |writer, (_, func)| writer.write_func(func))
+        })
+    }
+
+    /// The single always-emitted memory: empty (`min 0`) and growable (no
+    /// max) — the host-boundary bulk-copy lane. Binaryen strips it from
+    /// modules that never touch it.
+    fn write_memory_section(&mut self) -> Result<()> {
+        self.write_section_with(5, |writer| {
+            writer.buffer.push_leb128_unsigned(1)?;
+            writer.buffer.push_byte(0x00)?;
+            writer.buffer.push_leb128_unsigned(0)
         })
     }
 
@@ -1171,6 +1205,7 @@ where
         self.write_type_section(module.types())?;
         self.write_import_section(module.imports())?;
         self.write_func_section(module.funcs())?;
+        self.write_memory_section()?;
         self.write_global_section(module.globals())?;
         self.write_export_section(module.exports())?;
         if let Some(start) = module.start() {

@@ -37,24 +37,32 @@ export async function run(config) {
   const bridge = (await WebAssembly.instantiate(config.bridge, {})).instance
     .exports;
 
-  const decodeBin = (bin) => {
-    const bytes = new Uint8Array(bridge.bin_len(bin));
+  // Byte strings cross the boundary through the bridge's memory in one
+  // `bin_load`/`bin_store` call per string; the memory starts empty and grows
+  // here, JS-side, to fit the largest string seen so far.
+  const memory = bridge.memory;
 
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = bridge.bin_get(bin, i);
+  const ensureCapacity = (length) => {
+    const missing = length - memory.buffer.byteLength;
+
+    if (missing > 0) {
+      memory.grow(Math.ceil(missing / 65536));
     }
+  };
 
-    return bytes;
+  const decodeBin = (bin) => {
+    const length = bridge.bin_len(bin);
+    ensureCapacity(length);
+    bridge.bin_load(bin);
+
+    return new Uint8Array(memory.buffer, 0, length).slice();
   };
 
   const encodeBin = (bytes) => {
-    const bin = bridge.bin_new(bytes.length);
+    ensureCapacity(bytes.length);
+    new Uint8Array(memory.buffer).set(bytes);
 
-    for (let i = 0; i < bytes.length; i++) {
-      bridge.bin_set(bin, i, bytes[i]);
-    }
-
-    return bin;
+    return bridge.bin_store(bytes.length);
   };
 
   // A handle's wire encoding is the little-endian bytes of its token, so the
