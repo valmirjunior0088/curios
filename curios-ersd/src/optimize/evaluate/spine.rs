@@ -122,6 +122,23 @@ fn plan_sites(
     def_index: &BTreeMap<ValueId, StatementId>,
     targets: &BTreeMap<FunctionId, Target>,
 ) -> Vec<Site> {
+    // A site inside a target's own region is excluded: its rewrite would make
+    // the target's body reference the specialization group, which installs
+    // *after* the target's binding item — a forward reference the verifier
+    // rejects. Self-recursion over a literal spine specializes only inside
+    // minted copies, whose shared group keeps every reference backward.
+    let own_statements: BTreeMap<FunctionId, BTreeSet<StatementId>> = targets
+        .keys()
+        .map(|&target| {
+            let statements = region_blocks(module, target)
+                .into_iter()
+                .filter_map(|block| module.block(block))
+                .flat_map(|block| block.statements.iter().copied())
+                .collect();
+            (target, statements)
+        })
+        .collect();
+
     let mut sites = Vec::new();
     for (position, slot) in module.statements().iter().enumerate() {
         let Some(Statement::Let {
@@ -138,6 +155,9 @@ fn plan_sites(
             continue;
         };
         if arguments.len() != info.params {
+            continue;
+        }
+        if own_statements[target].contains(&StatementId(position as u32)) {
             continue;
         }
         if let Some((argument_position, spine)) = spine_argument(module, def_index, arguments) {
