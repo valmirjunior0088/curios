@@ -17,7 +17,7 @@ use {
     super::{
         Block, BlockId, Constant, ConstantId, Constructor, ConstructorId, FamilyId, ForeignId,
         Function, FunctionId, ProductId, ProductSchema, RecGroup, RecGroupId, Statement,
-        StatementId, ValueId, VariantFamily,
+        StatementId, Terminator, ValueId, VariantFamily,
     },
     curios_abi::ForeignFunction,
     std::{collections::HashMap, sync::Arc},
@@ -246,6 +246,15 @@ impl ErasedModule {
             .as_mut()
             .expect("a spliced block is live");
         slot.statements = statements;
+    }
+
+    /// Replace one live block's terminator — the monoid rebase redirects a
+    /// leaf tail block's return through the threaded accumulator.
+    pub(crate) fn set_block_terminator(&mut self, id: BlockId, terminator: Terminator) {
+        let slot = self.blocks[id.index()]
+            .as_mut()
+            .expect("a rewritten block is live");
+        slot.terminator = terminator;
     }
 
     /// Redefine one live function — the spine specializer's parameter-drop

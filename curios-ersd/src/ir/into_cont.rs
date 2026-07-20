@@ -810,14 +810,26 @@ impl Lowerer<'_> {
     // === Control splits ==================================================
 
     /// Open a join continuation that receives a control split's single result
-    /// and runs the rest of the block; every arm delivers to it.
+    /// and runs the rest of the block; every arm delivers to it. A split in
+    /// tail position — the block's last statement, whose result the block
+    /// returns — delivers straight to the block's own target instead: no
+    /// administrative join means a self-call in an arm returns to the
+    /// function's return continuation and is genuinely tail, which is what
+    /// lets Cont contify the recursion into a loop (a bodyless return
+    /// continuation is not a forwarding target, so an eta join there would
+    /// never collapse).
     fn open_join(
         &mut self,
         result: ValueId,
         rest: &[StatementId],
         terminator: &Terminator,
         target: CpsContId,
-    ) -> CpsContId {
+    ) -> (CpsContId, bool) {
+        if rest.is_empty()
+            && matches!(terminator, Terminator::Return(ErasedAtom::Value(returned)) if *returned == result)
+        {
+            return (target, false);
+        }
         let join = self.module.reserve_continuation();
         let parameter = self.bind_value(result);
         let body = self.lower_statements(rest, terminator, target);
@@ -829,7 +841,7 @@ impl Lowerer<'_> {
                 body,
             },
         );
-        join
+        (join, true)
     }
 
     /// Build a parameterless continuation lowering `block` into `join`.
@@ -861,8 +873,8 @@ impl Lowerer<'_> {
         terminator: &Terminator,
         target: CpsContId,
     ) -> CpsNodeId {
-        let join = self.open_join(result, rest, terminator, target);
-        let mut continuations = vec![join];
+        let (join, fresh) = self.open_join(result, rest, terminator, target);
+        let mut continuations = if fresh { vec![join] } else { Vec::new() };
         let mut cases = BTreeMap::new();
         for (key, block) in arms {
             let continuation = self.plain_arm(block, join);
@@ -909,9 +921,9 @@ impl Lowerer<'_> {
         target: CpsContId,
     ) -> CpsNodeId {
         let scrutinee = self.lower_atom(scrutinee);
-        let join = self.open_join(result, rest, terminator, target);
+        let (join, fresh) = self.open_join(result, rest, terminator, target);
 
-        let mut continuations = vec![join];
+        let mut continuations = if fresh { vec![join] } else { Vec::new() };
         let mut cases = BTreeMap::new();
         for arm in arms {
             let continuation = self.lower_variant_arm(arm, scrutinee.clone(), join);
@@ -1000,7 +1012,7 @@ impl Lowerer<'_> {
         target: CpsContId,
     ) -> CpsNodeId {
         let head = self.lower_atom(scrutinee);
-        let join = self.open_join(result, rest, terminator, target);
+        let (join, fresh) = self.open_join(result, rest, terminator, target);
 
         let loop_index = self.module.add_value(None);
         let loop_acc = self.module.add_value(None);
@@ -1102,8 +1114,10 @@ impl Lowerer<'_> {
         );
 
         let entry = self.lower_block(zero, zero_resume);
+        let mut continuations = if fresh { vec![join] } else { Vec::new() };
+        continuations.extend([loop_cont, step_cont, zero_resume]);
         self.module.add_node(CpsNode::LetCont {
-            continuations: vec![join, loop_cont, step_cont, zero_resume],
+            continuations,
             body: entry,
         })
     }
@@ -1124,7 +1138,7 @@ impl Lowerer<'_> {
         target: CpsContId,
     ) -> CpsNodeId {
         let sequence = self.lower_atom(scrutinee);
-        let join = self.open_join(result, rest, terminator, target);
+        let (join, fresh) = self.open_join(result, rest, terminator, target);
 
         let length = self.module.add_value(None);
         let loop_index = self.module.add_value(None);
@@ -1245,8 +1259,10 @@ impl Lowerer<'_> {
         );
 
         let entry = self.lower_block(empty, empty_resume);
+        let mut continuations = if fresh { vec![join] } else { Vec::new() };
+        continuations.extend([loop_cont, step_cont, empty_resume]);
         let entry = self.module.add_node(CpsNode::LetCont {
-            continuations: vec![join, loop_cont, step_cont, empty_resume],
+            continuations,
             body: entry,
         });
         // Compute the length up front so every continuation sees it.
@@ -1273,6 +1289,14 @@ impl Lowerer<'_> {
         target: CpsContId,
         make: impl FnOnce(CpsContId) -> CpsNode,
     ) -> CpsNodeId {
+        // The same tail bypass as `open_join`: a single-result split whose
+        // value the block immediately returns delivers to the block's target.
+        if result_arity == 1
+            && rest.is_empty()
+            && matches!(terminator, Terminator::Return(ErasedAtom::Value(returned)) if *returned == result)
+        {
+            return self.module.add_node(make(target));
+        }
         let join = self.module.reserve_continuation();
         let params = if result_arity == 0 {
             self.values

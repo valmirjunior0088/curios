@@ -13,8 +13,13 @@ mod prune;
 
 mod evaluate;
 
+mod rebase;
+
 #[cfg(test)]
 mod prune_tests;
+
+#[cfg(test)]
+mod rebase_tests;
 
 use super::ErasedModule;
 
@@ -32,6 +37,7 @@ pub fn optimize_ir(module: &mut ErasedModule) {
     prune::prune_unreachable(module, &proven_pure);
     evaluate::evaluate_closed_terms(module);
     evaluate::specialize_literal_spines(module);
+    rebase::rebase_monoid_recursion(module);
     let proven_pure = evaluate::prove_eager_groups_pure(module);
     prune::prune_unreachable(module, &proven_pure);
 }

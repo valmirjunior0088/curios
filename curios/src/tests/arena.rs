@@ -111,29 +111,85 @@ fn arena_lcg_kernel_keeps_its_structural_properties() {
     .expect("fixture compiles through the arena");
     let wat = module.to_string();
 
-    let position = wat.find("65537").expect("the kernel constant is emitted");
-    let function_start = wat[..position]
-        .rfind("(func ")
-        .expect("the constant sits inside a function");
-    let function_end = wat[position..]
-        .find("\n  (func ")
-        .map(|offset| position + offset)
-        .unwrap_or(wat.len());
-    let kernel = &wat[function_start..function_end];
-
+    // The innermost natural loop holding the kernel constant (the kernel is
+    // contified — into main or a caller — so the loop, not a function
+    // boundary, is the structural unit).
+    let kernel = innermost_loop(&wat, "65537");
     assert_eq!(
         kernel.matches("loop ").count(),
         1,
-        "the kernel must be a single natural loop:\n{kernel}"
+        "the kernel must be a single natural loop, not nested loops:\n{kernel}"
     );
     assert!(
         !kernel.contains("$dispatch/"),
         "the backedge must not be a dispatcher selector:\n{kernel}"
     );
     assert!(
-        !kernel.contains("struct.new") || !kernel.contains("call_ref"),
-        "the loop body must not allocate closures or dispatch indirectly:\n{kernel}"
+        !kernel.contains("call_ref"),
+        "the loop body must not dispatch indirectly:\n{kernel}"
     );
+}
+
+/// The innermost `loop … end` region containing `needle` — the same slicing
+/// the legacy structural suite uses.
+fn innermost_loop<'a>(wat: &'a str, needle: &str) -> &'a str {
+    let needle_offset = wat.find(needle).expect("the needle is emitted");
+    let lines: Vec<(usize, &str)> = {
+        let mut offset = 0;
+        wat.lines()
+            .map(|line| {
+                let start = offset;
+                offset += line.len() + 1;
+                (start, line.trim())
+            })
+            .collect()
+    };
+    let is_opener =
+        |t: &str| t.starts_with("loop ") || t.starts_with("block ") || t.starts_with("if ");
+    let is_closer = |t: &str| t == "end";
+
+    let needle_line = lines
+        .iter()
+        .rposition(|&(start, _)| start <= needle_offset)
+        .expect("the needle has a line");
+
+    let mut depth = 0usize;
+    let mut loop_line = None;
+    for index in (0..needle_line).rev() {
+        let text = lines[index].1;
+        if is_closer(text) {
+            depth += 1;
+        } else if is_opener(text) {
+            if depth == 0 {
+                if text.starts_with("loop ") {
+                    loop_line = Some(index);
+                    break;
+                }
+            } else {
+                depth -= 1;
+            }
+        }
+    }
+    let loop_line = loop_line.expect("the needle sits inside a loop");
+
+    let mut depth = 0usize;
+    let mut end_line = None;
+    for (index, &(_, text)) in lines.iter().enumerate().skip(loop_line) {
+        if is_opener(text) {
+            depth += 1;
+        } else if is_closer(text) {
+            depth -= 1;
+            if depth == 0 {
+                end_line = Some(index);
+                break;
+            }
+        }
+    }
+    let end_line = end_line.expect("the loop is balanced");
+
+    let start = lines[loop_line].0;
+    let end = lines.get(end_line + 1).map_or(wat.len(), |&(next, _)| next);
+    &wat[start..end]
 }
 
 /// The partial-evaluation gate: `Fmt/print("literal")` with constant
@@ -255,5 +311,40 @@ fn arena_effectful_fold_body_bails_and_runs_per_iteration() {
             acc + 1);
         Io/write(Io/stdout, Str/to_bytes(Nat/to_str(out)))
         "#,
+    );
+}
+
+/// The worker/wrapper gate. A monoid-deferred recursion (`count(t) + 1`)
+/// matches production at a depth both paths handle, and — the load-bearing
+/// half — runs at a depth where an unrebased recursion overflows the runtime
+/// stack. (The legacy path's own worker/wrapper does not cover
+/// entrypoint-local recursion, so the deep half runs through the arena
+/// alone: the rebase threads the deferred addition into a tail accumulator.)
+#[test]
+fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
+    let program = |depth: u32| {
+        format!(
+            r#"
+        use /std/{{Io, Nat, Str, Bytes}};
+        rec count(b : Bytes) -> Nat =
+            match b : Nat
+            | x\ => 0
+            | x\h\..t; ih => count(t) + 1
+            end;
+        rec build(n : Nat, acc : Bytes) -> Bytes =
+            match n : Bytes
+            | 0 => acc
+            | p + 1; ih => build(p, Bytes/cons(97, acc))
+            end;
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(count(build({depth}, x\)))))
+        "#
+        )
+    };
+
+    behavior_matches(&program(1_000));
+    assert_eq!(
+        run_arena(&program(60_000)),
+        b"60000".to_vec(),
+        "the rebased recursion must not overflow at depth"
     );
 }
