@@ -57,14 +57,19 @@ impl RegionCfg {
         succ[entry] = entry_targets;
 
         // A block branches to a sibling whenever the block's region — through
-        // any of its own nested blocks — transfers there. Iterating siblings in
-        // index order keeps each successor list sorted and duplicate-free.
+        // any of its own nested blocks — transfers there. One walk per block
+        // collects every transferred-to name; mapping through the sibling
+        // index and sorting keeps each successor list sorted and
+        // duplicate-free (the set already deduplicates).
         for (source, (_, block)) in region.blocks.iter().enumerate() {
-            for (target, (name, _)) in region.blocks.iter().enumerate() {
-                if region_targets(&block.region, name) {
-                    succ[source].push(target);
-                }
-            }
+            let mut names = std::collections::BTreeSet::new();
+            collect_region_targets(&block.region, &mut names);
+            let mut targets = names
+                .into_iter()
+                .filter_map(|name| index.get(name).copied())
+                .collect::<Vec<_>>();
+            targets.sort_unstable();
+            succ[source] = targets;
         }
 
         let mut pred = vec![Vec::new(); blocks + 1];
@@ -130,15 +135,18 @@ fn tail_targets(tail: &EmissionTail) -> Vec<&EmissionBlockName> {
     }
 }
 
-/// Whether `region`, or any region nested inside its blocks, branches into
-/// `name`. This is the sibling-level edge oracle: a branch from deep inside a
-/// block to a sibling is an edge between those two blocks.
-pub(crate) fn region_targets(region: &EmissionBody, name: &EmissionBlockName) -> bool {
-    tail_targets(&region.tail).contains(&name)
-        || region
-            .blocks
-            .iter()
-            .any(|(_, block)| region_targets(&block.region, name))
+/// Every block name `region`, or any region nested inside its blocks,
+/// branches into — the sibling-level edge oracle, collected in one traversal:
+/// a branch from deep inside a block to a sibling is an edge between those
+/// two blocks.
+fn collect_region_targets<'a>(
+    region: &'a EmissionBody,
+    out: &mut std::collections::BTreeSet<&'a EmissionBlockName>,
+) {
+    out.extend(tail_targets(&region.tail));
+    for (_, block) in &region.blocks {
+        collect_region_targets(&block.region, out);
+    }
 }
 
 /// The structured layout of a region's blocks: an ordered nesting of `loop`,
