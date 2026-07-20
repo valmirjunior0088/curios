@@ -448,7 +448,7 @@ end
 
 ### Natural-number induction
 
-Natural-number induction has a zero arm and a successor arm. The successor arm binds the predecessor before `+ 1` and requires an induction-hypothesis binder after `;`.
+Natural-number induction has a zero arm and a successor arm. The successor arm binds the predecessor before `+ 1`; a binding after `;` receives the induction hypothesis for the predecessor, and omitting it makes the arm an ordinary case split.
 
 ```crs
 match n : (m) => P(m)

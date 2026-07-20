@@ -21,7 +21,7 @@ pub let fold(@A : Type, b : Bits, init : A, f : (Bool, A) -> A) -> A =
     rec go(k : Nat, i : Nat, acc : A, inv : Eq(i + k, n)) -> A =
         match k
         | 0 => acc
-        | kp + 1; ih =>
+        | kp + 1 =>
             go(kp, i + 1,
                 f(at(b, i, Eq/subst((x) => Nat/Lt(i, x), inv, Nat/lte_to_lt_succ(Nat/lte_add_r(i, kp)))), acc),
                 inv)

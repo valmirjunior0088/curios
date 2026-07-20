@@ -796,7 +796,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// An `Lst`/`Bin` cons arm's induction-hypothesis binder name: an omitted
+    /// A `Nat` succ or `Lst`/`Bin` cons arm's induction-hypothesis binder name: an omitted
     /// `; ih` (`None` — there is no source name at all) mints a fresh internal
     /// name directly; a written one gets the same wildcard-safe treatment as
     /// [`Self::pattern_binder_name`].

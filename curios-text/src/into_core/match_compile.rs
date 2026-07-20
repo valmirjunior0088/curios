@@ -719,8 +719,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// synthetic name here would resurrect the exact regression class
     /// `compile_ctor`'s fast path exists to avoid. A `NatSucc` group of
     /// exactly one row therefore reuses that row's own written
-    /// `pred_label`/`ih_label` directly; only a group with more than one row
-    /// mints synthetic names.
+    /// `pred_label`/`ih_label` directly (the optional `ih` through
+    /// [`Self::cons_ih_name`], like [`Self::compile_lst`]); only a group
+    /// with more than one row mints synthetic names, and — as in
+    /// [`Self::compile_lst`] — a multi-row member that omitted `; ih` gets
+    /// no ih bind pushed.
     ///
     /// `pred`/`ih` are always plain binder names, never a further
     /// sub-pattern (deep peeling stays out of scope), so — unlike a
@@ -745,7 +748,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let rest = columns;
 
         let mut zero_rows = Vec::new();
-        let mut succ_rows: Vec<(String, String, MatrixRow<'_>)> = Vec::new();
+        let mut succ_rows: Vec<(String, Option<String>, MatrixRow<'_>)> = Vec::new();
         let mut lit_rows: Vec<(u32, MatrixRow<'_>)> = Vec::new();
         for mut row in rows {
             match row.patterns.remove(0) {
@@ -810,7 +813,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let (pred_label, ih_label, succ_case) = if succ_rows.len() == 1 {
             let (pred_name, ih_name, row) = succ_rows.pop().unwrap();
             let pred_bound = self.pattern_binder_name(&pred_name);
-            let ih_bound = self.pattern_binder_name(&ih_name);
+            let ih_bound = self.cons_ih_name(&ih_name);
             let succ_case = self.scoped([pred_bound.clone(), ih_bound.clone()], || {
                 self.compile(rest, vec![row], None, leaf)
             })?;
@@ -825,10 +828,12 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                         pred_name,
                         curios_core::Term::var(curios_core::Var::free(pred_synth.clone())),
                     ));
-                    row.binds.push((
-                        ih_name,
-                        curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
-                    ));
+                    if let Some(ih_name) = ih_name {
+                        row.binds.push((
+                            ih_name,
+                            curios_core::Term::var(curios_core::Var::free(ih_synth.clone())),
+                        ));
+                    }
                     row
                 })
                 .collect();

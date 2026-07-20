@@ -245,9 +245,9 @@ pub(super) fn parse_nat_zero_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     }))
 }
 
-// The `pred + 1; ih` leaf of a `Nat` match-arm pattern. `ih` is mandatory here
-// (no optional-ih alternative), unlike the optional `; ih` on the `Lst`/`Bin`
-// cons leaves below. Tried after `Ctor` and before
+// The `pred + 1; ih` leaf of a `Nat` match-arm pattern, with the same
+// optional `; ih` as the `Lst`/`Bin` cons leaves below (`parse_cons_ih`).
+// Tried after `Ctor` and before
 // the generic `Binder` fallback in `parse_match_pattern`: it shares a
 // leading identifier with both, so `Binder` would otherwise silently
 // swallow every `name+1;ih` input before this ever gets a chance to commit.
@@ -262,14 +262,13 @@ pub(super) fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
             .and_drop(preceded_by_space())
             .and_drop(take_exact("+"))
             .and_drop(require_space())
-            .and_drop(parse_literal("1"))
-            .and_drop(parse_literal(";")),
+            .and_drop(parse_literal("1")),
     )
-    .and(parse_identifier())
-    .map(|(pred_label, ih_label): (&str, &str)| {
+    .and(parse_cons_ih())
+    .map(|(pred_label, ih_label): (&str, Option<String>)| {
         MatchPattern::Nat(NatPattern::Succ {
             pred_label: pred_label.to_string(),
-            ih_label: ih_label.to_string(),
+            ih_label,
         })
     })
 }

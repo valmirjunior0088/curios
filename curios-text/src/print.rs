@@ -191,8 +191,9 @@ fn print_struct_entry(entry: StructLitEntry) -> Printer<'static> {
 /// A tuple-pattern / struct-pattern field: positional or `label = pattern` —
 /// the literal mirror of `print_tuple_field`, with `Term` replaced by
 /// `Pattern` (no definition-sugar form; a pattern field is never a function).
-/// The optional `; ih` tail of an `Lst`/`Bin` fold's cons arm — `None` prints
-/// nothing at all (a plain case-split), matching how it was written.
+/// The optional `; ih` tail of a `Nat` fold's succ arm or an `Lst`/`Bin`
+/// fold's cons arm — `None` prints nothing at all (a plain case-split),
+/// matching how it was written.
 fn print_cons_ih(ih_label: Option<String>) -> Printer<'static> {
     match ih_label {
         Some(ih_label) => flat([pure("; "), pure(ih_label)]),
@@ -293,7 +294,7 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer<'static> {
         MatchPattern::Nat(NatPattern::Succ {
             pred_label,
             ih_label,
-        }) => flat([pure(pred_label), pure(" + 1; "), pure(ih_label)]),
+        }) => flat([pure(pred_label), pure(" + 1"), print_cons_ih(ih_label)]),
         MatchPattern::Nat(NatPattern::Lit(n)) => pure(n.to_string()),
         MatchPattern::Lst(LstPattern::Nil) => pure("[]"),
         MatchPattern::Lst(LstPattern::Cons {

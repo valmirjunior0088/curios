@@ -47,12 +47,12 @@ pub let concat(a : Str, b : Str) -> Str =
 rec drop_width(n : Nat, s : Scan, b : Bytes) -> Nat =
     match b
     | x\ => 0
-    | x\h\..t; ih =>
+    | x\h\..t =>
         match s
         | lead() =>
             match n
             | 0 => 0
-            | pred + 1; ih2 => 1 + drop_width(pred, step(h, Scan/lead()), t)
+            | pred + 1 => 1 + drop_width(pred, step(h, Scan/lead()), t)
             end
         | cont(rem, lo, hi) => 1 + drop_width(n, step(h, Scan/cont(rem, lo, hi)), t)
         | bad() => 1 + drop_width(n, step(h, Scan/bad()), t)
@@ -68,7 +68,7 @@ rec drop_valid(n : Nat, s : Scan, @b : Bytes, d : Utf8(s, b))
         | more(c, st, t, rest) =>
             match n
             | 0 => Utf8/more(c, Scan/lead(), t, rest)
-            | pred + 1; ih => drop_valid(pred, step(c, Scan/lead()), @t, rest)
+            | pred + 1 => drop_valid(pred, step(c, Scan/lead()), @t, rest)
             end
         end
     | cont(rem, lo, hi) =>
@@ -90,7 +90,7 @@ rec take_valid(n : Nat, s : Scan, @b : Bytes, d : Utf8(s, b))
         | more(c, st, t, rest) =>
             match n
             | 0 => Utf8/stop()
-            | pred + 1; ih =>
+            | pred + 1 =>
                 Utf8/more(c, Scan/lead(), Bytes/slice(t, 0, drop_width(pred, step(c, Scan/lead()), t)),
                     take_valid(pred, step(c, Scan/lead()), @t, rest))
             end
@@ -159,12 +159,12 @@ pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bytes, w : Utf8(Scan/cont(k
     -> Nat/Lte(k, Bytes/len(t)) =
     match k
     | 0 => Nat/Lte/z()
-    | kp + 1; ih =>
+    | kp + 1 =>
         match w
         | more(c, st, tt, rest) =>
             match kp
             | 0 => Nat/Lte/s(Nat/Lte/z())
-            | kpp + 1; ih2 =>
+            | kpp + 1 =>
                 Nat/Lte/s(
                     match Nat/in_range(Byte/to_nat(c), lo, hi)
                     | true => cont_len(kpp + 1, @0x80, @0xBF, @tt, rest)
@@ -189,7 +189,7 @@ pub rec take_conts(b : Bytes, off : Nat, remaining : Nat, acc : Nat,
     bound : Nat/Lte(off + remaining, Bytes/len(b))) -> {Nat, Nat} =
     match remaining
     | 0 => (acc, off)
-    | pred + 1; ih =>
+    | pred + 1 =>
         take_conts(b, off + 1, pred,
             acc * 0x40 + (Byte/to_nat(Bytes/at(b, off,
                 Nat/lt_of_lte_succ(Nat/lte_trans(Nat/Lte/s(Nat/lte_add_r(off, pred)), bound)))) - 0x80),
@@ -207,7 +207,7 @@ pub rec peel_byte(@s : Scan, @b : Bytes, nz : Nat/Lt(0, Bytes/len(b)), w : Utf8(
 pub rec count_w(s : Scan, b : Bytes) -> Nat =
     match b
     | x\ => 0
-    | x\h\..t; ih =>
+    | x\h\..t =>
         match s
         | lead() => count_w(step(h, Scan/lead()), t) + 1
         | cont(rem, lo, hi) => count_w(step(h, Scan/cont(rem, lo, hi)), t)
@@ -297,10 +297,10 @@ pub let get(s : Str, i : Nat) -> Option(Char) =
 rec lte_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Lte(i + 1, n) =
     match n
     | 0 => False/absurd(@Nat/Lte(i + 1, 0), p)
-    | np + 1; ihn =>
+    | np + 1 =>
         match i
         | 0 => Nat/Lte/s(Nat/Lte/z())
-        | ip + 1; ihi => Nat/Lte/s(lte_succ_of_lt(ip, np, p))
+        | ip + 1 => Nat/Lte/s(lte_succ_of_lt(ip, np, p))
         end
     end;
 
@@ -309,12 +309,12 @@ pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Char =
         le : Nat/Lte(i + 1, count_w(sc, b))) -> Char =
         match b
         | x\ => match le : Char end
-        | x\h\..t; ih =>
+        | x\h\..t =>
             match sc
             | lead() =>
                 match i
                 | 0 => decode_head(h, @t, valid)
-                | pred + 1; ih2 =>
+                | pred + 1 =>
                     go(step(h, Scan/lead()), t,
                         peel_byte(@Scan/lead(), @Bytes/cons(h, t), True/qed(), valid), pred,
                         match le : (le : Nat/Lte(x, y)) => Nat/Lte(x - 1, y - 1)

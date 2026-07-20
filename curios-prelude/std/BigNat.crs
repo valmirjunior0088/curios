@@ -96,7 +96,7 @@ let of_trimmed_bits(rep : Bits, p : Eq(is_trimmed(rep), true)) -> BigNat =
 pub let view(a : BigNat) -> View =
     match a.rep
     | b\ => View/zero()
-    | b\head\..tail; ih =>
+    | b\head\..tail =>
         View/succ(head, of_trimmed_bits(tail,
             tail_is_trimmed(head, tail, is_trimmed_of_canonical(a.rep, a.canonical))))
     end;
@@ -127,7 +127,7 @@ let dbl_succ(a : BigNat) -> BigNat =
 pub rec succ_raw(x : Bits) -> Bits =
     match x
     | b\ => cons(true, b\)
-    | b\h\..t; ih =>
+    | b\h\..t =>
         match h
         | true => cons(false, succ_raw(t))
         | false => cons(true, t)
@@ -154,12 +154,12 @@ pub rec add_raw(x : Bits, y : Bits, carry : Bool) -> Bits =
     | b\ =>
         match y
         | b\ => match carry | true => cons(true, b\) | false => b\ end
-        | b\yh\..yt; ih => cons(xor3(false, yh, carry), add_raw(b\, yt, maj3(false, yh, carry)))
+        | b\yh\..yt => cons(xor3(false, yh, carry), add_raw(b\, yt, maj3(false, yh, carry)))
         end
-    | b\xh\..xt; ih =>
+    | b\xh\..xt =>
         match y
         | b\ => cons(xor3(xh, false, carry), add_raw(xt, b\, maj3(xh, false, carry)))
-        | b\yh\..yt; ih2 => cons(xor3(xh, yh, carry), add_raw(xt, yt, maj3(xh, yh, carry)))
+        | b\yh\..yt => cons(xor3(xh, yh, carry), add_raw(xt, yt, maj3(xh, yh, carry)))
         end
     end;
 
@@ -203,12 +203,12 @@ pub rec add_comm_raw(x : Bits, y : Bits, c : Bool) -> Eq(add_raw(x, y, c), add_r
     | b\ =>
         match y : (b) => Eq(add_raw(b\, b, c), add_raw(b, b\, c))
         | b\ => qed(add_raw(b\, b\, c))
-        | b\yh\..yt; ih => add_raw_swap_step(b\, yt, false, yh, c)
+        | b\yh\..yt => add_raw_swap_step(b\, yt, false, yh, c)
         end
-    | b\xh\..xt; ih =>
+    | b\xh\..xt =>
         match y : (b) => Eq(add_raw(cons(xh, xt), b, c), add_raw(b, cons(xh, xt), c))
         | b\ => add_raw_swap_step(xt, b\, xh, false, c)
-        | b\yh\..yt; ih2 => add_raw_swap_step(xt, yt, xh, yh, c)
+        | b\yh\..yt => add_raw_swap_step(xt, yt, xh, yh, c)
         end
     end
 and add_raw_swap_step(x : Bits, y : Bits, h1 : Bool, h2 : Bool, c : Bool)
@@ -928,7 +928,7 @@ pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
 pub rec add_raw_one_r(x : Bits) -> Eq(add_raw(x, cons(true, b\), false), succ_raw(x)) =
     match x : (a) => Eq(add_raw(a, cons(true, b\), false), succ_raw(a))
     | b\ => Eq/refl()
-    | b\h\..t; ih =>
+    | b\h\..t =>
         match h
         | true => cong_cons2(qed(false), add_raw_succ_r(t))
         | false => cong_cons2(qed(true), add_raw_zero_r(t))
@@ -1280,10 +1280,10 @@ pub rec cmp_raw(x : Bits, y : Bits) -> Order =
         | b\ => Order/eq()
         | b\_\.._ => Order/lt()
         end
-    | b\xh\..xt; ih =>
+    | b\xh\..xt =>
         match y
         | b\ => Order/gt()
-        | b\yh\..yt; ih2 =>
+        | b\yh\..yt =>
             match cmp_raw(xt, yt)
             | eq() =>
                 match xh
@@ -1321,7 +1321,7 @@ let absorb_eq(o : Order, p : Eq(o, Order/eq()))
 pub rec cmp_raw_refl(x : Bits) -> Eq(cmp_raw(x, x), Order/eq()) =
     match x : (a) => Eq(cmp_raw(a, a), Order/eq())
     | b\ => Eq/refl()
-    | b\h\..t; ih =>
+    | b\h\..t =>
         match h
         | true => absorb_eq(cmp_raw(t, t), cmp_raw_refl(t))
         | false => absorb_eq(cmp_raw(t, t), cmp_raw_refl(t))
@@ -1506,16 +1506,16 @@ pub rec sub_raw(x : Bits, y : Bits, borrow : Bool) -> {Bits, Bool} =
     | b\ =>
         match y
         | b\ => (b\, borrow)
-        | b\yh\..yt; ih =>
+        | b\yh\..yt =>
             let (rest, bw) = sub_raw(b\, yt, sub_borrow(false, yh, borrow));
             (cons(xor3(false, yh, borrow), rest), bw)
         end
-    | b\xh\..xt; ih =>
+    | b\xh\..xt =>
         match y
         | b\ =>
             let (rest, bw) = sub_raw(xt, b\, sub_borrow(xh, false, borrow));
             (cons(xor3(xh, false, borrow), rest), bw)
-        | b\yh\..yt; ih2 =>
+        | b\yh\..yt =>
             let (rest, bw) = sub_raw(xt, yt, sub_borrow(xh, yh, borrow));
             (cons(xor3(xh, yh, borrow), rest), bw)
         end
@@ -1537,7 +1537,7 @@ pub rec of_nat(n : Nat) -> BigNat =
 pub rec mul_raw(x : Bits, y : Bits) -> Bits =
     match x
     | b\ => b\
-    | b\xh\..xt; ih =>
+    | b\xh\..xt =>
         match xh
         | false => cons(false, mul_raw(xt, y))
         | true => add_raw(y, cons(false, mul_raw(xt, y)), false)

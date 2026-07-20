@@ -458,11 +458,11 @@ pub enum NatPattern {
     /// The `pred + 1; ih` leaf. `pred_label`/`ih_label` are always plain
     /// binder names, never a further nested sub-pattern — deep peeling in
     /// one arm stays expressible only via hand-nested matches. `ih_label`
-    /// is mandatory here, unlike the optional `; ih` on the `Lst`/`Bits`/`Bytes` cons
-    /// leaves below.
+    /// is optional, exactly like the `; ih` on the `Lst`/`Bits`/`Bytes` cons
+    /// leaves below: omitting it makes the arm an ordinary case split.
     Succ {
         pred_label: String,
-        ih_label: String,
+        ih_label: Option<String>,
     },
     /// A literal-dispatch leaf `k` — matched by value, peeling no successor.
     /// Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never

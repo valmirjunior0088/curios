@@ -1855,8 +1855,10 @@ fn matrix_match_round_trips() {
          | (none(), some(y)) => h(y)\n\
          | (none(), none()) => d\n\
          end",
-        // Nat literal leaves nested inside a constructor payload.
+        // Nat literal leaves nested inside a constructor payload, with and
+        // without the optional induction hypothesis.
         "match o | some(0) => y | some(n + 1; ih) => y | none() => y end",
+        "match o | some(0) => y | some(n + 1) => n | none() => y end",
         // Lst literal leaves nested inside a tuple field, with and without
         // the optional induction hypothesis.
         "match p | (x, []) => x | (x, [h, ..t]) => h end",
@@ -1872,6 +1874,7 @@ fn matrix_match_round_trips() {
         // preserves their surface syntax.
         "match b | false => x | true => y end",
         "match n | 0 => a | m + 1; ih => b end",
+        "match n | 0 => a | m + 1 => b end",
         // Nat literal dispatch (the old `NatMatch::Dispatch`): literal cases and
         // the mandatory `| _ =>` default.
         "match d | 0 => a | 5 => b | _ => c end",
