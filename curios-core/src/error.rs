@@ -962,6 +962,8 @@ impl Error {
                 out.push(expected)
             }
             Self::NotAStructType { found } => out.push(found),
+            Self::InformativePropStruct { field_type, .. } => out.push(field_type),
+            Self::OperatorUndefined { type_, .. } => out.push(type_),
             Self::SpreadBaseTypeMismatch { found, .. } => out.push(found),
             Self::MatchCaseMissing { term, .. } => out.push(term),
             Self::UnboundVariable { term } => out.push(term),
