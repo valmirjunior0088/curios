@@ -231,6 +231,45 @@ impl ErasedModule {
         self.items = items;
     }
 
+    /// Rewrite one live statement in place — partial evaluation's install
+    /// primitive (a folded call becomes an alias or a residual).
+    pub(crate) fn set_statement(&mut self, id: StatementId, statement: Statement) {
+        let slot = &mut self.statements[id.index()];
+        debug_assert!(slot.is_some(), "statement {id} is live");
+        *slot = Some(statement);
+    }
+
+    /// Replace one live block's statement list — the splice primitive for
+    /// materialized reifications and taken match arms.
+    pub(crate) fn set_block_statements(&mut self, id: BlockId, statements: Vec<StatementId>) {
+        let slot = self.blocks[id.index()]
+            .as_mut()
+            .expect("a spliced block is live");
+        slot.statements = statements;
+    }
+
+    /// Redefine one live function — the spine specializer's parameter-drop
+    /// edit on a freshly minted copy.
+    pub(crate) fn set_function(&mut self, id: FunctionId, function: Function) {
+        let slot = &mut self.functions[id.index()];
+        debug_assert!(slot.is_some(), "function {id} is live");
+        *slot = Some(function);
+    }
+
+    /// Mint a block identity whose definition follows — the deep copy reserves
+    /// the whole region before rewriting references into it.
+    pub(crate) fn reserve_block(&mut self) -> BlockId {
+        let id = BlockId(self.blocks.len() as u32);
+        self.blocks.push(None);
+        id
+    }
+
+    pub(crate) fn define_block(&mut self, id: BlockId, block: Block) {
+        let slot = &mut self.blocks[id.index()];
+        debug_assert!(slot.is_none(), "block {id} defined twice");
+        *slot = Some(block);
+    }
+
     /// Tombstone every function outside `keep`. Identities are never reused.
     pub(crate) fn retain_functions(&mut self, keep: &std::collections::BTreeSet<FunctionId>) {
         for (index, slot) in self.functions.iter_mut().enumerate() {

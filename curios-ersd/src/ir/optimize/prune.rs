@@ -53,8 +53,14 @@ impl Subtree {
     }
 }
 
-/// Drop the items the program neither reaches nor runs for observable effect.
-pub(super) fn prune_unreachable(module: &mut ErasedModule) {
+/// Drop the items the program neither reaches nor runs for observable
+/// effect. `proven_pure` names items whose eager evaluation the interpreter
+/// proved inert — they are never seeded as observable, so a dead proven-pure
+/// group drops, carrying its web with it.
+pub(super) fn prune_unreachable(
+    module: &mut ErasedModule,
+    proven_pure: &std::collections::BTreeSet<StatementId>,
+) {
     let Some(entry) = module.entry() else { return };
     let items = module.items().to_vec();
 
@@ -93,6 +99,9 @@ pub(super) fn prune_unreachable(module: &mut ErasedModule) {
         }
     }
     for (index, &item) in items.iter().enumerate() {
+        if proven_pure.contains(&item) {
+            continue;
+        }
         if let Some(statement) = module.statement(item)
             && summary
                 .statement_behavior(module, statement)

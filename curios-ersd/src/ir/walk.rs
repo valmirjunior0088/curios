@@ -89,3 +89,27 @@ impl Terminator {
         }
     }
 }
+
+/// Every control block reachable from `root` — the block itself and the
+/// sub-blocks of its statements, transitively — without entering a nested
+/// function's body. Iterative, deterministic order.
+pub(crate) fn control_blocks(module: &super::ErasedModule, root: BlockId) -> Vec<BlockId> {
+    let mut blocks = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut work = vec![root];
+    while let Some(block) = work.pop() {
+        if !seen.insert(block) {
+            continue;
+        }
+        blocks.push(block);
+        let Some(definition) = module.block(block) else {
+            continue;
+        };
+        for &statement in &definition.statements {
+            if let Some(super::Statement::Let { rhs, .. }) = module.statement(statement) {
+                work.extend(rhs.sub_blocks());
+            }
+        }
+    }
+    blocks
+}

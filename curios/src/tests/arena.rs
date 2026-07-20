@@ -135,3 +135,125 @@ fn arena_lcg_kernel_keeps_its_structural_properties() {
         "the loop body must not allocate closures or dispatch indirectly:\n{kernel}"
     );
 }
+
+/// The partial-evaluation gate: `Fmt/print("literal")` with constant
+/// arguments collapses at the arena level — the emitted Cont carries no
+/// `/std/Fmt/` or `/std/Parse/` machinery, just the residual host call chain.
+#[test]
+fn arena_fmt_print_constant_args_collapses() {
+    let source = r#"/std/Fmt/print("hello world")"#;
+    behavior_matches(source);
+
+    let entrypoint = source
+        .parse::<curios_text::Entrypoint>()
+        .expect("fixture parses");
+    let mut cont_optm = String::new();
+    let (_module, _foreigns) = curios_pipeline::compile_entrypoint_via_arena(
+        std::time::Duration::from_secs(60),
+        &entrypoint,
+        curios_text::RootSource::none(),
+        |stage| {
+            if let curios_pipeline::Stage::ContOptm(module) = stage {
+                cont_optm = module.to_string();
+            }
+        },
+    )
+    .expect("fixture compiles through the arena");
+
+    assert!(
+        !cont_optm.contains("/std/Fmt/") && !cont_optm.contains("/std/Parse/"),
+        "the format machinery must collapse at compile time:\n{}",
+        &cont_optm[..cont_optm.len().min(4000)]
+    );
+}
+
+/// Runtime arguments: the parse of the literal directive spine still runs at
+/// compile time (the residual is the specialized first-order chain), and the
+/// output matches production.
+#[test]
+fn arena_fmt_print_runtime_args_specializes_spine() {
+    let source = r#"
+        use /std/{Fmt, Nat, Lst, proc};
+        Fmt/print("count: %s")(Nat/to_str(Lst/len(proc/args())))
+        "#;
+    behavior_matches(source);
+
+    let entrypoint = source
+        .parse::<curios_text::Entrypoint>()
+        .expect("fixture parses");
+    let mut cont_optm = String::new();
+    let (_module, _foreigns) = curios_pipeline::compile_entrypoint_via_arena(
+        std::time::Duration::from_secs(60),
+        &entrypoint,
+        curios_text::RootSource::none(),
+        |stage| {
+            if let curios_pipeline::Stage::ContOptm(module) = stage {
+                cont_optm = module.to_string();
+            }
+        },
+    )
+    .expect("fixture compiles through the arena");
+
+    assert!(
+        !cont_optm.contains("/std/Fmt/") && !cont_optm.contains("/std/Parse/"),
+        "the parse of the literal spine must collapse at compile time:\n{}",
+        &cont_optm[..cont_optm.len().min(4000)]
+    );
+}
+
+/// Effect hugging: a deep closed computation beside a host effect collapses
+/// to a constant while the effect stays, in order — emergent from ANF plus
+/// the effect contract, no dedicated pass.
+#[test]
+fn arena_pure_computation_hugs_a_host_effect() {
+    let source = r#"
+        use /std/{Io, Nat, Str};
+        rec triangle(n : Nat) -> Nat =
+            match n : Nat
+            | 0 => 0
+            | p + 1; ih => n + ih
+            end;
+        let before = Io/write(Io/stdout, Str/to_bytes("a"));
+        let pure = triangle(100);
+        let after = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(pure)));
+        ()
+        "#;
+    behavior_matches(source);
+
+    let entrypoint = source
+        .parse::<curios_text::Entrypoint>()
+        .expect("fixture parses");
+    let mut cont_optm = String::new();
+    let (_module, _foreigns) = curios_pipeline::compile_entrypoint_via_arena(
+        std::time::Duration::from_secs(60),
+        &entrypoint,
+        curios_text::RootSource::none(),
+        |stage| {
+            if let curios_pipeline::Stage::ContOptm(module) = stage {
+                cont_optm = module.to_string();
+            }
+        },
+    )
+    .expect("fixture compiles through the arena");
+
+    assert!(
+        !cont_optm.contains("triangle"),
+        "the closed recursion must collapse to its constant around the effects:\n{}",
+        &cont_optm[..cont_optm.len().min(4000)]
+    );
+}
+
+/// An effectful fold body is never folded or residualized out of order: the
+/// per-iteration writes all happen, in order, matching production.
+#[test]
+fn arena_effectful_fold_body_bails_and_runs_per_iteration() {
+    behavior_matches(
+        r#"
+        use /std/{Io, Nat, Str};
+        let out = Str/fold(@Nat, "abc", 0, (c, acc) =>
+            let w = Io/write(Io/stdout, Str/to_bytes("x"));
+            acc + 1);
+        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(out)))
+        "#,
+    );
+}

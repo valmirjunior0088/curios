@@ -11,16 +11,27 @@
 
 mod prune;
 
+mod evaluate;
+
 #[cfg(test)]
 mod prune_tests;
 
 use super::ErasedModule;
 
-/// Run the arena transformations in place. The module must verify on entry;
-/// it verifies again on exit (each pass re-verifies after mutating).
+/// Run the arena transformations in place: prune, evaluate, specialize, and
+/// prune again (evaluation and specialization strand the code they collapse).
+/// The module must verify on entry; the final prune re-verifies on exit.
+/// Taking a match arm during specialization orphans the untaken arms' values
+/// until that final prune tombstones them, so no intermediate verify runs
+/// after specialization.
 pub fn optimize_ir(module: &mut ErasedModule) {
     module
         .verify()
         .expect("a module entering optimization verifies");
-    prune::prune_unreachable(module);
+    let proven_pure = evaluate::prove_eager_groups_pure(module);
+    prune::prune_unreachable(module, &proven_pure);
+    evaluate::evaluate_closed_terms(module);
+    evaluate::specialize_literal_spines(module);
+    let proven_pure = evaluate::prove_eager_groups_pure(module);
+    prune::prune_unreachable(module, &proven_pure);
 }

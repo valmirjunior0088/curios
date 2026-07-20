@@ -14,7 +14,7 @@
 //! constant operands → value / would-trap / unknown) lands with its consumer,
 //! partial evaluation.
 
-use super::{CellOperation, Intrinsic, Operation, Rhs, SequenceOp, Terminator};
+use super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator};
 
 /// What allocating a value commits a pass to. Immutable allocation is not
 /// language-observable and may be discarded or duplicated; mutable allocation
@@ -316,4 +316,317 @@ impl Semantics {
             },
         }
     }
+}
+
+/// The outcome of constant-folding an operation over fully-known operands.
+/// The three cases stay distinct because control-flow simplification depends
+/// on the difference: a known trap must survive as an explicit computation —
+/// never dead code, never a compile-time panic, never [`Unknown`].
+///
+/// [`Unknown`]: FoldOutcome::Unknown
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FoldOutcome {
+    /// The operation evaluates to this constant.
+    Value(Constant),
+    /// The operation is known to trap at runtime; the optimizer must keep it
+    /// as an explicit residual computation.
+    WouldTrap(TrapKind),
+    /// Nothing is known: an operand is not a constant, the operation has no
+    /// constant carrier (a list operation), or the fold deliberately declines
+    /// (a float min/max with a NaN operand, which Rust and wasm disagree on).
+    Unknown,
+}
+
+/// Why a folded operation would trap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TrapKind {
+    /// Integer division or remainder by a zero divisor.
+    DivisionByZero,
+    /// Signed integer division overflow (`i32::MIN / -1`).
+    IntegerOverflow,
+    /// A float-to-integer conversion of a non-finite or out-of-range value.
+    ConversionRange,
+    /// A sequence index outside its bounds.
+    IndexOutOfBounds,
+    /// A sequence slice outside its bounds.
+    SliceOutOfBounds,
+    /// A packed-binary decode of the wrong length (`FltOfLeBytes`).
+    MalformedInput,
+}
+
+impl Semantics {
+    /// Constant-fold a scalar operation over its operands, under the numeric
+    /// law: exact `u32`/`i32` (add, subtract — monus for `Nat` — and multiply
+    /// wrap the full 32-bit carrier and never trap) and bit-preserving
+    /// binary32. Comparisons yield a [`Constant::Bln`]; the `0`/`1` carrier is
+    /// the lowering's decision. i31 appears nowhere here.
+    pub fn fold_operation(operation: Operation, operands: &[Constant]) -> FoldOutcome {
+        use Operation::*;
+
+        let nat = |index: usize| match operands.get(index) {
+            Some(Constant::Nat(value)) => Some(*value),
+            _ => None,
+        };
+        let int = |index: usize| match operands.get(index) {
+            Some(Constant::Int(value)) => Some(*value),
+            _ => None,
+        };
+        let byte = |index: usize| match operands.get(index) {
+            Some(Constant::Byte(value)) => Some(*value),
+            _ => None,
+        };
+        let flt = |index: usize| match operands.get(index) {
+            Some(Constant::Flt(value)) => Some(*value),
+            _ => None,
+        };
+        let bln = |index: usize| match operands.get(index) {
+            Some(Constant::Bln(value)) => Some(*value),
+            _ => None,
+        };
+        let io = |index: usize| match operands.get(index) {
+            Some(Constant::Io(value)) => Some(*value),
+            _ => None,
+        };
+        let bin_x = |index: usize| match operands.get(index) {
+            Some(Constant::Bin(curios_base::Grain::X, value)) => Some(value),
+            _ => None,
+        };
+
+        let compute = || -> Option<Result<Constant, TrapKind>> {
+            Some(Ok(match operation {
+                BlnAnd => Constant::Bln(bln(0)? & bln(1)?),
+                BlnOr => Constant::Bln(bln(0)? | bln(1)?),
+                BlnXor => Constant::Bln(bln(0)? ^ bln(1)?),
+                BlnEql => Constant::Bln(bln(0)? == bln(1)?),
+                BlnNeq => Constant::Bln(bln(0)? != bln(1)?),
+
+                NatAdd => Constant::Nat(nat(0)?.wrapping_add(nat(1)?)),
+                NatSub => Constant::Nat(nat(0)?.saturating_sub(nat(1)?)),
+                NatMul => Constant::Nat(nat(0)?.wrapping_mul(nat(1)?)),
+                NatDiv => return Some(nat_div(nat(0)?, nat(1)?)),
+                NatRem => return Some(nat_rem(nat(0)?, nat(1)?)),
+                NatAnd => Constant::Nat(nat(0)? & nat(1)?),
+                NatOr => Constant::Nat(nat(0)? | nat(1)?),
+                NatXor => Constant::Nat(nat(0)? ^ nat(1)?),
+                NatShl => Constant::Nat(nat(0)?.wrapping_shl(nat(1)?)),
+                NatShr => Constant::Nat(nat(0)?.wrapping_shr(nat(1)?)),
+                NatEql => Constant::Bln(nat(0)? == nat(1)?),
+                NatNeq => Constant::Bln(nat(0)? != nat(1)?),
+                NatLt => Constant::Bln(nat(0)? < nat(1)?),
+                NatGt => Constant::Bln(nat(0)? > nat(1)?),
+                NatLte => Constant::Bln(nat(0)? <= nat(1)?),
+                NatGte => Constant::Bln(nat(0)? >= nat(1)?),
+
+                ByteEql => Constant::Bln(byte(0)? == byte(1)?),
+                ByteLt => Constant::Bln(byte(0)? < byte(1)?),
+                ByteGt => Constant::Bln(byte(0)? > byte(1)?),
+                ByteLte => Constant::Bln(byte(0)? <= byte(1)?),
+                ByteGte => Constant::Bln(byte(0)? >= byte(1)?),
+
+                IntAdd => Constant::Int(int(0)?.wrapping_add(int(1)?)),
+                IntSub => Constant::Int(int(0)?.wrapping_sub(int(1)?)),
+                IntMul => Constant::Int(int(0)?.wrapping_mul(int(1)?)),
+                IntDiv => return Some(int_div(int(0)?, int(1)?)),
+                IntRem => return Some(int_rem(int(0)?, int(1)?)),
+                IntAnd => Constant::Int(int(0)? & int(1)?),
+                IntOr => Constant::Int(int(0)? | int(1)?),
+                IntXor => Constant::Int(int(0)? ^ int(1)?),
+                IntShl => Constant::Int(int(0)?.wrapping_shl(int(1)? as u32)),
+                IntShr => Constant::Int(int(0)?.wrapping_shr(int(1)? as u32)),
+                IntEql => Constant::Bln(int(0)? == int(1)?),
+                IntNeq => Constant::Bln(int(0)? != int(1)?),
+                IntLt => Constant::Bln(int(0)? < int(1)?),
+                IntGt => Constant::Bln(int(0)? > int(1)?),
+                IntLte => Constant::Bln(int(0)? <= int(1)?),
+                IntGte => Constant::Bln(int(0)? >= int(1)?),
+
+                FltAdd => Constant::Flt(flt(0)? + flt(1)?),
+                FltSub => Constant::Flt(flt(0)? - flt(1)?),
+                FltMul => Constant::Flt(flt(0)? * flt(1)?),
+                FltDiv => Constant::Flt(flt(0)? / flt(1)?),
+                FltRem => Constant::Flt(flt(0)? % flt(1)?),
+                FltMin => Constant::Flt(fold_min(flt(0)?, flt(1)?)?),
+                FltMax => Constant::Flt(fold_max(flt(0)?, flt(1)?)?),
+                FltNeg => Constant::Flt(-flt(0)?),
+                FltAbs => Constant::Flt(flt(0)?.abs()),
+                FltSqrt => Constant::Flt(flt(0)?.sqrt()),
+                FltFloor => Constant::Flt(flt(0)?.floor()),
+                FltCeil => Constant::Flt(flt(0)?.ceil()),
+                FltTrunc => Constant::Flt(flt(0)?.trunc()),
+                FltNearest => Constant::Flt(flt(0)?.nearest()),
+                FltEql => Constant::Bln(flt(0)?.eql(flt(1)?)),
+                FltNeq => Constant::Bln(flt(0)?.neq(flt(1)?)),
+                FltLt => Constant::Bln(flt(0)?.lt(flt(1)?)),
+                FltGt => Constant::Bln(flt(0)?.gt(flt(1)?)),
+                FltLte => Constant::Bln(flt(0)?.lte(flt(1)?)),
+                FltGte => Constant::Bln(flt(0)?.gte(flt(1)?)),
+
+                IoEql => Constant::Bln(io(0)? == io(1)?),
+
+                NatToInt => Constant::Int(nat(0)? as i32),
+                NatToFlt => Constant::Flt(curios_base::Flt::from_f32(nat(0)? as f32)),
+                IntToNat => Constant::Nat(int(0)? as u32),
+                IntToFlt => Constant::Flt(curios_base::Flt::from_f32(int(0)? as f32)),
+                FltToNat => return Some(flt_to_nat(flt(0)?)),
+                FltToInt => return Some(flt_to_int(flt(0)?)),
+                ByteToNat => Constant::Nat(byte(0)? as u32),
+                NatToByte => Constant::Byte(nat(0)? as u8),
+                FltToLeBytes => Constant::Bin(
+                    curios_base::Grain::X,
+                    curios_base::PackedBin::from_bytes(flt(0)?.to_f32().to_le_bytes().to_vec()),
+                ),
+                FltOfLeBytes => return Some(flt_of_le_bytes(bin_x(0)?)),
+            }))
+        };
+        fold_outcome(compute())
+    }
+
+    /// Constant-fold a sequence operation. Only packed-binary operations can
+    /// fold — the constant domain has no list carrier, so list operations are
+    /// always [`FoldOutcome::Unknown`] here (the evaluator interprets them
+    /// over its own value domain instead). Elements stay grain-shaped: a byte
+    /// grain yields `Byte`, a bit grain `Bln`.
+    pub fn fold_sequence(operation: SequenceOp, operands: &[Constant]) -> FoldOutcome {
+        use {SequenceOp::*, curios_base::Grain};
+
+        let bin = |index: usize, grain: Grain| match operands.get(index) {
+            Some(Constant::Bin(found, value)) if *found == grain => Some(value),
+            _ => None,
+        };
+        let nat = |index: usize| match operands.get(index) {
+            Some(Constant::Nat(value)) => Some(*value),
+            _ => None,
+        };
+        let byte = |index: usize| match operands.get(index) {
+            Some(Constant::Byte(value)) => Some(*value),
+            _ => None,
+        };
+        let bln = |index: usize| match operands.get(index) {
+            Some(Constant::Bln(value)) => Some(*value),
+            _ => None,
+        };
+
+        let compute = || -> Option<Result<Constant, TrapKind>> {
+            Some(Ok(match operation {
+                BinLen(grain) => Constant::Nat(bin(0, grain)?.len(grain) as u32),
+                BinEql(grain) => Constant::Bln(bin(0, grain)? == bin(1, grain)?),
+                BinGet(Grain::X) => {
+                    return Some(match bin(0, Grain::X)?.byte(nat(1)? as usize) {
+                        Some(byte) => Ok(Constant::Byte(byte)),
+                        None => Err(TrapKind::IndexOutOfBounds),
+                    });
+                }
+                BinGet(Grain::B) => {
+                    return Some(match bin(0, Grain::B)?.bit(nat(1)? as usize) {
+                        Some(bit) => Ok(Constant::Bln(bit)),
+                        None => Err(TrapKind::IndexOutOfBounds),
+                    });
+                }
+                BinSlice(grain) => {
+                    let value = bin(0, grain)?;
+                    return Some(
+                        match value.slice(grain, nat(1)? as usize, nat(2)? as usize) {
+                            Some(value) => Ok(Constant::Bin(grain, value)),
+                            None => Err(TrapKind::SliceOutOfBounds),
+                        },
+                    );
+                }
+                BinAppend(Grain::X) => {
+                    Constant::Bin(Grain::X, bin(0, Grain::X)?.append_byte(byte(1)?)?)
+                }
+                BinAppend(Grain::B) => {
+                    Constant::Bin(Grain::B, bin(0, Grain::B)?.append_bit(bln(1)?))
+                }
+                BinConcat(grain) => Constant::Bin(
+                    grain,
+                    curios_base::PackedBin::concat(
+                        (0..operands.len())
+                            .map(|index| bin(index, grain))
+                            .collect::<Option<Vec<_>>>()?,
+                    ),
+                ),
+                LstLen | LstGet | LstSlice | LstAppend | LstConcat | LstBuild => return None,
+            }))
+        };
+        fold_outcome(compute())
+    }
+}
+
+fn fold_outcome(result: Option<Result<Constant, TrapKind>>) -> FoldOutcome {
+    match result {
+        Some(Ok(value)) => FoldOutcome::Value(value),
+        Some(Err(trap)) => FoldOutcome::WouldTrap(trap),
+        None => FoldOutcome::Unknown,
+    }
+}
+
+fn nat_div(left: u32, right: u32) -> Result<Constant, TrapKind> {
+    match right {
+        0 => Err(TrapKind::DivisionByZero),
+        right => Ok(Constant::Nat(left / right)),
+    }
+}
+
+fn nat_rem(left: u32, right: u32) -> Result<Constant, TrapKind> {
+    match right {
+        0 => Err(TrapKind::DivisionByZero),
+        right => Ok(Constant::Nat(left % right)),
+    }
+}
+
+fn int_div(left: i32, right: i32) -> Result<Constant, TrapKind> {
+    if right == 0 {
+        return Err(TrapKind::DivisionByZero);
+    }
+    // `checked_div` is `None` exactly on the `i32::MIN / -1` overflow here.
+    left.checked_div(right)
+        .map(Constant::Int)
+        .ok_or(TrapKind::IntegerOverflow)
+}
+
+fn int_rem(left: i32, right: i32) -> Result<Constant, TrapKind> {
+    match right {
+        // `i32::MIN % -1` is `0` and does not trap.
+        0 => Err(TrapKind::DivisionByZero),
+        right => Ok(Constant::Int(left.wrapping_rem(right))),
+    }
+}
+
+/// Float min/max decline on a NaN operand: Rust and wasm disagree on NaN
+/// propagation, so the fold leaves the operation for the runtime.
+fn fold_min(left: curios_base::Flt, right: curios_base::Flt) -> Option<curios_base::Flt> {
+    (!left.to_f32().is_nan() && !right.to_f32().is_nan()).then(|| left.min(right))
+}
+
+fn fold_max(left: curios_base::Flt, right: curios_base::Flt) -> Option<curios_base::Flt> {
+    (!left.to_f32().is_nan() && !right.to_f32().is_nan()).then(|| left.max(right))
+}
+
+/// Truncate to `u32`, trapping outside `(-1, 2^32)` — the full-width carrier
+/// of the numeric law; the i31 narrowing belongs to Cont-to-Wasm.
+fn flt_to_nat(value: curios_base::Flt) -> Result<Constant, TrapKind> {
+    let raw = value.to_f32();
+    let truncated = raw.trunc();
+    (raw.is_finite() && truncated > -1.0 && truncated < 4_294_967_296.0)
+        .then_some(Constant::Nat(truncated as u32))
+        .ok_or(TrapKind::ConversionRange)
+}
+
+/// Truncate to `i32`, trapping outside `[-2^31, 2^31)`.
+fn flt_to_int(value: curios_base::Flt) -> Result<Constant, TrapKind> {
+    let raw = value.to_f32();
+    let truncated = raw.trunc();
+    (raw.is_finite() && (-2_147_483_648.0..2_147_483_648.0).contains(&truncated))
+        .then_some(Constant::Int(truncated as i32))
+        .ok_or(TrapKind::ConversionRange)
+}
+
+/// Decode a little-endian binary32, trapping unless exactly four bytes.
+fn flt_of_le_bytes(value: &curios_base::PackedBin) -> Result<Constant, TrapKind> {
+    value
+        .to_bytes()
+        .as_deref()
+        .and_then(|bytes| <[u8; 4]>::try_from(bytes).ok())
+        .map(|le_bytes| Constant::Flt(curios_base::Flt::from_f32(f32::from_le_bytes(le_bytes))))
+        .ok_or(TrapKind::MalformedInput)
 }
