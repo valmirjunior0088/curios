@@ -21,8 +21,8 @@
 use {
     super::{budget::ReifyBudget, copy::deep_copy_function, reify::reify, value::Value},
     crate::{
-        Analysis, BlockId, ErasedAtom, ErasedModule, Function, FunctionId, Rhs, Statement,
-        StatementId, Terminator, ValueId, ir::walk::control_blocks,
+        Analysis, Atom, BlockId, Function, FunctionId, Module, Rhs, Statement, StatementId,
+        Terminator, ValueId, walk::control_blocks,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -40,7 +40,7 @@ const MAX_SPINE_NODES: usize = 256;
 
 /// Specialize every eligible literal-spine call site, module-wide.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub(crate) fn specialize_literal_spines(module: &mut ErasedModule) {
+pub(crate) fn specialize_literal_spines(module: &mut Module) {
     let analysis = Analysis::analyze(module);
     let targets = find_targets(module, &analysis);
     if targets.is_empty() {
@@ -84,7 +84,7 @@ struct Site {
 /// scope where its specializations install. The function may sit in a larger
 /// recursive component — the fold only re-specializes its *direct* self
 /// calls, and the copy redirects them to the generic original.
-fn find_targets(module: &ErasedModule, analysis: &Analysis) -> BTreeMap<FunctionId, Target> {
+fn find_targets(module: &Module, analysis: &Analysis) -> BTreeMap<FunctionId, Target> {
     let mut targets = BTreeMap::new();
     for &item in module.items() {
         let Some(Statement::Functions { functions }) = module.statement(item) else {
@@ -107,7 +107,7 @@ fn find_targets(module: &ErasedModule, analysis: &Analysis) -> BTreeMap<Function
 }
 
 /// Every value's defining `Let` statement, for structural literal resolution.
-fn definition_index(module: &ErasedModule) -> BTreeMap<ValueId, StatementId> {
+fn definition_index(module: &Module) -> BTreeMap<ValueId, StatementId> {
     let mut index = BTreeMap::new();
     for (position, slot) in module.statements().iter().enumerate() {
         if let Some(Statement::Let { result, .. }) = slot {
@@ -118,7 +118,7 @@ fn definition_index(module: &ErasedModule) -> BTreeMap<ValueId, StatementId> {
 }
 
 fn plan_sites(
-    module: &ErasedModule,
+    module: &Module,
     def_index: &BTreeMap<ValueId, StatementId>,
     targets: &BTreeMap<FunctionId, Target>,
 ) -> Vec<Site> {
@@ -131,7 +131,7 @@ fn plan_sites(
         else {
             continue;
         };
-        let ErasedAtom::Function(target) = callee else {
+        let Atom::Function(target) = callee else {
             continue;
         };
         let Some(info) = targets.get(target) else {
@@ -155,9 +155,9 @@ fn plan_sites(
 
 /// The first argument that resolves to a constructor-shaped literal spine.
 fn spine_argument(
-    module: &ErasedModule,
+    module: &Module,
     def_index: &BTreeMap<ValueId, StatementId>,
-    arguments: &[ErasedAtom],
+    arguments: &[Atom],
 ) -> Option<(usize, Value)> {
     arguments.iter().enumerate().find_map(|(position, &atom)| {
         let mut budget = MAX_SPINE_NODES;
@@ -172,9 +172,9 @@ fn spine_argument(
 /// a construction over further literals. Bounded, so a deep or cyclic chain
 /// terminates.
 fn resolve_literal(
-    module: &ErasedModule,
+    module: &Module,
     def_index: &BTreeMap<ValueId, StatementId>,
-    atom: ErasedAtom,
+    atom: Atom,
     budget: &mut usize,
 ) -> Option<Value> {
     if *budget == 0 {
@@ -182,8 +182,8 @@ fn resolve_literal(
     }
     *budget -= 1;
     match atom {
-        ErasedAtom::Constant(constant) => Some(Value::from_constant(module.constant(constant)?)),
-        ErasedAtom::Value(value) => {
+        Atom::Constant(constant) => Some(Value::from_constant(module.constant(constant)?)),
+        Atom::Value(value) => {
             let Some(Statement::Let { rhs, .. }) = module.statement(*def_index.get(&value)?) else {
                 return None;
             };
@@ -203,14 +203,14 @@ fn resolve_literal(
                 _ => None,
             }
         }
-        ErasedAtom::Function(_) => None,
+        Atom::Function(_) => None,
     }
 }
 
 fn resolve_fields(
-    module: &ErasedModule,
+    module: &Module,
     def_index: &BTreeMap<ValueId, StatementId>,
-    fields: &[ErasedAtom],
+    fields: &[Atom],
     budget: &mut usize,
 ) -> Option<Vec<Value>> {
     fields
@@ -293,7 +293,7 @@ impl Minter {
     /// recursively folded) on first use.
     fn request(
         &mut self,
-        module: &mut ErasedModule,
+        module: &mut Module,
         target: FunctionId,
         position: usize,
         spine: &Value,
@@ -350,7 +350,7 @@ impl Minter {
     /// Fold what the baked spine decides in a minted body: take known match
     /// arms, read known projections, and re-specialize self-recursive calls
     /// over strictly smaller spines. Iterates to a fixed point.
-    fn fold_known(&mut self, module: &mut ErasedModule, spec: FunctionId, target: FunctionId) {
+    fn fold_known(&mut self, module: &mut Module, spec: FunctionId, target: FunctionId) {
         loop {
             let def_index = definition_index(module);
             let mut progressed = false;
@@ -369,7 +369,7 @@ impl Minter {
     /// Apply the first available reduction in `block`.
     fn reduce_block(
         &mut self,
-        module: &mut ErasedModule,
+        module: &mut Module,
         def_index: &BTreeMap<ValueId, StatementId>,
         target: FunctionId,
         block: BlockId,
@@ -426,7 +426,7 @@ impl Minter {
                     }
                 }
                 Rhs::Apply {
-                    callee: ErasedAtom::Function(callee),
+                    callee: Atom::Function(callee),
                     arguments,
                 } if *callee == target => {
                     let arguments = arguments.clone();
@@ -440,7 +440,7 @@ impl Minter {
                             Statement::Let {
                                 result,
                                 rhs: Rhs::Apply {
-                                    callee: ErasedAtom::Function(spec),
+                                    callee: Atom::Function(spec),
                                     arguments: rewritten,
                                 },
                             },
@@ -456,7 +456,7 @@ impl Minter {
 }
 
 fn apply(
-    module: &mut ErasedModule,
+    module: &mut Module,
     minter: &Minter,
     rewrites: Vec<(StatementId, ValueId, FunctionId, usize)>,
 ) {
@@ -478,7 +478,7 @@ fn apply(
             Statement::Let {
                 result,
                 rhs: Rhs::Apply {
-                    callee: ErasedAtom::Function(spec),
+                    callee: Atom::Function(spec),
                     arguments,
                 },
             },
@@ -505,7 +505,7 @@ fn apply(
 /// The target a one-member `Functions` item binds, when it has minted
 /// specializations.
 fn binds_target(
-    module: &ErasedModule,
+    module: &Module,
     statement: StatementId,
     installed: &BTreeMap<FunctionId, Vec<FunctionId>>,
 ) -> Option<FunctionId> {
@@ -519,18 +519,18 @@ fn binds_target(
 }
 
 fn resolve_construct(
-    module: &ErasedModule,
+    module: &Module,
     def_index: &BTreeMap<ValueId, StatementId>,
-    atom: ErasedAtom,
+    atom: Atom,
     budget: &mut usize,
-) -> Option<(crate::ConstructorId, Vec<ErasedAtom>)> {
+) -> Option<(crate::ConstructorId, Vec<Atom>)> {
     let mut current = atom;
     loop {
         if *budget == 0 {
             return None;
         }
         *budget -= 1;
-        let ErasedAtom::Value(value) = current else {
+        let Atom::Value(value) = current else {
             return None;
         };
         match module.statement(*def_index.get(&value)?) {
@@ -552,18 +552,18 @@ fn resolve_construct(
 }
 
 fn resolve_product(
-    module: &ErasedModule,
+    module: &Module,
     def_index: &BTreeMap<ValueId, StatementId>,
-    atom: ErasedAtom,
+    atom: Atom,
     budget: &mut usize,
-) -> Option<Vec<ErasedAtom>> {
+) -> Option<Vec<Atom>> {
     let mut current = atom;
     loop {
         if *budget == 0 {
             return None;
         }
         *budget -= 1;
-        let ErasedAtom::Value(value) = current else {
+        let Atom::Value(value) = current else {
             return None;
         };
         match module.statement(*def_index.get(&value)?) {
@@ -585,12 +585,12 @@ fn resolve_product(
 /// the result to the arm's returned atom. Declines an arm that exits or
 /// traps, leaving the eliminator for Cont.
 fn take_block(
-    module: &mut ErasedModule,
+    module: &mut Module,
     block: BlockId,
     index: usize,
     result: ValueId,
     bindings: &[ValueId],
-    payload: &[ErasedAtom],
+    payload: &[Atom],
     arm: BlockId,
 ) -> bool {
     let Some(arm_definition) = module.block(arm) else {
@@ -631,7 +631,7 @@ fn take_block(
 
 /// Every block a function region owns, descending through nested functions —
 /// unlike `control_blocks`, which stops at a nested function body.
-fn region_blocks(module: &ErasedModule, root: FunctionId) -> Vec<BlockId> {
+fn region_blocks(module: &Module, root: FunctionId) -> Vec<BlockId> {
     let mut work = vec![root];
     let mut seen_functions = BTreeSet::new();
     let mut seen_blocks = BTreeSet::new();

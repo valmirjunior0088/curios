@@ -21,7 +21,7 @@ mod prune_tests;
 #[cfg(test)]
 mod rebase_tests;
 
-use super::ErasedModule;
+use super::Module;
 
 /// Run the arena transformations in place: prune, evaluate, specialize, and
 /// prune again (evaluation and specialization strand the code they collapse).
@@ -29,7 +29,7 @@ use super::ErasedModule;
 /// Taking a match arm during specialization orphans the untaken arms' values
 /// until that final prune tombstones them, so no intermediate verify runs
 /// after specialization.
-pub fn optimize_ir(module: &mut ErasedModule) {
+pub fn optimize_ir(module: &mut Module) {
     module
         .verify()
         .expect("a module entering optimization verifies");

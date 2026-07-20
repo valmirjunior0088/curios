@@ -1,18 +1,18 @@
 use super::*;
 
-fn doubling_module() -> ErasedModule {
+fn doubling_module() -> Module {
     let mut builder = ErsdBuilder::new();
     let one = builder.constant(Constant::Nat(1));
-    let bound = builder.item_value(Some("one".into()), Rhs::Alias(ErasedAtom::Constant(one)));
+    let bound = builder.item_value(Some("one".into()), Rhs::Alias(Atom::Constant(one)));
     builder.open_block();
     let doubled = builder.let_value(
         Some("doubled".into()),
         Rhs::Operation {
             operation: Operation::NatAdd,
-            operands: vec![ErasedAtom::Value(bound), ErasedAtom::Value(bound)],
+            operands: vec![Atom::Value(bound), Atom::Value(bound)],
         },
     );
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(doubled)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(doubled)));
     builder.set_entry(entry);
     builder.finalize().expect("the module verifies")
 }
@@ -35,33 +35,33 @@ fn use_counts_are_exact() {
 fn free_values_derive_transitively_through_nested_functions() {
     let mut builder = ErsdBuilder::new();
     let zero = builder.constant(Constant::Nat(0));
-    let glob = builder.item_value(Some("glob".into()), Rhs::Alias(ErasedAtom::Constant(zero)));
+    let glob = builder.item_value(Some("glob".into()), Rhs::Alias(Atom::Constant(zero)));
 
     let outer = builder.reserve_function();
     let inner = builder.reserve_function();
     let p = builder.value(Some("p".into()));
 
     builder.open_block();
-    let x = builder.let_value(Some("x".into()), Rhs::Alias(ErasedAtom::Value(glob)));
+    let x = builder.let_value(Some("x".into()), Rhs::Alias(Atom::Value(glob)));
 
     builder.open_block();
     let s = builder.let_value(
         None,
         Rhs::Operation {
             operation: Operation::NatAdd,
-            operands: vec![ErasedAtom::Value(x), ErasedAtom::Value(p)],
+            operands: vec![Atom::Value(x), Atom::Value(p)],
         },
     );
-    let inner_body = builder.seal_block(Terminator::Return(ErasedAtom::Value(s)));
+    let inner_body = builder.seal_block(Terminator::Return(Atom::Value(s)));
     builder.define_function(inner, Some("inner".into()), vec![], inner_body);
     builder.let_functions(vec![inner]);
 
-    let outer_body = builder.seal_block(Terminator::Return(ErasedAtom::Function(inner)));
+    let outer_body = builder.seal_block(Terminator::Return(Atom::Function(inner)));
     builder.define_function(outer, Some("outer".into()), vec![p], outer_body);
     builder.item_functions(vec![outer]);
 
     builder.open_block();
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Function(outer)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Function(outer)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("the module verifies");
 
@@ -100,19 +100,19 @@ fn nesting_recursion_forms_one_component() {
     let call = builder.let_value(
         None,
         Rhs::Apply {
-            callee: ErasedAtom::Function(outer),
+            callee: Atom::Function(outer),
             arguments: vec![],
         },
     );
-    let inner_body = builder.seal_block(Terminator::Return(ErasedAtom::Value(call)));
+    let inner_body = builder.seal_block(Terminator::Return(Atom::Value(call)));
     builder.define_function(inner, Some("inner".into()), vec![], inner_body);
     builder.let_functions(vec![inner]);
-    let outer_body = builder.seal_block(Terminator::Return(ErasedAtom::Function(inner)));
+    let outer_body = builder.seal_block(Terminator::Return(Atom::Function(inner)));
     builder.define_function(outer, Some("outer".into()), vec![], outer_body);
     builder.item_functions(vec![outer]);
 
     builder.open_block();
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Function(outer)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Function(outer)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("the module verifies");
 
@@ -135,11 +135,11 @@ fn components_distinguish_recursion_from_plain_calls() {
     let recur = builder.let_value(
         None,
         Rhs::Apply {
-            callee: ErasedAtom::Function(looping),
+            callee: Atom::Function(looping),
             arguments: vec![],
         },
     );
-    let looping_body = builder.seal_block(Terminator::Return(ErasedAtom::Value(recur)));
+    let looping_body = builder.seal_block(Terminator::Return(Atom::Value(recur)));
     builder.define_function(looping, Some("looping".into()), vec![], looping_body);
     builder.item_functions(vec![looping]);
 
@@ -148,16 +148,16 @@ fn components_distinguish_recursion_from_plain_calls() {
     let call = builder.let_value(
         None,
         Rhs::Apply {
-            callee: ErasedAtom::Function(looping),
+            callee: Atom::Function(looping),
             arguments: vec![],
         },
     );
-    let plain_body = builder.seal_block(Terminator::Return(ErasedAtom::Value(call)));
+    let plain_body = builder.seal_block(Terminator::Return(Atom::Value(call)));
     builder.define_function(plain, Some("plain".into()), vec![], plain_body);
     builder.item_functions(vec![plain]);
 
     builder.open_block();
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Function(plain)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Function(plain)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("the module verifies");
 
@@ -184,20 +184,17 @@ fn analysis_is_deterministic() {
 fn a_deep_module_analyzes_without_native_stack() {
     let mut builder = ErsdBuilder::new();
     let zero = builder.constant(Constant::Nat(0));
-    let scrutinee = builder.item_value(
-        Some("scrutinee".into()),
-        Rhs::Alias(ErasedAtom::Constant(zero)),
-    );
+    let scrutinee = builder.item_value(Some("scrutinee".into()), Rhs::Alias(Atom::Constant(zero)));
     builder.open_block();
-    let mut chain = builder.seal_block(Terminator::Return(ErasedAtom::Value(scrutinee)));
+    let mut chain = builder.seal_block(Terminator::Return(Atom::Value(scrutinee)));
     for _ in 0..50_000 {
         builder.open_block();
-        let leaf = builder.seal_block(Terminator::Return(ErasedAtom::Value(scrutinee)));
+        let leaf = builder.seal_block(Terminator::Return(Atom::Value(scrutinee)));
         builder.open_block();
         let switched = builder.let_value(
             None,
             Rhs::SwitchNat {
-                scrutinee: ErasedAtom::Value(scrutinee),
+                scrutinee: Atom::Value(scrutinee),
                 cases: vec![NatCase {
                     key: 0,
                     block: leaf,
@@ -205,7 +202,7 @@ fn a_deep_module_analyzes_without_native_stack() {
                 default: chain,
             },
         );
-        chain = builder.seal_block(Terminator::Return(ErasedAtom::Value(switched)));
+        chain = builder.seal_block(Terminator::Return(Atom::Value(switched)));
     }
     builder.set_entry(chain);
     let module = builder.finalize().expect("the deep module verifies");

@@ -14,7 +14,7 @@
 //! produce arbitrary (but still terminating) results.
 
 use {
-    super::{BlockId, ErasedAtom, ErasedModule, FunctionId, Statement, StatementId, ValueId},
+    super::{Atom, BlockId, FunctionId, Module, Statement, StatementId, ValueId},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -41,7 +41,7 @@ struct Region {
 
 impl Analysis {
     /// Analyze the module's current state.
-    pub fn analyze(module: &ErasedModule) -> Self {
+    pub fn analyze(module: &Module) -> Self {
         let mut value_uses = BTreeMap::new();
 
         // Walk the top level and every live function as separate regions. The
@@ -177,7 +177,7 @@ impl Analysis {
 /// then every block reachable through statement sub-blocks and recursive-group
 /// initializers — never entering a bound function's body.
 fn walk_region(
-    module: &ErasedModule,
+    module: &Module,
     items: impl IntoIterator<Item = StatementId>,
     blocks: Vec<BlockId>,
     value_uses: &mut BTreeMap<ValueId, usize>,
@@ -186,15 +186,15 @@ fn walk_region(
     let mut statements: Vec<StatementId> = items.into_iter().collect();
     let mut blocks = blocks;
 
-    let mut use_atom = |region: &mut Region, atom: ErasedAtom| match atom {
-        ErasedAtom::Value(value) => {
+    let mut use_atom = |region: &mut Region, atom: Atom| match atom {
+        Atom::Value(value) => {
             *value_uses.entry(value).or_default() += 1;
             region.used.insert(value);
         }
-        ErasedAtom::Function(function) => {
+        Atom::Function(function) => {
             region.references.insert(function);
         }
-        ErasedAtom::Constant(_) => {}
+        Atom::Constant(_) => {}
     };
 
     loop {

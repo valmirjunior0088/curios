@@ -10,7 +10,7 @@
 //! making the block graph cyclic.
 
 use super::{
-    BlockId, ConstructorId, ErasedAtom, FamilyId, ForeignId, FunctionId, Operation, ProductId,
+    Atom, BlockId, ConstructorId, FamilyId, ForeignId, FunctionId, Operation, ProductId,
     RecGroupId, SequenceGrain, SequenceOp, StatementId, ValueId,
 };
 
@@ -22,39 +22,36 @@ use super::{
 )]
 pub enum Rhs {
     /// A computation-free rebinding of an atom.
-    Alias(ErasedAtom),
+    Alias(Atom),
     /// Application of a callee to its full, saturated argument list.
-    Apply {
-        callee: ErasedAtom,
-        arguments: Vec<ErasedAtom>,
-    },
+    Apply { callee: Atom, arguments: Vec<Atom> },
     /// A scalar primitive operation (see [`Operation`]).
     Operation {
         operation: Operation,
-        operands: Vec<ErasedAtom>,
+        operands: Vec<Atom>,
     },
     /// A packed-binary or list operation (see [`SequenceOp`]); the variadic
     /// forms hold their whole operand list here.
     Sequence {
         operation: SequenceOp,
-        operands: Vec<ErasedAtom>,
+        operands: Vec<Atom>,
     },
     /// Construct a product from its field atoms, in the schema's field order.
     Product {
         schema: ProductId,
-        fields: Vec<ErasedAtom>,
+        fields: Vec<Atom>,
     },
     /// Construct a variant value from its constructor and payload atoms.
     Construct {
         constructor: ConstructorId,
-        fields: Vec<ErasedAtom>,
+        fields: Vec<Atom>,
     },
     /// Read one field of a product value by position. The schema identity is
     /// carried so shape agreement is checkable and a projection from a known
     /// product folds only through a matching schema.
     Project {
         schema: ProductId,
-        product: ErasedAtom,
+        product: Atom,
         field: u32,
     },
     /// Match a variant scrutinee of the given family. Each arm binds its
@@ -63,14 +60,14 @@ pub enum Rhs {
     /// default are exhaustive over the family.
     MatchVariant {
         family: FamilyId,
-        scrutinee: ErasedAtom,
+        scrutinee: Atom,
         arms: Vec<VariantArm>,
         default: Option<BlockId>,
     },
     /// Dispatch on a `Bln` scrutinee. A semantic identity distinct from
     /// [`Rhs::SwitchNat`]; the carrier is the lowering's decision.
     SwitchBool {
-        scrutinee: ErasedAtom,
+        scrutinee: Atom,
         if_false: BlockId,
         if_true: BlockId,
     },
@@ -78,7 +75,7 @@ pub enum Rhs {
     /// `default`. Binder-free: a zero/successor match's predecessor is an
     /// explicit subtraction in the default block.
     SwitchNat {
-        scrutinee: ErasedAtom,
+        scrutinee: Atom,
         cases: Vec<NatCase>,
         default: BlockId,
     },
@@ -87,7 +84,7 @@ pub enum Rhs {
     /// the induction hypothesis. A first-class loop form — O(1) native stack
     /// by construction.
     FoldNat {
-        scrutinee: ErasedAtom,
+        scrutinee: Atom,
         zero: BlockId,
         step: FoldNatStep,
     },
@@ -97,7 +94,7 @@ pub enum Rhs {
     /// O(1) native stack by construction.
     FoldSequence {
         grain: SequenceGrain,
-        scrutinee: ErasedAtom,
+        scrutinee: Atom,
         empty: BlockId,
         step: FoldSequenceStep,
     },
@@ -106,19 +103,19 @@ pub enum Rhs {
     /// result, never duplicated, and never residualized by evaluation.
     Cell {
         operation: CellOperation,
-        operands: Vec<ErasedAtom>,
+        operands: Vec<Atom>,
     },
     /// A host-observable foreign call through the canonical row registered in
-    /// the module (see [`super::ErasedModule::foreign`]). Binds one language
+    /// the module (see [`super::Module::foreign`]). Binds one language
     /// value; the host-level result shape is reconstructed by the lowering.
     Foreign {
         foreign: ForeignId,
-        operands: Vec<ErasedAtom>,
+        operands: Vec<Atom>,
     },
     /// A call-like intrinsic (see [`Intrinsic`]).
     Intrinsic {
         intrinsic: Intrinsic,
-        operands: Vec<ErasedAtom>,
+        operands: Vec<Atom>,
     },
 }
 
@@ -243,9 +240,9 @@ pub enum Statement {
 )]
 pub enum Terminator {
     /// Yield an atom as the block's result.
-    Return(ErasedAtom),
+    Return(Atom),
     /// Nonreturning process exit with the given code.
-    Exit(ErasedAtom),
+    Exit(Atom),
     /// An unreachable trap, seated where an arm was proved impossible.
     Unreachable,
 }

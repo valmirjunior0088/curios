@@ -21,7 +21,7 @@ use {
 /// What one expression erased to. See the module documentation.
 #[derive(Debug)]
 pub(super) enum Outcome {
-    Emitted(curios_ersd::ErasedAtom),
+    Emitted(curios_ersd::Atom),
     Diverged(curios_ersd::Terminator),
 }
 
@@ -38,7 +38,7 @@ pub(super) struct Lowering {
 }
 
 /// Erase a whole meta-free [`Module`] into a verified arena
-/// [`ErasedModule`]. Top-level items are erased in dominance order as the
+/// [`Module`]. Top-level items are erased in dominance order as the
 /// module's item chain; the entrypoint body becomes the entry block, checked
 /// against `expected`.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
@@ -46,7 +46,7 @@ pub fn erase_module_to_ir(
     context: &mut Context,
     module: &Module,
     expected: &Term,
-) -> Result<curios_ersd::ErasedModule, Error> {
+) -> Result<curios_ersd::Module, Error> {
     // Erasure runs with its own `Context`; seed the registries the re-derived
     // types consult before any item does.
     for (name, inductive) in &module.inductives {
@@ -91,12 +91,12 @@ impl Lowering {
     /// top-level item) and hand back its result operand.
     pub(super) fn bind(&mut self, hint: Option<&str>, rhs: curios_ersd::Rhs) -> Outcome {
         let result = self.builder.let_value(hint.map(str::to_string), rhs);
-        Outcome::Emitted(curios_ersd::ErasedAtom::Value(result))
+        Outcome::Emitted(curios_ersd::Atom::Value(result))
     }
 
     /// The unit constant — the value of a retained-but-erased slot.
-    pub(super) fn unit(&mut self) -> curios_ersd::ErasedAtom {
-        curios_ersd::ErasedAtom::Constant(self.builder.constant(curios_ersd::Constant::Unit))
+    pub(super) fn unit(&mut self) -> curios_ersd::Atom {
+        curios_ersd::Atom::Constant(self.builder.constant(curios_ersd::Constant::Unit))
     }
 
     /// Erase one expression to an operand. `expected` is the type the
@@ -224,7 +224,7 @@ impl Lowering {
 )]
 pub struct ErasedPrelude {
     #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
-    module: curios_ersd::ErasedModule,
+    module: curios_ersd::Module,
     environment: Environment,
 }
 
@@ -270,7 +270,7 @@ pub fn erase_module_with_prelude_to_ir(
     module: &Module,
     expected: &Term,
     prefix: ErasedPrelude,
-) -> Result<curios_ersd::ErasedModule, Error> {
+) -> Result<curios_ersd::Module, Error> {
     for (name, inductive) in &module.inductives {
         context.register_inductive(name, inductive.clone())?;
     }

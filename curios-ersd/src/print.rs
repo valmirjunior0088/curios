@@ -14,14 +14,14 @@
 
 use {
     super::{
-        BlockId, Constant, ErasedAtom, ErasedModule, FunctionId, Rhs, Statement, StatementId,
-        Terminator, ValueId,
+        Atom, BlockId, Constant, FunctionId, Module, Rhs, Statement, StatementId, Terminator,
+        ValueId,
     },
     curios_base::Grain,
     std::fmt,
 };
 
-impl fmt::Display for ErasedModule {
+impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Printer {
             module: self,
@@ -50,7 +50,7 @@ enum Job {
 }
 
 struct Printer<'m, 'f, 'o> {
-    module: &'m ErasedModule,
+    module: &'m Module,
     out: &'f mut fmt::Formatter<'o>,
 }
 
@@ -385,17 +385,17 @@ impl Printer<'_, '_, '_> {
         push_sequence(stack, sequence);
     }
 
-    fn atom(&self, atom: ErasedAtom) -> String {
+    fn atom(&self, atom: Atom) -> String {
         match atom {
-            ErasedAtom::Value(value) => self.value(value),
-            ErasedAtom::Function(function) => self.function(function),
-            ErasedAtom::Constant(constant) => {
+            Atom::Value(value) => self.value(value),
+            Atom::Function(function) => self.function(function),
+            Atom::Constant(constant) => {
                 render_constant(self.module.constant(constant).expect("live constant"))
             }
         }
     }
 
-    fn atoms(&self, atoms: &[ErasedAtom]) -> String {
+    fn atoms(&self, atoms: &[Atom]) -> String {
         atoms
             .iter()
             .map(|&atom| self.atom(atom))

@@ -14,8 +14,8 @@ use {
 pub enum Stage<'a> {
     Text(&'a curios_text::Entrypoint),
     Core(&'a curios_core::Module),
-    Ersd(&'a curios_ersd::ErasedModule),
-    ErsdOptm(&'a curios_ersd::ErasedModule),
+    Ersd(&'a curios_ersd::Module),
+    ErsdOptm(&'a curios_ersd::Module),
     Cont(&'a curios_cont::CpsModule),
     ContOptm(&'a curios_cont::CpsModule),
     Wasm(&'a curios_wasm::Module),
@@ -175,7 +175,7 @@ where
 /// Production runs the arena erased representation: the archived prelude
 /// prefix is restored and replayed, only the user suffix erases, the arena
 /// transformations shrink and rebase the module, and the lowering into Cont
-/// makes every encoding decision once (see `curios_ersd::ir`).
+/// makes every encoding decision once (see `curios_ersd::lower_to_cont`).
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn compile_entrypoint<O>(
     timeout: Duration,

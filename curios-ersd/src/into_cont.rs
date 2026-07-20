@@ -29,10 +29,9 @@
 
 use {
     super::{
-        Block, BlockId, CellOperation, Constant, ConstantId, ConstructorId, ErasedAtom,
-        ErasedModule, FoldNatStep, FoldSequenceStep, Function, FunctionId, Intrinsic, Operation,
-        RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
-        ValueId, VariantArm,
+        Atom, Block, BlockId, CellOperation, Constant, ConstantId, ConstructorId, FoldNatStep,
+        FoldSequenceStep, Function, FunctionId, Intrinsic, Module, Operation, RecGroup, RecGroupId,
+        Rhs, SequenceGrain, SequenceOp, Statement, StatementId, Terminator, ValueId, VariantArm,
     },
     curios_abi::ForeignFunction,
     curios_base::{Grain, PackedBin},
@@ -48,13 +47,13 @@ use {
     },
 };
 
-/// Lower a verified arena [`ErasedModule`] into the landed Cont
+/// Lower a verified arena [`Module`] into the landed Cont
 /// [`CpsModule`]. The module's top level — its item chain followed by its
 /// entry block — becomes the parameterless Cps entry `main`, delivering its
 /// result to a bodyless `return_cont`. The produced module is verified; a
 /// failure is a lowering bug, not a user error, so it panics.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub fn lower_to_cont(source: &ErasedModule) -> CpsModule {
+pub fn lower_to_cont(source: &Module) -> CpsModule {
     let mut lowerer = Lowerer {
         source,
         module: CpsModule::new(),
@@ -89,7 +88,7 @@ pub fn lower_to_cont(source: &ErasedModule) -> CpsModule {
 }
 
 struct Lowerer<'a> {
-    source: &'a ErasedModule,
+    source: &'a Module,
     module: CpsModule,
     values: BTreeMap<ValueId, CpsAtom>,
     functions: BTreeMap<FunctionId, CpsFunId>,
@@ -514,12 +513,12 @@ impl Lowerer<'_> {
             }
             for &statement in &block.statements {
                 if let Some(Statement::Let { rhs, .. }) = self.source.statement(statement)
-                    && rhs.operands().contains(&ErasedAtom::Value(member))
+                    && rhs.operands().contains(&Atom::Value(member))
                 {
                     return true;
                 }
             }
-            if block.terminator.atom() == Some(ErasedAtom::Value(member)) {
+            if block.terminator.atom() == Some(Atom::Value(member)) {
                 return true;
             }
         }
@@ -563,7 +562,7 @@ impl Lowerer<'_> {
         let mut pending: Vec<StatementId> = statements.to_vec();
         let mut blocks: Vec<BlockId> = Vec::new();
         let mut seen = BTreeSet::new();
-        if let Some(ErasedAtom::Value(value)) = terminator.atom() {
+        if let Some(Atom::Value(value)) = terminator.atom() {
             refs.insert(value);
         }
         loop {
@@ -571,7 +570,7 @@ impl Lowerer<'_> {
                 match self.source.statement(statement) {
                     Some(Statement::Let { rhs, .. }) => {
                         for atom in rhs.operands() {
-                            if let ErasedAtom::Value(value) = atom {
+                            if let Atom::Value(value) = atom {
                                 refs.insert(value);
                             }
                         }
@@ -594,7 +593,7 @@ impl Lowerer<'_> {
             }
             if let Some(block) = self.source.block(block) {
                 pending.extend(&block.statements);
-                if let Some(ErasedAtom::Value(value)) = block.terminator.atom() {
+                if let Some(Atom::Value(value)) = block.terminator.atom() {
                     refs.insert(value);
                 }
             }
@@ -861,7 +860,7 @@ impl Lowerer<'_> {
         &mut self,
         result: ValueId,
         operation: Operation,
-        operands: &[ErasedAtom],
+        operands: &[Atom],
         rest: &[StatementId],
         terminator: &Terminator,
         target: CpsContId,
@@ -917,7 +916,7 @@ impl Lowerer<'_> {
         target: CpsContId,
     ) -> (CpsContId, bool) {
         if rest.is_empty()
-            && matches!(terminator, Terminator::Return(ErasedAtom::Value(returned)) if *returned == result)
+            && matches!(terminator, Terminator::Return(Atom::Value(returned)) if *returned == result)
         {
             return (target, false);
         }
@@ -1018,7 +1017,7 @@ impl Lowerer<'_> {
     fn lower_match_variant(
         &mut self,
         result: ValueId,
-        scrutinee: ErasedAtom,
+        scrutinee: Atom,
         arms: &[VariantArm],
         default: Option<BlockId>,
         rest: &[StatementId],
@@ -1109,7 +1108,7 @@ impl Lowerer<'_> {
     fn lower_fold_nat(
         &mut self,
         result: ValueId,
-        scrutinee: ErasedAtom,
+        scrutinee: Atom,
         zero: BlockId,
         step: &FoldNatStep,
         rest: &[StatementId],
@@ -1233,7 +1232,7 @@ impl Lowerer<'_> {
         &mut self,
         result: ValueId,
         grain: SequenceGrain,
-        scrutinee: ErasedAtom,
+        scrutinee: Atom,
         empty: BlockId,
         step: &FoldSequenceStep,
         rest: &[StatementId],
@@ -1394,7 +1393,7 @@ impl Lowerer<'_> {
         // value the block immediately returns delivers to the block's target.
         if result_arity == 1
             && rest.is_empty()
-            && matches!(terminator, Terminator::Return(ErasedAtom::Value(returned)) if *returned == result)
+            && matches!(terminator, Terminator::Return(Atom::Value(returned)) if *returned == result)
         {
             return self.module.add_node(make(target));
         }
@@ -1524,7 +1523,7 @@ impl Lowerer<'_> {
             .expect("a constructor belongs to its family") as u32
     }
 
-    fn lower_callee(&self, atom: ErasedAtom) -> CpsCallee {
+    fn lower_callee(&self, atom: Atom) -> CpsCallee {
         match self.lower_atom(atom) {
             CpsAtom::Fun(function) => CpsCallee::Known(function),
             CpsAtom::Value(value) => CpsCallee::Closure(value),
@@ -1532,20 +1531,20 @@ impl Lowerer<'_> {
         }
     }
 
-    fn lower_atom(&self, atom: ErasedAtom) -> CpsAtom {
+    fn lower_atom(&self, atom: Atom) -> CpsAtom {
         match atom {
-            ErasedAtom::Value(value) => self
+            Atom::Value(value) => self
                 .values
                 .get(&value)
                 .unwrap_or_else(|| panic!("arena lowering lacks value {value}"))
                 .clone(),
-            ErasedAtom::Function(function) => CpsAtom::Fun(
+            Atom::Function(function) => CpsAtom::Fun(
                 *self
                     .functions
                     .get(&function)
                     .unwrap_or_else(|| panic!("arena lowering lacks function {function}")),
             ),
-            ErasedAtom::Constant(constant) => CpsAtom::Literal(self.lower_constant(constant)),
+            Atom::Constant(constant) => CpsAtom::Literal(self.lower_constant(constant)),
         }
     }
 

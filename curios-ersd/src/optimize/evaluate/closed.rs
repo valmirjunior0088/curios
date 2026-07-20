@@ -15,8 +15,8 @@ use {
         value::Value,
     },
     crate::{
-        Analysis, BlockId, ErasedAtom, ErasedModule, ForeignId, FunctionId, Rhs, Statement,
-        StatementId, ValueId,
+        Analysis, Atom, BlockId, ForeignId, FunctionId, Module, Rhs, Statement, StatementId,
+        ValueId,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -49,7 +49,7 @@ enum Kind {
 /// whether anything was installed — a curried chain folds one application per
 /// round, so the driver iterates until quiescent.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub(crate) fn evaluate_closed_terms(module: &mut ErasedModule) -> bool {
+pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
     let analysis = Analysis::analyze(module);
     let owners = index_owners(module);
     let planned = plan(module, &analysis, &owners);
@@ -57,7 +57,7 @@ pub(crate) fn evaluate_closed_terms(module: &mut ErasedModule) -> bool {
 }
 
 fn plan(
-    module: &ErasedModule,
+    module: &Module,
     analysis: &Analysis,
     owners: &BTreeMap<StatementId, Owner>,
 ) -> Vec<Planned> {
@@ -108,7 +108,7 @@ fn plan(
 /// deep-copies a source function and must read the original module, not one
 /// where an earlier plan's rewrite left an alias whose definition is not yet
 /// spliced into its block.
-fn apply(module: &mut ErasedModule, planned: Vec<Planned>) -> bool {
+fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
     if planned.is_empty() {
         return false;
     }
@@ -148,7 +148,7 @@ fn apply(module: &mut ErasedModule, planned: Vec<Planned>) -> bool {
             Kind::Call(function, values) => {
                 match reify_all(module, &values, &mut budget, &mut spliced) {
                     Ok(arguments) => {
-                        let callee = ErasedAtom::Function(function);
+                        let callee = Atom::Function(function);
                         // A residual identical to the original call would
                         // churn forever; leave it untouched.
                         if is_same_call(module, plan.statement, callee, &arguments) {
@@ -199,12 +199,7 @@ fn apply(module: &mut ErasedModule, planned: Vec<Planned>) -> bool {
     installed
 }
 
-fn is_same_call(
-    module: &ErasedModule,
-    statement: StatementId,
-    callee: ErasedAtom,
-    arguments: &[ErasedAtom],
-) -> bool {
+fn is_same_call(module: &Module, statement: StatementId, callee: Atom, arguments: &[Atom]) -> bool {
     matches!(
         module.statement(statement),
         Some(Statement::Let {
@@ -218,7 +213,7 @@ fn is_same_call(
 }
 
 /// Map each statement to its owner — its block, or the top-level item list.
-fn index_owners(module: &ErasedModule) -> BTreeMap<StatementId, Owner> {
+fn index_owners(module: &Module) -> BTreeMap<StatementId, Owner> {
     let mut owners = BTreeMap::new();
     for (index, slot) in module.blocks().iter().enumerate() {
         if let Some(block) = slot {

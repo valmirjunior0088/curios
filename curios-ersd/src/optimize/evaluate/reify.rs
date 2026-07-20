@@ -15,8 +15,8 @@ use {
         value::{Bail, Closure, Value},
     },
     crate::{
-        Constant, ErasedAtom, ErasedModule, FunctionId, Rhs, SequenceOp, Statement, StatementId,
-        ir::walk::control_blocks,
+        Atom, Constant, FunctionId, Module, Rhs, SequenceOp, Statement, StatementId,
+        walk::control_blocks,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -28,7 +28,7 @@ use {
 /// closure gates as [`reify`], with no module mutation — so a failed
 /// reification never strands half-emitted statements in the arena.
 pub(super) fn reify_check(
-    module: &ErasedModule,
+    module: &Module,
     value: &Value,
     budget: &mut ReifyBudget,
 ) -> Result<(), Bail> {
@@ -68,7 +68,7 @@ pub(super) fn reify_check(
 
 /// [`reify_check`] over a list of values.
 pub(super) fn reify_check_all(
-    module: &ErasedModule,
+    module: &Module,
     values: &[Value],
     budget: &mut ReifyBudget,
 ) -> Result<(), Bail> {
@@ -83,18 +83,18 @@ pub(super) fn reify_check_all(
 /// caller has already run [`reify_check`], so failure cannot strand emitted
 /// statements.
 pub(super) fn reify(
-    module: &mut ErasedModule,
+    module: &mut Module,
     value: &Value,
     budget: &mut ReifyBudget,
     out: &mut Vec<StatementId>,
-) -> Result<ErasedAtom, Bail> {
+) -> Result<Atom, Bail> {
     budget.node()?;
 
     if let Some(constant) = value.as_constant() {
         if let Constant::Bin(grain, value) = &constant {
             budget.payload(value.len(*grain))?;
         }
-        return Ok(ErasedAtom::Constant(module.intern_constant(constant)));
+        return Ok(Atom::Constant(module.intern_constant(constant)));
     }
 
     match value {
@@ -150,11 +150,11 @@ pub(super) fn reify(
 /// free value the captures do not cover is a top-level identity kept
 /// verbatim.
 fn reify_closure(
-    module: &mut ErasedModule,
+    module: &mut Module,
     closure: &Rc<Closure>,
     budget: &mut ReifyBudget,
     out: &mut Vec<StatementId>,
-) -> Result<ErasedAtom, Bail> {
+) -> Result<Atom, Bail> {
     // The copy keeps outward function references verbatim; every one must be
     // item-bound to stay in scope at an arbitrary splice site — a reference
     // to a *locally* bound function outside the copied region declines.
@@ -171,16 +171,16 @@ fn reify_closure(
     out.push(module.add_statement(Statement::Functions {
         functions: vec![function],
     }));
-    Ok(ErasedAtom::Function(function))
+    Ok(Atom::Function(function))
 }
 
 /// Reify each value in order, collecting the atoms that name them.
 pub(super) fn reify_all(
-    module: &mut ErasedModule,
+    module: &mut Module,
     values: &[Value],
     budget: &mut ReifyBudget,
     out: &mut Vec<StatementId>,
-) -> Result<Vec<ErasedAtom>, Bail> {
+) -> Result<Vec<Atom>, Bail> {
     let mut atoms = Vec::with_capacity(values.len());
     for value in values {
         atoms.push(reify(module, value, budget, out)?);
@@ -190,7 +190,7 @@ pub(super) fn reify_all(
 
 /// Whether every function the region rooted at `root` references outside
 /// itself is bound by a top-level item.
-fn outward_functions_item_bound(module: &ErasedModule, root: FunctionId) -> bool {
+fn outward_functions_item_bound(module: &Module, root: FunctionId) -> bool {
     let mut item_bound = BTreeSet::<FunctionId>::new();
     for &item in module.items() {
         match module.statement(item) {
@@ -222,7 +222,7 @@ fn outward_functions_item_bound(module: &ErasedModule, root: FunctionId) -> bool
                 match module.statement(statement) {
                     Some(Statement::Let { rhs, .. }) => {
                         for atom in rhs.operands() {
-                            if let ErasedAtom::Function(referenced) = atom {
+                            if let Atom::Function(referenced) = atom {
                                 outward.insert(referenced);
                             }
                         }
@@ -236,7 +236,7 @@ fn outward_functions_item_bound(module: &ErasedModule, root: FunctionId) -> bool
                     None => {}
                 }
             }
-            if let Some(ErasedAtom::Function(referenced)) = block.terminator.atom() {
+            if let Some(Atom::Function(referenced)) = block.terminator.atom() {
                 outward.insert(referenced);
             }
         }
@@ -246,8 +246,8 @@ fn outward_functions_item_bound(module: &ErasedModule, root: FunctionId) -> bool
         .all(|function| region.contains(&function) || item_bound.contains(&function))
 }
 
-fn emit(module: &mut ErasedModule, out: &mut Vec<StatementId>, rhs: Rhs) -> ErasedAtom {
+fn emit(module: &mut Module, out: &mut Vec<StatementId>, rhs: Rhs) -> Atom {
     let result = module.add_value(None);
     out.push(module.add_statement(Statement::Let { result, rhs }));
-    ErasedAtom::Value(result)
+    Atom::Value(result)
 }

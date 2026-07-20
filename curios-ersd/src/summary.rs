@@ -19,8 +19,8 @@
 
 use {
     super::{
-        Analysis, BlockId, ErasedAtom, ErasedModule, FunctionId, Intrinsic, LocalBehavior, Rhs,
-        Semantics, Statement,
+        Analysis, Atom, BlockId, FunctionId, Intrinsic, LocalBehavior, Module, Rhs, Semantics,
+        Statement,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -34,7 +34,7 @@ pub struct Summary {
 impl Summary {
     /// Compute the summary to a fixed point over a verified module and its
     /// analysis.
-    pub fn analyze(module: &ErasedModule, analysis: &Analysis) -> Self {
+    pub fn analyze(module: &Module, analysis: &Analysis) -> Self {
         // Seed: a recursive component's members may diverge; everything else
         // starts pure. The seed persists because updates join the previous
         // summary in (the lattice only grows).
@@ -83,7 +83,7 @@ impl Summary {
 
     /// The total behavior of evaluating a right-hand side: its own operation,
     /// its callee or callback, and every sub-block it evaluates.
-    pub fn rhs_behavior(&self, module: &ErasedModule, rhs: &Rhs) -> LocalBehavior {
+    pub fn rhs_behavior(&self, module: &Module, rhs: &Rhs) -> LocalBehavior {
         Semantics::local_behavior(rhs)
             .join(call_behavior(rhs, &self.functions))
             .join(region_blocks(module, rhs.sub_blocks(), &self.functions))
@@ -92,11 +92,7 @@ impl Summary {
     /// The total behavior of executing a statement: a `Let` evaluates its
     /// right-hand side; binding functions performs nothing (dormancy); a
     /// recursive group eagerly evaluates its computed initializers.
-    pub fn statement_behavior(
-        &self,
-        module: &ErasedModule,
-        statement: &Statement,
-    ) -> LocalBehavior {
+    pub fn statement_behavior(&self, module: &Module, statement: &Statement) -> LocalBehavior {
         match statement {
             Statement::Let { rhs, .. } => self.rhs_behavior(module, rhs),
             Statement::Functions { .. } => LocalBehavior::pure(),
@@ -112,7 +108,7 @@ impl Summary {
 }
 
 fn region_blocks(
-    module: &ErasedModule,
+    module: &Module,
     seeds: Vec<BlockId>,
     summaries: &BTreeMap<FunctionId, LocalBehavior>,
 ) -> LocalBehavior {
@@ -123,7 +119,7 @@ fn region_blocks(
 /// flow and eager initializers — never through a nested function body, whose
 /// behavior is composed only at its calls.
 fn region_behavior(
-    module: &ErasedModule,
+    module: &Module,
     seeds: Vec<BlockId>,
     summaries: &BTreeMap<FunctionId, LocalBehavior>,
 ) -> LocalBehavior {
@@ -178,12 +174,9 @@ fn call_behavior(rhs: &Rhs, summaries: &BTreeMap<FunctionId, LocalBehavior>) -> 
     }
 }
 
-fn callee_behavior(
-    atom: ErasedAtom,
-    summaries: &BTreeMap<FunctionId, LocalBehavior>,
-) -> LocalBehavior {
+fn callee_behavior(atom: Atom, summaries: &BTreeMap<FunctionId, LocalBehavior>) -> LocalBehavior {
     match atom {
-        ErasedAtom::Function(function) => summaries.get(&function).copied().unwrap_or_default(),
+        Atom::Function(function) => summaries.get(&function).copied().unwrap_or_default(),
         _ => LocalBehavior::unknown(),
     }
 }

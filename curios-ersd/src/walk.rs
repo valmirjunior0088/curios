@@ -6,12 +6,12 @@
 //! in deterministic evaluation order. Consumers drive their own explicit
 //! worklists over these, keeping every whole-module walk iterative.
 
-use super::{BlockId, ErasedAtom, Rhs, Terminator, ValueId};
+use super::{Atom, BlockId, Rhs, Terminator, ValueId};
 
 impl Rhs {
     /// Every atom operand this right-hand side evaluates or references,
     /// in evaluation order — including callees and scrutinees.
-    pub fn operands(&self) -> Vec<ErasedAtom> {
+    pub fn operands(&self) -> Vec<Atom> {
         match self {
             Self::Alias(atom) => vec![*atom],
             Self::Apply { callee, arguments } => {
@@ -82,7 +82,7 @@ impl Rhs {
 
 impl Terminator {
     /// The atom this terminator yields, when it yields one.
-    pub fn atom(&self) -> Option<ErasedAtom> {
+    pub fn atom(&self) -> Option<Atom> {
         match self {
             Self::Return(atom) | Self::Exit(atom) => Some(*atom),
             Self::Unreachable => None,
@@ -93,7 +93,7 @@ impl Terminator {
 /// Every control block reachable from `root` — the block itself and the
 /// sub-blocks of its statements, transitively — without entering a nested
 /// function's body. Iterative, deterministic order.
-pub(crate) fn control_blocks(module: &super::ErasedModule, root: BlockId) -> Vec<BlockId> {
+pub(crate) fn control_blocks(module: &super::Module, root: BlockId) -> Vec<BlockId> {
     let mut blocks = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
     let mut work = vec![root];

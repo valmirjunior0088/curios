@@ -5,7 +5,7 @@ use {
 
 #[test]
 fn constants_intern_by_exact_bitwise_identity() {
-    let mut module = ErasedModule::new();
+    let mut module = Module::new();
     let a = module.intern_constant(Constant::Nat(7));
     let b = module.intern_constant(Constant::Nat(7));
     assert_eq!(a, b);
@@ -20,7 +20,7 @@ fn constants_intern_by_exact_bitwise_identity() {
 
 #[test]
 fn float_constants_intern_by_bit_pattern() {
-    let mut module = ErasedModule::new();
+    let mut module = Module::new();
     let positive = module.intern_constant(Constant::Flt(Flt::from_f32(0.0)));
     let negative = module.intern_constant(Constant::Flt(Flt::from_f32(-0.0)));
     assert_ne!(positive, negative, "signed zeros are distinct constants");
@@ -34,7 +34,7 @@ fn float_constants_intern_by_bit_pattern() {
 
 #[test]
 fn binary_constants_intern_by_logical_bits_across_windows() {
-    let mut module = ErasedModule::new();
+    let mut module = Module::new();
     let direct = PackedBin::from_bits([true, false, true]);
     let framed = PackedBin::from_bits([false, true, false, true, true])
         .window(1, 3)
@@ -46,27 +46,27 @@ fn binary_constants_intern_by_logical_bits_across_windows() {
 
 #[test]
 fn a_hand_built_module_round_trips_through_its_accessors() {
-    let mut module = ErasedModule::new();
+    let mut module = Module::new();
 
     // let one = 1; let doubled = NatAdd(one, one); return doubled
     let one = module.intern_constant(Constant::Nat(1));
     let bound = module.add_value(Some("one".into()));
     let alias = module.add_statement(Statement::Let {
         result: bound,
-        rhs: Rhs::Alias(ErasedAtom::Constant(one)),
+        rhs: Rhs::Alias(Atom::Constant(one)),
     });
     let doubled = module.add_value(Some("doubled".into()));
     let add = module.add_statement(Statement::Let {
         result: doubled,
         rhs: Rhs::Operation {
             operation: Operation::NatAdd,
-            operands: vec![ErasedAtom::Value(bound), ErasedAtom::Value(bound)],
+            operands: vec![Atom::Value(bound), Atom::Value(bound)],
         },
     });
     module.push_item(alias);
     let entry = module.add_block(Block {
         statements: vec![add],
-        terminator: Terminator::Return(ErasedAtom::Value(doubled)),
+        terminator: Terminator::Return(Atom::Value(doubled)),
     });
     module.set_entry(entry);
 
@@ -85,7 +85,7 @@ fn a_hand_built_module_round_trips_through_its_accessors() {
 
 #[test]
 fn functions_reserve_before_they_define() {
-    let mut module = ErasedModule::new();
+    let mut module = Module::new();
     let function = module.reserve_function();
     assert!(module.function(function).is_none(), "reserved, not defined");
 
@@ -95,13 +95,13 @@ fn functions_reserve_before_they_define() {
     let call = module.add_statement(Statement::Let {
         result,
         rhs: Rhs::Apply {
-            callee: ErasedAtom::Function(function),
-            arguments: vec![ErasedAtom::Value(n)],
+            callee: Atom::Function(function),
+            arguments: vec![Atom::Value(n)],
         },
     });
     let body = module.add_block(Block {
         statements: vec![call],
-        terminator: Terminator::Return(ErasedAtom::Value(result)),
+        terminator: Terminator::Return(Atom::Value(result)),
     });
     module.define_function(
         function,
@@ -116,7 +116,7 @@ fn functions_reserve_before_they_define() {
 
 #[test]
 fn constructors_register_in_discriminant_order() {
-    let mut module = ErasedModule::new();
+    let mut module = Module::new();
     let family = module.add_family(Some("Shape".into()));
     let circle = module.add_constructor(family, Some("circle".into()), vec![Some("radius".into())]);
     let square = module.add_constructor(family, Some("square".into()), vec![Some("side".into())]);
@@ -130,14 +130,14 @@ fn constructors_register_in_discriminant_order() {
 
 #[test]
 fn identities_mint_monotonically_per_arena() {
-    let mut module = ErasedModule::new();
+    let mut module = Module::new();
     let first = module.add_value(None);
     let second = module.add_value(None);
     assert_eq!(first.index(), 0);
     assert_eq!(second.index(), 1);
     let statement = module.add_statement(Statement::Let {
         result: first,
-        rhs: Rhs::Alias(ErasedAtom::Value(second)),
+        rhs: Rhs::Alias(Atom::Value(second)),
     });
     assert_eq!(statement.index(), 0, "arenas mint independently");
 }

@@ -12,9 +12,9 @@
 use {
     super::super::super::walk::control_blocks,
     crate::{
-        Block, BlockId, ErasedAtom, ErasedModule, FoldNatStep, FoldSequenceStep, Function,
-        FunctionId, NatCase, RecGroup, RecGroupId, RecValue, Rhs, Statement, StatementId,
-        Terminator, ValueId, VariantArm,
+        Atom, Block, BlockId, FoldNatStep, FoldSequenceStep, Function, FunctionId, Module, NatCase,
+        RecGroup, RecGroupId, RecValue, Rhs, Statement, StatementId, Terminator, ValueId,
+        VariantArm,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -27,9 +27,9 @@ use {
 /// fold to re-specialize. Returns the fresh identity of the copied `source`,
 /// or `None` if the region references a tombstoned entity.
 pub(super) fn deep_copy_function(
-    module: &mut ErasedModule,
+    module: &mut Module,
     source: FunctionId,
-    substitution: &BTreeMap<ValueId, ErasedAtom>,
+    substitution: &BTreeMap<ValueId, Atom>,
     self_reference: Option<FunctionId>,
 ) -> Option<FunctionId> {
     let region = gather_region(module, source)?;
@@ -130,7 +130,7 @@ struct Region {
     rec_groups: Vec<RecGroupId>,
 }
 
-fn gather_region(module: &ErasedModule, source: FunctionId) -> Option<Region> {
+fn gather_region(module: &Module, source: FunctionId) -> Option<Region> {
     let mut functions = Vec::new();
     let mut seen_functions = BTreeSet::new();
     let mut blocks = BTreeSet::new();
@@ -201,7 +201,7 @@ struct Remap<'a> {
     blocks: &'a BTreeMap<BlockId, BlockId>,
     functions: &'a BTreeMap<FunctionId, FunctionId>,
     rec_groups: &'a BTreeMap<RecGroupId, RecGroupId>,
-    substitution: &'a BTreeMap<ValueId, ErasedAtom>,
+    substitution: &'a BTreeMap<ValueId, Atom>,
     /// When set, a `Function` atom that would remap to `from` (the copy of
     /// the region's root) is kept as `to` (the original) instead. Structural
     /// bindings are never redirected.
@@ -209,24 +209,24 @@ struct Remap<'a> {
 }
 
 impl Remap<'_> {
-    fn atom(&self, atom: ErasedAtom) -> ErasedAtom {
+    fn atom(&self, atom: Atom) -> Atom {
         match atom {
-            ErasedAtom::Value(value) => {
+            Atom::Value(value) => {
                 if let Some(&fresh) = self.values.get(&value) {
-                    ErasedAtom::Value(fresh)
+                    Atom::Value(fresh)
                 } else if let Some(&replacement) = self.substitution.get(&value) {
                     replacement
                 } else {
-                    ErasedAtom::Value(value)
+                    Atom::Value(value)
                 }
             }
-            ErasedAtom::Function(function) => {
+            Atom::Function(function) => {
                 let mapped = lookup(self.functions, function);
                 let mapped = match self.redirect {
                     Some((from, to)) if mapped == from => to,
                     _ => mapped,
                 };
-                ErasedAtom::Function(mapped)
+                Atom::Function(mapped)
             }
             other => other,
         }
@@ -267,8 +267,7 @@ impl Remap<'_> {
     }
 
     fn rhs(&self, rhs: &Rhs) -> Rhs {
-        let atoms =
-            |operands: &[ErasedAtom]| operands.iter().map(|&atom| self.atom(atom)).collect();
+        let atoms = |operands: &[Atom]| operands.iter().map(|&atom| self.atom(atom)).collect();
         match rhs {
             Rhs::Alias(atom) => Rhs::Alias(self.atom(*atom)),
             Rhs::Apply { callee, arguments } => Rhs::Apply {

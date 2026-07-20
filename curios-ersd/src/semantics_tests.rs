@@ -38,7 +38,7 @@ fn constructing_functions_is_dormant_and_aggregates_are_discardable() {
 
 #[test]
 fn terminators_report_exit_and_trap() {
-    let unit = ErasedAtom::Constant(ConstantId(0));
+    let unit = Atom::Constant(ConstantId(0));
     assert!(!Semantics::terminator(&Terminator::Return(unit)).is_effectful());
     assert!(Semantics::terminator(&Terminator::Exit(unit)).may_exit);
     assert!(Semantics::terminator(&Terminator::Unreachable).may_trap);

@@ -1,13 +1,13 @@
 use {super::*, curios_base::Grain};
 
-fn nat(builder: &mut ErsdBuilder, value: u32) -> ErasedAtom {
+fn nat(builder: &mut ErsdBuilder, value: u32) -> Atom {
     let constant = builder.constant(Constant::Nat(value));
-    ErasedAtom::Constant(constant)
+    Atom::Constant(constant)
 }
 
 /// Every completed lowering has already passed `CpsModule::verify` inside
 /// `lower_to_cont`; the shape assertions on top read the printed module.
-fn lowered(module: &ErasedModule) -> String {
+fn lowered(module: &Module) -> String {
     lower_to_cont(module).to_string()
 }
 
@@ -21,10 +21,10 @@ fn a_scalar_module_lowers_to_verified_cont() {
         Some("doubled".into()),
         Rhs::Operation {
             operation: Operation::NatAdd,
-            operands: vec![ErasedAtom::Value(bound), ErasedAtom::Value(bound)],
+            operands: vec![Atom::Value(bound), Atom::Value(bound)],
         },
     );
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(doubled)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(doubled)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
@@ -42,7 +42,7 @@ fn bln_and_byte_collapse_onto_the_nat_carrier() {
         None,
         Rhs::Operation {
             operation: Operation::BlnAnd,
-            operands: vec![ErasedAtom::Constant(t), ErasedAtom::Constant(f)],
+            operands: vec![Atom::Constant(t), Atom::Constant(f)],
         },
     );
     let byte = builder.constant(Constant::Byte(7));
@@ -50,17 +50,17 @@ fn bln_and_byte_collapse_onto_the_nat_carrier() {
         None,
         Rhs::Operation {
             operation: Operation::NatToByte,
-            operands: vec![ErasedAtom::Value(both)],
+            operands: vec![Atom::Value(both)],
         },
     );
     let compared = builder.let_value(
         None,
         Rhs::Operation {
             operation: Operation::ByteEql,
-            operands: vec![ErasedAtom::Value(masked), ErasedAtom::Constant(byte)],
+            operands: vec![Atom::Value(masked), Atom::Constant(byte)],
         },
     );
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(compared)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(compared)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
@@ -81,17 +81,17 @@ fn byte_to_nat_is_the_identity() {
         None,
         Rhs::Operation {
             operation: Operation::ByteToNat,
-            operands: vec![ErasedAtom::Constant(byte)],
+            operands: vec![Atom::Constant(byte)],
         },
     );
     let sum = builder.let_value(
         None,
         Rhs::Operation {
             operation: Operation::NatAdd,
-            operands: vec![ErasedAtom::Value(widened), ErasedAtom::Value(widened)],
+            operands: vec![Atom::Value(widened), Atom::Value(widened)],
         },
     );
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(sum)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(sum)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
     let printed = lowered(&module);
@@ -119,12 +119,12 @@ fn a_variant_match_lowers_to_tag_dispatch() {
     let none_arm = builder.seal_block(Terminator::Return(zero));
     builder.open_block();
     let x = builder.value(Some("x".into()));
-    let some_arm = builder.seal_block(Terminator::Return(ErasedAtom::Value(x)));
+    let some_arm = builder.seal_block(Terminator::Return(Atom::Value(x)));
     let matched = builder.let_value(
         None,
         Rhs::MatchVariant {
             family,
-            scrutinee: ErasedAtom::Value(value),
+            scrutinee: Atom::Value(value),
             arms: vec![
                 VariantArm {
                     constructor: none,
@@ -140,7 +140,7 @@ fn a_variant_match_lowers_to_tag_dispatch() {
             default: None,
         },
     );
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(matched)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(matched)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
@@ -168,10 +168,10 @@ fn folds_lower_to_accumulator_loops() {
         None,
         Rhs::Operation {
             operation: Operation::NatAdd,
-            operands: vec![ErasedAtom::Value(hypothesis), two],
+            operands: vec![Atom::Value(hypothesis), two],
         },
     );
-    let step_block = builder.seal_block(Terminator::Return(ErasedAtom::Value(stepped)));
+    let step_block = builder.seal_block(Terminator::Return(Atom::Value(stepped)));
     let folded = builder.let_value(
         None,
         Rhs::FoldNat {
@@ -184,7 +184,7 @@ fn folds_lower_to_accumulator_loops() {
             },
         },
     );
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(folded)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(folded)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
     // Completing at all means the synthesized loop verified.
@@ -212,15 +212,15 @@ fn a_sequence_fold_reads_through_its_grain() {
         None,
         Rhs::Operation {
             operation: Operation::NatAdd,
-            operands: vec![ErasedAtom::Value(accumulator), one],
+            operands: vec![Atom::Value(accumulator), one],
         },
     );
-    let step_block = builder.seal_block(Terminator::Return(ErasedAtom::Value(stepped)));
+    let step_block = builder.seal_block(Terminator::Return(Atom::Value(stepped)));
     let folded = builder.let_value(
         None,
         Rhs::FoldSequence {
             grain: SequenceGrain::Bin(Grain::X),
-            scrutinee: ErasedAtom::Constant(bytes),
+            scrutinee: Atom::Constant(bytes),
             empty: empty_block,
             step: FoldSequenceStep {
                 element,
@@ -230,7 +230,7 @@ fn a_sequence_fold_reads_through_its_grain() {
             },
         },
     );
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(folded)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(folded)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
     let printed = lowered(&module);
@@ -245,14 +245,14 @@ fn a_mixed_recursive_group_lowers_to_rec_init() {
     let produce = builder.reserve_function();
     let consume = builder.value(Some("consume".into()));
     builder.open_block();
-    let body = builder.seal_block(Terminator::Return(ErasedAtom::Value(consume)));
+    let body = builder.seal_block(Terminator::Return(Atom::Value(consume)));
     builder.define_function(produce, Some("produce".into()), vec![], body);
     builder.open_block();
-    let init = builder.seal_block(Terminator::Return(ErasedAtom::Function(produce)));
+    let init = builder.seal_block(Terminator::Return(Atom::Function(produce)));
     let group = builder.rec_group(vec![produce], vec![(consume, init)]);
     builder.item_rec(group);
     builder.open_block();
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(consume)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(consume)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
     let printed = lowered(&module);
@@ -272,7 +272,7 @@ fn a_value_only_knot_lowers_through_cells() {
     builder.open_block();
     let force = builder.reserve_function();
     builder.open_block();
-    let force_body = builder.seal_block(Terminator::Return(ErasedAtom::Value(lazy)));
+    let force_body = builder.seal_block(Terminator::Return(Atom::Value(lazy)));
     builder.define_function(force, Some("force".into()), vec![], force_body);
     builder.let_functions(vec![force]);
     let mark = nat(&mut builder, 0);
@@ -280,14 +280,14 @@ fn a_value_only_knot_lowers_through_cells() {
         None,
         Rhs::Product {
             schema,
-            fields: vec![ErasedAtom::Function(force), mark],
+            fields: vec![Atom::Function(force), mark],
         },
     );
-    let init = builder.seal_block(Terminator::Return(ErasedAtom::Value(boxed)));
+    let init = builder.seal_block(Terminator::Return(Atom::Value(boxed)));
     let group = builder.rec_group(vec![], vec![(lazy, init)]);
     builder.item_rec(group);
     builder.open_block();
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(lazy)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(lazy)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
@@ -317,10 +317,10 @@ fn io_constants_ride_the_binary_carrier() {
         None,
         Rhs::Operation {
             operation: Operation::IoEql,
-            operands: vec![ErasedAtom::Constant(stdout), ErasedAtom::Constant(stderr)],
+            operands: vec![Atom::Constant(stdout), Atom::Constant(stderr)],
         },
     );
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(same)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(same)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
     let printed = lowered(&module);

@@ -1,6 +1,6 @@
 //! Atomic operands and the leaf constant domain.
 //!
-//! Every operand position in the representation holds an [`ErasedAtom`]: a
+//! Every operand position in the representation holds an [`Atom`]: a
 //! reference to a bound value, a bound function, or an interned constant.
 //! Compound computation never nests — it is bound by a statement first (the
 //! operand law's structural half).
@@ -17,7 +17,7 @@ use {
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-pub enum ErasedAtom {
+pub enum Atom {
     Value(ValueId),
     Function(FunctionId),
     Constant(ConstantId),

@@ -21,9 +21,9 @@ use {
         value::{Bail, Closure, Value},
     },
     crate::{
-        Analysis, BlockId, Constant, ErasedAtom, ErasedModule, FoldNatStep, FoldOutcome,
-        FoldSequenceStep, ForeignId, FunctionId, Intrinsic, Operation, RecValue, Rhs, Semantics,
-        SequenceGrain, SequenceOp, Statement, Terminator, ValueId, VariantArm,
+        Analysis, Atom, BlockId, Constant, FoldNatStep, FoldOutcome, FoldSequenceStep, ForeignId,
+        FunctionId, Intrinsic, Module, Operation, RecValue, Rhs, Semantics, SequenceGrain,
+        SequenceOp, Statement, Terminator, ValueId, VariantArm,
     },
     curios_base::Grain,
     std::{
@@ -91,7 +91,7 @@ enum CafSource<'m> {
 
 /// The interpreter over a borrowed module and its analysis snapshot.
 pub(super) struct Evaluator<'m> {
-    module: &'m ErasedModule,
+    module: &'m Module,
     analysis: &'m Analysis,
     /// Every `Let`-defined value, module-wide, forced on demand. Forcing from
     /// an empty frame naturally declines anything not transitively closed (a
@@ -114,7 +114,7 @@ pub(super) struct Evaluator<'m> {
 impl<'m> Evaluator<'m> {
     /// Build an interpreter over a module and its analysis. The top-level
     /// value bindings are the module's item chain.
-    pub(super) fn new(module: &'m ErasedModule, analysis: &'m Analysis) -> Self {
+    pub(super) fn new(module: &'m Module, analysis: &'m Analysis) -> Self {
         let mut definitions = BTreeMap::new();
         let mut rec_caf = BTreeMap::new();
         let mut item_functions = BTreeSet::new();
@@ -153,10 +153,10 @@ impl<'m> Evaluator<'m> {
 
     /// Whether an atom names a closed value — a constant, a module function,
     /// or a top-level item value — so a call over such atoms is a candidate.
-    pub(super) fn is_closed_atom(&self, atom: ErasedAtom) -> bool {
+    pub(super) fn is_closed_atom(&self, atom: Atom) -> bool {
         match atom {
-            ErasedAtom::Constant(_) | ErasedAtom::Function(_) => true,
-            ErasedAtom::Value(value) => {
+            Atom::Constant(_) | Atom::Function(_) => true,
+            Atom::Value(value) => {
                 self.definitions.contains_key(&value) || self.rec_caf.contains_key(&value)
             }
         }
@@ -182,20 +182,20 @@ impl<'m> Evaluator<'m> {
     }
 
     /// Evaluate one closed candidate call from a fresh budget frame.
-    pub(super) fn evaluate(&mut self, callee: ErasedAtom, arguments: &[ErasedAtom]) -> Outcome {
+    pub(super) fn evaluate(&mut self, callee: Atom, arguments: &[Atom]) -> Outcome {
         self.budget.restart();
         let mut frame = Frame::new();
         self.eval_apply(callee, arguments, &mut frame, true)
     }
 
-    fn eval_atom(&mut self, atom: ErasedAtom, frame: &Frame) -> Result<Value, Bail> {
+    fn eval_atom(&mut self, atom: Atom, frame: &Frame) -> Result<Value, Bail> {
         match atom {
-            ErasedAtom::Constant(id) => match self.module.constant(id) {
+            Atom::Constant(id) => match self.module.constant(id) {
                 Some(constant) => Ok(Value::from_constant(constant)),
                 None => Err(Bail::Unknown),
             },
-            ErasedAtom::Function(function) => self.close(function, frame),
-            ErasedAtom::Value(value) => match frame.lookup(value) {
+            Atom::Function(function) => self.close(function, frame),
+            Atom::Value(value) => match frame.lookup(value) {
                 Some(held) => Ok(held),
                 None => self.force_toplevel(value),
             },
@@ -290,8 +290,7 @@ impl<'m> Evaluator<'m> {
         for (index, &statement) in block.statements.iter().enumerate() {
             match module.statement(statement) {
                 Some(Statement::Let { result, rhs }) => {
-                    let is_tail =
-                        tail && Some(index) == last && returned == ErasedAtom::Value(*result);
+                    let is_tail = tail && Some(index) == last && returned == Atom::Value(*result);
                     match self.eval_rhs(rhs, frame, is_tail) {
                         Outcome::Done(held) => {
                             if is_tail {
@@ -433,8 +432,8 @@ impl<'m> Evaluator<'m> {
 
     fn eval_apply(
         &mut self,
-        callee: ErasedAtom,
-        arguments: &[ErasedAtom],
+        callee: Atom,
+        arguments: &[Atom],
         frame: &mut Frame,
         tail: bool,
     ) -> Outcome {
@@ -458,7 +457,7 @@ impl<'m> Evaluator<'m> {
             // residual, rerunning the callee in full at this point. A locally
             // bound callee would be out of scope where the residual installs.
             Outcome::Bail(Bail::Effect) if tail => match callee {
-                ErasedAtom::Function(function) if self.item_functions.contains(&function) => {
+                Atom::Function(function) if self.item_functions.contains(&function) => {
                     Outcome::Stuck(Residual::Call(function, args))
                 }
                 _ => Outcome::Bail(Bail::Effect),
@@ -491,7 +490,7 @@ impl<'m> Evaluator<'m> {
     fn eval_operation(
         &mut self,
         operation: Operation,
-        operands: &[ErasedAtom],
+        operands: &[Atom],
         frame: &mut Frame,
     ) -> Outcome {
         let operands = match self.eval_operands(operands, frame) {
@@ -507,7 +506,7 @@ impl<'m> Evaluator<'m> {
     fn eval_sequence(
         &mut self,
         operation: SequenceOp,
-        operands: &[ErasedAtom],
+        operands: &[Atom],
         frame: &mut Frame,
     ) -> Outcome {
         let operands = match self.eval_operands(operands, frame) {
@@ -530,7 +529,7 @@ impl<'m> Evaluator<'m> {
 
     fn eval_match(
         &mut self,
-        scrutinee: ErasedAtom,
+        scrutinee: Atom,
         arms: &[VariantArm],
         default: Option<BlockId>,
         frame: &mut Frame,
@@ -561,7 +560,7 @@ impl<'m> Evaluator<'m> {
 
     fn eval_fold_nat(
         &mut self,
-        scrutinee: ErasedAtom,
+        scrutinee: Atom,
         zero: BlockId,
         step: &FoldNatStep,
         frame: &mut Frame,
@@ -594,7 +593,7 @@ impl<'m> Evaluator<'m> {
     fn eval_fold_sequence(
         &mut self,
         grain: SequenceGrain,
-        scrutinee: ErasedAtom,
+        scrutinee: Atom,
         empty: BlockId,
         step: &FoldSequenceStep,
         frame: &mut Frame,
@@ -633,7 +632,7 @@ impl<'m> Evaluator<'m> {
         Outcome::Done(accumulator)
     }
 
-    fn eval_map(&mut self, operands: &[ErasedAtom], frame: &mut Frame) -> Outcome {
+    fn eval_map(&mut self, operands: &[Atom], frame: &mut Frame) -> Outcome {
         // The intrinsic's operand order is mapper first, then the list.
         let [mapper, source] = operands else {
             return Outcome::Bail(Bail::Arity);
@@ -662,11 +661,7 @@ impl<'m> Evaluator<'m> {
         Outcome::Done(Value::Lst(Rc::new(mapped)))
     }
 
-    fn eval_operands(
-        &mut self,
-        atoms: &[ErasedAtom],
-        frame: &mut Frame,
-    ) -> Result<Vec<Value>, Bail> {
+    fn eval_operands(&mut self, atoms: &[Atom], frame: &mut Frame) -> Result<Vec<Value>, Bail> {
         let mut values = Vec::with_capacity(atoms.len());
         for &atom in atoms {
             values.push(self.eval_atom(atom, frame)?);

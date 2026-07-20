@@ -5,7 +5,7 @@
 //! the open-block discipline that gives the operand law its home ("bound as a
 //! statement in the innermost open block"), schema and recursion registration,
 //! constant and foreign interning, and finalization, which runs the module
-//! verifier. The arena mutators on [`ErasedModule`] stay crate-private behind
+//! verifier. The arena mutators on [`Module`] stay crate-private behind
 //! it.
 //!
 //! The module's item list is the outermost block: `let_value`,
@@ -20,8 +20,8 @@
 
 use {
     super::{
-        Block, BlockId, Constant, ConstantId, ConstructorId, ErasedModule, FamilyId, ForeignId,
-        Function, FunctionId, ProductId, ProductSchema, RecGroup, RecGroupId, RecValue, Rhs,
+        Block, BlockId, Constant, ConstantId, ConstructorId, FamilyId, ForeignId, Function,
+        FunctionId, Module, ProductId, ProductSchema, RecGroup, RecGroupId, RecValue, Rhs,
         Statement, StatementId, Terminator, ValueId, VerifyError,
     },
     curios_abi::ForeignFunction,
@@ -31,7 +31,7 @@ use {
 /// A checked module under construction. See the module documentation.
 #[derive(Debug, Default)]
 pub struct ErsdBuilder {
-    module: ErasedModule,
+    module: Module,
     open_blocks: Vec<Vec<StatementId>>,
 }
 
@@ -43,7 +43,7 @@ impl ErsdBuilder {
     /// Resume construction over a restored prefix module: the archived
     /// prelude's arenas continue growing under the user suffix. The skipped
     /// constant-interning index is rebuilt here, and no block is open.
-    pub fn resume(mut module: ErasedModule) -> Self {
+    pub fn resume(mut module: Module) -> Self {
         module.reindex_constants();
         Self {
             module,
@@ -52,13 +52,13 @@ impl ErsdBuilder {
     }
 
     /// Read-only access to the module under construction.
-    pub fn module(&self) -> &ErasedModule {
+    pub fn module(&self) -> &Module {
         &self.module
     }
 
     /// Hand the module over *unfinished* — no entry, no verification — as a
     /// replayable prefix. [`resume`](Self::resume) is the inverse.
-    pub fn into_module(self) -> ErasedModule {
+    pub fn into_module(self) -> Module {
         assert!(
             self.open_blocks.is_empty(),
             "a prefix hand-off leaves no open block"
@@ -223,7 +223,7 @@ impl ErsdBuilder {
     /// (An empty function slot is a construction error here; after removal
     /// lands with its consumer, the same slot is an ordinary tombstone to the
     /// verifier.)
-    pub fn finalize(self) -> Result<ErasedModule, VerifyError> {
+    pub fn finalize(self) -> Result<Module, VerifyError> {
         if !self.open_blocks.is_empty() {
             return Err(VerifyError(format!(
                 "finalize with {} unsealed open block(s)",

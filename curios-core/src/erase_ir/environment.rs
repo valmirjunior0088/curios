@@ -19,7 +19,7 @@ use super::BTreeMap;
 )]
 pub(super) enum Binding {
     /// The operand holding the name's erased value.
-    Atom(curios_ersd::ErasedAtom),
+    Atom(curios_ersd::Atom),
     /// A dropped (erasable) binder — a proof or a type with no runtime value.
     /// Referencing it yields the unit constant and records the dangle for the
     /// function-body collapse.
@@ -90,7 +90,7 @@ pub(super) struct Environment {
 }
 
 impl Environment {
-    pub(super) fn bind(&mut self, name: impl Into<String>, atom: curios_ersd::ErasedAtom) {
+    pub(super) fn bind(&mut self, name: impl Into<String>, atom: curios_ersd::Atom) {
         self.values.insert(name.into(), Binding::Atom(atom));
     }
 

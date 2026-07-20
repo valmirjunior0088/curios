@@ -69,9 +69,7 @@ fn grain_element_type(grain: curios_base::Grain) -> Term {
 impl Lowering {
     /// Erase a constant to its interned atom.
     fn constant(&mut self, constant: curios_ersd::Constant) -> Outcome {
-        Outcome::Emitted(curios_ersd::ErasedAtom::Constant(
-            self.builder.constant(constant),
-        ))
+        Outcome::Emitted(curios_ersd::Atom::Constant(self.builder.constant(constant)))
     }
 
     /// Erase the operands (each against its type, in order) and bind a scalar
@@ -172,7 +170,7 @@ pub(super) fn erase_prim(
                 return Ok(lowering.constant(curios_ersd::Constant::Nat(spine)));
             }
             let inner_atom = emitted!(lowering.walk(context, inner, &nat_type(), None)?);
-            let spine_atom = curios_ersd::ErasedAtom::Constant(
+            let spine_atom = curios_ersd::Atom::Constant(
                 lowering.builder.constant(curios_ersd::Constant::Nat(spine)),
             );
             Ok(lowering.bind(

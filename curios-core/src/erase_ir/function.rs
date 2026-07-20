@@ -30,9 +30,7 @@ impl Lowering {
         let function = self.builder.reserve_function();
         self.define_lambda(context, function, func, expected, hint)?;
         self.builder.let_functions(vec![function]);
-        Ok(Outcome::Emitted(curios_ersd::ErasedAtom::Function(
-            function,
-        )))
+        Ok(Outcome::Emitted(curios_ersd::Atom::Function(function)))
     }
 
     /// Erase a lambda into a previously reserved function identity — shared by
@@ -78,7 +76,7 @@ impl Lowering {
                         } else {
                             let param = self.builder.value(label);
                             self.environment
-                                .bind(&name, curios_ersd::ErasedAtom::Value(param));
+                                .bind(&name, curios_ersd::Atom::Value(param));
                             params.push(param);
                         }
                         body_telescope = body_rest.open(&[&variable]);

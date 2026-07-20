@@ -12,14 +12,14 @@
 
 use {
     super::interpret::Evaluator,
-    crate::{Analysis, ErasedModule, Statement, StatementId},
+    crate::{Analysis, Module, Statement, StatementId},
     std::collections::BTreeSet,
 };
 
 /// The item statements whose eager evaluation the interpreter proves performs
 /// no effect.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub(crate) fn prove_eager_groups_pure(module: &ErasedModule) -> BTreeSet<StatementId> {
+pub(crate) fn prove_eager_groups_pure(module: &Module) -> BTreeSet<StatementId> {
     let analysis = Analysis::analyze(module);
     let mut evaluator = Evaluator::new(module, &analysis);
     let mut pure = BTreeSet::new();

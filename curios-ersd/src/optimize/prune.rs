@@ -20,8 +20,7 @@
 
 use {
     super::super::{
-        BlockId, ErasedAtom, ErasedModule, FunctionId, RecGroupId, Statement, StatementId,
-        Terminator, ValueId,
+        Atom, BlockId, FunctionId, Module, RecGroupId, Statement, StatementId, Terminator, ValueId,
     },
     crate::{Analysis, Summary},
     std::collections::{BTreeMap, BTreeSet},
@@ -58,7 +57,7 @@ impl Subtree {
 /// proved inert — they are never seeded as observable, so a dead proven-pure
 /// group drops, carrying its web with it.
 pub(super) fn prune_unreachable(
-    module: &mut ErasedModule,
+    module: &mut Module,
     proven_pure: &std::collections::BTreeSet<StatementId>,
 ) {
     let Some(entry) = module.entry() else { return };
@@ -169,24 +168,20 @@ pub(super) fn prune_unreachable(
 /// Walk one region's whole subtree — statements, control sub-blocks, nested
 /// function bodies, recursive-group initializers — collecting what it binds,
 /// owns, and references. Iterative.
-fn walk_subtree(
-    module: &ErasedModule,
-    statements: Vec<StatementId>,
-    blocks: Vec<BlockId>,
-) -> Subtree {
+fn walk_subtree(module: &Module, statements: Vec<StatementId>, blocks: Vec<BlockId>) -> Subtree {
     let mut subtree = Subtree::default();
     let mut statements = statements;
     let mut blocks = blocks;
     let mut functions: Vec<FunctionId> = Vec::new();
 
-    let use_atom = |subtree: &mut Subtree, atom: ErasedAtom| match atom {
-        ErasedAtom::Value(value) => {
+    let use_atom = |subtree: &mut Subtree, atom: Atom| match atom {
+        Atom::Value(value) => {
             subtree.used_values.insert(value);
         }
-        ErasedAtom::Function(function) => {
+        Atom::Function(function) => {
             subtree.used_functions.insert(function);
         }
-        ErasedAtom::Constant(_) => {}
+        Atom::Constant(_) => {}
     };
 
     loop {

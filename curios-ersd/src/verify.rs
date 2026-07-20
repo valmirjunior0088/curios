@@ -25,8 +25,8 @@
 
 use {
     super::{
-        Block, BlockId, Constructor, ConstructorId, ErasedAtom, ErasedModule, FamilyId, Function,
-        FunctionId, Intrinsic, ProductId, ProductSchema, RecGroup, RecGroupId, Rhs, SequenceArity,
+        Atom, Block, BlockId, Constructor, ConstructorId, FamilyId, Function, FunctionId,
+        Intrinsic, Module, ProductId, ProductSchema, RecGroup, RecGroupId, Rhs, SequenceArity,
         Statement, StatementId, Terminator, ValueId, VariantFamily,
     },
     std::collections::HashSet,
@@ -45,7 +45,7 @@ impl std::fmt::Display for VerifyError {
 
 impl std::error::Error for VerifyError {}
 
-impl ErasedModule {
+impl Module {
     /// Check the module against the representation contract, reporting the
     /// first violation. Deterministic: the same module always reports the same
     /// diagnostic.
@@ -90,7 +90,7 @@ struct InitContext {
 }
 
 struct Verifier<'m> {
-    module: &'m ErasedModule,
+    module: &'m Module,
     stack: Vec<Task>,
     values_in_scope: HashSet<ValueId>,
     functions_in_scope: HashSet<FunctionId>,
@@ -104,7 +104,7 @@ struct Verifier<'m> {
 }
 
 impl<'m> Verifier<'m> {
-    fn new(module: &'m ErasedModule) -> Self {
+    fn new(module: &'m Module) -> Self {
         Self {
             module,
             stack: Vec::new(),
@@ -302,12 +302,12 @@ impl<'m> Verifier<'m> {
             Rhs::Alias(atom) => self.check_atom(id, atom)?,
             Rhs::Apply { callee, arguments } => {
                 self.check_atom(id, callee)?;
-                if let ErasedAtom::Constant(_) = callee {
+                if let Atom::Constant(_) = callee {
                     return Err(VerifyError(format!(
                         "statement {id} applies a constant callee"
                     )));
                 }
-                if let ErasedAtom::Function(function) = callee {
+                if let Atom::Function(function) = callee {
                     let arity = self.function(function)?.params.len();
                     if arguments.len() != arity {
                         return Err(VerifyError(format!(
@@ -547,7 +547,7 @@ impl<'m> Verifier<'m> {
                     )));
                 }
                 if let Intrinsic::LstMap = intrinsic
-                    && let ErasedAtom::Function(mapper) = operands[0]
+                    && let Atom::Function(mapper) = operands[0]
                 {
                     let arity = self.function(mapper)?.params.len();
                     if arity != 1 {
@@ -576,17 +576,13 @@ impl<'m> Verifier<'m> {
         }
     }
 
-    fn check_atom(&self, statement: StatementId, atom: ErasedAtom) -> Result<(), VerifyError> {
+    fn check_atom(&self, statement: StatementId, atom: Atom) -> Result<(), VerifyError> {
         self.check_atom_at(atom, || format!("statement {statement}"))
     }
 
-    fn check_atom_at(
-        &self,
-        atom: ErasedAtom,
-        site: impl Fn() -> String,
-    ) -> Result<(), VerifyError> {
+    fn check_atom_at(&self, atom: Atom, site: impl Fn() -> String) -> Result<(), VerifyError> {
         match atom {
-            ErasedAtom::Value(value) => {
+            Atom::Value(value) => {
                 if self.module.value(value).is_none() {
                     return Err(VerifyError(format!("{} references dead {value}", site())));
                 }
@@ -618,7 +614,7 @@ impl<'m> Verifier<'m> {
                 }
                 Ok(())
             }
-            ErasedAtom::Function(function) => {
+            Atom::Function(function) => {
                 if self.module.function(function).is_none() {
                     return Err(VerifyError(format!(
                         "{} references dead {function}",
@@ -633,7 +629,7 @@ impl<'m> Verifier<'m> {
                 }
                 Ok(())
             }
-            ErasedAtom::Constant(constant) => {
+            Atom::Constant(constant) => {
                 if self.module.constant(constant).is_none() {
                     return Err(VerifyError(format!(
                         "{} references dead {constant}",

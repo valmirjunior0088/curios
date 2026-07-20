@@ -27,8 +27,8 @@
 
 use {
     super::super::{
-        Block, BlockId, Constant, ErasedAtom, ErasedModule, Function, FunctionId, Operation, Rhs,
-        Statement, StatementId, Terminator, walk::control_blocks,
+        Atom, Block, BlockId, Constant, Function, FunctionId, Module, Operation, Rhs, Statement,
+        StatementId, Terminator, walk::control_blocks,
     },
     std::collections::BTreeSet,
 };
@@ -70,7 +70,7 @@ impl Monoid {
     /// primitive), so the resolver is what makes the envelope reach idiomatic
     /// code at all; unfolding a pure forwarder chain preserves meaning
     /// exactly.
-    fn of_rhs(module: &ErasedModule, rhs: &Rhs) -> Option<(Monoid, ErasedAtom, ErasedAtom)> {
+    fn of_rhs(module: &Module, rhs: &Rhs) -> Option<(Monoid, Atom, Atom)> {
         match rhs {
             Rhs::Operation {
                 operation,
@@ -80,7 +80,7 @@ impl Monoid {
                 Some((monoid, operands[0], operands[1]))
             }
             Rhs::Apply {
-                callee: ErasedAtom::Function(callee),
+                callee: Atom::Function(callee),
                 arguments,
             } if arguments.len() == 2 => {
                 let operation = resolve_forwarder(module, *callee, 8)?;
@@ -110,7 +110,7 @@ impl Monoid {
     }
 
     /// `left ⊕ right`.
-    fn build(self, left: ErasedAtom, right: ErasedAtom) -> Rhs {
+    fn build(self, left: Atom, right: Atom) -> Rhs {
         match self {
             Monoid::NatAdd => operation(Operation::NatAdd, left, right),
             Monoid::NatMul => operation(Operation::NatMul, left, right),
@@ -122,7 +122,7 @@ impl Monoid {
     }
 }
 
-fn operation(operation: Operation, left: ErasedAtom, right: ErasedAtom) -> Rhs {
+fn operation(operation: Operation, left: Atom, right: Atom) -> Rhs {
     Rhs::Operation {
         operation,
         operands: vec![left, right],
@@ -132,11 +132,7 @@ fn operation(operation: Operation, left: ErasedAtom, right: ErasedAtom) -> Rhs {
 /// The scalar operation a binary forwarder chain bottoms out in: a function
 /// whose body is exactly one statement over its two parameters in order —
 /// the operation itself, or a saturated call to the next forwarder.
-fn resolve_forwarder(
-    module: &ErasedModule,
-    function: FunctionId,
-    budget: usize,
-) -> Option<Operation> {
+fn resolve_forwarder(module: &Module, function: FunctionId, budget: usize) -> Option<Operation> {
     if budget == 0 {
         return None;
     }
@@ -151,18 +147,17 @@ fn resolve_forwarder(
     let Some(Statement::Let { result, rhs }) = module.statement(*statement) else {
         return None;
     };
-    if block.terminator.atom() != Some(ErasedAtom::Value(*result)) {
+    if block.terminator.atom() != Some(Atom::Value(*result)) {
         return None;
     }
-    let forwards =
-        |operands: &[ErasedAtom]| operands == [ErasedAtom::Value(*p0), ErasedAtom::Value(*p1)];
+    let forwards = |operands: &[Atom]| operands == [Atom::Value(*p0), Atom::Value(*p1)];
     match rhs {
         Rhs::Operation {
             operation,
             operands,
         } if forwards(operands) => Some(*operation),
         Rhs::Apply {
-            callee: ErasedAtom::Function(next),
+            callee: Atom::Function(next),
             arguments,
         } if forwards(arguments) => resolve_forwarder(module, *next, budget - 1),
         _ => None,
@@ -176,7 +171,7 @@ enum Leaf {
         block: BlockId,
         call: StatementId,
         combine: StatementId,
-        addend: ErasedAtom,
+        addend: Atom,
     },
     /// `a = f(args); return a`.
     Bare { block: BlockId, call: StatementId },
@@ -186,7 +181,7 @@ enum Leaf {
 
 /// Rebase every recognized function, module-wide.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub(super) fn rebase_monoid_recursion(module: &mut ErasedModule) {
+pub(super) fn rebase_monoid_recursion(module: &mut Module) {
     // Targets: self-recursive functions bound by a `Functions` statement
     // (anywhere — item or block), recognized one at a time. Collect first;
     // rewriting appends statements and functions but never disturbs another
@@ -209,7 +204,7 @@ pub(super) fn rebase_monoid_recursion(module: &mut ErasedModule) {
     }
 }
 
-fn rebase_one(module: &mut ErasedModule, binding: StatementId, function: FunctionId) {
+fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
     let Some(definition) = module.function(function) else {
         return;
     };
@@ -242,17 +237,17 @@ fn rebase_one(module: &mut ErasedModule, binding: StatementId, function: Functio
     let call = module.add_statement(Statement::Let {
         result: call_result,
         rhs: Rhs::Apply {
-            callee: ErasedAtom::Function(worker),
+            callee: Atom::Function(worker),
             arguments: wrapper_params
                 .iter()
-                .map(|&param| ErasedAtom::Value(param))
-                .chain([ErasedAtom::Constant(identity)])
+                .map(|&param| Atom::Value(param))
+                .chain([Atom::Constant(identity)])
                 .collect(),
         },
     });
     let wrapper_body = module.add_block(Block {
         statements: vec![call],
-        terminator: Terminator::Return(ErasedAtom::Value(call_result)),
+        terminator: Terminator::Return(Atom::Value(call_result)),
     });
 
     let mut worker_params = params;
@@ -276,7 +271,7 @@ fn rebase_one(module: &mut ErasedModule, binding: StatementId, function: Functio
     );
 
     // Rewrite the leaf tail blocks of the (now worker-owned) body.
-    let acc_atom = ErasedAtom::Value(acc);
+    let acc_atom = Atom::Value(acc);
     for leaf in leaves {
         match leaf {
             Leaf::Combine {
@@ -310,13 +305,13 @@ fn rebase_one(module: &mut ErasedModule, binding: StatementId, function: Functio
                     },
                 );
                 let mut arguments = arguments;
-                arguments.push(ErasedAtom::Value(combine_result));
+                arguments.push(Atom::Value(combine_result));
                 module.set_statement(
                     call,
                     Statement::Let {
                         result: call_result,
                         rhs: Rhs::Apply {
-                            callee: ErasedAtom::Function(worker),
+                            callee: Atom::Function(worker),
                             arguments,
                         },
                     },
@@ -329,7 +324,7 @@ fn rebase_one(module: &mut ErasedModule, binding: StatementId, function: Functio
                 if let Some(position) = statements.iter().position(|&s| s == call) {
                     statements.swap(position, position + 1);
                 }
-                let terminator = Terminator::Return(ErasedAtom::Value(call_result));
+                let terminator = Terminator::Return(Atom::Value(call_result));
                 module.set_block_statements(block, statements);
                 module.set_block_terminator(block, terminator);
             }
@@ -348,7 +343,7 @@ fn rebase_one(module: &mut ErasedModule, binding: StatementId, function: Functio
                     Statement::Let {
                         result,
                         rhs: Rhs::Apply {
-                            callee: ErasedAtom::Function(worker),
+                            callee: Atom::Function(worker),
                             arguments,
                         },
                     },
@@ -375,7 +370,7 @@ fn rebase_one(module: &mut ErasedModule, binding: StatementId, function: Functio
                 });
                 statements.push(statement);
                 module.set_block_statements(block, statements);
-                module.set_block_terminator(block, Terminator::Return(ErasedAtom::Value(combined)));
+                module.set_block_terminator(block, Terminator::Return(Atom::Value(combined)));
             }
         }
     }
@@ -393,11 +388,7 @@ fn rebase_one(module: &mut ErasedModule, binding: StatementId, function: Functio
 /// combine, every self-call in the function's whole region accounted for on
 /// the spine, and the addend defined before the call (structurally: the call
 /// and combine are the block's last two statements).
-fn recognize(
-    module: &ErasedModule,
-    function: FunctionId,
-    body: BlockId,
-) -> Option<(Monoid, Vec<Leaf>)> {
+fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Monoid, Vec<Leaf>)> {
     let mut leaves = Vec::new();
     let mut monoid: Option<Monoid> = None;
     let mut combines = 0usize;
@@ -432,7 +423,7 @@ fn recognize(
                     rhs @ (Rhs::SwitchBool { .. } | Rhs::SwitchNat { .. } | Rhs::MatchVariant { .. }),
             },
         )) = last
-            && returned == ErasedAtom::Value(*result)
+            && returned == Atom::Value(*result)
         {
             work.extend(rhs.sub_blocks());
             continue;
@@ -448,15 +439,15 @@ fn recognize(
                 result: combine_result,
                 rhs: combine_rhs,
             }) = module.statement(statements[count - 1])
-            && returned == ErasedAtom::Value(*combine_result)
+            && returned == Atom::Value(*combine_result)
             && let Some((found, left, right)) = Monoid::of_rhs(module, combine_rhs)
             && let Some(Statement::Let {
                 result: call_result,
                 rhs: Rhs::Apply { callee, .. },
             }) = module.statement(statements[count - 2])
-            && *callee == ErasedAtom::Function(function)
+            && *callee == Atom::Function(function)
         {
-            let call_atom = ErasedAtom::Value(*call_result);
+            let call_atom = Atom::Value(*call_result);
             let left_self = left == call_atom;
             let right_self = right == call_atom;
             if left_self ^ right_self {
@@ -487,8 +478,8 @@ fn recognize(
                 result,
                 rhs: Rhs::Apply { callee, .. },
             }) = module.statement(statements[count - 1])
-            && returned == ErasedAtom::Value(*result)
-            && *callee == ErasedAtom::Function(function)
+            && returned == Atom::Value(*result)
+            && *callee == Atom::Function(function)
         {
             spine_calls += 1;
             leaves.push(Leaf::Bare {
@@ -518,7 +509,7 @@ fn recognize(
 
 /// Count every reference to `function` inside its own region, including
 /// nested function bodies.
-fn count_self_references(module: &ErasedModule, function: FunctionId) -> usize {
+fn count_self_references(module: &Module, function: FunctionId) -> usize {
     let mut count = 0usize;
     let mut functions = vec![function];
     let mut seen = BTreeSet::new();
@@ -537,7 +528,7 @@ fn count_self_references(module: &ErasedModule, function: FunctionId) -> usize {
                 match module.statement(statement) {
                     Some(Statement::Let { rhs, .. }) => {
                         for atom in rhs.operands() {
-                            if atom == ErasedAtom::Function(function) {
+                            if atom == Atom::Function(function) {
                                 count += 1;
                             }
                         }
@@ -553,7 +544,7 @@ fn count_self_references(module: &ErasedModule, function: FunctionId) -> usize {
                     None => {}
                 }
             }
-            if block.terminator.atom() == Some(ErasedAtom::Function(function)) {
+            if block.terminator.atom() == Some(Atom::Function(function)) {
                 count += 1;
             }
         }

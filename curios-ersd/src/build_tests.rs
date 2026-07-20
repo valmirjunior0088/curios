@@ -1,19 +1,19 @@
 use super::*;
 
 /// let one = 1 (item); entry { let doubled = NatAdd(one, one); return doubled }
-fn doubling_module() -> Result<ErasedModule, VerifyError> {
+fn doubling_module() -> Result<Module, VerifyError> {
     let mut builder = ErsdBuilder::new();
     let one = builder.constant(Constant::Nat(1));
-    let bound = builder.item_value(Some("one".into()), Rhs::Alias(ErasedAtom::Constant(one)));
+    let bound = builder.item_value(Some("one".into()), Rhs::Alias(Atom::Constant(one)));
     builder.open_block();
     let doubled = builder.let_value(
         Some("doubled".into()),
         Rhs::Operation {
             operation: Operation::NatAdd,
-            operands: vec![ErasedAtom::Value(bound), ErasedAtom::Value(bound)],
+            operands: vec![Atom::Value(bound), Atom::Value(bound)],
         },
     );
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(doubled)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(doubled)));
     builder.set_entry(entry);
     builder.finalize()
 }
@@ -35,28 +35,28 @@ fn a_recursive_function_builds_through_reserve_and_define() {
     let zero = builder.constant(Constant::Nat(0));
     let one = builder.constant(Constant::Nat(1));
     builder.open_block();
-    let zero_case = builder.seal_block(Terminator::Return(ErasedAtom::Constant(zero)));
+    let zero_case = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
     builder.open_block();
     let predecessor = builder.let_value(
         None,
         Rhs::Operation {
             operation: Operation::NatSub,
-            operands: vec![ErasedAtom::Value(n), ErasedAtom::Constant(one)],
+            operands: vec![Atom::Value(n), Atom::Constant(one)],
         },
     );
     let recur = builder.let_value(
         None,
         Rhs::Apply {
-            callee: ErasedAtom::Function(function),
-            arguments: vec![ErasedAtom::Value(predecessor)],
+            callee: Atom::Function(function),
+            arguments: vec![Atom::Value(predecessor)],
         },
     );
-    let default = builder.seal_block(Terminator::Return(ErasedAtom::Value(recur)));
+    let default = builder.seal_block(Terminator::Return(Atom::Value(recur)));
     builder.open_block();
     let result = builder.let_value(
         None,
         Rhs::SwitchNat {
-            scrutinee: ErasedAtom::Value(n),
+            scrutinee: Atom::Value(n),
             cases: vec![NatCase {
                 key: 0,
                 block: zero_case,
@@ -64,7 +64,7 @@ fn a_recursive_function_builds_through_reserve_and_define() {
             default,
         },
     );
-    let body = builder.seal_block(Terminator::Return(ErasedAtom::Value(result)));
+    let body = builder.seal_block(Terminator::Return(Atom::Value(result)));
     builder.define_function(function, Some("loop".into()), vec![n], body);
     builder.item_functions(vec![function]);
 
@@ -73,11 +73,11 @@ fn a_recursive_function_builds_through_reserve_and_define() {
     let run = builder.let_value(
         None,
         Rhs::Apply {
-            callee: ErasedAtom::Function(function),
-            arguments: vec![ErasedAtom::Constant(ten)],
+            callee: Atom::Function(function),
+            arguments: vec![Atom::Constant(ten)],
         },
     );
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(run)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(run)));
     builder.set_entry(entry);
 
     let module = builder.finalize().expect("the module verifies");
@@ -96,17 +96,17 @@ fn a_mixed_recursive_group_builds() {
     let consume = builder.value(Some("consume".into()));
 
     builder.open_block();
-    let body = builder.seal_block(Terminator::Return(ErasedAtom::Value(consume)));
+    let body = builder.seal_block(Terminator::Return(Atom::Value(consume)));
     builder.define_function(produce, Some("produce".into()), vec![], body);
 
     builder.open_block();
-    let init = builder.seal_block(Terminator::Return(ErasedAtom::Function(produce)));
+    let init = builder.seal_block(Terminator::Return(Atom::Function(produce)));
 
     let group = builder.rec_group(vec![produce], vec![(consume, init)]);
     builder.item_rec(group);
 
     builder.open_block();
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(consume)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(consume)));
     builder.set_entry(entry);
 
     let module = builder.finalize().expect("the module verifies");
@@ -121,7 +121,7 @@ fn finalize_rejects_a_dangling_reservation() {
     builder.reserve_function();
     builder.open_block();
     let unit = builder.constant(Constant::Unit);
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Constant(unit)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Constant(unit)));
     builder.set_entry(entry);
     let error = builder
         .finalize()

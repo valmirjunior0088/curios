@@ -160,7 +160,7 @@ impl Lowering {
         mask: &[bool],
         mut telescope: Telescope<B>,
         values: &[Term],
-    ) -> Result<Result<Vec<curios_ersd::ErasedAtom>, Outcome>, Error> {
+    ) -> Result<Result<Vec<curios_ersd::Atom>, Outcome>, Error> {
         let mut atoms = Vec::with_capacity(values.len());
         for (index, value) in values.iter().enumerate() {
             match telescope {

@@ -53,7 +53,7 @@ pub struct ValueDef {
         bytecheck(bounds(__C: rkyv::validation::ArchiveContext + rkyv::validation::shared::SharedContext, __C::Error: rkyv::rancor::Source))
     )
 )]
-pub struct ErasedModule {
+pub struct Module {
     values: Vec<Option<ValueDef>>,
     functions: Vec<Option<Function>>,
     blocks: Vec<Option<Block>>,
@@ -71,7 +71,7 @@ pub struct ErasedModule {
     constant_index: HashMap<Constant, ConstantId>,
 }
 
-impl ErasedModule {
+impl Module {
     pub fn new() -> Self {
         Self::default()
     }

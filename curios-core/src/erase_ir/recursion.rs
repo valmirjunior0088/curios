@@ -134,8 +134,8 @@ impl Lowering {
                     _ => Member::Computed(self.builder.value(hint.clone())),
                 };
                 let atom = match &member {
-                    Member::Function(function) => curios_ersd::ErasedAtom::Function(*function),
-                    Member::Computed(value) => curios_ersd::ErasedAtom::Value(*value),
+                    Member::Function(function) => curios_ersd::Atom::Function(*function),
+                    Member::Computed(value) => curios_ersd::Atom::Value(*value),
                 };
                 self.environment.bind(name, atom);
                 member

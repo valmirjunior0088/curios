@@ -1,4 +1,4 @@
-use crate::ir::*;
+use crate::*;
 
 /// items: pure_unused = NatAdd(1,1); used = 2; effectful = Foreign(...);
 /// entry returns used. The pure unused item drops; the others stay.
@@ -10,11 +10,11 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
         Some("pure_unused".into()),
         Rhs::Operation {
             operation: Operation::NatAdd,
-            operands: vec![ErasedAtom::Constant(one), ErasedAtom::Constant(one)],
+            operands: vec![Atom::Constant(one), Atom::Constant(one)],
         },
     );
     let two = builder.constant(Constant::Nat(2));
-    let used = builder.item_value(Some("used".into()), Rhs::Alias(ErasedAtom::Constant(two)));
+    let used = builder.item_value(Some("used".into()), Rhs::Alias(Atom::Constant(two)));
     let row = std::sync::Arc::new(curios_abi::ForeignFunction {
         namespace: "sys",
         name: "beep".into(),
@@ -33,7 +33,7 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
         },
     );
     builder.open_block();
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(used)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(used)));
     builder.set_entry(entry);
     let mut module = builder.finalize().expect("verifies");
 
@@ -58,21 +58,21 @@ fn drops_dead_function_webs_and_keeps_reached_groups_whole() {
     let call_b = builder.let_value(
         None,
         Rhs::Apply {
-            callee: ErasedAtom::Function(b),
+            callee: Atom::Function(b),
             arguments: vec![],
         },
     );
-    let a_body = builder.seal_block(Terminator::Return(ErasedAtom::Value(call_b)));
+    let a_body = builder.seal_block(Terminator::Return(Atom::Value(call_b)));
     builder.define_function(a, Some("dead_a".into()), vec![], a_body);
     builder.open_block();
     let call_a = builder.let_value(
         None,
         Rhs::Apply {
-            callee: ErasedAtom::Function(a),
+            callee: Atom::Function(a),
             arguments: vec![],
         },
     );
-    let b_body = builder.seal_block(Terminator::Return(ErasedAtom::Value(call_a)));
+    let b_body = builder.seal_block(Terminator::Return(Atom::Value(call_a)));
     builder.define_function(b, Some("dead_b".into()), vec![], b_body);
     builder.item_functions(vec![a, b]);
 
@@ -83,16 +83,16 @@ fn drops_dead_function_webs_and_keeps_reached_groups_whole() {
     let recur = builder.let_value(
         None,
         Rhs::Apply {
-            callee: ErasedAtom::Function(live),
-            arguments: vec![ErasedAtom::Value(x)],
+            callee: Atom::Function(live),
+            arguments: vec![Atom::Value(x)],
         },
     );
-    let live_body = builder.seal_block(Terminator::Return(ErasedAtom::Value(recur)));
+    let live_body = builder.seal_block(Terminator::Return(Atom::Value(recur)));
     builder.define_function(live, Some("live".into()), vec![x], live_body);
     builder.item_functions(vec![live]);
 
     builder.open_block();
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Function(live)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Function(live)));
     builder.set_entry(entry);
     let mut module = builder.finalize().expect("verifies");
 
@@ -113,11 +113,11 @@ fn pruning_is_deterministic() {
             None,
             Rhs::Operation {
                 operation: Operation::NatAdd,
-                operands: vec![ErasedAtom::Constant(one), ErasedAtom::Constant(one)],
+                operands: vec![Atom::Constant(one), Atom::Constant(one)],
             },
         );
         builder.open_block();
-        let entry = builder.seal_block(Terminator::Return(ErasedAtom::Constant(one)));
+        let entry = builder.seal_block(Terminator::Return(Atom::Constant(one)));
         builder.set_entry(entry);
         let mut module = builder.finalize().expect("verifies");
         optimize_ir(&mut module);

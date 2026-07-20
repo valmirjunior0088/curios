@@ -1387,7 +1387,7 @@ fn dead_user_definition_is_still_typechecked() {
 
 /// Elaborate `source` to its meta-free Core module and erase it through the
 /// arena path, prelude erased fresh — the Phase-2 erasure vertical.
-fn erase_to_ir(source: &str) -> curios_ersd::ErasedModule {
+fn erase_to_ir(source: &str) -> curios_ersd::Module {
     let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
     let (module, core_type, _foreigns) = super::elaborate_and_zonk(
         Duration::from_secs(60),

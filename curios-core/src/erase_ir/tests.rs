@@ -37,7 +37,7 @@ fn module(items: Vec<Item>, body: Term) -> Module {
     }
 }
 
-fn erase(module: &Module, expected: Term) -> curios_ersd::ErasedModule {
+fn erase(module: &Module, expected: Term) -> curios_ersd::Module {
     erase_module_to_ir(&mut context(), module, &expected).expect("the module erases")
 }
 

@@ -216,7 +216,7 @@ impl Lowering {
         context: &mut Context,
         head: &Term,
         head_type: &Term,
-    ) -> Result<Result<(Term, curios_ersd::ErasedAtom), Outcome>, Error> {
+    ) -> Result<Result<(Term, curios_ersd::Atom), Outcome>, Error> {
         let atom = match self.walk(context, head, head_type, Some("scrutinee"))? {
             Outcome::Emitted(atom) => atom,
             diverged => return Ok(Err(diverged)),
@@ -400,11 +400,9 @@ impl Lowering {
         let predecessor = self.builder.value(pred_hint);
         let hypothesis = self.builder.value(hypothesis_hint);
         self.environment
-            .bind(&pred_label, curios_ersd::ErasedAtom::Value(predecessor));
-        self.environment.bind(
-            &hypothesis_label,
-            curios_ersd::ErasedAtom::Value(hypothesis),
-        );
+            .bind(&pred_label, curios_ersd::Atom::Value(predecessor));
+        self.environment
+            .bind(&hypothesis_label, curios_ersd::Atom::Value(hypothesis));
 
         self.builder.open_block();
         let outcome = context.with_frame(|context| {
@@ -503,13 +501,11 @@ impl Lowering {
         let suffix = self.builder.value(suffix_hint);
         let accumulator = self.builder.value(accumulator_hint);
         self.environment
-            .bind(&element_label, curios_ersd::ErasedAtom::Value(element));
+            .bind(&element_label, curios_ersd::Atom::Value(element));
         self.environment
-            .bind(&suffix_label, curios_ersd::ErasedAtom::Value(suffix));
-        self.environment.bind(
-            &accumulator_label,
-            curios_ersd::ErasedAtom::Value(accumulator),
-        );
+            .bind(&suffix_label, curios_ersd::Atom::Value(suffix));
+        self.environment
+            .bind(&accumulator_label, curios_ersd::Atom::Value(accumulator));
 
         self.builder.open_block();
         let outcome = context.with_frame(|context| {
@@ -685,7 +681,7 @@ impl Lowering {
             } else {
                 let value = self.builder.value(hint);
                 self.environment
-                    .bind(label, curios_ersd::ErasedAtom::Value(value));
+                    .bind(label, curios_ersd::Atom::Value(value));
                 bindings.push(value);
             }
         }
