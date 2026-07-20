@@ -392,7 +392,7 @@ impl EmissionModule {
         self.entry.as_ref()
     }
 
-    /// Bless `func_name` as the entrypoint. Set once by `into_cont` (always `main`); the module does not check the function exists — the lowerer adds it separately.
+    /// Bless `func_name` as the entrypoint. Set once by `structurize` (always `main`); the module does not check the function exists — the structurizer adds it separately.
     pub(crate) fn set_entry(&mut self, func_name: EmissionFunctionName) {
         self.entry = Some(func_name);
     }
