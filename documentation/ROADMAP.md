@@ -21,6 +21,8 @@ Unchecked items may link to working implementation specifications. When an item 
 - [x] Crate-boundary split isolating the Cranelift/Binaryen-free launcher (`curios-runtime`) from the JIT-capable compiler
 - [x] Pure pipeline driver crate (`curios-pipeline`) decoupled from runtime/Binaryen/CLI, enabling a wasm32 (browser) build
 - [x] Build-scoped archived prelude and replay (`curios-prelude` compiles and validates fixed Text/Core/Ersd state in `OUT_DIR`; production compilations restore it with no source fallback and lower/elaborate/erase only the user suffix)
+- [ ] Full data section support in `curios-wasm` (active data segments, `memory.init`/`data.drop`, and the complete linear-memory load/store instruction family; today the section is minimum-fitted to its one consumer — passive-only segments reached through `array.new_data`)
+- [ ] Full element section support in `curios-wasm` (every element-segment mode with table declarations and table instructions; today the section is minimum-fitted to its one consumer — a single declarative segment making functions `ref.func`-eligible)
 - [ ] [Bootstrap the compiler in Curios itself](05_BOOTSTRAP_SPEC.md) (self-host every language-specific stage through raw WebAssembly generation while retaining Rust as the native host and stage-zero seed)
 
 ## Primitive Types
