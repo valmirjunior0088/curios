@@ -308,15 +308,15 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             }
             (Prim::LstConcat(type_, elaborated), list_type)
         }
-        Prim::LstMap(a, b, f, lst) => {
+        Prim::LstMap(a, b, lst, f) => {
             let a = elaborate(context, a, Mode::Check(Term::type_()))?.0;
             let b = elaborate(context, b, Mode::Check(Term::type_()))?.0;
-            let f_type = Term::func_type([("x", a.clone())], b.clone());
-            let f = elaborate(context, f, Mode::Check(f_type))?.0;
             let lst_a = lst_type(a.clone());
             let lst = elaborate(context, lst, Mode::Check(lst_a))?.0;
+            let f_type = Term::func_type([("x", a.clone())], b.clone());
+            let f = elaborate(context, f, Mode::Check(f_type))?.0;
             let lst_b = lst_type(b.clone());
-            (Prim::LstMap(a, b, f, lst), lst_b)
+            (Prim::LstMap(a, b, lst, f), lst_b)
         }
         Prim::IoType => (prim.clone(), Term::type_()),
         Prim::Io(_) => (prim.clone(), io_type),

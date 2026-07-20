@@ -969,18 +969,22 @@ fn indexed_inductive_targets_are_required_and_arity_checked() {
 
 #[test]
 fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
-    // `Lst/map((pair) => pair.0, xs)`: the inserted implicit `?A` is the
+    // `with((pair) => pair.0, xs)`: the inserted implicit `?A` is the
     // lambda's domain *and* `xs`'s element type, but `xs : Lst(?A)` is checked
     // after the lambda. Elaboration must postpone the lambda (its domain is an
     // unsolved metavar, and its body projects `pair.0`) until `xs` pins `?A`,
     // then re-check it. Guards the lambda-domain arm of `blocked_on_metavar`;
     // without it this fails "projected from a non-tuple". Checked at the
-    // type-check level — the inference is the point, not lowering.
+    // type-check level — the inference is the point, not lowering. (`with` is
+    // local: the std maps take their collection first, which would pin `?A`
+    // before the lambda and vacate the scenario.)
     let source = r#"
         use /std/{Lst};
         use /std/{Nat};
+        let with(@A : Type, @B : Type, f : (A) -> B, xs : Lst(A)) -> Lst(B) =
+            Lst/map(xs, f);
         let first(xs : Lst({ Nat, Nat })) -> Lst(Nat) =
-            Lst/map((pair) => pair.0, xs);
+            with((pair) => pair.0, xs);
         first
     "#;
 
@@ -1066,7 +1070,7 @@ fn closure_returning_a_bare_projection_lowers() {
     let source = r#"
         use /std/{Lst};
         use /std/{Nat};
-        Lst/map(@{ Nat, Nat }, @Nat, (pair) => pair.0, [])
+        Lst/map(@{ Nat, Nat }, @Nat, [], (pair) => pair.0)
     "#;
 
     assert!(compile(source, None).is_ok());

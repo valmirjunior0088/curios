@@ -1186,11 +1186,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Prim::LstConcat(ty, left, right) => {
                 curios_core::Prim::lst_concat(self.term(ty)?, [self.term(left)?, self.term(right)?])
             }
-            Prim::LstMap(a, b, f, lst) => curios_core::Prim::lst_map(
+            Prim::LstMap(a, b, lst, f) => curios_core::Prim::lst_map(
                 self.term(a)?,
                 self.term(b)?,
-                self.term(f)?,
                 self.term(lst)?,
+                self.term(f)?,
             ),
             Prim::CellType(inner) => curios_core::Prim::cell_type(self.term(inner)?),
             Prim::Cell(type_, init) => {

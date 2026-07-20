@@ -38,7 +38,7 @@ pub rec bind(@A : Type, @B : Type, m : Task(A), f : (A) -> Task(B)) -> Task(B) =
     | step(p, k) => Task/step(p, () => bind(k(), f))
     end;
 
-pub let map(@A : Type, @B : Type, f : (A) -> B, m : Task(A)) -> Task(B) =
+pub let map(@A : Type, @B : Type, m : Task(A), f : (A) -> B) -> Task(B) =
     bind(m, (a) => pure(f(a)));
 
 let fork_with(child : Fiber, t : Token) -> Task({}) =
@@ -209,8 +209,8 @@ let is_ready(results : Nat, interest : Nat) -> Bln =
     Nat/and(results, Nat/or(Nat/or(interest, /sys/Io/Poll/err), /sys/Io/Poll/hup)) > 0;
 
 let poll_ready(blocked : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
-    let handles = Lst/map((p : Parked) => p.handle, blocked);
-    let events = Lst/map((p : Parked) => p.interest, blocked);
+    let handles = Lst/map(blocked, (p : Parked) => p.handle);
+    let events = Lst/map(blocked, (p : Parked) => p.interest);
     let results = /sys/Io/poll(handles, events, -1);
     rec walk(rest : Lst(Parked), i : Nat, woken : Lst(Job), still : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
         match rest : {Lst(Job), Lst(Parked)}

@@ -317,8 +317,8 @@ fn char_of_nat_accepts_exact_unicode_scalar_boundaries() {
             | some(c) => Nat/to_str(Char/to_nat(c))
             | none() => "x"
             end;
-        Io/print(Str/join(",", Lst/map(render,
-            [0, 0xD7FF, 0xD800, 0xDFFF, 0xE000, 0x10FFFF, 0x110000])))
+        Io/print(Str/join(",", Lst/map(
+            [0, 0xD7FF, 0xD800, 0xDFFF, 0xE000, 0x10FFFF, 0x110000], render)))
         "#;
 
     assert_eq!(run(source), b"0,55295,x,x,57344,1114111,x");
@@ -333,9 +333,9 @@ fn char_to_utf8_matches_rust_across_widths_and_boundaries() {
         use /std/{Char, Nat, Bytes, Option, Lst, Io};
         let encode(n : Nat) -> Bytes =
             Char/to_utf8(Option/unwrap_or(Char/of_nat(n), '?'));
-        Io/write(Io/stdout, Bytes/flatten(Lst/map(encode,
+        Io/write(Io/stdout, Bytes/flatten(Lst/map(
             [0, 0x7F, 0x80, 0x3BB, 0x7FF, 0x800, 0xD7FF, 0xE000, 0xFFFF,
-             0x10000, 0x1F600, 0x10FFFF])))
+             0x10000, 0x1F600, 0x10FFFF], encode)))
         "#;
 
     let expected = scalars

@@ -701,15 +701,17 @@ impl Prim {
         )
     }
 
-    /// A `LstMap` node from term-shaped source element type, target element type, function, and list.
-    pub fn lst_map<A, B, F, R>(a: A, b: B, f: F, lst: R) -> Self
+    /// A `LstMap` node from term-shaped source element type, target element
+    /// type, list, and function — the collection first, like every other
+    /// sequence operation.
+    pub fn lst_map<A, B, R, F>(a: A, b: B, lst: R, f: F) -> Self
     where
         A: Into<Term>,
         B: Into<Term>,
-        F: Into<Term>,
         R: Into<Term>,
+        F: Into<Term>,
     {
-        Self::LstMap(a.into(), b.into(), f.into(), lst.into())
+        Self::LstMap(a.into(), b.into(), lst.into(), f.into())
     }
 
     /// A `CellType` node from a term-shaped element type.
@@ -1058,11 +1060,11 @@ impl Prim {
                 visit.visit_subterm(ty),
                 operands.iter().map(|e| visit.visit_subterm(e)).collect(),
             ),
-            Prim::LstMap(a, b, f, lst) => Prim::LstMap(
+            Prim::LstMap(a, b, lst, f) => Prim::LstMap(
                 visit.visit_subterm(a),
                 visit.visit_subterm(b),
-                visit.visit_subterm(f),
                 visit.visit_subterm(lst),
+                visit.visit_subterm(f),
             ),
             Prim::IoType => Prim::IoType,
             Prim::Io(token) => Prim::Io(*token),

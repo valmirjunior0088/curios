@@ -351,16 +351,16 @@ pub(super) fn erase_prim(
                 .collect::<Vec<_>>();
             lowering.sequence(context, Seq::LstConcat, &pairs, hint)
         }
-        Prim::LstMap(domain, codomain, mapper, list) => {
-            let mapper_type = Term::func_type([("x", domain.clone())], codomain.clone());
-            let mapper_atom = emitted!(lowering.walk(context, mapper, &mapper_type, None)?);
+        Prim::LstMap(domain, codomain, list, mapper) => {
             let list_atom =
                 emitted!(lowering.walk(context, list, &lst_type(domain.clone()), None)?);
+            let mapper_type = Term::func_type([("x", domain.clone())], codomain.clone());
+            let mapper_atom = emitted!(lowering.walk(context, mapper, &mapper_type, None)?);
             Ok(lowering.bind(
                 hint,
                 curios_ersd::Rhs::Intrinsic {
                     intrinsic: curios_ersd::Intrinsic::LstMap,
-                    operands: vec![mapper_atom, list_atom],
+                    operands: vec![list_atom, mapper_atom],
                 },
             ))
         }

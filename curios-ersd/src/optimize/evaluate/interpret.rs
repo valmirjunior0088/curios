@@ -633,8 +633,8 @@ impl<'m> Evaluator<'m> {
     }
 
     fn eval_map(&mut self, operands: &[Atom], frame: &mut Frame) -> Outcome {
-        // The intrinsic's operand order is mapper first, then the list.
-        let [mapper, source] = operands else {
+        // The intrinsic's operand order is the list first, then the mapper.
+        let [source, mapper] = operands else {
             return Outcome::Bail(Bail::Arity);
         };
         let elements = match self.eval_atom(*source, frame) {

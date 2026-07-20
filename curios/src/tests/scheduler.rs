@@ -120,7 +120,7 @@ fn map_transforms_a_tasks_result() {
         r#"
         use /std/{Task, Io, Str, Nat};
         let main : Task({}) =
-            let s = Task/map(Nat/to_str, Task/pure(42))!;
+            let s = Task/map(Task/pure(42), Nat/to_str)!;
             let w = Io/write(Io/stdout, Str/to_bytes(s));
             Task/pure(());
         Task/run(main)
@@ -318,11 +318,11 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
         let Box : Type = { A : Type, t : Susp(A) };
         let boxes : Lst(Box) =
             [(Nat, Susp/now(7)), ({}, Susp/now(()))];
-        let stepped = Lst/map((b : Box) =>
+        let stepped = Lst/map(boxes, (b : Box) =>
             match b.t : Box
             | now(a) => (b.A, Susp/now(a))
             | later(k) => (b.A, k())
-            end, boxes);
+            end);
         Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Lst/len(stepped))))
         "#,
         system,

@@ -503,11 +503,11 @@ fn lst_ops() -> Vec<TopItem> {
             vec![
                 (Plicity::Implicit, "A", type_()),
                 (Plicity::Implicit, "B", type_()),
-                (Plicity::Explicit, "f", fn_of(name("A"), name("B"))),
                 (Plicity::Explicit, "a", lst_of(name("A"))),
+                (Plicity::Explicit, "f", fn_of(name("A"), name("B"))),
             ],
             lst_of(name("B")),
-            prim(Prim::LstMap(name("A"), name("B"), name("f"), name("a"))),
+            prim(Prim::LstMap(name("A"), name("B"), name("a"), name("f"))),
         ),
     ]
 }

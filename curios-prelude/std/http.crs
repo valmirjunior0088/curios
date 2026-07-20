@@ -65,7 +65,7 @@ let until(target : Byte) -> (Byte) -> Bln =
     (byte) => Bln/not(byte == target);
 
 let header_lookup(headers : Lst({Str, Str}), name : Str) -> Option(Str) =
-    Option/map(((_, value)) => value, Lst/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)));
+    Option/map(Lst/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)), ((_, value)) => value);
 
 let is_ascii_digit(byte : Byte) -> Bln =
     Nat/in_range(Byte/to_nat(byte), 0x30, 0x39);
@@ -85,7 +85,7 @@ pub let render(request : Request) -> Bytes =
         "Host: ", request.host, "\r\n",
         "Connection: close\r\n",
         content_length(request.body),
-        Str/flatten(Lst/map(render_header, request.headers)),
+        Str/flatten(Lst/map(request.headers, render_header)),
         "\r\n"
     ]))\..request.body;
 

@@ -166,7 +166,7 @@ fn call_behavior(rhs: &Rhs, summaries: &BTreeMap<FunctionId, LocalBehavior>) -> 
             intrinsic: Intrinsic::LstMap,
             operands,
         } => operands
-            .first()
+            .get(1)
             .map_or_else(LocalBehavior::unknown, |&mapper| {
                 callee_behavior(mapper, summaries)
             }),

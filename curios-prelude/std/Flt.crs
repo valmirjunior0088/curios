@@ -193,7 +193,7 @@ let exp_factor(exp_int : Int) -> Flt =
 let exp_factor_of(s : Str, e_pos : Nat, len : Nat) -> Option(Flt) =
     match e_pos < len
     | false => Option/some(+1.0)
-    | true => Option/map(exp_factor, Int/of_str(Str/slice(s, e_pos + 1, len)))
+    | true => Option/map(Int/of_str(Str/slice(s, e_pos + 1, len)), exp_factor)
     end;
 
 pub let of_str(s : Str) -> Option(Flt) =

@@ -665,9 +665,9 @@ fn option_result_char_helpers() {
         Duration::from_secs(10),
         r#"
         use /std/{Option, Result, Char, Nat, Str, Io};
-        let opt = Option/unwrap_or(Option/map((x : Nat) => Nat/add(x, 1), Option/some(4)), 0);
+        let opt = Option/unwrap_or(Option/map(Option/some(4), (x : Nat) => Nat/add(x, 1)), 0);
         let res0 : Result(Nat, Nat) = Result/success(5);
-        let res = Result/unwrap_or(Result/map_success((x : Nat) => Nat/mul(x, 2), res0), 0);
+        let res = Result/unwrap_or(Result/map_success(res0, (x : Nat) => Nat/mul(x, 2)), 0);
         let up = Char/to_ascii_upper('a');
         Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(opt, res), Char/to_nat(up)))))
         "#,

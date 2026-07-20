@@ -1578,11 +1578,11 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         // same normal form a structural `foldr (\x ih. f x :: ih) []` produces, so
         // map-based proofs still reduce. A symbolic list stays neutral (the
         // `Opaque` case), so there is no unfold of a variable.
-        Prim::LstMap(a, b, f, lst) => {
+        Prim::LstMap(a, b, lst, f) => {
             let a = reduce(context, a.clone())?;
             let b = reduce(context, b.clone())?;
-            let f = reduce(context, f.clone())?;
             let lst = reduce_forced(context, lst.clone())?;
+            let f = reduce(context, f.clone())?;
             reduce_homomorphism(
                 context,
                 lst_shape(lst),
@@ -1602,7 +1602,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
                         Term::apply(f.clone(), [generator]),
                     ))
                 },
-                |sub| Term::prim(Prim::lst_map(a.clone(), b.clone(), f.clone(), sub)),
+                |sub| Term::prim(Prim::lst_map(a.clone(), b.clone(), sub, f.clone())),
             )
         }
         // The handle type and handle tokens are inert values, like `Nat`/`Nat(_)`.

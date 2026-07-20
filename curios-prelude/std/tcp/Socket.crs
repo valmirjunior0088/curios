@@ -14,8 +14,8 @@ pub let write(c : Socket, b : Bytes) -> Task(Result({}, Io/Error)) =
     Task/write(c.0, b);
 
 let configure(h : Io, settings : Settings) -> {} =
-    let _ = /sys/Io/set_recv_timeout(h, Option/unwrap_or(Option/map(Duration/to_millis, settings.read_timeout), 0));
-    let _ = /sys/Io/set_send_timeout(h, Option/unwrap_or(Option/map(Duration/to_millis, settings.write_timeout), 0));
+    let _ = /sys/Io/set_recv_timeout(h, Option/unwrap_or(Option/map(settings.read_timeout, Duration/to_millis), 0));
+    let _ = /sys/Io/set_send_timeout(h, Option/unwrap_or(Option/map(settings.write_timeout, Duration/to_millis), 0));
     ();
 
 let upgrade(h : Io, host : Str, tls : Bln) -> Nat =

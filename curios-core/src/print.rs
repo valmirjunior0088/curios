@@ -693,7 +693,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 || pure(", "),
             ),
         ]),
-        Prim::LstMap(a, b, f, lst) => flat([
+        Prim::LstMap(a, b, lst, f) => flat([
             pure("Lst.map "),
             print_term(a, depth),
             pure(" "),

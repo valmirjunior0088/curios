@@ -835,13 +835,12 @@ impl Lowerer<'_> {
                 let op = match intrinsic {
                     Intrinsic::LstMap => CpsIntrinsicOp::LstMap,
                 };
-                // The arena intrinsic binds the mapper first; the landed Cont
-                // contract takes the list first. Reorder at the door.
-                let args = match intrinsic {
-                    Intrinsic::LstMap => {
-                        vec![self.lower_atom(operands[1]), self.lower_atom(operands[0])]
-                    }
-                };
+                // Both representations bind the mapper first; the operands
+                // transcribe in order.
+                let args = operands
+                    .iter()
+                    .map(|&operand| self.lower_atom(operand))
+                    .collect();
                 self.split(result, 1, rest, terminator, target, |return_to| {
                     CpsNode::Intrinsic {
                         op,

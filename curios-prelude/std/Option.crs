@@ -13,7 +13,7 @@ pub let bind(@A : Type, @B : Type, m : Option(A), f : (A) -> Option(B)) -> Optio
     | none() => Option/none()
     end;
 
-pub let map(@A : Type, @B : Type, f : (A) -> B, m : Option(A)) -> Option(B) =
+pub let map(@A : Type, @B : Type, m : Option(A), f : (A) -> B) -> Option(B) =
     match m
     | some(a) => Option/some(f(a))
     | none() => Option/none()

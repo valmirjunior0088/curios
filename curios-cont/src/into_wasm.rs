@@ -159,6 +159,7 @@ pub(crate) enum EmissionCode {
     // `LstMap(src, f)`: map closure `f` over list `src` into a fresh list of
     // the same length. Codegen lowers it to the shared `$lst/map` rope helper:
     // one allocation, one fill loop applying `f` per slot via `call_ref`.
+    /// The list-map runtime helper call: list first, mapper second.
     LstMap(EmissionValueName, EmissionValueName),
     TplGet(EmissionValueName, usize),
 }

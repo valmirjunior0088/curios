@@ -288,6 +288,10 @@ impl CpsCellOp {
     }
 }
 
+/// A call-like intrinsic. `LstMap` takes the list then the mapper — the
+/// carrier-first order of the whole sequence family, matched by the erased
+/// representation so the lowering transcribes without reordering — and runs
+/// the mapper once per element, in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CpsIntrinsicOp {
     LstMap,

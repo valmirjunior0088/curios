@@ -51,12 +51,12 @@ pub rec encode(v : Json) -> Str =
     | str(s) => encode_str(s)
     | arr(xs) =>
         Str/concat(Str/concat("[",
-            Str/join(",", Lst/map(encode, xs))), "]")
+            Str/join(",", Lst/map(xs, encode))), "]")
     | obj(ps) =>
         Str/concat(Str/concat("{",
             Str/join(",", Lst/map(
-                (pair : {Str, Json}) => Str/concat(Str/concat(encode_str(pair.0), ":"), encode(pair.1)),
-                ps))),
+                ps,
+                (pair : {Str, Json}) => Str/concat(Str/concat(encode_str(pair.0), ":"), encode(pair.1))))),
             "}")
     end;
 
@@ -99,13 +99,13 @@ let take_literal(literal : Str) -> Parse({}) =
     };
 
 let parse_null : Parse(Json) =
-    Parse/map((_) => Json/null(), take_literal("null"));
+    Parse/map(take_literal("null"), (_) => Json/null());
 
 let parse_true_val : Parse(Json) =
-    Parse/map((_) => Json/bln(true), take_literal("true"));
+    Parse/map(take_literal("true"), (_) => Json/bln(true));
 
 let parse_false_val : Parse(Json) =
-    Parse/map((_) => Json/bln(false), take_literal("false"));
+    Parse/map(take_literal("false"), (_) => Json/bln(false));
 
 let parse_num : Parse(Json) =
     Parse {
@@ -199,7 +199,7 @@ let parse_raw_str : Parse(Str) =
     end;
 
 let parse_str_value : Parse(Json) =
-    Parse/map((s) => Json/str(s), parse_raw_str);
+    Parse/map(parse_raw_str, (s) => Json/str(s));
 
 let is_ws(byte : Byte) -> Bln =
     match Byte/to_nat(byte)
@@ -211,7 +211,7 @@ let is_ws(byte : Byte) -> Bln =
     end;
 
 let ws : Parse({}) =
-    Parse/map((_) => (), Parse/take_while(is_ws));
+    Parse/map(Parse/take_while(is_ws), (_) => ());
 
 let symbol(b : Byte) -> Parse(Byte) =
     let _ = ws!;

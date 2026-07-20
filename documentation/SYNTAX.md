@@ -521,7 +521,7 @@ Top-level `let` declarations require a type annotation. Function-definition suga
 ```crs
 pub let zero : Nat = 0;
 
-pub let map(@A : Type, @B : Type, f : (A) -> B, value : Option(A)) -> Option(B) =
+pub let map(@A : Type, @B : Type, value : Option(A), f : (A) -> B) -> Option(B) =
     match value
     | some(x) => Option/some(f(x))
     | none() => Option/none()

@@ -16,7 +16,7 @@ pub let pure(@A : Type, a : A) -> Parse(A) =
 pub let fail(@A : Type, msg : Str) -> Parse(A) =
     Parse { run(input, pos) = Result/failure(msg) };
 
-pub let map(@A : Type, @B : Type, f : (A) -> B, p : Parse(A)) -> Parse(B) =
+pub let map(@A : Type, @B : Type, p : Parse(A), f : (A) -> B) -> Parse(B) =
     Parse {
         run(input, pos) =
             match p.run(input, pos)

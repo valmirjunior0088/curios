@@ -591,7 +591,7 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         }
         Prim::LstAppend(ty, list, elem) => print_prim_call("Lst.append", vec![ty, list, elem]),
         Prim::LstConcat(ty, left, right) => print_prim_call("Lst.concat", vec![ty, left, right]),
-        Prim::LstMap(a, b, f, lst) => print_prim_call("Lst.map", vec![a, b, f, lst]),
+        Prim::LstMap(a, b, lst, f) => print_prim_call("Lst.map", vec![a, b, lst, f]),
         Prim::IoType => pure("Io"),
         Prim::Io(token) => pure(format!("Io({token})")),
         Prim::IoEql(left, right) => print_prim_call("Io.eql", vec![left, right]),

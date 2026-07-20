@@ -635,11 +635,11 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::LstConcat(ty, operands) => {
             Prim::LstConcat(zonk_term(context, ty)?, zonk_terms(context, operands)?)
         }
-        Prim::LstMap(a, b, f, lst) => Prim::LstMap(
+        Prim::LstMap(a, b, lst, f) => Prim::LstMap(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
-            zonk_term(context, f)?,
             zonk_term(context, lst)?,
+            zonk_term(context, f)?,
         ),
 
         Prim::Foreign(function, args) => {

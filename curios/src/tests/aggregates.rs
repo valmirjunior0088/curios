@@ -28,7 +28,7 @@ fn lst_map_fills_every_slot() {
     // fill *every* slot, not just one: `get(_, 0) + get(_, 2)` = 11 + 31 = 42.
     let source = r#"
         use /std/{Io, Str, Nat, Lst, Option};
-        let xs : Lst(Nat) = Lst/map((n) => Nat/add(n, 1), [10, 20, 30]);
+        let xs : Lst(Nat) = Lst/map([10, 20, 30], (n) => Nat/add(n, 1));
         Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Option/unwrap_or(Lst/get(xs, 0), 0), Option/unwrap_or(Lst/get(xs, 2), 0)))))
         "#;
     assert_eq!(run(source), b"42");
@@ -45,7 +45,7 @@ fn lst_map_distributes_over_cons() {
     let source = r#"
         use /std/{Io, Str, Eq, Nat, Lst};
         let step(f : (Nat) -> Nat, x : Nat, t : Lst(Nat))
-            -> Eq(Lst/map(f, Lst/concat([x], t)), Lst/concat([f(x)], Lst/map(f, t))) =
+            -> Eq(Lst/map(Lst/concat([x], t), f), Lst/concat([f(x)], Lst/map(t, f))) =
             Eq/refl();
         Io/write(Io/stdout, Str/to_bytes("ok"))
         "#;
