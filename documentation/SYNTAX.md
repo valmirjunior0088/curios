@@ -18,6 +18,8 @@ let n = 1; -- A trailing comment.
 n
 ```
 
+Every comma-separated list — parameter and argument lists, tuple and struct fields, list literals, import groups — admits one optional trailing comma before its closing delimiter. A comma alone does not form an empty list.
+
 ### Identifiers
 
 An identifier is a nonempty sequence of Unicode alphanumeric characters and `_`.
@@ -109,10 +111,10 @@ A list literal constructs `Lst(T)`. Entries are elements or spreads; a spread in
 [head, ..middle, tail]
 ```
 
-A nonempty literal may infer `T` from its elements. An empty literal needs an expected list type:
+A nonempty literal may infer `T` from its elements. An empty literal needs an expected list type from its position, such as a binder annotation:
 
 ```crs
-[] : Lst(Nat)
+let empty : Lst(Nat) = [];
 ```
 
 Spreads may appear in any position and may be repeated. Every element and spread operand must agree on the same element type.
@@ -188,14 +190,6 @@ This is equivalent to:
 
 ```crs
 {run : (input : Bytes) -> Io(Nat)}
-```
-
-### Type ascription
-
-`term : type` checks a term against an explicitly written type.
-
-```crs
-[] : Lst(Nat)
 ```
 
 ## Expressions
@@ -345,6 +339,18 @@ let parser : Parse(Nat) =
 Every value body is a sequencing region. Lambda bodies, match arms, and recursive member bodies begin fresh regions; the tail after a local `let` remains in the same region. There is no `let !` header or matching `end`.
 
 Postfix `!` is not allowed in types. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
+
+### Whole-term forms and operand positions
+
+`let`, `rec`, `match`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term : type` ascription; a `:` annotation appears only in binder, signature, and motive positions.
+
+An infix operand is an applied atom: a literal, name, tuple, structure literal, or parenthesized term, followed by any chain of calls, projections, and postfix `!`. A whole-term form is not an operand; parenthesize it to use it as one.
+
+```crs
+1 + (match flag | true => 1 | false => 0 end)
+```
+
+Positions that accept a full term need no parentheses: call arguments, list elements, field values, match scrutinees, and arm bodies.
 
 ## Operators
 
@@ -512,7 +518,7 @@ Each selected arm receives the same definitional refinement that an equivalent n
 
 ## Declarations and modules
 
-An entrypoint consists of zero or more top-level items followed by one final term. A file used only as a module normally contains declarations and exports consumed by another file.
+An entrypoint consists of zero or more top-level items followed by exactly one final term — the value the program computes. A module file consists of top-level items only and has no final term.
 
 ### Top-level definitions
 
@@ -528,7 +534,7 @@ pub let map(@A : Type, @B : Type, value : Option(A), f : (A) -> B) -> Option(B) 
     end;
 ```
 
-Top-level `rec` declarations also require types. `and` joins mutually recursive members.
+Top-level `rec` declarations also require types. `and` joins mutually recursive members; each member takes its own `pub` marker — before `rec` for the first member and before `and` for each later member — and one `;` terminates the whole group.
 
 ### Modules
 

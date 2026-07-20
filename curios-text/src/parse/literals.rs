@@ -298,7 +298,7 @@ pub(super) fn parse_lst_entry<'a>() -> Parser<'a, LstEntry> {
 // elaboration infers it); spreads splice in place, any position and count.
 pub(super) fn parse_lst_literal<'a>() -> Parser<'a, Term> {
     catch(parse_literal("["))
-        .and_keep(sep_by0(parse_lst_entry, || parse_literal(",")))
+        .and_keep(sep_by0_trailing(parse_lst_entry, || parse_literal(",")))
         .and_drop(parse_literal("]"))
         .map(|entries| Subterm::Prim(Prim::Lst(entries)))
         .map(Into::into)

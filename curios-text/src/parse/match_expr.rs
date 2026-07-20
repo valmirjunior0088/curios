@@ -3,7 +3,9 @@ use super::*;
 pub(super) fn parse_func<'a>() -> Parser<'a, Term> {
     catch(
         parse_literal("(")
-            .and_keep(sep_by0(parse_func_pattern_param, || parse_literal(",")))
+            .and_keep(sep_by0_trailing(parse_func_pattern_param, || {
+                parse_literal(",")
+            }))
             .and_drop(parse_literal(")"))
             .and_drop(parse_literal("=>")),
     )
@@ -35,7 +37,7 @@ pub(super) fn parse_motive<'a>() -> Parser<'a, Motive> {
             .and(
                 catch(
                     parse_literal("(")
-                        .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+                        .and_keep(sep_by0_trailing(|| lazy(parse_term), || parse_literal(",")))
                         .and_drop(parse_literal(")")),
                 )
                 .or(pure(vec![])),

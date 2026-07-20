@@ -38,7 +38,9 @@ pub(super) fn parse_func_type_param<'a>() -> Parser<'a, FuncTypeParam> {
 pub(super) fn parse_func_type<'a>() -> Parser<'a, Term> {
     catch(
         parse_literal("(")
-            .and_keep(sep_by0(parse_func_type_param, || parse_literal(",")))
+            .and_keep(sep_by0_trailing(parse_func_type_param, || {
+                parse_literal(",")
+            }))
             .and_drop(parse_literal(")"))
             .and_drop(parse_literal("->")),
     )
@@ -212,7 +214,7 @@ pub(super) fn parse_struct_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 // payload can nest arbitrarily (`some(some(x))`, `pair(some(x), y)`, …).
 pub(super) fn parse_ctor_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_identifier().and_drop(parse_literal("(")))
-        .and(sep_by0(parse_match_pattern, || parse_literal(",")))
+        .and(sep_by0_trailing(parse_match_pattern, || parse_literal(",")))
         .and_drop(parse_literal(")"))
         .map(
             |(tag, args): (&str, Vec<MatchPattern>)| MatchPattern::Ctor {

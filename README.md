@@ -21,6 +21,8 @@ Curios is a dependently typed programming language that compiles to WebAssembly.
 Here is a vector whose length is part of its type:
 
 ```crs
+use /std/{Nat};
+
 -- A vector indexed by its own length.
 pub induct Vec(T : Type) : (n : Nat) -> Type
 | nil() : (0)

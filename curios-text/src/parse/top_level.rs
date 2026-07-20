@@ -47,7 +47,7 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
 pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
     catch(
         parse_literal("(")
-            .and_keep(sep_by0(parse_wire_type, || parse_literal(",")))
+            .and_keep(sep_by0_trailing(parse_wire_type, || parse_literal(",")))
             .and_drop(parse_literal(")"))
             .and_drop(parse_literal("->")),
     )
@@ -195,7 +195,7 @@ pub(super) fn parse_group_item<'a>() -> Parser<'a, GroupItem> {
 
 pub(super) fn parse_brace_group<'a>() -> Parser<'a, Vec<GroupItem>> {
     catch(parse_literal("{"))
-        .and_keep(sep_by0(parse_group_item, || parse_literal(",")))
+        .and_keep(sep_by0_trailing(parse_group_item, || parse_literal(",")))
         .and_drop(parse_literal("}"))
 }
 
@@ -250,7 +250,7 @@ pub(super) fn parse_top_inductive_case<'a>() -> Parser<'a, TopCase> {
         .and_keep(parse_identifier())
         .and(
             parse_literal("(")
-                .and_keep(sep_by0(parse_inductive_payload_field, || {
+                .and_keep(sep_by0_trailing(parse_inductive_payload_field, || {
                     parse_literal(",")
                 }))
                 .and_drop(parse_literal(")")),
@@ -260,7 +260,7 @@ pub(super) fn parse_top_inductive_case<'a>() -> Parser<'a, TopCase> {
         .and(
             catch(parse_literal(":"))
                 .and_keep(parse_literal("("))
-                .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+                .and_keep(sep_by0_trailing(|| lazy(parse_term), || parse_literal(",")))
                 .and_drop(parse_literal(")"))
                 .map(Some)
                 .or(pure(None)),
@@ -314,7 +314,9 @@ fn parse_representation_sort<'a>() -> Parser<'a, (bool, Term)> {
 pub(super) fn parse_inductive_arity<'a>() -> Parser<'a, InductiveArity> {
     catch(
         parse_literal("(")
-            .and_keep(sep_by0(parse_inductive_index, || parse_literal(",")))
+            .and_keep(sep_by0_trailing(parse_inductive_index, || {
+                parse_literal(",")
+            }))
             .and_drop(parse_literal(")")),
     )
     .and(parse_literal("->").and_keep(parse_representation_sort()))
@@ -327,7 +329,9 @@ pub(super) fn parse_top_inductive_body<'a>(vis_pub: bool) -> Parser<'a, TopInduc
         .and(
             catch(
                 parse_literal("(")
-                    .and_keep(sep_by0(parse_inductive_param, || parse_literal(",")))
+                    .and_keep(sep_by0_trailing(parse_inductive_param, || {
+                        parse_literal(",")
+                    }))
                     .and_drop(parse_literal(")")),
             )
             .or(pure(vec![])),
@@ -410,7 +414,9 @@ pub(super) fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
             .and(
                 catch(
                     parse_literal("(")
-                        .and_keep(sep_by0(parse_inductive_param, || parse_literal(",")))
+                        .and_keep(sep_by0_trailing(parse_inductive_param, || {
+                            parse_literal(",")
+                        }))
                         .and_drop(parse_literal(")")),
                 )
                 .or(pure(vec![])),
@@ -454,7 +460,9 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
         .and(
             catch(
                 parse_literal("(")
-                    .and_keep(sep_by0(parse_func_type_param, || parse_literal(",")))
+                    .and_keep(sep_by0_trailing(parse_func_type_param, || {
+                        parse_literal(",")
+                    }))
                     .and_drop(parse_literal(")"))
                     .and_drop(parse_literal("->")),
             )
@@ -480,7 +488,9 @@ pub(super) fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
             .and(
                 catch(
                     parse_literal("(")
-                        .and_keep(sep_by0(parse_inductive_param, || parse_literal(",")))
+                        .and_keep(sep_by0_trailing(parse_inductive_param, || {
+                            parse_literal(",")
+                        }))
                         .and_drop(parse_literal(")")),
                 )
                 .or(pure(vec![])),
@@ -532,7 +542,9 @@ pub(super) fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
     catch(parse_keyword("satisfy")).flat_map(|()| {
         catch(
             parse_literal("(")
-                .and_keep(sep_by1(parse_func_sugar_param, || parse_literal(",")))
+                .and_keep(sep_by1_trailing(parse_func_sugar_param, || {
+                    parse_literal(",")
+                }))
                 .and_drop(parse_literal(")"))
                 .and_drop(parse_literal("=>")),
         )
@@ -541,7 +553,7 @@ pub(super) fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
         .and(
             catch(
                 parse_literal("(")
-                    .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+                    .and_keep(sep_by0_trailing(|| lazy(parse_term), || parse_literal(",")))
                     .and_drop(parse_literal(")")),
             )
             .or(pure(vec![])),

@@ -1,4 +1,8 @@
 //! Developer-facing entrypoint for profiling one Curios compilation.
+//!
+//! Profiles `compile_entrypoint`. To profile a path it does not already
+//! exercise, point `run` at the relevant entrypoint for the duration of the
+//! investigation, then restore it.
 
 use {
     clap::Parser,

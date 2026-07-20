@@ -1,6 +1,6 @@
-# Bootstrapping the Curios compiler
+# Bootstrapping the Curios compiler — contracts and baseline
 
-Working implementation specification for moving the language-specific compiler pipeline into Curios while retaining Rust as the native host, bootstrap seed, runtime, optimizer driver, and packaging environment. When the bootstrap lands, fold the durable architecture into `AGENTS.md`, update `ROADMAP.md`, and retain this document only for implementation history that does not belong in those references.
+Working implementation specification for moving the language-specific compiler pipeline into Curios while retaining Rust as the native host, bootstrap seed, runtime, optimizer driver, and packaging environment. This document owns the durable bootstrap contracts and the Phase 0 baseline; each later implementation phase owns one of the numbered specifications that follow it in this directory. When the bootstrap lands, fold the durable architecture into `AGENTS.md`, update `ROADMAP.md`, and retain these documents only for implementation history that does not belong in those references.
 
 This specification assumes the complete planned representation series has landed and been validated before Phase 0 begins. It also assumes the current pipeline and host split described by `AGENTS.md`: `text → core → ersd → cont → wasm` lives in the pure compiler crates, while Binaryen, Wasmtime compilation and execution, AOT precompilation, bundling, CLI integration, and operating-system services live downstream in Rust.
 
@@ -31,7 +31,7 @@ Curios is self-hosting when all of the following are true:
 - The authoritative lexer, parser, module resolver, surface AST, lowering, elaborator, conversion and reduction engine, zonker, eraser, Ersd pipeline, continuation pipeline, Wasm model, and Wasm encoder are written in Curios.
 - The Curios compiler accepts the complete supported language rather than a bootstrap-only source subset when compiling user programs.
 - The Curios compiler can compile the complete source of the Curios compiler itself.
-- A compiler built by the self-hosted compiler reaches a deterministic fixed point as specified under [Generation stability](#generation-stability).
+- A compiler built by the self-hosted compiler reaches a deterministic fixed point as specified under [generation stability](08_STABILITY_AND_PRODUCTION_SPEC.md).
 - The production Rust CLI invokes the self-hosted compiler rather than the Rust compiler pipeline for ordinary compilation.
 - The production compiler artifact imports no temporary whole-compiler or Rust-backend bootstrap service.
 - Binaryen, Wasmtime, AOT, execution, bundling, host IO, and packaging may remain implemented in Rust without weakening the self-hosting claim.
@@ -80,7 +80,7 @@ The set is enumerated and agreed before the bootstrap begins. The gate does not 
 
 For the current numeric sequence, the representation gate includes the landed private dyadic `BigFlt` layout and its executable binary32 boundary. The native-width `Toml` codec is scheduled before them but does not alter compiler representations. The complete standalone `BigInt` law corpus begins immediately after bootstrap; the dyadic core lands only the focused normalization and uniqueness facts it actually requires.
 
-The dyadic theorem corpus, exact quotient rounding, and boundary proofs in specifications 07–09 are explicitly post-bootstrap proof and library work. The general odd-denominator extension in specifications 14–19 is explicitly post-Wonder private standard-library evolution. Those deferred projects are known but excluded from the S0 representation gate because they change no language syntax, compiler IR, host ABI, or compiler-owned runtime representation; prelude artifacts are rebuilt and versioned when the private library layout later changes.
+The dyadic theorem corpus, exact quotient rounding, and boundary proofs in the `big_flt_dyadic_proofs` specification sequence are explicitly post-bootstrap proof and library work. The general odd-denominator extension in the `big_flt_general` specification sequence is explicitly post-Wonder private standard-library evolution. Those deferred projects are known but excluded from the S0 representation gate because they change no language syntax, compiler IR, host ABI, or compiler-owned runtime representation; prelude artifacts are rebuilt and versioned when the private library layout later changes.
 
 The representation-series gate is complete only when:
 
@@ -278,6 +278,16 @@ Determinism is tested throughout the port rather than postponed until self-compi
 
 ## Implementation phases
 
+The port proceeds through nine strictly ordered phases. Phase 0 is specified here because its deliverable is this document's contracts and the recorded baseline; each later phase or phase pair owns one numbered specification in this directory:
+
+1. [Phase 1 — hybrid shell and feasibility probes](02_FEASIBILITY_SPEC.md)
+2. [Phase 2 — Curios base and Wasm leaf](03_BASE_AND_WASM_LEAF_SPEC.md)
+3. [Phase 3 — surface frontend in shadow mode](04_SURFACE_FRONTEND_SPEC.md)
+4. [Phase 4 — Core, elaboration, and erasure in shadow mode](05_CORE_ELABORATION_SPEC.md)
+5. [Phase 5 — frontend ownership and the Ersd cutover](06_FRONTEND_CUTOVER_SPEC.md)
+6. [Phase 6 — Ersd and continuation backend](07_BACKEND_SPEC.md)
+7. [Phases 7 and 8 — generation stability and production integration](08_STABILITY_AND_PRODUCTION_SPEC.md)
+
 ### Phase 0 — baseline and contracts
 
 Phase 0 begins only after the [representation-series prerequisite](#representation-series-prerequisite) is complete. If an included representation specification remains unimplemented or its cross-stage migration remains unvalidated, the bootstrap has not started.
@@ -287,105 +297,6 @@ Parked lambda inference and anonymous match functions are not bootstrap prerequi
 After that optional language batch is decided and, if selected, completed, record the exact S0 revision as the bootstrap language and representation baseline, together with the permanent Rust/Curios ownership boundary, the temporary FFI services, the initial source discipline for S0, and the self-hosting done bar.
 
 Choose and pin the request and response envelopes, error model, protocol versioning, artifact identities, and the exact command used to build and run a compiler generation only against the completed representation baseline. Add no fine-grained AST FFI while resolving these contracts.
-
-### Phase 1 — hybrid shell and feasibility probes
-
-Build a minimal Curios compiler program with a `bootstrap_compile` foreign declaration. S0 compiles it, the Rust host binds the service, and the program delegates one successful and one failing compilation to Rust.
-
-In parallel with the shell, implement narrow prototypes for the highest-risk substrate:
-
-- A shared-term representation with minted identity, cached structural hash, and collision-safe structural comparison.
-- Deterministic compiler maps, sets, queues, and byte builders.
-- A byte-cursor lexer/parser that handles representative standard-library source.
-- A representative reduction or conversion cache workload.
-- Iterative traversal over a deliberately deep term or IR fixture.
-- Raw Wasm byte construction for a small module.
-
-This phase is a feasibility gate, not the bootstrap itself. It records time, allocation, peak memory, and artifact-size measurements for the representative workloads. No fixed speed ratio is required, but an asymptotic failure, uncontrolled allocation growth, stack dependence, or inability to retain deterministic output blocks the full port until the representation is revised.
-
-### Phase 2 — Curios base and Wasm leaf
-
-Port the reusable equivalents of `curios-abi` and the necessary parts of `curios-base`: spans, names, entropy, packed binary values, numeric leaves, foreign signatures, printers, parser state, and compiler collections.
-
-Port the Wasm model and binary encoder early as a leaf component. It is independently testable against the existing Rust writer and proves that the Curios compiler can construct large binary artifacts efficiently. The initial Wasm port need only encode the feature set emitted by Curios; parsing arbitrary external Wasm and WAT is not on the critical bootstrap path.
-
-At the end of this phase, the hybrid compiler still delegates production compilation to `bootstrap_compile`.
-
-### Phase 3 — surface frontend in shadow mode
-
-Port source storage, lexing, parsing, module discovery, interface resolution, the surface AST, printing needed by diagnostics, dependency ordering, and lowering to Core.
-
-The Curios frontend runs in shadow mode over the complete embedded `sys`/`syn`/`std` sources and the integration corpus. Rust remains authoritative until Core elaboration and erasure are also ready, avoiding a live Core serialization boundary.
-
-Surface tests compare parse success, item and term structure, exact spans where semantically relevant, module graphs, interface visibility, lowering results through a test normalization, and diagnostic categories. Parse-print-parse properties supplement direct comparison; they do not replace malformed-input tests.
-
-### Phase 4 — Core, elaboration, and erasure in shadow mode
-
-Port the Core term representation, contexts, registries, reduction, conversion, unification, inference, checking, inductive inversion, coverage, refinements, witnesses, privacy, zonking, erasure, and all supporting diagnostics.
-
-Implementation should follow semantic dependency rather than Rust file order:
-
-1. Core data, binders, substitution, scopes, and iterative traversals.
-2. Context definitions, registries, term caches, and reduction.
-3. Conversion and metavariable solving.
-4. Typing and elaboration of primitive and structural forms.
-5. Inductives, pattern refinement, coverage, visibility, concepts, and witnesses.
-6. Whole-module elaboration, zonking, prelude restoration, and erasure.
-
-Every completed family runs in shadow mode against focused Rust unit fixtures and the cross-stage program corpus. Successful comparisons use normalized semantic structures or downstream behavior rather than allocation identities. Negative comparisons require the same acceptance boundary, diagnostic category, and principal source span; exact prose may converge later.
-
-The initial self-hosted frontend may rebuild the prelude from source. Correctness and the ownership cutover come before an on-disk prelude cache, but measurements from this phase determine how soon the Curios-native cache becomes necessary for usable iteration times.
-
-### Phase 5 — frontend ownership and the Ersd cutover
-
-Implement the Ersd envelope encoder in Curios and decoder in Rust. Round-trip every Ersd constructor, validate corrupt data, pin canonical encoding, and compare Rust-decoded output with the Ersd produced directly by S0.
-
-Switch the hybrid compiler's production path to:
-
-```text
-Curios frontend and erasure → bootstrap_backend → raw Wasm
-```
-
-The switch is atomic. The compiler no longer calls `bootstrap_compile`, and a Curios frontend error is returned directly rather than retried through Rust.
-
-This is the principal architectural milestone. From this point onward, Curios owns the source language, ASTs, module system, type system, elaboration, diagnostics produced by those stages, and erasure. New AST-heavy features target Curios only.
-
-The frozen Rust frontend remains in tests and S0. It does not receive post-cutover language extensions.
-
-### Phase 6 — Ersd and continuation backend
-
-Port Ersd semantics, correctness-preserving lowering to continuation form, the continuation IR (the landed pre-closure CPS graph, its private machine CFG, and structured Wasm emission), and lowering to the Curios Wasm model. Establish an unoptimized correctness path before porting the optimizer suite.
-
-Optimizers are restored in viability order rather than Rust source order. The first tier contains transformations required to keep compiler artifacts and self-compilation within practical memory, code-size, and execution bounds, including reachability pruning and the passes on which large recursive Curios programs rely. The second tier restores production performance and output quality. A pass may remain Rust-oracle-only temporarily if omitting it preserves semantics and does not prevent self-compilation.
-
-As Curios takes ownership of each backend region, shadow tests compare normalized IR and end-to-end program behavior. The live path continues using `bootstrap_backend` until Curios can emit the complete raw Wasm module itself; no additional live Ersd-to-Cont or Cont-to-Wasm FFI seam is introduced.
-
-When the Curios backend passes the raw-Wasm done bar, remove `bootstrap_backend` from the compiler source and verify that its Wasm import table contains neither temporary bootstrap service.
-
-### Phase 7 — generation stability
-
-Build three compiler generations from one clean source snapshot and one pinned set of options:
-
-```text
-S0: the frozen Rust compiler
-S1: S0 compiles the Curios compiler source
-S2: S1 compiles the same Curios compiler source
-S3: S2 compiles the same Curios compiler source
-```
-
-S1 need not match S0's implementation or raw output. S2 and S3 must be byte-identical raw compiler Wasm artifacts before Binaryen and Wasmtime precompilation. Their foreign manifests, compiler metadata, embedded source hashes, and diagnostics must also be identical.
-
-If S2 and S3 differ, the bootstrap is not complete. A normalized or behavioral comparison may diagnose the difference but does not replace the fixed-point requirement. Binaryen output and `.cwasm` bytes are excluded because they are downstream host products and may carry backend- or platform-specific details.
-
-Run the complete Curios language test corpus through S2 and S3, including accepted programs, rejected programs, deep-stack fixtures, foreign declarations, prelude compilation, deterministic repeated builds, and representative compiler-sized inputs. Both generations must agree on acceptance, diagnostics at the specified comparison level, raw program Wasm, and foreign manifests.
-
-### Phase 8 — production integration and retirement of active dual maintenance
-
-Make the self-hosted compiler artifact the default compiler used by the Rust CLI, browser compiler path where feasible, and release process. Keep artifact construction out of the slim runtime launcher and avoid linking S0 into binaries that only host an already-built compiler.
-
-Document how a clean checkout builds S1, verifies S2/S3, refreshes any embedded compiler artifact, and recovers using S0. CI must exercise both the ordinary production build and the generation-stability job.
-
-Mark the Rust pipeline as frozen bootstrap code or move it behind an explicit stage-zero build path. Remove production dependencies on its AST and IR APIs. Future compiler features land only in Curios unless they alter the permanent Rust host boundary.
 
 ## Prelude strategy
 
@@ -483,7 +394,7 @@ The bootstrap is complete when:
 - The prelude path is correct from source, with any cache defined by the Curios compiler rather than Rust object layout.
 - CI builds the native host, builds the self-hosted compiler, checks the generation fixed point, runs the language suite through the self-hosted compiler, and preserves the existing slim-launcher and browser obligations where applicable.
 - `AGENTS.md`, `ROADMAP.md`, build instructions, release automation, and public CLI documentation describe the self-hosted architecture.
-- Before this specification is deleted, permanent ownership boundaries and architectural invariants are recorded in `AGENTS.md` and the owning crate or module documentation, operational procedures are recorded in build and release documentation, remaining plans refer to the authoritative self-hosted pipeline rather than this file, the roadmap entry is a checked unlinked summary, and no reference to this filename remains.
+- Before the last of these bootstrap specifications is deleted, permanent ownership boundaries and architectural invariants are recorded in `AGENTS.md` and the owning crate or module documentation, operational procedures are recorded in build and release documentation, remaining plans refer to the authoritative self-hosted pipeline rather than these files, the roadmap entry is a checked unlinked summary, and no reference to their filenames remains.
 
 ## Effort estimate
 

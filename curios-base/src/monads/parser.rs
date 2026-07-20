@@ -708,3 +708,47 @@ where
         Ok((items, state))
     })
 }
+
+/// Like [`sep_by1`], but admits (and drops) one trailing separator — the
+/// nonempty sibling of [`sep_by0_trailing`]: `(a, b,)` parses like `(a, b)`,
+/// while an empty list still fails on the first item.
+pub fn sep_by1_trailing<'a, T, S, F, G>(mut f: F, mut g: G) -> Parser<'a, Vec<T>>
+where
+    T: 'a,
+    S: 'a,
+    F: FnMut() -> Parser<'a, T> + 'a,
+    G: FnMut() -> Parser<'a, S> + 'a,
+{
+    Parser::new(move |state| {
+        let offset = state.offset;
+        let (item, mut state) = f().parse(state)?;
+
+        if offset == state.offset {
+            panic!("Infinite repetition");
+        }
+
+        let mut items = vec![item];
+
+        while let Some(next_state) = parse_separator(&mut g, state)? {
+            let offset = next_state.offset;
+            match f().parse(next_state) {
+                Ok((item, next_state)) => {
+                    if offset == next_state.offset {
+                        panic!("Infinite repetition");
+                    }
+
+                    items.push(item);
+                    state = next_state;
+                }
+                Err(error) if error.is_uncaught(next_state) => return Err(error),
+                // The separator was trailing: keep it consumed, end the list.
+                Err(_) => {
+                    state = next_state;
+                    break;
+                }
+            }
+        }
+
+        Ok((items, state))
+    })
+}

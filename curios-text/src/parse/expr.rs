@@ -51,7 +51,9 @@ pub(super) fn parse_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
 pub(super) fn parse_func_let_signature<'a>() -> Parser<'a, LetSignature> {
     catch(
         parse_literal("(")
-            .and_keep(sep_by0(parse_func_sugar_param, || parse_literal(",")))
+            .and_keep(sep_by0_trailing(parse_func_sugar_param, || {
+                parse_literal(",")
+            }))
             .and_drop(parse_literal(")"))
             .and_drop(parse_literal("->")),
     )
@@ -171,7 +173,9 @@ pub(super) fn parse_suffix<'a>() -> Parser<'a, Suffix> {
     parse_proj_suffix()
         .map(Suffix::Proj)
         .or(catch(parse_literal("("))
-            .and_keep(sep_by0(parse_apply_argument, || parse_literal(",")))
+            .and_keep(sep_by0_trailing(parse_apply_argument, || {
+                parse_literal(",")
+            }))
             .and_drop(parse_literal(")"))
             .map(Suffix::Apply))
         // A postfix `!` — but not the `!=` operator, whose `!` would otherwise be
@@ -193,7 +197,9 @@ pub(super) fn parse_suffix_raw<'a>() -> Parser<'a, Suffix> {
         .map(Suffix::Proj)
         .or(catch(take_exact("("))
             .and_drop(parse_whitespace())
-            .and_keep(sep_by0(parse_apply_argument, || parse_literal(",")))
+            .and_keep(sep_by0_trailing(parse_apply_argument, || {
+                parse_literal(",")
+            }))
             .and_drop(take_exact(")"))
             .map(Suffix::Apply))
         .or(catch(take_exact("!").and_drop(not_ahead("="))).map(|()| Suffix::Bang))

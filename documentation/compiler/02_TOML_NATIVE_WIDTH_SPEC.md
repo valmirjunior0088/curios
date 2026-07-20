@@ -2,7 +2,7 @@
 
 Working implementation specification for `curios-prelude/std/Toml.crs`: a useful TOML 1.1-oriented decoder and encoder over Curios's existing native `Int` and binary32 `Flt` values. This is the next planned standard-library effort, before dyadic `BigFlt`.
 
-The first implementation explicitly does not claim full TOML conformance. It accepts and emits TOML syntax while rejecting integers outside native `Int`, rounding finite floats to binary32, and inheriting the current `Flt` decimal parser's limits. It does not depend on `BigInt` or `BigFlt`.
+The first implementation explicitly does not claim full TOML conformance. It accepts and emits TOML syntax while rejecting integers outside native `Int`, rounding finite floats to binary32, and inheriting the current `Flt` decimal parser's limits. It does not depend on `BigInt` or `BigFlt`. The planned full-conformance upgrade is specified separately by [08_TOML_FULL_CONFORMANCE_SPEC.md](08_TOML_FULL_CONFORMANCE_SPEC.md).
 
 ## Objective
 

@@ -27,7 +27,9 @@ pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
         parse_identifier()
             .and(
                 parse_literal("(")
-                    .and_keep(sep_by0(parse_func_type_param, || parse_literal(",")))
+                    .and_keep(sep_by0_trailing(parse_func_type_param, || {
+                        parse_literal(",")
+                    }))
                     .and_drop(parse_literal(")")),
             )
             .and_drop(parse_literal("->")),
@@ -81,7 +83,7 @@ pub(super) fn parse_tuple_field_prefix<'a>() -> Parser<'a, TupleFieldPrefix> {
         .and(
             catch(
                 parse_literal("(")
-                    .and_keep(sep_by0(parse_func_param, || parse_literal(",")))
+                    .and_keep(sep_by0_trailing(parse_func_param, || parse_literal(",")))
                     .and_drop(parse_literal(")")),
             )
             .map(Some)
@@ -165,7 +167,7 @@ pub(super) fn parse_struct_lit<'a>() -> Parser<'a, Term> {
             .and(
                 catch(
                     parse_literal("(")
-                        .and_keep(sep_by0(|| lazy(parse_term), || parse_literal(",")))
+                        .and_keep(sep_by0_trailing(|| lazy(parse_term), || parse_literal(",")))
                         .and_drop(parse_literal(")")),
                 )
                 .or(pure(vec![])),

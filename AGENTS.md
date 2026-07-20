@@ -4,16 +4,13 @@ Operational guide for working on Curios. Read this before investigating or chang
 
 ## Working with the user
 
-- **Do not change anything without explicit instruction to do so.** Investigation, explanation, and proposals are read-only activities. Do not edit, format, generate, delete, stage, commit, or otherwise mutate the repository unless the user has authorized that action.
-- **Treat authorization as narrowly scoped.** A request to implement one change does not authorize adjacent refactors, cleanup, dependency upgrades, documentation rewrites, or fixes for unrelated problems.
-- **Do not proactively solve problems you were not asked to solve.** If you discover an unrelated bug, inefficiency, inconsistency, or cleanup opportunity, report it and ask whether the user wants it addressed.
+- **Mutation requires explicit authorization, narrowly scoped.** Investigation, explanation, and proposals are read-only activities. Do not edit, format, generate, delete, stage, commit, or otherwise mutate the repository unless the user has authorized that specific change. Authorization for one change covers neither adjacent refactors, cleanup, dependency upgrades, and unrelated fixes, nor a materially broader scope that would make implementation easier. When the boundary of an authorization is ambiguous, stop and ask.
+- **Report, don't fix, problems you were not asked to solve.** A discovered bug, inefficiency, inconsistency, or cleanup opportunity is a finding to surface; the user decides whether it becomes work.
 - **Run every decision through the user.** Where there is more than one reasonable design, present the alternatives and their trade-offs, recommend one plainly, and wait for the user to choose.
-- **Do not silently broaden the task to make implementation easier.** If the requested result requires a material change in scope, explain why and request permission.
 - **Preserve existing work.** Assume every uncommitted change belongs to the user. Do not overwrite, revert, reformat, stage, or incorporate it unless the user explicitly includes it in the task.
 - **Do not commit or push unless explicitly asked.** When asked to commit, include only the authorized changes and follow the requested attribution and message constraints.
 - **Do not spiral into self-doubt.** State findings, uncertainties, and recommendations plainly. Do not hedge, repeatedly reopen settled decisions, or defer to the user without first presenting the available evidence.
 - **Do not spawn subagents or delegate work unless explicitly asked.** Investigate and implement directly unless the user requests parallel or delegated work.
-- **Stop when authorization is ambiguous.** Ask before taking an action whose effects extend beyond the clear scope of the request.
 
 ## Before starting
 
@@ -173,13 +170,7 @@ Run one compilation under the profiler with the `profile` recipe:
 make curios/profile CURIOS_PROFILE_SOURCE=programs/hello_curios.crs
 ```
 
-It builds the `curios/profile` binary with `--features profile` and prints one row per instrumented span — `total_ms`, `calls`, `min_ms`, `max_ms`, `target`, `name` — sorted by total time descending. The `profile` feature fans out from `curios` through `curios-pipeline` to every compiler crate (each crate exposes `profile = ["dep:tracing"]`), and `curios::capture` installs a thread-local subscriber that aggregates per-span durations for the wrapped call.
-
-Add a measurement point by attributing the function with `#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]`; it compiles to nothing without the feature. Stage entrypoints and optimizer passes carry permanent spans; a span added to isolate one investigation is temporary instrumentation and is removed once the question is answered, never left as a metrics API.
-
-To break down the individual steps of a loop — for example each pass inside an optimizer's fixpoint, where instrumenting the pass function still aggregates all its calls but a per-step split needs a span around each call site — wrap each step with `curios_base::profile_span!("name", expr)`. It enters a `tracing` span for that expression under the invoking crate's `profile` feature and expands to the bare expression otherwise. Like the attribute, it is temporary instrumentation to remove once the breakdown is understood.
-
-The binary profiles `compile_entrypoint` by default. To profile a path it does not already exercise, point `curios/profile/main.rs` at the relevant entrypoint (for example `compile_entrypoint_via_arena`) for the duration of the investigation, then restore it.
+It builds the `curios/profile` binary with `--features profile` and prints per-span aggregate timings sorted by total time descending. The instrumentation mechanics — declaring spans, the per-crate `profile` feature fan-out, per-step loop breakdowns, and the temporary-instrumentation norm — are documented in `curios/src/profile.rs`.
 
 ## Documentation ownership
 
