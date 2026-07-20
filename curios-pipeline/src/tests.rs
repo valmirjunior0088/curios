@@ -1384,3 +1384,73 @@ fn dead_user_definition_is_still_typechecked() {
 
     assert!(error.contains("mismatch"), "unexpected error: {error}");
 }
+
+/// Elaborate `source` to its meta-free Core module and erase it through the
+/// arena path, prelude erased fresh — the Phase-2 erasure vertical.
+fn erase_to_ir(source: &str) -> curios_ersd::ErasedModule {
+    let entrypoint = source.parse::<curios_text::Entrypoint>().unwrap();
+    let (module, core_type, _foreigns) = super::elaborate_and_zonk(
+        Duration::from_secs(60),
+        &entrypoint,
+        curios_text::RootSource::none(),
+        &mut |_| {},
+    )
+    .unwrap();
+    curios_core::erase_module_to_ir(
+        &mut curios_core::Context::new(Duration::from_secs(60)),
+        &module,
+        &core_type,
+    )
+    .expect("the elaborated module erases into a verified arena module")
+}
+
+#[test]
+fn arena_erasure_covers_the_fixed_prelude() {
+    // The entrypoint pulls in string formatting, so the erased module carries
+    // the whole fixed prelude — every construct the corpus uses — through the
+    // arena path, fresh, into one verified module.
+    let module = erase_to_ir(r#"/std/Fmt/print("hello")"#);
+    assert!(
+        module.functions().len() > 100,
+        "the fixed prelude erased with the program: {} functions",
+        module.functions().len()
+    );
+}
+
+#[test]
+fn arena_erasure_is_deterministic_across_compiles() {
+    let source = "/std/Nat/add(20, 22)";
+    let first = erase_to_ir(source).to_string();
+    let second = erase_to_ir(source).to_string();
+    assert_eq!(first, second);
+}
+
+#[test]
+fn arena_erasure_stores_no_captures_for_the_prelude() {
+    // Functions carry no capture lists anywhere in the erased prelude; free
+    // values are derived on demand. The analysis on the full module is the
+    // witness that derivation covers every function.
+    let module = erase_to_ir("/std/Nat/to_str(7)");
+    let analysis = curios_ersd::Analysis::analyze(&module);
+    let counted = module.function_ids().count();
+    assert!(counted > 0);
+    for function in module.function_ids() {
+        let _ = analysis.free_values(function);
+    }
+}
+
+#[test]
+fn arena_erasure_handles_deep_input_on_the_default_stack() {
+    // A wide flat block (the shape whose N-deep nesting once overflowed the
+    // legacy pipeline); erasure, verification, and printing all stay on the
+    // default test-thread stack. Sized so quadratic *elaboration* cost —
+    // shared by both paths and out of erasure's scope — stays testable.
+    let mut source = String::new();
+    for index in 0..500 {
+        source.push_str(&format!("let x{index} = {index} + 1;\n"));
+    }
+    source.push_str("x0");
+    let module = erase_to_ir(&source);
+    let printed = module.to_string();
+    assert!(printed.contains("NatAdd"));
+}

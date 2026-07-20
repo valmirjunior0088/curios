@@ -9,14 +9,17 @@
 //! a single-key dispatch rather than an n-step fold, so a non-tail recursive
 //! caller does not re-run the whole fold at every level.
 //!
-//! The scrutinee is erased exactly once. A non-variable head is aliased on
-//! the Core side first — a fresh variable defined as the head, its label
-//! mapped to the once-erased operand — so every Core term the elimination
-//! machinery re-derives from the head (a peel's `head - 1`, a sequence's
-//! length, index refinements) re-resolves to the same operand instead of
-//! re-erasing an effectful expression. Arm-side refinement (`refine_head`,
-//! index refinement) is typing-only: it reproduces the context the arm was
-//! elaborated in and emits nothing.
+//! The scrutinee is erased exactly once. The fold forms alias a non-variable
+//! head on the Core side first — a fresh variable defined as the head, its
+//! label mapped to the once-erased operand — because their peels re-derive
+//! Core terms from the head (`head - 1`, the sequence's length and slices),
+//! and walking those must re-resolve to the same operand instead of
+//! re-erasing an effectful expression. The dispatch forms (`Bln`, `Switch`,
+//! the inductive match) never re-derive from the head, so they refine the
+//! *original* head term — arm bodies were elaborated against reductions
+//! keyed on that term, and refining an alias in its place would break their
+//! re-derived typing. Arm-side refinement is typing-only: it reproduces the
+//! context the arm was elaborated in and emits nothing.
 
 use super::{
     Atom, Carrier, Cases, Context, Error, Inductive, InductiveType, Lowering, Many, Match,
@@ -315,19 +318,16 @@ impl Lowering {
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         let head_type = expect_prim_head(context, head, PrimHead::Nat)?;
-        let (head, scrutinee) = match self.scrutinee_operand(context, head, &head_type)? {
-            Ok(pair) => pair,
-            Err(diverged) => return Ok(diverged),
-        };
+        let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let mut nat_cases = Vec::with_capacity(cases.len());
         for (&key, body) in cases {
             let value = Term::prim(Prim::Nat(super::Nat::new(key)));
-            let block = self.refined_arm(context, &head, &value, motive, body)?;
+            let block = self.refined_arm(context, head, &value, motive, body)?;
             nat_cases.push(curios_ersd::NatCase { key, block });
         }
 
-        let default_expected = motive.open(&[&head]);
+        let default_expected = motive.open(&[head]);
         let default = self.open_arm(context, &default_expected, default)?;
 
         Ok(self.bind(
@@ -601,11 +601,7 @@ impl Lowering {
         }
 
         let row = self.inductive_row(context, &name)?;
-        let (head, scrutinee) = match self.scrutinee_operand(context, head, &head_type)? {
-            Ok(pair) => pair,
-            Err(diverged) => return Ok(diverged),
-        };
-        let m = InductiveMatch { head: &head, ..m };
+        let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let mut arms = Vec::new();
         for (index, tag) in inductive.constructor_order().enumerate() {
