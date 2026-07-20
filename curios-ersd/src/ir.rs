@@ -50,6 +50,9 @@ mod walk;
 mod analysis;
 pub use analysis::*;
 
+mod into_cont;
+pub use into_cont::lower_to_cont;
+
 #[cfg(test)]
 mod module_tests;
 
@@ -64,3 +67,6 @@ mod print_tests;
 
 #[cfg(test)]
 mod analysis_tests;
+
+#[cfg(test)]
+mod into_cont_tests;
