@@ -299,6 +299,18 @@ pub(super) fn inline_call(
         .copied()
         .zip(args.iter().cloned())
         .collect::<BTreeMap<_, _>>();
+
+    // Bail before minting anything: only a parameter can map a closure callee
+    // to a literal (locals map to fresh values below), so this check is
+    // complete against the parameter substitutions alone, and an aborted
+    // attempt must leave no orphaned arena entries behind.
+    if nodes.values().any(|node| {
+        matches!(node, CpsNode::ApplyFun { callee: CpsCallee::Closure(value), .. }
+            if matches!(values.get(value), Some(CpsAtom::Literal(_))))
+    }) {
+        return false;
+    }
+
     for node in nodes.values() {
         if let CpsNode::LetValue { result, .. } | CpsNode::LetPrim { result, .. } = node {
             let definition = module.values[result.index()].as_ref().unwrap().clone();
@@ -320,13 +332,6 @@ pub(super) fn inline_call(
             let fresh = module.add_value(definition.debug_name);
             values.insert(param, CpsAtom::Value(fresh));
         }
-    }
-
-    if nodes.values().any(|node| {
-        matches!(node, CpsNode::ApplyFun { callee: CpsCallee::Closure(value), .. }
-            if matches!(values.get(value), Some(CpsAtom::Literal(_))))
-    }) {
-        return false;
     }
 
     let mut node_map = BTreeMap::from([(function.body, call)]);
