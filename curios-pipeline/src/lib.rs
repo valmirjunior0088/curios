@@ -123,6 +123,41 @@ where
     Ok((module, core_type, user_foreigns))
 }
 
+/// The back half shared by [`compile_entrypoint`] and its fresh-erasure twin:
+/// from a verified erased module through optimization, the lowering into Cont,
+/// Cont optimization, and wasm emission, observing every stage in order. Both
+/// entrypoints differ only in how they produce the erased module, and funneling
+/// them through one sequence keeps that contract true by construction.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
+fn lower_from_ersd<O>(mut ersd_module: curios_ersd::Module, observe: &mut O) -> curios_wasm::Module
+where
+    O: FnMut(Stage<'_>),
+{
+    observe(Stage::Ersd(&ersd_module));
+
+    // Shrink before lowering: drop the items the program neither reaches nor
+    // runs for effect, so Cont's whole-module fixpoint sees only the live
+    // slice (see `curios_ersd::optimize_ir`).
+    curios_ersd::optimize_ir(&mut ersd_module);
+
+    observe(Stage::ErsdOptm(&ersd_module));
+
+    let cont_module = curios_ersd::lower_to_cont(&ersd_module);
+
+    observe(Stage::Cont(&cont_module));
+
+    let mut cont_optm_module = cont_module;
+    curios_cont::optimize(&mut cont_optm_module);
+
+    observe(Stage::ContOptm(&cont_optm_module));
+
+    let wasm_module = curios_cont::into_wasm(&cont_optm_module);
+
+    observe(Stage::Wasm(&wasm_module));
+
+    wasm_module
+}
+
 /// The fresh-erasure twin of [`compile_entrypoint`]: identical except the
 /// whole module — fixed prelude included — is erased from Core on every call
 /// instead of replaying the archived prelude prefix. Deliberately slower; the
@@ -141,33 +176,14 @@ where
     let (module, core_type, foreigns) =
         elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
 
-    let mut ersd_module = curios_core::erase_module_to_ir(
+    let ersd_module = curios_core::erase_module_to_ir(
         &mut curios_core::Context::new(timeout),
         &module,
         &core_type,
     )
     .map_err(|error| error.format_with(&module))?;
 
-    observe(Stage::Ersd(&ersd_module));
-
-    // Shrink before lowering: drop the items the program neither reaches nor
-    // runs for effect, so Cont's whole-module fixpoint sees only the live
-    // slice (see `curios_ersd::optimize_ir`).
-    curios_ersd::optimize_ir(&mut ersd_module);
-
-    observe(Stage::ErsdOptm(&ersd_module));
-
-    let cont_module = curios_ersd::lower_to_cont(&ersd_module);
-    observe(Stage::Cont(&cont_module));
-
-    let mut cont_optm_module = cont_module;
-    curios_cont::optimize(&mut cont_optm_module);
-    observe(Stage::ContOptm(&cont_optm_module));
-
-    let wasm_module = curios_cont::into_wasm(&cont_optm_module);
-    observe(Stage::Wasm(&wasm_module));
-
-    Ok((wasm_module, foreigns))
+    Ok((lower_from_ersd(ersd_module, &mut observe), foreigns))
 }
 
 /// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
@@ -190,7 +206,7 @@ where
         elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
 
     let prefix = curios_prelude::restore_ersd_prelude();
-    let mut ersd_module = curios_prelude::with_prelude(|prelude| {
+    let ersd_module = curios_prelude::with_prelude(|prelude| {
         curios_core::erase_module_with_prelude_to_ir(
             &mut curios_core::Context::new(timeout),
             prelude.core(),
@@ -201,24 +217,5 @@ where
     })
     .map_err(|error| error.format_with(&module))?;
 
-    observe(Stage::Ersd(&ersd_module));
-
-    curios_ersd::optimize_ir(&mut ersd_module);
-
-    observe(Stage::ErsdOptm(&ersd_module));
-
-    let cont_module = curios_ersd::lower_to_cont(&ersd_module);
-
-    observe(Stage::Cont(&cont_module));
-
-    let mut cont_optm_module = cont_module;
-    curios_cont::optimize(&mut cont_optm_module);
-
-    observe(Stage::ContOptm(&cont_optm_module));
-
-    let wasm_module = curios_cont::into_wasm(&cont_optm_module);
-
-    observe(Stage::Wasm(&wasm_module));
-
-    Ok((wasm_module, foreigns))
+    Ok((lower_from_ersd(ersd_module, &mut observe), foreigns))
 }
