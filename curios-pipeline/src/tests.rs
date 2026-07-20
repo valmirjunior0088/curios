@@ -7,7 +7,7 @@ fn entrypoint_type_is_used_as_expected_type() {
     let entrypoint = "0"
         .parse::<curios_text::Entrypoint>()
         .unwrap()
-        .with_type("/std/Bln".parse().unwrap());
+        .with_type("/std/Bool".parse().unwrap());
 
     let error = compile_entrypoint(
         Duration::from_secs(5),
@@ -174,20 +174,20 @@ fn solved_goal_reports_its_solution() {
 
 #[test]
 fn goal_pinned_through_the_expected_type_reports_the_pin() {
-    // `id ? true` checked against `/std/Bln`: the turnaround pins the type
-    // argument `?` to `Bln` through the expected type (§14, a type-level pin),
+    // `id ? true` checked against `/std/Bool`: the turnaround pins the type
+    // argument `?` to `Bool` through the expected type (§14, a type-level pin),
     // and the goal report names that solution.
     let source = r#"
-        use /std/{Bln};
+        use /std/{Bool};
         let id(A : Type, a : A) -> A = a;
         id(?, true)
     "#;
 
-    let error = compile(source, Some("/std/Bln")).unwrap_err();
+    let error = compile(source, Some("/std/Bool")).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(
-        error.contains("? =") && error.contains("Bln"),
+        error.contains("? =") && error.contains("Bool"),
         "unexpected error: {error}"
     );
 }
@@ -249,8 +249,8 @@ fn omitted_motive_mentioning_a_type_param_lowers() {
     // re-closed and `erase` rejects it with `unbound variable`. Guards the
     // zonk binder-realignment fix.
     let source = r#"
-        use /std/{Bln};
-        let pick(A : Type, a : A, b : A, c : Bln) -> A =
+        use /std/{Bool};
+        let pick(A : Type, a : A, b : A, c : Bool) -> A =
             match c
             | false => a
             | true => b
@@ -1144,8 +1144,8 @@ fn closure_annotation_must_match_the_expected_domain() {
     // In checking position the param annotation is verified against the
     // expected function type's domain — a wrong annotation is a type mismatch.
     let source = r#"
-        use /std/{Nat, Bln};
-        let f : (Nat) -> Nat = (x : Bln) => x;
+        use /std/{Nat, Bool};
+        let f : (Nat) -> Nat = (x : Bool) => x;
         f(5)
     "#;
 

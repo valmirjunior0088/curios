@@ -85,11 +85,11 @@ fn parse_prim() {
     );
     assert_eq!(
         "false".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Bln(false)))
+        Term::from(Subterm::Prim(Prim::Bool(false)))
     );
     assert_eq!(
         "true".parse::<Term>().unwrap(),
-        Term::from(Subterm::Prim(Prim::Bln(true)))
+        Term::from(Subterm::Prim(Prim::Bool(true)))
     );
 }
 
@@ -314,7 +314,7 @@ fn parse_top_foreign_zero_arg() {
 #[test]
 fn parse_top_foreign_nested_lst() {
     assert_eq!(
-        "foreign frobnicate : (Lst(Lst(Nat))) -> Bln;"
+        "foreign frobnicate : (Lst(Lst(Nat))) -> Bool;"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -326,7 +326,7 @@ fn parse_top_foreign_nested_lst() {
                     "a0".to_string(),
                     WireType::Lst(Box::new(WireType::Lst(Box::new(WireType::Nat)))),
                 )],
-                results: vec![("_".to_string(), WireType::Bln)],
+                results: vec![("_".to_string(), WireType::Bool)],
             },
         })]
     );
@@ -334,7 +334,7 @@ fn parse_top_foreign_nested_lst() {
 
 #[test]
 fn parse_top_foreign_rejects_non_wire_type() {
-    assert!("foreign frobnicate : Bool;".parse::<Module>().is_err());
+    assert!("foreign frobnicate : Str;".parse::<Module>().is_err());
 }
 
 #[test]
@@ -343,7 +343,7 @@ fn foreign_declaration_round_trips() {
         "foreign frobnicate : (Nat, Bin) -> Nat;",
         "pub foreign frobnicate : (Nat, Bin) -> Nat;",
         "foreign clock : Nat;",
-        "foreign frobnicate : (Lst(Lst(Nat))) -> Bln;",
+        "foreign frobnicate : (Lst(Lst(Nat))) -> Bool;",
     ] {
         let module = source.parse::<Module>().unwrap();
 
@@ -856,7 +856,7 @@ fn parse_top_inductive_and_chain() {
 #[test]
 fn parse_inductive_match_nullary_and_unary() {
     assert_eq!(
-        "match v : Bin\n| null() => \"null\"\n| bln(b) => b\nend"
+        "match v : Bin\n| null() => \"null\"\n| bool_(b) => b\nend"
             .parse::<Term>()
             .unwrap(),
         Subterm::Match(Match::Matrix(MatrixMatch {
@@ -874,7 +874,7 @@ fn parse_inductive_match_nullary_and_unary() {
                 },
                 MatrixArm {
                     pattern: MatchPattern::Ctor {
-                        tag: "bln".to_string(),
+                        tag: "bool_".to_string(),
                         args: vec![MatchPattern::Binder("b".to_string())],
                     },
                     body: Subterm::Name(Name::from(["b".to_string()])).into(),
@@ -1864,7 +1864,7 @@ fn matrix_match_round_trips() {
         // Bits and Bytes literal leaves nested inside a constructor payload.
         r#"match o | some(x\) => y | some(x\h\..t) => y | none() => y end"#,
         r#"match o | some(b\h\..t; ih) => y | some(b\) => y | none() => y end"#,
-        // Bln literal leaves nested inside a constructor payload.
+        // Bool literal leaves nested inside a constructor payload.
         "match p | pair(true, y) => y | pair(false, y) => y end",
         // The four hardcoded carriers as *headed* matches — no longer separate
         // surface variants, just matrices over that carrier's own leaves. Each
@@ -1888,7 +1888,7 @@ fn matrix_match_round_trips() {
     }
 }
 
-// The headless ladder: no head term, `Bln` condition arms, and a mandatory
+// The headless ladder: no head term, `Bool` condition arms, and a mandatory
 // `| _ =>` default. A bare `_` condition parses as the default (not a `Name`
 // condition arm) — the `flat_map` guard in `parse_cond_case` sees it and lets
 // `many0` stop.

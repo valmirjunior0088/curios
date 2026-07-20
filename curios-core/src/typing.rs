@@ -316,7 +316,7 @@ fn retry_checking(
 /// the (counterfactual) assumption does not leak. Three keyings, by head shape:
 ///
 /// - a `Var` reduces to the value (`refine`);
-/// - a projection — a `Bln`/`Nat` match on a tuple field — refines that
+/// - a projection — a `Bool`/`Nat` match on a tuple field — refines that
 ///   projection (`refine_projection`);
 /// - any other head — a stuck application like `classify(c)` / `Nat/in_range(...)`
 ///   — is canonicalized (head verbatim, arguments in WHNF) and recorded in the
@@ -383,7 +383,7 @@ pub(crate) fn check_motive(
 pub(crate) fn check_prim_head(expected: PrimHead, head_type: Term) -> Result<Term, Error> {
     let matches = match expected {
         PrimHead::Nat => matches!(&*head_type, Subterm::Prim(Prim::NatType)),
-        PrimHead::Bln => matches!(&*head_type, Subterm::Prim(Prim::BlnType)),
+        PrimHead::Bool => matches!(&*head_type, Subterm::Prim(Prim::BoolType)),
         PrimHead::Bin(grain) => {
             matches!(&*head_type, Subterm::Prim(Prim::BinType(actual)) if *actual == grain)
         }
@@ -393,7 +393,7 @@ pub(crate) fn check_prim_head(expected: PrimHead, head_type: Term) -> Result<Ter
         true => Ok(head_type),
         false => Err(match expected {
             PrimHead::Nat => Error::not_nat_type(head_type),
-            PrimHead::Bln => Error::not_bln_type(head_type),
+            PrimHead::Bool => Error::not_bln_type(head_type),
             PrimHead::Bin(_) => Error::not_bin_type(head_type),
         }),
     }

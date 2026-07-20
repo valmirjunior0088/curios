@@ -225,15 +225,15 @@ fn subst_motive_inserts_implicit_in_eq() {
     assert_eq!(io.output(), b"ok");
 }
 
-// A `rec` that never reduces (`go : Bln = go`) forces forever when demanded in
+// A `rec` that never reduces (`go : Bool = go`) forces forever when demanded in
 // type position — same infinite-spin behavior as a top-level `rec` — so a
 // short reduce deadline preempts it with a timeout error rather than hanging.
 #[test]
 fn nonproductive_inner_rec_in_type_position_is_preempted() {
     let source = r#"
-        use /std/{Bln};
-        let spin : Bln =
-            rec go : Bln = go;
+        use /std/{Bool};
+        let spin : Bool =
+            rec go : Bool = go;
             go;
         let bad : Type =
             match spin : Type

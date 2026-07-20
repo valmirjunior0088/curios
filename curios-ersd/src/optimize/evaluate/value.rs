@@ -20,7 +20,7 @@ use {
 pub(super) enum Value {
     /// The unit value — the carrier of an erased proof or type slot.
     Unit,
-    Bln(bool),
+    Bool(bool),
     Nat(u32),
     Byte(u8),
     Int(i32),
@@ -48,7 +48,7 @@ impl Value {
     pub(super) fn as_constant(&self) -> Option<Constant> {
         Some(match self {
             Value::Unit => Constant::Unit,
-            Value::Bln(value) => Constant::Bln(*value),
+            Value::Bool(value) => Constant::Bool(*value),
             Value::Nat(value) => Constant::Nat(*value),
             Value::Byte(value) => Constant::Byte(*value),
             Value::Int(value) => Constant::Int(*value),
@@ -65,7 +65,7 @@ impl Value {
     pub(super) fn from_constant(constant: &Constant) -> Value {
         match constant {
             Constant::Unit => Value::Unit,
-            Constant::Bln(value) => Value::Bln(*value),
+            Constant::Bool(value) => Value::Bool(*value),
             Constant::Nat(value) => Value::Nat(*value),
             Constant::Byte(value) => Value::Byte(*value),
             Constant::Int(value) => Value::Int(*value),
@@ -82,9 +82,9 @@ impl Value {
         }
     }
 
-    pub(super) fn bln(&self) -> Result<bool, Bail> {
+    pub(super) fn bool_(&self) -> Result<bool, Bail> {
         match self {
-            Value::Bln(value) => Ok(*value),
+            Value::Bool(value) => Ok(*value),
             _ => Err(Bail::Unsupported),
         }
     }

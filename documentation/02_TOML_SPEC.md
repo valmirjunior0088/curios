@@ -54,7 +54,7 @@ pub induct Toml : pub Type
 | str(Str)
 | int(Int)
 | flt(Flt)
-| bln(Bln)
+| bool(Bool)
 | offset_date_time(OffsetDateTime)
 | local_date_time(LocalDateTime)
 | local_date(Date)

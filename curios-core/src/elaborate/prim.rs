@@ -81,32 +81,32 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
     let byte_type: Term = Subterm::Prim(Prim::ByteType).into();
     let int_type: Term = Subterm::Prim(Prim::IntType).into();
     let flt_type: Term = Subterm::Prim(Prim::FltType).into();
-    let bln_type: Term = Subterm::Prim(Prim::BlnType).into();
+    let bool_type: Term = Subterm::Prim(Prim::BoolType).into();
     let bin_type: Term = Subterm::Prim(Prim::BinType(Grain::X)).into();
     let bin_b_type: Term = Subterm::Prim(Prim::BinType(Grain::B)).into();
     let io_type: Term = Subterm::Prim(Prim::IoType).into();
 
     Ok(match prim {
-        Prim::BlnType => (prim.clone(), Term::type_()),
-        Prim::Bln(_) => (prim.clone(), bln_type),
+        Prim::BoolType => (prim.clone(), Term::type_()),
+        Prim::Bool(_) => (prim.clone(), bool_type),
         Prim::NatType => (prim.clone(), Term::type_()),
         Prim::Nat(_) => (prim.clone(), nat_type),
         Prim::ByteType => (prim.clone(), Term::type_()),
         Prim::Byte(_) => (prim.clone(), byte_type.clone()),
         Prim::ByteToNat(i) => unary(context, i, &byte_type, nat_type.clone(), Prim::ByteToNat)?,
         Prim::NatToByte(i) => unary(context, i, &nat_type, byte_type.clone(), Prim::NatToByte)?,
-        Prim::ByteEql(l, r) => binary(context, l, r, &byte_type, bln_type.clone(), Prim::ByteEql)?,
-        Prim::ByteLt(l, r) => binary(context, l, r, &byte_type, bln_type.clone(), Prim::ByteLt)?,
-        Prim::ByteLte(l, r) => binary(context, l, r, &byte_type, bln_type.clone(), Prim::ByteLte)?,
-        Prim::ByteGt(l, r) => binary(context, l, r, &byte_type, bln_type.clone(), Prim::ByteGt)?,
-        Prim::ByteGte(l, r) => binary(context, l, r, &byte_type, bln_type.clone(), Prim::ByteGte)?,
-        Prim::NatEql(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatEql)?,
-        Prim::IoEql(l, r) => binary(context, l, r, &io_type, bln_type.clone(), Prim::IoEql)?,
-        Prim::NatNeq(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatNeq)?,
-        Prim::NatLt(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatLt)?,
-        Prim::NatGt(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatGt)?,
-        Prim::NatLte(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatLte)?,
-        Prim::NatGte(l, r) => binary(context, l, r, &nat_type, bln_type.clone(), Prim::NatGte)?,
+        Prim::ByteEql(l, r) => binary(context, l, r, &byte_type, bool_type.clone(), Prim::ByteEql)?,
+        Prim::ByteLt(l, r) => binary(context, l, r, &byte_type, bool_type.clone(), Prim::ByteLt)?,
+        Prim::ByteLte(l, r) => binary(context, l, r, &byte_type, bool_type.clone(), Prim::ByteLte)?,
+        Prim::ByteGt(l, r) => binary(context, l, r, &byte_type, bool_type.clone(), Prim::ByteGt)?,
+        Prim::ByteGte(l, r) => binary(context, l, r, &byte_type, bool_type.clone(), Prim::ByteGte)?,
+        Prim::NatEql(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatEql)?,
+        Prim::IoEql(l, r) => binary(context, l, r, &io_type, bool_type.clone(), Prim::IoEql)?,
+        Prim::NatNeq(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatNeq)?,
+        Prim::NatLt(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatLt)?,
+        Prim::NatGt(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatGt)?,
+        Prim::NatLte(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatLte)?,
+        Prim::NatGte(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatGte)?,
         Prim::NatAdd(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatAdd)?,
         Prim::NatSub(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatSub)?,
         Prim::NatMul(l, r) => binary(context, l, r, &nat_type, nat_type.clone(), Prim::NatMul)?,
@@ -122,19 +122,19 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::NatClz(i) => unary(context, i, &nat_type, nat_type.clone(), Prim::NatClz)?,
         Prim::NatCtz(i) => unary(context, i, &nat_type, nat_type.clone(), Prim::NatCtz)?,
         Prim::NatPopcnt(i) => unary(context, i, &nat_type, nat_type.clone(), Prim::NatPopcnt)?,
-        Prim::BlnAnd(l, r) => binary(context, l, r, &bln_type, bln_type.clone(), Prim::BlnAnd)?,
-        Prim::BlnOr(l, r) => binary(context, l, r, &bln_type, bln_type.clone(), Prim::BlnOr)?,
-        Prim::BlnXor(l, r) => binary(context, l, r, &bln_type, bln_type.clone(), Prim::BlnXor)?,
-        Prim::BlnEql(l, r) => binary(context, l, r, &bln_type, bln_type.clone(), Prim::BlnEql)?,
-        Prim::BlnNeq(l, r) => binary(context, l, r, &bln_type, bln_type.clone(), Prim::BlnNeq)?,
+        Prim::BoolAnd(l, r) => binary(context, l, r, &bool_type, bool_type.clone(), Prim::BoolAnd)?,
+        Prim::BoolOr(l, r) => binary(context, l, r, &bool_type, bool_type.clone(), Prim::BoolOr)?,
+        Prim::BoolXor(l, r) => binary(context, l, r, &bool_type, bool_type.clone(), Prim::BoolXor)?,
+        Prim::BoolEql(l, r) => binary(context, l, r, &bool_type, bool_type.clone(), Prim::BoolEql)?,
+        Prim::BoolNeq(l, r) => binary(context, l, r, &bool_type, bool_type.clone(), Prim::BoolNeq)?,
         Prim::IntType => (prim.clone(), Term::type_()),
         Prim::Int(_) => (prim.clone(), int_type),
-        Prim::IntEql(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntEql)?,
-        Prim::IntNeq(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntNeq)?,
-        Prim::IntLt(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntLt)?,
-        Prim::IntGt(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntGt)?,
-        Prim::IntLte(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntLte)?,
-        Prim::IntGte(l, r) => binary(context, l, r, &int_type, bln_type.clone(), Prim::IntGte)?,
+        Prim::IntEql(l, r) => binary(context, l, r, &int_type, bool_type.clone(), Prim::IntEql)?,
+        Prim::IntNeq(l, r) => binary(context, l, r, &int_type, bool_type.clone(), Prim::IntNeq)?,
+        Prim::IntLt(l, r) => binary(context, l, r, &int_type, bool_type.clone(), Prim::IntLt)?,
+        Prim::IntGt(l, r) => binary(context, l, r, &int_type, bool_type.clone(), Prim::IntGt)?,
+        Prim::IntLte(l, r) => binary(context, l, r, &int_type, bool_type.clone(), Prim::IntLte)?,
+        Prim::IntGte(l, r) => binary(context, l, r, &int_type, bool_type.clone(), Prim::IntGte)?,
         Prim::IntAdd(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntAdd)?,
         Prim::IntSub(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntSub)?,
         Prim::IntMul(l, r) => binary(context, l, r, &int_type, int_type.clone(), Prim::IntMul)?,
@@ -174,12 +174,12 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::FltCeil(i) => unary(context, i, &flt_type, flt_type.clone(), Prim::FltCeil)?,
         Prim::FltTrunc(i) => unary(context, i, &flt_type, flt_type.clone(), Prim::FltTrunc)?,
         Prim::FltNearest(i) => unary(context, i, &flt_type, flt_type.clone(), Prim::FltNearest)?,
-        Prim::FltEql(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltEql)?,
-        Prim::FltNeq(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltNeq)?,
-        Prim::FltLt(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltLt)?,
-        Prim::FltGt(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltGt)?,
-        Prim::FltLte(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltLte)?,
-        Prim::FltGte(l, r) => binary(context, l, r, &flt_type, bln_type.clone(), Prim::FltGte)?,
+        Prim::FltEql(l, r) => binary(context, l, r, &flt_type, bool_type.clone(), Prim::FltEql)?,
+        Prim::FltNeq(l, r) => binary(context, l, r, &flt_type, bool_type.clone(), Prim::FltNeq)?,
+        Prim::FltLt(l, r) => binary(context, l, r, &flt_type, bool_type.clone(), Prim::FltLt)?,
+        Prim::FltGt(l, r) => binary(context, l, r, &flt_type, bool_type.clone(), Prim::FltGt)?,
+        Prim::FltLte(l, r) => binary(context, l, r, &flt_type, bool_type.clone(), Prim::FltLte)?,
+        Prim::FltGte(l, r) => binary(context, l, r, &flt_type, bool_type.clone(), Prim::FltGte)?,
         // `Flt/to_le_bytes` exposes the IEEE-754 bytes (`Bin`); `/std/Flt/to_str`
         // renders them to the proof-carrying `/syn/Str` in Curios (Dragon4).
         Prim::FltToLeBytes(i) => {
@@ -205,7 +205,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::BinEql(Grain::X, left, right) => {
             let left = elaborate(context, left, Mode::Check(bin_type.clone()))?.0;
             let right = elaborate(context, right, Mode::Check(bin_type))?.0;
-            (Prim::BinEql(Grain::X, left, right), bln_type)
+            (Prim::BinEql(Grain::X, left, right), bool_type)
         }
         Prim::BinGet(Grain::X, bin, index) => {
             let bin = infer_bin(context, bin)?;
@@ -242,12 +242,12 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::BinEql(Grain::B, left, right) => {
             let left = elaborate(context, left, Mode::Check(bin_b_type.clone()))?.0;
             let right = elaborate(context, right, Mode::Check(bin_b_type))?.0;
-            (Prim::BinEql(Grain::B, left, right), bln_type)
+            (Prim::BinEql(Grain::B, left, right), bool_type)
         }
         Prim::BinGet(Grain::B, bin, index) => {
             let bin = elaborate(context, bin, Mode::Check(bin_b_type))?.0;
             let index = elaborate(context, index, Mode::Check(nat_type.clone()))?.0;
-            (Prim::BinGet(Grain::B, bin, index), bln_type)
+            (Prim::BinGet(Grain::B, bin, index), bool_type)
         }
         Prim::BinSlice(Grain::B, bin, start, end) => {
             let bin = elaborate(context, bin, Mode::Check(bin_b_type.clone()))?.0;
@@ -257,7 +257,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         }
         Prim::BinAppend(Grain::B, bin, bit) => {
             let bin = elaborate(context, bin, Mode::Check(bin_b_type.clone()))?.0;
-            let bit = elaborate(context, bit, Mode::Check(bln_type))?.0;
+            let bit = elaborate(context, bit, Mode::Check(bool_type))?.0;
             (Prim::BinAppend(Grain::B, bin, bit), bin_b_type)
         }
         Prim::BinConcat(Grain::B, operands) => {

@@ -126,7 +126,7 @@ impl Head {
     /// Reflect into the eliminator's grain-specific element type.
     fn into_atom(self) -> Term {
         match self {
-            Head::LiteralBit(bit) => Subterm::Prim(Prim::Bln(bit)).into(),
+            Head::LiteralBit(bit) => Subterm::Prim(Prim::Bool(bit)).into(),
             Head::LiteralByte(byte) => Subterm::Prim(Prim::Byte(byte)).into(),
             Head::Symbolic(atom) => atom,
         }

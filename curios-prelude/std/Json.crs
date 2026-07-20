@@ -1,8 +1,8 @@
-use /std/{Bytes, Byte, Str, Bln, Char, Flt, Nat, Parse, Result, Option, Lst};
+use /std/{Bytes, Byte, Str, Bool, Char, Flt, Nat, Parse, Result, Option, Lst};
 
 pub induct Json : pub Type
 | null()
-| bln(Bln)
+| bool(Bool)
 | num(Flt)
 | str(Str)
 | arr(Lst(Json))
@@ -46,7 +46,7 @@ let encode_str(s : Str) -> Str =
 pub rec encode(v : Json) -> Str =
     match v
     | null() => "null"
-    | bln(b) => Bln/to_str(b)
+    | bool(b) => Bool/to_str(b)
     | num(n) => encode_num(n)
     | str(s) => encode_str(s)
     | arr(xs) =>
@@ -60,7 +60,7 @@ pub rec encode(v : Json) -> Str =
             "}")
     end;
 
-let is_num_byte(byte : Byte) -> Bln =
+let is_num_byte(byte : Byte) -> Bool =
     match Byte/to_nat(byte)
     | 0x2D => true
     | 0x2B => true
@@ -75,7 +75,7 @@ let take_literal(literal : Str) -> Parse({}) =
         run(input, pos) =
             let lit = Str/to_bytes(literal);
             let (stop, matched) =
-                match Bytes/len(lit) : {Nat, Bln}
+                match Bytes/len(lit) : {Nat, Bool}
                 | 0 => (pos, true)
                 | step + 1; ih =>
                     let (cur, live) = ih;
@@ -102,10 +102,10 @@ let parse_null : Parse(Json) =
     Parse/map(take_literal("null"), (_) => Json/null());
 
 let parse_true_val : Parse(Json) =
-    Parse/map(take_literal("true"), (_) => Json/bln(true));
+    Parse/map(take_literal("true"), (_) => Json/bool(true));
 
 let parse_false_val : Parse(Json) =
-    Parse/map(take_literal("false"), (_) => Json/bln(false));
+    Parse/map(take_literal("false"), (_) => Json/bool(false));
 
 let parse_num : Parse(Json) =
     Parse {
@@ -120,7 +120,7 @@ let parse_num : Parse(Json) =
             end
     };
 
-let is_not_string_special(byte : Byte) -> Bln =
+let is_not_string_special(byte : Byte) -> Bool =
     match Byte/to_nat(byte)
     | 0x22 => false
     | 0x5C => false
@@ -201,7 +201,7 @@ let parse_raw_str : Parse(Str) =
 let parse_str_value : Parse(Json) =
     Parse/map(parse_raw_str, (s) => Json/str(s));
 
-let is_ws(byte : Byte) -> Bln =
+let is_ws(byte : Byte) -> Bool =
     match Byte/to_nat(byte)
     | 0x20 => true
     | 0x09 => true

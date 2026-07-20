@@ -1,4 +1,4 @@
-use /std/{Nat, Bln};
+use /std/{Nat, Bool};
 use /std/time/{Duration};
 
 pub struct Instant : Type {
@@ -31,7 +31,7 @@ pub let diff(a : Instant, b : Instant) -> Duration =
     let r_hi = a.secs_hi - (b.secs_hi + d_lo.borrow);
     Duration/of(r_hi * 1000000000 + d_lo.digit, d_nanos.digit);
 
-pub let before(a : Instant, b : Instant) -> Bln =
+pub let before(a : Instant, b : Instant) -> Bool =
     match
     | a.secs_hi < b.secs_hi => true
     | a.secs_hi > b.secs_hi => false

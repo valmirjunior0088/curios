@@ -64,7 +64,7 @@ pub enum Rhs {
         arms: Vec<VariantArm>,
         default: Option<BlockId>,
     },
-    /// Dispatch on a `Bln` scrutinee. A semantic identity distinct from
+    /// Dispatch on a `Bool` scrutinee. A semantic identity distinct from
     /// [`Rhs::SwitchNat`]; the carrier is the lowering's decision.
     SwitchBool {
         scrutinee: Atom,

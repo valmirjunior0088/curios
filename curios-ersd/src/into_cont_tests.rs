@@ -33,15 +33,15 @@ fn a_scalar_module_lowers_to_verified_cont() {
 }
 
 #[test]
-fn bln_and_byte_collapse_onto_the_nat_carrier() {
+fn bool_and_byte_collapse_onto_the_nat_carrier() {
     let mut builder = ErsdBuilder::new();
     builder.open_block();
-    let t = builder.constant(Constant::Bln(true));
-    let f = builder.constant(Constant::Bln(false));
+    let t = builder.constant(Constant::Bool(true));
+    let f = builder.constant(Constant::Bool(false));
     let both = builder.let_value(
         None,
         Rhs::Operation {
-            operation: Operation::BlnAnd,
+            operation: Operation::BoolAnd,
             operands: vec![Atom::Constant(t), Atom::Constant(f)],
         },
     );
@@ -65,8 +65,8 @@ fn bln_and_byte_collapse_onto_the_nat_carrier() {
     let module = builder.finalize().expect("verifies");
 
     let printed = lowered(&module);
-    // Bln ops ride Nat bit ops; NatToByte masks; Byte comparisons are Nat
-    // comparisons. No Bln- or Byte-shaped operation survives the door.
+    // Bool ops ride Nat bit ops; NatToByte masks; Byte comparisons are Nat
+    // comparisons. No Bool- or Byte-shaped operation survives the door.
     assert!(printed.contains("NatAnd"), "{printed}");
     assert!(printed.contains("255"), "{printed}");
     assert!(printed.contains("NatEql"), "{printed}");

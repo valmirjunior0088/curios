@@ -65,8 +65,8 @@ fn big_nat_div2_and_parity() {
     // `div2` drops the low bit in O(1) and `is_even` reads it: 101 is odd and
     // floor-halves to 50, which is even.
     let source = r#"
-        use /std/{Io, Str, Bln, BigNat};
-        let show(b : Bln) -> Str =
+        use /std/{Io, Str, Bool, BigNat};
+        let show(b : Bool) -> Str =
             match b : Str
             | true => "T"
             | false => "F"

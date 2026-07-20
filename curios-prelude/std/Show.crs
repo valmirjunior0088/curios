@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bln, Char, Str, Option, BigNat, BigInt};
+use /std/{Nat, Int, Flt, Bool, Char, Str, Option, BigNat, BigInt};
 
 pub concept Show(A : Type) : Type {
     show(A) -> Str
@@ -18,8 +18,8 @@ satisfy Show(Flt) {
     show(f) = Flt/to_str(f)
 }
 
-satisfy Show(Bln) {
-    show(b) = Bln/to_str(b)
+satisfy Show(Bool) {
+    show(b) = Bool/to_str(b)
 }
 
 satisfy Show(Str) {

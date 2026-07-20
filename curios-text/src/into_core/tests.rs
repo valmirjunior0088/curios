@@ -1608,7 +1608,7 @@ fn bang_desugars_through_syn_monad_bind() {
 
 #[test]
 fn headless_cond_ladder_lowers_to_nested_bln_matches() {
-    // `match | p => a | q => b | _ => ? end` right-folds into two nested `Bln`
+    // `match | p => a | q => b | _ => ? end` right-folds into two nested `Bool`
     // matches: the first condition's false branch holds the second, whose own
     // false branch is the `_` default (a plain hole here).
     let term = run("match | p => a | q => b | _ => ? end");
@@ -1616,18 +1616,18 @@ fn headless_cond_ladder_lowers_to_nested_bln_matches() {
     let curios_core::Subterm::Match(outer) = &*term else {
         panic!("expected a Match at the top, got {term:?}");
     };
-    let curios_core::Cases::Bln { false_case, .. } = &outer.cases else {
-        panic!("expected the outer Cases::Bln, got {:?}", outer.cases);
+    let curios_core::Cases::Bool { false_case, .. } = &outer.cases else {
+        panic!("expected the outer Cases::Bool, got {:?}", outer.cases);
     };
     let curios_core::Subterm::Match(inner) = &**false_case else {
         panic!("expected a nested Match in the outer false branch, got {false_case:?}");
     };
-    let curios_core::Cases::Bln {
+    let curios_core::Cases::Bool {
         false_case: inner_false,
         ..
     } = &inner.cases
     else {
-        panic!("expected the inner Cases::Bln, got {:?}", inner.cases);
+        panic!("expected the inner Cases::Bool, got {:?}", inner.cases);
     };
     assert!(
         matches!(&**inner_false, curios_core::Subterm::Metavar(_)),

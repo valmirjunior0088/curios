@@ -255,7 +255,7 @@ impl Semantics {
         use Operation::*;
         match operation {
             NatDiv | NatRem | IntDiv | IntRem | FltToNat | FltToInt => LocalBehavior::trap(),
-            BlnAnd | BlnOr | BlnXor | BlnEql | BlnNeq | NatEql | NatNeq | NatAdd | NatSub
+            BoolAnd | BoolOr | BoolXor | BoolEql | BoolNeq | NatEql | NatNeq | NatAdd | NatSub
             | NatMul | NatLt | NatGt | NatLte | NatGte | NatAnd | NatOr | NatXor | NatShl
             | NatShr | NatRotl | NatRotr | NatClz | NatCtz | NatPopcnt | ByteToNat | NatToByte
             | ByteEql | ByteLt | ByteLte | ByteGt | ByteGte | IntEql | IntNeq | IntAdd | IntSub
@@ -358,7 +358,7 @@ impl Semantics {
     /// Constant-fold a scalar operation over its operands, under the numeric
     /// law: exact `u32`/`i32` (add, subtract — monus for `Nat` — and multiply
     /// wrap the full 32-bit carrier and never trap) and bit-preserving
-    /// binary32. Comparisons yield a [`Constant::Bln`]; the `0`/`1` carrier is
+    /// binary32. Comparisons yield a [`Constant::Bool`]; the `0`/`1` carrier is
     /// the lowering's decision. i31 appears nowhere here.
     pub fn fold_operation(operation: Operation, operands: &[Constant]) -> FoldOutcome {
         use Operation::*;
@@ -379,8 +379,8 @@ impl Semantics {
             Some(Constant::Flt(value)) => Some(*value),
             _ => None,
         };
-        let bln = |index: usize| match operands.get(index) {
-            Some(Constant::Bln(value)) => Some(*value),
+        let bool_ = |index: usize| match operands.get(index) {
+            Some(Constant::Bool(value)) => Some(*value),
             _ => None,
         };
         let io = |index: usize| match operands.get(index) {
@@ -394,11 +394,11 @@ impl Semantics {
 
         let compute = || -> Option<Result<Constant, TrapKind>> {
             Some(Ok(match operation {
-                BlnAnd => Constant::Bln(bln(0)? & bln(1)?),
-                BlnOr => Constant::Bln(bln(0)? | bln(1)?),
-                BlnXor => Constant::Bln(bln(0)? ^ bln(1)?),
-                BlnEql => Constant::Bln(bln(0)? == bln(1)?),
-                BlnNeq => Constant::Bln(bln(0)? != bln(1)?),
+                BoolAnd => Constant::Bool(bool_(0)? & bool_(1)?),
+                BoolOr => Constant::Bool(bool_(0)? | bool_(1)?),
+                BoolXor => Constant::Bool(bool_(0)? ^ bool_(1)?),
+                BoolEql => Constant::Bool(bool_(0)? == bool_(1)?),
+                BoolNeq => Constant::Bool(bool_(0)? != bool_(1)?),
 
                 NatAdd => Constant::Nat(curios_base::nat_add(nat(0)?, nat(1)?)),
                 NatSub => Constant::Nat(curios_base::nat_sub(nat(0)?, nat(1)?)),
@@ -425,18 +425,18 @@ impl Semantics {
                 NatClz => Constant::Nat(nat(0)?.leading_zeros()),
                 NatCtz => Constant::Nat(nat(0)?.trailing_zeros()),
                 NatPopcnt => Constant::Nat(nat(0)?.count_ones()),
-                NatEql => Constant::Bln(nat(0)? == nat(1)?),
-                NatNeq => Constant::Bln(nat(0)? != nat(1)?),
-                NatLt => Constant::Bln(nat(0)? < nat(1)?),
-                NatGt => Constant::Bln(nat(0)? > nat(1)?),
-                NatLte => Constant::Bln(nat(0)? <= nat(1)?),
-                NatGte => Constant::Bln(nat(0)? >= nat(1)?),
+                NatEql => Constant::Bool(nat(0)? == nat(1)?),
+                NatNeq => Constant::Bool(nat(0)? != nat(1)?),
+                NatLt => Constant::Bool(nat(0)? < nat(1)?),
+                NatGt => Constant::Bool(nat(0)? > nat(1)?),
+                NatLte => Constant::Bool(nat(0)? <= nat(1)?),
+                NatGte => Constant::Bool(nat(0)? >= nat(1)?),
 
-                ByteEql => Constant::Bln(byte(0)? == byte(1)?),
-                ByteLt => Constant::Bln(byte(0)? < byte(1)?),
-                ByteGt => Constant::Bln(byte(0)? > byte(1)?),
-                ByteLte => Constant::Bln(byte(0)? <= byte(1)?),
-                ByteGte => Constant::Bln(byte(0)? >= byte(1)?),
+                ByteEql => Constant::Bool(byte(0)? == byte(1)?),
+                ByteLt => Constant::Bool(byte(0)? < byte(1)?),
+                ByteGt => Constant::Bool(byte(0)? > byte(1)?),
+                ByteLte => Constant::Bool(byte(0)? <= byte(1)?),
+                ByteGte => Constant::Bool(byte(0)? >= byte(1)?),
 
                 IntAdd => Constant::Int(curios_base::int_add(int(0)?, int(1)?)),
                 IntSub => Constant::Int(curios_base::int_sub(int(0)?, int(1)?)),
@@ -463,12 +463,12 @@ impl Semantics {
                 IntClz => Constant::Int((int(0)? as u32).leading_zeros() as i32),
                 IntCtz => Constant::Int((int(0)? as u32).trailing_zeros() as i32),
                 IntPopcnt => Constant::Int((int(0)? as u32).count_ones() as i32),
-                IntEql => Constant::Bln(int(0)? == int(1)?),
-                IntNeq => Constant::Bln(int(0)? != int(1)?),
-                IntLt => Constant::Bln(int(0)? < int(1)?),
-                IntGt => Constant::Bln(int(0)? > int(1)?),
-                IntLte => Constant::Bln(int(0)? <= int(1)?),
-                IntGte => Constant::Bln(int(0)? >= int(1)?),
+                IntEql => Constant::Bool(int(0)? == int(1)?),
+                IntNeq => Constant::Bool(int(0)? != int(1)?),
+                IntLt => Constant::Bool(int(0)? < int(1)?),
+                IntGt => Constant::Bool(int(0)? > int(1)?),
+                IntLte => Constant::Bool(int(0)? <= int(1)?),
+                IntGte => Constant::Bool(int(0)? >= int(1)?),
 
                 FltAdd => Constant::Flt(flt(0)? + flt(1)?),
                 FltSub => Constant::Flt(flt(0)? - flt(1)?),
@@ -485,14 +485,14 @@ impl Semantics {
                 FltCeil => Constant::Flt(flt(0)?.ceil()),
                 FltTrunc => Constant::Flt(flt(0)?.trunc()),
                 FltNearest => Constant::Flt(flt(0)?.nearest()),
-                FltEql => Constant::Bln(flt(0)?.eql(flt(1)?)),
-                FltNeq => Constant::Bln(flt(0)?.neq(flt(1)?)),
-                FltLt => Constant::Bln(flt(0)?.lt(flt(1)?)),
-                FltGt => Constant::Bln(flt(0)?.gt(flt(1)?)),
-                FltLte => Constant::Bln(flt(0)?.lte(flt(1)?)),
-                FltGte => Constant::Bln(flt(0)?.gte(flt(1)?)),
+                FltEql => Constant::Bool(flt(0)?.eql(flt(1)?)),
+                FltNeq => Constant::Bool(flt(0)?.neq(flt(1)?)),
+                FltLt => Constant::Bool(flt(0)?.lt(flt(1)?)),
+                FltGt => Constant::Bool(flt(0)?.gt(flt(1)?)),
+                FltLte => Constant::Bool(flt(0)?.lte(flt(1)?)),
+                FltGte => Constant::Bool(flt(0)?.gte(flt(1)?)),
 
-                IoEql => Constant::Bln(io(0)? == io(1)?),
+                IoEql => Constant::Bool(io(0)? == io(1)?),
 
                 NatToInt => Constant::Int(curios_base::nat_to_int(nat(0)?)),
                 NatToFlt => Constant::Flt(curios_base::Flt::from_f32(nat(0)? as f32)),
@@ -516,7 +516,7 @@ impl Semantics {
     /// fold — the constant domain has no list carrier, so list operations are
     /// always [`FoldOutcome::Unknown`] here (the evaluator interprets them
     /// over its own value domain instead). Elements stay grain-shaped: a byte
-    /// grain yields `Byte`, a bit grain `Bln`.
+    /// grain yields `Byte`, a bit grain `Bool`.
     pub fn fold_sequence(operation: SequenceOp, operands: &[Constant]) -> FoldOutcome {
         use {SequenceOp::*, curios_base::Grain};
 
@@ -532,15 +532,15 @@ impl Semantics {
             Some(Constant::Byte(value)) => Some(*value),
             _ => None,
         };
-        let bln = |index: usize| match operands.get(index) {
-            Some(Constant::Bln(value)) => Some(*value),
+        let bool_ = |index: usize| match operands.get(index) {
+            Some(Constant::Bool(value)) => Some(*value),
             _ => None,
         };
 
         let compute = || -> Option<Result<Constant, TrapKind>> {
             Some(Ok(match operation {
                 BinLen(grain) => Constant::Nat(bin(0, grain)?.len(grain) as u32),
-                BinEql(grain) => Constant::Bln(bin(0, grain)? == bin(1, grain)?),
+                BinEql(grain) => Constant::Bool(bin(0, grain)? == bin(1, grain)?),
                 BinGet(Grain::X) => {
                     return Some(match bin(0, Grain::X)?.byte(nat(1)? as usize) {
                         Some(byte) => Ok(Constant::Byte(byte)),
@@ -549,7 +549,7 @@ impl Semantics {
                 }
                 BinGet(Grain::B) => {
                     return Some(match bin(0, Grain::B)?.bit(nat(1)? as usize) {
-                        Some(bit) => Ok(Constant::Bln(bit)),
+                        Some(bit) => Ok(Constant::Bool(bit)),
                         None => Err(TrapKind::IndexOutOfBounds),
                     });
                 }
@@ -566,7 +566,7 @@ impl Semantics {
                     Constant::Bin(Grain::X, bin(0, Grain::X)?.append_byte(byte(1)?)?)
                 }
                 BinAppend(Grain::B) => {
-                    Constant::Bin(Grain::B, bin(0, Grain::B)?.append_bit(bln(1)?))
+                    Constant::Bin(Grain::B, bin(0, Grain::B)?.append_bit(bool_(1)?))
                 }
                 BinConcat(grain) => Constant::Bin(
                     grain,

@@ -6,7 +6,7 @@
 -- no borrow/compare bridge is needed. The algebraic lemma corpus is deferred until
 -- a consumer needs it (see documentation/REPRESENTATION_SPEC_PT4_BIGFLT.md).
 
-use /std/{Nat, Int, Bln, Str, Order, BigNat, NonZero};
+use /std/{Nat, Int, Bool, Str, Order, BigNat, NonZero};
 use /std/NonZero/{non_zero_add, non_zero_mul, non_zero_cmp, Split};
 
 pub induct BigInt : pub Type
@@ -18,7 +18,7 @@ end
 pub let zero : BigInt =
     BigInt/zero();
 
-pub let is_zero(a : BigInt) -> Bln =
+pub let is_zero(a : BigInt) -> Bool =
     match a
     | neg(_) => false
     | zero() => true
@@ -26,7 +26,7 @@ pub let is_zero(a : BigInt) -> Bln =
     end;
 
 -- attach a sign to a BigNat magnitude, collapsing a zero magnitude to BigInt/zero
-let signed(negative : Bln, a : BigNat) -> BigInt =
+let signed(negative : Bool, a : BigNat) -> BigInt =
     match NonZero/of_big_nat(a)
     | zero() => BigInt/zero()
     | pos(t) =>
@@ -107,31 +107,31 @@ pub let cmp(a : BigInt, b : BigInt) -> Order =
     | (pos(p), pos(q)) => non_zero_cmp(p, q)
     end;
 
-pub let eql(a : BigInt, b : BigInt) -> Bln =
+pub let eql(a : BigInt, b : BigInt) -> Bool =
     match cmp(a, b)
     | eq() => true
     | _ => false
     end;
 
-pub let lt(a : BigInt, b : BigInt) -> Bln =
+pub let lt(a : BigInt, b : BigInt) -> Bool =
     match cmp(a, b)
     | lt() => true
     | _ => false
     end;
 
-pub let lte(a : BigInt, b : BigInt) -> Bln =
+pub let lte(a : BigInt, b : BigInt) -> Bool =
     match cmp(a, b)
     | gt() => false
     | _ => true
     end;
 
-pub let gt(a : BigInt, b : BigInt) -> Bln =
+pub let gt(a : BigInt, b : BigInt) -> Bool =
     match cmp(a, b)
     | gt() => true
     | _ => false
     end;
 
-pub let gte(a : BigInt, b : BigInt) -> Bln =
+pub let gte(a : BigInt, b : BigInt) -> Bool =
     match cmp(a, b)
     | lt() => false
     | _ => true
@@ -147,7 +147,7 @@ pub let of_int(n : Int) -> BigInt =
     | false => mag
     end;
 
-pub let is_even(a : BigInt) -> Bln =
+pub let is_even(a : BigInt) -> Bool =
     BigNat/is_even(magnitude(a));
 
 pub let div2(a : BigInt) -> BigInt =

@@ -202,7 +202,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
             collect_labels(head, out);
             scope(out, motive);
             match cases {
-                Cases::Bln {
+                Cases::Bool {
                     false_case,
                     true_case,
                 } => {
@@ -433,10 +433,10 @@ fn print_unary(name: &'static str, inner: Term, depth: usize) -> Printer<'static
 
 /// The surface infix symbol an operator primitive prints as, or `None` for a
 /// primitive with no infix spelling — the bitwise ops, conversions, `min`/`max`,
-/// and the `Bln.xor` that `!=` desugars through. Exactly the operators the
+/// and the `Bool.xor` that `!=` desugars through. Exactly the operators the
 /// surface language spells infix ([`NumOp::symbol`](super::NumOp::symbol)); the
 /// concept-dispatched arithmetic/comparison operators plus the two hardcoded
-/// `Bln` short-circuits.
+/// `Bool` short-circuits.
 fn infix_symbol(prim: &Prim) -> Option<&'static str> {
     Some(match prim {
         Prim::NatAdd(..) | Prim::IntAdd(..) | Prim::FltAdd(..) => "+",
@@ -447,16 +447,16 @@ fn infix_symbol(prim: &Prim) -> Option<&'static str> {
         Prim::NatEql(..)
         | Prim::IntEql(..)
         | Prim::FltEql(..)
-        | Prim::BlnEql(..)
+        | Prim::BoolEql(..)
         | Prim::BinEql(Grain::X, ..)
         | Prim::IoEql(..) => "==",
-        Prim::NatNeq(..) | Prim::IntNeq(..) | Prim::FltNeq(..) | Prim::BlnNeq(..) => "!=",
+        Prim::NatNeq(..) | Prim::IntNeq(..) | Prim::FltNeq(..) | Prim::BoolNeq(..) => "!=",
         Prim::NatLt(..) | Prim::IntLt(..) | Prim::FltLt(..) => "<",
         Prim::NatGt(..) | Prim::IntGt(..) | Prim::FltGt(..) => ">",
         Prim::NatLte(..) | Prim::IntLte(..) | Prim::FltLte(..) => "<=",
         Prim::NatGte(..) | Prim::IntGte(..) | Prim::FltGte(..) => ">=",
-        Prim::BlnAnd(..) => "&&",
-        Prim::BlnOr(..) => "||",
+        Prim::BoolAnd(..) => "&&",
+        Prim::BoolOr(..) => "||",
         _ => return None,
     })
 }
@@ -491,14 +491,14 @@ fn print_operand(term: Term, depth: usize) -> Printer<'static> {
 
 fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
     match prim {
-        Prim::BlnType => pure("Bln"),
-        Prim::Bln(false) => pure("false"),
-        Prim::Bln(true) => pure("true"),
-        Prim::BlnAnd(l, r) => print_infix("&&", l, r, depth),
-        Prim::BlnOr(l, r) => print_infix("||", l, r, depth),
-        Prim::BlnXor(l, r) => print_binary("Bln.xor ", l, r, depth),
-        Prim::BlnEql(l, r) => print_infix("==", l, r, depth),
-        Prim::BlnNeq(l, r) => print_infix("!=", l, r, depth),
+        Prim::BoolType => pure("Bool"),
+        Prim::Bool(false) => pure("false"),
+        Prim::Bool(true) => pure("true"),
+        Prim::BoolAnd(l, r) => print_infix("&&", l, r, depth),
+        Prim::BoolOr(l, r) => print_infix("||", l, r, depth),
+        Prim::BoolXor(l, r) => print_binary("Bool.xor ", l, r, depth),
+        Prim::BoolEql(l, r) => print_infix("==", l, r, depth),
+        Prim::BoolNeq(l, r) => print_infix("!=", l, r, depth),
         Prim::NatType => pure("Nat"),
         Prim::Nat(Nat::Zero) => pure("0"),
         // A successor over a symbolic tail is that tail plus its literal floor —
@@ -986,7 +986,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             // Shared `<keyword> head : label => motive;` prefix; the keyword
             // and arm bodies depend on the case kind.
             let keyword = match &cases {
-                Cases::Bln { .. } => "Bln.match ",
+                Cases::Bool { .. } => "Bool.match ",
                 Cases::Switch { .. } => "Nat.match ",
                 Cases::Inductive { .. } => "match ",
                 Cases::FreeMonoid { carrier } => match carrier {
@@ -1007,7 +1007,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             ]);
 
             let arms = match cases {
-                Cases::Bln {
+                Cases::Bool {
                     false_case,
                     true_case,
                 } => flat([

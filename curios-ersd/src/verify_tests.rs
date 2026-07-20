@@ -314,7 +314,7 @@ fn a_block_with_two_owners_is_rejected() {
 }
 
 fn nat_bool(builder: &mut ErsdBuilder) -> Atom {
-    let constant = builder.constant(Constant::Bln(true));
+    let constant = builder.constant(Constant::Bool(true));
     Atom::Constant(constant)
 }
 

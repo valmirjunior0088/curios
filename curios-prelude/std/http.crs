@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Bln, Char, Lst, Parse, Result, Option, Io, Task};
+use /std/{Bytes, Byte, Str, Nat, Bool, Char, Lst, Parse, Result, Option, Io, Task};
 use /std/tcp/{Settings, Socket};
 
 pub induct Method : pub Type
@@ -61,13 +61,13 @@ pub let get_tls(host : Str, port : Nat, path : Str) -> Request =
 pub let post_tls(host : Str, port : Nat, path : Str, body : Bytes) -> Request =
     secure(post(host, port, path, body));
 
-let until(target : Byte) -> (Byte) -> Bln =
-    (byte) => Bln/not(byte == target);
+let until(target : Byte) -> (Byte) -> Bool =
+    (byte) => Bool/not(byte == target);
 
 let header_lookup(headers : Lst({Str, Str}), name : Str) -> Option(Str) =
     Option/map(Lst/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)), ((_, value)) => value);
 
-let is_ascii_digit(byte : Byte) -> Bln =
+let is_ascii_digit(byte : Byte) -> Bool =
     Nat/in_range(Byte/to_nat(byte), 0x30, 0x39);
 
 let render_header((name, value) : {Str, Str}) -> Str =

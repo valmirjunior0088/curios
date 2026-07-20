@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Option, Io, Bln};
+use /std/{Bytes, Byte, Str, Nat, Option, Io, Bool};
 
 pub induct Fmt : pub Type
 | nil()

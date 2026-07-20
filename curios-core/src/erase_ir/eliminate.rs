@@ -14,7 +14,7 @@
 //! label mapped to the once-erased operand — because their peels re-derive
 //! Core terms from the head (`head - 1`, the sequence's length and slices),
 //! and walking those must re-resolve to the same operand instead of
-//! re-erasing an effectful expression. The dispatch forms (`Bln`, `Switch`,
+//! re-erasing an effectful expression. The dispatch forms (`Bool`, `Switch`,
 //! the inductive match) never re-derive from the head, so they refine the
 //! *original* head term — arm bodies were elaborated against reductions
 //! keyed on that term, and refining an alias in its place would break their
@@ -49,7 +49,7 @@ impl SeqCarrier<'_> {
         match self {
             SeqCarrier::Lst { element } => element.clone(),
             SeqCarrier::Bin { grain } => Term::prim(match grain {
-                curios_base::Grain::B => Prim::BlnType,
+                curios_base::Grain::B => Prim::BoolType,
                 curios_base::Grain::X => Prim::ByteType,
             }),
         }
@@ -145,7 +145,7 @@ impl Lowering {
             cases,
         } = m;
         match cases {
-            Cases::Bln {
+            Cases::Bool {
                 false_case,
                 true_case,
             } => self.erase_bln(context, head, motive, false_case, true_case, hint),
@@ -264,7 +264,7 @@ impl Lowering {
         Ok(self.seal(outcome))
     }
 
-    /// A dependent `Bln` elimination — a first-class `SwitchBool`, distinct
+    /// A dependent `Bool` elimination — a first-class `SwitchBool`, distinct
     /// from a `Nat` dispatch.
     fn erase_bln(
         &mut self,
@@ -275,7 +275,7 @@ impl Lowering {
         true_case: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let head_type = expect_prim_head(context, head, PrimHead::Bln)?;
+        let head_type = expect_prim_head(context, head, PrimHead::Bool)?;
         let (head, scrutinee) = match self.scrutinee_operand(context, head, &head_type)? {
             Ok(pair) => pair,
             Err(diverged) => return Ok(diverged),
@@ -284,14 +284,14 @@ impl Lowering {
         let if_false = self.refined_arm(
             context,
             &head,
-            &Term::prim(Prim::Bln(false)),
+            &Term::prim(Prim::Bool(false)),
             motive,
             false_case,
         )?;
         let if_true = self.refined_arm(
             context,
             &head,
-            &Term::prim(Prim::Bln(true)),
+            &Term::prim(Prim::Bool(true)),
             motive,
             true_case,
         )?;

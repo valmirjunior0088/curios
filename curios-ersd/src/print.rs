@@ -450,7 +450,7 @@ fn sequence_grain(grain: &super::SequenceGrain) -> &'static str {
 fn render_constant(constant: &Constant) -> String {
     match constant {
         Constant::Unit => "unit".into(),
-        Constant::Bln(value) => format!("{value}"),
+        Constant::Bool(value) => format!("{value}"),
         Constant::Nat(value) => format!("{value}"),
         Constant::Int(value) => format!("{value}:int"),
         Constant::Flt(value) => {

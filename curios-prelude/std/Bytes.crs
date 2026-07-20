@@ -1,5 +1,5 @@
 pub use /sys/Bytes/{let Bytes, len, eql, slice, append, concat};
-use /std/{Lst, Nat, Byte, Bln, Option, Eq};
+use /std/{Lst, Nat, Byte, Bool, Option, Eq};
 
 pub let at(b : Bytes, i : Nat, ok : Nat/Lt(i, len(b))) -> Byte =
     /sys/Bytes/get(b, i);
@@ -28,7 +28,7 @@ pub let fold(@A : Type, b : Bytes, init : A, f : (Byte, A) -> A) -> A =
         end;
     go(n, 0, init, Eq/refl());
 
-pub let find_index(b : Bytes, pred : (Byte) -> Bln) -> Option(Nat) =
+pub let find_index(b : Bytes, pred : (Byte) -> Bool) -> Option(Nat) =
     let (_, found) : {Nat, Option(Nat)} =
         fold(b, (0, Option/none()), (byte, (i, found)) =>
             match found

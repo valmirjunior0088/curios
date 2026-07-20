@@ -267,16 +267,16 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
     } = m;
 
     match cases {
-        Cases::Bln {
+        Cases::Bool {
             false_case,
             true_case,
         } => match Term::unwrap_or_clone(reduce_forced(context, head)?) {
-            Subterm::Prim(Prim::Bln(false)) => Ok(Reduce::Continue(false_case)),
-            Subterm::Prim(Prim::Bln(true)) => Ok(Reduce::Continue(true_case)),
+            Subterm::Prim(Prim::Bool(false)) => Ok(Reduce::Continue(false_case)),
+            Subterm::Prim(Prim::Bool(true)) => Ok(Reduce::Continue(true_case)),
             head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
                 head: head.into(),
                 motive,
-                cases: Cases::Bln {
+                cases: Cases::Bool {
                     false_case,
                     true_case,
                 },

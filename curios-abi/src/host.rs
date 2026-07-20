@@ -42,7 +42,7 @@ use std::{
 /// The type of one value crossing the host boundary. The whole vocabulary is
 /// six shapes; everything a host op consumes or produces is one of them.
 ///
-/// The scalar cases matter to codegen: a `Nat`/`Bln` operand is unboxed from
+/// The scalar cases matter to codegen: a `Nat`/`Bool` operand is unboxed from
 /// its i31 carrier *unsigned* (`i31.get_u`) and crosses as a raw wasm `i32`,
 /// while `Int` is unboxed *signed* (`i31.get_s`) — `poll`'s timeout keeps the
 /// `poll(2)` sign convention. Scalar results re-enter pre-boxed as i31 refs.
@@ -64,7 +64,7 @@ use std::{
 pub enum WireType {
     Nat,
     Int,
-    Bln,
+    Bool,
     Bin,
     Io,
     Lst(#[cfg_attr(feature = "archive", rkyv(omit_bounds))] Box<WireType>),
@@ -276,7 +276,7 @@ pub fn sys_io() -> ForeignStore {
         (
             "io_set_nonblocking",
             "set_nonblocking",
-            vec![("h", WireType::Io), ("on", WireType::Bln)],
+            vec![("h", WireType::Io), ("on", WireType::Bool)],
             vec![("status", WireType::Nat)],
         ),
         (
@@ -294,7 +294,7 @@ pub fn sys_io() -> ForeignStore {
         (
             "io_set_reuseaddr",
             "set_reuseaddr",
-            vec![("h", WireType::Io), ("on", WireType::Bln)],
+            vec![("h", WireType::Io), ("on", WireType::Bool)],
             vec![("status", WireType::Nat)],
         ),
         (

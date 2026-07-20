@@ -12,7 +12,7 @@ pub(crate) fn wire_term(wire_type: &WireType) -> Term {
     let prim = match wire_type {
         WireType::Nat => Prim::NatType,
         WireType::Int => Prim::IntType,
-        WireType::Bln => Prim::BlnType,
+        WireType::Bool => Prim::BoolType,
         WireType::Bin => Prim::BinType(Grain::X),
         WireType::Io => Prim::IoType,
         WireType::Lst(element) => Prim::LstType(wire_term(element)),
@@ -21,7 +21,7 @@ pub(crate) fn wire_term(wire_type: &WireType) -> Term {
     Subterm::Prim(prim).into()
 }
 
-/// The closed set of primitives of the core calculus: the built-in types (`BlnType`, `NatType`, `IntType`, `FltType`, `BinType`, `LstType`, `IoType`, `CellType`), their literals, and the operator families over them, plus store-described `Foreign` host calls and `IoExit`. Operand positions hold full [`Term`]s, so a primitive participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+/// The closed set of primitives of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `LstType`, `IoType`, `CellType`), their literals, and the operator families over them, plus store-described `Foreign` host calls and `IoExit`. Operand positions hold full [`Term`]s, so a primitive participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
 ///
 /// The `impl` block's constructor helpers (`nat_add`, `bin_slice`, …) take `impl Into<Term>` operands, sparing builder call sites — reduction's neutral rebuilds and curios-text's lowering — the `.into()` noise.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -30,13 +30,13 @@ pub(crate) fn wire_term(wire_type: &WireType) -> Term {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub enum Prim {
-    BlnType,
-    Bln(bool),
-    BlnAnd(Term, Term),
-    BlnOr(Term, Term),
-    BlnXor(Term, Term),
-    BlnEql(Term, Term),
-    BlnNeq(Term, Term),
+    BoolType,
+    Bool(bool),
+    BoolAnd(Term, Term),
+    BoolOr(Term, Term),
+    BoolXor(Term, Term),
+    BoolEql(Term, Term),
+    BoolNeq(Term, Term),
     NatType,
     Nat(Nat),
     NatEql(Term, Term),
@@ -144,7 +144,7 @@ pub enum Prim {
     LstMap(Term, Term, Term, Term),
     IoType,
     Io(u32),
-    // (a, b) -> Bln: identity of two handles. The one pure operation on `Io` --
+    // (a, b) -> Bool: identity of two handles. The one pure operation on `Io` --
     // handles are opaque i31 tokens, so this erases to the `Nat` equality op.
     IoEql(Term, Term),
     // A store-described host call: the function's `WireSignature` fixes the
@@ -769,8 +769,8 @@ impl Prim {
     /// de Bruijn / region hot path allocation- and indirection-free.
     fn for_each_operand(&self, visit: &mut impl FnMut(&Term)) {
         match self {
-            Prim::BlnType
-            | Prim::Bln(_)
+            Prim::BoolType
+            | Prim::Bool(_)
             | Prim::NatType
             | Prim::Nat(Nat::Zero)
             | Prim::ByteType
@@ -839,11 +839,11 @@ impl Prim {
             | Prim::NatShr(a, b)
             | Prim::NatRotl(a, b)
             | Prim::NatRotr(a, b)
-            | Prim::BlnAnd(a, b)
-            | Prim::BlnOr(a, b)
-            | Prim::BlnXor(a, b)
-            | Prim::BlnEql(a, b)
-            | Prim::BlnNeq(a, b)
+            | Prim::BoolAnd(a, b)
+            | Prim::BoolOr(a, b)
+            | Prim::BoolXor(a, b)
+            | Prim::BoolEql(a, b)
+            | Prim::BoolNeq(a, b)
             | Prim::IntEql(a, b)
             | Prim::IntNeq(a, b)
             | Prim::IntAdd(a, b)
@@ -951,8 +951,8 @@ impl Prim {
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
         match self {
-            Prim::BlnType => Prim::BlnType,
-            Prim::Bln(value) => Prim::Bln(*value),
+            Prim::BoolType => Prim::BoolType,
+            Prim::Bool(value) => Prim::Bool(*value),
             Prim::NatType => Prim::NatType,
             Prim::Nat(Nat::Zero) => Prim::Nat(Nat::Zero),
             Prim::Nat(Nat::Succ(spine, inner)) => {
@@ -989,11 +989,11 @@ impl Prim {
             Prim::ByteLte(l, r) => traverse_binary(l, r, visit, Prim::ByteLte),
             Prim::ByteGt(l, r) => traverse_binary(l, r, visit, Prim::ByteGt),
             Prim::ByteGte(l, r) => traverse_binary(l, r, visit, Prim::ByteGte),
-            Prim::BlnAnd(l, r) => traverse_binary(l, r, visit, Prim::BlnAnd),
-            Prim::BlnOr(l, r) => traverse_binary(l, r, visit, Prim::BlnOr),
-            Prim::BlnXor(l, r) => traverse_binary(l, r, visit, Prim::BlnXor),
-            Prim::BlnEql(l, r) => traverse_binary(l, r, visit, Prim::BlnEql),
-            Prim::BlnNeq(l, r) => traverse_binary(l, r, visit, Prim::BlnNeq),
+            Prim::BoolAnd(l, r) => traverse_binary(l, r, visit, Prim::BoolAnd),
+            Prim::BoolOr(l, r) => traverse_binary(l, r, visit, Prim::BoolOr),
+            Prim::BoolXor(l, r) => traverse_binary(l, r, visit, Prim::BoolXor),
+            Prim::BoolEql(l, r) => traverse_binary(l, r, visit, Prim::BoolEql),
+            Prim::BoolNeq(l, r) => traverse_binary(l, r, visit, Prim::BoolNeq),
             Prim::IntType => Prim::IntType,
             Prim::Int(value) => Prim::Int(value.clone()),
             Prim::IntEql(l, r) => traverse_binary(l, r, visit, Prim::IntEql),
@@ -1125,7 +1125,7 @@ impl Prim {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PrimHead {
     Nat,
-    Bln,
+    Bool,
     Bin(Grain),
 }
 

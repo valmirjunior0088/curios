@@ -79,7 +79,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// non-nullable heap type (a handle is its `Bin` token).
     fn wire_param_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type {
-            WireType::Nat | WireType::Bln | WireType::Int => {
+            WireType::Nat | WireType::Bool | WireType::Int => {
                 curios_wasm::ValType::Num(curios_wasm::NumType::I32)
             }
             WireType::Bin | WireType::Io => curios_wasm::ValType::Ref(curios_wasm::RefType {
@@ -99,7 +99,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// function total), references exactly as in parameter position.
     fn wire_result_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type {
-            WireType::Nat | WireType::Bln | WireType::Int => {
+            WireType::Nat | WireType::Bool | WireType::Int => {
                 curios_wasm::ValType::Ref(Table::int_type(false))
             }
             reference => self.wire_param_type(reference),

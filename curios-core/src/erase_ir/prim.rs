@@ -1,9 +1,9 @@
 //! The primitive transcription: each Core primitive to its arena identity,
 //! shape for shape.
 //!
-//! No carrier is chosen here: `Bln` values and operations stay `Bln`-shaped,
+//! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped,
 //! `Byte` stays `Byte`, `Io` stays an opaque handle constant, and a packed
-//! binary's element is its grain's shape (`Byte` for `X`, `Bln` for `B`) —
+//! binary's element is its grain's shape (`Byte` for `X`, `Bool` for `B`) —
 //! every collapse onto a runtime carrier belongs to the lowering out of the
 //! representation. Unbounded type-level numerals narrow to the exact 32-bit
 //! domains here (the numeric law's Core border), with overflow reported as an
@@ -30,8 +30,8 @@ fn nat_type() -> Term {
     Term::prim(Prim::NatType)
 }
 
-fn bln_type() -> Term {
-    Term::prim(Prim::BlnType)
+fn bool_type() -> Term {
+    Term::prim(Prim::BoolType)
 }
 
 fn byte_type() -> Term {
@@ -62,7 +62,7 @@ fn lst_type(element: Term) -> Term {
 fn grain_element_type(grain: curios_base::Grain) -> Term {
     match grain {
         curios_base::Grain::X => byte_type(),
-        curios_base::Grain::B => bln_type(),
+        curios_base::Grain::B => bool_type(),
     }
 }
 
@@ -137,7 +137,7 @@ pub(super) fn erase_prim(
 
     match prim {
         // Type formers carry nothing to lower.
-        Prim::BlnType
+        Prim::BoolType
         | Prim::NatType
         | Prim::ByteType
         | Prim::IntType
@@ -147,12 +147,12 @@ pub(super) fn erase_prim(
         | Prim::IoType
         | Prim::CellType(_) => Ok(Outcome::Emitted(lowering.unit())),
 
-        &Prim::Bln(value) => Ok(lowering.constant(curios_ersd::Constant::Bln(value))),
-        Prim::BlnAnd(l, r) => op!(Op::BlnAnd, bln_type, l, r),
-        Prim::BlnOr(l, r) => op!(Op::BlnOr, bln_type, l, r),
-        Prim::BlnXor(l, r) => op!(Op::BlnXor, bln_type, l, r),
-        Prim::BlnEql(l, r) => op!(Op::BlnEql, bln_type, l, r),
-        Prim::BlnNeq(l, r) => op!(Op::BlnNeq, bln_type, l, r),
+        &Prim::Bool(value) => Ok(lowering.constant(curios_ersd::Constant::Bool(value))),
+        Prim::BoolAnd(l, r) => op!(Op::BoolAnd, bool_type, l, r),
+        Prim::BoolOr(l, r) => op!(Op::BoolOr, bool_type, l, r),
+        Prim::BoolXor(l, r) => op!(Op::BoolXor, bool_type, l, r),
+        Prim::BoolEql(l, r) => op!(Op::BoolEql, bool_type, l, r),
+        Prim::BoolNeq(l, r) => op!(Op::BoolNeq, bool_type, l, r),
 
         &Prim::Byte(value) => Ok(lowering.constant(curios_ersd::Constant::Byte(value))),
         Prim::ByteToNat(inner) => op!(Op::ByteToNat, byte_type, inner),

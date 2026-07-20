@@ -71,7 +71,7 @@ Unchecked items may link to working implementation specifications. When an item 
 - [x] Struct spread/update syntax (`T { ..base, f = x }` — one leading spread; labeled, declaration-ordered overrides; unwritten fields copied from the base, concept superclass fields included, overridable with `use <term>`; no tuple spread)
 - [x] List/Bits/Bytes spread syntax (`[a, ..xs, b]`, `b\1\..bits\0`, `x\00\..bytes\01` — positional splices, any position/count, desugared to n-ary concat prims; packed literals stay whitespace-free with glued atomic operands and require their grain prefix; no tuple/string spread)
 - [x] Nested/tuple/struct match-arm patterns (the pattern-matrix compiler — full enumeration, no row priority)
-- [x] Headless match (a headless `Bln` condition ladder `match | cond => … | _ => … end` with a mandatory `_` default; arms inherit their condition's definitional refinement)
+- [x] Headless match (a headless `Bool` condition ladder `match | cond => … | _ => … end` with a mandatory `_` default; arms inherit their condition's definitional refinement)
 - [x] Bind-arms (`| pattern = value =>`, Rust `if let`, in the headless ladder; refutable LHS, nested patterns, fallthrough shared through a nullary thunk)
 - [x] Final `| _ =>` catch-all in headed inductive matches (bare/final/top-level only; lowers to the core `Cases::Inductive` default)
 - [ ] [Anonymous match functions](11_ANONYMOUS_MATCH_FUNCTION_SPEC.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match)

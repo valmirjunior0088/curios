@@ -1,18 +1,18 @@
 use {super::run, curios_runtime::MockHost, std::time::Duration};
 
 #[test]
-fn bln_logic_and_of_str() {
+fn bool_logic_and_of_str() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Bln, Str, Option, Io};
-        let computed = Bln/and(Bln/or(false, true), Bln/not(false));
-        let parsed = match Bln/of_str("false") : Bln
+        use /std/{Bool, Str, Option, Io};
+        let computed = Bool/and(Bool/or(false, true), Bool/not(false));
+        let parsed = match Bool/of_str("false") : Bool
             | some(b) => b
             | none() => true
             end;
-        Io/write(Io/stdout, Str/to_bytes(Str/concat(Bln/to_str(computed), Bln/to_str(parsed))))
+        Io/write(Io/stdout, Str/to_bytes(Str/concat(Bool/to_str(computed), Bool/to_str(parsed))))
         "#,
         system,
     )
@@ -22,15 +22,15 @@ fn bln_logic_and_of_str() {
 }
 
 #[test]
-fn bln_xor_executes() {
+fn bool_xor_executes() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Bln, Str, Io};
-        let a = Bln/xor(true, false);
-        let b = Bln/xor(true, true);
-        Io/write(Io/stdout, Str/to_bytes(Str/concat(Bln/to_str(a), Bln/to_str(b))))
+        use /std/{Bool, Str, Io};
+        let a = Bool/xor(true, false);
+        let b = Bool/xor(true, true);
+        Io/write(Io/stdout, Str/to_bytes(Str/concat(Bool/to_str(a), Bool/to_str(b))))
         "#,
         system,
     )
@@ -40,15 +40,15 @@ fn bln_xor_executes() {
 }
 
 #[test]
-fn bln_eql_executes() {
+fn bool_eql_executes() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Bln, Str, Io};
-        let a = Bln/eql(true, true);
-        let b = Bln/eql(true, false);
-        Io/write(Io/stdout, Str/to_bytes(Str/concat(Bln/to_str(a), Bln/to_str(b))))
+        use /std/{Bool, Str, Io};
+        let a = Bool/eql(true, true);
+        let b = Bool/eql(true, false);
+        Io/write(Io/stdout, Str/to_bytes(Str/concat(Bool/to_str(a), Bool/to_str(b))))
         "#,
         system,
     )
@@ -190,7 +190,7 @@ fn infix_resolves_against_a_bound_variable_type() {
 
 #[test]
 fn infix_comparison_yields_a_bln_scrutinee() {
-    // A comparison resolves on its operand type and yields `Bln`, usable directly
+    // A comparison resolves on its operand type and yields `Bool`, usable directly
     // as a `match` scrutinee. `2 + 2 == 4` is true; `3 < 1` is false.
     assert_eq!(
         run(r#"
@@ -216,7 +216,7 @@ fn infix_comparison_yields_a_bln_scrutinee() {
 
 #[test]
 fn infix_equality_is_overloaded_for_bln() {
-    // `==` resolves at `Bln` too (`BlnEql`), so `(1 < 2) == (3 < 4)` is `true`.
+    // `==` resolves at `Bool` too (`BoolEql`), so `(1 < 2) == (3 < 4)` is `true`.
     assert_eq!(
         run(r#"
             use /std/{Io, Str};
@@ -248,7 +248,7 @@ fn infix_mixes_a_float_variable_with_an_integer_literal() {
 
 #[test]
 fn infix_undefined_operator_for_type_is_rejected() {
-    // `&&` only has a witness on `Bln`, so `nat && nat` has no `And(Nat)` — a
+    // `&&` only has a witness on `Bool`, so `nat && nat` has no `And(Nat)` — a
     // compile-time error, same as any other operator at an un-witnessed type.
     let (system, _io) = MockHost::builder().build();
     let source = r#"
@@ -279,7 +279,7 @@ fn infix_rem_on_flt_computes_fmod() {
 
 #[test]
 fn infix_not_equal_on_bln_resolves_to_bln_neq() {
-    // `bln != bln` now resolves to the `BlnNeq` primitive. `true != false` is `true`.
+    // `bool_ != bool_` now resolves to the `BoolNeq` primitive. `true != false` is `true`.
     assert_eq!(
         run(r#"
             use /std/{Io, Str};
@@ -346,8 +346,8 @@ fn infix_resolves_against_a_local_use_premise() {
 fn infix_equality_works_on_str() {
     assert_eq!(
         run(r#"
-            use /std/{Bln, Io, Str};
-            Io/write(Io/stdout, Str/to_bytes(Bln/to_str("abc" == "abc")))
+            use /std/{Bool, Io, Str};
+            Io/write(Io/stdout, Str/to_bytes(Bool/to_str("abc" == "abc")))
         "#),
         b"true"
     );
@@ -361,12 +361,12 @@ fn infix_equality_works_on_str() {
 fn infix_without_witness_reports_no_witness() {
     let (system, _io) = MockHost::builder().build();
     let source = r#"
-        use /std/{Bln, Io, Str};
-        let b : Bln = true + false;
-        Io/write(Io/stdout, Str/to_bytes(Bln/to_str(b)))
+        use /std/{Bool, Io, Str};
+        let b : Bool = true + false;
+        Io/write(Io/stdout, Str/to_bytes(Bool/to_str(b)))
     "#;
     let error = crate::run_text(Duration::from_secs(10), source, system)
-        .expect_err("Add(Bln) has no witness");
+        .expect_err("Add(Bool) has no witness");
     assert!(error.contains("no witness"), "unexpected error: {error}");
 }
 
@@ -407,16 +407,16 @@ fn type_level_operator_indices_stay_convertible() {
     );
 }
 
-// `!=` is the xor-negated equality (no `BlnNot` prim); on `Bytes` both `==`
+// `!=` is the xor-negated equality (no `BoolNot` prim); on `Bytes` both `==`
 // and `!=` newly resolve through the migrated sys witness.
 #[test]
 fn infix_equality_works_on_bin() {
     assert_eq!(
         run(r#"
-            use /std/{Bln, Bytes, Io, Str};
+            use /std/{Bool, Bytes, Io, Str};
             let a : Bytes = Str/to_bytes("xy");
             let b : Bytes = Str/to_bytes("xz");
-            Io/write(Io/stdout, Str/to_bytes(Bln/to_str(a != b)))
+            Io/write(Io/stdout, Str/to_bytes(Bool/to_str(a != b)))
         "#),
         b"true"
     );

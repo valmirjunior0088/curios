@@ -3,7 +3,7 @@ use {
     curios_base::Grain,
 };
 
-/// How a freshly-computed numeric value is boxed: an `i31ref` for `Nat`/`Int`/`Bln`
+/// How a freshly-computed numeric value is boxed: an `i31ref` for `Nat`/`Int`/`Bool`
 /// results, or the `Flt` struct for `f32` results.
 enum WrapAs {
     I31,

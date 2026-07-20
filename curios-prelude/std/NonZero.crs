@@ -6,7 +6,7 @@
 -- same raw ripple-carry the `BigNat` op runs, so the algebraic lemma corpus is a
 -- one-line delegation each.
 
-use /std/{Bln, Bits, Order, Eq, False, True};
+use /std/{Bool, Bits, Order, Eq, False, True};
 use /std/Bits/{cons};
 use /std/BigNat/{BigNat, Canonical, of_bits, is_trimmed, trim, trim_of_trimmed, big_nat_eq,
     view, View, add, add_raw, add_raw_trimmed, succ, succ_raw, succ_raw_trimmed, mul, mul_raw, cmp,
@@ -14,7 +14,7 @@ use /std/BigNat/{BigNat, Canonical, of_bits, is_trimmed, trim, trim_of_trimmed, 
     add_comm, add_assoc, mul_comm, mul_assoc, distrib_l, cmp_refl, cmp_eq, cmp_flip, cmp_trans};
 
 let false_neq_true(p : Eq(false, true)) -> False =
-    Eq/subst((b : Bln) => match b : Prop | false => True | true => False end, p, True/qed());
+    Eq/subst((b : Bool) => match b : Prop | false => True | true => False end, p, True/qed());
 
 let cong_flip(@s : Order, @t : Order, p : Eq(s, t)) -> Eq(Order/flip(s), Order/flip(t)) =
     match p : (q : Eq(Order, a, b)) => Eq(Order/flip(a), Order/flip(b))
@@ -29,7 +29,7 @@ let is_trimmed_of_canonical(rep : Bits, c : Canonical(rep)) -> Eq(is_trimmed(rep
 
 pub let of_trimmed_bits(rep : Bits, p : Eq(is_trimmed(rep), true)) -> BigNat =
     BigNat { rep = rep, canonical =
-        Eq/subst((b : Bln) => match b : Prop | true => True | false => False end, Eq/sym(p), True/qed()) };
+        Eq/subst((b : Bool) => match b : Prop | true => True | false => False end, Eq/sym(p), True/qed()) };
 
 -- nonzero certificate: the (canonical) rep is nonempty. A plain match (no fold),
 -- so it reduces on any cons-headed rep, even one with an opaque tail.
@@ -49,7 +49,7 @@ pub let non_zero_eq(a : NonZero, b : NonZero, p : Eq(a.magnitude, b.magnitude)) 
 pub let nz_trimmed(t : NonZero) -> Eq(is_trimmed(t.magnitude.rep), true) =
     is_trimmed_of_canonical(t.magnitude.rep, t.magnitude.canonical);
 
-let cons_low_trimmed(low : Bln, rep : Bits, tr : Eq(is_trimmed(rep), true), ne : is_cons(rep))
+let cons_low_trimmed(low : Bool, rep : Bits, tr : Eq(is_trimmed(rep), true), ne : is_cons(rep))
     -> Eq(is_trimmed(cons(low, rep)), true) =
     match rep | b\ => False/absurd(ne) | b\_\.._ => tr end;
 
@@ -59,7 +59,7 @@ pub let raw_non_zero(rep : Bits, tr : Eq(is_trimmed(rep), true), ne : is_cons(re
     Eq/subst((w : Bits) => is_cons(w), Eq/sym(trim_of_trimmed(rep, tr)), ne);
 
 -- add_raw of a cons-headed left operand is cons-headed
-let add_raw_cons(x : Bits, y : Bits, c : Bln, ne : is_cons(x)) -> is_cons(add_raw(x, y, c)) =
+let add_raw_cons(x : Bits, y : Bits, c : Bool, ne : is_cons(x)) -> is_cons(add_raw(x, y, c)) =
     match x : (r) => is_cons(add_raw(r, y, c))
     | b\ => False/absurd(ne)
     | b\xh\..xt =>
@@ -77,13 +77,13 @@ let succ_raw_cons(x : Bits) -> is_cons(succ_raw(x)) =
     end;
 
 -- combine / trim-head helpers for the mul-nonzero proof
-let combine_non_zero(h : Bln, w : Bits, ne : is_cons(w)) -> is_cons(combine(h, w)) =
+let combine_non_zero(h : Bool, w : Bits, ne : is_cons(w)) -> is_cons(combine(h, w)) =
     match w | b\ => False/absurd(ne) | b\_\.._ => True/qed() end;
 
 let combine_true_non_zero(w : Bits) -> is_cons(combine(true, w)) =
     match w | b\ => True/qed() | b\_\.._ => True/qed() end;
 
-let trim_head_non_zero(h : Bln, r : Bits, ne : is_cons(trim(r))) -> is_cons(trim(cons(h, r))) =
+let trim_head_non_zero(h : Bool, r : Bits, ne : is_cons(trim(r))) -> is_cons(trim(cons(h, r))) =
     combine_non_zero(h, trim(r), ne);
 
 let trim_head_true(r : Bits) -> is_cons(trim(cons(true, r))) =
@@ -99,7 +99,7 @@ rec carry_non_zero(x : Bits) -> is_cons(trim(add_raw(b\, x, true))) =
         end
     end;
 
-rec add_trim_non_zero(a : Bits, b : Bits, c : Bln,
+rec add_trim_non_zero(a : Bits, b : Bits, c : Bool,
     tr : Eq(is_trimmed(a), true), ne : is_cons(a)) -> is_cons(trim(add_raw(a, b, c))) =
     match a
     | b\ => False/absurd(ne)

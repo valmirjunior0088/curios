@@ -141,8 +141,8 @@ fn check_accepts_a_well_typed_term() {
 fn check_rejects_a_type_mismatch() {
     let mut context = context();
 
-    let bln = Subterm::Prim(Prim::BlnType).into();
-    let result = elaborate(&mut context, &nat_lit(3), Mode::Check(bln));
+    let bool_ = Subterm::Prim(Prim::BoolType).into();
+    let result = elaborate(&mut context, &nat_lit(3), Mode::Check(bool_));
 
     assert!(result.is_err());
 }

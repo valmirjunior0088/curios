@@ -345,18 +345,18 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Match(match_) => match match_ {
-                // The headless ladder right-folds into nested `Bln` matches:
+                // The headless ladder right-folds into nested `Bool` matches:
                 // each `cond => body` becomes `match cond | false => <rest> |
                 // true => body end`, the `_` default sitting at the innermost
                 // false branch. No motive at any level (a fresh hole each),
                 // matching the surface form's absence of one. Arms inherit the
                 // definitional refinement of their conditions for free — that
-                // is exactly what nesting `Bln` matches buys.
+                // is exactly what nesting `Bool` matches buys.
                 Match::Cond(CondMatch { arms, default }) => {
                     let mut acc = self.term(default)?;
                     for arm in arms.iter().rev() {
                         acc = match &arm.test {
-                            LadderTest::Cond(condition) => curios_core::Term::bln_match(
+                            LadderTest::Cond(condition) => curios_core::Term::bool_match(
                                 self.term(condition)?,
                                 None,
                                 curios_core::Term::metavar(self.context.fresh_metavar()),
@@ -933,22 +933,22 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     pub(super) fn prim(&self, prim: &Prim) -> Result<curios_core::Prim, Error> {
         Ok(match prim {
-            Prim::BlnType => curios_core::Prim::BlnType,
-            Prim::Bln(b) => curios_core::Prim::Bln(*b),
-            Prim::BlnAnd(left, right) => {
-                curios_core::Prim::BlnAnd(self.term(left)?, self.term(right)?)
+            Prim::BoolType => curios_core::Prim::BoolType,
+            Prim::Bool(b) => curios_core::Prim::Bool(*b),
+            Prim::BoolAnd(left, right) => {
+                curios_core::Prim::BoolAnd(self.term(left)?, self.term(right)?)
             }
-            Prim::BlnOr(left, right) => {
-                curios_core::Prim::BlnOr(self.term(left)?, self.term(right)?)
+            Prim::BoolOr(left, right) => {
+                curios_core::Prim::BoolOr(self.term(left)?, self.term(right)?)
             }
-            Prim::BlnXor(left, right) => {
-                curios_core::Prim::BlnXor(self.term(left)?, self.term(right)?)
+            Prim::BoolXor(left, right) => {
+                curios_core::Prim::BoolXor(self.term(left)?, self.term(right)?)
             }
-            Prim::BlnEql(left, right) => {
-                curios_core::Prim::BlnEql(self.term(left)?, self.term(right)?)
+            Prim::BoolEql(left, right) => {
+                curios_core::Prim::BoolEql(self.term(left)?, self.term(right)?)
             }
-            Prim::BlnNeq(left, right) => {
-                curios_core::Prim::BlnNeq(self.term(left)?, self.term(right)?)
+            Prim::BoolNeq(left, right) => {
+                curios_core::Prim::BoolNeq(self.term(left)?, self.term(right)?)
             }
             Prim::NatType => curios_core::Prim::NatType,
             Prim::Nat(Nat::Zero) => curios_core::Prim::Nat(curios_core::Nat::Zero),

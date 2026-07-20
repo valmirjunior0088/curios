@@ -346,10 +346,10 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             head: zonk_term(context, head)?,
             motive: motive.map_body(|b| zonk_term(context, b))?,
             cases: match cases {
-                Cases::Bln {
+                Cases::Bool {
                     false_case,
                     true_case,
-                } => Cases::Bln {
+                } => Cases::Bool {
                     false_case: zonk_term(context, false_case)?,
                     true_case: zonk_term(context, true_case)?,
                 },
@@ -478,8 +478,8 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
 /// fallibly substitutes metavariable solutions rather than de Bruijn shifting.
 fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
     Ok(match prim {
-        Prim::BlnType
-        | Prim::Bln(_)
+        Prim::BoolType
+        | Prim::Bool(_)
         | Prim::NatType
         | Prim::Nat(Nat::Zero)
         | Prim::ByteType
@@ -529,11 +529,11 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::ByteGt(a, b) => Prim::ByteGt(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::ByteGte(a, b) => Prim::ByteGte(zonk_term(context, a)?, zonk_term(context, b)?),
 
-        Prim::BlnAnd(a, b) => Prim::BlnAnd(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::BlnOr(a, b) => Prim::BlnOr(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::BlnXor(a, b) => Prim::BlnXor(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::BlnEql(a, b) => Prim::BlnEql(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::BlnNeq(a, b) => Prim::BlnNeq(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::BoolAnd(a, b) => Prim::BoolAnd(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::BoolOr(a, b) => Prim::BoolOr(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::BoolXor(a, b) => Prim::BoolXor(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::BoolEql(a, b) => Prim::BoolEql(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::BoolNeq(a, b) => Prim::BoolNeq(zonk_term(context, a)?, zonk_term(context, b)?),
 
         Prim::IntEql(a, b) => Prim::IntEql(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IntNeq(a, b) => Prim::IntNeq(zonk_term(context, a)?, zonk_term(context, b)?),

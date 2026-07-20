@@ -1,4 +1,4 @@
-use /std/{Bytes, Str, Nat, Bln, Io, Result, Option, Task};
+use /std/{Bytes, Str, Nat, Bool, Io, Result, Option, Task};
 use /std/tcp/{Settings, resolve};
 use /std/time/{Duration};
 
@@ -18,7 +18,7 @@ let configure(h : Io, settings : Settings) -> {} =
     let _ = /sys/Io/set_send_timeout(h, Option/unwrap_or(Option/map(settings.write_timeout, Duration/to_millis), 0));
     ();
 
-let upgrade(h : Io, host : Str, tls : Bln) -> Nat =
+let upgrade(h : Io, host : Str, tls : Bool) -> Nat =
     match tls : Nat
     | false => /sys/Io/Status/ok
     | true => /sys/Io/start_tls(h, Str/to_bytes(host))

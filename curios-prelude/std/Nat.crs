@@ -1,6 +1,6 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, rotl, rotr, clz, ctz, popcnt, to_int, to_flt, to_byte};
-use /std/{Str, Option, Char, Bytes, Bln, Eq, Order, True, False};
+use /std/{Str, Option, Char, Bytes, Bool, Eq, Order, True, False};
 
 let single_digit(d : Nat) -> Str =
     match d
@@ -50,7 +50,7 @@ pub let max(a : Nat, b : Nat) -> Nat =
     | false => a
     end;
 
-pub let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+pub let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
     match c >= lo
     | true => c <= hi
     | false => false

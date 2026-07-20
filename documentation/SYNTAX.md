@@ -97,7 +97,7 @@ String escapes are `\n`, `\t`, `\r`, `\\`, and `\"`.
 
 ### Boolean literals
 
-`true` and `false` have type `Bln`.
+`true` and `false` have type `Bool`.
 
 ### List literals
 
@@ -170,8 +170,8 @@ Later parameter types and the result may refer to earlier named parameters.
 A tuple type is a dependent field telescope enclosed in braces.
 
 ```crs
-{Nat, Bln}
-{fst : Nat, snd : Bln}
+{Nat, Bool}
+{fst : Nat, snd : Bool}
 {value : A, proof : Valid(value)}
 {}
 ```
@@ -292,12 +292,12 @@ x + y
 `rec` introduces locally scoped recursive definitions. Every recursive member requires a type. `and` joins a mutually recursive group.
 
 ```crs
-rec even(n : Nat) -> Bln =
+rec even(n : Nat) -> Bool =
     match n
     | 0 => true
     | p + 1; _ => odd(p)
     end
-and odd(n : Nat) -> Bln =
+and odd(n : Nat) -> Bool =
     match n
     | 0 => false
     | p + 1; _ => even(p)
@@ -431,7 +431,7 @@ Tuple and struct patterns over non-inductive values compile to projections rathe
 
 ### Boolean match
 
-A `Bln` match has exactly one `true` arm and one `false` arm, in either order.
+A `Bool` match has exactly one `true` arm and one `false` arm, in either order.
 
 ```crs
 match condition
@@ -480,7 +480,7 @@ end
 
 ### Packed folds
 
-`Bits` and `Bytes` use their literal prefixes to select the carrier. The nonempty arm binds the leading element and tail; an optional binding after `;` receives the fold result for the tail. A `Bits` head has type `Bln`; a `Bytes` head has type `Byte`.
+`Bits` and `Bytes` use their literal prefixes to select the carrier. The nonempty arm binds the leading element and tail; an optional binding after `;` receives the fold result for the tail. A `Bits` head has type `Bool`; a `Bytes` head has type `Byte`.
 
 ```crs
 match bits
@@ -547,7 +547,7 @@ end
 `use` imports paths. Prefixing it with `pub` re-exports what it imports.
 
 ```crs
-use /std/{Nat, Bln};
+use /std/{Nat, Bool};
 pub use Option/*;
 use /syn/Str/{classify, step};
 ```
@@ -635,7 +635,7 @@ A structure value names its type and supplies its fields. Parameterized heads ma
 
 ```crs
 Pair { fst = 1, snd = true }
-Pair(Nat, Bln) { fst = 1, snd = true }
+Pair(Nat, Bool) { fst = 1, snd = true }
 Api { base = 3, bump(x) = x + 1 }
 ```
 
@@ -712,7 +712,7 @@ Every registered witness is keyed by the concept name and the tuple of rigid hea
 
 A globally registered witness therefore requires a concept with at least one parameter. A parameterless concept can still be used through an ordinary value supplied in a local `use` scope.
 
-For example, witnesses for `Into(Nat, Str)` and `Into(Nat, Bln)` have distinct keys. A call must determine both parameters from its explicit arguments, expected result, or an explicitly supplied witness before automatic lookup can proceed.
+For example, witnesses for `Into(Nat, Str)` and `Into(Nat, Bool)` have distinct keys. A call must determine both parameters from its explicit arguments, expected result, or an explicitly supplied witness before automatic lookup can proceed.
 
 Only one witness may occupy a key across the whole program. Module visibility does not scope witness registration.
 
@@ -781,7 +781,7 @@ foreign frobnicate : (Nat, Bin) -> Nat;
 pub foreign log : (Bin) -> Nat;
 ```
 
-The wire types are `Nat`, `Int`, `Bln`, `Bin`, `Io`, and recursively `Lst(T)`. A wire signature is a bare wire result type for a zero-argument foreign or a parenthesized wire parameter list followed by `->` and a wire result type.
+The wire types are `Nat`, `Int`, `Bool`, `Bin`, `Io`, and recursively `Lst(T)`. A wire signature is a bare wire result type for a zero-argument foreign or a parenthesized wire parameter list followed by `->` and a wire result type.
 
 Wire `Bin` maps to object-language `Bytes`. `Byte` and `Bits` are not distinct wire types. The Wasm import uses the declaration's fully qualified name in the `ffi` namespace.
 

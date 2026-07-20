@@ -9,7 +9,7 @@ fn traps_and_effects_classify_by_operation() {
             .may_trap
     );
     assert!(!Semantics::operation(Operation::NatAdd).is_observable());
-    assert!(!Semantics::operation(Operation::BlnNeq).is_observable());
+    assert!(!Semantics::operation(Operation::BoolNeq).is_observable());
     assert!(Semantics::sequence(SequenceOp::LstGet).observable.may_trap);
     assert!(!Semantics::sequence(SequenceOp::LstLen).is_observable());
     assert!(

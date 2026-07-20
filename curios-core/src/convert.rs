@@ -773,11 +773,11 @@ impl Convert {
 
         match (this.cases, that.cases) {
             (
-                Cases::Bln {
+                Cases::Bool {
                     false_case: this_false,
                     true_case: this_true,
                 },
-                Cases::Bln {
+                Cases::Bool {
                     false_case: that_false,
                     true_case: that_true,
                 },

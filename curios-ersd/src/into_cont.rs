@@ -3,7 +3,7 @@
 //!
 //! Every encoding decision the erasure deliberately deferred is made here,
 //! exactly once, per the specification's normative desugar table: `Unit`,
-//! `Bln`, and `Byte` ride the `Nat` carrier (`Bln` operations become `Nat`
+//! `Bool`, and `Byte` ride the `Nat` carrier (`Bool` operations become `Nat`
 //! bit operations, `Byte` comparisons `Nat` comparisons, `NatToByte` a mask,
 //! `ByteToNat` the identity); an `Io` token is its little-endian bytes as a
 //! byte-grain binary and `IoEql` that grain's binary equality; products and
@@ -1549,10 +1549,10 @@ impl Lowerer<'_> {
 
     fn lower_constant(&self, constant: ConstantId) -> CpsLiteral {
         match self.source.constant(constant).expect("live constant") {
-            // Unit, Bln, and Byte collapse onto the Nat runtime carrier here,
+            // Unit, Bool, and Byte collapse onto the Nat runtime carrier here,
             // at the one-way door — never earlier.
             Constant::Unit => CpsLiteral::Nat(0),
-            Constant::Bln(value) => CpsLiteral::Nat(u32::from(*value)),
+            Constant::Bool(value) => CpsLiteral::Nat(u32::from(*value)),
             Constant::Nat(value) => CpsLiteral::Nat(*value),
             Constant::Byte(value) => CpsLiteral::Nat(u32::from(*value)),
             Constant::Int(value) => CpsLiteral::Int(*value),
@@ -1568,18 +1568,18 @@ impl Lowerer<'_> {
     }
 }
 
-/// The Cont primitive of a scalar [`Operation`]. `Bln` operations run on the
-/// `0`/`1` `Nat` carrier (`BlnNeq` is xor on a single bit) and `Byte`
+/// The Cont primitive of a scalar [`Operation`]. `Bool` operations run on the
+/// `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit) and `Byte`
 /// comparisons on the `Nat` carrier; `IoEql` is packed-binary equality at
 /// byte grain. The `Byte` conversions are handled before this table.
 fn operation_prim(operation: Operation) -> CpsPrimOp {
     use {CpsPrimOp as C, Operation as O};
     match operation {
-        O::BlnAnd => C::NatAnd,
-        O::BlnOr => C::NatOr,
-        O::BlnXor => C::NatXor,
-        O::BlnEql => C::NatEql,
-        O::BlnNeq => C::NatXor,
+        O::BoolAnd => C::NatAnd,
+        O::BoolOr => C::NatOr,
+        O::BoolXor => C::NatXor,
+        O::BoolEql => C::NatEql,
+        O::BoolNeq => C::NatXor,
         O::NatEql => C::NatEql,
         O::NatNeq => C::NatNeq,
         O::NatAdd => C::NatAdd,

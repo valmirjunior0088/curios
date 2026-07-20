@@ -102,7 +102,7 @@ fn elaborate_nat_match(
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
-    // Refine the scrutinee to its constructor in each arm (as `Bln`/`Switch`
+    // Refine the scrutinee to its constructor in each arm (as `Bool`/`Switch`
     // already do): a context hypothesis whose type mentions the scrutinee then
     // reduces at the arm's value, so a dependent match needs no hand-written
     // convoy to carry it across the eliminator.
@@ -177,7 +177,7 @@ fn elaborate_lst_match(
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
-    // Refine the scrutinee to its value in each arm (as `Nat`/`Bln`/`Switch`
+    // Refine the scrutinee to its value in each arm (as `Nat`/`Bool`/`Switch`
     // already do), so a hypothesis whose type mentions the scrutinee reduces at
     // the arm's value without a hand-written convoy.
     let empty_value: Term = Subterm::Prim(Prim::Lst(vec![])).into();
@@ -251,7 +251,7 @@ fn elaborate_bin_match(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let (empty_case, cons_case) = cases;
-    // `Bin` is a parameterless carrier (like `Nat`/`Bln`), so the scrutinee's type
+    // `Bin` is a parameterless carrier (like `Nat`/`Bool`), so the scrutinee's type
     // is just `Bin` — no element type to read off the head as `Lst` needs.
     let (head_elaborated, head_type) = elaborate_prim_head(context, head, PrimHead::Bin(grain))?;
 
@@ -260,7 +260,7 @@ fn elaborate_bin_match(
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
-    // Refine the scrutinee to its value in each arm (as `Nat`/`Bln`/`Switch`
+    // Refine the scrutinee to its value in each arm (as `Nat`/`Bool`/`Switch`
     // already do): a context hypothesis whose type mentions the scrutinee then
     // reduces at the arm's value, so a dependent match needs no hand-written
     // convoy to carry it across the eliminator.
@@ -276,7 +276,7 @@ fn elaborate_bin_match(
 
     let cons_body = context.with_frame(|context| {
         let atom_type: Term = Subterm::Prim(match grain {
-            Grain::B => Prim::BlnType,
+            Grain::B => Prim::BoolType,
             Grain::X => Prim::ByteType,
         })
         .into();
@@ -403,7 +403,7 @@ pub(crate) fn elaborate_match(
     } = m;
 
     match cases {
-        Cases::Bln {
+        Cases::Bool {
             false_case,
             true_case,
         } => elaborate_bln_match(context, head, motive, false_case, true_case, term, mode),
@@ -478,12 +478,12 @@ fn elaborate_bln_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = elaborate_prim_head(context, head, PrimHead::Bln)?;
+    let (head_elaborated, _) = elaborate_prim_head(context, head, PrimHead::Bool)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
     let motive = resolve_prim_motive(
         context,
-        &Subterm::Prim(Prim::BlnType).into(),
+        &Subterm::Prim(Prim::BoolType).into(),
         &head_elaborated,
         motive,
         &mode,
@@ -495,12 +495,12 @@ fn elaborate_bln_match(
         refine_head(
             context,
             &head_elaborated,
-            &Subterm::Prim(Prim::Bln(false)).into(),
+            &Subterm::Prim(Prim::Bool(false)).into(),
         )?;
         check(
             context,
             false_case,
-            motive.open(&[&Subterm::Prim(Prim::Bln(false)).into()]),
+            motive.open(&[&Subterm::Prim(Prim::Bool(false)).into()]),
         )
     })?;
 
@@ -508,12 +508,12 @@ fn elaborate_bln_match(
         refine_head(
             context,
             &head_elaborated,
-            &Subterm::Prim(Prim::Bln(true)).into(),
+            &Subterm::Prim(Prim::Bool(true)).into(),
         )?;
         check(
             context,
             true_case,
-            motive.open(&[&Subterm::Prim(Prim::Bln(true)).into()]),
+            motive.open(&[&Subterm::Prim(Prim::Bool(true)).into()]),
         )
     })?;
 
@@ -521,7 +521,7 @@ fn elaborate_bln_match(
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
         motive,
-        cases: Cases::Bln {
+        cases: Cases::Bool {
             false_case: false_elaborated,
             true_case: true_elaborated,
         },

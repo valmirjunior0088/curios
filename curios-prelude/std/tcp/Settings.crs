@@ -1,11 +1,11 @@
-use /std/{Bln, Option};
+use /std/{Bool, Option};
 use /std/time/{Duration};
 
 pub struct Settings : pub Type {
     connect_timeout : Option(Duration),
     read_timeout : Option(Duration),
     write_timeout : Option(Duration),
-    tls : Bln
+    tls : Bool
 }
 
 pub let default : Settings = Settings {

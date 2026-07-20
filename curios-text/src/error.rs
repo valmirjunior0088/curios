@@ -80,12 +80,12 @@ pub enum Error {
     /// motive, a Π/Σ component): types have no region to hoist the action to.
     BangInTypePosition,
     /// The annotated motive form `(x : T(...)) => P` is only meaningful on a
-    /// inductive scrutinee — `Bln` and `Nat` matches take `: P` or `: (x) => P`.
+    /// inductive scrutinee — `Bool` and `Nat` matches take `: P` or `: (x) => P`.
     AnnotatedMotiveNotInductive,
     /// A dependent motive (`(x) => P` or the annotated type-pattern form) was
     /// written on a match whose head does not dispatch on a single tag or
     /// literal shape directly — every arm matches a tuple/struct, is a
-    /// plain binder, or arms disagree on which carrier (`Ctor`/`Bln`/`Nat`/
+    /// plain binder, or arms disagree on which carrier (`Ctor`/`Bool`/`Nat`/
     /// `Lst`/`Bin`) they dispatch on. There is no core `Match` node for such
     /// a head to attach the motive to; only a match whose every top-level
     /// arm shares one dispatchable shape can carry a dependent motive.
@@ -103,7 +103,7 @@ pub enum Error {
     /// constructor tag. Every arm must be reachable and distinct; "Path A"
     /// gives arms no priority order to break the tie with.
     MatrixDuplicateRow,
-    /// A nested `Bln`/`Nat`/`Lst`/`Bin` leaf-pattern column split without
+    /// A nested `Bool`/`Nat`/`Lst`/`Bin` leaf-pattern column split without
     /// both of its required cases present. Unlike an ordinary constructor
     /// tag (whose omission the matrix compiler defers entirely to
     /// `inductive_match`'s vacuity inversion), these four hardcoded

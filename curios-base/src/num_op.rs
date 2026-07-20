@@ -48,7 +48,7 @@ impl NumOp {
         }
     }
 
-    /// Comparison and equality operators yield `Bln` regardless of operand type;
+    /// Comparison and equality operators yield `Bool` regardless of operand type;
     /// arithmetic operators yield the operand type.
     pub fn result_is_bln(self) -> bool {
         matches!(

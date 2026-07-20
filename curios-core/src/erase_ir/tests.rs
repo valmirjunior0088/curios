@@ -63,27 +63,27 @@ entry {
 }
 
 #[test]
-fn bln_and_byte_keep_their_shapes() {
-    // Bln stays Bln-shaped and Byte stays Byte-shaped: no Nat carrier appears
+fn bool_and_byte_keep_their_shapes() {
+    // Bool stays Bool-shaped and Byte stays Byte-shaped: no Nat carrier appears
     // anywhere in the erased output.
     let body = Term::let_(
         "b",
-        Term::prim(Prim::BlnType),
-        Term::prim(Prim::BlnAnd(
-            Term::prim(Prim::Bln(true)),
-            Term::prim(Prim::Bln(false)),
+        Term::prim(Prim::BoolType),
+        Term::prim(Prim::BoolAnd(
+            Term::prim(Prim::Bool(true)),
+            Term::prim(Prim::Bool(false)),
         )),
         Term::prim(Prim::ByteEql(
             Term::prim(Prim::Byte(7)),
             Term::prim(Prim::Byte(8)),
         )),
     );
-    let erased = erase(&module(Vec::new(), body), Term::prim(Prim::BlnType));
+    let erased = erase(&module(Vec::new(), body), Term::prim(Prim::BoolType));
     assert_eq!(
         erased.to_string(),
         "\
 entry {
-  ~v0$b = BlnAnd(true, false)
+  ~v0$b = BoolAnd(true, false)
   ~v1 = ByteEql(7:byte, 8:byte)
   return ~v1
 }
@@ -389,8 +389,8 @@ entry {
 
 #[test]
 fn a_bln_match_erases_to_a_switch_bool() {
-    let body = Term::bln_match(
-        Term::prim(Prim::Bln(true)),
+    let body = Term::bool_match(
+        Term::prim(Prim::Bool(true)),
         None,
         Term::prim(Prim::NatType),
         nat_lit(10),

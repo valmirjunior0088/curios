@@ -322,24 +322,24 @@ impl Infix {
 /// resolved by the same engine that fills `use` slots (so `no witness of
 /// Add(Point)` is the single error vocabulary, and what an operator means at
 /// a type is entirely a question of which witnesses exist). `!=` rebuilds as
-/// `BlnXor(Eql/eql(a, b), true)` — no `BlnNot` prim exists. The node never
+/// `BoolXor(Eql/eql(a, b), true)` — no `BoolNot` prim exists. The node never
 /// survives elaboration; witness projections over the statically-known
 /// primitive witnesses collapse back to bare `Prim` code in the backend
-/// (`And(Bln)`/`Or(Bln)` collapse to `BlnAnd`/`BlnOr` exactly as `Eql(Bln)`
-/// collapses to `BlnEql` — see the codegen parity tests).
+/// (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)`
+/// collapses to `BoolEql` — see the codegen parity tests).
 pub(super) fn elaborate_infix(
     context: &mut Context,
     infix: &Infix,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let bln_type: Term = Subterm::Prim(Prim::BlnType).into();
+    let bool_type: Term = Subterm::Prim(Prim::BoolType).into();
 
     // `?T`: the operand type shared by both sides.
     let (operand_id, operand_type) = context.fresh_placeholder(Term::type_(), term.span());
 
     // An arithmetic operator returns its operand type, so an expected result
-    // type pins `?T` straight away; a comparison returns `Bln`, which says
+    // type pins `?T` straight away; a comparison returns `Bool`, which says
     // nothing about the operands, so only the operands can pin it.
     if !infix.op.result_is_bln()
         && let Mode::Check(expected) = &mode
@@ -415,14 +415,14 @@ pub(super) fn elaborate_infix(
     attempt_witness_goal(context, slot, &goal, provenance, term)?;
 
     let call = Term::apply(Term::proj(witness, projection_index), [left, right]);
-    // No `BlnNot` prim exists; `!=` is the xor-negated equality.
+    // No `BoolNot` prim exists; `!=` is the xor-negated equality.
     let rebuilt = match infix.op {
-        NumOp::Neq => Term::prim(Prim::BlnXor(call, Term::prim(Prim::Bln(true)))),
+        NumOp::Neq => Term::prim(Prim::BoolXor(call, Term::prim(Prim::Bool(true)))),
         _ => call,
     };
 
     let result_type = if infix.op.result_is_bln() {
-        bln_type
+        bool_type
     } else {
         operand_type
     };

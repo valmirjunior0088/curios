@@ -131,7 +131,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             LadderTest::Cond(condition) => {
                 let head = self.collect(condition, binds)?;
                 let true_case = self.region(&arm.body)?;
-                Ok(curios_core::Term::bln_match(
+                Ok(curios_core::Term::bool_match(
                     head,
                     None,
                     curios_core::Term::metavar(self.context.fresh_metavar()),
@@ -477,10 +477,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             // friends), so matching the outer variant alone already treats
             // both sub-cases as one shape here — no separate classifier
             // needed (see `is_dispatchable`'s doc comment).
-            MatchPattern::Bln(_) => {
+            MatchPattern::Bool(_) => {
                 if rows
                     .iter()
-                    .any(|row| !matches!(row.patterns[0], MatchPattern::Bln(_)))
+                    .any(|row| !matches!(row.patterns[0], MatchPattern::Bool(_)))
                 {
                     return Err(Error::MatrixInconsistentShape);
                 }
@@ -631,15 +631,15 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         self.inductive_match(scrutinee, top_motive.unwrap_or(&None), cases)
     }
 
-    /// Groups rows into `Bln`'s two literal shapes and emits
-    /// [`curios_core::Term::bln_match`] directly — never `inductive_match`
-    /// (`Cases::Bln` is its own hardcoded core node, not a tag dispatch; see
-    /// this module's own notes on hardcoded-primitive carriers). `Bln`
+    /// Groups rows into `Bool`'s two literal shapes and emits
+    /// [`curios_core::Term::bool_match`] directly — never `inductive_match`
+    /// (`Cases::Bool` is its own hardcoded core node, not a tag dispatch; see
+    /// this module's own notes on hardcoded-primitive carriers). `Bool`
     /// carries no payload at all, so — unlike [`Self::compile_ctor`] — there
     /// is no single-row/multi-row naming discipline needed here.
     ///
     /// Unlike a user inductive (whose omitted tags `compile_ctor` defers to
-    /// `inductive_match`'s Rung-C vacuity inversion), `Cases::Bln` has no
+    /// `inductive_match`'s Rung-C vacuity inversion), `Cases::Bool` has no
     /// core-side exhaustiveness escape hatch (`elaborate_bln_match`) — both
     /// groups must be present here, checked eagerly before recursing on
     /// either.
@@ -656,8 +656,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let mut false_rows = Vec::new();
         let mut true_rows = Vec::new();
         for mut row in rows {
-            let MatchPattern::Bln(value) = row.patterns.remove(0) else {
-                unreachable!("every row classified as Bln")
+            let MatchPattern::Bool(value) = row.patterns.remove(0) else {
+                unreachable!("every row classified as Bool")
             };
             match value {
                 false => false_rows.push(row),
@@ -668,7 +668,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         // With a fallthrough default, a missing group's arm is the default
         // (see [`Self::default`]); without one, both shapes are still required.
         if (false_rows.is_empty() || true_rows.is_empty()) && self.default.is_none() {
-            return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Bln" });
+            return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Bool" });
         }
 
         let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
@@ -687,7 +687,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             false => self.compile(rest, true_rows, None, leaf)?,
         };
 
-        Ok(curios_core::Term::bln_match(
+        Ok(curios_core::Term::bool_match(
             scrutinee,
             label,
             motive_body,
@@ -1180,7 +1180,7 @@ fn refutation_count(pattern: &MatchPattern) -> usize {
         MatchPattern::Tuple(fields) | MatchPattern::Struct { fields, .. } => {
             fields.iter().map(|f| refutation_count(&f.value)).sum()
         }
-        MatchPattern::Bln(_)
+        MatchPattern::Bool(_)
         | MatchPattern::Nat(_)
         | MatchPattern::Lst(_)
         | MatchPattern::Bin(_) => 1,
@@ -1191,7 +1191,7 @@ fn refutation_count(pattern: &MatchPattern) -> usize {
 /// `| _ =>` catch-all body. A final top-level bare `_` after *dispatching* arms
 /// (a constructor tag or any of the four hardcoded-carrier leaves —
 /// [`MatchPattern::is_dispatchable`]) is the catch-all: its body becomes the
-/// core match's default (a `Cases::Inductive` default, or a `Nat`/`Bln`
+/// core match's default (a `Cases::Inductive` default, or a `Nat`/`Bool`
 /// carrier's fallthrough — this is what makes a `Nat` literal dispatch's
 /// mandatory `_` legal). A *named* final binder in that position is a mistake
 /// ([`Error::MatchNamedCatchAll`]). A lone `_` with no concrete arms is not a

@@ -74,9 +74,9 @@ of_big_int : BigInt -> BigFlt
 of_dyadic : BigInt -> BigInt -> BigFlt
 add, sub, mul : BigFlt -> BigFlt -> BigFlt
 neg, abs : BigFlt -> BigFlt
-eql : BigFlt -> BigFlt -> Bln
+eql : BigFlt -> BigFlt -> Bool
 cmp : BigFlt -> BigFlt -> Order
-lt, lte, gt, gte : BigFlt -> BigFlt -> Bln
+lt, lte, gt, gte : BigFlt -> BigFlt -> Bool
 ```
 
 Equality is structural because certification gives a unique representation. Comparison aligns exact values and delegates signed magnitude comparison to `BigInt`.

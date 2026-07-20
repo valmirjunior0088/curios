@@ -271,9 +271,9 @@ pub enum Motive {
 /// A headless ladder: `match | test => body | … | _ => default end`. There is
 /// no scrutinee — the arms are tried top-to-bottom and the first that fires
 /// selects its body; the mandatory final `| _ =>` supplies the fallthrough. An
-/// arm's [`LadderTest`] is either a `Bln` condition (`| cond =>`) or a refutable
+/// arm's [`LadderTest`] is either a `Bool` condition (`| cond =>`) or a refutable
 /// bind (`| pattern = value =>`, Rust `if let`). Lowering right-folds the ladder
-/// into nested `Bln` matches / single-row matrix matches
+/// into nested `Bool` matches / single-row matrix matches
 /// (`into_core::match_compile`), so each body inherits the definitional
 /// refinement of its condition for free (the same `refine_head` keying a
 /// hand-written `match cond | true => … | false => …` would get). A dispatch
@@ -298,7 +298,7 @@ pub struct LadderArm {
 /// What a ladder arm dispatches on.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LadderTest {
-    /// `| cond =>` — a `Bln` condition; the arm fires when `cond` is `true`.
+    /// `| cond =>` — a `Bool` condition; the arm fires when `cond` is `true`.
     Cond(Term),
     /// `| pattern = value =>` — a refutable bind (Rust `if let`): the arm fires
     /// when `value` matches the (refutable, possibly nested) `pattern`, binding
@@ -378,12 +378,12 @@ pub struct MatrixArm {
 /// A surface `match`, in exactly two shapes. [`MatrixMatch`] is the general
 /// headed form: one scrutinee and arms of arbitrary (nested, across
 /// constructors, tuples, structs, and the four literal-carrier leaves)
-/// [`MatchPattern`]s. The hardcoded carriers (`Bln`, `Nat` — induction *and*
+/// [`MatchPattern`]s. The hardcoded carriers (`Bool`, `Nat` — induction *and*
 /// literal dispatch — `Lst`, `Bin`) are not separate variants: each is a matrix
 /// whose arm patterns are that carrier's own leaves, lowered through the
 /// per-carrier `compile_bln`/`compile_nat`/`compile_lst`/`compile_bin` in
 /// `into_core::match_compile`. The headless [`CondMatch`] has no scrutinee at
-/// all — its arms are `Bln` conditions (and refutable binds).
+/// all — its arms are `Bool` conditions (and refutable binds).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Match {
     Matrix(MatrixMatch),
@@ -418,8 +418,8 @@ pub enum MatchPattern {
         head: String,
         fields: Vec<MatchPatternField>,
     },
-    /// A `Bln` literal leaf: `true` or `false`.
-    Bln(bool),
+    /// A `Bool` literal leaf: `true` or `false`.
+    Bool(bool),
     /// A nested `Nat` literal leaf — the `0`/`n+1; ih` (induction) or bare
     /// literal (dispatch) shapes a headed `Nat` match takes.
     Nat(NatPattern),
@@ -433,7 +433,7 @@ pub enum MatchPattern {
 
 impl MatchPattern {
     /// Whether this leaf is a genuine single-dispatch shape
-    /// (`Ctor`/`Bln`/`Nat`/`Lst`/`Bits`/`Bytes`), as opposed to `Binder`/`Tuple`/
+    /// (`Ctor`/`Bool`/`Nat`/`Lst`/`Bits`/`Bytes`), as opposed to `Binder`/`Tuple`/
     /// `Struct`, which never produce a core `Match` node at all (a binder
     /// never splits, a tuple/struct explodes into projections) — so there
     /// is nothing for a dependent motive to attach to. Used by the matrix

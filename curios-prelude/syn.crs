@@ -1,4 +1,4 @@
-use /sys/{Bln};
+use /sys/{Bool};
 
 pub concept Add(A : Type) : Type {
     add(A, A) -> A
@@ -29,14 +29,14 @@ pub concept Or(A : Type) : Type {
 }
 
 pub concept Eql(A : Type) : Type {
-    eql(A, A) -> Bln
+    eql(A, A) -> Bool
 }
 
 pub concept Cmp(A : Type) : Type {
-    lt(A, A) -> Bln,
-    lte(A, A) -> Bln,
-    gt(A, A) -> Bln,
-    gte(A, A) -> Bln
+    lt(A, A) -> Bool,
+    lte(A, A) -> Bool,
+    gt(A, A) -> Bool,
+    gte(A, A) -> Bool
 }
 
 pub concept Monad(M : (Type) -> Type) : Type {

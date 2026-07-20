@@ -287,8 +287,8 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer<'static> {
             }),
             pure(" }"),
         ]),
-        MatchPattern::Bln(false) => pure("false"),
-        MatchPattern::Bln(true) => pure("true"),
+        MatchPattern::Bool(false) => pure("false"),
+        MatchPattern::Bool(true) => pure("true"),
         MatchPattern::Nat(NatPattern::Zero) => pure("0"),
         MatchPattern::Nat(NatPattern::Succ {
             pred_label,
@@ -385,14 +385,14 @@ fn print_prim_call(name: impl Into<String> + 'static, args: Vec<Term>) -> Printe
 
 fn print_prim(prim: Prim) -> Printer<'static> {
     match prim {
-        Prim::BlnType => pure("Bln"),
-        Prim::Bln(false) => pure("false"),
-        Prim::Bln(true) => pure("true"),
-        Prim::BlnAnd(left, right) => print_prim_call("Bln.and", vec![left, right]),
-        Prim::BlnOr(left, right) => print_prim_call("Bln.or", vec![left, right]),
-        Prim::BlnXor(left, right) => print_prim_call("Bln.xor", vec![left, right]),
-        Prim::BlnEql(left, right) => print_prim_call("Bln.eql", vec![left, right]),
-        Prim::BlnNeq(left, right) => print_prim_call("Bln.neq", vec![left, right]),
+        Prim::BoolType => pure("Bool"),
+        Prim::Bool(false) => pure("false"),
+        Prim::Bool(true) => pure("true"),
+        Prim::BoolAnd(left, right) => print_prim_call("Bool.and", vec![left, right]),
+        Prim::BoolOr(left, right) => print_prim_call("Bool.or", vec![left, right]),
+        Prim::BoolXor(left, right) => print_prim_call("Bool.xor", vec![left, right]),
+        Prim::BoolEql(left, right) => print_prim_call("Bool.eql", vec![left, right]),
+        Prim::BoolNeq(left, right) => print_prim_call("Bool.neq", vec![left, right]),
         Prim::NatType => pure("Nat"),
         Prim::Nat(Nat::Zero) => pure("0"),
         Prim::Nat(Nat::Succ(nat, inner)) => {
@@ -886,7 +886,7 @@ fn print_wire_type(type_: WireType) -> Printer<'static> {
     match type_ {
         WireType::Nat => pure("Nat"),
         WireType::Int => pure("Int"),
-        WireType::Bln => pure("Bln"),
+        WireType::Bool => pure("Bool"),
         WireType::Bin => pure("Bin"),
         WireType::Io => pure("Io"),
         WireType::Lst(element) => flat([pure("Lst("), print_wire_type(*element), pure(")")]),

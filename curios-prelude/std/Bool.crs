@@ -1,17 +1,17 @@
-pub use /sys/{Bln};
-pub use /sys/Bln/{and, or, xor, eql};
+pub use /sys/{Bool};
+pub use /sys/Bool/{and, or, xor, eql};
 use /std/{Str, Option};
 
-pub let not(b : Bln) -> Bln =
+pub let not(b : Bool) -> Bool =
     xor(b, true);
 
-pub let to_str(b : Bln) -> Str =
+pub let to_str(b : Bool) -> Str =
     match b
     | true => "true"
     | false => "false"
     end;
 
-pub let of_str(s : Str) -> Option(Bln) =
+pub let of_str(s : Str) -> Option(Bool) =
     match
     | s == "true" => Option/some(true)
     | s == "false" => Option/some(false)

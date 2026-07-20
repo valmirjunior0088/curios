@@ -59,8 +59,8 @@ const TREES: &str = r#"
     "#;
 
 const HIGHER_ORDER: &str = r#"
-    use /std/{Io, Nat, Bln, Lst, proc};
-    let pick(b : Bln) -> (Nat) -> Nat =
+    use /std/{Io, Nat, Bool, Lst, proc};
+    let pick(b : Bool) -> (Nat) -> Nat =
         match b : (Nat) -> Nat
         | true => (y) => y + 1
         | false => (y) => y * 2
@@ -71,10 +71,10 @@ const HIGHER_ORDER: &str = r#"
     "#;
 
 const DIRECT_ESCAPING: &str = r#"
-    use /std/{Io, Nat, Bln, Lst, proc};
+    use /std/{Io, Nat, Bool, Lst, proc};
     let inc(x : Nat) -> Nat = x + 1;
     let apply(g : (Nat) -> Nat, x : Nat) -> Nat = g(x);
-    let choose(b : Bln, g : (Nat) -> Nat) -> (Nat) -> Nat =
+    let choose(b : Bool, g : (Nat) -> Nat) -> (Nat) -> Nat =
         match b : (Nat) -> Nat
         | true => g
         | false => (y) => y

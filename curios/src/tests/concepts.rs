@@ -85,9 +85,9 @@ fn explicit_use_argument_overrides() {
 #[test]
 fn superclass_projection_resolves() {
     let source = r#"
-        use /std/{Nat, Bln, Order, Io};
+        use /std/{Nat, Bool, Order, Io};
         pub concept Eql(A : Type) : Type {
-            eql(A, A) -> Bln
+            eql(A, A) -> Bool
         }
         pub concept Ord(A : Type) : Type {
             use Eql(A),
@@ -99,9 +99,9 @@ fn superclass_projection_resolves() {
         satisfy Ord(Nat) {
             cmp(a, b) = Order/lt()
         }
-        pub let same(@A : Type, use Ord(A), x : A, y : A) -> Bln = Eql/eql(x, y);
+        pub let same(@A : Type, use Ord(A), x : A, y : A) -> Bool = Eql/eql(x, y);
         let n : Nat = 3;
-        Io/print(Bln/to_str(same(n, n)))
+        Io/print(Bool/to_str(same(n, n)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -111,14 +111,14 @@ fn superclass_projection_resolves() {
 #[test]
 fn missing_witness_is_an_error() {
     let source = r#"
-        use /std/{Nat, Bln, Io, Str};
+        use /std/{Nat, Bool, Io, Str};
         pub concept Show(A : Type) : Type {
             show(A) -> Str
         }
         satisfy Show(Nat) {
             show(n) = Nat/to_str(n)
         }
-        let b : Bln = true;
+        let b : Bool = true;
         Io/print(Show/show(b))
         "#;
 
@@ -142,10 +142,10 @@ fn prelude_show_resolves() {
 #[test]
 fn prelude_eql_resolves() {
     let source = r#"
-        use /std/{Nat, Bln, Io, Eql};
+        use /std/{Nat, Bool, Io, Eql};
         let a : Nat = 5;
         let b : Nat = 5;
-        Io/print(Bln/to_str(Eql/eql(a, b)))
+        Io/print(Bool/to_str(Eql/eql(a, b)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -156,10 +156,10 @@ fn prelude_eql_resolves() {
 #[test]
 fn prelude_ord_superclass_projects() {
     let source = r#"
-        use /std/{Nat, Bln, Io, Ord, Eql};
-        pub let equal(@A : Type, use Ord(A), x : A, y : A) -> Bln = Eql/eql(x, y);
+        use /std/{Nat, Bool, Io, Ord, Eql};
+        pub let equal(@A : Type, use Ord(A), x : A, y : A) -> Bool = Eql/eql(x, y);
         let n : Nat = 4;
-        Io/print(Bln/to_str(equal(n, n)))
+        Io/print(Bool/to_str(equal(n, n)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -189,17 +189,17 @@ fn duplicate_witness_is_an_error() {
 }
 
 // The orphan rule: a witness may be declared only where the concept it
-// witnesses, or a type in its key, is already declared. `Ord` and `Bln` are
-// both `/std`/`/sys`-owned and the entry program owns neither, so `Ord(Bln)`
+// witnesses, or a type in its key, is already declared. `Ord` and `Bool` are
+// both `/std`/`/sys`-owned and the entry program owns neither, so `Ord(Bool)`
 // (not already witnessed anywhere in the standard library) is rejected.
 #[test]
 fn orphan_witness_is_rejected() {
     let source = r#"
-        use /std/{Bln, Ord, Order};
-        satisfy Ord(Bln) {
+        use /std/{Bool, Ord, Order};
+        satisfy Ord(Bool) {
             cmp(a, b) = Order/eq()
         }
-        let n : Bln = true;
+        let n : Bool = true;
         n
         "#;
 
@@ -230,19 +230,19 @@ fn witness_for_a_locally_owned_type_is_not_an_orphan() {
 #[test]
 fn multi_param_witnesses_share_a_first_head() {
     let source = r#"
-        use /std/{Nat, Bln, Io, Str};
+        use /std/{Nat, Bool, Io, Str};
         pub concept Into(A : Type, B : Type) : Type {
             into(A) -> B
         }
         satisfy Into(Nat, Str) {
             into(n) = Nat/to_str(n)
         }
-        satisfy Into(Nat, Bln) {
+        satisfy Into(Nat, Bool) {
             into(n) = Nat/eql(n, 1)
         }
         let s : Str = Into/into(2);
-        let b : Bln = Into/into(2);
-        Io/print(Bln/to_str(b))
+        let b : Bool = Into/into(2);
+        Io/print(Bool/to_str(b))
         "#;
 
     assert_eq!(run(source), b"false");
@@ -405,12 +405,12 @@ fn syn_add_concept_resolves_everywhere() {
 #[test]
 fn sys_eql_and_cmp_resolve() {
     let source = r#"
-        use /std/{Nat, Flt, Bln, Io, Str, Eql, Cmp};
-        let a : Bln = Eql/eql(2, 2);
-        let b : Bln = Eql/eql("abc", "abc");
-        let c : Bln = Cmp/lt(1.0, 2.0);
-        let d : Bln = Cmp/gte(3, 3);
-        Io/print(Bln/to_str(Bln/and(Bln/and(a, b), Bln/and(c, d))))
+        use /std/{Nat, Flt, Bool, Io, Str, Eql, Cmp};
+        let a : Bool = Eql/eql(2, 2);
+        let b : Bool = Eql/eql("abc", "abc");
+        let c : Bool = Cmp/lt(1.0, 2.0);
+        let d : Bool = Cmp/gte(3, 3);
+        Io/print(Bool/to_str(Bool/and(Bool/and(a, b), Bool/and(c, d))))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -425,9 +425,9 @@ fn sys_eql_and_cmp_resolve() {
 #[test]
 fn use_entry_fills_a_concept_field_explicitly() {
     let source = r#"
-        use /std/{Nat, Bln, Io, Str, Order};
+        use /std/{Nat, Bool, Io, Str, Order};
         pub concept Eq2(A : Type) : Type {
-            eq2(A, A) -> Bln
+            eq2(A, A) -> Bool
         }
         pub concept Ord2(A : Type) : Type {
             use Eq2(A),
@@ -438,8 +438,8 @@ fn use_entry_fills_a_concept_field_explicitly() {
         }
         let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
         let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
-        pub let observe(use Ord2(Nat)) -> Bln = Eq2/eq2(1, 1);
-        Io/print(Bln/to_str(observe(use o)))
+        pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
+        Io/print(Bool/to_str(observe(use o)))
         "#;
 
     assert_eq!(run(source), b"false");
@@ -450,9 +450,9 @@ fn use_entry_fills_a_concept_field_explicitly() {
 #[test]
 fn use_entry_fills_a_witness_superclass() {
     let source = r#"
-        use /std/{Nat, Bln, Io, Str, Order};
+        use /std/{Nat, Bool, Io, Str, Order};
         pub concept Eq3(A : Type) : Type {
-            eq3(A, A) -> Bln
+            eq3(A, A) -> Bool
         }
         pub concept Ord3(A : Type) : Type {
             use Eq3(A),
@@ -462,8 +462,8 @@ fn use_entry_fills_a_witness_superclass() {
             use Eq3 { eq3(a, b) = a == b },
             cmp3(a, b) = Order/lt()
         }
-        pub let same(@A : Type, use Ord3(A), x : A, y : A) -> Bln = Eq3/eq3(x, y);
-        Io/print(Bln/to_str(same(2, 2)))
+        pub let same(@A : Type, use Ord3(A), x : A, y : A) -> Bool = Eq3/eq3(x, y);
+        Io/print(Bool/to_str(same(2, 2)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -475,9 +475,9 @@ fn use_entry_fills_a_witness_superclass() {
 #[test]
 fn labeled_fill_of_a_former_superclass_is_unknown() {
     let source = r#"
-        use /std/{Nat, Bln, Io, Str, Order};
+        use /std/{Nat, Bool, Io, Str, Order};
         pub concept Eq4(A : Type) : Type {
-            eq4(A, A) -> Bln
+            eq4(A, A) -> Bool
         }
         pub concept Ord4(A : Type) : Type {
             use Eq4(A),
@@ -508,9 +508,9 @@ fn misplaced_use_entries_are_errors() {
     assert!(error(non_concept).contains("not a concept"));
 
     let surplus = r#"
-        use /std/{Nat, Bln, Io, Str, Order};
+        use /std/{Nat, Bool, Io, Str, Order};
         pub concept Eq5(A : Type) : Type {
-            eq5(A, A) -> Bln
+            eq5(A, A) -> Bool
         }
         pub concept Ord5(A : Type) : Type {
             use Eq5(A),
@@ -535,9 +535,9 @@ fn misplaced_use_entries_are_errors() {
 #[test]
 fn omitted_superclass_resolves_from_a_premise() {
     let source = r#"
-        use /std/{Nat, Bln, Io, Str, Order, Lst};
+        use /std/{Nat, Bool, Io, Str, Order, Lst};
         pub concept Eq6(A : Type) : Type {
-            eq6(A, A) -> Bln
+            eq6(A, A) -> Bool
         }
         pub concept Ord6(A : Type) : Type {
             use Eq6(A),
@@ -555,9 +555,9 @@ fn omitted_superclass_resolves_from_a_premise() {
         satisfy Ord6(Nat) {
             cmp6(a, b) = Order/lt()
         }
-        pub let same(@A : Type, use Ord6(A), x : A, y : A) -> Bln = Eq6/eq6(x, y);
+        pub let same(@A : Type, use Ord6(A), x : A, y : A) -> Bool = Eq6/eq6(x, y);
         let l : Lst(Nat) = [1, 2];
-        Io/print(Bln/to_str(same(l, l)))
+        Io/print(Bool/to_str(same(l, l)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -570,9 +570,9 @@ fn omitted_superclass_resolves_from_a_premise() {
 #[test]
 fn concept_literal_spread_copies_superclass() {
     let source = r#"
-        use /std/{Nat, Bln, Io, Str, Order};
+        use /std/{Nat, Bool, Io, Str, Order};
         pub concept Eq2(A : Type) : Type {
-            eq2(A, A) -> Bln
+            eq2(A, A) -> Bool
         }
         pub concept Ord2(A : Type) : Type {
             use Eq2(A),
@@ -584,8 +584,8 @@ fn concept_literal_spread_copies_superclass() {
         let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
         let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
         let o2 : Ord2(Nat) = Ord2 { ..o, cmp2(a, b) = Order/gt() };
-        pub let observe(use Ord2(Nat)) -> Bln = Eq2/eq2(1, 1);
-        Io/print(Bln/to_str(observe(use o2)))
+        pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
+        Io/print(Bool/to_str(observe(use o2)))
         "#;
 
     assert_eq!(run(source), b"false");
@@ -596,9 +596,9 @@ fn concept_literal_spread_copies_superclass() {
 #[test]
 fn concept_literal_spread_use_override() {
     let source = r#"
-        use /std/{Nat, Bln, Io, Str, Order};
+        use /std/{Nat, Bool, Io, Str, Order};
         pub concept Eq2(A : Type) : Type {
-            eq2(A, A) -> Bln
+            eq2(A, A) -> Bool
         }
         pub concept Ord2(A : Type) : Type {
             use Eq2(A),
@@ -608,8 +608,8 @@ fn concept_literal_spread_use_override() {
         let straight : Eq2(Nat) = Eq2 { eq2(a, b) = true };
         let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
         let o2 : Ord2(Nat) = Ord2 { ..o, use straight };
-        pub let observe(use Ord2(Nat)) -> Bln = Eq2/eq2(1, 1);
-        Io/print(Bln/to_str(observe(use o2)))
+        pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
+        Io/print(Bool/to_str(observe(use o2)))
         "#;
 
     assert_eq!(run(source), b"true");

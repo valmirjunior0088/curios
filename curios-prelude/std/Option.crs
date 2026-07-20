@@ -1,4 +1,4 @@
-use /std/{Bln};
+use /std/{Bool};
 
 pub induct Option(A : Type) : pub Type
 | some(A)
@@ -25,13 +25,13 @@ pub let unwrap_or(@A : Type, m : Option(A), default : A) -> A =
     | none() => default
     end;
 
-pub let is_some(@A : Type, m : Option(A)) -> Bln =
+pub let is_some(@A : Type, m : Option(A)) -> Bool =
     match m
     | some(_) => true
     | none() => false
     end;
 
-pub let is_none(@A : Type, m : Option(A)) -> Bln =
+pub let is_none(@A : Type, m : Option(A)) -> Bool =
     match m
     | some(_) => false
     | none() => true

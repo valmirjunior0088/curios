@@ -3,7 +3,7 @@
 //! It consumes the meta-free Core [`Module`] and lowers it through the
 //! checked [`curios_ersd::ErsdBuilder`] into a verified
 //! [`curios_ersd::Module`], preserving the language's semantic
-//! identities — distinct `Bln`/`Byte` shapes, first-class switches and folds,
+//! identities — distinct `Bool`/`Byte` shapes, first-class switches and folds,
 //! schema-carrying products and variants. Every encoding decision (carriers,
 //! tag layouts, dispatch, loop synthesis) belongs to the later lowering out
 //! of the representation, not to erasure.

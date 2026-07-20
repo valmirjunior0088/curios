@@ -16,8 +16,8 @@ fn as_index(term: &Term) -> Option<usize> {
     term.as_nat().and_then(|n| n.to_big_uint()?.to_usize())
 }
 
-/// Reduce both operands of a `Bln` binary primitive, then either `fold` the two
-/// literals or `rebuild` the neutral term. `Bln` has no numeric carrier at the
+/// Reduce both operands of a `Bool` binary primitive, then either `fold` the two
+/// literals or `rebuild` the neutral term. `Bool` has no numeric carrier at the
 /// type level, so the fold reads the `true`/`false` constructors directly.
 fn reduce_bln_binary(
     context: &mut Context,
@@ -30,7 +30,7 @@ fn reduce_bln_binary(
     let right = reduce_forced(context, right.clone())?;
 
     Ok(Subterm::Prim(match (left.as_bln(), right.as_bln()) {
-        (Some(l), Some(r)) => Prim::Bln(fold(l, r)),
+        (Some(l), Some(r)) => Prim::Bool(fold(l, r)),
         _ => rebuild(left, right),
     }))
 }
@@ -47,7 +47,7 @@ fn reduce_byte_binary(
 
     Ok(Subterm::Prim(match (&*left, &*right) {
         (Subterm::Prim(Prim::Byte(left)), Subterm::Prim(Prim::Byte(right))) => {
-            Prim::Bln(fold(*left, *right))
+            Prim::Bool(fold(*left, *right))
         }
         _ => rebuild(left, right),
     }))
@@ -318,7 +318,7 @@ fn reduce_nat_compare(
     let (outcome, left, right) = compare_nat(context, left.clone(), right.clone())?;
 
     Ok(match read(outcome) {
-        Some(value) => Subterm::Prim(Prim::Bln(value)),
+        Some(value) => Subterm::Prim(Prim::Bool(value)),
         None => Subterm::Prim(rebuild(left, right)),
     })
 }
@@ -404,22 +404,22 @@ fn nat_sum(images: Vec<Term>) -> Term {
 
 pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm, ReduceError> {
     match prim {
-        Prim::BlnType => Ok(Subterm::Prim(Prim::BlnType)),
-        Prim::Bln(value) => Ok(Subterm::Prim(Prim::Bln(*value))),
-        Prim::BlnAnd(left, right) => {
-            reduce_bln_binary(context, left, right, |l, r| l && r, Prim::BlnAnd)
+        Prim::BoolType => Ok(Subterm::Prim(Prim::BoolType)),
+        Prim::Bool(value) => Ok(Subterm::Prim(Prim::Bool(*value))),
+        Prim::BoolAnd(left, right) => {
+            reduce_bln_binary(context, left, right, |l, r| l && r, Prim::BoolAnd)
         }
-        Prim::BlnOr(left, right) => {
-            reduce_bln_binary(context, left, right, |l, r| l || r, Prim::BlnOr)
+        Prim::BoolOr(left, right) => {
+            reduce_bln_binary(context, left, right, |l, r| l || r, Prim::BoolOr)
         }
-        Prim::BlnXor(left, right) => {
-            reduce_bln_binary(context, left, right, |l, r| l != r, Prim::BlnXor)
+        Prim::BoolXor(left, right) => {
+            reduce_bln_binary(context, left, right, |l, r| l != r, Prim::BoolXor)
         }
-        Prim::BlnEql(left, right) => {
-            reduce_bln_binary(context, left, right, |l, r| l == r, Prim::BlnEql)
+        Prim::BoolEql(left, right) => {
+            reduce_bln_binary(context, left, right, |l, r| l == r, Prim::BoolEql)
         }
-        Prim::BlnNeq(left, right) => {
-            reduce_bln_binary(context, left, right, |l, r| l != r, Prim::BlnNeq)
+        Prim::BoolNeq(left, right) => {
+            reduce_bln_binary(context, left, right, |l, r| l != r, Prim::BoolNeq)
         }
         Prim::NatType => Ok(Subterm::Prim(Prim::NatType)),
         Prim::Nat(Nat::Zero) => Ok(Subterm::Prim(Prim::Nat(Nat::Zero))),
@@ -724,14 +724,14 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             context,
             left,
             right,
-            |left, right| Some(Prim::Bln(left == right)),
+            |left, right| Some(Prim::Bool(left == right)),
             Prim::IntEql,
         ),
         Prim::IntNeq(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Some(Prim::Bln(left != right)),
+            |left, right| Some(Prim::Bool(left != right)),
             Prim::IntNeq,
         ),
         Prim::IntAdd(left, right) => reduce_int_binary(
@@ -775,28 +775,28 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             context,
             left,
             right,
-            |left, right| Some(Prim::Bln(left < right)),
+            |left, right| Some(Prim::Bool(left < right)),
             Prim::IntLt,
         ),
         Prim::IntGt(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Some(Prim::Bln(left > right)),
+            |left, right| Some(Prim::Bool(left > right)),
             Prim::IntGt,
         ),
         Prim::IntLte(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Some(Prim::Bln(left <= right)),
+            |left, right| Some(Prim::Bool(left <= right)),
             Prim::IntLte,
         ),
         Prim::IntGte(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |left, right| Some(Prim::Bln(left >= right)),
+            |left, right| Some(Prim::Bool(left >= right)),
             Prim::IntGte,
         ),
         // Bitwise ops fold on the unbounded ℤ the type level pretends: `and`,
@@ -959,42 +959,42 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             context,
             left,
             right,
-            |left, right| Prim::Bln(left.eql(right)),
+            |left, right| Prim::Bool(left.eql(right)),
             Prim::FltEql,
         ),
         Prim::FltNeq(left, right) => reduce_flt_binary(
             context,
             left,
             right,
-            |left, right| Prim::Bln(left.neq(right)),
+            |left, right| Prim::Bool(left.neq(right)),
             Prim::FltNeq,
         ),
         Prim::FltLt(left, right) => reduce_flt_binary(
             context,
             left,
             right,
-            |left, right| Prim::Bln(left.lt(right)),
+            |left, right| Prim::Bool(left.lt(right)),
             Prim::FltLt,
         ),
         Prim::FltGt(left, right) => reduce_flt_binary(
             context,
             left,
             right,
-            |left, right| Prim::Bln(left.gt(right)),
+            |left, right| Prim::Bool(left.gt(right)),
             Prim::FltGt,
         ),
         Prim::FltLte(left, right) => reduce_flt_binary(
             context,
             left,
             right,
-            |left, right| Prim::Bln(left.lte(right)),
+            |left, right| Prim::Bool(left.lte(right)),
             Prim::FltLte,
         ),
         Prim::FltGte(left, right) => reduce_flt_binary(
             context,
             left,
             right,
-            |left, right| Prim::Bln(left.gte(right)),
+            |left, right| Prim::Bool(left.gte(right)),
             Prim::FltGte,
         ),
         Prim::FltNeg(inner) => {
@@ -1124,7 +1124,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             // Reflexivity: any value equals itself. Catches a shared variable, which
             // the peel below cannot — a bare variable is not a `Bin`-valued prim.
             if left == right {
-                return Ok(Subterm::Prim(Prim::Bln(true)));
+                return Ok(Subterm::Prim(Prim::Bool(true)));
             }
 
             // Structural decision via the free-monoid peel (`core::spine`): a
@@ -1134,8 +1134,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             // conversion reads, so the fold only ever strengthens, never weakens.
             if let (Subterm::Prim(l), Subterm::Prim(r)) = (&*left, &*right) {
                 match peel_bin(l, r) {
-                    Some(Peel::Equal) => return Ok(Subterm::Prim(Prim::Bln(true))),
-                    Some(Peel::Clash) => return Ok(Subterm::Prim(Prim::Bln(false))),
+                    Some(Peel::Equal) => return Ok(Subterm::Prim(Prim::Bool(true))),
+                    Some(Peel::Clash) => return Ok(Subterm::Prim(Prim::Bool(false))),
                     Some(Peel::Continue(..)) | Some(Peel::Stuck) | None => {}
                 }
             }
@@ -1337,12 +1337,12 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             let left = reduce_forced(context, left.clone())?;
             let right = reduce_forced(context, right.clone())?;
             if left == right {
-                return Ok(Subterm::Prim(Prim::Bln(true)));
+                return Ok(Subterm::Prim(Prim::Bool(true)));
             }
             if let (Subterm::Prim(l), Subterm::Prim(r)) = (&*left, &*right) {
                 match peel_bin(l, r) {
-                    Some(Peel::Equal) => return Ok(Subterm::Prim(Prim::Bln(true))),
-                    Some(Peel::Clash) => return Ok(Subterm::Prim(Prim::Bln(false))),
+                    Some(Peel::Equal) => return Ok(Subterm::Prim(Prim::Bool(true))),
+                    Some(Peel::Clash) => return Ok(Subterm::Prim(Prim::Bool(false))),
                     Some(Peel::Continue(..)) | Some(Peel::Stuck) | None => {}
                 }
             }
@@ -1357,7 +1357,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             {
                 return bits
                     .bit(index)
-                    .map(|bit| Subterm::Prim(Prim::Bln(bit)))
+                    .map(|bit| Subterm::Prim(Prim::Bool(bit)))
                     .ok_or_else(|| ReduceError::BinGetOutOfBounds {
                         len: bits.bit_length(),
                         index,

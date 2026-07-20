@@ -40,7 +40,7 @@ pub enum Atom {
 pub enum Constant {
     /// The unit value — the value of a retained-but-erased slot.
     Unit,
-    Bln(bool),
+    Bool(bool),
     Nat(u32),
     Int(i32),
     Flt(Flt),

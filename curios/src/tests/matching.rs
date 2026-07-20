@@ -115,8 +115,8 @@ fn nested_ctor_pattern_dispatches_by_shape() {
 #[test]
 fn headless_cond_match_allows_condition_before_bind_arm() {
     let source = r#"
-        use /std/{Bln, Nat, Option, Io};
-        let pick(prefer_fresh : Bln, cached : Option(Nat), fresh : Nat) -> Nat =
+        use /std/{Bool, Nat, Option, Io};
+        let pick(prefer_fresh : Bool, cached : Option(Nat), fresh : Nat) -> Nat =
             match
             | prefer_fresh && fresh > 0 => fresh
             | some(n) = cached => n
@@ -364,18 +364,18 @@ fn nested_bin_pattern_dispatches_by_shape() {
     assert_eq!(io.output(), b"65");
 }
 
-// A `Bln` literal leaf (`true`/`false`) nested inside a constructor payload —
+// A `Bool` literal leaf (`true`/`false`) nested inside a constructor payload —
 // two full rows, since a bare top-level `true`/`false` would otherwise be
 // swallowed by the separate flat `parse_bln_match` before ever reaching the
 // matrix grammar.
 #[test]
 fn nested_bln_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Bln, Nat, Io};
+        use /std/{Bool, Nat, Io};
          pub induct Pair(A : Type, B : Type) : pub Type
         | pair(A, B)
         end
-        let f(p : Pair(Bln, Nat)) -> Nat =
+        let f(p : Pair(Bool, Nat)) -> Nat =
             match p
             | pair(true, y) => y
             | pair(false, y) => y + 1
@@ -413,7 +413,7 @@ fn matrix_match_rejects_incomplete_nat_pattern() {
 }
 
 // A dependent motive is legal on a top-level `Nat` head too, not just a
-// `Ctor` head — `BlnMatch`/`NatMatch::Induction`/`LstMatch`/`BinMatch` all
+// `Ctor` head — `BoolMatch`/`NatMatch::Induction`/`LstMatch`/`BinMatch` all
 // already support the full motive ladder flat today. The arms are written
 // succ-case-first: written zero-then-succ (in that literal order) is valid
 // input to the pre-existing flat `parse_nat_match` grammar too, which would
@@ -518,7 +518,7 @@ fn effectful_match_scrutinee_runs_once() {
     assert_eq!(io.file(b"log.txt"), Some(b"x".to_vec()));
 }
 
-// The headless `Bln` ladder, exercised as emitted wasm rather than folded:
+// The headless `Bool` ladder, exercised as emitted wasm rather than folded:
 // `rand/bin(0)` is length 0 so `z` is a runtime-opaque 0, and `n` is a runtime
 // 2. The first *true* condition wins — `n <= 0` and `n <= 1` are false, `n <= 2`
 // selects `300`, and the later-true `_` default is never reached.
@@ -565,13 +565,13 @@ fn headless_cond_ladder_default_only() {
 // A deeper condition's effect fires only when it is reached: `probe` prints its
 // tag as a side effect, so an all-false-but-first ladder would print every tag,
 // but a ladder whose first condition is true prints only that tag. The nested
-// `Bln` lowering keeps deeper conditions inside the previous false branch.
+// `Bool` lowering keeps deeper conditions inside the previous false branch.
 #[test]
 fn headless_cond_ladder_evaluates_conditions_lazily() {
     let source = r#"
-        use /std/{Nat, Bytes, rand, Io, Bln, Str};
+        use /std/{Nat, Bytes, rand, Io, Bool, Str};
         let z = Bytes/len(rand/bin(0));
-        let probe(tag : Str, r : Bln) -> Bln =
+        let probe(tag : Str, r : Bool) -> Bool =
             let _ = Io/print(tag);
             r;
         let result =

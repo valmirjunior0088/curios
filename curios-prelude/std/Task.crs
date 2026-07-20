@@ -1,8 +1,8 @@
-use /std/{Io, Bytes, Nat, Bln, Lst, Option, Result, Cell};
+use /std/{Io, Bytes, Nat, Bool, Lst, Option, Result, Cell};
 
 pub induct Pause : pub Type
 | wait(Io, Nat)
-| fork(() -> Task({}), Cell(Bln))
+| fork(() -> Task({}), Cell(Bool))
 | park((() -> {}) -> {})
 | acquire(Io, () -> {})
 | release(Io)
@@ -24,7 +24,7 @@ pub let Waker : Type =
     () -> {};
 
 pub let Token : Type =
-    Cell(Bln);
+    Cell(Bool);
 
 let Guard : Type =
     {Io, Finalizer};
@@ -205,7 +205,7 @@ let sweep_parked(ss : Lst(Slot)) -> Lst(Slot) =
         end;
     each(ss);
 
-let is_ready(results : Nat, interest : Nat) -> Bln =
+let is_ready(results : Nat, interest : Nat) -> Bool =
     Nat/and(results, Nat/or(Nat/or(interest, /sys/Io/Poll/err), /sys/Io/Poll/hup)) > 0;
 
 let poll_ready(blocked : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =

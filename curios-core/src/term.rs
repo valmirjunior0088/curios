@@ -606,8 +606,8 @@ impl Term {
         }
     }
 
-    /// Build the dependent `Bln` eliminator ([`Cases::Bln`]): a false arm and a true arm, neither binding anything — the motive alone sees the scrutinee.
-    pub fn bln_match<H, M, F, T>(
+    /// Build the dependent `Bool` eliminator ([`Cases::Bool`]): a false arm and a true arm, neither binding anything — the motive alone sees the scrutinee.
+    pub fn bool_match<H, M, F, T>(
         head: H,
         motive_label: Option<&str>,
         motive: M,
@@ -623,7 +623,7 @@ impl Term {
         Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: Self::motive_scope(motive_label, motive.into()),
-            cases: Cases::Bln {
+            cases: Cases::Bool {
                 false_case: false_case.into(),
                 true_case: true_case.into(),
             },
@@ -980,7 +980,7 @@ impl Bound for Term {
 /// An unresolved infix application `left <op> right`. Elaboration infers a
 /// shared operand type for the two sides and rebuilds the node as a concept
 /// method call (`a + b` ≙ `Add/add(a, b)`; `&&`/`||` alone are hardcoded on
-/// `Bln` — see `elaborate_infix`); the node never survives elaboration.
+/// `Bool` — see `elaborate_infix`); the node never survives elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -1278,8 +1278,8 @@ pub enum MotiveSlot {
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub enum Cases {
-    /// Dependent elimination of `Bln`: a false arm and a true arm.
-    Bln { false_case: Term, true_case: Term },
+    /// Dependent elimination of `Bool`: a false arm and a true arm.
+    Bool { false_case: Term, true_case: Term },
     /// Sparse dispatch on specific `Nat` values with a default arm.
     Switch {
         cases: BTreeMap<u32, Term>,
@@ -1618,7 +1618,7 @@ impl Subterm {
 
     pub(crate) fn as_bln(&self) -> Option<bool> {
         match self {
-            Subterm::Prim(Prim::Bln(value)) => Some(*value),
+            Subterm::Prim(Prim::Bool(value)) => Some(*value),
             _ => None,
         }
     }
@@ -1738,7 +1738,7 @@ impl Subterm {
                 head.collect_construction_names(names);
                 motive.body().collect_construction_names(names);
                 match cases {
-                    Cases::Bln {
+                    Cases::Bool {
                         false_case,
                         true_case,
                     } => {
@@ -1870,7 +1870,7 @@ impl Subterm {
                 head.any_metavar(pred)
                     || motive.body().any_metavar(pred)
                     || match cases {
-                        Cases::Bln {
+                        Cases::Bool {
                             false_case,
                             true_case,
                         } => false_case.any_metavar(pred) || true_case.any_metavar(pred),
@@ -2039,10 +2039,10 @@ impl Bound for Subterm {
                 head: visit.visit_subterm(head),
                 motive: visit.visit_scope(motive),
                 cases: match cases {
-                    Cases::Bln {
+                    Cases::Bool {
                         false_case,
                         true_case,
-                    } => Cases::Bln {
+                    } => Cases::Bool {
                         false_case: visit.visit_subterm(false_case),
                         true_case: visit.visit_subterm(true_case),
                     },
@@ -2213,7 +2213,7 @@ impl Bound for Subterm {
                 motive,
                 cases,
             }) => head.reach().max(motive.reach()).max(match cases {
-                Cases::Bln {
+                Cases::Bool {
                     false_case,
                     true_case,
                 } => false_case.reach().max(true_case.reach()),

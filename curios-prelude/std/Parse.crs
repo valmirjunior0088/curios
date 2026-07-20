@@ -1,4 +1,4 @@
-use /std/{Result, Nat, Byte, Bytes, Str, Bln, Lst};
+use /std/{Result, Nat, Byte, Bytes, Str, Bool, Lst};
 
 pub struct Parse(A : Type) : pub Type {
     run(input : Bytes, pos : Nat) -> Result({Nat, A}, Str)
@@ -88,11 +88,11 @@ pub let take_byte(expected : Byte) -> Parse(Byte) =
             end
     };
 
-pub let take_while(pred : (Byte) -> Bln) -> Parse(Bytes) =
+pub let take_while(pred : (Byte) -> Bool) -> Parse(Bytes) =
     Parse {
         run(input, pos) =
             let (stop, _) =
-                match Bytes/len(input) - pos : {Nat, Bln}
+                match Bytes/len(input) - pos : {Nat, Bool}
                 | 0 => (pos, false)
                 | step + 1; ih =>
                     let (cur, stopped) = ih;

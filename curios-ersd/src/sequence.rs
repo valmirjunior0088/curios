@@ -2,7 +2,7 @@
 //!
 //! Sequence operations form their own family beside the scalar
 //! [`Operation`](super::Operation)s: the packed-binary forms carry their
-//! [`Grain`] so `Bln`- and `Byte`-grained binaries stay distinct shapes, and
+//! [`Grain`] so `Bool`- and `Byte`-grained binaries stay distinct shapes, and
 //! the variadic construction/concatenation forms carry their whole operand
 //! list in the statement's operand vector.
 
@@ -18,7 +18,7 @@ use curios_base::Grain;
 pub enum SequenceOp {
     /// `(bin) -> Nat`: the element count.
     BinLen(Grain),
-    /// `(a, b) -> Bln`: logical element-wise equality.
+    /// `(a, b) -> Bool`: logical element-wise equality.
     BinEql(Grain),
     /// `(bin, index) -> element`: the element at `index`; out of bounds traps.
     BinGet(Grain),

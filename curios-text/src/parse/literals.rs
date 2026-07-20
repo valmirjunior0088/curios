@@ -306,8 +306,8 @@ pub(super) fn parse_lst_literal<'a>() -> Parser<'a, Term> {
 
 pub(super) fn parse_bln_prim<'a>() -> Parser<'a, Term> {
     catch(parse_keyword("false"))
-        .map(|()| Subterm::Prim(Prim::Bln(false)))
-        .or(catch(parse_keyword("true")).map(|()| Subterm::Prim(Prim::Bln(true))))
+        .map(|()| Subterm::Prim(Prim::Bool(false)))
+        .or(catch(parse_keyword("true")).map(|()| Subterm::Prim(Prim::Bool(true))))
         .map(Into::into)
 }
 

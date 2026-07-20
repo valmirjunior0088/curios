@@ -348,15 +348,15 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
 #[test]
 fn pub_concept_with_private_superclass_is_rejected() {
     let source = r#"
-        use /std/{Nat, Bln, Io};
+        use /std/{Nat, Bool, Io};
         mod M
-            use /std/{Bln};
+            use /std/{Bool};
             concept Hidden(A : Type) : Type {
-                h(A) -> Bln
+                h(A) -> Bool
             }
             pub concept Loud(A : Type) : Type {
                 use Hidden(A),
-                l(A) -> Bln
+                l(A) -> Bool
             }
         end
         Io/print("no")

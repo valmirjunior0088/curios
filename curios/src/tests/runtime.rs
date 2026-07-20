@@ -197,9 +197,9 @@ fn bang_region_mixes_action_types() {
     // `take_while(is_a)` reads "A" (stops at 'B'), then `any_byte` reads 'B'
     // (66); `Bytes/append("A", 66)` is "AB".
     let source = r#"
-        use /std/{Parse, Byte, Bytes, Bln, Result, Io, Str};
+        use /std/{Parse, Byte, Bytes, Bool, Result, Io, Str};
 
-        let is_a : (Byte) -> Bln = (b) => b == 0x41;
+        let is_a : (Byte) -> Bool = (b) => b == 0x41;
 
         let parser : Parse/Parse(Bytes) =
             Parse/pure(Bytes/append(Parse/take_while(is_a)!, Parse/any_byte!));

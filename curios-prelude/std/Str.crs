@@ -1,6 +1,6 @@
 pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
-use /std/{Char, Nat, Byte, Bytes, Bln, Lst, Option};
+use /std/{Char, Nat, Byte, Bytes, Bool, Lst, Option};
 use /syn/{True, False};
 
 rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
@@ -129,7 +129,7 @@ pub let slice(s : Str, x : Nat, y : Nat) -> Str =
 pub let flatten(parts : Lst(Str)) -> Str =
     Lst/fold(parts, "", (p, acc) => concat(acc, p));
 
-pub let eql(a : Str, b : Str) -> Bln =
+pub let eql(a : Str, b : Str) -> Bool =
     Bytes/eql(to_bytes(a), to_bytes(b));
 
 -- ASCII-insensitive equality folds only encoded ASCII letters. Every non-ASCII
@@ -144,7 +144,7 @@ let lower_ascii_byte(byte : Byte) -> Byte =
 let lower_ascii_bytes(b : Bytes) -> Bytes =
     Bytes/fold(b, x\, (byte, acc) => Bytes/append(acc, lower_ascii_byte(byte)));
 
-pub let eql_ascii_ci(a : Str, b : Str) -> Bln =
+pub let eql_ascii_ci(a : Str, b : Str) -> Bool =
     Bytes/eql(lower_ascii_bytes(to_bytes(a)), lower_ascii_bytes(to_bytes(b)));
 
 pub let repeat(s : Str, n : Nat) -> Str =
@@ -264,7 +264,7 @@ pub let fold(@A : Type, s : Str, init : A, f : (Char, A) -> A) -> A =
 pub let len(s : Str) -> Nat =
     count_w(Scan/lead(), s.bytes);
 
-pub let find_index(s : Str, pred : (Char) -> Bln) -> Option(Nat) =
+pub let find_index(s : Str, pred : (Char) -> Bool) -> Option(Nat) =
     let (_, found) : {Nat, Option(Nat)} =
         fold(s, (0, Option/none()), (codepoint, (i, found)) =>
             match found

@@ -134,7 +134,7 @@ pub(super) fn reify(
         }
         Value::Closure(closure) => reify_closure(module, closure, budget, out),
         Value::Unit
-        | Value::Bln(_)
+        | Value::Bool(_)
         | Value::Nat(_)
         | Value::Byte(_)
         | Value::Int(_)

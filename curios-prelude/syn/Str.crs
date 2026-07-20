@@ -1,4 +1,4 @@
-use /std/{Nat, Byte, Bytes, Bln};
+use /std/{Nat, Byte, Bytes, Bool};
 
 pub induct Class : pub Type
 | ascii()
@@ -34,7 +34,7 @@ pub let step(c : Byte, s : Scan) -> Scan =
     | bad() => Scan/bad()
     | cont(rem, lo, hi) =>
         match
-        | Bln/not(Nat/in_range(n, lo, hi)) => Scan/bad()
+        | Bool/not(Nat/in_range(n, lo, hi)) => Scan/bad()
         | rem == 1 => Scan/lead()
         | _ => Scan/cont(rem - 1, 0x80, 0xBF)
         end

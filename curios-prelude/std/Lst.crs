@@ -1,6 +1,6 @@
 pub use /sys/{Lst};
 pub use /sys/Lst/{len, slice, append, concat, map};
-use /std/{Nat, Bln, Option, Eq};
+use /std/{Nat, Bool, Option, Eq};
 
 pub let nil(@A : Type) -> Lst(A) =
     [];
@@ -35,7 +35,7 @@ pub let fold(@T : Type, @A : Type, l : Lst(T), init : A, f : (T, A) -> A) -> A =
 pub let each(@T : Type, l : Lst(T), f : (T) -> {}) -> {} =
     fold(l, (), (x, acc) => f(x));
 
-pub let find(@T : Type, l : Lst(T), pred : (T) -> Bln) -> Option(T) =
+pub let find(@T : Type, l : Lst(T), pred : (T) -> Bool) -> Option(T) =
     let n = len(l);
     rec go(i : Nat) -> Option(T) =
         match i < n

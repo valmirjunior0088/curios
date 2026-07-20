@@ -378,7 +378,7 @@ impl<'m> Evaluator<'m> {
                 if_true,
             } => match self
                 .eval_atom(*scrutinee, frame)
-                .and_then(|held| held.bln())
+                .and_then(|held| held.bool_())
             {
                 Ok(chosen) => {
                     self.eval_block(if chosen { *if_true } else { *if_false }, frame, tail)
@@ -693,7 +693,7 @@ fn leaves(values: &[Value]) -> Option<Vec<Constant>> {
 
 /// The elements of a sequence value as the fold binds them: a list's own
 /// elements, or a packed binary's grains — byte grain as `Byte`, bit grain as
-/// `Bln`.
+/// `Bool`.
 fn fold_elements(grain: SequenceGrain, sequence: &Value) -> Result<Vec<Value>, Bail> {
     match (grain, sequence) {
         (SequenceGrain::List, Value::Lst(elements)) => Ok(elements.as_ref().clone()),
@@ -703,7 +703,7 @@ fn fold_elements(grain: SequenceGrain, sequence: &Value) -> Result<Vec<Value>, B
             for index in 0..length {
                 let element = match expected {
                     Grain::X => packed.byte(index).map(Value::Byte),
-                    Grain::B => packed.bit(index).map(Value::Bln),
+                    Grain::B => packed.bit(index).map(Value::Bool),
                 };
                 match element {
                     Some(value) => elements.push(value),
@@ -775,7 +775,7 @@ fn suffix_view(grain: SequenceGrain, remainder: &[Value]) -> Value {
                     (Grain::X, Value::Byte(byte)) => {
                         packed.append_byte(*byte).unwrap_or_else(|| packed.clone())
                     }
-                    (Grain::B, Value::Bln(bit)) => packed.append_bit(*bit),
+                    (Grain::B, Value::Bool(bit)) => packed.append_bit(*bit),
                     _ => packed,
                 };
             }

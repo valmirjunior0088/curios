@@ -56,8 +56,8 @@ fn bin(grain: Grain) -> Term {
     prim(Prim::BinType(grain))
 }
 
-fn bln() -> Term {
-    prim(Prim::BlnType)
+fn bool_() -> Term {
+    prim(Prim::BoolType)
 }
 
 fn io() -> Term {
@@ -198,7 +198,7 @@ fn wire_type(type_: &WireType) -> Term {
     match type_ {
         WireType::Nat => nat(),
         WireType::Int => int(),
-        WireType::Bln => bln(),
+        WireType::Bool => bool_(),
         WireType::Bin => bin(Grain::X),
         WireType::Io => io(),
         WireType::Lst(element) => lst_of(wire_type(element)),
@@ -298,17 +298,17 @@ fn nat_succ() -> TopItem {
 fn nat_ops() -> Vec<TopItem> {
     vec![
         nat_succ(),
-        binary("eql", nat(), bln(), Prim::NatEql),
-        binary("neq", nat(), bln(), Prim::NatNeq),
+        binary("eql", nat(), bool_(), Prim::NatEql),
+        binary("neq", nat(), bool_(), Prim::NatNeq),
         binary("add", nat(), nat(), Prim::NatAdd),
         binary("sub", nat(), nat(), Prim::NatSub),
         binary("mul", nat(), nat(), Prim::NatMul),
         binary("div", nat(), nat(), Prim::NatDiv),
         binary("rem", nat(), nat(), Prim::NatRem),
-        binary("lt", nat(), bln(), Prim::NatLt),
-        binary("gt", nat(), bln(), Prim::NatGt),
-        binary("lte", nat(), bln(), Prim::NatLte),
-        binary("gte", nat(), bln(), Prim::NatGte),
+        binary("lt", nat(), bool_(), Prim::NatLt),
+        binary("gt", nat(), bool_(), Prim::NatGt),
+        binary("lte", nat(), bool_(), Prim::NatLte),
+        binary("gte", nat(), bool_(), Prim::NatGte),
         binary("and", nat(), nat(), Prim::NatAnd),
         binary("or", nat(), nat(), Prim::NatOr),
         binary("xor", nat(), nat(), Prim::NatXor),
@@ -328,41 +328,41 @@ fn nat_ops() -> Vec<TopItem> {
 fn byte_ops() -> Vec<TopItem> {
     vec![
         unary("to_nat", byte(), nat(), Prim::ByteToNat),
-        binary("eql", byte(), bln(), Prim::ByteEql),
-        binary("lt", byte(), bln(), Prim::ByteLt),
-        binary("lte", byte(), bln(), Prim::ByteLte),
-        binary("gt", byte(), bln(), Prim::ByteGt),
-        binary("gte", byte(), bln(), Prim::ByteGte),
+        binary("eql", byte(), bool_(), Prim::ByteEql),
+        binary("lt", byte(), bool_(), Prim::ByteLt),
+        binary("lte", byte(), bool_(), Prim::ByteLte),
+        binary("gt", byte(), bool_(), Prim::ByteGt),
+        binary("gte", byte(), bool_(), Prim::ByteGte),
     ]
 }
 
-// `Bln` rides the same i31ref/u32 carrier as `Nat`, with `false`/`true` as
+// `Bool` rides the same i31ref/u32 carrier as `Nat`, with `false`/`true` as
 // `0`/`1`. `and`/`or`/`xor` are bitwise machine ops on those bits — exact
 // boolean logic — and `eql` is the `Nat` equality op (`i32.eq`) on that single
 // bit, so all four are primitives rather than `match` definitions. `not` has no
-// machine instruction; `/std/Bln` defines it as `xor(b, true)`.
-fn bln_ops() -> Vec<TopItem> {
+// machine instruction; `/std/Bool` defines it as `xor(b, true)`.
+fn bool_ops() -> Vec<TopItem> {
     vec![
-        binary("and", bln(), bln(), Prim::BlnAnd),
-        binary("or", bln(), bln(), Prim::BlnOr),
-        binary("xor", bln(), bln(), Prim::BlnXor),
-        binary("eql", bln(), bln(), Prim::BlnEql),
+        binary("and", bool_(), bool_(), Prim::BoolAnd),
+        binary("or", bool_(), bool_(), Prim::BoolOr),
+        binary("xor", bool_(), bool_(), Prim::BoolXor),
+        binary("eql", bool_(), bool_(), Prim::BoolEql),
     ]
 }
 
 fn int_ops() -> Vec<TopItem> {
     vec![
-        binary("eql", int(), bln(), Prim::IntEql),
-        binary("neq", int(), bln(), Prim::IntNeq),
+        binary("eql", int(), bool_(), Prim::IntEql),
+        binary("neq", int(), bool_(), Prim::IntNeq),
         binary("add", int(), int(), Prim::IntAdd),
         binary("sub", int(), int(), Prim::IntSub),
         binary("mul", int(), int(), Prim::IntMul),
         binary("div", int(), int(), Prim::IntDiv),
         binary("rem", int(), int(), Prim::IntRem),
-        binary("lt", int(), bln(), Prim::IntLt),
-        binary("gt", int(), bln(), Prim::IntGt),
-        binary("lte", int(), bln(), Prim::IntLte),
-        binary("gte", int(), bln(), Prim::IntGte),
+        binary("lt", int(), bool_(), Prim::IntLt),
+        binary("gt", int(), bool_(), Prim::IntGt),
+        binary("lte", int(), bool_(), Prim::IntLte),
+        binary("gte", int(), bool_(), Prim::IntGte),
         // Bitwise ops on the signed i31 carrier. `and`/`or`/`xor` are exact bit
         // ops; `shl` truncates into the carrier like `Nat/shl`; `shr` is
         // arithmetic (sign-preserving). `not` is `/std/Int`'s `xor(x, -1)`.
@@ -390,12 +390,12 @@ fn flt_ops() -> Vec<TopItem> {
         binary("rem", flt(), flt(), Prim::FltRem),
         binary("min", flt(), flt(), Prim::FltMin),
         binary("max", flt(), flt(), Prim::FltMax),
-        binary("eql", flt(), bln(), Prim::FltEql),
-        binary("neq", flt(), bln(), Prim::FltNeq),
-        binary("lt", flt(), bln(), Prim::FltLt),
-        binary("gt", flt(), bln(), Prim::FltGt),
-        binary("lte", flt(), bln(), Prim::FltLte),
-        binary("gte", flt(), bln(), Prim::FltGte),
+        binary("eql", flt(), bool_(), Prim::FltEql),
+        binary("neq", flt(), bool_(), Prim::FltNeq),
+        binary("lt", flt(), bool_(), Prim::FltLt),
+        binary("gt", flt(), bool_(), Prim::FltGt),
+        binary("lte", flt(), bool_(), Prim::FltLte),
+        binary("gte", flt(), bool_(), Prim::FltGte),
         unary("neg", flt(), flt(), Prim::FltNeg),
         unary("abs", flt(), flt(), Prim::FltAbs),
         unary("sqrt", flt(), flt(), Prim::FltSqrt),
@@ -414,7 +414,7 @@ fn flt_ops() -> Vec<TopItem> {
 fn bin_ops(grain: Grain) -> Vec<TopItem> {
     let type_ = bin(grain);
     let atom = match grain {
-        Grain::B => bln(),
+        Grain::B => bool_(),
         Grain::X => byte(),
     };
     vec![
@@ -427,7 +427,7 @@ fn bin_ops(grain: Grain) -> Vec<TopItem> {
         pub_fn(
             "eql",
             vec![("a", type_.clone()), ("b", type_.clone())],
-            bln(),
+            bool_(),
             prim(Prim::BinEql(grain, name("a"), name("b"))),
         ),
         pub_fn(
@@ -564,7 +564,7 @@ fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
         pub_fn(
             "eql",
             vec![("a", io()), ("b", io())],
-            bln(),
+            bool_(),
             prim(Prim::IoEql(name("a"), name("b"))),
         ),
     ];
@@ -665,8 +665,11 @@ pub fn sys_module(foreigns: &ForeignStore) -> Module {
                 "Bytes",
                 with_type(pub_let("Bytes", type_(), bin(Grain::X)), bin_ops(Grain::X)),
             ),
-            pub_mod("Bln", with_type(pub_let("Bln", type_(), bln()), bln_ops())),
-            pub_use("Bln"),
+            pub_mod(
+                "Bool",
+                with_type(pub_let("Bool", type_(), bool_()), bool_ops()),
+            ),
+            pub_use("Bool"),
             pub_mod(
                 "Io",
                 with_type(pub_let("Io", type_(), io()), io_ops(foreigns)),

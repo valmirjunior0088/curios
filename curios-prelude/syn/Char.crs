@@ -1,4 +1,4 @@
-use /std/{Nat, Bln};
+use /std/{Nat, Bool};
 use /syn/{True, False};
 
 pub let Below(code : Nat, bound : Nat) -> Prop =

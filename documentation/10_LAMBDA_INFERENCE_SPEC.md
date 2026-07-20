@@ -78,7 +78,7 @@ An inductive match whose scrutinee type is unknown must wait for an actual type 
 
 Primitive match forms have an unambiguous carrier and should solve an unknown scrutinee type immediately rather than park:
 
-- Boolean arms constrain the scrutinee to `Bln`.
+- Boolean arms constrain the scrutinee to `Bool`.
 - Numeric switch arms constrain the scrutinee to `Nat`.
 - Bit and byte arms constrain the scrutinee to their respective packed primitive types.
 - List-shaped arms constrain the scrutinee to `Lst(?Element)`; the element type may remain unknown until another constraint solves it.

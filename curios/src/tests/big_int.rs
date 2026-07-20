@@ -85,8 +85,8 @@ fn bigint_neg_abs_and_parity() {
     // `neg` is an involution that `abs` collapses, and `is_even`/`div2` read
     // the magnitude: -101 is odd and halves toward zero to -50.
     let source = r#"
-        use /std/{Io, Str, Bln, Lst, BigInt};
-        let show(b : Bln) -> Str =
+        use /std/{Io, Str, Bool, Lst, BigInt};
+        let show(b : Bool) -> Str =
             match b : Str
             | true => "T"
             | false => "F"
@@ -108,10 +108,10 @@ fn bigint_operators_dispatch_through_concepts() {
     // for `BigInt`, so the operator syntax and `show` resolve on it like on
     // any native numeric type.
     let source = r#"
-        use /std/{Io, Str, Bln, Lst, BigInt, Show};
+        use /std/{Io, Str, Bool, Lst, BigInt, Show};
         let a = BigInt/of_int(-6);
         let b = BigInt/of_int(+2);
-        let show_bln(v : Bln) -> Str =
+        let show_bln(v : Bool) -> Str =
             match v : Str
             | true => "T"
             | false => "F"

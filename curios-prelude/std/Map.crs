@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Nat, Bln, Str, Lst, Option};
+use /std/{Bytes, Byte, Nat, Bool, Str, Lst, Option};
 
 induct Node(V : Type) : Type
 | leaf(key : Bytes, value : V)
@@ -136,7 +136,7 @@ pub let get(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Option(V) 
         end
     end;
 
-pub let has(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Bln =
+pub let has(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Bool =
     Option/is_some(get(m, key));
 
 pub let set(@K : Type, @V : Type, use Key(K), m : Map(V), key : K, v : V) -> Map(V) =

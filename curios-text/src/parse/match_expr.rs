@@ -110,7 +110,7 @@ pub(super) fn parse_cons_ih<'a>() -> Parser<'a, Option<String>> {
 // vs `!=` idiom. Tried *before* the condition arm — a bind pattern like
 // `some(x)` also parses as a condition term — so the `catch` backtracks to the
 // `|` when no `=` separator follows the pattern, and the condition arm re-parses
-// the same text as a `Bln` term.
+// the same text as a `Bool` term.
 pub(super) fn parse_bind_case<'a>() -> Parser<'a, LadderArm> {
     catch(
         parse_literal("|")
@@ -163,7 +163,7 @@ pub(super) fn parse_ladder_arm<'a>() -> Parser<'a, LadderArm> {
     catch(parse_bind_case()).or(parse_cond_case())
 }
 
-// The mandatory `| _ =>` default arm closing a headless ladder. A `Bln` ladder
+// The mandatory `| _ =>` default arm closing a headless ladder. A `Bool` ladder
 // is a dispatch form (it enumerates no shapes), so `_` is required, not optional.
 pub(super) fn parse_cond_default<'a>() -> Parser<'a, Term> {
     catch(parse_literal("|").and_keep(parse_literal("_")))
@@ -172,7 +172,7 @@ pub(super) fn parse_cond_default<'a>() -> Parser<'a, Term> {
 }
 
 // The headless form `match | test => body | … | _ => default end`. No head term
-// follows `match` — the arms are `Bln` conditions or refutable binds, tried
+// follows `match` — the arms are `Bool` conditions or refutable binds, tried
 // top-to-bottom, first to fire wins. Prefix-disambiguated from every headed
 // form: no term starts with `|`, so those forms' `lazy(parse_term)` backtracks.
 pub(super) fn parse_cond_match<'a>() -> Parser<'a, Term> {
@@ -182,9 +182,9 @@ pub(super) fn parse_cond_match<'a>() -> Parser<'a, Term> {
         .map(|(arms, default)| Subterm::Match(Match::Cond(CondMatch { arms, default })).into())
 }
 
-// A `match` is one of exactly two surface shapes: the headless `Bln`/bind
+// A `match` is one of exactly two surface shapes: the headless `Bool`/bind
 // ladder (no head term after `match`), or the general headed pattern matrix.
-// Every headed carrier form — `Bln`, `Nat` (induction *and* literal dispatch),
+// Every headed carrier form — `Bool`, `Nat` (induction *and* literal dispatch),
 // `Lst`, `Bin` — is just a matrix whose arm patterns are that carrier's leaves
 // (see `parse_match_pattern`), lowered by `into_core::match_compile`'s
 // `compile_bln`/`compile_nat`/`compile_lst`/`compile_bin`. The headless form is

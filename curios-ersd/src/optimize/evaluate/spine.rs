@@ -223,7 +223,7 @@ fn resolve_fields(
 fn spine_key(value: &Value, out: &mut String) {
     match value {
         Value::Unit => out.push('u'),
-        Value::Bln(bit) => {
+        Value::Bool(bit) => {
             let _ = write!(out, "b{bit}");
         }
         Value::Nat(number) => {

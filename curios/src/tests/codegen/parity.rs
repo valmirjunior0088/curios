@@ -86,10 +86,10 @@ fn concept_method_call_matches_direct_primitive_codegen() {
     );
 }
 
-/// The headless `Bln` ladder desugars to exactly the nested boolean matches a
+/// The headless `Bool` ladder desugars to exactly the nested boolean matches a
 /// user would hand-write: `match | c0 => b0 | c1 => b1 | _ => d end` is
 /// `match c0 | true => b0 | false => match c1 | true => b1 | false => d end end`.
-/// Both lower through the same core `bln_match` nesting, so they emit the same
+/// Both lower through the same core `bool_match` nesting, so they emit the same
 /// primitive operations — the two forms mint metavars in a slightly different
 /// order, which only permutes the emission order of the top-level specialized
 /// closures (their bodies are identical), so `operations()` is the exact
@@ -197,16 +197,16 @@ fn operations(dump: &str) -> Vec<String> {
 #[test]
 fn concept_comparison_matches_direct_primitive_codegen() {
     let through_concept = r#"
-        use /std/{Nat, Bln, Lst, Io, Str, Cmp, proc};
-        pub let small(x : Nat) -> Bln = Cmp/lt(x, 10);
+        use /std/{Nat, Bool, Lst, Io, Str, Cmp, proc};
+        pub let small(x : Nat) -> Bool = Cmp/lt(x, 10);
         let n : Nat = Lst/len(proc/args());
-        Io/print(Bln/to_str(small(n)))
+        Io/print(Bool/to_str(small(n)))
         "#;
     let direct = r#"
-        use /std/{Nat, Bln, Lst, Io, Str, proc};
-        pub let small(x : Nat) -> Bln = Nat/lt(x, 10);
+        use /std/{Nat, Bool, Lst, Io, Str, proc};
+        pub let small(x : Nat) -> Bool = Nat/lt(x, 10);
         let n : Nat = Lst/len(proc/args());
-        Io/print(Bln/to_str(small(n)))
+        Io/print(Bool/to_str(small(n)))
         "#;
 
     assert_eq!(

@@ -170,7 +170,7 @@ pub enum Error {
     NotNatType {
         head_type: Box<Term>,
     },
-    NotBlnType {
+    NotBoolType {
         head_type: Box<Term>,
     },
     NotLstType {
@@ -296,7 +296,7 @@ pub enum Error {
     },
     CannotInfer,
     /// An overloaded infix operator applied at an operand type with no matching
-    /// scalar primitive — `%` on `Flt`, `!=` on `Bln`, `+` on `Bln`, etc. The
+    /// scalar primitive — `%` on `Flt`, `!=` on `Bool`, `+` on `Bool`, etc. The
     /// `symbol` is the operator's spelling; `type_` is the resolved operand type.
     OperatorUndefined {
         symbol: String,
@@ -548,7 +548,7 @@ impl Error {
     }
 
     pub(crate) fn not_bln_type<U: Into<Term>>(head_type: U) -> Self {
-        Self::NotBlnType {
+        Self::NotBoolType {
             head_type: Box::new(head_type.into()),
         }
     }
@@ -954,7 +954,7 @@ impl Error {
             Self::NotAFunction { head_type }
             | Self::NotATuple { head_type }
             | Self::NotNatType { head_type }
-            | Self::NotBlnType { head_type }
+            | Self::NotBoolType { head_type }
             | Self::NotLstType { head_type }
             | Self::NotBinType { head_type }
             | Self::NotAInductiveType { head_type } => out.push(head_type),
@@ -1091,8 +1091,8 @@ impl fmt::Display for Error {
             Error::NotNatType { head_type } => {
                 write!(f, "expected Nat but got {head_type}")
             }
-            Error::NotBlnType { head_type } => {
-                write!(f, "expected Bln but got {head_type}")
+            Error::NotBoolType { head_type } => {
+                write!(f, "expected Bool but got {head_type}")
             }
             Error::NotLstType { head_type } => {
                 write!(f, "expected Lst but got {head_type}")

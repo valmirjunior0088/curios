@@ -4,7 +4,7 @@
 
 pub use /syn/{Char};
 pub use /syn/Char/{Below, InRange, Scalar};
-use /std/{Nat, Byte, Bln, Bytes, Option, Order, Eq, True};
+use /std/{Nat, Byte, Bool, Bytes, Option, Order, Eq, True};
 
 pub let to_nat(c : Char) -> Nat =
     c.code;
@@ -30,29 +30,29 @@ pub let eq_of_code(a : Char, b : Char, proof : Eq(a.code, b.code)) -> Eq(a, b) =
         proof,
         (scalar : Scalar(a.code)) => Eq/refl())(b.scalar);
 
-pub let eql(a : Char, b : Char) -> Bln =
+pub let eql(a : Char, b : Char) -> Bool =
     Nat/eql(a.code, b.code);
 
 pub let cmp(a : Char, b : Char) -> Order =
     Nat/cmp(a.code, b.code);
 
-pub let is_whitespace(c : Char) -> Bln =
-    Bln/or(Nat/eql(c.code, 0x20), Nat/in_range(c.code, 0x09, 0x0D));
+pub let is_whitespace(c : Char) -> Bool =
+    Bool/or(Nat/eql(c.code, 0x20), Nat/in_range(c.code, 0x09, 0x0D));
 
-pub let is_digit(c : Char) -> Bln =
+pub let is_digit(c : Char) -> Bool =
     Nat/in_range(c.code, 0x30, 0x39);
 
-pub let is_lower(c : Char) -> Bln =
+pub let is_lower(c : Char) -> Bool =
     Nat/in_range(c.code, 0x61, 0x7A);
 
-pub let is_upper(c : Char) -> Bln =
+pub let is_upper(c : Char) -> Bool =
     Nat/in_range(c.code, 0x41, 0x5A);
 
-pub let is_alpha(c : Char) -> Bln =
-    Bln/or(is_lower(c), is_upper(c));
+pub let is_alpha(c : Char) -> Bool =
+    Bool/or(is_lower(c), is_upper(c));
 
-pub let is_alphanumeric(c : Char) -> Bln =
-    Bln/or(is_alpha(c), is_digit(c));
+pub let is_alphanumeric(c : Char) -> Bool =
+    Bool/or(is_alpha(c), is_digit(c));
 
 pub let to_ascii_lower(c : Char) -> Char =
     match is_upper(c)

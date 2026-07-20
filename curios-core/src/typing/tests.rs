@@ -17,8 +17,8 @@ fn display_not_a_function() {
 
 #[test]
 fn display_type_mismatch_shows_both_types() {
-    let err = Error::type_mismatch(Subterm::Prim(Prim::NatType), Subterm::Prim(Prim::BlnType));
+    let err = Error::type_mismatch(Subterm::Prim(Prim::NatType), Subterm::Prim(Prim::BoolType));
     let s = err.to_string();
     assert!(s.contains("Nat"), "should contain inferred Nat: {s}");
-    assert!(s.contains("Bln"), "should contain expected Bln: {s}");
+    assert!(s.contains("Bool"), "should contain expected Bool: {s}");
 }

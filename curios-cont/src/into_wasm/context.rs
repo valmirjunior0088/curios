@@ -597,7 +597,7 @@ impl<'a, 'b> Context<'a, 'b> {
     /// `Lst(Bin)`/`Lst(Io)`, whose *elements* the host lifts as raw `$bytes`.
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let force = match wire_type {
-            WireType::Nat | WireType::Bln | WireType::Int => return vec![],
+            WireType::Nat | WireType::Bool | WireType::Int => return vec![],
             WireType::Bin | WireType::Io => self.table().bytes_force_func(),
             WireType::Lst(inner) => match **inner {
                 WireType::Bin | WireType::Io => self.table().lst_bin_force_func(),
@@ -613,7 +613,7 @@ impl<'a, 'b> Context<'a, 'b> {
     /// `Lst(Bin)`, whose elements the host lowered as raw `$bytes`.
     fn wire_embed_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let embed = match wire_type {
-            WireType::Nat | WireType::Bln | WireType::Int => return vec![],
+            WireType::Nat | WireType::Bool | WireType::Int => return vec![],
             WireType::Bin | WireType::Io => self.table().bytes_embed_func(),
             WireType::Lst(inner) => match **inner {
                 WireType::Bin | WireType::Io => self.table().lst_bin_embed_func(),
@@ -662,7 +662,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 // through locals. Every host signature keeps references last.
                 for (_, wire_type) in signature.results.iter().rev().skip(1) {
                     debug_assert!(
-                        matches!(wire_type, WireType::Nat | WireType::Bln | WireType::Int),
+                        matches!(wire_type, WireType::Nat | WireType::Bool | WireType::Int),
                         "{} carries a reference result before its last",
                         function.name
                     );
@@ -746,14 +746,14 @@ pub(crate) enum LoadAs {
 }
 
 /// How a host-import operand of the given wire type is loaded at the call
-/// site: `Nat`/`Bln` unbox their i31 carrier unsigned to a raw i32, `Int`
+/// site: `Nat`/`Bool` unbox their i31 carrier unsigned to a raw i32, `Int`
 /// unboxes signed (the `poll(2)` timeout convention), and the reference
 /// shapes cast to their rope base type (a handle is its `Bin` token) — the
 /// force step to the flat wire payload follows in `wire_force_instrs`.
 impl From<&WireType> for LoadAs {
     fn from(wire_type: &WireType) -> LoadAs {
         match wire_type {
-            WireType::Nat | WireType::Bln => LoadAs::Nat,
+            WireType::Nat | WireType::Bool => LoadAs::Nat,
             WireType::Int => LoadAs::Int,
             WireType::Bin | WireType::Io => LoadAs::Bin,
             WireType::Lst(_) => LoadAs::Lst,

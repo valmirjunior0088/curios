@@ -144,16 +144,16 @@ fn reduce_nat_fold_zero_is_not_true() {
     let term: Term = Term::nat_match(
         Subterm::Prim(Prim::Nat(Nat::new(0usize))),
         Some("m"),
-        Term::prim(Prim::BlnType),
-        Term::prim(Prim::Bln(false)),
+        Term::prim(Prim::BoolType),
+        Term::prim(Prim::Bool(false)),
         "pred",
         "ih",
-        Term::prim(Prim::Bln(true)),
+        Term::prim(Prim::Bool(true)),
     );
 
     assert_ne!(
         reduce(&mut context, term.clone()),
-        Ok(Term::prim(Prim::Bln(true)))
+        Ok(Term::prim(Prim::Bool(true)))
     );
 }
 
@@ -319,7 +319,7 @@ fn reduce_int_eql_returns_true_or_false_bln() {
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::Bln(true)).into())
+        Ok(Subterm::Prim(Prim::Bool(true)).into())
     );
     assert_eq!(
         reduce(
@@ -330,7 +330,7 @@ fn reduce_int_eql_returns_true_or_false_bln() {
             ))
             .into()
         ),
-        Ok(Subterm::Prim(Prim::Bln(false)).into())
+        Ok(Subterm::Prim(Prim::Bool(false)).into())
     );
 }
 
@@ -596,7 +596,7 @@ fn reduce_solved_metavar_yields_solution() {
 fn refinement_is_suppressible() {
     let mut context = context();
     let b = Term::free_var("b");
-    let truth = Term::prim(Prim::Bln(true));
+    let truth = Term::prim(Prim::Bool(true));
 
     context.refine("b", &truth);
 
@@ -796,25 +796,25 @@ mod prim {
         // `succ x ≥ 1`: lt is false, gte is true; and `0 < succ x` is true.
         assert_eq!(
             reduced(&mut context, Term::prim(Prim::nat_lt(succ(x()), lit(1)))),
-            Subterm::Prim(Prim::Bln(false)),
+            Subterm::Prim(Prim::Bool(false)),
         );
         assert_eq!(
             reduced(&mut context, Term::prim(Prim::nat_gte(succ(x()), lit(1)))),
-            Subterm::Prim(Prim::Bln(true)),
+            Subterm::Prim(Prim::Bool(true)),
         );
         assert_eq!(
             reduced(&mut context, Term::prim(Prim::nat_lt(lit(0), succ(x())))),
-            Subterm::Prim(Prim::Bln(true)),
+            Subterm::Prim(Prim::Bool(true)),
         );
 
         // Shared inner: `lt(x, succ x) = true`, `gte(x, succ x) = false`.
         assert_eq!(
             reduced(&mut context, Term::prim(Prim::nat_lt(x(), succ(x())))),
-            Subterm::Prim(Prim::Bln(true)),
+            Subterm::Prim(Prim::Bool(true)),
         );
         assert_eq!(
             reduced(&mut context, Term::prim(Prim::nat_gte(x(), succ(x())))),
-            Subterm::Prim(Prim::Bln(false)),
+            Subterm::Prim(Prim::Bool(false)),
         );
 
         // The Str decoder blocker: `eql(succ(succ x), 1) = false` (shapes differ
@@ -824,7 +824,7 @@ mod prim {
                 &mut context,
                 Term::prim(Prim::nat_eql(succ(succ(x())), lit(1)))
             ),
-            Subterm::Prim(Prim::Bln(false)),
+            Subterm::Prim(Prim::Bool(false)),
         );
 
         // A non-strict bound decides `lte` but leaves `lt` genuinely undecidable
@@ -834,7 +834,7 @@ mod prim {
                 &mut context,
                 Term::prim(Prim::nat_lte(lit(2), succ(succ(x()))))
             ),
-            Subterm::Prim(Prim::Bln(true)),
+            Subterm::Prim(Prim::Bool(true)),
         );
         assert!(matches!(
             reduced(
@@ -1066,7 +1066,7 @@ mod prim {
                 &mut context,
                 Term::prim(Prim::bin_eql(Grain::X, x.clone(), x.clone()))
             ),
-            Subterm::Prim(Prim::Bln(true)),
+            Subterm::Prim(Prim::Bool(true)),
         );
 
         // Literal decisions: equal folds true, unequal folds false.
@@ -1075,14 +1075,14 @@ mod prim {
                 &mut context,
                 Term::prim(Prim::bin_eql(Grain::X, bin(vec![1, 2]), bin(vec![1, 2])))
             ),
-            Subterm::Prim(Prim::Bln(true)),
+            Subterm::Prim(Prim::Bool(true)),
         );
         assert_eq!(
             reduced(
                 &mut context,
                 Term::prim(Prim::bin_eql(Grain::X, bin(vec![1, 2]), bin(vec![1, 3])))
             ),
-            Subterm::Prim(Prim::Bln(false)),
+            Subterm::Prim(Prim::Bool(false)),
         );
 
         // A first-byte clash decides `false` even past a shared symbolic tail:
@@ -1091,7 +1091,7 @@ mod prim {
         let rhs = Term::prim(Prim::bin_concat(Grain::X, [bin(vec![2]), x.clone()]));
         assert_eq!(
             reduced(&mut context, Term::prim(Prim::bin_eql(Grain::X, lhs, rhs))),
-            Subterm::Prim(Prim::Bln(false)),
+            Subterm::Prim(Prim::Bool(false)),
         );
 
         // Distinct variables are undecidable: `eql(x, y)` stays neutral.
@@ -1119,7 +1119,7 @@ mod prim {
                 &mut context,
                 Term::prim(Prim::bin_get(Grain::B, cons.clone(), lit(0)))
             ),
-            Subterm::Prim(Prim::Bln(true)),
+            Subterm::Prim(Prim::Bool(true)),
         );
         assert_eq!(
             reduced(
@@ -1148,7 +1148,7 @@ mod prim {
                 &mut context,
                 Term::prim(Prim::bin_eql(Grain::B, cons, false_cons))
             ),
-            Subterm::Prim(Prim::Bln(false)),
+            Subterm::Prim(Prim::Bool(false)),
         );
         assert_eq!(
             reduced(

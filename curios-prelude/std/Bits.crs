@@ -1,22 +1,22 @@
 pub use /sys/Bits/{let Bits, len, eql, slice, append, concat};
-use /std/{Lst, Nat, Bln, Option, Eq};
+use /std/{Lst, Nat, Bool, Option, Eq};
 
-pub let at(b : Bits, i : Nat, ok : Nat/Lt(i, len(b))) -> Bln =
+pub let at(b : Bits, i : Nat, ok : Nat/Lt(i, len(b))) -> Bool =
     /sys/Bits/get(b, i);
 
-pub let get(b : Bits, i : Nat) -> Option(Bln) =
+pub let get(b : Bits, i : Nat) -> Option(Bool) =
     match i < len(b)
     | true => Option/some(/sys/Bits/get(b, i))
     | false => Option/none()
     end;
 
-pub let cons(head : Bln, tail : Bits) -> Bits =
+pub let cons(head : Bool, tail : Bits) -> Bits =
     b\..append(b\, head)\..tail;
 
 pub let flatten(parts : Lst(Bits)) -> Bits =
     Lst/fold(parts, b\, (bits, acc) => b\..acc\..bits);
 
-pub let fold(@A : Type, b : Bits, init : A, f : (Bln, A) -> A) -> A =
+pub let fold(@A : Type, b : Bits, init : A, f : (Bool, A) -> A) -> A =
     let n = len(b);
     rec go(k : Nat, i : Nat, acc : A, inv : Eq(i + k, n)) -> A =
         match k

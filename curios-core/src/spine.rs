@@ -2,7 +2,7 @@
 //! (`convert`). A primitive whose values are a literal run of generators over a
 //! symbolic tail — a `Nat` count, a `Bin` byte run, an `Lst` element run —
 //! reduces two values by stripping their longest common literal head; the
-//! residual tails go back to the caller's own recursion. `Bln`/`Int` are the
+//! residual tails go back to the caller's own recursion. `Bool`/`Int` are the
 //! degenerate, zero-generator spines. The point of the seam: a new instance is
 //! one `peel_prim` arm and nothing else — the drivers, the `Peel` vocabulary,
 //! and the termination argument are shared, and `Bin`/`Lst` further share the
@@ -38,7 +38,7 @@ pub(crate) fn peel_prim(left: &Prim, right: &Prim) -> Option<Peel> {
     match (left, right) {
         (Prim::Nat(actual), Prim::Nat(target)) => Some(peel_nat(actual, target)),
         // Finite scalars are the degenerate (zero-generator) spines: no tail.
-        (Prim::Bln(actual), Prim::Bln(target)) => Some(decide(actual == target)),
+        (Prim::Bool(actual), Prim::Bool(target)) => Some(decide(actual == target)),
         (Prim::Int(actual), Prim::Int(target)) => Some(decide(actual == target)),
         // `Bin`/`Lst` are the free monoids on their bytes/elements: peel the
         // longest common prefix (each returns `None` for the other's shapes).
@@ -310,7 +310,7 @@ fn bin_grain(prim: &Prim) -> Option<Grain> {
 /// (matching the runtime's packed store), or `None` for a symbolic byte.
 fn bin_atom(grain: Grain, term: &Term) -> Option<u8> {
     match (grain, &**term) {
-        (Grain::B, Subterm::Prim(Prim::Bln(bit))) => Some(u8::from(*bit)),
+        (Grain::B, Subterm::Prim(Prim::Bool(bit))) => Some(u8::from(*bit)),
         (Grain::X, Subterm::Prim(Prim::Byte(byte))) => Some(*byte),
         _ => None,
     }

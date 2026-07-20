@@ -24,7 +24,7 @@ fn witness_key_displays_as_a_tuple_for_higher_arities() {
 // head is a different table entry.
 #[test]
 fn witness_keys_differ_beyond_the_first_head() {
-    let a = WitnessKey(vec![HeadKey::Nat, HeadKey::Bln]);
+    let a = WitnessKey(vec![HeadKey::Nat, HeadKey::Bool]);
     let b = WitnessKey(vec![HeadKey::Nat, HeadKey::Bin(Grain::X)]);
     assert_ne!(a, b);
 }

@@ -61,7 +61,7 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
     let i31_ref = ValType::Ref(RefType::new(false, HeapType::I31));
 
     let val_type = |wire_type: &WireType, is_result: bool| match wire_type {
-        WireType::Nat | WireType::Bln | WireType::Int => match is_result {
+        WireType::Nat | WireType::Bool | WireType::Int => match is_result {
             true => i31_ref.clone(),
             false => ValType::I32,
         },

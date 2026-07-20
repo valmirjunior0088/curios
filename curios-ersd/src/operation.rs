@@ -1,10 +1,10 @@
 //! The scalar operation alphabet.
 //!
 //! One fieldless variant per primitive operation over the scalar shapes —
-//! `Bln`, `Nat` (exact `u32`), `Byte`, `Int` (exact `i32`), `Flt` (bit-preserving
+//! `Bool`, `Nat` (exact `u32`), `Byte`, `Int` (exact `i32`), `Flt` (bit-preserving
 //! binary32), and `Io` — transcribed one-to-one from Core's primitive
 //! vocabulary. Every shape stays distinct: there are no carrier choices here
-//! (`Bln`→`Nat`, `Byte`→`Nat`, `Io`→`Bin` belong exclusively to the lowering),
+//! (`Bool`→`Nat`, `Byte`→`Nat`, `Io`→`Bin` belong exclusively to the lowering),
 //! and no 31-bit fact appears anywhere in this alphabet. Sequence operations
 //! live in their own family ([`super::SequenceOp`]).
 
@@ -17,11 +17,11 @@
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub enum Operation {
-    BlnAnd,
-    BlnOr,
-    BlnXor,
-    BlnEql,
-    BlnNeq,
+    BoolAnd,
+    BoolOr,
+    BoolXor,
+    BoolEql,
+    BoolNeq,
     NatEql,
     NatNeq,
     NatAdd,
@@ -130,11 +130,11 @@ impl Operation {
             | Self::IntClz
             | Self::IntCtz
             | Self::IntPopcnt => 1,
-            Self::BlnAnd
-            | Self::BlnOr
-            | Self::BlnXor
-            | Self::BlnEql
-            | Self::BlnNeq
+            Self::BoolAnd
+            | Self::BoolOr
+            | Self::BoolXor
+            | Self::BoolEql
+            | Self::BoolNeq
             | Self::NatEql
             | Self::NatNeq
             | Self::NatAdd

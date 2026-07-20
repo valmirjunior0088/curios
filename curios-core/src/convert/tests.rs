@@ -674,7 +674,7 @@ fn convert_eta_tuple_neutral_with_known_type() {
 
     let tuple_type: Term = Term::tuple_type([
         ("x", Term::prim(Prim::NatType)),
-        ("y", Term::prim(Prim::BlnType)),
+        ("y", Term::prim(Prim::BoolType)),
     ]);
 
     let r: Term = Term::free_var("r");
@@ -999,19 +999,19 @@ fn embedded_metavar_postpones_to_residual() {
 #[test]
 fn revalidation_rejects_ill_typed_solution() {
     let mut context = context();
-    // ?0 : Nat under empty Γ. A candidate of type Type (e.g. `Bln`) does not
+    // ?0 : Nat under empty Γ. A candidate of type Type (e.g. `Bool`) does not
     // type-check against Nat, so re-validation rejects it.
     context.birth_metavar(MetavarId(0), Vec::new(), Term::prim(Prim::NatType));
 
-    let bln = Term::prim(Prim::BlnType);
-    assert_eq!(conv(&mut context, &Term::metavar(0), &bln), Ok(false));
+    let bool_ = Term::prim(Prim::BoolType);
+    assert_eq!(conv(&mut context, &Term::metavar(0), &bool_), Ok(false));
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
 
 #[test]
 fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
     // The §12 regression. Γ = (t : Type) with a counterfactual match-arm
-    // refinement `t := Nat` in force (as inside `bln_match b { true => ... }`,
+    // refinement `t := Nat` in force (as inside `bool_match b { true => ... }`,
     // where the family `T(b) ⇝ Nat`). `?0 : t` is born under the *frozen*
     // Γ = (t : Type) — its result type depends on the refined head, mirroring
     // `m : T(b)`.
@@ -1509,8 +1509,8 @@ fn imitation_solves_flex_apply_against_inductive() {
 
     // The committed solution is the imitation, not the constant: applied to a
     // different argument it yields Lst of *that* argument.
-    let at_bln = Term::apply(Term::metavar(0), [Term::prim(Prim::BlnType)]);
-    let lst_bln = Term::inductive_type("Lst", [Term::prim(Prim::BlnType)], Vec::<Term>::new());
+    let at_bln = Term::apply(Term::metavar(0), [Term::prim(Prim::BoolType)]);
+    let lst_bln = Term::inductive_type("Lst", [Term::prim(Prim::BoolType)], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &at_bln, &lst_bln), Ok(true));
 }
 
@@ -1562,8 +1562,8 @@ fn imitation_splits_params_and_indices() {
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
 
-    let at_two = Term::apply(Term::metavar(0), [Term::prim(Prim::BlnType), nat(2)]);
-    let vec_two = Term::inductive_type("Vec", [Term::prim(Prim::BlnType)], [nat(2)]);
+    let at_two = Term::apply(Term::metavar(0), [Term::prim(Prim::BoolType), nat(2)]);
+    let vec_two = Term::inductive_type("Vec", [Term::prim(Prim::BoolType)], [nat(2)]);
     assert_eq!(conv(&mut context, &at_two, &vec_two), Ok(true));
 }
 

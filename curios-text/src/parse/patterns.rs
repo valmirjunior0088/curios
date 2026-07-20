@@ -222,15 +222,15 @@ pub(super) fn parse_ctor_match_pattern<'a>() -> Parser<'a, MatchPattern> {
         )
 }
 
-// A nested `Bln` leaf: `true` or `false`. Tried as dedicated keywords before
+// A nested `Bool` leaf: `true` or `false`. Tried as dedicated keywords before
 // the generic `Binder` fallback in `parse_match_pattern` — `parse_binder`
 // doesn't itself reject keyword text, mirroring the same precedent already
-// used for `Bln` literals at term level (see the `Subterm::Prim(Prim::Bln)`
+// used for `Bool` literals at term level (see the `Subterm::Prim(Prim::Bool)`
 // case above).
 pub(super) fn parse_bln_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_keyword("false"))
-        .map(|()| MatchPattern::Bln(false))
-        .or(catch(parse_keyword("true")).map(|()| MatchPattern::Bln(true)))
+        .map(|()| MatchPattern::Bool(false))
+        .or(catch(parse_keyword("true")).map(|()| MatchPattern::Bool(true)))
 }
 
 // The `0` leaf of a `Nat` match-arm pattern (the zero case of an induction,
@@ -359,7 +359,7 @@ pub(super) fn parse_bin_byte_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 
 // A match-arm pattern: a plain binder, an inductive constructor applied to
 // (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one
-// of the `Bln`/`Nat`/`Lst`/`Bits`/`Bytes` literal leaves — see `MatchPattern`. Struct
+// of the `Bool`/`Nat`/`Lst`/`Bits`/`Bytes` literal leaves — see `MatchPattern`. Struct
 // and constructor forms are tried before the bare-name case for the same
 // reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier
 // prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would

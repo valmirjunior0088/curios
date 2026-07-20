@@ -1,4 +1,4 @@
-use /std/{Bln};
+use /std/{Bool};
 
 pub induct Result(A : Type, E : Type) : pub Type
 | success(A)
@@ -31,13 +31,13 @@ pub let unwrap_or(@A : Type, @E : Type, r : Result(A, E), default : A) -> A =
     | failure(_) => default
     end;
 
-pub let is_success(@A : Type, @E : Type, r : Result(A, E)) -> Bln =
+pub let is_success(@A : Type, @E : Type, r : Result(A, E)) -> Bool =
     match r
     | success(_) => true
     | failure(_) => false
     end;
 
-pub let is_failure(@A : Type, @E : Type, r : Result(A, E)) -> Bln =
+pub let is_failure(@A : Type, @E : Type, r : Result(A, E)) -> Bool =
     match r
     | success(_) => false
     | failure(_) => true

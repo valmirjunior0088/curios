@@ -1,6 +1,6 @@
 pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte, neg, abs, sqrt, floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
-use /std/{Nat, Byte, Int, Str, Bln, Option, Bytes, Lst, Order, BigNat};
+use /std/{Nat, Byte, Int, Str, Bool, Option, Bytes, Lst, Order, BigNat};
 
 let pow2(k : Nat) -> BigNat =
     BigNat/mul_pow2(BigNat/of_nat(1), k);
@@ -29,7 +29,7 @@ rec scale_down(r : BigNat, mp : BigNat, mm : BigNat, s : BigNat, k : Int) -> {Bi
     | false => (r, mp, mm, k)
     end;
 
-rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bln) -> Lst(Nat) =
+rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bool) -> Lst(Nat) =
     let r10 = BigNat/mul_small(r, 10);
     let mp10 = BigNat/mul_small(mp, 10);
     let mm10 = BigNat/mul_small(mm, 10);
@@ -49,8 +49,8 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bln) -> Ls
     | true =>
         let last =
             match
-            | Bln/not(low) => d + 1
-            | Bln/not(high) => d
+            | Bool/not(low) => d + 1
+            | Bool/not(high) => d
             | BigNat/lt(BigNat/mul_small(rem, 2), s) => d
             | _ => d + 1
             end;
@@ -60,7 +60,7 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bln) -> Ls
 let digits_to_str(ds : Lst(Nat)) -> Str =
     Lst/fold(ds, "", (d, acc) => Str/concat(acc, Nat/to_str(d)));
 
-rec normalize(ds : Lst(Nat)) -> {Lst(Nat), Bln} =
+rec normalize(ds : Lst(Nat)) -> {Lst(Nat), Bool} =
     match ds
     | [] => ([], false)
     | [h, ..t] =>
@@ -73,7 +73,7 @@ rec normalize(ds : Lst(Nat)) -> {Lst(Nat), Bln} =
         | false =>
             let (rest, carry) = normalize(t);
             match
-            | Bln/not(carry) => (Lst/cons(h, rest), false)
+            | Bool/not(carry) => (Lst/cons(h, rest), false)
             | h == 9 => (Lst/cons(0, rest), true)
             | _ => (Lst/cons(h + 1, rest), false)
             end
@@ -98,7 +98,7 @@ let setup(f_mant : Nat, exp_field : Nat) -> {BigNat, BigNat, BigNat, BigNat} =
         end
     | false =>
         let abs_e = 150 - Nat/max(exp_field, 1);
-        match exp_field < 2 || Bln/not(f_mant == 0x800000)
+        match exp_field < 2 || Bool/not(f_mant == 0x800000)
         | true =>
             (BigNat/mul_small(BigNat/of_nat(f_mant), 2),
                 pow2(abs_e + 1),
@@ -127,7 +127,7 @@ let layout(digits_str : Str, k : Int) -> Str =
         end
     end;
 
-let render(f_mant : Nat, exp_field : Nat, even : Bln) -> Str =
+let render(f_mant : Nat, exp_field : Nat, even : Bool) -> Str =
     let (r0, s0, mp0, mm0) = setup(f_mant, exp_field);
     let (s1, k1) = scale_up(BigNat/add(r0, mp0), s0, +0);
     let (r1, mp1, mm1, k2) = scale_down(r0, mp0, mm0, s1, k1);

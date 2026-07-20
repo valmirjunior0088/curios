@@ -9,9 +9,9 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
     // rule). The `cont`/`bad` arms reduce `to_lead_bytes(cont, cons(c,t))` to
     // `to_lead_bytes(step(c,cont), t)`, matching the recursive proof's index.
     let source = r#"
-        use /std/{Io, Byte, Bytes, Nat, Bln};
+        use /std/{Io, Byte, Bytes, Nat, Bool};
 
-        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/gte(c, lo)
             | true => Nat/lte(c, hi)
             | false => false
@@ -365,7 +365,7 @@ fn str_logical_operations_use_certified_chars() {
         Io/print(Str/flatten([
             rebuilt, "|", second, "|", Nat/to_str(euro), "|",
             Nat/to_str(supplementary), "|", shown, "|",
-            /std/Bln/to_str(folded), "|", /std/Bln/to_str(not_unicode_folded), "|",
+            /std/Bool/to_str(folded), "|", /std/Bool/to_str(not_unicode_folded), "|",
             Nat/to_str(Str/len(s)), "|", Str/slice(s, 1, 2)
         ]))
         "#;
@@ -376,13 +376,13 @@ fn str_logical_operations_use_certified_chars() {
 #[test]
 fn str_rejects_every_invalid_utf8_shape() {
     let source = r#"
-        use /std/{Str, Bln, Lst, Bytes, Io};
-        let rejected(bytes : Bytes) -> Bln =
+        use /std/{Str, Bool, Lst, Bytes, Io};
+        let rejected(bytes : Bytes) -> Bool =
             match Str/of_bytes(bytes)
             | some(_) => false
             | none() => true
             end;
-        Io/print(Bln/to_str(Lst/fold([
+        Io/print(Bool/to_str(Lst/fold([
             x\c0\af, x\e0\80\80, x\ed\a0\80, x\f4\90\80\80,
             x\80, x\c2, x\e2\82, x\f0\9f\98
         ], true, (bytes, ok) => ok && rejected(bytes))))
@@ -515,9 +515,9 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
     // laws (`concat(x\, b) ≡ b`; associativity). This is the lemma that earns the
     // proof-carrying newtype: `Valid(a) -> Valid(b) -> Valid(concat a b)`.
     let source = r#"
-        use /std/{Io, Str, Nat, Byte, Bytes, Bln};
+        use /std/{Io, Str, Nat, Byte, Bytes, Bool};
 
-        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/gte(c, lo)
             | true => Nat/lte(c, hi)
             | false => false
@@ -604,9 +604,9 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
     // actually runs: "hi" (ASCII) is accepted, a lone `x\80` continuation byte is
     // rejected — output "yesno".
     let source = r#"
-        use /std/{Io, Str, Nat, Bytes, Bln, Option};
+        use /std/{Io, Str, Nat, Bytes, Bool, Option};
 
-        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/gte(c, lo)
             | true => Nat/lte(c, hi)
             | false => false
@@ -706,9 +706,9 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
     // a dependent pair `{ b : Bytes, v : Valid(b) }` — IS `decimal_is_ascii`. Runtime
     // check: `decimal(255).b` renders "255", proving the bytes are real digits.
     let source = r#"
-        use /std/{Io, Str, Nat, Bytes, Bln, Eq};
+        use /std/{Io, Str, Nat, Bytes, Bool, Eq};
 
-        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/gte(c, lo)
             | true => Nat/lte(c, hi)
             | false => false
@@ -832,9 +832,9 @@ fn utf8_slice_closed_peels_codepoints() {
     // elaborates for a general index (its `stop` prunes; it's just never hit at
     // runtime on valid input).
     let source = r#"
-        use /std/{Io, Str, Nat, Byte, Bytes, Bln};
+        use /std/{Io, Str, Nat, Byte, Bytes, Bool};
 
-        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bln =
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/gte(c, lo)
             | true => Nat/lte(c, hi)
             | false => false

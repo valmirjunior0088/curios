@@ -6,11 +6,11 @@
 -- ops match `.rep` directly, build a raw untrimmed result, and route it through
 -- `of_bits` — a single `trim` — at the public boundary.
 
-use /std/{Nat, Bln, Bits, Str, Order, Eq, False, True};
+use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt, eq_neq_gt, lt_neq_gt};
 use /std/Bits/{cons};
 
-pub rec is_trimmed(rep : Bits) -> Bln =
+pub rec is_trimmed(rep : Bits) -> Bool =
     match rep
     | b\ => true
     | b\head\..tail; ih =>
@@ -26,7 +26,7 @@ pub let Canonical(rep : Bits) -> Prop =
     | false => False
     end;
 
-pub let combine(head : Bln, t : Bits) -> Bits =
+pub let combine(head : Bool, t : Bits) -> Bits =
     match t
     | b\ =>
         match head
@@ -42,7 +42,7 @@ pub rec trim(rep : Bits) -> Bits =
     | b\head\..tail; ih => combine(head, ih)
     end;
 
-rec combine_is_trimmed(head : Bln, t : Bits, p : Eq(is_trimmed(t), true)) -> Eq(is_trimmed(combine(head, t)), true) =
+rec combine_is_trimmed(head : Bool, t : Bits, p : Eq(is_trimmed(t), true)) -> Eq(is_trimmed(combine(head, t)), true) =
     match t : (u) => Eq(is_trimmed(combine(head, u)), true)
     | b\ =>
         match head : (h) => Eq(is_trimmed(combine(h, b\)), true)
@@ -59,7 +59,7 @@ pub rec trim_is_trimmed(rep : Bits) -> Eq(is_trimmed(trim(rep)), true) =
     end;
 
 let canonical_of_is_trimmed(rep : Bits, p : Eq(is_trimmed(rep), true)) -> Canonical(rep) =
-    Eq/subst((b : Bln) => match b : Prop | true => True | false => False end, Eq/sym(p), True/qed());
+    Eq/subst((b : Bool) => match b : Prop | true => True | false => False end, Eq/sym(p), True/qed());
 
 let canonical_of_trim(rep : Bits) -> Canonical(trim(rep)) =
     canonical_of_is_trimmed(trim(rep), trim_is_trimmed(rep));
@@ -74,10 +74,10 @@ pub let of_bits(rep : Bits) -> BigNat =
 
 pub induct View : pub Type
 | zero()
-| succ(low : Bln, tail : BigNat)
+| succ(low : Bool, tail : BigNat)
 end
 
-let tail_is_trimmed(head : Bln, tail : Bits, p : Eq(is_trimmed(cons(head, tail)), true))
+let tail_is_trimmed(head : Bool, tail : Bits, p : Eq(is_trimmed(cons(head, tail)), true))
     -> Eq(is_trimmed(tail), true) =
     match tail : (t) => Eq(is_trimmed(t), true)
     | b\ => Eq/refl()
@@ -106,7 +106,7 @@ let qed(@A : Type, x : A) -> Eq(x, x) =
 
 pub let zero : BigNat = of_bits(b\);
 
-pub let is_zero(a : BigNat) -> Bln =
+pub let is_zero(a : BigNat) -> Bool =
     match view(a)
     | zero() => true
     | succ(_, _) => false
@@ -137,19 +137,19 @@ pub rec succ_raw(x : Bits) -> Bits =
 pub let succ(a : BigNat) -> BigNat =
     of_bits(succ_raw(a.rep));
 
-pub let xor3(a : Bln, b : Bln, c : Bln) -> Bln =
+pub let xor3(a : Bool, b : Bool, c : Bool) -> Bool =
     match a
     | true => match b | true => c | false => match c | true => false | false => true end end
     | false => match b | true => match c | true => false | false => true end | false => c end
     end;
 
-pub let maj3(a : Bln, b : Bln, c : Bln) -> Bln =
+pub let maj3(a : Bool, b : Bool, c : Bool) -> Bool =
     match a
     | true => match b | true => true | false => c end
     | false => match b | true => c | false => false end
     end;
 
-pub rec add_raw(x : Bits, y : Bits, carry : Bln) -> Bits =
+pub rec add_raw(x : Bits, y : Bits, carry : Bool) -> Bits =
     match x
     | b\ =>
         match y
@@ -166,18 +166,18 @@ pub rec add_raw(x : Bits, y : Bits, carry : Bln) -> Bits =
 pub let add(a : BigNat, b : BigNat) -> BigNat =
     of_bits(add_raw(a.rep, b.rep, false));
 
-let cong_cons2(@h1 : Bln, @h2 : Bln, ph : Eq(h1, h2), @t1 : Bits, @t2 : Bits, pt : Eq(t1, t2))
+let cong_cons2(@h1 : Bool, @h2 : Bool, ph : Eq(h1, h2), @t1 : Bits, @t2 : Bits, pt : Eq(t1, t2))
     -> Eq(cons(h1, t1), cons(h2, t2)) =
-    match ph : (q : Eq(Bln, a, b)) => Eq(cons(a, t1), cons(b, t2))
+    match ph : (q : Eq(Bool, a, b)) => Eq(cons(a, t1), cons(b, t2))
     | refl(z) =>
         match pt : (q2 : Eq(Bits, a2, b2)) => Eq(cons(h1, a2), cons(h1, b2))
         | refl(z2) => Eq/refl()
         end
     end;
 
-let cong_add_raw_c(x : Bits, y : Bits, @c1 : Bln, @c2 : Bln, p : Eq(c1, c2))
+let cong_add_raw_c(x : Bits, y : Bits, @c1 : Bool, @c2 : Bool, p : Eq(c1, c2))
     -> Eq(add_raw(x, y, c1), add_raw(x, y, c2)) =
-    match p : (q : Eq(Bln, a, b)) => Eq(add_raw(x, y, a), add_raw(x, y, b))
+    match p : (q : Eq(Bool, a, b)) => Eq(add_raw(x, y, a), add_raw(x, y, b))
     | refl(z) => Eq/refl()
     end;
 
@@ -186,19 +186,19 @@ let cong_of_bits(@s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(of_bits(s), of_bits(t
     | refl(z) => Eq/refl()
     end;
 
-let xor3_comm(a : Bln, b : Bln, c : Bln) -> Eq(xor3(a, b, c), xor3(b, a, c)) =
+let xor3_comm(a : Bool, b : Bool, c : Bool) -> Eq(xor3(a, b, c), xor3(b, a, c)) =
     match a
     | true => match b | true => qed(xor3(true, true, c)) | false => qed(xor3(true, false, c)) end
     | false => match b | true => qed(xor3(false, true, c)) | false => qed(xor3(false, false, c)) end
     end;
 
-let maj3_comm(a : Bln, b : Bln, c : Bln) -> Eq(maj3(a, b, c), maj3(b, a, c)) =
+let maj3_comm(a : Bool, b : Bool, c : Bool) -> Eq(maj3(a, b, c), maj3(b, a, c)) =
     match a
     | true => match b | true => qed(maj3(true, true, c)) | false => qed(maj3(true, false, c)) end
     | false => match b | true => qed(maj3(false, true, c)) | false => qed(maj3(false, false, c)) end
     end;
 
-pub rec add_comm_raw(x : Bits, y : Bits, c : Bln) -> Eq(add_raw(x, y, c), add_raw(y, x, c)) =
+pub rec add_comm_raw(x : Bits, y : Bits, c : Bool) -> Eq(add_raw(x, y, c), add_raw(y, x, c)) =
     match x : (a) => Eq(add_raw(a, y, c), add_raw(y, a, c))
     | b\ =>
         match y : (b) => Eq(add_raw(b\, b, c), add_raw(b, b\, c))
@@ -211,7 +211,7 @@ pub rec add_comm_raw(x : Bits, y : Bits, c : Bln) -> Eq(add_raw(x, y, c), add_ra
         | b\yh\..yt; ih2 => add_raw_swap_step(xt, yt, xh, yh, c)
         end
     end
-and add_raw_swap_step(x : Bits, y : Bits, h1 : Bln, h2 : Bln, c : Bln)
+and add_raw_swap_step(x : Bits, y : Bits, h1 : Bool, h2 : Bool, c : Bool)
     -> Eq(cons(xor3(h1, h2, c), add_raw(x, y, maj3(h1, h2, c))),
           cons(xor3(h2, h1, c), add_raw(y, x, maj3(h2, h1, c)))) =
     cong_cons2(xor3_comm(h1, h2, c),
@@ -222,13 +222,13 @@ let cong_succ_raw(@s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(succ_raw(s), succ_ra
     | refl(z) => Eq/refl()
     end;
 
-let cong_add_raw_l(@s : Bits, @t : Bits, p : Eq(s, t), y : Bits, c : Bln)
+let cong_add_raw_l(@s : Bits, @t : Bits, p : Eq(s, t), y : Bits, c : Bool)
     -> Eq(add_raw(s, y, c), add_raw(t, y, c)) =
     match p : (q : Eq(Bits, a, b)) => Eq(add_raw(a, y, c), add_raw(b, y, c))
     | refl(z) => Eq/refl()
     end;
 
-let cong_add_raw_r(x : Bits, @s : Bits, @t : Bits, p : Eq(s, t), c : Bln)
+let cong_add_raw_r(x : Bits, @s : Bits, @t : Bits, p : Eq(s, t), c : Bool)
     -> Eq(add_raw(x, s, c), add_raw(x, t, c)) =
     match p : (q : Eq(Bits, a, b)) => Eq(add_raw(x, a, c), add_raw(x, b, c))
     | refl(z) => Eq/refl()
@@ -308,7 +308,7 @@ pub rec add_raw_carry_spec(x : Bits, y : Bits) -> Eq(add_raw(x, y, true), succ_r
         end
     end;
 
-pub rec add_raw_succ_out_l(u : Bits, v : Bits, c : Bln)
+pub rec add_raw_succ_out_l(u : Bits, v : Bits, c : Bool)
     -> Eq(add_raw(succ_raw(u), v, c), succ_raw(add_raw(u, v, c))) =
     match u : (a) => Eq(add_raw(succ_raw(a), v, c), succ_raw(add_raw(a, v, c)))
     | b\ =>
@@ -379,7 +379,7 @@ pub rec add_raw_succ_out_l(u : Bits, v : Bits, c : Bln)
         end
     end;
 
-pub rec add_raw_succ_out_r(u : Bits, v : Bits, c : Bln)
+pub rec add_raw_succ_out_r(u : Bits, v : Bits, c : Bool)
     -> Eq(add_raw(u, succ_raw(v), c), succ_raw(add_raw(u, v, c))) =
     match v : (b) => Eq(add_raw(u, succ_raw(b), c), succ_raw(add_raw(u, b, c)))
     | b\ =>
@@ -450,7 +450,7 @@ pub rec add_raw_succ_out_r(u : Bits, v : Bits, c : Bln)
         end
     end;
 
-pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bln, c2 : Bln)
+pub rec add_assoc_raw(x : Bits, y : Bits, z : Bits, c1 : Bool, c2 : Bool)
     -> Eq(add_raw(add_raw(x, y, c1), z, c2), add_raw(x, add_raw(y, z, c1), c2)) =
     match x : (xv) => Eq(add_raw(add_raw(xv, y, c1), z, c2), add_raw(xv, add_raw(y, z, c1), c2))
     | b\ =>
@@ -936,15 +936,15 @@ pub rec add_raw_one_r(x : Bits) -> Eq(add_raw(x, cons(true, b\), false), succ_ra
     end;
 
 let false_neq_true(p : Eq(false, true)) -> False =
-    Eq/subst((b : Bln) => match b : Prop | false => True | true => False end, p, True/qed());
+    Eq/subst((b : Bool) => match b : Prop | false => True | true => False end, p, True/qed());
 
-let nonempty(x : Bits) -> Bln =
+let nonempty(x : Bits) -> Bool =
     match x
     | b\ => false
     | b\_\.._ => true
     end;
 
-let cong_combine(h : Bln, @s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(combine(h, s), combine(h, t)) =
+let cong_combine(h : Bool, @s : Bits, @t : Bits, p : Eq(s, t)) -> Eq(combine(h, s), combine(h, t)) =
     match p : (q : Eq(Bits, a, b)) => Eq(combine(h, a), combine(h, b))
     | refl(z) => Eq/refl()
     end;
@@ -968,7 +968,7 @@ pub rec trim_of_trimmed(x : Bits, p : Eq(is_trimmed(x), true)) -> Eq(trim(x), x)
         end
     end;
 
-let is_trimmed_cons(head : Bln, u : Bits, pt : Eq(is_trimmed(u), true), pn : Eq(nonempty(u), true))
+let is_trimmed_cons(head : Bool, u : Bits, pt : Eq(is_trimmed(u), true), pn : Eq(nonempty(u), true))
     -> Eq(is_trimmed(cons(head, u)), true) =
     match u : (v) => Eq(is_trimmed(cons(head, v)), true)
     | b\ => False/absurd(false_neq_true(pn))
@@ -1004,21 +1004,21 @@ pub rec succ_raw_trimmed(x : Bits, p : Eq(is_trimmed(x), true)) -> Eq(is_trimmed
         end
     end;
 
-let add_raw_nonempty_l(xh : Bln, xt : Bits, y : Bits, c : Bln)
+let add_raw_nonempty_l(xh : Bool, xt : Bits, y : Bits, c : Bool)
     -> Eq(nonempty(add_raw(cons(xh, xt), y, c)), true) =
     match y : (b) => Eq(nonempty(add_raw(cons(xh, xt), b, c)), true)
     | b\ => Eq/refl()
     | b\_\.._ => Eq/refl()
     end;
 
-let add_raw_nonempty_r(x : Bits, yh : Bln, yt : Bits, c : Bln)
+let add_raw_nonempty_r(x : Bits, yh : Bool, yt : Bits, c : Bool)
     -> Eq(nonempty(add_raw(x, cons(yh, yt), c)), true) =
     match x : (a) => Eq(nonempty(add_raw(a, cons(yh, yt), c)), true)
     | b\ => Eq/refl()
     | b\_\.._ => Eq/refl()
     end;
 
-pub rec add_raw_trimmed(x : Bits, y : Bits, c : Bln,
+pub rec add_raw_trimmed(x : Bits, y : Bits, c : Bool,
     px : Eq(is_trimmed(x), true), py : Eq(is_trimmed(y), true))
     -> Eq(is_trimmed(add_raw(x, y, c)), true) =
     match x : (a) => Eq(is_trimmed(add_raw(a, y, c)), true)
@@ -1091,7 +1091,7 @@ pub let add_assoc(a : BigNat, b : BigNat, c : BigNat) -> Eq(add(add(a, b), c), a
                             is_trimmed_of_canonical(c.rep, c.canonical)))),
                     false))));
 
-let head_of(x : Bits) -> Bln =
+let head_of(x : Bits) -> Bool =
     match x
     | b\ => false
     | b\h\.._ => h
@@ -1103,19 +1103,19 @@ let tail_of(x : Bits) -> Bits =
     | b\_\..t => t
     end;
 
-let cons_inj_head(@h1 : Bln, @t1 : Bits, @h2 : Bln, @t2 : Bits, p : Eq(cons(h1, t1), cons(h2, t2)))
+let cons_inj_head(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(cons(h1, t1), cons(h2, t2)))
     -> Eq(h1, h2) =
     match p : (q : Eq(Bits, s, t)) => Eq(head_of(s), head_of(t))
     | refl(z) => Eq/refl()
     end;
 
-let cons_inj_tail(@h1 : Bln, @t1 : Bits, @h2 : Bln, @t2 : Bits, p : Eq(cons(h1, t1), cons(h2, t2)))
+let cons_inj_tail(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(cons(h1, t1), cons(h2, t2)))
     -> Eq(t1, t2) =
     match p : (q : Eq(Bits, s, t)) => Eq(tail_of(s), tail_of(t))
     | refl(z) => Eq/refl()
     end;
 
-let xor3_inj_mid(a : Bln, @b1 : Bln, @b2 : Bln, c : Bln, p : Eq(xor3(a, b1, c), xor3(a, b2, c)))
+let xor3_inj_mid(a : Bool, @b1 : Bool, @b2 : Bool, c : Bool, p : Eq(xor3(a, b1, c), xor3(a, b2, c)))
     -> Eq(b1, b2) =
     match a
     | true =>
@@ -1146,13 +1146,13 @@ let xor3_inj_mid(a : Bln, @b1 : Bln, @b2 : Bln, c : Bln, p : Eq(xor3(a, b1, c), 
         end
     end;
 
-let cong_maj3_mid(a : Bln, @b1 : Bln, @b2 : Bln, p : Eq(b1, b2), c : Bln)
+let cong_maj3_mid(a : Bool, @b1 : Bool, @b2 : Bool, p : Eq(b1, b2), c : Bool)
     -> Eq(maj3(a, b1, c), maj3(a, b2, c)) =
-    match p : (q : Eq(Bln, s, t)) => Eq(maj3(a, s, c), maj3(a, t, c))
+    match p : (q : Eq(Bool, s, t)) => Eq(maj3(a, s, c), maj3(a, t, c))
     | refl(z) => Eq/refl()
     end;
 
-let succ_raw_inj_absurd(zh : Bln, zt : Bits, pz : Eq(is_trimmed(cons(zh, zt)), true),
+let succ_raw_inj_absurd(zh : Bool, zt : Bits, pz : Eq(is_trimmed(cons(zh, zt)), true),
     p : Eq(succ_raw(b\), succ_raw(cons(zh, zt)))) -> False =
     match zh
     | true => false_neq_true(Eq/sym(cons_inj_head(@true, @(b\), @false, @(succ_raw(zt)), p)))
@@ -1196,7 +1196,7 @@ rec succ_raw_inj(y : Bits, z : Bits,
         end
     end;
 
-pub rec add_raw_cancel_l(x : Bits, y : Bits, z : Bits, c : Bln,
+pub rec add_raw_cancel_l(x : Bits, y : Bits, z : Bits, c : Bool,
     py : Eq(is_trimmed(y), true), pz : Eq(is_trimmed(z), true),
     p : Eq(add_raw(x, y, c), add_raw(x, z, c))) -> Eq(y, z) =
     match x
@@ -1227,7 +1227,7 @@ pub rec add_raw_cancel_l(x : Bits, y : Bits, z : Bits, c : Bln,
             end
         end
     end
-and add_raw_cancel_absurd(xh : Bln, xt : Bits, zh : Bln, zt : Bits, c : Bln,
+and add_raw_cancel_absurd(xh : Bool, xt : Bits, zh : Bool, zt : Bits, c : Bool,
     pz : Eq(is_trimmed(cons(zh, zt)), true),
     p : Eq(add_raw(cons(xh, xt), b\, c), add_raw(cons(xh, xt), cons(zh, zt), c))) -> False =
     let shifted : Eq(is_trimmed(cons(false, b\)), true) =
@@ -1243,7 +1243,7 @@ and add_raw_cancel_absurd(xh : Bln, xt : Bits, zh : Bln, zt : Bits, c : Bln,
             pz);
     false_neq_true(shifted);
 
-pub let add_raw_cancel_r(x : Bits, y : Bits, z : Bits, c : Bln,
+pub let add_raw_cancel_r(x : Bits, y : Bits, z : Bits, c : Bool,
     py : Eq(is_trimmed(y), true), pz : Eq(is_trimmed(z), true),
     p : Eq(add_raw(y, x, c), add_raw(z, x, c))) -> Eq(y, z) =
     add_raw_cancel_l(x, y, z, c, py, pz,
@@ -1299,19 +1299,19 @@ pub rec cmp_raw(x : Bits, y : Bits) -> Order =
 pub let cmp(a : BigNat, b : BigNat) -> Order =
     cmp_raw(a.rep, b.rep);
 
-pub let eql(a : BigNat, b : BigNat) -> Bln =
+pub let eql(a : BigNat, b : BigNat) -> Bool =
     match cmp(a, b) | eq() => true | _ => false end;
 
-pub let lt(a : BigNat, b : BigNat) -> Bln =
+pub let lt(a : BigNat, b : BigNat) -> Bool =
     match cmp(a, b) | lt() => true | _ => false end;
 
-pub let lte(a : BigNat, b : BigNat) -> Bln =
+pub let lte(a : BigNat, b : BigNat) -> Bool =
     match cmp(a, b) | gt() => false | _ => true end;
 
-pub let gt(a : BigNat, b : BigNat) -> Bln =
+pub let gt(a : BigNat, b : BigNat) -> Bool =
     match cmp(a, b) | gt() => true | _ => false end;
 
-pub let gte(a : BigNat, b : BigNat) -> Bln =
+pub let gte(a : BigNat, b : BigNat) -> Bool =
     match cmp(a, b) | lt() => false | _ => true end;
 
 let absorb_eq(o : Order, p : Eq(o, Order/eq()))
@@ -1360,7 +1360,7 @@ pub rec cmp_raw_eq(x : Bits, y : Bits, p : Eq(cmp_raw(x, y), Order/eq())) -> Eq(
                 cmp_raw_eq(xt, yt, sub_split(cmp_raw(xt, yt), p)))
         end
     end
-and cmp_head_eq(xh : Bln, yh : Bln,
+and cmp_head_eq(xh : Bool, yh : Bool,
     p : Eq(match xh : Order | true => match yh | true => Order/eq() | false => Order/gt() end | false => match yh | true => Order/lt() | false => Order/eq() end end, Order/eq()))
     -> Eq(xh, yh) =
     match xh
@@ -1368,7 +1368,7 @@ and cmp_head_eq(xh : Bln, yh : Bln,
     | false => match yh | true => False/absurd(lt_neq_eq(p)) | false => Eq/refl() end
     end;
 
-let flip_heads(xh : Bln, yh : Bln)
+let flip_heads(xh : Bool, yh : Bool)
     -> Eq(match yh : Order | true => match xh | true => Order/eq() | false => Order/gt() end | false => match xh | true => Order/lt() | false => Order/eq() end end,
           Order/flip(match xh : Order | true => match yh | true => Order/eq() | false => Order/gt() end | false => match yh | true => Order/lt() | false => Order/eq() end end)) =
     match xh
@@ -1403,7 +1403,7 @@ let force_lt(@s : Order, @E : Order, p : Eq(s, Order/lt()))
     -> Eq(match s : Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()) =
     Eq/subst((v : Order) => Eq(match v : Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()), Eq/sym(p), Eq/refl());
 
-let head_lt_yh(xh : Bln, yh : Bln,
+let head_lt_yh(xh : Bool, yh : Bool,
     p : Eq(match xh : Order | true => match yh | true => Order/eq() | false => Order/gt() end | false => match yh | true => Order/lt() | false => Order/eq() end end, Order/lt()))
     -> Eq(yh, true) =
     match xh
@@ -1411,7 +1411,7 @@ let head_lt_yh(xh : Bln, yh : Bln,
     | false => match yh | true => Eq/refl() | false => False/absurd(eq_neq_lt(p)) end
     end;
 
-let head_lt_xh(xh : Bln, yh : Bln,
+let head_lt_xh(xh : Bool, yh : Bool,
     p : Eq(match xh : Order | true => match yh | true => Order/eq() | false => Order/gt() end | false => match yh | true => Order/lt() | false => Order/eq() end end, Order/lt()))
     -> Eq(xh, false) =
     match xh
@@ -1424,14 +1424,14 @@ let reduce_whole(@a : Bits, @b : Bits, @s : Order, e : Eq(cmp_raw(a, b), s), @E 
     -> Eq(match s : Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()) =
     Eq/subst((r : Order) => Eq(match r : Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()), e, p);
 
-let cons_lt(xh : Bln, zh : Bln, @xt : Bits, @zt : Bits, tail_lt : Eq(cmp_raw(xt, zt), Order/lt()))
+let cons_lt(xh : Bool, zh : Bool, @xt : Bits, @zt : Bits, tail_lt : Eq(cmp_raw(xt, zt), Order/lt()))
     -> Eq(cmp_raw(cons(xh, xt), cons(zh, zt)), Order/lt()) =
     match xh
     | true => match zh | true => force_lt(tail_lt) | false => force_lt(tail_lt) end
     | false => match zh | true => force_lt(tail_lt) | false => force_lt(tail_lt) end
     end;
 
-let trans_cons(@xh : Bln, @xt : Bits, @yh : Bln, @yt : Bits, @zh : Bln, @zt : Bits,
+let trans_cons(@xh : Bool, @xt : Bits, @yh : Bool, @yt : Bits, @zh : Bool, @zt : Bits,
     s1 : Order, e1 : Eq(cmp_raw(xt, yt), s1),
     s2 : Order, e2 : Eq(cmp_raw(yt, zt), s2),
     p : Eq(cmp_raw(cons(xh, xt), cons(yh, yt)), Order/lt()),
@@ -1495,13 +1495,13 @@ pub let cmp_trans(a : BigNat, b : BigNat, c : BigNat,
     p : Eq(cmp(a, b), Order/lt()), q : Eq(cmp(b, c), Order/lt())) -> Eq(cmp(a, c), Order/lt()) =
     cmp_raw_trans(a.rep, b.rep, c.rep, p, q);
 
-let sub_borrow(a : Bln, b : Bln, bw : Bln) -> Bln =
+let sub_borrow(a : Bool, b : Bool, bw : Bool) -> Bool =
     match a
     | true => match b | true => bw | false => false end
     | false => match b | true => true | false => bw end
     end;
 
-pub rec sub_raw(x : Bits, y : Bits, borrow : Bln) -> {Bits, Bln} =
+pub rec sub_raw(x : Bits, y : Bits, borrow : Bool) -> {Bits, Bool} =
     match x
     | b\ =>
         match y
@@ -1567,7 +1567,7 @@ let trim_idem(w : Bits) -> Eq(trim(trim(w)), trim(w)) =
 let of_bits_eq(u : Bits, v : Bits, p : Eq(trim(u), trim(v))) -> Eq(of_bits(u), of_bits(v)) =
     big_nat_eq(of_bits(u), of_bits(v), p);
 
-let add_combine_l(h : Bln, w : Bits, v : Bits, c : Bln)
+let add_combine_l(h : Bool, w : Bits, v : Bits, c : Bool)
     -> Eq(trim(add_raw(combine(h, w), v, c)), trim(add_raw(cons(h, w), v, c))) =
     match w : (a) => Eq(trim(add_raw(combine(h, a), v, c)), trim(add_raw(cons(h, a), v, c)))
     | b\ =>
@@ -1582,7 +1582,7 @@ let add_combine_l(h : Bln, w : Bits, v : Bits, c : Bln)
     | b\_\.._ => Eq/refl()
     end;
 
-rec trim_add_raw_trim_l(u : Bits, v : Bits, c : Bln)
+rec trim_add_raw_trim_l(u : Bits, v : Bits, c : Bool)
     -> Eq(trim(add_raw(trim(u), v, c)), trim(add_raw(u, v, c))) =
     match u : (a) => Eq(trim(add_raw(trim(a), v, c)), trim(add_raw(a, v, c)))
     | b\ => Eq/refl()
@@ -1597,12 +1597,12 @@ rec trim_add_raw_trim_l(u : Bits, v : Bits, c : Bln)
         end
     end;
 
-let trim_add_raw_trim_r(u : Bits, v : Bits, c : Bln)
+let trim_add_raw_trim_r(u : Bits, v : Bits, c : Bool)
     -> Eq(trim(add_raw(u, trim(v), c)), trim(add_raw(u, v, c))) =
     Eq/trans(cong_trim(add_comm_raw(u, trim(v), c)),
         Eq/trans(trim_add_raw_trim_l(v, u, c), cong_trim(add_comm_raw(v, u, c))));
 
-let mul_combine_l(h : Bln, w : Bits, v : Bits)
+let mul_combine_l(h : Bool, w : Bits, v : Bits)
     -> Eq(trim(mul_raw(combine(h, w), v)), trim(mul_raw(cons(h, w), v))) =
     match w : (a) => Eq(trim(mul_raw(combine(h, a), v)), trim(mul_raw(cons(h, a), v)))
     | b\ =>
@@ -1642,16 +1642,16 @@ rec trim_mul_raw_trim_r(u : Bits, v : Bits)
         end
     end;
 
-let trim_cons_cong(h : Bln, @s : Bits, @t : Bits, p : Eq(trim(s), trim(t)))
+let trim_cons_cong(h : Bool, @s : Bits, @t : Bits, p : Eq(trim(s), trim(t)))
     -> Eq(trim(cons(h, s)), trim(cons(h, t))) =
     cong_combine(h, p);
 
-let trim_add_raw_l_cong(@s : Bits, @t : Bits, p : Eq(trim(s), trim(t)), v : Bits, c : Bln)
+let trim_add_raw_l_cong(@s : Bits, @t : Bits, p : Eq(trim(s), trim(t)), v : Bits, c : Bool)
     -> Eq(trim(add_raw(s, v, c)), trim(add_raw(t, v, c))) =
     Eq/trans(Eq/sym(trim_add_raw_trim_l(s, v, c)),
         Eq/trans(cong_trim(cong_add_raw_l(p, v, c)), trim_add_raw_trim_l(t, v, c)));
 
-let trim_add_raw_r_cong(u : Bits, @s : Bits, @t : Bits, p : Eq(trim(s), trim(t)), c : Bln)
+let trim_add_raw_r_cong(u : Bits, @s : Bits, @t : Bits, p : Eq(trim(s), trim(t)), c : Bool)
     -> Eq(trim(add_raw(u, s, c)), trim(add_raw(u, t, c))) =
     Eq/trans(Eq/sym(trim_add_raw_trim_r(u, s, c)),
         Eq/trans(cong_trim(cong_add_raw_r(u, p, c)), trim_add_raw_trim_r(u, t, c)));
@@ -1827,7 +1827,7 @@ pub let mul_pow2_compose(a : BigNat, j : Nat, k : Nat)
     | pred + 1; ih => cong_dbl(ih)
     end;
 
-pub rec is_even(a : BigNat) -> Bln =
+pub rec is_even(a : BigNat) -> Bool =
     match view(a)
     | zero() => true
     | succ(low, _) => match low | true => false | false => true end
