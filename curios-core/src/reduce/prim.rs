@@ -451,7 +451,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             Ok(Subterm::Prim(
                 match inner.as_nat().and_then(|value| {
                     let value = value.to_big_uint()?;
-                    Some((value.to_u32().unwrap_or(0) & 0xff) as u8)
+                    Some((value.to_u32()? & 0xff) as u8)
                 }) {
                     Some(value) => Prim::Byte(value),
                     None => Prim::NatToByte(inner),
@@ -1049,7 +1049,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             context,
             inner,
             |v| {
-                let bits = v.to_big_uint()?.to_u32().unwrap_or(0) & 0x7FFF_FFFF;
+                let bits = v.to_big_uint()?.to_u32()? & 0x7FFF_FFFF;
                 let signed = if bits >= 0x4000_0000 {
                     bits as i64 - (1i64 << 31)
                 } else {
