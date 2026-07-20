@@ -24,7 +24,7 @@ Here is a vector whose length is part of its type:
 use /std/{Nat};
 
 -- A vector indexed by its own length.
-pub induct Vec(T : Type) : (n : Nat) -> Type
+pub induct Vec(T : Type) : (n : Nat) -> pub Type
 | nil() : (0)
 | cons(@m : Nat, x : T, xs : Vec(T, m)) : (m + 1)
 end
