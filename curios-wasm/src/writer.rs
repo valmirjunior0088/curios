@@ -1072,13 +1072,7 @@ where
         self.write_section_with(11, |writer| {
             writer.write_vec(datas, |writer, (_, segment)| {
                 writer.buffer.push_byte(0x01)?; // passive flag
-                writer
-                    .buffer
-                    .push_leb128_unsigned(segment.bytes.len() as u64)?;
-
-                for byte in &segment.bytes {
-                    writer.buffer.push_byte(*byte)?;
-                }
+                writer.buffer.push_vec_bytes(&segment.bytes)?;
 
                 Ok(())
             })
