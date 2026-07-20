@@ -162,7 +162,7 @@ enum Front {
 }
 
 /// The structural traversal shared by both `Bin` destructors ([`FreeMonoid::uncons`]
-/// for the eliminator, [`peel_first_byte`] for `Bin/get`/`Bin/slice`): peel the
+/// for the eliminator, [`peel_first_atom`] for `Bin/get`/`Bin/slice`): peel the
 /// leading generator off an already-reduced value. A literal run yields its first
 /// byte; a `Utf8` cons `append(\\, c)` yields its symbolic byte; a concatenation
 /// recurses into its first operand so a literal- or cons-led `BinConcat` decodes
@@ -311,7 +311,7 @@ fn peel_front_lst(lst: &Term) -> LstFront {
 }
 
 /// Split the first element off a reduced `Lst` value, returning the head element and
-/// the residual tail — the element-typed twin of [`peel_first_byte`]. Lets `Lst/get`
+/// the residual tail — the element-typed twin of [`peel_first_atom`]. Lets `Lst/get`
 /// and `Lst/slice` peel a symbolic cons one element at a time, exactly as `Bin/get`/
 /// `Bin/slice` walk a byte at a time. `None` for the empty array or an opaque
 /// symbolic value, where no first element is statically exposed.

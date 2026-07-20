@@ -316,7 +316,7 @@ fn bin_atom(grain: Grain, term: &Term) -> Option<u8> {
     }
 }
 
-/// The `Lst` analogue of [`bin_valued`]: `Lst` and `LstConcat` carry the monoid's
+/// The `Lst` analogue of [`bin_grain`]: `Lst` and `LstConcat` carry the monoid's
 /// literals and juxtaposition, `LstSlice` rides in as a measured `Window` (like
 /// `BinSlice`), and `LstAppend` rides in as its base followed by a length-1 literal
 /// run — so `append(xs, e) ≡ concat(xs, single(e))`. Any other producer stays an
