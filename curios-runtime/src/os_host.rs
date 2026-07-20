@@ -591,8 +591,15 @@ impl Host for OsHost {
                     Err(error) => (Status::from(error), 0),
                 };
             }
-            // stdin is not writable; the guest's `/std/Io` never issues this.
-            Io::Stdin => panic!("write to stdin"),
+            // POSIX semantics: stdin is plain fd 0, so the write succeeds when
+            // the process was handed a read-write descriptor (a terminal) and
+            // reports `EBADF` when it was opened read-only.
+            Io::Stdin => {
+                return match rustix::io::write(stdin(), bytes) {
+                    Ok(written) => (Status::Ok, written as u32),
+                    Err(errno) => (Status::from(std::io::Error::from(errno)), 0),
+                };
+            }
             Io::Other(_) => {}
         }
 
