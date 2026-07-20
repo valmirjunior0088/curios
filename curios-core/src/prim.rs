@@ -138,7 +138,7 @@ pub enum Prim {
     LstSlice(Term, Term, Term, Term),
     LstAppend(Term, Term, Term),
     LstConcat(Term, Vec<Term>),
-    // (@A, @B, f : (A) -> B, lst : Lst(A)) -> Lst(B): a structural map. Opaque
+    // (@A, @B, lst : Lst(A), f : (A) -> B) -> Lst(B): a structural map. Opaque
     // under reduction on a symbolic operand, so it never unfolds a variable
     // during type-checking. Erases to a single O(n) fill loop.
     LstMap(Term, Term, Term, Term),
