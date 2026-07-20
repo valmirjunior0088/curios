@@ -930,7 +930,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         &mut self,
         rope: &RopeData,
         func_name: curios_wasm::FuncName,
-        force_func: Option<curios_wasm::FuncName>,
+        force_func: curios_wasm::FuncName,
     ) {
         let r = curios_wasm::LocalName::from("r");
         let s = curios_wasm::LocalName::from("s");
@@ -1036,37 +1036,35 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
         // An uncached node is forced first — memoized in place — so the view
         // below reads through its cache.
-        if let Some(force_func) = force_func {
-            instrs.extend([
-                get(&r),
-                field_get(&rope.base, &rope.tag_field),
-                curios_wasm::Instr::I32Const { value: 1 },
-                curios_wasm::Instr::I32Eq,
-                curios_wasm::Instr::If {
-                    label_name: curios_wasm::LabelName::from("node"),
-                    block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: vec![
-                        get(&r),
-                        cast(&rope.node),
-                        field_get(&rope.node, &rope.cache_field),
-                        curios_wasm::Instr::RefIsNull,
-                        curios_wasm::Instr::If {
-                            label_name: curios_wasm::LabelName::from("settle"),
-                            block_type: curios_wasm::BlockType::Empty,
-                            then_instructions: vec![
-                                get(&r),
-                                curios_wasm::Instr::Call {
-                                    func_name: force_func,
-                                },
-                                curios_wasm::Instr::Drop,
-                            ],
-                            else_instructions: vec![],
-                        },
-                    ],
-                    else_instructions: vec![],
-                },
-            ]);
-        }
+        instrs.extend([
+            get(&r),
+            field_get(&rope.base, &rope.tag_field),
+            curios_wasm::Instr::I32Const { value: 1 },
+            curios_wasm::Instr::I32Eq,
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("node"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: vec![
+                    get(&r),
+                    cast(&rope.node),
+                    field_get(&rope.node, &rope.cache_field),
+                    curios_wasm::Instr::RefIsNull,
+                    curios_wasm::Instr::If {
+                        label_name: curios_wasm::LabelName::from("settle"),
+                        block_type: curios_wasm::BlockType::Empty,
+                        then_instructions: vec![
+                            get(&r),
+                            curios_wasm::Instr::Call {
+                                func_name: force_func,
+                            },
+                            curios_wasm::Instr::Drop,
+                        ],
+                        else_instructions: vec![],
+                    },
+                ],
+                else_instructions: vec![],
+            },
+        ]);
 
         instrs.extend([
             curios_wasm::Instr::I32Const { value: 2 },

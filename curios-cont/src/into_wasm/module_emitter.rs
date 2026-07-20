@@ -614,7 +614,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_slice_func(
                 &self.table.bin_rope(),
                 self.table.bytes_slice_func(),
-                Some(self.table.bytes_force_func()),
+                self.table.bytes_force_func(),
             );
         }
 
@@ -622,7 +622,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_slice_func(
                 &self.table.bin_rope(),
                 self.table.bits_slice_func(),
-                Some(self.table.bits_force_func()),
+                self.table.bits_force_func(),
             );
         }
 
@@ -630,7 +630,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_slice_func(
                 &self.table.lst_rope(),
                 self.table.lst_slice_func(),
-                Some(self.table.lst_force_func()),
+                self.table.lst_force_func(),
             );
         }
 
