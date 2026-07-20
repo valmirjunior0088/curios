@@ -772,11 +772,11 @@ fn suffix_view(grain: SequenceGrain, remainder: &[Value]) -> Value {
             let mut packed = curios_base::PackedBin::from_bytes(Vec::new());
             for value in remainder {
                 packed = match (grain, value) {
-                    (Grain::X, Value::Byte(byte)) => {
-                        packed.append_byte(*byte).unwrap_or_else(|| packed.clone())
-                    }
+                    (Grain::X, Value::Byte(byte)) => packed
+                        .append_byte(*byte)
+                        .expect("a byte-built binary stays byte-aligned"),
                     (Grain::B, Value::Bool(bit)) => packed.append_bit(*bit),
-                    _ => packed,
+                    _ => unreachable!("fold elements match their sequence grain"),
                 };
             }
             Value::Bin(grain, Rc::new(packed))
