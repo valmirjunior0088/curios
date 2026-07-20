@@ -11,6 +11,6 @@ ROOT="$(dirname "${BASH_SOURCE[0]}")"
 docker build \
     --platform linux/arm64 \
     -f "$ROOT/Dockerfile" \
-    -t curios-bench \
+    -t curios-benchmarks \
     "$@" \
     "$ROOT/.."

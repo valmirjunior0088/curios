@@ -1,10 +1,10 @@
 # Kitchen-sink benchmark image — every toolchain in one arm64 container.
 #
 # Build from the REPO ROOT (the build needs the curios sources):
-#   docker build --platform linux/arm64 -f benchmarks/Dockerfile -t curios-bench .
+#   docker build --platform linux/arm64 -f benchmarks/Dockerfile -t curios-benchmarks .
 # Run on a single pinned core so the numbers are stable:
-#   docker run --rm --cpuset-cpus 0 curios-bench
-#   docker run --rm --cpuset-cpus 0 -e D_TREES=23 -e N_LCG=100000000 curios-bench
+#   docker run --rm --cpuset-cpus 0 curios-benchmarks
+#   docker run --rm --cpuset-cpus 0 -e D_TREES=23 -e N_LCG=100000000 curios-benchmarks
 #
 # Toolchains are installed the perf-correct way (flambda OCaml, fresh V8). Grain
 # ships no arm64 binary and its source build needs esy (also arm64-less), so its

@@ -7,7 +7,8 @@ A throwaway, run-once-every-never harness to place Curios against industry langu
 | Run | Captured | Environment |
 | --- | --- | --- |
 | [00 — The most surprising night in a long while](00_RESULTS.md) | 2026-06-30 | Apple Silicon, Docker Desktop Linux VM, one pinned arm64 core |
-| [01 — This is what growing a language looks like](01_RESULT.md) | 2026-07-16 | Apple Silicon, Docker Desktop Linux VM, one pinned arm64 core |
+| [01 — This is what growing a language looks like](01_RESULTS.md) | 2026-07-16 | Apple Silicon, Docker Desktop Linux VM, one pinned arm64 core |
+| [02 — The debt got paid back, with interest](02_RESULTS.md) | 2026-07-20 | Apple Silicon, Docker Desktop Linux VM, one pinned arm64 core |
 
 ## Contestants
 
@@ -51,13 +52,13 @@ The image build needs the Curios sources, which live *above* `benchmarks/`, so i
 
 ```sh
 bash benchmarks/build.sh                   # builds the image (repo root as context)
-docker run --rm --cpuset-cpus 0 curios-bench
+docker run --rm --cpuset-cpus 0 curios-benchmarks
 
 # equivalent by hand, from the repo root:
-docker build --platform linux/arm64 -f benchmarks/Dockerfile -t curios-bench .
+docker build --platform linux/arm64 -f benchmarks/Dockerfile -t curios-benchmarks .
 
 # tune the workloads:
-docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e RUNS=7 curios-bench
+docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e RUNS=7 curios-benchmarks
 ```
 
 `entrypoint.sh` first prints the correctness cross-check (all eight outputs must be identical), then hyperfine's comparison — with relative "x times faster than" ratios — for each table, and writes `bin/*.md`. Read the ratio to Rust as the headline "where are we" number.
