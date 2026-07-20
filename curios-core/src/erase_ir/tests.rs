@@ -601,3 +601,130 @@ fn an_effectful_scrutinee_is_erased_once() {
         "the compound scrutinee is applied exactly once:\n{printed}"
     );
 }
+
+#[test]
+fn a_recursive_function_group_erases_to_functions() {
+    // rec f(x) = f(x); body f(3)
+    let func_type = Term::func_type(
+        [("x", Term::prim(Prim::NatType))],
+        Term::prim(Prim::NatType),
+    );
+    let body = Term::rec(
+        vec![(
+            "f",
+            func_type.clone(),
+            Term::func(
+                [("x", Term::type_())],
+                Term::apply(Term::free_var("f"), [Term::free_var("x")]),
+            ),
+        )],
+        Term::apply(Term::free_var("f"), [nat_lit(3)]),
+    );
+    let erased = erase(&module(Vec::new(), body), Term::prim(Prim::NatType));
+    assert_eq!(
+        erased.to_string(),
+        "\
+entry {
+  functions ~f0$f
+  ~v2 = apply ~f0$f(3)
+  return ~v2
+}
+function ~f0$f(~v0$x) {
+  ~v1 = apply ~f0$f(~v0$x)
+  return ~v1
+}
+"
+    );
+}
+
+#[test]
+fn a_mixed_recursive_group_erases_to_a_rec_group() {
+    // rec { produce() = consume; consume = produce } — a dormant knot: the
+    // computed member's initializer references the function, and the function
+    // body references the computed member (dormant until applied).
+    let produce_type = Term::func_type(
+        [("u", Term::tuple_type(Vec::<(&str, Term)>::new()))],
+        Term::prim(Prim::NatType),
+    );
+    let body = Term::rec(
+        vec![
+            (
+                "produce",
+                produce_type.clone(),
+                Term::func([("u", Term::type_())], nat_lit(5)),
+            ),
+            ("consume", produce_type.clone(), Term::free_var("produce")),
+        ],
+        Term::free_var("consume"),
+    );
+    let erased = erase(&module(Vec::new(), body), produce_type);
+    assert_eq!(
+        erased.to_string(),
+        "\
+entry {
+  rec ~r0 {
+    functions ~f0$produce
+    ~v0$consume = init {
+      return ~f0$produce
+    }
+  }
+  return ~v0$consume
+}
+function ~f0$produce(~v1$u) {
+  return 5
+}
+"
+    );
+}
+
+#[test]
+fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
+    // rec loop : Nat = loop — a value-level loop no initialization order
+    // satisfies. The verifier rejects it; erasure surfaces the diagnostic as
+    // an error, never a panic.
+    let type_ = Term::prim(Prim::NatType);
+    let body = Term::rec(
+        vec![("loop", type_.clone(), Term::free_var("loop"))],
+        Term::free_var("loop"),
+    );
+    let error = erase_module_to_ir(&mut context(), &module(Vec::new(), body), &type_)
+        .expect_err("the value-level loop is rejected");
+    assert!(
+        matches!(error, Error::ErasedModuleInvalid { .. }),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn top_level_recursive_items_erase_through_the_item_chain() {
+    let func_type = Term::func_type(
+        [("x", Term::prim(Prim::NatType))],
+        Term::prim(Prim::NatType),
+    );
+    let items = vec![Item::Rec(RecItem::new(vec![Definition {
+        name: "go".into(),
+        island: Qualifier::empty(),
+        root: curios_abi::RootId::Entry,
+        type_: func_type.clone(),
+        body: Term::func(
+            [("x", Term::type_())],
+            Term::apply(Term::free_var("go"), [Term::free_var("x")]),
+        ),
+    }]))];
+    let body = Term::apply(Term::free_var("go"), [nat_lit(1)]);
+    let erased = erase(&module(items, body), Term::prim(Prim::NatType));
+    assert_eq!(
+        erased.to_string(),
+        "\
+functions ~f0$go
+entry {
+  ~v2 = apply ~f0$go(1)
+  return ~v2
+}
+function ~f0$go(~v0$x) {
+  ~v1 = apply ~f0$go(~v0$x)
+  return ~v1
+}
+"
+    );
+}

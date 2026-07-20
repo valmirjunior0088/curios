@@ -27,9 +27,9 @@ use {
     super::{
         Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, Inductive,
         InductiveType, Item, Let, Many, Match, Module, MotivePattern, Nat, Prim, PrimHead, Proj,
-        Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Variant,
-        erasure_mask, expect_prim_head, infer, is_erasable, pattern_binder_slots, reduce_with,
-        refine_head, wire_term,
+        Rec, RecItem, RecMember, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
+        TupleType, Two, Var, Variant, erasure_mask, expect_prim_head, infer, is_erasable,
+        pattern_binder_slots, reduce_with, refine_head, wire_term,
     },
     curios_base::Qualifier,
     num_bigint::BigUint,
@@ -51,6 +51,8 @@ mod function;
 mod aggregate;
 
 mod eliminate;
+
+mod recursion;
 
 mod prim;
 

@@ -407,6 +407,13 @@ pub enum Error {
     NatOverflow {
         value: BigUint,
     },
+    /// A program whose erased module fails the arena representation's
+    /// verifier — today exactly the recursion classes the language rejects
+    /// (a computed-only recursive cycle no initialization order satisfies).
+    /// The verifier owns rejection; erasure only surfaces its diagnostic.
+    ErasedModuleInvalid {
+        detail: String,
+    },
     /// An `Int` literal that survived to `erase` but does not fit `ersd`'s
     /// `i32` carrier — the type level is unbounded, so the representation
     /// narrowing lives at the erase boundary, like [`Error::NatOverflow`]'s
@@ -838,6 +845,10 @@ impl Error {
 
     pub(crate) fn nat_overflow(value: BigUint) -> Self {
         Self::NatOverflow { value }
+    }
+
+    pub(crate) fn erased_module_invalid(detail: String) -> Self {
+        Self::ErasedModuleInvalid { detail }
     }
 
     pub(crate) fn int_overflow(value: Int) -> Self {
@@ -1383,6 +1394,9 @@ impl fmt::Display for Error {
             }
             Error::NatOverflow { value } => {
                 write!(f, "Nat literal {value} overflows u32 at the erase boundary")
+            }
+            Error::ErasedModuleInvalid { detail } => {
+                write!(f, "unsupported recursion at the erase boundary: {detail}")
             }
             Error::IntOverflow { value } => {
                 write!(

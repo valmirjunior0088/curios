@@ -35,8 +35,9 @@ impl Lowering {
                     context.define_assuming(&definition.name, &definition.type_, &definition.body);
                     self.environment.bind(&definition.name, atom);
                 }
-                Item::Rec(_) => {
-                    unimplemented!("erase_ir: recursive items land in a later sub-step")
+                Item::Rec(rec) => {
+                    context.set_island(rec.island());
+                    self.erase_rec_item(context, rec)?;
                 }
             }
         }

@@ -27,13 +27,31 @@ impl Lowering {
         expected: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
+        let function = self.builder.reserve_function();
+        self.define_lambda(context, function, func, expected, hint)?;
+        self.builder.let_functions(vec![function]);
+        Ok(Outcome::Emitted(curios_ersd::ErasedAtom::Function(
+            function,
+        )))
+    }
+
+    /// Erase a lambda into a previously reserved function identity — shared by
+    /// the expression form above (which reserves and binds it) and recursive
+    /// groups (which reserve every member first for mutual visibility).
+    pub(super) fn define_lambda(
+        &mut self,
+        context: &mut Context,
+        function: curios_ersd::FunctionId,
+        func: &Func,
+        expected: &Term,
+        hint: Option<&str>,
+    ) -> Result<(), Error> {
         let ft = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
             Subterm::FuncType(ft) => ft,
             // Elaborate already checked this function against a function type.
             _ => unreachable!("erase_ir: function checked against non-function type"),
         };
 
-        let function = self.builder.reserve_function();
         let mut params = Vec::new();
         let mut dropped = Vec::new();
 
@@ -96,10 +114,7 @@ impl Lowering {
 
         self.builder
             .define_function(function, hint.map(str::to_string), params, body);
-        self.builder.let_functions(vec![function]);
-        Ok(Outcome::Emitted(curios_ersd::ErasedAtom::Function(
-            function,
-        )))
+        Ok(())
     }
 
     pub(super) fn erase_apply(

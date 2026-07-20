@@ -66,10 +66,13 @@ pub fn erase_module_to_ir(
     let entry = lowering.seal(outcome);
     lowering.builder.set_entry(entry);
 
-    Ok(lowering
+    // The verifier is the rejection point for the recursion classes the
+    // language does not admit (a computed-only evaluation cycle); any other
+    // failure here is an erasure bug, indistinguishable at this boundary.
+    lowering
         .builder
         .finalize()
-        .expect("erasure constructs a module that verifies"))
+        .map_err(|error| Error::erased_module_invalid(error.to_string()))
 }
 
 impl Lowering {
@@ -151,9 +154,8 @@ impl Lowering {
             Subterm::Proj(proj) => self.erase_proj(context, proj, hint),
             Subterm::Func(func) => self.erase_func(context, func, expected, hint),
             Subterm::Apply(apply) => self.erase_apply(context, apply, hint),
-            Subterm::Rec(_) | Subterm::RecMember(_) => {
-                unimplemented!("erase_ir: recursion lands in a later sub-step")
-            }
+            Subterm::Rec(rec) => self.erase_rec(context, rec, expected, hint),
+            Subterm::RecMember(member) => self.erase_rec_member(context, member, expected, hint),
             // Erasure runs downstream of zonking and elaboration.
             Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erase_ir"),
             Subterm::Infix(_) => unreachable!("infix node survived elaboration into erase_ir"),
