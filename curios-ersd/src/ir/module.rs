@@ -107,6 +107,16 @@ impl ErasedModule {
         &self.foreigns
     }
 
+    /// The live function identities, in identity order — the external handle
+    /// surface for consumers that hold a module but cannot mint identities.
+    pub fn function_ids(&self) -> impl Iterator<Item = FunctionId> + '_ {
+        self.functions
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| slot.is_some())
+            .map(|(index, _)| FunctionId(index as u32))
+    }
+
     pub fn value(&self, id: ValueId) -> Option<&ValueDef> {
         self.values.get(id.index()).and_then(Option::as_ref)
     }

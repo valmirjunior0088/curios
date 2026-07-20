@@ -25,7 +25,9 @@
 
 use {
     super::{
-        Bound, Context, Error, Item, Let, Module, Nat, Prim, Subterm, Term, reduce_with, wire_term,
+        Apply, Bound, Context, Error, Field, Func, FuncType, Item, Let, Module, Nat, Prim, Proj,
+        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, erasure_mask,
+        infer, is_erasable, reduce_with, wire_term,
     },
     curios_base::Qualifier,
     num_bigint::BigUint,
@@ -41,6 +43,10 @@ pub use lower::erase_module_to_ir;
 use lower::{Lowering, Outcome};
 
 mod binding;
+
+mod function;
+
+mod aggregate;
 
 mod prim;
 

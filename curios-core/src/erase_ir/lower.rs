@@ -10,9 +10,12 @@
 //! the walk reaches it, so evaluation order is statement order by
 //! construction.
 
-use super::{
-    Binding, Bound, Context, Environment, Error, Let, Module, Qualifier, Subterm, Term, emitted,
-    prim,
+use {
+    super::{
+        Binding, Bound, Context, Environment, Error, Let, Module, Qualifier, Subterm, Term,
+        emitted, prim,
+    },
+    std::collections::BTreeSet,
 };
 
 /// What one expression erased to. See the module documentation.
@@ -28,6 +31,10 @@ pub(super) enum Outcome {
 pub(super) struct Lowering {
     pub(super) builder: curios_ersd::ErsdBuilder,
     pub(super) environment: Environment,
+    /// Dropped binder labels referenced from a retained position. Consumed by
+    /// the function-body collapse: a proof-valued body that dangles a binder
+    /// its own lambda dropped is replaced by the unit constant.
+    pub(super) dangled: BTreeSet<String>,
 }
 
 /// Erase a whole meta-free [`Module`] into a verified arena
@@ -129,6 +136,10 @@ impl Lowering {
                 let name = var.unwrap();
                 match self.environment.lookup(name) {
                     Some(Binding::Atom(atom)) => Ok(Outcome::Emitted(atom)),
+                    Some(Binding::Dropped) => {
+                        self.dangled.insert(name.to_string());
+                        Ok(Outcome::Emitted(self.unit()))
+                    }
                     None => unreachable!("erase_ir: unbound variable {name}"),
                 }
             }
@@ -136,12 +147,12 @@ impl Lowering {
             Subterm::Match(_) => {
                 unimplemented!("erase_ir: matches land in a later sub-step")
             }
-            Subterm::Variant(_) | Subterm::Struct(_) | Subterm::Tuple(_) | Subterm::Proj(_) => {
-                unimplemented!("erase_ir: aggregates land in a later sub-step")
-            }
-            Subterm::Func(_) | Subterm::Apply(_) => {
-                unimplemented!("erase_ir: functions land in a later sub-step")
-            }
+            Subterm::Variant(variant) => self.erase_variant(context, variant, hint),
+            Subterm::Struct(value) => self.erase_struct(context, value, hint),
+            Subterm::Tuple(tuple) => self.erase_tuple(context, tuple, expected, hint),
+            Subterm::Proj(proj) => self.erase_proj(context, proj, hint),
+            Subterm::Func(func) => self.erase_func(context, func, expected, hint),
+            Subterm::Apply(apply) => self.erase_apply(context, apply, hint),
             Subterm::Rec(_) | Subterm::RecMember(_) => {
                 unimplemented!("erase_ir: recursion lands in a later sub-step")
             }
