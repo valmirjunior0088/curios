@@ -85,6 +85,7 @@ The resulting CLI is `target/release/curios`.
 
 - [Language reference](documentation/SYNTAX.md)
 - [Development roadmap](documentation/ROADMAP.md)
+- [Design decisions](documentation/DESIGN.md)
 - [Compiler architecture and contributor guide](AGENTS.md)
 - [Benchmark methodology and results](benchmarks/README.md)
 

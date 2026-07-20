@@ -1,4 +1,4 @@
-# Curios Language Reference
+# Syntax
 
 This document defines the surface language accepted in `.crs` files. It is a reference for writing and reading Curios programs, not a description of compiler internals. An implementation disagreement is a language conformance bug: either the implementation or this document must be corrected.
 

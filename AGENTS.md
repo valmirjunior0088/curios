@@ -182,6 +182,7 @@ Document each fact at the narrowest authoritative level and link to it elsewhere
 | `AGENTS.md` | Contributor behavior, ownership boundaries, durable invariants, and validation |
 | `documentation/SYNTAX.md` | Complete Curios surface-language reference |
 | `documentation/ROADMAP.md` | Implemented capabilities and pending specifications |
+| `documentation/DESIGN.md` | Design decisions, their rationale, and rejected alternatives |
 | Crate and module rustdoc | Local architecture, algorithms, invariants, and public APIs |
 | `Cargo.toml` descriptions | One-line crate purposes for Cargo tooling |
 | `benchmarks/README.md` | Benchmark harness mechanics |
