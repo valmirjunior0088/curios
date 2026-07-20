@@ -1244,7 +1244,7 @@ mod tests {
     #[test]
     fn return_sentinel_becomes_machine_return_without_a_block() {
         let mut source = CpsModule::new();
-        let function = source.reserve_function(Some("main".into()));
+        let function = source.reserve_function();
         let return_cont = source.reserve_continuation();
         let body = source.add_node(CpsNode::ApplyCont(CpsEdge {
             target: return_cont,
@@ -1273,8 +1273,8 @@ mod tests {
     #[test]
     fn call_to_return_sentinel_becomes_tail_call_without_resume_state() {
         let mut source = CpsModule::new();
-        let main = source.reserve_function(Some("main".into()));
-        let callee = source.reserve_function(Some("callee".into()));
+        let main = source.reserve_function();
+        let callee = source.reserve_function();
 
         let callee_return = source.reserve_continuation();
         let callee_body = source.add_node(CpsNode::ApplyCont(CpsEdge {
@@ -1324,7 +1324,7 @@ mod tests {
     #[test]
     fn exit_stays_direct_termination_through_structurization() {
         let mut source = CpsModule::new();
-        let main = source.reserve_function(Some("main".into()));
+        let main = source.reserve_function();
         let return_cont = source.reserve_continuation();
         let body = source.add_node(CpsNode::Exit {
             value: Some(CpsAtom::Literal(CpsLiteral::Nat(7))),
@@ -1352,9 +1352,9 @@ mod tests {
     #[test]
     fn residual_rec_init_fills_its_fresh_shell_only_at_the_ready_point() {
         let mut source = CpsModule::new();
-        let main = source.reserve_function(Some("main".into()));
-        let function = source.reserve_function(Some("recursive closure".into()));
-        let passive = source.reserve_function(Some("non-participating sibling".into()));
+        let main = source.reserve_function();
+        let function = source.reserve_function();
+        let passive = source.reserve_function();
         let computed = source.add_value(Some("computed capture".into()));
 
         let function_return = source.reserve_continuation();
@@ -1492,9 +1492,9 @@ mod tests {
     #[test]
     fn repeated_first_class_use_materializes_one_closure() {
         let mut source = CpsModule::new();
-        let main = source.reserve_function(Some("main".into()));
-        let target = source.reserve_function(Some("target".into()));
-        let consumer = source.reserve_function(Some("consumer".into()));
+        let main = source.reserve_function();
+        let target = source.reserve_function();
+        let consumer = source.reserve_function();
 
         let target_return = source.reserve_continuation();
         let target_body = source.add_node(CpsNode::ApplyCont(CpsEdge {
@@ -1556,8 +1556,8 @@ mod tests {
     #[test]
     fn mixed_direct_and_escaping_use_keeps_the_call_direct() {
         let mut source = CpsModule::new();
-        let main = source.reserve_function(Some("main".into()));
-        let target = source.reserve_function(Some("target".into()));
+        let main = source.reserve_function();
+        let target = source.reserve_function();
 
         let target_return = source.reserve_continuation();
         let target_body = source.add_node(CpsNode::ApplyCont(CpsEdge {
@@ -1621,9 +1621,9 @@ mod tests {
     #[test]
     fn sibling_recursion_creates_no_shell() {
         let mut source = CpsModule::new();
-        let main = source.reserve_function(Some("main".into()));
-        let ping = source.reserve_function(Some("ping".into()));
-        let pong = source.reserve_function(Some("pong".into()));
+        let main = source.reserve_function();
+        let ping = source.reserve_function();
+        let pong = source.reserve_function();
 
         let ping_return = source.reserve_continuation();
         let ping_body = source.add_node(CpsNode::ApplyFun {
@@ -1685,8 +1685,8 @@ mod tests {
     #[test]
     fn ordinary_recursion_creates_no_shell() {
         let mut source = CpsModule::new();
-        let main = source.reserve_function(Some("main".into()));
-        let repeat = source.reserve_function(Some("repeat".into()));
+        let main = source.reserve_function();
+        let repeat = source.reserve_function();
 
         let repeat_return = source.reserve_continuation();
         let repeat_body = source.add_node(CpsNode::ApplyFun {
@@ -1733,7 +1733,7 @@ mod tests {
     /// module, used to seed the verifier-rejection tests.
     fn exiting_main() -> (CpsModule, CpsFunId) {
         let mut source = CpsModule::new();
-        let main = source.reserve_function(Some("main".into()));
+        let main = source.reserve_function();
         let return_cont = source.reserve_continuation();
         let body = source.add_node(CpsNode::Exit {
             value: Some(CpsAtom::Literal(CpsLiteral::Nat(0))),
@@ -1773,7 +1773,7 @@ mod tests {
         // A `LetCont` continuation becomes a block nested under the entry; drop
         // the scope table and it is left without a lexical owner.
         let mut source = CpsModule::new();
-        let main = source.reserve_function(Some("main".into()));
+        let main = source.reserve_function();
         let return_cont = source.reserve_continuation();
         let bound = source.add_value(Some("bound".into()));
         let exit = source.add_node(CpsNode::Exit {

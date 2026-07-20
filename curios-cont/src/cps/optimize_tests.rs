@@ -96,7 +96,7 @@ fn preserves_traps_and_folds_exact_u32_nat_add() {
 #[test]
 fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(Some("main".into()));
+    let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let return_node = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: return_cont,
@@ -149,8 +149,8 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
 #[test]
 fn dead_parameter_elimination_rewrites_known_calls() {
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
-    let callee = module.reserve_function(Some("callee".into()));
+    let main = module.reserve_function();
+    let callee = module.reserve_function();
     let kept = module.add_value(Some("kept".into()));
     let removed = module.add_value(Some("removed".into()));
     let callee_return = module.reserve_continuation();
@@ -204,7 +204,7 @@ fn dead_parameter_elimination_rewrites_known_calls() {
 #[test]
 fn known_continuation_values_are_not_substituted_across_scopes() {
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(Some("main".into()));
+    let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let seed = module.add_value(Some("seed".into()));
     let forwarding = module.reserve_continuation();
@@ -270,7 +270,7 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
 #[test]
 fn known_value_analysis_leaves_local_continuation_parameters_to_beta_reduction() {
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(None);
+    let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let continuation = module.reserve_continuation();
     let parameter = module.add_value(None);
@@ -318,7 +318,7 @@ fn known_value_analysis_leaves_local_continuation_parameters_to_beta_reduction()
 #[test]
 fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(Some("main".into()));
+    let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let target = module.reserve_continuation();
     let target_left = module.add_value(Some("target left".into()));
@@ -387,12 +387,12 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
 #[test]
 fn continuation_beta_rewrites_parameters_captured_by_nested_functions() {
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(Some("main".into()));
+    let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let continuation = module.reserve_continuation();
     let captured = module.add_value(Some("captured".into()));
 
-    let nested = module.reserve_function(Some("nested".into()));
+    let nested = module.reserve_function();
     let nested_return = module.reserve_continuation();
     let nested_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: nested_return,
@@ -454,9 +454,9 @@ fn continuation_beta_rewrites_parameters_captured_by_nested_functions() {
 #[test]
 fn known_call_inlining_clones_recursive_local_continuations() {
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(None);
+    let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
-    let callee = module.reserve_function(None);
+    let callee = module.reserve_function();
     let callee_return = module.reserve_continuation();
     let callee_param = module.add_value(None);
     let local_cont = module.reserve_continuation();
@@ -522,9 +522,9 @@ fn known_call_inlining_clones_recursive_local_continuations() {
 #[test]
 fn contifies_a_single_entry_tail_loop_and_bridges_switch_returns() {
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(Some("main".into()));
+    let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
-    let loop_function = module.reserve_function(Some("loop".into()));
+    let loop_function = module.reserve_function();
     let loop_return = module.reserve_continuation();
     let loop_param = module.add_value(Some("loop argument".into()));
     let recur = module.reserve_continuation();
@@ -619,11 +619,11 @@ fn contifies_a_single_entry_tail_loop_and_bridges_switch_returns() {
 #[test]
 fn scc_invariant_known_argument_propagates_into_recursive_member() {
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(Some("main".into()));
+    let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
 
     // A trivial helper used only as an invariant first-class argument.
-    let helper = module.reserve_function(Some("helper".into()));
+    let helper = module.reserve_function();
     let helper_return = module.reserve_continuation();
     let helper_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: helper_return,
@@ -642,7 +642,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
     // loop(invariant, counter): the recursive call forwards `invariant`
     // unchanged and replaces `counter`, so `invariant` is loop-invariant and
     // `counter` is not.
-    let loop_function = module.reserve_function(Some("loop".into()));
+    let loop_function = module.reserve_function();
     let loop_return = module.reserve_continuation();
     let invariant = module.add_value(Some("invariant".into()));
     let counter = module.add_value(Some("counter".into()));
@@ -735,11 +735,11 @@ struct PolymorphicLoop {
 /// dead `LetPrim` nodes to `loop`'s body to inflate its node count.
 fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(Some("main".into()));
+    let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
 
     let trivial = |module: &mut CpsModule, name: &str| {
-        let function = module.reserve_function(Some(name.into()));
+        let function = module.reserve_function();
         let function_return = module.reserve_continuation();
         let param = module.add_value(Some(format!("{name} x")));
         let function_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
@@ -760,7 +760,7 @@ fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
     let add = trivial(&mut module, "add");
     let mul = trivial(&mut module, "mul");
 
-    let loop_fn = module.reserve_function(Some("loop".into()));
+    let loop_fn = module.reserve_function();
     let loop_return = module.reserve_continuation();
     let op = module.add_value(Some("op".into()));
     let n = module.add_value(Some("n".into()));
@@ -1027,9 +1027,9 @@ fn optimization_specializes_away_the_polymorphic_indirect_call() {
 // external sites. Returns the module and the helper function.
 fn helper_called(two_sites: bool) -> (CpsModule, CpsFunId) {
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(Some("main".into()));
+    let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
-    let helper = module.reserve_function(Some("helper".into()));
+    let helper = module.reserve_function();
     let helper_return = module.reserve_continuation();
     let x = module.add_value(Some("x".into()));
     let helper_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
@@ -1128,10 +1128,10 @@ fn does_not_contify_a_multi_site_function() {
 // otherwise `f` is independent and the knot is already broken.
 fn rec_init_module(captures: bool) -> (CpsModule, CpsNodeId) {
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(Some("main".into()));
+    let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
 
-    let f = module.reserve_function(Some("f".into()));
+    let f = module.reserve_function();
     let f_return = module.reserve_continuation();
     let a = module.add_value(Some("a".into()));
     let v = module.add_value(Some("v".into()));
@@ -1230,10 +1230,10 @@ fn retains_a_live_recursive_initializer() {
 // module, the call node per site (in `sites` order), and `consume`.
 fn tagged_consumer(padding: usize, sites: &[u32]) -> (CpsModule, Vec<CpsNodeId>, CpsFunId) {
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(Some("main".into()));
+    let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
 
-    let consume = module.reserve_function(Some("consume".into()));
+    let consume = module.reserve_function();
     let consume_return = module.reserve_continuation();
     let t = module.add_value(Some("t".into()));
     let tag = module.add_value(Some("tag".into()));
@@ -1379,7 +1379,7 @@ fn rewrite_atoms_remaps_and_devirtualizes_a_closure_callee() {
     let ret = module.reserve_continuation();
     let old = module.add_value(Some("old".into()));
     let new = module.add_value(Some("new".into()));
-    let target = module.reserve_function(Some("target".into()));
+    let target = module.reserve_function();
 
     let value_call = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Closure(old),
@@ -1532,10 +1532,10 @@ fn optimization_eliminates_a_constructor_dispatch() {
 fn specialization_peels_a_recursive_callee_into_the_general_function() {
     // consume(t): leaf returns the field; node recurses on the child.
     let mut module = CpsModule::new();
-    let entry = module.reserve_function(Some("main".into()));
+    let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
 
-    let consume = module.reserve_function(Some("consume".into()));
+    let consume = module.reserve_function();
     let consume_return = module.reserve_continuation();
     let t = module.add_value(Some("t".into()));
     let tag = module.add_value(Some("tag".into()));

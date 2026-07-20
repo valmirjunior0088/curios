@@ -497,14 +497,9 @@ impl CpsModule {
         id
     }
 
-    pub fn reserve_function(&mut self, debug_name: Option<String>) -> CpsFunId {
+    pub fn reserve_function(&mut self) -> CpsFunId {
         let id = CpsFunId(self.functions.len() as u32);
         self.functions.push(None);
-        if let Some(name) = debug_name {
-            // Retain the name in the eventual definition; reserving does not
-            // create a parallel metadata arena.
-            let _ = name;
-        }
         id
     }
 
@@ -1439,7 +1434,7 @@ mod tests {
 
     fn minimal_module() -> CpsModule {
         let mut module = CpsModule::new();
-        let fun = module.reserve_function(Some("main".into()));
+        let fun = module.reserve_function();
         let return_cont = module.reserve_continuation();
         let result = module.add_value(Some("result".into()));
         let return_node = module.add_node(CpsNode::ApplyCont(CpsEdge {
@@ -1563,7 +1558,7 @@ mod tests {
             .function(module.entry().unwrap())
             .unwrap()
             .return_cont;
-        let second = module.reserve_function(Some("second".into()));
+        let second = module.reserve_function();
         let body = module.add_node(CpsNode::ApplyCont(CpsEdge {
             target: shared_return,
             args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
@@ -1589,7 +1584,7 @@ mod tests {
     #[test]
     fn verifier_rejects_another_functions_return_target() {
         let mut module = minimal_module();
-        let second = module.reserve_function(Some("second".into()));
+        let second = module.reserve_function();
         let second_return = module.reserve_continuation();
         let second_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
             target: second_return,

@@ -561,7 +561,7 @@ pub(super) fn clone_scc(
     let mut functions: BTreeMap<CpsFunId, CpsFunId> = BTreeMap::new();
     let mut returns: BTreeMap<CpsContId, CpsContId> = BTreeMap::new();
     for (&m, def) in &member_defs {
-        functions.insert(m, module.reserve_function(def.debug_name.clone()));
+        functions.insert(m, module.reserve_function());
         returns.insert(def.return_cont, module.reserve_continuation());
     }
     let mut nodes: BTreeMap<CpsNodeId, CpsNodeId> = BTreeMap::new();

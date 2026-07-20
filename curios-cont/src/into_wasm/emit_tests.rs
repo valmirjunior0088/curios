@@ -73,7 +73,7 @@ const fn flt(value: f32) -> CpsAtom {
 /// with it". `into_wasm` does not fold, so the op lowers verbatim.
 fn prim_main(op: CpsPrimOp, args: Vec<CpsAtom>) -> CpsModule {
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
+    let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let result = module.add_value(Some("result".into()));
     let exit = module.add_node(CpsNode::Exit {
@@ -222,7 +222,7 @@ fn flt_to_int_truncates_and_guards_the_range() {
 /// Construct a tuple then project field 0 from it.
 fn tuple_project() -> CpsModule {
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
+    let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let tuple = module.add_value(Some("tuple".into()));
     let field = module.add_value(Some("field".into()));
@@ -263,7 +263,7 @@ fn tuple_construction_and_projection() {
 /// A list literal then its length.
 fn list_len() -> CpsModule {
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
+    let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let list = module.add_value(Some("list".into()));
     let len = module.add_value(Some("len".into()));
@@ -304,7 +304,7 @@ fn list_literal_builds_a_rope_leaf() {
 /// A packed-bytes literal then its length.
 fn bin_len() -> CpsModule {
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
+    let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let bin = module.add_value(Some("bin".into()));
     let len = module.add_value(Some("len".into()));
@@ -350,7 +350,7 @@ fn packed_bin_literal_builds_a_rope_leaf() {
 /// Allocate a cell, read it back, and exit with the value.
 fn cell_roundtrip() -> CpsModule {
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
+    let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let cell = module.add_value(Some("cell".into()));
     let value = module.add_value(Some("value".into()));
@@ -414,7 +414,7 @@ fn foreign_call(name: &str) -> CpsModule {
     let results = function.signature.results.len();
 
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
+    let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let bound = (0..results)
         .map(|i| module.add_value(Some(format!("result{i}"))))
@@ -475,9 +475,9 @@ fn foreign_result_arity_shapes_the_resume() {
 /// it indirectly — an unknown callee that must go through the closure ABI.
 fn indirect_apply() -> CpsModule {
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
-    let target = module.reserve_function(Some("target".into()));
-    let apply = module.reserve_function(Some("apply".into()));
+    let main = module.reserve_function();
+    let target = module.reserve_function();
+    let apply = module.reserve_function();
 
     let target_return = module.reserve_continuation();
     let target_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
@@ -601,7 +601,7 @@ fn bin_concat_builds_o1_nodes_inline_without_a_helper() {
 /// A list literal read at an index — the list-rope read helper.
 fn list_read() -> CpsModule {
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
+    let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let list = module.add_value(Some("list".into()));
     let elem = module.add_value(Some("elem".into()));
@@ -642,8 +642,8 @@ fn list_read_calls_the_list_read_helper() {
 /// shared helper.
 fn list_map() -> CpsModule {
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
-    let mapper = module.reserve_function(Some("mapper".into()));
+    let main = module.reserve_function();
+    let mapper = module.reserve_function();
 
     let mapper_return = module.reserve_continuation();
     let element = module.add_value(Some("element".into()));
@@ -714,7 +714,7 @@ fn list_map_calls_the_map_helper() {
 /// assertion that matters is that `into_wasm` returns at all.
 fn deep_bin_chain(depth: usize) -> CpsModule {
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
+    let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let values = (0..depth)
         .map(|i| module.add_value(Some(format!("v{i}"))))
@@ -759,7 +759,7 @@ fn deep_rope_chain_lowers_on_the_default_stack() {
 /// A single self-recursive continuation: one entry, so a reducible natural loop.
 fn reducible_loop() -> CpsModule {
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
+    let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let loop_cont = module.reserve_continuation();
     let counter = module.add_value(Some("counter".into()));
@@ -803,7 +803,7 @@ fn irreducible_pair() -> CpsModule {
     use std::collections::BTreeMap;
 
     let mut module = CpsModule::new();
-    let main = module.reserve_function(Some("main".into()));
+    let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let k1 = module.reserve_continuation();
     let k2 = module.reserve_continuation();

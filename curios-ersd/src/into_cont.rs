@@ -62,7 +62,7 @@ pub fn lower_to_cont(source: &Module) -> CpsModule {
         knot_cells: BTreeMap::new(),
     };
 
-    let main = lowerer.module.reserve_function(Some("main".into()));
+    let main = lowerer.module.reserve_function();
     let return_cont = lowerer.module.reserve_continuation();
     let entry = source.entry().expect("a finalized module has an entry");
     let entry = source.block(entry).expect("live entry block").clone();
@@ -162,11 +162,7 @@ impl Lowerer<'_> {
         let ids: Vec<CpsFunId> = functions
             .iter()
             .map(|&arena| {
-                let name = self
-                    .source
-                    .function(arena)
-                    .and_then(|function| function.debug_name.clone());
-                let id = self.module.reserve_function(name);
+                let id = self.module.reserve_function();
                 self.functions.insert(arena, id);
                 id
             })
@@ -248,11 +244,7 @@ impl Lowerer<'_> {
             .functions
             .iter()
             .map(|&arena| {
-                let name = self
-                    .source
-                    .function(arena)
-                    .and_then(|function| function.debug_name.clone());
-                let id = self.module.reserve_function(name);
+                let id = self.module.reserve_function();
                 self.functions.insert(arena, id);
                 id
             })
