@@ -297,7 +297,7 @@ pub trait Host {
     fn listen(&self, io: Io, backlog: u32) -> Status;
 
     /// Pull the next connection from the listener `io`, blocking until one
-    /// lstives. Returns `(status, io)`; the connection handle is an ordinary
+    /// arrives. Returns `(status, io)`; the connection handle is an ordinary
     /// byte stream the same `read`/`write`/`close` serve, like a `connect`ed one.
     fn accept(&self, io: Io) -> (Status, Io);
 
