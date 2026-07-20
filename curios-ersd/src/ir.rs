@@ -45,6 +45,11 @@ pub use build::*;
 
 mod print;
 
+mod walk;
+
+mod analysis;
+pub use analysis::*;
+
 #[cfg(test)]
 mod module_tests;
 
@@ -56,3 +61,6 @@ mod verify_tests;
 
 #[cfg(test)]
 mod print_tests;
+
+#[cfg(test)]
+mod analysis_tests;
