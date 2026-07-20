@@ -33,8 +33,11 @@ fn parse_string<'a>() -> Parser<'a, &'a str> {
         .and_drop(parse_whitespace())
 }
 
+// `$` is only a sigil, never a delimiter: emitted names carry interior `$`s
+// (data segments are `{value-name}${index}`, hints are `$`-separated), and
+// printed names are always whitespace- or paren-terminated.
 fn is_delimiter(char: char) -> bool {
-    char.is_whitespace() || ['(', ')', '$', '"'].contains(&char)
+    char.is_whitespace() || ['(', ')', '"'].contains(&char)
 }
 
 /// Parses any `FromStr` numeric type from a delimiter-bounded token, failing

@@ -23,7 +23,7 @@ fn round_trip() {
                 drop
                 i32.const 0
                 i32.const 5
-                array.new_data $bytes $greeting
+                array.new_data $bytes $greeting$0
                 drop
                 i32.const 0
                 i32.load8_u
@@ -37,7 +37,7 @@ fn round_trip() {
                 local.get $tmp)
             (global $answer (mut i32)
                 i32.const 41)
-            (data $greeting "\68\65\6c\6c\6f")
+            (data $greeting$0 "\68\65\6c\6c\6f")
             (export "demo" (func $demo))
             (export "answer" (global $answer))
             (export "memory" (memory))
