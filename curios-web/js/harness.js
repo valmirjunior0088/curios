@@ -96,6 +96,10 @@ export async function run(config) {
         output.stderr.push(bytes);
         hooks.onStderr?.(bytes);
         break;
+      // Writing to stdin is a loud tripwire (a trap), mirroring MockHost's
+      // panic; the browser has no fd 0 for OsHost's POSIX passthrough.
+      case config.stdio.STDIN:
+        throw new Error("write to stdin");
       default:
         return [config.status.PERMISSION_DENIED, 0];
     }
