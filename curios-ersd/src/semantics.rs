@@ -400,16 +400,26 @@ impl Semantics {
                 BlnEql => Constant::Bln(bln(0)? == bln(1)?),
                 BlnNeq => Constant::Bln(bln(0)? != bln(1)?),
 
-                NatAdd => Constant::Nat(nat(0)?.wrapping_add(nat(1)?)),
-                NatSub => Constant::Nat(nat(0)?.saturating_sub(nat(1)?)),
-                NatMul => Constant::Nat(nat(0)?.wrapping_mul(nat(1)?)),
-                NatDiv => return Some(nat_div(nat(0)?, nat(1)?)),
-                NatRem => return Some(nat_rem(nat(0)?, nat(1)?)),
+                NatAdd => Constant::Nat(curios_base::nat_add(nat(0)?, nat(1)?)),
+                NatSub => Constant::Nat(curios_base::nat_sub(nat(0)?, nat(1)?)),
+                NatMul => Constant::Nat(curios_base::nat_mul(nat(0)?, nat(1)?)),
+                NatDiv => {
+                    return Some(div_result(
+                        curios_base::nat_div(nat(0)?, nat(1)?),
+                        Constant::Nat,
+                    ));
+                }
+                NatRem => {
+                    return Some(div_result(
+                        curios_base::nat_rem(nat(0)?, nat(1)?),
+                        Constant::Nat,
+                    ));
+                }
                 NatAnd => Constant::Nat(nat(0)? & nat(1)?),
                 NatOr => Constant::Nat(nat(0)? | nat(1)?),
                 NatXor => Constant::Nat(nat(0)? ^ nat(1)?),
-                NatShl => Constant::Nat(nat(0)?.wrapping_shl(nat(1)?)),
-                NatShr => Constant::Nat(nat(0)?.wrapping_shr(nat(1)?)),
+                NatShl => Constant::Nat(curios_base::nat_shl(nat(0)?, nat(1)?)),
+                NatShr => Constant::Nat(curios_base::nat_shr(nat(0)?, nat(1)?)),
                 NatEql => Constant::Bln(nat(0)? == nat(1)?),
                 NatNeq => Constant::Bln(nat(0)? != nat(1)?),
                 NatLt => Constant::Bln(nat(0)? < nat(1)?),
@@ -423,16 +433,26 @@ impl Semantics {
                 ByteLte => Constant::Bln(byte(0)? <= byte(1)?),
                 ByteGte => Constant::Bln(byte(0)? >= byte(1)?),
 
-                IntAdd => Constant::Int(int(0)?.wrapping_add(int(1)?)),
-                IntSub => Constant::Int(int(0)?.wrapping_sub(int(1)?)),
-                IntMul => Constant::Int(int(0)?.wrapping_mul(int(1)?)),
-                IntDiv => return Some(int_div(int(0)?, int(1)?)),
-                IntRem => return Some(int_rem(int(0)?, int(1)?)),
+                IntAdd => Constant::Int(curios_base::int_add(int(0)?, int(1)?)),
+                IntSub => Constant::Int(curios_base::int_sub(int(0)?, int(1)?)),
+                IntMul => Constant::Int(curios_base::int_mul(int(0)?, int(1)?)),
+                IntDiv => {
+                    return Some(div_result(
+                        curios_base::int_div(int(0)?, int(1)?),
+                        Constant::Int,
+                    ));
+                }
+                IntRem => {
+                    return Some(div_result(
+                        curios_base::int_rem(int(0)?, int(1)?),
+                        Constant::Int,
+                    ));
+                }
                 IntAnd => Constant::Int(int(0)? & int(1)?),
                 IntOr => Constant::Int(int(0)? | int(1)?),
                 IntXor => Constant::Int(int(0)? ^ int(1)?),
-                IntShl => Constant::Int(int(0)?.wrapping_shl(int(1)? as u32)),
-                IntShr => Constant::Int(int(0)?.wrapping_shr(int(1)? as u32)),
+                IntShl => Constant::Int(curios_base::int_shl(int(0)?, int(1)?)),
+                IntShr => Constant::Int(curios_base::int_shr(int(0)?, int(1)?)),
                 IntEql => Constant::Bln(int(0)? == int(1)?),
                 IntNeq => Constant::Bln(int(0)? != int(1)?),
                 IntLt => Constant::Bln(int(0)? < int(1)?),
@@ -463,9 +483,9 @@ impl Semantics {
 
                 IoEql => Constant::Bln(io(0)? == io(1)?),
 
-                NatToInt => Constant::Int(nat(0)? as i32),
+                NatToInt => Constant::Int(curios_base::nat_to_int(nat(0)?)),
                 NatToFlt => Constant::Flt(curios_base::Flt::from_f32(nat(0)? as f32)),
-                IntToNat => Constant::Nat(int(0)? as u32),
+                IntToNat => Constant::Nat(curios_base::int_to_nat(int(0)?)),
                 IntToFlt => Constant::Flt(curios_base::Flt::from_f32(int(0)? as f32)),
                 FltToNat => return Some(flt_to_nat(flt(0)?)),
                 FltToInt => return Some(flt_to_int(flt(0)?)),
@@ -560,64 +580,38 @@ fn fold_outcome(result: Option<Result<Constant, TrapKind>>) -> FoldOutcome {
     }
 }
 
-fn nat_div(left: u32, right: u32) -> Result<Constant, TrapKind> {
-    match right {
-        0 => Err(TrapKind::DivisionByZero),
-        right => Ok(Constant::Nat(left / right)),
+/// Map a shared-semantics division outcome ([`curios_base::DivTrap`]) into
+/// the fold's constant/trap split.
+fn div_result<T>(
+    result: Result<T, curios_base::DivTrap>,
+    wrap: fn(T) -> Constant,
+) -> Result<Constant, TrapKind> {
+    match result {
+        Ok(value) => Ok(wrap(value)),
+        Err(curios_base::DivTrap::DivisionByZero) => Err(TrapKind::DivisionByZero),
+        Err(curios_base::DivTrap::Overflow) => Err(TrapKind::IntegerOverflow),
     }
 }
 
-fn nat_rem(left: u32, right: u32) -> Result<Constant, TrapKind> {
-    match right {
-        0 => Err(TrapKind::DivisionByZero),
-        right => Ok(Constant::Nat(left % right)),
-    }
-}
-
-fn int_div(left: i32, right: i32) -> Result<Constant, TrapKind> {
-    if right == 0 {
-        return Err(TrapKind::DivisionByZero);
-    }
-    // `checked_div` is `None` exactly on the `i32::MIN / -1` overflow here.
-    left.checked_div(right)
-        .map(Constant::Int)
-        .ok_or(TrapKind::IntegerOverflow)
-}
-
-fn int_rem(left: i32, right: i32) -> Result<Constant, TrapKind> {
-    match right {
-        // `i32::MIN % -1` is `0` and does not trap.
-        0 => Err(TrapKind::DivisionByZero),
-        right => Ok(Constant::Int(left.wrapping_rem(right))),
-    }
-}
-
-/// Float min/max decline on a NaN operand: Rust and wasm disagree on NaN
-/// propagation, so the fold leaves the operation for the runtime.
+/// Float min/max decline on a NaN operand (see [`curios_base::flt_min`]).
 fn fold_min(left: curios_base::Flt, right: curios_base::Flt) -> Option<curios_base::Flt> {
-    (!left.to_f32().is_nan() && !right.to_f32().is_nan()).then(|| left.min(right))
+    curios_base::flt_min(left.to_f32(), right.to_f32()).map(curios_base::Flt::from_f32)
 }
 
 fn fold_max(left: curios_base::Flt, right: curios_base::Flt) -> Option<curios_base::Flt> {
-    (!left.to_f32().is_nan() && !right.to_f32().is_nan()).then(|| left.max(right))
+    curios_base::flt_max(left.to_f32(), right.to_f32()).map(curios_base::Flt::from_f32)
 }
 
-/// Truncate to `u32`, trapping outside `(-1, 2^32)` — the full-width carrier
-/// of the numeric law; the i31 narrowing belongs to Cont-to-Wasm.
 fn flt_to_nat(value: curios_base::Flt) -> Result<Constant, TrapKind> {
-    let raw = value.to_f32();
-    let truncated = raw.trunc();
-    (raw.is_finite() && truncated > -1.0 && truncated < 4_294_967_296.0)
-        .then_some(Constant::Nat(truncated as u32))
+    curios_base::flt_to_nat(value.to_f32())
+        .map(Constant::Nat)
         .ok_or(TrapKind::ConversionRange)
 }
 
 /// Truncate to `i32`, trapping outside `[-2^31, 2^31)`.
 fn flt_to_int(value: curios_base::Flt) -> Result<Constant, TrapKind> {
-    let raw = value.to_f32();
-    let truncated = raw.trunc();
-    (raw.is_finite() && (-2_147_483_648.0..2_147_483_648.0).contains(&truncated))
-        .then_some(Constant::Int(truncated as i32))
+    curios_base::flt_to_int(value.to_f32())
+        .map(Constant::Int)
         .ok_or(TrapKind::ConversionRange)
 }
 

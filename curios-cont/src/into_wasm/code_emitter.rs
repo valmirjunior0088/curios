@@ -609,16 +609,12 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 curios_wasm::Instr::I32Xor,
                 WrapAs::I31,
             ),
-            // Left shift truncates into the 31-bit carrier rather than trapping:
-            // `ref.i31` already drops bit 31, so `i32.shl` + `WrapAs::I31` is a
-            // guard-free truncating shift (matching `shr`, which never overflows).
-            EmissionCode::NatShl(left, right) => self.emit_binary_op(
+            EmissionCode::NatShl(left, right) => self.emit_checked_nat_op(
                 &result_local,
                 left,
                 right,
-                LoadAs::Nat,
+                "nat_shl",
                 curios_wasm::Instr::I32Shl,
-                WrapAs::I31,
             ),
             EmissionCode::NatShr(left, right) => self.emit_binary_op(
                 &result_local,
@@ -694,17 +690,12 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 curios_wasm::Instr::I32Xor,
                 WrapAs::I31,
             ),
-            // Left shift truncates into the signed 31-bit carrier rather than
-            // trapping: `ref.i31` drops bit 31 and the value reloads sign-extended
-            // from bit 30, so `i32.shl` + `WrapAs::I31` is a guard-free truncating
-            // shift, matching `Nat/shl` and `shr` (which never overflow).
-            EmissionCode::IntShl(left, right) => self.emit_binary_op(
+            EmissionCode::IntShl(left, right) => self.emit_checked_int_op(
                 &result_local,
                 left,
                 right,
-                LoadAs::Int,
+                "int_shl",
                 curios_wasm::Instr::I32Shl,
-                WrapAs::I31,
             ),
             EmissionCode::IntShr(left, right) => self.emit_binary_op(
                 &result_local,
@@ -926,7 +917,26 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 WrapAs::Flt,
             ),
             EmissionCode::NatToInt(operand) => {
+                // The conversion is a carrier-bit reinterpretation; a `Nat` at
+                // or above 2^30 has no signed-i31 representation, so it traps
+                // at the boundary rather than silently reloading negative.
+                let local_name = self.context.push_local(
+                    "nat_to_int",
+                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+                );
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Nat));
+                self.emit_instr(curios_wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(curios_wasm::Instr::I32Const { value: 30 });
+                self.emit_instr(curios_wasm::Instr::I32ShrU);
+                self.emit_instr(curios_wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: curios_wasm::BlockType::Empty,
+                    then_instructions: vec![curios_wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
                 self.emit_instr(curios_wasm::Instr::RefI31);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
@@ -940,7 +950,27 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 WrapAs::Flt,
             ),
             EmissionCode::IntToNat(operand) => {
+                // The conversion is a carrier-bit reinterpretation; a negative
+                // `Int` maps to a `Nat` at or above 2^31, which has no i31
+                // representation, so it traps at the boundary rather than
+                // silently dropping the sign bit.
+                let local_name = self.context.push_local(
+                    "int_to_nat",
+                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+                );
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Int));
+                self.emit_instr(curios_wasm::Instr::LocalTee {
+                    local_name: local_name.clone(),
+                });
+                self.emit_instr(curios_wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(curios_wasm::Instr::I32ShrU);
+                self.emit_instr(curios_wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: curios_wasm::BlockType::Empty,
+                    then_instructions: vec![curios_wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
                 self.emit_instr(curios_wasm::Instr::RefI31);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),

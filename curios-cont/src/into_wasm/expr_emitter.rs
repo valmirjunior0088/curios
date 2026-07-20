@@ -60,8 +60,12 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     pub(crate) fn emit_data(&mut self, value_name: &'a EmissionValueName, value: &'a EmissionData) {
         match value {
             &EmissionData::Nat(value) => {
+                // A folded u32 value the i31 carrier cannot box traps at its
+                // materialization point — the same backend boundary where the
+                // checked runtime computation of the value would have trapped.
                 if value >> 31 != 0 {
-                    panic!("Nat literal {value} exceeds i31ref range");
+                    self.emit_instrs([curios_wasm::Instr::Unreachable]);
+                    return;
                 }
 
                 self.emit_instrs([
@@ -73,10 +77,12 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             }
             &EmissionData::Int(value) => {
                 // In-range iff bit 30 agrees with the sign bit — the signed
-                // analogue of the `Nat` check above; `RefI31` would otherwise
-                // silently wrap the literal to 31 bits.
+                // analogue of the `Nat` check above; out of range traps at the
+                // materialization point instead of silently wrapping to 31
+                // bits.
                 if value >> 30 != value >> 31 {
-                    panic!("Int literal {value} exceeds i31ref range");
+                    self.emit_instrs([curios_wasm::Instr::Unreachable]);
+                    return;
                 }
 
                 self.emit_instrs([

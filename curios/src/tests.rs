@@ -12,6 +12,7 @@ mod io;
 mod map;
 mod matching;
 mod network;
+mod numeric;
 mod operators;
 mod runtime;
 mod scheduler;

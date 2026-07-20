@@ -39,3 +39,6 @@ pub use monads::*;
 
 mod packed;
 pub use packed::*;
+
+mod scalar;
+pub use scalar::*;

@@ -61,9 +61,9 @@ fn bln_eql_executes() {
 fn nat_bitwise_ops_execute() {
     // The first input byte is `A` (65); reading it from the host keeps the
     // operand opaque to the optimizer, so each op is lowered to its WebAssembly
-    // instruction and executed for real rather than folded at compile time. This
-    // is what exercises the truncating `shl` (65 << 25 sets bit 31, which the
-    // i31 carrier drops to leave 2^25).
+    // instruction and executed for real rather than folded at compile time. The
+    // shift stays inside the i31 envelope — an overflowing `shl` traps at the
+    // backend boundary (see the numeric envelope gates).
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     crate::run_text(
         Duration::from_secs(10),
@@ -79,7 +79,7 @@ fn nat_bitwise_ops_execute() {
             Nat/to_str(Nat/and(x, 15)), ",",
             Nat/to_str(Nat/or(x, 128)), ",",
             Nat/to_str(Nat/xor(x, 255)), ",",
-            Nat/to_str(Nat/shl(x, 25)), ",",
+            Nat/to_str(Nat/shl(x, 20)), ",",
             Nat/to_str(Nat/shr(x, 1))
         ]);
         Io/write(Io/stdout, Str/to_bytes(r))
@@ -88,16 +88,17 @@ fn nat_bitwise_ops_execute() {
     )
     .expect("expected result");
 
-    assert_eq!(io.output(), b"1,193,190,33554432,32");
+    assert_eq!(io.output(), b"1,193,190,68157440,32");
 }
 
 #[test]
 fn int_bitwise_ops_execute() {
     // `x` is the host byte `A` (65) read as an `Int`, kept opaque to the
     // optimizer so each op lowers to its WebAssembly instruction. This exercises
-    // the Int-distinctive behaviors: a truncating `shl` that lands on bit 30 and
-    // so reloads negative (65 << 24), an arithmetic (sign-preserving) `shr` on a
-    // negative operand (-65 >> 1 = -33), and the `xor`-based `not` (-x - 1).
+    // the Int-distinctive behaviors: an arithmetic (sign-preserving) `shr` on a
+    // negative operand (-65 >> 1 = -33) and the `xor`-based `not` (-x - 1). The
+    // shift stays inside the signed i31 envelope — an overflowing `shl` traps
+    // at the backend boundary (see the numeric envelope gates).
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     crate::run_text(
         Duration::from_secs(10),
@@ -114,7 +115,7 @@ fn int_bitwise_ops_execute() {
             Int/to_str(Int/and(x, +15)), ",",
             Int/to_str(Int/or(x, +128)), ",",
             Int/to_str(Int/xor(x, +255)), ",",
-            Int/to_str(Int/shl(x, +24)), ",",
+            Int/to_str(Int/shl(x, +20)), ",",
             Int/to_str(Int/shr(neg, +1)), ",",
             Int/to_str(Int/not(x))
         ]);
@@ -124,7 +125,7 @@ fn int_bitwise_ops_execute() {
     )
     .expect("expected result");
 
-    assert_eq!(io.output(), b"+1,+193,+190,-1056964608,-33,-66");
+    assert_eq!(io.output(), b"+1,+193,+190,+68157440,-33,-66");
 }
 
 #[test]

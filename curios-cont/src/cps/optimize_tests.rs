@@ -58,7 +58,7 @@ fn sccs_group_cycles_and_stay_deterministic() {
 }
 
 #[test]
-fn preserves_traps_and_folds_wasm_faithful_nat_add() {
+fn preserves_traps_and_folds_exact_u32_nat_add() {
     assert_eq!(
         evaluate(
             CpsPrimOp::NatAdd,
@@ -69,6 +69,8 @@ fn preserves_traps_and_folds_wasm_faithful_nat_add() {
         ),
         Some(CpsLiteral::Nat(42))
     );
+    // The numeric law: the folder computes in exact u32; the i31 envelope is
+    // the backend's problem (an out-of-range literal traps at materialization).
     assert_eq!(
         evaluate(
             CpsPrimOp::NatAdd,
@@ -77,7 +79,7 @@ fn preserves_traps_and_folds_wasm_faithful_nat_add() {
                 CpsAtom::Literal(CpsLiteral::Nat(1)),
             ],
         ),
-        None
+        Some(CpsLiteral::Nat(0x8000_0000))
     );
     assert_eq!(
         evaluate(
