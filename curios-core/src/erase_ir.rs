@@ -1,14 +1,12 @@
-//! Core erasure into the arena erased representation ([`curios_ersd::ir`]) —
-//! the transcription defined by the Ersd v2 specification.
+//! Core erasure into the arena erased representation ([`curios_ersd::ir`]).
 //!
-//! This is the replacement counterpart to the legacy [`erase`](crate::erase):
-//! it consumes the same meta-free Core [`Module`] and lowers it through the
+//! It consumes the meta-free Core [`Module`] and lowers it through the
 //! checked [`curios_ersd::ErsdBuilder`] into a verified
-//! [`curios_ersd::ErasedModule`], preserving the semantic identities the
-//! legacy path desugared away — distinct `Bln`/`Byte` shapes, first-class
-//! switches and folds, schema-carrying products and variants. Every encoding
-//! decision (carriers, tag layouts, dispatch, loop synthesis) belongs to the
-//! later lowering out of the representation, not to erasure.
+//! [`curios_ersd::ErasedModule`], preserving the language's semantic
+//! identities — distinct `Bln`/`Byte` shapes, first-class switches and folds,
+//! schema-carrying products and variants. Every encoding decision (carriers,
+//! tag layouts, dispatch, loop synthesis) belongs to the later lowering out
+//! of the representation, not to erasure.
 //!
 //! Erasure is a transcription under the **operand law**: every source
 //! subexpression erases to exactly one operand ([`curios_ersd::ErasedAtom`]) —
@@ -19,23 +17,26 @@
 //! elimination) reports the terminator that seals its block instead of an
 //! atom, and dead code after it is never erased.
 //!
-//! Core classifies and traverses; the builder owns construction. The stage
-//! coexists with the legacy path and has no production consumer yet — it is
-//! exercised by tests until the lowering vertical and the flip land.
+//! Core classifies and traverses; the builder owns construction. Production
+//! compilation erases the fixed prelude once at compiler build time
+//! ([`erase_prelude_to_ir_prefix`], archived by `curios-prelude`) and replays
+//! it under each program's user suffix ([`erase_module_with_prelude_to_ir`]).
 
 use {
     super::{
         Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, Inductive,
         InductiveType, Item, Let, Many, Match, Module, MotivePattern, Nat, Prim, PrimHead, Proj,
         Rec, RecItem, RecMember, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
-        TupleType, Two, Var, Variant, erasure_mask, expect_prim_head, infer, is_erasable,
-        pattern_binder_slots, reduce_with, refine_head, wire_term,
+        TupleType, Two, Var, Variant, expect_prim_head, infer, reduce_with, refine_head, wire_term,
     },
     curios_base::Qualifier,
     num_bigint::BigUint,
     num_traits::ToPrimitive,
     std::collections::{BTreeMap, BTreeSet},
 };
+
+mod classify;
+use classify::*;
 
 mod environment;
 use environment::*;

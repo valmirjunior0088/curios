@@ -67,18 +67,6 @@ fn main() {
         )
     });
 
-    let ersd = curios_core::erase_module(
-        &mut curios_core::Context::new(Duration::from_secs(300)),
-        &core,
-        &body_type,
-    )
-    .unwrap_or_else(|error| {
-        panic!(
-            "fixed prelude failed to erase: {}",
-            error.format_with(&core)
-        )
-    });
-
     let ersd_prelude = curios_core::erase_prelude_to_ir_prefix(
         &mut curios_core::Context::new(Duration::from_secs(300)),
         &core,
@@ -96,7 +84,6 @@ fn main() {
         prepared,
         core,
         body_type,
-        ersd_items: ersd.items,
         ersd_prelude,
     };
     let first = rkyv::to_bytes::<rkyv::rancor::Error>(&image)

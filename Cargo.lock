@@ -536,7 +536,6 @@ dependencies = [
  "curios-base",
  "curios-cont",
  "num-bigint",
- "num-traits",
  "rkyv",
  "tracing",
 ]

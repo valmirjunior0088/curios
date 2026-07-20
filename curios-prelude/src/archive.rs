@@ -6,7 +6,7 @@
 
 use curios_text::PreparedPrelude;
 
-pub(crate) const SCHEMA: u32 = 3;
+pub(crate) const SCHEMA: u32 = 4;
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[rkyv(
@@ -29,6 +29,5 @@ pub(crate) struct PreludeArchive {
     pub(crate) prepared: PreparedPrelude,
     pub(crate) core: curios_core::Module,
     pub(crate) body_type: curios_core::Term,
-    pub(crate) ersd_items: Vec<curios_ersd::Item>,
     pub(crate) ersd_prelude: curios_core::ErasedPrelude,
 }

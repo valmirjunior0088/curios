@@ -1,18 +1,16 @@
-//! The Ersd v2 behavior-identity corpus: representative programs run through
-//! the legacy production path and the arena vertical (erase → lower → Cont →
-//! Wasm), compared on observable runtime output — never on bytes. One program
-//! per behavior class the specification names; the full suite remains the
-//! oracle at the flip.
+//! The arena behavior-identity corpus: representative programs run through
+//! production (archived-prefix replay) and fresh arena erasure, compared on
+//! observable runtime output — never on bytes. One program per behavior class
+//! the Ersd specification named; a divergence here is an archive round-trip
+//! bug before it is anything else.
 
-use super::{run, run_arena, run_legacy};
+use super::{run, run_arena};
 
-/// Assert production (archived-prefix replay), fresh arena erasure, and the
-/// legacy oracle all produce the same observable behavior. The replay-versus-
-/// fresh half is what catches a bad archive round trip.
+/// Assert production (archived-prefix replay) and fresh arena erasure produce
+/// the same observable behavior — the probe that catches a bad archive round
+/// trip.
 fn behavior_matches(source: &str) {
-    let production = run(source);
-    assert_eq!(production, run_arena(source), "replay differs from fresh");
-    assert_eq!(production, run_legacy(source), "arena differs from legacy");
+    assert_eq!(run(source), run_arena(source), "replay differs from fresh");
 }
 
 #[test]

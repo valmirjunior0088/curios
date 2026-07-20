@@ -123,13 +123,11 @@ where
     Ok((module, core_type, user_foreigns))
 }
 
-/// Compile a parsed entrypoint through the arena erased representation — the
-/// Ersd v2 migration's vertical: fresh whole-module erasure into the verified
-/// arena `ErasedModule`, the direct lowering into Cont, then the shared Cont
-/// optimizer and Wasm emitter. Coexists with [`compile_entrypoint`] (the
-/// legacy production path) until the flip; the behavior-identity corpus in
-/// `curios` compares the two at runtime. The arena stages are not observable
-/// through [`Stage`] until the flip repoints the `ersd` observers.
+/// The fresh-erasure twin of [`compile_entrypoint`]: identical except the
+/// whole module — fixed prelude included — is erased from Core on every call
+/// instead of replaying the archived prelude prefix. Deliberately slower; the
+/// behavior-identity corpus in `curios` compares it against production, which
+/// is what catches a bad archive round trip.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn compile_entrypoint_via_arena<O>(
     timeout: Duration,
@@ -210,53 +208,6 @@ where
     observe(Stage::ErsdOptm(&ersd_module));
 
     let cont_module = curios_ersd::lower_to_cont(&ersd_module);
-
-    observe(Stage::Cont(&cont_module));
-
-    let mut cont_optm_module = cont_module;
-    curios_cont::optimize(&mut cont_optm_module);
-
-    observe(Stage::ContOptm(&cont_optm_module));
-
-    let wasm_module = curios_cont::into_wasm(&cont_optm_module);
-
-    observe(Stage::Wasm(&wasm_module));
-
-    Ok((wasm_module, foreigns))
-}
-
-/// The retired production path, kept only as the migration's behavior oracle
-/// until the legacy representation is deleted. Emits no `ersd` stages.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub fn compile_entrypoint_legacy<O>(
-    timeout: Duration,
-    entrypoint: &curios_text::Entrypoint,
-    loader: curios_text::RootSource,
-    mut observe: O,
-) -> Result<(curios_wasm::Module, ForeignStore), String>
-where
-    O: FnMut(Stage<'_>),
-{
-    let (module, core_type, foreigns) =
-        elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
-
-    let prefix = curios_prelude::restore_ersd_items();
-    let ersd_module = curios_prelude::with_prelude(|prelude| {
-        curios_core::erase_module_with_prelude(
-            &mut curios_core::Context::new(timeout),
-            prelude.core(),
-            &module,
-            &core_type,
-            prefix,
-        )
-    })
-    .map_err(|error| error.format_with(&module))?;
-
-    let mut ersd_optm_module = ersd_module;
-    curios_ersd::optimize(&mut ersd_optm_module);
-
-    let cont_module =
-        curios_ersd::into_cont(&ersd_optm_module).map_err(|error| error.to_string())?;
 
     observe(Stage::Cont(&cont_module));
 

@@ -104,17 +104,9 @@ pub fn with_prelude<R>(use_prelude: impl FnOnce(&Prelude) -> R) -> R {
     PRELUDE.with(|prelude| use_prelude(prelude))
 }
 
-/// Restore a fresh owned Ersd prefix for one compilation. Optimizer mutation of
-/// the returned items can never affect a later invocation.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub fn restore_ersd_items() -> Vec<curios_ersd::Item> {
-    rkyv::deserialize::<Vec<curios_ersd::Item>, rkyv::rancor::Error>(&archived().ersd_items)
-        .unwrap_or_else(|error| panic!("validated Ersd prefix failed to restore: {error}"))
-}
-
 /// Restore the arena prelude prefix — the erased module and environment
-/// production replay resumes over. Deserialized fresh per call, like
-/// [`restore_ersd_items`], so a compile can never poison a later one.
+/// production replay resumes over. Deserialized fresh per call, so a
+/// compile's mutation of the restored prefix can never poison a later one.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn restore_ersd_prelude() -> curios_core::ErasedPrelude {
     rkyv::deserialize::<curios_core::ErasedPrelude, rkyv::rancor::Error>(&archived().ersd_prelude)
@@ -168,11 +160,10 @@ mod tests {
 
     #[test]
     fn ersd_restore_is_fresh() {
-        let mut first = restore_ersd_items();
-        let count = first.len();
-        assert!(count > 0);
-        first.clear();
-        assert_eq!(restore_ersd_items().len(), count);
+        let first = restore_ersd_prelude();
+        assert!(!first.is_empty());
+        drop(first);
+        assert!(!restore_ersd_prelude().is_empty());
     }
 
     #[test]

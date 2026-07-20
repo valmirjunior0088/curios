@@ -1,6 +1,6 @@
-//! The core calculus of the Curios compiler: the dependently-typed kernel between `curios-text` (whose `into_core` lowers surface syntax into this crate's [`Term`]) and `curios-ersd` (which consumes [`erase_module`]'s erased output).
+//! The core calculus of the Curios compiler: the dependently-typed kernel between `curios-text` (whose `into_core` lowers surface syntax into this crate's [`Term`]) and `curios-ersd` (which consumes the erased output of [`erase_module_with_prelude_to_ir`]).
 //!
-//! The stage runs module-at-a-time: [`elaborate_module`] walks a lowered [`Module`] item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; `zonk`/[`zonk_module`] then substitute solved metavariables and report unsolved holes; [`erase_module`] strips types, proofs, and other runtime-irrelevant structure for `curios-ersd`.
+//! The stage runs module-at-a-time: [`elaborate_module`] walks a lowered [`Module`] item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; `zonk`/[`zonk_module`] then substitute solved metavariables and report unsolved holes; `erase_ir` ([`erase_module_with_prelude_to_ir`]) strips types, proofs, and other runtime-irrelevant structure for `curios-ersd`.
 //!
 //! Everything else is that pipeline's machinery: `term`/`scope` define the term language and its locally-nameless binder discipline ([`Scope`], [`Telescope`], [`Bound`]); `reduce` is deadline-bounded type-level evaluation (`normalize` for full normal forms); `convert` decides definitional equality, solving metavariables and distinguishing hard mismatches from goals merely blocked on unsolved metas (`Outcome`) so `typing` can park and retry them; `resolve` implements witness (concept) resolution with global coherence checks; `invert` proves omitted match arms impossible; `print`/`names` render terms for [`Error`] messages.
 //!
@@ -68,9 +68,6 @@ pub(crate) use invert::*;
 
 mod elaborate;
 pub use elaborate::*;
-
-mod erase;
-pub use erase::*;
 
 mod erase_ir;
 pub use erase_ir::*;
