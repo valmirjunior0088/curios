@@ -435,11 +435,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             },
         );
 
-        self.module.add_export(
-            global_name.as_string(),
-            curios_wasm::Export::Global(global_name.clone()),
-        );
-
         self.start_expr
             .push(curios_wasm::Instr::I32Const { value: 0 });
         self.start_expr
