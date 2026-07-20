@@ -948,7 +948,7 @@ impl Convert {
         }
 
         let labels = (0..this.group.len())
-            .map(|_| Term::free_var(context.fresh(None)))
+            .map(|_| Term::free_var(self.opening(context, None)))
             .collect::<Vec<_>>();
 
         let labels = labels.iter().collect::<Vec<_>>();
