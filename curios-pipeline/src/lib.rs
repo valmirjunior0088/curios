@@ -123,6 +123,46 @@ where
     Ok((module, core_type, user_foreigns))
 }
 
+/// Compile a parsed entrypoint through the arena erased representation — the
+/// Ersd v2 migration's vertical: fresh whole-module erasure into the verified
+/// arena `ErasedModule`, the direct lowering into Cont, then the shared Cont
+/// optimizer and Wasm emitter. Coexists with [`compile_entrypoint`] (the
+/// legacy production path) until the flip; the behavior-identity corpus in
+/// `curios` compares the two at runtime. The arena stages are not observable
+/// through [`Stage`] until the flip repoints the `ersd` observers.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
+pub fn compile_entrypoint_via_arena<O>(
+    timeout: Duration,
+    entrypoint: &curios_text::Entrypoint,
+    loader: curios_text::RootSource,
+    mut observe: O,
+) -> Result<(curios_wasm::Module, ForeignStore), String>
+where
+    O: FnMut(Stage<'_>),
+{
+    let (module, core_type, foreigns) =
+        elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
+
+    let ersd_module = curios_core::erase_module_to_ir(
+        &mut curios_core::Context::new(timeout),
+        &module,
+        &core_type,
+    )
+    .map_err(|error| error.format_with(&module))?;
+
+    let cont_module = curios_ersd::lower_to_cont(&ersd_module);
+    observe(Stage::Cont(&cont_module));
+
+    let mut cont_optm_module = cont_module;
+    curios_cont::optimize(&mut cont_optm_module);
+    observe(Stage::ContOptm(&cont_optm_module));
+
+    let wasm_module = curios_cont::into_wasm(&cont_optm_module);
+    observe(Stage::Wasm(&wasm_module));
+
+    Ok((wasm_module, foreigns))
+}
+
 /// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn compile_entrypoint<O>(

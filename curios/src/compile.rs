@@ -9,7 +9,10 @@ use {
 };
 
 #[cfg(test)]
-use {curios_pipeline::compile_entrypoint, std::time::Duration};
+use {
+    curios_pipeline::{compile_entrypoint, compile_entrypoint_via_arena},
+    std::time::Duration,
+};
 
 /// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm`
 /// payload the runtime deserializes — the same payload a bundled executable
@@ -52,6 +55,27 @@ pub(crate) fn run_entrypoint<H: Host + Send + Sync + 'static>(
 ) -> Result<(), String> {
     let (module, _foreigns) = compile_entrypoint(timeout, entrypoint, loader, |_| {})?;
 
+    run_wasm(&module, host, ForeignBindings::empty()).map(|_| ())
+}
+
+/// The arena-path twin of [`run_entrypoint`], compiling through
+/// [`compile_entrypoint_via_arena`] — the behavior-identity harness runs a
+/// program through both and compares the observable output.
+#[cfg(test)]
+pub(crate) fn run_text_via_arena<H: Host + Send + Sync + 'static>(
+    timeout: Duration,
+    source: &str,
+    host: H,
+) -> Result<(), String> {
+    let entrypoint = source
+        .parse::<curios_text::Entrypoint>()
+        .map_err(|error| error.format())?;
+    let (module, _foreigns) = compile_entrypoint_via_arena(
+        timeout,
+        &entrypoint,
+        curios_text::RootSource::none(),
+        |_| {},
+    )?;
     run_wasm(&module, host, ForeignBindings::empty()).map(|_| ())
 }
 
