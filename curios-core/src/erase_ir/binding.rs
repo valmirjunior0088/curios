@@ -31,8 +31,21 @@ impl Lowering {
                         &definition.type_,
                         Some(&definition.name),
                     )?;
-                    let Outcome::Emitted(atom) = outcome else {
-                        unimplemented!("erase_ir: a top-level item initializer diverges")
+                    let atom = match outcome {
+                        Outcome::Emitted(atom) => atom,
+                        // A diverging initializer (a vacuous elimination) has
+                        // no result operand; give it the computed-member
+                        // encoding — a value whose init block seals with the
+                        // divergence terminator — so the program traps at
+                        // initialization, matching the entry-block convention.
+                        Outcome::Diverged(terminator) => {
+                            let value = self.builder.value(Some(definition.name.clone()));
+                            self.builder.open_block();
+                            let block = self.builder.seal_block(terminator);
+                            let group = self.builder.rec_group(vec![], vec![(value, block)]);
+                            self.builder.let_rec(group);
+                            curios_ersd::Atom::Value(value)
+                        }
                     };
                     context.define_assuming(&definition.name, &definition.type_, &definition.body);
                     self.environment.bind(&definition.name, atom);
