@@ -43,6 +43,10 @@ impl Flt {
         Self::from_f32(self.to_f32().trunc())
     }
 
+    pub fn copysign(self, other: Self) -> Self {
+        Self::from_f32(self.to_f32().copysign(other.to_f32()))
+    }
+
     pub fn nearest(self) -> Self {
         Self::from_f32(self.to_f32().round_ties_even())
     }

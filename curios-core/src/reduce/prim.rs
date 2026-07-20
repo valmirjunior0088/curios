@@ -663,6 +663,61 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             |l, r| l.checked_shr(r).map(Prim::Nat),
             Prim::NatShr,
         ),
+        // The rotation and bit-count operations are 32-bit-carrier notions:
+        // they fold only a literal that fits the u32 view (the erased carrier)
+        // and stay neutral otherwise, like every other declined fold.
+        Prim::NatRotl(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| {
+                let l = l.to_big_uint()?.to_u32()?;
+                let r = r.to_big_uint()?.to_u32()?;
+                Some(Prim::Nat(Nat::new(curios_base::nat_rotl(l, r) as usize)))
+            },
+            Prim::NatRotl,
+        ),
+        Prim::NatRotr(left, right) => reduce_nat_binary(
+            context,
+            left,
+            right,
+            |l, r| {
+                let l = l.to_big_uint()?.to_u32()?;
+                let r = r.to_big_uint()?.to_u32()?;
+                Some(Prim::Nat(Nat::new(curios_base::nat_rotr(l, r) as usize)))
+            },
+            Prim::NatRotr,
+        ),
+        Prim::NatClz(inner) => reduce_nat_unary(
+            context,
+            inner,
+            |n| {
+                Some(Prim::Nat(Nat::new(
+                    n.to_big_uint()?.to_u32()?.leading_zeros() as usize,
+                )))
+            },
+            Prim::NatClz,
+        ),
+        Prim::NatCtz(inner) => reduce_nat_unary(
+            context,
+            inner,
+            |n| {
+                Some(Prim::Nat(Nat::new(
+                    n.to_big_uint()?.to_u32()?.trailing_zeros() as usize,
+                )))
+            },
+            Prim::NatCtz,
+        ),
+        Prim::NatPopcnt(inner) => reduce_nat_unary(
+            context,
+            inner,
+            |n| {
+                Some(Prim::Nat(Nat::new(
+                    n.to_big_uint()?.to_u32()?.count_ones() as usize
+                )))
+            },
+            Prim::NatPopcnt,
+        ),
         Prim::IntType => Ok(Subterm::Prim(Prim::IntType)),
         Prim::Int(value) => Ok(Subterm::Prim(Prim::Int(value.clone()))),
         Prim::IntEql(left, right) => reduce_int_binary(
@@ -784,6 +839,62 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             |left, right| left.checked_shr(right).map(Prim::Int),
             Prim::IntShr,
         ),
+        // 32-bit-carrier rotations and bit counts over the i32 view; a literal
+        // outside it stays neutral.
+        Prim::IntRotl(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |l, r| {
+                Some(Prim::Int(Int::new(curios_base::int_rotl(
+                    l.to_i32()?,
+                    r.to_i32()?,
+                ))))
+            },
+            Prim::IntRotl,
+        ),
+        Prim::IntRotr(left, right) => reduce_int_binary(
+            context,
+            left,
+            right,
+            |l, r| {
+                Some(Prim::Int(Int::new(curios_base::int_rotr(
+                    l.to_i32()?,
+                    r.to_i32()?,
+                ))))
+            },
+            Prim::IntRotr,
+        ),
+        Prim::IntClz(inner) => reduce_int_unary(
+            context,
+            inner,
+            |n| {
+                Some(Prim::Int(Int::new(
+                    (n.to_i32()? as u32).leading_zeros() as i32
+                )))
+            },
+            Prim::IntClz,
+        ),
+        Prim::IntCtz(inner) => reduce_int_unary(
+            context,
+            inner,
+            |n| {
+                Some(Prim::Int(Int::new(
+                    (n.to_i32()? as u32).trailing_zeros() as i32
+                )))
+            },
+            Prim::IntCtz,
+        ),
+        Prim::IntPopcnt(inner) => reduce_int_unary(
+            context,
+            inner,
+            |n| {
+                Some(Prim::Int(
+                    Int::new((n.to_i32()? as u32).count_ones() as i32),
+                ))
+            },
+            Prim::IntPopcnt,
+        ),
         Prim::FltType => Ok(Subterm::Prim(Prim::FltType)),
         Prim::Flt(flt) => Ok(Subterm::Prim(Prim::Flt(*flt))),
         Prim::FltAdd(left, right) => reduce_flt_binary(
@@ -836,6 +947,13 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             right,
             |left, right| Prim::Flt(left.max(right)),
             Prim::FltMax,
+        ),
+        Prim::FltCopysign(left, right) => reduce_flt_binary(
+            context,
+            left,
+            right,
+            |l, r| Prim::Flt(l.copysign(r)),
+            Prim::FltCopysign,
         ),
         Prim::FltEql(left, right) => reduce_flt_binary(
             context,

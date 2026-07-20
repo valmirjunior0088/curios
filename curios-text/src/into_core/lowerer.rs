@@ -1022,6 +1022,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Prim::NatShr(left, right) => {
                 curios_core::Prim::NatShr(self.term(left)?, self.term(right)?)
             }
+            Prim::NatRotl(left, right) => {
+                curios_core::Prim::NatRotl(self.term(left)?, self.term(right)?)
+            }
+            Prim::NatRotr(left, right) => {
+                curios_core::Prim::NatRotr(self.term(left)?, self.term(right)?)
+            }
+            Prim::NatClz(inner) => curios_core::Prim::NatClz(self.term(inner)?),
+            Prim::NatCtz(inner) => curios_core::Prim::NatCtz(self.term(inner)?),
+            Prim::NatPopcnt(inner) => curios_core::Prim::NatPopcnt(self.term(inner)?),
             Prim::IntType => curios_core::Prim::IntType,
             Prim::Int(value) => curios_core::Prim::Int(value.clone()),
             Prim::IntEql(left, right) => {
@@ -1072,6 +1081,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Prim::IntShr(left, right) => {
                 curios_core::Prim::IntShr(self.term(left)?, self.term(right)?)
             }
+            Prim::IntRotl(left, right) => {
+                curios_core::Prim::IntRotl(self.term(left)?, self.term(right)?)
+            }
+            Prim::IntRotr(left, right) => {
+                curios_core::Prim::IntRotr(self.term(left)?, self.term(right)?)
+            }
+            Prim::IntClz(inner) => curios_core::Prim::IntClz(self.term(inner)?),
+            Prim::IntCtz(inner) => curios_core::Prim::IntCtz(self.term(inner)?),
+            Prim::IntPopcnt(inner) => curios_core::Prim::IntPopcnt(self.term(inner)?),
             Prim::FltType => curios_core::Prim::FltType,
             Prim::Flt(flt) => curios_core::Prim::Flt(*flt),
             Prim::FltAdd(left, right) => {
@@ -1115,6 +1133,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             Prim::FltNeg(inner) => curios_core::Prim::flt_neg(self.term(inner)?),
             Prim::FltAbs(inner) => curios_core::Prim::flt_abs(self.term(inner)?),
+            Prim::FltCopysign(left, right) => {
+                curios_core::Prim::FltCopysign(self.term(left)?, self.term(right)?)
+            }
             Prim::FltSqrt(inner) => curios_core::Prim::flt_sqrt(self.term(inner)?),
             Prim::FltFloor(inner) => curios_core::Prim::flt_floor(self.term(inner)?),
             Prim::FltCeil(inner) => curios_core::Prim::flt_ceil(self.term(inner)?),

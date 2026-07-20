@@ -516,6 +516,11 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::NatXor(a, b) => Prim::NatXor(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::NatShl(a, b) => Prim::NatShl(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::NatShr(a, b) => Prim::NatShr(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatRotl(a, b) => Prim::NatRotl(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatRotr(a, b) => Prim::NatRotr(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::NatClz(a) => Prim::NatClz(zonk_term(context, a)?),
+        Prim::NatCtz(a) => Prim::NatCtz(zonk_term(context, a)?),
+        Prim::NatPopcnt(a) => Prim::NatPopcnt(zonk_term(context, a)?),
         Prim::ByteToNat(t) => Prim::ByteToNat(zonk_term(context, t)?),
         Prim::NatToByte(t) => Prim::NatToByte(zonk_term(context, t)?),
         Prim::ByteEql(a, b) => Prim::ByteEql(zonk_term(context, a)?, zonk_term(context, b)?),
@@ -546,6 +551,11 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::IntXor(a, b) => Prim::IntXor(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IntShl(a, b) => Prim::IntShl(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::IntShr(a, b) => Prim::IntShr(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntRotl(a, b) => Prim::IntRotl(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntRotr(a, b) => Prim::IntRotr(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::IntClz(a) => Prim::IntClz(zonk_term(context, a)?),
+        Prim::IntCtz(a) => Prim::IntCtz(zonk_term(context, a)?),
+        Prim::IntPopcnt(a) => Prim::IntPopcnt(zonk_term(context, a)?),
 
         Prim::FltAdd(a, b) => Prim::FltAdd(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::FltSub(a, b) => Prim::FltSub(zonk_term(context, a)?, zonk_term(context, b)?),
@@ -560,6 +570,9 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::FltGte(a, b) => Prim::FltGte(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::FltMin(a, b) => Prim::FltMin(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::FltMax(a, b) => Prim::FltMax(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::FltCopysign(a, b) => {
+            Prim::FltCopysign(zonk_term(context, a)?, zonk_term(context, b)?)
+        }
 
         Prim::FltNeg(t) => Prim::FltNeg(zonk_term(context, t)?),
         Prim::FltAbs(t) => Prim::FltAbs(zonk_term(context, t)?),

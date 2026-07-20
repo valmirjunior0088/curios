@@ -63,6 +63,8 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         | (Prim::NatXor(this_left, this_right), Prim::NatXor(that_left, that_right))
         | (Prim::NatShl(this_left, this_right), Prim::NatShl(that_left, that_right))
         | (Prim::NatShr(this_left, this_right), Prim::NatShr(that_left, that_right))
+        | (Prim::NatRotl(this_left, this_right), Prim::NatRotl(that_left, that_right))
+        | (Prim::NatRotr(this_left, this_right), Prim::NatRotr(that_left, that_right))
         | (Prim::ByteEql(this_left, this_right), Prim::ByteEql(that_left, that_right))
         | (Prim::ByteLt(this_left, this_right), Prim::ByteLt(that_left, that_right))
         | (Prim::ByteLte(this_left, this_right), Prim::ByteLte(that_left, that_right))
@@ -89,6 +91,8 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         | (Prim::IntXor(this_left, this_right), Prim::IntXor(that_left, that_right))
         | (Prim::IntShl(this_left, this_right), Prim::IntShl(that_left, that_right))
         | (Prim::IntShr(this_left, this_right), Prim::IntShr(that_left, that_right))
+        | (Prim::IntRotl(this_left, this_right), Prim::IntRotl(that_left, that_right))
+        | (Prim::IntRotr(this_left, this_right), Prim::IntRotr(that_left, that_right))
         | (Prim::FltAdd(this_left, this_right), Prim::FltAdd(that_left, that_right))
         | (Prim::FltSub(this_left, this_right), Prim::FltSub(that_left, that_right))
         | (Prim::FltMul(this_left, this_right), Prim::FltMul(that_left, that_right))
@@ -102,6 +106,7 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         | (Prim::FltGte(this_left, this_right), Prim::FltGte(that_left, that_right))
         | (Prim::FltMin(this_left, this_right), Prim::FltMin(that_left, that_right))
         | (Prim::FltMax(this_left, this_right), Prim::FltMax(that_left, that_right))
+        | (Prim::FltCopysign(this_left, this_right), Prim::FltCopysign(that_left, that_right))
         | (
             Prim::BinEql(Grain::X, this_left, this_right),
             Prim::BinEql(Grain::X, that_left, that_right),
@@ -137,6 +142,12 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         }
         (Prim::FltNeg(this), Prim::FltNeg(that))
         | (Prim::FltAbs(this), Prim::FltAbs(that))
+        | (Prim::NatClz(this), Prim::NatClz(that))
+        | (Prim::NatCtz(this), Prim::NatCtz(that))
+        | (Prim::NatPopcnt(this), Prim::NatPopcnt(that))
+        | (Prim::IntClz(this), Prim::IntClz(that))
+        | (Prim::IntCtz(this), Prim::IntCtz(that))
+        | (Prim::IntPopcnt(this), Prim::IntPopcnt(that))
         | (Prim::FltSqrt(this), Prim::FltSqrt(that))
         | (Prim::FltFloor(this), Prim::FltFloor(that))
         | (Prim::FltCeil(this), Prim::FltCeil(that))

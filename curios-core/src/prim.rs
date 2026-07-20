@@ -55,6 +55,11 @@ pub enum Prim {
     NatXor(Term, Term),
     NatShl(Term, Term),
     NatShr(Term, Term),
+    NatRotl(Term, Term),
+    NatRotr(Term, Term),
+    NatClz(Term),
+    NatCtz(Term),
+    NatPopcnt(Term),
     ByteType,
     Byte(u8),
     ByteToNat(Term),
@@ -82,6 +87,11 @@ pub enum Prim {
     IntXor(Term, Term),
     IntShl(Term, Term),
     IntShr(Term, Term),
+    IntRotl(Term, Term),
+    IntRotr(Term, Term),
+    IntClz(Term),
+    IntCtz(Term),
+    IntPopcnt(Term),
     FltType,
     Flt(Flt),
     FltAdd(Term, Term),
@@ -104,6 +114,7 @@ pub enum Prim {
     FltCeil(Term),
     FltTrunc(Term),
     FltNearest(Term),
+    FltCopysign(Term, Term),
     NatToInt(Term),
     NatToFlt(Term),
     IntToNat(Term),
@@ -794,6 +805,12 @@ impl Prim {
             | Prim::FltCeil(t)
             | Prim::FltTrunc(t)
             | Prim::FltNearest(t)
+            | Prim::NatClz(t)
+            | Prim::NatCtz(t)
+            | Prim::NatPopcnt(t)
+            | Prim::IntClz(t)
+            | Prim::IntCtz(t)
+            | Prim::IntPopcnt(t)
             | Prim::BinLen(Grain::X, t)
             | Prim::BinLen(Grain::B, t)
             | Prim::LstType(t) => visit(t),
@@ -820,6 +837,8 @@ impl Prim {
             | Prim::NatXor(a, b)
             | Prim::NatShl(a, b)
             | Prim::NatShr(a, b)
+            | Prim::NatRotl(a, b)
+            | Prim::NatRotr(a, b)
             | Prim::BlnAnd(a, b)
             | Prim::BlnOr(a, b)
             | Prim::BlnXor(a, b)
@@ -841,6 +860,8 @@ impl Prim {
             | Prim::IntXor(a, b)
             | Prim::IntShl(a, b)
             | Prim::IntShr(a, b)
+            | Prim::IntRotl(a, b)
+            | Prim::IntRotr(a, b)
             | Prim::FltAdd(a, b)
             | Prim::FltSub(a, b)
             | Prim::FltMul(a, b)
@@ -854,6 +875,7 @@ impl Prim {
             | Prim::FltGte(a, b)
             | Prim::FltMin(a, b)
             | Prim::FltMax(a, b)
+            | Prim::FltCopysign(a, b)
             | Prim::BinEql(Grain::X, a, b)
             | Prim::BinGet(Grain::X, a, b)
             | Prim::BinAppend(Grain::X, a, b)
@@ -953,6 +975,11 @@ impl Prim {
             Prim::NatXor(l, r) => traverse_binary(l, r, visit, Prim::NatXor),
             Prim::NatShl(l, r) => traverse_binary(l, r, visit, Prim::NatShl),
             Prim::NatShr(l, r) => traverse_binary(l, r, visit, Prim::NatShr),
+            Prim::NatRotl(l, r) => traverse_binary(l, r, visit, Prim::NatRotl),
+            Prim::NatRotr(l, r) => traverse_binary(l, r, visit, Prim::NatRotr),
+            Prim::NatClz(i) => Prim::NatClz(visit.visit_subterm(i)),
+            Prim::NatCtz(i) => Prim::NatCtz(visit.visit_subterm(i)),
+            Prim::NatPopcnt(i) => Prim::NatPopcnt(visit.visit_subterm(i)),
             Prim::ByteType => Prim::ByteType,
             Prim::Byte(value) => Prim::Byte(*value),
             Prim::ByteToNat(inner) => Prim::ByteToNat(visit.visit_subterm(inner)),
@@ -985,6 +1012,11 @@ impl Prim {
             Prim::IntXor(l, r) => traverse_binary(l, r, visit, Prim::IntXor),
             Prim::IntShl(l, r) => traverse_binary(l, r, visit, Prim::IntShl),
             Prim::IntShr(l, r) => traverse_binary(l, r, visit, Prim::IntShr),
+            Prim::IntRotl(l, r) => traverse_binary(l, r, visit, Prim::IntRotl),
+            Prim::IntRotr(l, r) => traverse_binary(l, r, visit, Prim::IntRotr),
+            Prim::IntClz(i) => Prim::IntClz(visit.visit_subterm(i)),
+            Prim::IntCtz(i) => Prim::IntCtz(visit.visit_subterm(i)),
+            Prim::IntPopcnt(i) => Prim::IntPopcnt(visit.visit_subterm(i)),
             Prim::FltType => Prim::FltType,
             Prim::Flt(flt) => Prim::Flt(*flt),
             Prim::FltAdd(l, r) => traverse_binary(l, r, visit, Prim::FltAdd),
@@ -1000,6 +1032,7 @@ impl Prim {
             Prim::FltGte(l, r) => traverse_binary(l, r, visit, Prim::FltGte),
             Prim::FltMin(l, r) => traverse_binary(l, r, visit, Prim::FltMin),
             Prim::FltMax(l, r) => traverse_binary(l, r, visit, Prim::FltMax),
+            Prim::FltCopysign(l, r) => traverse_binary(l, r, visit, Prim::FltCopysign),
             Prim::FltNeg(inner) => Prim::FltNeg(visit.visit_subterm(inner)),
             Prim::FltAbs(inner) => Prim::FltAbs(visit.visit_subterm(inner)),
             Prim::FltSqrt(inner) => Prim::FltSqrt(visit.visit_subterm(inner)),
