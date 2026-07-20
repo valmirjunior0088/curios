@@ -4,11 +4,15 @@
 //! per behavior class the specification names; the full suite remains the
 //! oracle at the flip.
 
-use super::{run, run_arena};
+use super::{run, run_arena, run_legacy};
 
-/// Assert the arena path produces the same observable behavior as production.
+/// Assert production (archived-prefix replay), fresh arena erasure, and the
+/// legacy oracle all produce the same observable behavior. The replay-versus-
+/// fresh half is what catches a bad archive round trip.
 fn behavior_matches(source: &str) {
-    assert_eq!(run(source), run_arena(source));
+    let production = run(source);
+    assert_eq!(production, run_arena(source), "replay differs from fresh");
+    assert_eq!(production, run_legacy(source), "arena differs from legacy");
 }
 
 #[test]

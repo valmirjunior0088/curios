@@ -40,9 +40,30 @@ impl ErsdBuilder {
         Self::default()
     }
 
+    /// Resume construction over a restored prefix module: the archived
+    /// prelude's arenas continue growing under the user suffix. The skipped
+    /// constant-interning index is rebuilt here, and no block is open.
+    pub fn resume(mut module: ErasedModule) -> Self {
+        module.reindex_constants();
+        Self {
+            module,
+            open_blocks: Vec::new(),
+        }
+    }
+
     /// Read-only access to the module under construction.
     pub fn module(&self) -> &ErasedModule {
         &self.module
+    }
+
+    /// Hand the module over *unfinished* — no entry, no verification — as a
+    /// replayable prefix. [`resume`](Self::resume) is the inverse.
+    pub fn into_module(self) -> ErasedModule {
+        assert!(
+            self.open_blocks.is_empty(),
+            "a prefix hand-off leaves no open block"
+        );
+        self.module
     }
 
     /// Mint a fresh value identity — a parameter, arm binder, or fold binder.

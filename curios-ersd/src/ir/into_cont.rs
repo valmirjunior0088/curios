@@ -220,7 +220,26 @@ impl Lowerer<'_> {
         terminator: &Terminator,
         target: CpsContId,
     ) -> CpsNodeId {
-        let group: RecGroup = self.source.rec_group(group).expect("live group").clone();
+        let mut group: RecGroup = self.source.rec_group(group).expect("live group").clone();
+
+        // Drop computed members never referenced outside their own
+        // initializer — their init never runs, mirroring the legacy path's
+        // member pruning (which is what makes an unused self-knot
+        // `rec loop = loop` legal). A member that survives with a direct
+        // eager self-reference has no sound initialization order.
+        group
+            .values
+            .retain(|member| self.member_used_outside_init(member.value, member.init));
+        for member in &group.values {
+            let init = self.source.block(member.init).expect("live init block");
+            assert!(
+                !self
+                    .eager_value_refs(&init.statements, &init.terminator)
+                    .contains(&member.value),
+                "unsupported eager self-recursive value: its initializer \
+                 evaluates the member it defines"
+            );
+        }
 
         if group.functions.is_empty() {
             return self.lower_value_knot(&group, rest, terminator, target);
@@ -439,6 +458,72 @@ impl Lowerer<'_> {
             });
         }
         body
+    }
+
+    /// Whether `member` is referenced anywhere in the module outside its own
+    /// initializer's subtree (control blocks and nested function regions
+    /// included on both sides). An unreferenced member's init never runs.
+    fn member_used_outside_init(&self, member: ValueId, init: BlockId) -> bool {
+        // The init's own subtree: its blocks, plus the regions of functions
+        // bound inside it.
+        let mut inside_blocks = BTreeSet::new();
+        let mut inside_functions = BTreeSet::new();
+        let mut function_work: Vec<FunctionId> = Vec::new();
+        let mut block_work = vec![init];
+        loop {
+            if let Some(block) = block_work.pop() {
+                if !inside_blocks.insert(block) {
+                    continue;
+                }
+                let Some(block) = self.source.block(block) else {
+                    continue;
+                };
+                for &statement in &block.statements {
+                    match self.source.statement(statement) {
+                        Some(Statement::Let { rhs, .. }) => block_work.extend(rhs.sub_blocks()),
+                        Some(Statement::Functions { functions }) => {
+                            function_work.extend(functions.iter().copied());
+                        }
+                        Some(Statement::Rec { group }) => {
+                            if let Some(group) = self.source.rec_group(*group) {
+                                function_work.extend(group.functions.iter().copied());
+                                block_work.extend(group.values.iter().map(|m| m.init));
+                            }
+                        }
+                        None => {}
+                    }
+                }
+                continue;
+            }
+            let Some(function) = function_work.pop() else {
+                break;
+            };
+            if !inside_functions.insert(function) {
+                continue;
+            }
+            if let Some(function) = self.source.function(function) {
+                block_work.push(function.body);
+            }
+        }
+
+        // Any reference from a block outside the subtree is a use.
+        for (index, slot) in self.source.blocks().iter().enumerate() {
+            let Some(block) = slot else { continue };
+            if inside_blocks.contains(&BlockId(index as u32)) {
+                continue;
+            }
+            for &statement in &block.statements {
+                if let Some(Statement::Let { rhs, .. }) = self.source.statement(statement)
+                    && rhs.operands().contains(&ErasedAtom::Value(member))
+                {
+                    return true;
+                }
+            }
+            if block.terminator.atom() == Some(ErasedAtom::Value(member)) {
+                return true;
+            }
+        }
+        false
     }
 
     /// The knot members a block's eager region references directly — its
@@ -751,7 +836,13 @@ impl Lowerer<'_> {
                 let op = match intrinsic {
                     Intrinsic::LstMap => CpsIntrinsicOp::LstMap,
                 };
-                let args = operands.iter().map(|&atom| self.lower_atom(atom)).collect();
+                // The arena intrinsic binds the mapper first; the landed Cont
+                // contract takes the list first. Reorder at the door.
+                let args = match intrinsic {
+                    Intrinsic::LstMap => {
+                        vec![self.lower_atom(operands[1]), self.lower_atom(operands[0])]
+                    }
+                };
                 self.split(result, 1, rest, terminator, target, |return_to| {
                     CpsNode::Intrinsic {
                         op,
@@ -830,6 +921,20 @@ impl Lowerer<'_> {
         {
             return (target, false);
         }
+        let join = self.open_join_fresh(result, rest, terminator, target);
+        (join, true)
+    }
+
+    /// Open a join unconditionally — the fold loops route their exit through
+    /// a `Switch` *edge*, and a bodyless return continuation cannot be a
+    /// switch target, so they never take the tail bypass.
+    fn open_join_fresh(
+        &mut self,
+        result: ValueId,
+        rest: &[StatementId],
+        terminator: &Terminator,
+        target: CpsContId,
+    ) -> CpsContId {
         let join = self.module.reserve_continuation();
         let parameter = self.bind_value(result);
         let body = self.lower_statements(rest, terminator, target);
@@ -841,7 +946,7 @@ impl Lowerer<'_> {
                 body,
             },
         );
-        (join, true)
+        join
     }
 
     /// Build a parameterless continuation lowering `block` into `join`.
@@ -1012,7 +1117,7 @@ impl Lowerer<'_> {
         target: CpsContId,
     ) -> CpsNodeId {
         let head = self.lower_atom(scrutinee);
-        let (join, fresh) = self.open_join(result, rest, terminator, target);
+        let join = self.open_join_fresh(result, rest, terminator, target);
 
         let loop_index = self.module.add_value(None);
         let loop_acc = self.module.add_value(None);
@@ -1114,10 +1219,8 @@ impl Lowerer<'_> {
         );
 
         let entry = self.lower_block(zero, zero_resume);
-        let mut continuations = if fresh { vec![join] } else { Vec::new() };
-        continuations.extend([loop_cont, step_cont, zero_resume]);
         self.module.add_node(CpsNode::LetCont {
-            continuations,
+            continuations: vec![join, loop_cont, step_cont, zero_resume],
             body: entry,
         })
     }
@@ -1138,7 +1241,7 @@ impl Lowerer<'_> {
         target: CpsContId,
     ) -> CpsNodeId {
         let sequence = self.lower_atom(scrutinee);
-        let (join, fresh) = self.open_join(result, rest, terminator, target);
+        let join = self.open_join_fresh(result, rest, terminator, target);
 
         let length = self.module.add_value(None);
         let loop_index = self.module.add_value(None);
@@ -1259,10 +1362,8 @@ impl Lowerer<'_> {
         );
 
         let entry = self.lower_block(empty, empty_resume);
-        let mut continuations = if fresh { vec![join] } else { Vec::new() };
-        continuations.extend([loop_cont, step_cont, empty_resume]);
         let entry = self.module.add_node(CpsNode::LetCont {
-            continuations,
+            continuations: vec![join, loop_cont, step_cont, empty_resume],
             body: entry,
         });
         // Compute the length up front so every continuation sees it.

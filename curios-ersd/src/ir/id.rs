@@ -8,13 +8,13 @@
 
 use curios_base::id;
 
-id!(ValueId, "~v");
-id!(FunctionId, "~f");
-id!(BlockId, "~b");
-id!(StatementId, "~s");
-id!(ConstantId, "~c");
-id!(ProductId, "~p");
-id!(FamilyId, "~d");
-id!(ConstructorId, "~t");
-id!(ForeignId, "~x");
-id!(RecGroupId, "~r");
+id!(ValueId, "~v"; archive);
+id!(FunctionId, "~f"; archive);
+id!(BlockId, "~b"; archive);
+id!(StatementId, "~s"; archive);
+id!(ConstantId, "~c"; archive);
+id!(ProductId, "~p"; archive);
+id!(FamilyId, "~d"; archive);
+id!(ConstructorId, "~t"; archive);
+id!(ForeignId, "~x"; archive);
+id!(RecGroupId, "~r"; archive);

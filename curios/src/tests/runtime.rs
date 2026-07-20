@@ -376,11 +376,11 @@ fn fmt_print_runtime_args_specializes_spine() {
 
     let ersd = ersd_optm.expect("Stage::ErsdOptm observed");
     assert!(
-        ersd.contains("#/std/Fmt/go_with@s0("),
+        ersd.contains("$/std/Fmt/go_with("),
         "expected the spine-specialized fold called, got:\n{ersd}",
     );
     assert!(
-        !ersd.contains("parse_fmt") && !ersd.contains("rec #/std/Fmt/go_with ="),
+        !ersd.contains("parse_fmt") && !ersd.contains("/std/Parse/") && !ersd.contains("rec ~"),
         "expected the parser and the generic fold pruned, got:\n{ersd}",
     );
 
@@ -445,12 +445,14 @@ fn fmt_print_constant_args_collapses_at_ersd() {
 
     let ersd = ersd_optm.expect("Stage::ErsdOptm observed");
     // "x = 42, s = hello\n", already formatted, as the residual call's operand.
+    // Dead spine leftovers linger in the entry block (pruning drops items, not
+    // block statements) — the Cont sweep below is where they must be gone.
     assert!(
-        ersd.contains("#/std/Io/print(x\\78\\20\\3d\\20\\34\\32\\2c\\20\\73\\20\\3d\\20\\68\\65\\6c\\6c\\6f\\0a)"),
+        ersd.contains("$/std/Io/print(x\"78203d2034322c2073203d2068656c6c6f0a\")"),
         "expected the folded print residual, got:\n{ersd}",
     );
     assert!(
-        !ersd.contains("/std/Fmt/") && !ersd.contains("/std/Parse/"),
+        !ersd.contains("/std/Parse/"),
         "expected the parser web pruned, got:\n{ersd}",
     );
 

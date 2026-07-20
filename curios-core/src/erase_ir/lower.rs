@@ -57,7 +57,7 @@ pub fn erase_module_to_ir(
     }
 
     let mut lowering = Lowering::default();
-    lowering.erase_items(context, module)?;
+    lowering.erase_items(context, module, 0)?;
 
     // The entrypoint body runs under the root module (mirrors elaboration).
     context.set_island(Qualifier::empty());
@@ -190,7 +190,11 @@ impl Lowering {
                 let label = binding.tail.label_iter().nth(index).flatten();
                 let hint = label.map(str::to_string);
                 let name = context.fresh(label);
-                let outcome = self.walk(context, &value, &type_, hint.as_deref())?;
+                // A proof- or type-valued binding carries no runtime content:
+                // fill it with the unit constant instead of erasing its body
+                // (which may project erased fields or reference dropped
+                // binders), exactly like a kept-but-erasable operand slot.
+                let outcome = self.kept_operand_at(context, &value, &type_, hint.as_deref())?;
                 let atom = emitted!(outcome);
                 context.define_assuming(&name, &type_, &value);
                 self.environment.bind(&name, atom);
@@ -201,4 +205,116 @@ impl Lowering {
             self.walk(context, &tail, expected, hint)
         })
     }
+}
+
+/// A replayable prefix: the fixed prelude erased into an unfinished arena
+/// module (items only, no entry), together with the erasure environment that
+/// maps prelude Core names to their arena operands. Archived by
+/// `curios-prelude` behind the `archive` feature and restored on every
+/// production compile, so the prelude is never re-erased from source.
+#[derive(Debug)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize),
+    rkyv(
+        serialize_bounds(__S: rkyv::ser::Writer + rkyv::ser::Allocator + rkyv::ser::Sharing, __S::Error: rkyv::rancor::Source),
+        deserialize_bounds(__D: rkyv::de::Pooling, __D::Error: rkyv::rancor::Source),
+        bytecheck(bounds(__C: rkyv::validation::ArchiveContext + rkyv::validation::shared::SharedContext, __C::Error: rkyv::rancor::Source))
+    )
+)]
+pub struct ErasedPrelude {
+    #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
+    module: curios_ersd::ErasedModule,
+    environment: Environment,
+}
+
+impl ErasedPrelude {
+    /// Whether the prefix holds any erased items — the freshness probe the
+    /// archive tests use.
+    pub fn is_empty(&self) -> bool {
+        self.module.items().is_empty()
+    }
+}
+
+/// Erase the fixed prelude's items into a replayable prefix. The prelude
+/// module carries no entrypoint of its own; only its item chain is erased.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
+pub fn erase_prelude_to_ir_prefix(
+    context: &mut Context,
+    prelude: &Module,
+) -> Result<ErasedPrelude, Error> {
+    for (name, inductive) in &prelude.inductives {
+        context.register_inductive(name, inductive.clone())?;
+    }
+    for (name, structure) in &prelude.structures {
+        context.register_structure(name, structure.clone())?;
+    }
+    let mut lowering = Lowering::default();
+    lowering.erase_items(context, prelude, 0)?;
+    Ok(ErasedPrelude {
+        module: lowering.builder.into_module(),
+        environment: lowering.environment,
+    })
+}
+
+/// Replay an erased prelude prefix and erase only the user suffix and
+/// entrypoint body. The Core context is re-seeded with the prelude's
+/// definitions (so the suffix's re-derived types reduce through them), the
+/// builder resumes over the restored arenas, and the suffix items erase in
+/// dominance order among themselves — every prelude reference is already
+/// bound.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
+pub fn erase_module_with_prelude_to_ir(
+    context: &mut Context,
+    prelude: &Module,
+    module: &Module,
+    expected: &Term,
+    prefix: ErasedPrelude,
+) -> Result<curios_ersd::ErasedModule, Error> {
+    for (name, inductive) in &module.inductives {
+        context.register_inductive(name, inductive.clone())?;
+    }
+    for (name, structure) in &module.structures {
+        context.register_structure(name, structure.clone())?;
+    }
+
+    // Re-seed the Core context with the prelude's definitions, mirroring the
+    // legacy replay: later items and the entrypoint reduce through them.
+    for item in &prelude.items {
+        match item {
+            super::Item::Let(definition) => {
+                context.define_assuming(&definition.name, &definition.type_, &definition.body);
+            }
+            super::Item::Rec(rec) => {
+                let definitions = rec.definitions();
+                for definition in &definitions {
+                    context.assume(&definition.name, &definition.type_);
+                }
+                for (index, definition) in definitions.iter().enumerate() {
+                    context.define(
+                        &definition.name,
+                        &Term::rec_member(rec.group.clone(), index),
+                    );
+                }
+            }
+        }
+    }
+
+    let mut lowering = Lowering {
+        builder: curios_ersd::ErsdBuilder::resume(prefix.module),
+        environment: prefix.environment,
+        dangled: Default::default(),
+    };
+    lowering.erase_items(context, module, prelude.items.len())?;
+
+    context.set_island(Qualifier::empty());
+    lowering.builder.open_block();
+    let outcome = lowering.walk(context, &module.body, expected, None)?;
+    let entry = lowering.seal(outcome);
+    lowering.builder.set_entry(entry);
+
+    lowering
+        .builder
+        .finalize()
+        .map_err(|error| Error::erased_module_invalid(error.to_string()))
 }

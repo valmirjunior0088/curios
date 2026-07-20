@@ -93,8 +93,17 @@ enum CafSource<'m> {
 pub(super) struct Evaluator<'m> {
     module: &'m ErasedModule,
     analysis: &'m Analysis,
-    toplevel: BTreeMap<ValueId, &'m Rhs>,
+    /// Every `Let`-defined value, module-wide, forced on demand. Forcing from
+    /// an empty frame naturally declines anything not transitively closed (a
+    /// parameter or binder leaks as an unknown), so this is exactly the
+    /// "local CAF" generalization that lets curried chains rooted in
+    /// entry-block locals fold.
+    definitions: BTreeMap<ValueId, &'m Rhs>,
     rec_caf: BTreeMap<ValueId, BlockId>,
+    /// Functions bound by top-level items — the only callees a residual call
+    /// may name (a locally bound function is out of scope at an arbitrary
+    /// candidate site).
+    item_functions: BTreeSet<FunctionId>,
     /// Memoized CAF values; `None` poisons a value whose forcing failed hard.
     cache: BTreeMap<ValueId, Option<Value>>,
     /// Values currently being forced — a repeat is a value-recursive cycle.
@@ -106,19 +115,26 @@ impl<'m> Evaluator<'m> {
     /// Build an interpreter over a module and its analysis. The top-level
     /// value bindings are the module's item chain.
     pub(super) fn new(module: &'m ErasedModule, analysis: &'m Analysis) -> Self {
-        let mut toplevel = BTreeMap::new();
+        let mut definitions = BTreeMap::new();
         let mut rec_caf = BTreeMap::new();
+        let mut item_functions = BTreeSet::new();
+        for slot in module.statements().iter() {
+            if let Some(Statement::Let { result, rhs }) = slot {
+                definitions.insert(*result, rhs);
+            }
+        }
         for &item in module.items() {
             match module.statement(item) {
-                Some(Statement::Let { result, rhs }) => {
-                    toplevel.insert(*result, rhs);
-                }
                 Some(Statement::Rec { group }) => {
                     if let Some(group) = module.rec_group(*group) {
                         for member in &group.values {
                             rec_caf.insert(member.value, member.init);
                         }
+                        item_functions.extend(group.functions.iter().copied());
                     }
+                }
+                Some(Statement::Functions { functions }) => {
+                    item_functions.extend(functions.iter().copied());
                 }
                 _ => {}
             }
@@ -126,8 +142,9 @@ impl<'m> Evaluator<'m> {
         Self {
             module,
             analysis,
-            toplevel,
+            definitions,
             rec_caf,
+            item_functions,
             cache: BTreeMap::new(),
             forcing: BTreeSet::new(),
             budget: Budget::new(),
@@ -140,7 +157,7 @@ impl<'m> Evaluator<'m> {
         match atom {
             ErasedAtom::Constant(_) | ErasedAtom::Function(_) => true,
             ErasedAtom::Value(value) => {
-                self.toplevel.contains_key(&value) || self.rec_caf.contains_key(&value)
+                self.definitions.contains_key(&value) || self.rec_caf.contains_key(&value)
             }
         }
     }
@@ -193,7 +210,8 @@ impl<'m> Evaluator<'m> {
         for &free in self.analysis.free_values(function) {
             match frame.lookup(free) {
                 Some(held) => captured.push((free, held)),
-                None if self.toplevel.contains_key(&free) || self.rec_caf.contains_key(&free) => {}
+                None if self.definitions.contains_key(&free)
+                    || self.rec_caf.contains_key(&free) => {}
                 None => return Err(Bail::Unknown),
             }
         }
@@ -211,7 +229,7 @@ impl<'m> Evaluator<'m> {
         if let Some(cached) = self.cache.get(&value) {
             return cached.clone().ok_or(Bail::Unknown);
         }
-        let source = if let Some(rhs) = self.toplevel.get(&value).copied() {
+        let source = if let Some(rhs) = self.definitions.get(&value).copied() {
             CafSource::Rhs(rhs)
         } else if let Some(&block) = self.rec_caf.get(&value) {
             CafSource::Block(block)
@@ -435,10 +453,14 @@ impl<'m> Evaluator<'m> {
         match self.enter(&closure, args.clone(), tail) {
             // Boundary conversion: the callee performs an effect it cannot
             // residualize itself, but this call is the candidate's tail and
-            // names a module function — the call with its evaluated arguments
-            // is the residual, rerunning the callee in full at this point.
+            // names an *item-bound* function — in scope at every candidate
+            // site — so the call with its evaluated arguments is the
+            // residual, rerunning the callee in full at this point. A locally
+            // bound callee would be out of scope where the residual installs.
             Outcome::Bail(Bail::Effect) if tail => match callee {
-                ErasedAtom::Function(function) => Outcome::Stuck(Residual::Call(function, args)),
+                ErasedAtom::Function(function) if self.item_functions.contains(&function) => {
+                    Outcome::Stuck(Residual::Call(function, args))
+                }
                 _ => Outcome::Bail(Bail::Effect),
             },
             other => other,

@@ -26,9 +26,16 @@ fn run(source: &str) -> Vec<u8> {
     io.output().to_vec()
 }
 
-/// The arena-path twin of [`run`], for the behavior-identity corpus.
+/// The fresh-erasure twin of [`run`], for the behavior-identity corpus.
 fn run_arena(source: &str) -> Vec<u8> {
     let (system, io) = MockHost::builder().build();
     crate::run_text_via_arena(Duration::from_secs(60), source, system).expect("expected result");
+    io.output().to_vec()
+}
+
+/// The legacy-oracle twin of [`run`], deleted with the legacy path.
+fn run_legacy(source: &str) -> Vec<u8> {
+    let (system, io) = MockHost::builder().build();
+    crate::run_text_legacy(Duration::from_secs(60), source, system).expect("expected result");
     io.output().to_vec()
 }

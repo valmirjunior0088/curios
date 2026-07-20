@@ -313,6 +313,10 @@ impl Lowering {
         let head_type = super::infer(context, head)?;
         let head_type = reduce_with(context, &head_type)?;
 
+        // Projecting an *erased* field yields proof content only: the unit
+        // constant, never a runtime projection (the field has no slot).
+        let erased_field = |mask: &[bool], index: usize| mask.get(index).copied().unwrap_or(false);
+
         let (row, width) = match &*head_type {
             Subterm::TupleType(TupleType { telescope }) => {
                 let mask: Vec<bool> = signature_entries(context, telescope.clone())?
@@ -331,6 +335,10 @@ impl Lowering {
             _ => unreachable!("erase_ir: projected a non-tuple/struct"),
         };
         assert!(*index < width, "erase_ir: projection out of range");
+
+        if erased_field(&row.mask, *index) {
+            return Ok(Outcome::Emitted(self.unit()));
+        }
 
         match row.schema {
             // The head collapsed to its single relevant field.

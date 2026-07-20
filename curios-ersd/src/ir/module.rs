@@ -27,13 +27,32 @@ use {
 /// analysis; only the optional debug name is stored, and it never affects
 /// identity or behavior.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct ValueDef {
     pub debug_name: Option<String>,
 }
 
 /// The erased program as flat, first-order data. See the crate's `ir` module
 /// documentation for the representation contract.
+///
+/// Archived (behind the `archive` feature) as the fixed prelude's replayable
+/// prefix. The constant interning index is skipped — it is exactly the
+/// inverse of the `constants` arena, rebuilt by
+/// [`reindex_constants`](Self::reindex_constants) on restore — so the
+/// serialized bytes stay deterministic (a hash map's iteration order is not).
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize),
+    rkyv(
+        serialize_bounds(__S: rkyv::ser::Writer + rkyv::ser::Allocator + rkyv::ser::Sharing, __S::Error: rkyv::rancor::Source),
+        deserialize_bounds(__D: rkyv::de::Pooling, __D::Error: rkyv::rancor::Source),
+        bytecheck(bounds(__C: rkyv::validation::ArchiveContext + rkyv::validation::shared::SharedContext, __C::Error: rkyv::rancor::Source))
+    )
+)]
 pub struct ErasedModule {
     values: Vec<Option<ValueDef>>,
     functions: Vec<Option<Function>>,
@@ -44,9 +63,11 @@ pub struct ErasedModule {
     products: Vec<ProductSchema>,
     families: Vec<VariantFamily>,
     constructors: Vec<Constructor>,
+    #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
     foreigns: Vec<Arc<ForeignFunction>>,
     items: Vec<StatementId>,
     entry: Option<BlockId>,
+    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
     constant_index: HashMap<Constant, ConstantId>,
 }
 
@@ -195,6 +216,17 @@ impl ErasedModule {
         let id = RecGroupId(self.rec_groups.len() as u32);
         self.rec_groups.push(Some(group));
         id
+    }
+
+    /// Rebuild the skipped interning index from the constants arena — the
+    /// restore path's counterpart to the `archive` skip above.
+    pub(crate) fn reindex_constants(&mut self) {
+        self.constant_index = self
+            .constants
+            .iter()
+            .enumerate()
+            .map(|(index, constant)| (constant.clone(), ConstantId(index as u32)))
+            .collect();
     }
 
     /// Intern a constant by its exact bitwise identity, returning the shared

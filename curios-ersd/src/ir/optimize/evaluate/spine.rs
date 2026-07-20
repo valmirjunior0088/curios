@@ -311,6 +311,11 @@ impl Minter {
 
         // Materialize the spine locally, deep-copy the target, drop the
         // baked parameter and bind it to the spine ahead of the copied body.
+        // Dry-run first so a declined mint strands nothing.
+        {
+            let mut probe = ReifyBudget::new();
+            super::reify::reify_check(module, spine, &mut probe).ok()?;
+        }
         let mut prelude = Vec::new();
         let mut reify_budget = ReifyBudget::new();
         let spine_atom = reify(module, spine, &mut reify_budget, &mut prelude).ok()?;

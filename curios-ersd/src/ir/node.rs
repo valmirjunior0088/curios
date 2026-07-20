@@ -16,6 +16,10 @@ use super::{
 
 /// The single computation a `Let` statement evaluates and binds.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Rhs {
     /// A computation-free rebinding of an atom.
     Alias(ErasedAtom),
@@ -122,6 +126,10 @@ pub enum Rhs {
 /// binders receiving its payload (one per payload field, in order), and the
 /// block evaluated when it matches.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct VariantArm {
     pub constructor: ConstructorId,
     pub bindings: Vec<ValueId>,
@@ -130,6 +138,10 @@ pub struct VariantArm {
 
 /// One case of a [`Rhs::SwitchNat`]: a literal key and the block it selects.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct NatCase {
     pub key: u32,
     pub block: BlockId,
@@ -138,6 +150,10 @@ pub struct NatCase {
 /// The successor arm of a [`Rhs::FoldNat`]: binds the predecessor index and
 /// the induction hypothesis (the fold's result on the predecessor) in `block`.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct FoldNatStep {
     pub predecessor: ValueId,
     pub hypothesis: ValueId,
@@ -147,6 +163,10 @@ pub struct FoldNatStep {
 /// The step arm of a [`Rhs::FoldSequence`]: binds the current element, the
 /// suffix view after it, and the accumulated result in `block`.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct FoldSequenceStep {
     pub element: ValueId,
     pub suffix: ValueId,
@@ -157,6 +177,10 @@ pub struct FoldSequenceStep {
 /// A mutable-cell operation. Operand order: `New` takes the initial value,
 /// `Get` takes the cell, `Set` takes the cell then the new value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum CellOperation {
     New,
     Get,
@@ -176,6 +200,10 @@ impl CellOperation {
 /// A call-like intrinsic. `LstMap` takes the mapper then the list and runs the
 /// mapper once per element, in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Intrinsic {
     LstMap,
 }
@@ -191,6 +219,10 @@ impl Intrinsic {
 
 /// One statement — of a block, or of the module's top-level item list.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Statement {
     /// Bind `result` to the value of `rhs`.
     Let { result: ValueId, rhs: Rhs },
@@ -205,6 +237,10 @@ pub enum Statement {
 
 /// How a block leaves.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Terminator {
     /// Yield an atom as the block's result.
     Return(ErasedAtom),
@@ -216,6 +252,10 @@ pub enum Terminator {
 
 /// An ordered list of statements evaluated in sequence, then a terminator.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Block {
     pub statements: Vec<StatementId>,
     pub terminator: Terminator,
@@ -225,6 +265,10 @@ pub struct Block {
 /// list is stored — free values are derived by analysis, so no rewrite can
 /// leave a stale one behind.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Function {
     pub debug_name: Option<String>,
     pub params: Vec<ValueId>,
@@ -237,6 +281,10 @@ pub struct Function {
 /// eagerly in that order. The verifier admits exactly the language's recursion
 /// classes: cycles must pass through at least one function.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct RecGroup {
     pub functions: Vec<FunctionId>,
     pub values: Vec<RecValue>,
@@ -245,6 +293,10 @@ pub struct RecGroup {
 /// A computed member of a [`RecGroup`]: the value it binds and the block that
 /// eagerly initializes it, which may reference other members of the group.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct RecValue {
     pub value: ValueId,
     pub init: BlockId,

@@ -101,6 +101,32 @@ macro_rules! id {
         }
     };
 
+    ($name:ident, $prefix:literal; archive) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[cfg_attr(
+            feature = "archive",
+            derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+        )]
+        #[cfg_attr(
+            feature = "archive",
+            rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
+        )]
+        pub struct $name(pub(crate) u32);
+
+        impl $name {
+            /// The identity's raw arena index.
+            pub fn index(self) -> usize {
+                self.0 as usize
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, concat!($prefix, "{}"), self.0)
+            }
+        }
+    };
+
     ($name:ident, $prefix:literal, mint) => {
         $crate::id!($name, $prefix);
 

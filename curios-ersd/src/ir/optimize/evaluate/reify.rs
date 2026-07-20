@@ -14,12 +14,74 @@ use {
         copy::deep_copy_function,
         value::{Bail, Closure, Value},
     },
-    crate::{Constant, ErasedAtom, ErasedModule, Rhs, SequenceOp, Statement, StatementId},
-    std::{collections::BTreeMap, rc::Rc},
+    crate::{
+        Constant, ErasedAtom, ErasedModule, FunctionId, Rhs, SequenceOp, Statement, StatementId,
+        ir::walk::control_blocks,
+    },
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+    },
 };
 
+/// Check that `value` can fully materialize — the same budget charges and
+/// closure gates as [`reify`], with no module mutation — so a failed
+/// reification never strands half-emitted statements in the arena.
+pub(super) fn reify_check(
+    module: &ErasedModule,
+    value: &Value,
+    budget: &mut ReifyBudget,
+) -> Result<(), Bail> {
+    budget.node()?;
+    if let Some(constant) = value.as_constant() {
+        if let Constant::Bin(grain, value) = &constant {
+            budget.payload(value.len(*grain))?;
+        }
+        return Ok(());
+    }
+    match value {
+        Value::Lst(elements) => {
+            budget.payload(elements.len())?;
+            for element in elements.iter() {
+                reify_check(module, element, budget)?;
+            }
+            Ok(())
+        }
+        Value::Product(_, fields) | Value::Construct(_, fields) => {
+            for field in fields.iter() {
+                reify_check(module, field, budget)?;
+            }
+            Ok(())
+        }
+        Value::Closure(closure) => {
+            if !outward_functions_item_bound(module, closure.function) {
+                return Err(Bail::Unsupported);
+            }
+            for (_, held) in closure.env.borrow().iter() {
+                reify_check(module, held, budget)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// [`reify_check`] over a list of values.
+pub(super) fn reify_check_all(
+    module: &ErasedModule,
+    values: &[Value],
+    budget: &mut ReifyBudget,
+) -> Result<(), Bail> {
+    for value in values {
+        reify_check(module, value, budget)?;
+    }
+    Ok(())
+}
+
 /// Materialize `value` into `module`, appending construction statements to
-/// `out` in dependency order, and return the atom naming the result.
+/// `out` in dependency order, and return the atom naming the result. The
+/// caller has already run [`reify_check`], so failure cannot strand emitted
+/// statements.
 pub(super) fn reify(
     module: &mut ErasedModule,
     value: &Value,
@@ -93,6 +155,12 @@ fn reify_closure(
     budget: &mut ReifyBudget,
     out: &mut Vec<StatementId>,
 ) -> Result<ErasedAtom, Bail> {
+    // The copy keeps outward function references verbatim; every one must be
+    // item-bound to stay in scope at an arbitrary splice site — a reference
+    // to a *locally* bound function outside the copied region declines.
+    if !outward_functions_item_bound(module, closure.function) {
+        return Err(Bail::Unsupported);
+    }
     let captures = closure.env.borrow().clone();
     let mut substitution = BTreeMap::new();
     for (value, held) in &captures {
@@ -118,6 +186,64 @@ pub(super) fn reify_all(
         atoms.push(reify(module, value, budget, out)?);
     }
     Ok(atoms)
+}
+
+/// Whether every function the region rooted at `root` references outside
+/// itself is bound by a top-level item.
+fn outward_functions_item_bound(module: &ErasedModule, root: FunctionId) -> bool {
+    let mut item_bound = BTreeSet::<FunctionId>::new();
+    for &item in module.items() {
+        match module.statement(item) {
+            Some(Statement::Functions { functions }) => item_bound.extend(functions.iter()),
+            Some(Statement::Rec { group }) => {
+                if let Some(group) = module.rec_group(*group) {
+                    item_bound.extend(group.functions.iter());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut region = BTreeSet::new();
+    let mut outward = BTreeSet::new();
+    let mut work = vec![root];
+    while let Some(function) = work.pop() {
+        if !region.insert(function) {
+            continue;
+        }
+        let Some(definition) = module.function(function) else {
+            return false;
+        };
+        for block in control_blocks(module, definition.body) {
+            let Some(block) = module.block(block) else {
+                continue;
+            };
+            for &statement in &block.statements {
+                match module.statement(statement) {
+                    Some(Statement::Let { rhs, .. }) => {
+                        for atom in rhs.operands() {
+                            if let ErasedAtom::Function(referenced) = atom {
+                                outward.insert(referenced);
+                            }
+                        }
+                    }
+                    Some(Statement::Functions { functions }) => work.extend(functions),
+                    Some(Statement::Rec { group }) => {
+                        if let Some(group) = module.rec_group(*group) {
+                            work.extend(&group.functions);
+                        }
+                    }
+                    None => {}
+                }
+            }
+            if let Some(ErasedAtom::Function(referenced)) = block.terminator.atom() {
+                outward.insert(referenced);
+            }
+        }
+    }
+    outward
+        .into_iter()
+        .all(|function| region.contains(&function) || item_bound.contains(&function))
 }
 
 fn emit(module: &mut ErasedModule, out: &mut Vec<StatementId>, rhs: Rhs) -> ErasedAtom {

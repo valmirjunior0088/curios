@@ -10,7 +10,9 @@ use {
 
 #[cfg(test)]
 use {
-    curios_pipeline::{compile_entrypoint, compile_entrypoint_via_arena},
+    curios_pipeline::{
+        compile_entrypoint, compile_entrypoint_legacy, compile_entrypoint_via_arena,
+    },
     std::time::Duration,
 };
 
@@ -58,9 +60,10 @@ pub(crate) fn run_entrypoint<H: Host + Send + Sync + 'static>(
     run_wasm(&module, host, ForeignBindings::empty()).map(|_| ())
 }
 
-/// The arena-path twin of [`run_entrypoint`], compiling through
-/// [`compile_entrypoint_via_arena`] — the behavior-identity harness runs a
-/// program through both and compares the observable output.
+/// The fresh-erasure twin of [`run_entrypoint`], compiling through
+/// [`compile_entrypoint_via_arena`] — the behavior-identity harness compares
+/// production (archived-prefix replay), fresh arena erasure, and the legacy
+/// oracle on observable output.
 #[cfg(test)]
 pub(crate) fn run_text_via_arena<H: Host + Send + Sync + 'static>(
     timeout: Duration,
@@ -71,6 +74,26 @@ pub(crate) fn run_text_via_arena<H: Host + Send + Sync + 'static>(
         .parse::<curios_text::Entrypoint>()
         .map_err(|error| error.format())?;
     let (module, _foreigns) = compile_entrypoint_via_arena(
+        timeout,
+        &entrypoint,
+        curios_text::RootSource::none(),
+        |_| {},
+    )?;
+    run_wasm(&module, host, ForeignBindings::empty()).map(|_| ())
+}
+
+/// The legacy-oracle twin of [`run_entrypoint`], deleted with the legacy
+/// representation.
+#[cfg(test)]
+pub(crate) fn run_text_legacy<H: Host + Send + Sync + 'static>(
+    timeout: Duration,
+    source: &str,
+    host: H,
+) -> Result<(), String> {
+    let entrypoint = source
+        .parse::<curios_text::Entrypoint>()
+        .map_err(|error| error.format())?;
+    let (module, _foreigns) = compile_entrypoint_legacy(
         timeout,
         &entrypoint,
         curios_text::RootSource::none(),

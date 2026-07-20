@@ -41,7 +41,9 @@ mod environment;
 use environment::*;
 
 mod lower;
-pub use lower::erase_module_to_ir;
+pub use lower::{
+    ErasedPrelude, erase_module_to_ir, erase_module_with_prelude_to_ir, erase_prelude_to_ir_prefix,
+};
 use lower::{Lowering, Outcome};
 
 mod binding;

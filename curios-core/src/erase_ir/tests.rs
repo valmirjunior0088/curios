@@ -679,16 +679,20 @@ function ~f0$produce(~v1$u) {
 
 #[test]
 fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
-    // rec loop : Nat = loop — a value-level loop no initialization order
+    // rec a = b; b = a — a mutual value-level cycle no initialization order
     // satisfies. The verifier rejects it; erasure surfaces the diagnostic as
-    // an error, never a panic.
+    // an error, never a panic. (A *self*-knot `rec loop = loop` is admitted:
+    // the lowering drops it when unused, mirroring the legacy path.)
     let type_ = Term::prim(Prim::NatType);
     let body = Term::rec(
-        vec![("loop", type_.clone(), Term::free_var("loop"))],
-        Term::free_var("loop"),
+        vec![
+            ("a", type_.clone(), Term::free_var("b")),
+            ("b", type_.clone(), Term::free_var("a")),
+        ],
+        Term::free_var("a"),
     );
     let error = erase_module_to_ir(&mut context(), &module(Vec::new(), body), &type_)
-        .expect_err("the value-level loop is rejected");
+        .expect_err("the value-level cycle is rejected");
     assert!(
         matches!(error, Error::ErasedModuleInvalid { .. }),
         "{error:?}"

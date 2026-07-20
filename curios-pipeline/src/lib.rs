@@ -14,8 +14,8 @@ use {
 pub enum Stage<'a> {
     Text(&'a curios_text::Entrypoint),
     Core(&'a curios_core::Module),
-    Ersd(&'a curios_ersd::Module),
-    ErsdOptm(&'a curios_ersd::Module),
+    Ersd(&'a curios_ersd::ErasedModule),
+    ErsdOptm(&'a curios_ersd::ErasedModule),
     Cont(&'a curios_cont::CpsModule),
     ContOptm(&'a curios_cont::CpsModule),
     Wasm(&'a curios_wasm::Module),
@@ -150,10 +150,14 @@ where
     )
     .map_err(|error| error.format_with(&module))?;
 
+    observe(Stage::Ersd(&ersd_module));
+
     // Shrink before lowering: drop the items the program neither reaches nor
     // runs for effect, so Cont's whole-module fixpoint sees only the live
     // slice (see `curios_ersd::optimize_ir`).
     curios_ersd::optimize_ir(&mut ersd_module);
+
+    observe(Stage::ErsdOptm(&ersd_module));
 
     let cont_module = curios_ersd::lower_to_cont(&ersd_module);
     observe(Stage::Cont(&cont_module));
@@ -169,8 +173,62 @@ where
 }
 
 /// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
+///
+/// Production runs the arena erased representation: the archived prelude
+/// prefix is restored and replayed, only the user suffix erases, the arena
+/// transformations shrink and rebase the module, and the lowering into Cont
+/// makes every encoding decision once (see `curios_ersd::ir`).
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 pub fn compile_entrypoint<O>(
+    timeout: Duration,
+    entrypoint: &curios_text::Entrypoint,
+    loader: curios_text::RootSource,
+    mut observe: O,
+) -> Result<(curios_wasm::Module, ForeignStore), String>
+where
+    O: FnMut(Stage<'_>),
+{
+    let (module, core_type, foreigns) =
+        elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
+
+    let prefix = curios_prelude::restore_ersd_prelude();
+    let mut ersd_module = curios_prelude::with_prelude(|prelude| {
+        curios_core::erase_module_with_prelude_to_ir(
+            &mut curios_core::Context::new(timeout),
+            prelude.core(),
+            &module,
+            &core_type,
+            prefix,
+        )
+    })
+    .map_err(|error| error.format_with(&module))?;
+
+    observe(Stage::Ersd(&ersd_module));
+
+    curios_ersd::optimize_ir(&mut ersd_module);
+
+    observe(Stage::ErsdOptm(&ersd_module));
+
+    let cont_module = curios_ersd::lower_to_cont(&ersd_module);
+
+    observe(Stage::Cont(&cont_module));
+
+    let mut cont_optm_module = cont_module;
+    curios_cont::optimize(&mut cont_optm_module);
+
+    observe(Stage::ContOptm(&cont_optm_module));
+
+    let wasm_module = curios_cont::into_wasm(&cont_optm_module);
+
+    observe(Stage::Wasm(&wasm_module));
+
+    Ok((wasm_module, foreigns))
+}
+
+/// The retired production path, kept only as the migration's behavior oracle
+/// until the legacy representation is deleted. Emits no `ersd` stages.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
+pub fn compile_entrypoint_legacy<O>(
     timeout: Duration,
     entrypoint: &curios_text::Entrypoint,
     loader: curios_text::RootSource,
@@ -194,22 +252,14 @@ where
     })
     .map_err(|error| error.format_with(&module))?;
 
-    observe(Stage::Ersd(&ersd_module));
-
-    // *After* erase has type-checked everything, run the Ersd optimization
-    // pipeline in place: drop the items the entrypoint cannot reach, then re-base
-    // self-recursion onto accumulators and offsets (see `curios_ersd::optimize`).
     let mut ersd_optm_module = ersd_module;
     curios_ersd::optimize(&mut ersd_optm_module);
-
-    observe(Stage::ErsdOptm(&ersd_optm_module));
 
     let cont_module =
         curios_ersd::into_cont(&ersd_optm_module).map_err(|error| error.to_string())?;
 
     observe(Stage::Cont(&cont_module));
 
-    // Run the Cont optimization pipeline in place (see `curios_cont::optimize`).
     let mut cont_optm_module = cont_module;
     curios_cont::optimize(&mut cont_optm_module);
 

@@ -11,7 +11,7 @@ use {
     super::{
         budget::ReifyBudget,
         interpret::{Evaluator, Outcome, Residual},
-        reify::{reify, reify_all},
+        reify::{reify, reify_all, reify_check, reify_check_all},
         value::Value,
     },
     crate::{
@@ -45,13 +45,15 @@ enum Kind {
     Call(FunctionId, Vec<Value>),
 }
 
-/// Fold every closed call the interpreter can finish, module-wide.
+/// Fold every closed call the interpreter can finish, module-wide. Returns
+/// whether anything was installed — a curried chain folds one application per
+/// round, so the driver iterates until quiescent.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub(crate) fn evaluate_closed_terms(module: &mut ErasedModule) {
+pub(crate) fn evaluate_closed_terms(module: &mut ErasedModule) -> bool {
     let analysis = Analysis::analyze(module);
     let owners = index_owners(module);
     let planned = plan(module, &analysis, &owners);
-    apply(module, planned);
+    apply(module, planned)
 }
 
 fn plan(
@@ -106,9 +108,9 @@ fn plan(
 /// deep-copies a source function and must read the original module, not one
 /// where an earlier plan's rewrite left an alias whose definition is not yet
 /// spliced into its block.
-fn apply(module: &mut ErasedModule, planned: Vec<Planned>) {
+fn apply(module: &mut ErasedModule, planned: Vec<Planned>) -> bool {
     if planned.is_empty() {
-        return;
+        return false;
     }
 
     let mut rewrites = Vec::<(StatementId, ValueId, Rhs)>::new();
@@ -116,6 +118,20 @@ fn apply(module: &mut ErasedModule, planned: Vec<Planned>) {
     let mut touched = BTreeSet::<Owner>::new();
 
     for plan in planned {
+        // Dry-run first: a plan that cannot fully materialize is skipped
+        // before anything is emitted, so nothing is ever stranded.
+        {
+            let mut probe = ReifyBudget::new();
+            let ok = match &plan.kind {
+                Kind::Value(value) => reify_check(module, value, &mut probe).is_ok(),
+                Kind::Foreign(_, values) | Kind::Call(_, values) => {
+                    reify_check_all(module, values, &mut probe).is_ok()
+                }
+            };
+            if !ok {
+                continue;
+            }
+        }
         let mut spliced = Vec::new();
         let mut budget = ReifyBudget::new();
         let rhs = match plan.kind {
@@ -151,6 +167,7 @@ fn apply(module: &mut ErasedModule, planned: Vec<Planned>) {
         }
     }
 
+    let installed = !rewrites.is_empty();
     for (statement, result, rhs) in rewrites {
         module.set_statement(statement, Statement::Let { result, rhs });
     }
@@ -179,6 +196,7 @@ fn apply(module: &mut ErasedModule, planned: Vec<Planned>) {
     module
         .verify()
         .expect("closed-term evaluation preserves a verifiable module");
+    installed
 }
 
 fn is_same_call(

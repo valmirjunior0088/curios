@@ -79,6 +79,17 @@ fn main() {
         )
     });
 
+    let ersd_prelude = curios_core::erase_prelude_to_ir_prefix(
+        &mut curios_core::Context::new(Duration::from_secs(300)),
+        &core,
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "fixed prelude failed to erase into the arena prefix: {}",
+            error.format_with(&core)
+        )
+    });
+
     let image = PreludeArchive {
         schema: SCHEMA,
         fingerprint,
@@ -86,6 +97,7 @@ fn main() {
         core,
         body_type,
         ersd_items: ersd.items,
+        ersd_prelude,
     };
     let first = rkyv::to_bytes::<rkyv::rancor::Error>(&image)
         .expect("fixed prelude archive serialization failed");

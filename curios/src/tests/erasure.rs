@@ -135,11 +135,11 @@ fn char_and_str_certificates_erase_to_their_existing_carriers() {
 
     let ersd = ersd.expect("ersd stage observed");
     assert!(
-        ersd.contains("#/std/Char/to_nat(128512n)"),
+        ersd.contains("$/std/Char/to_nat(128512)"),
         "Char literal did not collapse to its Nat carrier:\n{ersd}"
     );
     assert!(
-        ersd.contains("#/std/Str/to_bytes(x\\c3\\a9\\f0\\9f\\98\\80)"),
+        ersd.contains("$/std/Str/to_bytes(x\"c3a9f09f9880\")"),
         "Str literal did not collapse to its packed Bytes carrier:\n{ersd}"
     );
 }

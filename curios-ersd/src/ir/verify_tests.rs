@@ -127,7 +127,9 @@ fn a_computed_only_cycle_is_rejected() {
 }
 
 #[test]
-fn a_direct_self_evaluation_is_rejected() {
+fn a_direct_self_knot_is_admitted() {
+    // `rec loop = loop` is language-accepted: unused, the lowering drops it;
+    // used, the lowering rejects it. The verifier admits the shape.
     let mut builder = ErsdBuilder::new();
     let value = builder.value(Some("value".into()));
     builder.open_block();
@@ -135,12 +137,10 @@ fn a_direct_self_evaluation_is_rejected() {
     let group = builder.rec_group(vec![], vec![(value, init)]);
     builder.item_rec(group);
     builder.open_block();
-    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Value(value)));
+    let zero = builder.constant(Constant::Nat(0));
+    let entry = builder.seal_block(Terminator::Return(ErasedAtom::Constant(zero)));
     builder.set_entry(entry);
-    let error = builder
-        .finalize()
-        .expect_err("self-evaluation cannot initialize");
-    assert!(error.0.contains("before its initialization"), "{error}");
+    builder.finalize().expect("the self-knot is admitted");
 }
 
 #[test]

@@ -598,12 +598,16 @@ impl<'m> Verifier<'m> {
                 }
                 // Recursion admission: inside an eager initializer (and not
                 // inside a function constructed since entering it), a computed
-                // member of the group may only be an *earlier* one.
+                // member of the group may only be an earlier one — or the
+                // member being initialized itself. A self-knot is admitted
+                // because the language accepts it: unused, the lowering drops
+                // it (mirroring the legacy path); used, the lowering rejects
+                // it with a diagnostic. Forward references stay unsatisfiable.
                 for context in &self.init_contexts {
                     if self.function_depth == context.function_depth
                         && let Some(position) =
                             context.computed.iter().position(|&member| member == value)
-                        && position >= context.limit
+                        && position > context.limit
                     {
                         return Err(VerifyError(format!(
                             "{} evaluates computed group member {value} before \

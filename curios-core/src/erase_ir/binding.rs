@@ -8,14 +8,16 @@
 use super::{BTreeMap, BTreeSet, Bound, Context, Error, Item, Lowering, Module, Outcome};
 
 impl Lowering {
-    /// Erase every top-level item, in dominance order (see
-    /// [`dominance_order`]).
+    /// Erase every top-level item from `start` on, in dominance order among
+    /// themselves (see [`dominance_order`]); items before `start` are an
+    /// already-erased prefix whose bindings the environment carries.
     pub(super) fn erase_items(
         &mut self,
         context: &mut Context,
         module: &Module,
+        start: usize,
     ) -> Result<(), Error> {
-        for index in dominance_order(module) {
+        for index in dominance_order(module, start) {
             let item = &module.items[index];
             // Stamp the item's declaring module so the re-derived types run
             // the struct representation-privacy check against the right
@@ -61,11 +63,11 @@ impl Lowering {
 /// Independent items keep their flat order (lowest-index-ready tiebreak). A
 /// value cycle across top-level items is unexpressible, so the stall fallback
 /// that emits the lowest remaining item only guarantees termination.
-fn dominance_order(module: &Module) -> Vec<usize> {
-    let count = module.items.len();
+fn dominance_order(module: &Module, start: usize) -> Vec<usize> {
+    let items = &module.items[start..];
+    let count = items.len();
 
-    let owner = module
-        .items
+    let owner = items
         .iter()
         .enumerate()
         .flat_map(|(index, item)| {
@@ -75,8 +77,9 @@ fn dominance_order(module: &Module) -> Vec<usize> {
         })
         .collect::<BTreeMap<&str, usize>>();
 
-    let dependencies = module
-        .items
+    // A reference to an item before `start` is already bound and carries no
+    // edge; only references among the suffix items order the sort.
+    let dependencies = items
         .iter()
         .enumerate()
         .map(|(index, item)| {
@@ -98,7 +101,7 @@ fn dominance_order(module: &Module) -> Vec<usize> {
         emitted[ready] = true;
         order.push(ready);
     }
-    order
+    order.into_iter().map(|index| index + start).collect()
 }
 
 /// Every global name an item references: the free variables of its types and

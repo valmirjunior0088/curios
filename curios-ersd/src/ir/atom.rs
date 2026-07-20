@@ -13,6 +13,10 @@ use {
 /// An atomic operand: a lexically bound value, a bound function used as a
 /// value, or an interned constant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum ErasedAtom {
     Value(ValueId),
     Function(FunctionId),
@@ -29,6 +33,10 @@ pub enum ErasedAtom {
 /// products, variants, and lists with constant elements are built by
 /// construction statements over these leaves.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Constant {
     /// The unit value — the value of a retained-but-erased slot.
     Unit,

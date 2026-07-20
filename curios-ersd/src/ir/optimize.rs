@@ -35,7 +35,14 @@ pub fn optimize_ir(module: &mut ErasedModule) {
         .expect("a module entering optimization verifies");
     let proven_pure = evaluate::prove_eager_groups_pure(module);
     prune::prune_unreachable(module, &proven_pure);
-    evaluate::evaluate_closed_terms(module);
+    // A curried chain folds one application per round; eight rounds cover
+    // any corpus chain with room to spare, and the shared pass budget caps
+    // the total work regardless.
+    for _ in 0..8 {
+        if !evaluate::evaluate_closed_terms(module) {
+            break;
+        }
+    }
     evaluate::specialize_literal_spines(module);
     rebase::rebase_monoid_recursion(module);
     let proven_pure = evaluate::prove_eager_groups_pure(module);

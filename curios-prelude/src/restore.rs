@@ -112,6 +112,15 @@ pub fn restore_ersd_items() -> Vec<curios_ersd::Item> {
         .unwrap_or_else(|error| panic!("validated Ersd prefix failed to restore: {error}"))
 }
 
+/// Restore the arena prelude prefix — the erased module and environment
+/// production replay resumes over. Deserialized fresh per call, like
+/// [`restore_ersd_items`], so a compile can never poison a later one.
+#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
+pub fn restore_ersd_prelude() -> curios_core::ErasedPrelude {
+    rkyv::deserialize::<curios_core::ErasedPrelude, rkyv::rancor::Error>(&archived().ersd_prelude)
+        .unwrap_or_else(|error| panic!("validated arena prelude prefix failed to restore: {error}"))
+}
+
 #[cfg(test)]
 mod tests {
     use {super::*, crate::SYNTAX, std::collections::BTreeSet};
