@@ -1,0 +1,1685 @@
+-- TOML 1.0.0 codec over native `Int` and binary32 `Flt`.
+--
+-- Public contract:
+--   decode : (Str) -> Result(Map(Toml), Str) — consumes exactly one complete TOML
+--     1.0.0 document (trailing non-trivia input is rejected) and builds the root
+--     table, enforcing table-construction semantics: duplicate keys, table
+--     redefinition, sealed inline tables, table/value and table/array conflicts,
+--     appending to static arrays, invalid parent selection through arrays of
+--     tables, and dotted-key redefinitions are all errors.
+--   encode : (Map(Toml)) -> Result(Str, Str) — emits one deterministic document in
+--     the map's structural order (root key/value lines first, then table sections;
+--     tables inside arrays as inline tables). It fails, rather than emitting
+--     invalid TOML, on a non-UTF-8 map key or an invalid calendar/clock/offset
+--     value. Every emitted document decodes back to the same value, modulo the
+--     implementation-defined NaN encoding.
+--
+-- Numeric policy — all conversion is codec-owned; `Nat/of_str` and `Flt/of_str`
+-- are never used, so no accepted lexeme can silently wrap:
+--   Integers live in the boxed-i31 envelope, exactly -1073741824 through
+--   1073741823 in every radix. Each accumulation step first compares the
+--   accumulator against a per-radix wrap-safety ceiling (floor((2^32 - 1 -
+--   maxdigit) / radix), a source-time constant), so the u32 carrier computes the
+--   next magnitude exactly; the magnitude is then compared exactly against the
+--   sign-specific bound.
+--   Finite floats honor at most nine significant decimal digits, accumulated
+--   exactly in `Nat`; further fraction digits are discarded and further integer
+--   digits shift the decimal exponent. Decimal exponents saturate at +/-2000
+--   (binary32 overflows to infinity / underflows to zero well before that
+--   bound), and the significand is scaled by repeated binary32 multiplication —
+--   deterministic, not correctly rounded. `inf`, `nan`, and signed zero use
+--   explicit `Flt/of_le_bytes` bit patterns, never arithmetic; `-nan` maps to
+--   the single implementation-defined NaN encoding.
+--
+-- Product limits: integer range is the i31 envelope (narrower than TOML's
+-- recommended 64-bit support); finite floats are binary32 with the nine-digit,
+-- not-correctly-rounded conversion above; NaN payload and sign are
+-- implementation-defined. Calendar types are owned here because `/std/time` is
+-- monotonic-only; `offset_minutes` covers RFC 3339's -23:59 through +23:59, and
+-- `nanosecond` truncates (never rounds) past nine fractional digits.
+
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
+
+-- ===================== data model =====================
+
+pub struct Date : pub Type {
+    year : Nat,
+    month : Nat,
+    day : Nat,
+}
+
+pub struct Time : pub Type {
+    hour : Nat,
+    minute : Nat,
+    second : Nat,
+    nanosecond : Nat,
+}
+
+pub struct OffsetDateTime : pub Type {
+    date : Date,
+    time : Time,
+    offset_minutes : Int,
+}
+
+pub struct LocalDateTime : pub Type {
+    date : Date,
+    time : Time,
+}
+
+pub induct Toml : pub Type
+| str(Str)
+| int(Int)
+| flt(Flt)
+| bool(Bool)
+| offset_date_time(OffsetDateTime)
+| local_date_time(LocalDateTime)
+| local_date(Date)
+| local_time(Time)
+| arr(Lst(Toml))
+| table(Map(Toml))
+end
+
+pub use Toml/*;
+
+-- ===================== calendar validation =====================
+
+let leap(year : Nat) -> Bool =
+    match
+    | year % 400 == 0 => true
+    | year % 100 == 0 => false
+    | year % 4 == 0 => true
+    | _ => false
+    end;
+
+let days_in(year : Nat, month : Nat) -> Nat =
+    match month
+    | 2 => match leap(year) | true => 29 | false => 28 end
+    | 4 => 30
+    | 6 => 30
+    | 9 => 30
+    | 11 => 30
+    | _ => 31
+    end;
+
+let date_ok(d : Date) -> Bool =
+    d.year <= 9999 && Nat/in_range(d.month, 1, 12) && Nat/in_range(d.day, 1, days_in(d.year, d.month));
+
+-- second 60 is admitted for RFC 3339 leap seconds
+let time_ok(t : Time) -> Bool =
+    t.hour <= 23 && t.minute <= 59 && t.second <= 60 && t.nanosecond <= 999999999;
+
+let offset_ok(mins : Int) -> Bool =
+    Int/abs(mins) <= 1439;
+
+-- ===================== table construction (semantic fold) =====================
+
+-- A resolved path segment: `at` carries the array-of-tables element index the
+-- segment addresses, so repeated `[[a]]` elements have distinct side-table keys.
+induct Seg : Type
+| plain(Str)
+| at(Str, Nat)
+end
+
+-- Construction metadata for a path in the side table. Plain values and static
+-- arrays get no entry: their presence in the root rejects duplicates, and the
+-- absence of `many()` is what seals a static array.
+induct State : Type
+| header()
+| implicit()
+| dotted()
+| inline()
+| many()
+end
+
+induct Act : Type
+| act_table()
+| act_many()
+| act_value(Toml)
+end
+
+struct Build : Type {
+    root : Map(Toml),
+    side : Map(State),
+    scope : Lst(Seg),
+}
+
+let build_empty : Build =
+    Build { root = Map/empty(@Toml), side = Map/empty(@State), scope = [] };
+
+-- Injective side-table key: tag, decimal name length, ':', name bytes, and for
+-- `at` a '#'-separated decimal element index closed by ';'.
+let seg_key(pre : Bytes, seg : Seg) -> Bytes =
+    match seg
+    | plain(name) =>
+        let nb = Str/to_bytes(name);
+        x\..pre\70\..Str/to_bytes(Nat/to_str(Bytes/len(nb)))\3a\..nb
+    | at(name, index) =>
+        let nb = Str/to_bytes(name);
+        x\..pre\61\..Str/to_bytes(Nat/to_str(Bytes/len(nb)))\3a\..nb\23\..Str/to_bytes(Nat/to_str(index))\3b
+    end;
+
+let seg_name(seg : Seg) -> Str =
+    match seg
+    | plain(name) => name
+    | at(name, _) => name
+    end;
+
+let walk_final(m : Map(Toml), side : Map(State), pre : Bytes, name : Str, act : Act)
+    -> Result({Map(Toml), Map(State), Lst(Seg)}, Str) =
+    let kf = seg_key(pre, Seg/plain(name));
+    match act
+    | act_table() =>
+        match Map/get(m, name)
+        | none() =>
+            Result/success((
+                Map/set(m, name, Toml/table(Map/empty(@Toml))),
+                Map/set(side, kf, State/header()),
+                [Seg/plain(name)]))
+        | some(existing) =>
+            match existing
+            | table(_) =>
+                match Map/get(side, kf)
+                | some(st) =>
+                    match st
+                    | implicit() => Result/success((m, Map/set(side, kf, State/header()), [Seg/plain(name)]))
+                    | header() => Result/failure("table defined more than once")
+                    | dotted() => Result/failure("cannot redefine a table created by dotted keys")
+                    | _ => Result/failure("cannot extend an inline table")
+                    end
+                | none() => Result/failure("cannot extend an inline table")
+                end
+            | arr(_) => Result/failure("cannot redefine an array as a table")
+            | _ => Result/failure("key conflicts with an existing value")
+            end
+        end
+    | act_many() =>
+        match Map/get(m, name)
+        | none() =>
+            Result/success((
+                Map/set(m, name, Toml/arr([Toml/table(Map/empty(@Toml))])),
+                Map/set(side, kf, State/many()),
+                [Seg/at(name, 0)]))
+        | some(existing) =>
+            match existing
+            | arr(items) =>
+                match Map/get(side, kf)
+                | some(st) =>
+                    match st
+                    | many() =>
+                        Result/success((
+                            Map/set(m, name, Toml/arr([..items, Toml/table(Map/empty(@Toml))])),
+                            side,
+                            [Seg/at(name, Lst/len(items))]))
+                    | _ => Result/failure("cannot append to a static array")
+                    end
+                | none() => Result/failure("cannot append to a static array")
+                end
+            | table(_) => Result/failure("cannot redefine a table as an array of tables")
+            | _ => Result/failure("key conflicts with an existing value")
+            end
+        end
+    | act_value(v) =>
+        match Map/get(m, name)
+        | none() =>
+            let side2 : Map(State) =
+                match v
+                | table(_) => Map/set(side, kf, State/inline())
+                | _ => side
+                end;
+            Result/success((Map/set(m, name, v), side2, [Seg/plain(name)]))
+        | some(_) => Result/failure("duplicate key")
+        end
+    end;
+
+-- Resolve a segment path against the root, rebuilding the map spine persistently
+-- and threading side-table updates. The first `unchecked` segments are the
+-- already-validated scope prefix and are traversed without construction checks.
+rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), unchecked : Nat, act : Act)
+    -> Result({Map(Toml), Map(State), Lst(Seg)}, Str) =
+    match segs
+    | [] => Result/failure("empty key path")
+    | [seg, ..rest] =>
+        match rest
+        | [] => walk_final(m, side, pre, seg_name(seg), act)
+        | [_, .._] =>
+            match unchecked > 0
+            | true =>
+                match seg
+                | plain(name) =>
+                    match Map/get(m, name)
+                    | some(existing) =>
+                        match existing
+                        | table(inner) =>
+                            match walk(inner, side, seg_key(pre, seg), rest, unchecked - 1, act)
+                            | success((inner2, side2, res)) =>
+                                Result/success((Map/set(m, name, Toml/table(inner2)), side2, [seg, ..res]))
+                            | failure(msg) => Result/failure(msg)
+                            end
+                        | _ => Result/failure("scope is not a table")
+                        end
+                    | none() => Result/failure("scope is missing")
+                    end
+                | at(name, index) =>
+                    match Map/get(m, name)
+                    | some(existing) =>
+                        match existing
+                        | arr(items) =>
+                            match Lst/get(items, index)
+                            | some(elem) =>
+                                match elem
+                                | table(inner) =>
+                                    match walk(inner, side, seg_key(pre, seg), rest, unchecked - 1, act)
+                                    | success((inner2, side2, res)) =>
+                                        let items2 = [
+                                            ..Lst/slice(items, 0, index),
+                                            Toml/table(inner2),
+                                            ..Lst/slice(items, index + 1, Lst/len(items)),
+                                        ];
+                                        Result/success((Map/set(m, name, Toml/arr(items2)), side2, [seg, ..res]))
+                                    | failure(msg) => Result/failure(msg)
+                                    end
+                                | _ => Result/failure("scope element is not a table")
+                                end
+                            | none() => Result/failure("scope element is missing")
+                            end
+                        | _ => Result/failure("scope is not an array of tables")
+                        end
+                    | none() => Result/failure("scope is missing")
+                    end
+                end
+            | false =>
+                let name = seg_name(seg);
+                let kp = seg_key(pre, Seg/plain(name));
+                match Map/get(m, name)
+                | none() =>
+                    let created : State =
+                        match act
+                        | act_value(_) => State/dotted()
+                        | _ => State/implicit()
+                        end;
+                    match walk(Map/empty(@Toml), Map/set(side, kp, created), kp, rest, 0, act)
+                    | success((inner2, side2, res)) =>
+                        Result/success((Map/set(m, name, Toml/table(inner2)), side2, [Seg/plain(name), ..res]))
+                    | failure(msg) => Result/failure(msg)
+                    end
+                | some(existing) =>
+                    match existing
+                    | table(inner) =>
+                        let permitted : Result({}, Str) =
+                            match Map/get(side, kp)
+                            | some(st) =>
+                                match act
+                                | act_value(_) =>
+                                    match st
+                                    | dotted() => Result/success(())
+                                    | inline() => Result/failure("cannot extend an inline table")
+                                    | _ => Result/failure("cannot extend a table defined elsewhere with dotted keys")
+                                    end
+                                | _ =>
+                                    match st
+                                    | header() => Result/success(())
+                                    | implicit() => Result/success(())
+                                    | dotted() => Result/failure("cannot extend a table created by dotted keys")
+                                    | _ => Result/failure("cannot extend an inline table")
+                                    end
+                                end
+                            | none() => Result/failure("cannot extend an inline table")
+                            end;
+                        match permitted
+                        | failure(msg) => Result/failure(msg)
+                        | success(_) =>
+                            match walk(inner, side, kp, rest, 0, act)
+                            | success((inner2, side2, res)) =>
+                                Result/success((Map/set(m, name, Toml/table(inner2)), side2, [Seg/plain(name), ..res]))
+                            | failure(msg) => Result/failure(msg)
+                            end
+                        end
+                    | arr(items) =>
+                        let is_many : Bool =
+                            match Map/get(side, kp)
+                            | some(st) =>
+                                match st
+                                | many() => true
+                                | _ => false
+                                end
+                            | none() => false
+                            end;
+                        match is_many
+                        | false => Result/failure("cannot extend a static array")
+                        | true =>
+                            match act
+                            | act_value(_) => Result/failure("cannot extend an array of tables with dotted keys")
+                            | _ =>
+                                let index = Lst/len(items) - 1;
+                                let seg2 = Seg/at(name, index);
+                                match Lst/get(items, index)
+                                | some(elem) =>
+                                    match elem
+                                    | table(inner) =>
+                                        match walk(inner, side, seg_key(pre, seg2), rest, 0, act)
+                                        | success((inner2, side2, res)) =>
+                                            let items2 = [
+                                                ..Lst/slice(items, 0, index),
+                                                Toml/table(inner2),
+                                            ];
+                                            Result/success((Map/set(m, name, Toml/arr(items2)), side2, [seg2, ..res]))
+                                        | failure(msg) => Result/failure(msg)
+                                        end
+                                    | _ => Result/failure("array element is not a table")
+                                    end
+                                | none() => Result/failure("array of tables is empty")
+                                end
+                            end
+                        end
+                    | _ => Result/failure("key conflicts with an existing value")
+                    end
+                end
+            end
+        end
+    end;
+
+let plains(names : Lst(Str)) -> Lst(Seg) =
+    Lst/map(names, (n) => Seg/plain(n));
+
+let apply_assign(b : Build, path : Lst(Str), v : Toml) -> Result(Build, Str) =
+    match walk(b.root, b.side, x\, [..b.scope, ..plains(path)], Lst/len(b.scope), Act/act_value(v))
+    | success((root2, side2, _)) => Result/success(Build { root = root2, side = side2, scope = b.scope })
+    | failure(msg) => Result/failure(msg)
+    end;
+
+let apply_header(b : Build, path : Lst(Str)) -> Result(Build, Str) =
+    match walk(b.root, b.side, x\, plains(path), 0, Act/act_table())
+    | success((root2, side2, resolved)) => Result/success(Build { root = root2, side = side2, scope = resolved })
+    | failure(msg) => Result/failure(msg)
+    end;
+
+let apply_aot(b : Build, path : Lst(Str)) -> Result(Build, Str) =
+    match walk(b.root, b.side, x\, plains(path), 0, Act/act_many())
+    | success((root2, side2, resolved)) => Result/success(Build { root = root2, side = side2, scope = resolved })
+    | failure(msg) => Result/failure(msg)
+    end;
+
+-- Inline tables reuse the same construction rules, scoped to the literal.
+let inline_fold(pairs : Lst({Lst(Str), Toml})) -> Result(Map(Toml), Str) =
+    let start : Result(Build, Str) = Result/success(build_empty);
+    match Lst/fold(pairs, start, (pair, acc) =>
+        Result/bind(acc, (b) => apply_assign(b, pair.0, pair.1)))
+    | success(b) => Result/success(b.root)
+    | failure(msg) => Result/failure(msg)
+    end;
+
+-- ===================== byte predicates and shared scanners =====================
+
+let is_ws_byte(b : Byte) -> Bool =
+    let n = Byte/to_nat(b);
+    n == 0x20 || n == 0x09;
+
+let is_bare_byte(b : Byte) -> Bool =
+    let n = Byte/to_nat(b);
+    Nat/in_range(n, 0x41, 0x5A) || Nat/in_range(n, 0x61, 0x7A)
+        || Nat/in_range(n, 0x30, 0x39) || n == 0x2D || n == 0x5F;
+
+let is_comment_byte(b : Byte) -> Bool =
+    let n = Byte/to_nat(b);
+    n == 0x09 || Nat/in_range(n, 0x20, 0x7E) || n >= 0x80;
+
+let byte_at_is(input : Bytes, i : Nat, pred : (Nat) -> Bool) -> Bool =
+    match Bytes/get(input, i)
+    | some(b) => pred(Byte/to_nat(b))
+    | none() => false
+    end;
+
+let hex_val(n : Nat) -> Option(Nat) =
+    match
+    | Nat/in_range(n, 0x30, 0x39) => Option/some(n - 0x30)
+    | Nat/in_range(n, 0x61, 0x66) => Option/some(n - 0x61 + 10)
+    | Nat/in_range(n, 0x41, 0x46) => Option/some(n - 0x41 + 10)
+    | _ => Option/none()
+    end;
+
+let take_literal(literal : Str) -> Parse({}) =
+    Parse {
+        run(input, pos) =
+            let lit = Str/to_bytes(literal);
+            let (stop, matched) =
+                match Bytes/len(lit) : {Nat, Bool}
+                | 0 => (pos, true)
+                | step + 1; ih =>
+                    let (cur, live) = ih;
+                    match live
+                    | false => ih
+                    | true =>
+                        match Nat/try_lt(cur, Bytes/len(input))
+                        | none() => (cur, false)
+                        | some(ok) =>
+                            match Option/unwrap_or(Bytes/get(lit, step), 0) == Bytes/at(input, cur, ok)
+                            | true => (cur + 1, true)
+                            | false => (cur, false)
+                            end
+                        end
+                    end
+                end;
+            match matched
+            | true => Result/success((stop, ()))
+            | false => Result/failure("unexpected literal")
+            end
+    };
+
+let ws : Parse({}) =
+    Parse/map(Parse/take_while(is_ws_byte), (_) => ());
+
+let comment : Parse({}) =
+    let _ = Parse/take_byte(0x23)!;
+    Parse/map(Parse/take_while(is_comment_byte), (_) => ());
+
+let newline : Parse({}) =
+    Parse/or(
+        Parse/map(Parse/and(Parse/take_byte(0x0D), Parse/take_byte(0x0A)), (_) => ()),
+        Parse/map(Parse/take_byte(0x0A), (_) => ()));
+
+let trivia : Parse({}) =
+    Parse/map(
+        Parse/many0(
+            Parse/or(Parse/map(Parse/take_byte(0x20), (_) => ()),
+            Parse/or(Parse/map(Parse/take_byte(0x09), (_) => ()),
+            Parse/or(newline, comment)))),
+        (_) => ());
+
+let line_end : Parse({}) =
+    let _ = ws!;
+    let _ = Parse/or(comment, Parse/pure(()))!;
+    Parse/or(newline, Parse/eof);
+
+-- ===================== strings =====================
+
+rec hex_scan(input : Bytes, cur : Nat, count : Nat, acc : Nat) -> Result({Nat, Nat}, Str) =
+    match count
+    | 0 => Result/success((cur, acc))
+    | pred + 1 =>
+        match Bytes/get(input, cur)
+        | none() => Result/failure("unterminated escape")
+        | some(b) =>
+            match hex_val(Byte/to_nat(b))
+            | some(v) => hex_scan(input, cur + 1, pred, acc * 0x10 + v)
+            | none() => Result/failure("invalid hex digit in escape")
+            end
+        end
+    end;
+
+let scalar_utf8(code : Nat) -> Result(Bytes, Str) =
+    match Char/of_nat(code)
+    | some(c) => Result/success(Char/to_utf8(c))
+    | none() => Result/failure("invalid Unicode scalar in escape")
+    end;
+
+-- one basic-string escape, `cur` positioned after the backslash
+let escape_scan(input : Bytes, cur : Nat) -> Result({Nat, Bytes}, Str) =
+    match Bytes/get(input, cur)
+    | none() => Result/failure("unterminated escape")
+    | some(b) =>
+        match Byte/to_nat(b)
+        | 0x62 => Result/success((cur + 1, Bytes/append(x\, 0x08)))
+        | 0x74 => Result/success((cur + 1, Bytes/append(x\, 0x09)))
+        | 0x6E => Result/success((cur + 1, Bytes/append(x\, 0x0A)))
+        | 0x66 => Result/success((cur + 1, Bytes/append(x\, 0x0C)))
+        | 0x72 => Result/success((cur + 1, Bytes/append(x\, 0x0D)))
+        | 0x22 => Result/success((cur + 1, Bytes/append(x\, 0x22)))
+        | 0x5C => Result/success((cur + 1, Bytes/append(x\, 0x5C)))
+        | 0x75 =>
+            match hex_scan(input, cur + 1, 4, 0)
+            | success((next, code)) => Result/map_success(scalar_utf8(code), (u) => (next, u))
+            | failure(msg) => Result/failure(msg)
+            end
+        | 0x55 =>
+            match hex_scan(input, cur + 1, 8, 0)
+            | success((next, code)) => Result/map_success(scalar_utf8(code), (u) => (next, u))
+            | failure(msg) => Result/failure(msg)
+            end
+        | _ => Result/failure("unknown escape")
+        end
+    end;
+
+let basic_str_scan : Parse(Bytes) =
+    Parse {
+        run(input, pos) =
+            rec go(cur : Nat, acc : Bytes) -> Result({Nat, Bytes}, Str) =
+                match Bytes/get(input, cur)
+                | none() => Result/failure("unterminated string")
+                | some(b) =>
+                    let n = Byte/to_nat(b);
+                    match
+                    | n == 0x22 => Result/success((cur + 1, acc))
+                    | n == 0x5C =>
+                        match escape_scan(input, cur + 1)
+                        | success((next, chunk)) => go(next, x\..acc\..chunk)
+                        | failure(msg) => Result/failure(msg)
+                        end
+                    | n == 0x09 => go(cur + 1, Bytes/append(acc, b))
+                    | n < 0x20 => Result/failure("control character in string")
+                    | n == 0x7F => Result/failure("control character in string")
+                    | _ => go(cur + 1, Bytes/append(acc, b))
+                    end
+                end;
+            match byte_at_is(input, pos, (n) => n == 0x22)
+            | true => go(pos + 1, x\)
+            | false => Result/failure("expected string")
+            end
+    };
+
+let literal_str_scan : Parse(Bytes) =
+    Parse {
+        run(input, pos) =
+            rec go(cur : Nat, acc : Bytes) -> Result({Nat, Bytes}, Str) =
+                match Bytes/get(input, cur)
+                | none() => Result/failure("unterminated string")
+                | some(b) =>
+                    let n = Byte/to_nat(b);
+                    match
+                    | n == 0x27 => Result/success((cur + 1, acc))
+                    | n == 0x09 => go(cur + 1, Bytes/append(acc, b))
+                    | n < 0x20 => Result/failure("control character in string")
+                    | n == 0x7F => Result/failure("control character in string")
+                    | _ => go(cur + 1, Bytes/append(acc, b))
+                    end
+                end;
+            match byte_at_is(input, pos, (n) => n == 0x27)
+            | true => go(pos + 1, x\)
+            | false => Result/failure("expected string")
+            end
+    };
+
+rec quote_run(input : Bytes, cur : Nat, quote : Nat, acc : Nat) -> Nat =
+    match byte_at_is(input, cur, (n) => n == quote)
+    | true => quote_run(input, cur + 1, quote, acc + 1)
+    | false => acc
+    end;
+
+let quotes(quote : Byte, count : Nat) -> Bytes =
+    match count
+    | 0 => x\
+    | pred + 1; ih => Bytes/append(ih, quote)
+    end;
+
+let is_crlf_at(input : Bytes, cur : Nat) -> Bool =
+    byte_at_is(input, cur, (n) => n == 0x0D) && byte_at_is(input, cur + 1, (n) => n == 0x0A);
+
+-- after a line-ending backslash: whitespace, then at least one newline, then
+-- any further whitespace and newlines
+rec trim_scan(input : Bytes, cur : Nat, seen_nl : Bool) -> Result(Nat, Str) =
+    let stop : Result(Nat, Str) =
+        match seen_nl
+        | true => Result/success(cur)
+        | false => Result/failure("invalid escape")
+        end;
+    match Bytes/get(input, cur)
+    | none() => stop
+    | some(b) =>
+        let n = Byte/to_nat(b);
+        match
+        | n == 0x20 => trim_scan(input, cur + 1, seen_nl)
+        | n == 0x09 => trim_scan(input, cur + 1, seen_nl)
+        | n == 0x0A => trim_scan(input, cur + 1, true)
+        | n == 0x0D =>
+            match is_crlf_at(input, cur)
+            | true => trim_scan(input, cur + 2, true)
+            | false => Result/failure("bare carriage return")
+            end
+        | _ => stop
+        end
+    end;
+
+-- content of a multiline basic string, after the opening delimiter
+let ml_basic_scan : Parse(Bytes) =
+    Parse {
+        run(input, pos) =
+            rec go(cur : Nat, acc : Bytes) -> Result({Nat, Bytes}, Str) =
+                match Bytes/get(input, cur)
+                | none() => Result/failure("unterminated string")
+                | some(b) =>
+                    let n = Byte/to_nat(b);
+                    match
+                    | n == 0x22 =>
+                        let q = quote_run(input, cur, 0x22, 0);
+                        match
+                        | q >= 6 => Result/failure("too many quotes")
+                        | q >= 3 => Result/success((cur + q, x\..acc\..quotes(b, q - 3)))
+                        | _ => go(cur + q, x\..acc\..quotes(b, q))
+                        end
+                    | n == 0x5C =>
+                        match byte_at_is(input, cur + 1, (n2) => n2 == 0x20 || n2 == 0x09 || n2 == 0x0A || n2 == 0x0D)
+                        | true =>
+                            match trim_scan(input, cur + 1, false)
+                            | success(next) => go(next, acc)
+                            | failure(msg) => Result/failure(msg)
+                            end
+                        | false =>
+                            match escape_scan(input, cur + 1)
+                            | success((next, chunk)) => go(next, x\..acc\..chunk)
+                            | failure(msg) => Result/failure(msg)
+                            end
+                        end
+                    | n == 0x0A => go(cur + 1, Bytes/append(acc, b))
+                    | n == 0x0D =>
+                        match is_crlf_at(input, cur)
+                        | true => go(cur + 2, x\..acc\0d\0a)
+                        | false => Result/failure("bare carriage return")
+                        end
+                    | n == 0x09 => go(cur + 1, Bytes/append(acc, b))
+                    | n < 0x20 => Result/failure("control character in string")
+                    | n == 0x7F => Result/failure("control character in string")
+                    | _ => go(cur + 1, Bytes/append(acc, b))
+                    end
+                end;
+            let start =
+                match
+                | byte_at_is(input, pos, (n) => n == 0x0A) => pos + 1
+                | is_crlf_at(input, pos) => pos + 2
+                | _ => pos
+                end;
+            go(start, x\)
+    };
+
+-- content of a multiline literal string, after the opening delimiter
+let ml_literal_scan : Parse(Bytes) =
+    Parse {
+        run(input, pos) =
+            rec go(cur : Nat, acc : Bytes) -> Result({Nat, Bytes}, Str) =
+                match Bytes/get(input, cur)
+                | none() => Result/failure("unterminated string")
+                | some(b) =>
+                    let n = Byte/to_nat(b);
+                    match
+                    | n == 0x27 =>
+                        let q = quote_run(input, cur, 0x27, 0);
+                        match
+                        | q >= 6 => Result/failure("too many quotes")
+                        | q >= 3 => Result/success((cur + q, x\..acc\..quotes(b, q - 3)))
+                        | _ => go(cur + q, x\..acc\..quotes(b, q))
+                        end
+                    | n == 0x0A => go(cur + 1, Bytes/append(acc, b))
+                    | n == 0x0D =>
+                        match is_crlf_at(input, cur)
+                        | true => go(cur + 2, x\..acc\0d\0a)
+                        | false => Result/failure("bare carriage return")
+                        end
+                    | n == 0x09 => go(cur + 1, Bytes/append(acc, b))
+                    | n < 0x20 => Result/failure("control character in string")
+                    | n == 0x7F => Result/failure("control character in string")
+                    | _ => go(cur + 1, Bytes/append(acc, b))
+                    end
+                end;
+            let start =
+                match
+                | byte_at_is(input, pos, (n) => n == 0x0A) => pos + 1
+                | is_crlf_at(input, pos) => pos + 2
+                | _ => pos
+                end;
+            go(start, x\)
+    };
+
+let str_of(b : Bytes) -> Parse(Str) =
+    match Str/of_bytes(b)
+    | some(s) => Parse/pure(s)
+    | none() => Parse/fail("invalid UTF-8 in string")
+    end;
+
+let str_basic : Parse(Str) =
+    let b = basic_str_scan!;
+    str_of(b);
+
+let str_literal : Parse(Str) =
+    let b = literal_str_scan!;
+    str_of(b);
+
+let str_ml_basic : Parse(Str) =
+    let _ = take_literal("\"\"\"")!;
+    let b = ml_basic_scan!;
+    str_of(b);
+
+let str_ml_literal : Parse(Str) =
+    let _ = take_literal("'''")!;
+    let b = ml_literal_scan!;
+    str_of(b);
+
+-- ===================== keys =====================
+
+let key_bare : Parse(Str) =
+    Parse {
+        run(input, pos) =
+            match Parse/take_while(is_bare_byte).run(input, pos)
+            | success((next, chunk)) =>
+                match Bytes/len(chunk) == 0
+                | true => Result/failure("expected key")
+                | false =>
+                    match Str/of_bytes(chunk)
+                    | some(s) => Result/success((next, s))
+                    | none() => Result/failure("expected key")
+                    end
+                end
+            | failure(msg) => Result/failure(msg)
+            end
+    };
+
+let key_part : Parse(Str) =
+    Parse/or(key_bare, Parse/or(str_basic, str_literal));
+
+let dot_part : Parse(Str) =
+    let _ = ws!;
+    let _ = Parse/take_byte(0x2E)!;
+    let _ = ws!;
+    key_part;
+
+let key_dotted : Parse(Lst(Str)) =
+    let first = key_part!;
+    let rest = Parse/many0(dot_part)!;
+    Parse/pure([first, ..rest]);
+
+-- ===================== numbers =====================
+
+let dec_digit(n : Nat) -> Option(Nat) =
+    match Nat/in_range(n, 0x30, 0x39)
+    | true => Option/some(n - 0x30)
+    | false => Option/none()
+    end;
+
+let oct_digit(n : Nat) -> Option(Nat) =
+    match Nat/in_range(n, 0x30, 0x37)
+    | true => Option/some(n - 0x30)
+    | false => Option/none()
+    end;
+
+let bin_digit(n : Nat) -> Option(Nat) =
+    match Nat/in_range(n, 0x30, 0x31)
+    | true => Option/some(n - 0x30)
+    | false => Option/none()
+    end;
+
+-- run boundary for magnitude_scan, kept out of its loop body so each
+-- per-digit recursion frame stays small
+let magnitude_stop(cur : Nat, acc : Nat, seen : Bool, pend : Bool) -> Result({Nat, Nat}, Str) =
+    match pend
+    | true => Result/failure("malformed underscore")
+    | false =>
+        match seen
+        | true => Result/success((cur, acc))
+        | false => Result/failure("expected digit")
+        end
+    end;
+
+-- digit run with TOML underscore placement; `guard` is the per-radix
+-- wrap-safety ceiling checked before each multiply
+let magnitude_scan(input : Bytes, start : Nat, radix : Nat, guard : Nat,
+    digit_of : (Nat) -> Option(Nat)) -> Result({Nat, Nat}, Str) =
+    rec go(cur : Nat, acc : Nat, seen : Bool, pend : Bool) -> Result({Nat, Nat}, Str) =
+        match Bytes/get(input, cur)
+        | none() => magnitude_stop(cur, acc, seen, pend)
+        | some(b) =>
+            let n = Byte/to_nat(b);
+            match n == 0x5F
+            | true =>
+                match seen && Bool/not(pend)
+                | true => go(cur + 1, acc, seen, true)
+                | false => Result/failure("malformed underscore")
+                end
+            | false =>
+                match digit_of(n)
+                | some(d) =>
+                    match acc > guard
+                    | true => Result/failure("integer out of range")
+                    | false => go(cur + 1, acc * radix + d, true, false)
+                    end
+                | none() => magnitude_stop(cur, acc, seen, pend)
+                end
+            end
+        end;
+    go(start, 0, false, false);
+
+let dec_leading_zero(input : Bytes, cur : Nat) -> Bool =
+    byte_at_is(input, cur, (n) => n == 0x30)
+        && byte_at_is(input, cur + 1, (n) => Nat/in_range(n, 0x30, 0x39) || n == 0x5F);
+
+let sign_read(input : Bytes, pos : Nat) -> {Nat, Bool, Bool} =
+    match Bytes/get(input, pos)
+    | some(b) =>
+        match Byte/to_nat(b)
+        | 0x2B => (pos + 1, false, true)
+        | 0x2D => (pos + 1, true, true)
+        | _ => (pos, false, false)
+        end
+    | none() => (pos, false, false)
+    end;
+
+let int_value : Parse(Toml) =
+    Parse {
+        run(input, pos) =
+            let (cur, negative, signed) = sign_read(input, pos);
+            let prefixed : Option(Result({Nat, Nat}, Str)) =
+                match signed
+                | true => Option/none()
+                | false =>
+                    match byte_at_is(input, cur, (n) => n == 0x30)
+                    | false => Option/none()
+                    | true =>
+                        match Bytes/get(input, cur + 1)
+                        | none() => Option/none()
+                        | some(b) =>
+                            match Byte/to_nat(b)
+                            | 0x78 => Option/some(magnitude_scan(input, cur + 2, 16, 268435455, hex_val))
+                            | 0x6F => Option/some(magnitude_scan(input, cur + 2, 8, 536870911, oct_digit))
+                            | 0x62 => Option/some(magnitude_scan(input, cur + 2, 2, 2147483647, bin_digit))
+                            | _ => Option/none()
+                            end
+                        end
+                    end
+                end;
+            let scanned : Result({Nat, Nat}, Str) =
+                match prefixed
+                | some(r) => r
+                | none() =>
+                    match dec_leading_zero(input, cur)
+                    | true => Result/failure("leading zero")
+                    | false => magnitude_scan(input, cur, 10, 429496728, dec_digit)
+                    end
+                end;
+            match scanned
+            | failure(msg) => Result/failure(msg)
+            | success((next, mag)) =>
+                match negative
+                | true =>
+                    match
+                    | mag > 1073741824 => Result/failure("integer out of range")
+                    | mag == 1073741824 => Result/success((next, Toml/int(+0 - Nat/to_int(1073741823) - +1)))
+                    | _ => Result/success((next, Toml/int(+0 - Nat/to_int(mag))))
+                    end
+                | false =>
+                    match mag > 1073741823
+                    | true => Result/failure("integer out of range")
+                    | false => Result/success((next, Toml/int(Nat/to_int(mag))))
+                    end
+                end
+            end
+    };
+
+let flt_pow10(n : Nat) -> Flt =
+    match n
+    | 0 => +1.0
+    | pred + 1; ih => ih * 10.0
+    end;
+
+-- significand digits: at most nine significant decimal digits are kept exactly;
+-- `frac` selects whether consumed digits shift the decimal point down (fraction)
+-- or dropped digits shift it up (integer part past nine digits)
+rec flt_digits(input : Bytes, cur : Nat, sig : Nat, count : Nat, shift : Nat,
+    frac : Bool, seen : Bool, pend : Bool) -> Result({Nat, Nat, Nat, Nat}, Str) =
+    let stop : Result({Nat, Nat, Nat, Nat}, Str) =
+        match pend
+        | true => Result/failure("malformed underscore")
+        | false =>
+            match seen
+            | true => Result/success((cur, sig, count, shift))
+            | false => Result/failure("expected digit")
+            end
+        end;
+    match Bytes/get(input, cur)
+    | none() => stop
+    | some(b) =>
+        let n = Byte/to_nat(b);
+        match
+        | n == 0x5F =>
+            match seen && Bool/not(pend)
+            | true => flt_digits(input, cur + 1, sig, count, shift, frac, seen, true)
+            | false => Result/failure("malformed underscore")
+            end
+        | Nat/in_range(n, 0x30, 0x39) =>
+            let d = n - 0x30;
+            match
+            | sig == 0 && d == 0 =>
+                let shift2 = match frac | true => shift + 1 | false => shift end;
+                flt_digits(input, cur + 1, 0, 0, shift2, frac, true, false)
+            | count < 9 =>
+                let shift2 = match frac | true => shift + 1 | false => shift end;
+                flt_digits(input, cur + 1, sig * 10 + d, count + 1, shift2, frac, true, false)
+            | _ =>
+                let shift2 = match frac | true => shift | false => shift + 1 end;
+                flt_digits(input, cur + 1, sig, count, shift2, frac, true, false)
+            end
+        | _ => stop
+        end
+    end;
+
+-- exponent digits saturate at 2000: binary32 scaling is pinned to infinity or
+-- zero long before that bound, so saturation cannot change any result
+rec exp_digits(input : Bytes, cur : Nat, acc : Nat, seen : Bool, pend : Bool) -> Result({Nat, Nat}, Str) =
+    let stop : Result({Nat, Nat}, Str) =
+        match pend
+        | true => Result/failure("malformed underscore")
+        | false =>
+            match seen
+            | true => Result/success((cur, acc))
+            | false => Result/failure("expected digit")
+            end
+        end;
+    match Bytes/get(input, cur)
+    | none() => stop
+    | some(b) =>
+        let n = Byte/to_nat(b);
+        match
+        | n == 0x5F =>
+            match seen && Bool/not(pend)
+            | true => exp_digits(input, cur + 1, acc, seen, true)
+            | false => Result/failure("malformed underscore")
+            end
+        | Nat/in_range(n, 0x30, 0x39) =>
+            exp_digits(input, cur + 1, Nat/min(acc * 10 + (n - 0x30), 2000), true, false)
+        | _ => stop
+        end
+    end;
+
+let flt_special : Parse(Toml) =
+    Parse {
+        run(input, pos) =
+            let (cur, negative, _) = sign_read(input, pos);
+            match take_literal("inf").run(input, cur)
+            | success((next, _)) =>
+                let bits : Bytes =
+                    match negative
+                    | true => x\00\00\80\ff
+                    | false => x\00\00\80\7f
+                    end;
+                Result/success((next, Toml/flt(Flt/of_le_bytes(bits))))
+            | failure(_) =>
+                match take_literal("nan").run(input, cur)
+                | success((next, _)) => Result/success((next, Toml/flt(Flt/of_le_bytes(x\00\00\c0\7f))))
+                | failure(msg) => Result/failure(msg)
+                end
+            end
+    };
+
+let flt_number : Parse(Toml) =
+    Parse {
+        run(input, pos) =
+            let (cur0, negative, _) = sign_read(input, pos);
+            match dec_leading_zero(input, cur0)
+            | true => Result/failure("leading zero")
+            | false =>
+                match flt_digits(input, cur0, 0, 0, 0, false, false, false)
+                | failure(msg) => Result/failure(msg)
+                | success((cur1, sig1, count1, up1)) =>
+                    let frac_res : Result({Nat, Nat, Nat, Bool}, Str) =
+                        match byte_at_is(input, cur1, (n) => n == 0x2E)
+                        | true =>
+                            match flt_digits(input, cur1 + 1, sig1, count1, 0, true, false, false)
+                            | success((c, s, k, down)) => Result/success((c, s, down, true))
+                            | failure(msg) => Result/failure(msg)
+                            end
+                        | false => Result/success((cur1, sig1, 0, false))
+                        end;
+                    match frac_res
+                    | failure(msg) => Result/failure(msg)
+                    | success((cur2, sig2, down2, has_frac)) =>
+                        let exp_res : Result({Nat, Nat, Bool, Bool}, Str) =
+                            match byte_at_is(input, cur2, (n) => n == 0x65 || n == 0x45)
+                            | true =>
+                                let (ce, eneg, _) = sign_read(input, cur2 + 1);
+                                match exp_digits(input, ce, 0, false, false)
+                                | success((c, e)) => Result/success((c, e, eneg, true))
+                                | failure(msg) => Result/failure(msg)
+                                end
+                            | false => Result/success((cur2, 0, false, false))
+                            end;
+                        match exp_res
+                        | failure(msg) => Result/failure(msg)
+                        | success((next, emag, eneg, has_exp)) =>
+                            match has_frac || has_exp
+                            | false => Result/failure("expected float")
+                            | true =>
+                                let up = match eneg | true => up1 | false => up1 + emag end;
+                                let down = match eneg | true => down2 + emag | false => down2 end;
+                                let scaled =
+                                    Nat/to_flt(sig2) * flt_pow10(Nat/min(up, 2000)) / flt_pow10(Nat/min(down, 2000));
+                                let value =
+                                    match negative
+                                    | true => Flt/neg(scaled)
+                                    | false => scaled
+                                    end;
+                                Result/success((next, Toml/flt(value)))
+                            end
+                        end
+                    end
+                end
+            end
+    };
+
+-- ===================== date-times =====================
+
+rec fixed_scan(input : Bytes, cur : Nat, count : Nat, acc : Nat) -> Result({Nat, Nat}, Str) =
+    match count
+    | 0 => Result/success((cur, acc))
+    | pred + 1 =>
+        match Bytes/get(input, cur)
+        | none() => Result/failure("expected digit")
+        | some(b) =>
+            let n = Byte/to_nat(b);
+            match Nat/in_range(n, 0x30, 0x39)
+            | true => fixed_scan(input, cur + 1, pred, acc * 10 + (n - 0x30))
+            | false => Result/failure("expected digit")
+            end
+        end
+    end;
+
+let expect_byte(input : Bytes, cur : Nat, want : Nat) -> Result(Nat, Str) =
+    match byte_at_is(input, cur, (n) => n == want)
+    | true => Result/success(cur + 1)
+    | false => Result/failure("malformed date-time")
+    end;
+
+let date_scan(input : Bytes, pos : Nat) -> Result({Nat, Date}, Str) =
+    match fixed_scan(input, pos, 4, 0)
+    | failure(msg) => Result/failure(msg)
+    | success((c1, y)) =>
+        match expect_byte(input, c1, 0x2D)
+        | failure(msg) => Result/failure(msg)
+        | success(c2) =>
+            match fixed_scan(input, c2, 2, 0)
+            | failure(msg) => Result/failure(msg)
+            | success((c3, mo)) =>
+                match expect_byte(input, c3, 0x2D)
+                | failure(msg) => Result/failure(msg)
+                | success(c4) =>
+                    match fixed_scan(input, c4, 2, 0)
+                    | failure(msg) => Result/failure(msg)
+                    | success((c5, d)) =>
+                        let date = Date { year = y, month = mo, day = d };
+                        match date_ok(date)
+                        | true => Result/success((c5, date))
+                        | false => Result/failure("invalid date")
+                        end
+                    end
+                end
+            end
+        end
+    end;
+
+let nat_pow10(n : Nat) -> Nat =
+    match n
+    | 0 => 1
+    | pred + 1; ih => ih * 10
+    end;
+
+-- fractional seconds: at most nine digits honored, further digits truncated
+rec frac_ns(input : Bytes, cur : Nat, taken : Nat, acc : Nat, seen : Bool) -> Result({Nat, Nat}, Str) =
+    let stop : Result({Nat, Nat}, Str) =
+        match seen
+        | true => Result/success((cur, acc * nat_pow10(9 - taken)))
+        | false => Result/failure("expected digit")
+        end;
+    match Bytes/get(input, cur)
+    | none() => stop
+    | some(b) =>
+        let n = Byte/to_nat(b);
+        match Nat/in_range(n, 0x30, 0x39)
+        | false => stop
+        | true =>
+            match taken < 9
+            | true => frac_ns(input, cur + 1, taken + 1, acc * 10 + (n - 0x30), true)
+            | false => frac_ns(input, cur + 1, taken, acc, true)
+            end
+        end
+    end;
+
+let time_scan(input : Bytes, pos : Nat) -> Result({Nat, Time}, Str) =
+    match fixed_scan(input, pos, 2, 0)
+    | failure(msg) => Result/failure(msg)
+    | success((c1, h)) =>
+        match expect_byte(input, c1, 0x3A)
+        | failure(msg) => Result/failure(msg)
+        | success(c2) =>
+            match fixed_scan(input, c2, 2, 0)
+            | failure(msg) => Result/failure(msg)
+            | success((c3, mi)) =>
+                match expect_byte(input, c3, 0x3A)
+                | failure(msg) => Result/failure(msg)
+                | success(c4) =>
+                    match fixed_scan(input, c4, 2, 0)
+                    | failure(msg) => Result/failure(msg)
+                    | success((c5, s)) =>
+                        let ns_res : Result({Nat, Nat}, Str) =
+                            match byte_at_is(input, c5, (n) => n == 0x2E)
+                            | true => frac_ns(input, c5 + 1, 0, 0, false)
+                            | false => Result/success((c5, 0))
+                            end;
+                        match ns_res
+                        | failure(msg) => Result/failure(msg)
+                        | success((c6, ns)) =>
+                            let time = Time { hour = h, minute = mi, second = s, nanosecond = ns };
+                            match time_ok(time)
+                            | true => Result/success((c6, time))
+                            | false => Result/failure("invalid time")
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end;
+
+let offset_scan(input : Bytes, pos : Nat) -> Result({Nat, Int}, Str) =
+    match byte_at_is(input, pos, (n) => n == 0x5A || n == 0x7A)
+    | true => Result/success((pos + 1, +0))
+    | false =>
+        match Bytes/get(input, pos)
+        | none() => Result/failure("expected offset")
+        | some(b) =>
+            let n = Byte/to_nat(b);
+            match n == 0x2B || n == 0x2D
+            | false => Result/failure("expected offset")
+            | true =>
+                match fixed_scan(input, pos + 1, 2, 0)
+                | failure(msg) => Result/failure(msg)
+                | success((c1, oh)) =>
+                    match expect_byte(input, c1, 0x3A)
+                    | failure(msg) => Result/failure(msg)
+                    | success(c2) =>
+                        match fixed_scan(input, c2, 2, 0)
+                        | failure(msg) => Result/failure(msg)
+                        | success((c3, om)) =>
+                            match oh <= 23 && om <= 59
+                            | false => Result/failure("invalid offset")
+                            | true =>
+                                let mins = oh * 60 + om;
+                                let value : Int =
+                                    match n == 0x2D
+                                    | true => +0 - Nat/to_int(mins)
+                                    | false => Nat/to_int(mins)
+                                    end;
+                                Result/success((c3, value))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end;
+
+let datetime_value : Parse(Toml) =
+    Parse {
+        run(input, pos) =
+            match date_scan(input, pos)
+            | success((c1, date)) =>
+                let sep : Option(Nat) =
+                    match byte_at_is(input, c1, (n) => n == 0x54 || n == 0x74 || n == 0x20)
+                    | true => Option/some(c1 + 1)
+                    | false => Option/none()
+                    end;
+                match sep
+                | none() => Result/success((c1, Toml/local_date(date)))
+                | some(c2) =>
+                    match time_scan(input, c2)
+                    | failure(_) => Result/success((c1, Toml/local_date(date)))
+                    | success((c3, time)) =>
+                        match offset_scan(input, c3)
+                        | success((c4, off)) =>
+                            Result/success((c4, Toml/offset_date_time(OffsetDateTime {
+                                date = date, time = time, offset_minutes = off })))
+                        | failure(_) =>
+                            Result/success((c3, Toml/local_date_time(LocalDateTime { date = date, time = time })))
+                        end
+                    end
+                end
+            | failure(_) =>
+                match time_scan(input, pos)
+                | success((c, time)) => Result/success((c, Toml/local_time(time)))
+                | failure(msg) => Result/failure(msg)
+                end
+            end
+    };
+
+-- ===================== values =====================
+
+let val_str_basic : Parse(Toml) =
+    Parse/map(Parse/or(str_ml_basic, str_basic), (s) => Toml/str(s));
+
+let val_str_literal : Parse(Toml) =
+    Parse/map(Parse/or(str_ml_literal, str_literal), (s) => Toml/str(s));
+
+let val_true : Parse(Toml) =
+    Parse/map(take_literal("true"), (_) => Toml/bool(true));
+
+let val_false : Parse(Toml) =
+    Parse/map(take_literal("false"), (_) => Toml/bool(false));
+
+let val_number_signed : Parse(Toml) =
+    Parse/or(flt_special, Parse/or(flt_number, int_value));
+
+let val_number_digit : Parse(Toml) =
+    Parse/or(datetime_value, Parse/or(flt_number, int_value));
+
+rec array_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
+    rec go(cur : Nat, acc : Lst(Toml)) -> Result({Nat, Toml}, Str) =
+        match trivia.run(input, cur)
+        | failure(msg) => Result/failure(msg)
+        | success((c1, _)) =>
+            match byte_at_is(input, c1, (n) => n == 0x5D)
+            | true => Result/success((c1 + 1, Toml/arr(acc)))
+            | false =>
+                match value_scan(input, c1)
+                | failure(msg) => Result/failure(msg)
+                | success((c2, v)) =>
+                    match trivia.run(input, c2)
+                    | failure(msg) => Result/failure(msg)
+                    | success((c3, _)) =>
+                        match byte_at_is(input, c3, (n) => n == 0x2C)
+                        | true => go(c3 + 1, [..acc, v])
+                        | false =>
+                            match byte_at_is(input, c3, (n) => n == 0x5D)
+                            | true => Result/success((c3 + 1, Toml/arr([..acc, v])))
+                            | false => Result/failure("expected ',' or ']' in array")
+                            end
+                        end
+                    end
+                end
+            end
+        end;
+    match byte_at_is(input, pos, (n) => n == 0x5B)
+    | true => go(pos + 1, [])
+    | false => Result/failure("expected array")
+    end
+and inline_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
+    rec go(cur : Nat, acc : Lst({Lst(Str), Toml})) -> Result({Nat, Toml}, Str) =
+        match key_dotted.run(input, cur)
+        | failure(msg) => Result/failure(msg)
+        | success((c1, path)) =>
+            match ws.run(input, c1)
+            | failure(msg) => Result/failure(msg)
+            | success((c2, _)) =>
+                match byte_at_is(input, c2, (n) => n == 0x3D)
+                | false => Result/failure("expected '=' in inline table")
+                | true =>
+                    match ws.run(input, c2 + 1)
+                    | failure(msg) => Result/failure(msg)
+                    | success((c3, _)) =>
+                        match value_scan(input, c3)
+                        | failure(msg) => Result/failure(msg)
+                        | success((c4, v)) =>
+                            match ws.run(input, c4)
+                            | failure(msg) => Result/failure(msg)
+                            | success((c5, _)) =>
+                                let acc2 = [..acc, (path, v)];
+                                match byte_at_is(input, c5, (n) => n == 0x2C)
+                                | true =>
+                                    match ws.run(input, c5 + 1)
+                                    | failure(msg) => Result/failure(msg)
+                                    | success((c6, _)) => go(c6, acc2)
+                                    end
+                                | false =>
+                                    match byte_at_is(input, c5, (n) => n == 0x7D)
+                                    | false => Result/failure("expected ',' or '}' in inline table")
+                                    | true =>
+                                        match inline_fold(acc2)
+                                        | success(m) => Result/success((c5 + 1, Toml/table(m)))
+                                        | failure(msg) => Result/failure(msg)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end;
+    match byte_at_is(input, pos, (n) => n == 0x7B)
+    | false => Result/failure("expected inline table")
+    | true =>
+        match ws.run(input, pos + 1)
+        | failure(msg) => Result/failure(msg)
+        | success((c1, _)) =>
+            match byte_at_is(input, c1, (n) => n == 0x7D)
+            | true => Result/success((c1 + 1, Toml/table(Map/empty(@Toml))))
+            | false => go(c1, [])
+            end
+        end
+    end
+and value_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
+    match Bytes/get(input, pos)
+    | none() => Result/failure("expected value")
+    | some(b) =>
+        match Byte/to_nat(b)
+        | 0x22 => val_str_basic.run(input, pos)
+        | 0x27 => val_str_literal.run(input, pos)
+        | 0x74 => val_true.run(input, pos)
+        | 0x66 => val_false.run(input, pos)
+        | 0x5B => array_scan(input, pos)
+        | 0x7B => inline_scan(input, pos)
+        | 0x2B => val_number_signed.run(input, pos)
+        | 0x2D => val_number_signed.run(input, pos)
+        | 0x69 => flt_special.run(input, pos)
+        | 0x6E => flt_special.run(input, pos)
+        | _ => val_number_digit.run(input, pos)
+        end
+    end;
+
+-- ===================== statements and the document =====================
+
+induct Stmt : Type
+| assign(Lst(Str), Toml)
+| table_header(Lst(Str))
+| array_header(Lst(Str))
+end
+
+-- The statement layer is written as recursive scanners over positions: a
+-- recursive function applied to a symbolic input stays a residual application
+-- under type-level reduction, where an equivalent combinator constant would
+-- unfold its whole parser tree symbolically.
+rec key_path_scan(input : Bytes, cur : Nat, acc : Lst(Str)) -> Result({Nat, Lst(Str)}, Str) =
+    match key_part.run(input, cur)
+    | failure(msg) => Result/failure(msg)
+    | success((c1, k)) =>
+        let acc2 = [..acc, k];
+        match ws.run(input, c1)
+        | failure(msg) => Result/failure(msg)
+        | success((c2, _)) =>
+            match byte_at_is(input, c2, (n) => n == 0x2E)
+            | true =>
+                match ws.run(input, c2 + 1)
+                | failure(msg) => Result/failure(msg)
+                | success((c3, _)) => key_path_scan(input, c3, acc2)
+                end
+            | false => Result/success((c2, acc2))
+            end
+        end
+    end
+and header_scan(input : Bytes, cur : Nat, double : Bool) -> Result({Nat, Lst(Str)}, Str) =
+    match ws.run(input, cur)
+    | failure(msg) => Result/failure(msg)
+    | success((c1, _)) =>
+        match key_path_scan(input, c1, [])
+        | failure(msg) => Result/failure(msg)
+        | success((c2, path)) =>
+            match byte_at_is(input, c2, (n) => n == 0x5D)
+            | false => Result/failure("expected ']' in table header")
+            | true =>
+                match double
+                | false => Result/success((c2 + 1, path))
+                | true =>
+                    match byte_at_is(input, c2 + 1, (n) => n == 0x5D)
+                    | true => Result/success((c2 + 2, path))
+                    | false => Result/failure("expected ']]' in table header")
+                    end
+                end
+            end
+        end
+    end
+and stmt_scan(input : Bytes, cur : Nat) -> Result({Nat, Stmt}, Str) =
+    match byte_at_is(input, cur, (n) => n == 0x5B)
+    | true =>
+        match byte_at_is(input, cur + 1, (n) => n == 0x5B)
+        | true =>
+            match header_scan(input, cur + 2, true)
+            | success((c1, path)) => Result/success((c1, Stmt/array_header(path)))
+            | failure(msg) => Result/failure(msg)
+            end
+        | false =>
+            match header_scan(input, cur + 1, false)
+            | success((c1, path)) => Result/success((c1, Stmt/table_header(path)))
+            | failure(msg) => Result/failure(msg)
+            end
+        end
+    | false =>
+        match key_path_scan(input, cur, [])
+        | failure(msg) => Result/failure(msg)
+        | success((c1, path)) =>
+            match byte_at_is(input, c1, (n) => n == 0x3D)
+            | false => Result/failure("expected '=' after key")
+            | true =>
+                match ws.run(input, c1 + 1)
+                | failure(msg) => Result/failure(msg)
+                | success((c2, _)) =>
+                    match value_scan(input, c2)
+                    | failure(msg) => Result/failure(msg)
+                    | success((c3, v)) => Result/success((c3, Stmt/assign(path, v)))
+                    end
+                end
+            end
+        end
+    end
+and stmts_scan(input : Bytes, cur : Nat, acc : Lst(Stmt)) -> Result(Lst(Stmt), Str) =
+    match trivia.run(input, cur)
+    | failure(msg) => Result/failure(msg)
+    | success((c1, _)) =>
+        match Parse/eof.run(input, c1)
+        | success(_) => Result/success(acc)
+        | failure(_) =>
+            match stmt_scan(input, c1)
+            | failure(msg) => Result/failure(msg)
+            | success((c2, s)) =>
+                match line_end.run(input, c2)
+                | failure(msg) => Result/failure(msg)
+                | success((c3, _)) => stmts_scan(input, c3, [..acc, s])
+                end
+            end
+        end
+    end;
+
+pub let decode(source : Str) -> Result(Map(Toml), Str) =
+    match stmts_scan(Str/to_bytes(source), 0, [])
+    | failure(msg) => Result/failure(msg)
+    | success(stmts) =>
+        let start : Result(Build, Str) = Result/success(build_empty);
+        match Lst/fold(stmts, start, (s, acc) =>
+            Result/bind(acc, (b) =>
+                match s : Result(Build, Str)
+                | assign(path, v) => apply_assign(b, path, v)
+                | table_header(path) => apply_header(b, path)
+                | array_header(path) => apply_aot(b, path)
+                end))
+        | success(b) => Result/success(b.root)
+        | failure(msg) => Result/failure(msg)
+        end
+    end;
+
+-- ===================== encoder =====================
+
+let bare_ok(s : Str) -> Bool =
+    let bs = Str/to_bytes(s);
+    match Bytes/len(bs) == 0
+    | true => false
+    | false => Bytes/fold(bs, true, (b, ok) => ok && is_bare_byte(b))
+    end;
+
+let escape_content(byte : Byte) -> Bytes =
+    let n = Byte/to_nat(byte);
+    match n
+    | 0x22 => Str/to_bytes("\\\"")
+    | 0x5C => Str/to_bytes("\\\\")
+    | 0x08 => Str/to_bytes("\\b")
+    | 0x09 => Str/to_bytes("\\t")
+    | 0x0A => Str/to_bytes("\\n")
+    | 0x0C => Str/to_bytes("\\f")
+    | 0x0D => Str/to_bytes("\\r")
+    | _ =>
+        match n < 0x20 || n == 0x7F
+        | true =>
+            Bytes/append(
+                Bytes/append(Str/to_bytes("\\u00"), Option/unwrap_or(Char/to_ascii(Char/hex_digit(n / 0x10)), 0)),
+                Option/unwrap_or(Char/to_ascii(Char/hex_digit(n % 0x10)), 0))
+        | false => Bytes/append(x\, byte)
+        end
+    end;
+
+let quote_str(s : Str) -> Str =
+    let body = Bytes/fold(Str/to_bytes(s), x\, (byte, acc) => x\..acc\..escape_content(byte));
+    Str/flatten(["\"", Option/unwrap_or(Str/of_bytes(body), ""), "\""]);
+
+let spell_key(kb : Bytes) -> Result(Str, Str) =
+    match Str/of_bytes(kb)
+    | none() => Result/failure("map key is not valid UTF-8")
+    | some(s) =>
+        match bare_ok(s)
+        | true => Result/success(s)
+        | false => Result/success(quote_str(s))
+        end
+    end;
+
+let pad(n : Nat, width : Nat) -> Str =
+    let s = Nat/to_str(n);
+    Str/concat(Str/repeat("0", width - Str/len(s)), s);
+
+let ns_str(ns : Nat) -> Str =
+    match ns == 0
+    | true => ""
+    | false =>
+        let digits = pad(ns, 9);
+        rec keep(k : Nat) -> Nat =
+            match k <= 1
+            | true => 1
+            | false =>
+                match Option/unwrap_or(Str/get(digits, k - 1), '1') == '0'
+                | true => keep(k - 1)
+                | false => k
+                end
+            end;
+        Str/concat(".", Str/slice(digits, 0, keep(9)))
+    end;
+
+let date_str(d : Date) -> Str =
+    Str/flatten([pad(d.year, 4), "-", pad(d.month, 2), "-", pad(d.day, 2)]);
+
+let time_str(t : Time) -> Str =
+    Str/flatten([pad(t.hour, 2), ":", pad(t.minute, 2), ":", pad(t.second, 2), ns_str(t.nanosecond)]);
+
+let offset_str(mins : Int) -> Str =
+    match mins == +0
+    | true => "Z"
+    | false =>
+        let mag = Int/abs(mins);
+        let sign =
+            match mins > +0
+            | true => "+"
+            | false => "-"
+            end;
+        Str/flatten([sign, pad(mag / 60, 2), ":", pad(mag % 60, 2)])
+    end;
+
+-- Codec-owned rendering: `Int/to_str` negates through `Int/abs`, which sends the
+-- minimum value's magnitude (+2^30) outside the boxed envelope; render the
+-- minimum from its literal spelling instead of negating it.
+let int_str(n : Int) -> Str =
+    match
+    | n >= +0 => Nat/to_str(Int/to_nat(n))
+    | n == -1073741824 => "-1073741824"
+    | _ => Str/concat("-", Nat/to_str(Int/to_nat(+0 - n)))
+    end;
+
+let flt_str(f : Flt) -> Str =
+    let b = Flt/to_le_bytes(f);
+    let b0 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 0), 0));
+    let b1 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 1), 0));
+    let b2 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 2), 0));
+    let b3 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 3), 0));
+    let exp_field = b3 % 0x80 * 2 + b2 / 0x80;
+    match
+    | exp_field == 0xFF && b0 == 0 && b1 == 0 && b2 % 0x80 == 0 =>
+        match b3 >= 0x80
+        | true => "-inf"
+        | false => "inf"
+        end
+    | exp_field == 0xFF => "nan"
+    | _ =>
+        let raw = Flt/to_str(f);
+        let unsigned =
+            match Option/unwrap_or(Str/get(raw, 0), '0') == '+'
+            | true => Str/slice(raw, 1, Str/len(raw))
+            | false => raw
+            end;
+        match Option/is_some(Str/find(unsigned, '.')) || Option/is_some(Str/find(unsigned, 'e'))
+        | true => unsigned
+        | false => Str/concat(unsigned, ".0")
+        end
+    end;
+
+rec value_str(v : Toml) -> Result(Str, Str) =
+    match v
+    | str(s) => Result/success(quote_str(s))
+    | int(n) => Result/success(int_str(n))
+    | flt(f) => Result/success(flt_str(f))
+    | bool(x) => Result/success(Bool/to_str(x))
+    | offset_date_time(odt) =>
+        match date_ok(odt.date) && time_ok(odt.time) && offset_ok(odt.offset_minutes)
+        | true =>
+            Result/success(Str/flatten([
+                date_str(odt.date), "T", time_str(odt.time), offset_str(odt.offset_minutes)]))
+        | false => Result/failure("invalid date-time value")
+        end
+    | local_date_time(ldt) =>
+        match date_ok(ldt.date) && time_ok(ldt.time)
+        | true => Result/success(Str/flatten([date_str(ldt.date), "T", time_str(ldt.time)]))
+        | false => Result/failure("invalid date-time value")
+        end
+    | local_date(d) =>
+        match date_ok(d)
+        | true => Result/success(date_str(d))
+        | false => Result/failure("invalid date value")
+        end
+    | local_time(t) =>
+        match time_ok(t)
+        | true => Result/success(time_str(t))
+        | false => Result/failure("invalid time value")
+        end
+    | arr(items) =>
+        let start : Result(Lst(Str), Str) = Result/success([]);
+        match Lst/fold(items, start, (item, acc) =>
+            Result/bind(acc, (parts) =>
+                Result/map_success(value_str(item), (s) => [..parts, s])))
+        | success(parts) => Result/success(Str/flatten(["[", Str/join(", ", parts), "]"]))
+        | failure(msg) => Result/failure(msg)
+        end
+    | table(m) =>
+        match Lst/len(Map/entries(m)) == 0
+        | true => Result/success("{}")
+        | false =>
+            match pairs_str(Map/entries(m))
+            | success(body) => Result/success(Str/flatten(["{ ", body, " }"]))
+            | failure(msg) => Result/failure(msg)
+            end
+        end
+    end
+and pairs_str(entries : Lst({Bytes, Toml})) -> Result(Str, Str) =
+    let start : Result(Lst(Str), Str) = Result/success([]);
+    match Lst/fold(entries, start, (entry, acc) =>
+        Result/bind(acc, (parts) =>
+            Result/bind(spell_key(entry.0), (k) =>
+                Result/map_success(value_str(entry.1), (vs) => [..parts, Str/flatten([k, " = ", vs])]))))
+    | success(parts) => Result/success(Str/join(", ", parts))
+    | failure(msg) => Result/failure(msg)
+    end;
+
+rec encode_table(prefix : Lst(Str), m : Map(Toml)) -> Result(Str, Str) =
+    let entries = Map/entries(m);
+    let start : Result(Lst(Str), Str) = Result/success([]);
+    match Lst/fold(entries, start, (entry, acc) =>
+        Result/bind(acc, (lines) =>
+            match entry.1 : Result(Lst(Str), Str)
+            | table(_) => Result/success(lines)
+            | _ =>
+                Result/bind(spell_key(entry.0), (k) =>
+                    Result/map_success(value_str(entry.1), (vs) => [..lines, Str/flatten([k, " = ", vs, "\n"])]))
+            end))
+    | failure(msg) => Result/failure(msg)
+    | success(lines) =>
+        match Lst/fold(entries, start, (entry, acc) =>
+            Result/bind(acc, (blocks) =>
+                match entry.1 : Result(Lst(Str), Str)
+                | table(sub) =>
+                    Result/bind(spell_key(entry.0), (k) =>
+                        Result/bind(encode_table([..prefix, k], sub), (body) =>
+                            Result/success([..blocks, Str/flatten([
+                                "[", Str/join(".", [..prefix, k]), "]\n", body])])))
+                | _ => Result/success(blocks)
+                end))
+        | failure(msg) => Result/failure(msg)
+        | success(blocks) => Result/success(Str/concat(Str/flatten(lines), Str/flatten(blocks)))
+        end
+    end;
+
+pub let encode(m : Map(Toml)) -> Result(Str, Str) =
+    encode_table([], m);

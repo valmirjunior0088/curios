@@ -18,6 +18,7 @@ mod runtime;
 mod scheduler;
 mod strings;
 mod structs;
+mod toml;
 
 use {curios_runtime::MockHost, std::time::Duration};
 

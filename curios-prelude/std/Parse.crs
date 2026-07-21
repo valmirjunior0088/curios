@@ -88,6 +88,15 @@ pub let take_byte(expected : Byte) -> Parse(Byte) =
             end
     };
 
+pub let eof : Parse({}) =
+    Parse {
+        run(input, pos) =
+            match pos < Bytes/len(input)
+            | true => Result/failure("expected end of input")
+            | false => Result/success((pos, ()))
+            end
+    };
+
 pub let take_while(pred : (Byte) -> Bool) -> Parse(Bytes) =
     Parse {
         run(input, pos) =

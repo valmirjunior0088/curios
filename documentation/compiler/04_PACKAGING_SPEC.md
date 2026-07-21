@@ -10,4 +10,4 @@ Not refined yet. This umbrella placeholder reserves the specification location f
 
 ## Known constraints
 
-- Manifest and lockfile storage is TOML through `/std/Toml` ([native-width codec](02_TOML_NATIVE_WIDTH_SPEC.md)).
+- Manifest and lockfile storage is TOML through the landed native-width `/std/Toml` codec (`curios-prelude/std/Toml.crs`).

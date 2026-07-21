@@ -115,6 +115,9 @@ pub use Parse/{let Parse};
 pub mod Json;
 pub use Json/{let Json};
 
+pub mod Toml;
+pub use Toml/{let Toml};
+
 pub mod Fmt;
 pub use Fmt/{let Fmt};
 
