@@ -86,6 +86,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Pure pipeline driver crate (`curios-pipeline`) decoupled from runtime/Binaryen/CLI, enabling a wasm32 (browser) build
 - [x] Build-scoped archived prelude and replay (`curios-prelude` compiles and validates fixed Text/Core/Ersd state in `OUT_DIR`; production compilations restore it with no source fallback and lower/elaborate/erase only the user suffix)
 - [x] Configurable type-checker reduction timeout (the CLI's `--timeout`, default 1000 ms, threaded into the core context; the browser build keeps it working through a `web-time` shim)
+- [ ] [Iterative elaboration of deep spines](compiler/00_ITERATIVE_ELABORATION_SPEC.md) (bound elaboration depth by written binder nesting, never data length; today an un-shared literal spine costs one native frame per byte, with measured cliffs near 50 bytes on a 2MB debug stack and 1000 bytes on the 8MB release main thread)
 - [ ] [Full data section support in `curios-wasm`](compiler/07_WASM_FULL_CONFORMANCE_SPEC.md) (active data segments, `memory.init`/`data.drop`, and the complete linear-memory load/store instruction family; today the section is minimum-fitted to its one consumer — passive-only segments reached through `array.new_data`)
 - [ ] [Full element section support in `curios-wasm`](compiler/07_WASM_FULL_CONFORMANCE_SPEC.md) (every element-segment mode with table declarations and table instructions; today the section is minimum-fitted to its one consumer — a single declarative segment making functions `ref.func`-eligible)
 - [ ] Bootstrap the compiler in Curios itself (self-host every language-specific stage through raw WebAssembly generation while retaining Rust as the native host and stage-zero seed)
@@ -162,7 +163,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Typed format strings (`std/Fmt`)
 - [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int`, and `Flt`; `Flt/to_str` renders the shortest round-trip binary32 decimal through exact `BigNat` digit generation)
 - [x] JSON codec (`std/Json`)
-- [ ] [`std/Toml`: native-`Int`/binary32 TOML codec](compiler/02_TOML_NATIVE_WIDTH_SPEC.md) _(next implementation effort; useful but explicitly not fully TOML-conforming because numeric storage is native-width)_
+- [x] TOML 1.0.0 codec over native `Int` and binary32 `Flt` (`std/Toml`; explicitly not fully TOML-conforming because numeric storage is native-width)
   - [ ] [Full TOML conformance over exact numerics](compiler/08_TOML_FULL_CONFORMANCE_SPEC.md) _(not refined; after the general rational `BigFlt` sequence)_
 - [x] Async combinators for `/std/Task`
   - [x] `map`
