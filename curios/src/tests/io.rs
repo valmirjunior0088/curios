@@ -226,3 +226,35 @@ fn proc_exit_halts_with_code() {
     assert_eq!(code, 7);
     assert!(io.output().is_empty());
 }
+
+#[test]
+fn proc_exit_in_local_binding_halts() {
+    // A local binding evaluates under call-by-value even when its result type
+    // is a proposition: the never-returning body runs. Regression test:
+    // erasure used to collapse proof-typed local bindings to the unit constant
+    // wholesale, silently dropping the exit.
+    let entrypoint = r#"
+        use /std/{Nat, Io, Str};
+        let go(n : std/Nat) -> std/Nat =
+            let dead = /std/proc/exit(3);
+            n;
+        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(go(1))))
+        "#
+    .parse::<curios_text::Entrypoint>()
+    .expect("failed to parse source");
+
+    let (module, _foreigns) = curios_pipeline::compile_entrypoint(
+        Duration::from_secs(10),
+        &entrypoint,
+        curios_text::RootSource::none(),
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let (system, io) = MockHost::builder().build();
+    let code =
+        crate::run_wasm(&module, system, ForeignBindings::empty()).expect("execution succeeded");
+
+    assert_eq!(code, 3);
+    assert!(io.output().is_empty());
+}

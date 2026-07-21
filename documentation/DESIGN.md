@@ -24,6 +24,14 @@ Non-goals: Curios is not a foundational proof assistant and makes no logical-sou
 
 **Rationale.** Proof irrelevance is what makes proofs erasable by construction: any two proofs of a proposition are definitionally equal, so no program can depend on which proof it received, and erasure drops them wholesale. The large-elimination guard is what keeps that erasure sound.
 
+### Erased positions are non-strict
+
+**Decision.** An expression in an erased value position — an argument to an erased parameter, an erased structure or constructor field, an operand slot instantiated at a proposition or a type — is not evaluated: its effects, traps, and divergence do not occur. Statement positions evaluate under call-by-value regardless of their result's sort: a top-level item, a local `let` binding, and a direct call of a never-returning function (`/std/proc/exit : (Nat) -> False`) all run even though their results erase. Type-level positions are guarded rather than non-strict: forcing an effectful primitive — a host call, `IoExit`, or a `Cell` operation — during type-level reduction is a compile error (`EffectAtTypeLevel`); an effectful subterm a type never forces is erased with the type.
+
+**Rationale.** Not evaluating erased value positions is what erasure is for: proofs are certificates whose computation must cost nothing at runtime, which is what lets the `/std` lemma corpus decorate data structures without runtime traversals. Host effects make the gap observable, because an effectful never-returning expression can inhabit a proposition, and no type-level rule can separate it from pure proof content. The boundary is therefore drawn by position rather than by type: what the program sequences as a statement runs; what erasure removes does not; what type checking would have to perform itself is refused outright.
+
+**Rejected.** A transitive host-effect analysis that evaluates an erased position when its expression may reach a host operation: real machinery that still cannot preserve divergence, so it buys only a partial strictness guarantee. Also rejected: retyping never-returning operations at an empty `Type`-sorted carrier, which narrows the observable gap without closing it — an elimination immediately launders the effect back into an erased position.
+
 ### Concepts resolve with global coherence
 
 **Decision.** Ad-hoc polymorphism is concepts and witnesses. Witness resolution consults one program-wide table under global coherence checks, and anonymous witnesses fill structure the goal already determines.

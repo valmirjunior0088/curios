@@ -190,11 +190,15 @@ impl Lowering {
                 let label = binding.tail.label_iter().nth(index).flatten();
                 let hint = label.map(str::to_string);
                 let name = context.fresh(label);
-                // A proof- or type-valued binding carries no runtime content:
-                // fill it with the unit constant instead of erasing its body
-                // (which may project erased fields or reference dropped
-                // binders), exactly like a kept-but-erasable operand slot.
-                let outcome = self.kept_operand_at(context, &value, &type_, hint.as_deref())?;
+                // A proof- or type-valued binding is walked, not collapsed: a
+                // written binding evaluates under call-by-value even when its
+                // *result* is erased, so an effectful never-returning body
+                // (`let _ = /std/proc/exit(3); …`) still runs. The erased
+                // residue a proof body can produce — projections of erased
+                // fields, dropped binders, applications of erased content —
+                // collapses to the unit constant at its own site (see
+                // `erase_apply` and `erase_proj`).
+                let outcome = self.walk(context, &value, &type_, hint.as_deref())?;
                 let atom = emitted!(outcome);
                 context.define_assuming(&name, &type_, &value);
                 self.environment.bind(&name, atom);

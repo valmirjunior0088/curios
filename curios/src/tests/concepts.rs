@@ -628,3 +628,90 @@ fn concept_literal_spread_use_on_non_concept_rejected() {
 
     assert!(error(source).contains("not a concept"));
 }
+
+// A `Prop`-sorted concept: the witness is proof content and erases completely,
+// and the method result is consumed in an erased argument slot. The runtime
+// path never sees the concept apparatus.
+#[test]
+fn prop_concept_resolves_and_erases() {
+    let source = r#"
+        use /std/{Nat, Str, Eq, Io};
+        pub concept Refl(A : Type) : Prop {
+            proof(x : A) -> Eq(x, x)
+        }
+        satisfy Refl(Nat) {
+            proof(x) = Eq/refl()
+        }
+        let ignore_proof(p : Eq(2, 2), n : Nat) -> Nat = n;
+        Io/print(Nat/to_str(ignore_proof(Refl/proof(2), 3)))
+        "#;
+
+    assert_eq!(run(source), b"3");
+}
+
+// A proof-returning method wrapper demanded by a top-level binding. The
+// wrapper call returns an erased method, so the outer application's callee is
+// proof content rather than a function — `erase_apply` collapses it to the
+// unit constant (value-driven: a direct function reference like
+// `/std/proc/exit` keeps its call). Regression test: this used to survive
+// erasure as an application of an erased callee and panic `into_cont`.
+#[test]
+fn prop_method_in_top_level_binding_collapses() {
+    let source = r#"
+        use /std/{Nat, Eq, Io};
+        pub concept Refl(A : Type) : Prop {
+            proof(x : A) -> Eq(x, x)
+        }
+        satisfy Refl(Nat) {
+            proof(x) = Eq/refl()
+        }
+        let probe(@A : Type, x : A, use Refl(A)) -> Eq(x, x) = Refl/proof(x);
+        let direct : Eq(2, 2) = Refl/proof(2);
+        let routed : Eq(3, 3) = probe(3);
+        Io/print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// The `Type`-sorted twin: the concept record is kept, but the method's result
+// is still a proposition, so the wrapper application collapses identically.
+// Regression test: this used to reach runtime as a call of an erased unit and
+// trap.
+#[test]
+fn type_concept_prop_method_binding_collapses() {
+    let source = r#"
+        use /std/{Nat, Eq, Io};
+        pub concept Refl(A : Type) : Type {
+            proof(x : A) -> Eq(x, x)
+        }
+        satisfy Refl(Nat) {
+            proof(x) = Eq/refl()
+        }
+        let evidence : Eq(2, 2) = Refl/proof(2);
+        Io/print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// The laws pattern: a `Prop` concept whose field quantifies over another
+// concept with a `use` parameter (a verified interface). The witness supplies
+// a proof (binding the `use` slot positionally), resolution supplies both
+// witnesses at the call, and everything erases.
+#[test]
+fn prop_laws_concept_resolves() {
+    let source = r#"
+        use /std/{Nat, Str, Show, Eq, Io};
+        pub concept ShowLaws(A : Type) : Prop {
+            stable(use Show(A), x : A) -> Eq(Show/show(x), Show/show(x))
+        }
+        satisfy ShowLaws(Nat) {
+            stable(w, x) = Eq/refl()
+        }
+        let take(q : Eq(Show/show(7), Show/show(7)), n : Nat) -> Nat = n;
+        Io/print(Nat/to_str(take(ShowLaws/stable(7), 42)))
+        "#;
+
+    assert_eq!(run(source), b"42");
+}

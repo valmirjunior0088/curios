@@ -9,10 +9,15 @@
 //!
 //! Application evaluates head first, then the kept arguments in order (the
 //! order the legacy pipeline sequenced at CPS conversion; under the operand
-//! law the erasure order *is* the runtime order). Arguments to erasable
-//! parameters are dropped; a kept slot whose instantiated type is a proof or
-//! a type is filled with the unit constant rather than a materialized witness
-//! (proof irrelevance — the slot stays, only its contents collapse).
+//! law the erasure order *is* the runtime order). An application at an
+//! erasable (proof-/type-producing) function type whose callee is not a
+//! direct function reference is erased content applied to arguments — it
+//! collapses to the unit constant; a direct function reference keeps its
+//! call, because a never-returning host effect is proof-typed but must run.
+//! Arguments to erasable parameters are dropped; a kept slot whose
+//! instantiated type is a proof or a type is filled with the unit constant
+//! rather than a materialized witness (proof irrelevance — the slot stays,
+//! only its contents collapse).
 
 use super::{
     Apply, Context, Error, Func, FuncType, Lowering, Outcome, Subterm, Telescope, Term, emitted,
@@ -136,6 +141,18 @@ impl Lowering {
         );
 
         let callee = emitted!(self.walk(context, head, &head_type, None)?);
+
+        // A proof-valued callee that is not a direct function reference is
+        // erased content standing where a function was expected — a projection
+        // of an erased field, a dropped binder, or a wrapper call returning an
+        // erased method: the application is proof content and collapses to the
+        // unit constant. The check must be value-driven, not type-driven: a
+        // *direct* function reference keeps its call even at an erasable type,
+        // because a never-returning host effect (`/std/proc/exit : (Nat) ->
+        // False`, polymorphic `/sys/Io/exit`) is proof-typed but must run.
+        if !matches!(callee, curios_ersd::Atom::Function(_)) && is_erasable(context, &head_type)? {
+            return Ok(Outcome::Emitted(self.unit()));
+        }
 
         // The drop decision is the signature mask (opaque-opened), so it
         // agrees with the function's fixed runtime arity even when a
