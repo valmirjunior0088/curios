@@ -1291,11 +1291,11 @@ fn record_is_an_identifier_and_legacy_declarations_are_not_grammar() {
 
 #[test]
 fn representation_pub_is_declaration_local() {
-    assert!(
-        "pub concept C : pub Type {} c"
-            .parse::<Entrypoint>()
-            .is_err()
-    );
+    // Concepts take the representation marker like structs and inductives;
+    // ordinary sort positions still reject it — `pub Type` is not a term.
+    "pub concept C : pub Type {} c"
+        .parse::<Entrypoint>()
+        .expect("a concept takes a representation sort");
     assert!("let x : pub Type = Type; x".parse::<Entrypoint>().is_err());
 }
 
@@ -2035,6 +2035,8 @@ fn parse_concept_item() {
     assert_eq!(concept.label, "Ord");
     assert_eq!(concept.params.len(), 1);
     assert_eq!(concept.fields.len(), 3);
+    // `: Type` without `pub` is a sealed (private-representation) concept.
+    assert!(!concept.rep_pub);
 
     // The `use` field is a superclass edge — anonymous, so its label is empty
     // (lowering mints an internal `_superN`).
@@ -2076,6 +2078,19 @@ fn out_stays_a_valid_parameter_name() {
 
     assert_eq!(concept.params.len(), 1);
     assert_eq!(concept.params[0].1, "out");
+}
+
+#[test]
+fn concept_representation_sort_carries_visibility() {
+    // `: pub Type` marks the representation transparent; the marker is
+    // independent from the name's `pub`.
+    let source = "concept Show(A : Type) : pub Type { show : A } u";
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    let TopItem::Concept(concept) = &entrypoint.module.items[0] else {
+        panic!("expected a concept declaration");
+    };
+    assert!(!concept.vis_pub);
+    assert!(concept.rep_pub);
 }
 
 #[test]
@@ -2167,6 +2182,8 @@ fn concept_witness_use_round_trip() {
     // print → re-parse cycle unchanged.
     for source in [
         "concept Show(A : Type) : Type { show : A } u",
+        "pub concept Show(A : Type) : pub Type { show : A } u",
+        "pub concept Certified(A : Type) : pub Prop { proof : A } u",
         "pub concept Ord(A : Type) : Type { use Eql(A), cmp : A } u",
         "concept Convert(A : Type, B : Type) : Type { convert : A } u",
         "satisfy Show(Nat) { show = f } u",

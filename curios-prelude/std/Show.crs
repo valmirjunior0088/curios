@@ -1,6 +1,6 @@
 use /std/{Nat, Int, Flt, Bool, Char, Str, Option, BigNat, BigInt};
 
-pub concept Show(A : Type) : Type {
+pub concept Show(A : Type) : pub Type {
     show(A) -> Str
 }
 

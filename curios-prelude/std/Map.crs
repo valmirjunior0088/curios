@@ -10,7 +10,7 @@ pub struct Map(V : Type) : Type {
     root : Option(Node(V))
 }
 
-pub concept Key(K : Type) : Type {
+pub concept Key(K : Type) : pub Type {
     to_bin(K) -> Bytes
 }
 

@@ -343,8 +343,8 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
     );
 }
 
-// A pub concept's field types are interface (its representation is always
-// public), superclass edges included.
+// A transparent pub concept's field types are interface (its representation
+// is public), superclass edges included.
 #[test]
 fn pub_concept_with_private_superclass_is_rejected() {
     let source = r#"
@@ -354,7 +354,7 @@ fn pub_concept_with_private_superclass_is_rejected() {
             concept Hidden(A : Type) : Type {
                 h(A) -> Bool
             }
-            pub concept Loud(A : Type) : Type {
+            pub concept Loud(A : Type) : pub Type {
                 use Hidden(A),
                 l(A) -> Bool
             }
@@ -368,6 +368,31 @@ fn pub_concept_with_private_superclass_is_rejected() {
         error.contains("exposes private item '/M/Hidden'"),
         "unexpected error: {error}"
     );
+}
+
+// A *sealed* pub concept's fields are not interface — a private superclass is
+// a hidden implementation obligation, discharged by resolution without the
+// consumer ever naming it (the sealed-trait-with-private-supertrait idiom).
+#[test]
+fn sealed_pub_concept_with_private_superclass_is_accepted() {
+    let source = r#"
+        use /std/{Nat, Bool, Io};
+        mod M
+            use /std/{Bool};
+            concept Hidden(A : Type) : Type {
+                h(A) -> Bool
+            }
+            pub concept Loud(A : Type) : Type {
+                use Hidden(A),
+                l(A) -> Bool
+            }
+        end
+        Io/print("ok")
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"ok");
 }
 
 // A pub inductive's constructors are its interface: a private payload type is

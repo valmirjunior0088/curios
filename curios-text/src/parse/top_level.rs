@@ -495,13 +495,16 @@ pub(super) fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
                 )
                 .or(pure(vec![])),
             )
-            .and(parse_literal(":").and_keep(parse_sort()))
+            // The representation sort: `: pub Type`, `: Type`, `: pub Prop`,
+            // or `: Prop` after the parameters. Required, like a struct's.
+            .and(parse_literal(":").and_keep(parse_representation_sort()))
             .and_drop(parse_literal("{"))
             .and(sep_by0_trailing(parse_concept_field, || parse_literal(",")))
             .and_drop(parse_literal("}"))
-            .map(move |(((label, params), result_sort), fields)| {
+            .map(move |(((label, params), (rep_pub, result_sort)), fields)| {
                 TopItem::Concept(TopConcept {
                     vis_pub,
+                    rep_pub,
                     label: label.to_string(),
                     params,
                     result_sort,

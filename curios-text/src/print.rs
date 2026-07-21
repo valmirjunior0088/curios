@@ -1142,6 +1142,7 @@ fn print_top_concept(item: TopConcept) -> Printer<'static> {
         pure(item.label),
         print_top_inductive_params(item.params),
         pure(" : "),
+        print_pub(item.rep_pub),
         print_term(item.result_sort),
         pure(" { "),
         sep_flat(item.fields.into_iter().map(print_concept_field), || {

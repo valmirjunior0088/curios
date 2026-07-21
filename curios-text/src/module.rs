@@ -184,6 +184,11 @@ impl ConceptField {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopConcept {
     pub vis_pub: bool,
+    /// Representation visibility, independent from `vis_pub` (the name's):
+    /// `: pub Type` is transparent, `: Type` is sealed — witnesses and
+    /// dictionary literals only in the declaring module, exactly like a
+    /// private-representation struct.
+    pub rep_pub: bool,
     pub label: String,
     pub params: Vec<(Plicity, String, Term)>,
     pub result_sort: Term,

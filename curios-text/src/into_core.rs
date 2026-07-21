@@ -1047,7 +1047,7 @@ fn process_items(
                         result_sort: result_sort.clone(),
                         module,
                         root,
-                        rep_public: true,
+                        rep_public: concept.rep_pub,
                     },
                 );
 
