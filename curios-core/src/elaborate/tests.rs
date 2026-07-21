@@ -117,6 +117,45 @@ fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
     }
 }
 
+// Privacy is a property of surface elaboration: machinery re-deriving types
+// from already-elaborated terms runs under `with_suppressed_privacy`, which
+// admits what enforcement rejects and restores enforcement on exit.
+#[test]
+fn privacy_suppression_admits_machinery_rederivation() {
+    let mut context = context();
+    register_opt(&mut context);
+    make_opt_opaque(&mut context);
+
+    let term = Term::variant("Opt", Vec::<Term>::new(), "none", Vec::<Term>::new());
+    assert!(matches!(
+        elaborate(&mut context, &term, Mode::Infer),
+        Err(Error::PrivateRepresentation { name }) if name == "Opt"
+    ));
+
+    let admitted =
+        context.with_suppressed_privacy(|context| elaborate(context, &term, Mode::Infer).is_ok());
+    assert!(admitted);
+
+    assert!(matches!(
+        elaborate(&mut context, &term, Mode::Infer),
+        Err(Error::PrivateRepresentation { name }) if name == "Opt"
+    ));
+}
+
+// The oracle's suppressions are a package: a re-validated candidate can embed
+// machinery-built projections of private representations, and a swallowed
+// privacy error would silently flip the verdict.
+#[test]
+fn oracle_suppresses_privacy_as_part_of_its_package() {
+    let mut context = context();
+    register_opt(&mut context);
+    make_opt_opaque(&mut context);
+
+    let term = Term::variant("Opt", Vec::<Term>::new(), "none", Vec::<Term>::new());
+    let admitted = context.with_oracle(|context| elaborate(context, &term, Mode::Infer).is_ok());
+    assert!(admitted);
+}
+
 #[test]
 fn infer_synthesizes_a_primitive_type() {
     let mut context = context();

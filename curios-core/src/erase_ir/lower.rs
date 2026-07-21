@@ -47,32 +47,36 @@ pub fn erase_module_to_ir(
     module: &Module,
     expected: &Term,
 ) -> Result<curios_ersd::Module, Error> {
-    // Erasure runs with its own `Context`; seed the registries the re-derived
-    // types consult before any item does.
-    for (name, inductive) in &module.inductives {
-        context.register_inductive(name, inductive.clone())?;
-    }
-    for (name, structure) in &module.structures {
-        context.register_structure(name, structure.clone())?;
-    }
+    // Erasure is re-derivation of elaborated terms, never surface elaboration,
+    // so the representation-privacy checks are suppressed for the whole walk.
+    context.with_suppressed_privacy(|context| {
+        // Erasure runs with its own `Context`; seed the registries the
+        // re-derived types consult before any item does.
+        for (name, inductive) in &module.inductives {
+            context.register_inductive(name, inductive.clone())?;
+        }
+        for (name, structure) in &module.structures {
+            context.register_structure(name, structure.clone())?;
+        }
 
-    let mut lowering = Lowering::default();
-    lowering.erase_items(context, module, 0)?;
+        let mut lowering = Lowering::default();
+        lowering.erase_items(context, module, 0)?;
 
-    // The entrypoint body runs under the root module (mirrors elaboration).
-    context.set_island(Qualifier::empty());
-    lowering.builder.open_block();
-    let outcome = lowering.walk(context, &module.body, expected, None)?;
-    let entry = lowering.seal(outcome);
-    lowering.builder.set_entry(entry);
+        // The entrypoint body runs under the root module (mirrors elaboration).
+        context.set_island(Qualifier::empty());
+        lowering.builder.open_block();
+        let outcome = lowering.walk(context, &module.body, expected, None)?;
+        let entry = lowering.seal(outcome);
+        lowering.builder.set_entry(entry);
 
-    // The verifier is the rejection point for the recursion classes the
-    // language does not admit (a computed-only evaluation cycle); any other
-    // failure here is an erasure bug, indistinguishable at this boundary.
-    lowering
-        .builder
-        .finalize()
-        .map_err(|error| Error::erased_module_invalid(error.to_string()))
+        // The verifier is the rejection point for the recursion classes the
+        // language does not admit (a computed-only evaluation cycle); any other
+        // failure here is an erasure bug, indistinguishable at this boundary.
+        lowering
+            .builder
+            .finalize()
+            .map_err(|error| Error::erased_module_invalid(error.to_string()))
+    })
 }
 
 impl Lowering {
@@ -248,17 +252,20 @@ pub fn erase_prelude_to_ir_prefix(
     context: &mut Context,
     prelude: &Module,
 ) -> Result<ErasedPrelude, Error> {
-    for (name, inductive) in &prelude.inductives {
-        context.register_inductive(name, inductive.clone())?;
-    }
-    for (name, structure) in &prelude.structures {
-        context.register_structure(name, structure.clone())?;
-    }
-    let mut lowering = Lowering::default();
-    lowering.erase_items(context, prelude, 0)?;
-    Ok(ErasedPrelude {
-        module: lowering.builder.into_module(),
-        environment: lowering.environment,
+    // Re-derivation, not surface elaboration (see `erase_module_to_ir`).
+    context.with_suppressed_privacy(|context| {
+        for (name, inductive) in &prelude.inductives {
+            context.register_inductive(name, inductive.clone())?;
+        }
+        for (name, structure) in &prelude.structures {
+            context.register_structure(name, structure.clone())?;
+        }
+        let mut lowering = Lowering::default();
+        lowering.erase_items(context, prelude, 0)?;
+        Ok(ErasedPrelude {
+            module: lowering.builder.into_module(),
+            environment: lowering.environment,
+        })
     })
 }
 
@@ -276,50 +283,54 @@ pub fn erase_module_with_prelude_to_ir(
     expected: &Term,
     prefix: ErasedPrelude,
 ) -> Result<curios_ersd::Module, Error> {
-    for (name, inductive) in &module.inductives {
-        context.register_inductive(name, inductive.clone())?;
-    }
-    for (name, structure) in &module.structures {
-        context.register_structure(name, structure.clone())?;
-    }
+    // Re-derivation, not surface elaboration (see `erase_module_to_ir`).
+    context.with_suppressed_privacy(|context| {
+        for (name, inductive) in &module.inductives {
+            context.register_inductive(name, inductive.clone())?;
+        }
+        for (name, structure) in &module.structures {
+            context.register_structure(name, structure.clone())?;
+        }
 
-    // Re-seed the Core context with the prelude's definitions, mirroring the
-    // legacy replay: later items and the entrypoint reduce through them.
-    for item in &prelude.items {
-        match item {
-            super::Item::Let(definition) => {
-                context.define_assuming(&definition.name, &definition.type_, &definition.body);
-            }
-            super::Item::Rec(rec) => {
-                let definitions = rec.definitions();
-                for definition in &definitions {
-                    context.assume(&definition.name, &definition.type_);
+        // Re-seed the Core context with the prelude's definitions, mirroring
+        // the legacy replay: later items and the entrypoint reduce through
+        // them.
+        for item in &prelude.items {
+            match item {
+                super::Item::Let(definition) => {
+                    context.define_assuming(&definition.name, &definition.type_, &definition.body);
                 }
-                for (index, definition) in definitions.iter().enumerate() {
-                    context.define(
-                        &definition.name,
-                        &Term::rec_member(rec.group.clone(), index),
-                    );
+                super::Item::Rec(rec) => {
+                    let definitions = rec.definitions();
+                    for definition in &definitions {
+                        context.assume(&definition.name, &definition.type_);
+                    }
+                    for (index, definition) in definitions.iter().enumerate() {
+                        context.define(
+                            &definition.name,
+                            &Term::rec_member(rec.group.clone(), index),
+                        );
+                    }
                 }
             }
         }
-    }
 
-    let mut lowering = Lowering {
-        builder: curios_ersd::ErsdBuilder::resume(prefix.module),
-        environment: prefix.environment,
-        dangled: Default::default(),
-    };
-    lowering.erase_items(context, module, prelude.items.len())?;
+        let mut lowering = Lowering {
+            builder: curios_ersd::ErsdBuilder::resume(prefix.module),
+            environment: prefix.environment,
+            dangled: Default::default(),
+        };
+        lowering.erase_items(context, module, prelude.items.len())?;
 
-    context.set_island(Qualifier::empty());
-    lowering.builder.open_block();
-    let outcome = lowering.walk(context, &module.body, expected, None)?;
-    let entry = lowering.seal(outcome);
-    lowering.builder.set_entry(entry);
+        context.set_island(Qualifier::empty());
+        lowering.builder.open_block();
+        let outcome = lowering.walk(context, &module.body, expected, None)?;
+        let entry = lowering.seal(outcome);
+        lowering.builder.set_entry(entry);
 
-    lowering
-        .builder
-        .finalize()
-        .map_err(|error| Error::erased_module_invalid(error.to_string()))
+        lowering
+            .builder
+            .finalize()
+            .map_err(|error| Error::erased_module_invalid(error.to_string()))
+    })
 }

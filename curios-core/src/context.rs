@@ -211,6 +211,15 @@ pub struct Context {
     // by `elaborate_module` per item; read by `elaborate_proj` for the struct
     // representation-privacy check (§7).
     island: Qualifier,
+    // Whether the representation-privacy checks (§7) fire. Privacy is a
+    // property of *surface elaboration*: machinery that re-derives types from
+    // already-elaborated terms — erasure, the metavariable oracle, idempotent
+    // metavariable re-checks — walks compiler-built projections (witness
+    // splices, eta-expansions) under whatever island happens to be current,
+    // and must not re-adjudicate a rule elaboration already enforced. On by
+    // default so a forgotten re-derivation site fails loudly (a spurious
+    // privacy error), never silently (missing enforcement).
+    enforce_privacy: bool,
 }
 
 // Safety: `Term` keys contain `OnceCell` fields for caching, which triggers Clippy's
@@ -246,6 +255,7 @@ impl Context {
             witness_marks: Vec::new(),
             deferred_witnesses: Vec::new(),
             island: Qualifier::empty(),
+            enforce_privacy: true,
             parked: Vec::new(),
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
@@ -817,6 +827,27 @@ impl Context {
         self.island = island;
     }
 
+    /// Whether the representation-privacy checks (§7) fire — true during
+    /// surface elaboration, false while machinery re-derives types from
+    /// already-elaborated terms (see the field's invariant).
+    pub(crate) fn privacy_enforced(&self) -> bool {
+        self.enforce_privacy
+    }
+
+    /// Run `f` with the representation-privacy checks suppressed — for
+    /// re-derivation of already-elaborated terms, whose machinery-built
+    /// projections were never subject to surface privacy in the first place.
+    /// The bracket is the only way to suppress (mirroring the parking half of
+    /// the oracle package), so no context can be left permanently altered.
+    pub(crate) fn with_suppressed_privacy<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let previous = self.enforce_privacy;
+        self.enforce_privacy = false;
+        let result = f(self);
+        self.enforce_privacy = previous;
+
+        result
+    }
+
     // === Metavariable store =================================================
 
     /// Materialize a metavariable's birth record (§5). The store grows to cover
@@ -1226,11 +1257,18 @@ impl Context {
     /// parking is suppressed — `expect` treats `Blocked` as a mismatch and
     /// `retry_parked` is a no-op, so provisional success can neither leak into
     /// the verdict nor consume a parked obligation whose error the oracle
-    /// would swallow — and counterfactual refinements are suppressed with it.
-    /// The two suppressions are a package: an oracle that set only one would
-    /// be subtly unsound, which is why the parking half has no public setter.
+    /// would swallow — counterfactual refinements are suppressed with it, and
+    /// so are the representation-privacy checks: an oracle candidate is a
+    /// unification artifact that can embed machinery-built projections
+    /// (eta-expansions, witness splices) whose privacy elaboration already
+    /// adjudicated, and a swallowed privacy error would silently flip the
+    /// verdict. The suppressions are a package: an oracle that set only some
+    /// would be subtly unsound, which is why the parking half has no public
+    /// setter.
     pub(crate) fn with_oracle<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        self.with_suppressed_parking(|context| context.with_suppressed_refinements(f))
+        self.with_suppressed_parking(|context| {
+            context.with_suppressed_refinements(|context| context.with_suppressed_privacy(f))
+        })
     }
 
     fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
