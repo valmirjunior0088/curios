@@ -118,8 +118,9 @@ fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
 }
 
 // Privacy is a property of surface elaboration: machinery re-deriving types
-// from already-elaborated terms runs under `with_suppressed_privacy`, which
-// admits what enforcement rejects and restores enforcement on exit.
+// from already-elaborated terms runs under `with_suppressed_privacy` (no
+// island — no use site to judge from), which admits what enforcement rejects
+// and restores the island on exit.
 #[test]
 fn privacy_suppression_admits_machinery_rederivation() {
     let mut context = context();

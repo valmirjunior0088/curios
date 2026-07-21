@@ -207,19 +207,17 @@ pub struct Context {
     // reported as errors only when the whole module has been elaborated.
     deferred_witnesses: Vec<ParkedGoal>,
     // The module whose item is currently being elaborated — the qualifier
-    // prefix of that item's name (the root module is the empty qualifier). Set
-    // by `elaborate_module` per item; read by `elaborate_proj` for the struct
-    // representation-privacy check (§7).
-    island: Qualifier,
-    // Whether the representation-privacy checks (§7) fire. Privacy is a
-    // property of *surface elaboration*: machinery that re-derives types from
-    // already-elaborated terms — erasure, the metavariable oracle, idempotent
-    // metavariable re-checks — walks compiler-built projections (witness
-    // splices, eta-expansions) under whatever island happens to be current,
-    // and must not re-adjudicate a rule elaboration already enforced. On by
-    // default so a forgotten re-derivation site fails loudly (a spurious
-    // privacy error), never silently (missing enforcement).
-    enforce_privacy: bool,
+    // prefix of that item's name (a fresh context starts at the root, the
+    // empty qualifier). Set by `elaborate_module` per item; read by the
+    // representation-privacy checks (§7). `None` arises only through
+    // `with_suppressed_privacy` and means there is no surface use site to
+    // judge from, which suppresses the checks structurally: privacy is a
+    // property of *surface elaboration*, and machinery that re-derives types
+    // from already-elaborated terms — erasure, the metavariable oracle —
+    // walks compiler-built projections (witness splices, eta-expansions) that
+    // must not be re-adjudicated. A machinery path that forgets its bracket
+    // fails loudly (a spurious privacy error), never silently.
+    island: Option<Qualifier>,
 }
 
 // Safety: `Term` keys contain `OnceCell` fields for caching, which triggers Clippy's
@@ -254,8 +252,7 @@ impl Context {
             witness_scope: Vec::new(),
             witness_marks: Vec::new(),
             deferred_witnesses: Vec::new(),
-            island: Qualifier::empty(),
-            enforce_privacy: true,
+            island: Some(Qualifier::empty()),
             parked: Vec::new(),
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
@@ -815,35 +812,29 @@ impl Context {
     }
 
     /// The module whose item is currently being elaborated (the qualifier
-    /// prefix of its name; empty for the root). Used by the struct projection
-    /// privacy check.
-    pub(crate) fn island(&self) -> &Qualifier {
-        &self.island
+    /// prefix of its name; empty for the root), or `None` when no surface
+    /// item is being elaborated — which suppresses the representation-privacy
+    /// checks (see the field's invariant).
+    pub(crate) fn island(&self) -> Option<&Qualifier> {
+        self.island.as_ref()
     }
 
     /// Set the current module before elaborating an item (see
     /// `elaborate_module`).
     pub(crate) fn set_island(&mut self, island: Qualifier) {
-        self.island = island;
+        self.island = Some(island);
     }
 
-    /// Whether the representation-privacy checks (§7) fire — true during
-    /// surface elaboration, false while machinery re-derives types from
-    /// already-elaborated terms (see the field's invariant).
-    pub(crate) fn privacy_enforced(&self) -> bool {
-        self.enforce_privacy
-    }
-
-    /// Run `f` with the representation-privacy checks suppressed — for
-    /// re-derivation of already-elaborated terms, whose machinery-built
+    /// Run `f` with no island — suppressing the representation-privacy checks
+    /// for re-derivation of already-elaborated terms, whose machinery-built
     /// projections were never subject to surface privacy in the first place.
-    /// The bracket is the only way to suppress (mirroring the parking half of
-    /// the oracle package), so no context can be left permanently altered.
+    /// The bracket is the only way to clear an island (mirroring the parking
+    /// half of the oracle package), so no context can be left permanently
+    /// altered.
     pub(crate) fn with_suppressed_privacy<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let previous = self.enforce_privacy;
-        self.enforce_privacy = false;
+        let previous = self.island.take();
         let result = f(self);
-        self.enforce_privacy = previous;
+        self.island = previous;
 
         result
     }

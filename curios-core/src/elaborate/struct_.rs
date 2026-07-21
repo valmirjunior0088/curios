@@ -141,7 +141,10 @@ pub(super) fn elaborate_struct(
     // only within its declaring module. Checked here (alongside projection
     // privacy in `elaborate_proj`) via `island`, set per item by
     // `elaborate_module`.
-    if context.privacy_enforced() && !structure.rep_public && *context.island() != structure.module
+    if !structure.rep_public
+        && context
+            .island()
+            .is_some_and(|island| *island != structure.module)
     {
         return Err(Error::private_representation(name.clone()));
     }

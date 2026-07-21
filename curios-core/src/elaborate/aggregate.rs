@@ -67,9 +67,10 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
             // (`Context::island`, set per item by `elaborate_module`);
             // the island model grants no descendant access, so the check is
             // exact qualifier equality.
-            if context.privacy_enforced()
-                && !structure.rep_public
-                && *context.island() != structure.module
+            if !structure.rep_public
+                && context
+                    .island()
+                    .is_some_and(|island| *island != structure.module)
             {
                 let field = match field {
                     Field::Index(index) => index.to_string(),
@@ -188,7 +189,10 @@ pub(super) fn elaborate_variant(
         return Err(Error::unbound_variable(Term::free_var(name)));
     };
 
-    if context.privacy_enforced() && !inductive.rep_public && *context.island() != inductive.module
+    if !inductive.rep_public
+        && context
+            .island()
+            .is_some_and(|island| *island != inductive.module)
     {
         return Err(Error::private_representation(name.clone()));
     }

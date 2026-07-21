@@ -637,7 +637,10 @@ fn elaborate_inductive_match(
     // Opacity covers every eliminator, including defaults and vacuous or
     // inversion-discharged matches. Check before motives, coverage, or index
     // refinement can reveal representation facts.
-    if context.privacy_enforced() && !inductive.rep_public && *context.island() != inductive.module
+    if !inductive.rep_public
+        && context
+            .island()
+            .is_some_and(|island| *island != inductive.module)
     {
         return Err(Error::private_representation(name));
     }
