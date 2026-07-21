@@ -67,7 +67,7 @@ fn main() {
         )
     });
 
-    let ersd_prelude = curios_core::erase_prelude_to_ir_prefix(
+    let ersd = curios_core::erase_prelude_to_ir_prefix(
         &mut curios_core::Context::new(Duration::from_secs(300)),
         &core,
     )
@@ -84,7 +84,7 @@ fn main() {
         prepared,
         core,
         body_type,
-        ersd_prelude,
+        ersd,
     };
     let first = rkyv::to_bytes::<rkyv::rancor::Error>(&image)
         .expect("fixed prelude archive serialization failed");

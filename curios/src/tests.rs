@@ -26,10 +26,3 @@ fn run(source: &str) -> Vec<u8> {
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     io.output().to_vec()
 }
-
-/// The fresh-erasure twin of [`run`], for the behavior-identity corpus.
-fn run_arena(source: &str) -> Vec<u8> {
-    let (system, io) = MockHost::builder().build();
-    crate::run_text_via_arena(Duration::from_secs(60), source, system).expect("expected result");
-    io.output().to_vec()
-}

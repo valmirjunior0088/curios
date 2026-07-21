@@ -74,7 +74,7 @@ pub(super) struct FamilyRow {
     pub(super) constructors: Vec<ConstructorRow>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 #[cfg_attr(
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)

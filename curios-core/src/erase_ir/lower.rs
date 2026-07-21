@@ -210,9 +210,10 @@ impl Lowering {
 /// A replayable prefix: the fixed prelude erased into an unfinished arena
 /// module (items only, no entry), together with the erasure environment that
 /// maps prelude Core names to their arena operands. Archived by
-/// `curios-prelude` behind the `archive` feature and restored on every
-/// production compile, so the prelude is never re-erased from source.
-#[derive(Debug)]
+/// `curios-prelude` behind the `archive` feature and restored there once per
+/// thread; every production compile consumes an owned clone, so the prelude
+/// is never re-erased from source.
+#[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize),

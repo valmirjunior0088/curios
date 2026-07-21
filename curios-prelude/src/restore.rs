@@ -12,12 +12,13 @@ const EXPECTED_ARCHIVE_DIGEST: &str = env!("CURIOS_PRELUDE_ARCHIVE_DIGEST");
 
 static ARCHIVE: OnceLock<Result<&'static ArchivedPreludeArchive, String>> = OnceLock::new();
 
-/// The reusable, restored Text/Core portion of the fixed prelude. Fields stay
-/// private so callers cannot mutate compiler-global state between invocations.
+/// The reusable, restored fixed prelude. Fields stay private so callers
+/// cannot mutate compiler-global state between invocations.
 pub struct Prelude {
     prepared: curios_text::PreparedPrelude,
     core: curios_core::Module,
     body_type: curios_core::Term,
+    ersd: curios_core::ErasedPrelude,
 }
 
 impl Prelude {
@@ -32,6 +33,14 @@ impl Prelude {
     pub fn body_type(&self) -> &curios_core::Term {
         &self.body_type
     }
+
+    /// The arena prelude prefix — the erased module and environment
+    /// production replay resumes over. Returned as an owned clone because
+    /// replay consumes it by value, so a compile's mutation of its copy can
+    /// never poison a later one.
+    pub fn ersd(&self) -> curios_core::ErasedPrelude {
+        self.ersd.clone()
+    }
 }
 
 thread_local! {
@@ -42,6 +51,7 @@ thread_local! {
             prepared: image.prepared,
             core: image.core,
             body_type: image.body_type,
+            ersd: image.ersd,
         }
     });
 }
@@ -103,15 +113,6 @@ pub fn with_prelude<R>(use_prelude: impl FnOnce(&Prelude) -> R) -> R {
     PRELUDE.with(|prelude| use_prelude(prelude))
 }
 
-/// Restore the arena prelude prefix — the erased module and environment
-/// production replay resumes over. Deserialized fresh per call, so a
-/// compile's mutation of the restored prefix can never poison a later one.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub fn restore_ersd_prelude() -> curios_core::ErasedPrelude {
-    rkyv::deserialize::<curios_core::ErasedPrelude, rkyv::rancor::Error>(&archived().ersd_prelude)
-        .unwrap_or_else(|error| panic!("validated arena prelude prefix failed to restore: {error}"))
-}
-
 #[cfg(test)]
 mod tests {
     use {super::*, crate::SYNTAX, std::collections::BTreeSet};
@@ -158,11 +159,13 @@ mod tests {
     }
 
     #[test]
-    fn ersd_restore_is_fresh() {
-        let first = restore_ersd_prelude();
-        assert!(!first.is_empty());
-        drop(first);
-        assert!(!restore_ersd_prelude().is_empty());
+    fn ersd_clones_are_fresh() {
+        with_prelude(|prelude| {
+            let first = prelude.ersd();
+            assert!(!first.is_empty());
+            drop(first);
+            assert!(!prelude.ersd().is_empty());
+        });
     }
 
     #[test]

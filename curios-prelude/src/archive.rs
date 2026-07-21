@@ -29,5 +29,5 @@ pub(crate) struct PreludeArchive {
     pub(crate) prepared: PreparedPrelude,
     pub(crate) core: curios_core::Module,
     pub(crate) body_type: curios_core::Term,
-    pub(crate) ersd_prelude: curios_core::ErasedPrelude,
+    pub(crate) ersd: curios_core::ErasedPrelude,
 }

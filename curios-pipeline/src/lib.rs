@@ -123,11 +123,9 @@ where
     Ok((module, core_type, user_foreigns))
 }
 
-/// The back half shared by [`compile_entrypoint`] and its fresh-erasure twin:
-/// from a verified erased module through optimization, the lowering into Cont,
-/// Cont optimization, and wasm emission, observing every stage in order. Both
-/// entrypoints differ only in how they produce the erased module, and funneling
-/// them through one sequence keeps that contract true by construction.
+/// The back half of [`compile_entrypoint`]: from a verified erased module
+/// through optimization, the lowering into Cont, Cont optimization, and wasm
+/// emission, observing every stage in order.
 #[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
 fn lower_from_ersd<O>(mut ersd_module: curios_ersd::Module, observe: &mut O) -> curios_wasm::Module
 where
@@ -158,34 +156,6 @@ where
     wasm_module
 }
 
-/// The fresh-erasure twin of [`compile_entrypoint`]: identical except the
-/// whole module — fixed prelude included — is erased from Core on every call
-/// instead of replaying the archived prelude prefix. Deliberately slower; the
-/// behavior-identity corpus in `curios` compares it against production, which
-/// is what catches a bad archive round trip.
-#[cfg_attr(feature = "profile", tracing::instrument(level = "trace", skip_all))]
-pub fn compile_entrypoint_via_arena<O>(
-    timeout: Duration,
-    entrypoint: &curios_text::Entrypoint,
-    loader: curios_text::RootSource,
-    mut observe: O,
-) -> Result<(curios_wasm::Module, ForeignStore), String>
-where
-    O: FnMut(Stage<'_>),
-{
-    let (module, core_type, foreigns) =
-        elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
-
-    let ersd_module = curios_core::erase_module_to_ir(
-        &mut curios_core::Context::new(timeout),
-        &module,
-        &core_type,
-    )
-    .map_err(|error| error.format_with(&module))?;
-
-    Ok((lower_from_ersd(ersd_module, &mut observe), foreigns))
-}
-
 /// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
 ///
 /// Production runs the arena erased representation: the archived prelude
@@ -205,14 +175,13 @@ where
     let (module, core_type, foreigns) =
         elaborate_and_zonk(timeout, entrypoint, loader, &mut observe)?;
 
-    let prefix = curios_prelude::restore_ersd_prelude();
     let ersd_module = curios_prelude::with_prelude(|prelude| {
         curios_core::erase_module_with_prelude_to_ir(
             &mut curios_core::Context::new(timeout),
             prelude.core(),
             &module,
             &core_type,
-            prefix,
+            prelude.ersd(),
         )
     })
     .map_err(|error| error.format_with(&module))?;
