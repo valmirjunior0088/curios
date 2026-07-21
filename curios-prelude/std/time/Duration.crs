@@ -1,4 +1,4 @@
-use /std/{Nat};
+use /std/{Nat, Bool};
 
 pub struct Duration : Type {
     secs : Nat,
@@ -28,3 +28,27 @@ pub let nanos(d : Duration) -> Nat =
 
 pub let to_millis(d : Duration) -> Nat =
     d.secs * 1000 + d.nanos / 1000000;
+
+pub let add(a : Duration, b : Duration) -> Duration =
+    let nanos = a.nanos + b.nanos;
+    match nanos < 1000000000
+    | true => Duration { secs = a.secs + b.secs, nanos = nanos }
+    | false => Duration { secs = a.secs + b.secs + 1, nanos = nanos - 1000000000 }
+    end;
+
+pub let before(a : Duration, b : Duration) -> Bool =
+    match
+    | a.secs < b.secs => true
+    | a.secs > b.secs => false
+    | _ => a.nanos < b.nanos
+    end;
+
+pub let sub(a : Duration, b : Duration) -> Duration =
+    match before(a, b)
+    | true => zero
+    | false =>
+        match a.nanos < b.nanos
+        | true => Duration { secs = a.secs - b.secs - 1, nanos = a.nanos + 1000000000 - b.nanos }
+        | false => Duration { secs = a.secs - b.secs, nanos = a.nanos - b.nanos }
+        end
+    end;

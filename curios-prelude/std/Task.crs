@@ -1,7 +1,9 @@
-use /std/{Io, Bytes, Nat, Bool, Lst, Option, Result, Cell};
+use /std/{Io, Bytes, Nat, Int, Bool, Lst, Option, Result, Cell};
+use /std/time/{Duration, Instant};
 
 pub induct Pause : pub Type
 | wait(Io, Nat)
+| sleep(Duration)
 | fork(() -> Task({}), Cell(Bool))
 | park((() -> {}) -> {})
 | acquire(Io, () -> {})
@@ -49,6 +51,9 @@ pub let defer(@A : Type, body : () -> Task(A)) -> Task(A) =
 
 pub let wait(h : Io, ev : Nat) -> Task({}) =
     Task/step(Pause/wait(h, ev), () => pure(()));
+
+pub let sleep(d : Duration) -> Task({}) =
+    Task/step(Pause/sleep(d), () => pure(()));
 
 pub let park(register : (Waker) -> {}) -> Task({}) =
     Task/step(Pause/park(register), () => pure(()));
@@ -156,6 +161,13 @@ struct Parked : pub Type {
     fins : Lst(Guard)
 }
 
+struct Sleeper : pub Type {
+    due : Duration,
+    resume : Fiber,
+    token : Token,
+    fins : Lst(Guard)
+}
+
 let run_fins(gs : Lst(Guard)) -> {} =
     Lst/each(gs, (g) => g.1());
 
@@ -176,6 +188,9 @@ let drain_jobs(js : Lst(Job)) -> {} =
 
 let drain_parked(ps : Lst(Parked)) -> {} =
     Lst/each(ps, (p) => run_fins(p.fins));
+
+let drain_sleeping(ss : Lst(Sleeper)) -> {} =
+    Lst/each(ss, (s) => run_fins(s.fins));
 
 let drain_slots(ss : Lst(Slot)) -> {} =
     rec each(rest : Lst(Slot)) -> {} =
@@ -208,10 +223,10 @@ let sweep_parked(ss : Lst(Slot)) -> Lst(Slot) =
 let is_ready(results : Nat, interest : Nat) -> Bool =
     Nat/and(results, Nat/or(Nat/or(interest, /sys/Io/Poll/err), /sys/Io/Poll/hup)) > 0;
 
-let poll_ready(blocked : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
+let poll_ready(blocked : Lst(Parked), timeout : Int) -> {Lst(Job), Lst(Parked)} =
     let handles = Lst/map(blocked, (p : Parked) => p.handle);
     let events = Lst/map(blocked, (p : Parked) => p.interest);
-    let results = /sys/Io/poll(handles, events, -1);
+    let results = /sys/Io/poll(handles, events, timeout);
     rec walk(rest : Lst(Parked), i : Nat, woken : Lst(Job), still : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
         match rest : {Lst(Job), Lst(Parked)}
         | [] => (woken, still)
@@ -227,9 +242,55 @@ let poll_ready(blocked : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
         end;
     walk(blocked, 0, Lst/nil(@Job), Lst/nil(@Parked));
 
+-- The remaining interval crosses the poll wire as `Int` milliseconds, so a
+-- deadline farther than 2^30 - 1 ms (about 12.4 days) away traps at the
+-- boundary instead of being silently truncated.
+let sleep_timeout(sleeping : Lst(Sleeper)) -> Int =
+    rec earliest(rest : Lst(Sleeper), best : Option(Duration)) -> Option(Duration) =
+        match rest : Option(Duration)
+        | [] => best
+        | [s, ..more] =>
+            match best : Option(Duration)
+            | none() => earliest(more, Option/some(s.due))
+            | some(b) =>
+                match Duration/before(s.due, b) : Option(Duration)
+                | true => earliest(more, Option/some(s.due))
+                | false => earliest(more, best)
+                end
+            end
+        end;
+    match earliest(sleeping, Option/none(@Duration)) : Int
+    | none() => -1
+    | some(due) =>
+        let remaining = Duration/sub(due, Instant/elapsed());
+        let whole = Duration/to_millis(remaining);
+        match Duration/nanos(remaining) % 1000000 > 0 : Int
+        | true => Nat/to_int(whole + 1)
+        | false => Nat/to_int(whole)
+        end
+    end;
+
+let expire_sleepers(sleeping : Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
+    let now = Instant/elapsed();
+    rec walk(rest : Lst(Sleeper), woken : Lst(Job), still : Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
+        match rest : {Lst(Job), Lst(Sleeper)}
+        | [] => (woken, still)
+        | [s, ..tail] =>
+            match Cell/get(s.token) : {Lst(Job), Lst(Sleeper)}
+            | true => let _ = run_fins(s.fins); walk(tail, woken, still)
+            | false =>
+                match Duration/before(now, s.due) : {Lst(Job), Lst(Sleeper)}
+                | true => walk(tail, woken, Lst/cons(s, still))
+                | false => walk(tail, Lst/cons(Job { resume = s.resume, token = s.token, fins = s.fins }, woken), still)
+                end
+            end
+        end;
+    walk(sleeping, Lst/nil(@Job), Lst/nil(@Sleeper));
+
 pub let block_on(@A : Type, root : Task(A)) -> A =
     let runq : Cell(Lst(Job)) = Cell/new(Lst/nil(@Job));
     let blocked : Cell(Lst(Parked)) = Cell/new(Lst/nil(@Parked));
+    let sleeping : Cell(Lst(Sleeper)) = Cell/new(Lst/nil(@Sleeper));
     let parked : Cell(Lst(Slot)) = Cell/new(Lst/nil(@Slot));
     let result : Cell(Option(A)) = Cell/new(Option/none(@A));
     let enqueue = (j : Job) =>
@@ -249,6 +310,8 @@ pub let block_on(@A : Type, root : Task(A)) -> A =
                 match p : {}
                 | wait(h, ev) =>
                     Cell/set(blocked, Lst/cons(Parked { handle = h, interest = ev, resume = k, token = job.token, fins = job.fins }, Cell/get(blocked)))
+                | sleep(d) =>
+                    Cell/set(sleeping, Lst/cons(Sleeper { due = Duration/add(Instant/elapsed(), d), resume = k, token = job.token, fins = job.fins }, Cell/get(sleeping)))
                 | fork(child, ct) =>
                     let _ = enqueue(Job { ..job, resume = k });
                     enqueue(Job { resume = child, token = ct, fins = Lst/nil(@Guard) })
@@ -273,6 +336,7 @@ pub let block_on(@A : Type, root : Task(A)) -> A =
     let drain_all = () =>
         let _ = drain_jobs(Cell/get(runq));
         let _ = drain_parked(Cell/get(blocked));
+        let _ = drain_sleeping(Cell/get(sleeping));
         drain_slots(Cell/get(parked));
     rec drive() -> A =
         match Cell/get(result) : A
@@ -283,11 +347,13 @@ pub let block_on(@A : Type, root : Task(A)) -> A =
             match Cell/get(runq) : A
             | [] =>
                 let _ = Cell/set(parked, sweep_parked(Cell/get(parked)));
-                match Lst/len(Cell/get(blocked)) == 0 : A
+                match Lst/len(Cell/get(blocked)) == 0 && Lst/len(Cell/get(sleeping)) == 0 : A
                 | false =>
-                    let split = poll_ready(Cell/get(blocked));
-                    let _ = Cell/set(runq, split.0);
+                    let split = poll_ready(Cell/get(blocked), sleep_timeout(Cell/get(sleeping)));
+                    let woken = expire_sleepers(Cell/get(sleeping));
+                    let _ = Cell/set(runq, [..split.0, ..woken.0]);
                     let _ = Cell/set(blocked, split.1);
+                    let _ = Cell/set(sleeping, woken.1);
                     drive()
                 | true =>
                     let _ = drain_all();
@@ -351,3 +417,9 @@ pub let select(@A : Type, tasks : Lst(() -> Task(A))) -> Task({Nat, A}) =
 
 pub let race(@A : Type, tasks : Lst(() -> Task(A))) -> Task(A) =
     bind(select(tasks), (w) => pure(w.1));
+
+pub let timeout(@A : Type, d : Duration, body : () -> Task(A)) -> Task(Option(A)) =
+    map(select(@Option(A), [
+        () => map(body(), (a) => Option/some(a)),
+        () => map(sleep(d), (_) => Option/none(@A)),
+    ]), (w) => w.1);

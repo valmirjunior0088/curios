@@ -330,3 +330,172 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
     .expect("expected result");
     assert_eq!(io.output(), b"2");
 }
+
+#[test]
+fn sleep_parks_until_the_clock_passes_the_deadline() {
+    // The timer half of the poll contract: the root sleeps five seconds, so the
+    // scheduler parks it in the `sleeping` registry and drives `Io/poll` with a
+    // finite timeout instead of `-1`. The mock's poll returns instantly and each
+    // `clock_mono` reading pops one scripted value, so the fiber resumes exactly
+    // when the scripted ramp passes the deadline — no readiness event involved.
+    let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Task, Io, Str};
+        use /std/time/{Duration};
+        let main : Task({}) =
+            Task/bind(Task/sleep(Duration/of_secs(5)), (_) =>
+                let w = Io/write(Io/stdout, Str/to_bytes("woke;"));
+                Task/pure(()));
+        Task/run(main)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"woke;");
+}
+
+#[test]
+fn sleepers_wake_in_deadline_order() {
+    // Two spawned children sleep three and six seconds; the scheduler must pick
+    // the earliest deadline for each poll timeout and expire the timers in due
+    // order even though the six-second child was pushed onto `sleeping` later.
+    let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Task, Io, Str};
+        use /std/time/{Duration};
+        let mark(m : Str) -> Task({}) =
+            let w = Io/write(Io/stdout, Str/to_bytes(m));
+            Task/pure(());
+        let main : Task({}) =
+            let ha = Task/spawn(() => Task/bind(Task/sleep(Duration/of_secs(3)), (_) => mark("a;")))!;
+            let hb = Task/spawn(() => Task/bind(Task/sleep(Duration/of_secs(6)), (_) => mark("b;")))!;
+            let x = Task/await(ha.result)!;
+            let y = Task/await(hb.result)!;
+            mark("done");
+        Task/run(main)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"a;b;done");
+}
+
+#[test]
+fn timeout_returns_some_when_the_body_finishes_first() {
+    // The body completes synchronously, so `select` resolves before the deadline
+    // fiber's timer matters; the cancelled timer is reclaimed on exit without
+    // ever waking. The result carries the body's value through `some`.
+    let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Task, Io, Str, Nat};
+        use /std/time/{Duration};
+        let main : Task({}) =
+            let r = Task/timeout(Duration/of_secs(5), () => Task/pure(42))!;
+            match r : Task({})
+            | some(v) => let w = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(v))); Task/pure(())
+            | none() => let w = Io/write(Io/stdout, Str/to_bytes("none")); Task/pure(())
+            end;
+        Task/run(main)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"42");
+}
+
+#[test]
+fn timeout_returns_none_and_runs_the_cancelled_bodys_finalizer() {
+    // The deadline elapses first: the two-second timer wakes, wins the `select`,
+    // and the fifty-second body — which holds a resource via `using` — is
+    // cancelled while still sleeping. Its finalizer runs when the scheduler
+    // reclaims it on exit, after the root has already reported `none`.
+    let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Task, Io, Str, Nat};
+        use /std/time/{Duration};
+        let main : Task({}) =
+            let r = Task/timeout(Duration/of_secs(2), () =>
+                Task/using(Io/stdin, () => let w = Io/write(Io/stdout, Str/to_bytes("released;")); (),
+                    Task/bind(Task/sleep(Duration/of_secs(50)), (_) =>
+                        let w = Io/write(Io/stdout, Str/to_bytes("body;"));
+                        Task/pure(0))))!;
+            match r : Task({})
+            | some(v) => let w = Io/write(Io/stdout, Str/to_bytes("some")); Task/pure(())
+            | none() => let w = Io/write(Io/stdout, Str/to_bytes("none;")); Task/pure(())
+            end;
+        Task/run(main)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"none;released;");
+}
+
+#[test]
+fn race_of_two_sleeps_wakes_the_earlier_and_reclaims_the_later() {
+    // Pure timer race: both branches sleep, so both land in `sleeping` and the
+    // poll timeout must track the earlier deadline. The two-second branch wakes,
+    // writes, and wins with 1; the sixty-second loser is cancelled and its
+    // `using` finalizer fires on reclamation — its body never runs.
+    let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Task, Io, Str, Nat};
+        use /std/time/{Duration};
+        let main : Task({}) =
+            let v = Task/race([
+                () => Task/bind(Task/sleep(Duration/of_secs(2)), (_) =>
+                    let w = Io/write(Io/stdout, Str/to_bytes("quick;"));
+                    Task/pure(1)),
+                () => Task/using(Io/stdin, () => let w = Io/write(Io/stdout, Str/to_bytes("released;")); (),
+                    Task/bind(Task/sleep(Duration/of_secs(60)), (_) =>
+                        let w = Io/write(Io/stdout, Str/to_bytes("slow;"));
+                        Task/pure(2)))
+            ])!;
+            let z = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(v)));
+            Task/pure(());
+        Task/run(main)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"quick;1released;");
+}
+
+#[test]
+fn block_on_drops_a_sleeping_child_when_root_done() {
+    // The sleeping counterpart of the parked-child drop: a fire-and-forget child
+    // holds a resource and sleeps far past the test, but the root finishes
+    // immediately. `block_on` must return without waiting out the timer, running
+    // the child's finalizer as it drains the `sleeping` registry.
+    let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
+    crate::run_text(
+        Duration::from_secs(10),
+        r#"
+        use /std/{Task, Io, Str};
+        use /std/time/{Duration};
+        let child : Task({}) =
+            Task/using(Io/stdin, () => let w = Io/write(Io/stdout, Str/to_bytes("released;")); (),
+                Task/bind(Task/sleep(Duration/of_secs(100)), (_) =>
+                    let w = Io/write(Io/stdout, Str/to_bytes("child;"));
+                    Task/pure(())));
+        let main : Task({}) =
+            Task/bind(Task/go(() => child), (_) =>
+                let w = Io/write(Io/stdout, Str/to_bytes("root;"));
+                Task/pure(()));
+        Task/run(main)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"root;released;");
+}
