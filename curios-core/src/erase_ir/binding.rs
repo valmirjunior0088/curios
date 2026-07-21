@@ -19,12 +19,8 @@ impl Lowering {
     ) -> Result<(), Error> {
         for index in dominance_order(module, start) {
             let item = &module.items[index];
-            // Stamp the item's declaring module so the re-derived types run
-            // the struct representation-privacy check against the right
-            // use-site island (mirrors elaboration).
             match item {
                 Item::Let(definition) => {
-                    context.set_island(definition.island.clone());
                     let outcome = self.walk(
                         context,
                         &definition.body,
@@ -51,7 +47,6 @@ impl Lowering {
                     self.environment.bind(&definition.name, atom);
                 }
                 Item::Rec(rec) => {
-                    context.set_island(rec.island());
                     self.erase_rec_item(context, rec)?;
                 }
             }

@@ -12,8 +12,7 @@
 
 use {
     super::{
-        Binding, Bound, Context, Environment, Error, Let, Module, Qualifier, Subterm, Term,
-        emitted, prim,
+        Binding, Bound, Context, Environment, Error, Let, Module, Subterm, Term, emitted, prim,
     },
     std::collections::BTreeSet,
 };
@@ -62,8 +61,6 @@ pub fn erase_module_to_ir(
         let mut lowering = Lowering::default();
         lowering.erase_items(context, module, 0)?;
 
-        // The entrypoint body runs under the root module (mirrors elaboration).
-        context.set_island(Qualifier::empty());
         lowering.builder.open_block();
         let outcome = lowering.walk(context, &module.body, expected, None)?;
         let entry = lowering.seal(outcome);
@@ -322,7 +319,6 @@ pub fn erase_module_with_prelude_to_ir(
         };
         lowering.erase_items(context, module, prelude.items.len())?;
 
-        context.set_island(Qualifier::empty());
         lowering.builder.open_block();
         let outcome = lowering.walk(context, &module.body, expected, None)?;
         let entry = lowering.seal(outcome);
