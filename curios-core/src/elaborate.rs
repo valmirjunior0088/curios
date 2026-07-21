@@ -53,7 +53,19 @@ pub(crate) fn elaborate(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let result = elaborate_subterm(context, term, mode);
+    // Route through the elaboration cache (`Context::get_or_init_elaborated`):
+    // ground, local-free subterms — which the lowerer emits as `Rc`-shared
+    // DAGs (string-literal UTF-8 derivations) — elaborate once per distinct
+    // node instead of once per occurrence. Span stamping stays below, outside
+    // the cache: spans are excluded from `Term` equality, so occurrences with
+    // different spans share one un-stamped entry and restamp per occurrence.
+    let expected = match &mode {
+        Mode::Check(expected) => Some(expected.clone()),
+        Mode::Infer => None,
+    };
+    let result = context.get_or_init_elaborated(term, expected.as_ref(), |context| {
+        elaborate_subterm(context, term, mode)
+    });
 
     // Carry the source span onto the rebuilt term as well as onto any error, so
     // downstream passes keep reporting against the original syntax.

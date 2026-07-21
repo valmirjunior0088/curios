@@ -91,3 +91,13 @@ Non-goals: Curios is not a foundational proof assistant and makes no logical-sou
 **Decision.** The native product precompiles modules to `.cwasm` with Cranelift at build time and bundles them with the slim runtime launcher into standalone executables. The launcher deserializes and runs; it cannot compile. Other native distribution modes are not foreclosed; none is planned yet.
 
 **Rationale.** User startup does no compilation work, the launcher stays slim precisely because Cranelift and Binaryen are excluded from it, and pinning the compiler and runtime to one Wasmtime version guarantees every `.cwasm` matches the engine that deserializes it.
+
+### Deep shared terms are cached, not special-cased
+
+**Decision.** The lowerer emits `Rc`-shared DAGs — a string literal's certified UTF-8 derivation shares every per-byte scan-state chain — and the compiler scales to them through generic mechanisms only: an elaboration cache for metavariable-free, minted-name-free subterms (`Context::get_or_init_elaborated`), the reduction cache's probe/record pair (`Context::cached_reduced` / `Context::reduce`), and eliminator scrutinees reduced on an explicit frame stack inside `reduce`'s trampoline instead of by native recursion. No stage carries `Str`- or literal-specific machinery; eligibility gates and invalidation discipline belong to the `curios-core` rustdoc of those methods.
+
+**Rationale.** Sharing-oblivious elaboration cost O(N²) work and O(N) native stack in a literal's byte length, and the depth surfaced wherever the checker ran on a bounded thread. The defect was the compiler's — recursive tree walks over DAG-shaped input — so the cure had to be compiler-general: the next proof-carrying literal or generated spine benefits identically, and `/syn`, `/std`, and the emitter stay ordinary library code.
+
+**Rejected.** Emitter-side pre-reduced scan states (duplicates `/std/Str` semantics inside the compiler); a canonical-spine special case in conversion (a nominal `Str` exception to definitional equality); redesigning the `/syn/Str` evidence to sidestep depth (the language may write deep certified data; the compiler must carry it).
+
+**Deferred.** The un-shared rest spine still costs one native elaboration level per literal byte (measured cliffs: between 50 and 56 bytes on a 2MB stack in debug, between 1000 and 1500 bytes on the 8MB main thread in release); the recorded follow-up is iterative elaboration. The elaboration cache also still clears on every top-level definition; the recorded relaxation is to refuse caching results that name a not-yet-defined global — the name analogue of the reduction cache's unsolved-metavariable rule, which already lets reduction entries survive `define` selectively.

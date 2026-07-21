@@ -546,6 +546,22 @@ fn refine_projection_invalidates_cached_reduction() {
 }
 
 #[test]
+fn redefine_invalidates_reduction_cached_under_the_old_value() {
+    let mut context = context();
+    let x: Term = Term::free_var("x");
+
+    // First definition: x reduces to 4 and the reduct — which no longer
+    // mentions `x` — is cached.
+    context.define("x", &nat(4));
+    assert_eq!(reduce(&mut context, x.clone()), Ok(nat(4)));
+
+    // Rebinding the same label must evict that entry even though a selective
+    // retain keyed on mentions of `x` cannot see it.
+    context.define("x", &nat(5));
+    assert_eq!(reduce(&mut context, x), Ok(nat(5)));
+}
+
+#[test]
 fn leave_frame_with_definitions_invalidates_cached_reduction() {
     let mut context = context();
     let x: Term = Term::free_var("x");

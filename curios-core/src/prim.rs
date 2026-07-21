@@ -939,6 +939,15 @@ impl Prim {
         found
     }
 
+    /// Whether any operand `Term` satisfies `pred` — the `Prim` leg of
+    /// `Subterm::any_child_term`, layered on the private operand walker like
+    /// `any_metavar` above.
+    pub(crate) fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
+        let mut found = false;
+        self.for_each_operand(&mut |term| found = found || pred(term));
+        found
+    }
+
     // Recurse into every operand `Term` so a construction nested inside a primitive
     // (e.g. `Lst(Str)`'s element type) still contributes its head name. Prims own no
     // head names of their own.

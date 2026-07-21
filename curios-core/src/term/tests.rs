@@ -12,15 +12,21 @@ fn archive_resets_caches_and_preserves_rc_sharing() {
     term.get_or_init_hash();
     term.reach();
     term.free_vars();
+    term.has_local_free();
+    term.has_metavar();
     assert!(term.hash.get().is_some());
     assert!(term.reach.get().is_some());
     assert!(term.free_vars.get().is_some());
+    assert!(term.has_local_free.get().is_some());
+    assert!(term.has_metavar.get().is_some());
 
     let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&term).unwrap();
     let restored = rkyv::from_bytes::<Term, rkyv::rancor::Error>(&bytes).unwrap();
     assert!(restored.hash.get().is_none());
     assert!(restored.reach.get().is_none());
     assert!(restored.free_vars.get().is_none());
+    assert!(restored.has_local_free.get().is_none());
+    assert!(restored.has_metavar.get().is_none());
 
     let Subterm::Tuple(tuple) = restored.as_ref() else {
         panic!("restored term changed shape");
@@ -134,6 +140,38 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
         true
     }));
     assert!(!fired);
+}
+
+#[test]
+fn has_local_free_flags_minted_names_not_binder_hints() {
+    // `#` is the elaborator's minting marker (`Context::fresh`) and cannot
+    // occur in a written identifier, so a free var carrying it is the mark of
+    // a context-dependent local — and the only kind that can invalidate an
+    // elaboration-cache entry across frames.
+    assert!(Term::free_var("x#3").has_local_free());
+    assert!(!Term::free_var("/std/Nat").has_local_free());
+
+    // The bit is structural: a minted name anywhere in the tree sets it.
+    let inner = Term::apply(Term::free_var("/syn/Str/step"), [Term::free_var("c#1")]);
+    assert!(inner.has_local_free());
+
+    // A binder whose label hint carries `#` stays clean: the hint is not an
+    // occurrence, and the captured variable is bound, not free.
+    let binder = Term::func([("x#9", Term::type_())], Term::free_var("x#9"));
+    assert!(!binder.has_local_free());
+}
+
+#[test]
+fn has_metavar_flags_any_metavariable_node() {
+    assert!(Term::metavar(1).has_metavar());
+    assert!(
+        Term::apply(
+            Term::func([("x", Term::type_())], Term::free_var("x")),
+            [Term::metavar(2)],
+        )
+        .has_metavar()
+    );
+    assert!(!Term::func([("x", Term::type_())], Term::free_var("x")).has_metavar());
 }
 
 #[test]

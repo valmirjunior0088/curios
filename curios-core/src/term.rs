@@ -40,6 +40,10 @@ pub struct Term {
     reach: OnceCell<usize>,
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
     free_vars: OnceCell<Rc<BTreeSet<String>>>,
+    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
+    has_local_free: OnceCell<bool>,
+    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
+    has_metavar: OnceCell<bool>,
     #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
     inner: Rc<Subterm>,
 }
@@ -52,6 +56,28 @@ impl Term {
 
             hasher.finish()
         })
+    }
+
+    /// Whether any *free* variable in this term carries an elaborator-minted
+    /// label — one containing `#`, which cannot occur in a written identifier
+    /// (`Context::fresh` always embeds it; witness-table names share the
+    /// convention, deliberately counted here so the elaboration memo stays
+    /// conservative). Binder labels inside `Scope`s are closed occurrences,
+    /// not free variables, and never count. Cached per node and computed from
+    /// the children's cached cells, so a shared subterm — a DAG-shaped lowered
+    /// literal — pays O(degree) here, not O(size): the elaboration cache gates
+    /// every `elaborate` call on this bit and must not re-walk shared chains.
+    pub(crate) fn has_local_free(&self) -> bool {
+        *self
+            .has_local_free
+            .get_or_init(|| self.inner.has_local_free())
+    }
+
+    /// Whether any `Metavar` node occurs in this term. Cached per node like
+    /// [`has_local_free`](Self::has_local_free) and for the same reason: the
+    /// elaboration cache's O(1)-per-call gate.
+    pub(crate) fn has_metavar(&self) -> bool {
+        *self.has_metavar.get_or_init(|| self.inner.has_metavar())
     }
 
     pub(crate) fn unwrap_or_clone(this: Self) -> Subterm {
@@ -919,6 +945,8 @@ impl From<Subterm> for Term {
             hash: OnceCell::new(),
             reach: OnceCell::new(),
             free_vars: OnceCell::new(),
+            has_local_free: OnceCell::new(),
+            has_metavar: OnceCell::new(),
             inner: Rc::new(term),
         }
     }
@@ -945,6 +973,8 @@ impl Bound for Term {
             hash: OnceCell::new(),
             reach: OnceCell::new(),
             free_vars: OnceCell::new(),
+            has_local_free: OnceCell::new(),
+            has_metavar: OnceCell::new(),
             inner: Rc::new((**self).traverse(visit)),
         }
     }
@@ -961,19 +991,31 @@ impl Bound for Term {
     /// O(size) walk once rather than once per goal. Uniform in every term,
     /// not specific to recursive ones; see `Convert::history_key`.
     fn free_vars(&self) -> BTreeSet<String> {
-        self.free_vars
-            .get_or_init(|| {
-                let mut vars = BTreeSet::new();
-                self.traverse(&mut Visit::new(|_, var| {
-                    if let Some(label) = var.as_free() {
-                        vars.insert(label.to_string());
-                    }
-                    None
-                }));
-                Rc::new(vars)
-            })
-            .as_ref()
-            .clone()
+        self.get_or_init_free_vars().as_ref().clone()
+    }
+}
+
+impl Term {
+    fn get_or_init_free_vars(&self) -> &Rc<BTreeSet<String>> {
+        self.free_vars.get_or_init(|| {
+            let mut vars = BTreeSet::new();
+            self.traverse(&mut Visit::new(|_, var| {
+                if let Some(label) = var.as_free() {
+                    vars.insert(label.to_string());
+                }
+                None
+            }));
+            Rc::new(vars)
+        })
+    }
+
+    /// Whether `label` occurs free in this term, through the same memoized
+    /// set [`Bound::free_vars`] fills — but as a lookup instead of a set
+    /// clone: `define`'s selective reduction-cache invalidation probes every
+    /// cached WHNF, and cloning each entry's set there would swamp the walk
+    /// it avoids.
+    pub(crate) fn mentions_free(&self, label: &str) -> bool {
+        self.get_or_init_free_vars().contains(label)
     }
 }
 
@@ -1930,6 +1972,126 @@ impl Subterm {
                     type_.body().any_metavar(pred) || value.body().any_metavar(pred)
                 })
             }
+        }
+    }
+
+    /// Whether any direct child `Term` of this subterm satisfies `pred`,
+    /// short-circuiting on the first hit — the shared structural walk under the
+    /// cached [`has_local_free`](Self::has_local_free)/[`has_metavar`](Self::has_metavar)
+    /// bits, which pass a child's own memoized accessor as `pred` so shared
+    /// subterms are never re-walked. Scope bodies are visited closed: binder
+    /// occurrences are bound indices there, so binder labels stay invisible to
+    /// any free-variable predicate.
+    fn any_child_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
+        match self {
+            Subterm::Metavar(Metavar { spine, .. }) => spine.iter().any(&mut *pred),
+            Subterm::Type | Subterm::Prop | Subterm::Var(_) => false,
+            Subterm::NumLit(_) => false,
+            Subterm::Infix(Infix { left, right, .. }) => pred(left) || pred(right),
+            Subterm::Prim(prim) => prim.any_term(pred),
+            Subterm::Func(Func { telescope }) => telescope.any_term(pred),
+            Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_term(pred),
+            Subterm::Apply(Apply { head, params, .. }) => {
+                pred(head) || params.iter().any(&mut *pred)
+            }
+            Subterm::TupleType(TupleType { telescope, .. }) => telescope.any_term(pred),
+            Subterm::Tuple(Tuple { fields, .. }) => fields.iter().any(&mut *pred),
+            Subterm::Proj(Proj { head, .. }) => pred(head),
+            Subterm::InductiveType(InductiveType {
+                params, indices, ..
+            }) => params.iter().any(&mut *pred) || indices.iter().any(&mut *pred),
+            Subterm::Variant(Variant {
+                params, payload, ..
+            }) => params.iter().any(&mut *pred) || payload.iter().any(&mut *pred),
+            Subterm::StructType(StructType { params, .. }) => params.iter().any(&mut *pred),
+            Subterm::Struct(Struct { params, fields, .. }) => {
+                params.iter().any(&mut *pred) || fields.iter().any(&mut *pred)
+            }
+            Subterm::Match(Match {
+                head,
+                motive,
+                cases,
+            }) => {
+                pred(head)
+                    || pred(motive.body())
+                    || match cases {
+                        Cases::Bool {
+                            false_case,
+                            true_case,
+                        } => pred(false_case) || pred(true_case),
+                        Cases::Switch { cases, default } => {
+                            cases.values().any(&mut *pred) || pred(default)
+                        }
+                        Cases::Inductive {
+                            cases,
+                            pattern,
+                            default,
+                        } => {
+                            cases.values().any(|s| pred(s.body()))
+                                || pattern
+                                    .iter()
+                                    .flat_map(|p| &p.slots)
+                                    .any(|slot| match slot {
+                                        MotiveSlot::Term(t) => pred(t),
+                                        _ => false,
+                                    })
+                                || default.as_ref().is_some_and(&mut *pred)
+                        }
+                        Cases::FreeMonoid { carrier } => match carrier {
+                            Carrier::Nat {
+                                empty_case,
+                                cons_case,
+                            } => pred(empty_case) || pred(cons_case.body()),
+                            Carrier::Bin {
+                                empty_case,
+                                cons_case,
+                                ..
+                            } => pred(empty_case) || pred(cons_case.body()),
+                            Carrier::Lst {
+                                elem,
+                                empty_case,
+                                cons_case,
+                            } => pred(elem) || pred(empty_case) || pred(cons_case.body()),
+                        },
+                    }
+            }
+            Subterm::Let(Let { bindings, tail }) => {
+                bindings
+                    .iter()
+                    .any(|(type_, value)| pred(type_) || pred(value))
+                    || pred(tail.body())
+            }
+            Subterm::Rec(Rec { group, tail }) => {
+                group
+                    .items()
+                    .iter()
+                    .any(|(type_, value)| pred(type_.body()) || pred(value.body()))
+                    || pred(tail.body())
+            }
+            Subterm::RecMember(RecMember { group, .. }) => group
+                .items()
+                .iter()
+                .any(|(type_, value)| pred(type_.body()) || pred(value.body())),
+        }
+    }
+
+    /// Whether any free variable in this subterm carries an elaborator-minted
+    /// (`#`-bearing) label — the uncached spelling of
+    /// [`Term::has_local_free`], which supplies the per-node memoization.
+    pub(crate) fn has_local_free(&self) -> bool {
+        match self {
+            Subterm::Var(var) => var.as_free().is_some_and(|label| label.contains('#')),
+            _ => self.any_child_term(&mut |t| t.has_local_free()),
+        }
+    }
+
+    /// Whether any `Metavar` node occurs in this subterm — the uncached
+    /// spelling of [`Term::has_metavar`], which supplies the per-node
+    /// memoization.
+    pub(crate) fn has_metavar(&self) -> bool {
+        match self {
+            Subterm::Metavar(_) => true,
+            _ => self.any_child_term(&mut |t| t.has_metavar()),
         }
     }
 

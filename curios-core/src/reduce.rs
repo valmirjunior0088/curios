@@ -7,7 +7,7 @@ mod tests;
 use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Field, FreeMonoid, Func, FuncType, InductiveType,
-        Layer, Let, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Scope, Struct,
+        Layer, Let, Many, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Scope, Struct,
         StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
     },
     crate::Instant,
@@ -17,6 +17,17 @@ use {
 enum Reduce {
     Continue(Term),
     Break(Term),
+}
+
+/// One `match` waiting for its scrutinee's value on [`reduce`]'s explicit
+/// scrutinee stack. `head` is the *original* scrutinee term: `Inductive`
+/// dispatch binds arms to projections of it (call-by-name), and the finished
+/// value is cached under it exactly as the previously nested `reduce` call
+/// would have cached it.
+struct PendingMatch {
+    head: Term,
+    motive: Scope<Many>,
+    cases: Cases,
 }
 
 /// Open a `rec` group's tail over structural folded member terms. This is a
@@ -259,32 +270,33 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
         }
 }
 
-fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> {
-    let Match {
-        head,
-        motive,
-        cases,
-    } = m;
-
+/// Dispatch a `match` over its scrutinee's already-reduced-and-forced value.
+/// `head` is the *original* scrutinee term, which the `Inductive` arm projects
+/// (call-by-name — see its comment); `forced` is what `reduce_forced` produced
+/// for it. Scrutinee reduction itself happens on [`reduce`]'s explicit
+/// scrutinee stack rather than by recursing here: a tower of matches over a
+/// deep closed spine — a string literal's scan-state chain — would otherwise
+/// consume native stack once per link.
+fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> Reduce {
     match cases {
         Cases::Bool {
             false_case,
             true_case,
-        } => match Term::unwrap_or_clone(reduce_forced(context, head)?) {
-            Subterm::Prim(Prim::Bool(false)) => Ok(Reduce::Continue(false_case)),
-            Subterm::Prim(Prim::Bool(true)) => Ok(Reduce::Continue(true_case)),
-            head => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
-                head: head.into(),
+        } => match Term::unwrap_or_clone(forced) {
+            Subterm::Prim(Prim::Bool(false)) => Reduce::Continue(false_case),
+            Subterm::Prim(Prim::Bool(true)) => Reduce::Continue(true_case),
+            forced => Reduce::Break(Term::from(Subterm::Match(Match {
+                head: forced.into(),
                 motive,
                 cases: Cases::Bool {
                     false_case,
                     true_case,
                 },
-            })))),
+            }))),
         },
 
         Cases::Switch { cases, default } => {
-            let scrutinee = reduce_forced(context, head)?;
+            let scrutinee = forced;
             // A literal `Nat` is the kernel's spine floor over a `Zero` inner, so
             // `is_zero` on the peeled inner is exactly "is this a concrete `k`?" — the
             // same spine view the arithmetic family reads. A literal dispatches to its
@@ -299,13 +311,13 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                         .and_then(|k| cases.get(&k))
                         .unwrap_or(&default);
 
-                    Ok(Reduce::Continue(body.clone()))
+                    Reduce::Continue(body.clone())
                 }
-                false => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
+                false => Reduce::Break(Term::from(Subterm::Match(Match {
                     head: scrutinee,
                     motive,
                     cases: Cases::Switch { cases, default },
-                })))),
+                }))),
             }
         }
 
@@ -323,9 +335,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             pattern,
             default,
         } => {
-            let head_reduced = reduce_forced(context, head.clone())?;
-
-            if let Subterm::Variant(ctor) = &*head_reduced {
+            if let Subterm::Variant(ctor) = &*forced {
                 if let Some(scope) = cases.get(&ctor.tag) {
                     let projections = (0..scope.arity())
                         .map(|i| Term::proj(head.clone(), i + 1))
@@ -333,25 +343,25 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
 
                     let projection_refs = projections.iter().collect::<Vec<_>>();
 
-                    return Ok(Reduce::Continue(scope.open(&projection_refs)));
+                    return Reduce::Continue(scope.open(&projection_refs));
                 }
 
                 // A concrete constructor with no enumerated arm takes the
                 // catch-all default, which binds nothing (no scope to open).
                 if let Some(default) = &default {
-                    return Ok(Reduce::Continue(default.clone()));
+                    return Reduce::Continue(default.clone());
                 }
             }
 
-            Ok(Reduce::Break(Term::from(Subterm::Match(Match {
-                head: head_reduced,
+            Reduce::Break(Term::from(Subterm::Match(Match {
+                head: forced,
                 motive,
                 cases: Cases::Inductive {
                     cases,
                     pattern,
                     default,
                 },
-            }))))
+            })))
         }
 
         // Structural induction on a native free-monoid primitive (`Nat`/`Bin`/`Lst`).
@@ -362,7 +372,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
         // recurses symbolically for the induction hypothesis; a stuck scrutinee
         // rebuilds.
         Cases::FreeMonoid { carrier } => {
-            let scrutinee = Term::unwrap_or_clone(reduce_forced(context, head)?);
+            let scrutinee = Term::unwrap_or_clone(forced);
 
             let layer = match &carrier {
                 Carrier::Nat { .. } => FreeMonoid::Unary,
@@ -372,11 +382,11 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
             .uncons(scrutinee);
 
             match layer {
-                Layer::Empty => Ok(Reduce::Continue(match carrier {
+                Layer::Empty => Reduce::Continue(match carrier {
                     Carrier::Nat { empty_case, .. }
                     | Carrier::Bin { empty_case, .. }
                     | Carrier::Lst { empty_case, .. } => empty_case,
-                })),
+                }),
                 Layer::Cons { head, tail } => {
                     let ih: Term = Subterm::Match(Match {
                         head: tail.clone(),
@@ -389,7 +399,7 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
 
                     // The cons arm binds the generator's payload (a head, absent for
                     // the unary `Nat`), then the tail and the induction hypothesis.
-                    Ok(Reduce::Continue(match &carrier {
+                    Reduce::Continue(match &carrier {
                         Carrier::Nat { cons_case, .. } => cons_case.open(&[&tail, &ih]),
                         Carrier::Bin { cons_case, .. } | Carrier::Lst { cons_case, .. } => {
                             cons_case.open(&[
@@ -398,13 +408,13 @@ fn reduce_match(context: &mut Context, m: Match) -> Result<Reduce, ReduceError> 
                                 &ih,
                             ])
                         }
-                    }))
+                    })
                 }
-                Layer::Stuck(scrutinee) => Ok(Reduce::Break(Term::from(Subterm::Match(Match {
+                Layer::Stuck(scrutinee) => Reduce::Break(Term::from(Subterm::Match(Match {
                     head: scrutinee.into(),
                     motive,
                     cases: Cases::FreeMonoid { carrier },
-                })))),
+                }))),
             }
         }
     }
@@ -455,13 +465,28 @@ fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
     }
 }
 
-pub(crate) fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
-    context.get_or_init_reduced(term, |context, mut term| {
-        loop {
-            if Instant::now() > context.deadline() {
-                break Err(ReduceError::Preempted);
-            }
+pub(crate) fn reduce(context: &mut Context, mut term: Term) -> Result<Term, ReduceError> {
+    if let Some(cached) = context.cached_reduced(&term) {
+        return Ok(cached);
+    }
 
+    let entry = term.clone();
+
+    // Matches waiting for their scrutinees. Reducing a scrutinee re-enters
+    // this loop under a pushed frame instead of recursing, so a tower of
+    // matches over a deep closed spine — a string literal's scan-state
+    // chain — costs one `PendingMatch` per level rather than native stack.
+    // A finished value resolves against these frames innermost-first; each
+    // landing reduct — a frame's scrutinee value, or with no frame left the
+    // entry term's overall value — is cached under the term it reduces.
+    let mut pending: Vec<PendingMatch> = Vec::new();
+
+    loop {
+        if Instant::now() > context.deadline() {
+            return Err(ReduceError::Preempted);
+        }
+
+        let mut step = 'step: {
             // Rung B for stuck applications (convertibility-keyed). Gated cheaply
             // — store non-empty, then a refined applied-head symbol — before
             // canonicalizing the candidate's arguments and looking the key up.
@@ -477,17 +502,31 @@ pub(crate) fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceEr
                     // committed spelling stays a term the live refinement can
                     // fire on (the canonical form, never the unfolded body).
                     if context.is_scrutinee_key(&canonical) {
-                        break Ok(canonical);
+                        break 'step Reduce::Break(canonical);
                     }
                 } else if let Some(value) = context.scrutinee_reduct(&canonical) {
-                    term = value.clone();
-                    continue;
+                    break 'step Reduce::Continue(value.clone());
                 }
             }
 
-            let step = match Term::unwrap_or_clone(term) {
+            match Term::unwrap_or_clone(term) {
                 Subterm::Prim(prim) => Reduce::Break(reduce_prim(context, &prim)?.into()),
-                Subterm::Match(m) => reduce_match(context, m)?,
+                Subterm::Match(m) => match context.cached_reduced(&m.head) {
+                    // A warm scrutinee dispatches immediately — the
+                    // frame-free analogue of the nested call's cache hit.
+                    Some(value) => {
+                        let forced = force_rec(context, value)?;
+                        reduce_match(m.head, forced, m.motive, m.cases)
+                    }
+                    None => {
+                        pending.push(PendingMatch {
+                            head: m.head.clone(),
+                            motive: m.motive,
+                            cases: m.cases,
+                        });
+                        Reduce::Continue(m.head)
+                    }
+                },
                 Subterm::Apply(apply) => reduce_apply(context, apply)?,
                 Subterm::Proj(proj) => reduce_proj(context, proj)?,
                 Subterm::Func(func) => reduce_func_eta(context, func)?,
@@ -498,14 +537,29 @@ pub(crate) fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceEr
                 // normal forms, like `Tuple`: their sub-terms are not reduced
                 // in WHNF.
                 term => Reduce::Break(term.into()),
-            };
+            }
+        };
 
+        loop {
             match step {
-                Reduce::Continue(next) => term = next,
-                Reduce::Break(result) => break Ok(result),
+                Reduce::Continue(next) => {
+                    term = next;
+                    break;
+                }
+                Reduce::Break(result) => match pending.pop() {
+                    None => {
+                        context.reduce(entry, &result);
+                        return Ok(result);
+                    }
+                    Some(frame) => {
+                        context.reduce(frame.head.clone(), &result);
+                        let forced = force_rec(context, result)?;
+                        step = reduce_match(frame.head, forced, frame.motive, frame.cases);
+                    }
+                },
             }
         }
-    })
+    }
 }
 
 /// Reduce `term` to a deep normal form for **diagnostic display**: every

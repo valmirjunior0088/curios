@@ -637,6 +637,18 @@ impl Telescope<Term> {
         }
     }
 
+    /// Whether any `Term` in a function/Π telescope (`Func`/`FuncType`) — the
+    /// parameter types and the trailing body/return type — satisfies `pred`,
+    /// short-circuiting on the first hit. The telescope leg of
+    /// `Subterm::any_child_term`: `pred` carries the per-node memoized
+    /// recursion, so this visits each `Term` exactly once.
+    pub(crate) fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
+        match self {
+            Telescope::Cons(ty, rest) => pred(ty) || rest.body().any_term(pred),
+            Telescope::Done(body) => pred(body),
+        }
+    }
+
     /// Zonk a function/Π telescope (`Func`/`FuncType`): its parameter types and
     /// its trailing body/return type, which is a real term to recurse into.
     pub(crate) fn zonk(&self, context: &Context) -> Result<Self, Error> {
@@ -671,6 +683,17 @@ impl Telescope<()> {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             // The trailing body is `()`, which holds no metavariables.
+            Telescope::Done(_) => false,
+        }
+    }
+
+    /// Whether any `Term` in a Σ telescope (`TupleType`) — only the field
+    /// types; its `Done` body is `()` — satisfies `pred`, short-circuiting on
+    /// the first hit. See the `Telescope<Term>` counterpart above.
+    pub(crate) fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
+        match self {
+            Telescope::Cons(ty, rest) => pred(ty) || rest.body().any_term(pred),
+            // The trailing body is `()`, which holds no terms.
             Telescope::Done(_) => false,
         }
     }

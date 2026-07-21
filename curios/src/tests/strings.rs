@@ -106,6 +106,25 @@ fn str_literal_prints_its_bytes() {
 
 // `Str/of_bytes` is the checked constructor: it runs `is_utf8` and yields `some`
 // for well-formed UTF-8. `é` is the bytes C3 A9, a valid 2-byte sequence.
+// A string literal's certified UTF-8 derivation shares its per-byte scan-state
+// chains by `Rc`, so the lowered literal is a DAG. Sharing-oblivious
+// elaboration tree-walked it — O(N²) work and two native stack frames per byte
+// — and overflowed a default 2MB test thread at exactly this length; the
+// elaboration cache plus the reducer's scrutinee stack elaborate each shared
+// node once at O(1) extra depth per byte. See documentation/DESIGN.md.
+#[test]
+fn long_str_literal_compiles_on_the_default_test_stack() {
+    let literal = "0123456789".repeat(4) + "abcde"; // 45 bytes: over the pre-cache cliff
+    let source = format!(
+        r#"
+        use /std/{{Str, Io}};
+        let s : Str = "{literal}";
+        Io/print(s)
+        "#
+    );
+    assert_eq!(run(&source), literal.as_bytes());
+}
+
 #[test]
 fn str_of_bytes_accepts_multibyte_utf8() {
     let source = r#"
