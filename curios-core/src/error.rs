@@ -31,7 +31,7 @@ pub(crate) enum ReduceError {
         end: usize,
         span: Option<Span>,
     },
-    IoAtTypeLevel {
+    EffectAtTypeLevel {
         kind: String,
         span: Option<Span>,
     },
@@ -68,7 +68,9 @@ impl ReduceError {
                 end,
                 span,
             } => Error::LstSliceOutOfRange { len, start, end }.at_opt(span),
-            Self::IoAtTypeLevel { kind, span } => Error::IoAtTypeLevel { kind }.at_opt(span),
+            Self::EffectAtTypeLevel { kind, span } => {
+                Error::EffectAtTypeLevel { kind }.at_opt(span)
+            }
             Self::DivisionByZero { kind, span } => Error::DivisionByZero { kind }.at_opt(span),
         }
     }
@@ -105,7 +107,7 @@ pub enum Error {
         start: usize,
         end: usize,
     },
-    IoAtTypeLevel {
+    EffectAtTypeLevel {
         kind: String,
     },
     DivisionByZero {
@@ -1454,7 +1456,7 @@ impl fmt::Display for Error {
                     "Lst.slice range {start}..{end} out of range (length {len})"
                 )
             }
-            Error::IoAtTypeLevel { kind } => {
+            Error::EffectAtTypeLevel { kind } => {
                 write!(f, "{kind} cannot appear at the type level")
             }
             Error::DivisionByZero { kind } => {

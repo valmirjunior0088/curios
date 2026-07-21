@@ -1726,14 +1726,14 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         // The handle type and handle tokens are inert values, like `Nat`/`Nat(_)`.
         Prim::IoType => Ok(Subterm::Prim(Prim::IoType)),
         Prim::Io(token) => Ok(Subterm::Prim(Prim::Io(*token))),
-        Prim::IoExit(_, code) => Err(ReduceError::IoAtTypeLevel {
+        Prim::IoExit(_, code) => Err(ReduceError::EffectAtTypeLevel {
             kind: "IoExit".to_string(),
             span: code.span(),
         }),
         // A store-described host call never reduces at the type level — the
         // effect cannot happen at compile time; it becomes a host call only
         // at erasure.
-        Prim::Foreign(function, args) => Err(ReduceError::IoAtTypeLevel {
+        Prim::Foreign(function, args) => Err(ReduceError::EffectAtTypeLevel {
             kind: function.name.clone(),
             span: args.first().and_then(|arg| arg.span()),
         }),
@@ -1741,15 +1741,15 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             let elem = reduce(context, elem.clone())?;
             Ok(Subterm::Prim(Prim::cell_type(elem)))
         }
-        Prim::Cell(_, init) => Err(ReduceError::IoAtTypeLevel {
+        Prim::Cell(_, init) => Err(ReduceError::EffectAtTypeLevel {
             kind: "Cell".to_string(),
             span: init.span(),
         }),
-        Prim::CellSet(_, cell, _) => Err(ReduceError::IoAtTypeLevel {
+        Prim::CellSet(_, cell, _) => Err(ReduceError::EffectAtTypeLevel {
             kind: "CellSet".to_string(),
             span: cell.span(),
         }),
-        Prim::CellGet(_, cell) => Err(ReduceError::IoAtTypeLevel {
+        Prim::CellGet(_, cell) => Err(ReduceError::EffectAtTypeLevel {
             kind: "CellGet".to_string(),
             span: cell.span(),
         }),
