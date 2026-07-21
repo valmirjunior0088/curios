@@ -366,6 +366,18 @@ impl Context {
     /// safe deferral, since retries re-run at every later `expect` and the
     /// module drain reports whatever survives.
     ///
+    /// A cached entry additionally names only *already-defined* globals: the
+    /// insert refuses any result — or `Check` expected — naming a
+    /// not-yet-defined global (`Context::elaboration_cacheable`), the name
+    /// analogue of the unsolved-metavariable refusal above. Definedness is the
+    /// one ambient fact a pure, ground elaboration reads (through `expect`'s
+    /// conversions, which unfold definitions), so an entry that surfaces only
+    /// settled globals cannot be invalidated by a later *fresh* `define`. That
+    /// is what lets `define_entry` drop its wholesale elaboration-cache clear
+    /// and keep the memo warm across the `#`-minted definitions that reduction
+    /// and the frame elaborators mint within one item. (`set_island` still
+    /// clears at each top-level item boundary, so the survival is within-item.)
+    ///
     /// The suppression brackets need no insert refusal. Privacy: validity is
     /// directional (an entry that passed an island's strict checks is valid
     /// under suppression, but not the reverse), so `island.is_some()` is part
@@ -463,10 +475,42 @@ impl Context {
     /// path's locals must not ride along on every level.
     #[inline(never)]
     fn insert_elaborated(&mut self, key: ElaborationKey, stamp: usize, result: &(Term, Term)) {
-        let ground = |t: &Term| !t.has_metavar() && !t.has_local_free();
-        if self.mutation_stamp.count() == stamp && ground(&result.0) && ground(&result.1) {
+        if self.elaboration_cacheable(stamp, key.expected.as_ref(), result) {
             self.elaboration_cache.insert(key, result.clone());
         }
+    }
+
+    /// Whether a [`probe_elaborated`] `Miss` may be recorded: the purity and
+    /// groundness condition, plus the *settled-globals* gate. Every global the
+    /// entry names — in the result, and in the `Check` `expected` half of the
+    /// key — must already be defined. Definedness is the one ambient fact a
+    /// pure, ground elaboration reads (through the conversions in `expect`,
+    /// which unfold definitions), so an entry that surfaces only settled
+    /// globals cannot be invalidated by a later *fresh* `define` — the name
+    /// analogue of the reduction cache's unsolved-metavariable refusal
+    /// (`Context::reduce`), and what lets [`define_entry`] drop its wholesale
+    /// elaboration-cache clear. A constructor, primitive, inductive, or struct
+    /// is not a free `Var`, so it never trips the gate; only a `/`-qualified
+    /// definition or a `rec` member does, and a `rec` member is defined (as a
+    /// slot) before any sibling body elaborates, so it counts as settled here
+    /// — the slot→member redefinition later clears wholesale.
+    ///
+    /// [`probe_elaborated`]: Context::probe_elaborated
+    /// [`define_entry`]: Context::define_entry
+    fn elaboration_cacheable(
+        &self,
+        stamp: usize,
+        expected: Option<&Term>,
+        result: &(Term, Term),
+    ) -> bool {
+        let ground = |t: &Term| !t.has_metavar() && !t.has_local_free();
+        let settled = |t: &Term| t.free_vars().iter().all(|name| self.is_defined(name));
+        self.mutation_stamp.count() == stamp
+            && ground(&result.0)
+            && ground(&result.1)
+            && settled(&result.0)
+            && settled(&result.1)
+            && expected.is_none_or(settled)
     }
 
     fn enter_frame(&mut self) {
@@ -599,6 +643,17 @@ impl Context {
             .find_map(|assumptions| assumptions.get(label))
     }
 
+    /// Whether `label` currently has a definition entry in some frame — the
+    /// settled-globals gate for [`Context::elaboration_cacheable`]. A name
+    /// defined here will only ever be *re*defined (which clears both caches
+    /// wholesale), never freshly defined, so an elaboration entry naming it is
+    /// safe to keep across a later fresh `define`.
+    fn is_defined(&self, label: &str) -> bool {
+        self.definitions
+            .iter()
+            .any(|frame| frame.contains_key(label))
+    }
+
     /// The local assumption context in binding order (outermost first). The
     /// dependent-match generalizer (`elaborate_match`) walks this to find the
     /// hypotheses whose type depends on a scrutinee index being abstracted: they
@@ -615,26 +670,39 @@ impl Context {
         // A *fresh* definition can only unstick reductions that read this
         // name's absence, and a stuck read always leaves the name free in the
         // WHNF (the name analogue of the unsolved-metavariable argument in
-        // `Context::reduce`) — so retain every entry whose result does not
-        // mention it instead of clearing wholesale. This keeps closed reducts
-        // warm across item boundaries: erasure re-derives an item right after
-        // its `define`, and a cold re-reduction of a deep closed spine (a
-        // string literal's scan-state chain) would repeat all of its work.
-        // A *redefinition* voids that argument — `reduce_let` defines under
-        // written binder labels, so same-frame rebinding and shadowing are
-        // reachable, and the old value may sit consumed inside reducts that
-        // no longer mention the label — so there the cache clears wholesale.
+        // `Context::reduce`) — so the reduction cache retains every entry whose
+        // result does not mention it instead of clearing wholesale. This keeps
+        // closed reducts warm across item boundaries: erasure re-derives an
+        // item right after its `define`, and a cold re-reduction of a deep
+        // closed spine (a string literal's scan-state chain) would repeat all
+        // of its work.
+        //
+        // The elaboration cache survives the same fresh definition with no
+        // retain at all: its insert gate (`elaboration_cacheable`) already
+        // refused every entry naming a not-yet-defined global, so the fresh
+        // label appears in no surviving entry. A `#`-minted `let` binder —
+        // which `reduce_let` leaks and the frame elaborators mint — is excluded
+        // from caching outright (`has_local_free`), and a `/`-qualified global
+        // is only ever referenced once defined; so not clearing lets a deep
+        // spine memoize once across those definitions instead of re-elaborating
+        // its shared subterms after each.
+        //
+        // A *redefinition* voids both arguments — `reduce_let` and the frame
+        // elaborators define under labels that can rebind or shadow, and the
+        // old value may sit consumed inside a reduct or an elaboration result
+        // that no longer mentions the label — so there both caches clear
+        // wholesale.
         let redefinition = self
             .definitions
             .iter()
             .any(|frame| frame.contains_key(&label));
         if redefinition {
             self.reduction_cache.clear();
+            self.elaboration_cache.clear();
         } else {
             self.reduction_cache
                 .retain(|_, reduct| !reduct.mentions_free(&label));
         }
-        self.elaboration_cache.clear();
 
         self.definitions.last_mut().unwrap().insert(label, entry);
     }
