@@ -567,12 +567,12 @@ use Package/{mod Syntax, let parse};
 
 ### Visibility
 
-An outer `pub` makes a declaration's name reachable outside its module. `struct` and `induct` have a second, declaration-local `pub` before their result sort; this independently exposes their representation.
+An outer `pub` makes a declaration's name reachable outside its module. `struct`, `induct`, and `concept` have a second, declaration-local `pub` before their result sort; this independently exposes their representation.
 
 A public interface cannot mention a private item. The interface includes:
 
 - parameters, indices, and result sorts of publicly reachable nominal declarations;
-- struct fields when the struct representation is public;
+- struct and concept fields when the representation is public;
 - inductive constructor signatures when the inductive representation is public;
 - declared types of public definitions.
 
@@ -668,14 +668,14 @@ Concepts provide ad-hoc polymorphism. A concept is a record-shaped interface, a 
 
 ### Concept declarations
 
-A concept has zero or more parameters, a required result sort, and a field list.
+A concept has zero or more parameters, a required representation sort, and a field list. The representation sort follows the struct rules: `: pub Type` declares a transparent concept, and `: Type` a *sealed* one, whose representation is private to its declaring module — witness declarations, dictionary literals, structure updates, and raw field projections are then permitted only there. Resolution, `use` parameters, and the generated method wrappers work the same either way, and visibility of the concept's name remains independent of its representation.
 
 ```crs
-pub concept Show(A : Type) : Type {
+pub concept Show(A : Type) : pub Type {
     show(A) -> Str,
 }
 
-pub concept Monad(M : (Type) -> Type) : Type {
+pub concept Monad(M : (Type) -> Type) : pub Type {
     pure(@A : Type, value : A) -> M(A),
     bind(@A : Type, @B : Type, action : M(A), next : (A) -> M(B)) -> M(B),
 }
@@ -686,7 +686,7 @@ Every ordinary field receives a wrapper in the concept's namespace, so `Show/sho
 A field beginning with `use` is an anonymous superclass edge. Its type must be a concept application.
 
 ```crs
-pub concept Ord(A : Type) : Type {
+pub concept Ord(A : Type) : pub Type {
     use Eql(A),
     cmp(A, A) -> Order,
 }
@@ -694,7 +694,9 @@ pub concept Ord(A : Type) : Type {
 
 A local `Ord(A)` witness can therefore satisfy an `Eql(A)` goal by superclass projection.
 
-A concept returning `Prop` has proof-irrelevant witnesses that erase completely.
+A sealed concept's fields are not part of its public interface: a `pub` sealed concept may reference private names in its field types — a private superclass is a hidden obligation that resolution discharges without the consumer naming it. A transparent `pub` concept's field types are interface and must be `pub` themselves.
+
+A concept returning `Prop` (or `pub Prop`) has proof-irrelevant witnesses that erase completely.
 
 ### Witness declarations
 
@@ -720,9 +722,9 @@ A globally registered witness therefore requires a concept with at least one par
 
 For example, witnesses for `Into(Nat, Str)` and `Into(Nat, Bool)` have distinct keys. A call must determine both parameters from its explicit arguments, expected result, or an explicitly supplied witness before automatic lookup can proceed.
 
-Only one witness may occupy a key across the whole program. Module visibility does not scope witness registration.
+Only one witness may occupy a key across the whole program. Module visibility does not scope witness registration, but a *sealed* concept's representation does gate declaration: its witnesses may only be declared in the concept's declaring module.
 
-To use a second dictionary for the same key, construct an ordinary concept value and supply it explicitly:
+To use a second dictionary for the same key on a *transparent* concept, construct an ordinary concept value and supply it explicitly (a sealed concept forbids the literal outside its module):
 
 ```crs
 let reverse : Ord(Nat) = Ord { cmp(a, b) = compare_reverse(a, b) };

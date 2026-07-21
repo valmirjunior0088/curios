@@ -351,7 +351,7 @@ fn pub_concept_with_private_superclass_is_rejected() {
         use /std/{Nat, Bool, Io};
         mod M
             use /std/{Bool};
-            concept Hidden(A : Type) : Type {
+            concept Hidden(A : Type) : pub Type {
                 h(A) -> Bool
             }
             pub concept Loud(A : Type) : pub Type {

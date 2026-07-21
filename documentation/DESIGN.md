@@ -38,6 +38,14 @@ Non-goals: Curios is not a foundational proof assistant and makes no logical-sou
 
 **Rationale.** Coherence makes the chosen witness a fact about the program rather than about the scope of the call site, so moving code or reorganizing imports cannot silently change which witness runs.
 
+### Concept representations may be sealed
+
+**Decision.** Concepts carry the same declaration-local representation visibility as structs and inductives: `: pub Type` is transparent, `: Type` is sealed. A sealed concept's representation is private to its declaring module — witness declarations, dictionary literals, structure updates, and raw field projections are permitted only there — while resolution, `use` parameters, and the generated method wrappers work identically for both. A sealed `pub` concept's fields are not interface, so they may reference private names: a private superclass is a hidden obligation resolution discharges without the consumer naming it.
+
+**Rationale.** Sealing lets an owner control the full instance set of a concept — a guarantee otherwise inexpressible, since the auto-generated public wrappers plus explicit implicit arguments leak any field value, defeating private-token workarounds. It reuses the enforcement that representation privacy already provides, adding no new checks, and it is honest about mechanism: a concept is a record, so its visibility story is the record's. Enforcement is scoped to surface elaboration (an island in `Context`); machinery that re-derives types from already-elaborated terms — erasure, the metavariable oracle — suppresses it through the one bracket that clears the island, because compiler-built projections (witness splices, eta-expansions) were never subject to surface privacy.
+
+**Rejected.** Coherence-only opacity (blocking dictionary literals while exempting `satisfy`): its motivating hazard dissolved once `Map` was recognized as byte-keyed by design, leaving no coherence-sensitive concept. Sealing through orphan-rule tightening: representation privacy already provides the gate, at the construction site where it belongs.
+
 ### Matching is total by enumeration
 
 **Decision.** Every match must cover its scrutinee. Arms enumerate constructors without row priority, nested patterns compile through the pattern matrix by full enumeration, and an omitted arm is legal only when index inversion proves it impossible.

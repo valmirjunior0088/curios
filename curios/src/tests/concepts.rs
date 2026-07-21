@@ -16,7 +16,7 @@ fn error(source: &str) -> String {
 fn concept_witness_resolves_through_wrapper() {
     let source = r#"
         use /std/{Nat, Io, Str};
-        pub concept Show(A : Type) : Type {
+        pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
         satisfy Show(Nat) {
@@ -37,7 +37,7 @@ fn concept_witness_resolves_through_wrapper() {
 fn premised_witness_resolves_recursively() {
     let source = r#"
         use /std/{Nat, Io, Str, Lst};
-        pub concept Show(A : Type) : Type {
+        pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
         satisfy Show(Nat) {
@@ -61,7 +61,7 @@ fn premised_witness_resolves_recursively() {
 fn explicit_use_argument_overrides() {
     let source = r#"
         use /std/{Nat, Io, Str};
-        pub concept Show(A : Type) : Type {
+        pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
         satisfy Show(Nat) {
@@ -86,10 +86,10 @@ fn explicit_use_argument_overrides() {
 fn superclass_projection_resolves() {
     let source = r#"
         use /std/{Nat, Bool, Order, Io};
-        pub concept Eql(A : Type) : Type {
+        pub concept Eql(A : Type) : pub Type {
             eql(A, A) -> Bool
         }
-        pub concept Ord(A : Type) : Type {
+        pub concept Ord(A : Type) : pub Type {
             use Eql(A),
             cmp(A, A) -> Order
         }
@@ -112,7 +112,7 @@ fn superclass_projection_resolves() {
 fn missing_witness_is_an_error() {
     let source = r#"
         use /std/{Nat, Bool, Io, Str};
-        pub concept Show(A : Type) : Type {
+        pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
         satisfy Show(Nat) {
@@ -172,7 +172,7 @@ fn prelude_ord_superclass_projects() {
 fn duplicate_witness_is_an_error() {
     let source = r#"
         use /std/{Nat, Io, Str};
-        pub concept Show(A : Type) : Type {
+        pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
         satisfy Show(Nat) {
@@ -231,7 +231,7 @@ fn witness_for_a_locally_owned_type_is_not_an_orphan() {
 fn multi_param_witnesses_share_a_first_head() {
     let source = r#"
         use /std/{Nat, Bool, Io, Str};
-        pub concept Into(A : Type, B : Type) : Type {
+        pub concept Into(A : Type, B : Type) : pub Type {
             into(A) -> B
         }
         satisfy Into(Nat, Str) {
@@ -255,7 +255,7 @@ fn multi_param_witnesses_share_a_first_head() {
 fn open_parameter_does_not_infer_from_the_witness() {
     let source = r#"
         use /std/{Nat, Io, Str};
-        pub concept Into(A : Type, B : Type) : Type {
+        pub concept Into(A : Type, B : Type) : pub Type {
             into(A) -> B
         }
         satisfy Into(Nat, Str) {
@@ -426,10 +426,10 @@ fn sys_eql_and_cmp_resolve() {
 fn use_entry_fills_a_concept_field_explicitly() {
     let source = r#"
         use /std/{Nat, Bool, Io, Str, Order};
-        pub concept Eq2(A : Type) : Type {
+        pub concept Eq2(A : Type) : pub Type {
             eq2(A, A) -> Bool
         }
-        pub concept Ord2(A : Type) : Type {
+        pub concept Ord2(A : Type) : pub Type {
             use Eq2(A),
             cmp2(A, A) -> Order
         }
@@ -451,10 +451,10 @@ fn use_entry_fills_a_concept_field_explicitly() {
 fn use_entry_fills_a_witness_superclass() {
     let source = r#"
         use /std/{Nat, Bool, Io, Str, Order};
-        pub concept Eq3(A : Type) : Type {
+        pub concept Eq3(A : Type) : pub Type {
             eq3(A, A) -> Bool
         }
-        pub concept Ord3(A : Type) : Type {
+        pub concept Ord3(A : Type) : pub Type {
             use Eq3(A),
             cmp3(A, A) -> Order
         }
@@ -476,10 +476,10 @@ fn use_entry_fills_a_witness_superclass() {
 fn labeled_fill_of_a_former_superclass_is_unknown() {
     let source = r#"
         use /std/{Nat, Bool, Io, Str, Order};
-        pub concept Eq4(A : Type) : Type {
+        pub concept Eq4(A : Type) : pub Type {
             eq4(A, A) -> Bool
         }
-        pub concept Ord4(A : Type) : Type {
+        pub concept Ord4(A : Type) : pub Type {
             use Eq4(A),
             cmp4(A, A) -> Order
         }
@@ -509,10 +509,10 @@ fn misplaced_use_entries_are_errors() {
 
     let surplus = r#"
         use /std/{Nat, Bool, Io, Str, Order};
-        pub concept Eq5(A : Type) : Type {
+        pub concept Eq5(A : Type) : pub Type {
             eq5(A, A) -> Bool
         }
-        pub concept Ord5(A : Type) : Type {
+        pub concept Ord5(A : Type) : pub Type {
             use Eq5(A),
             cmp5(A, A) -> Order
         }
@@ -536,10 +536,10 @@ fn misplaced_use_entries_are_errors() {
 fn omitted_superclass_resolves_from_a_premise() {
     let source = r#"
         use /std/{Nat, Bool, Io, Str, Order, Lst};
-        pub concept Eq6(A : Type) : Type {
+        pub concept Eq6(A : Type) : pub Type {
             eq6(A, A) -> Bool
         }
-        pub concept Ord6(A : Type) : Type {
+        pub concept Ord6(A : Type) : pub Type {
             use Eq6(A),
             cmp6(A, A) -> Order
         }
@@ -571,10 +571,10 @@ fn omitted_superclass_resolves_from_a_premise() {
 fn concept_literal_spread_copies_superclass() {
     let source = r#"
         use /std/{Nat, Bool, Io, Str, Order};
-        pub concept Eq2(A : Type) : Type {
+        pub concept Eq2(A : Type) : pub Type {
             eq2(A, A) -> Bool
         }
-        pub concept Ord2(A : Type) : Type {
+        pub concept Ord2(A : Type) : pub Type {
             use Eq2(A),
             cmp2(A, A) -> Order
         }
@@ -597,10 +597,10 @@ fn concept_literal_spread_copies_superclass() {
 fn concept_literal_spread_use_override() {
     let source = r#"
         use /std/{Nat, Bool, Io, Str, Order};
-        pub concept Eq2(A : Type) : Type {
+        pub concept Eq2(A : Type) : pub Type {
             eq2(A, A) -> Bool
         }
-        pub concept Ord2(A : Type) : Type {
+        pub concept Ord2(A : Type) : pub Type {
             use Eq2(A),
             cmp2(A, A) -> Order
         }
@@ -636,7 +636,7 @@ fn concept_literal_spread_use_on_non_concept_rejected() {
 fn prop_concept_resolves_and_erases() {
     let source = r#"
         use /std/{Nat, Str, Eq, Io};
-        pub concept Refl(A : Type) : Prop {
+        pub concept Refl(A : Type) : pub Prop {
             proof(x : A) -> Eq(x, x)
         }
         satisfy Refl(Nat) {
@@ -659,7 +659,7 @@ fn prop_concept_resolves_and_erases() {
 fn prop_method_in_top_level_binding_collapses() {
     let source = r#"
         use /std/{Nat, Eq, Io};
-        pub concept Refl(A : Type) : Prop {
+        pub concept Refl(A : Type) : pub Prop {
             proof(x : A) -> Eq(x, x)
         }
         satisfy Refl(Nat) {
@@ -682,7 +682,7 @@ fn prop_method_in_top_level_binding_collapses() {
 fn type_concept_prop_method_binding_collapses() {
     let source = r#"
         use /std/{Nat, Eq, Io};
-        pub concept Refl(A : Type) : Type {
+        pub concept Refl(A : Type) : pub Type {
             proof(x : A) -> Eq(x, x)
         }
         satisfy Refl(Nat) {
@@ -703,7 +703,7 @@ fn type_concept_prop_method_binding_collapses() {
 fn prop_laws_concept_resolves() {
     let source = r#"
         use /std/{Nat, Str, Show, Eq, Io};
-        pub concept ShowLaws(A : Type) : Prop {
+        pub concept ShowLaws(A : Type) : pub Prop {
             stable(use Show(A), x : A) -> Eq(Show/show(x), Show/show(x))
         }
         satisfy ShowLaws(Nat) {
