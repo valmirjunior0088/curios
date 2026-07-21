@@ -463,3 +463,222 @@ pub(super) fn transitively_ground(context: &Context, id: MetavarId) -> bool {
             .all(|&inner| transitively_ground(context, inner)),
     }
 }
+
+// === Iterative fast path for ground, all-explicit applications ==============
+//
+// `elaborate` (the driver in `elaborate.rs`) defunctionalizes the recursive
+// cycle `elaborate → elaborate_apply → check(rest) → elaborate` onto an
+// explicit frame stack — the reducer's `PendingMatch` move, one level up — so a
+// right-nested constructor spine (a string literal's `Utf8` derivation, one
+// `more(c, st, t, rest)` link per byte) elaborates at native depth bounded by
+// the written program's binder nesting rather than by the spine's length. This
+// module holds the frame and the walk logic; the driver holds the loop.
+//
+// The fast path is a hand-specialized copy of `elaborate_apply` restricted to
+// the class that provably neither inserts an implicit nor postpones an intro
+// form: `term` is ground and every argument is explicit, and (confirmed after
+// the head elaborates) the head telescope is all-explicit at the call's arity.
+// Under those gates the all-auto saturation loop, argument insertion, and the
+// result-directed postponement machinery are all inert, so the walk reduces to
+// "check each argument against its dependent domain, opening the rest over the
+// checked form" — and only the potentially-deep argument's `check` is turned
+// into a descent. Every other application (and every position the gate
+// declines) falls through to the unchanged native `elaborate_apply`, so the
+// output stays byte-for-byte identical to the recursive elaborator.
+
+/// The cheap, O(1) gate the driver applies before any head elaboration: `term`
+/// is ground (no metavariable, no elaborator-minted free name — the bits
+/// `Term` caches per node) and every call-site argument is explicit. Passing it
+/// makes the term a *candidate*; `start_fast_apply` confirms the head telescope
+/// conforms before committing to the specialized walk.
+pub(super) fn fast_apply_eligible(term: &Term, apply: &Apply) -> bool {
+    !term.has_metavar()
+        && !term.has_local_free()
+        && apply
+            .plicities
+            .iter()
+            .all(|p| matches!(p, Plicity::Explicit))
+}
+
+/// One suspended fast-path application on the driver's frame stack — the
+/// iterative analogue of `reduce`'s `PendingMatch`. Captures the telescope walk
+/// of one application whose current argument (`params[index]`) is being
+/// elaborated by descent; a finished child resolves against this frame instead
+/// of returning through a native frame. Every field is owned and `Clone`, none
+/// borrows the context across the child's elaboration.
+pub(super) struct ElabFrame {
+    /// The already-elaborated head, spelled into the rebuilt application.
+    head: Term,
+    /// The head telescope's plicities (all `Explicit` under the gate) — the
+    /// marks for the rebuilt application, paired with `elaborated`.
+    plicities: Vec<Plicity>,
+    /// The original lowered arguments, in call order (all explicit, so no
+    /// insertion reorders them; `full_args` in `elaborate_apply` is exactly
+    /// this vector for the fast-path class).
+    params: Vec<Term>,
+    /// The remaining head telescope, already opened over the checked prefix.
+    /// Bounded by the head's declared arity, never by data length.
+    tele: Telescope<Term>,
+    /// The checked arguments accumulated so far, in slot order.
+    elaborated: Vec<Term>,
+    /// The slot currently being elaborated (index into `params`).
+    index: usize,
+    /// The application's own mode; drives the final `Check`-mode `expect`.
+    mode: Mode,
+    /// The application node — its span anchors restamping and error location,
+    /// and rebuilds the cache key at record-at-pop.
+    term: Term,
+    /// `Some(stamp)` when this node was a cacheable probe miss: record the
+    /// finalized (un-restamped) result under `stamp` at pop. `None` when the
+    /// node is uncacheable (a non-ground expected type).
+    record: Option<usize>,
+}
+
+/// Outcome of advancing a fast-path walk one step
+/// ([`ElabFrame::advance`]/[`ElabFrame::resume`]).
+pub(super) enum Walk {
+    /// The walk reached a fast-path-eligible argument: the driver pushes
+    /// `frame` and descends into `arg` in `Check(ty)` mode. Boxed — an
+    /// `ElabFrame` dwarfs the other variant.
+    Suspend {
+        frame: Box<ElabFrame>,
+        arg: Term,
+        ty: Term,
+    },
+    /// The walk finished: `result` is the un-restamped `(rebuilt, type)` for
+    /// `term`. Record-at-pop has already fired for a cacheable frame.
+    Done { term: Term, result: (Term, Term) },
+}
+
+impl ElabFrame {
+    /// Begin a fast-path walk for a gated application. Elaborates the head
+    /// (native, shallow), confirms the head telescope is all-explicit at the
+    /// call's arity — delegating to the unchanged native `elaborate_apply` when
+    /// it is not — then starts the walk. `record` is the probe outcome:
+    /// `Some(stamp)` records the result at finalize, `None` leaves it uncached.
+    /// Returns a [`Walk`]: `Suspend` means the first argument needs descent,
+    /// `Done` means the walk completed without one (e.g. a nullary
+    /// constructor).
+    pub(super) fn start(
+        context: &mut Context,
+        apply: &Apply,
+        term: &Term,
+        mode: Mode,
+        record: Option<usize>,
+    ) -> Result<Walk, Error> {
+        let (head, head_type) = elaborate(context, &apply.head, Mode::Infer)?;
+        let head_type = reduce_with(context, &head_type)?;
+        let ft = match &*head_type {
+            Subterm::FuncType(ft) => ft.clone(),
+            other => return Err(Error::not_a_function(other.clone())),
+        };
+
+        // Confirm the specialized class: the head telescope is all-explicit and
+        // its arity matches the call. A head type that still carries an implicit
+        // slot, or a genuine arity error, is the general elaborator's business —
+        // hand the whole node to native `elaborate_apply` (which re-elaborates
+        // the head through the cache: cheap and idempotent) and still record the
+        // result for a cacheable miss, exactly as the recursive form would.
+        let conforms = ft.plicities.len() == apply.params.len()
+            && ft.plicities.iter().all(|p| matches!(p, Plicity::Explicit));
+        if !conforms {
+            let expected = mode.expected();
+            let result = elaborate_apply(context, apply, term, mode)?;
+            if let Some(stamp) = record {
+                context.record_elaborated(term, expected.as_ref(), stamp, &result);
+            }
+            return Ok(Walk::Done {
+                term: term.clone(),
+                result,
+            });
+        }
+
+        ElabFrame {
+            head,
+            plicities: ft.plicities.clone(),
+            elaborated: Vec::with_capacity(apply.params.len()),
+            params: apply.params.clone(),
+            tele: ft.telescope,
+            index: 0,
+            mode,
+            term: term.clone(),
+            record,
+        }
+        .advance(context)
+    }
+
+    /// Advance this walk to its next descent or its finish. Checks each shallow
+    /// argument natively (bounded by that argument's written depth), suspending
+    /// the moment it reaches a fast-path-eligible argument, and finalizes —
+    /// running the `Check`-mode `expect` and recording a cacheable result — when
+    /// the telescope is exhausted. Mirrors `elaborate_apply`'s main telescope
+    /// walk with the deep argument's `check` factored out into `Walk::Suspend`.
+    fn advance(mut self, context: &mut Context) -> Result<Walk, Error> {
+        loop {
+            // The telescope is the head's declared arity (four for `more`),
+            // never the spine length, so cloning it per step is bounded work.
+            match self.tele.clone() {
+                Telescope::Done(body) => {
+                    let output = *body;
+                    if let Mode::Check(expected) = &self.mode {
+                        expect(context, &self.term, &output, expected)?;
+                    }
+                    let rebuilt = Term::apply_marked(
+                        self.head.clone(),
+                        self.plicities
+                            .iter()
+                            .copied()
+                            .zip(self.elaborated.iter().cloned()),
+                    );
+                    let result = (rebuilt, output);
+                    if let Some(stamp) = self.record {
+                        let expected = self.mode.expected();
+                        context.record_elaborated(&self.term, expected.as_ref(), stamp, &result);
+                    }
+                    return Ok(Walk::Done {
+                        term: self.term,
+                        result,
+                    });
+                }
+                Telescope::Cons(ty, rest) => {
+                    let arg = self.params[self.index].clone();
+                    if let Subterm::Apply(inner) = &*arg
+                        && fast_apply_eligible(&arg, inner)
+                    {
+                        // Suspend at this slot; `self.tele`/`self.index` still
+                        // point at it, so `resume` re-opens `rest` over the
+                        // finished child.
+                        return Ok(Walk::Suspend {
+                            frame: Box::new(self),
+                            arg,
+                            ty,
+                        });
+                    }
+                    let checked = check(context, &arg, ty.clone())?;
+                    self.tele = rest.open(&[&checked]);
+                    self.elaborated.push(checked);
+                    self.index += 1;
+                }
+            }
+        }
+    }
+
+    /// Resume this suspended frame with the finished (already span-stamped)
+    /// argument: slot it in, open the telescope over it, and advance to the next
+    /// descent or finish. The frame was suspended at a `Cons`, so the
+    /// re-destructure is total.
+    pub(super) fn resume(mut self, context: &mut Context, child: Term) -> Result<Walk, Error> {
+        let Telescope::Cons(_, rest) = self.tele.clone() else {
+            unreachable!("a suspended frame is always positioned at a telescope Cons");
+        };
+        self.tele = rest.open(&[&child]);
+        self.elaborated.push(child);
+        self.index += 1;
+        self.advance(context)
+    }
+
+    /// The span this frame's node contributes to an error draining through it.
+    pub(super) fn span(&self) -> Option<Span> {
+        self.term.span()
+    }
+}

@@ -7,7 +7,7 @@ use {
     num_bigint::BigUint,
     std::{
         cell::OnceCell,
-        collections::{BTreeMap, BTreeSet, hash_map::DefaultHasher},
+        collections::{BTreeMap, BTreeSet, HashSet, hash_map::DefaultHasher},
         fmt,
         hash::{Hash, Hasher},
         ops::Deref,
@@ -18,7 +18,7 @@ use {
 #[cfg(feature = "archive")]
 use curios_base::BigUintBytes;
 
-/// A core-calculus term: an `Rc`-shared [`Subterm`] plus a lazily-cached structural hash, `reach`, and free-variable set, and an optional source span. Clones are pointer bumps, and equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The span is identity-irrelevant: hash and equality look only at the inner node, so re-spanning a term never splits a cache.
+/// A core-calculus term: an `Rc`-shared [`Node`] — a [`Subterm`] plus its lazily-cached, span-independent derivations (a structural hash, `reach`, the free-variable set, and the `has_local_free`/`has_metavar` bits) — with an optional per-occurrence source span. Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The span is identity-irrelevant: hash and equality look only at the node, so re-spanning a term never splits a cache.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "archive",
@@ -34,6 +34,22 @@ use curios_base::BigUintBytes;
 )]
 pub struct Term {
     span: Option<Span>,
+    #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
+    inner: Rc<Node>,
+}
+
+/// A [`Subterm`] together with its memoized, span-independent derivations. One
+/// per distinct node, behind the shared `Rc` every occurrence bumps, so each
+/// derivation fills at most once across the whole DAG. The cells are filled
+/// lazily by an iterative post-order walk over the node's descendants
+/// (`Term::warm_scalars`/`Term::get_or_init_free_vars`) rather than by native
+/// recursion, so a data-shaped spine of any depth memoizes on a bounded stack:
+/// filling one node reads its children's already-filled cells in O(children).
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+struct Node {
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
     hash: OnceCell<u64>,
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
@@ -44,18 +60,84 @@ pub struct Term {
     has_local_free: OnceCell<bool>,
     #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
     has_metavar: OnceCell<bool>,
-    #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
-    inner: Rc<Subterm>,
+    subterm: Subterm,
+}
+
+impl Node {
+    fn new(subterm: Subterm) -> Self {
+        Node {
+            hash: OnceCell::new(),
+            reach: OnceCell::new(),
+            free_vars: OnceCell::new(),
+            has_local_free: OnceCell::new(),
+            has_metavar: OnceCell::new(),
+            subterm,
+        }
+    }
+}
+
+/// The cells are cache noise; a `Node` prints as its subterm.
+impl fmt::Debug for Node {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.subterm.fmt(formatter)
+    }
 }
 
 impl Term {
-    fn get_or_init_hash(&self) -> u64 {
-        *self.hash.get_or_init(|| {
-            let mut hasher = DefaultHasher::new();
-            self.inner.hash(&mut hasher);
+    /// Fill a memoized cell on every node of this term's subtree, bottom-up,
+    /// on an explicit stack instead of the native one — so a data-shaped spine
+    /// of any depth memoizes without recursing per link. `is_filled` reports
+    /// whether a node's target cell is set (a filled node — and its whole
+    /// subtree — is skipped, so shared chains are walked once); `fill` computes
+    /// one node's cell after all its children are filled, reading theirs in
+    /// O(children). The walk rides `any_child_term` over owned clones: cloning a
+    /// `Term` bumps the shared `Rc<Node>`, so filling a clone's cell fills it
+    /// for every occurrence of that node, and `Rc::as_ptr` dedups by node.
+    fn fill_post_order(&self, is_filled: impl Fn(&Node) -> bool, mut fill: impl FnMut(&Node)) {
+        if is_filled(&self.inner) {
+            return;
+        }
+        let mut seen: HashSet<*const Node> = HashSet::new();
+        let mut stack: Vec<(Term, bool)> = vec![(self.clone(), false)];
+        while let Some((node, expanded)) = stack.pop() {
+            if expanded {
+                fill(&node.inner);
+            } else if !is_filled(&node.inner) && seen.insert(Rc::as_ptr(&node.inner)) {
+                stack.push((node.clone(), true));
+                node.inner.subterm.any_child_term(&mut |child| {
+                    stack.push((child.clone(), false));
+                    false
+                });
+            }
+        }
+    }
 
-            hasher.finish()
-        })
+    /// Fill the four cheap scalar cells (`hash`, `reach`, `has_local_free`,
+    /// `has_metavar`) together in one post-order pass. They combine from the
+    /// children's cells in O(children), and are almost always all wanted on the
+    /// same node, so one shared walk beats four. `reach` is the fill marker.
+    fn warm_scalars(&self) {
+        self.fill_post_order(
+            |node| node.reach.get().is_some(),
+            |node| {
+                node.reach.get_or_init(|| node.subterm.reach());
+                node.has_local_free
+                    .get_or_init(|| node.subterm.has_local_free());
+                node.has_metavar.get_or_init(|| node.subterm.has_metavar());
+                node.hash.get_or_init(|| {
+                    let mut hasher = DefaultHasher::new();
+                    node.subterm.hash(&mut hasher);
+                    hasher.finish()
+                });
+            },
+        );
+    }
+
+    fn get_or_init_hash(&self) -> u64 {
+        if self.inner.hash.get().is_none() {
+            self.warm_scalars();
+        }
+        *self.inner.hash.get().expect("warm_scalars fills hash")
     }
 
     /// Whether any *free* variable in this term carries an elaborator-minted
@@ -68,20 +150,35 @@ impl Term {
     /// literal — pays O(degree) here, not O(size): the elaboration cache gates
     /// every `elaborate` call on this bit and must not re-walk shared chains.
     pub(crate) fn has_local_free(&self) -> bool {
+        if self.inner.has_local_free.get().is_none() {
+            self.warm_scalars();
+        }
         *self
+            .inner
             .has_local_free
-            .get_or_init(|| self.inner.has_local_free())
+            .get()
+            .expect("warm_scalars fills has_local_free")
     }
 
     /// Whether any `Metavar` node occurs in this term. Cached per node like
     /// [`has_local_free`](Self::has_local_free) and for the same reason: the
     /// elaboration cache's O(1)-per-call gate.
     pub(crate) fn has_metavar(&self) -> bool {
-        *self.has_metavar.get_or_init(|| self.inner.has_metavar())
+        if self.inner.has_metavar.get().is_none() {
+            self.warm_scalars();
+        }
+        *self
+            .inner
+            .has_metavar
+            .get()
+            .expect("warm_scalars fills has_metavar")
     }
 
     pub(crate) fn unwrap_or_clone(this: Self) -> Subterm {
-        Rc::unwrap_or_clone(this.inner)
+        match Rc::try_unwrap(this.inner) {
+            Ok(node) => node.subterm,
+            Err(shared) => shared.subterm.clone(),
+        }
     }
 
     /// The free-variable label at the head of an application spine, descending
@@ -91,7 +188,7 @@ impl Term {
     /// canonicalization on the applied symbol before paying for argument
     /// reduction.
     pub(crate) fn head_label(&self) -> Option<&str> {
-        match &*self.inner {
+        match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_label(),
             Subterm::Var(var) => var.as_free(),
             _ => None,
@@ -104,7 +201,7 @@ impl Term {
     /// interface audit uses this after name resolution to preserve
     /// representation provenance; computed bodies are not classified as aliases.
     pub fn transparent_alias_target(&self) -> Option<String> {
-        match &*self.inner {
+        match &self.inner.subterm {
             Subterm::Var(var) => var.as_free().map(str::to_string),
             Subterm::Func(Func { telescope }) => {
                 let fresh = (0..telescope.len())
@@ -918,7 +1015,7 @@ impl PartialEq for Term {
             return false;
         }
 
-        *self.inner == *other.inner
+        self.inner.subterm == other.inner.subterm
     }
 }
 
@@ -926,7 +1023,7 @@ impl Eq for Term {}
 
 impl AsRef<Subterm> for Term {
     fn as_ref(&self) -> &Subterm {
-        &self.inner
+        &self.inner.subterm
     }
 }
 
@@ -934,7 +1031,7 @@ impl Deref for Term {
     type Target = Subterm;
 
     fn deref(&self) -> &Subterm {
-        &self.inner
+        &self.inner.subterm
     }
 }
 
@@ -942,12 +1039,7 @@ impl From<Subterm> for Term {
     fn from(term: Subterm) -> Self {
         Self {
             span: None,
-            hash: OnceCell::new(),
-            reach: OnceCell::new(),
-            free_vars: OnceCell::new(),
-            has_local_free: OnceCell::new(),
-            has_metavar: OnceCell::new(),
-            inner: Rc::new(term),
+            inner: Rc::new(Node::new(term)),
         }
     }
 }
@@ -967,20 +1059,19 @@ impl Bound for Term {
             return self.clone();
         }
 
-        // Preserve the span across traversal.
+        // Preserve the span across traversal; the rebuilt node is a fresh
+        // structure, so its cache starts empty.
         Self {
             span: self.span.clone(),
-            hash: OnceCell::new(),
-            reach: OnceCell::new(),
-            free_vars: OnceCell::new(),
-            has_local_free: OnceCell::new(),
-            has_metavar: OnceCell::new(),
-            inner: Rc::new((**self).traverse(visit)),
+            inner: Rc::new(Node::new((**self).traverse(visit))),
         }
     }
 
     fn reach(&self) -> usize {
-        *self.reach.get_or_init(|| self.inner.reach())
+        if self.inner.reach.get().is_none() {
+            self.warm_scalars();
+        }
+        *self.inner.reach.get().expect("warm_scalars fills reach")
     }
 
     /// Cached alongside `hash`/`reach`: a closed subterm that `traverse`'s
@@ -996,17 +1087,25 @@ impl Bound for Term {
 }
 
 impl Term {
+    /// The memoized free-variable set, filled bottom-up on an explicit stack:
+    /// each node's set is its children's sets unioned with its own free label
+    /// (if it is a free `Var`), so filling reads the children's cached sets in
+    /// O(children) rather than re-walking the subtree — a deep spine memoizes
+    /// without native recursion. `free_vars` is the fill marker.
     fn get_or_init_free_vars(&self) -> &Rc<BTreeSet<String>> {
-        self.free_vars.get_or_init(|| {
-            let mut vars = BTreeSet::new();
-            self.traverse(&mut Visit::new(|_, var| {
-                if let Some(label) = var.as_free() {
-                    vars.insert(label.to_string());
-                }
-                None
-            }));
-            Rc::new(vars)
-        })
+        if self.inner.free_vars.get().is_none() {
+            self.fill_post_order(
+                |node| node.free_vars.get().is_some(),
+                |node| {
+                    node.free_vars
+                        .get_or_init(|| Rc::new(node.subterm.free_vars_from_children()));
+                },
+            );
+        }
+        self.inner
+            .free_vars
+            .get()
+            .expect("fill_post_order fills free_vars")
     }
 
     /// Whether `label` occurs free in this term, through the same memoized
@@ -1016,6 +1115,35 @@ impl Term {
     /// it avoids.
     pub(crate) fn mentions_free(&self, label: &str) -> bool {
         self.get_or_init_free_vars().contains(label)
+    }
+
+    /// The free-variable labels of this term. Inherent so a `term.free_vars()`
+    /// call routes through the memoized, iteratively-filled set (this and the
+    /// [`Bound`] impl agree) rather than deref-ing to the uncached, recursive
+    /// [`Subterm::free_vars`] when the `Bound` trait is out of scope.
+    pub fn free_vars(&self) -> BTreeSet<String> {
+        self.get_or_init_free_vars().as_ref().clone()
+    }
+
+    /// The ids of every metavariable in this term. Inherent, and gated on the
+    /// memoized [`has_metavar`](Self::has_metavar): a ground term (every data
+    /// spine) short-circuits without walking, so the enumeration only ever
+    /// recurses through metavariable-bearing structure, whose depth is bounded
+    /// by the written program.
+    pub(crate) fn metavars(&self) -> BTreeSet<MetavarId> {
+        let mut ids = BTreeSet::new();
+        if self.has_metavar() {
+            self.inner.subterm.collect_metavars(&mut ids);
+        }
+        ids
+    }
+
+    /// Whether any metavariable in this term satisfies `pred`. Inherent and
+    /// gated on [`has_metavar`](Self::has_metavar) like [`metavars`](Self::metavars),
+    /// and — since `Subterm::any_metavar`'s recursion re-enters through each
+    /// child `Term` — every ground subtree it reaches short-circuits too.
+    pub(crate) fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
+        self.has_metavar() && self.inner.subterm.any_metavar(pred)
     }
 }
 
@@ -1670,15 +1798,6 @@ impl Subterm {
         <Subterm as Bound>::free_vars(self)
     }
 
-    /// Collect the ids of every metavariable occurring in this subterm. `Visit`
-    /// only sees `Var`s and a `Metavar` holds none, so occurs/zonk analyses
-    /// cannot piggyback on `free_vars` — this walk enumerates them directly.
-    pub(crate) fn metavars(&self) -> BTreeSet<MetavarId> {
-        let mut ids = BTreeSet::new();
-        self.collect_metavars(&mut ids);
-        ids
-    }
-
     /// Collect the head name of every inductive/struct *construction* and
     /// *type-former normal form* occurring in this subterm. These names are not
     /// `Var`s (they live in the registry, not the variable graph), so they do not
@@ -2093,6 +2212,26 @@ impl Subterm {
             Subterm::Metavar(_) => true,
             _ => self.any_child_term(&mut |t| t.has_metavar()),
         }
+    }
+
+    /// This subterm's free-variable set as its own free label (if it is a free
+    /// `Var`) unioned with its children's already-memoized sets — the child-
+    /// combining spelling that lets [`Term::get_or_init_free_vars`] fill a deep
+    /// spine bottom-up in O(children) per node instead of re-walking the
+    /// subtree. Equivalent to the whole-subtree `Bound::free_vars` walk, since a
+    /// free name occurs free in exactly the nodes whose subtrees contain it.
+    fn free_vars_from_children(&self) -> BTreeSet<String> {
+        if let Subterm::Var(var) = self
+            && let Some(label) = var.as_free()
+        {
+            return BTreeSet::from([label.to_string()]);
+        }
+        let mut vars = BTreeSet::new();
+        self.any_child_term(&mut |child| {
+            vars.extend(child.get_or_init_free_vars().iter().cloned());
+            false
+        });
+        vars
     }
 
     /// Collect the ids of every metavariable occurring in this subterm. `Visit`

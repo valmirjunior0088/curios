@@ -141,6 +141,21 @@ struct ElaborationKey {
     privacy_checked: bool,
 }
 
+/// Outcome of [`Context::probe_elaborated`] — the read half of the elaboration
+/// cache, torn out of [`Context::get_or_init_elaborated`]'s bracket so the
+/// iterative `elaborate` driver can probe at a frame push and record at the
+/// matching pop (the reduction cache's `cached_reduced`/`reduce` split, one
+/// level up). `Hit` carries the memoized, un-span-stamped `(rebuilt, type)`;
+/// `Miss` carries the `mutation_stamp` snapshot the caller threads back into
+/// [`Context::record_elaborated`] as its purity witness; `Uncacheable` marks a
+/// term the groundness gate excludes — the caller elaborates it but records
+/// nothing.
+pub(crate) enum ElabProbe {
+    Hit((Term, Term)),
+    Miss(usize),
+    Uncacheable,
+}
+
 /// The kernel's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: *frame-scoped* lexical state (assumptions, local definitions, the counterfactual refinement stores, the witness scope), pushed and popped as binders and match arms are entered, and *flat monotonic facts* about the program (the `MetaStore`, inductive/struct/concept declarations, the witness table, parked and deferred goals), which frames never touch. The single deadline fixed at construction bounds *total* work across every call sharing the context — see [`Context::new`].
 #[derive(Debug)]
 pub struct Context {
@@ -367,15 +382,40 @@ impl Context {
     /// `Rc`, so re-elaborating the chain at each link cost O(N²) work and the
     /// chain's depth in native stack; with it, each shared node elaborates
     /// once, at O(1) additional depth.
+    ///
+    /// This is the recursive form — probe, compute under the stamp snapshot,
+    /// record — used by every native `elaborate_subterm` dispatch. The
+    /// iterative `elaborate` driver reaches the same cache through the split
+    /// halves [`Context::probe_elaborated`] and [`Context::record_elaborated`]
+    /// so it can suspend the computation between them; this method is those two
+    /// halves with the `compute` call spliced in.
     pub(crate) fn get_or_init_elaborated<E>(
         &mut self,
         term: &Term,
         expected: Option<&Term>,
         compute: impl FnOnce(&mut Self) -> Result<(Term, Term), E>,
     ) -> Result<(Term, Term), E> {
+        match self.probe_elaborated(term, expected) {
+            ElabProbe::Hit(hit) => Ok(hit),
+            ElabProbe::Uncacheable => compute(self),
+            ElabProbe::Miss(stamp) => {
+                let result = compute(self)?;
+                self.record_elaborated(term, expected, stamp, &result);
+                Ok(result)
+            }
+        }
+    }
+
+    /// Read half of the elaboration cache (see [`Context::get_or_init_elaborated`]
+    /// for the full contract). Applies the O(1) groundness gate, then either
+    /// answers from the cache (`Hit`), reports the term ineligible
+    /// (`Uncacheable`), or snapshots `mutation_stamp` for the caller to thread
+    /// back into [`record_elaborated`] (`Miss`). Pure: it never mutates the
+    /// context, so a driver may probe speculatively at a frame push.
+    pub(crate) fn probe_elaborated(&self, term: &Term, expected: Option<&Term>) -> ElabProbe {
         let ground = |t: &Term| !t.has_metavar() && !t.has_local_free();
         if !ground(term) || !expected.is_none_or(ground) {
-            return compute(self);
+            return ElabProbe::Uncacheable;
         }
 
         // Locally-nameless discipline: every scope is opened before descent,
@@ -388,15 +428,33 @@ impl Context {
             expected: expected.cloned(),
             privacy_checked: self.island.is_some(),
         };
-        if let Some((rebuilt, type_)) = self.elaboration_cache.get(&key) {
-            return Ok((rebuilt.clone(), type_.clone()));
+        match self.elaboration_cache.get(&key) {
+            Some((rebuilt, type_)) => ElabProbe::Hit((rebuilt.clone(), type_.clone())),
+            None => ElabProbe::Miss(self.mutation_stamp.count()),
         }
+    }
 
-        let stamp = self.mutation_stamp.count();
-        let result = compute(self)?;
-        self.insert_elaborated(key, stamp, &result);
-
-        Ok(result)
+    /// Write half of the elaboration cache, paired with a [`probe_elaborated`]
+    /// `Miss`. Rebuilds the same key (spans excluded from `Term` equality, so
+    /// the un-restamped result the caller passes keys identically to the probe)
+    /// and defers to [`insert_elaborated`]'s purity/groundness condition against
+    /// the snapshotted `stamp`.
+    ///
+    /// [`probe_elaborated`]: Context::probe_elaborated
+    /// [`insert_elaborated`]: Context::insert_elaborated
+    pub(crate) fn record_elaborated(
+        &mut self,
+        term: &Term,
+        expected: Option<&Term>,
+        stamp: usize,
+        result: &(Term, Term),
+    ) {
+        let key = ElaborationKey {
+            term: term.clone(),
+            expected: expected.cloned(),
+            privacy_checked: self.island.is_some(),
+        };
+        self.insert_elaborated(key, stamp, result);
     }
 
     /// Insert-side tail of [`Context::get_or_init_elaborated`], kept out of
