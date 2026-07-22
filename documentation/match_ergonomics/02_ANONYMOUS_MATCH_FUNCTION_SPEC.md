@@ -40,15 +40,14 @@ match-function ::= "match" "=>" matrix-arm* "end"
 matrix-arm     ::= "|" match-pattern "=>" term
 ```
 
-Curios then has three visually distinct forms after the `match` keyword:
+Curios then has two visually distinct forms after the `match` keyword:
 
 | Prefix | Meaning |
 | --- | --- |
 | `match <term>` | Ordinary headed pattern match |
-| `match |` | Existing headless condition/binding ladder |
 | `match =>` | Anonymous one-argument match function |
 
-The token after `match` is therefore a complete local discriminator. No whitespace-sensitive rule is required.
+The token after `match` is therefore a complete local discriminator. No whitespace-sensitive rule is required. `choose | test => body … end` is its own reserved keyword, disjoint from `match` entirely (see `SYNTAX.md`'s `choose` section) — it needs no disambiguation against this dispatch.
 
 ## Semantics
 
@@ -80,9 +79,9 @@ This is syntactic abstraction over a headed match, not a second pattern-matching
 
 ### No condition-ladder arms
 
-`match =>` accepts matrix patterns only. It does not accept the existing headless ladder's condition or binding forms, including `pattern = value` arms.
+`match =>` accepts matrix patterns only. It does not accept `choose`'s condition or binding forms, including `pattern = value` arms.
 
-The separation is important: `match |` branches on independent conditions or bindings, whereas `match =>` partitions one future scrutinee.
+The separation is important: `choose` branches on independent conditions or bindings, whereas `match =>` partitions one future scrutinee.
 
 ### No explicit motive in the initial form
 
@@ -136,17 +135,19 @@ If the function remains unconstrained at the enclosing item boundary, it fails w
 
 ## Surface AST
 
-Retain the construct explicitly in the text AST rather than desugaring it in the parser. A conceptual shape is:
+Retain the construct explicitly in the text AST rather than desugaring it in the parser. Every surface form is its own top-level `Subterm` variant (see `choose`'s own `Subterm::Choose` for the precedent this follows); there is no longer a `Match` enum to nest a new variant inside. A conceptual shape is:
 
 ```rust
 struct MatchFunc {
     arms: Vec<MatrixArm>,
 }
 
-enum Match {
-    Matrix(MatrixMatch),
-    Cond(CondMatch),
-    Func(MatchFunc),
+enum Subterm {
+    …
+    Match(Match),
+    Choose(Choose),
+    MatchFunc(MatchFunc),
+    …
 }
 ```
 
@@ -167,15 +168,16 @@ The implementation belongs with the existing match parsers in `curios-text/src/p
 
 The parser should recognize the shared prefix `match =>` as the commitment point, then reuse the ordinary inductive matrix-arm parser, likely `parse_inductive_match_branch` or its current equivalent.
 
-Only failure to see the complete `match =>` prefix may backtrack to the condition ladder or headed match alternatives. Once the arrow has been consumed, a malformed arm or missing `end` must report an anonymous-match-function syntax error rather than silently reinterpret the expression as another match form.
+Only failure to see the complete `match =>` prefix may backtrack to the headed match alternative — `choose` is a distinct reserved keyword and is never a backtrack target here. Once the arrow has been consumed, a malformed arm or missing `end` must report an anonymous-match-function syntax error rather than silently reinterpret the expression as another match form.
 
 A likely choice structure is conceptually:
 
 ```rust
 parse_match_func()
-    .or(catch(parse_cond_match()))
-    .or(parse_inductive_match())
+    .or(parse_match())
 ```
+
+(`parse_match` is the current name of the headed-only matrix parser in `curios-text/src/parse/match_expr.rs`.)
 
 The exact placement of `catch` must follow the parser monad's current commitment conventions. The invariant, not the literal combinator sequence, is normative.
 
@@ -233,7 +235,7 @@ Before implementation, re-read `SYNTAX.md`, the `curios-text` module documentati
 
 - `match =>` followed by a malformed matrix arm should point into that arm and remain committed to the new form.
 - A missing `end` should identify the anonymous match function as the unterminated construct.
-- Condition-ladder-only syntax after `match =>` should receive a matrix-pattern error rather than being reinterpreted.
+- A `choose`-style condition or bind arm written after `match =>` should receive a matrix-pattern error rather than being reinterpreted as `choose`.
 - Exhaustiveness, impossible-pattern, private-representation, and branch-type errors should be the same errors produced by the equivalent explicit lambda and headed match.
 - An unconstrained scrutinee type should use the ordinary lambda-inference diagnostic, preferably anchored at the `match =>` introducer because there is no written parameter.
 
@@ -243,7 +245,7 @@ At minimum, the implementation should pin the following cases:
 
 - The parser produces the explicit anonymous-match-function AST for inline and multiline forms.
 - Parse-print-parse round trips preserve the form and its arms.
-- `match <term>`, `match |`, and `match =>` remain unambiguous.
+- `match <term>` and `match =>` remain unambiguous; `choose` needs no disambiguation against this dispatch, being a distinct reserved keyword.
 - A malformed construct after the consumed arrow does not backtrack into another match parser.
 - Zero-arm syntax parses and delegates legality to ordinary match elaboration.
 - An annotated or expected function type checks an anonymous match function.
@@ -272,7 +274,7 @@ At minimum, the implementation should pin the following cases:
 - A `function` keyword or any new reserved word.
 - OCaml-style ordered row priority distinct from Curios's current match semantics.
 - Multiple implicit scrutinees or multi-argument pattern functions.
-- Condition or binding ladder arms inside the new form.
+- `choose`-style condition or binding arms inside the new form.
 - An explicit motive syntax in the initial version.
 - A syntax-specific inference algorithm.
 - A new core, erased, continuation, or wasm node.
