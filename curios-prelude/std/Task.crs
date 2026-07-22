@@ -79,7 +79,7 @@ pub let nonblocking(h : Io) -> {} =
 pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
     defer(() =>
         let r = /sys/Io/read(h, n);
-        match
+        choose
         | r.status == /sys/Io/Status/would_block => bind(wait(h, /sys/Io/Poll/read), (_) => read(h, n))
         | r.status == /sys/Io/Status/eof => pure(Io/Read/eof())
         | r.status == /sys/Io/Status/ok => pure(Io/Read/chunk(r.bytes))
@@ -89,7 +89,7 @@ pub rec read(h : Io, n : Nat) -> Task(Io/Read) =
 pub rec write(h : Io, b : Bytes) -> Task(Result({}, Io/Error)) =
     defer(() =>
         let r = /sys/Io/write(h, b);
-        match
+        choose
         | r.status == /sys/Io/Status/would_block => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, b))
         | r.status != /sys/Io/Status/ok => pure(Result/failure(Io/error_of(r.status)))
         | r.written < Bytes/len(b) => bind(wait(h, /sys/Io/Poll/write), (_) => write(h, Bytes/slice(b, r.written, Bytes/len(b))))
@@ -99,7 +99,7 @@ pub rec write(h : Io, b : Bytes) -> Task(Result({}, Io/Error)) =
 pub rec accept(l : Io) -> Task(Result(Io, Io/Error)) =
     defer(() =>
         let r = /sys/Io/accept(l);
-        match
+        choose
         | r.status == /sys/Io/Status/would_block => bind(wait(l, /sys/Io/Poll/read), (_) => accept(l))
         | r.status == /sys/Io/Status/ok => pure(Result/success(r.handle))
         | _ => pure(Result/failure(Io/error_of(r.status)))

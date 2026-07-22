@@ -22,14 +22,13 @@ mod tests;
 
 use {
     super::{
-        Apply, BinPattern, BinSegment, CasePayloadParam, ConceptField, CondMatch, Field, Func,
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, LadderArm, LadderTest, Let,
+        Apply, BinPattern, BinSegment, CasePayloadParam, Choose, ChooseArm, ChooseTest,
+        ConceptField, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let,
         LetBinding, LetSignature, LstEntry, LstPattern, Match, MatchPattern, MatchPatternField,
-        MatrixArm, MatrixMatch, Module, Motive, Name, NatLiteral, NatPattern, NumLit, Pattern,
-        PatternField, Prim, Proj, Radix, Rec, RecItem, StructLit, StructLitEntry, Subterm, Syn,
-        Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
-        TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
-        WitnessField,
+        MatrixArm, Module, Motive, Name, NatLiteral, NatPattern, NumLit, Pattern, PatternField,
+        Prim, Proj, Radix, Rec, RecItem, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase,
+        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness,
+        Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{
@@ -48,8 +47,8 @@ use {
 const CHARACTERS: &[char] = &['_'];
 
 const KEYWORDS: &[&str] = &[
-    "let", "match", "rec", "mod", "use", "pub", "end", "false", "true", "induct", "struct",
-    "foreign",
+    "let", "match", "choose", "rec", "mod", "use", "pub", "end", "false", "true", "induct",
+    "struct", "foreign",
 ];
 
 pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {

@@ -1,8 +1,8 @@
 use {
     super::{Context, MatchCompiler},
     crate::{
-        BinSegment, CondMatch, Error, Field, LadderTest, Let, LetBinding, LstEntry, Match, Name,
-        Nat, NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
+        BinSegment, Choose, ChooseTest, Error, Field, Let, LetBinding, LstEntry, Name, Nat,
+        NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     curios_base::{Grain, PackedBin, Plicity},
     num_bigint::BigUint,
@@ -344,54 +344,52 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
-            Subterm::Match(match_) => match match_ {
-                // The headless ladder right-folds into nested `Bool` matches:
-                // each `cond => body` becomes `match cond | false => <rest> |
-                // true => body end`, the `_` default sitting at the innermost
-                // false branch. No motive at any level (a fresh hole each),
-                // matching the surface form's absence of one. Arms inherit the
-                // definitional refinement of their conditions for free — that
-                // is exactly what nesting `Bool` matches buys.
-                Match::Cond(CondMatch { arms, default }) => {
-                    let mut acc = self.term(default)?;
-                    for arm in arms.iter().rev() {
-                        acc = match &arm.test {
-                            LadderTest::Cond(condition) => curios_core::Term::bool_match(
-                                self.term(condition)?,
-                                None,
-                                curios_core::Term::metavar(self.context.fresh_metavar()),
+            // A `choose` right-folds into nested `Bool` matches: each
+            // `cond => body` becomes `match cond | false => <rest> | true =>
+            // body end`, the `_` default sitting at the innermost false
+            // branch. No motive at any level (a fresh hole each), matching
+            // the surface form's absence of one. Arms inherit the
+            // definitional refinement of their conditions for free — that is
+            // exactly what nesting `Bool` matches buys.
+            Subterm::Choose(Choose { arms, default }) => {
+                let mut acc = self.term(default)?;
+                for arm in arms.iter().rev() {
+                    acc = match &arm.test {
+                        ChooseTest::Cond(condition) => curios_core::Term::bool_match(
+                            self.term(condition)?,
+                            None,
+                            curios_core::Term::metavar(self.context.fresh_metavar()),
+                            acc,
+                            self.term(&arm.body)?,
+                        ),
+                        ChooseTest::Bind { pattern, value } => {
+                            let value = self.term(value)?;
+                            MatchCompiler::new(self).lower_bind_arm(
+                                pattern,
+                                value,
+                                &arm.body,
                                 acc,
-                                self.term(&arm.body)?,
-                            ),
-                            LadderTest::Bind { pattern, value } => {
-                                let value = self.term(value)?;
-                                MatchCompiler::new(self).lower_bind_arm(
-                                    pattern,
-                                    value,
-                                    &arm.body,
-                                    acc,
-                                    MatchCompiler::term,
-                                )?
-                            }
-                        };
-                    }
-                    acc
+                                MatchCompiler::term,
+                            )?
+                        }
+                    };
                 }
-                Match::Matrix(um) => {
-                    // The matrix compiler recursively decomposes (possibly
-                    // nested, across constructors/tuples/structs) arm
-                    // patterns into single-level core `Match`/projection
-                    // forms — see `MatchCompiler::compile_matrix`. A final
-                    // `| _ =>` catch-all is split off as the dispatch default.
-                    let head = self.term(&um.head)?;
-                    MatchCompiler::new(self).compile_matrix_headed(
-                        head,
-                        &um.motive,
-                        &um.arms,
-                        MatchCompiler::term,
-                    )?
-                }
-            },
+                acc
+            }
+            Subterm::Match(match_) => {
+                // The matrix compiler recursively decomposes (possibly
+                // nested, across constructors/tuples/structs) arm patterns
+                // into single-level core `Match`/projection forms — see
+                // `MatchCompiler::compile_matrix`. A final `| _ =>` catch-all
+                // is split off as the dispatch default.
+                let head = self.term(&match_.head)?;
+                MatchCompiler::new(self).compile_matrix_headed(
+                    head,
+                    &match_.motive,
+                    &match_.arms,
+                    MatchCompiler::term,
+                )?
+            }
             // A `let` block is non-recursive: each binding is in scope for the
             // bindings after it and the tail, never for its own type or value.
             // Lower each binding's type/value in the scope of the bindings
@@ -464,6 +462,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let mut binds = Vec::new();
                 let match_term = MatchCompiler::new(self).match_region(match_, &mut binds)?;
                 self.wrap(binds, match_term)
+            }
+            // The `choose` head arm's test runs unconditionally (its bangs
+            // hoist here); deeper arms and the default are branch-local.
+            Subterm::Choose(choose) => {
+                let mut binds = Vec::new();
+                let choose_term = MatchCompiler::new(self).choose_region(choose, &mut binds)?;
+                self.wrap(binds, choose_term)
             }
             // A lambda re-roots the region.
             Subterm::Func(func) => {
@@ -655,10 +660,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     self.collect(term, binds)
                 })?)
             }
-            // A `let`/`match` sub-expression hoists its bound-expression /
-            // scrutinee bangs into the enclosing region (this `binds`).
+            // A `let`/`match`/`choose` sub-expression hoists its
+            // bound-expression / scrutinee / head-test bangs into the
+            // enclosing region (this `binds`).
             Subterm::Let(let_) => self.build_let(let_, binds)?,
             Subterm::Match(match_) => MatchCompiler::new(self).match_region(match_, binds)?,
+            Subterm::Choose(choose) => MatchCompiler::new(self).choose_region(choose, binds)?,
             // A lambda is a value and a `rec` binds recursively: neither hoists
             // anything outward, so desugar each as its own region.
             Subterm::Func(_) | Subterm::Rec(_) => self.region(term)?,

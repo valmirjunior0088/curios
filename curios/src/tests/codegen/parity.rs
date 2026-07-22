@@ -86,8 +86,8 @@ fn concept_method_call_matches_direct_primitive_codegen() {
     );
 }
 
-/// The headless `Bool` ladder desugars to exactly the nested boolean matches a
-/// user would hand-write: `match | c0 => b0 | c1 => b1 | _ => d end` is
+/// `choose` desugars to exactly the nested boolean matches a user would
+/// hand-write: `choose | c0 => b0 | c1 => b1 | _ => d end` is
 /// `match c0 | true => b0 | false => match c1 | true => b1 | false => d end end`.
 /// Both lower through the same core `bool_match` nesting, so they emit the same
 /// primitive operations — the two forms mint metavars in a slightly different
@@ -96,12 +96,12 @@ fn concept_method_call_matches_direct_primitive_codegen() {
 /// comparison. A runtime operand (`Lst/len(proc/args())`) keeps the ladder from
 /// folding to a constant.
 #[test]
-fn headless_cond_ladder_matches_hand_nested_bln_codegen() {
+fn choose_matches_hand_nested_bln_codegen() {
     let ladder = r#"
         use /std/{Nat, Lst, Io, Str, proc};
         let n : Nat = Lst/len(proc/args());
         let result =
-            match
+            choose
             | n <= 0 => Nat/add(n, 100)
             | n <= 1 => Nat/add(n, 200)
             | _ => Nat/add(n, 300)
@@ -133,11 +133,11 @@ fn headless_cond_ladder_matches_hand_nested_bln_codegen() {
 /// headed catch-all `match o | some(x) => … | _ => …` — both a single-row
 /// inductive match with the same default — so they emit identical operations.
 #[test]
-fn headless_bind_arm_matches_headed_catch_all_codegen() {
+fn choose_bind_arm_matches_headed_catch_all_codegen() {
     let bind = r#"
         use /std/{Option, Nat, Lst, Io, Str, proc};
         let f(o : Option(Nat)) -> Nat =
-            match
+            choose
             | some(x) = o => x + 10
             | _ => 99
             end;

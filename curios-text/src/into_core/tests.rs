@@ -1607,11 +1607,11 @@ fn bang_desugars_through_syn_monad_bind() {
 }
 
 #[test]
-fn headless_cond_ladder_lowers_to_nested_bln_matches() {
-    // `match | p => a | q => b | _ => ? end` right-folds into two nested `Bool`
-    // matches: the first condition's false branch holds the second, whose own
-    // false branch is the `_` default (a plain hole here).
-    let term = run("match | p => a | q => b | _ => ? end");
+fn choose_lowers_to_nested_bln_matches() {
+    // `choose | p => a | q => b | _ => ? end` right-folds into two nested
+    // `Bool` matches: the first condition's false branch holds the second,
+    // whose own false branch is the `_` default (a plain hole here).
+    let term = run("choose | p => a | q => b | _ => ? end");
 
     let curios_core::Subterm::Match(outer) = &*term else {
         panic!("expected a Match at the top, got {term:?}");
@@ -1639,7 +1639,7 @@ fn headless_cond_ladder_lowers_to_nested_bln_matches() {
 fn bind_arm_bare_binder_is_rejected() {
     // `| x = n =>` binds irrefutably — always fires, so the rest of the ladder
     // is dead. Rejected in favor of a `let`.
-    let error = run_err("match | x = n => x | _ => 0 end");
+    let error = run_err("choose | x = n => x | _ => 0 end");
     assert!(
         error.contains("refutable") && error.contains("let"),
         "unexpected error: {error}"

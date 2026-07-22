@@ -48,7 +48,7 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bool) -> L
     | false => Lst/cons(d, generate(rem, s, mp10, mm10, even))
     | true =>
         let last =
-            match
+            choose
             | Bool/not(low) => d + 1
             | Bool/not(high) => d
             | BigNat/lt(BigNat/mul_small(rem, 2), s) => d
@@ -72,7 +72,7 @@ rec normalize(ds : Lst(Nat)) -> {Lst(Nat), Bool} =
             end
         | false =>
             let (rest, carry) = normalize(t);
-            match
+            choose
             | Bool/not(carry) => (Lst/cons(h, rest), false)
             | h == 9 => (Lst/cons(0, rest), true)
             | _ => (Lst/cons(h + 1, rest), false)
@@ -139,7 +139,7 @@ let render(f_mant : Nat, exp_field : Nat, even : Bool) -> Str =
     end;
 
 pub let cmp(x : Flt, y : Flt) -> Order =
-    match
+    choose
     | x < y => Order/lt()
     | x == y => Order/eq()
     | _ => Order/gt()
@@ -158,7 +158,7 @@ pub let to_str(f : Flt) -> Str =
         | true => "-"
         | false => "+"
         end;
-    match
+    choose
     | exp_field == 0xFF && mant_field == 0 => Str/concat(sign, "inf")
     | exp_field == 0xFF => "NaN"
     | exp_field == 0 && mant_field == 0 => Str/concat(sign, "0")
@@ -203,7 +203,7 @@ pub let of_str(s : Str) -> Option(Flt) =
         let first = Str/get(s, 0)!;
         let is_neg = first == '-';
         let start =
-            match
+            choose
             | first == '+' => 1
             | first == '-' => 1
             | _ => 0

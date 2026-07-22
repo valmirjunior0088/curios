@@ -355,6 +355,7 @@ pub(super) fn parse_term_inner<'a>() -> Parser<'a, Term> {
         parse_rec()
             .or(parse_let())
             .or(parse_match())
+            .or(parse_choose())
             .or(parse_func_type())
             .or(parse_func())
             .or(parse_infix_expr(0)),

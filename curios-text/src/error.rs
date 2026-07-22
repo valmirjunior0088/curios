@@ -120,9 +120,9 @@ pub enum Error {
     /// A binary-pattern column mixes bit and byte grains. A single scrutinee
     /// has one binary type, so every row in the column must use the same prefix.
     MatrixMixedBinGrain,
-    /// A headless-ladder bind arm `| pattern = value =>` whose `pattern` is a
-    /// bare binder — irrefutable, so it always fires and the rest of the ladder
-    /// is dead. A bind is for *refutable* matching; use a `let` for an
+    /// A `choose` bind arm `| pattern = value =>` whose `pattern` is a bare
+    /// binder — irrefutable, so it always fires and the rest of the ladder is
+    /// dead. A bind is for *refutable* matching; use a `let` for an
     /// unconditional binding.
     BindArmIrrefutable,
     /// A headed match ended in a *named* catch-all (`| x =>`) among concrete

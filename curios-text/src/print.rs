@@ -1,12 +1,11 @@
 use {
     super::{
-        Apply, BinPattern, BinSegment, ConceptField, CondMatch, Field, Func, FuncSugarParam,
-        FuncType, FuncTypeParam, GroupItem, Infix, LadderArm, LadderTest, Let, LetSignature,
-        LstEntry, LstPattern, Match, MatchPattern, MatchPatternField, MatrixMatch, Motive, Nat,
-        NatLiteral, NatPattern, NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec, StructLit,
-        StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
-        TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
-        TupleTypeParam, UseGroup, WitnessEntry,
+        Apply, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Field, Func,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetSignature, LstEntry,
+        LstPattern, Match, MatchPattern, MatchPatternField, Motive, Nat, NatLiteral, NatPattern,
+        NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm,
+        Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
+        TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{
@@ -720,51 +719,49 @@ pub(crate) fn print_term(term: Term) -> Printer<'static> {
             sep_flat(entries.into_iter().map(print_struct_entry), || pure(", ")),
             pure(" }"),
         ]),
-        Subterm::Match(match_) => match match_ {
-            Match::Cond(CondMatch { arms, default }) => flat([
-                pure("match"),
-                flat(
-                    arms.into_iter()
-                        .map(|LadderArm { test, body }| {
-                            let head = match test {
-                                LadderTest::Cond(condition) => {
-                                    flat([pure("\n| "), print_term(condition), pure(" =>\n")])
-                                }
-                                LadderTest::Bind { pattern, value } => flat([
-                                    pure("\n| "),
-                                    print_match_pattern(pattern),
-                                    pure(" = "),
-                                    print_term(value),
-                                    pure(" =>\n"),
-                                ]),
-                            };
-                            flat([head, indent(print_term(body))])
-                        })
-                        .collect::<Vec<_>>(),
-                ),
-                pure("\n| _ =>\n"),
-                indent(print_term(default)),
-                pure("\nend"),
-            ]),
-            Match::Matrix(MatrixMatch { head, motive, arms }) => flat([
-                pure("match "),
-                print_term(head),
-                print_motive(motive),
-                flat(
-                    arms.into_iter()
-                        .map(|arm| {
-                            flat([
+        Subterm::Choose(Choose { arms, default }) => flat([
+            pure("choose"),
+            flat(
+                arms.into_iter()
+                    .map(|ChooseArm { test, body }| {
+                        let head = match test {
+                            ChooseTest::Cond(condition) => {
+                                flat([pure("\n| "), print_term(condition), pure(" =>\n")])
+                            }
+                            ChooseTest::Bind { pattern, value } => flat([
                                 pure("\n| "),
-                                print_match_pattern(arm.pattern),
+                                print_match_pattern(pattern),
+                                pure(" = "),
+                                print_term(value),
                                 pure(" =>\n"),
-                                indent(print_term(arm.body)),
-                            ])
-                        })
-                        .collect::<Vec<_>>(),
-                ),
-                pure("\nend"),
-            ]),
-        },
+                            ]),
+                        };
+                        flat([head, indent(print_term(body))])
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            pure("\n| _ =>\n"),
+            indent(print_term(default)),
+            pure("\nend"),
+        ]),
+        Subterm::Match(Match { head, motive, arms }) => flat([
+            pure("match "),
+            print_term(head),
+            print_motive(motive),
+            flat(
+                arms.into_iter()
+                    .map(|arm| {
+                        flat([
+                            pure("\n| "),
+                            print_match_pattern(arm.pattern),
+                            pure(" =>\n"),
+                            indent(print_term(arm.body)),
+                        ])
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            pure("\nend"),
+        ]),
         Subterm::Let(Let { bindings, tail }) => flat(
             bindings
                 .into_iter()

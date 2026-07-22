@@ -32,7 +32,7 @@ pub let diff(a : Instant, b : Instant) -> Duration =
     Duration/of(r_hi * 1000000000 + d_lo.digit, d_nanos.digit);
 
 pub let before(a : Instant, b : Instant) -> Bool =
-    match
+    choose
     | a.secs_hi < b.secs_hi => true
     | a.secs_hi > b.secs_hi => false
     | a.secs_lo < b.secs_lo => true

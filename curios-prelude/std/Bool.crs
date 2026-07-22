@@ -12,7 +12,7 @@ pub let to_str(b : Bool) -> Str =
     end;
 
 pub let of_str(s : Str) -> Option(Bool) =
-    match
+    choose
     | s == "true" => Option/some(true)
     | s == "false" => Option/some(false)
     | _ => Option/none()

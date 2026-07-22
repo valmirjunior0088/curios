@@ -28,7 +28,7 @@ The following words are reserved and cannot be used as path segments:
 
 | Declaration and expression words | Literal words |
 | --- | --- |
-| `let`, `match`, `rec`, `mod`, `use`, `pub`, `end`, `induct`, `struct`, `foreign` | `true`, `false` |
+| `let`, `match`, `choose`, `rec`, `mod`, `use`, `pub`, `end`, `induct`, `struct`, `foreign` | `true`, `false` |
 
 `concept`, `satisfy`, and `and` are contextual words. They are recognized only in the grammatical positions that use them and remain valid identifiers and path segments elsewhere. `Type` and `Prop` denote sorts when parsed as terms, but they are not globally forbidden path segments.
 
@@ -139,7 +139,7 @@ b\1\..rest\0
 x\48\..suffix\00
 x\..header.bytes
 x\..make_bytes(n)
-x\..(choose(flag, a, b))
+x\..(pick(flag, a, b))
 ```
 
 The entire packed literal is whitespace-free. An unparenthesized spread operand must be a glued name, projection, application, or postfix-`!` chain. Parentheses admit an arbitrary term. A following `\` resumes the literal. `Bits` and `Bytes` cannot be mixed.
@@ -342,7 +342,7 @@ Postfix `!` is not allowed in types. The token `!=` is an infix operator and is 
 
 ### Whole-term forms and operand positions
 
-`let`, `rec`, `match`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term : type` ascription; a `:` annotation appears only in binder, signature, and motive positions.
+`let`, `rec`, `match`, `choose`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term : type` ascription; a `:` annotation appears only in binder, signature, and motive positions.
 
 An infix operand is an applied atom: a literal, name, tuple, structure literal, or parenthesized term, followed by any chain of calls, projections, and postfix `!`. A whole-term form is not an operand; parenthesize it to use it as one.
 
@@ -500,12 +500,12 @@ match bytes
 end
 ```
 
-### Headless match
+## Choose
 
-A headless match is an ordered condition ladder. Arms are tried from top to bottom, and a final `_` arm is mandatory.
+`choose` is an ordered guarded ladder, not a match — it consumes no scrutinee. Arms are tried from top to bottom, and a final `_` arm is mandatory.
 
 ```crs
-match
+choose
 | condition => when_true
 | some(value) = lookup(key) => when_found(value)
 | _ => fallback
@@ -821,6 +821,6 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `Name { ... }` | Structure or concept literal |
 | `Name { ..base, ... }` | Structure update |
 | `match term ... end` | Typed elimination or dispatch |
-| `match ... end` | Ordered condition ladder |
+| `choose ... end` | Ordered guarded ladder |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
 | `satisfy (@A : Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |

@@ -78,7 +78,7 @@ pub let hex_digit(nibble : Nat) -> Char =
     Option/unwrap_or(of_nat(digit), ascii_zero);
 
 pub let of_hex_digit(c : Char) -> Option(Nat) =
-    match
+    choose
     | is_digit(c) => Option/some(c.code - 0x30)
     | Nat/in_range(c.code, 0x61, 0x66) => Option/some(c.code - 0x61 + 10)
     | Nat/in_range(c.code, 0x41, 0x46) => Option/some(c.code - 0x41 + 10)
@@ -107,7 +107,7 @@ rec emit_continuations(acc : Bytes, codepoint : Nat, shift : Nat) -> Bytes =
 
 pub let to_utf8(c : Char) -> Bytes =
     let codepoint = c.code;
-    match
+    choose
     | Nat/lt(codepoint, 0x80) => Bytes/append(x\, Nat/to_byte(codepoint))
     | Nat/lt(codepoint, 0x800) => emit_continuations(Bytes/append(x\, Nat/to_byte(Nat/add(0xC0, Nat/div(codepoint, 0x40)))), codepoint, 1)
     | Nat/lt(codepoint, 0x10000) => emit_continuations(Bytes/append(x\, Nat/to_byte(Nat/add(0xE0, Nat/div(codepoint, 0x1000)))), codepoint, 0x40)

@@ -859,7 +859,7 @@ fn parse_inductive_match_nullary_and_unary() {
         "match v : Bin\n| null() => \"null\"\n| bool_(b) => b\nend"
             .parse::<Term>()
             .unwrap(),
-        Subterm::Match(Match::Matrix(MatrixMatch {
+        Subterm::Match(Match {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
             motive: Some(Motive::Constant(
                 Subterm::Name(Name::from(["Bin".to_string()])).into()
@@ -880,7 +880,7 @@ fn parse_inductive_match_nullary_and_unary() {
                     body: Subterm::Name(Name::from(["b".to_string()])).into(),
                 },
             ],
-        }))
+        })
         .into()
     );
 }
@@ -891,7 +891,7 @@ fn parse_inductive_match_multi_binder() {
         "match v : T\n| lit(a, b) => a\nend"
             .parse::<Term>()
             .unwrap(),
-        Subterm::Match(Match::Matrix(MatrixMatch {
+        Subterm::Match(Match {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
             motive: Some(Motive::Constant(
                 Subterm::Name(Name::from(["T".to_string()])).into()
@@ -906,7 +906,7 @@ fn parse_inductive_match_multi_binder() {
                 },
                 body: Subterm::Name(Name::from(["a".to_string()])).into(),
             }],
-        }))
+        })
         .into()
     );
 }
@@ -917,7 +917,7 @@ fn parse_match_omitted_motive() {
     // elaborator later lowers it to a fresh metavariable (sugar for `: _`).
     assert_eq!(
         "match x | foo(y) => y end".parse::<Term>().unwrap(),
-        Subterm::Match(Match::Matrix(MatrixMatch {
+        Subterm::Match(Match {
             head: Subterm::Name(Name::from(["x".to_string()])).into(),
             motive: None,
             arms: vec![MatrixArm {
@@ -927,7 +927,7 @@ fn parse_match_omitted_motive() {
                 },
                 body: Subterm::Name(Name::from(["y".to_string()])).into(),
             }],
-        }))
+        })
         .into()
     );
 }
@@ -1157,7 +1157,7 @@ fn parse_bang_in_match_scrutinee_and_arm() {
     // the elaborator hoists them into different regions.
     let term = "match x! | foo(z) => y! end".parse::<Term>().unwrap();
     match term.into_subterm() {
-        Subterm::Match(Match::Matrix(m)) => {
+        Subterm::Match(m) => {
             assert_eq!(m.head, Subterm::Bang(name("x")).into());
             let foo = m.arms.iter().find_map(|arm| {
                 matches!(&arm.pattern, MatchPattern::Ctor { tag, .. } if tag == "foo")
@@ -1891,43 +1891,43 @@ fn matrix_match_round_trips() {
     }
 }
 
-// The headless ladder: no head term, `Bool` condition arms, and a mandatory
-// `| _ =>` default. A bare `_` condition parses as the default (not a `Name`
-// condition arm) — the `flat_map` guard in `parse_cond_case` sees it and lets
-// `many0` stop.
+// `choose`: no head term, `Bool` condition arms, and a mandatory `| _ =>`
+// default. A bare `_` condition parses as the default (not a `Name` condition
+// arm) — the `flat_map` guard in `parse_cond_arm` sees it and lets `many0`
+// stop.
 #[test]
-fn parse_headless_cond_match() {
+fn parse_choose() {
     assert_eq!(
-        "match\n| p => 1\n| q => 2\n| _ => 3\nend"
+        "choose\n| p => 1\n| q => 2\n| _ => 3\nend"
             .parse::<Term>()
             .unwrap(),
-        Subterm::Match(Match::Cond(CondMatch {
+        Subterm::Choose(Choose {
             arms: vec![
                 cond_arm(name("p"), num_lit(1, false, false)),
                 cond_arm(name("q"), num_lit(2, false, false)),
             ],
             default: num_lit(3, false, false),
-        }))
+        })
         .into()
     );
 }
 
-fn cond_arm(condition: Term, body: Term) -> LadderArm {
-    LadderArm {
-        test: LadderTest::Cond(condition),
+fn cond_arm(condition: Term, body: Term) -> ChooseArm {
+    ChooseArm {
+        test: ChooseTest::Cond(condition),
         body,
     }
 }
 
-// An arm-free ladder is legal: `match | _ => d end` is just its default.
+// An arm-free choose is legal: `choose | _ => d end` is just its default.
 #[test]
-fn parse_headless_cond_match_default_only() {
+fn parse_choose_default_only() {
     assert_eq!(
-        "match\n| _ => 0\nend".parse::<Term>().unwrap(),
-        Subterm::Match(Match::Cond(CondMatch {
+        "choose\n| _ => 0\nend".parse::<Term>().unwrap(),
+        Subterm::Choose(Choose {
             arms: vec![],
             default: num_lit(0, false, false),
-        }))
+        })
         .into()
     );
 }
@@ -1935,31 +1935,31 @@ fn parse_headless_cond_match_default_only() {
 // A condition whose head merely *begins* with `_` (`_ready`) is an ordinary
 // condition, not the default — the guard rejects only a lone `_`.
 #[test]
-fn parse_headless_cond_match_leading_underscore_condition() {
+fn parse_choose_leading_underscore_condition() {
     assert_eq!(
-        "match\n| _ready => 1\n| _ => 2\nend"
+        "choose\n| _ready => 1\n| _ => 2\nend"
             .parse::<Term>()
             .unwrap(),
-        Subterm::Match(Match::Cond(CondMatch {
+        Subterm::Choose(Choose {
             arms: vec![cond_arm(name("_ready"), num_lit(1, false, false))],
             default: num_lit(2, false, false),
-        }))
+        })
         .into()
     );
 }
 
-// A bind arm `| pattern = value =>` parses as a `LadderTest::Bind`; a condition
-// arm sharing a `|` with it stays a `Cond`.
+// A bind arm `| pattern = value =>` parses as a `ChooseTest::Bind`; a
+// condition arm sharing a `|` with it stays a `Cond`.
 #[test]
-fn parse_headless_bind_arm() {
+fn parse_choose_bind_arm() {
     assert_eq!(
-        "match\n| some(x) = o => x\n| ready => 1\n| _ => 2\nend"
+        "choose\n| some(x) = o => x\n| ready => 1\n| _ => 2\nend"
             .parse::<Term>()
             .unwrap(),
-        Subterm::Match(Match::Cond(CondMatch {
+        Subterm::Choose(Choose {
             arms: vec![
-                LadderArm {
-                    test: LadderTest::Bind {
+                ChooseArm {
+                    test: ChooseTest::Bind {
                         pattern: MatchPattern::Ctor {
                             tag: "some".to_string(),
                             args: vec![MatchPattern::Binder("x".to_string())],
@@ -1971,27 +1971,27 @@ fn parse_headless_bind_arm() {
                 cond_arm(name("ready"), num_lit(1, false, false)),
             ],
             default: num_lit(2, false, false),
-        }))
+        })
         .into()
     );
 }
 
-// The headless ladder survives print → re-parse, including the arm-free form.
+// `choose` survives print → re-parse, including the arm-free form.
 #[test]
-fn headless_cond_match_round_trips() {
+fn choose_round_trips() {
     for source in [
-        "match | p => 1 | q => 2 | _ => 3 end",
-        "match | _ => 0 end",
-        "match | a <= b => x | _ => y end",
+        "choose | p => 1 | q => 2 | _ => 3 end",
+        "choose | _ => 0 end",
+        "choose | a <= b => x | _ => y end",
         // Bind arms, mixed with a condition arm.
-        "match | some(x) = o => x | _ => y end",
-        "match | cons(h, t) = xs => h | ready => 1 | _ => 0 end",
+        "choose | some(x) = o => x | _ => y end",
+        "choose | cons(h, t) = xs => h | ready => 1 | _ => 0 end",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
             term.to_string().parse::<Term>().unwrap(),
             term,
-            "headless cond match round-trip failed for {source:?}"
+            "choose round-trip failed for {source:?}"
         );
     }
 }

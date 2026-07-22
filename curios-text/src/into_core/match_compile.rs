@@ -1,7 +1,7 @@
 use {
     super::Lowerer,
     crate::{
-        BinPattern, CondMatch, Error, LadderArm, LadderTest, LstPattern, Match, MatchPattern,
+        BinPattern, Choose, ChooseArm, ChooseTest, Error, LstPattern, Match, MatchPattern,
         MatrixArm, Motive, NatPattern, Subterm, Term,
     },
     curios_base::Grain,
@@ -39,8 +39,8 @@ struct MatrixRow<'t> {
 pub(super) struct MatchCompiler<'l, 'a, 'b> {
     lowerer: &'l Lowerer<'a, 'b>,
     /// The fallthrough arm for constructors/cases no row covers, already
-    /// lowered — a headed match's `| _ =>` catch-all, or a headless ladder
-    /// bind-arm's rest-of-ladder (see [`Lowerer::lower_bind_arm`]). `None` means
+    /// lowered — a headed match's `| _ =>` catch-all, or a `choose` bind-arm's
+    /// rest-of-ladder (see [`Lowerer::lower_bind_arm`]). `None` means
     /// full enumeration: `compile_ctor` emits a plain `inductive_match` (leaning
     /// on core's Rung-C vacuity for any pruned tag) and the hardcoded carriers
     /// require both of their shapes. Constant across one matrix's whole
@@ -58,7 +58,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 
     /// A [`MatchCompiler`] whose uncovered-case fallthrough is `default`. Used
-    /// for a headed `| _ =>` catch-all and for ladder bind-arms.
+    /// for a headed `| _ =>` catch-all and for `choose` bind-arms.
     pub(super) fn with_default(
         lowerer: &'l Lowerer<'a, 'b>,
         default: Option<curios_core::Term>,
@@ -83,41 +83,39 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// into `binds` (hoisted out — the scrutinee runs unconditionally), while
     /// each arm is desugared as its own region (branch-local effects). This
     /// mirrors the `Match` arm of `subterm`, swapping `self.term` for `collect`
-    /// on heads and `region` on arm bodies.
+    /// on the head and `region` on arm bodies.
     pub(super) fn match_region(
         &self,
         match_: &Match,
         binds: &mut Vec<(String, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
-        Ok(match match_ {
-            // The headless ladder mirrors the `subterm` path's right-fold, but
-            // only the *first* condition runs unconditionally, so only its bangs
-            // hoist into `binds`. Every deeper condition evaluates just when its
-            // predecessor is false, so each lowers as its own sub-region inside
-            // that false branch (see `cond_ladder_region`).
-            Match::Cond(CondMatch { arms, default }) => {
-                self.cond_ladder_region(arms, default, binds)?
-            }
-            Match::Matrix(um) => {
-                // Mirrors the `Match::Matrix` arm of `subterm` (see there and
-                // `Self::compile_matrix_headed`), swapping `collect` on the head
-                // and `region` on the arm bodies (branch-local effects).
-                let head = self.collect(&um.head, binds)?;
-                self.compile_matrix_headed(head, &um.motive, &um.arms, Self::region)?
-            }
-        })
+        let head = self.collect(&match_.head, binds)?;
+        self.compile_matrix_headed(head, &match_.motive, &match_.arms, Self::region)
     }
 
-    /// Lowers a headless ladder's arms inside a region. The head arm's test (a
+    /// Desugars a `choose` inside a region: the head arm's test mirrors the
+    /// `subterm` path's right-fold, but only the *first* condition runs
+    /// unconditionally, so only its bangs hoist into `binds`. Every deeper
+    /// condition evaluates just when its predecessor is false, so each lowers
+    /// as its own sub-region inside that false branch (see [`Self::ladder_region`]).
+    pub(super) fn choose_region(
+        &self,
+        choose: &Choose,
+        binds: &mut Vec<(String, curios_core::Term)>,
+    ) -> Result<curios_core::Term, Error> {
+        self.ladder_region(&choose.arms, &choose.default, binds)
+    }
+
+    /// Lowers a `choose`'s arms inside a region. The head arm's test (a
     /// condition or a bind scrutinee) collects its bangs into `binds` (the
     /// caller's region — it runs unconditionally at this level); its body is its
     /// own region; the rest of the ladder — reached only when this test fails —
     /// is lowered as a *fresh* region so deeper tests' bangs stay branch-local.
     /// With no arms left, the ladder is just its default, run unconditionally in
     /// the current region.
-    fn cond_ladder_region(
+    fn ladder_region(
         &self,
-        arms: &[LadderArm],
+        arms: &[ChooseArm],
         default: &Term,
         binds: &mut Vec<(String, curios_core::Term)>,
     ) -> Result<curios_core::Term, Error> {
@@ -125,10 +123,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             return self.collect(default, binds);
         };
         let mut rest_binds = Vec::new();
-        let rest_term = self.cond_ladder_region(rest, default, &mut rest_binds)?;
+        let rest_term = self.ladder_region(rest, default, &mut rest_binds)?;
         let rest_wrapped = self.wrap(rest_binds, rest_term)?;
         match &arm.test {
-            LadderTest::Cond(condition) => {
+            ChooseTest::Cond(condition) => {
                 let head = self.collect(condition, binds)?;
                 let true_case = self.region(&arm.body)?;
                 Ok(curios_core::Term::bool_match(
@@ -139,7 +137,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                     true_case,
                 ))
             }
-            LadderTest::Bind { pattern, value } => {
+            ChooseTest::Bind { pattern, value } => {
                 let value = self.collect(value, binds)?;
                 self.lower_bind_arm(
                     pattern,
@@ -152,7 +150,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
     }
 
-    /// Lowers a headless-ladder bind arm `| pattern = value => body` — with
+    /// Lowers a `choose` bind arm `| pattern = value => body` — with
     /// `value` and `rest` (the fallthrough) already lowered — as a single-row
     /// matrix over `value` whose fallthrough for every unmatched shape is `rest`
     /// (via [`Self::default`]). A refutable pattern only: a bare-binder LHS is

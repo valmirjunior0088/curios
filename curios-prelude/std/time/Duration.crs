@@ -37,7 +37,7 @@ pub let add(a : Duration, b : Duration) -> Duration =
     end;
 
 pub let before(a : Duration, b : Duration) -> Bool =
-    match
+    choose
     | a.secs < b.secs => true
     | a.secs > b.secs => false
     | _ => a.nanos < b.nanos

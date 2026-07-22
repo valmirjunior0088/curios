@@ -74,13 +74,13 @@ const DIRECT_ESCAPING: &str = r#"
     use /std/{Io, Nat, Bool, Lst, proc};
     let inc(x : Nat) -> Nat = x + 1;
     let apply(g : (Nat) -> Nat, x : Nat) -> Nat = g(x);
-    let choose(b : Bool, g : (Nat) -> Nat) -> (Nat) -> Nat =
+    let select(b : Bool, g : (Nat) -> Nat) -> (Nat) -> Nat =
         match b : (Nat) -> Nat
         | true => g
         | false => (y) => y
         end;
     let n : Nat = Lst/len(proc/args());
-    let escaped = choose(n <= 0, inc);
+    let escaped = select(n <= 0, inc);
     Io/print(Nat/to_str(inc(n) + apply(escaped, n)))
     "#;
 

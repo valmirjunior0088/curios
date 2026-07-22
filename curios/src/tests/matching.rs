@@ -109,15 +109,15 @@ fn nested_ctor_pattern_dispatches_by_shape() {
     assert_eq!(io.output(), b"7");
 }
 
-// Regression for a headless ladder lowering bug: a condition arm followed by
-// a refutable bind arm was parsed as `CondMatch`, but lowering the bind arm
+// Regression for a `choose` lowering bug: a condition arm followed by a
+// refutable bind arm was parsed as `Choose`, but lowering the bind arm
 // accidentally routed through the headed-match dependent-motive/default gate.
 #[test]
-fn headless_cond_match_allows_condition_before_bind_arm() {
+fn choose_allows_condition_before_bind_arm() {
     let source = r#"
         use /std/{Bool, Nat, Option, Io};
         let pick(prefer_fresh : Bool, cached : Option(Nat), fresh : Nat) -> Nat =
-            match
+            choose
             | prefer_fresh && fresh > 0 => fresh
             | some(n) = cached => n
             | _ => 0
@@ -518,18 +518,18 @@ fn effectful_match_scrutinee_runs_once() {
     assert_eq!(io.file(b"log.txt"), Some(b"x".to_vec()));
 }
 
-// The headless `Bool` ladder, exercised as emitted wasm rather than folded:
-// `rand/bin(0)` is length 0 so `z` is a runtime-opaque 0, and `n` is a runtime
-// 2. The first *true* condition wins — `n <= 0` and `n <= 1` are false, `n <= 2`
-// selects `300`, and the later-true `_` default is never reached.
+// `choose`, exercised as emitted wasm rather than folded: `rand/bin(0)` is
+// length 0 so `z` is a runtime-opaque 0, and `n` is a runtime 2. The first
+// *true* condition wins — `n <= 0` and `n <= 1` are false, `n <= 2` selects
+// `300`, and the later-true `_` default is never reached.
 #[test]
-fn headless_cond_ladder_selects_first_true_arm() {
+fn choose_selects_first_true_arm() {
     let source = r#"
         use /std/{Nat, Bytes, rand, Io};
         let z = Bytes/len(rand/bin(0));
         let n = Nat/add(z, 2);
         let result =
-            match
+            choose
             | n <= 0 => Nat/add(z, 100)
             | n <= 1 => Nat/add(z, 200)
             | n <= 2 => Nat/add(z, 300)
@@ -543,15 +543,15 @@ fn headless_cond_ladder_selects_first_true_arm() {
     assert_eq!(io.output(), b"300");
 }
 
-// A ladder with no condition arms is just its default. Runtime-tainted so it
-// runs as wasm.
+// A `choose` with no condition arms is just its default. Runtime-tainted so
+// it runs as wasm.
 #[test]
-fn headless_cond_ladder_default_only() {
+fn choose_default_only() {
     let source = r#"
         use /std/{Nat, Bytes, rand, Io};
         let z = Bytes/len(rand/bin(0));
         let result =
-            match
+            choose
             | _ => Nat/add(z, 42)
             end;
         Io/print(Nat/to_str(result))
@@ -567,7 +567,7 @@ fn headless_cond_ladder_default_only() {
 // but a ladder whose first condition is true prints only that tag. The nested
 // `Bool` lowering keeps deeper conditions inside the previous false branch.
 #[test]
-fn headless_cond_ladder_evaluates_conditions_lazily() {
+fn choose_evaluates_conditions_lazily() {
     let source = r#"
         use /std/{Nat, Bytes, rand, Io, Bool, Str};
         let z = Bytes/len(rand/bin(0));
@@ -575,7 +575,7 @@ fn headless_cond_ladder_evaluates_conditions_lazily() {
             let _ = Io/print(tag);
             r;
         let result =
-            match
+            choose
             | probe("a", true)  => Nat/add(z, 1)
             | probe("b", false) => Nat/add(z, 2)
             | _ => Nat/add(z, 9)
@@ -610,14 +610,14 @@ fn inductive_match_catch_all_covers_unenumerated_constructors() {
     assert_eq!(io.output(), b"114");
 }
 
-// A headless-ladder bind arm `| pattern = value =>` (Rust `if let`): fires and
-// binds when `value` matches, else falls through to the rest of the ladder.
+// A `choose` bind arm `| pattern = value =>` (Rust `if let`): fires and binds
+// when `value` matches, else falls through to the rest of the ladder.
 #[test]
-fn headless_ladder_bind_arm_destructures_or_falls_through() {
+fn choose_bind_arm_destructures_or_falls_through() {
     let source = r#"
         use /std/{Option, Nat, Bytes, rand, Io};
         let f(o : Option(Nat)) -> Nat =
-            match
+            choose
             | some(x) = o => x + 10
             | _ => 99
             end;
@@ -634,11 +634,11 @@ fn headless_ladder_bind_arm_destructures_or_falls_through() {
 // nested in its payload): the rest-of-ladder is shared through a nullary thunk,
 // reached whether the outer `some` or the inner cons fails to match.
 #[test]
-fn headless_ladder_nested_bind_shares_the_fallthrough() {
+fn choose_nested_bind_shares_the_fallthrough() {
     let source = r#"
         use /std/{Option, Lst, Nat, Bytes, rand, Io};
         let f(o : Option(Lst(Nat))) -> Nat =
-            match
+            choose
             | some([h, ..t]) = o => h + 1
             | _ => 99
             end;

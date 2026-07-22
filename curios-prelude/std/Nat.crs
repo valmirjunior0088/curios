@@ -118,7 +118,7 @@ pub let lte_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(n + a,
     end;
 
 pub let cmp(x : Nat, y : Nat) -> Order =
-    match
+    choose
     | x < y => Order/lt()
     | x == y => Order/eq()
     | _ => Order/gt()

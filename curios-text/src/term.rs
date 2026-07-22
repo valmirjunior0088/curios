@@ -268,36 +268,37 @@ pub enum Motive {
     },
 }
 
-/// A headless ladder: `match | test => body | … | _ => default end`. There is
-/// no scrutinee — the arms are tried top-to-bottom and the first that fires
-/// selects its body; the mandatory final `| _ =>` supplies the fallthrough. An
-/// arm's [`LadderTest`] is either a `Bool` condition (`| cond =>`) or a refutable
-/// bind (`| pattern = value =>`, Rust `if let`). Lowering right-folds the ladder
-/// into nested `Bool` matches / single-row matrix matches
-/// (`into_core::match_compile`), so each body inherits the definitional
-/// refinement of its condition for free (the same `refine_head` keying a
-/// hand-written `match cond | true => … | false => …` would get). A dispatch
-/// form, not an elimination: it enumerates no shapes, so the `_` default is
-/// mandatory (as in a headed `Nat` literal dispatch). No motive.
+/// An ordered guarded ladder: `choose | test => body | … | _ => default end`.
+/// There is no scrutinee — the arms are tried top-to-bottom and the first
+/// that fires selects its body; the mandatory final `| _ =>` supplies the
+/// fallthrough. An arm's [`ChooseTest`] is either a `Bool` condition
+/// (`| cond =>`) or a refutable bind (`| pattern = value =>`, Rust `if let`).
+/// Lowering right-folds the ladder into nested `Bool` matches / single-row
+/// matrix matches (`into_core::match_compile`'s `ladder_region`), so each body
+/// inherits the definitional refinement of its condition for free (the same
+/// `refine_head` keying a hand-written `match cond | true => … | false => …`
+/// would get). A dispatch form, not an elimination — it consumes no
+/// scrutinee, so it is not a `match` at all: it enumerates no shapes, so the
+/// `_` default is mandatory (as in a headed `Nat` literal dispatch). No motive.
 #[derive(Debug, Clone, PartialEq)]
-pub struct CondMatch {
+pub struct Choose {
     /// The arms, in source order; the first whose test fires selects its body.
     /// May be empty (then the ladder is just its `default`).
-    pub arms: Vec<LadderArm>,
+    pub arms: Vec<ChooseArm>,
     pub default: Term,
 }
 
-/// One arm of a headless [`CondMatch`] ladder: a [`LadderTest`] and the `body`
-/// it selects when the test fires.
+/// One arm of a [`Choose`] ladder: a [`ChooseTest`] and the `body` it selects
+/// when the test fires.
 #[derive(Debug, Clone, PartialEq)]
-pub struct LadderArm {
-    pub test: LadderTest,
+pub struct ChooseArm {
+    pub test: ChooseTest,
     pub body: Term,
 }
 
-/// What a ladder arm dispatches on.
+/// What a choose arm dispatches on.
 #[derive(Debug, Clone, PartialEq)]
-pub enum LadderTest {
+pub enum ChooseTest {
     /// `| cond =>` — a `Bool` condition; the arm fires when `cond` is `true`.
     Cond(Term),
     /// `| pattern = value =>` — a refutable bind (Rust `if let`): the arm fires
@@ -350,9 +351,9 @@ pub struct StructLit {
     pub entries: Vec<StructLitEntry>,
 }
 
-/// The general pattern match: one scrutinee and arms of arbitrary (nested, across constructors, tuples, structs, and the four literal-carrier leaves) [`MatchPattern`]s, compiled by the pattern-matrix scheme in `into_core::match_compile` into the same single-level core match/projection forms a person would get from hand-nesting matches.
+/// A headed dependent elimination: one scrutinee and arms of arbitrary (nested, across constructors, tuples, structs, and the four literal-carrier leaves) [`MatchPattern`]s, compiled by the pattern-matrix scheme in `into_core::match_compile` into the same single-level core match/projection forms a person would get from hand-nesting matches.
 #[derive(Debug, Clone, PartialEq)]
-pub struct MatrixMatch {
+pub struct Match {
     pub head: Term,
     pub motive: Option<Motive>,
     /// The arms, in source order. Each pairs a (possibly nested, across
@@ -364,7 +365,7 @@ pub struct MatrixMatch {
     pub arms: Vec<MatrixArm>,
 }
 
-/// One arm of a [`MatrixMatch`]: `| pattern => body`. Compiled by
+/// One arm of a [`Match`]: `| pattern => body`. Compiled by
 /// `into_core::match_compile` into the single-level core match/projection forms —
 /// exactly what a person would get from hand-nesting matches today (see its
 /// doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every
@@ -373,21 +374,6 @@ pub struct MatrixMatch {
 pub struct MatrixArm {
     pub pattern: MatchPattern,
     pub body: Term,
-}
-
-/// A surface `match`, in exactly two shapes. [`MatrixMatch`] is the general
-/// headed form: one scrutinee and arms of arbitrary (nested, across
-/// constructors, tuples, structs, and the four literal-carrier leaves)
-/// [`MatchPattern`]s. The hardcoded carriers (`Bool`, `Nat` — induction *and*
-/// literal dispatch — `Lst`, `Bin`) are not separate variants: each is a matrix
-/// whose arm patterns are that carrier's own leaves, lowered through the
-/// per-carrier `compile_bln`/`compile_nat`/`compile_lst`/`compile_bin` in
-/// `into_core::match_compile`. The headless [`CondMatch`] has no scrutinee at
-/// all — its arms are `Bool` conditions (and refutable binds).
-#[derive(Debug, Clone, PartialEq)]
-pub enum Match {
-    Matrix(MatrixMatch),
-    Cond(CondMatch),
 }
 
 /// A match-arm pattern: genuinely refutable, unlike [`Pattern`] (which is
@@ -669,6 +655,9 @@ pub enum Subterm {
     Proj(Proj),
     StructLit(StructLit),
     Match(Match),
+    /// An ordered guarded ladder (see [`Choose`]) — not a match, since it
+    /// consumes no scrutinee.
+    Choose(Choose),
     Let(Let),
     Rec(Rec),
     /// A postfix bang `e!`: extracts the result of monadic action `e` inline.

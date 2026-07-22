@@ -50,7 +50,7 @@ end
 
 pub let read(h : Io, n : Nat) -> Read =
     let r = /sys/Io/read(h, n);
-    match
+    choose
     | r.status == /sys/Io/Status/ok => Read/chunk(r.bytes)
     | r.status == /sys/Io/Status/eof => Read/eof()
     | _ => Read/error(error_of(r.status))
@@ -58,7 +58,7 @@ pub let read(h : Io, n : Nat) -> Read =
 
 pub rec write(h : Io, b : Bytes) -> Result({}, Error) =
     let r = /sys/Io/write(h, b);
-    match
+    choose
     | r.status != /sys/Io/Status/ok => Result/failure(error_of(r.status))
     | r.written < Bytes/len(b) => write(h, Bytes/slice(b, r.written, Bytes/len(b)))
     | _ => Result/success(())
@@ -75,7 +75,7 @@ pub let print_err(s : Str) -> {} =
 pub let input() -> Option(Bytes) =
     rec go(acc : Bytes) -> Option(Bytes) =
         let r = /sys/Io/read(stdin, 1);
-        match
+        choose
         | r.status != /sys/Io/Status/ok && Bytes/len(acc) == 0 => Option/none()
         | r.status != /sys/Io/Status/ok => Option/some(acc)
         | Byte/to_nat(Option/unwrap_or(Bytes/get(r.bytes, 0), 0)) == 0x0A => Option/some(acc)

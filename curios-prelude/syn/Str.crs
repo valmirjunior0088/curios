@@ -8,16 +8,16 @@ end
 
 pub let classify(c : Byte) -> Class =
     let n = Byte/to_nat(c);
-    match
+    choose
     | Nat/in_range(n, 0x00, 0x7F) => Class/ascii()
     | Nat/in_range(n, 0xC2, 0xDF) => Class/lead(1, 0x80, 0xBF, n - 0xC0)
     | Nat/in_range(n, 0xE0, 0xEF) =>
-        let lo = match | n == 0xE0 => 0xA0 | _ => 0x80 end;
-        let hi = match | n == 0xED => 0x9F | _ => 0xBF end;
+        let lo = choose | n == 0xE0 => 0xA0 | _ => 0x80 end;
+        let hi = choose | n == 0xED => 0x9F | _ => 0xBF end;
         Class/lead(2, lo, hi, n - 0xE0)
     | Nat/in_range(n, 0xF0, 0xF4) =>
-        let lo = match | n == 0xF0 => 0x90 | _ => 0x80 end;
-        let hi = match | n == 0xF4 => 0x8F | _ => 0xBF end;
+        let lo = choose | n == 0xF0 => 0x90 | _ => 0x80 end;
+        let hi = choose | n == 0xF4 => 0x8F | _ => 0xBF end;
         Class/lead(3, lo, hi, n - 0xF0)
     | _ => Class/bad()
     end;
@@ -33,7 +33,7 @@ pub let step(c : Byte, s : Scan) -> Scan =
     match s
     | bad() => Scan/bad()
     | cont(rem, lo, hi) =>
-        match
+        choose
         | Bool/not(Nat/in_range(n, lo, hi)) => Scan/bad()
         | rem == 1 => Scan/lead()
         | _ => Scan/cont(rem - 1, 0x80, 0xBF)

@@ -51,7 +51,7 @@ pub let find(@T : Type, l : Lst(T), pred : (T) -> Bool) -> Option(T) =
 
 pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (A, A) -> A) -> A =
     rec go(lo : Nat, hi : Nat) -> A =
-        match
+        choose
         | lo + 1 < hi =>
             let mid = (lo + hi) / 2;
             combine(go(lo, mid), go(mid, hi))

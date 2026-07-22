@@ -84,7 +84,7 @@ pub use Toml/*;
 -- ===================== calendar validation =====================
 
 let leap(year : Nat) -> Bool =
-    match
+    choose
     | year % 400 == 0 => true
     | year % 100 == 0 => false
     | year % 4 == 0 => true
@@ -430,7 +430,7 @@ let byte_at_is(input : Bytes, i : Nat, pred : (Nat) -> Bool) -> Bool =
     end;
 
 let hex_val(n : Nat) -> Option(Nat) =
-    match
+    choose
     | Nat/in_range(n, 0x30, 0x39) => Option/some(n - 0x30)
     | Nat/in_range(n, 0x61, 0x66) => Option/some(n - 0x61 + 10)
     | Nat/in_range(n, 0x41, 0x46) => Option/some(n - 0x41 + 10)
@@ -547,7 +547,7 @@ let basic_str_scan : Parse(Bytes) =
                 | none() => Result/failure("unterminated string")
                 | some(b) =>
                     let n = Byte/to_nat(b);
-                    match
+                    choose
                     | n == 0x22 => Result/success((cur + 1, acc))
                     | n == 0x5C =>
                         match escape_scan(input, cur + 1)
@@ -574,7 +574,7 @@ let literal_str_scan : Parse(Bytes) =
                 | none() => Result/failure("unterminated string")
                 | some(b) =>
                     let n = Byte/to_nat(b);
-                    match
+                    choose
                     | n == 0x27 => Result/success((cur + 1, acc))
                     | n == 0x09 => go(cur + 1, Bytes/append(acc, b))
                     | n < 0x20 => Result/failure("control character in string")
@@ -615,7 +615,7 @@ rec trim_scan(input : Bytes, cur : Nat, seen_nl : Bool) -> Result(Nat, Str) =
     | none() => stop
     | some(b) =>
         let n = Byte/to_nat(b);
-        match
+        choose
         | n == 0x20 => trim_scan(input, cur + 1, seen_nl)
         | n == 0x09 => trim_scan(input, cur + 1, seen_nl)
         | n == 0x0A => trim_scan(input, cur + 1, true)
@@ -637,10 +637,10 @@ let ml_basic_scan : Parse(Bytes) =
                 | none() => Result/failure("unterminated string")
                 | some(b) =>
                     let n = Byte/to_nat(b);
-                    match
+                    choose
                     | n == 0x22 =>
                         let q = quote_run(input, cur, 0x22, 0);
-                        match
+                        choose
                         | q >= 6 => Result/failure("too many quotes")
                         | q >= 3 => Result/success((cur + q, x\..acc\..quotes(b, q - 3)))
                         | _ => go(cur + q, x\..acc\..quotes(b, q))
@@ -671,7 +671,7 @@ let ml_basic_scan : Parse(Bytes) =
                     end
                 end;
             let start =
-                match
+                choose
                 | byte_at_is(input, pos, (n) => n == 0x0A) => pos + 1
                 | is_crlf_at(input, pos) => pos + 2
                 | _ => pos
@@ -688,10 +688,10 @@ let ml_literal_scan : Parse(Bytes) =
                 | none() => Result/failure("unterminated string")
                 | some(b) =>
                     let n = Byte/to_nat(b);
-                    match
+                    choose
                     | n == 0x27 =>
                         let q = quote_run(input, cur, 0x27, 0);
-                        match
+                        choose
                         | q >= 6 => Result/failure("too many quotes")
                         | q >= 3 => Result/success((cur + q, x\..acc\..quotes(b, q - 3)))
                         | _ => go(cur + q, x\..acc\..quotes(b, q))
@@ -709,7 +709,7 @@ let ml_literal_scan : Parse(Bytes) =
                     end
                 end;
             let start =
-                match
+                choose
                 | byte_at_is(input, pos, (n) => n == 0x0A) => pos + 1
                 | is_crlf_at(input, pos) => pos + 2
                 | _ => pos
@@ -886,7 +886,7 @@ let int_value : Parse(Toml) =
             | success((next, mag)) =>
                 match negative
                 | true =>
-                    match
+                    choose
                     | mag > 1073741824 => Result/failure("integer out of range")
                     | mag == 1073741824 => Result/success((next, Toml/int(+0 - Nat/to_int(1073741823) - +1)))
                     | _ => Result/success((next, Toml/int(+0 - Nat/to_int(mag))))
@@ -924,7 +924,7 @@ rec flt_digits(input : Bytes, cur : Nat, sig : Nat, count : Nat, shift : Nat,
     | none() => stop
     | some(b) =>
         let n = Byte/to_nat(b);
-        match
+        choose
         | n == 0x5F =>
             match seen && Bool/not(pend)
             | true => flt_digits(input, cur + 1, sig, count, shift, frac, seen, true)
@@ -932,7 +932,7 @@ rec flt_digits(input : Bytes, cur : Nat, sig : Nat, count : Nat, shift : Nat,
             end
         | Nat/in_range(n, 0x30, 0x39) =>
             let d = n - 0x30;
-            match
+            choose
             | sig == 0 && d == 0 =>
                 let shift2 = match frac | true => shift + 1 | false => shift end;
                 flt_digits(input, cur + 1, 0, 0, shift2, frac, true, false)
@@ -963,7 +963,7 @@ rec exp_digits(input : Bytes, cur : Nat, acc : Nat, seen : Bool, pend : Bool) ->
     | none() => stop
     | some(b) =>
         let n = Byte/to_nat(b);
-        match
+        choose
         | n == 0x5F =>
             match seen && Bool/not(pend)
             | true => exp_digits(input, cur + 1, acc, seen, true)
@@ -1564,7 +1564,7 @@ let offset_str(mins : Int) -> Str =
 -- minimum value's magnitude (+2^30) outside the boxed envelope; render the
 -- minimum from its literal spelling instead of negating it.
 let int_str(n : Int) -> Str =
-    match
+    choose
     | n >= +0 => Nat/to_str(Int/to_nat(n))
     | n == -1073741824 => "-1073741824"
     | _ => Str/concat("-", Nat/to_str(Int/to_nat(+0 - n)))
@@ -1577,7 +1577,7 @@ let flt_str(f : Flt) -> Str =
     let b2 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 2), 0));
     let b3 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 3), 0));
     let exp_field = b3 % 0x80 * 2 + b2 / 0x80;
-    match
+    choose
     | exp_field == 0xFF && b0 == 0 && b1 == 0 && b2 % 0x80 == 0 =>
         match b3 >= 0x80
         | true => "-inf"

@@ -35,7 +35,7 @@ satisfy Key(Nat) {
 let bit(k : Bytes, j : Nat) -> Nat =
     let g = j / 9;
     let o = j % 9;
-    match
+    choose
     | g >= Bytes/len(k) => 0
     | o == 0 => 1
     | _ => Nat/and(Nat/shr(Byte/to_nat(/sys/Bytes/get(k, g)), 8 - o), 1)
