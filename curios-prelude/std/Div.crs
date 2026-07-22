@@ -1,15 +1,2 @@
 pub use /syn/{Div};
 pub use /syn/Div/{div};
-use /std/{Nat, Int, Flt};
-
-satisfy Div(Nat) {
-    div(a, b) = Nat/div(a, b)
-}
-
-satisfy Div(Int) {
-    div(a, b) = Int/div(a, b)
-}
-
-satisfy Div(Flt) {
-    div(a, b) = Flt/div(a, b)
-}

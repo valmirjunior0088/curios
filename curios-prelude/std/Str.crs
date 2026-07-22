@@ -1,6 +1,6 @@
 pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
-use /std/{Char, Nat, Byte, Bytes, Bool, Lst, Option};
+use /std/{Char, Nat, Byte, Bytes, Bool, Lst, Option, Eql};
 use /syn/{True, False};
 
 rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
@@ -358,3 +358,7 @@ pub let trim(s : Str) -> Str =
     | false => ""
     | true => slice(s, lo, hi)
     end;
+
+satisfy Eql(Str) {
+    eql(a, b) = eql(a, b)
+}

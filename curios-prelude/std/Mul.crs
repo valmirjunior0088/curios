@@ -1,19 +1,2 @@
 pub use /syn/{Mul};
 pub use /syn/Mul/{mul};
-use /std/{Nat, Int, Flt, BigInt};
-
-satisfy Mul(Nat) {
-    mul(a, b) = Nat/mul(a, b)
-}
-
-satisfy Mul(Int) {
-    mul(a, b) = Int/mul(a, b)
-}
-
-satisfy Mul(Flt) {
-    mul(a, b) = Flt/mul(a, b)
-}
-
-satisfy Mul(BigInt) {
-    mul(a, b) = BigInt/mul(a, b)
-}

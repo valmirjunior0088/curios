@@ -1,7 +1,2 @@
 pub use /syn/{And};
 pub use /syn/And/{and};
-use /std/{Bool};
-
-satisfy And(Bool) {
-    and(a, b) = Bool/and(a, b)
-}

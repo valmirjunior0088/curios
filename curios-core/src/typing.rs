@@ -182,7 +182,21 @@ impl Context {
                 if let Some(parked) = self.take_parked().into_iter().next() {
                     return Err(match parked.work {
                         super::ParkedWork::Conversion(goal) => {
-                            display_mismatch(self, &goal.this, &goal.that)
+                            // A conversion stuck between two witness holes reads as
+                            // a bare metavariable mismatch; name the unresolved
+                            // witness it actually is instead.
+                            match self
+                                .witness_hole(&goal.this)
+                                .or_else(|| self.witness_hole(&goal.that))
+                            {
+                                Some((origin, witness_goal)) => Error::no_witness(
+                                    resolved_for_display(self, &witness_goal),
+                                    origin.func,
+                                    origin.binder,
+                                )
+                                .at_opt(parked.origin.span()),
+                                None => display_mismatch(self, &goal.this, &goal.that),
+                            }
                         }
                         super::ParkedWork::Checking { .. } => Error::CannotInfer,
                         super::ParkedWork::Witness {

@@ -1,6 +1,6 @@
 pub use /sys/{Int};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, rotl, rotr, clz, ctz, popcnt, to_nat, to_flt};
-use /std/{Nat, Str, Option, Order};
+use /std/{Nat, Str, Option, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 pub let to_str(n : Int) -> Str =
     let mag = Nat/to_str(abs(n));
@@ -42,3 +42,34 @@ pub let cmp(x : Int, y : Int) -> Order =
     | x == y => Order/eq()
     | _ => Order/gt()
     end;
+
+satisfy Eql(Int) {
+    eql(a, b) = eql(a, b)
+}
+
+satisfy Cmp(Int) {
+    lt(a, b) = lt(a, b),
+    lte(a, b) = lte(a, b),
+    gt(a, b) = gt(a, b),
+    gte(a, b) = gte(a, b)
+}
+
+satisfy Add(Int) {
+    add(a, b) = add(a, b)
+}
+
+satisfy Sub(Int) {
+    sub(a, b) = sub(a, b)
+}
+
+satisfy Mul(Int) {
+    mul(a, b) = mul(a, b)
+}
+
+satisfy Div(Int) {
+    div(a, b) = div(a, b)
+}
+
+satisfy Rem(Int) {
+    rem(a, b) = rem(a, b)
+}

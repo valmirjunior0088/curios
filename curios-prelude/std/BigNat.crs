@@ -6,7 +6,7 @@
 -- ops match `.rep` directly, build a raw untrimmed result, and route it through
 -- `of_bits` — a single `trim` — at the public boundary.
 
-use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True};
+use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt, eq_neq_gt, lt_neq_gt};
 use /std/Bits/{cons};
 
@@ -1870,3 +1870,26 @@ pub let to_str(a : BigNat) -> Str =
     | true => "0"
     | false => to_str_go(a, "")
     end;
+
+satisfy Eql(BigNat) {
+    eql(a, b) = eql(a, b)
+}
+
+satisfy Cmp(BigNat) {
+    lt(a, b) = lt(a, b),
+    lte(a, b) = lte(a, b),
+    gt(a, b) = gt(a, b),
+    gte(a, b) = gte(a, b)
+}
+
+satisfy Add(BigNat) {
+    add(a, b) = add(a, b)
+}
+
+satisfy Sub(BigNat) {
+    sub(a, b) = sub(a, b)
+}
+
+satisfy Mul(BigNat) {
+    mul(a, b) = mul(a, b)
+}

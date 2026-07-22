@@ -1,5 +1,5 @@
 pub use /sys/Bytes/{let Bytes, len, eql, slice, append, concat};
-use /std/{Lst, Nat, Byte, Bool, Option, Eq};
+use /std/{Lst, Nat, Byte, Bool, Option, Eq, Eql};
 
 pub let at(b : Bytes, i : Nat, ok : Nat/Lt(i, len(b))) -> Byte =
     /sys/Bytes/get(b, i);
@@ -45,3 +45,7 @@ pub let find_index(b : Bytes, pred : (Byte) -> Bool) -> Option(Nat) =
 pub let join(sep : Bytes, parts : Lst(Bytes)) -> Bytes =
     Lst/balanced(Lst/len(parts), x\, (i) => Option/unwrap_or(Lst/get(parts, i), x\),
         (l, r) => x\..l\..sep\..r);
+
+satisfy Eql(Bytes) {
+    eql(a, b) = eql(a, b)
+}

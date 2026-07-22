@@ -1,6 +1,6 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, rotl, rotr, clz, ctz, popcnt, to_int, to_flt, to_byte};
-use /std/{Str, Option, Char, Bytes, Bool, Eq, Order, True, False};
+use /std/{Str, Option, Char, Bytes, Bool, Eq, Order, True, False, Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 let single_digit(d : Nat) -> Str =
     match d
@@ -55,6 +55,44 @@ pub let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
     | true => c <= hi
     | false => false
     end;
+
+pub let cmp(x : Nat, y : Nat) -> Order =
+    choose
+    | x < y => Order/lt()
+    | x == y => Order/eq()
+    | _ => Order/gt()
+    end;
+
+satisfy Eql(Nat) {
+    eql(a, b) = eql(a, b)
+}
+
+satisfy Cmp(Nat) {
+    lt(a, b) = lt(a, b),
+    lte(a, b) = lte(a, b),
+    gt(a, b) = gt(a, b),
+    gte(a, b) = gte(a, b)
+}
+
+satisfy Add(Nat) {
+    add(a, b) = add(a, b)
+}
+
+satisfy Sub(Nat) {
+    sub(a, b) = sub(a, b)
+}
+
+satisfy Mul(Nat) {
+    mul(a, b) = mul(a, b)
+}
+
+satisfy Div(Nat) {
+    div(a, b) = div(a, b)
+}
+
+satisfy Rem(Nat) {
+    rem(a, b) = rem(a, b)
+}
 
 pub let Lt(a : Nat, b : Nat) -> Prop =
     match a < b : Prop
@@ -115,11 +153,4 @@ pub let lte_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(n + a,
     match n : (m) => Lte(m + a, m + b)
     | 0 => p
     | m + 1; ih => Lte/s(ih)
-    end;
-
-pub let cmp(x : Nat, y : Nat) -> Order =
-    choose
-    | x < y => Order/lt()
-    | x == y => Order/eq()
-    | _ => Order/gt()
     end;

@@ -4,7 +4,7 @@
 
 pub use /syn/{Char};
 pub use /syn/Char/{Below, InRange, Scalar};
-use /std/{Nat, Byte, Bool, Bytes, Option, Order, Eq, True};
+use /std/{Nat, Byte, Bool, Bytes, Option, Order, Eq, True, Eql, Cmp};
 
 pub let to_nat(c : Char) -> Nat =
     c.code;
@@ -35,6 +35,30 @@ pub let eql(a : Char, b : Char) -> Bool =
 
 pub let cmp(a : Char, b : Char) -> Order =
     Nat/cmp(a.code, b.code);
+
+pub let lt(a : Char, b : Char) -> Bool =
+    match cmp(a, b)
+    | lt() => true
+    | _ => false
+    end;
+
+pub let lte(a : Char, b : Char) -> Bool =
+    match cmp(a, b)
+    | gt() => false
+    | _ => true
+    end;
+
+pub let gt(a : Char, b : Char) -> Bool =
+    match cmp(a, b)
+    | gt() => true
+    | _ => false
+    end;
+
+pub let gte(a : Char, b : Char) -> Bool =
+    match cmp(a, b)
+    | lt() => false
+    | _ => true
+    end;
 
 pub let is_whitespace(c : Char) -> Bool =
     Bool/or(Nat/eql(c.code, 0x20), Nat/in_range(c.code, 0x09, 0x0D));
@@ -113,3 +137,14 @@ pub let to_utf8(c : Char) -> Bytes =
     | Nat/lt(codepoint, 0x10000) => emit_continuations(Bytes/append(x\, Nat/to_byte(Nat/add(0xE0, Nat/div(codepoint, 0x1000)))), codepoint, 0x40)
     | _ => emit_continuations(Bytes/append(x\, Nat/to_byte(Nat/add(0xF0, Nat/div(codepoint, 0x40000)))), codepoint, 0x1000)
     end;
+
+satisfy Eql(Char) {
+    eql(a, b) = eql(a, b)
+}
+
+satisfy Cmp(Char) {
+    lt(a, b) = lt(a, b),
+    lte(a, b) = lte(a, b),
+    gt(a, b) = gt(a, b),
+    gte(a, b) = gte(a, b)
+}

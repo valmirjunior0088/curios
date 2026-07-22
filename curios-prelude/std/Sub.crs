@@ -1,19 +1,2 @@
 pub use /syn/{Sub};
 pub use /syn/Sub/{sub};
-use /std/{Nat, Int, Flt, BigInt};
-
-satisfy Sub(Nat) {
-    sub(a, b) = Nat/sub(a, b)
-}
-
-satisfy Sub(Int) {
-    sub(a, b) = Int/sub(a, b)
-}
-
-satisfy Sub(Flt) {
-    sub(a, b) = Flt/sub(a, b)
-}
-
-satisfy Sub(BigInt) {
-    sub(a, b) = BigInt/sub(a, b)
-}

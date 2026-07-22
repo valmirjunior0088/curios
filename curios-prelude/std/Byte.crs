@@ -1,6 +1,6 @@
 pub use /sys/{Byte};
 pub use /sys/Byte/{to_nat, eql, lt, lte, gt, gte};
-use /std/{Order};
+use /std/{Order, Eql, Cmp};
 
 pub let cmp(a : Byte, b : Byte) -> Order =
     choose
@@ -8,3 +8,14 @@ pub let cmp(a : Byte, b : Byte) -> Order =
     | Byte/eql(a, b) => Order/eq()
     | _ => Order/gt()
     end;
+
+satisfy Eql(Byte) {
+    eql(a, b) = eql(a, b)
+}
+
+satisfy Cmp(Byte) {
+    lt(a, b) = lt(a, b),
+    lte(a, b) = lte(a, b),
+    gt(a, b) = gt(a, b),
+    gte(a, b) = gte(a, b)
+}

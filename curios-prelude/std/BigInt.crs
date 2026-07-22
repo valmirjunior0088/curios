@@ -6,7 +6,7 @@
 -- no borrow/compare bridge is needed. The algebraic lemma corpus is deferred until
 -- a consumer needs it (see documentation/REPRESENTATION_SPEC_PT4_BIGFLT.md).
 
-use /std/{Nat, Int, Bool, Str, Order, BigNat, NonZero};
+use /std/{Nat, Int, Bool, Str, Order, BigNat, NonZero, Eql, Cmp, Add, Sub, Mul};
 use /std/NonZero/{non_zero_add, non_zero_mul, non_zero_cmp, Split};
 
 pub induct BigInt : pub Type
@@ -163,3 +163,26 @@ pub let to_str(a : BigInt) -> Str =
     | zero() => "+0"
     | pos(p) => Str/concat("+", BigNat/to_str(p.magnitude))
     end;
+
+satisfy Eql(BigInt) {
+    eql(a, b) = eql(a, b)
+}
+
+satisfy Cmp(BigInt) {
+    lt(a, b) = lt(a, b),
+    lte(a, b) = lte(a, b),
+    gt(a, b) = gt(a, b),
+    gte(a, b) = gte(a, b)
+}
+
+satisfy Add(BigInt) {
+    add(a, b) = add(a, b)
+}
+
+satisfy Sub(BigInt) {
+    sub(a, b) = sub(a, b)
+}
+
+satisfy Mul(BigInt) {
+    mul(a, b) = mul(a, b)
+}

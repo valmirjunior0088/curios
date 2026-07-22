@@ -1,7 +1,7 @@
 use {
     super::{
         Bound, Concept, Error, Goal, HeadKey, ImplicitOrigin, Inductive, Metavar, MetavarId,
-        MetavarOrigin, Structure, Term, Witness, WitnessKey, WitnessOrigin,
+        MetavarOrigin, Structure, Subterm, Term, Witness, WitnessKey, WitnessOrigin,
     },
     crate::Instant,
     curios_abi::RootId,
@@ -1311,6 +1311,21 @@ impl Context {
 
     pub(crate) fn metavar_entry(&self, id: MetavarId) -> Option<&MetaEntry> {
         self.metas.entries.get(id.0).and_then(Option::as_ref)
+    }
+
+    /// If `term` is a witness-resolution hole, its provenance and the concept
+    /// goal it stands for (e.g. `Add(Nat)`). A conversion left stuck between two
+    /// such holes is really an unresolved witness — reported as one rather than
+    /// as a bare metavariable mismatch between two anonymous placeholders.
+    pub(crate) fn witness_hole(&self, term: &Term) -> Option<(WitnessOrigin, Term)> {
+        let Subterm::Metavar(metavar) = &**term else {
+            return None;
+        };
+        let Some(MetavarOrigin::Witness(origin)) = &metavar.origin else {
+            return None;
+        };
+        let goal = self.metavar_entry(metavar.id)?.result.clone();
+        Some((origin.clone(), goal))
     }
 
     pub(crate) fn metavar_solution(&self, id: MetavarId) -> Option<&Term> {
