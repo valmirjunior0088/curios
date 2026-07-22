@@ -487,17 +487,17 @@ fn lst_spread_operand_hoists_bangs() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Task, Io, Str, Nat, Lst};
-        let prog : Task({}) =
-            let ys : Lst(Nat) = [1, ..Task/pure([2, 3])!, 4];
+        use /std/{Async, Io, Str, Nat, Lst};
+        let prog : Async({}) =
+            let ys : Lst(Nat) = [1, ..Async/pure([2, 3])!, 4];
             let digits : Nat =
                 match ys : Nat
                 | [] => 0
                 | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
                 end;
             let wrote = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(digits)));
-            Task/pure(());
-        Task/block_on(prog)
+            Async/pure(());
+        Async/block_on(prog)
         "#,
         system,
     )
@@ -550,12 +550,12 @@ fn bin_spread_operand_hoists_bangs() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Task, Io, Bytes};
-        let prog : Task({}) =
-            let out : Bytes = x\3e\..Task/pure(x\68\69)!\3c;
+        use /std/{Async, Io, Bytes};
+        let prog : Async({}) =
+            let out : Bytes = x\3e\..Async/pure(x\68\69)!\3c;
             let wrote = Io/write(Io/stdout, out);
-            Task/pure(());
-        Task/block_on(prog)
+            Async/pure(());
+        Async/block_on(prog)
         "#,
         system,
     )

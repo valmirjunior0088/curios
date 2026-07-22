@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, Char, Lst, Parse, Result, Option, Io, Task};
+use /std/{Bytes, Byte, Str, Nat, Bool, Char, Lst, Parse, Result, Option, Io, Async};
 use /std/tcp/{Settings, Socket};
 
 pub induct Method : pub Type
@@ -177,13 +177,13 @@ pub let decode : Parse(Response) =
 pub let header(resp : Response, name : Str) -> Option(Str) =
     header_lookup(resp.headers, name);
 
-pub let perform(request : Request) -> Task(Result(Response, Error)) =
-    Task/bind(Socket/call(request.settings, request.host, request.port, render(request)), (r) =>
-        match r : Task(Result(Response, Error))
+pub let perform(request : Request) -> Async(Result(Response, Error)) =
+    Async/bind(Socket/call(request.settings, request.host, request.port, render(request)), (r) =>
+        match r : Async(Result(Response, Error))
         | success(bytes) =>
-            match Parse/run(decode, bytes) : Task(Result(Response, Error))
-            | success(response) => Task/pure(Result/success(response))
-            | failure(message) => Task/pure(Result/failure(Error/malformed(message)))
+            match Parse/run(decode, bytes) : Async(Result(Response, Error))
+            | success(response) => Async/pure(Result/success(response))
+            | failure(message) => Async/pure(Result/failure(Error/malformed(message)))
             end
-        | failure(error) => Task/pure(Result/failure(Error/net(error)))
+        | failure(error) => Async/pure(Result/failure(Error/net(error)))
         end);

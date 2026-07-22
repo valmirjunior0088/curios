@@ -5,7 +5,7 @@ fn nat_atom(builder: &mut ErsdBuilder, value: u32) -> Atom {
     Atom::Constant(constant)
 }
 
-/// The `Task/join_all` idiom: a recursive group function called by the
+/// The `Async/join_all` idiom: a recursive group function called by the
 /// computed member's eager initializer. The first run's verifier over-rejected
 /// this shape; it is a supported program.
 #[test]

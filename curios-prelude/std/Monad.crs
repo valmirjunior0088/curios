@@ -1,6 +1,6 @@
 pub use /syn/{Monad};
 pub use /syn/Monad/{pure, bind};
-use /std/{Lst, Option, Parse, Task};
+use /std/{Lst, Option, Parse, Async};
 
 satisfy Monad(Lst) {
     pure(A, x) = [x],
@@ -17,7 +17,7 @@ satisfy Monad(Parse) {
     bind(A, B, m, f) = Parse/bind(@A, @B, m, f)
 }
 
-satisfy Monad(Task) {
-    pure(A, x) = Task/pure(@A, x),
-    bind(A, B, m, f) = Task/bind(@A, @B, m, f)
+satisfy Monad(Async) {
+    pure(A, x) = Async/pure(@A, x),
+    bind(A, B, m, f) = Async/bind(@A, @B, m, f)
 }

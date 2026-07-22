@@ -71,8 +71,8 @@ fn io_read_short_reads_and_eof() {
 #[test]
 fn file_read_all_reads_a_seeded_file() {
     let source = r#"
-        use /std/{File, Io, Task};
-        match Task/block_on(File/read_all("data.txt"))
+        use /std/{File, Io, Async};
+        match Async/block_on(File/read_all("data.txt"))
         | success(contents) => Io/write(Io/stdout, contents)
         | failure(_) => Io/write(Io/stdout, /std/Str/to_bytes("error"))
         end
@@ -88,8 +88,8 @@ fn file_read_all_reads_a_seeded_file() {
 #[test]
 fn file_read_all_of_a_missing_path_is_not_found() {
     let source = r#"
-        use /std/{File, Io, Task};
-        match Task/block_on(File/read_all("nope.txt"))
+        use /std/{File, Io, Async};
+        match Async/block_on(File/read_all("nope.txt"))
         | success(_) => Io/print("contents")
         | failure(e) =>
             match e : {}
@@ -112,8 +112,8 @@ fn file_read_all_of_a_missing_path_is_not_found() {
 #[test]
 fn file_with_write_mode_persists_through_close() {
     let source = r#"
-        use /std/{File, Io, Task};
-        match Task/block_on(File/with("out.txt", Io/Mode/write(), (f) => File/write(f, /std/Str/to_bytes("written"))))
+        use /std/{File, Io, Async};
+        match Async/block_on(File/with("out.txt", Io/Mode/write(), (f) => File/write(f, /std/Str/to_bytes("written"))))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end
@@ -131,13 +131,13 @@ fn file_with_write_mode_persists_through_close() {
 #[test]
 fn file_read_pulls_bytes_inside_the_bracket() {
     let source = r#"
-        use /std/{File, Io, Str, Bytes, Task};
-        match Task/block_on(File/with("lines.txt", Io/Mode/read(), (f) =>
-            Task/bind(File/read(f, 1024), (r) =>
-                match r : Task(Bytes)
-                | chunk(b) => Task/pure(b)
-                | eof() => Task/pure(x\)
-                | error(_) => Task/pure(x\)
+        use /std/{File, Io, Str, Bytes, Async};
+        match Async/block_on(File/with("lines.txt", Io/Mode/read(), (f) =>
+            Async/bind(File/read(f, 1024), (r) =>
+                match r : Async(Bytes)
+                | chunk(b) => Async/pure(b)
+                | eof() => Async/pure(x\)
+                | error(_) => Async/pure(x\)
                 end)))
         | success(bytes) => Io/write(Io/stdout, bytes)
         | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))

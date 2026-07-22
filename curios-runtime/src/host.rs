@@ -177,7 +177,7 @@ pub enum Status {
     ConnectionRefused,
     /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`).
     /// Produced once a handle has been switched to non-blocking mode by
-    /// `Task/nonblocking` (`/std/Task.crs`); `/std`'s scheduler matches on it to
+    /// `Async/nonblocking` (`/std/Async.crs`); `/std`'s scheduler matches on it to
     /// reschedule the read/write instead of treating it as a real failure.
     WouldBlock,
     /// A TLS upgrade (`start_tls`/`start_tls_server`) or server-config build

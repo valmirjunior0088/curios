@@ -1,38 +1,38 @@
-use /std/{Bytes, Nat, Str, Io, Result, Task};
+use /std/{Bytes, Nat, Str, Io, Result, Async};
 
 pub struct File : Type { Io }
 
-pub let read(f : File, n : Nat) -> Task(Io/Read) =
-    Task/read(f.0, n);
+pub let read(f : File, n : Nat) -> Async(Io/Read) =
+    Async/read(f.0, n);
 
-pub let write(f : File, b : Bytes) -> Task(Result({}, Io/Error)) =
-    Task/write(f.0, b);
+pub let write(f : File, b : Bytes) -> Async(Result({}, Io/Error)) =
+    Async/write(f.0, b);
 
-pub let open(path : Str, mode : Io/Mode) -> Task(Result(File, Io/Error)) =
-    Task/defer(() =>
+pub let open(path : Str, mode : Io/Mode) -> Async(Result(File, Io/Error)) =
+    Async/defer(() =>
         let r = /sys/Io/open(Str/to_bytes(path), Io/of_mode(mode));
-        match r.status == /sys/Io/Status/ok : Task(Result(File, Io/Error))
+        match r.status == /sys/Io/Status/ok : Async(Result(File, Io/Error))
         | true =>
-            let _ = Task/nonblocking(r.handle);
-            Task/bind(Task/acquire(r.handle, () => /sys/Io/close(r.handle)), (_) =>
-                Task/pure(Result/success(File { r.handle })))
-        | false => Task/pure(Result/failure(Io/error_of(r.status)))
+            let _ = Async/nonblocking(r.handle);
+            Async/bind(Async/acquire(r.handle, () => /sys/Io/close(r.handle)), (_) =>
+                Async/pure(Result/success(File { r.handle })))
+        | false => Async/pure(Result/failure(Io/error_of(r.status)))
         end);
 
-pub let close(f : File) -> Task({}) =
-    Task/release(f.0);
+pub let close(f : File) -> Async({}) =
+    Async/release(f.0);
 
-pub let with(@A : Type, path : Str, mode : Io/Mode, body : (File) -> Task(A)) -> Task(Result(A, Io/Error)) =
-    Task/bind(open(path, mode), (opened) =>
-        match opened : Task(Result(A, Io/Error))
+pub let with(@A : Type, path : Str, mode : Io/Mode, body : (File) -> Async(A)) -> Async(Result(A, Io/Error)) =
+    Async/bind(open(path, mode), (opened) =>
+        match opened : Async(Result(A, Io/Error))
         | success(f) =>
-            Task/bind(body(f), (a) =>
-                Task/bind(close(f), (_) => Task/pure(Result/success(a))))
-        | failure(e) => Task/pure(Result/failure(e))
+            Async/bind(body(f), (a) =>
+                Async/bind(close(f), (_) => Async/pure(Result/success(a))))
+        | failure(e) => Async/pure(Result/failure(e))
         end);
 
-let drain(f : File) -> Task(Bytes) =
-    Task/drain((n) => read(f, n));
+let drain(f : File) -> Async(Bytes) =
+    Async/drain((n) => read(f, n));
 
-pub let read_all(path : Str) -> Task(Result(Bytes, Io/Error)) =
+pub let read_all(path : Str) -> Async(Result(Bytes, Io/Error)) =
     with(path, Io/Mode/read(), (f) => drain(f));

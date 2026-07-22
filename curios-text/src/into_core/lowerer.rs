@@ -108,7 +108,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // spelled (unqualified) name, which core then resolves to the
             // innermost enclosing binder. Without this an in-scope module binding
             // of the same name would unlawfully capture the reference — and inside
-            // a qualified module the module's name (`std/Task/go`) and the local
+            // a qualified module the module's name (`std/Async/go`) and the local
             // binder (`go`) are *different* strings, so core cannot recover from a
             // wrong choice made here.
             name.head().to_string()

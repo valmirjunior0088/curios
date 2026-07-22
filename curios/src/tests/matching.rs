@@ -505,8 +505,8 @@ fn nested_nat_literal_dispatch_falls_through_to_default() {
 #[test]
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
-        use /std/{File, Io, Task};
-        match Task/block_on(File/with("log.txt", Io/Mode/append(), (f) => File/write(f, /std/Str/to_bytes("x"))))
+        use /std/{File, Io, Async};
+        match Async/block_on(File/with("log.txt", Io/Mode/append(), (f) => File/write(f, /std/Str/to_bytes("x"))))
         | success(_) => Io/print("ok")
         | failure(_) => Io/print("error")
         end

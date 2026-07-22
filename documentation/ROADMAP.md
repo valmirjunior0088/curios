@@ -165,12 +165,12 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] JSON codec (`std/Json`)
 - [x] TOML 1.0.0 codec over native `Int` and binary32 `Flt` (`std/Toml`; explicitly not fully TOML-conforming because numeric storage is native-width)
   - [ ] [Full TOML conformance over exact numerics](compiler/08_TOML_FULL_CONFORMANCE_SPEC.md) _(not refined; after the general rational `BigFlt` sequence)_
-- [x] Async combinators for `/std/Task`
+- [x] Async combinators for `/std/Async`
   - [x] `map`
   - [x] concurrent `both`/`race`/`select`
   - [x] result cell (`Cell`)
   - [x] `sleep`/`timeout`
-- [x] HTTP client (`std/http`, built on `tcp` + `Task`)
+- [x] HTTP client (`std/http`, built on `tcp` + `Async`)
 - [x] Host-service modules (`std/time` `Instant`/`Duration`, `std/proc` `args`/`env`/`exit`, `std/rand`)
 - [x] Arbitrary-precision naturals (`std/BigNat`, canonical and packed over `Bits`)
   - [x] Machine-checked additive and multiplicative laws, additive cancellation, order reflection/transitivity, and power-of-two interaction lemmas

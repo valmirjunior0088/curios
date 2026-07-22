@@ -3,9 +3,9 @@ use {curios_runtime::MockHost, std::time::Duration};
 #[test]
 fn net_call_round_trips_a_scripted_endpoint() {
     let source = r#"
-        use /std/{Io, Str, Task};
+        use /std/{Io, Str, Async};
         use /std/tcp/{Settings, Socket};
-        match Task/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))
+        match Async/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))
         | success(response) => Io/write(Io/stdout, response)
         | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
         end
@@ -23,9 +23,9 @@ fn net_call_round_trips_a_scripted_endpoint() {
 #[test]
 fn net_call_to_an_unscripted_endpoint_is_refused() {
     let source = r#"
-        use /std/{Io, Task};
+        use /std/{Io, Async};
         use /std/tcp/{Settings, Socket};
-        match Task/block_on(Socket/call(Settings/default, "example.com", 80, /std/Str/to_bytes("ping")))
+        match Async/block_on(Socket/call(Settings/default, "example.com", 80, /std/Str/to_bytes("ping")))
         | success(_) => Io/print("connected")
         | failure(e) =>
             match e : {}
@@ -50,7 +50,7 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
 #[test]
 fn net_with_custom_timeout_config_reads_response() {
     let source = r#"
-        use /std/{Io, Str, Bytes, Option, Task};
+        use /std/{Io, Str, Bytes, Option, Async};
         use /std/tcp/{Settings, Socket};
         use /std/time/{Duration};
         let settings = Settings {
@@ -59,12 +59,12 @@ fn net_with_custom_timeout_config_reads_response() {
             write_timeout = Option/none(),
             tls = false
         };
-        match Task/block_on(Socket/with(settings, "db.internal", 5432, (s) =>
-            Task/bind(Socket/read(s, 64), (r) =>
-                match r : Task(Bytes)
-                | chunk(b) => Task/pure(b)
-                | eof() => Task/pure(x\)
-                | error(_) => Task/pure(x\)
+        match Async/block_on(Socket/with(settings, "db.internal", 5432, (s) =>
+            Async/bind(Socket/read(s, 64), (r) =>
+                match r : Async(Bytes)
+                | chunk(b) => Async/pure(b)
+                | eof() => Async/pure(x\)
+                | error(_) => Async/pure(x\)
                 end)))
         | success(bytes) => Io/write(Io/stdout, bytes)
         | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
@@ -86,15 +86,15 @@ fn net_with_custom_timeout_config_reads_response() {
 #[test]
 fn net_serve_handles_a_scripted_inbound_connection() {
     let source = r#"
-        use /std/{Io, Str, Bytes, Task};
+        use /std/{Io, Str, Bytes, Async};
         use /std/tcp/{Listener, Socket};
-        match Task/block_on(Listener/serve("0.0.0.0", 8080, (c) =>
-            Task/bind(Socket/read(c, 64), (r) =>
-                match r : Task({})
+        match Async/block_on(Listener/serve("0.0.0.0", 8080, (c) =>
+            Async/bind(Socket/read(c, 64), (r) =>
+                match r : Async({})
                 | chunk(bytes) =>
-                    Task/bind(Socket/write(c, Bytes/concat(Str/to_bytes("echo: "), bytes)), (wrote) => Task/pure(()))
-                | eof() => Task/pure(())
-                | error(_) => Task/pure(())
+                    Async/bind(Socket/write(c, Bytes/concat(Str/to_bytes("echo: "), bytes)), (wrote) => Async/pure(()))
+                | eof() => Async/pure(())
+                | error(_) => Async/pure(())
                 end))) : {}
         | success(u) => ()
         | failure(_) => Io/print("listen failed")
@@ -114,7 +114,7 @@ fn net_serve_handles_a_scripted_inbound_connection() {
 #[test]
 fn net_with_tls_upgrades_and_reads() {
     let source = r#"
-        use /std/{Io, Str, Bytes, Option, Task};
+        use /std/{Io, Str, Bytes, Option, Async};
         use /std/tcp/{Settings, Socket};
         let settings = Settings {
             connect_timeout = Option/none(),
@@ -122,12 +122,12 @@ fn net_with_tls_upgrades_and_reads() {
             write_timeout = Option/none(),
             tls = true
         };
-        match Task/block_on(Socket/with(settings, "secure.example", 443, (s) =>
-            Task/bind(Socket/read(s, 64), (r) =>
-                match r : Task(Bytes)
-                | chunk(b) => Task/pure(b)
-                | eof() => Task/pure(x\)
-                | error(_) => Task/pure(x\)
+        match Async/block_on(Socket/with(settings, "secure.example", 443, (s) =>
+            Async/bind(Socket/read(s, 64), (r) =>
+                match r : Async(Bytes)
+                | chunk(b) => Async/pure(b)
+                | eof() => Async/pure(x\)
+                | error(_) => Async/pure(x\)
                 end)))
         | success(bytes) => Io/write(Io/stdout, bytes)
         | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
@@ -148,15 +148,15 @@ fn net_with_tls_upgrades_and_reads() {
 #[test]
 fn net_serve_tls_handles_a_scripted_inbound_connection() {
     let source = r#"
-        use /std/{Io, Str, Bytes, Task};
+        use /std/{Io, Str, Bytes, Async};
         use /std/tcp/{Listener, Socket};
-        match Task/block_on(Listener/serve_tls("0.0.0.0", 8443, Str/to_bytes("CERT"), Str/to_bytes("KEY"), (c) =>
-            Task/bind(Socket/read(c, 64), (r) =>
-                match r : Task({})
+        match Async/block_on(Listener/serve_tls("0.0.0.0", 8443, Str/to_bytes("CERT"), Str/to_bytes("KEY"), (c) =>
+            Async/bind(Socket/read(c, 64), (r) =>
+                match r : Async({})
                 | chunk(bytes) =>
-                    Task/bind(Socket/write(c, Bytes/concat(Str/to_bytes("tls: "), bytes)), (wrote) => Task/pure(()))
-                | eof() => Task/pure(())
-                | error(_) => Task/pure(())
+                    Async/bind(Socket/write(c, Bytes/concat(Str/to_bytes("tls: "), bytes)), (wrote) => Async/pure(()))
+                | eof() => Async/pure(())
+                | error(_) => Async/pure(())
                 end))) : {}
         | success(u) => ()
         | failure(_) => Io/print("serve failed")
@@ -174,8 +174,8 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
 #[test]
 fn http_perform_parses_a_scripted_response() {
     let source = r#"
-        use /std/{Io, Str, Nat, Task, http};
-        match Task/block_on(http/perform(http/get("example.com", 80, "/"))) : {}
+        use /std/{Io, Str, Nat, Async, http};
+        match Async/block_on(http/perform(http/get("example.com", 80, "/"))) : {}
         | success(response) =>
             let ct = match http/header(response, "Content-Type") : Str
                 | some(value) => value

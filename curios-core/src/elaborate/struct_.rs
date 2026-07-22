@@ -72,8 +72,8 @@ pub(super) enum FieldSource<'a> {
 /// *elaborated* field, not the raw surface term: the elaborated form carries
 /// label projections rebuilt positionally (and implicits inserted), whereas a
 /// raw `Field::Label` substituted into a later field type would panic once that
-/// type is reduced (e.g. `Task(b.A)` arising from a field typed `Task(A)` in
-/// `{ A : Type, t : Task(A) }`). A `Resolve` source mints a witness metavar
+/// type is reduced (e.g. `Async(b.A)` arising from a field typed `Async(A)` in
+/// `{ A : Type, t : Async(A) }`). A `Resolve` source mints a witness metavar
 /// plus an eagerly-attempted resolution goal — the `insert_auto_argument`
 /// pattern — anchored at `origin`, and the metavar threads the telescope like
 /// any elaborated field.

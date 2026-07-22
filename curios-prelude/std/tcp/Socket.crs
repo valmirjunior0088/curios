@@ -1,4 +1,4 @@
-use /std/{Bytes, Str, Nat, Bool, Io, Result, Option, Task};
+use /std/{Bytes, Str, Nat, Bool, Io, Result, Option, Async};
 use /std/tcp/{Settings, resolve};
 use /std/time/{Duration};
 
@@ -7,11 +7,11 @@ pub struct Socket : Type { Io }
 pub let of(h : Io) -> Socket =
     Socket { h };
 
-pub let read(c : Socket, n : Nat) -> Task(Io/Read) =
-    Task/read(c.0, n);
+pub let read(c : Socket, n : Nat) -> Async(Io/Read) =
+    Async/read(c.0, n);
 
-pub let write(c : Socket, b : Bytes) -> Task(Result({}, Io/Error)) =
-    Task/write(c.0, b);
+pub let write(c : Socket, b : Bytes) -> Async(Result({}, Io/Error)) =
+    Async/write(c.0, b);
 
 let configure(h : Io, settings : Settings) -> {} =
     let _ = /sys/Io/set_recv_timeout(h, Option/unwrap_or(Option/map(settings.read_timeout, Duration/to_millis), 0));
@@ -44,7 +44,7 @@ let connect_addr(settings : Settings, host : Str, addr : Bytes) -> Result(Socket
             | true =>
                 let _ =
                     match settings.tls : {}
-                    | false => Task/nonblocking(s.handle)
+                    | false => Async/nonblocking(s.handle)
                     | true => ()
                     end;
                 Result/success(Socket { s.handle })
@@ -52,37 +52,37 @@ let connect_addr(settings : Settings, host : Str, addr : Bytes) -> Result(Socket
         end
     end;
 
-let connect_socket(settings : Settings, host : Str, port : Nat) -> Task(Result(Socket, Io/Error)) =
-    Task/bind(resolve(host, port), (resolved) =>
-        match resolved : Task(Result(Socket, Io/Error))
-        | failure(e) => Task/pure(Result/failure(e))
-        | success(addr) => Task/pure(connect_addr(settings, host, addr))
+let connect_socket(settings : Settings, host : Str, port : Nat) -> Async(Result(Socket, Io/Error)) =
+    Async/bind(resolve(host, port), (resolved) =>
+        match resolved : Async(Result(Socket, Io/Error))
+        | failure(e) => Async/pure(Result/failure(e))
+        | success(addr) => Async/pure(connect_addr(settings, host, addr))
         end);
 
-pub let connect(settings : Settings, host : Str, port : Nat) -> Task(Result(Socket, Io/Error)) =
-    Task/defer(() =>
-        Task/bind(connect_socket(settings, host, port), (opened) =>
-            match opened : Task(Result(Socket, Io/Error))
-            | failure(e) => Task/pure(Result/failure(e))
+pub let connect(settings : Settings, host : Str, port : Nat) -> Async(Result(Socket, Io/Error)) =
+    Async/defer(() =>
+        Async/bind(connect_socket(settings, host, port), (opened) =>
+            match opened : Async(Result(Socket, Io/Error))
+            | failure(e) => Async/pure(Result/failure(e))
             | success(c) =>
-                Task/bind(Task/acquire(c.0, () => /sys/Io/close(c.0)), (_) => Task/pure(Result/success(c)))
+                Async/bind(Async/acquire(c.0, () => /sys/Io/close(c.0)), (_) => Async/pure(Result/success(c)))
             end));
 
-pub let close(c : Socket) -> Task({}) =
-    Task/release(c.0);
+pub let close(c : Socket) -> Async({}) =
+    Async/release(c.0);
 
-pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket) -> Task(A)) -> Task(Result(A, Io/Error)) =
-    Task/bind(connect(settings, host, port), (opened) =>
-        match opened : Task(Result(A, Io/Error))
-        | failure(e) => Task/pure(Result/failure(e))
+pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket) -> Async(A)) -> Async(Result(A, Io/Error)) =
+    Async/bind(connect(settings, host, port), (opened) =>
+        match opened : Async(Result(A, Io/Error))
+        | failure(e) => Async/pure(Result/failure(e))
         | success(c) =>
-            Task/bind(f(c), (a) =>
-                Task/bind(close(c), (_) => Task/pure(Result/success(a))))
+            Async/bind(f(c), (a) =>
+                Async/bind(close(c), (_) => Async/pure(Result/success(a))))
         end);
 
-let drain(c : Socket) -> Task(Bytes) =
-    Task/drain((n) => read(c, n));
+let drain(c : Socket) -> Async(Bytes) =
+    Async/drain((n) => read(c, n));
 
-pub let call(settings : Settings, host : Str, port : Nat, request : Bytes) -> Task(Result(Bytes, Io/Error)) =
+pub let call(settings : Settings, host : Str, port : Nat, request : Bytes) -> Async(Result(Bytes, Io/Error)) =
     with(settings, host, port, (c) =>
-        Task/bind(write(c, request), (_) => drain(c)));
+        Async/bind(write(c, request), (_) => drain(c)));

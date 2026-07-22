@@ -396,7 +396,7 @@ fn sealed_pub_concept_with_private_superclass_is_accepted() {
 }
 
 // A pub inductive's constructors are its interface: a private payload type is
-// rejected (the `Task`/`Pause` shape).
+// rejected (the `Async`/`Pause` shape).
 #[test]
 fn pub_inductive_with_private_payload_type_is_rejected() {
     let source = r#"
