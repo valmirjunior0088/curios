@@ -367,7 +367,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
 /// Check that `motive` is a well-formed type family over a scrutinee of `head_type`,
 /// returning the rebuilt motive. Shared by every match form whose motive binds
 /// only the scrutinee (arity 1) — an annotated inductive-match motive goes through
-/// `check_inductive_motive` instead. Runs the motive through `elaborate` in
+/// `check_induct_motive` instead. Runs the motive through `elaborate` in
 /// `Check(Type)` mode — erase is downstream lowering now and no longer
 /// type-checks (§6) — and re-closes the elaborated body so the motive carries
 /// its solved/re-closed form (§9).

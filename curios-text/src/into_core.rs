@@ -331,7 +331,7 @@ fn scan_module_info(items: &[TopItem], root: RootId) -> Result<ModuleInfo, Error
             }
             TopItem::Induct(group) => {
                 for u in group {
-                    info.insert_inductive_child(u.label.clone(), u.vis_pub, u.rep_pub)?;
+                    info.insert_induct_child(u.label.clone(), u.vis_pub, u.rep_pub)?;
                     info.insert_binding(u.label.clone(), u.vis_pub)?;
                 }
             }
@@ -435,8 +435,8 @@ fn process_items(
     top_items: &[TopItem],
     context: &mut Context,
     flat_items: &mut Vec<FlatItem>,
-    inductives: &mut BTreeMap<String, curios_core::Inductive>,
-    structures: &mut BTreeMap<String, curios_core::Structure>,
+    induct_decls: &mut BTreeMap<String, curios_core::InductDecl>,
+    struct_decls: &mut BTreeMap<String, curios_core::StructDecl>,
     concepts: &mut BTreeMap<String, curios_core::Concept>,
     witnesses: &mut BTreeSet<String>,
     foreigns: &mut ForeignStore,
@@ -493,8 +493,8 @@ fn process_items(
                         &module.items,
                         &mut context.nested(&mod_item.label),
                         flat_items,
-                        inductives,
-                        structures,
+                        induct_decls,
+                        struct_decls,
                         concepts,
                         witnesses,
                         foreigns,
@@ -511,8 +511,8 @@ fn process_items(
                         &module.items,
                         &mut context.nested(&mod_item.label),
                         flat_items,
-                        inductives,
-                        structures,
+                        induct_decls,
+                        struct_decls,
                         concepts,
                         witnesses,
                         foreigns,
@@ -608,10 +608,10 @@ fn process_items(
             }
             TopItem::Induct(group) => {
                 // Step 1: type bindings as one rec group. An inductive's type
-                // binding wraps a primitive `InductiveType` normal form in a
+                // binding wraps a primitive `InductType` normal form in a
                 // `Func` over its type parameters and indices (so
-                // `Result(Nat, Bin)` beta-reduces to `InductiveType { Result,
-                // [Nat, Bin] }` and `Vec(Bin, 3)` to `InductiveType { Vec, [Bin],
+                // `Result(Nat, Bin)` beta-reduces to `InductType { Result,
+                // [Nat, Bin] }` and `Vec(Bin, 3)` to `InductType { Vec, [Bin],
                 // [3] }`), and its shape is recorded in the inductive
                 // registry.
                 let type_flat_items = group
@@ -625,7 +625,7 @@ fn process_items(
                             .iter()
                             .map(|(p, n, t)| Ok((*p, n.clone(), lower.term(t)?)))
                             .collect::<Result<Vec<_>, Error>>()?;
-                        // The registry and the `InductiveType` normal form are
+                        // The registry and the `InductType` normal form are
                         // positional; plicity matters only on the generated
                         // type-constructor function.
                         let param_tys_unmarked = param_tys
@@ -659,7 +659,7 @@ fn process_items(
 
                         // Registry entry: the parameter telescope plus each
                         // constructor's full signature `(params..., payload...)
-                        // -> InductiveType { name, params, indices }`, where the
+                        // -> InductType { name, params, indices }`, where the
                         // terminal's indices are that *case's* target
                         // expressions over its payload binders.
                         // `Telescope::build` captures the parameter and
@@ -689,7 +689,7 @@ fn process_items(
 
                                 let telescope = curios_core::Telescope::build(
                                     param_tys_unmarked.iter().cloned().chain(fields),
-                                    curios_core::Term::inductive_type(
+                                    curios_core::Term::induct_type(
                                         &name,
                                         param_vars.clone(),
                                         target,
@@ -698,7 +698,7 @@ fn process_items(
 
                                 Ok((
                                     curios_core::Atom::from(c.label.as_str()),
-                                    curios_core::InductiveParam { telescope },
+                                    curios_core::InductParam { telescope },
                                 ))
                             })
                             .collect::<Result<BTreeMap<_, _>, Error>>()?;
@@ -708,9 +708,9 @@ fn process_items(
                         // entry's sort and the type-constructor's codomain.
                         let result_sort = lower.term(&u.result_sort)?;
 
-                        inductives.insert(
+                        induct_decls.insert(
                             name.clone(),
-                            curios_core::Inductive {
+                            curios_core::InductDecl {
                                 params: curios_core::Telescope::build(
                                     param_tys_unmarked.clone(),
                                     (),
@@ -730,8 +730,8 @@ fn process_items(
                             },
                         );
 
-                        let inductive =
-                            curios_core::Term::inductive_type(&name, param_vars, index_vars);
+                        let induct_decl =
+                            curios_core::Term::induct_type(&name, param_vars, index_vars);
 
                         // The type constructor is flat over params then
                         // indices: `Vec : (T : Type, n : Nat) -> Type`. Use
@@ -749,7 +749,7 @@ fn process_items(
                             )
                             .collect();
                         let (type_, body) = if binder_tys.is_empty() {
-                            (result_sort, inductive)
+                            (result_sort, induct_decl)
                         } else {
                             (
                                 curios_core::Term::func_type_marked(
@@ -758,7 +758,7 @@ fn process_items(
                                 ),
                                 curios_core::Term::func(
                                     binder_tys.into_iter().map(|(_, n, t)| (n, t)),
-                                    inductive,
+                                    induct_decl,
                                 ),
                             )
                         };
@@ -928,9 +928,9 @@ fn process_items(
                 // registry entry's sort and the type-former's codomain.
                 let result_sort = lower.term(&s.result_sort)?;
 
-                structures.insert(
+                struct_decls.insert(
                     name.clone(),
-                    curios_core::Structure {
+                    curios_core::StructDecl {
                         params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: curios_core::Telescope::build(
                             param_tys_unmarked.iter().cloned().chain(field_tys),
@@ -968,7 +968,7 @@ fn process_items(
                     body,
                 }));
             }
-            // A concept lowers to a representation-public nominal `Structure`
+            // A concept lowers to a representation-public nominal `StructDecl`
             // and its type-former `let` —
             // plus a concept-registry entry (field labels, superclass edges, the
             // parameter telescope) and one method-wrapper `let` per field, synthed
@@ -1036,9 +1036,9 @@ fn process_items(
                 };
 
                 // The record shape drives struct literals and projections.
-                structures.insert(
+                struct_decls.insert(
                     name.clone(),
-                    curios_core::Structure {
+                    curios_core::StructDecl {
                         params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                         fields: curios_core::Telescope::build(
                             param_tys_unmarked.iter().cloned().chain(field_tys),
@@ -1226,16 +1226,16 @@ fn process_items(
 fn node_reference_names(
     item: &FlatItem,
     declared: &[String],
-    inductives: &BTreeMap<String, curios_core::Inductive>,
-    structures: &BTreeMap<String, curios_core::Structure>,
+    induct_decls: &BTreeMap<String, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<String, curios_core::StructDecl>,
 ) -> HashSet<String> {
     let mut names = item.free_vars();
     for name in declared {
-        if let Some(inductive) = inductives.get(name) {
-            names.extend(inductive_free_vars(inductive));
+        if let Some(induct_decl) = induct_decls.get(name) {
+            names.extend(induct_free_vars(induct_decl));
         }
-        if let Some(structure) = structures.get(name) {
-            names.extend(structure_free_vars(structure));
+        if let Some(struct_decl) = struct_decls.get(name) {
+            names.extend(struct_free_vars(struct_decl));
         }
     }
     names
@@ -1299,8 +1299,8 @@ fn topological_order(nodes: &[usize], deps: &HashMap<usize, HashSet<usize>>) -> 
 fn prelude_permutation(
     items: &[FlatItem],
     prelude_nodes: &[usize],
-    inductives: &BTreeMap<String, curios_core::Inductive>,
-    structures: &BTreeMap<String, curios_core::Structure>,
+    induct_decls: &BTreeMap<String, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<String, curios_core::StructDecl>,
     rest_owner: &HashMap<String, usize>,
 ) -> Vec<usize> {
     let owner = owner_of(items, prelude_nodes);
@@ -1308,7 +1308,7 @@ fn prelude_permutation(
         .iter()
         .map(|&n| {
             let declared = items[n].names();
-            let names = node_reference_names(&items[n], &declared, inductives, structures);
+            let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls);
             if let Some(name) = names.iter().find(|name| {
                 !owner.contains_key(name.as_str()) && rest_owner.contains_key(name.as_str())
             }) {
@@ -1337,8 +1337,8 @@ fn prelude_permutation(
 
 fn order_flat_items(
     items: Vec<FlatItem>,
-    inductives: &BTreeMap<String, curios_core::Inductive>,
-    structures: &BTreeMap<String, curios_core::Structure>,
+    induct_decls: &BTreeMap<String, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<String, curios_core::StructDecl>,
 ) -> Vec<FlatItem> {
     let count = items.len();
 
@@ -1358,8 +1358,13 @@ fn order_flat_items(
     let mut order = Vec::with_capacity(count);
 
     if !prelude_nodes.is_empty() {
-        let permutation =
-            prelude_permutation(&items, &prelude_nodes, inductives, structures, &rest_owner);
+        let permutation = prelude_permutation(
+            &items,
+            &prelude_nodes,
+            induct_decls,
+            struct_decls,
+            &rest_owner,
+        );
         order.extend(permutation.into_iter().map(|rel| prelude_nodes[rel]));
     }
 
@@ -1371,7 +1376,7 @@ fn order_flat_items(
         .iter()
         .map(|&n| {
             let declared = items[n].names();
-            let names = node_reference_names(&items[n], &declared, inductives, structures);
+            let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls);
             (n, dep_nodes(n, &names, &rest_owner))
         })
         .collect::<HashMap<usize, HashSet<usize>>>();
@@ -1391,14 +1396,14 @@ fn order_flat_items(
 /// its telescopes. Binder names (parameters, payload binders) are captured by
 /// `Telescope::build` and never appear here; the index types' references also
 /// live in the type binding's own signature, but are included for robustness.
-fn inductive_free_vars(inductive: &curios_core::Inductive) -> HashSet<String> {
-    inductive
+fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<String> {
+    induct_decl
         .params
         .free_vars()
         .into_iter()
-        .chain(inductive.indices.free_vars())
+        .chain(induct_decl.indices.free_vars())
         .chain(
-            inductive
+            induct_decl
                 .constructors
                 .values()
                 .flat_map(|param| param.telescope.free_vars()),
@@ -1407,16 +1412,16 @@ fn inductive_free_vars(inductive: &curios_core::Inductive) -> HashSet<String> {
 }
 
 /// The external references of a struct registry entry: every free var of its
-/// parameter and field telescopes. Like `inductive_free_vars`, this is what
+/// parameter and field telescopes. Like `induct_free_vars`, this is what
 /// makes a struct's type-former node depend on the (e.g. primitive) types its
 /// fields mention — they live nowhere in the type-former's own body, which is
 /// just the `StructType` normal form.
-fn structure_free_vars(structure: &curios_core::Structure) -> HashSet<String> {
-    structure
+fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<String> {
+    struct_decl
         .params
         .free_vars()
         .into_iter()
-        .chain(structure.fields.free_vars())
+        .chain(struct_decl.fields.free_vars())
         .collect()
 }
 
@@ -1457,8 +1462,8 @@ fn flat_aliases(items: &[FlatItem]) -> HashMap<String, AliasEdge> {
 fn exposed_nominal(
     entry: &Entry,
     aliases: &HashMap<String, AliasEdge>,
-    inductives: &BTreeMap<String, curios_core::Inductive>,
-    structures: &BTreeMap<String, curios_core::Structure>,
+    induct_decls: &BTreeMap<String, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<String, curios_core::StructDecl>,
 ) -> Option<(String, Vec<AliasEdge>)> {
     let mut current = entry
         .representation
@@ -1469,7 +1474,7 @@ fn exposed_nominal(
     let mut traversed = Vec::new();
 
     loop {
-        if inductives.contains_key(&current) || structures.contains_key(&current) {
+        if induct_decls.contains_key(&current) || struct_decls.contains_key(&current) {
             return Some((current, traversed));
         }
         if !seen.insert(current.clone()) {
@@ -1560,15 +1565,15 @@ fn audit_dependencies(
 fn audit_public_exposures(
     public: &HashMap<Qualifier, PublicInterface>,
     items: &[FlatItem],
-    inductives: &BTreeMap<String, curios_core::Inductive>,
-    structures: &BTreeMap<String, curios_core::Structure>,
+    induct_decls: &BTreeMap<String, curios_core::InductDecl>,
+    struct_decls: &BTreeMap<String, curios_core::StructDecl>,
 ) -> Result<(), Error> {
     let aliases = flat_aliases(items);
 
     for (module, interface) in public {
         for (label, entry) in &interface.bindings {
             let Some((nominal, traversed)) =
-                exposed_nominal(entry, &aliases, inductives, structures)
+                exposed_nominal(entry, &aliases, induct_decls, struct_decls)
             else {
                 continue;
             };
@@ -1587,52 +1592,52 @@ fn audit_public_exposures(
                 }
             }
 
-            if let Some(inductive) = inductives.get(&nominal) {
-                let nominal_dependencies = inductive
+            if let Some(induct_decl) = induct_decls.get(&nominal) {
+                let nominal_dependencies = induct_decl
                     .params
                     .free_vars()
                     .into_iter()
-                    .chain(inductive.indices.free_vars());
+                    .chain(induct_decl.indices.free_vars());
                 audit_dependencies(
                     public,
                     module,
                     &item,
-                    &inductive.module,
+                    &induct_decl.module,
                     &aliases,
                     nominal_dependencies,
                 )?;
 
-                if inductive.rep_public {
+                if induct_decl.rep_public {
                     audit_dependencies(
                         public,
                         module,
                         &item,
-                        &inductive.module,
+                        &induct_decl.module,
                         &aliases,
-                        inductive
+                        induct_decl
                             .constructors
                             .values()
                             .flat_map(|case| case.telescope.free_vars()),
                     )?;
                 }
-            } else if let Some(structure) = structures.get(&nominal) {
+            } else if let Some(struct_decl) = struct_decls.get(&nominal) {
                 audit_dependencies(
                     public,
                     module,
                     &item,
-                    &structure.module,
+                    &struct_decl.module,
                     &aliases,
-                    structure.params.free_vars(),
+                    struct_decl.params.free_vars(),
                 )?;
 
-                if structure.rep_public {
+                if struct_decl.rep_public {
                     audit_dependencies(
                         public,
                         module,
                         &item,
-                        &structure.module,
+                        &struct_decl.module,
                         &aliases,
-                        structure.fields.free_vars(),
+                        struct_decl.fields.free_vars(),
                     )?;
                 }
             }
@@ -1660,8 +1665,8 @@ pub fn into_core(
     let mut context = Context::new(&table, &public, RootId::Entry, &metavars, &binders, syntax);
 
     let mut flat_items = Vec::new();
-    let mut inductives = BTreeMap::new();
-    let mut structures = BTreeMap::new();
+    let mut induct_decls = BTreeMap::new();
+    let mut struct_decls = BTreeMap::new();
     // Concept resolution metadata and witness registration markers, populated as
     // `concept`/`witness` items lower.
     let mut concepts = BTreeMap::new();
@@ -1676,8 +1681,8 @@ pub fn into_core(
         &entrypoint.module.items,
         &mut context,
         &mut flat_items,
-        &mut inductives,
-        &mut structures,
+        &mut induct_decls,
+        &mut struct_decls,
         &mut concepts,
         &mut witnesses,
         &mut foreigns,
@@ -1692,7 +1697,7 @@ pub fn into_core(
         .transpose()?;
     let tail = lower.value(&entrypoint.tail)?;
 
-    audit_public_exposures(&public, &flat_items, &inductives, &structures)?;
+    audit_public_exposures(&public, &flat_items, &induct_decls, &struct_decls)?;
 
     // Emit the program as a flat list of named top-level definitions rather than
     // folding it into one N-deep nested `let`/`rec` term (BUG.md). Cross-references
@@ -1700,7 +1705,7 @@ pub fn into_core(
     // free `Var`s keyed by the definition's joined name; the core passes `define`
     // each one into the `Context`, so both the body and its annotation reduce
     // through those definitions and agree — no shared binder scope required.
-    let items = order_flat_items(flat_items, &inductives, &structures)
+    let items = order_flat_items(flat_items, &induct_decls, &struct_decls)
         .into_iter()
         .map(FlatItem::into_core)
         .collect();
@@ -1708,8 +1713,8 @@ pub fn into_core(
     Ok((
         curios_core::Module {
             items,
-            inductives,
-            structures,
+            induct_decls,
+            struct_decls,
             concepts,
             witnesses,
             type_,
@@ -1736,8 +1741,8 @@ pub fn prepare_prelude(
     }
 
     let mut flat_items = Vec::new();
-    let mut inductives = BTreeMap::new();
-    let mut structures = BTreeMap::new();
+    let mut induct_decls = BTreeMap::new();
+    let mut struct_decls = BTreeMap::new();
     let mut concepts = BTreeMap::new();
     let mut witnesses = BTreeSet::new();
     let mut foreigns = ForeignStore::new();
@@ -1751,8 +1756,8 @@ pub fn prepare_prelude(
             &content.items,
             &mut context.nested_root(name, *root),
             &mut flat_items,
-            &mut inductives,
-            &mut structures,
+            &mut induct_decls,
+            &mut struct_decls,
             &mut concepts,
             &mut witnesses,
             &mut foreigns,
@@ -1760,15 +1765,15 @@ pub fn prepare_prelude(
         )?;
     }
 
-    audit_public_exposures(&public, &flat_items, &inductives, &structures)?;
-    let items = order_flat_items(flat_items, &inductives, &structures)
+    audit_public_exposures(&public, &flat_items, &induct_decls, &struct_decls)?;
+    let items = order_flat_items(flat_items, &induct_decls, &struct_decls)
         .into_iter()
         .map(FlatItem::into_core)
         .collect();
     let core = curios_core::Module {
         items,
-        inductives,
-        structures,
+        induct_decls,
+        struct_decls,
         concepts,
         witnesses,
         type_: None,
@@ -1818,8 +1823,8 @@ pub fn into_core_with_prelude(
     }
 
     let mut flat_items = Vec::new();
-    let mut inductives = prepared.core.inductives.clone();
-    let mut structures = prepared.core.structures.clone();
+    let mut induct_decls = prepared.core.induct_decls.clone();
+    let mut struct_decls = prepared.core.struct_decls.clone();
     let mut concepts = prepared.core.concepts.clone();
     let mut witnesses = prepared.core.witnesses.clone();
     let mut foreigns = ForeignStore::new();
@@ -1827,8 +1832,8 @@ pub fn into_core_with_prelude(
         &entrypoint.module.items,
         &mut context,
         &mut flat_items,
-        &mut inductives,
-        &mut structures,
+        &mut induct_decls,
+        &mut struct_decls,
         &mut concepts,
         &mut witnesses,
         &mut foreigns,
@@ -1842,11 +1847,11 @@ pub fn into_core_with_prelude(
         .map(|type_| lower.term(type_))
         .transpose()?;
     let body = lower.value(&entrypoint.tail)?;
-    audit_public_exposures(&public, &flat_items, &inductives, &structures)?;
+    audit_public_exposures(&public, &flat_items, &induct_decls, &struct_decls)?;
 
     let mut items = prepared.core.items.clone();
     items.extend(
-        order_flat_items(flat_items, &inductives, &structures)
+        order_flat_items(flat_items, &induct_decls, &struct_decls)
             .into_iter()
             .map(FlatItem::into_core),
     );
@@ -1854,8 +1859,8 @@ pub fn into_core_with_prelude(
     Ok((
         curios_core::Module {
             items,
-            inductives,
-            structures,
+            induct_decls,
+            struct_decls,
             concepts,
             witnesses,
             type_,

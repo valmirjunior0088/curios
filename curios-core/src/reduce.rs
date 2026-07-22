@@ -6,7 +6,7 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Context, Field, FreeMonoid, Func, FuncType, InductiveType,
+        Apply, Bound, Carrier, Cases, Context, Field, FreeMonoid, Func, FuncType, InductType,
         Layer, Let, Many, Match, Metavar, Nat, One, Prim, Proj, Rec, ReduceError, Scope, Struct,
         StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
     },
@@ -20,7 +20,7 @@ enum Reduce {
 }
 
 /// One `match` waiting for its scrutinee's value on [`reduce`]'s explicit
-/// scrutinee stack. `head` is the *original* scrutinee term: `Inductive`
+/// scrutinee stack. `head` is the *original* scrutinee term: `Induct`
 /// dispatch binds arms to projections of it (call-by-name), and the finished
 /// value is cached under it exactly as the previously nested `reduce` call
 /// would have cached it.
@@ -220,7 +220,7 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
         )),
         // The untyped reducer's flat view of a constructor value, mirroring the
         // runtime layout `(tag, payload...)`: field i + 1 is the i-th payload
-        // component. `reduce_inductive_match` relies on this to bind arms by
+        // component. `reduce_induct_match` relies on this to bind arms by
         // projection (call-by-name). Field 0 (the tag) is never projected at
         // the term level — dispatch inspects the `Variant` directly.
         Subterm::Variant(ctor) if (1..=ctor.payload.len()).contains(&index) => {
@@ -271,7 +271,7 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
 }
 
 /// Dispatch a `match` over its scrutinee's already-reduced-and-forced value.
-/// `head` is the *original* scrutinee term, which the `Inductive` arm projects
+/// `head` is the *original* scrutinee term, which the `Induct` arm projects
 /// (call-by-name — see its comment); `forced` is what `reduce_forced` produced
 /// for it. Scrutinee reduction itself happens on [`reduce`]'s explicit
 /// scrutinee stack rather than by recursing here: a tower of matches over a
@@ -330,7 +330,7 @@ fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> 
         // inline evaluated definition internals (including local-`let`
         // annotation holes that elaboration never births) into types that
         // flow on to `zonk`.
-        Cases::Inductive {
+        Cases::Induct {
             cases,
             pattern,
             default,
@@ -356,7 +356,7 @@ fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> 
             Reduce::Break(Term::from(Subterm::Match(Match {
                 head: forced,
                 motive,
-                cases: Cases::Inductive {
+                cases: Cases::Induct {
                     cases,
                     pattern,
                     default,
@@ -533,7 +533,7 @@ pub(crate) fn reduce(context: &mut Context, mut term: Term) -> Result<Term, Redu
                 Subterm::Let(let_) => reduce_let(context, let_),
                 Subterm::Var(var) => reduce_var(context, var),
                 Subterm::Metavar(metavar) => reduce_metavar(context, metavar),
-                // `InductiveType`/`Variant` and `StructType`/`Struct` are primitive
+                // `InductType`/`Variant` and `StructType`/`Struct` are primitive
                 // normal forms, like `Tuple`: their sub-terms are not reduced
                 // in WHNF.
                 term => Reduce::Break(term.into()),
@@ -599,11 +599,11 @@ pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, Reduc
             head: normalize(context, head)?,
             field,
         }),
-        Subterm::InductiveType(InductiveType {
+        Subterm::InductType(InductType {
             name,
             params,
             indices,
-        }) => Subterm::InductiveType(InductiveType {
+        }) => Subterm::InductType(InductType {
             name,
             params: normalize_each(context, params)?,
             indices: normalize_each(context, indices)?,

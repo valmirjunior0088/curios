@@ -21,7 +21,7 @@ pub enum Error {
     /// A `pub use` in an inductive's declaring module attempted to expose the
     /// constructors of a representation-private inductive.
     OpaqueConstructorsCannotBeReExported {
-        inductive: String,
+        induct_decl: String,
     },
     /// A root module reachable only from the standard library (e.g. `sys`) was
     /// referenced from user code. Such modules are the trusted primitive
@@ -81,7 +81,7 @@ pub enum Error {
     BangInTypePosition,
     /// The annotated motive form `(x : T(...)) => P` is only meaningful on a
     /// inductive scrutinee — `Bool` and `Nat` matches take `: P` or `: (x) => P`.
-    AnnotatedMotiveNotInductive,
+    AnnotatedMotiveNotInduct,
     /// A dependent motive (`(x) => P` or the annotated type-pattern form) was
     /// written on a match whose head does not dispatch on a single tag or
     /// literal shape directly — every arm matches a tuple/struct, is a
@@ -106,7 +106,7 @@ pub enum Error {
     /// A nested `Bool`/`Nat`/`Lst`/`Bin` leaf-pattern column split without
     /// both of its required cases present. Unlike an ordinary constructor
     /// tag (whose omission the matrix compiler defers entirely to
-    /// `inductive_match`'s vacuity inversion), these four hardcoded
+    /// `induct_match`'s vacuity inversion), these four hardcoded
     /// carriers have no core-side exhaustiveness mechanism — the matrix
     /// compiler must enforce completeness itself.
     MatrixIncompleteCarrierMatch {
@@ -173,9 +173,9 @@ impl fmt::Display for Error {
                 write!(f, "child module not found: {segment}")
             }
             Error::PrivateChildModule { segment } => write!(f, "private child module: {segment}"),
-            Error::OpaqueConstructorsCannotBeReExported { inductive } => write!(
+            Error::OpaqueConstructorsCannotBeReExported { induct_decl } => write!(
                 f,
-                "constructors of opaque inductive '{inductive}' cannot be re-exported\n  mark its representation public (`: pub Type` or `: pub Prop`)"
+                "constructors of opaque inductive '{induct_decl}' cannot be re-exported\n  mark its representation public (`: pub Type` or `: pub Prop`)"
             ),
             Error::InternalRootModule { segment } => write!(
                 f,
@@ -223,7 +223,7 @@ impl fmt::Display for Error {
             Error::BangInTypePosition => {
                 write!(f, "postfix `!` is not allowed inside a type")
             }
-            Error::AnnotatedMotiveNotInductive => {
+            Error::AnnotatedMotiveNotInduct => {
                 write!(
                     f,
                     "an annotated motive `(x : T(...)) => P` is only legal on an inductive match"

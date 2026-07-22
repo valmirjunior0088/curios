@@ -2,7 +2,7 @@ use super::*;
 
 /// Type a struct type against its registry entry: the parameters are checked
 /// pointwise (dependently) through the parameter telescope, and the whole node
-/// is a `Type`. The struct analogue of `elaborate_inductive_type`, with no indices.
+/// is a `Type`. The struct analogue of `elaborate_induct_type`, with no indices.
 ///
 /// An *empty* parameter list on a parameterized struct is the inferred-head form
 /// (the type struct destructuring gives its temp): mint one fresh metavariable
@@ -16,16 +16,16 @@ pub(super) fn elaborate_struct_type(
 ) -> Result<(Term, Term), Error> {
     let StructType { name, params } = st;
 
-    let Some(structure) = context.structure(name).cloned() else {
+    let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Err(match context.assumption(name) {
             Some(found) => Error::not_a_struct_type(found.clone()),
             None => Error::unbound_variable(Term::free_var(name)),
         });
     };
 
-    if params.is_empty() && !structure.params.is_empty() {
-        let mut resolved = Vec::with_capacity(structure.params.len());
-        let mut tele = structure.params.clone();
+    if params.is_empty() && !struct_decl.params.is_empty() {
+        let mut resolved = Vec::with_capacity(struct_decl.params.len());
+        let mut tele = struct_decl.params.clone();
         while let Telescope::Cons(ty, rest) = tele {
             let binder = binder_name(rest.first_label().unwrap_or("_"));
             let arg = context.fresh_metavar(
@@ -41,21 +41,21 @@ pub(super) fn elaborate_struct_type(
         }
         return Ok((
             Term::struct_type(name, resolved),
-            structure.result_sort.clone(),
+            struct_decl.result_sort.clone(),
         ));
     }
 
-    if params.len() != structure.params.len() {
+    if params.len() != struct_decl.params.len() {
         return Err(Error::struct_arity_mismatch(
             name.clone(),
-            structure.params.len(),
+            struct_decl.params.len(),
             params.len(),
         ));
     }
 
-    let (elaborated, ()) = check_args_against(context, structure.params, params)?;
+    let (elaborated, ()) = check_args_against(context, struct_decl.params, params)?;
 
-    Ok((Term::struct_type(name, elaborated), structure.result_sort))
+    Ok((Term::struct_type(name, elaborated), struct_decl.result_sort))
 }
 
 /// Where one field position's value comes from: a written term to check, or —
@@ -130,7 +130,7 @@ pub(super) fn elaborate_struct(
         entries,
     } = s;
 
-    let Some(structure) = context.structure(name).cloned() else {
+    let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Err(match context.assumption(name) {
             Some(found) => Error::not_a_struct_type(found.clone()),
             None => Error::unbound_variable(Term::free_var(name)),
@@ -141,20 +141,20 @@ pub(super) fn elaborate_struct(
     // only within its declaring module. Checked here (alongside projection
     // privacy in `elaborate_proj`) via `island`, set per item by
     // `elaborate_module`.
-    if !structure.rep_public
+    if !struct_decl.rep_public
         && context
             .island()
-            .is_some_and(|island| *island != structure.module)
+            .is_some_and(|island| *island != struct_decl.module)
     {
         return Err(Error::private_representation(name.clone()));
     }
 
     // A written-but-wrong parameter count is an error; an *empty* list is the
     // bare-name head, which mints one fresh metavariable per parameter.
-    if !params.is_empty() && params.len() != structure.params.len() {
+    if !params.is_empty() && params.len() != struct_decl.params.len() {
         return Err(Error::struct_arity_mismatch(
             name.clone(),
-            structure.params.len(),
+            struct_decl.params.len(),
             params.len(),
         ));
     }
@@ -169,17 +169,17 @@ pub(super) fn elaborate_struct(
     {
         0 => {}
         1 if matches!(entries[0], StructEntry::Spread) => {
-            return elaborate_struct_spread(context, &structure, s, term, mode);
+            return elaborate_struct_spread(context, &struct_decl, s, term, mode);
         }
         1 => return Err(Error::spread_not_first(name.clone())),
         _ => return Err(Error::multiple_spreads(name.clone())),
     }
 
-    let resolved = resolve_struct_params(context, name, &structure, params, term)?;
+    let resolved = resolve_struct_params(context, name, &struct_decl, params, term)?;
     seed_struct_expectation(context, name, &resolved, term, mode)?;
 
     // Instantiate the field telescope at the resolved parameters.
-    let field_telescope = structure.fields_at(&resolved);
+    let field_telescope = struct_decl.fields_at(&resolved);
 
     // A concept's `use`-marked (superclass) fields leave the positional field
     // sequence, exactly like witness slots at call sites: plain written fields
@@ -301,13 +301,13 @@ pub(super) fn elaborate_struct(
 pub(super) fn resolve_struct_params(
     context: &mut Context,
     name: &str,
-    structure: &Structure,
+    struct_decl: &StructDecl,
     params: &[Term],
     term: &Term,
 ) -> Result<Vec<Term>, Error> {
     let mut written = params.iter();
-    let mut resolved = Vec::with_capacity(structure.params.len());
-    let mut tele = structure.params.clone();
+    let mut resolved = Vec::with_capacity(struct_decl.params.len());
+    let mut tele = struct_decl.params.clone();
     while let Telescope::Cons(ty, rest) = tele {
         let arg = match written.next() {
             Some(arg) => check(context, arg, ty.clone())?,
@@ -372,7 +372,7 @@ pub(super) fn seed_struct_expectation(
 /// `let b = base; Name { … }`, which downstream stages see as existing nodes.
 pub(super) fn elaborate_struct_spread(
     context: &mut Context,
-    structure: &Structure,
+    struct_decl: &StructDecl,
     s: &Struct,
     term: &Term,
     mode: &Mode,
@@ -406,10 +406,10 @@ pub(super) fn elaborate_struct_spread(
     let (rebuilt, result_type) = context.with_frame(|context| {
         context.define_assuming(&label, &base_type, &base);
 
-        let resolved = resolve_struct_params(context, name, structure, params, term)?;
+        let resolved = resolve_struct_params(context, name, struct_decl, params, term)?;
         seed_struct_expectation(context, name, &resolved, term, mode)?;
 
-        let field_telescope = structure.fields_at(&resolved);
+        let field_telescope = struct_decl.fields_at(&resolved);
 
         let use_positions: Vec<usize> = match context.concept(name) {
             Some(concept) => concept.supers.iter().map(|(index, _)| *index).collect(),

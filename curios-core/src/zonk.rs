@@ -3,9 +3,9 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, Inductive,
-        InductiveParam, InductiveType, Item, Let, Match, Metavar, MetavarId, MetavarOrigin, Module,
-        MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, RecItem, Struct, StructType, Structure,
+        Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, InductDecl,
+        InductParam, InductType, Item, Let, Match, Metavar, MetavarId, MetavarOrigin, Module,
+        MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, RecItem, Struct, StructDecl, StructType,
         Subterm, Term, Tuple, TupleType, Variant,
     },
     curios_base::Grain,
@@ -50,50 +50,50 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
 
     // The registry's telescopes flow into `erase`, which runs meta-free with
     // its own (solution-less) context — so they are zonked like everything else.
-    let inductives = module
-        .inductives
+    let induct_decls = module
+        .induct_decls
         .iter()
-        .map(|(name, inductive)| {
+        .map(|(name, induct_decl)| {
             Ok((
                 name.clone(),
-                Inductive {
-                    params: inductive.params.zonk(context)?,
-                    indices: inductive.indices.zonk(context)?,
-                    constructors: inductive
+                InductDecl {
+                    params: induct_decl.params.zonk(context)?,
+                    indices: induct_decl.indices.zonk(context)?,
+                    constructors: induct_decl
                         .constructors
                         .iter()
                         .map(|(tag, param)| {
                             Ok((
                                 tag.clone(),
-                                InductiveParam {
+                                InductParam {
                                     telescope: param.telescope.zonk(context)?,
                                 },
                             ))
                         })
                         .collect::<Result<_, Error>>()?,
-                    result_sort: inductive.result_sort.clone(),
-                    module: inductive.module.clone(),
-                    root: inductive.root,
-                    rep_public: inductive.rep_public,
+                    result_sort: induct_decl.result_sort.clone(),
+                    module: induct_decl.module.clone(),
+                    root: induct_decl.root,
+                    rep_public: induct_decl.rep_public,
                 },
             ))
         })
         .collect::<Result<_, Error>>()?;
 
     // Struct field telescopes flow into `erase` the same way — zonk them too.
-    let structures = module
-        .structures
+    let struct_decls = module
+        .struct_decls
         .iter()
-        .map(|(name, structure)| {
+        .map(|(name, struct_decl)| {
             Ok((
                 name.clone(),
-                Structure {
-                    params: structure.params.zonk(context)?,
-                    fields: structure.fields.zonk(context)?,
-                    result_sort: structure.result_sort.clone(),
-                    module: structure.module.clone(),
-                    root: structure.root,
-                    rep_public: structure.rep_public,
+                StructDecl {
+                    params: struct_decl.params.zonk(context)?,
+                    fields: struct_decl.fields.zonk(context)?,
+                    result_sort: struct_decl.result_sort.clone(),
+                    module: struct_decl.module.clone(),
+                    root: struct_decl.root,
+                    rep_public: struct_decl.rep_public,
                 },
             ))
         })
@@ -101,10 +101,10 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
 
     Ok(Module {
         items,
-        inductives,
-        structures,
+        induct_decls,
+        struct_decls,
         // Concept metadata and witness markers carry no terms of their own
-        // (each concept's telescopes live in `structures`, zonked above).
+        // (each concept's telescopes live in `struct_decls`, zonked above).
         concepts: module.concepts.clone(),
         witnesses: module.witnesses.clone(),
         type_,
@@ -299,11 +299,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             field: field.clone(),
         }),
 
-        Subterm::InductiveType(InductiveType {
+        Subterm::InductType(InductType {
             name,
             params,
             indices,
-        }) => Subterm::InductiveType(InductiveType {
+        }) => Subterm::InductType(InductType {
             name: name.clone(),
             params: zonk_terms(context, params)?,
             indices: zonk_terms(context, indices)?,
@@ -389,11 +389,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                         .collect::<Result<_, Error>>()?,
                     default: zonk_term(context, default)?,
                 },
-                Cases::Inductive {
+                Cases::Induct {
                     cases,
                     pattern,
                     default,
-                } => Cases::Inductive {
+                } => Cases::Induct {
                     cases: cases
                         .iter()
                         .map(|(atom, scope)| {

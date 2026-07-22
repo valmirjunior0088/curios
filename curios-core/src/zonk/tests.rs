@@ -43,7 +43,7 @@ fn zonk_resolves_a_metavariable_in_an_inductive_match_default() {
 
     // The catch-all default is a real term position, so a solved metavar sitting
     // in it is resolved like any other.
-    let term = Term::inductive_match_default(
+    let term = Term::induct_match_default(
         Term::free_var("r"),
         Some("m"),
         nat(),
@@ -51,7 +51,7 @@ fn zonk_resolves_a_metavariable_in_an_inductive_match_default() {
         Term::metavar(0),
     );
 
-    let expected = Term::inductive_match_default(
+    let expected = Term::induct_match_default(
         Term::free_var("r"),
         Some("m"),
         nat(),

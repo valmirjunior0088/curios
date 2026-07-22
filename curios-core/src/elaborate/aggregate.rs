@@ -59,7 +59,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
     let telescope = match &*head_type {
         Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
         Subterm::StructType(StructType { name, params }) => {
-            let Some(structure) = context.structure(name).cloned() else {
+            let Some(struct_decl) = context.struct_decl(name).cloned() else {
                 return Err(Error::unbound_variable(Term::free_var(name)));
             };
 
@@ -67,10 +67,10 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
             // (`Context::island`, set per item by `elaborate_module`);
             // the island model grants no descendant access, so the check is
             // exact qualifier equality.
-            if !structure.rep_public
+            if !struct_decl.rep_public
                 && context
                     .island()
-                    .is_some_and(|island| *island != structure.module)
+                    .is_some_and(|island| *island != struct_decl.module)
             {
                 let field = match field {
                     Field::Index(index) => index.to_string(),
@@ -79,7 +79,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
                 return Err(Error::private_field(name.clone(), field));
             }
 
-            structure.fields_at(params)
+            struct_decl.fields_at(params)
         }
         other => return Err(Error::not_a_tuple(other.clone())),
     };
@@ -134,45 +134,45 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
 /// and indices are checked pointwise (dependently) as one flat argument list
 /// through the declaration's full index telescope (whose leading binders are
 /// the parameters), and the whole node is a `Type`.
-pub(super) fn elaborate_inductive_type(
+pub(super) fn elaborate_induct_type(
     context: &mut Context,
-    ut: &InductiveType,
+    ut: &InductType,
 ) -> Result<(Term, Term), Error> {
-    let InductiveType {
+    let InductType {
         name,
         params,
         indices,
     } = ut;
 
-    let Some(inductive) = context.inductive(name).cloned() else {
+    let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Err(Error::unbound_variable(Term::free_var(name)));
     };
 
     let args: Vec<Term> = params.iter().chain(indices.iter()).cloned().collect();
 
-    if args.len() != inductive.indices.len() {
+    if args.len() != induct_decl.indices.len() {
         return Err(Error::wrong_number_of_arguments(
-            inductive.indices.len(),
+            induct_decl.indices.len(),
             args.len(),
         ));
     }
 
-    let (elaborated, ()) = check_args_against(context, inductive.indices, &args)?;
+    let (elaborated, ()) = check_args_against(context, induct_decl.indices, &args)?;
 
     Ok((
-        Term::inductive_type(
+        Term::induct_type(
             name,
             elaborated[..params.len()].iter().cloned(),
             elaborated[params.len()..].iter().cloned(),
         ),
-        inductive.result_sort,
+        induct_decl.result_sort,
     ))
 }
 
 /// Type a primitive constructor value against its registry signature: the
 /// instantiated parameters and the payload are checked through the
 /// constructor's full telescope, whose terminal gives the constructed
-/// `InductiveType`.
+/// `InductType`.
 pub(super) fn elaborate_variant(
     context: &mut Context,
     uc: &Variant,
@@ -185,19 +185,23 @@ pub(super) fn elaborate_variant(
         payload,
     } = uc;
 
-    let Some(inductive) = context.inductive(name).cloned() else {
+    let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Err(Error::unbound_variable(Term::free_var(name)));
     };
 
-    if !inductive.rep_public
+    if !induct_decl.rep_public
         && context
             .island()
-            .is_some_and(|island| *island != inductive.module)
+            .is_some_and(|island| *island != induct_decl.module)
     {
         return Err(Error::private_representation(name.clone()));
     }
 
-    let Some(signature) = inductive.constructors.get(tag).map(|c| c.telescope.clone()) else {
+    let Some(signature) = induct_decl
+        .constructors
+        .get(tag)
+        .map(|c| c.telescope.clone())
+    else {
         return Err(Error::match_case_missing(term.clone(), tag.clone()));
     };
 

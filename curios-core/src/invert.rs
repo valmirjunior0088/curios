@@ -8,7 +8,7 @@
 
 use {
     super::{
-        Context, Error, InductiveType, Peel, Subterm, Telescope, Term, convert_at, peel_prim,
+        Context, Error, InductType, Peel, Subterm, Telescope, Term, convert_at, peel_prim,
         reduce_with,
     },
     std::collections::BTreeSet,
@@ -34,7 +34,7 @@ enum Step {
 pub(crate) fn case_target_indices(telescope: Telescope<Term>, vars: &[Term]) -> Vec<Term> {
     match telescope.open_params(vars) {
         Telescope::Done(terminal) => match &**terminal {
-            Subterm::InductiveType(InductiveType { indices, .. }) => indices.clone(),
+            Subterm::InductType(InductType { indices, .. }) => indices.clone(),
             _ => unreachable!("constructor terminal is its inductive type"),
         },
         Telescope::Cons(..) => unreachable!("telescope arity matches the binder count"),

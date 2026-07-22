@@ -1,7 +1,7 @@
 use {
     super::{
-        Bound, Concept, Error, Goal, HeadKey, ImplicitOrigin, Inductive, Metavar, MetavarId,
-        MetavarOrigin, Structure, Subterm, Term, Witness, WitnessKey, WitnessOrigin,
+        Bound, Concept, Error, Goal, HeadKey, ImplicitOrigin, InductDecl, Metavar, MetavarId,
+        MetavarOrigin, StructDecl, Subterm, Term, Witness, WitnessKey, WitnessOrigin,
     },
     crate::Instant,
     curios_abi::RootId,
@@ -224,12 +224,12 @@ pub struct Context {
     // Inductive declarations, keyed by the type's qualified name ("Result").
     // Like `metas`, a flat store of monotonic facts about the program, not
     // lexically-scoped bindings — `enter_frame`/`leave_frame` never touch it.
-    inductives: BTreeMap<String, Inductive>,
+    induct_decls: BTreeMap<String, InductDecl>,
     // Struct declarations, keyed the same way — a flat monotonic store like
-    // `inductives`. Consulted by `elaborate_struct`/`elaborate_proj`/`erase`.
-    structures: BTreeMap<String, Structure>,
+    // `induct_decls`. Consulted by `elaborate_struct`/`elaborate_proj`/`erase`.
+    struct_decls: BTreeMap<String, StructDecl>,
     // Concept declarations, keyed by the concept's qualified name — a flat
-    // monotonic store like `structures` (which also holds each concept's
+    // monotonic store like `struct_decls` (which also holds each concept's
     // record entry; this adds the resolution metadata).
     concepts: BTreeMap<String, Concept>,
     // The definition names `into_core` marked as witness declarations; each
@@ -288,8 +288,8 @@ impl Context {
             local_marks: Vec::new(),
             metas: MetaStore::default(),
             next_metavar: Entropy::<MetavarId>::new(),
-            inductives: BTreeMap::new(),
-            structures: BTreeMap::new(),
+            induct_decls: BTreeMap::new(),
+            struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
             witness_declarations: BTreeSet::new(),
             witness_table: BTreeMap::new(),
@@ -907,101 +907,101 @@ impl Context {
 
     /// Record a new inductive declaration's metadata. Called once per
     /// `induct` declaration as a module is seeded into the context. Errs with
-    /// `DuplicateInductive` (leaving the existing entry untouched) if `name`
+    /// `DuplicateInduct` (leaving the existing entry untouched) if `name`
     /// is already registered — the registry is shared across every root
     /// elaborated into this `Context`, so a collision is rejected rather than
     /// silently overwriting a prior root's declaration. Mid-elaboration
     /// rebuilds of an already-registered entry go through
-    /// [`Context::update_inductive`] instead.
-    pub(crate) fn register_inductive<N>(
+    /// [`Context::update_induct`] instead.
+    pub(crate) fn register_induct<N>(
         &mut self,
         name: N,
-        inductive: Inductive,
+        induct_decl: InductDecl,
     ) -> Result<(), Error>
     where
         N: Into<String>,
     {
         let name = name.into();
-        if self.inductives.contains_key(&name) {
-            return Err(Error::duplicate_inductive(name));
+        if self.induct_decls.contains_key(&name) {
+            return Err(Error::duplicate_induct(name));
         }
-        self.inductives.insert(name, inductive);
+        self.induct_decls.insert(name, induct_decl);
         Ok(())
     }
 
     /// Overwrite an already-registered inductive's metadata with a rebuilt
-    /// telescope — called mid-elaboration by `elaborate_inductive_indices`/
-    /// `elaborate_inductive_constructors` to refine the same declaration's
+    /// telescope — called mid-elaboration by `elaborate_induct_indices`/
+    /// `elaborate_induct_constructors` to refine the same declaration's
     /// own entry, not to register a new one, so unlike
-    /// [`Context::register_inductive`] this always overwrites. Panics if
+    /// [`Context::register_induct`] this always overwrites. Panics if
     /// `name` has no prior entry — every caller is expected to have checked
-    /// `Context::inductive` first (a construction bug otherwise, not a
+    /// `Context::induct_decl` first (a construction bug otherwise, not a
     /// user-facing case).
-    pub(crate) fn update_inductive<N>(&mut self, name: N, inductive: Inductive)
+    pub(crate) fn update_induct<N>(&mut self, name: N, induct_decl: InductDecl)
     where
         N: Into<String>,
     {
         let name = name.into();
         assert!(
-            self.inductives.contains_key(&name),
-            "update_inductive: '{name}' is not already registered"
+            self.induct_decls.contains_key(&name),
+            "update_induct: '{name}' is not already registered"
         );
-        self.inductives.insert(name, inductive);
+        self.induct_decls.insert(name, induct_decl);
     }
 
     /// Look up an inductive declaration by the type's qualified name.
-    pub(crate) fn inductive(&self, name: &str) -> Option<&Inductive> {
-        self.inductives.get(name)
+    pub(crate) fn induct_decl(&self, name: &str) -> Option<&InductDecl> {
+        self.induct_decls.get(name)
     }
 
     // === Struct registry ====================================================
 
     /// Record a new struct declaration's metadata. Called once per `struct`
     /// declaration as a module is seeded into the context (elaboration or
-    /// erasure). Errs with `DuplicateStructure` (leaving the existing entry
+    /// erasure). Errs with `DuplicateStruct` (leaving the existing entry
     /// untouched) if `name` is already registered — the registry is shared
     /// across every root elaborated into this `Context`, so a collision is
     /// rejected rather than silently overwriting a prior root's declaration.
     /// Mid-elaboration rebuilds of an already-registered entry go through
-    /// [`Context::update_structure`] instead.
-    pub(crate) fn register_structure<N>(
+    /// [`Context::update_struct`] instead.
+    pub(crate) fn register_struct<N>(
         &mut self,
         name: N,
-        structure: Structure,
+        struct_decl: StructDecl,
     ) -> Result<(), Error>
     where
         N: Into<String>,
     {
         let name = name.into();
-        if self.structures.contains_key(&name) {
-            return Err(Error::duplicate_structure(name));
+        if self.struct_decls.contains_key(&name) {
+            return Err(Error::duplicate_struct(name));
         }
-        self.structures.insert(name, structure);
+        self.struct_decls.insert(name, struct_decl);
         Ok(())
     }
 
     /// Overwrite an already-registered struct's metadata with rebuilt field
-    /// types — called mid-elaboration by `elaborate_structure` to refine the
+    /// types — called mid-elaboration by `elaborate_struct` to refine the
     /// same declaration's own entry, not to register a new one, so unlike
-    /// [`Context::register_structure`] this always overwrites. Panics if
+    /// [`Context::register_struct`] this always overwrites. Panics if
     /// `name` has no prior entry — every caller is expected to have checked
-    /// `Context::structure` first (a construction bug otherwise, not a
+    /// `Context::struct_decl` first (a construction bug otherwise, not a
     /// user-facing case).
-    pub(crate) fn update_structure<N>(&mut self, name: N, structure: Structure)
+    pub(crate) fn update_struct<N>(&mut self, name: N, struct_decl: StructDecl)
     where
         N: Into<String>,
     {
         let name = name.into();
         assert!(
-            self.structures.contains_key(&name),
-            "update_structure: '{name}' is not already registered"
+            self.struct_decls.contains_key(&name),
+            "update_struct: '{name}' is not already registered"
         );
-        self.structures.insert(name, structure);
+        self.struct_decls.insert(name, struct_decl);
     }
 
     /// Look up a struct declaration by the type's qualified name.
-    pub(crate) fn structure(&self, name: &str) -> Option<&Structure> {
-        self.structures.get(name)
+    pub(crate) fn struct_decl(&self, name: &str) -> Option<&StructDecl> {
+        self.struct_decls.get(name)
     }
 
     // === Concept & witness registries =======================================
@@ -1044,9 +1044,9 @@ impl Context {
     pub(crate) fn root_of_head(&self, head: &HeadKey) -> RootId {
         match head {
             HeadKey::Nominal(name) => self
-                .structure(name)
-                .map(|structure| structure.root)
-                .or_else(|| self.inductive(name).map(|inductive| inductive.root))
+                .struct_decl(name)
+                .map(|struct_decl| struct_decl.root)
+                .or_else(|| self.induct_decl(name).map(|induct_decl| induct_decl.root))
                 .expect("a nominal head names a registered structure or inductive"),
             _ => RootId::Sys,
         }

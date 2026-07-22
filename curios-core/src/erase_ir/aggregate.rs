@@ -61,21 +61,21 @@ fn open_opaque(context: &mut Context, mut telescope: Telescope<()>) -> Vec<Term>
 
 impl Lowering {
     /// The memoized layout of a registered structure.
-    pub(super) fn structure_row(
+    pub(super) fn struct_row(
         &mut self,
         context: &mut Context,
         name: &str,
     ) -> Result<super::ProductRow, Error> {
-        if let Some(row) = self.environment.structure_row(name) {
+        if let Some(row) = self.environment.struct_row(name) {
             return Ok(row.clone());
         }
-        let structure = context
-            .structure(name)
+        let struct_decl = context
+            .struct_decl(name)
             .cloned()
             .expect("erase_ir: a registered struct");
         let entries = context.with_frame(|context| {
-            let params = open_opaque(context, structure.params.clone());
-            signature_entries(context, structure.fields_at(&params))
+            let params = open_opaque(context, struct_decl.params.clone());
+            signature_entries(context, struct_decl.fields_at(&params))
         })?;
         let mask: Vec<bool> = entries.iter().map(|(_, erased)| *erased).collect();
         let relevant: Vec<Option<String>> = entries
@@ -91,29 +91,29 @@ impl Lowering {
             })
         });
         let row = super::ProductRow { schema, mask };
-        self.environment.register_structure_row(name, row.clone());
+        self.environment.register_struct_row(name, row.clone());
         Ok(row)
     }
 
     /// The memoized layout of a registered inductive.
-    pub(super) fn inductive_row(
+    pub(super) fn induct_row(
         &mut self,
         context: &mut Context,
         name: &str,
     ) -> Result<super::FamilyRow, Error> {
-        if let Some(row) = self.environment.inductive_row(name) {
+        if let Some(row) = self.environment.induct_row(name) {
             return Ok(row.clone());
         }
-        let inductive = context
-            .inductive(name)
+        let induct_decl = context
+            .induct_decl(name)
             .cloned()
             .expect("erase_ir: a registered inductive");
         let family = self.builder.family(Some(name.to_string()));
         let mut constructors = Vec::new();
-        for tag in inductive.constructor_order() {
+        for tag in induct_decl.constructor_order() {
             let entries = context.with_frame(|context| {
-                let params = open_opaque(context, inductive.params.clone());
-                let telescope = inductive
+                let params = open_opaque(context, induct_decl.params.clone());
+                let telescope = induct_decl
                     .instantiate(tag, &params)
                     .expect("erase_ir: constructor instantiates at its inductive's parameters");
                 signature_entries(context, telescope)
@@ -133,7 +133,7 @@ impl Lowering {
             family,
             constructors,
         };
-        self.environment.register_inductive_row(name, row.clone());
+        self.environment.register_induct_row(name, row.clone());
         Ok(row)
     }
 
@@ -236,12 +236,12 @@ impl Lowering {
         value: &Struct,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let row = self.structure_row(context, &value.name)?;
-        let structure = context
-            .structure(&value.name)
+        let row = self.struct_row(context, &value.name)?;
+        let struct_decl = context
+            .struct_decl(&value.name)
             .cloned()
             .expect("erase_ir: a registered struct");
-        let telescope = structure.fields_at(&value.params);
+        let telescope = struct_decl.fields_at(&value.params);
         let atoms = match self.masked_fields(context, &row.mask, telescope, &value.fields)? {
             Ok(atoms) => atoms,
             Err(diverged) => return Ok(diverged),
@@ -269,16 +269,16 @@ impl Lowering {
         variant: &Variant,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let row = self.inductive_row(context, &variant.name)?;
-        let inductive = context
-            .inductive(&variant.name)
+        let row = self.induct_row(context, &variant.name)?;
+        let induct_decl = context
+            .induct_decl(&variant.name)
             .cloned()
             .expect("erase_ir: a registered inductive");
-        let index = inductive
+        let index = induct_decl
             .constructor_index(&variant.tag)
             .expect("erase_ir: constructor tag registered with its inductive");
         let constructor = &row.constructors[index];
-        let telescope = inductive
+        let telescope = induct_decl
             .instantiate(&variant.tag, &variant.params)
             .expect("erase_ir: constructor instantiates at its inductive's parameters");
         let mask = constructor.mask.clone();
@@ -328,7 +328,7 @@ impl Lowering {
                 (super::ProductRow { schema, mask }, telescope.len())
             }
             Subterm::StructType(StructType { name, .. }) => {
-                let row = self.structure_row(context, name)?;
+                let row = self.struct_row(context, name)?;
                 let width = row.mask.len();
                 (row, width)
             }

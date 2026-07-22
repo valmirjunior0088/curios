@@ -280,11 +280,11 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
     let Some(concept) = context.concept(name).cloned() else {
         return Ok(Vec::new());
     };
-    let Some(structure) = context.structure(name).cloned() else {
+    let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Ok(Vec::new());
     };
 
-    let telescope = structure.fields_at(params);
+    let telescope = struct_decl.fields_at(params);
     let mut out = Vec::with_capacity(concept.supers.len());
     for (index, _) in &concept.supers {
         let field_type = telescope
@@ -314,11 +314,11 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
             let Subterm::StructType(StructType { name, params }) = &*reduced else {
                 return Err(Error::not_a_tuple(Term::unwrap_or_clone(reduced)));
             };
-            let structure = context
-                .structure(name)
+            let struct_decl = context
+                .struct_decl(name)
                 .cloned()
                 .ok_or_else(|| Error::unbound_variable(Term::free_var(name)))?;
-            Ok(structure
+            Ok(struct_decl
                 .fields_at(params)
                 .nth(index, |j| Term::proj(proj.head.clone(), j))
                 .expect("projection index within telescope"))

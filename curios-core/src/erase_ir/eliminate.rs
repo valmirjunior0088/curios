@@ -22,7 +22,7 @@
 //! context the arm was elaborated in and emits nothing.
 
 use super::{
-    Atom, Carrier, Cases, Context, Error, Inductive, InductiveType, Lowering, Many, Match,
+    Atom, Carrier, Cases, Context, Error, InductDecl, InductType, Lowering, Many, Match,
     MotivePattern, Outcome, Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two, emitted,
     expect_prim_head, infer, is_erasable, pattern_binder_slots, reduce_with, refine_head,
 };
@@ -122,7 +122,7 @@ impl SeqCarrier<'_> {
 }
 
 /// The match-wide data an inductive elimination threads to each arm.
-struct InductiveMatch<'a> {
+struct InductMatch<'a> {
     head: &'a Term,
     motive: &'a Scope<Many>,
     name: &'a str,
@@ -152,11 +152,11 @@ impl Lowering {
             Cases::Switch { cases, default } => {
                 self.erase_switch(context, head, motive, cases, default, hint)
             }
-            Cases::Inductive {
+            Cases::Induct {
                 cases,
                 pattern,
                 default,
-            } => self.erase_inductive(
+            } => self.erase_induct(
                 context,
                 head,
                 motive,
@@ -551,7 +551,7 @@ impl Lowering {
     /// to its single live arm. A vacuous elimination (no arms, no default) is
     /// unreachable code and diverges without erasing the head.
     #[allow(clippy::too_many_arguments)]
-    fn erase_inductive(
+    fn erase_induct(
         &mut self,
         context: &mut Context,
         head: &Term,
@@ -568,20 +568,20 @@ impl Lowering {
         let head_type = infer(context, head)?;
         let head_type = reduce_with(context, &head_type)?;
         let (name, params, actual_indices) = match &*head_type {
-            Subterm::InductiveType(InductiveType {
+            Subterm::InductType(InductType {
                 name,
                 params,
                 indices,
             }) => (name.clone(), params.clone(), indices.clone()),
             _ => unreachable!("erase_ir: inductive match scrutinee checked by elaborate"),
         };
-        let inductive = context
-            .inductive(&name)
+        let induct_decl = context
+            .induct_decl(&name)
             .cloned()
             .expect("erase_ir: scrutinee type names a registered inductive");
 
-        let binder_slots = pattern_binder_slots(pattern, inductive.params.len());
-        let m = InductiveMatch {
+        let binder_slots = pattern_binder_slots(pattern, induct_decl.params.len());
+        let m = InductMatch {
             head,
             motive,
             name: &name,
@@ -593,19 +593,19 @@ impl Lowering {
         // A proof/type scrutinee carries no runtime tag; its subsingleton
         // elimination reduces to its single live arm, erased inline.
         if is_erasable(context, &head_type)? {
-            return self.erase_erasable_scrutinee(context, &m, &inductive, cases, default);
+            return self.erase_erasable_scrutinee(context, &m, &induct_decl, cases, default);
         }
 
-        let row = self.inductive_row(context, &name)?;
+        let row = self.induct_row(context, &name)?;
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let mut arms = Vec::new();
-        for (index, tag) in inductive.constructor_order().enumerate() {
+        for (index, tag) in induct_decl.constructor_order().enumerate() {
             let constructor = row.constructors[index].id;
             let mask = row.constructors[index].mask.clone();
             match cases.get(tag) {
                 Some(scope) => {
-                    let telescope = inductive
+                    let telescope = induct_decl
                         .instantiate(tag, m.params)
                         .expect("erase_ir: constructor instantiates at its inductive's parameters");
                     let arm =
@@ -657,7 +657,7 @@ impl Lowering {
     fn variant_arm(
         &mut self,
         context: &mut Context,
-        m: &InductiveMatch<'_>,
+        m: &InductMatch<'_>,
         (tag, scope): (&Atom, &Scope<Many>),
         telescope: Telescope<Term>,
         mask: &[bool],
@@ -706,7 +706,7 @@ impl Lowering {
     fn default_arm(
         &mut self,
         context: &mut Context,
-        m: &InductiveMatch<'_>,
+        m: &InductMatch<'_>,
         default: &Term,
     ) -> Result<curios_ersd::BlockId, Error> {
         let default_args = m
@@ -729,8 +729,8 @@ impl Lowering {
     fn erase_erasable_scrutinee(
         &mut self,
         context: &mut Context,
-        m: &InductiveMatch<'_>,
-        inductive: &Inductive,
+        m: &InductMatch<'_>,
+        induct_decl: &InductDecl,
         cases: &super::BTreeMap<Atom, Scope<Many>>,
         default: Option<&Term>,
     ) -> Result<Outcome, Error> {
@@ -751,7 +751,7 @@ impl Lowering {
             return self.walk(context, default, &expected, None);
         };
 
-        let telescope = inductive
+        let telescope = induct_decl
             .instantiate(tag, m.params)
             .expect("erase_ir: constructor instantiates at its inductive's parameters");
         let labels = scope
@@ -779,7 +779,7 @@ impl Lowering {
 /// context and emits nothing.
 fn refine_arm(
     context: &mut Context,
-    m: &InductiveMatch<'_>,
+    m: &InductMatch<'_>,
     tag: &Atom,
     labels: &[String],
     vars: &[Term],
@@ -798,7 +798,7 @@ fn refine_arm(
 
     let target_indices = match &telescope {
         Telescope::Done(terminal) => match &***terminal {
-            Subterm::InductiveType(InductiveType { indices, .. }) => indices.clone(),
+            Subterm::InductType(InductType { indices, .. }) => indices.clone(),
             _ => unreachable!("erase_ir: constructor terminal is its inductive type"),
         },
         Telescope::Cons(..) => unreachable!("erase_ir: constructor arity checked by elaborate"),

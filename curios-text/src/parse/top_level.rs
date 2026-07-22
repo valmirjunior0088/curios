@@ -224,7 +224,7 @@ pub(super) fn parse_top_use<'a>() -> Parser<'a, TopItem> {
 // `m : Nat` (named), or a bare type (positional). Plicity's `@` (on the name)
 // requires a name — a positional binder has nothing for a later type or the
 // target to mention.
-pub(super) fn parse_inductive_payload_field<'a>() -> Parser<'a, CasePayloadParam> {
+pub(super) fn parse_induct_payload_field<'a>() -> Parser<'a, CasePayloadParam> {
     catch(
         parse_plicity()
             .and(parse_identifier())
@@ -245,12 +245,12 @@ pub(super) fn parse_inductive_payload_field<'a>() -> Parser<'a, CasePayloadParam
     }))
 }
 
-pub(super) fn parse_top_inductive_case<'a>() -> Parser<'a, TopCase> {
+pub(super) fn parse_top_induct_case<'a>() -> Parser<'a, TopCase> {
     parse_literal("|")
         .and_keep(parse_identifier())
         .and(
             parse_literal("(")
-                .and_keep(sep_by0_trailing(parse_inductive_payload_field, || {
+                .and_keep(sep_by0_trailing(parse_induct_payload_field, || {
                     parse_literal(",")
                 }))
                 .and_drop(parse_literal(")")),
@@ -278,7 +278,7 @@ pub(super) fn parse_top_inductive_case<'a>() -> Parser<'a, TopCase> {
 // the type-constructor function (it is implicit at the value constructors
 // either way — the mark's only job is the type constructor, where unmarked
 // parameters are written out).
-pub(super) fn parse_inductive_param<'a>() -> Parser<'a, (Plicity, String, Term)> {
+pub(super) fn parse_induct_param<'a>() -> Parser<'a, (Plicity, String, Term)> {
     parse_plicity()
         .and(parse_identifier())
         .and_drop(parse_literal(":"))
@@ -289,7 +289,7 @@ pub(super) fn parse_inductive_param<'a>() -> Parser<'a, (Plicity, String, Term)>
 // A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is
 // documentary (and a dependency hook for later entries) — never in scope in
 // the cases — so it is optional and never takes `@`.
-pub(super) fn parse_inductive_index<'a>() -> Parser<'a, (Option<String>, Term)> {
+pub(super) fn parse_induct_index<'a>() -> Parser<'a, (Option<String>, Term)> {
     catch(parse_identifier().and_drop(parse_literal(":")))
         .and(lazy(parse_term))
         .map(|(name, ty): (&str, Term)| (Some(name.to_string()), ty))
@@ -298,7 +298,7 @@ pub(super) fn parse_inductive_index<'a>() -> Parser<'a, (Option<String>, Term)> 
 
 /// A parsed inductive head arity: the index telescope (each binder optionally
 /// named) and the sort it lands in.
-type InductiveArity = (Vec<(Option<String>, Term)>, bool, Term);
+type InductArity = (Vec<(Option<String>, Term)>, bool, Term);
 
 /// A declaration-local result sort, with an independent representation
 /// visibility marker. This parser is deliberately not used for ordinary sort
@@ -311,12 +311,10 @@ fn parse_representation_sort<'a>() -> Parser<'a, (bool, Term)> {
 // `(n : Nat) -> Prop`, or a bare sort, `Prop`. The sort is mandatory: an index
 // telescope must state where it lands (`-> Sort`), and a sortless head is a
 // parse error, never an implicit `Type`.
-pub(super) fn parse_inductive_arity<'a>() -> Parser<'a, InductiveArity> {
+pub(super) fn parse_induct_arity<'a>() -> Parser<'a, InductArity> {
     catch(
         parse_literal("(")
-            .and_keep(sep_by0_trailing(parse_inductive_index, || {
-                parse_literal(",")
-            }))
+            .and_keep(sep_by0_trailing(parse_induct_index, || parse_literal(",")))
             .and_drop(parse_literal(")")),
     )
     .and(parse_literal("->").and_keep(parse_representation_sort()))
@@ -324,22 +322,20 @@ pub(super) fn parse_inductive_arity<'a>() -> Parser<'a, InductiveArity> {
     .or(parse_representation_sort().map(|(rep_pub, sort)| (Vec::new(), rep_pub, sort)))
 }
 
-pub(super) fn parse_top_inductive_body<'a>(vis_pub: bool) -> Parser<'a, TopInduct> {
+pub(super) fn parse_top_induct_body<'a>(vis_pub: bool) -> Parser<'a, TopInduct> {
     parse_identifier()
         .and(
             catch(
                 parse_literal("(")
-                    .and_keep(sep_by0_trailing(parse_inductive_param, || {
-                        parse_literal(",")
-                    }))
+                    .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
                     .and_drop(parse_literal(")")),
             )
             .or(pure(vec![])),
         )
         // The head's arity: `: (n : Nat) -> Prop` or `: Prop`. The sort is
         // required — there is no implicit `Type`.
-        .and(parse_literal(":").and_keep(parse_inductive_arity()))
-        .and(many0(parse_top_inductive_case))
+        .and(parse_literal(":").and_keep(parse_induct_arity()))
+        .and(many0(parse_top_induct_case))
         .flat_map(
             move |(((label, params), (indices, rep_pub, result_sort)), cases)| {
                 // Targets are required on every case iff the head declares
@@ -387,12 +383,12 @@ pub(super) fn parse_top_inductive_body<'a>(vis_pub: bool) -> Parser<'a, TopInduc
         )
 }
 
-pub(super) fn parse_top_inductive<'a>() -> Parser<'a, TopItem> {
+pub(super) fn parse_top_induct<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("induct"))).flat_map(|(vis_pub, ())| {
-        parse_top_inductive_body(vis_pub)
+        parse_top_induct_body(vis_pub)
             .and(many0(|| {
                 catch(parse_pub().and(parse_keyword("and")))
-                    .flat_map(|(vis_pub2, ())| parse_top_inductive_body(vis_pub2))
+                    .flat_map(|(vis_pub2, ())| parse_top_induct_body(vis_pub2))
             }))
             .and_drop(parse_keyword("end"))
             .map(|(first, rest)| TopItem::Induct(iter::once(first).chain(rest).collect()))
@@ -414,9 +410,7 @@ pub(super) fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
             .and(
                 catch(
                     parse_literal("(")
-                        .and_keep(sep_by0_trailing(parse_inductive_param, || {
-                            parse_literal(",")
-                        }))
+                        .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
                         .and_drop(parse_literal(")")),
                 )
                 .or(pure(vec![])),
@@ -488,9 +482,7 @@ pub(super) fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
             .and(
                 catch(
                     parse_literal("(")
-                        .and_keep(sep_by0_trailing(parse_inductive_param, || {
-                            parse_literal(",")
-                        }))
+                        .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
                         .and_drop(parse_literal(")")),
                 )
                 .or(pure(vec![])),
@@ -581,7 +573,7 @@ pub(crate) fn parse_top_item<'a>() -> Parser<'a, TopItem> {
         .or(parse_top_concept())
         .or(parse_top_witness())
         .or(parse_top_let())
-        .or(parse_top_inductive())
+        .or(parse_top_induct())
         .or(parse_top_struct())
         .or(parse_top_rec())
         .or(parse_top_foreign())

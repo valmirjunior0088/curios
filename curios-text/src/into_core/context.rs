@@ -98,22 +98,19 @@ impl FlatItem {
 )]
 enum ChildInfo {
     Ordinary { vis_pub: bool },
-    InductiveConstructors { vis_pub: bool, rep_pub: bool },
+    InductConstructors { vis_pub: bool, rep_pub: bool },
 }
 
 impl ChildInfo {
     fn is_public(self) -> bool {
         match self {
             ChildInfo::Ordinary { vis_pub } => vis_pub,
-            ChildInfo::InductiveConstructors { vis_pub, rep_pub } => vis_pub && rep_pub,
+            ChildInfo::InductConstructors { vis_pub, rep_pub } => vis_pub && rep_pub,
         }
     }
 
     fn is_opaque_constructor_namespace(self) -> bool {
-        matches!(
-            self,
-            ChildInfo::InductiveConstructors { rep_pub: false, .. }
-        )
+        matches!(self, ChildInfo::InductConstructors { rep_pub: false, .. })
     }
 }
 
@@ -148,7 +145,7 @@ impl ModuleInfo {
         Ok(())
     }
 
-    pub(super) fn insert_inductive_child(
+    pub(super) fn insert_induct_child(
         &mut self,
         label: String,
         vis_pub: bool,
@@ -159,7 +156,7 @@ impl ModuleInfo {
         }
 
         self.children
-            .insert(label, ChildInfo::InductiveConstructors { vis_pub, rep_pub });
+            .insert(label, ChildInfo::InductConstructors { vis_pub, rep_pub });
         Ok(())
     }
 

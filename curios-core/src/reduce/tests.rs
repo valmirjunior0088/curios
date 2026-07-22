@@ -86,7 +86,7 @@ fn reduce_inductive_match_selects_case_and_projects_payload() {
     // Dispatch inspects the reduced head's `Variant`; the arm's binder is
     // bound call-by-name to the flat projection `head.1`, which then reduces
     // to the payload component.
-    let term: Term = Term::inductive_match(
+    let term: Term = Term::induct_match(
         Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
         Some("m"),
         Term::prim(Prim::NatType),
@@ -106,7 +106,7 @@ fn reduce_inductive_match_absent_tag_takes_default() {
     // The scrutinee is `some(42)`, but only `none` has an explicit arm; the
     // `some` tag is absent from the cases, so dispatch falls through to the
     // binding-free `| _ =>` default (no payload projected).
-    let term: Term = Term::inductive_match_default(
+    let term: Term = Term::induct_match_default(
         Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
         Some("m"),
         Term::prim(Prim::NatType),
@@ -123,7 +123,7 @@ fn reduce_inductive_match_present_tag_ignores_default() {
 
     // With the `some` arm present, dispatch selects it (binding the payload)
     // rather than the default — the default is only for absent tags.
-    let term: Term = Term::inductive_match_default(
+    let term: Term = Term::induct_match_default(
         Term::variant("E", Vec::<Term>::new(), "some", [nat(42)]),
         Some("m"),
         Term::prim(Prim::NatType),

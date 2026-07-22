@@ -81,8 +81,8 @@ pub(super) struct FamilyRow {
 )]
 pub(super) struct Environment {
     values: BTreeMap<String, Binding>,
-    structures: BTreeMap<String, ProductRow>,
-    inductives: BTreeMap<String, FamilyRow>,
+    struct_decls: BTreeMap<String, ProductRow>,
+    induct_decls: BTreeMap<String, FamilyRow>,
     /// Anonymous tuple schemas, interned by relevant-field width — an
     /// arity-`n` product is one untyped layout regardless of which tuple
     /// built it.
@@ -102,20 +102,20 @@ impl Environment {
         self.values.get(name).copied()
     }
 
-    pub(super) fn structure_row(&self, name: &str) -> Option<&ProductRow> {
-        self.structures.get(name)
+    pub(super) fn struct_row(&self, name: &str) -> Option<&ProductRow> {
+        self.struct_decls.get(name)
     }
 
-    pub(super) fn register_structure_row(&mut self, name: impl Into<String>, row: ProductRow) {
-        self.structures.insert(name.into(), row);
+    pub(super) fn register_struct_row(&mut self, name: impl Into<String>, row: ProductRow) {
+        self.struct_decls.insert(name.into(), row);
     }
 
-    pub(super) fn inductive_row(&self, name: &str) -> Option<&FamilyRow> {
-        self.inductives.get(name)
+    pub(super) fn induct_row(&self, name: &str) -> Option<&FamilyRow> {
+        self.induct_decls.get(name)
     }
 
-    pub(super) fn register_inductive_row(&mut self, name: impl Into<String>, row: FamilyRow) {
-        self.inductives.insert(name.into(), row);
+    pub(super) fn register_induct_row(&mut self, name: impl Into<String>, row: FamilyRow) {
+        self.induct_decls.insert(name.into(), row);
     }
 
     pub(super) fn tuple_schema(&self, width: usize) -> Option<curios_ersd::ProductId> {

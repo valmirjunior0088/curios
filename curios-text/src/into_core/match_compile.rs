@@ -10,7 +10,7 @@ use {
 
 /// One elaborated arm of a single-level core inductive match: the constructor tag,
 /// its payload binder names, and the (already-lowered) body.
-type InductiveCase = (curios_core::Atom, Vec<String>, curios_core::Term);
+type InductCase = (curios_core::Atom, Vec<String>, curios_core::Term);
 
 /// One in-progress row of the matrix compiler's recursion (see
 /// [`MatchCompiler::compile_matrix`]): the still-unconsumed column patterns (left to
@@ -41,7 +41,7 @@ pub(super) struct MatchCompiler<'l, 'a, 'b> {
     /// The fallthrough arm for constructors/cases no row covers, already
     /// lowered — a headed match's `| _ =>` catch-all, or a `choose` bind-arm's
     /// rest-of-ladder (see [`Lowerer::lower_bind_arm`]). `None` means
-    /// full enumeration: `compile_ctor` emits a plain `inductive_match` (leaning
+    /// full enumeration: `compile_ctor` emits a plain `induct_match` (leaning
     /// on core's Rung-C vacuity for any pruned tag) and the hardcoded carriers
     /// require both of their shapes. Constant across one matrix's whole
     /// recursion — a nested match inside a body re-enters through `leaf`, which
@@ -238,7 +238,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// match constructors. An omitted motive (`None`) lowers to an unlabelled
     /// fresh metavariable body — the same as writing `: _` — so a non-dependent
     /// match infers its motive by unifying the arms against that metavariable.
-    /// The annotated form is inductive-only and goes through `inductive_match` instead.
+    /// The annotated form is inductive-only and goes through `induct_match` instead.
     pub(super) fn motive_parts<'m>(
         &self,
         motive: &'m Option<Motive>,
@@ -250,7 +250,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 Some(label),
                 self.scoped([label.clone()], || self.term(body))?,
             )),
-            Some(Motive::Annotated { .. }) => Err(Error::AnnotatedMotiveNotInductive),
+            Some(Motive::Annotated { .. }) => Err(Error::AnnotatedMotiveNotInduct),
             None => Ok((
                 None,
                 curios_core::Term::metavar(self.context.fresh_metavar()),
@@ -265,11 +265,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// binder candidate (locals are invisible here; core elaboration
     /// validates positionally against the registry), anything else verbatim —
     /// and closes the motive body over the binder labels then the scrutinee.
-    fn inductive_match(
+    fn induct_match(
         &self,
         head: curios_core::Term,
         motive: &Option<Motive>,
-        cases: Vec<InductiveCase>,
+        cases: Vec<InductCase>,
     ) -> Result<curios_core::Term, Error> {
         let Some(Motive::Annotated {
             label,
@@ -283,14 +283,14 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             // match's default; otherwise the arms enumerate every constructor
             // (core's Rung-C vacuity covers any pruned tag).
             return Ok(match &self.default {
-                Some(default) => curios_core::Term::inductive_match_default(
+                Some(default) => curios_core::Term::induct_match_default(
                     head,
                     label,
                     body,
                     cases,
                     default.clone(),
                 ),
-                None => curios_core::Term::inductive_match(head, label, body, cases),
+                None => curios_core::Term::induct_match(head, label, body, cases),
             });
         };
 
@@ -320,7 +320,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         // The index binders are in scope inside the motive body.
         let motive_body = self.scoped(binders.clone(), || self.term(body))?;
 
-        Ok(curios_core::Term::inductive_match_motive(
+        Ok(curios_core::Term::induct_match_motive(
             head,
             binders,
             label,
@@ -344,7 +344,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     ///
     /// Zero arms (a vacuous elimination, e.g. of `False`) needs no
     /// recursion at all — there is nothing to infer a dispatch kind from, so
-    /// it goes straight to [`Self::inductive_match`] exactly as today.
+    /// it goes straight to [`Self::induct_match`] exactly as today.
     ///
     /// A dependent motive (`Motive::Scrutinee`/`Motive::Annotated`) is only
     /// meaningful when the head itself dispatches on a constructor tag
@@ -365,7 +365,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
         if arms.is_empty() {
-            return self.inductive_match(head, motive, Vec::new());
+            return self.induct_match(head, motive, Vec::new());
         }
 
         let homogeneous_dispatch = arms[0].pattern.is_dispatchable()
@@ -626,18 +626,18 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             cases.push((curios_core::Atom::from(tag.as_str()), synthetic, body));
         }
 
-        self.inductive_match(scrutinee, top_motive.unwrap_or(&None), cases)
+        self.induct_match(scrutinee, top_motive.unwrap_or(&None), cases)
     }
 
     /// Groups rows into `Bool`'s two literal shapes and emits
-    /// [`curios_core::Term::bool_match`] directly — never `inductive_match`
+    /// [`curios_core::Term::bool_match`] directly — never `induct_match`
     /// (`Cases::Bool` is its own hardcoded core node, not a tag dispatch; see
     /// this module's own notes on hardcoded-primitive carriers). `Bool`
     /// carries no payload at all, so — unlike [`Self::compile_ctor`] — there
     /// is no single-row/multi-row naming discipline needed here.
     ///
     /// Unlike a user inductive (whose omitted tags `compile_ctor` defers to
-    /// `inductive_match`'s Rung-C vacuity inversion), `Cases::Bool` has no
+    /// `induct_match`'s Rung-C vacuity inversion), `Cases::Bool` has no
     /// core-side exhaustiveness escape hatch (`elaborate_bln_match`) — both
     /// groups must be present here, checked eagerly before recursing on
     /// either.
@@ -713,7 +713,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// discipline exactly, for the same reason: `curios-core`'s erasure pass
     /// reads a `Nat` succ arm's stored binder labels as naming hints too
     /// (`erase_nat_match`, the same `Context::fresh` hint-compounding
-    /// mechanism `erase_inductive_match` has) — unconditionally minting a
+    /// mechanism `erase_induct_match` has) — unconditionally minting a
     /// synthetic name here would resurrect the exact regression class
     /// `compile_ctor`'s fast path exists to avoid. A `NatSucc` group of
     /// exactly one row therefore reuses that row's own written
@@ -1194,7 +1194,7 @@ fn refutation_count(pattern: &MatchPattern) -> usize {
 /// `| _ =>` catch-all body. A final top-level bare `_` after *dispatching* arms
 /// (a constructor tag or any of the four hardcoded-carrier leaves —
 /// [`MatchPattern::is_dispatchable`]) is the catch-all: its body becomes the
-/// core match's default (a `Cases::Inductive` default, or a `Nat`/`Bool`
+/// core match's default (a `Cases::Induct` default, or a `Nat`/`Bool`
 /// carrier's fallthrough — this is what makes a `Nat` literal dispatch's
 /// mandatory `_` legal). A *named* final binder in that position is a mistake
 /// ([`Error::MatchNamedCatchAll`]). A lone `_` with no concrete arms is not a

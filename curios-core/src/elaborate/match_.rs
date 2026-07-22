@@ -1,9 +1,10 @@
 use {
-    super::{Context, Error, InductiveType, Mode, check, elaborate, expect},
+    super::{Context, Error, InductType, Mode, check, elaborate, expect},
     crate::{
-        Atom, Carrier, Cases, Inductive, Invert, Many, Match, MotivePattern, MotiveSlot, Nat, Prim,
-        PrimHead, Scope, Subterm, Telescope, Term, Three, Two, case_target_indices, check_motive,
-        check_prim_head, convert_with, invert_indices, is_prop, reduce_with, refine_head,
+        Atom, Carrier, Cases, InductDecl, Invert, Many, Match, MotivePattern, MotiveSlot, Nat,
+        Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two, case_target_indices,
+        check_motive, check_prim_head, convert_with, invert_indices, is_prop, reduce_with,
+        refine_head,
     },
     curios_base::{Grain, PackedBin},
     std::collections::{BTreeMap, BTreeSet},
@@ -410,13 +411,13 @@ pub(crate) fn elaborate_match(
         Cases::Switch { cases, default } => {
             elaborate_switch(context, head, motive, cases, default, term, mode)
         }
-        Cases::Inductive {
+        Cases::Induct {
             cases,
             pattern,
             default,
-        } => elaborate_inductive_match(
+        } => elaborate_induct_match(
             context,
-            InductiveMatchInput {
+            InductMatchInput {
                 head,
                 motive,
                 cases,
@@ -460,7 +461,7 @@ pub(crate) fn elaborate_match(
     }
 }
 
-struct InductiveMatchInput<'a> {
+struct InductMatchInput<'a> {
     head: &'a Term,
     motive: &'a Scope<Many>,
     cases: &'a BTreeMap<Atom, Scope<Many>>,
@@ -537,11 +538,11 @@ fn elaborate_bln_match(
 /// type, as `Eq`'s `refl(z) : (z, z)` recovers `z` from its indices).
 fn singleton_eliminable(
     context: &mut Context,
-    inductive: &Inductive,
+    induct_decl: &InductDecl,
     tag: &Atom,
     params: &[Term],
 ) -> Result<bool, Error> {
-    let Some(payload) = inductive.instantiate(tag, params) else {
+    let Some(payload) = induct_decl.instantiate(tag, params) else {
         return Ok(false);
     };
 
@@ -581,12 +582,12 @@ fn singleton_eliminable(
 /// (Rung A of the indexed-inductive ladder) additionally binds the scrutinee's
 /// indices: each arm checks against the motive at *that case's* target
 /// indices, and the whole match types at the scrutinee's *actual* indices.
-fn elaborate_inductive_match(
+fn elaborate_induct_match(
     context: &mut Context,
-    input: InductiveMatchInput<'_>,
+    input: InductMatchInput<'_>,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let InductiveMatchInput {
+    let InductMatchInput {
         head,
         motive,
         cases,
@@ -611,12 +612,12 @@ fn elaborate_inductive_match(
     let head_type = reduce_with(context, &head_type)?;
 
     let (name, params, indices) = match &*head_type {
-        Subterm::InductiveType(InductiveType {
+        Subterm::InductType(InductType {
             name,
             params,
             indices,
         }) => (name.clone(), params.clone(), indices.clone()),
-        other => return Err(Error::not_a_inductive_type(other.clone())),
+        other => return Err(Error::not_a_induct_type(other.clone())),
     };
 
     // Reducing the scrutinee type to weak-head normal form leaves its index
@@ -630,17 +631,17 @@ fn elaborate_inductive_match(
         .map(|index| reduce_with(context, index))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let Some(inductive) = context.inductive(&name).cloned() else {
+    let Some(induct_decl) = context.induct_decl(&name).cloned() else {
         return Err(Error::unbound_variable(Term::free_var(&name)));
     };
 
     // Opacity covers every eliminator, including defaults and vacuous or
     // inversion-discharged matches. Check before motives, coverage, or index
     // refinement can reveal representation facts.
-    if !inductive.rep_public
+    if !induct_decl.rep_public
         && context
             .island()
-            .is_some_and(|island| *island != inductive.module)
+            .is_some_and(|island| *island != induct_decl.module)
     {
         return Err(Error::private_representation(name));
     }
@@ -648,7 +649,7 @@ fn elaborate_inductive_match(
     let (motive_elaborated, pattern_elaborated, plan, generalized) = match pattern {
         Some(pattern) => {
             let (motive_elaborated, pattern_elaborated, plan) =
-                check_inductive_motive(context, &inductive, &name, &params, motive, pattern)?;
+                check_induct_motive(context, &induct_decl, &name, &params, motive, pattern)?;
             (motive_elaborated, Some(pattern_elaborated), plan, vec![])
         }
         // An elided motive (the lowering's bare metavar) checked against an
@@ -669,9 +670,9 @@ fn elaborate_inductive_match(
         None if is_elided_motive(motive) && default.is_none() => match &mode {
             Mode::Check(expected) => {
                 let (motive_elaborated, pattern_elaborated, plan, generalized) =
-                    synthesize_inductive_motive(
+                    synthesize_induct_motive(
                         context,
-                        &inductive,
+                        &induct_decl,
                         &name,
                         &params,
                         &actual_indices,
@@ -758,7 +759,7 @@ fn elaborate_inductive_match(
                 0 => true,
                 1 => {
                     let tag = cases.keys().next().expect("one covered constructor");
-                    singleton_eliminable(context, &inductive, tag, &params)?
+                    singleton_eliminable(context, &induct_decl, tag, &params)?
                 }
                 _ => false,
             };
@@ -772,7 +773,7 @@ fn elaborate_inductive_match(
     // impossible (Rung C).
     if let Some(tag) = cases
         .keys()
-        .find(|tag| !inductive.constructors.contains_key(*tag))
+        .find(|tag| !induct_decl.constructors.contains_key(*tag))
     {
         return Err(Error::unknown_match_constructor(
             name.clone(),
@@ -781,7 +782,7 @@ fn elaborate_inductive_match(
     }
 
     let mut cases_elaborated = BTreeMap::new();
-    for tag in inductive.constructors.keys() {
+    for tag in induct_decl.constructors.keys() {
         let Some(scope) = cases.get(tag) else {
             // A catch-all default covers every un-enumerated constructor, so a
             // missing arm needs neither the unindexed-completeness check nor
@@ -801,7 +802,7 @@ fn elaborate_inductive_match(
             // against this case's targets finds a *definite* clash. The arm
             // is then pruned (erase fills its slot with an unreachable
             // body); anything short of definite keeps the arm mandatory.
-            let telescope = inductive
+            let telescope = induct_decl
                 .instantiate(tag, &params)
                 .expect("constructor instantiates at its inductive's parameters");
 
@@ -819,7 +820,7 @@ fn elaborate_inductive_match(
             }
         };
 
-        let telescope = inductive
+        let telescope = induct_decl
             .instantiate(tag, &params)
             .expect("constructor instantiates at its inductive's parameters");
 
@@ -862,7 +863,7 @@ fn elaborate_inductive_match(
             // opened) signature states them over the payload binders.
             let ix_c = match &telescope {
                 Telescope::Done(terminal) => match &***terminal {
-                    Subterm::InductiveType(InductiveType { indices, .. }) => indices.clone(),
+                    Subterm::InductType(InductType { indices, .. }) => indices.clone(),
                     _ => unreachable!("constructor terminal is its inductive type"),
                 },
                 Telescope::Cons(..) => unreachable!("arity checked above"),
@@ -939,7 +940,7 @@ fn elaborate_inductive_match(
     let rebuilt_match: Term = Subterm::Match(Match {
         head: head_elaborated,
         motive: motive_elaborated,
-        cases: Cases::Inductive {
+        cases: Cases::Induct {
             cases: cases_elaborated,
             pattern: pattern_elaborated,
             default: default_elaborated,
@@ -1011,24 +1012,24 @@ type SynthesizedMotive = (
 /// abstracted over the scrutinee's index *variables* and the scrutinee itself
 /// (forced or compound positions bind vacuously), yielding an all-binders
 /// pattern motive; the resulting scope is validated by the same
-/// [`check_inductive_motive`] the annotated form goes through, so its plan and
+/// [`check_induct_motive`] the annotated form goes through, so its plan and
 /// per-arm specialisation behave identically. Any context hypothesis whose type
 /// mentions an abstracted index and which occurs in the goal is generalized into
 /// the motive as a Π-telescope (the convoy, automated).
-fn synthesize_inductive_motive(
+fn synthesize_induct_motive(
     context: &mut Context,
-    inductive: &Inductive,
+    induct_decl: &InductDecl,
     name: &str,
     params: &[Term],
     actual_indices: &[Term],
     head: &Term,
     expected: &Term,
 ) -> Result<SynthesizedMotive, Error> {
-    let n_params = inductive.params.len();
-    let n_indices = inductive.indices.len() - n_params;
+    let n_params = induct_decl.params.len();
+    let n_indices = induct_decl.indices.len() - n_params;
 
     // One abstraction label per flat slot (parameters then indices), then the
-    // scrutinee — the same binder order `check_inductive_motive` expects. The
+    // scrutinee — the same binder order `check_induct_motive` expects. The
     // labels that come back as a variable's own name (`used` accumulates them)
     // are the *roots*: the binders that genuinely specialise the goal, and the
     // ones a context hypothesis can depend on.
@@ -1100,7 +1101,7 @@ fn synthesize_inductive_motive(
     };
 
     let (motive, pattern, plan) =
-        check_inductive_motive(context, inductive, name, params, &motive, &pattern)?;
+        check_induct_motive(context, induct_decl, name, params, &motive, &pattern)?;
     Ok((motive, pattern, plan, generalized))
 }
 
@@ -1157,21 +1158,21 @@ fn check_generalized_arm(
 /// Index binders are assumed at the registry's index telescope instantiated
 /// at the scrutinee's actual parameters, each later type opened with the
 /// earlier binder; the scrutinee binder is assumed at
-/// `InductiveType(name, params, index-vars)`. No unification anywhere — the
+/// `InductType(name, params, index-vars)`. No unification anywhere — the
 /// eliminator's discipline.
-fn check_inductive_motive(
+fn check_induct_motive(
     context: &mut Context,
-    inductive: &Inductive,
+    induct_decl: &InductDecl,
     name: &str,
     params: &[Term],
     motive: &Scope<Many>,
     pattern: &MotivePattern,
 ) -> Result<(Scope<Many>, MotivePattern, Vec<SlotPlan>), Error> {
-    let n_params = inductive.params.len();
-    let n_indices = inductive.indices.len() - n_params;
+    let n_params = induct_decl.params.len();
+    let n_indices = induct_decl.indices.len() - n_params;
 
     if pattern.name != name {
-        return Err(Error::motive_wrong_inductive(
+        return Err(Error::motive_wrong_induct(
             pattern.name.clone(),
             name.to_string(),
         ));
@@ -1187,7 +1188,7 @@ fn check_inductive_motive(
     // Each parameter's declared type at the actual parameters, for checking
     // verbatim slots.
     let mut param_types = Vec::with_capacity(n_params);
-    inductive.params.clone().walk(params, |_, _, ty| {
+    induct_decl.params.clone().walk(params, |_, _, ty| {
         param_types.push(ty.clone());
         Ok(())
     })?;
@@ -1247,7 +1248,7 @@ fn check_inductive_motive(
     let motive_elaborated = context.with_frame(|context| {
         // Peel the parameter binders off the full index telescope, leaving
         // the index types at the actual parameters.
-        let mut ix_telescope = inductive.indices.clone().open_params(params);
+        let mut ix_telescope = induct_decl.indices.clone().open_params(params);
 
         let mut index_vars = Vec::with_capacity(n_indices);
         for (slot, label) in plan.iter().zip(&labels) {
@@ -1276,7 +1277,7 @@ fn check_inductive_motive(
         let scrutinee_label = labels.last().expect("motive binds at least the scrutinee");
         context.assume(
             scrutinee_label,
-            &Term::inductive_type(name, params.to_vec(), index_vars),
+            &Term::induct_type(name, params.to_vec(), index_vars),
         );
 
         let var_terms = labels.iter().map(Term::free_var).collect::<Vec<_>>();

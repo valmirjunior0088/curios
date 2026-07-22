@@ -50,7 +50,7 @@ fn convert_inductive_match_compares_cases_and_motive() {
     let mut context = context();
 
     let make = |motive_label: &str, binder: &str| {
-        Term::inductive_match(
+        Term::induct_match(
             Term::free_var("r"),
             Some(motive_label),
             Term::prim(Prim::NatType),
@@ -67,7 +67,7 @@ fn convert_inductive_match_compares_cases_and_motive() {
         Ok(true)
     );
 
-    let different = Term::inductive_match(
+    let different = Term::induct_match(
         Term::free_var("r"),
         Some("m"),
         Term::prim(Prim::NatType),
@@ -85,7 +85,7 @@ fn convert_inductive_match_compares_default() {
     let mut context = context();
 
     let with_default = |d: usize| {
-        Term::inductive_match_default(
+        Term::induct_match_default(
             Term::free_var("r"),
             Some("m"),
             Term::prim(Prim::NatType),
@@ -109,7 +109,7 @@ fn convert_inductive_match_compares_default() {
 
     // A defaulted match never converts with an otherwise-identical bare one:
     // presence of the catch-all is itself a difference.
-    let bare = Term::inductive_match(
+    let bare = Term::induct_match(
         Term::free_var("r"),
         Some("m"),
         Term::prim(Prim::NatType),
@@ -172,7 +172,7 @@ fn convert_prim_distinguishes_operator_kind() {
 fn recursive_matcher(head: &str, none_value: usize) -> Term {
     Term::func(
         [("x", Term::prim(Prim::NatType))],
-        Term::inductive_match(
+        Term::induct_match(
             Term::free_var("x"),
             Some("m"),
             Term::prim(Prim::NatType),
@@ -199,7 +199,7 @@ fn convert_folded_recursive_call_against_its_unfolding() {
     // the sides are not syntactically equal: the folded call meets a
     // non-apply shape, lazy delta unfolds it once, and the two stuck
     // matches compare structurally.
-    let unfolded = Term::inductive_match(
+    let unfolded = Term::induct_match(
         Term::free_var("a"),
         Some("m"),
         Term::prim(Prim::NatType),
@@ -316,7 +316,7 @@ fn convert_growing_recursive_unfolding_spends_the_deadline() {
     let growing = |head: &str| {
         Term::func(
             [("x", Term::prim(Prim::NatType))],
-            Term::inductive_match(
+            Term::induct_match(
                 Term::free_var("x"),
                 Some("m"),
                 Term::prim(Prim::NatType),
@@ -764,9 +764,9 @@ fn convert_struct_unit_field_is_irrelevant() {
 
     // struct Wrap { x : Nat, u : () }
     context
-        .register_structure(
+        .register_struct(
             "Wrap",
-            Structure {
+            StructDecl {
                 params: Telescope::done(()),
                 fields: Telescope::build(
                     [
@@ -804,20 +804,20 @@ fn convert_variant_unit_payload_is_irrelevant() {
 
     // induct Wrap | wrap(x : Nat, u : ()) end
     context
-        .register_inductive(
+        .register_induct(
             "Wrap",
-            Inductive {
+            InductDecl {
                 params: Telescope::done(()),
                 indices: Telescope::done(()),
                 constructors: BTreeMap::from([(
                     Atom::from("wrap"),
-                    InductiveParam {
+                    InductParam {
                         telescope: Telescope::build(
                             [
                                 ("x", Term::prim(Prim::NatType)),
                                 ("u", Term::tuple_type_unit()),
                             ],
-                            Term::inductive_type("Wrap", Vec::<Term>::new(), Vec::<Term>::new()),
+                            Term::induct_type("Wrap", Vec::<Term>::new(), Vec::<Term>::new()),
                         ),
                     },
                 )]),
@@ -1397,8 +1397,8 @@ fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
     // An inductive type against `Nat` is provably unequal whatever `?0` becomes —
     // the heads are rigid — so the mismatch stays hard (and is reported at
     // the use site, not deferred to the drain).
-    let inductive = Term::inductive_type("Vec", [m], Vec::<Term>::new());
-    let outcome = convert_outcome(&mut context, &Term::type_(), &inductive, &nat_type());
+    let induct_decl = Term::induct_type("Vec", [m], Vec::<Term>::new());
+    let outcome = convert_outcome(&mut context, &Term::type_(), &induct_decl, &nat_type());
     assert!(matches!(outcome, Ok(Outcome::Mismatch)));
 }
 
@@ -1454,9 +1454,9 @@ fn eta_at_unit_trusts_the_goal_type_label() {
 /// Register a `Lst`-shaped inductive: one parameter, no indices.
 fn register_lst(context: &mut Context) {
     context
-        .register_inductive(
+        .register_induct(
             "Lst",
-            Inductive {
+            InductDecl {
                 params: Telescope::build([("A", Term::type_())], ()),
                 indices: Telescope::build([("A", Term::type_())], ()),
                 constructors: BTreeMap::new(),
@@ -1472,9 +1472,9 @@ fn register_lst(context: &mut Context) {
 /// Register a `Vec`-shaped inductive: one parameter, one `Nat` index.
 fn register_vec(context: &mut Context) {
     context
-        .register_inductive(
+        .register_induct(
             "Vec",
-            Inductive {
+            InductDecl {
                 params: Telescope::build([("T", Term::type_())], ()),
                 indices: Telescope::build(
                     [("T", Term::type_()), ("n", Term::prim(Prim::NatType))],
@@ -1503,14 +1503,14 @@ fn imitation_solves_flex_apply_against_inductive() {
 
     // ?0(Nat) ≟ Lst(Nat)  — commits ?0 := λA. Lst(A).
     let flex = Term::apply(Term::metavar(0), [nat_type()]);
-    let rigid = Term::inductive_type("Lst", [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type("Lst", [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
 
     // The committed solution is the imitation, not the constant: applied to a
     // different argument it yields Lst of *that* argument.
     let at_bln = Term::apply(Term::metavar(0), [Term::prim(Prim::BoolType)]);
-    let lst_bln = Term::inductive_type("Lst", [Term::prim(Prim::BoolType)], Vec::<Term>::new());
+    let lst_bln = Term::induct_type("Lst", [Term::prim(Prim::BoolType)], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &at_bln, &lst_bln), Ok(true));
 }
 
@@ -1522,7 +1522,7 @@ fn imitation_is_symmetric() {
 
     // Rigid on the left, stuck application on the right.
     let flex = Term::apply(Term::metavar(0), [nat_type()]);
-    let rigid = Term::inductive_type("Lst", [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type("Lst", [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &rigid, &flex), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
 }
@@ -1536,7 +1536,7 @@ fn imitation_equates_arguments_pairwise() {
 
     // ?0(?1) ≟ Lst(Nat) — the imitation solves ?0, the pairwise equation ?1.
     let flex = Term::apply(Term::metavar(0), [Term::metavar(1)]);
-    let rigid = Term::inductive_type("Lst", [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type("Lst", [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
     assert_eq!(context.metavar_solution(MetavarId(1)), Some(&nat_type()));
@@ -1558,12 +1558,12 @@ fn imitation_splits_params_and_indices() {
     // ?0(Nat, 3) ≟ Vec(Nat, 3) — arity 2 = 1 param + 1 index; the candidate's
     // body must mirror the rigid node's split or re-validation rejects it.
     let flex = Term::apply(Term::metavar(0), [nat_type(), nat(3)]);
-    let rigid = Term::inductive_type("Vec", [nat_type()], [nat(3)]);
+    let rigid = Term::induct_type("Vec", [nat_type()], [nat(3)]);
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
 
     let at_two = Term::apply(Term::metavar(0), [Term::prim(Prim::BoolType), nat(2)]);
-    let vec_two = Term::inductive_type("Vec", [Term::prim(Prim::BoolType)], [nat(2)]);
+    let vec_two = Term::induct_type("Vec", [Term::prim(Prim::BoolType)], [nat(2)]);
     assert_eq!(conv(&mut context, &at_two, &vec_two), Ok(true));
 }
 
@@ -1571,9 +1571,9 @@ fn imitation_splits_params_and_indices() {
 fn imitation_solves_against_struct_type() {
     let mut context = context();
     context
-        .register_structure(
+        .register_struct(
             "Pair",
-            Structure {
+            StructDecl {
                 params: Telescope::build([("A", Term::type_()), ("B", Term::type_())], ()),
                 fields: Telescope::build([("A", Term::type_()), ("B", Term::type_())], ()),
                 result_sort: Term::type_(),
@@ -1605,7 +1605,7 @@ fn imitation_arity_mismatch_blocks() {
     // v1 has no partial-application solutions, so the goal blocks (it is not
     // provably unequal — a constant solution could exist).
     let flex = Term::apply(Term::metavar(0), [nat_type()]);
-    let rigid = Term::inductive_type("Vec", [nat_type()], [nat(3)]);
+    let rigid = Term::induct_type("Vec", [nat_type()], [nat(3)]);
     let outcome = convert_outcome(&mut context, &Term::type_(), &flex, &rigid);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
@@ -1619,7 +1619,7 @@ fn imitation_non_function_birth_type_blocks() {
     context.birth_metavar(MetavarId(0), Vec::new(), Term::type_());
 
     let flex = Term::apply(Term::metavar(0), [nat_type()]);
-    let rigid = Term::inductive_type("Lst", [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type("Lst", [nat_type()], Vec::<Term>::new());
     let outcome = convert_outcome(&mut context, &Term::type_(), &flex, &rigid);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
@@ -1635,7 +1635,7 @@ fn imitation_leaves_rigid_apply_pairs_alone() {
     // case: the guard falls back to the neutral path, which cannot equate
     // them — a definite mismatch, exactly as before the rule existed.
     let stuck = Term::apply(Term::free_var("f"), [nat_type()]);
-    let rigid = Term::inductive_type("Lst", [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type("Lst", [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &stuck, &rigid), Ok(false));
 }
 

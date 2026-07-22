@@ -1,8 +1,8 @@
 use {
     super::{Bound, Context, Error, Mode, check, elaborate},
     crate::{
-        Definition, Inductive, InductiveParam, Item, Module, RecItem, Structure, Subterm,
-        Telescope, Term, check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with,
+        Definition, InductDecl, InductParam, Item, Module, RecItem, StructDecl, Subterm, Telescope,
+        Term, check_concept_registry, finish_deferred_witnesses, is_prop, reduce_with,
         register_witness, retry_deferred_witnesses, zonk, zonk_module,
     },
     curios_base::Qualifier,
@@ -43,16 +43,16 @@ fn check_telescope_entries<B: Bound>(
 /// Called from `elaborate_module_rec` after the group's signatures are
 /// reassumed rebuilt and *before* any body is checked — index types may
 /// mention the group's own members (resolved through the assumed signatures),
-/// and the type-constructor bodies' `InductiveType` nodes check their arguments
+/// and the type-constructor bodies' `InductType` nodes check their arguments
 /// against this very telescope. A name with no registry entry is an ordinary
 /// binding; no-op.
-fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), Error> {
-    let Some(inductive) = context.inductive(name).cloned() else {
+fn elaborate_induct_indices(context: &mut Context, name: &str) -> Result<(), Error> {
+    let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Ok(());
     };
 
-    let n_params = inductive.params.len();
-    let labels = inductive
+    let n_params = induct_decl.params.len();
+    let labels = induct_decl
         .indices
         .labels()
         .iter()
@@ -62,23 +62,23 @@ fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), 
     // Walk the full (params-first) index telescope, checking each entry type
     // against `Type` under the earlier binders.
     let (entries, ()) = context
-        .with_frame(|context| check_telescope_entries(context, inductive.indices.clone()))?;
+        .with_frame(|context| check_telescope_entries(context, induct_decl.indices.clone()))?;
 
     let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
     let params =
         Telescope::build(entries[..n_params].iter().cloned(), ()).relabel(&label_refs[..n_params]);
     let indices = Telescope::build(entries, ()).relabel(&label_refs);
 
-    context.update_inductive(
+    context.update_induct(
         name,
-        Inductive {
+        InductDecl {
             params,
             indices,
-            constructors: inductive.constructors,
-            result_sort: inductive.result_sort,
-            module: inductive.module,
-            root: inductive.root,
-            rep_public: inductive.rep_public,
+            constructors: induct_decl.constructors,
+            result_sort: induct_decl.result_sort,
+            module: induct_decl.module,
+            root: induct_decl.root,
+            rep_public: induct_decl.rep_public,
         },
     );
 
@@ -87,20 +87,20 @@ fn elaborate_inductive_indices(context: &mut Context, name: &str) -> Result<(), 
 
 /// Rebuild a registry entry's constructor signatures with *elaborated* types —
 /// the second phase of the registry rebuild (see
-/// [`elaborate_inductive_indices`]). Payload types may apply the inductive group's
+/// [`elaborate_induct_indices`]). Payload types may apply the inductive group's
 /// type constructors, so this runs from `elaborate_module_rec` only after the
 /// group's rebuilt bodies are defined; each terminal — the constructed
-/// `InductiveType` normal form — routes through `elaborate_inductive_type`, which
+/// `InductType` normal form — routes through `elaborate_induct_type`, which
 /// checks the parameters and the case's target indices against the
-/// already-rebuilt index telescope and returns another `InductiveType` node, the
+/// already-rebuilt index telescope and returns another `InductType` node, the
 /// shape `case_target_indices` and the match elaborators rely on.
-fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result<(), Error> {
-    let Some(inductive) = context.inductive(name).cloned() else {
+fn elaborate_induct_constructors(context: &mut Context, name: &str) -> Result<(), Error> {
+    let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Ok(());
     };
 
     let mut constructors = BTreeMap::new();
-    for (tag, param) in &inductive.constructors {
+    for (tag, param) in &induct_decl.constructors {
         let signature = &param.telescope;
         let labels = signature
             .labels()
@@ -117,22 +117,22 @@ fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result
         let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
         constructors.insert(
             tag.clone(),
-            InductiveParam {
+            InductParam {
                 telescope: Telescope::build(entries, terminal).relabel(&label_refs),
             },
         );
     }
 
-    context.update_inductive(
+    context.update_induct(
         name,
-        Inductive {
-            params: inductive.params,
-            indices: inductive.indices,
+        InductDecl {
+            params: induct_decl.params,
+            indices: induct_decl.indices,
             constructors,
-            result_sort: inductive.result_sort,
-            module: inductive.module,
-            root: inductive.root,
-            rep_public: inductive.rep_public,
+            result_sort: induct_decl.result_sort,
+            module: induct_decl.module,
+            root: induct_decl.root,
+            rep_public: induct_decl.rep_public,
         },
     );
 
@@ -142,17 +142,17 @@ fn elaborate_inductive_constructors(context: &mut Context, name: &str) -> Result
 /// Rebuild a struct's registry telescopes with *elaborated* types, so the field
 /// types `erase` and later construction sites consult are saturated (implicit
 /// insertion) and reduce correctly — the struct analogue of
-/// [`elaborate_inductive_indices`], over the single (params-first) field
+/// [`elaborate_induct_indices`], over the single (params-first) field
 /// telescope. Called from `elaborate_module_let` once the type-former is
 /// defined (field types may mention the struct itself and earlier items). A
 /// name with no registry entry is an ordinary binding; no-op.
-fn elaborate_structure(context: &mut Context, name: &str) -> Result<(), Error> {
-    let Some(structure) = context.structure(name).cloned() else {
+fn elaborate_struct(context: &mut Context, name: &str) -> Result<(), Error> {
+    let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Ok(());
     };
 
-    let n_params = structure.params.len();
-    let labels = structure
+    let n_params = struct_decl.params.len();
+    let labels = struct_decl
         .fields
         .labels()
         .iter()
@@ -160,12 +160,12 @@ fn elaborate_structure(context: &mut Context, name: &str) -> Result<(), Error> {
         .collect::<Vec<_>>();
 
     let declared_prop = matches!(
-        &*reduce_with(context, &structure.result_sort)?,
+        &*reduce_with(context, &struct_decl.result_sort)?,
         Subterm::Prop
     );
 
     let (entries, ()) = context.with_frame(|context| -> Result<_, Error> {
-        let (entries, ()) = check_telescope_entries(context, structure.fields.clone())?;
+        let (entries, ()) = check_telescope_entries(context, struct_decl.fields.clone())?;
 
         // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof
         // irrelevance, yet projection is an *unguarded* eliminator — it reads a
@@ -193,15 +193,15 @@ fn elaborate_structure(context: &mut Context, name: &str) -> Result<(), Error> {
         Telescope::build(entries[..n_params].iter().cloned(), ()).relabel(&label_refs[..n_params]);
     let fields = Telescope::build(entries, ()).relabel(&label_refs);
 
-    context.update_structure(
+    context.update_struct(
         name,
-        Structure {
+        StructDecl {
             params,
             fields,
-            result_sort: structure.result_sort,
-            module: structure.module,
-            root: structure.root,
-            rep_public: structure.rep_public,
+            result_sort: struct_decl.result_sort,
+            module: struct_decl.module,
+            root: struct_decl.root,
+            rep_public: struct_decl.rep_public,
         },
     );
 
@@ -238,7 +238,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
 
     // A struct's type-former lowers to a standalone `let`; rebuild its registry
     // telescopes now that the former is defined (no-op for an ordinary let).
-    elaborate_structure(context, &def.name)?;
+    elaborate_struct(context, &def.name)?;
 
     Ok(Definition {
         name: def.name.clone(),
@@ -275,9 +275,9 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     // An inductive's type bindings always lower as one `rec` group whose member
     // names are the registry keys. Rebuild the registry index telescopes here
     // — after the rebuilt signatures are assumed (index types may mention the
-    // group), before any body's `InductiveType` node checks against them.
+    // group), before any body's `InductType` node checks against them.
     for def in &defs {
-        elaborate_inductive_indices(context, &def.name)?;
+        elaborate_induct_indices(context, &def.name)?;
     }
 
     let slots = defs
@@ -299,10 +299,10 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     context.retry_parked()?;
 
     // Registry rebuild, phase two: constructor payload types may apply the
-    // group's type constructors, so their signatures (and `InductiveType`
+    // group's type constructors, so their signatures (and `InductType`
     // terminals) elaborate only now that the rebuilt bodies are defined.
     for def in &defs {
-        elaborate_inductive_constructors(context, &def.name)?;
+        elaborate_induct_constructors(context, &def.name)?;
     }
 
     let definitions = defs
@@ -347,15 +347,15 @@ pub fn elaborate_module(
 ) -> Result<(Module, Term), Error> {
     // Seed the context's inductive registry before any item is checked: an
     // inductive's type-constructor and value-constructor definitions reference
-    // their own registry entry (`elaborate_inductive_type` / `elaborate_variant`).
-    for (name, inductive) in &module.inductives {
-        context.register_inductive(name, inductive.clone())?;
+    // their own registry entry (`elaborate_induct_type` / `elaborate_variant`).
+    for (name, induct_decl) in &module.induct_decls {
+        context.register_induct(name, induct_decl.clone())?;
     }
 
     // Likewise seed the struct registry — `elaborate_struct`/`elaborate_proj`
-    // consult it (and `elaborate_structure` rebuilds each entry's telescopes).
-    for (name, structure) in &module.structures {
-        context.register_structure(name, structure.clone())?;
+    // consult it (and `elaborate_struct` rebuilds each entry's telescopes).
+    for (name, struct_decl) in &module.struct_decls {
+        context.register_struct(name, struct_decl.clone())?;
     }
 
     // Concept metadata and witness markers, alongside — witness *table*
@@ -412,36 +412,36 @@ pub fn elaborate_module(
     // from the context, where the per-group rebuild re-registered them), so
     // `zonk_module` and `erase` see elaborated telescopes. An entry whose
     // declaring item was pruned keeps its lowered form — nothing consults it.
-    let inductives = module
-        .inductives
+    let induct_decls = module
+        .induct_decls
         .keys()
         .map(|name| {
-            let inductive = context
-                .inductive(name)
+            let induct_decl = context
+                .induct_decl(name)
                 .expect("every module entry was registered above")
                 .clone();
-            (name.clone(), inductive)
+            (name.clone(), induct_decl)
         })
         .collect();
 
     // Same for the struct registry: pull back the entries rebuilt by
-    // `elaborate_structure` so `zonk_module`/`erase` see elaborated telescopes.
-    let structures = module
-        .structures
+    // `elaborate_struct` so `zonk_module`/`erase` see elaborated telescopes.
+    let struct_decls = module
+        .struct_decls
         .keys()
         .map(|name| {
-            let structure = context
-                .structure(name)
+            let struct_decl = context
+                .struct_decl(name)
                 .expect("every module entry was registered above")
                 .clone();
-            (name.clone(), structure)
+            (name.clone(), struct_decl)
         })
         .collect();
 
     let module = Module {
         items,
-        inductives,
-        structures,
+        induct_decls,
+        struct_decls,
         concepts: module.concepts.clone(),
         witnesses: module.witnesses.clone(),
         type_: module.type_.clone(),
@@ -500,33 +500,33 @@ pub fn elaborate_and_zonk_with_prelude(
     // Seed the registries — cached prelude entries verbatim, then the user's
     // (rebuilt by elaboration below). Keep the user keys to pull their rebuilt
     // forms back out afterwards.
-    for (name, inductive) in &prelude.inductives {
-        context.register_inductive(name, inductive.clone())?;
+    for (name, induct_decl) in &prelude.induct_decls {
+        context.register_induct(name, induct_decl.clone())?;
     }
-    for (name, structure) in &prelude.structures {
-        context.register_structure(name, structure.clone())?;
+    for (name, struct_decl) in &prelude.struct_decls {
+        context.register_struct(name, struct_decl.clone())?;
     }
     for (name, concept) in &prelude.concepts {
         context.register_concept(name, concept.clone())?;
     }
 
-    let user_inductive_keys = module
-        .inductives
+    let user_induct_keys = module
+        .induct_decls
         .keys()
-        .filter(|name| !prelude.inductives.contains_key(*name))
+        .filter(|name| !prelude.induct_decls.contains_key(*name))
         .cloned()
         .collect::<Vec<String>>();
-    let user_structure_keys = module
-        .structures
+    let user_struct_keys = module
+        .struct_decls
         .keys()
-        .filter(|name| !prelude.structures.contains_key(*name))
+        .filter(|name| !prelude.struct_decls.contains_key(*name))
         .cloned()
         .collect::<Vec<String>>();
-    for name in &user_inductive_keys {
-        context.register_inductive(name, module.inductives[name].clone())?;
+    for name in &user_induct_keys {
+        context.register_induct(name, module.induct_decls[name].clone())?;
     }
-    for name in &user_structure_keys {
-        context.register_structure(name, module.structures[name].clone())?;
+    for name in &user_struct_keys {
+        context.register_struct(name, module.struct_decls[name].clone())?;
     }
     for (name, concept) in &module.concepts {
         if !prelude.concepts.contains_key(name) {
@@ -593,24 +593,24 @@ pub fn elaborate_and_zonk_with_prelude(
     let body_type = reduce_with(context, &body_type)?;
 
     // Pull the rebuilt user registry entries back out (mirrors `elaborate_module`).
-    let user_inductives = user_inductive_keys
+    let user_induct_decls = user_induct_keys
         .into_iter()
         .map(|name| {
-            let inductive = context
-                .inductive(&name)
+            let induct_decl = context
+                .induct_decl(&name)
                 .expect("user entry registered")
                 .clone();
-            (name, inductive)
+            (name, induct_decl)
         })
         .collect();
-    let user_structures = user_structure_keys
+    let user_struct_decls = user_struct_keys
         .into_iter()
         .map(|name| {
-            let structure = context
-                .structure(&name)
+            let struct_decl = context
+                .struct_decl(&name)
                 .expect("user entry registered")
                 .clone();
-            (name, structure)
+            (name, struct_decl)
         })
         .collect();
 
@@ -631,8 +631,8 @@ pub fn elaborate_and_zonk_with_prelude(
 
     let user_module = Module {
         items: user_items,
-        inductives: user_inductives,
-        structures: user_structures,
+        induct_decls: user_induct_decls,
+        struct_decls: user_struct_decls,
         concepts: user_concepts,
         witnesses: user_witnesses,
         type_: module.type_.clone(),
@@ -643,10 +643,10 @@ pub fn elaborate_and_zonk_with_prelude(
 
     let mut items = prelude.items.clone();
     items.extend(user_module.items);
-    let mut inductives = prelude.inductives.clone();
-    inductives.extend(user_module.inductives);
-    let mut structures = prelude.structures.clone();
-    structures.extend(user_module.structures);
+    let mut induct_decls = prelude.induct_decls.clone();
+    induct_decls.extend(user_module.induct_decls);
+    let mut struct_decls = prelude.struct_decls.clone();
+    struct_decls.extend(user_module.struct_decls);
     let mut concepts = prelude.concepts.clone();
     concepts.extend(user_module.concepts);
     let mut witnesses = prelude.witnesses.clone();
@@ -654,8 +654,8 @@ pub fn elaborate_and_zonk_with_prelude(
 
     let module = Module {
         items,
-        inductives,
-        structures,
+        induct_decls,
+        struct_decls,
         concepts,
         witnesses,
         type_: user_module.type_,

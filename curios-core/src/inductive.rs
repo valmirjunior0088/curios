@@ -9,7 +9,7 @@ use {
 ///
 /// The telescope is the constructor's *full* signature — the parameter binders
 /// first, then the payload binders, terminating in the constructed type. E.g.
-/// `success ↦ (A : Type, E : Type, _0 : A) -> InductiveType { Result, [A, E] }`.
+/// `success ↦ (A : Type, E : Type, _0 : A) -> InductType { Result, [A, E] }`.
 /// For an indexed inductive the terminal is *per-case*: its indices are that case's
 /// target expressions over the payload binders. Instantiating peels the leading
 /// `params.len()` binders by opening each with the corresponding parameter.
@@ -21,7 +21,7 @@ use {
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-pub struct InductiveParam {
+pub struct InductParam {
     pub telescope: Telescope<Term>,
 }
 
@@ -39,7 +39,7 @@ pub struct InductiveParam {
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-pub struct Inductive {
+pub struct InductDecl {
     /// The declaration's parameter telescope, e.g. `(A : Type, E : Type)` for
     /// `induct Result(A : Type, E : Type)`. Ends in `()` like a `TupleType`'s
     /// telescope: there is no trailing body, only binders.
@@ -52,10 +52,10 @@ pub struct Inductive {
     /// by peeling the leading `params.len()` binders.
     pub indices: Telescope<()>,
     /// Per-constructor signatures, keyed by tag — each the constructor's
-    /// signature telescope (see [`InductiveParam`]).
-    pub constructors: BTreeMap<Atom, InductiveParam>,
+    /// signature telescope (see [`InductParam`]).
+    pub constructors: BTreeMap<Atom, InductParam>,
     /// The declared result sort — `Type` or `Prop` — the codomain of the
-    /// type-constructor's kind. A fully-applied `InductiveType { name, .. }`
+    /// type-constructor's kind. A fully-applied `InductType { name, .. }`
     /// has this sort, which `sort_of` reads to decide propositional irrelevance.
     pub result_sort: Term,
     /// The exact source module that owns construction and elimination rights.
@@ -70,10 +70,10 @@ pub struct Inductive {
     pub rep_public: bool,
 }
 
-impl Inductive {
+impl InductDecl {
     /// Instantiate `tag`'s signature at the given type parameters, yielding the
     /// payload-only telescope: `success` at `[Nat, Bin]` becomes
-    /// `(_0 : Nat) -> InductiveType { Result, [Nat, Bin] }`.
+    /// `(_0 : Nat) -> InductType { Result, [Nat, Bin] }`.
     pub(crate) fn instantiate(&self, tag: &Atom, params: &[Term]) -> Option<Telescope<Term>> {
         Some(
             self.constructors
@@ -86,7 +86,7 @@ impl Inductive {
 
     /// Constructor tags in runtime dispatch order: position `i` here is the
     /// tag `erase` assigns as runtime index `i` (`erase_variant`) and the
-    /// arm order it builds a `Match` in (`erase_inductive_match`). Both sites
+    /// arm order it builds a `Match` in (`erase_induct_match`). Both sites
     /// must derive that correspondence from this one method, not from their
     /// own `constructors.keys()` walk, so the two can never disagree about
     /// what "index `i`" means.

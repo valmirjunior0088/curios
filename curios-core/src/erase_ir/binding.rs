@@ -131,16 +131,16 @@ fn item_reference_names(item: &Item, module: &Module) -> BTreeSet<String> {
         }
     }
     for name in item.declared_names() {
-        if let Some(inductive) = module.inductives.get(name) {
-            names.extend(inductive.params.free_vars());
-            names.extend(inductive.indices.free_vars());
-            for parameter in inductive.constructors.values() {
+        if let Some(induct_decl) = module.induct_decls.get(name) {
+            names.extend(induct_decl.params.free_vars());
+            names.extend(induct_decl.indices.free_vars());
+            for parameter in induct_decl.constructors.values() {
                 names.extend(parameter.telescope.free_vars());
             }
         }
-        if let Some(structure) = module.structures.get(name) {
-            names.extend(structure.params.free_vars());
-            names.extend(structure.fields.free_vars());
+        if let Some(struct_decl) = module.struct_decls.get(name) {
+            names.extend(struct_decl.params.free_vars());
+            names.extend(struct_decl.fields.free_vars());
         }
     }
     names

@@ -1,10 +1,10 @@
 //! Registry entries for concepts (record-shaped interfaces) and witnesses
 //! (their registered inhabitants) — the instance-argument machinery's flat
 //! stores, carried on the [`Module`](super::Module) and mirrored into the
-//! [`Context`](super::Context) exactly like `inductives`/`structures`.
+//! [`Context`](super::Context) exactly like `induct_decls`/`struct_decls`.
 //!
 //! A concept lowers to a representation-public nominal structure (its
-//! [`Structure`] (super::Structure) entry drives literals and projections); the [`Concept`]
+//! [`StructDecl`] (super::StructDecl) entry drives literals and projections); the [`Concept`]
 //! entry here adds what resolution needs on top: the field labels, the
 //! superclass mask, and the parameter telescope. A witness lowers to an
 //! ordinary top-level definition; its [`Witness`] entry keys that definition
@@ -29,7 +29,7 @@ use {
 )]
 pub struct Concept {
     /// The declaration's parameter telescope, e.g. `(A : Type)` for
-    /// `concept Show(A : Type)`. Ends in `()` like a `Structure`'s.
+    /// `concept Show(A : Type)`. Ends in `()` like a `StructDecl`'s.
     pub params: Telescope<()>,
     /// Field labels in declaration order — the positions witness struct
     /// literals fill and method wrappers project.
@@ -120,12 +120,12 @@ impl HeadKey {
     /// `Type`/`Prop` — which are not keyable.
     pub(crate) fn of_whnf(term: &Term) -> Option<HeadKey> {
         match &**term {
-            Subterm::InductiveType(inductive) => Some(HeadKey::Nominal(inductive.name.clone())),
-            Subterm::StructType(structure) => Some(HeadKey::Nominal(structure.name.clone())),
+            Subterm::InductType(induct_decl) => Some(HeadKey::Nominal(induct_decl.name.clone())),
+            Subterm::StructType(struct_decl) => Some(HeadKey::Nominal(struct_decl.name.clone())),
             Subterm::Prim(prim) => Self::of_prim(prim),
             // The higher-kinded head: the type-constructor function's body is
             // the normal form the applied constructor would reduce to (`λA.
-            // InductiveType(Option, [A])`, or `λT. LstType(T)` for a primitive
+            // InductType(Option, [A])`, or `λT. LstType(T)` for a primitive
             // former like `/sys/Lst`). The binders need not be opened — the
             // name/former sits on the node.
             Subterm::Func(func) => {
@@ -137,11 +137,11 @@ impl HeadKey {
                     unreachable!("telescope spine ends in Done");
                 };
                 match &***body {
-                    Subterm::InductiveType(inductive) => {
-                        Some(HeadKey::Nominal(inductive.name.clone()))
+                    Subterm::InductType(induct_decl) => {
+                        Some(HeadKey::Nominal(induct_decl.name.clone()))
                     }
-                    Subterm::StructType(structure) => {
-                        Some(HeadKey::Nominal(structure.name.clone()))
+                    Subterm::StructType(struct_decl) => {
+                        Some(HeadKey::Nominal(struct_decl.name.clone()))
                     }
                     Subterm::Prim(prim) => Self::of_prim(prim),
                     _ => None,

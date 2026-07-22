@@ -268,21 +268,21 @@ fn seed(
                 });
             }
             TopItem::Induct(group) => {
-                for inductive in group {
-                    let ctor = prefix.with(&inductive.label);
+                for induct_decl in group {
+                    let ctor = prefix.with(&induct_decl.label);
 
                     // Constructor bindings are public within their synthetic
                     // namespace. The parent's child bit, seeded separately as
                     // `vis_pub && rep_pub`, gates all external walks while the
                     // declaring module retains direct access.
                     let mut direct = ModuleInfo::new(RootId::of_segment(prefix.root_segment()));
-                    for case in &inductive.cases {
+                    for case in &induct_decl.cases {
                         direct.insert_binding(case.label.clone(), true)?;
                     }
                     table.insert(ctor.clone(), direct);
 
                     let mut interface = PublicInterface::new();
-                    for case in &inductive.cases {
+                    for case in &induct_decl.cases {
                         let target = ctor.with(&case.label);
                         interface.bindings.insert(
                             case.label.clone(),
@@ -627,7 +627,7 @@ fn resolve_provider(
             None => match table.get(module) {
                 Some(info) if info.is_opaque_constructor_child(first) => {
                     return Err(Error::OpaqueConstructorsCannotBeReExported {
-                        inductive: module.with(first).join(),
+                        induct_decl: module.with(first).join(),
                     });
                 }
                 // Own direct child (any visibility) is a valid start; only an

@@ -189,7 +189,7 @@ fn variant_collects_metavars_and_prints_as_function_call() {
     assert_eq!(ctor.metavars(), BTreeSet::from([1, 2].map(MetavarId)));
     assert_eq!(format!("{ctor}"), "Result/success(?2)");
 
-    let type_ = Term::inductive_type(
+    let type_ = Term::induct_type(
         "Result",
         [Term::prim(Prim::NatType), Term::metavar(3)],
         Vec::<Term>::new(),
@@ -231,7 +231,7 @@ fn implicit_marks_print_and_default_to_explicit() {
 #[test]
 fn inductive_match_case_binders_are_captured() {
     // match r : #m => Type; | success(value) => value;
-    let term = Term::inductive_match(
+    let term = Term::induct_match(
         Term::free_var("r"),
         None,
         Term::type_(),
@@ -247,7 +247,7 @@ fn inductive_match_case_binders_are_captured() {
 fn inductive_match_default_prints_a_catch_all_arm() {
     // The catch-all renders as a trailing `| _ =>` arm, after the enumerated
     // constructors — mirroring `Cases::Switch`'s default.
-    let term = Term::inductive_match_default(
+    let term = Term::induct_match_default(
         Term::free_var("r"),
         None,
         Term::type_(),
@@ -265,7 +265,7 @@ fn inductive_match_default_prints_a_catch_all_arm() {
 #[test]
 fn inductive_variants_reach_spans_components() {
     assert_eq!(
-        Term::inductive_type("Result", [Term::var(Var::bound(2))], Vec::<Term>::new()).reach(),
+        Term::induct_type("Result", [Term::var(Var::bound(2))], Vec::<Term>::new()).reach(),
         3
     );
     assert_eq!(

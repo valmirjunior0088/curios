@@ -28,8 +28,8 @@ fn definition(name: &str, type_: Term, body: Term) -> Item {
 fn module(items: Vec<Item>, body: Term) -> Module {
     Module {
         items,
-        inductives: BTreeMap::new(),
-        structures: BTreeMap::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         type_: None,
@@ -278,25 +278,25 @@ fn a_capturing_closure_stores_no_capture_list() {
 }
 
 fn opt_type() -> Term {
-    Term::inductive_type("Opt", Vec::<Term>::new(), Vec::<Term>::new())
+    Term::induct_type("Opt", Vec::<Term>::new(), Vec::<Term>::new())
 }
 
 // induct Opt : Type | none() | some(x : Nat) end — `none` is tag 0, `some`
 // tag 1 (registry-sorted). Registered on the module so erasure seeds it.
-fn opt_inductive() -> Inductive {
-    Inductive {
+fn opt_induct() -> InductDecl {
+    InductDecl {
         params: Telescope::done(()),
         indices: Telescope::done(()),
         constructors: BTreeMap::from([
             (
                 Atom::from("none"),
-                InductiveParam {
+                InductParam {
                     telescope: Telescope::done(opt_type()),
                 },
             ),
             (
                 Atom::from("some"),
-                InductiveParam {
+                InductParam {
                     telescope: Telescope::build([("x", Term::prim(Prim::NatType))], opt_type()),
                 },
             ),
@@ -310,15 +310,15 @@ fn opt_inductive() -> Inductive {
 
 #[test]
 fn a_variant_constructs_with_its_registered_schema() {
-    let mut inductives = BTreeMap::new();
-    inductives.insert("Opt".to_string(), opt_inductive());
+    let mut induct_decls = BTreeMap::new();
+    induct_decls.insert("Opt".to_string(), opt_induct());
     let body = Term::variant("Opt", Vec::<Term>::new(), Atom::from("some"), [nat_lit(6)]);
     let erased = erase_module_to_ir(
         &mut context(),
         &Module {
             items: Vec::new(),
-            inductives,
-            structures: BTreeMap::new(),
+            induct_decls,
+            struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
             witnesses: BTreeSet::new(),
             type_: None,
@@ -524,10 +524,10 @@ entry {
 
 #[test]
 fn a_variant_match_binds_payload_without_projections() {
-    let mut inductives = BTreeMap::new();
-    inductives.insert("Opt".to_string(), opt_inductive());
+    let mut induct_decls = BTreeMap::new();
+    induct_decls.insert("Opt".to_string(), opt_induct());
     let scrutinee = Term::variant("Opt", Vec::<Term>::new(), Atom::from("some"), [nat_lit(6)]);
-    let body = Term::inductive_match(
+    let body = Term::induct_match(
         scrutinee,
         None,
         Term::prim(Prim::NatType),
@@ -540,8 +540,8 @@ fn a_variant_match_binds_payload_without_projections() {
         &mut context(),
         &Module {
             items: Vec::new(),
-            inductives,
-            structures: BTreeMap::new(),
+            induct_decls,
+            struct_decls: BTreeMap::new(),
             concepts: BTreeMap::new(),
             witnesses: BTreeSet::new(),
             type_: None,

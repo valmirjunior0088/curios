@@ -8,7 +8,7 @@ use {
 /// declaration produces alongside its type-former binding.
 ///
 /// A struct is a nominal record — there is no value-constructor function and no
-/// tag — so this is an [`Inductive`](super::Inductive) minus the indices and
+/// tag — so this is an [`InductDecl`](super::InductDecl) minus the indices and
 /// the per-constructor map, plus the privacy metadata the representation
 /// boundary needs. Elaboration consults it to check a struct literal's fields
 /// and to type a projection; `erase` consults it to lower the fields.
@@ -17,7 +17,7 @@ use {
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-pub struct Structure {
+pub struct StructDecl {
     /// The declaration's parameter telescope, e.g. `(A : Type, B : Type)` for
     /// `struct Pair(A : Type, B : Type)`. Ends in `()` like a `TupleType`'s
     /// telescope: there is no trailing body, only binders.
@@ -46,7 +46,7 @@ pub struct Structure {
     pub rep_public: bool,
 }
 
-impl Structure {
+impl StructDecl {
     /// Instantiate the field telescope at known parameters, yielding the
     /// field-only telescope: `fields_at([Nat, Bin])` for `Pair` becomes
     /// `(fst : Nat, snd : Bin)`. Peels the leading `params.len()` binders by

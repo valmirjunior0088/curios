@@ -6,9 +6,9 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, InductiveType, Match,
-        Metavar, Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term,
-        Three, Tuple, TupleType, Variant, Visit, check, reduce, reduce_forced, unfold_rec,
+        Apply, Bound, Carrier, Cases, Context, Field, Func, FuncType, InductType, Match, Metavar,
+        Prim, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope, Term, Three,
+        Tuple, TupleType, Variant, Visit, check, reduce, reduce_forced, unfold_rec,
         unfold_rec_apply,
     },
     crate::Instant,
@@ -156,14 +156,14 @@ impl Sort {
         let reduced = reduce_forced(context, type_.clone())?;
 
         Ok(match &*reduced {
-            Subterm::InductiveType(InductiveType { name, .. }) => {
-                match context.inductive(name).map(|i| i.result_sort.clone()) {
+            Subterm::InductType(InductType { name, .. }) => {
+                match context.induct_decl(name).map(|i| i.result_sort.clone()) {
                     Some(sort) => Sort::from_universe(context, &sort)?,
                     None => Sort::Type,
                 }
             }
             Subterm::StructType(StructType { name, .. }) => {
-                match context.structure(name).map(|s| s.result_sort.clone()) {
+                match context.struct_decl(name).map(|s| s.result_sort.clone()) {
                     Some(sort) => Sort::from_universe(context, &sort)?,
                     None => Sort::Type,
                 }
@@ -593,11 +593,11 @@ impl Convert {
         Ok(true)
     }
 
-    fn compare_inductive_type(
+    fn compare_induct_type(
         &mut self,
         context: &mut Context,
-        this: InductiveType,
-        that: InductiveType,
+        this: InductType,
+        that: InductType,
     ) -> Result<bool, ReduceError> {
         if this.name != that.name
             || this.params.len() != that.params.len()
@@ -617,7 +617,7 @@ impl Convert {
             .chain(this.indices.iter())
             .cloned()
             .collect();
-        let arg_types = match context.inductive(&this.name).map(|i| i.indices.clone()) {
+        let arg_types = match context.induct_decl(&this.name).map(|i| i.indices.clone()) {
             Some(telescope) if telescope.len() == this_args.len() => {
                 let mut types = Vec::with_capacity(this_args.len());
                 telescope.walk(&this_args, |_, _, ty| {
@@ -688,8 +688,8 @@ impl Convert {
         // instead of a structural compare at `Type`. Same recovery `erase`
         // uses; falls back to `Type` if the inductive is somehow absent.
         let telescope = context
-            .inductive(&this.name)
-            .and_then(|inductive| inductive.instantiate(&this.tag, &this.params));
+            .induct_decl(&this.name)
+            .and_then(|induct_decl| induct_decl.instantiate(&this.tag, &this.params));
 
         for (a, b) in this.params.into_iter().zip(that.params) {
             self.enqueue(Term::type_(), a, b);
@@ -734,8 +734,8 @@ impl Convert {
         // irrelevance fire per field, as `compare_tuple` does with the tuple
         // type's telescope. Falls back to `Type` if the struct is somehow absent.
         let telescope = context
-            .structure(&this.name)
-            .map(|structure| structure.fields_at(&this.params));
+            .struct_decl(&this.name)
+            .map(|struct_decl| struct_decl.fields_at(&this.params));
 
         for (a, b) in this.params.into_iter().zip(that.params) {
             self.enqueue(Term::type_(), a, b);
@@ -817,12 +817,12 @@ impl Convert {
             // default, though, is a real arm: two matches convert only if their
             // catch-alls agree in presence and body.
             (
-                Cases::Inductive {
+                Cases::Induct {
                     cases: this_cases,
                     default: this_default,
                     ..
                 },
-                Cases::Inductive {
+                Cases::Induct {
                     cases: that_cases,
                     default: that_default,
                     ..
@@ -1028,8 +1028,8 @@ impl Convert {
         // `Tuple`'s inline `TupleType`.
         let cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
             Subterm::StructType(StructType { name, params }) if name == struct_.name => context
-                .structure(&name)
-                .map(|structure| structure.fields_at(&params)),
+                .struct_decl(&name)
+                .map(|struct_decl| struct_decl.fields_at(&params)),
             _ => None,
         };
 
@@ -1081,8 +1081,8 @@ impl Convert {
             // `TupleType`, a `StructType` doesn't carry its telescope inline.
             Subterm::StructType(StructType { name, .. }) => {
                 let n = context
-                    .structure(&name)
-                    .map(|structure| structure.fields.len() - structure.params.len());
+                    .struct_decl(&name)
+                    .map(|struct_decl| struct_decl.fields.len() - struct_decl.params.len());
                 let Some(n) = n else {
                     return Ok(false);
                 };
@@ -1399,28 +1399,28 @@ impl Convert {
 
         type MkBody = Box<dyn Fn(&[Term]) -> Term>;
         let (rigid_args, mk_body): (Vec<Term>, MkBody) = match &*rigid {
-            Subterm::InductiveType(inductive) => {
-                let name = inductive.name.clone();
-                let n_params = inductive.params.len();
-                let args = inductive
+            Subterm::InductType(induct_decl) => {
+                let name = induct_decl.name.clone();
+                let n_params = induct_decl.params.len();
+                let args = induct_decl
                     .params
                     .iter()
-                    .chain(&inductive.indices)
+                    .chain(&induct_decl.indices)
                     .cloned()
                     .collect();
                 (
                     args,
                     Box::new(move |vars| {
                         let (params, indices) = vars.split_at(n_params);
-                        Term::inductive_type(&name, params.iter().cloned(), indices.iter().cloned())
+                        Term::induct_type(&name, params.iter().cloned(), indices.iter().cloned())
                     }),
                 )
             }
             // Struct types carry no indices.
-            Subterm::StructType(structure) => {
-                let name = structure.name.clone();
+            Subterm::StructType(struct_decl) => {
+                let name = struct_decl.name.clone();
                 (
-                    structure.params.clone(),
+                    struct_decl.params.clone(),
                     Box::new(move |vars| Term::struct_type(&name, vars.iter().cloned())),
                 )
             }
@@ -1470,7 +1470,7 @@ impl Convert {
         }
 
         // The candidate body mirrors the rigid node's shape (for an inductive,
-        // its params/indices split — `elaborate_inductive_type` re-checks the
+        // its params/indices split — `elaborate_induct_type` re-checks the
         // node against the full telescope during re-validation and rejects a
         // wrong split).
         let binder_vars = domains
@@ -1792,8 +1792,8 @@ impl Convert {
                     self.eta_expand_tuple(context, tuple, other.into(), type_.clone())?
                 }
                 (Subterm::Proj(this), Subterm::Proj(that)) => self.compare_proj(this, that)?,
-                (Subterm::InductiveType(this), Subterm::InductiveType(that)) => {
-                    self.compare_inductive_type(context, this, that)?
+                (Subterm::InductType(this), Subterm::InductType(that)) => {
+                    self.compare_induct_type(context, this, that)?
                 }
                 (Subterm::Variant(this), Subterm::Variant(that)) => {
                     self.compare_variant(context, this, that)?
@@ -1863,12 +1863,12 @@ impl Convert {
                 // type constructor. The unsolved-metavariable-head guard (and
                 // the `eta_expand_neutral` fallthrough for every other
                 // `Apply`) lives inside `imitate_flex_apply`.
-                (Subterm::Apply(apply), Subterm::InductiveType(rigid)) => {
-                    let rigid: Term = Subterm::InductiveType(rigid).into();
+                (Subterm::Apply(apply), Subterm::InductType(rigid)) => {
+                    let rigid: Term = Subterm::InductType(rigid).into();
                     self.imitate_flex_apply(context, apply, rigid, &that_raw, goal.clone())?
                 }
-                (Subterm::InductiveType(rigid), Subterm::Apply(apply)) => {
-                    let rigid: Term = Subterm::InductiveType(rigid).into();
+                (Subterm::InductType(rigid), Subterm::Apply(apply)) => {
+                    let rigid: Term = Subterm::InductType(rigid).into();
                     self.imitate_flex_apply(context, apply, rigid, &this_raw, goal.clone())?
                 }
                 (Subterm::Apply(apply), Subterm::StructType(rigid)) => {

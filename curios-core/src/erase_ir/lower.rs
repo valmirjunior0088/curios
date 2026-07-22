@@ -51,11 +51,11 @@ pub fn erase_module_to_ir(
     context.with_suppressed_privacy(|context| {
         // Erasure runs with its own `Context`; seed the registries the
         // re-derived types consult before any item does.
-        for (name, inductive) in &module.inductives {
-            context.register_inductive(name, inductive.clone())?;
+        for (name, induct_decl) in &module.induct_decls {
+            context.register_induct(name, induct_decl.clone())?;
         }
-        for (name, structure) in &module.structures {
-            context.register_structure(name, structure.clone())?;
+        for (name, struct_decl) in &module.struct_decls {
+            context.register_struct(name, struct_decl.clone())?;
         }
 
         let mut lowering = Lowering::default();
@@ -134,7 +134,7 @@ impl Lowering {
             | Subterm::Prop
             | Subterm::FuncType(_)
             | Subterm::TupleType(_)
-            | Subterm::InductiveType(_)
+            | Subterm::InductType(_)
             | Subterm::StructType(_) => Ok(Outcome::Emitted(self.unit())),
             Subterm::Var(var) => {
                 let name = var.unwrap();
@@ -251,11 +251,11 @@ pub fn erase_prelude_to_ir_prefix(
 ) -> Result<ErasedPrelude, Error> {
     // Re-derivation, not surface elaboration (see `erase_module_to_ir`).
     context.with_suppressed_privacy(|context| {
-        for (name, inductive) in &prelude.inductives {
-            context.register_inductive(name, inductive.clone())?;
+        for (name, induct_decl) in &prelude.induct_decls {
+            context.register_induct(name, induct_decl.clone())?;
         }
-        for (name, structure) in &prelude.structures {
-            context.register_structure(name, structure.clone())?;
+        for (name, struct_decl) in &prelude.struct_decls {
+            context.register_struct(name, struct_decl.clone())?;
         }
         let mut lowering = Lowering::default();
         lowering.erase_items(context, prelude, 0)?;
@@ -282,11 +282,11 @@ pub fn erase_module_with_prelude_to_ir(
 ) -> Result<curios_ersd::Module, Error> {
     // Re-derivation, not surface elaboration (see `erase_module_to_ir`).
     context.with_suppressed_privacy(|context| {
-        for (name, inductive) in &module.inductives {
-            context.register_inductive(name, inductive.clone())?;
+        for (name, induct_decl) in &module.induct_decls {
+            context.register_induct(name, induct_decl.clone())?;
         }
-        for (name, structure) in &module.structures {
-            context.register_structure(name, structure.clone())?;
+        for (name, struct_decl) in &module.struct_decls {
+            context.register_struct(name, struct_decl.clone())?;
         }
 
         // Re-seed the Core context with the prelude's definitions, mirroring

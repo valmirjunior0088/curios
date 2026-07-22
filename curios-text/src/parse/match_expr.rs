@@ -74,7 +74,7 @@ pub(super) fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Motive>)> {
 // rejects mixing it with a concrete-shape arm in the same column, since that
 // would be a catch-all/row-priority pattern this grammar doesn't otherwise
 // support.
-pub(super) fn parse_inductive_match_branch<'a>() -> Parser<'a, MatrixArm> {
+pub(super) fn parse_induct_match_branch<'a>() -> Parser<'a, MatrixArm> {
     catch(parse_literal("|"))
         .and_keep(parse_match_pattern())
         .and_drop(parse_literal("=>"))
@@ -183,7 +183,7 @@ pub(super) fn parse_choose<'a>() -> Parser<'a, Term> {
 // constructor's target eliminates with no arms at all.
 pub(super) fn parse_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
-        .and(many0(parse_inductive_match_branch))
+        .and(many0(parse_induct_match_branch))
         .and_drop(parse_keyword("end"))
         .map(|((head, motive), arms)| Subterm::Match(Match { head, motive, arms }))
         .map(Into::into)

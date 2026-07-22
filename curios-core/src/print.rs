@@ -1,7 +1,7 @@
 use {
     super::{
-        Apply, Arity, Atom, Bound, Carrier, Cases, Field, Func, FuncType, InductiveType, Infix,
-        Let, Many, Match, Nat, Prim, Proj, Rec, RecMember, Scope, Struct, StructType, Subterm,
+        Apply, Arity, Atom, Bound, Carrier, Cases, Field, Func, FuncType, InductType, Infix, Let,
+        Many, Match, Nat, Prim, Proj, Rec, RecMember, Scope, Struct, StructType, Subterm,
         Telescope, Term, Three, Tuple, TupleType, Two, Var, Variant,
     },
     curios_base::{
@@ -157,7 +157,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
         }
         Subterm::Tuple(Tuple { fields, .. }) => each(out, fields),
         Subterm::Proj(Proj { head, .. }) => collect_labels(head, out),
-        Subterm::InductiveType(InductiveType {
+        Subterm::InductType(InductType {
             params, indices, ..
         }) => {
             each(out, params);
@@ -213,7 +213,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
                     cases.iter().for_each(|(_, body)| collect_labels(body, out));
                     collect_labels(default, out);
                 }
-                Cases::Inductive { cases, default, .. } => {
+                Cases::Induct { cases, default, .. } => {
                     cases.iter().for_each(|(_, s)| scope(out, s));
                     default.iter().for_each(|d| collect_labels(d, out));
                 }
@@ -294,7 +294,7 @@ pub(crate) fn build_rename(names: &BTreeSet<String>) -> HashMap<String, String> 
 /// so an in-scope name is always a suffix. Only entries that actually shorten
 /// are recorded; an ambiguous (or single-segment) name keeps its full path.
 pub(crate) fn build_shorten(symbols: &[String]) -> HashMap<String, String> {
-    // One global can be listed twice (an inductive is both an `inductives` registry
+    // One global can be listed twice (an inductive is both an `induct_decls` registry
     // key and an `items` type-constructor definition); count distinct names, or
     // such a name would look ambiguous with itself and never shorten.
     let symbols = symbols.iter().map(String::as_str).collect::<BTreeSet<_>>();
@@ -888,7 +888,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
         }
         // Params then indices, one flat argument list — exactly how the
         // type-constructor function is applied at use sites.
-        Subterm::InductiveType(InductiveType {
+        Subterm::InductType(InductType {
             name,
             params,
             indices,
@@ -933,7 +933,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 ])
             }
         }
-        // Like `InductiveType` but with no indices: `Pair(Nat, Bin)`.
+        // Like `InductType` but with no indices: `Pair(Nat, Bin)`.
         Subterm::StructType(StructType { name, params }) => {
             if params.is_empty() {
                 pure(display_label(&name))
@@ -988,7 +988,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
             let keyword = match &cases {
                 Cases::Bool { .. } => "Bool.match ",
                 Cases::Switch { .. } => "Nat.match ",
-                Cases::Inductive { .. } => "match ",
+                Cases::Induct { .. } => "match ",
                 Cases::FreeMonoid { carrier } => match carrier {
                     Carrier::Nat { .. } => "Nat.fold ",
                     Carrier::Bin { .. } => "Bin.fold ",
@@ -1034,7 +1034,7 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                         indent(flat([print_term(default, depth), pure(";")])),
                     ])
                 }
-                Cases::Inductive { cases, default, .. } => {
+                Cases::Induct { cases, default, .. } => {
                     let case_printers = flat(
                         cases
                             .into_iter()

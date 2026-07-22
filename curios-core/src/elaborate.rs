@@ -27,11 +27,10 @@ mod tests;
 
 use {
     super::{
-        Apply, Bound, Context, ElabProbe, Error, Field, Func, FuncType, ImplicitOrigin,
-        InductiveType, Infix, Let, Metavar, MetavarId, MetavarOrigin, Nat, NumLit, ParkedWork,
-        Prim, Proj, Rec, Struct, StructEntry, StructType, Structure, Subterm, Telescope, Term,
-        Tuple, TupleType, Var, Variant, WitnessOrigin, attempt_witness_goal, check, expect,
-        reduce_with, sort_term,
+        Apply, Bound, Context, ElabProbe, Error, Field, Func, FuncType, ImplicitOrigin, InductType,
+        Infix, Let, Metavar, MetavarId, MetavarOrigin, Nat, NumLit, ParkedWork, Prim, Proj, Rec,
+        Struct, StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        Var, Variant, WitnessOrigin, attempt_witness_goal, check, expect, reduce_with, sort_term,
     },
     curios_base::{Flt, Int, NumOp, Plicity, Span},
     num_bigint::BigInt,
@@ -216,7 +215,7 @@ fn elaborate_subterm(
         Subterm::Infix(infix) => return elaborate_infix(context, infix, term, mode),
         Subterm::NumLit(num_lit) => return elaborate_num_lit(context, num_lit, term, mode),
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
-        Subterm::InductiveType(ut) => elaborate_inductive_type(context, ut)?,
+        Subterm::InductType(ut) => elaborate_induct_type(context, ut)?,
         Subterm::Variant(uc) => elaborate_variant(context, uc, term)?,
         Subterm::StructType(st) => elaborate_struct_type(context, st, term)?,
         Subterm::Struct(s) => elaborate_struct(context, s, term, &mode)?,

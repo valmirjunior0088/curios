@@ -1,6 +1,7 @@
 use {
     super::{
-        Concept, Inductive, Many, RecGroup, Scope, Structure, Term, build_shorten, with_short_names,
+        Concept, InductDecl, Many, RecGroup, Scope, StructDecl, Term, build_shorten,
+        with_short_names,
     },
     curios_abi::RootId,
     curios_base::Qualifier,
@@ -33,8 +34,8 @@ pub struct Definition {
     /// privacy suppressed and never stamps them.
     pub island: Qualifier,
     /// This definition's declaring root — `island`'s leading segment,
-    /// precomputed once by `into_core` the same way `Concept`/`Structure`/
-    /// `Inductive` are, so `Context::set_island` (and, downstream, the
+    /// precomputed once by `into_core` the same way `Concept`/`StructDecl`/
+    /// `InductDecl` are, so `Context::set_island` (and, downstream, the
     /// orphan-rule check) never has to re-derive it from `island` itself.
     pub root: RootId,
     pub type_: Term,
@@ -180,14 +181,14 @@ pub struct Module {
     /// name. Carried on the module — not on a `Context` — because elaboration
     /// and erasure each run with their *own* `Context` (see `run::compile`);
     /// both seed their context's flat inductive store from here on entry.
-    pub inductives: BTreeMap<String, Inductive>,
+    pub induct_decls: BTreeMap<String, InductDecl>,
     /// Struct declarations' registry entries, keyed by the type's qualified
-    /// name. Carried on the module like `inductives` (and for the same reason):
+    /// name. Carried on the module like `induct_decls` (and for the same reason):
     /// elaboration and erasure each seed their own `Context` from here on entry.
-    pub structures: BTreeMap<String, Structure>,
+    pub struct_decls: BTreeMap<String, StructDecl>,
     /// Concept declarations' resolution metadata, keyed by the concept's
     /// qualified name (each concept's record shape also lives in
-    /// `structures`). Seeded into the elaboration `Context` on entry; erasure
+    /// `struct_decls`). Seeded into the elaboration `Context` on entry; erasure
     /// never consults it.
     pub concepts: BTreeMap<String, Concept>,
     /// The definition names that are witness declarations. Elaboration
@@ -236,8 +237,8 @@ impl Module {
                 ),
             }
         }
-        symbols.extend(self.inductives.keys().cloned());
-        symbols.extend(self.structures.keys().cloned());
+        symbols.extend(self.induct_decls.keys().cloned());
+        symbols.extend(self.struct_decls.keys().cloned());
         symbols
     }
 }

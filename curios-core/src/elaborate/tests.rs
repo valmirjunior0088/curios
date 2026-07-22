@@ -18,28 +18,28 @@ fn nat_lit(n: usize) -> Term {
 }
 
 fn opt_type() -> Term {
-    Term::inductive_type("Opt", Vec::<Term>::new(), Vec::<Term>::new())
+    Term::induct_type("Opt", Vec::<Term>::new(), Vec::<Term>::new())
 }
 
 // induct Opt : Type | none() | some(x : Nat) end — an unindexed, two-constructor
 // data type, the minimal shape a `| _ =>` catch-all is interesting over.
 fn register_opt(context: &mut Context) {
     context
-        .register_inductive(
+        .register_induct(
             "Opt",
-            Inductive {
+            InductDecl {
                 params: Telescope::done(()),
                 indices: Telescope::done(()),
                 constructors: BTreeMap::from([
                     (
                         Atom::from("none"),
-                        InductiveParam {
+                        InductParam {
                             telescope: Telescope::done(opt_type()),
                         },
                     ),
                     (
                         Atom::from("some"),
-                        InductiveParam {
+                        InductParam {
                             telescope: Telescope::build(
                                 [("x", Term::prim(Prim::NatType))],
                                 opt_type(),
@@ -57,10 +57,10 @@ fn register_opt(context: &mut Context) {
 }
 
 fn make_opt_opaque(context: &mut Context) {
-    let mut inductive = context.inductive("Opt").unwrap().clone();
-    inductive.module = Qualifier::from(["Owner"]);
-    inductive.rep_public = false;
-    context.update_inductive("Opt", inductive);
+    let mut induct_decl = context.induct_decl("Opt").unwrap().clone();
+    induct_decl.module = Qualifier::from(["Owner"]);
+    induct_decl.rep_public = false;
+    context.update_induct("Opt", induct_decl);
 }
 
 #[test]
@@ -86,13 +86,13 @@ fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
     make_opt_opaque(&mut context);
     context.assume("x", &opt_type());
 
-    let empty = Term::inductive_match(
+    let empty = Term::induct_match(
         Term::free_var("x"),
         Some("x"),
         nat(),
         Vec::<(Atom, Vec<&str>, Term)>::new(),
     );
-    let named = Term::inductive_match(
+    let named = Term::induct_match(
         Term::free_var("x"),
         Some("x"),
         nat(),
@@ -101,7 +101,7 @@ fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
             ("some", vec!["n"], nat_lit(1)),
         ],
     );
-    let defaulted = Term::inductive_match_default(
+    let defaulted = Term::induct_match_default(
         Term::free_var("x"),
         Some("x"),
         nat(),
@@ -305,7 +305,7 @@ fn inductive_match_default_relaxes_coverage() {
     // `match some(5) : Nat | none() => 0 | _ => 99 end` — only `none` is
     // enumerated; the un-written `some` constructor is covered by the catch-all,
     // so this otherwise-incomplete match elaborates, at the motive's type.
-    let term = Term::inductive_match_default(
+    let term = Term::induct_match_default(
         Term::variant("Opt", Vec::<Term>::new(), "some", [nat_lit(5)]),
         Some("m"),
         nat(),
@@ -324,7 +324,7 @@ fn inductive_match_missing_arm_without_default_is_rejected() {
 
     // The same match without the catch-all: `some` is genuinely missing from an
     // unindexed inductive, so coverage fails.
-    let term = Term::inductive_match(
+    let term = Term::induct_match(
         Term::variant("Opt", Vec::<Term>::new(), "some", [nat_lit(5)]),
         Some("m"),
         nat(),
@@ -345,7 +345,7 @@ fn inductive_match_default_with_pattern_motive_is_rejected() {
     let term: Term = Subterm::Match(Match {
         head: Term::variant("Opt", Vec::<Term>::new(), "none", Vec::<Term>::new()),
         motive: Scope::close(Many(1), &["m"], nat()),
-        cases: Cases::Inductive {
+        cases: Cases::Induct {
             cases: BTreeMap::from([(Atom::from("none"), Scope::close(Many(0), &[], nat_lit(0)))]),
             pattern: Some(MotivePattern {
                 name: "Opt".to_string(),

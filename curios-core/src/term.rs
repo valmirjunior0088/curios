@@ -511,8 +511,8 @@ impl Term {
         }))
     }
 
-    /// Build an [`InductiveType`] normal form — the body of the generated type-constructor function. See the type's docs for the `params`/`indices` split.
-    pub fn inductive_type<N, I, P, J, Q>(name: N, params: I, indices: J) -> Self
+    /// Build an [`InductType`] normal form — the body of the generated type-constructor function. See the type's docs for the `params`/`indices` split.
+    pub fn induct_type<N, I, P, J, Q>(name: N, params: I, indices: J) -> Self
     where
         N: Into<String>,
         I: IntoIterator<Item = P>,
@@ -520,7 +520,7 @@ impl Term {
         J: IntoIterator<Item = Q>,
         Q: Into<Term>,
     {
-        Self::from(Subterm::InductiveType(InductiveType {
+        Self::from(Subterm::InductType(InductType {
             name: name.into(),
             params: params.into_iter().map(|p| p.into()).collect(),
             indices: indices.into_iter().map(|i| i.into()).collect(),
@@ -604,8 +604,8 @@ impl Term {
         }))
     }
 
-    /// Build the primitive eliminator of a nominal inductive ([`Cases::Inductive`]) without a type-pattern annotation: one arm per constructor tag, each closed over its payload binders. The annotated-motive form is [`Term::inductive_match_motive`].
-    pub fn inductive_match<H, M, I, A, L, B>(
+    /// Build the primitive eliminator of a nominal inductive ([`Cases::Induct`]) without a type-pattern annotation: one arm per constructor tag, each closed over its payload binders. The annotated-motive form is [`Term::induct_match_motive`].
+    pub fn induct_match<H, M, I, A, L, B>(
         head: H,
         motive_label: Option<&str>,
         motive: M,
@@ -622,8 +622,8 @@ impl Term {
         Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: Self::motive_scope(motive_label, motive.into()),
-            cases: Cases::Inductive {
-                cases: Self::inductive_cases(cases),
+            cases: Cases::Induct {
+                cases: Self::induct_cases(cases),
                 pattern: None,
                 default: None,
             },
@@ -631,11 +631,11 @@ impl Term {
     }
 
     /// The primitive eliminator of a nominal inductive with an explicit `| _ =>`
-    /// catch-all ([`Cases::Inductive`]'s `default`): the enumerated arms plus a
+    /// catch-all ([`Cases::Induct`]'s `default`): the enumerated arms plus a
     /// binding-free default standing in for every other constructor tag. The
-    /// dispatching analogue of [`Term::inductive_match`], mirroring how
+    /// dispatching analogue of [`Term::induct_match`], mirroring how
     /// [`Term::switch`] relates to [`Term::nat_match`].
-    pub fn inductive_match_default<H, M, I, A, L, B, D>(
+    pub fn induct_match_default<H, M, I, A, L, B, D>(
         head: H,
         motive_label: Option<&str>,
         motive: M,
@@ -654,8 +654,8 @@ impl Term {
         Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: Self::motive_scope(motive_label, motive.into()),
-            cases: Cases::Inductive {
-                cases: Self::inductive_cases(cases),
+            cases: Cases::Induct {
+                cases: Self::induct_cases(cases),
                 pattern: None,
                 default: Some(default.into()),
             },
@@ -666,7 +666,7 @@ impl Term {
     /// is closed over the pattern's binder labels (slot order) then the
     /// scrutinee label. `binders` must list one label per
     /// [`MotiveSlot::Binder`] in `pattern.slots`, in order.
-    pub fn inductive_match_motive<H, M, I, A, L, B>(
+    pub fn induct_match_motive<H, M, I, A, L, B>(
         head: H,
         binders: Vec<String>,
         scrutinee_label: &str,
@@ -691,15 +691,15 @@ impl Term {
         Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: Scope::close(Many(labels.len()), &labels, motive.into()),
-            cases: Cases::Inductive {
-                cases: Self::inductive_cases(cases),
+            cases: Cases::Induct {
+                cases: Self::induct_cases(cases),
                 pattern: Some(pattern),
                 default: None,
             },
         }))
     }
 
-    fn inductive_cases<I, A, L, B>(cases: I) -> BTreeMap<Atom, Scope<Many>>
+    fn induct_cases<I, A, L, B>(cases: I) -> BTreeMap<Atom, Scope<Many>>
     where
         I: IntoIterator<Item = (A, Vec<L>, B)>,
         A: Into<Atom>,
@@ -1293,7 +1293,7 @@ pub struct Proj {
 /// An inductive type as a primitive normal form. Built inside the
 /// automatically-generated type-constructor function's body. Users never write
 /// one directly — they write `Result(A, E)` and the type-constructor function
-/// reduces to this. Two `InductiveType`s are convertible iff same `name` and
+/// reduces to this. Two `InductType`s are convertible iff same `name` and
 /// pointwise-convertible `params` and `indices`.
 ///
 /// `params` are uniform across constructors; `indices` are the per-case
@@ -1306,7 +1306,7 @@ pub struct Proj {
     feature = "archive",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-pub struct InductiveType {
+pub struct InductType {
     pub name: String,
     pub params: Vec<Term>,
     pub indices: Vec<Term>,
@@ -1332,7 +1332,7 @@ pub struct Variant {
     pub payload: Vec<Term>,
 }
 
-/// A struct type as a primitive normal form (cf. [`InductiveType`], no indices).
+/// A struct type as a primitive normal form (cf. [`InductType`], no indices).
 /// Built inside the generated type-former's body; users write `Pair(A, B)` and
 /// the former reduces to this. Convertible iff same `name` and pointwise-
 /// convertible `params`.
@@ -1464,7 +1464,7 @@ pub enum Cases {
     /// `cases`; `None` means the arms structurally cover every constructor
     /// (a true elimination). A `Some(default)` may not co-occur with `pattern`
     /// — the annotated type-pattern motive is elimination-only.
-    Inductive {
+    Induct {
         cases: BTreeMap<Atom, Scope<Many>>,
         pattern: Option<MotivePattern>,
         default: Option<Term>,
@@ -1747,7 +1747,7 @@ pub enum Subterm {
     Apply(Apply),
     TupleType(TupleType),
     Tuple(Tuple),
-    InductiveType(InductiveType),
+    InductType(InductType),
     Variant(Variant),
     Match(Match),
     StructType(StructType),
@@ -1844,7 +1844,7 @@ impl Subterm {
                     .for_each(|f| f.collect_construction_names(names));
             }
             Subterm::Proj(Proj { head, .. }) => head.collect_construction_names(names),
-            Subterm::InductiveType(InductiveType {
+            Subterm::InductType(InductType {
                 name,
                 params,
                 indices,
@@ -1912,7 +1912,7 @@ impl Subterm {
                             .for_each(|b| b.collect_construction_names(names));
                         default.collect_construction_names(names);
                     }
-                    Cases::Inductive {
+                    Cases::Induct {
                         cases,
                         pattern,
                         default,
@@ -2004,7 +2004,7 @@ impl Subterm {
             Subterm::TupleType(TupleType { telescope, .. }) => telescope.any_metavar(pred),
             Subterm::Tuple(Tuple { fields, .. }) => fields.iter().any(|f| f.any_metavar(pred)),
             Subterm::Proj(Proj { head, .. }) => head.any_metavar(pred),
-            Subterm::InductiveType(InductiveType {
+            Subterm::InductType(InductType {
                 params, indices, ..
             }) => {
                 params.iter().any(|p| p.any_metavar(pred))
@@ -2038,7 +2038,7 @@ impl Subterm {
                         Cases::Switch { cases, default } => {
                             cases.values().any(|b| b.any_metavar(pred)) || default.any_metavar(pred)
                         }
-                        Cases::Inductive {
+                        Cases::Induct {
                             cases,
                             pattern,
                             default,
@@ -2116,7 +2116,7 @@ impl Subterm {
             Subterm::TupleType(TupleType { telescope, .. }) => telescope.any_term(pred),
             Subterm::Tuple(Tuple { fields, .. }) => fields.iter().any(&mut *pred),
             Subterm::Proj(Proj { head, .. }) => pred(head),
-            Subterm::InductiveType(InductiveType {
+            Subterm::InductType(InductType {
                 params, indices, ..
             }) => params.iter().any(&mut *pred) || indices.iter().any(&mut *pred),
             Subterm::Variant(Variant {
@@ -2141,7 +2141,7 @@ impl Subterm {
                         Cases::Switch { cases, default } => {
                             cases.values().any(&mut *pred) || pred(default)
                         }
-                        Cases::Inductive {
+                        Cases::Induct {
                             cases,
                             pattern,
                             default,
@@ -2297,11 +2297,11 @@ impl Bound for Subterm {
                 head: visit.visit_subterm(head),
                 field: field.clone(),
             }),
-            Subterm::InductiveType(InductiveType {
+            Subterm::InductType(InductType {
                 name,
                 params,
                 indices,
-            }) => Subterm::InductiveType(InductiveType {
+            }) => Subterm::InductType(InductType {
                 name: name.clone(),
                 params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
                 indices: indices.iter().map(|i| visit.visit_subterm(i)).collect(),
@@ -2354,11 +2354,11 @@ impl Bound for Subterm {
                             .collect(),
                         default: visit.visit_subterm(default),
                     },
-                    Cases::Inductive {
+                    Cases::Induct {
                         cases,
                         pattern,
                         default,
-                    } => Cases::Inductive {
+                    } => Cases::Induct {
                         cases: cases
                             .iter()
                             .map(|(atom, scope)| (atom.clone(), visit.visit_scope(scope)))
@@ -2499,7 +2499,7 @@ impl Bound for Subterm {
             Subterm::TupleType(TupleType { telescope, .. }) => telescope.reach(),
             Subterm::Tuple(Tuple { fields, .. }) => max_reach(fields),
             Subterm::Proj(Proj { head, .. }) => head.reach(),
-            Subterm::InductiveType(InductiveType {
+            Subterm::InductType(InductType {
                 params, indices, ..
             }) => max_reach(params).max(max_reach(indices)),
             Subterm::Variant(Variant {
@@ -2519,7 +2519,7 @@ impl Bound for Subterm {
                     true_case,
                 } => false_case.reach().max(true_case.reach()),
                 Cases::Switch { cases, default } => max_reach(cases.values()).max(default.reach()),
-                Cases::Inductive {
+                Cases::Induct {
                     cases,
                     pattern,
                     default,

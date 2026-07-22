@@ -174,7 +174,7 @@ New parked inference and groundness work should watch the transitively unsolved 
 
 ### Inductive matching
 
-In `elaborate_inductive_match`, if the rebuilt scrutinee type reduces to an unsolved metavariable, park inference of the entire residual match. Once the type is known, retry the ordinary inductive lookup, motive construction, coverage checks, refinement handling, and branch elaboration.
+In `elaborate_induct_match`, if the rebuilt scrutinee type reduces to an unsolved metavariable, park inference of the entire residual match. Once the type is known, retry the ordinary inductive lookup, motive construction, coverage checks, refinement handling, and branch elaboration.
 
 Do not pre-resolve tags or choose an inductive while the carrier is unknown.
 

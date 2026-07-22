@@ -151,16 +151,16 @@ pub enum Error {
     /// claims. The registry is global across every root elaborated into one
     /// `Context`, so this is rejected rather than silently overwritten — the
     /// same shape of collision `DuplicateWitness` guards for witnesses.
-    DuplicateInductive {
+    DuplicateInduct {
         name: String,
     },
     /// A second `struct` registered under a name a prior declaration already
-    /// claims — see `DuplicateInductive`.
-    DuplicateStructure {
+    /// claims — see `DuplicateInduct`.
+    DuplicateStruct {
         name: String,
     },
     /// A second `concept` registered under a name a prior declaration already
-    /// claims — see `DuplicateInductive`.
+    /// claims — see `DuplicateInduct`.
     DuplicateConcept {
         name: String,
     },
@@ -198,7 +198,7 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
-    NotAInductiveType {
+    NotAInductType {
         head_type: Box<Term>,
     },
     /// A strict proposition was eliminated into a relevant (data) result — a
@@ -426,7 +426,7 @@ pub enum Error {
     },
     /// An inductive match's annotated motive names a different inductive than the
     /// scrutinee's type.
-    MotiveWrongInductive {
+    MotiveWrongInduct {
         written: String,
         actual: String,
     },
@@ -519,12 +519,12 @@ impl Error {
         Self::DuplicateTupleLabel { label }
     }
 
-    pub(crate) fn duplicate_inductive(name: String) -> Self {
-        Self::DuplicateInductive { name }
+    pub(crate) fn duplicate_induct(name: String) -> Self {
+        Self::DuplicateInduct { name }
     }
 
-    pub(crate) fn duplicate_structure(name: String) -> Self {
-        Self::DuplicateStructure { name }
+    pub(crate) fn duplicate_struct(name: String) -> Self {
+        Self::DuplicateStruct { name }
     }
 
     pub(crate) fn duplicate_concept(name: String) -> Self {
@@ -582,8 +582,8 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_a_inductive_type<U: Into<Term>>(head_type: U) -> Self {
-        Self::NotAInductiveType {
+    pub(crate) fn not_a_induct_type<U: Into<Term>>(head_type: U) -> Self {
+        Self::NotAInductType {
             head_type: Box::new(head_type.into()),
         }
     }
@@ -859,8 +859,8 @@ impl Error {
         }
     }
 
-    pub(crate) fn motive_wrong_inductive(written: String, actual: String) -> Self {
-        Self::MotiveWrongInductive { written, actual }
+    pub(crate) fn motive_wrong_induct(written: String, actual: String) -> Self {
+        Self::MotiveWrongInduct { written, actual }
     }
 
     pub(crate) fn motive_pattern_arity(expected: usize, got: usize) -> Self {
@@ -959,7 +959,7 @@ impl Error {
             | Self::NotBoolType { head_type }
             | Self::NotLstType { head_type }
             | Self::NotBinType { head_type }
-            | Self::NotAInductiveType { head_type } => out.push(head_type),
+            | Self::NotAInductType { head_type } => out.push(head_type),
             Self::NotAFunctionType { expected } | Self::NotATupleType { expected } => {
                 out.push(expected)
             }
@@ -1066,10 +1066,10 @@ impl fmt::Display for Error {
             Error::DuplicateTupleLabel { label } => {
                 write!(f, "duplicate field label '{label}' in tuple type")
             }
-            Error::DuplicateInductive { name } => {
+            Error::DuplicateInduct { name } => {
                 write!(f, "duplicate inductive declaration '{name}'")
             }
-            Error::DuplicateStructure { name } => {
+            Error::DuplicateStruct { name } => {
                 write!(f, "duplicate struct declaration '{name}'")
             }
             Error::DuplicateConcept { name } => {
@@ -1116,7 +1116,7 @@ impl fmt::Display for Error {
             Error::MatchCaseMissing { term, atom } => {
                 write!(f, "missing match case for constructor '{atom}': {term}")
             }
-            Error::NotAInductiveType { head_type } => {
+            Error::NotAInductType { head_type } => {
                 write!(
                     f,
                     "matched inductive constructors on a non-inductive type\n  head has type: {head_type}"
@@ -1408,7 +1408,7 @@ impl fmt::Display for Error {
                     "Int literal {value:+} overflows i32 at the erase boundary"
                 )
             }
-            Error::MotiveWrongInductive { written, actual } => {
+            Error::MotiveWrongInduct { written, actual } => {
                 write!(
                     f,
                     "motive annotation names '{written}', but the scrutinee is a '{actual}'"
