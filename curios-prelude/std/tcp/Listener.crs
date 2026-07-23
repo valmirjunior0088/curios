@@ -43,7 +43,7 @@ let listen_loop(host : Str, port : Nat, on_conn : (Handle) -> Async({})) -> Asyn
                 Async/using(l.0, () => /sys/close(l.0),
                     rec go() -> Async({}) =
                         Async/bind(Async/accept(l.0), (r) =>
-                            match r : Async({})
+                            match r
                             | failure(_) => Async/pure(())
                             | success(h) => Async/bind(on_conn(h), (_) => go())
                             end);

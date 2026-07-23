@@ -55,7 +55,7 @@ rec go_with(T : Type, finish : (Str) -> T, f : Fmt, acc : Str) -> format_type_wi
     match f : (f) => format_type_with(T, f)
     | nil() => finish(acc)
     | lit(piece, rest) => go_with(T, finish, rest, Str/concat(acc, piece))
-    | show(rest) => (@A, use w, a) => go_with(T, finish, rest, Str/concat(acc, Show/show(a)))
+    | show(rest) => (use w, a) => go_with(T, finish, rest, Str/concat(acc, Show/show(a)))
     end;
 
 pub let render(s : Str) -> format_type_with(Str, parse(s)) =

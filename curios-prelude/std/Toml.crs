@@ -1300,7 +1300,7 @@ and inline_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
         | failure(msg) => Result/failure(msg)
         | success((c1, _)) =>
             match byte_at_is(input, c1, (n) => n == 0x7D)
-            | true => Result/success((c1 + 1, Toml/table(Map/empty(@Toml))))
+            | true => Result/success((c1 + 1, Toml/table(Map/empty())))
             | false => go(c1, [])
             end
         end

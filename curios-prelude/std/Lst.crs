@@ -66,6 +66,6 @@ satisfy (@A : Type, use Show(A)) => Show(Lst(A)) {
 }
 
 satisfy Monad(Lst) {
-    pure(@A, x) = [x],
-    bind(@A, @B, m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)])
+    pure(x) = [x],
+    bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)])
 }

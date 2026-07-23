@@ -43,7 +43,7 @@ pub let pure(@A : Type, a : A) -> Async(A) =
     Async/done(a);
 
 pub rec bind(@A : Type, @B : Type, m : Async(A), f : (A) -> Async(B)) -> Async(B) =
-    match m : Async(B)
+    match m
     | done(a) => f(a)
     | step(p, k) => Async/step(p, () => bind(k(), f))
     end;
@@ -128,7 +128,7 @@ pub let accept(l : Handle) -> Async(Result(Handle, Handle/Error)) =
 pub let drain(read : (Nat) -> Async(Handle/Read)) -> Async(Bytes) =
     rec go(acc : Bytes) -> Async(Bytes) =
         bind(read(4096), (r) =>
-            match r : Async(Bytes)
+            match r
             | chunk(bytes) => go(x\..acc\..bytes)
             | eof() => pure(acc)
             | error(_) => pure(acc)
@@ -136,7 +136,7 @@ pub let drain(read : (Nat) -> Async(Handle/Read)) -> Async(Bytes) =
     go(x\);
 
 pub rec await(@A : Type, f : Future(A)) -> Async(A) =
-    match Future/poll(f) : Async(A)
+    match Future/poll(f)
     | some(a) => pure(a)
     | none() => bind(park((w) => Future/register(f, w)), (_) => await(f))
     end;
@@ -170,10 +170,10 @@ let run_guards(gs : Lst(Guard)) -> {} =
 
 let release_guard(h : Handle, gs : Lst(Guard)) -> Lst(Guard) =
     rec each(rest : Lst(Guard)) -> Lst(Guard) =
-        match rest : Lst(Guard)
-        | [] => Lst/nil(@Guard)
+        match rest
+        | [] => Lst/nil()
         | [g, ..more] =>
-            match /sys/Handle/eql(g.handle, h) : Lst(Guard)
+            match /sys/Handle/eql(g.handle, h)
             | true => let _ = g.release(); more
             | false => Lst/cons(g, each(more))
             end
@@ -191,10 +191,10 @@ let drain_sleeping(ss : Lst(Sleeper)) -> {} =
 
 let drain_slots(ss : Lst(Slot)) -> {} =
     rec each(rest : Lst(Slot)) -> {} =
-        match rest : {}
+        match rest
         | [] => ()
         | [s, ..more] =>
-            match Cell/get(s) : {}
+            match Cell/get(s)
             | none() => each(more)
             | some(j) => let _ = run_guards(j.guards); each(more)
             end
@@ -203,14 +203,14 @@ let drain_slots(ss : Lst(Slot)) -> {} =
 
 let sweep_parked(ss : Lst(Slot)) -> Lst(Slot) =
     rec each(rest : Lst(Slot)) -> Lst(Slot) =
-        match rest : Lst(Slot)
-        | [] => Lst/nil(@Slot)
+        match rest
+        | [] => Lst/nil()
         | [s, ..more] =>
-            match Cell/get(s) : Lst(Slot)
+            match Cell/get(s)
             | none() => each(more)
             | some(j) =>
-                match is_cancelled(j.token) : Lst(Slot)
-                | true => let _ = run_guards(j.guards); let _ = Cell/set(s, Option/none(@Job)); each(more)
+                match is_cancelled(j.token)
+                | true => let _ = run_guards(j.guards); let _ = Cell/set(s, Option/none()); each(more)
                 | false => Lst/cons(s, each(more))
                 end
             end
@@ -225,42 +225,42 @@ let poll_ready(blocked : Lst(Parked), timeout : Int) -> {Lst(Job), Lst(Parked)} 
     let events = Lst/map(blocked, (p : Parked) => p.interest);
     let results = /sys/poll(handles, events, timeout);
     rec walk(rest : Lst(Parked), i : Nat, woken : Lst(Job), still : Lst(Parked)) -> {Lst(Job), Lst(Parked)} =
-        match rest : {Lst(Job), Lst(Parked)}
+        match rest
         | [] => (woken, still)
         | [p, ..tail] =>
-            match is_cancelled(p.token) : {Lst(Job), Lst(Parked)}
+            match is_cancelled(p.token)
             | true =>
                 let _ = run_guards(p.guards);
                 walk(tail, i + 1, woken, still)
             | false =>
-                match is_ready(/sys/Lst/get(results, i), p.interest) : {Lst(Job), Lst(Parked)}
+                match is_ready(/sys/Lst/get(results, i), p.interest)
                 | true => walk(tail, i + 1, Lst/cons(Job { resume = p.resume, token = p.token, guards = p.guards }, woken), still)
                 | false => walk(tail, i + 1, woken, Lst/cons(p, still))
                 end
             end
         end;
-    walk(blocked, 0, Lst/nil(@Job), Lst/nil(@Parked));
+    walk(blocked, 0, Lst/nil(), Lst/nil());
 
 let sleep_timeout(sleeping : Lst(Sleeper)) -> Int =
     rec earliest(rest : Lst(Sleeper), best : Option(Duration)) -> Option(Duration) =
-        match rest : Option(Duration)
+        match rest
         | [] => best
         | [s, ..more] =>
-            match best : Option(Duration)
+            match best
             | none() => earliest(more, Option/some(s.due))
             | some(b) =>
-                match Duration/before(s.due, b) : Option(Duration)
+                match Duration/before(s.due, b)
                 | true => earliest(more, Option/some(s.due))
                 | false => earliest(more, best)
                 end
             end
         end;
-    match earliest(sleeping, Option/none(@Duration)) : Int
+    match earliest(sleeping, Option/none())
     | none() => -1
     | some(due) =>
         let remaining = Duration/sub(due, Instant/elapsed());
         let whole = Duration/to_millis(remaining);
-        match Duration/nanos(remaining) % 1000000 > 0 : Int
+        match Duration/nanos(remaining) % 1000000 > 0
         | true => Nat/to_int(whole + 1)
         | false => Nat/to_int(whole)
         end
@@ -269,60 +269,60 @@ let sleep_timeout(sleeping : Lst(Sleeper)) -> Int =
 let expire_sleepers(sleeping : Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
     let now = Instant/elapsed();
     rec walk(rest : Lst(Sleeper), woken : Lst(Job), still : Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
-        match rest : {Lst(Job), Lst(Sleeper)}
+        match rest
         | [] => (woken, still)
         | [s, ..tail] =>
-            match is_cancelled(s.token) : {Lst(Job), Lst(Sleeper)}
+            match is_cancelled(s.token)
             | true =>
                 let _ = run_guards(s.guards);
                 walk(tail, woken, still)
             | false =>
-                match Duration/before(now, s.due) : {Lst(Job), Lst(Sleeper)}
+                match Duration/before(now, s.due)
                 | true => walk(tail, woken, Lst/cons(s, still))
                 | false => walk(tail, Lst/cons(Job { resume = s.resume, token = s.token, guards = s.guards }, woken), still)
                 end
             end
         end;
-    walk(sleeping, Lst/nil(@Job), Lst/nil(@Sleeper));
+    walk(sleeping, Lst/nil(), Lst/nil());
 
 pub let block_on(@A : Type, root : Async(A)) -> A =
-    let runq : Cell(Lst(Job)) = Cell/new(Lst/nil(@Job));
-    let blocked : Cell(Lst(Parked)) = Cell/new(Lst/nil(@Parked));
-    let sleeping : Cell(Lst(Sleeper)) = Cell/new(Lst/nil(@Sleeper));
-    let parked : Cell(Lst(Slot)) = Cell/new(Lst/nil(@Slot));
-    let result : Cell(Option(A)) = Cell/new(Option/none(@A));
+    let runq = Cell/new(Lst/nil());
+    let blocked = Cell/new(Lst/nil());
+    let sleeping = Cell/new(Lst/nil());
+    let parked = Cell/new(Lst/nil());
+    let result = Cell/new(Option/none(@A));
     let enqueue = (j : Job) =>
         Cell/set(runq, Lst/cons(j, Cell/get(runq)));
     let _ = enqueue(Job {
         resume = () => bind(root, (a) =>
-            let _ = Cell/set(result, Option/some(@A, a));
+            let _ = Cell/set(result, Option/some(a));
             pure(())),
         token = Token { Cell/new(false) },
-        guards = Lst/nil(@Guard)
+        guards = Lst/nil()
     });
     rec serve(job : Job) -> {} =
-        match is_cancelled(job.token) : {}
+        match is_cancelled(job.token)
         | true => run_guards(job.guards)
         | false =>
-            match job.resume() : {}
+            match job.resume()
             | done(_) => run_guards(job.guards)
             | step(p, k) =>
-                match p : {}
+                match p
                 | wait(h, ev) =>
                     Cell/set(blocked, Lst/cons(Parked { handle = h, interest = ev, resume = k, token = job.token, guards = job.guards }, Cell/get(blocked)))
                 | sleep(d) =>
                     Cell/set(sleeping, Lst/cons(Sleeper { due = Duration/add(Instant/elapsed(), d), resume = k, token = job.token, guards = job.guards }, Cell/get(sleeping)))
                 | fork(child, ct) =>
                     let _ = enqueue(Job { ..job, resume = k });
-                    enqueue(Job { resume = child, token = ct, guards = Lst/nil(@Guard) })
+                    enqueue(Job { resume = child, token = ct, guards = Lst/nil() })
                 | park(reg) =>
-                    let slot : Slot = Cell/new(Option/some(@Job, Job { ..job, resume = k }));
+                    let slot = Cell/new(Option/some(@Job, Job { ..job, resume = k }));
                     let _ = Cell/set(parked, Lst/cons(slot, Cell/get(parked)));
                     let waker = () =>
-                        match Cell/get(slot) : {}
+                        match Cell/get(slot)
                         | none() => ()
                         | some(j) =>
-                            let _ = Cell/set(slot, Option/none(@Job));
+                            let _ = Cell/set(slot, Option/none());
                             enqueue(j)
                         end;
                     reg(Waker/of(waker))
@@ -343,15 +343,15 @@ pub let block_on(@A : Type, root : Async(A)) -> A =
         let _ = drain_sleeping(Cell/get(sleeping));
         drain_slots(Cell/get(parked));
     rec drive() -> A =
-        match Cell/get(result) : A
+        match Cell/get(result)
         | some(a) =>
             let _ = drain_all();
             a
         | none() =>
-            match Cell/get(runq) : A
+            match Cell/get(runq)
             | [] =>
                 let _ = Cell/set(parked, sweep_parked(Cell/get(parked)));
-                match Lst/len(Cell/get(blocked)) == 0 && Lst/len(Cell/get(sleeping)) == 0 : A
+                match Lst/len(Cell/get(blocked)) == 0 && Lst/len(Cell/get(sleeping)) == 0
                 | false =>
                     let split = poll_ready(Cell/get(blocked), sleep_timeout(Cell/get(sleeping)));
                     let woken = expire_sleepers(Cell/get(sleeping));
@@ -361,7 +361,7 @@ pub let block_on(@A : Type, root : Async(A)) -> A =
                     drive()
                 | true =>
                     let _ = drain_all();
-                    /sys/exit(@A, 1)
+                    /sys/exit(1)
                 end
             | [job, ..rest] =>
                 let _ = Cell/set(runq, rest);
@@ -382,8 +382,8 @@ pub struct Task(A : Type) : Type {
 
 pub let spawn(@A : Type, body : () -> Async(A)) -> Async(Task(A)) =
     defer(() =>
-        let f = Future/new(@A);
-        let t : Token = Token { Cell/new(false) };
+        let f = Future/new();
+        let t = Token { Cell/new(false) };
         let task : Task(A) = Task { result = f, token = t };
         bind(fork_with(() => bind(body(), (a) => let _ = Future/fulfill(f, a); pure(())), t), (_) =>
             pure(task)));
@@ -399,8 +399,8 @@ let cancel_all(ts : Lst(Token)) -> {} =
 
 pub let join_all(@A : Type, tasks : Lst(() -> Async(A))) -> Async(Lst(A)) =
     rec go(i : Nat) -> Async(Lst(A)) =
-        match Nat/try_lt(i, Lst/len(tasks)) : Async(Lst(A))
-        | none() => pure(Lst/nil(@A))
+        match Nat/try_lt(i, Lst/len(tasks))
+        | none() => pure(Lst/nil())
         | some(ok) =>
             let h = spawn(Lst/at(tasks, i, ok))!;
             let rest = go(i + 1)!;
@@ -411,12 +411,12 @@ pub let join_all(@A : Type, tasks : Lst(() -> Async(A))) -> Async(Lst(A)) =
 
 pub let select(@A : Type, tasks : Lst(() -> Async(A))) -> Async({Nat, A}) =
     defer(() =>
-        let winner : Future({Nat, A}) = Future/new(@{Nat, A});
+        let winner = Future/new(@{Nat, A});
         rec arm(i : Nat) -> Async(Lst(Token)) =
-            match Nat/try_lt(i, Lst/len(tasks)) : Async(Lst(Token))
-            | none() => pure(Lst/nil(@Token))
+            match Nat/try_lt(i, Lst/len(tasks))
+            | none() => pure(Lst/nil())
             | some(ok) =>
-                let t : Token = Token { Cell/new(false) };
+                let t = Token { Cell/new(false) };
                 let _ = fork_with(() => bind((Lst/at(tasks, i, ok))(), (a) => let _ = Future/fulfill(winner, (i, a)); pure(())), t)!;
                 let rest = arm(i + 1)!;
                 pure(Lst/cons(t, rest))
@@ -432,10 +432,10 @@ pub let race(@A : Type, tasks : Lst(() -> Async(A))) -> Async(A) =
 pub let timeout(@A : Type, d : Duration, body : () -> Async(A)) -> Async(Option(A)) =
     map(select(@Option(A), [
         () => map(body(), (a) => Option/some(a)),
-        () => map(sleep(d), (_) => Option/none(@A)),
+        () => map(sleep(d), (_) => Option/none()),
     ]), (w) => w.1);
 
 satisfy Monad(Async) {
-    pure(@A, x) = pure(@A, x),
-    bind(@A, @B, m, f) = bind(@A, @B, m, f)
+    pure(x) = pure(x),
+    bind(m, f) = bind(m, f)
 }

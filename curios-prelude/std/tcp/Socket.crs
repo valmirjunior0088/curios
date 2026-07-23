@@ -43,7 +43,7 @@ let connect_addr(settings : Settings, host : Str, addr : Bytes) -> Result(Socket
                 Result/failure(Handle/error_of(upgraded))
             | true =>
                 let _ =
-                    match settings.tls : {}
+                    match settings.tls
                     | false => Async/nonblocking(s.handle)
                     | true => ()
                     end;
@@ -54,7 +54,7 @@ let connect_addr(settings : Settings, host : Str, addr : Bytes) -> Result(Socket
 
 let connect_socket(settings : Settings, host : Str, port : Nat) -> Async(Result(Socket, Handle/Error)) =
     Async/bind(resolve(host, port), (resolved) =>
-        match resolved : Async(Result(Socket, Handle/Error))
+        match resolved
         | failure(e) => Async/pure(Result/failure(e))
         | success(addr) => Async/pure(connect_addr(settings, host, addr))
         end);

@@ -101,9 +101,9 @@ let is_not_string_special(byte : Byte) -> Bool =
 
 let hex_digit : Parse(Nat) =
     let byte = Parse/any_byte!;
-    match Char/of_ascii(byte) : Parse(Nat)
+    match Char/of_ascii(byte)
     | some(c) =>
-        match Char/of_hex_digit(c) : Parse(Nat)
+        match Char/of_hex_digit(c)
         | some(v) => Parse/pure(v)
         | none() => Parse/fail("invalid hex digit")
         end
@@ -119,21 +119,21 @@ let hex4 : Parse(Nat) =
 
 let parse_unicode : Parse(Bytes) =
     let hi = hex4!;
-    match hi >= 0xD800 && hi <= 0xDBFF : Parse(Bytes)
+    match hi >= 0xD800 && hi <= 0xDBFF
     | true =>
         let _ = Parse/take_byte(0x5C)!;
         let _ = Parse/take_byte(0x75)!;
         let lo = hex4!;
-        match lo >= 0xDC00 && lo <= 0xDFFF : Parse(Bytes)
+        match lo >= 0xDC00 && lo <= 0xDFFF
         | false => Parse/fail("invalid low surrogate")
         | true =>
-            match Char/of_nat(0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00)) : Parse(Bytes)
+            match Char/of_nat(0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00))
             | some(c) => Parse/pure(Char/to_utf8(c))
             | none() => Parse/fail("invalid Unicode scalar")
             end
         end
     | false =>
-        match Char/of_nat(hi) : Parse(Bytes)
+        match Char/of_nat(hi)
         | some(c) => Parse/pure(Char/to_utf8(c))
         | none() => Parse/fail("invalid Unicode scalar")
         end
@@ -142,7 +142,7 @@ let parse_unicode : Parse(Bytes) =
 let parse_str_escape : Parse(Bytes) =
     let _ = Parse/take_byte(0x5C)!;
     let byte = Parse/any_byte!;
-    match Byte/to_nat(byte) : Parse(Bytes)
+    match Byte/to_nat(byte)
     | 0x22 => Parse/pure(Str/to_bytes("\""))
     | 0x5C => Parse/pure(Str/to_bytes("\\"))
     | 0x2F => Parse/pure(Str/to_bytes("/"))
@@ -165,7 +165,7 @@ let parse_raw_str : Parse(Str) =
     let _ = Parse/take_byte(0x22)!;
     let chunks = parse_str_body!;
     let _ = Parse/take_byte(0x22)!;
-    match Str/of_bytes(Bytes/flatten(chunks)) : Parse(Str)
+    match Str/of_bytes(Bytes/flatten(chunks))
     | some(s) => Parse/pure(s)
     | none() => Parse/fail("invalid UTF-8 in string")
     end;
