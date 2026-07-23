@@ -2,13 +2,13 @@ use /std/{Str, Nat, Bytes, Handle, Result, Option, Lst, Async};
 
 pub let resolve(host : Str, port : Nat) -> Async(Result(Bytes, Handle/Error)) =
     let r = /sys/lookup(Str/to_bytes(host), port);
-    match r.status == /sys/Status/ok : Async(Result(Bytes, Handle/Error))
+    match r.status == /sys/Status/ok
     | false => Async/pure(Result/failure(Handle/error_of(r.status)))
     | true =>
         Async/using(r.handle, () => /sys/close(r.handle),
             Async/bind(Async/wait(r.handle, /sys/Poll/read), (_) =>
                 let a = /sys/resolve(r.handle);
-                match a.status == /sys/Status/ok : Async(Result(Bytes, Handle/Error))
+                match a.status == /sys/Status/ok
                 | false => Async/pure(Result/failure(Handle/error_of(a.status)))
                 | true => Async/pure(Result/success(Option/unwrap_or(Lst/get(a.addresses, 0), x\)))
                 end))

@@ -19,25 +19,25 @@ let configure(h : Handle, settings : Settings) -> {} =
     ();
 
 let upgrade(h : Handle, host : Str, tls : Bool) -> Nat =
-    match tls : Nat
+    match tls
     | false => /sys/Status/ok
     | true => /sys/start_tls(h, Str/to_bytes(host))
     end;
 
 let connect_addr(settings : Settings, host : Str, addr : Bytes) -> Result(Socket, Handle/Error) =
     let s = /sys/socket(addr);
-    match s.status == /sys/Status/ok : Result(Socket, Handle/Error)
+    match s.status == /sys/Status/ok
     | false => Result/failure(Handle/error_of(s.status))
     | true =>
         let _ = configure(s.handle, settings);
         let status = /sys/connect(s.handle, addr);
-        match status == /sys/Status/ok : Result(Socket, Handle/Error)
+        match status == /sys/Status/ok
         | false =>
             let _ = /sys/close(s.handle);
             Result/failure(Handle/error_of(status))
         | true =>
             let upgraded = upgrade(s.handle, host, settings.tls);
-            match upgraded == /sys/Status/ok : Result(Socket, Handle/Error)
+            match upgraded == /sys/Status/ok
             | false =>
                 let _ = /sys/close(s.handle);
                 Result/failure(Handle/error_of(upgraded))
@@ -62,7 +62,7 @@ let connect_socket(settings : Settings, host : Str, port : Nat) -> Async(Result(
 pub let connect(settings : Settings, host : Str, port : Nat) -> Async(Result(Socket, Handle/Error)) =
     Async/defer(() =>
         Async/bind(connect_socket(settings, host, port), (opened) =>
-            match opened : Async(Result(Socket, Handle/Error))
+            match opened
             | failure(e) => Async/pure(Result/failure(e))
             | success(c) =>
                 Async/bind(Async/acquire(c.0, () => /sys/close(c.0)), (_) => Async/pure(Result/success(c)))
@@ -73,7 +73,7 @@ pub let close(c : Socket) -> Async({}) =
 
 pub let with(@A : Type, settings : Settings, host : Str, port : Nat, f : (Socket) -> Async(A)) -> Async(Result(A, Handle/Error)) =
     Async/bind(connect(settings, host, port), (opened) =>
-        match opened : Async(Result(A, Handle/Error))
+        match opened
         | failure(e) => Async/pure(Result/failure(e))
         | success(c) =>
             Async/bind(f(c), (a) =>

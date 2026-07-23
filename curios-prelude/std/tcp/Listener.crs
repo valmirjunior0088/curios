@@ -5,18 +5,18 @@ pub struct Listener : Type { Handle }
 
 let bind_listen(addr : Bytes) -> Result(Listener, Handle/Error) =
     let s = /sys/socket(addr);
-    match s.status == /sys/Status/ok : Result(Listener, Handle/Error)
+    match s.status == /sys/Status/ok
     | false => Result/failure(Handle/error_of(s.status))
     | true =>
         let _ = /sys/set_reuseaddr(s.handle, true);
         let bound = /sys/bind(s.handle, addr);
-        match bound == /sys/Status/ok : Result(Listener, Handle/Error)
+        match bound == /sys/Status/ok
         | false =>
             let _ = /sys/close(s.handle);
             Result/failure(Handle/error_of(bound))
         | true =>
             let status = /sys/listen(s.handle, 128);
-            match status == /sys/Status/ok : Result(Listener, Handle/Error)
+            match status == /sys/Status/ok
             | false =>
                 let _ = /sys/close(s.handle);
                 Result/failure(Handle/error_of(status))
@@ -29,14 +29,14 @@ let bind_listen(addr : Bytes) -> Result(Listener, Handle/Error) =
 
 let listen(host : Str, port : Nat) -> Async(Result(Listener, Handle/Error)) =
     Async/bind(resolve(host, port), (resolved) =>
-        match resolved : Async(Result(Listener, Handle/Error))
+        match resolved
         | failure(e) => Async/pure(Result/failure(e))
         | success(addr) => Async/pure(bind_listen(addr))
         end);
 
 let listen_loop(host : Str, port : Nat, on_conn : (Handle) -> Async({})) -> Async(Result({}, Handle/Error)) =
     Async/bind(listen(host, port), (opened) =>
-        match opened : Async(Result({}, Handle/Error))
+        match opened
         | failure(e) => Async/pure(Result/failure(e))
         | success(l) =>
             Async/bind(
@@ -60,13 +60,13 @@ pub let serve(host : Str, port : Nat, handler : (Socket) -> Async({})) -> Async(
 pub let serve_tls(host : Str, port : Nat, cert : Bytes, key : Bytes, handler : (Socket) -> Async({})) -> Async(Result({}, Handle/Error)) =
     Async/defer(() =>
         let cfg = /sys/tls_server_config(cert, key);
-        match cfg.status == /sys/Status/ok : Async(Result({}, Handle/Error))
+        match cfg.status == /sys/Status/ok
         | false => Async/pure(Result/failure(Handle/error_of(cfg.status)))
         | true =>
             Async/using(cfg.handle, () => let _ = /sys/close(cfg.handle); (),
                 listen_loop(host, port, (h) =>
                     let status = /sys/start_tls_server(h, cfg.handle);
-                    match status == /sys/Status/ok : Async({})
+                    match status == /sys/Status/ok
                     | true => Async/using(h, () => /sys/close(h), handler(Socket/of(h)))
                     | false =>
                         let _ = /sys/close(h);

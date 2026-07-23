@@ -103,7 +103,7 @@ satisfy Ord(Nat) {
 }
 
 pub let Lt(a : Nat, b : Nat) -> Prop =
-    match a < b : Prop
+    match a < b
     | true => True
     | false => False
     end;

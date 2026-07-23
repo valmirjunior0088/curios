@@ -18,7 +18,7 @@ use /std/BigNat/{BigNat, of_bits, of_trimmed_bits, is_trimmed, is_trimmed_of_can
 -- nonzero certificate: the (canonical) rep is nonempty. A plain match (no fold),
 -- so it reduces on any cons-headed rep, even one with an opaque tail.
 pub let is_cons(rep : Bits) -> Prop =
-    match rep : Prop | b\ => False | b\_\.._ => True end;
+    match rep | b\ => False | b\_\.._ => True end;
 
 pub struct NonZero : pub Type {
     magnitude : BigNat,

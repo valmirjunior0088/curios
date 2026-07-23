@@ -12,28 +12,28 @@ pub struct Future(A : Type) : Type {
 
 pub let new(@A : Type) -> Future(A) =
     Future {
-        Cell/new(State/pending(@A, Lst/nil(@Waker)))
+        Cell/new(State/pending(Lst/nil()))
     };
 
 pub let poll(@A : Type, f : Future(A)) -> Option(A) =
-    match Cell/get(f.0) : Option(A)
+    match Cell/get(f.0)
     | ready(a) => Option/some(a)
-    | pending(_) => Option/none(@A)
+    | pending(_) => Option/none()
     end;
 
 let wake_all(ws : Lst(Waker)) -> {} =
     Lst/each(ws, Waker/wake);
 
 pub let register(@A : Type, f : Future(A), w : Waker) -> {} =
-    match Cell/get(f.0) : {}
+    match Cell/get(f.0)
     | ready(_) => Waker/wake(w)
-    | pending(ws) => Cell/set(f.0, State/pending(@A, Lst/cons(w, ws)))
+    | pending(ws) => Cell/set(f.0, State/pending(Lst/cons(w, ws)))
     end;
 
 pub let fulfill(@A : Type, f : Future(A), a : A) -> {} =
-    match Cell/get(f.0) : {}
+    match Cell/get(f.0)
     | ready(_) => ()
     | pending(ws) =>
-        let _ = Cell/set(f.0, State/ready(@A, a));
+        let _ = Cell/set(f.0, State/ready(a));
         wake_all(ws)
     end;

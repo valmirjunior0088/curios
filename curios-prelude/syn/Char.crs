@@ -2,16 +2,16 @@ use /std/{Nat};
 use /syn/{True, False};
 
 pub let Below(code : Nat, bound : Nat) -> Prop =
-    match Nat/lt(code, bound) : Prop
+    match Nat/lt(code, bound)
     | true => True
     | false => False
     end;
 
 pub let InRange(code : Nat, lo : Nat, hi : Nat) -> Prop =
-    match Nat/gte(code, lo) : Prop
+    match Nat/gte(code, lo)
     | false => False
     | true =>
-        match Nat/lte(code, hi) : Prop
+        match Nat/lte(code, hi)
         | false => False
         | true => True
         end

@@ -23,11 +23,11 @@ pub rec map(@A : Type, @B : Type, @n : Nat, f : (A) -> B, v : Vec(A, n)) -> Vec(
     end;
 
 pub let first(@T : Type, @n : Nat, v : Vec(T, n + 1)) -> T =
-    match v : T
+    match v
     | cons(@j, x, xs) => x
     end;
 
 pub let rest(@T : Type, @n : Nat, v : Vec(T, n + 1)) -> Vec(T, n) =
-    match v : Vec(T, n)
+    match v
     | cons(@j, x, xs) => xs
     end;

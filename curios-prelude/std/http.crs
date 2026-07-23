@@ -7,7 +7,7 @@ pub induct Method : pub Type
 end
 
 let method_str(m : Method) -> Str =
-    match m : Str
+    match m
     | get() => "GET"
     | post() => "POST"
     end;
@@ -74,7 +74,7 @@ let render_header((name, value) : {Str, Str}) -> Str =
     Str/flatten([name, ": ", value, "\r\n"]);
 
 let content_length(body : Bytes) -> Str =
-    match Bytes/len(body) == 0 : Str
+    match Bytes/len(body) == 0
     | true => ""
     | false => Str/flatten(["Content-Length: ", Nat/to_str(Bytes/len(body)), "\r\n"])
     end;
@@ -151,13 +151,13 @@ let take_n(n : Nat) -> Parse(Bytes) =
     };
 
 let content_length_of(headers : Lst({Str, Str})) -> Option(Nat) =
-    match header_lookup(headers, "Content-Length") : Option(Nat)
+    match header_lookup(headers, "Content-Length")
     | some(value) => Nat/of_str(value)
     | none() => Option/none()
     end;
 
 let body_parser(headers : Lst({Str, Str})) -> Parse(Bytes) =
-    match content_length_of(headers) : Parse(Bytes)
+    match content_length_of(headers)
     | some(n) => take_n(n)
     | none() => rest
     end;
@@ -179,9 +179,9 @@ pub let header(resp : Response, name : Str) -> Option(Str) =
 
 pub let perform(request : Request) -> Async(Result(Response, Error)) =
     Async/bind(Socket/call(request.settings, request.host, request.port, render(request)), (r) =>
-        match r : Async(Result(Response, Error))
+        match r
         | success(bytes) =>
-            match Parse/run(decode, bytes) : Async(Result(Response, Error))
+            match Parse/run(decode, bytes)
             | success(response) => Async/pure(Result/success(response))
             | failure(message) => Async/pure(Result/failure(Error/malformed(message)))
             end

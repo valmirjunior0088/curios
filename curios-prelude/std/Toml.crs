@@ -144,7 +144,7 @@ struct Build : Type {
 }
 
 let build_empty : Build =
-    Build { root = Map/empty(@Toml), side = Map/empty(@State), scope = [] };
+    Build { root = Map/empty(), side = Map/empty(), scope = [] };
 
 -- Injective side-table key: tag, decimal name length, ':', name bytes, and for
 -- `at` a '#'-separated decimal element index closed by ';'.
@@ -172,7 +172,7 @@ let walk_final(m : Map(Toml), side : Map(State), pre : Bytes, name : Str, act : 
         match Map/get(m, name)
         | none() =>
             Result/success((
-                Map/set(m, name, Toml/table(Map/empty(@Toml))),
+                Map/set(m, name, Toml/table(Map/empty())),
                 Map/set(side, kf, State/header()),
                 [Seg/plain(name)]))
         | some(existing) =>
@@ -196,7 +196,7 @@ let walk_final(m : Map(Toml), side : Map(State), pre : Bytes, name : Str, act : 
         match Map/get(m, name)
         | none() =>
             Result/success((
-                Map/set(m, name, Toml/arr([Toml/table(Map/empty(@Toml))])),
+                Map/set(m, name, Toml/arr([Toml/table(Map/empty())])),
                 Map/set(side, kf, State/many()),
                 [Seg/at(name, 0)]))
         | some(existing) =>
@@ -207,7 +207,7 @@ let walk_final(m : Map(Toml), side : Map(State), pre : Bytes, name : Str, act : 
                     match st
                     | many() =>
                         Result/success((
-                            Map/set(m, name, Toml/arr([..items, Toml/table(Map/empty(@Toml))])),
+                            Map/set(m, name, Toml/arr([..items, Toml/table(Map/empty())])),
                             side,
                             [Seg/at(name, Lst/len(items))]))
                     | _ => Result/failure("cannot append to a static array")
@@ -297,7 +297,7 @@ rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), uncheck
                         | act_value(_) => State/dotted()
                         | _ => State/implicit()
                         end;
-                    match walk(Map/empty(@Toml), Map/set(side, kp, created), kp, rest, 0, act)
+                    match walk(Map/empty(), Map/set(side, kp, created), kp, rest, 0, act)
                     | success((inner2, side2, res)) =>
                         Result/success((Map/set(m, name, Toml/table(inner2)), side2, [Seg/plain(name), ..res]))
                     | failure(msg) => Result/failure(msg)
@@ -1433,7 +1433,7 @@ pub let decode(source : Str) -> Result(Map(Toml), Str) =
         let start : Result(Build, Str) = Result/success(build_empty);
         match Lst/fold(stmts, start, (s, acc) =>
             Result/bind(acc, (b) =>
-                match s : Result(Build, Str)
+                match s
                 | assign(path, v) => apply_assign(b, path, v)
                 | table_header(path) => apply_header(b, path)
                 | array_header(path) => apply_aot(b, path)
@@ -1624,7 +1624,7 @@ rec encode_table(prefix : Lst(Str), m : Map(Toml)) -> Result(Str, Str) =
     let start : Result(Lst(Str), Str) = Result/success([]);
     match Lst/fold(entries, start, (entry, acc) =>
         Result/bind(acc, (lines) =>
-            match entry.1 : Result(Lst(Str), Str)
+            match entry.1
             | table(_) => Result/success(lines)
             | _ =>
                 Result/bind(spell_key(entry.0), (k) =>
@@ -1634,7 +1634,7 @@ rec encode_table(prefix : Lst(Str), m : Map(Toml)) -> Result(Str, Str) =
     | success(lines) =>
         match Lst/fold(entries, start, (entry, acc) =>
             Result/bind(acc, (blocks) =>
-                match entry.1 : Result(Lst(Str), Str)
+                match entry.1
                 | table(sub) =>
                     Result/bind(spell_key(entry.0), (k) =>
                         Result/bind(encode_table([..prefix, k], sub), (body) =>

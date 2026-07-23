@@ -2,7 +2,7 @@ pub induct False : pub Prop
 end
 
 pub let absurd(@A : Type, contradiction : False) -> A =
-    match contradiction : A
+    match contradiction
     end;
 
 pub let Not(P : Type) -> Type =

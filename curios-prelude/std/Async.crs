@@ -411,7 +411,7 @@ pub let join_all(@A : Type, tasks : Lst(() -> Async(A))) -> Async(Lst(A)) =
 
 pub let select(@A : Type, tasks : Lst(() -> Async(A))) -> Async({Nat, A}) =
     defer(() =>
-        let winner = Future/new(@{Nat, A});
+        let winner = Future/new();
         rec arm(i : Nat) -> Async(Lst(Token)) =
             match Nat/try_lt(i, Lst/len(tasks))
             | none() => pure(Lst/nil())
