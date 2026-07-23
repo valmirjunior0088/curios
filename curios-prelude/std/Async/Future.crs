@@ -11,7 +11,9 @@ pub struct Future(A : Type) : Type {
 }
 
 pub let new(@A : Type) -> Future(A) =
-    Future { Cell/new(State/pending(@A, Lst/nil(@Waker))) };
+    Future {
+        Cell/new(State/pending(@A, Lst/nil(@Waker)))
+    };
 
 pub let poll(@A : Type, f : Future(A)) -> Option(A) =
     match Cell/get(f.0) : Option(A)
