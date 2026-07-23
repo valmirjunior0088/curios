@@ -1,4 +1,4 @@
-use /std/{Bool};
+use /std/{Bool, Show, Str};
 
 pub induct Result(A : Type, E : Type) : pub Type
 | success(A)
@@ -42,3 +42,11 @@ pub let is_failure(@A : Type, @E : Type, r : Result(A, E)) -> Bool =
     | success(_) => false
     | failure(_) => true
     end;
+
+satisfy (@A : Type, @E : Type, use Show(A), use Show(E)) => Show(Result(A, E)) {
+    show(r) =
+        match r
+        | success(x) => Str/concat("success(", Str/concat(Show/show(x), ")"))
+        | failure(e) => Str/concat("failure(", Str/concat(Show/show(e), ")"))
+        end
+}

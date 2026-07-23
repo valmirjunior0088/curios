@@ -6,6 +6,7 @@ mod binaryen;
 mod codegen;
 mod concepts;
 mod erasure;
+mod fmt;
 mod foreign;
 mod inference;
 mod io;

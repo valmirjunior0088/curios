@@ -6,7 +6,7 @@
 -- same raw ripple-carry the `BigNat` op runs, so the algebraic lemma corpus is a
 -- one-line delegation each.
 
-use /std/{Bool, Bits, Order, Eq, False, True};
+use /std/{Bool, Bits, Order, Eq, False, True, Show};
 use /std/Bits/{cons};
 use /std/BigNat/{BigNat, Canonical, of_bits, is_trimmed, trim, trim_of_trimmed, big_nat_eq,
     view, View, add, add_raw, add_raw_trimmed, succ, succ_raw, succ_raw_trimmed, mul, mul_raw, cmp,
@@ -258,3 +258,7 @@ pub let non_zero_cmp_trans(p : NonZero, q : NonZero, r : NonZero,
 pub let non_zero_cmp_gt_to_lt(p : NonZero, q : NonZero, w : Eq(non_zero_cmp(p, q), Order/gt()))
     -> Eq(non_zero_cmp(q, p), Order/lt()) =
     Eq/trans(non_zero_cmp_flip(p, q), cong_flip(w));
+
+satisfy Show(NonZero) {
+    show(n) = /std/BigNat/to_str(n.magnitude)
+}

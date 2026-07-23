@@ -1,6 +1,6 @@
 pub use /sys/{Int};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, rotl, rotr, clz, ctz, popcnt, to_nat, to_flt};
-use /std/{Nat, Str, Option, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem};
+use /std/{Nat, Str, Option, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord};
 
 pub let to_str(n : Int) -> Str =
     let mag = Nat/to_str(abs(n));
@@ -72,4 +72,12 @@ satisfy Div(Int) {
 
 satisfy Rem(Int) {
     rem(a, b) = rem(a, b)
+}
+
+satisfy Show(Int) {
+    show(n) = to_str(n)
+}
+
+satisfy Ord(Int) {
+    cmp(a, b) = cmp(a, b)
 }

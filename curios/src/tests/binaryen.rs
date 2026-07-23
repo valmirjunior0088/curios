@@ -14,7 +14,7 @@ fn optimizes_to_a_smaller_valid_module() {
             | pred + 1; ih => /std/Nat/add(/std/Nat/succ(pred), ih)
             end;
 
-        /std/Fmt/print("%d")(sum(10))
+        /std/Fmt/print("%")(sum(10))
     "#;
 
     let entrypoint = source

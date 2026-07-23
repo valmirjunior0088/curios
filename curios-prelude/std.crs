@@ -28,6 +28,12 @@ pub use Cmp/{let Cmp};
 pub mod Monad;
 pub use Monad/{let Monad};
 
+pub mod Show;
+pub use Show/{let Show};
+
+pub mod Ord;
+pub use Ord/{let Ord};
+
 pub mod Nat;
 pub use Nat/{let Nat};
 
@@ -72,12 +78,6 @@ pub use Option/{let Option};
 
 pub mod Order;
 pub use Order/{let Order};
-
-pub mod Ord;
-pub use Ord/{let Ord};
-
-pub mod Show;
-pub use Show/{let Show};
 
 pub mod BigNat;
 pub use BigNat/{let BigNat};
@@ -130,10 +130,6 @@ pub mod time;
 pub mod rand;
 
 pub mod proc;
-
--- Universal stream conveniences. `print`/`print_err` write a string to
--- stdout/stderr; `read` reads one newline-terminated line from stdin. The
--- lower-level, handle-taking `read`/`write` live under `/std/Handle`.
 
 pub let print(s : Str) -> {} =
     let _ = Handle/write(Handle/stdout, Str/to_bytes(s));

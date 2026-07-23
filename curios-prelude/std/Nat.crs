@@ -1,6 +1,6 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, rotl, rotr, clz, ctz, popcnt, to_int, to_flt, to_byte};
-use /std/{Str, Option, Char, Bytes, Bool, Eq, Order, True, False, Eql, Cmp, Add, Sub, Mul, Div, Rem};
+use /std/{Str, Option, Char, Bytes, Bool, Eq, Order, True, False, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord};
 
 let single_digit(d : Nat) -> Str =
     match d
@@ -92,6 +92,14 @@ satisfy Div(Nat) {
 
 satisfy Rem(Nat) {
     rem(a, b) = rem(a, b)
+}
+
+satisfy Show(Nat) {
+    show(n) = to_str(n)
+}
+
+satisfy Ord(Nat) {
+    cmp(a, b) = cmp(a, b)
 }
 
 pub let Lt(a : Nat, b : Nat) -> Prop =

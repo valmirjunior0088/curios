@@ -1,39 +1,7 @@
-use /std/{Nat, Int, Flt, Bool, Char, Str, Option, BigNat, BigInt};
+use /std/{Str};
 
 pub concept Show(A : Type) : pub Type {
     show(A) -> Str
 }
 
 pub use Show/*;
-
-satisfy Show(Nat) {
-    show(n) = Nat/to_str(n)
-}
-
-satisfy Show(Int) {
-    show(n) = Int/to_str(n)
-}
-
-satisfy Show(Flt) {
-    show(f) = Flt/to_str(f)
-}
-
-satisfy Show(Bool) {
-    show(b) = Bool/to_str(b)
-}
-
-satisfy Show(Str) {
-    show(s) = s
-}
-
-satisfy Show(Char) {
-    show(c) = Option/unwrap_or(Str/of_bytes(Char/to_utf8(c)), "")
-}
-
-satisfy Show(BigNat) {
-    show(n) = BigNat/to_str(n)
-}
-
-satisfy Show(BigInt) {
-    show(n) = BigInt/to_str(n)
-}

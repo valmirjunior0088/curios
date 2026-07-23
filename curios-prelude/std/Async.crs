@@ -1,4 +1,4 @@
-use /std/{Handle, Bytes, Nat, Int, Bool, Lst, Option, Result, Cell};
+use /std/{Handle, Bytes, Nat, Int, Bool, Lst, Option, Result, Cell, Monad};
 use /std/time/{Duration, Instant};
 
 pub induct Pause : pub Type
@@ -423,3 +423,8 @@ pub let timeout(@A : Type, d : Duration, body : () -> Async(A)) -> Async(Option(
         () => map(body(), (a) => Option/some(a)),
         () => map(sleep(d), (_) => Option/none(@A)),
     ]), (w) => w.1);
+
+satisfy Monad(Async) {
+    pure(@A, x) = pure(@A, x),
+    bind(@A, @B, m, f) = bind(@A, @B, m, f)
+}

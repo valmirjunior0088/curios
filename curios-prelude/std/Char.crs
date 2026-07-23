@@ -4,7 +4,7 @@
 
 pub use /syn/{Char};
 pub use /syn/Char/{Below, InRange, Scalar};
-use /std/{Nat, Byte, Bool, Bytes, Option, Order, Eq, True, Eql, Cmp};
+use /std/{Nat, Byte, Bool, Bytes, Option, Order, Eq, True, Eql, Cmp, Str, Show, Ord};
 
 pub let to_nat(c : Char) -> Nat =
     c.code;
@@ -147,4 +147,12 @@ satisfy Cmp(Char) {
     lte(a, b) = lte(a, b),
     gt(a, b) = gt(a, b),
     gte(a, b) = gte(a, b)
+}
+
+satisfy Show(Char) {
+    show(c) = Option/unwrap_or(Str/of_bytes(to_utf8(c)), "")
+}
+
+satisfy Ord(Char) {
+    cmp(a, b) = cmp(a, b)
 }

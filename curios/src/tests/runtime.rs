@@ -276,25 +276,26 @@ fn folds_constant_arg_through_let_function() {
 #[test]
 fn fmt_print_partial_evaluation_reduces_residual() {
     // End-to-end residue guard for the staging stack on
-    // `Fmt/print("%s is %d")(name)(30)` with a *runtime* `%s` argument. The
+    // `Fmt/print("% is %")(name)(30)` with a *runtime* first argument. The
     // ersd `evaluate` pass folds the closed prefix — the format-string parse
     // (Parse combinators and the segment UTF-8 revalidation included) runs at
     // compile time and `Fmt/print(lit)` reifies as the curried hole-filling
     // closure over a constant `Fmt` spine. What stays runtime is exactly the
-    // runtime work: specialized `go_with` over the spine, the `%s` path
-    // (`Str/trim` and stdin UTF-8 validation through `classify`), and the `%d`
-    // path (`Nat/to_str`'s digit producer). The single-entry `go_with` spine is
-    // then contified into the entry, so the boundary is pinned by the surviving
-    // `%d` digit producer together with the absence of the generic `Fmt/print`
-    // driver and the compile-time `Parse` combinators, without depending on a
-    // legacy backend function-count metric.
+    // runtime work: specialized `go_with` over the spine, the runtime `Str`
+    // slot (`Str/trim` and stdin UTF-8 validation through `classify`, shown by
+    // `Show(Str)` identity), and the `Nat` slot (`Show(Nat)` = `Nat/to_str`'s
+    // digit producer). The single-entry `go_with` spine is then contified into
+    // the entry, so the boundary is pinned by the surviving `Nat/to_str` digit
+    // producer together with the absence of the generic `Fmt/print` driver and
+    // the compile-time `Parse` combinators, without depending on a legacy
+    // backend function-count metric.
     let source = r#"
         use /std/{Str, Handle, Bytes, Fmt};
 
         match Handle/read(Handle/stdin, 1024) : {}
         | chunk(bytes) =>
             match Str/of_bytes(bytes) : {}
-            | some(s) => Fmt/print("%s is %d")(Str/trim(s))(30)
+            | some(s) => Fmt/print("% is %")(Str/trim(s))(30)
             | none() => /std/print("invalid input")
             end
         | eof() => /std/print("invalid input")
@@ -347,7 +348,7 @@ fn fmt_print_runtime_args_specializes_spine() {
         match Handle/read(Handle/stdin, 1024) : {}
         | chunk(bytes) =>
             match Str/of_bytes(bytes) : {}
-            | some(s) => Fmt/print("%s is %d")(Str/trim(s))(30)
+            | some(s) => Fmt/print("% is %")(Str/trim(s))(30)
             | none() => /std/print("invalid input")
             end
         | eof() => /std/print("invalid input")
@@ -400,7 +401,7 @@ fn fmt_print_err_formats_to_stderr() {
         r#"
         use /std/{Fmt, Handle};
         let a = /std/print("before;");
-        let b = Fmt/print_err("%s: %d;")("code")(3);
+        let b = Fmt/print_err("%: %;")("code")(3);
         /std/print("after")
         "#,
         system,
@@ -420,7 +421,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     let source = r#"
         use /std/{Fmt};
 
-        Fmt/print("x = %d, s = %s\n")(42)("hello")
+        Fmt/print("x = %, s = %\n")(42)("hello")
         "#;
 
     let entrypoint = source

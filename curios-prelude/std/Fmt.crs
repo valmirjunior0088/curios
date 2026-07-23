@@ -1,18 +1,16 @@
-use /std/{Bytes, Byte, Str, Nat, Option, Bool};
+use /std/{Bytes, Byte, Str, Nat, Option, Show};
 
 pub induct Fmt : pub Type
 | nil()
 | lit(Str, Fmt)
-| str(Fmt)
-| nat(Fmt)
+| show(Fmt)
 end
 
 pub rec format_type_with(T: Type, f: Fmt) -> Type =
     match f
     | nil() => T
     | lit(_, rest) => format_type_with(T, rest)
-    | str(rest) => (Str) -> format_type_with(T, rest)
-    | nat(rest) => (Nat) -> format_type_with(T, rest)
+    | show(rest) => (@A : Type, use Show(A), a : A) -> format_type_with(T, rest)
     end;
 
 let flush(bytes : Bytes, start : Nat, stop : Nat, rest : Fmt) -> Fmt =
@@ -25,28 +23,28 @@ rec parse_at(bytes : Bytes, pos : Nat) -> Fmt =
     match Nat/try_lt(pos, Bytes/len(bytes))
     | none() => Fmt/nil()
     | some(ok) =>
-        match Bytes/at(bytes, pos, ok) == 0x25
-        | true => parse_spec_at(bytes, pos + 1)
-        | false => parse_lit_at(bytes, pos, pos + 1)
-        end
-    end
-and parse_spec_at(bytes : Bytes, pos : Nat) -> Fmt =
-    match Nat/try_lt(pos, Bytes/len(bytes))
-    | none() => Fmt/lit("%", Fmt/nil())
-    | some(ok) =>
         match Byte/to_nat(Bytes/at(bytes, pos, ok))
-        | 0x73 => Fmt/str(parse_at(bytes, pos + 1))
-        | 0x64 => Fmt/nat(parse_at(bytes, pos + 1))
-        | _ => parse_at(bytes, pos + 1)
+        | 0x25 => Fmt/show(parse_at(bytes, pos + 1))
+        | _ => parse_lit_at(bytes, pos, pos)
         end
     end
 and parse_lit_at(bytes : Bytes, start : Nat, pos : Nat) -> Fmt =
     match Nat/try_lt(pos, Bytes/len(bytes))
     | none() => flush(bytes, start, pos, Fmt/nil())
     | some(ok) =>
-        match Bytes/at(bytes, pos, ok) == 0x25
-        | true => flush(bytes, start, pos, parse_spec_at(bytes, pos + 1))
-        | false => parse_lit_at(bytes, start, pos + 1)
+        match Byte/to_nat(Bytes/at(bytes, pos, ok))
+        | 0x25 => flush(bytes, start, pos, Fmt/show(parse_at(bytes, pos + 1)))
+        | 0x5c => parse_esc_at(bytes, start, pos)
+        | _ => parse_lit_at(bytes, start, pos + 1)
+        end
+    end
+and parse_esc_at(bytes : Bytes, start : Nat, pos : Nat) -> Fmt =
+    match Nat/try_lt(pos + 1, Bytes/len(bytes))
+    | none() => parse_lit_at(bytes, start, pos + 1)
+    | some(ok) =>
+        match Byte/to_nat(Bytes/at(bytes, pos + 1, ok))
+        | 0x25 => flush(bytes, start, pos, Fmt/lit("%", parse_at(bytes, pos + 2)))
+        | _ => parse_lit_at(bytes, start, pos + 1)
         end
     end;
 
@@ -57,8 +55,7 @@ rec go_with(T : Type, finish : (Str) -> T, f : Fmt, acc : Str) -> format_type_wi
     match f : (f) => format_type_with(T, f)
     | nil() => finish(acc)
     | lit(piece, rest) => go_with(T, finish, rest, Str/concat(acc, piece))
-    | str(rest) => (s) => go_with(T, finish, rest, Str/concat(acc, s))
-    | nat(rest) => (n) => go_with(T, finish, rest, Str/concat(acc, Nat/to_str(n)))
+    | show(rest) => (@A, use w, a) => go_with(T, finish, rest, Str/concat(acc, Show/show(a)))
     end;
 
 pub let render(s : Str) -> format_type_with(Str, parse(s)) =

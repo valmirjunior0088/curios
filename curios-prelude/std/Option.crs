@@ -1,4 +1,4 @@
-use /std/{Bool};
+use /std/{Bool, Show, Str, Monad};
 
 pub induct Option(A : Type) : pub Type
 | some(A)
@@ -36,3 +36,16 @@ pub let is_none(@A : Type, m : Option(A)) -> Bool =
     | some(_) => false
     | none() => true
     end;
+
+satisfy (@A : Type, use Show(A)) => Show(Option(A)) {
+    show(m) =
+        match m
+        | some(x) => Str/concat("some(", Str/concat(Show/show(x), ")"))
+        | none() => "none"
+        end
+}
+
+satisfy Monad(Option) {
+    pure(@A, x) = some(x),
+    bind(@A, @B, m, f) = bind(@A, @B, m, f)
+}

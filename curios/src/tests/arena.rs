@@ -47,7 +47,7 @@ fn arena_fmt_print_constant_args_collapses() {
 fn arena_fmt_print_runtime_args_specializes_spine() {
     let source = r#"
         use /std/{Fmt, Nat, Lst, proc};
-        Fmt/print("count: %s")(Nat/to_str(Lst/len(proc/args())))
+        Fmt/print("count: %")(Nat/to_str(Lst/len(proc/args())))
         "#;
     assert_eq!(run(source), b"count: 0".to_vec());
 

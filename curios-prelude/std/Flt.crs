@@ -1,6 +1,6 @@
 pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte, neg, abs, sqrt, floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
-use /std/{Nat, Byte, Int, Str, Bool, Option, Bytes, Lst, Order, BigNat, Eql, Cmp, Add, Sub, Mul, Div, Rem};
+use /std/{Nat, Byte, Int, Str, Bool, Option, Bytes, Lst, Order, BigNat, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord};
 
 let pow2(k : Nat) -> BigNat =
     BigNat/mul_pow2(BigNat/of_nat(1), k);
@@ -265,4 +265,12 @@ satisfy Div(Flt) {
 
 satisfy Rem(Flt) {
     rem(a, b) = rem(a, b)
+}
+
+satisfy Show(Flt) {
+    show(f) = to_str(f)
+}
+
+satisfy Ord(Flt) {
+    cmp(a, b) = cmp(a, b)
 }

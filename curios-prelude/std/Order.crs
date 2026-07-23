@@ -1,4 +1,4 @@
-use /std/{Bool, Eq, False, True};
+use /std/{Bool, Eq, False, True, Str, Show};
 
 pub induct Order : pub Type
 | lt()
@@ -73,3 +73,12 @@ pub let lt_neq_gt(p : Eq(Order/lt(), Order/gt())) -> False =
     bool_clash(match p : (q : Eq(Order, s, t)) => Eq(is_gt(s), is_gt(t))
         | refl(@z) => Eq/refl()
         end);
+
+satisfy Show(Order) {
+    show(r) =
+        match r
+        | lt() => "lt"
+        | eq() => "eq"
+        | gt() => "gt"
+        end
+}

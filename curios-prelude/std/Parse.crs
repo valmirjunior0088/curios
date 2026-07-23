@@ -1,4 +1,4 @@
-use /std/{Result, Nat, Byte, Bytes, Str, Bool, Lst};
+use /std/{Result, Nat, Byte, Bytes, Str, Bool, Lst, Monad};
 
 pub struct Parse(A : Type) : pub Type {
     run(input : Bytes, pos : Nat) -> Result({Nat, A}, Str)
@@ -158,3 +158,8 @@ pub let sep_by0(@A : Type, @S : Type, elem : Parse(A), sep : Parse(S)) -> Parse(
                 go([first], first_end)
             end
     };
+
+satisfy Monad(Parse) {
+    pure(@A, x) = pure(@A, x),
+    bind(@A, @B, m, f) = bind(@A, @B, m, f)
+}

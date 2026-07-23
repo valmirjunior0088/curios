@@ -273,7 +273,7 @@ fn projection_through_a_stuck_inductive_payload_lowers() {
     // `projectable_at`; without it this panics `erase: projected a non-tuple`.
     let source = r#"
         use /std/{Fmt, Bytes};
-        Fmt/print("%s is %d")
+        Fmt/print("% is %")
     "#;
 
     assert!(compile(source, None).is_ok());

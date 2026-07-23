@@ -1,5 +1,5 @@
 pub use /sys/Bytes/{let Bytes, len, eql, slice, append, concat};
-use /std/{Lst, Nat, Byte, Bool, Option, Eq, Eql};
+use /std/{Lst, Nat, Byte, Bool, Option, Eq, Eql, Char, Str, Show};
 
 pub let at(b : Bytes, i : Nat, ok : Nat/Lt(i, len(b))) -> Byte =
     /sys/Bytes/get(b, i);
@@ -48,4 +48,13 @@ pub let join(sep : Bytes, parts : Lst(Bytes)) -> Bytes =
 
 satisfy Eql(Bytes) {
     eql(a, b) = eql(a, b)
+}
+
+satisfy Show(Bytes) {
+    show(b) =
+        Option/unwrap_or(Str/of_bytes(fold(b, x\, (byte, acc) =>
+            let n = Byte/to_nat(byte);
+            let hi = Char/to_utf8(Char/hex_digit(Nat/div(n, 0x10)));
+            let lo = Char/to_utf8(Char/hex_digit(Nat/rem(n, 0x10)));
+            x\..acc\..hi\..lo)), "")
 }

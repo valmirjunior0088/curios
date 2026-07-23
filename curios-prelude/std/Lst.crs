@@ -1,6 +1,6 @@
 pub use /sys/{Lst};
 pub use /sys/Lst/{len, slice, append, concat, map};
-use /std/{Nat, Bool, Option, Eq};
+use /std/{Nat, Bool, Option, Eq, Show, Str, Monad};
 
 pub let nil(@A : Type) -> Lst(A) =
     [];
@@ -59,3 +59,13 @@ pub let balanced(@A : Type, n : Nat, empty : A, single : (Nat) -> A, combine : (
         | _ => empty
         end;
     go(0, n);
+
+satisfy (@A : Type, use Show(A)) => Show(Lst(A)) {
+    show(l) =
+        Str/concat("[", Str/concat(Str/join(", ", map(l, (x) => Show/show(x))), "]"))
+}
+
+satisfy Monad(Lst) {
+    pure(@A, x) = [x],
+    bind(@A, @B, m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)])
+}
