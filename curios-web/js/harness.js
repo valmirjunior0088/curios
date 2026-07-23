@@ -1,6 +1,6 @@
 // The browser run harness: instantiates a compiled curios program against a
 // JS implementation of the host boundary and drives its entrypoint. Like any
-// embedder, this file spells the wire names itself — the `sys.io_*` import
+// embedder, this file spells the wire names itself — the `sys.*` import
 // keys, the `sys`/`ffi` namespaces, the `func/main` export; the contract is
 // pinned by the Rust test suite. Only the numeric status/stdio codes arrive
 // via `config`, built Rust-side from curios-abi (see src/abi.rs).
@@ -9,7 +9,7 @@
 // stream via hooks), stdin is at EOF, the clocks and randomness are real, and
 // everything filesystem/network answers PERMISSION_DENIED.
 
-/** Thrown by the `io_exit` import to unwind the wasm stack with an exit code. */
+/** Thrown by the `exit` import to unwind the wasm stack with an exit code. */
 export class ExitSignal extends Error {
   constructor(code) {
     super(`exit(${code})`);
@@ -115,30 +115,30 @@ export async function run(config) {
     throw new Error(`${name} is not supported in the browser playground`);
   };
 
-  // The `sys` import object, keyed by wire name. A `sys_io` row without a
+  // The `sys` import object, keyed by wire name. A `host_ops` row without a
   // browser implementation surfaces as a `LinkError` naming the import when
   // a program calls it.
   const sysEnv = {
-    io_read: () => [config.status.EOF, emptyBin()],
-    io_write: write,
-    io_open: deniedHandle,
-    io_lookup: deniedHandle,
-    io_resolve: unsupported("io_resolve"),
-    io_socket: deniedHandle,
-    io_bind: denied,
-    io_connect: denied,
-    io_listen: denied,
-    io_accept: deniedHandle,
-    io_start_tls: denied,
-    io_tls_server_config: deniedHandle,
-    io_start_tls_server: denied,
-    io_set_nonblocking: denied,
-    io_set_recv_timeout: denied,
-    io_set_send_timeout: denied,
-    io_set_reuseaddr: denied,
-    io_poll: unsupported("io_poll"),
-    io_close: () => {},
-    io_clock_wall: () => {
+    read: () => [config.status.EOF, emptyBin()],
+    write: write,
+    open: deniedHandle,
+    lookup: deniedHandle,
+    resolve: unsupported("resolve"),
+    socket: deniedHandle,
+    bind: denied,
+    connect: denied,
+    listen: denied,
+    accept: deniedHandle,
+    start_tls: denied,
+    tls_server_config: deniedHandle,
+    start_tls_server: denied,
+    set_nonblocking: denied,
+    set_recv_timeout: denied,
+    set_send_timeout: denied,
+    set_reuseaddr: denied,
+    poll: unsupported("poll"),
+    close: () => {},
+    clock_wall: () => {
       const millis = Date.now();
       const secs = Math.floor(millis / 1000);
 
@@ -149,7 +149,7 @@ export async function run(config) {
         (millis % 1000) * 1_000_000,
       ];
     },
-    io_clock_mono: () => {
+    clock_mono: () => {
       const millis = performance.now();
 
       // Floor, not round: a fractional millisecond just below 1000 would
@@ -160,15 +160,15 @@ export async function run(config) {
         Math.floor((millis % 1000) * 1_000_000),
       ];
     },
-    io_random: (count) => {
+    random: (count) => {
       const bytes = new Uint8Array(count);
       crypto.getRandomValues(bytes);
 
       return encodeBin(bytes);
     },
-    io_args: unsupported("io_args"),
-    io_env: () => [config.status.NOT_FOUND, emptyBin()],
-    io_exit: (code) => {
+    args: unsupported("args"),
+    env: () => [config.status.NOT_FOUND, emptyBin()],
+    exit: (code) => {
       throw new ExitSignal(code);
     },
   };
