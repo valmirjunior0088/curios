@@ -266,3 +266,32 @@ fn higher_kinded_implicit_infers_by_imitation() {
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"2");
 }
+
+// A postponed argument keeps its *raw* surface spelling when `elaborate_apply`
+// opens the rest of the telescope, and that spelling is load-bearing: reducing
+// through it is what lets the result `expect` pin the metavariables the slot is
+// waiting on. But `elaborate_proj` only resolves a label projection on the
+// *checked* form, so beta-reducing a raw lambda body through the result type
+// manufactures `head.label` where the settled spelling is `head.index` — a term
+// `reduce_proj` once declared `unreachable!`. The result `expect` is now
+// two-phase: best-effort through the raw spelling, then authoritative through
+// the settled arguments.
+#[test]
+fn postponed_lambda_projecting_by_label_elaborates() {
+    let source = r#"
+        use /std/{Nat, Eq};
+        struct Boxed : pub Type {
+            value : Nat
+        }
+        let cong_value(@s : Boxed, @t : Boxed, p : Eq(s, t)) -> Eq(s.value, t.value) =
+            Eq/cong((b : Boxed) => b.value, p);
+        let boxed : Boxed = Boxed { value = 7 };
+        let same : Eq(boxed, boxed) = Eq/refl();
+        let lifted : Eq(boxed.value, boxed.value) = cong_value(same);
+        /std/print(Nat/to_str(boxed.value))
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"7");
+}

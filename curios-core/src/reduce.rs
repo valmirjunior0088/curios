@@ -201,10 +201,22 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
 
 fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError> {
     let Proj { head, field } = proj;
-    // Label projections are resolved (and rebuilt positionally) by elaborate;
-    // reduction only ever sees post-elaboration terms.
+    // Label projections are normally resolved (and rebuilt positionally) by
+    // elaborate. One path reaches here with a label still attached:
+    // `elaborate_apply` substitutes a *postponed* argument's raw surface term
+    // into the remaining telescope and the result type (that raw spelling is
+    // load-bearing — beta-reducing it through the result is what lets `expect`
+    // pin the metavariables the postponed slot is waiting on). If such an
+    // argument is a lambda whose body projects by label, beta-reduction here
+    // manufactures a label projection on a not-yet-solved head, which no
+    // earlier pass could have resolved. Leave it stuck rather than panicking:
+    // the conversion it sits under then fails as an ordinary mismatch at its
+    // origin span, or succeeds once the slot is settled and re-opened.
     let Field::Index(index) = field else {
-        unreachable!("unresolved label projection reached reduction");
+        return Ok(Reduce::Break(Term::from(Subterm::Proj(Proj {
+            head,
+            field,
+        }))));
     };
 
     if let Some(v) = context.proj_reduct(&head, index) {

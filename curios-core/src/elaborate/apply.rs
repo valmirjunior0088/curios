@@ -319,7 +319,7 @@ pub(super) fn elaborate_apply(
     let mut postponed: Vec<usize> = Vec::new();
     let mut tele = original.clone();
     let mut index = 0;
-    let output = loop {
+    let mut output = loop {
         let (ty, rest) = match tele {
             Telescope::Done(body) => break *body,
             Telescope::Cons(ty, rest) => (ty, rest),
@@ -373,13 +373,40 @@ pub(super) fn elaborate_apply(
     };
 
     if let Mode::Check(expected) = &mode {
-        expect(context, term, &output, expected)?;
+        // With nothing postponed the output is already built from elaborated
+        // spellings and this check is authoritative. With a slot still raw it is
+        // not: `elaborate_proj` only resolves a label projection on the *checked*
+        // form, so beta-reducing a raw lambda body through the result type can
+        // manufacture a stuck `head.label` that cannot convert against the
+        // settled `head.index` spelling (`Eq/cong((n : T) => n.field, p)`). The
+        // raw spelling still has to be substituted — reducing through it is what
+        // pins the result metavariables a postponed slot waits on — so run this
+        // as a best-effort pin, discard a non-authoritative mismatch along with
+        // any partial solutions it committed, and let the re-check below decide.
+        let mark = context.solution_mark();
+        match expect(context, term, &output, expected) {
+            Ok(()) => {}
+            Err(error) if postponed.is_empty() => return Err(error),
+            Err(_) => context.rollback_solutions(mark),
+        }
+
         for &slot in &postponed {
             let slot_ty = original
                 .clone()
                 .nth(slot, |k| elaborated[k].clone())
                 .expect("postponed slot is within the telescope");
             elaborated[slot] = check(context, &params[slot], slot_ty)?;
+        }
+
+        // Re-open the result through the now fully elaborated arguments, whose
+        // spellings carry label projections rebuilt positionally and implicits
+        // inserted. This is the authoritative check, and the output the caller
+        // receives.
+        if !postponed.is_empty() {
+            if let Telescope::Done(body) = original.clone().open_params(&elaborated) {
+                output = *body;
+            }
+            expect(context, term, &output, expected)?;
         }
     }
 
