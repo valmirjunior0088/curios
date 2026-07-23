@@ -141,8 +141,8 @@ fn bang_dispatches_through_a_user_monad_witness() {
         use /std/{Nat, Handle, Str, Monad};
         pub struct Box(A : Type) : pub Type { unbox : A }
         satisfy Monad(Box) {
-            pure(A, x) = Box { unbox = x },
-            bind(A, B, m, f) = f(m.unbox)
+            pure(@A, x) = Box { unbox = x },
+            bind(@A, @B, m, f) = f(m.unbox)
         }
         let a : Box(Nat) = Box { unbox = 3 };
         let b : Box(Nat) = Box { unbox = 4 };

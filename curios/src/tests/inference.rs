@@ -35,13 +35,13 @@ fn implicit_inductive_type_param_executes() {
         end
         let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
             match p : (q : Eq2(A, s, t)) => Eq2(t, s)
-            | refl(z) => Eq2/refl()
+            | refl(@z) => Eq2/refl()
             end;
         let pinned : Eq2(@Nat, 3, 3) = Eq2/refl();
         let proof : Eq2(2, 2) = Eq2/refl();
         let inferred : Eq2(2, 2) = sym2(proof);
         match inferred : {}
-        | refl(z) => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
+        | refl(@z) => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
         end
         "#;
 
@@ -83,12 +83,12 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         end
         let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
             match p : (q : Eq2(A, s, t)) => Eq2(t, s)
-            | refl(z) => Eq2/refl()
+            | refl(@z) => Eq2/refl()
             end;
         let direct : Eq2(2, 2) = sym2(Eq2/refl());
         let chained : Eq2(3, 3) = sym2(sym2(Eq2/refl()));
         match chained : {}
-        | refl(z) => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
+        | refl(@z) => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
         end
         "#;
 

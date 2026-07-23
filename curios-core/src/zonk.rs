@@ -67,6 +67,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                                 tag.clone(),
                                 InductParam {
                                     telescope: param.telescope.zonk(context)?,
+                                    plicities: param.plicities.clone(),
                                 },
                             ))
                         })
@@ -263,8 +264,12 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
 
         Subterm::Prim(prim) => Subterm::Prim(zonk_prim(context, prim)?),
 
-        Subterm::Func(Func { telescope }) => Subterm::Func(Func {
+        Subterm::Func(Func {
+            telescope,
+            plicities,
+        }) => Subterm::Func(Func {
             telescope: telescope.zonk(context)?,
+            plicities: plicities.clone(),
         }),
 
         Subterm::FuncType(FuncType {
@@ -396,8 +401,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                 } => Cases::Induct {
                     cases: cases
                         .iter()
-                        .map(|(atom, scope)| {
-                            Ok((atom.clone(), scope.map_body(|b| zonk_term(context, b))?))
+                        .map(|(atom, arm)| {
+                            Ok((
+                                atom.clone(),
+                                arm.with_body(arm.body.map_body(|b| zonk_term(context, b))?),
+                            ))
                         })
                         .collect::<Result<_, Error>>()?,
                     default: default

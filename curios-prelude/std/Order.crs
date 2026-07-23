@@ -17,7 +17,7 @@ pub let flip(r : Order) -> Order =
 
 pub let cong_flip(@s : Order, @t : Order, p : Eq(s, t)) -> Eq(flip(s), flip(t)) =
     match p : (q : Eq(Order, a, b)) => Eq(flip(a), flip(b))
-    | refl(z) => Eq/refl()
+    | refl(@z) => Eq/refl()
     end;
 
 let is_lt(r : Order) -> Bool =
@@ -46,30 +46,30 @@ let bool_clash(p : Eq(false, true)) -> False =
 
 pub let lt_neq_eq(p : Eq(Order/lt(), Order/eq())) -> False =
     bool_clash(match p : (q : Eq(Order, s, t)) => Eq(is_eq(s), is_eq(t))
-        | refl(z) => Eq/refl()
+        | refl(@z) => Eq/refl()
         end);
 
 pub let gt_neq_eq(p : Eq(Order/gt(), Order/eq())) -> False =
     bool_clash(match p : (q : Eq(Order, s, t)) => Eq(is_eq(s), is_eq(t))
-        | refl(z) => Eq/refl()
+        | refl(@z) => Eq/refl()
         end);
 
 pub let eq_neq_lt(p : Eq(Order/eq(), Order/lt())) -> False =
     bool_clash(match p : (q : Eq(Order, s, t)) => Eq(is_lt(s), is_lt(t))
-        | refl(z) => Eq/refl()
+        | refl(@z) => Eq/refl()
         end);
 
 pub let gt_neq_lt(p : Eq(Order/gt(), Order/lt())) -> False =
     bool_clash(match p : (q : Eq(Order, s, t)) => Eq(is_lt(s), is_lt(t))
-        | refl(z) => Eq/refl()
+        | refl(@z) => Eq/refl()
         end);
 
 pub let eq_neq_gt(p : Eq(Order/eq(), Order/gt())) -> False =
     bool_clash(match p : (q : Eq(Order, s, t)) => Eq(is_gt(s), is_gt(t))
-        | refl(z) => Eq/refl()
+        | refl(@z) => Eq/refl()
         end);
 
 pub let lt_neq_gt(p : Eq(Order/lt(), Order/gt())) -> False =
     bool_clash(match p : (q : Eq(Order, s, t)) => Eq(is_gt(s), is_gt(t))
-        | refl(z) => Eq/refl()
+        | refl(@z) => Eq/refl()
         end);

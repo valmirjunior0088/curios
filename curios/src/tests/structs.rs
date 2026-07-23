@@ -9,7 +9,7 @@ fn named_fields_run_end_to_end() {
         rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
             match v : Nat
             | nil() => acc
-            | cons(m, x, xs) => total(xs, Nat/add(acc, x))
+            | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
             end;
         /std/print(Nat/to_str(Nat/add(total(p.v, 0), Nat/mul(p.0, 0))))
         "#;
@@ -78,7 +78,7 @@ fn struct_dependent_fields_run_end_to_end() {
         rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
             match v : Nat
             | nil() => acc
-            | cons(m, x, xs) => total(xs, Nat/add(acc, x))
+            | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
             end;
         /std/print(Nat/to_str(total(s.v, 0)))
         "#;
@@ -518,7 +518,7 @@ fn struct_spread_dependent_override_runs() {
         rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
             match v : Nat
             | nil() => acc
-            | cons(m, x, xs) => total(xs, Nat/add(acc, x))
+            | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
             end;
         /std/print(Nat/to_str(total(t.v, 0)))
         "#;

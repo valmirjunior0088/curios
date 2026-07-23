@@ -163,11 +163,16 @@ pub(super) fn elaborate_func(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let Func { telescope } = func;
+    let Func {
+        telescope,
+        plicities,
+    } = func;
 
     match mode {
-        Mode::Check(expected) => elaborate_func_check(context, telescope, term, expected),
-        Mode::Infer => elaborate_func_infer(context, telescope),
+        Mode::Check(expected) => {
+            elaborate_func_check(context, telescope, plicities, term, expected)
+        }
+        Mode::Infer => elaborate_func_infer(context, telescope, plicities),
     }
 }
 
@@ -434,18 +439,40 @@ pub(super) fn elaborate_infix(
     Ok((rebuilt, result_type))
 }
 
-/// Check a lambda against an expected function type. Walk the lambda's own
-/// telescope (whose `Done` is the body) alongside the expected type's telescope
-/// (whose `Done` is the output type) in lockstep. Each parameter's domain is
-/// taken from the expected type; the lambda's own domain — a hole when the
-/// annotation was omitted, or the annotation itself — is unified against it via
-/// `expect`, which solves the hole (or checks the annotation). The rebuilt lambda
-/// then *carries* the expected domain rather than the hole, so re-closing it (and
-/// every enclosing binder) captures any free names the domain mentions — this is
-/// what keeps nested lambda domains de-Bruijn-correct for `zonk`/`erase` (§9).
+/// Check a lambda against an expected function type, aligning the lambda's own
+/// binders with the expected telescope *by plicity* and inserting every omitted
+/// hidden (implicit/witness) expected binder — the lambda-side counterpart of
+/// application-side hidden-argument insertion.
+///
+/// Two queues advance together: the lambda's written telescope (whose `Done` is
+/// the body) with its written plicities, and the expected type's telescope
+/// (whose `Done` is the output) with its canonical plicities. At each step:
+///
+/// 1. matching plicities consume both — the written domain (a hole when the
+///    annotation was omitted, or the annotation itself) is unified against the
+///    expected domain via `expect`;
+/// 2. a mismatch at a hidden expected slot inserts that binder — a real fresh
+///    bound variable checked at the expected domain — and keeps the written
+///    binder for the following expected slot;
+/// 3. a mismatch at an *explicit* expected slot is a plicity error: an explicit
+///    slot is never skipped, and a marked binder can never claim one.
+///
+/// Once the written binders run out, every remaining hidden expected slot is
+/// synthesized; a leftover explicit slot is a missing-parameter arity error, and
+/// a leftover written binder is a too-many-parameters arity error. Alignment is
+/// positional by plicity, not by binder label.
+///
+/// The rebuilt lambda carries the *complete canonical* telescope — inserted
+/// binders included — and the expected type's full plicity vector, so it re-checks
+/// against the same type consuming every binder directly and inserting nothing
+/// (idempotence, required for caching, parked-work replay, zonk, and archive
+/// restoration). Each rebuilt domain is the *expected* domain rather than the
+/// written hole, so re-closing it captures any free names it mentions — keeping
+/// nested lambda domains de-Bruijn-correct for `zonk`/`erase` (§9).
 pub(super) fn elaborate_func_check(
     context: &mut Context,
     telescope: &Telescope<Term>,
+    written_plicities: &[Plicity],
     term: &Term,
     expected: Term,
 ) -> Result<(Term, Term), Error> {
@@ -457,84 +484,119 @@ pub(super) fn elaborate_func_check(
         _ => return Err(Error::not_a_function_type(expected.clone())),
     };
 
-    if telescope.len() != ft.telescope.len() {
-        return Err(Error::wrong_number_of_arguments(
-            ft.telescope.len(),
-            telescope.len(),
-        ));
-    }
-
-    fn walk(
-        context: &mut Context,
-        term: &Term,
-        body: Telescope<Term>,
-        type_: Telescope<Term>,
-        plicities: &[Plicity],
-        domains: &mut Vec<(String, Term)>,
-    ) -> Result<Term, Error> {
-        match (body, type_) {
-            (Telescope::Done(body), Telescope::Done(output)) => check(context, &body, *output),
-            (Telescope::Cons(domain, body_rest), Telescope::Cons(type_, type_rest)) => {
-                // Unify the *rebuilt* annotation against the expected domain:
-                // `expect` reduces both sides, and a lowered (under-applied)
-                // domain would open a telescope at the wrong arity. An omitted
-                // annotation is a hole either way — `check` births it and
-                // `expect` then solves it to the expected domain, as before.
-                let domain = check(context, &domain, Term::type_())?;
-                expect(context, term, &domain, &type_)?;
-                let name = context.fresh(body_rest.first_label());
-                let x = Term::free_var(&name);
-                // A binder the expected type marks `use` joins the witness
-                // scope: resolution inside the body finds it there.
-                match plicities.get(domains.len()) {
-                    Some(Plicity::Witness) => context.assume_witness(&name, &type_),
-                    _ => context.assume(&name, &type_),
-                }
-                domains.push((name, type_.clone()));
-                walk(
-                    context,
-                    term,
-                    body_rest.open(&[&x]),
-                    type_rest.open(&[&x]),
-                    plicities,
-                    domains,
-                )
-            }
-            // Arities were checked equal above.
-            _ => unreachable!("function/type telescope arity mismatch"),
+    // Assume an inserted or consumed binder into the ordinary scope, joining the
+    // witness scope when the *expected* slot is a `use` binder so resolution in
+    // later domains and the body finds it there.
+    fn assume_slot(context: &mut Context, name: &str, plicity: Plicity, type_: &Term) {
+        match plicity {
+            Plicity::Witness => context.assume_witness(name, type_),
+            _ => context.assume(name, type_),
         }
     }
 
-    let mut domains = Vec::new();
+    let mut domains: Vec<(Plicity, String, Term)> = Vec::new();
     let body = context.with_frame(|context| {
-        walk(
-            context,
-            term,
-            telescope.clone(),
-            ft.telescope,
-            &ft.plicities,
-            &mut domains,
-        )
+        let mut written = telescope.clone();
+        let mut expected_tele = ft.telescope;
+        let e_plicities = &ft.plicities;
+        let (mut w_idx, mut e_idx) = (0usize, 0usize);
+
+        loop {
+            match (written, expected_tele) {
+                (Telescope::Done(body), Telescope::Done(output)) => {
+                    break check(context, &body, *output);
+                }
+                // Written binders are exhausted: synthesize every remaining
+                // expected slot, which must be hidden — an explicit slot is
+                // never inserted (a missing-parameter arity error instead).
+                (Telescope::Done(body), Telescope::Cons(domain, rest)) => {
+                    let plicity = e_plicities[e_idx];
+                    if plicity == Plicity::Explicit {
+                        break Err(Error::wrong_number_of_arguments(
+                            e_plicities.len(),
+                            telescope.len(),
+                        ));
+                    }
+                    let name = context.fresh(None);
+                    let x = Term::free_var(&name);
+                    assume_slot(context, &name, plicity, &domain);
+                    domains.push((plicity, name, domain));
+                    written = Telescope::Done(body);
+                    expected_tele = rest.open(&[&x]);
+                    e_idx += 1;
+                }
+                // A written binder remains but the expected telescope ended:
+                // too many parameters.
+                (Telescope::Cons(..), Telescope::Done(_)) => {
+                    break Err(Error::wrong_number_of_arguments(
+                        e_plicities.len(),
+                        telescope.len(),
+                    ));
+                }
+                (Telescope::Cons(w_domain, w_rest), Telescope::Cons(e_domain, e_rest)) => {
+                    let w_plicity = written_plicities[w_idx];
+                    let e_plicity = e_plicities[e_idx];
+                    if w_plicity == e_plicity {
+                        // Consume both. Unify the *rebuilt* written annotation
+                        // against the expected domain (`expect` reduces both
+                        // sides; an omitted annotation is a hole `check` births
+                        // and `expect` solves to the expected domain).
+                        let w_domain = check(context, &w_domain, Term::type_())?;
+                        expect(context, term, &w_domain, &e_domain)?;
+                        let name = context.fresh(w_rest.first_label());
+                        let x = Term::free_var(&name);
+                        assume_slot(context, &name, e_plicity, &e_domain);
+                        domains.push((e_plicity, name, e_domain));
+                        written = w_rest.open(&[&x]);
+                        expected_tele = e_rest.open(&[&x]);
+                        w_idx += 1;
+                        e_idx += 1;
+                    } else if e_plicity != Plicity::Explicit {
+                        // Insert this hidden expected slot; the written binder
+                        // waits for the following expected slot.
+                        let name = context.fresh(None);
+                        let x = Term::free_var(&name);
+                        assume_slot(context, &name, e_plicity, &e_domain);
+                        domains.push((e_plicity, name, e_domain));
+                        written = Telescope::Cons(w_domain, w_rest);
+                        expected_tele = e_rest.open(&[&x]);
+                        e_idx += 1;
+                    } else {
+                        // A marked written binder reached an explicit slot.
+                        break Err(Error::BinderPlicityMismatch {
+                            position: w_idx + 1,
+                            expected: e_plicity,
+                            written: w_plicity,
+                        });
+                    }
+                }
+            }
+        }
     })?;
 
-    Ok((Term::func(domains, body), expected))
+    Ok((Term::func_marked(domains, body), expected))
 }
 
 /// Synthesize a function type from a lambda's own domain annotations — the mirror
-/// of `elaborate_func_type`. Walk the telescope, elaborating each domain against
-/// `Type`, assuming the parameter, and inferring the body at `Done`. A domain
-/// that stays an unconstrained hole (the bare `(x) => …` sugar, or `(x : _)`)
-/// offers nothing to synthesize from, so inference fails — exactly as a bare
-/// lambda in inference position did before annotations existed. The rebuilt lambda
-/// and its type share the same closed domains, so both stay de-Bruijn-correct.
+/// of `elaborate_func_type`. Without an expected type no binders can be inserted,
+/// so the lambda's written plicity sequence is already canonical: the walk keeps
+/// each written mark, entering a `use` binder into the witness scope for later
+/// domains and the body, and the synthesized `FuncType`/rebuilt `Func` both carry
+/// exactly that sequence. A domain that stays an unconstrained hole (the bare
+/// `(x) => …` sugar, or `(x : _)`) offers nothing to synthesize from, so inference
+/// fails — exactly as a bare lambda in inference position did before annotations
+/// existed. The rebuilt lambda and its type share the same closed domains, so both
+/// stay de-Bruijn-correct.
 pub(super) fn elaborate_func_infer(
     context: &mut Context,
     telescope: &Telescope<Term>,
+    plicities: &[Plicity],
 ) -> Result<(Term, Term), Error> {
     fn walk(
         context: &mut Context,
         body: Telescope<Term>,
-        domains: &mut Vec<(String, Term)>,
+        plicities: &[Plicity],
+        domains: &mut Vec<(Plicity, String, Term)>,
     ) -> Result<(Term, Term), Error> {
         match body {
             Telescope::Done(body) => elaborate(context, &body, Mode::Infer),
@@ -545,21 +607,25 @@ pub(super) fn elaborate_func_infer(
                     return Err(Error::CannotInfer);
                 }
 
+                let plicity = plicities[domains.len()];
                 let name = context.fresh(body_rest.first_label());
                 let x = Term::free_var(&name);
-                context.assume(&name, &domain);
-                domains.push((name, domain));
-                walk(context, body_rest.open(&[&x]), domains)
+                match plicity {
+                    Plicity::Witness => context.assume_witness(&name, &domain),
+                    _ => context.assume(&name, &domain),
+                }
+                domains.push((plicity, name, domain));
+                walk(context, body_rest.open(&[&x]), plicities, domains)
             }
         }
     }
 
     let mut domains = Vec::new();
     let (body, output) =
-        context.with_frame(|context| walk(context, telescope.clone(), &mut domains))?;
+        context.with_frame(|context| walk(context, telescope.clone(), plicities, &mut domains))?;
 
     Ok((
-        Term::func(domains.clone(), body),
-        Term::func_type(domains, output),
+        Term::func_marked(domains.clone(), body),
+        Term::func_type_marked(domains, output),
     ))
 }

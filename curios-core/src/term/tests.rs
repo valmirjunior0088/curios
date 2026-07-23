@@ -303,6 +303,7 @@ fn reach_telescope_absorbs_arity() {
             Term::type_(),
             Scope::constant(One, Telescope::done(Term::var(Var::bound(2)))),
         ),
+        plicities: vec![Plicity::Explicit],
     }));
     assert_eq!(f1.reach(), 2); // one binder: (2 + 1) - 1
 
@@ -317,6 +318,7 @@ fn reach_telescope_absorbs_arity() {
                 ),
             ),
         ),
+        plicities: vec![Plicity::Explicit, Plicity::Explicit],
     }));
     assert_eq!(f2.reach(), 1); // two binders: (2 + 1) - 2
 }

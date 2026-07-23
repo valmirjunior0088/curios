@@ -6,20 +6,20 @@ pub use Eq/*;
 
 pub let sym(@A : Type, @x : A, @y : A, p : Eq(x, y)) -> Eq(y, x) =
     match p : (q : Eq(A, s, t)) => Eq(t, s)
-    | refl(z) => Eq/refl()
+    | refl(@z) => Eq/refl()
     end;
 
 pub let trans(@A : Type, @x : A, @y : A, @z : A, p : Eq(x, y), q : Eq(y, z)) -> Eq(x, z) =
     match q : Eq(x, z)
-    | refl(w) => p
+    | refl(@w) => p
     end;
 
 pub let cong(@A : Type, @B : Type, @x : A, @y : A, f : (A) -> B, p : Eq(x, y)) -> Eq(f(x), f(y)) =
     match p : Eq(f(x), f(y))
-    | refl(z) => Eq/refl()
+    | refl(@z) => Eq/refl()
     end;
 
 pub let subst(@A : Type, @x : A, @y : A, P : (A) -> Type, p : Eq(x, y), v : P(x)) -> P(y) =
     match p : P(y)
-    | refl(z) => v
+    | refl(@z) => v
     end;

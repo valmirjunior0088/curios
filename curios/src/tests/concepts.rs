@@ -351,7 +351,7 @@ fn higher_kinded_superclass_projects() {
             empty(@A : Type) -> M(A)
         }
         satisfy MonadPlus(Option) {
-            empty(A) = Option/none()
+            empty(@A) = Option/none()
         }
         pub let wrap(@M : (Type) -> Type, use MonadPlus(M), m : M(Nat)) -> M(Nat) =
             Monad/bind(m, (x) => Monad/pure(x));
@@ -708,7 +708,7 @@ fn prop_laws_concept_resolves() {
             stable(use Show(A), x : A) -> Eq(Show/show(x), Show/show(x))
         }
         satisfy ShowLaws(Nat) {
-            stable(w, x) = Eq/refl()
+            stable(use w, x) = Eq/refl()
         }
         let take(q : Eq(Show/show(7), Show/show(7)), n : Nat) -> Nat = n;
         /std/print(Nat/to_str(take(ShowLaws/stable(7), 42)))

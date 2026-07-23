@@ -256,6 +256,15 @@ A lambda is a comma-separated parameter list followed by `=>` and a body.
 
 Lambda parameters may be plain binders or irrefutable tuple and struct patterns. An annotation may be written when the parameter type is not supplied by context.
 
+A lambda parameter carries the same plicity mark as a function-type parameter: `@name` binds an implicit slot, `use name` binds a witness slot, and an unmarked binder binds an explicit slot. The mark applies to the slot the parameter occupies whatever the pattern shape. Each written binder is checked against the plicity of the slot it claims when the lambda is checked against an expected function type.
+
+```crs
+(@A, value) => value
+(@A, use show, value) => Show/show(value)
+```
+
+An omitted implicit or witness binder is inserted automatically from the expected function type, so hidden binders may be left out when the body does not name them. Alignment is positional by plicity: among the parameters of the expected type, each written binder claims the next slot of its own plicity, and every skipped implicit or witness slot before it is inserted. A plain binder never silently binds a hidden slot. For the expected type `(@A : Type, use Show(A), value : A) -> Str`, every one of `(value) => …`, `(@A, value) => …`, `(use show, value) => …`, and `(@A, use show, value) => …` is accepted; `(A, show, value) => …` is not, because `A` binds the sole explicit slot and the remaining binders are surplus.
+
 ### Local `let`
 
 A local `let` binds a value throughout the term after its terminating `;`.
@@ -392,6 +401,14 @@ An inductive pattern names a constructor and supplies one pattern per payload po
 match option
 | some(value) => use(value)
 | none() => fallback
+end
+```
+
+A payload position the constructor declared implicit (`@`) must be matched with `@`; a plain payload is matched without a mark. A constructor pattern supplies one pattern per payload position, hidden ones included — omitted hidden payload patterns are not inserted (unlike lambda binders). Witness payloads are not a surface feature, so `use` is not accepted in a constructor pattern.
+
+```crs
+match vector
+| cons(@length, head, tail) => head
 end
 ```
 

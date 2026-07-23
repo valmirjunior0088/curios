@@ -696,9 +696,23 @@ fn process_items(
                                     ),
                                 );
 
+                                // The value constructor's calling convention:
+                                // every leading declaration parameter is
+                                // implicit, each payload keeps its declared
+                                // mark — the same source `ctor_type` uses.
+                                let plicities = u
+                                    .params
+                                    .iter()
+                                    .map(|_| Plicity::Implicit)
+                                    .chain(c.payload.iter().map(|param| param.plicity))
+                                    .collect::<Vec<_>>();
+
                                 Ok((
                                     curios_core::Atom::from(c.label.as_str()),
-                                    curios_core::InductParam { telescope },
+                                    curios_core::InductParam {
+                                        telescope,
+                                        plicities,
+                                    },
                                 ))
                             })
                             .collect::<Result<BTreeMap<_, _>, Error>>()?;
@@ -756,10 +770,7 @@ fn process_items(
                                     binder_tys.clone(),
                                     result_sort,
                                 ),
-                                curios_core::Term::func(
-                                    binder_tys.into_iter().map(|(_, n, t)| (n, t)),
-                                    induct_decl,
-                                ),
+                                curios_core::Term::func_marked(binder_tys, induct_decl),
                             )
                         };
                         Ok(FlatLet {
@@ -864,11 +875,10 @@ fn process_items(
                             curios_core::Atom::from(c.label.as_str()),
                             args,
                         );
-                        // The lambda binds every parameter regardless of mark.
-                        let ctor_body = curios_core::Term::func(
-                            param_tys.into_iter().map(|(_, n, t)| (n, t)),
-                            inject,
-                        );
+                        // The value constructor carries the same calling
+                        // convention as `ctor_type`: every inductive parameter
+                        // is implicit, each payload keeps its declared mark.
+                        let ctor_body = curios_core::Term::func_marked(param_tys, inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
                             name: context.prefixed(&u.label).with(&c.label),
@@ -953,10 +963,7 @@ fn process_items(
                 } else {
                     (
                         curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
-                        curios_core::Term::func(
-                            param_tys.into_iter().map(|(_, n, t)| (n, t)),
-                            struct_type,
-                        ),
+                        curios_core::Term::func_marked(param_tys, struct_type),
                     )
                 };
 
@@ -1085,10 +1092,7 @@ fn process_items(
                 } else {
                     (
                         curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
-                        curios_core::Term::func(
-                            param_tys.iter().cloned().map(|(_, n, t)| (n, t)),
-                            struct_type,
-                        ),
+                        curios_core::Term::func_marked(param_tys, struct_type),
                     )
                 };
                 flat_items.push(FlatItem::Let(FlatLet {

@@ -370,12 +370,12 @@ fn indexed_vec_append_executes() {
         rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
             match v : (v : Vec(T, k)) => Vec(T, Nat/add(k, m))
             | nil() => w
-            | cons(j, x, xs) => Vec/cons(x, append(xs, w))
+            | cons(@j, x, xs) => Vec/cons(x, append(xs, w))
             end;
         rec total(@n : Nat, v : Vec(Nat, n), acc : Nat) -> Nat =
             match v : Nat
             | nil() => acc
-            | cons(m, x, xs) => total(xs, Nat/add(acc, x))
+            | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
             end;
         let a : Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
         let b : Vec(Nat, 1) = Vec/cons(4, Vec/nil());

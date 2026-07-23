@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_base::{Qualifier, RootId},
+    curios_base::{Plicity, Qualifier, RootId},
     std::{collections::BTreeMap, time::Duration},
 };
 
@@ -34,6 +34,7 @@ fn register_opt(context: &mut Context) {
                         Atom::from("none"),
                         InductParam {
                             telescope: Telescope::done(opt_type()),
+                            plicities: vec![],
                         },
                     ),
                     (
@@ -43,6 +44,7 @@ fn register_opt(context: &mut Context) {
                                 [("x", Term::prim(Prim::NatType))],
                                 opt_type(),
                             ),
+                            plicities: vec![Plicity::Explicit],
                         },
                     ),
                 ]),
@@ -345,7 +347,13 @@ fn inductive_match_default_with_pattern_motive_is_rejected() {
         head: Term::variant("Opt", Vec::<Term>::new(), "none", Vec::<Term>::new()),
         motive: Scope::close(Many(1), &["m"], nat()),
         cases: Cases::Induct {
-            cases: BTreeMap::from([(Atom::from("none"), Scope::close(Many(0), &[], nat_lit(0)))]),
+            cases: BTreeMap::from([(
+                Atom::from("none"),
+                InductArm {
+                    body: Scope::close(Many(0), &[], nat_lit(0)),
+                    plicities: vec![],
+                },
+            )]),
             pattern: Some(MotivePattern {
                 name: "Opt".to_string(),
                 slots: vec![],

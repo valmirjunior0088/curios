@@ -318,7 +318,7 @@ pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Char =
                     go(step(h, Scan/lead()), t,
                         peel_byte(@Scan/lead(), @Bytes/cons(h, t), True/qed(), valid), pred,
                         match le : (le : Nat/Lte(x, y)) => Nat/Lte(x - 1, y - 1)
-                        | s(a, c, prev) => prev
+                        | s(@a, @c, prev) => prev
                         end)
                 end
             | cont(rem, lo, hi) =>

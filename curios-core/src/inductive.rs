@@ -1,6 +1,6 @@
 use {
     super::{Atom, Telescope, Term},
-    curios_base::{Qualifier, RootId},
+    curios_base::{Plicity, Qualifier, RootId},
     std::collections::BTreeMap,
 };
 
@@ -22,6 +22,11 @@ use {
 )]
 pub struct InductParam {
     pub telescope: Telescope<Term>,
+    /// One plicity mark per telescope binder — the value constructor's calling
+    /// convention: every leading declaration parameter is `Implicit` (a value
+    /// constructor infers them), each payload keeps its declared mark. Parallels
+    /// `telescope`; `plicities.len()` equals `telescope.len()`.
+    pub plicities: Vec<Plicity>,
 }
 
 /// One inductive declaration's registry entry: the metadata an `induct`
@@ -81,6 +86,17 @@ impl InductDecl {
                 .clone()
                 .open_params(params),
         )
+    }
+
+    /// The canonical plicities of `tag`'s *payload* binders — the constructor
+    /// signature plicities past the leading `params.len()` declaration
+    /// parameters, paralleling the telescope [`Self::instantiate`] peels. `None`
+    /// if `tag` is not a constructor of this inductive.
+    pub(crate) fn payload_plicities(&self, tag: &Atom) -> Option<&[Plicity]> {
+        let param_count = self.params.len();
+        self.constructors
+            .get(tag)
+            .map(|param| &param.plicities[param_count..])
     }
 
     /// Constructor tags in runtime dispatch order: position `i` here is the

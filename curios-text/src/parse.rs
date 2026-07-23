@@ -23,12 +23,13 @@ mod tests;
 use {
     super::{
         Apply, BinPattern, BinSegment, CasePayloadParam, Choose, ChooseArm, ChooseTest,
-        ConceptField, Field, Func, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let,
-        LetBinding, LetSignature, LstEntry, LstPattern, Match, MatchPattern, MatchPatternField,
-        MatrixArm, Module, Motive, Name, NatLiteral, NatPattern, NumLit, Pattern, PatternField,
-        Prim, Proj, Radix, Rec, RecItem, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase,
-        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness,
-        Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
+        ConceptField, Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
+        Infix, Let, LetBinding, LetSignature, LstEntry, LstPattern, Match, MatchPattern,
+        MatchPatternField, MatrixArm, Module, Motive, Name, NatLiteral, NatPattern, NumLit,
+        Pattern, PatternField, Prim, Proj, Radix, Rec, RecItem, StructLit, StructLitEntry, Subterm,
+        Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
+        TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
+        WitnessField,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{

@@ -1,6 +1,6 @@
 use {
     super::{Atom, Module, Term},
-    curios_base::{Int, Span},
+    curios_base::{Int, Plicity, Span},
     num_bigint::BigUint,
     std::{collections::BTreeSet, fmt, rc::Rc},
 };
@@ -184,6 +184,17 @@ pub enum Error {
     WrongNumberOfArguments {
         expected: usize,
         got: usize,
+    },
+    /// A written function binder claims a slot whose plicity it does not match.
+    /// `position` is the binder's 1-based position among the written binders,
+    /// `expected` the plicity of the expected slot it aligned with, and `written`
+    /// the mark it carries. Under automatic hidden-binder insertion this fires
+    /// when a marked (`@`/`use`) binder reaches an *explicit* expected slot — an
+    /// explicit slot is never skipped and never marked.
+    BinderPlicityMismatch {
+        position: usize,
+        expected: Plicity,
+        written: Plicity,
     },
     UnknownMatchConstructor {
         type_name: String,
@@ -1108,6 +1119,26 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "wrong number of arguments: expected {expected}, got {got}"
+                )
+            }
+            Error::BinderPlicityMismatch {
+                position,
+                expected,
+                written,
+            } => {
+                let requirement = match expected {
+                    Plicity::Explicit => "an explicit parameter (written with no mark)",
+                    Plicity::Implicit => "an implicit parameter (written with `@`)",
+                    Plicity::Witness => "a witness parameter (written with `use`)",
+                };
+                let written = match written {
+                    Plicity::Explicit => "written with no mark",
+                    Plicity::Implicit => "written with `@`",
+                    Plicity::Witness => "written with `use`",
+                };
+                write!(
+                    f,
+                    "function parameter {position} is {requirement}, but was {written}"
                 )
             }
             Error::UnknownMatchConstructor { type_name, tag } => {

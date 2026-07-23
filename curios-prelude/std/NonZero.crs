@@ -18,7 +18,7 @@ let false_neq_true(p : Eq(false, true)) -> False =
 
 let cong_flip(@s : Order, @t : Order, p : Eq(s, t)) -> Eq(Order/flip(s), Order/flip(t)) =
     match p : (q : Eq(Order, a, b)) => Eq(Order/flip(a), Order/flip(b))
-    | refl(z) => Eq/refl()
+    | refl(@z) => Eq/refl()
     end;
 
 let is_trimmed_of_canonical(rep : Bits, c : Canonical(rep)) -> Eq(is_trimmed(rep), true) =

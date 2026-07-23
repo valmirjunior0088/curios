@@ -4,13 +4,19 @@ use {
         BinPattern, Choose, ChooseArm, ChooseTest, Error, LstPattern, Match, MatchPattern,
         MatrixArm, Motive, NatPattern, Subterm, Term,
     },
-    curios_base::Grain,
+    curios_base::{Grain, Plicity},
     std::{collections::BTreeMap, mem},
 };
 
-/// One elaborated arm of a single-level core inductive match: the constructor tag,
-/// its payload binder names, and the (already-lowered) body.
-type InductCase = (curios_core::Atom, Vec<String>, curios_core::Term);
+/// One elaborated arm of a single-level core inductive match: the constructor
+/// tag, its payload binders (each with its written plicity mark), and the
+/// (already-lowered) body. The marks travel to the Core arm; core elaboration
+/// checks them against the constructor's canonical payload plicities.
+type InductCase = (
+    curios_core::Atom,
+    Vec<(curios_base::Plicity, String)>,
+    curios_core::Term,
+);
 
 /// One in-progress row of the matrix compiler's recursion (see
 /// [`MatchCompiler::compile_matrix`]): the still-unconsumed column patterns (left to
@@ -29,6 +35,10 @@ struct MatrixRow<'t> {
     binds: Vec<(String, curios_core::Term)>,
     body: &'t Term,
 }
+
+/// One row grouped under a constructor tag in [`MatchCompiler::compile_ctor`]:
+/// its still-borrowed, plicity-marked argument patterns and the row itself.
+type VariantRow<'t> = (&'t [(Plicity, MatchPattern)], MatrixRow<'t>);
 
 /// One unit of match-matrix compilation: borrows the [`Lowerer`] doing the
 /// surrounding term lowering (for name resolution, scoping, and recursing back
@@ -283,14 +293,14 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             // match's default; otherwise the arms enumerate every constructor
             // (core's Rung-C vacuity covers any pruned tag).
             return Ok(match &self.default {
-                Some(default) => curios_core::Term::induct_match_default(
+                Some(default) => curios_core::Term::induct_match_default_marked(
                     head,
                     label,
                     body,
                     cases,
                     default.clone(),
                 ),
-                None => curios_core::Term::induct_match(head, label, body, cases),
+                None => curios_core::Term::induct_match_marked(head, label, body, cases),
             });
         };
 
@@ -320,7 +330,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         // The index binders are in scope inside the motive body.
         let motive_body = self.scoped(binders.clone(), || self.term(body))?;
 
-        Ok(curios_core::Term::induct_match_motive(
+        Ok(curios_core::Term::induct_match_motive_marked(
             head,
             binders,
             label,
@@ -348,7 +358,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     ///
     /// A dependent motive (`Motive::Scrutinee`/`Motive::Annotated`) is only
     /// meaningful when the head itself dispatches on a constructor tag
-    /// directly — every arm's *top-level* pattern being [`MatchPattern::Ctor`]
+    /// directly — every arm's *top-level* pattern being [`MatchPattern::Variant`]
     /// — since that is the only case where a core `Match` node exists for
     /// the *original* scrutinee to attach the motive to (a
     /// tuple/struct-headed or plain-binder match never builds one; it just
@@ -443,10 +453,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
 
         match rows[0].patterns[0] {
-            MatchPattern::Ctor { .. } => {
+            MatchPattern::Variant { .. } => {
                 if rows
                     .iter()
-                    .any(|row| !matches!(row.patterns[0], MatchPattern::Ctor { .. }))
+                    .any(|row| !matches!(row.patterns[0], MatchPattern::Variant { .. }))
                 {
                     return Err(Error::MatrixInconsistentShape);
                 }
@@ -547,10 +557,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let scrutinee = columns.remove(0);
         let rest = columns;
 
-        let mut groups: BTreeMap<String, Vec<(&[MatchPattern], MatrixRow<'_>)>> = BTreeMap::new();
+        let mut groups: BTreeMap<String, Vec<VariantRow<'_>>> = BTreeMap::new();
         for mut row in rows {
-            let MatchPattern::Ctor { tag, args } = row.patterns.remove(0) else {
-                unreachable!("every row classified as Ctor")
+            let MatchPattern::Variant { tag, args } = row.patterns.remove(0) else {
+                unreachable!("every row classified as a variant")
             };
             groups
                 .entry(tag.clone())
@@ -560,8 +570,19 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
         let mut cases = Vec::with_capacity(groups.len());
         for (tag, mut group) in groups {
-            let arity = group[0].0.len();
-            if group.iter().any(|(args, _)| args.len() != arity) {
+            // Rows merging under one constructor must agree structurally on
+            // arity *and* on the written plicity of each payload slot — a
+            // source-shape check independent of constructor typing.
+            let plicities = group[0]
+                .0
+                .iter()
+                .map(|(plicity, _)| *plicity)
+                .collect::<Vec<_>>();
+            let arity = plicities.len();
+            if group
+                .iter()
+                .any(|(args, _)| args.iter().map(|(p, _)| *p).ne(plicities.iter().copied()))
+            {
                 return Err(Error::MatrixInconsistentShape);
             }
 
@@ -576,12 +597,12 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 let mut direct_names = Vec::new();
                 let mut sub_columns = Vec::new();
                 let mut sub_patterns = Vec::new();
-                for pattern in args {
+                for (plicity, pattern) in args {
                     match pattern {
                         MatchPattern::Binder(name) => {
                             let bound = self.pattern_binder_name(name);
                             direct_names.push(bound.clone());
-                            binder_names.push(bound);
+                            binder_names.push((*plicity, bound));
                         }
                         other => {
                             let synthetic = self.context.fresh_binder();
@@ -589,7 +610,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                                 synthetic.clone(),
                             )));
                             sub_patterns.push(other);
-                            binder_names.push(synthetic);
+                            binder_names.push((*plicity, synthetic));
                         }
                     }
                 }
@@ -610,7 +631,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             let sub_rows = group
                 .into_iter()
                 .map(|(args, mut row)| {
-                    let mut patterns = args.iter().collect::<Vec<_>>();
+                    let mut patterns = args.iter().map(|(_, p)| p).collect::<Vec<_>>();
                     patterns.extend(row.patterns);
                     row.patterns = patterns;
                     row
@@ -623,7 +644,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             sub_columns.extend(rest.clone());
 
             let body = self.compile(sub_columns, sub_rows, None, leaf)?;
-            cases.push((curios_core::Atom::from(tag.as_str()), synthetic, body));
+            let marked = plicities.into_iter().zip(synthetic).collect::<Vec<_>>();
+            cases.push((curios_core::Atom::from(tag.as_str()), marked, body));
         }
 
         self.induct_match(scrutinee, top_motive.unwrap_or(&None), cases)
@@ -1179,7 +1201,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 fn refutation_count(pattern: &MatchPattern) -> usize {
     match pattern {
         MatchPattern::Binder(_) => 0,
-        MatchPattern::Ctor { args, .. } => 1 + args.iter().map(refutation_count).sum::<usize>(),
+        MatchPattern::Variant { args, .. } => {
+            1 + args.iter().map(|(_, p)| refutation_count(p)).sum::<usize>()
+        }
         MatchPattern::Tuple(fields) | MatchPattern::Struct { fields, .. } => {
             fields.iter().map(|f| refutation_count(&f.value)).sum()
         }
@@ -1222,9 +1246,9 @@ fn split_catch_all(arms: &[MatrixArm]) -> Result<(&[MatrixArm], Option<&Term>), 
 /// into a payload sub-match, a second site worth sharing.
 fn arms_all_flat(arms: &[MatrixArm]) -> bool {
     arms.iter().all(|arm| match &arm.pattern {
-        MatchPattern::Ctor { args, .. } => {
-            args.iter().all(|p| matches!(p, MatchPattern::Binder(_)))
-        }
+        MatchPattern::Variant { args, .. } => args
+            .iter()
+            .all(|(_, p)| matches!(p, MatchPattern::Binder(_))),
         _ => true,
     })
 }

@@ -203,7 +203,7 @@ impl Term {
     pub fn transparent_alias_target(&self) -> Option<String> {
         match &self.inner.subterm {
             Subterm::Var(var) => var.as_free().map(str::to_string),
-            Subterm::Func(Func { telescope }) => {
+            Subterm::Func(Func { telescope, .. }) => {
                 let fresh = (0..telescope.len())
                     .map(|index| format!("#alias{index}"))
                     .collect::<Vec<_>>();
@@ -257,7 +257,7 @@ impl Term {
 
         fn direct_head(term: &Term) -> Option<&str> {
             match &**term {
-                Subterm::Func(Func { telescope }) => direct_head(telescope.terminal()),
+                Subterm::Func(Func { telescope, .. }) => direct_head(telescope.terminal()),
                 _ => application_head(term),
             }
         }
@@ -399,7 +399,11 @@ impl Term {
         }))
     }
 
-    /// Build a function literal from `(label, annotation)` parameters, closing the body over the labels via a [`Telescope`]. No plicity marks — see [`Func`].
+    /// Build an all-explicit function literal from `(label, annotation)`
+    /// parameters, closing the body over the labels via a [`Telescope`]. Every
+    /// binder is stamped [`Plicity::Explicit`] — use [`Term::func_marked`] for a
+    /// function containing hidden binders. There is deliberately no unmarked
+    /// "trust me" constructor for a hidden-binder function.
     pub fn func<I, L, T, B>(params: I, body: B) -> Self
     where
         I: IntoIterator<Item = (L, T)>,
@@ -407,8 +411,37 @@ impl Term {
         T: Into<Term>,
         B: Into<Term>,
     {
+        Self::func_marked(
+            params
+                .into_iter()
+                .map(|(label, type_)| (Plicity::Explicit, label, type_)),
+            body,
+        )
+    }
+
+    /// Build a function literal from `(plicity, label, annotation)` binders,
+    /// keeping one plicity mark per telescope entry (asserted to line up — the
+    /// [`Func`] invariant). The all-explicit shorthand is [`Term::func`].
+    pub fn func_marked<I, L, T, B>(params: I, body: B) -> Self
+    where
+        I: IntoIterator<Item = (Plicity, L, T)>,
+        L: Into<String>,
+        T: Into<Term>,
+        B: Into<Term>,
+    {
+        let mut plicities = Vec::new();
+        let telescope = Telescope::build(
+            params.into_iter().map(|(plicity, label, type_)| {
+                plicities.push(plicity);
+                (label, type_)
+            }),
+            body.into(),
+        );
+        assert_eq!(plicities.len(), telescope.len());
+
         Self::from(Subterm::Func(Func {
-            telescope: Telescope::build(params, body.into()),
+            telescope,
+            plicities,
         }))
     }
 
@@ -604,7 +637,7 @@ impl Term {
         }))
     }
 
-    /// Build the primitive eliminator of a nominal inductive ([`Cases::Induct`]) without a type-pattern annotation: one arm per constructor tag, each closed over its payload binders. The annotated-motive form is [`Term::induct_match_motive`].
+    /// Build the primitive eliminator of a nominal inductive ([`Cases::Induct`]) without a type-pattern annotation: one arm per constructor tag, each closed over its payload binders (all-explicit). The annotated-motive form is [`Term::induct_match_motive`]; [`Term::induct_match_marked`] carries per-binder plicity.
     pub fn induct_match<H, M, I, A, L, B>(
         head: H,
         motive_label: Option<&str>,
@@ -619,11 +652,36 @@ impl Term {
         L: Into<String>,
         B: Into<Term>,
     {
+        Self::induct_match_marked(
+            head,
+            motive_label,
+            motive,
+            cases
+                .into_iter()
+                .map(|(atom, binders, body)| (atom, explicit_arm(binders), body)),
+        )
+    }
+
+    /// [`Term::induct_match`] carrying the written constructor-pattern plicity of each payload binder — the matrix compiler's entry point.
+    pub fn induct_match_marked<H, M, I, A, L, B>(
+        head: H,
+        motive_label: Option<&str>,
+        motive: M,
+        cases: I,
+    ) -> Self
+    where
+        H: Into<Term>,
+        M: Into<Term>,
+        I: IntoIterator<Item = (A, Vec<(Plicity, L)>, B)>,
+        A: Into<Atom>,
+        L: Into<String>,
+        B: Into<Term>,
+    {
         Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: Self::motive_scope(motive_label, motive.into()),
             cases: Cases::Induct {
-                cases: Self::induct_cases(cases),
+                cases: Self::induct_cases_marked(cases),
                 pattern: None,
                 default: None,
             },
@@ -651,11 +709,39 @@ impl Term {
         B: Into<Term>,
         D: Into<Term>,
     {
+        Self::induct_match_default_marked(
+            head,
+            motive_label,
+            motive,
+            cases
+                .into_iter()
+                .map(|(atom, binders, body)| (atom, explicit_arm(binders), body)),
+            default,
+        )
+    }
+
+    /// [`Term::induct_match_default`] carrying the written constructor-pattern plicity of each payload binder — the matrix compiler's entry point.
+    pub fn induct_match_default_marked<H, M, I, A, L, B, D>(
+        head: H,
+        motive_label: Option<&str>,
+        motive: M,
+        cases: I,
+        default: D,
+    ) -> Self
+    where
+        H: Into<Term>,
+        M: Into<Term>,
+        I: IntoIterator<Item = (A, Vec<(Plicity, L)>, B)>,
+        A: Into<Atom>,
+        L: Into<String>,
+        B: Into<Term>,
+        D: Into<Term>,
+    {
         Self::from(Subterm::Match(Match {
             head: head.into(),
             motive: Self::motive_scope(motive_label, motive.into()),
             cases: Cases::Induct {
-                cases: Self::induct_cases(cases),
+                cases: Self::induct_cases_marked(cases),
                 pattern: None,
                 default: Some(default.into()),
             },
@@ -665,7 +751,8 @@ impl Term {
     /// An inductive match with the annotated type-pattern motive: the motive body
     /// is closed over the pattern's binder labels (slot order) then the
     /// scrutinee label. `binders` must list one label per
-    /// [`MotiveSlot::Binder`] in `pattern.slots`, in order.
+    /// [`MotiveSlot::Binder`] in `pattern.slots`, in order. Arm binders are
+    /// all-explicit; [`Term::induct_match_motive_marked`] carries per-binder plicity.
     pub fn induct_match_motive<H, M, I, A, L, B>(
         head: H,
         binders: Vec<String>,
@@ -682,6 +769,35 @@ impl Term {
         L: Into<String>,
         B: Into<Term>,
     {
+        Self::induct_match_motive_marked(
+            head,
+            binders,
+            scrutinee_label,
+            motive,
+            pattern,
+            cases
+                .into_iter()
+                .map(|(atom, binders, body)| (atom, explicit_arm(binders), body)),
+        )
+    }
+
+    /// [`Term::induct_match_motive`] carrying the written constructor-pattern plicity of each payload binder — the matrix compiler's entry point.
+    pub fn induct_match_motive_marked<H, M, I, A, L, B>(
+        head: H,
+        binders: Vec<String>,
+        scrutinee_label: &str,
+        motive: M,
+        pattern: MotivePattern,
+        cases: I,
+    ) -> Self
+    where
+        H: Into<Term>,
+        M: Into<Term>,
+        I: IntoIterator<Item = (A, Vec<(Plicity, L)>, B)>,
+        A: Into<Atom>,
+        L: Into<String>,
+        B: Into<Term>,
+    {
         let labels = binders
             .iter()
             .map(String::as_str)
@@ -692,16 +808,18 @@ impl Term {
             head: head.into(),
             motive: Scope::close(Many(labels.len()), &labels, motive.into()),
             cases: Cases::Induct {
-                cases: Self::induct_cases(cases),
+                cases: Self::induct_cases_marked(cases),
                 pattern: Some(pattern),
                 default: None,
             },
         }))
     }
 
-    fn induct_cases<I, A, L, B>(cases: I) -> BTreeMap<Atom, Scope<Many>>
+    /// Build the arm map from `(tag, [(plicity, binder)], body)` triples, keeping
+    /// one plicity mark per payload binder (the [`InductArm`] invariant).
+    pub(crate) fn induct_cases_marked<I, A, L, B>(cases: I) -> BTreeMap<Atom, InductArm>
     where
-        I: IntoIterator<Item = (A, Vec<L>, B)>,
+        I: IntoIterator<Item = (A, Vec<(Plicity, L)>, B)>,
         A: Into<Atom>,
         L: Into<String>,
         B: Into<Term>,
@@ -709,11 +827,17 @@ impl Term {
         cases
             .into_iter()
             .map(|(atom, binders, body)| {
-                let binders = binders.into_iter().map(Into::into).collect::<Vec<_>>();
-                let binders = binders.iter().map(String::as_str).collect::<Vec<_>>();
+                let (plicities, labels): (Vec<Plicity>, Vec<String>) = binders
+                    .into_iter()
+                    .map(|(plicity, label)| (plicity, label.into()))
+                    .unzip();
+                let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
                 (
                     atom.into(),
-                    Scope::close(Many(binders.len()), &binders, body.into()),
+                    InductArm {
+                        body: Scope::close(Many(label_refs.len()), &label_refs, body.into()),
+                        plicities,
+                    },
                 )
             })
             .collect()
@@ -1195,7 +1319,18 @@ pub struct FuncType {
     pub plicities: Vec<Plicity>,
 }
 
-/// A function literal: the parameter annotations and the body as one [`Telescope`] (each entry a parameter type, the `Done` payload the body). Unlike [`FuncType`]/[`Apply`], a lambda carries no plicity marks — its binders are matched against the expected function type's marks during elaboration.
+/// A function literal: the parameter annotations and the body as one
+/// [`Telescope`] (each entry a parameter type, the `Done` payload the body),
+/// with `plicities` paralleling the telescope one mark per binder — the builder
+/// asserts the lengths agree. Plicity is part of a function's identity and
+/// calling convention: a lambda carries the marks its binders were written with
+/// (before elaboration) and the complete canonical marks of its checked type
+/// (after elaboration, once omitted hidden binders are inserted). Derived
+/// `Eq`/`Hash` include `plicities` so that two lambdas differing only in a
+/// written mark never share an elaboration-cache entry.
+///
+/// Erasure ignores `plicities`; its keep/drop decisions come from the checked
+/// function type and sort information.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -1203,6 +1338,7 @@ pub struct FuncType {
 )]
 pub struct Func {
     pub telescope: Telescope<Term>,
+    pub plicities: Vec<Plicity>,
 }
 
 /// `plicities` parallels `params`, one mark per argument — the call-site `@`
@@ -1441,6 +1577,56 @@ pub enum MotiveSlot {
     Term(Term),
 }
 
+/// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its
+/// payload binders, plus a plicity vector paralleling those binders one mark per
+/// slot. `plicities.len()` equals `body.arity()`. Before elaboration the marks
+/// are the written constructor-pattern plicities; after elaboration they are the
+/// constructor's canonical payload plicities. Reduction and erasure open the body
+/// positionally and never read the marks; conversion compares them alongside the
+/// bodies. Kept beside the body (rather than in a second map) so the two can never
+/// drift apart.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "archive",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct InductArm {
+    pub body: Scope<Many>,
+    pub plicities: Vec<Plicity>,
+}
+
+impl InductArm {
+    /// The arm's payload arity — equal to `plicities.len()`.
+    pub(crate) fn arity(&self) -> usize {
+        self.body.arity()
+    }
+
+    /// Open the arm body at its payload binders, positionally (plicity is not
+    /// consulted by reduction or erasure).
+    pub(crate) fn open(&self, args: &[&Term]) -> Term {
+        self.body.open(args)
+    }
+
+    /// The arm body's free-variable reach, past its payload binders.
+    pub(crate) fn reach(&self) -> usize {
+        self.body.reach()
+    }
+
+    /// The arm's payload binder labels (hints), in order.
+    pub(crate) fn label_iter(&self) -> impl Iterator<Item = Option<&str>> {
+        self.body.label_iter()
+    }
+
+    /// Rebuild the arm with its whole body scope replaced, preserving the
+    /// plicity vector (the traversal-side reconstruction helper).
+    pub(crate) fn with_body(&self, body: Scope<Many>) -> Self {
+        InductArm {
+            body,
+            plicities: self.plicities.clone(),
+        }
+    }
+}
+
 /// The arm payload of a [`Match`] — the only part that differs between the elimination forms (the scrutinee and motive live on `Match` itself). Which variant a match carries decides both its reduction rule and how erasure lowers it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
@@ -1465,7 +1651,7 @@ pub enum Cases {
     /// (a true elimination). A `Some(default)` may not co-occur with `pattern`
     /// — the annotated type-pattern motive is elimination-only.
     Induct {
-        cases: BTreeMap<Atom, Scope<Many>>,
+        cases: BTreeMap<Atom, InductArm>,
         pattern: Option<MotivePattern>,
         default: Option<Term>,
     },
@@ -1825,7 +2011,7 @@ impl Subterm {
                     .for_each(|t| t.collect_construction_names(names));
             }
             Subterm::Prim(prim) => prim.collect_construction_names(names),
-            Subterm::Func(Func { telescope }) => telescope.collect_construction_names(names),
+            Subterm::Func(Func { telescope, .. }) => telescope.collect_construction_names(names),
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 telescope.collect_construction_names(names)
             }
@@ -1919,7 +2105,7 @@ impl Subterm {
                     } => {
                         cases
                             .values()
-                            .for_each(|s| s.body().collect_construction_names(names));
+                            .for_each(|s| s.body.body().collect_construction_names(names));
                         pattern.iter().flat_map(|p| &p.slots).for_each(|slot| {
                             if let MotiveSlot::Term(t) = slot {
                                 t.collect_construction_names(names);
@@ -1996,7 +2182,7 @@ impl Subterm {
                 left.any_metavar(pred) || right.any_metavar(pred)
             }
             Subterm::Prim(prim) => prim.any_metavar(pred),
-            Subterm::Func(Func { telescope }) => telescope.any_metavar(pred),
+            Subterm::Func(Func { telescope, .. }) => telescope.any_metavar(pred),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_metavar(pred),
             Subterm::Apply(Apply { head, params, .. }) => {
                 head.any_metavar(pred) || params.iter().any(|p| p.any_metavar(pred))
@@ -2043,7 +2229,7 @@ impl Subterm {
                             pattern,
                             default,
                         } => {
-                            cases.values().any(|s| s.body().any_metavar(pred))
+                            cases.values().any(|s| s.body.body().any_metavar(pred))
                                 || pattern
                                     .iter()
                                     .flat_map(|p| &p.slots)
@@ -2108,7 +2294,7 @@ impl Subterm {
             Subterm::NumLit(_) => false,
             Subterm::Infix(Infix { left, right, .. }) => pred(left) || pred(right),
             Subterm::Prim(prim) => prim.any_term(pred),
-            Subterm::Func(Func { telescope }) => telescope.any_term(pred),
+            Subterm::Func(Func { telescope, .. }) => telescope.any_term(pred),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_term(pred),
             Subterm::Apply(Apply { head, params, .. }) => {
                 pred(head) || params.iter().any(&mut *pred)
@@ -2146,7 +2332,7 @@ impl Subterm {
                             pattern,
                             default,
                         } => {
-                            cases.values().any(|s| pred(s.body()))
+                            cases.values().any(|s| pred(s.body.body()))
                                 || pattern
                                     .iter()
                                     .flat_map(|p| &p.slots)
@@ -2268,8 +2454,12 @@ impl Bound for Subterm {
                 telescope: telescope.traverse(visit),
                 plicities: plicities.clone(),
             }),
-            Subterm::Func(Func { telescope }) => Subterm::Func(Func {
+            Subterm::Func(Func {
+                telescope,
+                plicities,
+            }) => Subterm::Func(Func {
                 telescope: telescope.traverse(visit),
+                plicities: plicities.clone(),
             }),
             Subterm::NumLit(num_lit) => Subterm::NumLit(num_lit.clone()),
             Subterm::Infix(Infix { op, left, right }) => Subterm::Infix(Infix {
@@ -2361,7 +2551,9 @@ impl Bound for Subterm {
                     } => Cases::Induct {
                         cases: cases
                             .iter()
-                            .map(|(atom, scope)| (atom.clone(), visit.visit_scope(scope)))
+                            .map(|(atom, arm)| {
+                                (atom.clone(), arm.with_body(visit.visit_scope(&arm.body)))
+                            })
                             .collect(),
                         // Verbatim slot terms live in the enclosing scope
                         // (outside the motive's binders), like `head`.
@@ -2493,7 +2685,7 @@ impl Bound for Subterm {
                 None => 0,
             },
             Subterm::Prim(prim) => prim.reach(),
-            Subterm::Func(Func { telescope }) => telescope.reach(),
+            Subterm::Func(Func { telescope, .. }) => telescope.reach(),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.reach(),
             Subterm::Apply(Apply { head, params, .. }) => head.reach().max(max_reach(params)),
             Subterm::TupleType(TupleType { telescope, .. }) => telescope.reach(),
@@ -2582,4 +2774,14 @@ fn max_reach<'a>(terms: impl IntoIterator<Item = &'a Term>) -> usize {
         .map(|term| term.reach())
         .max()
         .unwrap_or(0)
+}
+
+/// Stamp one arm's payload binders with [`Plicity::Explicit`], the shape the
+/// `_marked` inductive-match builders consume — the all-explicit builders'
+/// per-arm adapter.
+fn explicit_arm<L>(binders: Vec<L>) -> Vec<(Plicity, L)> {
+    binders
+        .into_iter()
+        .map(|label| (Plicity::Explicit, label))
+        .collect()
 }

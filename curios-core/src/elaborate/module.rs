@@ -119,6 +119,9 @@ fn elaborate_induct_constructors(context: &mut Context, name: &str) -> Result<()
             tag.clone(),
             InductParam {
                 telescope: Telescope::build(entries, terminal).relabel(&label_refs),
+                // Plicity is metadata parallel to the telescope; elaboration
+                // re-checks the types but never changes the calling convention.
+                plicities: param.plicities.clone(),
             },
         );
     }

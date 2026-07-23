@@ -149,7 +149,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
 
     match &**term {
         Subterm::FuncType(FuncType { telescope: t, .. }) => telescope(out, t),
-        Subterm::Func(Func { telescope: t }) => telescope(out, t),
+        Subterm::Func(Func { telescope: t, .. }) => telescope(out, t),
         Subterm::TupleType(TupleType { telescope: t, .. }) => tuple_telescope(out, t),
         Subterm::Apply(Apply { head, params, .. }) => {
             collect_labels(head, out);
@@ -214,7 +214,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<String>) {
                     collect_labels(default, out);
                 }
                 Cases::Induct { cases, default, .. } => {
-                    cases.iter().for_each(|(_, s)| scope(out, s));
+                    cases.iter().for_each(|(_, s)| scope(out, &s.body));
                     default.iter().for_each(|d| collect_labels(d, out));
                 }
                 Cases::FreeMonoid { carrier } => match carrier {
@@ -792,20 +792,30 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                 print_term(output, depth + n),
             ])
         }
-        Subterm::Func(Func { telescope }) => {
+        Subterm::Func(Func {
+            telescope,
+            plicities,
+        }) => {
             let n = telescope.len();
             let (labels, body) = open_telescope(telescope, depth);
-            let param_str = if labels.len() == 1 {
-                display_label(&labels[0])
+            // Each binder carries its written/canonical mark (`@x` = implicit,
+            // `use x` = witness), matching the `FuncType` printer above.
+            let marked = labels
+                .iter()
+                .enumerate()
+                .map(|(idx, label)| {
+                    let mark = match plicities.get(idx) {
+                        Some(Plicity::Implicit) => "@",
+                        Some(Plicity::Witness) => "use ",
+                        _ => "",
+                    };
+                    format!("{mark}{}", display_label(label))
+                })
+                .collect::<Vec<_>>();
+            let param_str = if marked.len() == 1 && plicities.first() == Some(&Plicity::Explicit) {
+                marked.into_iter().next().unwrap()
             } else {
-                format!(
-                    "({})",
-                    labels
-                        .iter()
-                        .map(|l| display_label(l))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+                format!("({})", marked.join(", "))
             };
             flat([
                 pure(param_str),
@@ -1038,11 +1048,11 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                     let case_printers = flat(
                         cases
                             .into_iter()
-                            .map(|(atom, scope)| {
-                                let labels = scope_labels(scope.label_iter(), depth);
+                            .map(|(atom, arm)| {
+                                let labels = scope_labels(arm.label_iter(), depth);
                                 let label_terms = label_terms(&labels);
                                 let label_terms = label_terms.iter().collect::<Vec<_>>();
-                                let body = scope.open(&label_terms);
+                                let body = arm.open(&label_terms);
 
                                 let binders = if labels.is_empty() {
                                     pure("")
@@ -1051,7 +1061,15 @@ pub(crate) fn print_term(term: Term, depth: usize) -> Printer<'static> {
                                         "({})",
                                         labels
                                             .iter()
-                                            .map(|l| display_label(l))
+                                            .enumerate()
+                                            .map(|(idx, l)| {
+                                                let mark = match arm.plicities.get(idx) {
+                                                    Some(Plicity::Implicit) => "@",
+                                                    Some(Plicity::Witness) => "use ",
+                                                    _ => "",
+                                                };
+                                                format!("{mark}{}", display_label(l))
+                                            })
                                             .collect::<Vec<_>>()
                                             .join(", ")
                                     ))

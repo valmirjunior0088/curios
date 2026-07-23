@@ -119,8 +119,8 @@ pub let lte_refl(n : Nat) -> Lte(n, n) =
 
 pub rec lte_succ_r(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(a, b + 1) =
     match p : (w : Lte(x, y)) => Lte(x, y + 1)
-    | z(_) => Lte/z()
-    | s(_, _, prev) => Lte/s(lte_succ_r(prev))
+    | z(@_) => Lte/z()
+    | s(@_, @_, prev) => Lte/s(lte_succ_r(prev))
     end;
 
 pub let lte_add_r(a : Nat, k : Nat) -> Lte(a, a + k) =
@@ -131,22 +131,22 @@ pub let lte_add_r(a : Nat, k : Nat) -> Lte(a, a + k) =
 
 pub rec lte_to_lt_succ(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lt(a, b + 1) =
     match p : (w : Lte(x, y)) => Lt(x, y + 1)
-    | z(_) => True/qed()
-    | s(_, _, prev) => lte_to_lt_succ(prev)
+    | z(@_) => True/qed()
+    | s(@_, @_, prev) => lte_to_lt_succ(prev)
     end;
 
 pub rec lte_trans(@a : Nat, @b : Nat, @c : Nat, p : Lte(a, b), q : Lte(b, c)) -> Lte(a, c) =
     match p
-    | z(_) => Lte/z()
-    | s(a2, b2, prev) =>
+    | z(@_) => Lte/z()
+    | s(@a2, @b2, prev) =>
         match q
-        | s(b3, c3, q2) => Lte/s(lte_trans(prev, q2))
+        | s(@b3, @c3, q2) => Lte/s(lte_trans(prev, q2))
         end
     end;
 
 pub let lt_of_lte_succ(@a : Nat, @b : Nat, p : Lte(a + 1, b)) -> Lt(a, b) =
     match p : (w : Lte(x, y)) => Lt(x - 1, y)
-    | s(a2, b2, prev) => lte_to_lt_succ(prev)
+    | s(@a2, @b2, prev) => lte_to_lt_succ(prev)
     end;
 
 pub let lte_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(n + a, n + b) =

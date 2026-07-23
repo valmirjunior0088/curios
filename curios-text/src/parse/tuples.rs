@@ -72,7 +72,7 @@ pub(super) fn parse_tuple_type<'a>() -> Parser<'a, Term> {
 
 // A parsed labeled-field prefix: the label and, for the definition sugar, the
 // written lambda-parameter list.
-type TupleFieldPrefix = (String, Option<Vec<(String, Option<Term>)>>);
+type TupleFieldPrefix = (String, Option<Vec<(Plicity, String, Option<Term>)>>);
 
 // The committing prefix of a labeled tuple/struct-literal field: `label =` or
 // the definition sugar `label(params) =`. The caller wraps it in `catch`, so a

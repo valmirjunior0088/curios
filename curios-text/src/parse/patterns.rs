@@ -211,13 +211,21 @@ pub(super) fn parse_struct_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 // The `(` immediately after the tag is the commit point, distinguishing it
 // from a bare name. Unlike `parse_func_param`'s definition-sugar arguments,
 // each argument here is itself a full `MatchPattern`, so a constructor's
-// payload can nest arbitrarily (`some(some(x))`, `pair(some(x), y)`, …).
+// payload can nest arbitrarily (`some(some(x))`, `pair(some(x), y)`, …). Each
+// argument retains its plicity: a payload slot the constructor declared `@`
+// must be matched `@name`. `use` is rejected — witness payloads are not a
+// surface feature (`parse_plicity` never consumes `use`, so it stays a keyword
+// no pattern can begin with).
+pub(super) fn parse_ctor_arg<'a>() -> Parser<'a, (Plicity, MatchPattern)> {
+    parse_plicity().and(lazy(parse_match_pattern))
+}
+
 pub(super) fn parse_ctor_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_identifier().and_drop(parse_literal("(")))
-        .and(sep_by0_trailing(parse_match_pattern, || parse_literal(",")))
+        .and(sep_by0_trailing(parse_ctor_arg, || parse_literal(",")))
         .and_drop(parse_literal(")"))
         .map(
-            |(tag, args): (&str, Vec<MatchPattern>)| MatchPattern::Ctor {
+            |(tag, args): (&str, Vec<(Plicity, MatchPattern)>)| MatchPattern::Variant {
                 tag: tag.to_string(),
                 args,
             },
@@ -391,18 +399,20 @@ fn parse_match_pattern_inner<'a>() -> Parser<'a, MatchPattern> {
         .or(parse_binder().map(MatchPattern::Binder))
 }
 
-pub(super) fn parse_func_param<'a>() -> Parser<'a, (String, Option<Term>)> {
-    // A leading `use` on a lambda parameter is accepted and dropped: lambdas
-    // carry no plicity marks (checking against a Π type supplies them), so the
-    // marker is purely documentary here.
-    catch(parse_keyword("use"))
-        .or(pure(()))
-        .and_keep(parse_binder())
+// One parameter of the definition sugar `label(params) = value` (tuple, struct,
+// and witness fields). Like a lambda binder it retains its plicity mark: `@name`
+// (implicit) or `use name` (witness) — the mark is copied onto the generated
+// function value's slot, so a hidden-binder field type (`pure : (@A, x) -> M(A)`)
+// can be implemented as `pure(@A, x) = …` rather than losing the mark.
+pub(super) fn parse_func_param<'a>() -> Parser<'a, (Plicity, String, Option<Term>)> {
+    parse_func_binder_plicity()
+        .and(parse_binder())
         .and(
             catch(parse_literal(":").and_keep(lazy(parse_term)))
                 .map(Some)
                 .or(pure(None)),
         )
+        .map(|((plicity, name), annotation)| (plicity, name, annotation))
 }
 
 // A lambda parameter with an optional domain annotation and a binder pattern
@@ -410,16 +420,29 @@ pub(super) fn parse_func_param<'a>() -> Parser<'a, (String, Option<Term>)> {
 // `parse_func_param`, forked rather than generalized in place because
 // `parse_func_param` also serves the out-of-scope `label(params) = value`
 // definition sugar (`parse_tuple_field_prefix`), which stays single-name-only.
-pub(super) fn parse_func_pattern_param<'a>() -> Parser<'a, (Pattern, Option<Term>)> {
-    // A leading `use` on a lambda parameter is accepted and dropped: lambdas
-    // carry no plicity marks (checking against a Π type supplies them), so the
-    // marker is purely documentary here.
+// A lambda parameter's plicity mark: `@` (implicit) or `use` (witness) prefixing
+// the binder pattern, or no mark (explicit). Unlike the function-type and
+// definition-sugar `use` forms — where a witness binder is anonymous and `use`
+// is followed by the domain *type* — a lambda's `use` names a binder the body
+// can reference (`use show`), so the mark precedes an ordinary pattern.
+fn parse_func_binder_plicity<'a>() -> Parser<'a, Plicity> {
     catch(parse_keyword("use"))
-        .or(pure(()))
-        .and_keep(parse_pattern())
+        .map(|()| Plicity::Witness)
+        .or(catch(parse_literal("@")).map(|()| Plicity::Implicit))
+        .or(pure(Plicity::Explicit))
+}
+
+pub(super) fn parse_func_pattern_param<'a>() -> Parser<'a, FuncParam> {
+    parse_func_binder_plicity()
+        .and(parse_pattern())
         .and(
             catch(parse_literal(":").and_keep(lazy(parse_term)))
                 .map(Some)
                 .or(pure(None)),
         )
+        .map(|((plicity, pattern), annotation)| FuncParam {
+            plicity,
+            pattern,
+            annotation,
+        })
 }

@@ -26,7 +26,11 @@ fn parse_rec_func_and_apply() {
                         .into(),
                     ),
                     body: Subterm::Func(Func {
-                        params: vec![(Pattern::Binder(Some("x".to_string())), None)],
+                        params: vec![FuncParam {
+                            plicity: Plicity::Explicit,
+                            pattern: Pattern::Binder(Some("x".to_string())),
+                            annotation: None,
+                        }],
                         body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
@@ -397,7 +401,11 @@ fn parse_top_rec_mixed_pub() {
                         .into(),
                     ),
                     body: Subterm::Func(Func {
-                        params: vec![(Pattern::Binder(Some("x".to_string())), None)],
+                        params: vec![FuncParam {
+                            plicity: Plicity::Explicit,
+                            pattern: Pattern::Binder(Some("x".to_string())),
+                            annotation: None,
+                        }],
                         body: Subterm::Name(Name::from(["x".to_string()])).into(),
                     })
                     .into(),
@@ -866,16 +874,16 @@ fn parse_inductive_match_nullary_and_unary() {
             )),
             arms: vec![
                 MatrixArm {
-                    pattern: MatchPattern::Ctor {
+                    pattern: MatchPattern::Variant {
                         tag: "null".to_string(),
                         args: vec![],
                     },
                     body: Subterm::Syn(Syn::Str("null".to_string())).into(),
                 },
                 MatrixArm {
-                    pattern: MatchPattern::Ctor {
+                    pattern: MatchPattern::Variant {
                         tag: "bool_".to_string(),
-                        args: vec![MatchPattern::Binder("b".to_string())],
+                        args: vec![(Plicity::Explicit, MatchPattern::Binder("b".to_string()))],
                     },
                     body: Subterm::Name(Name::from(["b".to_string()])).into(),
                 },
@@ -897,11 +905,11 @@ fn parse_inductive_match_multi_binder() {
                 Subterm::Name(Name::from(["T".to_string()])).into()
             )),
             arms: vec![MatrixArm {
-                pattern: MatchPattern::Ctor {
+                pattern: MatchPattern::Variant {
                     tag: "lit".to_string(),
                     args: vec![
-                        MatchPattern::Binder("a".to_string()),
-                        MatchPattern::Binder("b".to_string()),
+                        (Plicity::Explicit, MatchPattern::Binder("a".to_string())),
+                        (Plicity::Explicit, MatchPattern::Binder("b".to_string())),
                     ],
                 },
                 body: Subterm::Name(Name::from(["a".to_string()])).into(),
@@ -921,9 +929,9 @@ fn parse_match_omitted_motive() {
             head: Subterm::Name(Name::from(["x".to_string()])).into(),
             motive: None,
             arms: vec![MatrixArm {
-                pattern: MatchPattern::Ctor {
+                pattern: MatchPattern::Variant {
                     tag: "foo".to_string(),
-                    args: vec![MatchPattern::Binder("y".to_string())],
+                    args: vec![(Plicity::Explicit, MatchPattern::Binder("y".to_string()))],
                 },
                 body: Subterm::Name(Name::from(["y".to_string()])).into(),
             }],
@@ -1041,10 +1049,11 @@ fn parse_func_with_annotation() {
     assert_eq!(
         "(x : Type) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
-            params: vec![(
-                Pattern::Binder(Some("x".to_string())),
-                Some(Subterm::Type.into())
-            )],
+            params: vec![FuncParam {
+                plicity: Plicity::Explicit,
+                pattern: Pattern::Binder(Some("x".to_string())),
+                annotation: Some(Subterm::Type.into()),
+            }],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
         .into()
@@ -1058,11 +1067,16 @@ fn parse_func_with_mixed_annotations() {
         "(x : Type, y) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
             params: vec![
-                (
-                    Pattern::Binder(Some("x".to_string())),
-                    Some(Subterm::Type.into())
-                ),
-                (Pattern::Binder(Some("y".to_string())), None),
+                FuncParam {
+                    plicity: Plicity::Explicit,
+                    pattern: Pattern::Binder(Some("x".to_string())),
+                    annotation: Some(Subterm::Type.into()),
+                },
+                FuncParam {
+                    plicity: Plicity::Explicit,
+                    pattern: Pattern::Binder(Some("y".to_string())),
+                    annotation: None,
+                },
             ],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
@@ -1075,7 +1089,11 @@ fn parse_func_without_annotation_still_works() {
     assert_eq!(
         "(x) => x".parse::<Term>().unwrap(),
         Subterm::Func(Func {
-            params: vec![(Pattern::Binder(Some("x".to_string())), None)],
+            params: vec![FuncParam {
+                plicity: Plicity::Explicit,
+                pattern: Pattern::Binder(Some("x".to_string())),
+                annotation: None,
+            }],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
         .into()
@@ -1160,7 +1178,7 @@ fn parse_bang_in_match_scrutinee_and_arm() {
         Subterm::Match(m) => {
             assert_eq!(m.head, Subterm::Bang(name("x")).into());
             let foo = m.arms.iter().find_map(|arm| {
-                matches!(&arm.pattern, MatchPattern::Ctor { tag, .. } if tag == "foo")
+                matches!(&arm.pattern, MatchPattern::Variant { tag, .. } if tag == "foo")
                     .then_some(&arm.body)
             });
             assert_eq!(foo, Some(&Subterm::Bang(name("y")).into()));
@@ -1422,7 +1440,10 @@ fn parse_function_field_sugar_in_values() {
     };
     assert_eq!(fields.len(), 2);
     assert_eq!(fields[0].label.as_deref(), Some("bump"));
-    assert_eq!(fields[0].func_params, Some(vec![("x".to_string(), None)]),);
+    assert_eq!(
+        fields[0].func_params,
+        Some(vec![(Plicity::Explicit, "x".to_string(), None)]),
+    );
     assert!(matches!(fields[0].value.as_subterm(), Subterm::Apply(_)));
     assert!(matches!(
         fields[0].desugared_value().as_subterm(),
@@ -1436,8 +1457,9 @@ fn parse_function_field_sugar_in_values() {
     };
     assert_eq!(fields.len(), 1);
     let params = fields[0].func_params.as_ref().unwrap();
-    assert_eq!(params[0].0, "x");
-    assert!(params[0].1.is_some());
+    assert_eq!(params[0].0, Plicity::Explicit);
+    assert_eq!(params[0].1, "x");
+    assert!(params[0].2.is_some());
 
     let term = "Api { ping(x) = f(x) }".parse::<Term>().unwrap();
     let Subterm::StructLit(StructLit { entries, .. }) = term.as_subterm() else {
@@ -1960,9 +1982,9 @@ fn parse_choose_bind_arm() {
             arms: vec![
                 ChooseArm {
                     test: ChooseTest::Bind {
-                        pattern: MatchPattern::Ctor {
+                        pattern: MatchPattern::Variant {
                             tag: "some".to_string(),
-                            args: vec![MatchPattern::Binder("x".to_string())],
+                            args: vec![(Plicity::Explicit, MatchPattern::Binder("x".to_string()))],
                         },
                         value: name("o"),
                     },
@@ -2137,8 +2159,8 @@ fn parse_witness_item() {
     assert_eq!(cmp.label, "cmp");
     let params = cmp.func_params.as_ref().unwrap();
     assert_eq!(params.len(), 2);
-    assert_eq!(params[0].0, "a");
-    assert_eq!(params[1].0, "b");
+    assert_eq!(params[0].1, "a");
+    assert_eq!(params[1].1, "b");
     assert!(matches!(cmp.value.as_subterm(), Subterm::Apply(_)));
 }
 

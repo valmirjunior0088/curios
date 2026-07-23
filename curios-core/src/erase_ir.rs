@@ -24,10 +24,11 @@
 
 use {
     super::{
-        Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, InductDecl,
-        InductType, Item, Let, Many, Match, Module, MotivePattern, Nat, Prim, PrimHead, Proj, Rec,
-        RecItem, RecMember, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
-        TupleType, Two, Var, Variant, expect_prim_head, infer, reduce_with, refine_head, wire_term,
+        Apply, Atom, Bound, Carrier, Cases, Context, Error, Field, Func, FuncType, InductArm,
+        InductDecl, InductType, Item, Let, Many, Match, Module, MotivePattern, Nat, Prim, PrimHead,
+        Proj, Rec, RecItem, RecMember, Scope, Struct, StructType, Subterm, Telescope, Term, Three,
+        Tuple, TupleType, Two, Var, Variant, expect_prim_head, infer, reduce_with, refine_head,
+        wire_term,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,

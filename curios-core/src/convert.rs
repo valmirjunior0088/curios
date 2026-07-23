@@ -12,6 +12,7 @@ use {
         unfold_rec_apply,
     },
     crate::Instant,
+    curios_base::Plicity,
     std::collections::{HashMap, HashSet, VecDeque},
 };
 
@@ -381,9 +382,15 @@ impl Convert {
         this: FuncType,
         that: FuncType,
     ) -> Result<bool, ReduceError> {
-        // Plicity is not part of a function type's identity (convert ignores
-        // it); arity is checked by the telescope walk below — a length mismatch
-        // surfaces as a `Cons`/`Done` shape clash.
+        // Plicity is part of a function type's identity and calling convention:
+        // an explicit slot and an implicit/witness slot are *not* convertible
+        // even when their domains and results are, so that a convertible
+        // annotation or alias can never reinterpret which binders elaboration
+        // inserts. Compare the whole plicity vector (arity included) up front —
+        // the telescope walk below then compares the dependent domains.
+        if this.plicities != that.plicities {
+            return Ok(false);
+        }
         fn walk(
             cmp: &mut Convert,
             context: &mut Context,
@@ -437,6 +444,13 @@ impl Convert {
         that: Func,
         type_: Term,
     ) -> Result<bool, ReduceError> {
+        // Plicity is part of a function's canonical identity. Well-typed
+        // functions compared at the same function type necessarily agree, but
+        // the explicit check preserves the Core invariant and rejects malformed
+        // or pre-elaboration terms that reach conversion unexpectedly.
+        if this.plicities != that.plicities {
+            return Ok(false);
+        }
         let (ys, output_type) = self.func_eta_args(context, this.telescope.len(), type_)?;
         let y_refs = ys.iter().collect::<Vec<_>>();
         self.enqueue(
@@ -1458,15 +1472,18 @@ impl Convert {
             return self.block(context, goal);
         }
 
-        let mut domains: Vec<(String, Term)> = Vec::with_capacity(arity);
+        // The candidate copies `?m`'s birth function type's plicities so the
+        // imitation is convertible with that type (plicity is part of function
+        // identity — see `compare_func`).
+        let mut domains: Vec<(Plicity, String, Term)> = Vec::with_capacity(arity);
         let mut telescope = func_type.telescope.clone();
-        for _ in 0..arity {
+        for plicity in func_type.plicities.iter().copied() {
             let Telescope::Cons(ty, rest) = telescope else {
                 unreachable!("plicities parallel the telescope");
             };
             let label = rest.first_label().unwrap_or("_").to_string();
             telescope = rest.open(&[&Term::free_var(&label)]);
-            domains.push((label, ty.clone()));
+            domains.push((plicity, label, ty.clone()));
         }
 
         // The candidate body mirrors the rigid node's shape (for an inductive,
@@ -1475,10 +1492,10 @@ impl Convert {
         // wrong split).
         let binder_vars = domains
             .iter()
-            .map(|(label, _)| Term::free_var(label))
+            .map(|(_, label, _)| Term::free_var(label))
             .collect::<Vec<_>>();
         let body = mk_body(&binder_vars);
-        let candidate = Term::func(domains.clone(), body);
+        let candidate = Term::func_marked(domains.clone(), body);
 
         // The invariant `solve_refinement_free` protects, upheld here by hand
         // (the committed solution is the built candidate, not the rigid side
@@ -1506,7 +1523,7 @@ impl Convert {
 
         // Equate arguments pairwise, at the candidate telescope's domains
         // (mirroring `compare_apply`'s recovered argument types).
-        for ((flex_arg, rigid_arg), (_, domain)) in
+        for ((flex_arg, rigid_arg), (_, _, domain)) in
             flex.params.into_iter().zip(rigid_args).zip(domains)
         {
             self.enqueue(domain, flex_arg, rigid_arg);

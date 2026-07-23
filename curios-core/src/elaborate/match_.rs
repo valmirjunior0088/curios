@@ -1,10 +1,10 @@
 use {
     super::{Context, Error, InductType, Mode, check, elaborate, expect},
     crate::{
-        Atom, Carrier, Cases, InductDecl, Invert, Many, Match, MotivePattern, MotiveSlot, Nat,
-        Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two, case_target_indices,
-        check_motive, check_prim_head, convert_with, invert_indices, is_prop, reduce_with,
-        refine_head,
+        Atom, Carrier, Cases, InductArm, InductDecl, Invert, Many, Match, MotivePattern,
+        MotiveSlot, Nat, Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two,
+        case_target_indices, check_motive, check_prim_head, convert_with, invert_indices, is_prop,
+        reduce_with, refine_head,
     },
     curios_base::{Grain, PackedBin},
     std::collections::{BTreeMap, BTreeSet},
@@ -464,7 +464,7 @@ pub(crate) fn elaborate_match(
 struct InductMatchInput<'a> {
     head: &'a Term,
     motive: &'a Scope<Many>,
-    cases: &'a BTreeMap<Atom, Scope<Many>>,
+    cases: &'a BTreeMap<Atom, InductArm>,
     pattern: Option<&'a MotivePattern>,
     default: Option<&'a Term>,
     term: &'a Term,
@@ -835,6 +835,26 @@ fn elaborate_induct_match(
             ));
         }
 
+        // Check each written pattern plicity against the constructor's canonical
+        // payload plicity: a payload slot the declaration marked `@` must be
+        // matched with `@`, an unmarked payload with a plain binder. (Alignment
+        // is exact here — pattern insertion is deferred, so arity already
+        // matched above.)
+        let payload_plicities = induct_decl
+            .payload_plicities(tag)
+            .expect("constructor payload plicities parallel its telescope");
+        for (position, (written, canonical)) in
+            scope.plicities.iter().zip(payload_plicities).enumerate()
+        {
+            if written != canonical {
+                return Err(Error::BinderPlicityMismatch {
+                    position: position + 1,
+                    expected: *canonical,
+                    written: *written,
+                });
+            }
+        }
+
         // Open the telescope with fresh names paralleling the arm's binder
         // labels; each binder is assumed at its declared (dependent) type.
         let hints = scope
@@ -918,9 +938,14 @@ fn elaborate_induct_match(
         })?;
 
         let label_strs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+        // Rebuild the arm with the constructor's canonical payload plicities, so
+        // a re-elaborated arm re-checks identically (idempotence).
         cases_elaborated.insert(
             tag.clone(),
-            Scope::close(Many(arity), &label_strs, body_elaborated),
+            InductArm {
+                body: Scope::close(Many(arity), &label_strs, body_elaborated),
+                plicities: payload_plicities.to_vec(),
+            },
         );
     }
 
@@ -1139,15 +1164,16 @@ fn check_generalized_arm(
         .collect::<Vec<_>>();
 
     let mut domains = Vec::with_capacity(generalized.len());
-    let codomain = ft.telescope.walk(&names, |_, name, type_| {
+    let plicities = ft.plicities.clone();
+    let codomain = ft.telescope.walk(&names, |i, name, type_| {
         let name = name.head_label().expect("walked at a fresh free variable");
         context.assume(name, type_);
-        domains.push((name.to_string(), type_.clone()));
+        domains.push((plicities[i], name.to_string(), type_.clone()));
         Ok::<(), Error>(())
     })?;
 
     let inner = check(context, body, codomain)?;
-    Ok(Term::func(domains, inner))
+    Ok(Term::func_marked(domains, inner))
 }
 
 /// Check the annotated type-pattern motive of an inductive match: validate the

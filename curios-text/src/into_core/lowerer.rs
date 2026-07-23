@@ -1,13 +1,17 @@
 use {
     super::{Context, MatchCompiler},
     crate::{
-        BinSegment, Choose, ChooseTest, Error, Field, Let, LetBinding, LstEntry, Name, Nat,
-        NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
+        BinSegment, Choose, ChooseTest, Error, Field, FuncParam, Let, LetBinding, LstEntry, Name,
+        Nat, NatLiteral, Pattern, PatternField, Prim, Rec, StructLitEntry, Subterm, Syn, Term,
     },
     curios_base::{Grain, PackedBin, Plicity},
     num_bigint::BigUint,
     std::{cell::RefCell, collections::BTreeSet, sync::Arc},
 };
+
+/// A lowered function's binders: `(plicity, core binder name, domain)` per slot,
+/// paralleling the surface parameter list.
+type LoweredParams = Vec<(Plicity, String, curios_core::Term)>;
 
 pub(super) struct Lowerer<'a, 'b> {
     pub(super) context: &'a Context<'b>,
@@ -274,7 +278,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Func(func) => {
                 let body = self.scoped(param_names(&func.params), || self.term(&func.body))?;
                 let (params, body) = self.lower_func_params(&func.params, body)?;
-                curios_core::Term::func(params, body)
+                curios_core::Term::func_marked(params, body)
             }
             Subterm::Apply(apply) => curios_core::Term::apply_marked(
                 self.term(&apply.head)?,
@@ -474,7 +478,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Func(func) => {
                 let body = self.scoped(param_names(&func.params), || self.region(&func.body))?;
                 let (params, body) = self.lower_func_params(&func.params, body)?;
-                Ok(curios_core::Term::func(params, body))
+                Ok(curios_core::Term::func_marked(params, body))
             }
             // A `rec`'s item bodies are their own regions (hoisting an action
             // out of a recursive binding would change how often it runs); the
@@ -708,24 +712,34 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// param list stays in declaration order.
     pub(super) fn lower_func_params(
         &self,
-        params: &[(Pattern, Option<Term>)],
+        params: &[FuncParam],
         mut body: curios_core::Term,
-    ) -> Result<(Vec<(String, curios_core::Term)>, curios_core::Term), Error> {
+    ) -> Result<(LoweredParams, curios_core::Term), Error> {
         let mut lowered = Vec::with_capacity(params.len());
-        for (pattern, annotation) in params.iter().rev() {
+        for param in params.iter().rev() {
+            let FuncParam {
+                plicity,
+                pattern,
+                annotation,
+            } = param;
             let domain = match annotation {
                 Some(annotation) => self.term(annotation)?,
                 None => curios_core::Term::metavar(self.context.fresh_metavar()),
             };
+            // The mark applies to the outer function slot the parameter
+            // occupies, whatever the pattern shape: a compound pattern's fresh
+            // core binder still claims a slot of the written plicity.
             match pattern {
                 Pattern::Binder(Some(name)) => {
-                    lowered.push((self.pattern_binder_name(name), domain))
+                    lowered.push((*plicity, self.pattern_binder_name(name), domain))
                 }
-                Pattern::Binder(None) => lowered.push((self.context.fresh_binder(), domain)),
+                Pattern::Binder(None) => {
+                    lowered.push((*plicity, self.context.fresh_binder(), domain))
+                }
                 Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                     let synthetic = self.context.fresh_binder();
                     body = self.lower_pattern_fields(fields, &synthetic, body);
-                    lowered.push((synthetic, domain));
+                    lowered.push((*plicity, synthetic, domain));
                 }
             }
         }
@@ -1236,10 +1250,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 /// in each parameter's pattern, flattened, all in scope across the body.
 /// These shadow like-named module bindings; the wildcard `_` rides along
 /// but is ignored by [`Lowerer::scoped`].
-fn param_names(params: &[(Pattern, Option<Term>)]) -> Vec<String> {
+fn param_names(params: &[FuncParam]) -> Vec<String> {
     params
         .iter()
-        .flat_map(|(pattern, _)| pattern_names(pattern))
+        .flat_map(|param| pattern_names(&param.pattern))
         .collect()
 }
 

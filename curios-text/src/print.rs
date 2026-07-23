@@ -1,11 +1,12 @@
 use {
     super::{
         Apply, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Field, Func,
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetSignature, LstEntry,
-        LstPattern, Match, MatchPattern, MatchPatternField, Motive, Nat, NatLiteral, NatPattern,
-        NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm,
-        Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
-        TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
+        FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetSignature,
+        LstEntry, LstPattern, Match, MatchPattern, MatchPatternField, Motive, Nat, NatLiteral,
+        NatPattern, NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec, StructLit,
+        StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
+        TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{
@@ -153,11 +154,14 @@ fn print_func_sugar_param(param: FuncSugarParam) -> Printer<'static> {
 }
 
 /// One lambda parameter: the binder name with its optional domain annotation.
-fn print_func_param((name, annotation): (String, Option<Term>)) -> Printer<'static> {
-    match annotation {
+fn print_func_param(
+    (plicity, name, annotation): (Plicity, String, Option<Term>),
+) -> Printer<'static> {
+    let bound = match annotation {
         Some(ty) => flat([pure(name), pure(" : "), print_term(ty)]),
         None => pure(name),
-    }
+    };
+    flat([print_plicity(plicity), bound])
 }
 
 /// A tuple-literal / struct-literal field: positional, `label = value`, or the
@@ -256,10 +260,15 @@ fn print_match_pattern_field(field: MatchPatternField) -> Printer<'static> {
 fn print_match_pattern(pattern: MatchPattern) -> Printer<'static> {
     match pattern {
         MatchPattern::Binder(name) => pure(name),
-        MatchPattern::Ctor { tag, args } => flat([
+        MatchPattern::Variant { tag, args } => flat([
             pure(tag),
             pure("("),
-            sep_flat(args.into_iter().map(print_match_pattern), || pure(", ")),
+            sep_flat(
+                args.into_iter().map(|(plicity, pattern)| {
+                    flat([print_plicity(plicity), print_match_pattern(pattern)])
+                }),
+                || pure(", "),
+            ),
             pure(")"),
         ]),
         MatchPattern::Tuple(fields) => {
@@ -333,14 +342,22 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer<'static> {
     }
 }
 
-/// One lambda parameter: the binder pattern with its optional domain
-/// annotation — the pattern-accepting counterpart of `print_func_param`,
-/// forked for the same reason `parse_func_pattern_param` is (see `parse.rs`).
-fn print_func_pattern_param((pattern, annotation): (Pattern, Option<Term>)) -> Printer<'static> {
-    match annotation {
+/// One lambda parameter: its plicity mark (`@`/`use`), the binder pattern, and
+/// its optional domain annotation — the pattern-accepting counterpart of
+/// `print_func_param`, forked for the same reason `parse_func_pattern_param` is
+/// (see `parse.rs`). A lambda's `use` binder is named (`use show`), so the mark
+/// precedes the pattern rather than an anonymous domain type.
+fn print_func_pattern_param(param: FuncParam) -> Printer<'static> {
+    let FuncParam {
+        plicity,
+        pattern,
+        annotation,
+    } = param;
+    let bound = match annotation {
         Some(ty) => flat([print_pattern(pattern), pure(" : "), print_term(ty)]),
         None => print_pattern(pattern),
-    }
+    };
+    flat([print_plicity(plicity), bound])
 }
 
 fn print_labeled((label, ty): (Option<String>, Term)) -> Printer<'static> {

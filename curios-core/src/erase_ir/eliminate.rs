@@ -23,8 +23,8 @@
 
 use {
     super::{
-        Atom, Carrier, Cases, Context, Error, InductDecl, InductType, Lowering, Many, Match,
-        MotivePattern, Outcome, Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two,
+        Atom, Carrier, Cases, Context, Error, InductArm, InductDecl, InductType, Lowering, Many,
+        Match, MotivePattern, Outcome, Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two,
         emitted, expect_prim_head, infer, is_erasable, pattern_binder_slots, reduce_with,
         refine_head,
     },
@@ -558,7 +558,7 @@ impl Lowering {
         context: &mut Context,
         head: &Term,
         motive: &Scope<Many>,
-        cases: &super::BTreeMap<Atom, Scope<Many>>,
+        cases: &super::BTreeMap<Atom, InductArm>,
         pattern: Option<&MotivePattern>,
         default: Option<&Term>,
         hint: Option<&str>,
@@ -606,12 +606,19 @@ impl Lowering {
             let constructor = row.constructors[index].id;
             let mask = row.constructors[index].mask.clone();
             match cases.get(tag) {
-                Some(scope) => {
+                Some(arm) => {
                     let telescope = induct_decl
                         .instantiate(tag, m.params)
                         .expect("erase_ir: constructor instantiates at its inductive's parameters");
-                    let arm =
-                        self.variant_arm(context, &m, (tag, scope), telescope, &mask, constructor)?;
+                    // Erasure opens the arm positionally; plicity is irrelevant.
+                    let arm = self.variant_arm(
+                        context,
+                        &m,
+                        (tag, &arm.body),
+                        telescope,
+                        &mask,
+                        constructor,
+                    )?;
                     arms.push(arm);
                 }
                 // A missing constructor without a default is provably
@@ -733,7 +740,7 @@ impl Lowering {
         context: &mut Context,
         m: &InductMatch<'_>,
         induct_decl: &InductDecl,
-        cases: &super::BTreeMap<Atom, Scope<Many>>,
+        cases: &super::BTreeMap<Atom, InductArm>,
         default: Option<&Term>,
     ) -> Result<Outcome, Error> {
         // No enumerated arm — a bare `_` ladder over a subsingleton: the

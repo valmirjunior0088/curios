@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_base::{Qualifier, RootId},
+    curios_base::{Plicity, Qualifier, RootId},
     std::{
         collections::{BTreeMap, BTreeSet},
         time::Duration,
@@ -292,12 +292,14 @@ fn opt_induct() -> InductDecl {
                 Atom::from("none"),
                 InductParam {
                     telescope: Telescope::done(opt_type()),
+                    plicities: vec![],
                 },
             ),
             (
                 Atom::from("some"),
                 InductParam {
                     telescope: Telescope::build([("x", Term::prim(Prim::NatType))], opt_type()),
+                    plicities: vec![Plicity::Explicit],
                 },
             ),
         ]),

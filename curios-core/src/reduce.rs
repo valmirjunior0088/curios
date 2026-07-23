@@ -74,7 +74,7 @@ pub(crate) fn unfold_rec_apply(
 
     let body = reduce(context, member.group.member_body(member.index))?;
     let body = force_rec(context, body)?;
-    let Subterm::Func(Func { telescope }) = Term::unwrap_or_clone(body) else {
+    let Subterm::Func(Func { telescope, .. }) = Term::unwrap_or_clone(body) else {
         return Ok(None);
     };
     let param_refs = params.iter().collect::<Vec<_>>();
@@ -185,7 +185,7 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
     let head = reduce(context, head)?;
     let head = expose_rec_tail(context, head)?;
     match Term::unwrap_or_clone(head) {
-        Subterm::Func(Func { telescope }) => Ok(Reduce::Continue(telescope.open(&param_refs))),
+        Subterm::Func(Func { telescope, .. }) => Ok(Reduce::Continue(telescope.open(&param_refs))),
         Subterm::RecMember(member) => Ok(Reduce::Break(Term::from(Subterm::Apply(Apply {
             head: Term::rec_member(member.group, member.index),
             params,
@@ -645,8 +645,12 @@ pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, Reduc
             telescope: normalize_telescope(context, telescope)?,
             plicities,
         }),
-        Subterm::Func(Func { telescope }) => Subterm::Func(Func {
+        Subterm::Func(Func {
+            telescope,
+            plicities,
+        }) => Subterm::Func(Func {
             telescope: normalize_telescope(context, telescope)?,
+            plicities,
         }),
         Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {
             telescope: normalize_tuple_telescope(context, telescope)?,

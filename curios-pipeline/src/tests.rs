@@ -445,13 +445,13 @@ fn all_implicit_telescope_saturates_and_retargets() {
         | wrap(A)
         end
         let bind : (@A : Type, @B : Type) -> (Id(A), (A) -> Id(B)) -> Id(B) =
-            (A, B) => (m, f) =>
+            (@A, @B) => (m, f) =>
                 match m : Id(B)
                 | wrap(x) => f(x)
                 end;
         satisfy Monad(Id) {
-            pure(A, x) = Id/wrap(x),
-            bind(A, B, m, f) = bind(@A, @B)(m, f)
+            pure(@A, x) = Id/wrap(x),
+            bind(@A, @B, m, f) = bind(@A, @B)(m, f)
         }
         let direct = bind(Id/wrap(1), (x) => Id/wrap(Nat/succ(x)));
         -- The lambda body is its own region root: the `!` sequences inside
@@ -598,7 +598,7 @@ fn indexed_inductive_declares_constructs_and_matches() {
         rec len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
             match v : Nat
             | nil() => 0
-            | cons(m, x, xs) => Nat/add(len(xs), 1)
+            | cons(@m, x, xs) => Nat/add(len(xs), 1)
             end;
         let v : Vec(Nat, 2) = Vec/cons(10, Vec/cons(20, Vec/nil()));
         len(v)
@@ -646,7 +646,7 @@ fn indexed_inductive_motive_binds_the_index() {
         rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
             match v : (v : Vec(T, k)) => Vec(T, Nat/add(k, m))
             | nil() => w
-            | cons(j, x, xs) => Vec/cons(x, append(xs, w))
+            | cons(@j, x, xs) => Vec/cons(x, append(xs, w))
             end;
         let a : Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
         let b : Vec(Nat, 1) = Vec/cons(3, Vec/nil());
@@ -676,7 +676,7 @@ fn motive_pattern_slots_are_validated() {
         let f(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
             match v : (v : Vec(T)) => Nat
             | nil() => 0
-            | cons(m, x, xs) => 1
+            | cons(@m, x, xs) => 1
             end;
         0
     "#
@@ -692,7 +692,7 @@ fn motive_pattern_slots_are_validated() {
         let f(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> Nat =
             match v : (v : Vec(T, Nat/succ(n))) => Nat
             | nil() => 0
-            | cons(m, x, xs) => 1
+            | cons(@m, x, xs) => 1
             end;
         0
     "#
@@ -708,7 +708,7 @@ fn motive_pattern_slots_are_validated() {
         let f(@n : Nat, v : Vec(Nat, n)) -> Nat =
             match v : (v : Vec(Bytes, k)) => Nat
             | nil() => 0
-            | cons(m, x, xs) => 1
+            | cons(@m, x, xs) => 1
             end;
         0
     "#
@@ -751,7 +751,7 @@ fn index_refinement_learns_inside_the_arm() {
         let f(@T : Type, @n : Nat, v : Vec(T, n), w : Vec(T, n)) -> Nat =
             match v : Nat
             | nil() => zonly(w)
-            | cons(j, x, xs) => 1
+            | cons(@j, x, xs) => 1
             end;
         let a : Vec(Bytes, 0) = Vec/nil();
         let p : Eq(Nat, 0, 0) = Eq/refl(0);
@@ -796,11 +796,11 @@ fn inversion_prunes_impossible_arms_and_solves_binders() {
         end
         let first(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> T =
             match v : T
-            | cons(j, x, xs) => x
+            | cons(@j, x, xs) => x
             end;
         let rest(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> Vec(T, n) =
             match v : Vec(T, n)
-            | cons(j, x, xs) => xs
+            | cons(@j, x, xs) => xs
             end;
         let v : Vec(Bytes, 2) = Vec/cons(/std/Str/to_bytes("a"), Vec/cons(/std/Str/to_bytes("b"), Vec/nil()));
         let w : Vec(Bytes, 1) = rest(v);
@@ -823,7 +823,7 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
         end
         let first(@T : Type, @n : Nat, v : Vec(T, Nat/succ(n))) -> T =
             match v : T
-            | cons(j, x, xs) => x
+            | cons(@j, x, xs) => x
             end;
         (b : Bytes) => first(Vec/cons(b, Vec/nil()))
     "#;
@@ -852,7 +852,7 @@ fn omission_requires_a_definite_clash() {
         end
         let f(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
             match v : Nat
-            | cons(j, x, xs) => 1
+            | cons(@j, x, xs) => 1
             end;
         0
     "#;

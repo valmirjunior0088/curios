@@ -46,6 +46,14 @@ Non-goals: Curios is not a foundational proof assistant and makes no logical-sou
 
 **Rejected.** Coherence-only opacity (blocking dictionary literals while exempting `satisfy`): its motivating hazard dissolved once `Map` was recognized as byte-keyed by design, leaving no coherence-sensitive concept. Sealing through orphan-rule tightening: representation privacy already provides the gate, at the construction site where it belongs.
 
+### Plicity is part of function identity
+
+**Decision.** A binder's plicity — explicit, implicit (`@`), or witness (`use`) — is part of a function type's identity and calling convention. Function types that differ only in plicity are not convertible, every written function binder and constructor-pattern argument is checked against the plicity of the slot it claims, and an omitted implicit or witness *lambda* binder is inserted automatically from the expected function type, mirroring application-side hidden-argument insertion. Reduction stays positional and erasure stays sort-driven, so plicity has no runtime effect.
+
+**Rationale.** Plicity controls elaboration-visible calling behaviour, so it must be stable under conversion: without it a convertible annotation or alias could reinterpret which binders get inserted. Lambda-side insertion lets a polymorphic definition omit the hidden binders it does not name while still writing exactly the ones it does, and keeping the rule positional-by-plicity (never by binder label) avoids named-argument selection. Constructor patterns are exempt from insertion because the type-blind match matrix lays out payload columns before elaboration knows the constructor signature; that omission is deferred rather than approximated.
+
+**Rejected.** Plicity-blind function-type conversion; silently binding an implicit or witness slot with a plain binder; inserting omitted hidden constructor-pattern arguments by analogy with lambdas.
+
 ### Matching is total by enumeration
 
 **Decision.** Every match must cover its scrutinee. Arms enumerate constructors without row priority, nested patterns compile through the pattern matrix by full enumeration, and an omitted arm is legal only when index inversion proves it impossible.

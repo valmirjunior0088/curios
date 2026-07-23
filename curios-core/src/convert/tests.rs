@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_base::{Grain, Int, PackedBin, Qualifier, RootId},
+    curios_base::{Grain, Int, PackedBin, Plicity, Qualifier, RootId},
     std::{collections::BTreeMap, time::Duration},
 };
 
@@ -42,6 +42,28 @@ fn convert_func_is_alpha_equivalent() {
     let that = func(["y"], Term::free_var("y"));
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}
+
+#[test]
+fn convert_func_type_distinguishes_plicity() {
+    let mut context = context();
+
+    // Three telescopes with identical domains and results, differing only in the
+    // one binder's plicity.
+    let explicit = Term::func_type([("x", Term::type_())], Term::type_());
+    let implicit = Term::func_type_marked([(Plicity::Implicit, "x", Term::type_())], Term::type_());
+    let witness = Term::func_type_marked([(Plicity::Witness, "x", Term::type_())], Term::type_());
+
+    // Plicity is part of function-type identity: every pairwise mix is
+    // non-convertible even though the dependent telescopes agree.
+    assert_eq!(conv(&mut context, &explicit, &implicit), Ok(false));
+    assert_eq!(conv(&mut context, &explicit, &witness), Ok(false));
+    assert_eq!(conv(&mut context, &implicit, &witness), Ok(false));
+
+    // Same plicity, alpha-renamed binder: still convertible.
+    let implicit_y =
+        Term::func_type_marked([(Plicity::Implicit, "y", Term::type_())], Term::type_());
+    assert_eq!(conv(&mut context, &implicit, &implicit_y), Ok(true));
 }
 
 #[test]
@@ -818,6 +840,7 @@ fn convert_variant_unit_payload_is_irrelevant() {
                             ],
                             Term::induct_type("Wrap", Vec::<Term>::new(), Vec::<Term>::new()),
                         ),
+                        plicities: vec![Plicity::Explicit, Plicity::Explicit],
                     },
                 )]),
                 result_sort: Term::type_(),

@@ -134,17 +134,30 @@ pub struct FuncType {
     pub output: Term,
 }
 
-/// A lambda `(x, (a, b) : P) => body`. Domain annotations are optional and parameters may be compound patterns — the field doc details how each lowers.
+/// One lambda binder as written: its plicity (`@`/`use` on the binder), the
+/// binder pattern, and an optional domain annotation. The mark applies to the
+/// outer function slot the parameter occupies, whatever the pattern shape — a
+/// `_`, a tuple, or a struct pattern claims a slot of that plicity just as a
+/// plain name does.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Func {
-    /// Each parameter is a binder pattern with an optional domain annotation.
+pub struct FuncParam {
+    pub plicity: Plicity,
+    pub pattern: Pattern,
     /// `None` is the surface `(x) => …` form, sugar for `(x : _) => …`; it
     /// lowers to a hole, solved by `curios_core::elaborate` against the
     /// expected function type when the lambda is checked, or synthesized from
-    /// the annotation when inferred. A compound (tuple/struct) pattern desugars
-    /// at lowering into a fresh core binder plus a projection-`let` chain —
-    /// see [`Pattern`].
-    pub params: Vec<(Pattern, Option<Term>)>,
+    /// the annotation when inferred.
+    pub annotation: Option<Term>,
+}
+
+/// A lambda `(x, @A, use show, (a, b) : P) => body`. Each parameter retains its
+/// plicity mark (see [`FuncParam`]); domain annotations are optional and
+/// parameters may be compound patterns — the field doc details how each lowers.
+/// A compound (tuple/struct) pattern desugars at lowering into a fresh core
+/// binder plus a projection-`let` chain — see [`Pattern`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct Func {
+    pub params: Vec<FuncParam>,
     pub body: Term,
 }
 
@@ -171,10 +184,12 @@ pub struct TupleType {
 pub struct TupleField {
     pub label: Option<String>,
     /// `Some` for the definition sugar `label(params) = value` — the written
-    /// parameter list, kept verbatim so the printer round-trips it. `into_core`
-    /// undoes the sugar, lowering the field as `label = (params) => value`
-    /// (see `TupleField::desugared_value`). Always paired with a label.
-    pub func_params: Option<Vec<(String, Option<Term>)>>,
+    /// parameter list (each `(plicity, name, annotation)`), kept verbatim so the
+    /// printer round-trips it. `into_core` undoes the sugar, lowering the field
+    /// as `label = (params) => value` (see `TupleField::desugared_value`), the
+    /// plicity marks carried onto the generated lambda's slots. Always paired
+    /// with a label.
+    pub func_params: Option<Vec<(Plicity, String, Option<Term>)>>,
     pub value: Term,
 }
 
@@ -184,14 +199,18 @@ impl TupleField {
     /// written `label(params) = value`.
     pub(crate) fn desugared_value(&self) -> Term {
         match &self.func_params {
-            // This sugar's own parameter list stays plain-name-only (it is not
-            // one of the pattern-accepting binder sites), so each name is
-            // wrapped as a trivial `Pattern::Binder` to match `Func.params`'s
-            // element type.
+            // This sugar's binders stay plain-name-only (it is not one of the
+            // pattern-accepting sites) but each retains its plicity mark, so a
+            // `@`/`use` written in the sugar is carried onto the generated
+            // lambda's slot rather than dropped.
             Some(params) => Subterm::Func(Func {
                 params: params
                     .iter()
-                    .map(|(name, ty)| (Pattern::Binder(Some(name.clone())), ty.clone()))
+                    .map(|(plicity, name, ty)| FuncParam {
+                        plicity: *plicity,
+                        pattern: Pattern::Binder(Some(name.clone())),
+                        annotation: ty.clone(),
+                    })
                     .collect(),
                 body: self.value.clone(),
             })
@@ -389,10 +408,14 @@ pub enum MatchPattern {
     /// compiler in `into_core::match_compile`).
     Binder(String),
     /// An inductive constructor tag applied to sub-patterns — positional
-    /// (constructors have no field labels in this language).
-    Ctor {
+    /// (constructors have no field labels in this language). Each argument
+    /// retains its plicity mark (`@`/`use`): a payload slot the constructor
+    /// declared implicit must be matched with `@`. The marks lower to the Core
+    /// arm untouched; core elaboration checks them against the constructor's
+    /// canonical payload plicities.
+    Variant {
         tag: String,
-        args: Vec<MatchPattern>,
+        args: Vec<(Plicity, MatchPattern)>,
     },
     /// A tuple pattern — field grammar mirrors [`PatternField`] exactly.
     Tuple(Vec<MatchPatternField>),
@@ -564,12 +587,18 @@ impl LetSignature {
     pub(crate) fn body(&self) -> Term {
         match self {
             LetSignature::Name { body, .. } => body.clone(),
-            // The lambda binds every parameter, implicit or not — plicity is a
-            // fact about the *type*, consulted only at application sites.
+            // The lambda binds every parameter and copies its plicity: the
+            // generated function value carries the same marks its signature
+            // does, so a written `@`/`use` in the sugar is checked against the
+            // slot it claims rather than silently dropped.
             LetSignature::Func { params, body, .. } => Subterm::Func(Func {
                 params: params
                     .iter()
-                    .map(|param| (param.label.clone(), Some(param.type_.clone())))
+                    .map(|param| FuncParam {
+                        plicity: param.plicity,
+                        pattern: param.label.clone(),
+                        annotation: Some(param.type_.clone()),
+                    })
                     .collect(),
                 body: body.clone(),
             })
