@@ -2,7 +2,7 @@ pub struct Waker : Type {
     () -> {}
 }
 
-pub let of(resume : () -> {}) -> Waker =
+pub let new(resume : () -> {}) -> Waker =
     Waker {
         resume
     };

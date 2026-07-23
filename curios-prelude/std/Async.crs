@@ -1,5 +1,5 @@
 use /std/{Handle, Bytes, Nat, Int, Bool, Lst, Option, Result, Cell, Monad};
-use /std/time/{Duration, Instant};
+use /std/time/{Duration};
 
 pub mod Waker;
 pub use Waker/{let Waker};
@@ -258,7 +258,7 @@ let sleep_timeout(sleeping : Lst(Sleeper)) -> Int =
     match earliest(sleeping, Option/none())
     | none() => -1
     | some(due) =>
-        let remaining = Duration/sub(due, Instant/elapsed());
+        let remaining = Duration/sub(due, Duration/now());
         let whole = Duration/to_millis(remaining);
         match Duration/nanos(remaining) % 1000000 > 0
         | true => Nat/to_int(whole + 1)
@@ -267,7 +267,7 @@ let sleep_timeout(sleeping : Lst(Sleeper)) -> Int =
     end;
 
 let expire_sleepers(sleeping : Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
-    let now = Instant/elapsed();
+    let now = Duration/now();
     rec walk(rest : Lst(Sleeper), woken : Lst(Job), still : Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
         match rest
         | [] => (woken, still)
@@ -311,7 +311,7 @@ pub let block_on(@A : Type, root : Async(A)) -> A =
                 | wait(h, ev) =>
                     Cell/set(blocked, Lst/cons(Parked { handle = h, interest = ev, resume = k, token = job.token, guards = job.guards }, Cell/get(blocked)))
                 | sleep(d) =>
-                    Cell/set(sleeping, Lst/cons(Sleeper { due = Duration/add(Instant/elapsed(), d), resume = k, token = job.token, guards = job.guards }, Cell/get(sleeping)))
+                    Cell/set(sleeping, Lst/cons(Sleeper { due = Duration/add(Duration/now(), d), resume = k, token = job.token, guards = job.guards }, Cell/get(sleeping)))
                 | fork(child, ct) =>
                     let _ = enqueue(Job { ..job, resume = k });
                     enqueue(Job { resume = child, token = ct, guards = Lst/nil() })
@@ -325,7 +325,7 @@ pub let block_on(@A : Type, root : Async(A)) -> A =
                             let _ = Cell/set(slot, Option/none());
                             enqueue(j)
                         end;
-                    reg(Waker/of(waker))
+                    reg(Waker/new(waker))
                 | acquire(h, fin) =>
                     serve(Job { ..job, resume = k, guards = Lst/cons(Guard { handle = h, release = fin }, job.guards) })
                 | release(h) =>

@@ -15,10 +15,6 @@ pub let now() -> Instant =
         nanos = r.nanos
     };
 
-pub let elapsed() -> Duration =
-    let r = /sys/clock_mono();
-    Duration/of(r.secs, r.nanos);
-
 let sub_digit(x : Nat, y : Nat) -> {digit : Nat, borrow : Nat} =
     match x < y
     | true => (digit = x + 1000000000 - y, borrow = 1)

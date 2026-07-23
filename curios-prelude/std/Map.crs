@@ -1,3 +1,9 @@
+-- A crit-bit (Patricia) trie keyed on the byte string a `Key` witness produces.
+-- The map deliberately does not remember `K`: the trie's identity *is* that byte
+-- string, so two key types serializing alike are the same key. `Key` is therefore a
+-- write-side injection only — `entries`, `keys`, and `fold` hand back `Bytes`, and a
+-- caller wanting typed keys decodes at the boundary.
+
 use /std/{Bytes, Byte, Nat, Bool, Str, Lst, Option};
 
 induct Node(V : Type) : Type
@@ -86,32 +92,32 @@ let wedge(@V : Type, c : Nat, b : Nat, k : Bytes, v : V, t : Node(V)) -> Node(V)
     | _ => Node/fork(c, t, Node/leaf(k, v))
     end;
 
-rec insert(@V : Type, t : Node(V), c : Nat, b : Nat, k : Bytes, v : V) -> Node(V) =
+rec insert_node(@V : Type, t : Node(V), c : Nat, b : Nat, k : Bytes, v : V) -> Node(V) =
     match t
     | leaf(k0, v0) => wedge(c, b, k, v, Node/leaf(k0, v0))
     | fork(tc, z, o) =>
         match tc < c
         | true =>
             match bit(k, tc)
-            | 0 => Node/fork(tc, insert(z, c, b, k, v), o)
-            | _ => Node/fork(tc, z, insert(o, c, b, k, v))
+            | 0 => Node/fork(tc, insert_node(z, c, b, k, v), o)
+            | _ => Node/fork(tc, z, insert_node(o, c, b, k, v))
             end
         | false => wedge(c, b, k, v, Node/fork(tc, z, o))
         end
     end;
 
-rec remove(@V : Type, t : Node(V), k : Bytes) -> Option(Node(V)) =
+rec remove_node(@V : Type, t : Node(V), k : Bytes) -> Option(Node(V)) =
     match t
     | leaf(k0, v0) => Option/none()
     | fork(c, z, o) =>
         match bit(k, c)
         | 0 =>
-            match remove(z, k)
+            match remove_node(z, k)
             | none() => Option/some(o)
             | some(z2) => Option/some(Node/fork(c, z2, o))
             end
         | _ =>
-            match remove(o, k)
+            match remove_node(o, k)
             | none() => Option/some(z)
             | some(o2) => Option/some(Node/fork(c, z, o2))
             end
@@ -139,7 +145,7 @@ pub let get(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Option(V) 
 pub let has(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Bool =
     Option/is_some(get(m, key));
 
-pub let set(@K : Type, @V : Type, use Key(K), m : Map(V), key : K, v : V) -> Map(V) =
+pub let insert(@K : Type, @V : Type, use Key(K), m : Map(V), key : K, v : V) -> Map(V) =
     let k = Key/to_bin(key);
     match m.root
     | none() => Map { size = 1, root = Option/some(Node/leaf(k, v)) }
@@ -149,18 +155,18 @@ pub let set(@K : Type, @V : Type, use Key(K), m : Map(V), key : K, v : V) -> Map
         | true => Map { size = m.size, root = Option/some(replace(n, k, v)) }
         | false =>
             let c = crit(k, k0);
-            Map { size = m.size + 1, root = Option/some(insert(n, c, bit(k, c), k, v)) }
+            Map { size = m.size + 1, root = Option/some(insert_node(n, c, bit(k, c), k, v)) }
         end
     end;
 
-pub let del(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Map(V) =
+pub let remove(@K : Type, @V : Type, use Key(K), m : Map(V), key : K) -> Map(V) =
     let k = Key/to_bin(key);
     match m.root
     | none() => m
     | some(n) =>
         let (k0, _) = lookup(n, k);
         match Bytes/eql(k0, k)
-        | true => Map { size = m.size - 1, root = remove(n, k) }
+        | true => Map { size = m.size - 1, root = remove_node(n, k) }
         | false => m
         end
     end;
@@ -187,4 +193,4 @@ pub let values(@V : Type, m : Map(V)) -> Lst(V) =
     fold(m, [], (_, v, acc) => [..acc, v]);
 
 pub let of(@K : Type, @V : Type, use Key(K), l : Lst({K, V})) -> Map(V) =
-    Lst/fold(l, empty(), ((k, v), acc) => set(acc, k, v));
+    Lst/fold(l, empty(), ((k, v), acc) => insert(acc, k, v));

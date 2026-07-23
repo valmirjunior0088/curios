@@ -1,7 +1,9 @@
 use /std/{Bytes, Str, Nat, Handle, Result, Async};
 use /std/tcp/{resolve, Socket};
 
-pub struct Listener : Type { Handle }
+pub struct Listener : Type {
+    Handle
+}
 
 let bind_listen(addr : Bytes) -> Result(Listener, Handle/Error) =
     let s = /sys/socket(addr);

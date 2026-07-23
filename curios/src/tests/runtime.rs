@@ -710,7 +710,7 @@ fn clock_mono_reads_scripted_elapsed() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        let e = /std/time/Instant/elapsed();
+        let e = /std/time/Duration/now();
         std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(e))))
         "#,
         system,

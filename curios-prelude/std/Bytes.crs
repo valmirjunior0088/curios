@@ -23,7 +23,7 @@ pub let fold(@A : Type, b : Bytes, init : A, f : (Byte, A) -> A) -> A =
         | 0 => acc
         | kp + 1 =>
             go(kp, i + 1,
-                f(at(b, i, Eq/subst((x) => Nat/Lt(i, x), inv, Nat/lte_to_lt_succ(Nat/lte_add_r(i, kp)))), acc),
+                f(at(b, i, Eq/subst((x) => Nat/Lt(i, x), inv, Nat/lt_succ_of_lte(Nat/lte_add_r(i, kp)))), acc),
                 inv)
         end;
     go(n, 0, init, Eq/refl());

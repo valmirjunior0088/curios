@@ -185,12 +185,12 @@ pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bytes, w : Utf8(Scan/cont(0
         end
     end;
 
-pub rec take_conts(b : Bytes, off : Nat, remaining : Nat, acc : Nat,
+pub rec take_continuations(b : Bytes, off : Nat, remaining : Nat, acc : Nat,
     bound : Nat/Lte(off + remaining, Bytes/len(b))) -> {Nat, Nat} =
     match remaining
     | 0 => (acc, off)
     | pred + 1 =>
-        take_conts(b, off + 1, pred,
+        take_continuations(b, off + 1, pred,
             acc * 0x40 + (Byte/to_nat(Bytes/at(b, off,
                 Nat/lt_of_lte_succ(Nat/lte_trans(Nat/Lte/s(Nat/lte_add_r(off, pred)), bound)))) - 0x80),
             bound)
@@ -204,14 +204,14 @@ pub rec peel_byte(@s : Scan, @b : Bytes, nz : Nat/Lt(0, Bytes/len(b)), w : Utf8(
     | more(c, st, t, rest) => rest
     end;
 
-pub rec count_w(s : Scan, b : Bytes) -> Nat =
+pub rec count_scalars(s : Scan, b : Bytes) -> Nat =
     match b
     | x\ => 0
     | x\h\..t =>
         match s
-        | lead() => count_w(step(h, Scan/lead()), t) + 1
-        | cont(rem, lo, hi) => count_w(step(h, Scan/cont(rem, lo, hi)), t)
-        | bad() => count_w(step(h, Scan/bad()), t)
+        | lead() => count_scalars(step(h, Scan/lead()), t) + 1
+        | cont(rem, lo, hi) => count_scalars(step(h, Scan/cont(rem, lo, hi)), t)
+        | bad() => count_scalars(step(h, Scan/bad()), t)
         end
     end;
 
@@ -219,7 +219,7 @@ pub let decode_head_raw(c : Byte, @t : Bytes, w : Utf8(Scan/lead(), Bytes/cons(c
     match classify(c)
     | ascii() => Byte/to_nat(c)
     | lead(k, lo, hi, payload) =>
-        take_conts(t, 0, k, payload,
+        take_continuations(t, 0, k, payload,
             cont_len(k, 
                 peel_byte(@Scan/lead(), @Bytes/cons(c, t), True/qed(), w))).0
     | bad() =>
@@ -262,7 +262,7 @@ pub let fold(@A : Type, s : Str, init : A, f : (Char, A) -> A) -> A =
     end)(Scan/lead(), s.valid, (init, 0)).0;
 
 pub let len(s : Str) -> Nat =
-    count_w(Scan/lead(), s.bytes);
+    count_scalars(Scan/lead(), s.bytes);
 
 pub let find_index(s : Str, pred : (Char) -> Bool) -> Option(Nat) =
     let (_, found) : {Nat, Option(Nat)} =
@@ -306,7 +306,7 @@ rec lte_succ_of_lt(i : Nat, n : Nat, p : Nat/Lt(i, n)) -> Nat/Lte(i + 1, n) =
 
 pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Char =
     rec go(sc : Scan, b : Bytes, valid : Utf8(sc, b), i : Nat,
-        le : Nat/Lte(i + 1, count_w(sc, b))) -> Char =
+        le : Nat/Lte(i + 1, count_scalars(sc, b))) -> Char =
         match b
         | x\ => match le end
         | x\h\..t =>
@@ -330,7 +330,7 @@ pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Char =
             end
         end;
     go(Scan/lead(), s.bytes, s.valid, i,
-        lte_succ_of_lt(i, count_w(Scan/lead(), s.bytes), ok));
+        lte_succ_of_lt(i, count_scalars(Scan/lead(), s.bytes), ok));
 
 pub let join(sep : Str, parts : Lst(Str)) -> Str =
     Lst/balanced(Lst/len(parts), "", (i) => Option/unwrap_or(Lst/get(parts, i), ""),

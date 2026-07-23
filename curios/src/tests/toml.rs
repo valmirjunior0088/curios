@@ -298,7 +298,7 @@ fn toml_encode_rejects_a_non_utf8_key() {
         use /std/{Handle, Str, Toml, Result, Map, Nat, Bytes, rand};
         let opaque = Nat/to_int(Bytes/len(rand/bin(0)) + 1);
         let outcome : Str =
-            match Toml/encode(Map/set(Map/empty(@Toml), x\ff, Toml/int(opaque)))
+            match Toml/encode(Map/insert(Map/empty(@Toml), x\ff, Toml/int(opaque)))
             | success(_) => "accepted"
             | failure(msg) => msg
             end;

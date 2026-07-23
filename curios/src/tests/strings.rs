@@ -178,17 +178,17 @@ fn str_of_bytes_rejects_truncated_multibyte() {
 // The UTF-8 decode certification lemmas: naming them forces their bodies to
 // elaborate (demand-driven checking). `cont_len` is the one that exercises the
 // comparison intrinsic — `step` only reduces in `cont` state because
-// `eql(succ(succ k''), 1)` now folds to `false`. `peel_byte`/`count_w`/
+// `eql(succ(succ k''), 1)` now folds to `false`. `peel_byte`/`count_scalars`/
 // `decode_head` are the cursor-free decode core: `peel_byte` advances the
 // (prop) validity witness one byte without ever large-eliminating it,
-// `count_w` is the codepoint count `len` is built on, and `decode_head`
+// `count_scalars` is the codepoint count `len` is built on, and `decode_head`
 // reads the head codepoint from the relevant bytes under that witness.
 #[test]
 fn utf8_decode_lemmas_type_check() {
     let source = r#"
         use /std/{Str, Nat, Handle};
         let lemmas = (Str/bad_uninhabited, Str/cont_len, Str/peel_byte,
-            Nat/lte_trans, Nat/lt_of_lte_succ, Nat/lte_add_mono_l, Str/count_w, Str/cont0_uninhabited, Str/take_conts, Str/decode_head);
+            Nat/lte_trans, Nat/lt_of_lte_succ, Nat/lte_add_mono_l, Str/count_scalars, Str/cont0_uninhabited, Str/take_continuations, Str/decode_head);
         /std/print("ok")
         "#;
 

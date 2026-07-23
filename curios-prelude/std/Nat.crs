@@ -137,10 +137,10 @@ pub let lte_add_r(a : Nat, k : Nat) -> Lte(a, a + k) =
     | pred + 1; ih => lte_succ_r(ih)
     end;
 
-pub rec lte_to_lt_succ(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lt(a, b + 1) =
+pub rec lt_succ_of_lte(@a : Nat, @b : Nat, p : Lte(a, b)) -> Lt(a, b + 1) =
     match p : (w : Lte(x, y)) => Lt(x, y + 1)
     | z(@_) => True/qed()
-    | s(@_, @_, prev) => lte_to_lt_succ(prev)
+    | s(@_, @_, prev) => lt_succ_of_lte(prev)
     end;
 
 pub rec lte_trans(@a : Nat, @b : Nat, @c : Nat, p : Lte(a, b), q : Lte(b, c)) -> Lte(a, c) =
@@ -154,7 +154,7 @@ pub rec lte_trans(@a : Nat, @b : Nat, @c : Nat, p : Lte(a, b), q : Lte(b, c)) ->
 
 pub let lt_of_lte_succ(@a : Nat, @b : Nat, p : Lte(a + 1, b)) -> Lt(a, b) =
     match p : (w : Lte(x, y)) => Lt(x - 1, y)
-    | s(@a2, @b2, prev) => lte_to_lt_succ(prev)
+    | s(@a2, @b2, prev) => lt_succ_of_lte(prev)
     end;
 
 pub let lte_add_mono_l(n : Nat, @a : Nat, @b : Nat, p : Lte(a, b)) -> Lte(n + a, n + b) =

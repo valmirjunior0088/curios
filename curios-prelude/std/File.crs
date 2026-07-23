@@ -1,6 +1,8 @@
 use /std/{Bytes, Nat, Str, Handle, Result, Async};
 
-pub struct File : Type { Handle }
+pub struct File : Type {
+    Handle
+}
 
 pub induct Mode : pub Type
 | read()

@@ -2,7 +2,9 @@ use /std/{Bytes, Str, Nat, Bool, Handle, Result, Option, Async};
 use /std/tcp/{Settings, resolve};
 use /std/time/{Duration};
 
-pub struct Socket : Type { Handle }
+pub struct Socket : Type {
+    Handle
+}
 
 pub let of(h : Handle) -> Socket =
     Socket { h };

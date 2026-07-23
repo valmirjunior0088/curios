@@ -31,7 +31,7 @@ fn map_set_replaces_without_growing() {
     // value, no duplicate leaf for the key.
     let source = r#"
         use /std/{Handle, Str, Map, Nat, Option};
-        let m : Map(Nat) = Map/set(Map/set(Map/empty(), "k", 1), "k", 2);
+        let m : Map(Nat) = Map/insert(Map/insert(Map/empty(), "k", 1), "k", 2);
         /std/print(Str/join(",", [
             Nat/to_str(Map/len(m)),
             Nat/to_str(Option/unwrap_or(Map/get(m, "k"), 0))]))
@@ -47,13 +47,13 @@ fn map_del_removes_and_collapses() {
     let source = r#"
         use /std/{Handle, Str, Map, Nat, Option};
         let m : Map(Nat) = Map/of([("a", 1), ("b", 2), ("c", 3)]);
-        let d : Map(Nat) = Map/del(m, "b");
+        let d : Map(Nat) = Map/remove(m, "b");
         let at(k : Str) -> Str = Nat/to_str(Option/unwrap_or(Map/get(d, k), 9));
-        let gone : Map(Nat) = Map/del(Map/del(d, "a"), "c");
+        let gone : Map(Nat) = Map/remove(Map/remove(d, "a"), "c");
         /std/print(Str/join(",", [
             Nat/to_str(Map/len(d)),
             at("a"), at("b"), at("c"),
-            Nat/to_str(Map/len(Map/del(d, "b"))),
+            Nat/to_str(Map/len(Map/remove(d, "b"))),
             Nat/to_str(Map/len(gone))]))
         "#;
     assert_eq!(run(source), b"2,1,9,3,2,0");
@@ -86,7 +86,7 @@ fn map_entries_agree_across_insertion_orders() {
                 Map/entries(m),
                 ((k, v)) => Str/concat(Option/unwrap_or(Str/of_bytes(k), "?"), Nat/to_str(v))));
         let m1 : Map(Nat) = Map/of([("x", 1), ("y", 2), ("z", 3)]);
-        let m2 : Map(Nat) = Map/del(Map/of([("z", 3), ("w", 0), ("y", 2), ("x", 1)]), "w");
+        let m2 : Map(Nat) = Map/remove(Map/of([("z", 3), ("w", 0), ("y", 2), ("x", 1)]), "w");
         /std/print(Str/join(";", [show(m1), show(m2)]))
         "#;
     assert_eq!(run(source), b"x1,y2,z3;x1,y2,z3");
@@ -118,14 +118,14 @@ fn map_holds_many_keys_with_shared_prefixes() {
         rec build(i : Nat, acc : Map(Str)) -> Map(Str) =
             match i
             | 0 => acc
-            | _ => build(i - 1, Map/set(acc, i, Nat/to_str(i)))
+            | _ => build(i - 1, Map/insert(acc, i, Nat/to_str(i)))
             end;
         rec drop_even(i : Nat, acc : Map(Str)) -> Map(Str) =
             match i
             | 0 => acc
             | _ =>
                 match i % 2 == 0
-                | true => drop_even(i - 1, Map/del(acc, i))
+                | true => drop_even(i - 1, Map/remove(acc, i))
                 | false => drop_even(i - 1, acc)
                 end
             end;
