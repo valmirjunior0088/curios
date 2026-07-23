@@ -21,7 +21,7 @@ pub let is_cons(rep : Bits) -> Prop =
 
 pub struct NonZero : pub Type {
     magnitude : BigNat,
-    non_zero  : is_cons(magnitude.rep),
+    non_zero : is_cons(magnitude.rep)
 }
 
 pub let eq(a : NonZero, b : NonZero, p : Eq(a.magnitude, b.magnitude)) -> Eq(a, b) =
@@ -158,7 +158,7 @@ pub let dbl_succ(t : NonZero) -> NonZero =
 -- ===================== operations =====================
 
 pub let add(p : NonZero, q : NonZero) -> NonZero =
-    NonZero { magnitude = BigNat/add(p.magnitude, q.magnitude),
+    NonZero { magnitude = p.magnitude + q.magnitude,
         non_zero = raw_non_zero(add_raw(p.magnitude.rep, q.magnitude.rep, false),
             add_raw_trimmed(p.magnitude.rep, q.magnitude.rep, false, nz_trimmed(p), nz_trimmed(q)),
             add_raw_cons(p.magnitude.rep, q.magnitude.rep, false, p.non_zero)) };
@@ -169,7 +169,7 @@ pub let succ(p : NonZero) -> NonZero =
             succ_raw_trimmed(p.magnitude.rep, nz_trimmed(p)), succ_raw_cons(p.magnitude.rep)) };
 
 pub let mul(p : NonZero, q : NonZero) -> NonZero =
-    NonZero { magnitude = BigNat/mul(p.magnitude, q.magnitude),
+    NonZero { magnitude = p.magnitude * q.magnitude,
         non_zero = mul_raw_trim_cons(p.magnitude.rep, q.magnitude.rep,
             nz_trimmed(p), p.non_zero, nz_trimmed(q), q.non_zero) };
 

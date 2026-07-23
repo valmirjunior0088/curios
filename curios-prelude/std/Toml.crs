@@ -45,25 +45,25 @@ use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result,
 pub struct Date : pub Type {
     year : Nat,
     month : Nat,
-    day : Nat,
+    day : Nat
 }
 
 pub struct Time : pub Type {
     hour : Nat,
     minute : Nat,
     second : Nat,
-    nanosecond : Nat,
+    nanosecond : Nat
 }
 
 pub struct OffsetDateTime : pub Type {
     date : Date,
     time : Time,
-    offset_minutes : Int,
+    offset_minutes : Int
 }
 
 pub struct LocalDateTime : pub Type {
     date : Date,
-    time : Time,
+    time : Time
 }
 
 pub induct Toml : pub Type
@@ -140,7 +140,7 @@ end
 struct Build : Type {
     root : Map(Toml),
     side : Map(State),
-    scope : Lst(Seg),
+    scope : Lst(Seg)
 }
 
 let build_empty : Build =

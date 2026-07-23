@@ -42,9 +42,9 @@ pub let of_big_nat(a : BigNat) -> BigInt =
 -- truncating BigNat difference of the larger minus the smaller.
 pub let pos_sub(x : NonZero, y : NonZero) -> BigInt =
     match NonZero/cmp(x, y)
-    | lt() => signed(true, BigNat/sub(y.magnitude, x.magnitude))
+    | lt() => signed(true, y.magnitude - x.magnitude)
     | eq() => BigInt/zero()
-    | gt() => signed(false, BigNat/sub(x.magnitude, y.magnitude))
+    | gt() => signed(false, x.magnitude - y.magnitude)
     end;
 
 pub let add(a : BigInt, b : BigInt) -> BigInt =

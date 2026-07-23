@@ -54,7 +54,7 @@ satisfy Show(Bytes) {
     show(b) =
         Option/unwrap_or(Str/of_bytes(fold(b, x\, (byte, acc) =>
             let n = Byte/to_nat(byte);
-            let hi = Char/to_utf8(Char/hex_digit(Nat/div(n, 0x10)));
-            let lo = Char/to_utf8(Char/hex_digit(Nat/rem(n, 0x10)));
+            let hi = Char/to_utf8(Char/hex_digit(n / 0x10));
+            let lo = Char/to_utf8(Char/hex_digit(n % 0x10));
             x\..acc\..hi\..lo)), "")
 }

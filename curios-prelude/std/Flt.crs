@@ -6,19 +6,19 @@ let pow2(k : Nat) -> BigNat =
     BigNat/mul_pow2(BigNat/of_nat(1), k);
 
 rec divmod(r : BigNat, s : BigNat, d : Nat) -> {Nat, BigNat} =
-    match BigNat/lt(r, s)
+    match r < s
     | true => (d, r)
-    | false => divmod(BigNat/sub(r, s), s, d + 1)
+    | false => divmod(r - s, s, d + 1)
     end;
 
 rec scale_up(rpm : BigNat, s : BigNat, k : Int) -> {BigNat, Int} =
-    match BigNat/gt(rpm, s)
+    match rpm > s
     | true => scale_up(rpm, BigNat/mul_small(s, 10), k + 1)
     | false => (s, k)
     end;
 
 rec scale_down(r : BigNat, mp : BigNat, mm : BigNat, s : BigNat, k : Int) -> {BigNat, BigNat, BigNat, Int} =
-    match BigNat/lte(BigNat/mul_small(BigNat/add(r, mp), 10), s)
+    match BigNat/mul_small(r + mp, 10) <= s
     | true =>
         scale_down(
             BigNat/mul_small(r, 10),
@@ -36,13 +36,13 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bool) -> L
     let (d, rem) = divmod(r10, s, 0);
     let low =
         match even
-        | true => BigNat/lte(rem, mm10)
-        | false => BigNat/lt(rem, mm10)
+        | true => rem <= mm10
+        | false => rem < mm10
         end;
     let high =
         match even
-        | true => BigNat/gte(BigNat/add(rem, mp10), s)
-        | false => BigNat/gt(BigNat/add(rem, mp10), s)
+        | true => rem + mp10 >= s
+        | false => rem + mp10 > s
         end;
     match low || high
     | false => Lst/cons(d, generate(rem, s, mp10, mm10, even))
@@ -51,7 +51,7 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bool) -> L
             choose
             | Bool/not(low) => d + 1
             | Bool/not(high) => d
-            | BigNat/lt(BigNat/mul_small(rem, 2), s) => d
+            | BigNat/mul_small(rem, 2) < s => d
             | _ => d + 1
             end;
         [last]
@@ -129,7 +129,7 @@ let layout(digits_str : Str, k : Int) -> Str =
 
 let render(f_mant : Nat, exp_field : Nat, even : Bool) -> Str =
     let (r0, s0, mp0, mm0) = setup(f_mant, exp_field);
-    let (s1, k1) = scale_up(BigNat/add(r0, mp0), s0, +0);
+    let (s1, k1) = scale_up(r0 + mp0, s0, +0);
     let (r1, mp1, mm1, k2) = scale_down(r0, mp0, mm0, s1, k1);
     let digits = generate(r1, s1, mp1, mm1, even);
     let (norm, carry) = normalize(digits);

@@ -291,7 +291,7 @@ pub let block_on(@A : Type, root : Async(A)) -> A =
     let sleeping = Cell/new(Lst/nil());
     let parked = Cell/new(Lst/nil());
     let result = Cell/new(Option/none(@A));
-    let enqueue = (j : Job) =>
+    let enqueue(j : Job) -> {} =
         Cell/set(runq, Lst/cons(j, Cell/get(runq)));
     let _ = enqueue(Job {
         resume = () => bind(root, (a) =>
@@ -318,7 +318,7 @@ pub let block_on(@A : Type, root : Async(A)) -> A =
                 | park(reg) =>
                     let slot = Cell/new(Option/some(@Job, Job { ..job, resume = k }));
                     let _ = Cell/set(parked, Lst/cons(slot, Cell/get(parked)));
-                    let waker = () =>
+                    let waker() -> {} =
                         match Cell/get(slot)
                         | none() => ()
                         | some(j) =>
@@ -337,7 +337,7 @@ pub let block_on(@A : Type, root : Async(A)) -> A =
                 end
             end
         end;
-    let drain_all = () =>
+    let drain_all() -> {} =
         let _ = drain_jobs(Cell/get(runq));
         let _ = drain_parked(Cell/get(blocked));
         let _ = drain_sleeping(Cell/get(sleeping));

@@ -66,8 +66,8 @@ let canonical_of_trim(rep : Bits) -> Canonical(trim(rep)) =
     canonical_of_is_trimmed(trim(rep), trim_is_trimmed(rep));
 
 pub struct BigNat : pub Type {
-    rep       : Bits,
-    canonical : Canonical(rep),
+    rep : Bits,
+    canonical : Canonical(rep)
 }
 
 pub let of_bits(rep : Bits) -> BigNat =
