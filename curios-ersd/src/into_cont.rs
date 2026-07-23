@@ -5,7 +5,7 @@
 //! exactly once, per the specification's normative desugar table: `Unit`,
 //! `Bool`, and `Byte` ride the `Nat` carrier (`Bool` operations become `Nat`
 //! bit operations, `Byte` comparisons `Nat` comparisons, `NatToByte` a mask,
-//! `ByteToNat` the identity); an `Io` token is its little-endian bytes as a
+//! `ByteToNat` the identity); a `Handle` token is its little-endian bytes as a
 //! byte-grain binary and `HandleEql` that grain's binary equality; products and
 //! variants are generic tuples (a variant is `(tag, payload…)`, the tag the
 //! constructor's position in its family); matches and switches are one
@@ -1550,7 +1550,7 @@ impl Lowerer<'_> {
             Constant::Int(value) => CpsLiteral::Int(*value),
             Constant::Flt(value) => CpsLiteral::Flt(value.to_f32()),
             Constant::Bin(grain, value) => CpsLiteral::Bin(*grain, value.clone()),
-            // An Io descriptor token rides the packed-binary carrier: its
+            // A Handle descriptor token rides the packed-binary carrier: its
             // little-endian bytes at byte grain.
             Constant::Handle(token) => CpsLiteral::Bin(
                 Grain::X,

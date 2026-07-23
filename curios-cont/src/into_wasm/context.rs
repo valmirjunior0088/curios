@@ -594,7 +594,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
     /// The rope→wire step for one host argument: a reference param crosses as
     /// its flat payload, so the loaded rope is forced first — deeply for
-    /// `Lst(Bin)`/`Lst(Io)`, whose *elements* the host lifts as raw `$bytes`.
+    /// `Lst(Bin)`/`Lst(Handle)`, whose *elements* the host lifts as raw `$bytes`.
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let force = match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => return vec![],

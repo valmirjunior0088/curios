@@ -50,9 +50,7 @@ The [browser playground](https://valmirjunior0088.github.io/curios/playground) r
 To use the CLI, download a binary from the [releases page](https://github.com/valmirjunior0088/curios/releases), then save this as `hello.crs`:
 
 ```crs
-use /std/{Io};
-
-Io/print("Hello, world!\n")
+/std/print("Hello, world!\n")
 ```
 
 Run it directly:

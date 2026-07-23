@@ -171,7 +171,7 @@ impl Sort {
             }
             // A *non-empty* record of propositions is a proposition. The empty
             // tuple `{}` is unit, not a prop: it is the result type of effects
-            // (`Io/print : .. -> {}`), so it stays `Type` (the `_` arm) and is
+            // (`/std/print : .. -> {}`), so it stays `Type` (the `_` arm) and is
             // kept at runtime rather than erased.
             Subterm::TupleType(TupleType { telescope, .. }) if !telescope.is_empty() => {
                 let mut tele = telescope.clone();

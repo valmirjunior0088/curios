@@ -4,7 +4,7 @@
 //! position, the only place an effect may residualize, is the statement whose
 //! result the block returns. ANF hoists every effect into a `Let`, so a
 //! `Foreign` feeding a block's `Return` is a tail-position effect and
-//! residualizes to a single host call — exactly the `Io/print(<bytes>)` the
+//! residualizes to a single host call — exactly the `Handle/write(<bytes>)` the
 //! `Fmt` collapse produces.
 //!
 //! Closedness and scope: a candidate call is evaluated from an empty frame;

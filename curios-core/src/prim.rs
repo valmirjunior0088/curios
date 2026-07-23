@@ -172,7 +172,7 @@ impl Prim {
         Self::NatEql(left.into(), right.into())
     }
 
-    /// An `HandleEql` node — handle identity, the one pure `Io` operation — from anything term-shaped.
+    /// An `HandleEql` node — handle identity, the one pure `Handle` operation — from anything term-shaped.
     pub fn io_eql<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,

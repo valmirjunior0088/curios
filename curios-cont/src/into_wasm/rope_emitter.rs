@@ -30,7 +30,7 @@
 //!   payload, filling a fresh leaf.
 //!
 //! The `lst/bin` variants are the host boundary's deep forms: an `Lst(Bin)` /
-//! `Lst(Io)` wire value carries `Bin`-shaped *elements*, which the host lifts
+//! `Lst(Handle)` wire value carries `Bin`-shaped *elements*, which the host lifts
 //! and lowers as raw `$bytes` — so params force each element too, and results
 //! embed each element back.
 

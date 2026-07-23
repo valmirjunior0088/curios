@@ -20,7 +20,7 @@ pub(super) fn parse_top_let<'a>() -> Parser<'a, TopItem> {
 }
 
 // One of the six wire shapes, by its own closed grammar — not an ordinary
-// Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Bin`/`Io`
+// Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Bin`/`Handle`
 // are literal keywords here, and `Lst(T)` recurses on the same grammar.
 pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
     parse_identifier().flat_map(|name| match name {
@@ -34,7 +34,7 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
             .and_drop(parse_literal(")"))
             .map(|element| WireType::Lst(Box::new(element))),
         other => fail(format!(
-            "expected a wire type (Nat, Int, Bool, Bin, Io, or Lst(...)), found '{other}'"
+            "expected a wire type (Nat, Int, Bool, Bin, Handle, or Lst(...)), found '{other}'"
         )),
     })
 }

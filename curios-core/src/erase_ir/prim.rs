@@ -2,7 +2,7 @@
 //! shape for shape.
 //!
 //! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped,
-//! `Byte` stays `Byte`, `Io` stays an opaque handle constant, and a packed
+//! `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed
 //! binary's element is its grain's shape (`Byte` for `X`, `Bool` for `B`) —
 //! every collapse onto a runtime carrier belongs to the lowering out of the
 //! representation. Unbounded type-level numerals narrow to the exact 32-bit

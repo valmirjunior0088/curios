@@ -50,7 +50,7 @@ pub mod mode {
 
 /// The well-known stdio handle tokens minted by the `/sys/Handle` prelude. A
 /// handle's wire encoding is the little-endian bytes of its token (see
-/// curios-runtime's `Io::encode`), so STDIN encodes to the empty byte string.
+/// `Handle::encode`), so STDIN encodes to the empty byte string.
 pub mod stdio {
     /// Standard input — the token whose wire encoding is the empty byte string.
     pub const STDIN: u32 = 0;

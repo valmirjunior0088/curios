@@ -610,7 +610,7 @@ impl<'a> Table<'a> {
     }
 
     /// `$lst/bin/force (ref $rope/lst) -> (ref $elems)`: force an `Lst(Bin)` /
-    /// `Lst(Io)` host argument *deeply* — the outer rope to a fresh payload
+    /// `Lst(Handle)` host argument *deeply* — the outer rope to a fresh payload
     /// whose every element is itself forced to `$bytes`, the element shape
     /// the host lifts.
     pub(crate) fn lst_bin_force_func(&self) -> curios_wasm::FuncName {

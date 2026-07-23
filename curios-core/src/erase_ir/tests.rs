@@ -136,7 +136,7 @@ entry {
 
 #[test]
 fn an_exit_seals_the_block_and_drops_dead_code() {
-    // let _ = Io/exit(3); 7 — the trailing computation is dead.
+    // let _ = /std/proc/exit(3); 7 — the trailing computation is dead.
     let body = Term::let_(
         "dead",
         Term::prim(Prim::NatType),
