@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, Char, Lst, Parse, Result, Option, Handle, Async};
+use /std/{Bytes, Byte, Str, Nat, Bool, Lst, Parse, Result, Option, Handle, Async};
 use /std/tcp/{Settings, Socket};
 
 pub induct Method : pub Type

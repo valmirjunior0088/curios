@@ -70,42 +70,14 @@ let is_num_byte(byte : Byte) -> Bool =
     | _ => Nat/in_range(Byte/to_nat(byte), 0x30, 0x39)
     end;
 
-let take_literal(literal : Str) -> Parse({}) =
-    Parse {
-        run(input, pos) =
-            let lit = Str/to_bytes(literal);
-            let (stop, matched) =
-                match Bytes/len(lit) : {Nat, Bool}
-                | 0 => (pos, true)
-                | step + 1; ih =>
-                    let (cur, live) = ih;
-                    match live
-                    | false => ih
-                    | true =>
-                        match Nat/try_lt(cur, Bytes/len(input))
-                        | none() => (cur, false)
-                        | some(ok) =>
-                            match Option/unwrap_or(Bytes/get(lit, step), 0) == Bytes/at(input, cur, ok)
-                            | true => (cur + 1, true)
-                            | false => (cur, false)
-                            end
-                        end
-                    end
-                end;
-            match matched
-            | true => Result/success((stop, ()))
-            | false => Result/failure("unexpected literal")
-            end
-    };
-
 let parse_null : Parse(Json) =
-    Parse/map(take_literal("null"), (_) => Json/null());
+    Parse/map(Parse/take_literal("null"), (_) => Json/null());
 
 let parse_true_val : Parse(Json) =
-    Parse/map(take_literal("true"), (_) => Json/bool(true));
+    Parse/map(Parse/take_literal("true"), (_) => Json/bool(true));
 
 let parse_false_val : Parse(Json) =
-    Parse/map(take_literal("false"), (_) => Json/bool(false));
+    Parse/map(Parse/take_literal("false"), (_) => Json/bool(false));
 
 let parse_num : Parse(Json) =
     Parse {

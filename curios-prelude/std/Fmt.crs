@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Option, Show};
+use /std/{Bytes, Byte, Str, Nat, Show};
 
 pub induct Fmt : pub Type
 | nil()
@@ -6,7 +6,7 @@ pub induct Fmt : pub Type
 | show(Fmt)
 end
 
-pub rec format_type_with(T: Type, f: Fmt) -> Type =
+pub rec format_type_with(T : Type, f : Fmt) -> Type =
     match f
     | nil() => T
     | lit(_, rest) => format_type_with(T, rest)

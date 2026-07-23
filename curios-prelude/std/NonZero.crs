@@ -7,29 +7,13 @@
 -- one-line delegation each.
 
 use /std/{Bool, Bits, Order, Eq, False, True, Show};
+use /std/Bool/{false_neq_true};
 use /std/Bits/{cons};
-use /std/BigNat/{BigNat, Canonical, of_bits, is_trimmed, trim, trim_of_trimmed, big_nat_eq,
-    view, View, add, add_raw, add_raw_trimmed, succ, succ_raw, succ_raw_trimmed, mul, mul_raw, cmp,
-    combine, xor3, maj3,
+use /std/Order/{cong_flip};
+use /std/BigNat/{BigNat, of_bits, of_trimmed_bits, is_trimmed, is_trimmed_of_canonical,
+    trim, trim_of_trimmed, view, add, add_raw, add_raw_trimmed, succ, succ_raw, succ_raw_trimmed,
+    mul, mul_raw, cmp, combine, xor3, maj3,
     add_comm, add_assoc, mul_comm, mul_assoc, distrib_l, cmp_refl, cmp_eq, cmp_flip, cmp_trans};
-
-let false_neq_true(p : Eq(false, true)) -> False =
-    Eq/subst((b : Bool) => match b : Prop | false => True | true => False end, p, True/qed());
-
-let cong_flip(@s : Order, @t : Order, p : Eq(s, t)) -> Eq(Order/flip(s), Order/flip(t)) =
-    match p : (q : Eq(Order, a, b)) => Eq(Order/flip(a), Order/flip(b))
-    | refl(@z) => Eq/refl()
-    end;
-
-let is_trimmed_of_canonical(rep : Bits, c : Canonical(rep)) -> Eq(is_trimmed(rep), true) =
-    match is_trimmed(rep) : (r) => Eq(r, true)
-    | true => Eq/refl()
-    | false => False/absurd(c)
-    end;
-
-pub let of_trimmed_bits(rep : Bits, p : Eq(is_trimmed(rep), true)) -> BigNat =
-    BigNat { rep = rep, canonical =
-        Eq/subst((b : Bool) => match b : Prop | true => True | false => False end, Eq/sym(p), True/qed()) };
 
 -- nonzero certificate: the (canonical) rep is nonempty. A plain match (no fold),
 -- so it reduces on any cons-headed rep, even one with an opaque tail.

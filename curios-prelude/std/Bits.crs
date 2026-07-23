@@ -1,5 +1,5 @@
 pub use /sys/Bits/{let Bits, len, eql, slice, append, concat};
-use /std/{Lst, Nat, Bool, Option, Eq, Eql};
+use /std/{Lst, Nat, Bool, Option, Eq, Str, Eql, Show};
 
 pub let at(b : Bits, i : Nat, ok : Nat/Lt(i, len(b))) -> Bool =
     /sys/Bits/get(b, i);
@@ -30,4 +30,10 @@ pub let fold(@A : Type, b : Bits, init : A, f : (Bool, A) -> A) -> A =
 
 satisfy Eql(Bits) {
     eql(a, b) = eql(a, b)
+}
+
+satisfy Show(Bits) {
+    show(b) =
+        fold(b, "", (bit, acc) =>
+            Str/concat(acc, match bit | true => "1" | false => "0" end))
 }

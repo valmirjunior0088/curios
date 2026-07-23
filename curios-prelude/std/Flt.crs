@@ -172,7 +172,7 @@ pub let to_str(f : Flt) -> Str =
         Str/concat(sign, render(f_mant, exp_field, even))
     end;
 
-let pow10(n : Nat) -> Flt =
+pub let pow10(n : Nat) -> Flt =
     match n
     | 0 => +1.0
     | pred + 1; ih => ih * 10.0

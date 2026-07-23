@@ -437,34 +437,6 @@ let hex_val(n : Nat) -> Option(Nat) =
     | _ => Option/none()
     end;
 
-let take_literal(literal : Str) -> Parse({}) =
-    Parse {
-        run(input, pos) =
-            let lit = Str/to_bytes(literal);
-            let (stop, matched) =
-                match Bytes/len(lit) : {Nat, Bool}
-                | 0 => (pos, true)
-                | step + 1; ih =>
-                    let (cur, live) = ih;
-                    match live
-                    | false => ih
-                    | true =>
-                        match Nat/try_lt(cur, Bytes/len(input))
-                        | none() => (cur, false)
-                        | some(ok) =>
-                            match Option/unwrap_or(Bytes/get(lit, step), 0) == Bytes/at(input, cur, ok)
-                            | true => (cur + 1, true)
-                            | false => (cur, false)
-                            end
-                        end
-                    end
-                end;
-            match matched
-            | true => Result/success((stop, ()))
-            | false => Result/failure("unexpected literal")
-            end
-    };
-
 let ws : Parse({}) =
     Parse/map(Parse/take_while(is_ws_byte), (_) => ());
 
@@ -732,12 +704,12 @@ let str_literal : Parse(Str) =
     str_of(b);
 
 let str_ml_basic : Parse(Str) =
-    let _ = take_literal("\"\"\"")!;
+    let _ = Parse/take_literal("\"\"\"")!;
     let b = ml_basic_scan!;
     str_of(b);
 
 let str_ml_literal : Parse(Str) =
-    let _ = take_literal("'''")!;
+    let _ = Parse/take_literal("'''")!;
     let b = ml_literal_scan!;
     str_of(b);
 
@@ -900,12 +872,6 @@ let int_value : Parse(Toml) =
             end
     };
 
-let flt_pow10(n : Nat) -> Flt =
-    match n
-    | 0 => +1.0
-    | pred + 1; ih => ih * 10.0
-    end;
-
 -- significand digits: at most nine significant decimal digits are kept exactly;
 -- `frac` selects whether consumed digits shift the decimal point down (fraction)
 -- or dropped digits shift it up (integer part past nine digits)
@@ -979,7 +945,7 @@ let flt_special : Parse(Toml) =
     Parse {
         run(input, pos) =
             let (cur, negative, _) = sign_read(input, pos);
-            match take_literal("inf").run(input, cur)
+            match Parse/take_literal("inf").run(input, cur)
             | success((next, _)) =>
                 let bits : Bytes =
                     match negative
@@ -988,7 +954,7 @@ let flt_special : Parse(Toml) =
                     end;
                 Result/success((next, Toml/flt(Flt/of_le_bytes(bits))))
             | failure(_) =>
-                match take_literal("nan").run(input, cur)
+                match Parse/take_literal("nan").run(input, cur)
                 | success((next, _)) => Result/success((next, Toml/flt(Flt/of_le_bytes(x\00\00\c0\7f))))
                 | failure(msg) => Result/failure(msg)
                 end
@@ -1036,7 +1002,7 @@ let flt_number : Parse(Toml) =
                                 let up = match eneg | true => up1 | false => up1 + emag end;
                                 let down = match eneg | true => down2 + emag | false => down2 end;
                                 let scaled =
-                                    Nat/to_flt(sig2) * flt_pow10(Nat/min(up, 2000)) / flt_pow10(Nat/min(down, 2000));
+                                    Nat/to_flt(sig2) * Flt/pow10(Nat/min(up, 2000)) / Flt/pow10(Nat/min(down, 2000));
                                 let value =
                                     match negative
                                     | true => Flt/neg(scaled)
@@ -1243,10 +1209,10 @@ let val_str_literal : Parse(Toml) =
     Parse/map(Parse/or(str_ml_literal, str_literal), (s) => Toml/str(s));
 
 let val_true : Parse(Toml) =
-    Parse/map(take_literal("true"), (_) => Toml/bool(true));
+    Parse/map(Parse/take_literal("true"), (_) => Toml/bool(true));
 
 let val_false : Parse(Toml) =
-    Parse/map(take_literal("false"), (_) => Toml/bool(false));
+    Parse/map(Parse/take_literal("false"), (_) => Toml/bool(false));
 
 let val_number_signed : Parse(Toml) =
     Parse/or(flt_special, Parse/or(flt_number, int_value));

@@ -41,7 +41,7 @@ satisfy (@A : Type, use Show(A)) => Show(Option(A)) {
     show(m) =
         match m
         | some(x) => Str/concat("some(", Str/concat(Show/show(x), ")"))
-        | none() => "none"
+        | none() => "none()"
         end
 }
 

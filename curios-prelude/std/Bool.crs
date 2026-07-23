@@ -1,6 +1,6 @@
 pub use /sys/{Bool};
 pub use /sys/Bool/{and, or, xor, eql};
-use /std/{Str, Option, Eql, Or, And, Show};
+use /std/{Str, Option, Eq, False, True, Eql, Or, And, Show};
 
 pub let not(b : Bool) -> Bool =
     xor(b, true);
@@ -17,6 +17,11 @@ pub let of_str(s : Str) -> Option(Bool) =
     | s == "false" => Option/some(false)
     | _ => Option/none()
     end;
+
+-- The two boolean constructors are distinct: a proof otherwise is absurd. Every
+-- `match b : Prop` decision procedure discharges its impossible branch through this.
+pub let false_neq_true(p : Eq(false, true)) -> False =
+    Eq/subst((b : Bool) => match b : Prop | true => False | false => True end, p, True/qed());
 
 satisfy Eql(Bool) {
     eql(a, b) = eql(a, b)
