@@ -473,6 +473,6 @@ fn render_constant(constant: &Constant) -> String {
                 Grain::X => format!("x\"{rendered}\""),
             }
         }
-        Constant::Io(token) => format!("io:{token}"),
+        Constant::Handle(token) => format!("io:{token}"),
     }
 }

@@ -225,7 +225,7 @@ pub(crate) enum EmissionHostTarget {
         resume: EmissionBlockName,
     },
     /// Terminate the process with exit `code`; this transfer never resumes.
-    IoExit { code: EmissionValueName },
+    Exit { code: EmissionValueName },
 }
 
 /// A guest mutable-cell op in tail position. Same `resume` discipline as

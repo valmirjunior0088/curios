@@ -1,5 +1,5 @@
 use {
-    super::{Io, Poll, Status},
+    super::{Handle, Poll, Status},
     wasmtime::{
         AnyRef, ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, I31,
         Mutability, RefType, StorageType, Val, ValType,
@@ -32,7 +32,7 @@ impl Lower for Status {
 
 /// A descriptor lowers as its wire token bytes — a `Bin` (an i8 array), the same
 /// uniform shape the runtime keys handles on.
-impl Lower for Io {
+impl Lower for Handle {
     fn lower(
         self,
         caller: &mut Caller<'_, ()>,

@@ -1,4 +1,4 @@
-use super::*;
+use {super::*, curios_base::Flt};
 
 fn doubling_module() -> Module {
     let mut builder = ErsdBuilder::new();
@@ -119,7 +119,7 @@ fn schemas_and_constants_print_deterministically() {
     let family = builder.family(Some("Shape".into()));
     let circle = builder.constructor(family, Some("circle".into()), vec![Some("radius".into())]);
     builder.open_block();
-    let negative_zero = builder.constant(Constant::Flt(curios_base::Flt::from_f32(-0.0)));
+    let negative_zero = builder.constant(Constant::Flt(Flt::from_f32(-0.0)));
     let byte = builder.constant(Constant::Byte(7));
     let pair = builder.let_value(
         None,

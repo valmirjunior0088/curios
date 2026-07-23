@@ -9,9 +9,12 @@
 //! domains here (the numeric law's Core border), with overflow reported as an
 //! error, never wrapped.
 
-use super::{
-    BigUint, Context, Error, Lowering, Nat, Outcome, Prim, Subterm, Term, ToPrimitive, emitted,
-    reduce_with, wire_term,
+use {
+    super::{
+        BigUint, Context, Error, Lowering, Nat, Outcome, Prim, Subterm, Term, ToPrimitive, emitted,
+        reduce_with, wire_term,
+    },
+    curios_base::{Grain, Int},
 };
 
 fn narrow_nat(value: &BigUint) -> Result<u32, Error> {
@@ -20,7 +23,7 @@ fn narrow_nat(value: &BigUint) -> Result<u32, Error> {
         .ok_or_else(|| Error::nat_overflow(value.clone()))
 }
 
-fn narrow_int(value: &curios_base::Int) -> Result<i32, Error> {
+fn narrow_int(value: &Int) -> Result<i32, Error> {
     value
         .to_i32()
         .ok_or_else(|| Error::int_overflow(value.clone()))
@@ -46,12 +49,12 @@ fn flt_type() -> Term {
     Term::prim(Prim::FltType)
 }
 
-fn bin_type(grain: curios_base::Grain) -> Term {
+fn bin_type(grain: Grain) -> Term {
     Term::prim(Prim::BinType(grain))
 }
 
 fn io_type() -> Term {
-    Term::prim(Prim::IoType)
+    Term::prim(Prim::HandleType)
 }
 
 fn lst_type(element: Term) -> Term {
@@ -59,10 +62,10 @@ fn lst_type(element: Term) -> Term {
 }
 
 /// The element shape of a packed binary: its grain's own scalar type.
-fn grain_element_type(grain: curios_base::Grain) -> Term {
+fn grain_element_type(grain: Grain) -> Term {
     match grain {
-        curios_base::Grain::X => byte_type(),
-        curios_base::Grain::B => bool_type(),
+        Grain::X => byte_type(),
+        Grain::B => bool_type(),
     }
 }
 
@@ -144,7 +147,7 @@ pub(super) fn erase_prim(
         | Prim::FltType
         | Prim::BinType(_)
         | Prim::LstType(_)
-        | Prim::IoType
+        | Prim::HandleType
         | Prim::CellType(_) => Ok(Outcome::Emitted(lowering.unit())),
 
         &Prim::Bool(value) => Ok(lowering.constant(curios_ersd::Constant::Bool(value))),
@@ -259,7 +262,7 @@ pub(super) fn erase_prim(
         Prim::FltOfLeBytes(inner) => lowering.operation(
             context,
             Op::FltOfLeBytes,
-            &[(inner, bin_type(curios_base::Grain::X))],
+            &[(inner, bin_type(Grain::X))],
             hint,
         ),
 
@@ -376,12 +379,12 @@ pub(super) fn erase_prim(
             ))
         }
 
-        &Prim::Io(token) => Ok(lowering.constant(curios_ersd::Constant::Io(token))),
-        Prim::IoEql(l, r) => op!(Op::IoEql, io_type, l, r),
+        &Prim::Handle(token) => Ok(lowering.constant(curios_ersd::Constant::Handle(token))),
+        Prim::HandleEql(l, r) => op!(Op::HandleEql, io_type, l, r),
         // A process exit never yields a value: erase the code, then report the
         // terminator that seals this block. Code after it is dead and is never
         // erased.
-        Prim::IoExit(_, code) => {
+        Prim::Exit(_, code) => {
             let code_atom = emitted!(lowering.walk(context, code, &nat_type(), None)?);
             Ok(Outcome::Diverged(curios_ersd::Terminator::Exit(code_atom)))
         }

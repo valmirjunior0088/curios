@@ -15,8 +15,8 @@ mod tests;
 
 use {
     super::*,
-    curios_abi::{ForeignStore, RootId, RootKind},
-    curios_base::{Entropy, Plicity, Qualifier},
+    curios_abi::ForeignStore,
+    curios_base::{Entropy, Plicity, Qualifier, RootId, RootKind},
     curios_core::Bound,
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -1673,7 +1673,7 @@ pub fn into_core(
     let mut witnesses = BTreeSet::new();
     // `foreign` declarations found anywhere in this compilation's module graph
     // (discovery above is already exhaustive over it) — separate from, and
-    // never merged with, the built-in `sys_io()` store the caller's prelude
+    // never merged with, the built-in `host_ops()` store the caller's prelude
     // loader was built from.
     let mut foreigns = ForeignStore::new();
 

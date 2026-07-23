@@ -8,8 +8,8 @@ mod syntax;
 use syntax::SYNTAX;
 
 use {
-    curios_abi::{RootId, sys_io},
-    curios_base::Qualifier,
+    curios_abi::host_ops,
+    curios_base::{Qualifier, RootId},
     curios_text::{Module, PreludeModules},
     sha2::{Digest, Sha256},
     std::{
@@ -38,7 +38,7 @@ fn main() {
     );
 
     let mut modules = PreludeModules::new();
-    modules.insert_root("sys", RootId::Sys, curios_text::sys_module(&sys_io()));
+    modules.insert_root("sys", RootId::Sys, curios_text::sys_module(&host_ops()));
     modules.insert_root("syn", RootId::Syn, parse_module(manifest.join("syn.crs")));
     modules.insert_root("std", RootId::Std, parse_module(manifest.join("std.crs")));
 

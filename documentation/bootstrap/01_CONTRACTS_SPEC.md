@@ -212,7 +212,7 @@ CompileResponse {
 }
 ```
 
-The first implementation may run the compiler as an ordinary Curios program using arguments and `/sys/Io` for source and output files. This is sufficient for the bootstrap generations and requires no new runtime calling convention.
+The first implementation may run the compiler as an ordinary Curios program using arguments and `/sys/Handle` for source and output files. This is sufficient for the bootstrap generations and requires no new runtime calling convention.
 
 A later in-memory service transport may carry the same logical request and response through byte buffers for the native CLI, browser, or embedders. Transport changes must not move module resolution, parsing, or language semantics back into Rust. A host may provide a filesystem or virtual filesystem, but the Curios compiler decides which modules to request and how their logical paths resolve.
 

@@ -3,8 +3,7 @@ use {
         Concept, InductDecl, Many, RecGroup, Scope, StructDecl, Term, build_shorten,
         with_short_names,
     },
-    curios_abi::RootId,
-    curios_base::Qualifier,
+    curios_base::{Qualifier, RootId},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,

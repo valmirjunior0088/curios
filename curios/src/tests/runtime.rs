@@ -15,7 +15,7 @@ fn nullary_closure_survives_erasure_and_codegen() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Str};
+        use /std/{Handle, Str};
         induct Susp(A : Type) : Type
         | now(A)
         | later(() -> Susp(A))
@@ -27,10 +27,10 @@ fn nullary_closure_survives_erasure_and_codegen() {
             end;
         let prog : Susp({}) =
             Susp/later(() =>
-                let w = Io/write(Io/stdout, Str/to_bytes("ok"));
+                let w = Handle/write(Handle/stdout, Str/to_bytes("ok"));
                 Susp/now(()));
         let r = force(prog);
-        Io/write(Io/stdout, Str/to_bytes("!"))
+        Handle/write(Handle/stdout, Str/to_bytes("!"))
         "#,
         system,
     )
@@ -51,7 +51,7 @@ fn end_to_end() {
             | left(_) => +42
             | right(_) => +7
             end;
-        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Int/to_str(score(pair))))
+        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Int/to_str(score(pair))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -69,7 +69,7 @@ fn end_to_end() {
 #[test]
 fn local_binders_shadow_module_bindings_without_leaking() {
     let source = r#"
-        use /std/{Nat, Io, Str};
+        use /std/{Nat, Handle, Str};
         mod Foo
             pub let go : /std/Nat = 7;
             pub let shadowed : /std/Nat =
@@ -79,7 +79,7 @@ fn local_binders_shadow_module_bindings_without_leaking() {
                 let probe : /std/Nat = (let go : /std/Nat = 3; go);
                 go;
         end
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -98,7 +98,7 @@ fn triangular_sum() {
             | 0 => 0
             | pred + 1; ih => std/Nat/add(ih, pred)
             end;
-        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))
+        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -110,7 +110,7 @@ fn triangular_sum() {
 fn multi_arg_function() {
     let source = r#"
         let add : (std/Int, std/Int) -> std/Int = (x, y) => std/Int/add(x, y);
-        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3, +4))))
+        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3, +4))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -122,7 +122,7 @@ fn multi_arg_function() {
 fn curried_function() {
     let source = r#"
         let add : (std/Int) -> (std/Int) -> std/Int = (x) => (y) => std/Int/add(x, y);
-        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3)(+4))))
+        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3)(+4))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -138,7 +138,7 @@ fn bang_dispatches_through_a_user_monad_witness() {
     // `M := Box` (flex-apply imitation) and resolves `monad_box` — the same
     // path a std monad takes, exercised end-to-end on a user type.
     let source = r#"
-        use /std/{Nat, Io, Str, Monad};
+        use /std/{Nat, Handle, Str, Monad};
         pub struct Box(A : Type) : pub Type { unbox : A }
         satisfy Monad(Box) {
             pure(A, x) = Box { unbox = x },
@@ -147,7 +147,7 @@ fn bang_dispatches_through_a_user_monad_witness() {
         let a : Box(Nat) = Box { unbox = 3 };
         let b : Box(Nat) = Box { unbox = 4 };
         let result : Box(Nat) = Monad/pure(Nat/add(a!, b!));
-        Io/print(Nat/to_str(result.unbox))
+        /std/print(Nat/to_str(result.unbox))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -164,14 +164,14 @@ fn bang_std_parse_threads_bangs_left_to_right() {
     // pins the evaluation order: on "BA" the first byte is 'B' (66) and the second
     // 'A' (65), so the result is 66 - 65 = 1 (the reversed order would saturate to 0).
     let source = r#"
-        use /std/{Parse, Byte, Nat, Result, Io};
+        use /std/{Parse, Byte, Nat, Result, Handle};
 
         let parser : Parse/Parse(Nat) =
             Parse/pure(Nat/sub(Byte/to_nat(Parse/any_byte!), Byte/to_nat(Parse/any_byte!)));
 
         match Parse/run(parser, /std/Str/to_bytes("BA")) : {}
-        | success(n) => Io/print(Nat/to_str(n))
-        | failure(msg) => Io/print(msg)
+        | success(n) => /std/print(Nat/to_str(n))
+        | failure(msg) => /std/print(msg)
         end
         "#;
 
@@ -197,7 +197,7 @@ fn bang_region_mixes_action_types() {
     // `take_while(is_a)` reads "A" (stops at 'B'), then `any_byte` reads 'B'
     // (66); `Bytes/append("A", 66)` is "AB".
     let source = r#"
-        use /std/{Parse, Byte, Bytes, Bool, Result, Io, Str};
+        use /std/{Parse, Byte, Bytes, Bool, Result, Handle, Str};
 
         let is_a : (Byte) -> Bool = (b) => b == 0x41;
 
@@ -207,10 +207,10 @@ fn bang_region_mixes_action_types() {
         match Parse/run(parser, /std/Str/to_bytes("AB")) : {}
         | success(s) =>
             match Str/of_bytes(s) : {}
-            | some(t) => Io/print(t)
-            | none() => Io/print("invalid utf-8")
+            | some(t) => /std/print(t)
+            | none() => /std/print("invalid utf-8")
             end
-        | failure(msg) => Io/print(msg)
+        | failure(msg) => /std/print(msg)
         end
         "#;
 
@@ -289,16 +289,16 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     // driver and the compile-time `Parse` combinators, without depending on a
     // legacy backend function-count metric.
     let source = r#"
-        use /std/{Str, Io, Bytes, Fmt};
+        use /std/{Str, Handle, Bytes, Fmt};
 
-        match Io/read(Io/stdin, 1024) : {}
+        match Handle/read(Handle/stdin, 1024) : {}
         | chunk(bytes) =>
             match Str/of_bytes(bytes) : {}
             | some(s) => Fmt/print("%s is %d")(Str/trim(s))(30)
-            | none() => Io/print("invalid input")
+            | none() => /std/print("invalid input")
             end
-        | eof() => Io/print("invalid input")
-        | error(_) => Io/print("invalid input")
+        | eof() => /std/print("invalid input")
+        | error(_) => /std/print("invalid input")
         end
         "#;
 
@@ -342,16 +342,16 @@ fn fmt_print_runtime_args_specializes_spine() {
     // the minted spine items and neither the format-string parser nor the
     // generic fold survives to codegen.
     let source = r#"
-        use /std/{Str, Io, Bytes, Fmt};
+        use /std/{Str, Handle, Bytes, Fmt};
 
-        match Io/read(Io/stdin, 1024) : {}
+        match Handle/read(Handle/stdin, 1024) : {}
         | chunk(bytes) =>
             match Str/of_bytes(bytes) : {}
             | some(s) => Fmt/print("%s is %d")(Str/trim(s))(30)
-            | none() => Io/print("invalid input")
+            | none() => /std/print("invalid input")
             end
-        | eof() => Io/print("invalid input")
-        | error(_) => Io/print("invalid input")
+        | eof() => /std/print("invalid input")
+        | error(_) => /std/print("invalid input")
         end
         "#;
 
@@ -391,17 +391,17 @@ fn fmt_print_runtime_args_specializes_spine() {
 
 #[test]
 fn fmt_print_err_formats_to_stderr() {
-    // Same staging as `Fmt/print`, routed through `Io/print_err`. MockIo
+    // Same staging as `Fmt/print`, routed through `/std/print_err`. MockIo
     // captures stdout and stderr concatenated in write order, so the ordering
     // also shows the stderr write really happened between the stdout ones.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Fmt, Io};
-        let a = Io/print("before;");
+        use /std/{Fmt, Handle};
+        let a = /std/print("before;");
         let b = Fmt/print_err("%s: %d;")("code")(3);
-        Io/print("after")
+        /std/print("after")
         "#,
         system,
     )
@@ -414,8 +414,8 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     // The fully-constant case: every input to `Fmt/print` is a literal, so the
     // ersd `evaluate` pass runs the *entire* program at compile time and
     // residualizes the one effect boundary — the ersd-optm module's body is a
-    // single `#/std/Io/print(<final bytes>)` call, the `Parse` combinator web
-    // and `Fmt`'s parser are pruned, and only the `Io/print` → `Io/write`
+    // single `#/std/print(<final bytes>)` call, the `Parse` combinator web
+    // and `Fmt`'s parser are pruned, and only the `/std/print` → `Handle/write`
     // plumbing reaches codegen.
     let source = r#"
         use /std/{Fmt};
@@ -448,7 +448,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     // Dead spine leftovers linger in the entry block (pruning drops items, not
     // block statements) — the Cont sweep below is where they must be gone.
     assert!(
-        ersd.contains("$/std/Io/print(x\"78203d2034322c2073203d2068656c6c6f0a\")"),
+        ersd.contains("$/std/print(x\"78203d2034322c2073203d2068656c6c6f0a\")"),
         "expected the folded print residual, got:\n{ersd}",
     );
     assert!(
@@ -585,7 +585,7 @@ fn random_bin_returns_requested_length() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
-        r#"std/Io/write(std/Io/stdout, /std/rand/bin(8))"#,
+        r#"std/Handle/write(std/Handle/stdout, /std/rand/bin(8))"#,
         system,
     )
     .expect("expected result");
@@ -602,11 +602,11 @@ fn nat_of_str_returns_option() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Nat, Str, Option, Io};
+        use /std/{Nat, Str, Option, Handle};
         let ok = Option/unwrap_or(Nat/of_str("123"), 0);
         let bad = Option/unwrap_or(Nat/of_str("12a"), 7);
         let empty = Option/unwrap_or(Nat/of_str(""), 9);
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(ok, bad), empty))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(ok, bad), empty))))
         "#,
         system,
     )
@@ -622,11 +622,11 @@ fn int_of_str_returns_option() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Nat, Int, Str, Option, Io};
+        use /std/{Nat, Int, Str, Option, Handle};
         let neg = Int/abs(Option/unwrap_or(Int/of_str("-5"), +0));
         let pos = Int/abs(Option/unwrap_or(Int/of_str("+7"), +0));
         let bad = Int/abs(Option/unwrap_or(Int/of_str("x"), +3));
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(neg, pos), bad))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(neg, pos), bad))))
         "#,
         system,
     )
@@ -644,12 +644,12 @@ fn flt_of_str_returns_option() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Nat, Flt, Str, Option, Io};
+        use /std/{Nat, Flt, Str, Option, Handle};
         let whole = Flt/to_nat(Option/unwrap_or(Flt/of_str("12.0"), +0.0));
         let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(".5"), +0.0), +2.0));
         let exp = Flt/to_nat(Option/unwrap_or(Flt/of_str("1e3"), +0.0));
         let bad = Flt/to_nat(Option/unwrap_or(Flt/of_str("abc"), +4.0));
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad)))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad)))))
         "#,
         system,
     )
@@ -664,12 +664,12 @@ fn option_result_char_helpers() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Option, Result, Char, Nat, Str, Io};
+        use /std/{Option, Result, Char, Nat, Str, Handle};
         let opt = Option/unwrap_or(Option/map(Option/some(4), (x : Nat) => Nat/add(x, 1)), 0);
         let res0 : Result(Nat, Nat) = Result/success(5);
         let res = Result/unwrap_or(Result/map_success(res0, (x : Nat) => Nat/mul(x, 2)), 0);
         let up = Char/to_ascii_upper('a');
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(opt, res), Char/to_nat(up)))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(opt, res), Char/to_nat(up)))))
         "#,
         system,
     )
@@ -694,7 +694,7 @@ fn clock_diff_of_two_distinct_now_readings() {
         let a = /std/time/Instant/now();
         let b = /std/time/Instant/now();
         let d = /std/time/Instant/diff(b, a);
-        std/Io/write(std/Io/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(d))))
+        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(d))))
         "#,
         system,
     )
@@ -710,7 +710,7 @@ fn clock_mono_reads_scripted_elapsed() {
         Duration::from_secs(10),
         r#"
         let e = /std/time/Instant/elapsed();
-        std/Io/write(std/Io/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(e))))
+        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(e))))
         "#,
         system,
     )
@@ -724,10 +724,10 @@ fn cell_get_returns_init_value() {
     // Round-trip: mint a cell then read it back.
     assert_eq!(
         run(r#"
-            use /std/{Cell, Io, Nat, Str};
+            use /std/{Cell, Handle, Nat, Str};
             let n : Nat = 42;
             let cell = Cell/new(n);
-            Io/print(Nat/to_str(Cell/get(cell)))
+            /std/print(Nat/to_str(Cell/get(cell)))
         "#),
         b"42",
     );
@@ -738,11 +738,11 @@ fn cell_set_overwrites_value() {
     // Write then read: the getter sees the new value, not the init.
     assert_eq!(
         run(r#"
-            use /std/{Cell, Io, Nat, Str};
+            use /std/{Cell, Handle, Nat, Str};
             let z : Nat = 0;
             let cell = Cell/new(z);
             let _ = Cell/set(cell, 99);
-            Io/print(Nat/to_str(Cell/get(cell)))
+            /std/print(Nat/to_str(Cell/get(cell)))
         "#),
         b"99",
     );
@@ -754,12 +754,12 @@ fn cell_two_cells_are_distinct() {
     // Setting one must not affect the other.
     assert_eq!(
         run(r#"
-            use /std/{Cell, Io, Nat, Str};
+            use /std/{Cell, Handle, Nat, Str};
             let n : Nat = 7;
             let a = Cell/new(n);
             let b = Cell/new(n);
             let _ = Cell/set(a, 1);
-            Io/print(Nat/to_str(Cell/get(b)))
+            /std/print(Nat/to_str(Cell/get(b)))
         "#),
         b"7",
     );
@@ -773,7 +773,7 @@ fn match_reads_an_effectful_scrutinee_once() {
     // `Cell/set`, making `k` 0 - 1 (monus) = 0 and `x` 1 instead of 5.
     assert_eq!(
         run(r#"
-            use /std/{Cell, Io, Nat, Str};
+            use /std/{Cell, Handle, Nat, Str};
             let n : Nat = 5;
             let c = Cell/new(n);
             let x = match Cell/get(c)
@@ -782,7 +782,7 @@ fn match_reads_an_effectful_scrutinee_once() {
                     let _ = Cell/set(c, 0);
                     k + 1
                 end;
-            Io/print(Nat/to_str(x))
+            /std/print(Nat/to_str(x))
         "#),
         b"5",
     );
@@ -800,7 +800,7 @@ fn accumulation_loops_are_linear_by_construction() {
     crate::run_text(
         Duration::from_secs(60),
         r#"
-        use /std/{Io, Bytes, Nat, Str};
+        use /std/{Handle, Bytes, Nat, Str};
         rec go(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
@@ -808,8 +808,8 @@ fn accumulation_loops_are_linear_by_construction() {
             end;
         let built = go(100000, x\);
         let head = Bytes/slice(built, 0, 10);
-        let _ = Io/write(Io/stdout, head);
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Bytes/len(built))))
+        let _ = Handle/write(Handle/stdout, head);
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/len(built))))
         "#,
         system,
     )
@@ -833,7 +833,7 @@ fn peel_loops_are_linear_by_construction() {
     crate::run_text(
         Duration::from_secs(60),
         r#"
-        use /std/{Io, Byte, Bytes, Nat, Str, Cell};
+        use /std/{Handle, Byte, Bytes, Nat, Str, Cell};
         rec build(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
@@ -853,7 +853,7 @@ fn peel_loops_are_linear_by_construction() {
                 end
             end;
         let total = drain(Bytes/len(built) + 1, 0);
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(total)))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(total)))
         "#,
         system,
     )
@@ -871,7 +871,7 @@ fn nested_local_rec_runs_correctly() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Nat, Str, Bytes};
+        use /std/{Handle, Nat, Str, Bytes};
         rec f(n : Nat) -> Nat =
             (rec go(i : Nat) -> Nat =
                 match i
@@ -879,7 +879,7 @@ fn nested_local_rec_runs_correctly() {
                 | k + 1; ih => go(k) + 1
                 end;
              go(n));
-        Io/print(Nat/to_str(f(Bytes/len(/std/rand/bin(4)))))
+        /std/print(Nat/to_str(f(Bytes/len(/std/rand/bin(4)))))
         "#,
         system,
     )
@@ -898,7 +898,7 @@ fn local_rec_calls_enclosing_rec_member() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Nat, Str, Bytes};
+        use /std/{Handle, Nat, Str, Bytes};
         rec f(n : Nat) -> Nat =
             (rec go(i : Nat) -> Nat =
                 match i
@@ -906,7 +906,7 @@ fn local_rec_calls_enclosing_rec_member() {
                 | k + 1; ih => f(k) + go(k)
                 end;
              go(n));
-        Io/print(Nat/to_str(f(Bytes/len(/std/rand/bin(3)))))
+        /std/print(Nat/to_str(f(Bytes/len(/std/rand/bin(3)))))
         "#,
         system,
     )
@@ -925,11 +925,11 @@ fn self_referential_value_rec_never_forced_compiles_and_runs() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Nat, Str, Bytes};
+        use /std/{Handle, Nat, Str, Bytes};
         let make(n : Nat) -> Nat =
             rec loop : Nat = loop;
             n;
-        Io/print(Nat/to_str(make(Bytes/len(/std/rand/bin(5)))))
+        /std/print(Nat/to_str(make(Bytes/len(/std/rand/bin(5)))))
         "#,
         system,
     )
@@ -948,7 +948,7 @@ fn recursive_group_signature_reduces_concrete_type_family() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Nat, Str, Bytes};
+        use /std/{Handle, Nat, Str, Bytes};
         rec T(n : Nat) -> Type =
             match n
             | 0 => Nat
@@ -956,7 +956,7 @@ fn recursive_group_signature_reduces_concrete_type_family() {
             end
         and val : T(2) =
             Bytes/len(/std/rand/bin(3));
-        Io/print(Nat/to_str(val))
+        /std/print(Nat/to_str(val))
         "#,
         system,
     )

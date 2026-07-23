@@ -100,7 +100,7 @@ pub enum Operation {
     FltToInt,
     FltToLeBytes,
     FltOfLeBytes,
-    IoEql,
+    HandleEql,
 }
 
 impl Operation {
@@ -190,7 +190,7 @@ impl Operation {
             | Self::FltMin
             | Self::FltMax
             | Self::FltCopysign
-            | Self::IoEql => 2,
+            | Self::HandleEql => 2,
         }
     }
 }

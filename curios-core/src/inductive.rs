@@ -1,7 +1,6 @@
 use {
     super::{Atom, Telescope, Term},
-    curios_abi::RootId,
-    curios_base::Qualifier,
+    curios_base::{Qualifier, RootId},
     std::collections::BTreeMap,
 };
 

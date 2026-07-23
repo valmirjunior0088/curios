@@ -1313,7 +1313,7 @@ mod tests {
         let (_, function) = structured.funcs().first().unwrap();
         assert!(matches!(
             function.region.tail,
-            EmissionTail::Host(EmissionHostTarget::IoExit { .. })
+            EmissionTail::Host(EmissionHostTarget::Exit { .. })
         ));
     }
 

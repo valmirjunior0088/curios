@@ -65,15 +65,15 @@ fn arena_fmt_print_runtime_args_specializes_spine() {
 #[test]
 fn arena_pure_computation_hugs_a_host_effect() {
     let source = r#"
-        use /std/{Io, Nat, Str};
+        use /std/{Handle, Nat, Str};
         rec triangle(n : Nat) -> Nat =
             match n : Nat
             | 0 => 0
             | p + 1; ih => n + ih
             end;
-        let before = Io/write(Io/stdout, Str/to_bytes("a"));
+        let before = Handle/write(Handle/stdout, Str/to_bytes("a"));
         let pure = triangle(100);
-        let after = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(pure)));
+        let after = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(pure)));
         ()
         "#;
     assert_eq!(run(source), b"a10000".to_vec());
@@ -94,7 +94,7 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
     let program = |depth: u32| {
         format!(
             r#"
-        use /std/{{Io, Nat, Str, Bytes}};
+        use /std/{{Handle, Nat, Str, Bytes}};
         rec count(b : Bytes) -> Nat =
             match b : Nat
             | x\ => 0
@@ -105,7 +105,7 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
             | 0 => acc
             | p + 1; ih => build(p, Bytes/cons(97, acc))
             end;
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(count(build({depth}, x\)))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(count(build({depth}, x\)))))
         "#
         )
     };

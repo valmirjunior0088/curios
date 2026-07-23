@@ -25,7 +25,7 @@ pub(super) enum Value {
     Byte(u8),
     Int(i32),
     Flt(Flt),
-    Io(u32),
+    Handle(u32),
     Bin(Grain, Rc<PackedBin>),
     Lst(Rc<Vec<Value>>),
     /// A product value, in the schema's field order.
@@ -53,7 +53,7 @@ impl Value {
             Value::Byte(value) => Constant::Byte(*value),
             Value::Int(value) => Constant::Int(*value),
             Value::Flt(value) => Constant::Flt(*value),
-            Value::Io(value) => Constant::Io(*value),
+            Value::Handle(value) => Constant::Handle(*value),
             Value::Bin(grain, value) => Constant::Bin(*grain, value.as_ref().clone()),
             Value::Lst(_) | Value::Product(..) | Value::Construct(..) | Value::Closure(_) => {
                 return None;
@@ -70,7 +70,7 @@ impl Value {
             Constant::Byte(value) => Value::Byte(*value),
             Constant::Int(value) => Value::Int(*value),
             Constant::Flt(value) => Value::Flt(*value),
-            Constant::Io(value) => Value::Io(*value),
+            Constant::Handle(value) => Value::Handle(*value),
             Constant::Bin(grain, value) => Value::Bin(*grain, Rc::new(value.clone())),
         }
     }

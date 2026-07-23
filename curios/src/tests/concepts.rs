@@ -15,7 +15,7 @@ fn error(source: &str) -> String {
 #[test]
 fn concept_witness_resolves_through_wrapper() {
     let source = r#"
-        use /std/{Nat, Io, Str};
+        use /std/{Nat, Handle, Str};
         pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
@@ -23,7 +23,7 @@ fn concept_witness_resolves_through_wrapper() {
             show(n) = Nat/to_str(n)
         }
         let n : Nat = 42;
-        Io/print(Show/show(n))
+        /std/print(Show/show(n))
         "#;
 
     assert_eq!(run(source), b"42");
@@ -36,7 +36,7 @@ fn concept_witness_resolves_through_wrapper() {
 #[test]
 fn premised_witness_resolves_recursively() {
     let source = r#"
-        use /std/{Nat, Io, Str, Lst};
+        use /std/{Nat, Handle, Str, Lst};
         pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
@@ -48,7 +48,7 @@ fn premised_witness_resolves_recursively() {
                 Lst/fold(l, "[", (x, acc) => Str/concat(acc, Show/show(x)))
         }
         let l : Lst(Nat) = [1, 2, 3];
-        Io/print(Show/show(l))
+        /std/print(Show/show(l))
         "#;
 
     assert_eq!(run(source), b"[123");
@@ -60,7 +60,7 @@ fn premised_witness_resolves_recursively() {
 #[test]
 fn explicit_use_argument_overrides() {
     let source = r#"
-        use /std/{Nat, Io, Str};
+        use /std/{Nat, Handle, Str};
         pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
@@ -70,7 +70,7 @@ fn explicit_use_argument_overrides() {
         let parens : Show(Nat) =
             Show(Nat) { show = (n) => Str/concat("(", Str/concat(Nat/to_str(n), ")")) };
         let n : Nat = 7;
-        Io/print(Show/show(use parens, n))
+        /std/print(Show/show(use parens, n))
         "#;
 
     assert_eq!(run(source), b"(7)");
@@ -85,7 +85,7 @@ fn explicit_use_argument_overrides() {
 #[test]
 fn superclass_projection_resolves() {
     let source = r#"
-        use /std/{Nat, Bool, Order, Io};
+        use /std/{Nat, Bool, Order, Handle};
         pub concept Eql(A : Type) : pub Type {
             eql(A, A) -> Bool
         }
@@ -101,7 +101,7 @@ fn superclass_projection_resolves() {
         }
         pub let same(@A : Type, use Ord(A), x : A, y : A) -> Bool = Eql/eql(x, y);
         let n : Nat = 3;
-        Io/print(Bool/to_str(same(n, n)))
+        /std/print(Bool/to_str(same(n, n)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -111,7 +111,7 @@ fn superclass_projection_resolves() {
 #[test]
 fn missing_witness_is_an_error() {
     let source = r#"
-        use /std/{Nat, Bool, Io, Str};
+        use /std/{Nat, Bool, Handle, Str};
         pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
@@ -119,7 +119,7 @@ fn missing_witness_is_an_error() {
             show(n) = Nat/to_str(n)
         }
         let b : Bool = true;
-        Io/print(Show/show(b))
+        /std/print(Show/show(b))
         "#;
 
     assert!(error(source).contains("witness"));
@@ -130,9 +130,9 @@ fn missing_witness_is_an_error() {
 #[test]
 fn prelude_show_resolves() {
     let source = r#"
-        use /std/{Nat, Io, Show};
+        use /std/{Nat, Handle, Show};
         let n : Nat = 42;
-        Io/print(Show/show(n))
+        /std/print(Show/show(n))
         "#;
 
     assert_eq!(run(source), b"42");
@@ -142,10 +142,10 @@ fn prelude_show_resolves() {
 #[test]
 fn prelude_eql_resolves() {
     let source = r#"
-        use /std/{Nat, Bool, Io, Eql};
+        use /std/{Nat, Bool, Handle, Eql};
         let a : Nat = 5;
         let b : Nat = 5;
-        Io/print(Bool/to_str(Eql/eql(a, b)))
+        /std/print(Bool/to_str(Eql/eql(a, b)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -156,10 +156,10 @@ fn prelude_eql_resolves() {
 #[test]
 fn prelude_ord_superclass_projects() {
     let source = r#"
-        use /std/{Nat, Bool, Io, Ord, Eql};
+        use /std/{Nat, Bool, Handle, Ord, Eql};
         pub let equal(@A : Type, use Ord(A), x : A, y : A) -> Bool = Eql/eql(x, y);
         let n : Nat = 4;
-        Io/print(Bool/to_str(equal(n, n)))
+        /std/print(Bool/to_str(equal(n, n)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -171,7 +171,7 @@ fn prelude_ord_superclass_projects() {
 #[test]
 fn duplicate_witness_is_an_error() {
     let source = r#"
-        use /std/{Nat, Io, Str};
+        use /std/{Nat, Handle, Str};
         pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
@@ -182,7 +182,7 @@ fn duplicate_witness_is_an_error() {
             show(n) = Nat/to_str(n)
         }
         let n : Nat = 1;
-        Io/print(Show/show(n))
+        /std/print(Show/show(n))
         "#;
 
     assert!(error(source).to_lowercase().contains("witness"));
@@ -212,13 +212,13 @@ fn orphan_witness_is_rejected() {
 #[test]
 fn witness_for_a_locally_owned_type_is_not_an_orphan() {
     let source = r#"
-        use /std/{Nat, Io, Str, Show};
+        use /std/{Nat, Handle, Str, Show};
         pub struct Wrapper : pub Type { inner : Nat }
         satisfy Show(Wrapper) {
             show(w) = Nat/to_str(w.inner)
         }
         let w : Wrapper = Wrapper { inner = 7 };
-        Io/print(Show/show(w))
+        /std/print(Show/show(w))
         "#;
 
     assert_eq!(run(source), b"7");
@@ -230,7 +230,7 @@ fn witness_for_a_locally_owned_type_is_not_an_orphan() {
 #[test]
 fn multi_param_witnesses_share_a_first_head() {
     let source = r#"
-        use /std/{Nat, Bool, Io, Str};
+        use /std/{Nat, Bool, Handle, Str};
         pub concept Into(A : Type, B : Type) : pub Type {
             into(A) -> B
         }
@@ -242,7 +242,7 @@ fn multi_param_witnesses_share_a_first_head() {
         }
         let s : Str = Into/into(2);
         let b : Bool = Into/into(2);
-        Io/print(Bool/to_str(b))
+        /std/print(Bool/to_str(b))
         "#;
 
     assert_eq!(run(source), b"false");
@@ -254,7 +254,7 @@ fn multi_param_witnesses_share_a_first_head() {
 #[test]
 fn open_parameter_does_not_infer_from_the_witness() {
     let source = r#"
-        use /std/{Nat, Io, Str};
+        use /std/{Nat, Handle, Str};
         pub concept Into(A : Type, B : Type) : pub Type {
             into(A) -> B
         }
@@ -262,7 +262,7 @@ fn open_parameter_does_not_infer_from_the_witness() {
             into(n) = Nat/to_str(n)
         }
         pub let discard(@A : Type, x : A) -> Nat = 0;
-        Io/print(Nat/to_str(discard(Into/into(1))))
+        /std/print(Nat/to_str(discard(Into/into(1))))
         "#;
 
     let message = error(source).to_lowercase();
@@ -278,9 +278,9 @@ fn open_parameter_does_not_infer_from_the_witness() {
 #[test]
 fn prelude_monad_resolves_by_imitation() {
     let source = r#"
-        use /std/{Nat, Io, Str, Option, Monad};
+        use /std/{Nat, Handle, Str, Option, Monad};
         let o : Option(Nat) = Monad/bind(Option/some(20), (x) => Monad/pure(Nat/add(x, 1)));
-        Io/print(Nat/to_str(Option/unwrap_or(o, 0)))
+        /std/print(Nat/to_str(Option/unwrap_or(o, 0)))
         "#;
 
     assert_eq!(run(source), b"21");
@@ -290,10 +290,10 @@ fn prelude_monad_resolves_by_imitation() {
 #[test]
 fn prelude_monad_arr_binds() {
     let source = r#"
-        use /std/{Nat, Io, Str, Lst, Monad};
+        use /std/{Nat, Handle, Str, Lst, Monad};
         let l : Lst(Nat) = [1, 2];
         let doubled : Lst(Nat) = Monad/bind(l, (x) => [x, x]);
-        Io/print(Nat/to_str(Lst/len(doubled)))
+        /std/print(Nat/to_str(Lst/len(doubled)))
         "#;
 
     assert_eq!(run(source), b"4");
@@ -305,12 +305,12 @@ fn prelude_monad_arr_binds() {
 #[test]
 fn monadic_sugar_binds_through_the_concept() {
     let source = r#"
-        use /std/{Nat, Io, Str, Option, Monad};
+        use /std/{Nat, Handle, Str, Option, Monad};
         pub let chain(a : Option(Nat), b : Option(Nat)) -> Option(Nat) =
             let x = a!;
             let y = b!;
             Monad/pure(Nat/add(x, y));
-        Io/print(Nat/to_str(Option/unwrap_or(chain(Option/some(20), Option/some(22)), 0)))
+        /std/print(Nat/to_str(Option/unwrap_or(chain(Option/some(20), Option/some(22)), 0)))
         "#;
 
     assert_eq!(run(source), b"42");
@@ -324,12 +324,12 @@ fn monadic_sugar_binds_through_the_concept() {
 fn bang_works_in_monad_generic_code() {
     let source = r#"
         use /syn/{Monad};
-        use /std/{Nat, Io, Str, Option, Lst};
+        use /std/{Nat, Handle, Str, Option, Lst};
         pub let add_both(@M : (Type) -> Type, use Monad(M), a : M(Nat), b : M(Nat)) -> M(Nat) =
             Monad/pure(a! + b!);
         let o : Option(Nat) = add_both(Option/some(20), Option/some(22));
         let l : Lst(Nat) = add_both([1, 2], [10]);
-        Io/print(Str/concat(
+        /std/print(Str/concat(
             Nat/to_str(Option/unwrap_or(o, 0)),
             Nat/to_str(Lst/len(l))))
         "#;
@@ -345,7 +345,7 @@ fn bang_works_in_monad_generic_code() {
 #[test]
 fn higher_kinded_superclass_projects() {
     let source = r#"
-        use /std/{Nat, Io, Str, Option, Monad};
+        use /std/{Nat, Handle, Str, Option, Monad};
         pub concept MonadPlus(M : (Type) -> Type) : Type {
             use Monad(M),
             empty(@A : Type) -> M(A)
@@ -356,7 +356,7 @@ fn higher_kinded_superclass_projects() {
         pub let wrap(@M : (Type) -> Type, use MonadPlus(M), m : M(Nat)) -> M(Nat) =
             Monad/bind(m, (x) => Monad/pure(x));
         let o : Option(Nat) = wrap(Option/some(11));
-        Io/print(Nat/to_str(Option/unwrap_or(o, 0)))
+        /std/print(Nat/to_str(Option/unwrap_or(o, 0)))
         "#;
 
     assert_eq!(run(source), b"11");
@@ -369,10 +369,10 @@ fn higher_kinded_superclass_projects() {
 #[test]
 fn monad_over_prim_constructor_resolves_by_imitation() {
     let source = r#"
-        use /std/{Nat, Lst, Io, Str, Monad};
+        use /std/{Nat, Lst, Handle, Str, Monad};
         let a : Lst(Nat) = [1];
         let b : Lst(Nat) = Monad/bind(a, (x) => a);
-        Io/print(Nat/to_str(Lst/len(b)))
+        /std/print(Nat/to_str(Lst/len(b)))
         "#;
 
     assert_eq!(run(source), b"1");
@@ -385,7 +385,7 @@ fn monad_over_prim_constructor_resolves_by_imitation() {
 #[test]
 fn syn_add_concept_resolves_everywhere() {
     let source = r#"
-        use /std/{Nat, Io, Str, Add};
+        use /std/{Nat, Handle, Str, Add};
         struct Point : pub Type { x : Nat, y : Nat }
         satisfy Add(Point) {
             add(a, b) = Point { x = Nat/add(a.x, b.x), y = Nat/add(a.y, b.y) }
@@ -393,7 +393,7 @@ fn syn_add_concept_resolves_everywhere() {
         pub let double(@A : Type, use Add(A), v : A) -> A = Add/add(v, v);
         let p : Point = double(Point { x = 3, y = 4 });
         let n : Nat = Add/add(20, 1);
-        Io/print(Nat/to_str(Nat/add(p.x, n)))
+        /std/print(Nat/to_str(Nat/add(p.x, n)))
         "#;
 
     assert_eq!(run(source), b"27");
@@ -406,12 +406,12 @@ fn syn_add_concept_resolves_everywhere() {
 #[test]
 fn eql_and_cmp_resolve_across_primitives() {
     let source = r#"
-        use /std/{Nat, Flt, Bool, Io, Str, Eql, Cmp};
+        use /std/{Nat, Flt, Bool, Handle, Str, Eql, Cmp};
         let a : Bool = Eql/eql(2, 2);
         let b : Bool = Eql/eql("abc", "abc");
         let c : Bool = Cmp/lt(1.0, 2.0);
         let d : Bool = Cmp/gte(3, 3);
-        Io/print(Bool/to_str(Bool/and(Bool/and(a, b), Bool/and(c, d))))
+        /std/print(Bool/to_str(Bool/and(Bool/and(a, b), Bool/and(c, d))))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -426,7 +426,7 @@ fn eql_and_cmp_resolve_across_primitives() {
 #[test]
 fn use_entry_fills_a_concept_field_explicitly() {
     let source = r#"
-        use /std/{Nat, Bool, Io, Str, Order};
+        use /std/{Nat, Bool, Handle, Str, Order};
         pub concept Eq2(A : Type) : pub Type {
             eq2(A, A) -> Bool
         }
@@ -440,7 +440,7 @@ fn use_entry_fills_a_concept_field_explicitly() {
         let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
         let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
         pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
-        Io/print(Bool/to_str(observe(use o)))
+        /std/print(Bool/to_str(observe(use o)))
         "#;
 
     assert_eq!(run(source), b"false");
@@ -451,7 +451,7 @@ fn use_entry_fills_a_concept_field_explicitly() {
 #[test]
 fn use_entry_fills_a_witness_superclass() {
     let source = r#"
-        use /std/{Nat, Bool, Io, Str, Order};
+        use /std/{Nat, Bool, Handle, Str, Order};
         pub concept Eq3(A : Type) : pub Type {
             eq3(A, A) -> Bool
         }
@@ -464,7 +464,7 @@ fn use_entry_fills_a_witness_superclass() {
             cmp3(a, b) = Order/lt()
         }
         pub let same(@A : Type, use Ord3(A), x : A, y : A) -> Bool = Eq3/eq3(x, y);
-        Io/print(Bool/to_str(same(2, 2)))
+        /std/print(Bool/to_str(same(2, 2)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -476,7 +476,7 @@ fn use_entry_fills_a_witness_superclass() {
 #[test]
 fn labeled_fill_of_a_former_superclass_is_unknown() {
     let source = r#"
-        use /std/{Nat, Bool, Io, Str, Order};
+        use /std/{Nat, Bool, Handle, Str, Order};
         pub concept Eq4(A : Type) : pub Type {
             eq4(A, A) -> Bool
         }
@@ -488,7 +488,7 @@ fn labeled_fill_of_a_former_superclass_is_unknown() {
             eq4(a, b) = a == b
         }
         let bad : Ord4(Nat) = Ord4 { eq4 = Eq4 { eq4(a, b) = a == b } };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let message = error(source);
@@ -501,15 +501,15 @@ fn labeled_fill_of_a_former_superclass_is_unknown() {
 #[test]
 fn misplaced_use_entries_are_errors() {
     let non_concept = r#"
-        use /std/{Nat, Io, Str};
+        use /std/{Nat, Handle, Str};
         pub struct Pair : pub Type { fst : Nat, snd : Nat }
         let p = Pair { use 1, snd = 2 };
-        Io/print("no")
+        /std/print("no")
         "#;
     assert!(error(non_concept).contains("not a concept"));
 
     let surplus = r#"
-        use /std/{Nat, Bool, Io, Str, Order};
+        use /std/{Nat, Bool, Handle, Str, Order};
         pub concept Eq5(A : Type) : pub Type {
             eq5(A, A) -> Bool
         }
@@ -525,7 +525,7 @@ fn misplaced_use_entries_are_errors() {
             use Eq5 { eq5(a, b) = a == b },
             cmp5(a, b) = Order/lt()
         }
-        Io/print("no")
+        /std/print("no")
         "#;
     assert!(error(surplus).contains("'use' entr"));
 }
@@ -536,7 +536,7 @@ fn misplaced_use_entries_are_errors() {
 #[test]
 fn omitted_superclass_resolves_from_a_premise() {
     let source = r#"
-        use /std/{Nat, Bool, Io, Str, Order, Lst};
+        use /std/{Nat, Bool, Handle, Str, Order, Lst};
         pub concept Eq6(A : Type) : pub Type {
             eq6(A, A) -> Bool
         }
@@ -558,7 +558,7 @@ fn omitted_superclass_resolves_from_a_premise() {
         }
         pub let same(@A : Type, use Ord6(A), x : A, y : A) -> Bool = Eq6/eq6(x, y);
         let l : Lst(Nat) = [1, 2];
-        Io/print(Bool/to_str(same(l, l)))
+        /std/print(Bool/to_str(same(l, l)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -571,7 +571,7 @@ fn omitted_superclass_resolves_from_a_premise() {
 #[test]
 fn concept_literal_spread_copies_superclass() {
     let source = r#"
-        use /std/{Nat, Bool, Io, Str, Order};
+        use /std/{Nat, Bool, Handle, Str, Order};
         pub concept Eq2(A : Type) : pub Type {
             eq2(A, A) -> Bool
         }
@@ -586,7 +586,7 @@ fn concept_literal_spread_copies_superclass() {
         let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
         let o2 : Ord2(Nat) = Ord2 { ..o, cmp2(a, b) = Order/gt() };
         pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
-        Io/print(Bool/to_str(observe(use o2)))
+        /std/print(Bool/to_str(observe(use o2)))
         "#;
 
     assert_eq!(run(source), b"false");
@@ -597,7 +597,7 @@ fn concept_literal_spread_copies_superclass() {
 #[test]
 fn concept_literal_spread_use_override() {
     let source = r#"
-        use /std/{Nat, Bool, Io, Str, Order};
+        use /std/{Nat, Bool, Handle, Str, Order};
         pub concept Eq2(A : Type) : pub Type {
             eq2(A, A) -> Bool
         }
@@ -610,7 +610,7 @@ fn concept_literal_spread_use_override() {
         let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
         let o2 : Ord2(Nat) = Ord2 { ..o, use straight };
         pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
-        Io/print(Bool/to_str(observe(use o2)))
+        /std/print(Bool/to_str(observe(use o2)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -620,11 +620,11 @@ fn concept_literal_spread_use_override() {
 #[test]
 fn concept_literal_spread_use_on_non_concept_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, use 1 };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     assert!(error(source).contains("not a concept"));
@@ -636,7 +636,7 @@ fn concept_literal_spread_use_on_non_concept_rejected() {
 #[test]
 fn prop_concept_resolves_and_erases() {
     let source = r#"
-        use /std/{Nat, Str, Eq, Io};
+        use /std/{Nat, Str, Eq, Handle};
         pub concept Refl(A : Type) : pub Prop {
             proof(x : A) -> Eq(x, x)
         }
@@ -644,7 +644,7 @@ fn prop_concept_resolves_and_erases() {
             proof(x) = Eq/refl()
         }
         let ignore_proof(p : Eq(2, 2), n : Nat) -> Nat = n;
-        Io/print(Nat/to_str(ignore_proof(Refl/proof(2), 3)))
+        /std/print(Nat/to_str(ignore_proof(Refl/proof(2), 3)))
         "#;
 
     assert_eq!(run(source), b"3");
@@ -659,7 +659,7 @@ fn prop_concept_resolves_and_erases() {
 #[test]
 fn prop_method_in_top_level_binding_collapses() {
     let source = r#"
-        use /std/{Nat, Eq, Io};
+        use /std/{Nat, Eq, Handle};
         pub concept Refl(A : Type) : pub Prop {
             proof(x : A) -> Eq(x, x)
         }
@@ -669,7 +669,7 @@ fn prop_method_in_top_level_binding_collapses() {
         let probe(@A : Type, x : A, use Refl(A)) -> Eq(x, x) = Refl/proof(x);
         let direct : Eq(2, 2) = Refl/proof(2);
         let routed : Eq(3, 3) = probe(3);
-        Io/print("ok")
+        /std/print("ok")
         "#;
 
     assert_eq!(run(source), b"ok");
@@ -682,7 +682,7 @@ fn prop_method_in_top_level_binding_collapses() {
 #[test]
 fn type_concept_prop_method_binding_collapses() {
     let source = r#"
-        use /std/{Nat, Eq, Io};
+        use /std/{Nat, Eq, Handle};
         pub concept Refl(A : Type) : pub Type {
             proof(x : A) -> Eq(x, x)
         }
@@ -690,7 +690,7 @@ fn type_concept_prop_method_binding_collapses() {
             proof(x) = Eq/refl()
         }
         let evidence : Eq(2, 2) = Refl/proof(2);
-        Io/print("ok")
+        /std/print("ok")
         "#;
 
     assert_eq!(run(source), b"ok");
@@ -703,7 +703,7 @@ fn type_concept_prop_method_binding_collapses() {
 #[test]
 fn prop_laws_concept_resolves() {
     let source = r#"
-        use /std/{Nat, Str, Show, Eq, Io};
+        use /std/{Nat, Str, Show, Eq, Handle};
         pub concept ShowLaws(A : Type) : pub Prop {
             stable(use Show(A), x : A) -> Eq(Show/show(x), Show/show(x))
         }
@@ -711,7 +711,7 @@ fn prop_laws_concept_resolves() {
             stable(w, x) = Eq/refl()
         }
         let take(q : Eq(Show/show(7), Show/show(7)), n : Nat) -> Nat = n;
-        Io/print(Nat/to_str(take(ShowLaws/stable(7), 42)))
+        /std/print(Nat/to_str(take(ShowLaws/stable(7), 42)))
         "#;
 
     assert_eq!(run(source), b"42");
@@ -723,7 +723,7 @@ fn prop_laws_concept_resolves() {
 #[test]
 fn sealed_concept_rejects_foreign_satisfy() {
     let source = r#"
-        use /std/{Nat, Str, Io};
+        use /std/{Nat, Str, Handle};
         mod Guard
             use /std/{Nat, Str};
             pub concept Tag(A : Type) : Type {
@@ -737,7 +737,7 @@ fn sealed_concept_rejects_foreign_satisfy() {
         satisfy Tag(Str) {
             tag(s) = s
         }
-        Io/print("no")
+        /std/print("no")
         "#;
 
     assert!(error(source).contains("private"));
@@ -749,7 +749,7 @@ fn sealed_concept_rejects_foreign_satisfy() {
 #[test]
 fn sealed_concept_rejects_foreign_dictionary_literal() {
     let source = r#"
-        use /std/{Nat, Str, Io};
+        use /std/{Nat, Str, Handle};
         mod Guard
             use /std/{Nat, Str};
             pub concept Tag(A : Type) : Type {
@@ -761,7 +761,7 @@ fn sealed_concept_rejects_foreign_dictionary_literal() {
         end
         use Guard/{Tag};
         let forged : Tag(Nat) = Tag { tag(n) = "forged" };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     assert!(error(source).contains("private"));
@@ -773,7 +773,7 @@ fn sealed_concept_rejects_foreign_dictionary_literal() {
 #[test]
 fn sealed_concept_resolves_and_projects_cross_module() {
     let source = r#"
-        use /std/{Nat, Str, Io};
+        use /std/{Nat, Str, Handle};
         mod Guard
             use /std/{Nat, Str};
             pub concept Tag(A : Type) : Type {
@@ -785,7 +785,7 @@ fn sealed_concept_resolves_and_projects_cross_module() {
         end
         use Guard/{Tag};
         let describe(@A : Type, use Tag(A), x : A) -> Str = Tag/tag(x);
-        Io/print(describe(42))
+        /std/print(describe(42))
         "#;
 
     assert_eq!(run(source), b"42");
@@ -800,7 +800,7 @@ fn sealed_concept_resolves_and_projects_cross_module() {
 #[test]
 fn sealed_concept_superclass_resolves_cross_module() {
     let source = r#"
-        use /std/{Nat, Bool, Io};
+        use /std/{Nat, Bool, Handle};
         mod Guard
             use /std/{Nat, Bool};
             pub concept Eq2(A : Type) : Type {
@@ -819,7 +819,7 @@ fn sealed_concept_superclass_resolves_cross_module() {
         end
         use Guard/{Eq2, Ord2};
         let same(@A : Type, use Ord2(A), x : A) -> Bool = Eq2/eq2(x, x);
-        Io/print(Bool/to_str(same(7)))
+        /std/print(Bool/to_str(same(7)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -831,7 +831,7 @@ fn sealed_concept_superclass_resolves_cross_module() {
 #[test]
 fn sealed_prop_concept_certifies() {
     let source = r#"
-        use /std/{Nat, Str, Eq, Io};
+        use /std/{Nat, Str, Eq, Handle};
         mod Guard
             use /std/{Nat, Eq};
             pub concept Certified(A : Type) : Prop {
@@ -843,7 +843,7 @@ fn sealed_prop_concept_certifies() {
         end
         use Guard/{Certified};
         let ignore(p : Eq(2, 2), n : Nat) -> Nat = n;
-        Io/print(Nat/to_str(ignore(Certified/proof(2), 3)))
+        /std/print(Nat/to_str(ignore(Certified/proof(2), 3)))
         "#;
 
     assert_eq!(run(source), b"3");
@@ -858,7 +858,7 @@ fn sealed_prop_concept_certifies() {
 #[test]
 fn forward_declared_witness_resolves() {
     let source = r#"
-        use /std/{Nat, Bool, Io, Str};
+        use /std/{Nat, Bool, Handle, Str};
         pub concept Eqx(A : Type) : pub Type {
             eqx(A, A) -> Bool
         }
@@ -866,7 +866,7 @@ fn forward_declared_witness_resolves() {
         satisfy Eqx(Nat) {
             eqx(a, b) = Nat/eql(a, b)
         }
-        Io/print(Bool/to_str(uses_eqx(3, 3)))
+        /std/print(Bool/to_str(uses_eqx(3, 3)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -880,12 +880,12 @@ fn forward_declared_witness_resolves() {
 #[test]
 fn missing_witness_in_constructor_index_names_the_concept() {
     let source = r#"
-        use /std/{Nat, Io, Add};
+        use /std/{Nat, Handle, Add};
         pub struct Wrap : pub Type { n : Nat }
         pub induct Foo : (w : Wrap) -> pub Type
         | mk(@w : Wrap, prev : Foo(w)) : (w + w)
         end
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let message = error(source);

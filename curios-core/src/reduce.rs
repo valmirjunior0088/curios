@@ -140,7 +140,7 @@ pub(crate) fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, R
 /// canonical form.
 ///
 /// Argument reduction is *best-effort*: an argument that cannot reduce at the
-/// type level (a runtime-only IO primitive like `is_ready`'s `/sys/Io/poll`
+/// type level (a runtime-only IO primitive like `is_ready`'s `/sys/poll`
 /// result, or an out-of-range access) is kept verbatim rather than forced. Such
 /// an argument was never going to differ in spelling — the only occurrence is
 /// the scrutinee itself, which matches the key raw — so keeping it raw both

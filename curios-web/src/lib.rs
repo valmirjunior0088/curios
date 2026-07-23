@@ -2,7 +2,7 @@
 //! `wasm-bindgen-cli --target web` — no `wasm-pack`, see AGENTS.md's
 //! Gotchas): a wasm-bindgen export of the pure compile
 //! pipeline ([`compile`]) plus the browser run harness ([`run`]). The harness
-//! spells the wire names (`sys`/`ffi` namespaces, `sys.io_*` keys, the entry
+//! spells the wire names (`sys`/`ffi` namespaces, `sys.*` keys, the entry
 //! export) directly, like any embedder; the numeric status/stdio codes it
 //! answers with derive from `curios-abi`, the same source the compiler and
 //! runtime cite.

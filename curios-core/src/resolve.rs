@@ -26,8 +26,7 @@ use {
         ParkedWork, StructType, Subterm, Telescope, Term, Witness, WitnessKey, WitnessOrigin,
         convert_outcome, reduce_with,
     },
-    curios_abi::RootId,
-    curios_base::Plicity,
+    curios_base::{Plicity, RootId},
     std::collections::{BTreeSet, HashSet},
 };
 

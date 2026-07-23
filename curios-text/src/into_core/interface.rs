@@ -1,8 +1,7 @@
 use {
     super::ModuleInfo,
     crate::{Entrypoint, Error, GroupItem, Module, Name, TopItem, UseGroup},
-    curios_abi::RootId,
-    curios_base::{Entropy, Qualifier},
+    curios_base::{Entropy, Qualifier, RootId},
     std::{
         collections::{HashMap, HashSet},
         rc::Rc,

@@ -7,11 +7,11 @@ fn prop_irrelevance_equates_distinct_proofs() {
     // though `p` and `q` are distinct binders. Without the `Prop` short-circuit
     // in `convert`, `refl : Eq(p, p)` would not check against `Eq(p, q)`.
     let source = r#"
-        use /std/{Io, Str, Eq, Nat};
+        use /std/{Handle, Str, Eq, Nat};
         let irrelevant(a : Nat, b : Nat, p : Nat/Lte(a, b), q : Nat/Lte(a, b))
             -> Eq(p, q) =
             Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -22,9 +22,9 @@ fn data_is_not_proof_irrelevant() {
     // values are never equated — `refl` at `Eq(x, y)` for unequal `x`, `y` is
     // rejected. Guards the `Prop` short-circuit against over-firing on non-props.
     let source = r#"
-        use /std/{Io, Str, Eq, Nat};
+        use /std/{Handle, Str, Eq, Nat};
         let bad(x : Nat, y : Nat) -> Eq(x, y) = Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
@@ -33,13 +33,13 @@ fn data_is_not_proof_irrelevant() {
 #[test]
 fn let_bound_unit_effect_survives_erasure() {
     // `{}` is unit, not a prop, so it is kept — a unit-typed effect must run
-    // after erasure. `Io/print` returns `{}`; binding its first call to an unused
+    // after erasure. `/std/print` returns `{}`; binding its first call to an unused
     // `let` must not drop the "a" write. Guards that the empty tuple stays
     // runtime content (the `Sort::of` empty-tuple-is-`Type` rule).
     let source = r#"
-        use /std/{Io};
-        let first = Io/print("a");
-        Io/print("b")
+        use /std/{Handle};
+        let first = /std/print("a");
+        /std/print("b")
         "#;
     assert_eq!(run(source), b"ab");
 }
@@ -51,13 +51,13 @@ fn large_elimination_of_a_prop_is_rejected() {
     // breaking irrelevance — rejected. The permitted cases (empty `False` via
     // `absurd`, singleton `Eq` via `subst`, and prop→prop) are exercised by std.
     let source = r#"
-        use /std/{Io, Str, Nat};
+        use /std/{Handle, Str, Nat};
         let bad(a : Nat, b : Nat, p : Nat/Lte(a, b)) -> Nat =
             match p : Nat
             | z(_) => 0
             | s(_, _, _) => 1
             end;
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
@@ -68,10 +68,10 @@ fn erased_param_unused_is_accepted() {
     // A type-valued parameter erases (sort-driven), yet at runtime the call still
     // behaves normally — the dropped argument never affects the relevant result.
     let source = r#"
-        use /std/{Io, Str, Nat};
+        use /std/{Handle, Str, Nat};
         let f : (T : Type, m : Nat) -> Nat = (T, m) => m;
         let r : Nat = f(Nat, 3);
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"3");
 }
@@ -84,11 +84,11 @@ fn erased_param_is_dropped_at_runtime() {
     // dropped — otherwise `h(n)` would reference a variable that erase removed
     // from `g`, a dangling runtime reference.
     let source = r#"
-        use /std/{Io, Str, Nat};
+        use /std/{Handle, Str, Nat};
         let h : (m : Type) -> Nat = (m) => 0;
         let g : (n : Type) -> Nat = (n) => h(n);
         let r : Nat = g(Nat);
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"0");
 }
@@ -101,11 +101,11 @@ fn erased_struct_field_collapses_to_bare_value() {
     // which only works if both are dropped. Projecting `.val` off the collapsed
     // record must still yield `val`, not `ghost`.
     let source = r#"
-        use /std/{Io, Str, Nat};
+        use /std/{Handle, Str, Nat};
         struct Wrap : pub Type { val : Nat, ghost : Type }
         let make : (n : Type) -> Wrap = (n) => Wrap { val = 5, ghost = n };
         let r : Nat = make(Nat).val;
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"5");
 }
@@ -150,10 +150,10 @@ fn erased_tuple_field_is_a_subset_type() {
     // whose type-valued witness is dropped, collapsing to the bare relevant
     // field. Here `make` puts its type-valued `n` in the erasable second field.
     let source = r#"
-        use /std/{Io, Str, Nat};
+        use /std/{Handle, Str, Nat};
         let make : (n : Type) -> { val : Nat, Type } = (n) => (5, n);
         let r : Nat = make(Nat).0;
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"5");
 }
@@ -163,11 +163,11 @@ fn erased_definition_param_is_dropped_at_runtime() {
     // The def-form sugar `let f(n : Type) -> R = body`: `g`'s type-valued `n` is
     // dropped and passed to `h`'s type-valued `m` (runs only if both are dropped).
     let source = r#"
-        use /std/{Io, Str, Nat};
+        use /std/{Handle, Str, Nat};
         let h(m : Type) -> Nat = 0;
         let g(n : Type) -> Nat = h(n);
         let r : Nat = g(Nat);
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"0");
 }
@@ -179,7 +179,7 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
     // `n` (runs only if both are dropped); the match binds only the relevant
     // `val`, so its projection must skip the absent field.
     let source = r#"
-        use /std/{Io, Str, Nat};
+        use /std/{Handle, Str, Nat};
         induct Boxed : Type
         | box(ghost : Type, val : Nat)
         end
@@ -189,7 +189,7 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
             | box(ghost, val) => val
             end;
         let r : Nat = get(make(Nat));
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(r)))
         "#;
     assert_eq!(run(source), b"5");
 }
@@ -197,11 +197,11 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
 #[test]
 fn erased_void_discharges_to_relevant_result() {
     let source = r#"
-        use /std/{False, Io};
+        use /std/{False, Handle};
         let direct(@A : Type, c : False) -> A = match c : A end;
         let via_absurd(@A : Type, c : False) -> A = False/absurd(c);
         let proofs = (direct, via_absurd);
-        Io/print("ok")
+        /std/print("ok")
         "#;
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
@@ -213,7 +213,7 @@ fn erased_indexed_relevant_repro() {
     // A type-indexed inductive whose payload is type-valued (sort-erased): the
     // index binder `m : Type` is dropped, yet `Box(m)` stays a well-formed type.
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         induct Box : (n : Type) -> Type
         | mk(x : Type) : (x)
         end
@@ -225,7 +225,7 @@ fn erased_indexed_relevant_repro() {
                 end;
             go(0);
         let g = f;
-        Io/print("ok")
+        /std/print("ok")
         "#;
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
@@ -239,14 +239,14 @@ fn erased_indexed_relevant_repro() {
 #[test]
 fn erased_index_in_type_valued_arg() {
     let source = r#"
-        use /std/{Nat, False, Io};
+        use /std/{Nat, False, Handle};
         induct Box : (n : Type) -> Type
         | mk(x : Type) : (x)
         end
         let id_void(w : False) -> False = w;
         let f(m : Type) -> (False) -> Box(m) = (v) => False/absurd(@Box(m), id_void(v));
         let g = f;
-        Io/print("ok")
+        /std/print("ok")
         "#;
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");

@@ -6,7 +6,7 @@
 //! `Bool`, and `Byte` ride the `Nat` carrier (`Bool` operations become `Nat`
 //! bit operations, `Byte` comparisons `Nat` comparisons, `NatToByte` a mask,
 //! `ByteToNat` the identity); an `Io` token is its little-endian bytes as a
-//! byte-grain binary and `IoEql` that grain's binary equality; products and
+//! byte-grain binary and `HandleEql` that grain's binary equality; products and
 //! variants are generic tuples (a variant is `(tag, payload…)`, the tag the
 //! constructor's position in its family); matches and switches are one
 //! `Nat`-keyed `Switch` behind the tag projection; the fold forms are
@@ -1552,7 +1552,7 @@ impl Lowerer<'_> {
             Constant::Bin(grain, value) => CpsLiteral::Bin(*grain, value.clone()),
             // An Io descriptor token rides the packed-binary carrier: its
             // little-endian bytes at byte grain.
-            Constant::Io(token) => CpsLiteral::Bin(
+            Constant::Handle(token) => CpsLiteral::Bin(
                 Grain::X,
                 PackedBin::from_bytes(BigUint::from(*token).to_bytes_le()),
             ),
@@ -1562,7 +1562,7 @@ impl Lowerer<'_> {
 
 /// The Cont primitive of a scalar [`Operation`]. `Bool` operations run on the
 /// `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit) and `Byte`
-/// comparisons on the `Nat` carrier; `IoEql` is packed-binary equality at
+/// comparisons on the `Nat` carrier; `HandleEql` is packed-binary equality at
 /// byte grain. The `Byte` conversions are handled before this table.
 fn operation_prim(operation: Operation) -> CpsPrimOp {
     use {CpsPrimOp as C, Operation as O};
@@ -1648,7 +1648,7 @@ fn operation_prim(operation: Operation) -> CpsPrimOp {
         O::FltToInt => C::FltToInt,
         O::FltToLeBytes => C::FltToLeBytes,
         O::FltOfLeBytes => C::FltOfLeBytes,
-        O::IoEql => C::BinEql(Grain::X),
+        O::HandleEql => C::BinEql(Grain::X),
         O::ByteToNat | O::NatToByte => {
             unreachable!("Byte conversions are lowered before the primitive table")
         }

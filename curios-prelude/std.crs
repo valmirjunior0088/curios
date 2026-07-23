@@ -52,8 +52,8 @@ pub use Lst/{let Lst};
 pub mod Cell;
 pub use Cell/{let Cell};
 
-pub mod Io;
-pub use Io/{let Io};
+pub mod Handle;
+pub use Handle/{let Handle};
 
 pub mod File;
 pub use File/{let File};
@@ -130,3 +130,26 @@ pub mod time;
 pub mod rand;
 
 pub mod proc;
+
+-- Universal stream conveniences. `print`/`print_err` write a string to
+-- stdout/stderr; `read` reads one newline-terminated line from stdin. The
+-- lower-level, handle-taking `read`/`write` live under `/std/Handle`.
+
+pub let print(s : Str) -> {} =
+    let _ = Handle/write(Handle/stdout, Str/to_bytes(s));
+    ();
+
+pub let print_err(s : Str) -> {} =
+    let _ = Handle/write(Handle/stderr, Str/to_bytes(s));
+    ();
+
+pub let read() -> Option(Bytes) =
+    rec go(acc : Bytes) -> Option(Bytes) =
+        let r = /sys/read(Handle/stdin, 1);
+        choose
+        | r.status != /sys/Status/ok && Bytes/len(acc) == 0 => Option/none()
+        | r.status != /sys/Status/ok => Option/some(acc)
+        | Byte/to_nat(Option/unwrap_or(Bytes/get(r.bytes, 0), 0)) == 0x0A => Option/some(acc)
+        | _ => go(x\..acc\..r.bytes)
+        end;
+    go(x\);

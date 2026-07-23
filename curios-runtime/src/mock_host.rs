@@ -109,7 +109,7 @@ enum MockResource {
 /// `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and
 /// read what the run produced through the [`MockIo`] handle `build` returns.
 pub struct MockHost {
-    /// Scripted stdin, pre-joined and newline-terminated; `read(Io::Stdin, …)`
+    /// Scripted stdin, pre-joined and newline-terminated; `read(Handle::Stdin, …)`
     /// drains its front and reports `Status::Eof` once it runs dry.
     input: Mutex<VecDeque<u8>>,
     /// Every byte written to stdout and stderr, concatenated in write order —
@@ -153,17 +153,17 @@ impl MockHost {
 
     /// Mint a fresh handle for `resource` under the table lock (see
     /// [`Table::mint`]).
-    fn mint(&self, resource: MockResource) -> Io {
+    fn mint(&self, resource: MockResource) -> Handle {
         self.table.lock().unwrap().mint(resource)
     }
 }
 
-impl Host for MockHost {
-    fn open(&self, path: &[u8], mode: Mode) -> (Status, Io) {
+impl HostOps for MockHost {
+    fn open(&self, path: &[u8], mode: Mode) -> (Status, Handle) {
         match mode {
             Mode::Read => {
                 if !self.files.contains(path) {
-                    return (Status::NotFound, Io::Other(Vec::new()));
+                    return (Status::NotFound, Handle::Other(Vec::new()));
                 }
             }
             Mode::Write => self.files.truncate(path),
@@ -180,7 +180,7 @@ impl Host for MockHost {
         )
     }
 
-    fn lookup(&self, host: &[u8], port: u32) -> (Status, Io) {
+    fn lookup(&self, host: &[u8], port: u32) -> (Status, Handle) {
         // One synthetic address blob: the `host:port` key `net` uses, so
         // `connect` can recover the scripted endpoint from the blob. Stashed
         // behind a handle `poll` reports ready and `resolve` drains, mirroring
@@ -193,18 +193,18 @@ impl Host for MockHost {
         )
     }
 
-    fn resolve(&self, handle: Io) -> (Status, Vec<Vec<u8>>) {
+    fn resolve(&self, handle: Handle) -> (Status, Vec<Vec<u8>>) {
         match self.table.lock().unwrap().remove(&handle) {
             Some(MockResource::Resolved(addresses)) => (Status::Ok, addresses),
             _ => (Status::NotFound, vec![]),
         }
     }
 
-    fn socket(&self, _addr: &[u8]) -> (Status, Io) {
+    fn socket(&self, _addr: &[u8]) -> (Status, Handle) {
         (Status::Ok, self.mint(MockResource::Socket))
     }
 
-    fn bind(&self, io: Io, _addr: &[u8]) -> Status {
+    fn bind(&self, io: Handle, _addr: &[u8]) -> Status {
         if matches!(
             self.table.lock().unwrap().get(&io),
             Some(MockResource::Socket)
@@ -215,7 +215,7 @@ impl Host for MockHost {
         }
     }
 
-    fn connect(&self, io: Io, addr: &[u8]) -> Status {
+    fn connect(&self, io: Handle, addr: &[u8]) -> Status {
         // The handle must be an unconnected socket minted by `socket`; consume
         // it up front so a refusal leaves no half-open handle behind.
         {
@@ -245,7 +245,7 @@ impl Host for MockHost {
         Status::Ok
     }
 
-    fn start_tls(&self, io: Io, _sni: &[u8]) -> Status {
+    fn start_tls(&self, io: Handle, _sni: &[u8]) -> Status {
         // The scripted host serves cleartext; a client TLS upgrade is a no-op
         // identity over the existing outbound connection.
         if matches!(
@@ -258,13 +258,13 @@ impl Host for MockHost {
         }
     }
 
-    fn tls_server_config(&self, _cert: &[u8], _key: &[u8]) -> (Status, Io) {
+    fn tls_server_config(&self, _cert: &[u8], _key: &[u8]) -> (Status, Handle) {
         // No real config under test — just mint a token the handle table can
         // hand back to `start_tls_server`.
         (Status::Ok, self.mint(MockResource::TlsConfig))
     }
 
-    fn start_tls_server(&self, io: Io, cfg: Io) -> Status {
+    fn start_tls_server(&self, io: Handle, cfg: Handle) -> Status {
         // A no-op identity over the accepted connection, given a config token.
         let table = self.table.lock().unwrap();
 
@@ -278,7 +278,7 @@ impl Host for MockHost {
         }
     }
 
-    fn listen(&self, io: Io, _backlog: u32) -> Status {
+    fn listen(&self, io: Handle, _backlog: u32) -> Status {
         let mut table = self.table.lock().unwrap();
 
         match table.get(&io) {
@@ -290,19 +290,19 @@ impl Host for MockHost {
         }
     }
 
-    fn accept(&self, io: Io) -> (Status, Io) {
+    fn accept(&self, io: Handle) -> (Status, Handle) {
         if !matches!(
             self.table.lock().unwrap().get(&io),
             Some(MockResource::Listener)
         ) {
-            return (Status::NotFound, Io::Other(Vec::new()));
+            return (Status::NotFound, Handle::Other(Vec::new()));
         }
 
         // Pull the next scripted request. An exhausted queue fails the accept,
         // ending the serve loop (a real blocking accept would park forever).
         let request = match self.inbound.lock().unwrap().pop_front() {
             Some(request) => request,
-            None => return (Status::NotFound, Io::Other(Vec::new())),
+            None => return (Status::NotFound, Handle::Other(Vec::new())),
         };
 
         let capture = {
@@ -322,23 +322,23 @@ impl Host for MockHost {
         )
     }
 
-    fn set_nonblocking(&self, _io: Io, _on: u32) -> Status {
+    fn set_nonblocking(&self, _io: Handle, _on: u32) -> Status {
         Status::Ok
     }
 
-    fn set_recv_timeout(&self, _io: Io, _ms: u32) -> Status {
+    fn set_recv_timeout(&self, _io: Handle, _ms: u32) -> Status {
         Status::Ok
     }
 
-    fn set_send_timeout(&self, _io: Io, _ms: u32) -> Status {
+    fn set_send_timeout(&self, _io: Handle, _ms: u32) -> Status {
         Status::Ok
     }
 
-    fn set_reuseaddr(&self, _io: Io, _on: u32) -> Status {
+    fn set_reuseaddr(&self, _io: Handle, _on: u32) -> Status {
         Status::Ok
     }
 
-    fn poll(&self, handles: &[Io], events: &[Poll], _: i32) -> Vec<Poll> {
+    fn poll(&self, handles: &[Handle], events: &[Poll], _: i32) -> Vec<Poll> {
         // In-memory data is always ready, so readiness just mirrors the requested
         // interest: a known handle reports `revents == events`, an unknown one
         // reports nothing. The deterministic in-memory oracle — any scheduler
@@ -350,8 +350,8 @@ impl Host for MockHost {
             .enumerate()
             .map(|(slot, handle)| {
                 let known = match handle {
-                    Io::Stdin | Io::Stdout | Io::Stderr => true,
-                    Io::Other(_) => table.contains(handle),
+                    Handle::Stdin | Handle::Stdout | Handle::Stderr => true,
+                    Handle::Other(_) => table.contains(handle),
                 };
 
                 if known {
@@ -363,13 +363,13 @@ impl Host for MockHost {
             .collect()
     }
 
-    fn close(&self, io: Io) {
+    fn close(&self, io: Handle) {
         self.table.lock().unwrap().remove(&io);
     }
 
-    fn read(&self, io: Io, count: u32) -> (Status, Vec<u8>) {
+    fn read(&self, io: Handle, count: u32) -> (Status, Vec<u8>) {
         match &io {
-            Io::Stdin => {
+            Handle::Stdin => {
                 // Scripted stdin is one pre-joined buffer; serve up to `count` of
                 // its front and report EOF once it is drained (the sender is fixed
                 // at build time, so a dry buffer is end-of-input, never a wait).
@@ -383,7 +383,7 @@ impl Host for MockHost {
 
                 return (Status::Ok, input.drain(..served).collect());
             }
-            Io::Other(_) => {}
+            Handle::Other(_) => {}
             // stdout/stderr are not readable.
             _ => return (Status::Eof, vec![]),
         }
@@ -411,20 +411,20 @@ impl Host for MockHost {
         }
     }
 
-    fn write(&self, io: Io, bytes: &[u8]) -> (Status, u32) {
+    fn write(&self, io: Handle, bytes: &[u8]) -> (Status, u32) {
         // The in-memory sink always takes the whole buffer in one go, so a
         // successful write reports the full length and never `WouldBlock`.
         let full = bytes.len() as u32;
 
         match &io {
-            Io::Stdout | Io::Stderr => {
+            Handle::Stdout | Handle::Stderr => {
                 self.output.lock().unwrap().extend_from_slice(bytes);
 
                 return (Status::Ok, full);
             }
-            Io::Other(_) => {}
-            // stdin is not writable; the guest's `/std/Io` never issues this.
-            Io::Stdin => panic!("write to stdin"),
+            Handle::Other(_) => {}
+            // stdin is not writable; the guest's `/std/Handle` never issues this.
+            Handle::Stdin => panic!("write to stdin"),
         }
 
         match self.table.lock().unwrap().get(&io) {

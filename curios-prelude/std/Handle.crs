@@ -1,0 +1,52 @@
+pub use /sys/{Handle};
+pub use /sys/Handle/{stdin, stdout, stderr, eql};
+use /std/{Bytes, Nat, Result, Lst};
+
+pub induct Error : pub Type
+| not_found()
+| permission_denied()
+| exists()
+| refused()
+| tls()
+| would_block()
+| other(Nat)
+end
+
+let errors : Lst({Nat, Error}) =
+    [
+        (/sys/Status/not_found, Error/not_found()),
+        (/sys/Status/permission_denied, Error/permission_denied()),
+        (/sys/Status/exists, Error/exists()),
+        (/sys/Status/refused, Error/refused()),
+        (/sys/Status/tls, Error/tls()),
+        (/sys/Status/would_block, Error/would_block())
+    ];
+
+pub let error_of(status : Nat) -> Error =
+    Lst/fold(errors, Error/other(status), (entry, acc) =>
+        match status == entry.0 : Error
+        | true => entry.1
+        | false => acc
+        end);
+
+pub induct Read : pub Type
+| chunk(Bytes)
+| eof()
+| error(Error)
+end
+
+pub let read(h : Handle, n : Nat) -> Read =
+    let r = /sys/read(h, n);
+    choose
+    | r.status == /sys/Status/ok => Read/chunk(r.bytes)
+    | r.status == /sys/Status/eof => Read/eof()
+    | _ => Read/error(error_of(r.status))
+    end;
+
+pub rec write(h : Handle, b : Bytes) -> Result({}, Error) =
+    let r = /sys/write(h, b);
+    choose
+    | r.status != /sys/Status/ok => Result/failure(error_of(r.status))
+    | r.written < Bytes/len(b) => write(h, Bytes/slice(b, r.written, Bytes/len(b)))
+    | _ => Result/success(())
+    end;

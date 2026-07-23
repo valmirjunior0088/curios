@@ -3,7 +3,7 @@
 -- The distinct payloads make every node structurally unique, so Curios's pure
 -- IR cannot share/CSE the two subtrees -> 2^(D+1)-1 real allocations.
 -- D is read from stdin; output is the payload sum mod 1000003 (bounded to i31).
-use /std/{Io, Str, Nat, Option};
+use /std/{Str, Nat, Option};
 
 induct Tree : Type
 | leaf(Nat)
@@ -22,15 +22,15 @@ rec sum(t : Tree) -> Nat =
     | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
     end;
 
-match Io/input() : {}
+match /std/read() : {}
 | some(bytes) =>
     match Str/of_bytes(bytes) : {}
     | some(s) =>
         match Nat/of_str(Str/trim(s)) : {}
-        | some(d) => Io/print(Str/concat(Nat/to_str(sum(build(d, 1))), "\n"))
-        | none() => Io/print("bad input\n")
+        | some(d) => /std/print(Str/concat(Nat/to_str(sum(build(d, 1))), "\n"))
+        | none() => /std/print("bad input\n")
         end
-    | none() => Io/print("invalid utf-8\n")
+    | none() => /std/print("invalid utf-8\n")
     end
-| none() => Io/print("no input\n")
+| none() => /std/print("no input\n")
 end

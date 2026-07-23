@@ -6,8 +6,8 @@ fn big_nat_add_ripples_carry() {
     // set bits, so adding 1 ripples the carry through all of them (the
     // `pos_add`/`pos_add_c` twin recursion) before it lands.
     let source = r#"
-        use /std/{Io, Str, BigNat};
-        Io/print(BigNat/to_str(BigNat/add(BigNat/of_nat(99999999), BigNat/of_nat(1))))
+        use /std/{Handle, Str, BigNat};
+        /std/print(BigNat/to_str(BigNat/add(BigNat/of_nat(99999999), BigNat/of_nat(1))))
         "#;
     assert_eq!(run(source), b"100000000");
 }
@@ -18,8 +18,8 @@ fn big_nat_sub_borrows() {
     // clear bits, so subtracting 1 borrows through all of them. The result is
     // canonical by construction — no trailing-zero cleanup exists to get wrong.
     let source = r#"
-        use /std/{Io, Str, BigNat};
-        Io/print(BigNat/to_str(BigNat/sub(BigNat/of_nat(100000000), BigNat/of_nat(1))))
+        use /std/{Handle, Str, BigNat};
+        /std/print(BigNat/to_str(BigNat/sub(BigNat/of_nat(100000000), BigNat/of_nat(1))))
         "#;
     assert_eq!(run(source), b"99999999");
 }
@@ -30,8 +30,8 @@ fn big_nat_mul_small_propagates_carry() {
     // 999_890_001 crosses well past both inputs' bit widths, so every carry of
     // the shift-and-add recursion has to land.
     let source = r#"
-        use /std/{Io, Str, BigNat};
-        Io/print(BigNat/to_str(BigNat/mul_small(BigNat/of_nat(9999), 99999)))
+        use /std/{Handle, Str, BigNat};
+        /std/print(BigNat/to_str(BigNat/mul_small(BigNat/of_nat(9999), 99999)))
         "#;
     assert_eq!(run(source), b"999890001");
 }
@@ -42,8 +42,8 @@ fn big_nat_mul_crosses_word_width() {
     // needs 57 bits, so a correct rendering proves the product lives in the
     // numeral itself, never in a fixed-width intermediate.
     let source = r#"
-        use /std/{Io, Str, BigNat};
-        Io/print(BigNat/to_str(BigNat/mul(BigNat/of_nat(123456789), BigNat/of_nat(987654321))))
+        use /std/{Handle, Str, BigNat};
+        /std/print(BigNat/to_str(BigNat/mul(BigNat/of_nat(123456789), BigNat/of_nat(987654321))))
         "#;
     assert_eq!(run(source), b"121932631112635269");
 }
@@ -54,8 +54,8 @@ fn big_nat_mul_pow2_builds_large_powers() {
     // far exceeds the 31-bit `Nat` carrier, so a correct result proves each
     // doubling is a low-bit prepend on the numeral, not native arithmetic.
     let source = r#"
-        use /std/{Io, Str, BigNat};
-        Io/print(BigNat/to_str(BigNat/mul_pow2(BigNat/of_nat(1), 40)))
+        use /std/{Handle, Str, BigNat};
+        /std/print(BigNat/to_str(BigNat/mul_pow2(BigNat/of_nat(1), 40)))
         "#;
     assert_eq!(run(source), b"1099511627776");
 }
@@ -65,14 +65,14 @@ fn big_nat_div2_and_parity() {
     // `div2` drops the low bit in O(1) and `is_even` reads it: 101 is odd and
     // floor-halves to 50, which is even.
     let source = r#"
-        use /std/{Io, Str, Bool, BigNat};
+        use /std/{Handle, Str, Bool, BigNat};
         let show(b : Bool) -> Str =
             match b : Str
             | true => "T"
             | false => "F"
             end;
         let n = BigNat/of_nat(101);
-        Io/print(Str/concat(
+        /std/print(Str/concat(
             Str/concat(BigNat/to_str(BigNat/div2(n)), show(BigNat/is_even(n))),
             show(BigNat/is_even(BigNat/div2(n)))))
         "#;
@@ -84,8 +84,8 @@ fn big_nat_bit_len_counts_binary_digits() {
     // `bit_len` is the numeral's length: zero has no bits, 1 is a single bit,
     // and the 255 → 256 step is where the count grows from 8 to 9.
     let source = r#"
-        use /std/{Io, Str, Nat, Lst, BigNat};
-        Io/print(Str/join(",", [
+        use /std/{Handle, Str, Nat, Lst, BigNat};
+        /std/print(Str/join(",", [
             Nat/to_str(BigNat/bit_len(BigNat/zero)),
             Nat/to_str(BigNat/bit_len(BigNat/of_nat(1))),
             Nat/to_str(BigNat/bit_len(BigNat/of_nat(255))),
@@ -101,7 +101,7 @@ fn big_nat_cmp_orders_by_magnitude() {
     // in the lowest bit still order correctly: 12345678 < 12345679, equal to
     // itself, and the reverse is greater.
     let source = r#"
-        use /std/{Io, Str, BigNat, Order};
+        use /std/{Handle, Str, BigNat, Order};
         let show(o : Order) -> Str =
             match o : Str
             | lt() => "lt"
@@ -110,7 +110,7 @@ fn big_nat_cmp_orders_by_magnitude() {
             end;
         let a = BigNat/of_nat(12345678);
         let b = BigNat/of_nat(12345679);
-        Io/print(Str/concat(Str/concat(show(BigNat/cmp(a, b)), show(BigNat/cmp(a, a))), show(BigNat/cmp(b, a))))
+        /std/print(Str/concat(Str/concat(show(BigNat/cmp(a, b)), show(BigNat/cmp(a, a))), show(BigNat/cmp(b, a))))
         "#;
     assert_eq!(run(source), b"lteqgt");
 }
@@ -121,8 +121,8 @@ fn big_nat_zero_renders_and_roundtrips() {
     // string), and a value with clear low bits round-trips through the binary
     // long division that produces the decimal digits.
     let source = r#"
-        use /std/{Io, Str, BigNat};
-        Io/print(Str/concat(Str/concat(BigNat/to_str(BigNat/zero), "/"), BigNat/to_str(BigNat/of_nat(70000))))
+        use /std/{Handle, Str, BigNat};
+        /std/print(Str/concat(Str/concat(BigNat/to_str(BigNat/zero), "/"), BigNat/to_str(BigNat/of_nat(70000))))
         "#;
     assert_eq!(run(source), b"0/70000");
 }
@@ -168,8 +168,8 @@ fn flt_to_str_matches_rust_shortest_format() {
         .join(", ");
     let source = format!(
         r#"
-        use /std/{{Io, Str, Flt, Lst}};
-        Io/print(Str/join("|", [{array}]))
+        use /std/{{Handle, Str, Flt, Lst}};
+        /std/print(Str/join("|", [{array}]))
         "#
     );
     let expected = cases
@@ -183,7 +183,7 @@ fn flt_to_str_matches_rust_shortest_format() {
 #[test]
 fn flt_to_le_bytes_prints_raw_bytes() {
     let source = r#"
-        std/Io/write(std/Io/stdout, std/Flt/to_le_bytes(+1.5))
+        std/Handle/write(std/Handle/stdout, std/Flt/to_le_bytes(+1.5))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -197,7 +197,7 @@ fn flt_of_le_bytes_roundtrips_raw_bytes() {
     // four little-endian bytes, then re-serialize. The program is closed, so
     // this also exercises the type-level and optimizer folds of `of_le_bytes`.
     let source = r#"
-        std/Io/write(std/Io/stdout, std/Flt/to_le_bytes(std/Flt/of_le_bytes(std/Flt/to_le_bytes(+1.5))))
+        std/Handle/write(std/Handle/stdout, std/Flt/to_le_bytes(std/Flt/of_le_bytes(std/Flt/to_le_bytes(+1.5))))
         "#;
 
     let (system, io) = MockHost::builder().build();

@@ -82,7 +82,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             WireType::Nat | WireType::Bool | WireType::Int => {
                 curios_wasm::ValType::Num(curios_wasm::NumType::I32)
             }
-            WireType::Bin | WireType::Io => curios_wasm::ValType::Ref(curios_wasm::RefType {
+            WireType::Bin | WireType::Handle => curios_wasm::ValType::Ref(curios_wasm::RefType {
                 is_nullable: false,
                 heap_type: curios_wasm::HeapType::Concrete(self.table.bytes_type()),
             }),
@@ -142,7 +142,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         // recorded themselves in the table, in minted-name order. Each
         // function's own `namespace` (stamped at declaration time — see
         // `ForeignFunction`) is the wasm namespace it imports
-        // under, so codegen neither rebuilds `sys_io()` to re-derive
+        // under, so codegen neither rebuilds `host_ops()` to re-derive
         // membership nor chooses a namespace itself.
         for function in self.table.host_funcs() {
             let signature = &function.signature;
@@ -168,12 +168,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
-        if self.table.io_exit_used() {
+        if self.table.exit_used() {
             self.add_host_import(
                 "sys",
-                "io_exit",
-                curios_wasm::TypeName::from("io_exit"),
-                self.table.io_exit_func().clone(),
+                "exit",
+                curios_wasm::TypeName::from("exit"),
+                self.table.exit_func().clone(),
                 curios_wasm::ResultType::from([i32_val.clone()]),
                 curios_wasm::ResultType::from([]),
             );

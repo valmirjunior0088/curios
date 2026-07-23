@@ -3,7 +3,7 @@ use {curios_runtime::MockHost, std::time::Duration};
 #[test]
 fn named_fields_run_end_to_end() {
     let source = r#"
-        use /std/{Vec, Nat, Io};
+        use /std/{Vec, Nat, Handle};
         let p : { n : Nat, v : Vec(Nat, n) } =
             (n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())));
         rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
@@ -11,7 +11,7 @@ fn named_fields_run_end_to_end() {
             | nil() => acc
             | cons(m, x, xs) => total(xs, Nat/add(acc, x))
             end;
-        Io/print(Nat/to_str(Nat/add(total(p.v, 0), Nat/mul(p.0, 0))))
+        /std/print(Nat/to_str(Nat/add(total(p.v, 0), Nat/mul(p.0, 0))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -24,10 +24,10 @@ fn named_fields_run_end_to_end() {
 #[test]
 fn struct_transparent_pair_projects() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair(Nat, Nat) { fst = 2, snd = 5 };
-        Io/print(Nat/to_str(Nat/add(p.fst, p.1)))
+        /std/print(Nat/to_str(Nat/add(p.fst, p.1)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -40,10 +40,10 @@ fn struct_transparent_pair_projects() {
 #[test]
 fn struct_parameter_inference_at_construction() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
-        Io/print(Nat/to_str(Nat/mul(p.fst, p.snd)))
+        /std/print(Nat/to_str(Nat/mul(p.fst, p.snd)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -56,10 +56,10 @@ fn struct_parameter_inference_at_construction() {
 #[test]
 fn struct_newtype_projects() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Meters : pub Type { Nat }
         let m : Meters = Meters { 5 };
-        Io/print(Nat/to_str(m.0))
+        /std/print(Nat/to_str(m.0))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -72,7 +72,7 @@ fn struct_newtype_projects() {
 #[test]
 fn struct_dependent_fields_run_end_to_end() {
     let source = r#"
-        use /std/{Vec, Nat, Io};
+        use /std/{Vec, Nat, Handle};
         pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
@@ -80,7 +80,7 @@ fn struct_dependent_fields_run_end_to_end() {
             | nil() => acc
             | cons(m, x, xs) => total(xs, Nat/add(acc, x))
             end;
-        Io/print(Nat/to_str(total(s.v, 0)))
+        /std/print(Nat/to_str(total(s.v, 0)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -93,14 +93,14 @@ fn struct_dependent_fields_run_end_to_end() {
 #[test]
 fn struct_abstract_smart_constructor_round_trips() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
             pub let of_nat(n : Nat) -> Celsius = Celsius { n };
             pub let to_nat(c : Celsius) -> Nat = c.0;
         end
-        Io/print(Nat/to_str(Celsius/to_nat(Celsius/of_nat(42))))
+        /std/print(Nat/to_str(Celsius/to_nat(Celsius/of_nat(42))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -113,13 +113,13 @@ fn struct_abstract_smart_constructor_round_trips() {
 #[test]
 fn struct_private_construction_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
         end
         let c : Celsius/Celsius = Celsius/Celsius { 42 };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -135,14 +135,14 @@ fn struct_private_construction_rejected() {
 #[test]
 fn struct_private_projection_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
             pub let of_nat(n : Nat) -> Celsius = Celsius { n };
         end
         let c : Celsius/Celsius = Celsius/of_nat(42);
-        Io/print(Nat/to_str(c.0))
+        /std/print(Nat/to_str(c.0))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -159,10 +159,10 @@ fn struct_private_projection_rejected() {
 #[test]
 fn struct_is_not_a_tuple() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : { fst : Nat, snd : Nat } = Pair { fst = 1, snd = 2 };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -173,10 +173,10 @@ fn struct_is_not_a_tuple() {
 #[test]
 fn struct_wrong_field_count_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1 };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -187,10 +187,10 @@ fn struct_wrong_field_count_rejected() {
 #[test]
 fn struct_field_label_out_of_order_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { snd = 1, fst = 2 };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -202,10 +202,10 @@ fn struct_field_label_out_of_order_rejected() {
 #[test]
 fn struct_literal_non_struct_head_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         let Foo : Nat = 3;
         let bad : Nat = Foo { x = 1 };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -221,11 +221,11 @@ fn struct_literal_non_struct_head_rejected() {
 #[test]
 fn prop_struct_with_prop_fields_runs() {
     let source = r#"
-        use /std/{Nat, Eq, Io};
+        use /std/{Nat, Eq, Handle};
         struct And(A : Prop, B : Prop) : pub Prop { fst : A, snd : B }
         let p : And(Eq(0, 0), Eq(1, 1)) = And { Eq/refl(), Eq/refl() };
         let proof : Eq(0, 0) = p.fst;
-        Io/print(Nat/to_str(7))
+        /std/print(Nat/to_str(7))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -240,14 +240,14 @@ fn prop_struct_with_prop_fields_runs() {
 #[test]
 fn prop_struct_with_informative_field_rejected() {
     let source = r#"
-        use /std/{Nat, Eq, Io};
+        use /std/{Nat, Eq, Handle};
         struct Box : pub Prop { val : Nat }
         let b0 : Box = Box { 0 };
         let b1 : Box = Box { 1 };
         let irrelevant : Eq(b0, b1) = Eq/refl();
         let get(b : Box) -> Nat = b.val;
         let zero_eq_one : Eq(0, 1) = Eq/cong(get, irrelevant);
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -262,12 +262,12 @@ fn prop_struct_with_informative_field_rejected() {
 #[test]
 fn type_struct_distinct_values_not_convertible() {
     let source = r#"
-        use /std/{Nat, Eq, Io};
+        use /std/{Nat, Eq, Handle};
         struct Box : pub Type { val : Nat }
         let b0 : Box = Box { 0 };
         let b1 : Box = Box { 1 };
         let irrelevant : Eq(b0, b1) = Eq/refl();
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -281,12 +281,12 @@ fn type_struct_distinct_values_not_convertible() {
 #[test]
 fn function_field_sugar_runs_end_to_end() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Api : pub Type { base : Nat, bump(x : Nat) -> Nat }
         let api : Api = Api { base = 3, bump(x) = x + 1 };
         let pair : { seed : Nat, twice(x : Nat) -> Nat } =
             (seed = api.bump(api.base), twice(x) = x + x);
-        Io/print(Nat/to_str(pair.twice(pair.seed)))
+        /std/print(Nat/to_str(pair.twice(pair.seed)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -300,13 +300,13 @@ fn function_field_sugar_runs_end_to_end() {
 #[test]
 fn pub_signature_exposing_private_sibling_is_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         mod M
             use /std/{Nat};
             struct Secret : Type { Nat }
             pub let f(s : Secret) -> Nat = 1;
         end
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -323,7 +323,7 @@ fn pub_signature_exposing_private_sibling_is_rejected() {
 #[test]
 fn pub_signature_exposing_private_child_module_is_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         mod M
             mod Inner
                 use /std/{Nat};
@@ -332,7 +332,7 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
             use Inner/{T};
             pub let g(t : T) -> T = t;
         end
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -348,7 +348,7 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
 #[test]
 fn pub_concept_with_private_superclass_is_rejected() {
     let source = r#"
-        use /std/{Nat, Bool, Io};
+        use /std/{Nat, Bool, Handle};
         mod M
             use /std/{Bool};
             concept Hidden(A : Type) : pub Type {
@@ -359,7 +359,7 @@ fn pub_concept_with_private_superclass_is_rejected() {
                 l(A) -> Bool
             }
         end
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -376,7 +376,7 @@ fn pub_concept_with_private_superclass_is_rejected() {
 #[test]
 fn sealed_pub_concept_with_private_superclass_is_accepted() {
     let source = r#"
-        use /std/{Nat, Bool, Io};
+        use /std/{Nat, Bool, Handle};
         mod M
             use /std/{Bool};
             concept Hidden(A : Type) : Type {
@@ -387,7 +387,7 @@ fn sealed_pub_concept_with_private_superclass_is_accepted() {
                 l(A) -> Bool
             }
         end
-        Io/print("ok")
+        /std/print("ok")
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -400,7 +400,7 @@ fn sealed_pub_concept_with_private_superclass_is_accepted() {
 #[test]
 fn pub_inductive_with_private_payload_type_is_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         mod M
             induct Secret : Type
             | mk()
@@ -409,7 +409,7 @@ fn pub_inductive_with_private_payload_type_is_rejected() {
             | wrap(Secret)
             end
         end
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -425,7 +425,7 @@ fn pub_inductive_with_private_payload_type_is_rejected() {
 #[test]
 fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
     let hidden = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         mod M
             use /std/{Nat};
             struct Secret : pub Type { n : Nat }
@@ -433,20 +433,20 @@ fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
             pub let mk() -> Opaque = Opaque { Secret { n = 1 } };
         end
         let o = M/mk();
-        Io/print("ok")
+        /std/print("ok")
         "#;
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), hidden, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
 
     let exposed = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         mod M
             use /std/{Nat};
             struct Secret : pub Type { n : Nat }
             pub struct Open : pub Type { s : Secret }
         end
-        Io/print("no")
+        /std/print("no")
         "#;
     let (system, _io) = MockHost::builder().build();
     let error = crate::run_text(Duration::from_secs(10), exposed, system).unwrap_err();
@@ -461,11 +461,11 @@ fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
 #[test]
 fn struct_spread_identity_copy() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         let q : Pair(Nat, Nat) = Pair { ..p };
-        Io/print(Nat/to_str(Nat/mul(q.fst, q.snd)))
+        /std/print(Nat/to_str(Nat/mul(q.fst, q.snd)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -477,11 +477,11 @@ fn struct_spread_identity_copy() {
 #[test]
 fn struct_spread_single_override() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         let q : Pair(Nat, Nat) = Pair { ..p, snd = 9 };
-        Io/print(Nat/to_str(Nat/add(q.fst, q.snd)))
+        /std/print(Nat/to_str(Nat/add(q.fst, q.snd)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -494,11 +494,11 @@ fn struct_spread_single_override() {
 #[test]
 fn struct_spread_multi_override_with_gap() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Tri : pub Type { fst : Nat, snd : Nat, thd : Nat }
         let t : Tri = Tri { fst = 1, snd = 2, thd = 3 };
         let u : Tri = Tri { ..t, fst = 10, thd = 30 };
-        Io/print(Nat/to_str(Nat/add(Nat/add(u.fst, u.snd), u.thd)))
+        /std/print(Nat/to_str(Nat/add(Nat/add(u.fst, u.snd), u.thd)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -511,7 +511,7 @@ fn struct_spread_multi_override_with_gap() {
 #[test]
 fn struct_spread_dependent_override_runs() {
     let source = r#"
-        use /std/{Nat, Vec, Io};
+        use /std/{Nat, Vec, Handle};
         pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         let t : Sized = Sized { ..s, n = 1, v = Vec/cons(42, Vec/nil()) };
@@ -520,7 +520,7 @@ fn struct_spread_dependent_override_runs() {
             | nil() => acc
             | cons(m, x, xs) => total(xs, Nat/add(acc, x))
             end;
-        Io/print(Nat/to_str(total(t.v, 0)))
+        /std/print(Nat/to_str(total(t.v, 0)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -533,11 +533,11 @@ fn struct_spread_dependent_override_runs() {
 #[test]
 fn struct_spread_dependent_field_mismatch_rejected() {
     let source = r#"
-        use /std/{Nat, Vec, Io};
+        use /std/{Nat, Vec, Handle};
         pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(1, Vec/cons(2, Vec/nil())) };
         let bad : Sized = Sized { ..s, n = 3 };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -550,11 +550,11 @@ fn struct_spread_dependent_field_mismatch_rejected() {
 #[test]
 fn struct_spread_parameter_changing_update() {
     let source = r#"
-        use /std/{Nat, Str, Io};
+        use /std/{Nat, Str, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 42 };
         let q : Pair(Str, Nat) = Pair { ..p, fst = "x" };
-        Io/print(Nat/to_str(q.snd))
+        /std/print(Nat/to_str(q.snd))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -567,11 +567,11 @@ fn struct_spread_parameter_changing_update() {
 #[test]
 fn struct_spread_bare_head_inference() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         let q = Pair { ..p, snd = 9 };
-        Io/print(Nat/to_str(Nat/add(q.fst, q.snd)))
+        /std/print(Nat/to_str(Nat/add(q.fst, q.snd)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -583,11 +583,11 @@ fn struct_spread_bare_head_inference() {
 #[test]
 fn struct_spread_function_field_override() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Api : pub Type { base : Nat, bump : (Nat) -> Nat }
         let api : Api = Api { base = 40, bump(x) = x };
         let api2 : Api = Api { ..api, bump(x) = Nat/add(x, 2) };
-        Io/print(Nat/to_str(api2.bump(api2.base)))
+        /std/print(Nat/to_str(api2.bump(api2.base)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -599,11 +599,11 @@ fn struct_spread_function_field_override() {
 #[test]
 fn struct_spread_unlabeled_override_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, 5 };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -616,11 +616,11 @@ fn struct_spread_unlabeled_override_rejected() {
 #[test]
 fn struct_spread_out_of_order_override_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Tri : pub Type { fst : Nat, snd : Nat, thd : Nat }
         let t : Tri = Tri { fst = 1, snd = 2, thd = 3 };
         let bad = Tri { ..t, thd = 30, fst = 10 };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -632,11 +632,11 @@ fn struct_spread_out_of_order_override_rejected() {
 #[test]
 fn struct_spread_duplicate_override_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, fst = 3, fst = 4 };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -648,11 +648,11 @@ fn struct_spread_duplicate_override_rejected() {
 #[test]
 fn struct_spread_unknown_field_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, nope = 3 };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -664,11 +664,11 @@ fn struct_spread_unknown_field_rejected() {
 #[test]
 fn struct_spread_not_first_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { fst = 3, ..p };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -680,11 +680,11 @@ fn struct_spread_not_first_rejected() {
 #[test]
 fn struct_spread_multiple_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, ..p };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -697,10 +697,10 @@ fn struct_spread_multiple_rejected() {
 #[test]
 fn struct_spread_non_struct_base_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let bad = Pair { ..(fst = 1, snd = 2) };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -715,12 +715,12 @@ fn struct_spread_non_struct_base_rejected() {
 #[test]
 fn struct_spread_wrong_struct_base_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         pub struct Dup(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let d : Dup(Nat, Nat) = Dup { fst = 1, snd = 2 };
         let bad = Pair { ..d };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -736,7 +736,7 @@ fn struct_spread_wrong_struct_base_rejected() {
 #[test]
 fn struct_spread_private_outside_module_rejected() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
@@ -744,7 +744,7 @@ fn struct_spread_private_outside_module_rejected() {
         end
         let c : Celsius/Celsius = Celsius/of_nat(42);
         let bad = Celsius/Celsius { ..c };
-        Io/print("no")
+        /std/print("no")
         "#;
 
     let (system, _io) = MockHost::builder().build();

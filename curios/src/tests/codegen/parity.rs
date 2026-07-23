@@ -68,16 +68,16 @@ fn normalized_cont_optm(source: &str) -> String {
 #[test]
 fn concept_method_call_matches_direct_primitive_codegen() {
     let through_concept = r#"
-        use /std/{Nat, Lst, Io, Str, Add, proc};
+        use /std/{Nat, Lst, Handle, Str, Add, proc};
         pub let bump(x : Nat) -> Nat = Add/add(x, 1);
         let n : Nat = Lst/len(proc/args());
-        Io/print(Nat/to_str(bump(n)))
+        /std/print(Nat/to_str(bump(n)))
         "#;
     let direct = r#"
-        use /std/{Nat, Lst, Io, Str, proc};
+        use /std/{Nat, Lst, Handle, Str, proc};
         pub let bump(x : Nat) -> Nat = Nat/add(x, 1);
         let n : Nat = Lst/len(proc/args());
-        Io/print(Nat/to_str(bump(n)))
+        /std/print(Nat/to_str(bump(n)))
         "#;
 
     assert_eq!(
@@ -98,7 +98,7 @@ fn concept_method_call_matches_direct_primitive_codegen() {
 #[test]
 fn choose_matches_hand_nested_bln_codegen() {
     let ladder = r#"
-        use /std/{Nat, Lst, Io, Str, proc};
+        use /std/{Nat, Lst, Handle, Str, proc};
         let n : Nat = Lst/len(proc/args());
         let result =
             choose
@@ -106,10 +106,10 @@ fn choose_matches_hand_nested_bln_codegen() {
             | n <= 1 => Nat/add(n, 200)
             | _ => Nat/add(n, 300)
             end;
-        Io/print(Nat/to_str(result))
+        /std/print(Nat/to_str(result))
         "#;
     let nested = r#"
-        use /std/{Nat, Lst, Io, Str, proc};
+        use /std/{Nat, Lst, Handle, Str, proc};
         let n : Nat = Lst/len(proc/args());
         let result =
             match n <= 0
@@ -120,7 +120,7 @@ fn choose_matches_hand_nested_bln_codegen() {
                 | false => Nat/add(n, 300)
                 end
             end;
-        Io/print(Nat/to_str(result))
+        /std/print(Nat/to_str(result))
         "#;
 
     assert_eq!(
@@ -135,24 +135,24 @@ fn choose_matches_hand_nested_bln_codegen() {
 #[test]
 fn choose_bind_arm_matches_headed_catch_all_codegen() {
     let bind = r#"
-        use /std/{Option, Nat, Lst, Io, Str, proc};
+        use /std/{Option, Nat, Lst, Handle, Str, proc};
         let f(o : Option(Nat)) -> Nat =
             choose
             | some(x) = o => x + 10
             | _ => 99
             end;
         let n : Nat = Lst/len(proc/args());
-        Io/print(Nat/to_str(f(Option/some(n))))
+        /std/print(Nat/to_str(f(Option/some(n))))
         "#;
     let headed = r#"
-        use /std/{Option, Nat, Lst, Io, Str, proc};
+        use /std/{Option, Nat, Lst, Handle, Str, proc};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(x) => x + 10
             | _ => 99
             end;
         let n : Nat = Lst/len(proc/args());
-        Io/print(Nat/to_str(f(Option/some(n))))
+        /std/print(Nat/to_str(f(Option/some(n))))
         "#;
 
     assert_eq!(
@@ -197,16 +197,16 @@ fn operations(dump: &str) -> Vec<String> {
 #[test]
 fn concept_comparison_matches_direct_primitive_codegen() {
     let through_concept = r#"
-        use /std/{Nat, Bool, Lst, Io, Str, Cmp, proc};
+        use /std/{Nat, Bool, Lst, Handle, Str, Cmp, proc};
         pub let small(x : Nat) -> Bool = Cmp/lt(x, 10);
         let n : Nat = Lst/len(proc/args());
-        Io/print(Bool/to_str(small(n)))
+        /std/print(Bool/to_str(small(n)))
         "#;
     let direct = r#"
-        use /std/{Nat, Bool, Lst, Io, Str, proc};
+        use /std/{Nat, Bool, Lst, Handle, Str, proc};
         pub let small(x : Nat) -> Bool = Nat/lt(x, 10);
         let n : Nat = Lst/len(proc/args());
-        Io/print(Bool/to_str(small(n)))
+        /std/print(Bool/to_str(small(n)))
         "#;
 
     assert_eq!(

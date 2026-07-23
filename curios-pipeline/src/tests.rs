@@ -78,7 +78,7 @@ fn sys_and_foreign_calls_import_under_separate_namespaces() {
     let module = compile(
         r#"
             foreign frobnicate : (Nat) -> Nat;
-            let _ = /std/Io/write(/std/Io/stdout, x\00);
+            let _ = /std/Handle/write(/std/Handle/stdout, x\00);
             frobnicate(5)
         "#,
         None,
@@ -90,8 +90,8 @@ fn sys_and_foreign_calls_import_under_separate_namespaces() {
     assert!(
         imports
             .iter()
-            .any(|(namespace, name, _)| namespace == "sys" && name == "io_write"),
-        "expected a sys.io_write import, got {imports:?}"
+            .any(|(namespace, name, _)| namespace == "sys" && name == "write"),
+        "expected a sys.write import, got {imports:?}"
     );
     assert!(
         imports
@@ -1186,7 +1186,8 @@ fn typecheck_accepts_a_well_typed_program() {
     // The fast path stops after `elaborate → zonk`; a well-typed program passes
     // without running erase/cont/optimize/wasm.
     assert!(
-        typecheck("/std/Io/write(/std/Io/stdout, /std/Str/to_bytes(/std/Nat/to_str(0)))").is_ok()
+        typecheck("/std/Handle/write(/std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(0)))")
+            .is_ok()
     );
 }
 
@@ -1213,11 +1214,11 @@ fn proj_by_label_resolves_to_its_position() {
     // `.label` is elaboration-time sugar for the positional projection,
     // so both spellings typecheck identically.
     let source = r#"
-        use /std/{Nat, Bytes, Io};
+        use /std/{Nat, Bytes, Handle};
         let r : { status : Nat, payload : Bytes } = (0, /std/Str/to_bytes("ok"));
         let by_label : Bytes = r.payload;
         let by_index : Bytes = r.1;
-        Io/write(Io/stdout, by_label)
+        Handle/write(Handle/stdout, by_label)
     "#;
 
     assert!(typecheck(source).is_ok());
@@ -1313,7 +1314,7 @@ fn dependent_record_projects_by_label() {
     let source = r#"
         let p : { T : Type, x : T } = (T = /std/Nat, x = 3);
         let v : p.T = p.x;
-        /std/Io/write(/std/Io/stdout, /std/Str/to_bytes(/std/Nat/to_str(v)))
+        /std/Handle/write(/std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(v)))
     "#;
 
     assert!(typecheck(source).is_ok());
@@ -1380,8 +1381,8 @@ fn dead_user_definition_is_still_typechecked() {
     // its error is reported. (`write` returns its `Nat` status, `Bytes` mismatches.)
     let error = typecheck(
         r#"
-        let dead : /std/Bytes = /std/Io/write(/std/Io/stdout, /std/Str/to_bytes("x"));
-        /std/Io/write(/std/Io/stdout, /std/Str/to_bytes("ok"))
+        let dead : /std/Bytes = /std/Handle/write(/std/Handle/stdout, /std/Str/to_bytes("x"));
+        /std/Handle/write(/std/Handle/stdout, /std/Str/to_bytes("ok"))
         "#,
     )
     .unwrap_err();

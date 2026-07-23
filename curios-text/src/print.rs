@@ -603,11 +603,11 @@ fn print_prim(prim: Prim) -> Printer<'static> {
         Prim::LstAppend(ty, list, elem) => print_prim_call("Lst.append", vec![ty, list, elem]),
         Prim::LstConcat(ty, left, right) => print_prim_call("Lst.concat", vec![ty, left, right]),
         Prim::LstMap(a, b, lst, f) => print_prim_call("Lst.map", vec![a, b, lst, f]),
-        Prim::IoType => pure("Io"),
-        Prim::Io(token) => pure(format!("Io({token})")),
-        Prim::IoEql(left, right) => print_prim_call("Io.eql", vec![left, right]),
+        Prim::HandleType => pure("Handle"),
+        Prim::Handle(token) => pure(format!("Handle({token})")),
+        Prim::HandleEql(left, right) => print_prim_call("Handle.eql", vec![left, right]),
         Prim::Foreign(function, args) => print_prim_call(function.label.clone(), args),
-        Prim::IoExit(type_, code) => print_prim_call("Io.exit", vec![type_, code]),
+        Prim::Exit(type_, code) => print_prim_call("exit", vec![type_, code]),
         Prim::CellType(elem) => print_prim_call("Cell", vec![elem]),
         Prim::Cell(type_, init) => print_prim_call("Cell.new", vec![type_, init]),
         Prim::CellSet(type_, cell, value) => print_prim_call("Cell.set", vec![type_, cell, value]),
@@ -886,13 +886,13 @@ fn print_wire_type(type_: WireType) -> Printer<'static> {
         WireType::Int => pure("Int"),
         WireType::Bool => pure("Bool"),
         WireType::Bin => pure("Bin"),
-        WireType::Io => pure("Io"),
+        WireType::Handle => pure("Handle"),
         WireType::Lst(element) => flat([pure("Lst("), print_wire_type(*element), pure(")")]),
     }
 }
 
 // `parse_wire_signature` only ever produces exactly one, unnamed (`_`)
-// result — `foreign` has no surface syntax for `/sys/Io`'s named-record
+// result — `foreign` has no surface syntax for `/sys/Handle`'s named-record
 // results — so the sole result is always present.
 fn print_wire_signature(signature: WireSignature) -> Printer<'static> {
     let WireSignature { params, results } = signature;

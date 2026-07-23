@@ -1,3 +1,3 @@
-use /std/{Io};
 
-Io/print("Hello, Curios!\n")
+
+/std/print("Hello, Curios!\n")

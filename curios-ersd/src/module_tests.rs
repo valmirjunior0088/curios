@@ -146,7 +146,7 @@ fn identities_mint_monotonically_per_arena() {
 fn operation_arities_are_exact() {
     assert_eq!(Operation::NatAdd.arity(), 2);
     assert_eq!(Operation::FltSqrt.arity(), 1);
-    assert_eq!(Operation::IoEql.arity(), 2);
+    assert_eq!(Operation::HandleEql.arity(), 2);
     assert_eq!(
         SequenceOp::BinSlice(Grain::X).arity(),
         SequenceArity::Exactly(3)

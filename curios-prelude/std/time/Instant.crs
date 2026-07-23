@@ -8,7 +8,7 @@ pub struct Instant : Type {
 }
 
 pub let now() -> Instant =
-    let r = /sys/Io/clock_wall();
+    let r = /sys/clock_wall();
     Instant {
         secs_hi = r.secs_hi,
         secs_lo = r.secs_lo,
@@ -16,7 +16,7 @@ pub let now() -> Instant =
     };
 
 pub let elapsed() -> Duration =
-    let r = /sys/Io/clock_mono();
+    let r = /sys/clock_mono();
     Duration/of(r.secs, r.nanos);
 
 let sub_digit(x : Nat, y : Nat) -> {digit : Nat, borrow : Nat} =

@@ -1,30 +1,43 @@
-use /std/{Bytes, Nat, Str, Io, Result, Async};
+use /std/{Bytes, Nat, Str, Handle, Result, Async};
 
-pub struct File : Type { Io }
+pub struct File : Type { Handle }
 
-pub let read(f : File, n : Nat) -> Async(Io/Read) =
+pub induct Mode : pub Type
+| read()
+| write()
+| append()
+end
+
+pub let of_mode(mode : Mode) -> Nat =
+    match mode : Nat
+    | read() => /sys/Mode/read
+    | write() => /sys/Mode/write
+    | append() => /sys/Mode/append
+    end;
+
+pub let read(f : File, n : Nat) -> Async(Handle/Read) =
     Async/read(f.0, n);
 
-pub let write(f : File, b : Bytes) -> Async(Result({}, Io/Error)) =
+pub let write(f : File, b : Bytes) -> Async(Result({}, Handle/Error)) =
     Async/write(f.0, b);
 
-pub let open(path : Str, mode : Io/Mode) -> Async(Result(File, Io/Error)) =
+pub let open(path : Str, mode : Mode) -> Async(Result(File, Handle/Error)) =
     Async/defer(() =>
-        let r = /sys/Io/open(Str/to_bytes(path), Io/of_mode(mode));
-        match r.status == /sys/Io/Status/ok : Async(Result(File, Io/Error))
+        let r = /sys/open(Str/to_bytes(path), of_mode(mode));
+        match r.status == /sys/Status/ok : Async(Result(File, Handle/Error))
         | true =>
             let _ = Async/nonblocking(r.handle);
-            Async/bind(Async/acquire(r.handle, () => /sys/Io/close(r.handle)), (_) =>
+            Async/bind(Async/acquire(r.handle, () => /sys/close(r.handle)), (_) =>
                 Async/pure(Result/success(File { r.handle })))
-        | false => Async/pure(Result/failure(Io/error_of(r.status)))
+        | false => Async/pure(Result/failure(Handle/error_of(r.status)))
         end);
 
 pub let close(f : File) -> Async({}) =
     Async/release(f.0);
 
-pub let with(@A : Type, path : Str, mode : Io/Mode, body : (File) -> Async(A)) -> Async(Result(A, Io/Error)) =
+pub let with(@A : Type, path : Str, mode : Mode, body : (File) -> Async(A)) -> Async(Result(A, Handle/Error)) =
     Async/bind(open(path, mode), (opened) =>
-        match opened : Async(Result(A, Io/Error))
+        match opened : Async(Result(A, Handle/Error))
         | success(f) =>
             Async/bind(body(f), (a) =>
                 Async/bind(close(f), (_) => Async/pure(Result/success(a))))
@@ -34,5 +47,5 @@ pub let with(@A : Type, path : Str, mode : Io/Mode, body : (File) -> Async(A)) -
 let drain(f : File) -> Async(Bytes) =
     Async/drain((n) => read(f, n));
 
-pub let read_all(path : Str) -> Async(Result(Bytes, Io/Error)) =
-    with(path, Io/Mode/read(), (f) => drain(f));
+pub let read_all(path : Str) -> Async(Result(Bytes, Handle/Error)) =
+    with(path, Mode/read(), (f) => drain(f));

@@ -311,7 +311,7 @@ impl<'a> MachineFunctionBridge<'a> {
                     Some(value) => self.operand(value, values),
                     None => self.literal(&CpsLiteral::Nat(0), values),
                 };
-                EmissionTail::Host(EmissionHostTarget::IoExit { code })
+                EmissionTail::Host(EmissionHostTarget::Exit { code })
             }
             MachineTerminator::Unreachable => EmissionTail::Unreachable,
         }

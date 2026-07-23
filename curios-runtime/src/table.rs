@@ -1,4 +1,4 @@
-use {super::Io, num_bigint::BigUint, std::collections::HashMap};
+use {super::Handle, num_bigint::BigUint, std::collections::HashMap};
 
 /// A host's handle table: an unbounded `BigUint` mint counter paired with the
 /// live-handle map keyed by minted token bytes, generic over the host's resource
@@ -18,7 +18,7 @@ impl<T> Table<T> {
     /// handles.
     pub(crate) fn new() -> Self {
         Self {
-            next: BigUint::from(Io::HANDLE_SEED),
+            next: BigUint::from(Handle::HANDLE_SEED),
             map: HashMap::new(),
         }
     }
@@ -27,34 +27,34 @@ impl<T> Table<T> {
     /// LE bytes), bump the counter so the token is never reused, and file the
     /// resource under those bytes. The bytes are the handle the guest shuttles
     /// back; `close` removes them and the counter never reproduces them.
-    pub(crate) fn mint(&mut self, resource: T) -> Io {
+    pub(crate) fn mint(&mut self, resource: T) -> Handle {
         let bytes = self.next.to_bytes_le();
         self.next += 1u32;
         self.map.insert(bytes.clone(), resource);
 
-        Io::Other(bytes)
+        Handle::Other(bytes)
     }
 
-    pub(crate) fn get(&self, handle: &Io) -> Option<&T> {
+    pub(crate) fn get(&self, handle: &Handle) -> Option<&T> {
         self.map.get(&handle.bytes())
     }
 
-    pub(crate) fn get_mut(&mut self, handle: &Io) -> Option<&mut T> {
+    pub(crate) fn get_mut(&mut self, handle: &Handle) -> Option<&mut T> {
         self.map.get_mut(&handle.bytes())
     }
 
     /// File `resource` under `handle`, keeping the exact token the guest already
     /// holds — used to re-file a handle whose state changed in place (e.g.
     /// `connect` turning a socket into a stream).
-    pub(crate) fn insert(&mut self, handle: &Io, resource: T) {
+    pub(crate) fn insert(&mut self, handle: &Handle, resource: T) {
         self.map.insert(handle.bytes(), resource);
     }
 
-    pub(crate) fn remove(&mut self, handle: &Io) -> Option<T> {
+    pub(crate) fn remove(&mut self, handle: &Handle) -> Option<T> {
         self.map.remove(&handle.bytes())
     }
 
-    pub(crate) fn contains(&self, handle: &Io) -> bool {
+    pub(crate) fn contains(&self, handle: &Handle) -> bool {
         self.map.contains_key(&handle.bytes())
     }
 }
@@ -79,9 +79,9 @@ mod tests {
         // Distinct live handles get distinct tokens...
         assert_ne!(a.bytes(), b.bytes());
         // ...and minted tokens never collide with stdin/stdout/stderr.
-        assert_ne!(a.bytes(), Io::Stdin.bytes());
-        assert_ne!(a.bytes(), Io::Stdout.bytes());
-        assert_ne!(a.bytes(), Io::Stderr.bytes());
+        assert_ne!(a.bytes(), Handle::Stdin.bytes());
+        assert_ne!(a.bytes(), Handle::Stdout.bytes());
+        assert_ne!(a.bytes(), Handle::Stderr.bytes());
 
         assert_eq!(table.get(&a), Some(&10));
         assert_eq!(table.get(&b), Some(&20));
@@ -110,8 +110,8 @@ mod tests {
     fn stdio_handles_are_never_in_the_table() {
         let table: Table<u32> = Table::new();
 
-        assert_eq!(table.get(&Io::Stdin), None);
-        assert_eq!(table.get(&Io::Stdout), None);
-        assert_eq!(table.get(&Io::Stderr), None);
+        assert_eq!(table.get(&Handle::Stdin), None);
+        assert_eq!(table.get(&Handle::Stdout), None);
+        assert_eq!(table.get(&Handle::Stderr), None);
     }
 }

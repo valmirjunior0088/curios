@@ -11,7 +11,7 @@ fn match_omitted_motive_infers() {
             | 0 => 0
             | pred + 1; ih => std/Nat/add(ih, pred)
             end;
-        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))
+        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -29,7 +29,7 @@ fn implicit_inductive_type_param_executes() {
     // names a sibling binder, and without the delayed substitution the two
     // spellings of the same domain compare as distinct.
     let source = r#"
-        use /std/{Nat, Bytes, Io};
+        use /std/{Nat, Bytes, Handle};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
@@ -41,7 +41,7 @@ fn implicit_inductive_type_param_executes() {
         let proof : Eq2(2, 2) = Eq2/refl();
         let inferred : Eq2(2, 2) = sym2(proof);
         match inferred : {}
-        | refl(z) => let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
+        | refl(z) => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
         end
         "#;
 
@@ -56,12 +56,12 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
     // explicit slots — one argument too many, an error rather than a silent
     // reinterpretation. (`Eq2(@Nat, 2, 2)` is the pinned spelling.)
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(Nat, 2, 2) = Eq2/refl();
-        Io/write(Io/stdout, /std/Str/to_bytes("no"))
+        Handle/write(Handle/stdout, /std/Str/to_bytes("no"))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -77,7 +77,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
     // everything. Now the pairs park, the output `expect` solves the domain
     // metas against the annotation, and the wake retries the parked pairs.
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
@@ -88,7 +88,7 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         let direct : Eq2(2, 2) = sym2(Eq2/refl());
         let chained : Eq2(3, 3) = sym2(sym2(Eq2/refl()));
         match chained : {}
-        | refl(z) => let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
+        | refl(z) => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
         end
         "#;
 
@@ -103,12 +103,12 @@ fn parked_constraints_still_reject_the_unsolvable() {
     // at the item drain, attributed to its origin. `refl` forces both indices
     // equal; `2` and `3` are not.
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(2, 3) = Eq2/refl();
-        Io/write(Io/stdout, /std/Str/to_bytes("no"))
+        Handle/write(Handle/stdout, /std/Str/to_bytes("no"))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -123,7 +123,7 @@ fn omitted_motive_infers_over_a_compound_scrutinee() {
     // the motive binder, so the dependent motive infers where it previously
     // had to be spelled.
     let source = r#"
-        use /std/{Nat, Vec, Io};
+        use /std/{Nat, Vec, Handle};
         rec build(n : Nat) -> Vec(Nat, n) =
             match n : (m) => Vec(Nat, m)
             | 0 => Vec/nil()
@@ -134,7 +134,7 @@ fn omitted_motive_infers_over_a_compound_scrutinee() {
             | 0 => Vec/nil()
             | pred + 1; ih => build(Nat/succ(pred))
             end;
-        Io/print(Nat/to_str(Vec/len(d(2))))
+        /std/print(Nat/to_str(Vec/len(d(2))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -150,15 +150,15 @@ fn bare_tuple_continuation_tail_infers() {
     // postponement defers the tuple, the constraint store parks the flex–flex
     // codomain pair across the inner apply, and the outer pin wakes both.
     let source = r#"
-        use /std/{Parse, Byte, Nat, Bytes, Io};
+        use /std/{Parse, Byte, Nat, Bytes, Handle};
         let pairer : Parse({ Byte, Byte }) =
             Parse/bind(Parse/any_byte, (a) => Parse/pure((a, a)));
         rec with_sugar : Parse({ Byte, Byte }) =
             let a = Parse/any_byte!;
             Parse/pure((a, 0));
         match Parse/run(pairer, /std/Str/to_bytes("hi"))
-        | success(pair) => Io/print(Nat/to_str(Byte/to_nat(pair.0)))
-        | failure(_) => Io/print("error")
+        | success(pair) => /std/print(Nat/to_str(Byte/to_nat(pair.0)))
+        | failure(_) => /std/print("error")
         end
         "#;
 
@@ -175,13 +175,13 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
     // behind a placeholder metavariable, and the outer annotation's pin wakes
     // it. Before ParkedWork::Checking this was a NotATupleType error.
     let source = r#"
-        use /std/{Nat, Lst, Io};
+        use /std/{Nat, Lst, Handle};
         let mk(@A : Type, a : A) -> Lst(A) = [a];
         let use_(@B : Type, l : Lst(B)) -> Lst(B) = l;
         let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
         match v : {}
         | [] => ()
-        | [p, ..rest] => let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(p.1))); ()
+        | [p, ..rest] => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(p.1))); ()
         end
         "#;
 
@@ -195,10 +195,10 @@ fn checking_problem_without_a_pin_still_rejects() {
     // A checking problem whose expected type is never pinned drains as a
     // cannot-infer at the tuple's own span — parked, not silently accepted.
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         let swallow(@A : Type, a : A) -> Nat = 0;
         let n : Nat = swallow((1, 2));
-        Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(n)))
+        Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(n)))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -212,12 +212,12 @@ fn checking_problem_without_a_pin_still_rejects() {
 #[test]
 fn subst_motive_inserts_implicit_in_eq() {
     let source = r#"
-        use /std/{Eq, Nat, Io};
+        use /std/{Eq, Nat, Handle};
         let g(n : Nat) -> Nat = n;
         let lemma(@a : Nat, @b : Nat, p : Eq(a, b)) -> Eq(g(a), g(b)) =
             Eq/subst((x) => Eq(g(a), g(x)), p, Eq/refl());
         let _ = lemma;
-        Io/print("ok")
+        /std/print("ok")
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -255,11 +255,11 @@ fn nonproductive_inner_rec_in_type_position_is_preempted() {
 #[test]
 fn higher_kinded_implicit_infers_by_imitation() {
     let source = r#"
-        use /std/{Nat, Lst, Io, Str};
+        use /std/{Nat, Lst, Handle, Str};
         pub let apply_m(@M : (Type) -> Type, @A : Type, x : M(A)) -> M(A) = x;
         let l : Lst(Nat) = [1, 2];
         let k : Lst(Nat) = apply_m(l);
-        Io/print(Nat/to_str(Lst/len(k)))
+        /std/print(Nat/to_str(Lst/len(k)))
         "#;
 
     let (system, io) = MockHost::builder().build();

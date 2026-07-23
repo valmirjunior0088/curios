@@ -449,7 +449,7 @@ fn infix_symbol(prim: &Prim) -> Option<&'static str> {
         | Prim::FltEql(..)
         | Prim::BoolEql(..)
         | Prim::BinEql(Grain::X, ..)
-        | Prim::IoEql(..) => "==",
+        | Prim::HandleEql(..) => "==",
         Prim::NatNeq(..) | Prim::IntNeq(..) | Prim::FltNeq(..) | Prim::BoolNeq(..) => "!=",
         Prim::NatLt(..) | Prim::IntLt(..) | Prim::FltLt(..) => "<",
         Prim::NatGt(..) | Prim::IntGt(..) | Prim::FltGt(..) => ">",
@@ -513,7 +513,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             ]),
         },
         Prim::NatEql(l, r) => print_infix("==", l, r, depth),
-        Prim::IoEql(l, r) => print_infix("==", l, r, depth),
+        Prim::HandleEql(l, r) => print_infix("==", l, r, depth),
         Prim::NatNeq(l, r) => print_infix("!=", l, r, depth),
         Prim::NatAdd(l, r) => print_infix("+", l, r, depth),
         Prim::NatSub(l, r) => print_infix("-", l, r, depth),
@@ -714,8 +714,8 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
             pure(" "),
             print_term(f, depth),
         ]),
-        Prim::IoType => pure("Io"),
-        Prim::Io(token) => pure(format!("Io({token})")),
+        Prim::HandleType => pure("Handle"),
+        Prim::Handle(token) => pure(format!("Handle({token})")),
         Prim::Foreign(function, args) => flat(
             [pure(function.label.clone())]
                 .into_iter()
@@ -725,7 +725,7 @@ fn print_prim(prim: Prim, depth: usize) -> Printer<'static> {
                 )
                 .collect::<Vec<_>>(),
         ),
-        Prim::IoExit(type_, code) => print_binary("Io.exit ", type_, code, depth),
+        Prim::Exit(type_, code) => print_binary("exit ", type_, code, depth),
         Prim::CellType(elem) => print_unary("Cell ", elem, depth),
         Prim::Cell(type_, init) => print_binary("Cell.new ", type_, init, depth),
         Prim::CellSet(type_, cell, value) => flat([

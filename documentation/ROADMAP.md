@@ -125,7 +125,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 ## IO
 
-- [x] `Io` unified byte-stream handle abstraction
+- [x] `Handle` unified byte-stream abstraction
 - [x] Terminal
 - [x] File
 - [x] Client network (TCP)
@@ -138,7 +138,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 ## Host Interface (FFI)
 
-- [x] Self-describing foreign-function store (`curios-abi`'s `ForeignFunction`/`WireSignature`/`ForeignStore`): the `/sys/Io` prelude declarations, elaboration, wasm `sys.*` imports, and runtime linking all derive from one per-compilation store of named signature rows — the generic `Foreign` IR nodes carry the row itself, and the runtime links by pulling the module's imports from a name-keyed registry
+- [x] Self-describing foreign-function store (`curios-abi`'s `ForeignFunction`/`WireSignature`/`ForeignStore`): the `/sys/Handle` prelude declarations, elaboration, wasm `sys.*` imports, and runtime linking all derive from one per-compilation store of named signature rows — the generic `Foreign` IR nodes carry the row itself, and the runtime links by pulling the module's imports from a name-keyed registry
 - [x] Surface `foreign` declarations (user-visible FFI syntax): a program's own declarations accumulate a second, `ffi`-tier store `compile_entrypoint` hands back
 - [x] Embedder-extensible host-function registry (`curios-runtime::ForeignBindings`, threaded through `run_bytes`/`instantiate`/`run_wasm`)
 

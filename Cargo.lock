@@ -481,6 +481,7 @@ dependencies = [
 name = "curios-abi"
 version = "0.4.3"
 dependencies = [
+ "num-bigint",
  "rkyv",
 ]
 

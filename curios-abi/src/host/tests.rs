@@ -1,14 +1,14 @@
 use {
-    super::{ForeignFunction, WireSignature, WireType, sys_io},
+    super::{ForeignFunction, WireSignature, WireType, host_ops},
     std::collections::BTreeSet,
 };
 
-/// The `/sys/Io` import names, byte for byte and in declaration order —
-/// the wire ABI contract between the wasm emitter and the runtime linker. A
-/// mismatch here silently strands an import, so the whole list is pinned.
+/// The builtin import names, byte for byte and in declaration order — the wire
+/// ABI contract between the wasm emitter and the runtime linker. A mismatch
+/// here silently strands an import, so the whole list is pinned.
 #[test]
 fn names_are_the_wire_abi() {
-    let names = sys_io()
+    let names = host_ops()
         .iter()
         .map(|function| function.name.clone())
         .collect::<Vec<_>>();
@@ -16,40 +16,40 @@ fn names_are_the_wire_abi() {
     assert_eq!(
         names,
         [
-            "io_read",
-            "io_write",
-            "io_open",
-            "io_lookup",
-            "io_resolve",
-            "io_socket",
-            "io_bind",
-            "io_connect",
-            "io_listen",
-            "io_accept",
-            "io_start_tls",
-            "io_tls_server_config",
-            "io_start_tls_server",
-            "io_set_nonblocking",
-            "io_set_recv_timeout",
-            "io_set_send_timeout",
-            "io_set_reuseaddr",
-            "io_poll",
-            "io_close",
-            "io_clock_wall",
-            "io_clock_mono",
-            "io_random",
-            "io_args",
-            "io_env",
+            "read",
+            "write",
+            "open",
+            "lookup",
+            "resolve",
+            "socket",
+            "bind",
+            "connect",
+            "listen",
+            "accept",
+            "start_tls",
+            "tls_server_config",
+            "start_tls_server",
+            "set_nonblocking",
+            "set_recv_timeout",
+            "set_send_timeout",
+            "set_reuseaddr",
+            "poll",
+            "close",
+            "clock_wall",
+            "clock_mono",
+            "random",
+            "args",
+            "env",
         ]
     );
 }
 
-/// Labels are the `/sys/Io` binding names, so they must be as unique as the
-/// import names (`register` already enforces name uniqueness; this pins the
-/// seed's labels too).
+/// Labels are the guest binding names, so they must be as unique as the import
+/// names (`register` already enforces name uniqueness; this pins the seed's
+/// labels too).
 #[test]
 fn labels_are_unique() {
-    let store = sys_io();
+    let store = host_ops();
     let labels: BTreeSet<_> = store.iter().map(|function| &function.label).collect();
 
     assert_eq!(labels.len(), store.len());
@@ -60,11 +60,11 @@ fn labels_are_unique() {
 /// multi-result shapes are pinned.
 #[test]
 fn result_records_keep_their_labels() {
-    let store = sys_io();
+    let store = host_ops();
     let labels = |name: &str| -> Vec<String> {
         store
             .get(name)
-            .unwrap_or_else(|| panic!("sys_io lacks {name}"))
+            .unwrap_or_else(|| panic!("host_ops lacks {name}"))
             .signature
             .results
             .iter()
@@ -72,17 +72,17 @@ fn result_records_keep_their_labels() {
             .collect()
     };
 
-    assert_eq!(labels("io_read"), ["status", "bytes"]);
-    assert_eq!(labels("io_write"), ["status", "written"]);
-    assert_eq!(labels("io_open"), ["status", "handle"]);
-    assert_eq!(labels("io_lookup"), ["status", "handle"]);
-    assert_eq!(labels("io_resolve"), ["status", "addresses"]);
-    assert_eq!(labels("io_socket"), ["status", "handle"]);
-    assert_eq!(labels("io_accept"), ["status", "handle"]);
-    assert_eq!(labels("io_tls_server_config"), ["status", "handle"]);
-    assert_eq!(labels("io_clock_wall"), ["secs_hi", "secs_lo", "nanos"]);
-    assert_eq!(labels("io_clock_mono"), ["secs", "nanos"]);
-    assert_eq!(labels("io_env"), ["status", "value"]);
+    assert_eq!(labels("read"), ["status", "bytes"]);
+    assert_eq!(labels("write"), ["status", "written"]);
+    assert_eq!(labels("open"), ["status", "handle"]);
+    assert_eq!(labels("lookup"), ["status", "handle"]);
+    assert_eq!(labels("resolve"), ["status", "addresses"]);
+    assert_eq!(labels("socket"), ["status", "handle"]);
+    assert_eq!(labels("accept"), ["status", "handle"]);
+    assert_eq!(labels("tls_server_config"), ["status", "handle"]);
+    assert_eq!(labels("clock_wall"), ["secs_hi", "secs_lo", "nanos"]);
+    assert_eq!(labels("clock_mono"), ["secs", "nanos"]);
+    assert_eq!(labels("env"), ["status", "value"]);
 }
 
 /// Every signature is well-formed: single results ride a name too (the guest
@@ -90,7 +90,7 @@ fn result_records_keep_their_labels() {
 /// names are unique within a signature.
 #[test]
 fn signatures_are_well_formed() {
-    for function in sys_io().iter() {
+    for function in host_ops().iter() {
         let signature = &function.signature;
 
         let params: BTreeSet<_> = signature.params.iter().map(|(name, _)| name).collect();
@@ -119,11 +119,11 @@ fn signatures_are_well_formed() {
 #[test]
 #[should_panic(expected = "already registered")]
 fn register_rejects_a_duplicate_name() {
-    let mut store = sys_io();
+    let mut store = host_ops();
 
     store.register(ForeignFunction {
         namespace: "sys",
-        name: "io_read".to_string(),
+        name: "read".to_string(),
         label: "read_again".to_string(),
         signature: WireSignature {
             params: vec![],
@@ -132,12 +132,16 @@ fn register_rejects_a_duplicate_name() {
     });
 }
 
-/// Every `sys_io` row is stamped with the `sys` wasm namespace — the fixed
+/// Every `host_ops` row is stamped with the `sys` wasm namespace — the fixed
 /// substrate `emit_sys_imports` reads instead of re-deriving membership by
 /// rebuilding this same store.
 #[test]
-fn sys_io_rows_are_stamped_with_the_sys_namespace() {
-    assert!(sys_io().iter().all(|function| function.namespace == "sys"));
+fn host_ops_rows_are_stamped_with_the_sys_namespace() {
+    assert!(
+        host_ops()
+            .iter()
+            .all(|function| function.namespace == "sys")
+    );
 }
 
 /// Identity is the wasm import pair: `label` and `signature` don't participate

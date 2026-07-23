@@ -4,7 +4,7 @@
 //! stays slim.
 
 use {
-    curios_runtime::{ForeignBindings, Host, run_bytes, shared_engine},
+    curios_runtime::{ForeignBindings, HostOps, run_bytes, shared_engine},
     std::path::Path,
 };
 
@@ -28,7 +28,7 @@ pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
 /// takes. `bindings` supplies the `ffi`-tier implementations for the module's own
 /// `foreign` declarations (pass [`ForeignBindings::empty`] for a program that
 /// declares none). Returns the process exit code.
-pub fn run_wasm<H: Host + Send + Sync + 'static>(
+pub fn run_wasm<H: HostOps + Send + Sync + 'static>(
     module: &curios_wasm::Module,
     host: H,
     bindings: ForeignBindings,
@@ -44,7 +44,7 @@ pub fn run_wasm<H: Host + Send + Sync + 'static>(
 /// calls [`compile_entrypoint`] directly instead, building [`ForeignBindings`]
 /// from the returned store and calling [`run_wasm`] itself.
 #[cfg(test)]
-pub(crate) fn run_entrypoint<H: Host + Send + Sync + 'static>(
+pub(crate) fn run_entrypoint<H: HostOps + Send + Sync + 'static>(
     timeout: Duration,
     entrypoint: &curios_text::Entrypoint,
     loader: curios_text::RootSource,
@@ -57,7 +57,7 @@ pub(crate) fn run_entrypoint<H: Host + Send + Sync + 'static>(
 
 /// Parse `source` (no external modules) and run it.
 #[cfg(test)]
-pub(crate) fn run_text<H: Host + Send + Sync + 'static>(
+pub(crate) fn run_text<H: HostOps + Send + Sync + 'static>(
     timeout: Duration,
     source: &str,
     host: H,

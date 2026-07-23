@@ -268,8 +268,8 @@ pub(crate) struct Table<'a> {
     lst_rope_node_type: curios_wasm::TypeName,
     lst_rope_view_type: curios_wasm::TypeName,
     cell_type: curios_wasm::TypeName,
-    io_exit: OnceCell<curios_wasm::FuncName>,
-    // The shared rope helpers, minted lazily like `io_exit`: the first call
+    exit: OnceCell<curios_wasm::FuncName>,
+    // The shared rope helpers, minted lazily like `exit`: the first call
     // site recorded during emission names the function, and the module
     // emitter then adds exactly the recorded set after the program's own
     // functions (see `emit_rope_funcs`).
@@ -291,7 +291,7 @@ pub(crate) struct Table<'a> {
     lst_map: OnceCell<curios_wasm::FuncName>,
     // The foreign functions the emitted code calls, keyed by the minted
     // internal name (see `host_func`). Same lazy used-tracking as the
-    // `io_exit` cell: the first call-site reference during emission records
+    // `exit` cell: the first call-site reference during emission records
     // the function's row, and `emit_sys_imports` then declares exactly the
     // recorded set (in minted-name order — wasmtime links by name, so
     // import order is cosmetic).
@@ -350,7 +350,7 @@ impl<'a> Table<'a> {
             lst_rope_node_type: curios_wasm::TypeName::from("rope/lst/node"),
             lst_rope_view_type: curios_wasm::TypeName::from("rope/lst/view"),
             cell_type: curios_wasm::TypeName::from("cell"),
-            io_exit: OnceCell::new(),
+            exit: OnceCell::new(),
             bytes_force: OnceCell::new(),
             bits_force: OnceCell::new(),
             lst_force: OnceCell::new(),
@@ -563,13 +563,13 @@ impl<'a> Table<'a> {
         self.host_funcs.borrow().values().cloned().collect()
     }
 
-    pub(crate) fn io_exit_func(&self) -> &curios_wasm::FuncName {
-        self.io_exit
-            .get_or_init(|| curios_wasm::FuncName::from("io_exit"))
+    pub(crate) fn exit_func(&self) -> &curios_wasm::FuncName {
+        self.exit
+            .get_or_init(|| curios_wasm::FuncName::from("exit"))
     }
 
-    pub(crate) fn io_exit_used(&self) -> bool {
-        self.io_exit.get().is_some()
+    pub(crate) fn exit_used(&self) -> bool {
+        self.exit.get().is_some()
     }
 
     /// `$bytes/force (ref $rope/bin) -> (ref $bytes)`: flatten a `Bytes` rope to its

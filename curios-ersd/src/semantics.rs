@@ -14,7 +14,14 @@
 //! constant operands → value / would-trap / unknown) lands with its consumer,
 //! partial evaluation.
 
-use super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator};
+use {
+    super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator},
+    curios_base::{
+        DivTrap, Flt, Grain, PackedBin, flt_max, flt_min, flt_to_int, flt_to_nat, int_add, int_div,
+        int_mul, int_rem, int_rotl, int_rotr, int_shl, int_shr, int_sub, int_to_nat, nat_add,
+        nat_div, nat_mul, nat_rem, nat_rotl, nat_rotr, nat_shl, nat_shr, nat_sub, nat_to_int,
+    },
+};
 
 /// What allocating a value commits a pass to. Immutable allocation is not
 /// language-observable and may be discarded or duplicated; mutable allocation
@@ -264,7 +271,7 @@ impl Semantics {
             | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt | FltGt | FltLte | FltGte
             | FltMin | FltMax | FltCopysign | FltNeg | FltAbs | FltSqrt | FltFloor | FltCeil
             | FltTrunc | FltNearest | NatToInt | NatToFlt | IntToNat | IntToFlt | FltToLeBytes
-            | FltOfLeBytes | IoEql => LocalBehavior::pure(),
+            | FltOfLeBytes | HandleEql => LocalBehavior::pure(),
         }
     }
 
@@ -384,11 +391,11 @@ impl Semantics {
             _ => None,
         };
         let io = |index: usize| match operands.get(index) {
-            Some(Constant::Io(value)) => Some(*value),
+            Some(Constant::Handle(value)) => Some(*value),
             _ => None,
         };
         let bin_x = |index: usize| match operands.get(index) {
-            Some(Constant::Bin(curios_base::Grain::X, value)) => Some(value),
+            Some(Constant::Bin(Grain::X, value)) => Some(value),
             _ => None,
         };
 
@@ -400,28 +407,22 @@ impl Semantics {
                 BoolEql => Constant::Bool(bool_(0)? == bool_(1)?),
                 BoolNeq => Constant::Bool(bool_(0)? != bool_(1)?),
 
-                NatAdd => Constant::Nat(curios_base::nat_add(nat(0)?, nat(1)?)),
-                NatSub => Constant::Nat(curios_base::nat_sub(nat(0)?, nat(1)?)),
-                NatMul => Constant::Nat(curios_base::nat_mul(nat(0)?, nat(1)?)),
+                NatAdd => Constant::Nat(nat_add(nat(0)?, nat(1)?)),
+                NatSub => Constant::Nat(nat_sub(nat(0)?, nat(1)?)),
+                NatMul => Constant::Nat(nat_mul(nat(0)?, nat(1)?)),
                 NatDiv => {
-                    return Some(div_result(
-                        curios_base::nat_div(nat(0)?, nat(1)?),
-                        Constant::Nat,
-                    ));
+                    return Some(div_result(nat_div(nat(0)?, nat(1)?), Constant::Nat));
                 }
                 NatRem => {
-                    return Some(div_result(
-                        curios_base::nat_rem(nat(0)?, nat(1)?),
-                        Constant::Nat,
-                    ));
+                    return Some(div_result(nat_rem(nat(0)?, nat(1)?), Constant::Nat));
                 }
                 NatAnd => Constant::Nat(nat(0)? & nat(1)?),
                 NatOr => Constant::Nat(nat(0)? | nat(1)?),
                 NatXor => Constant::Nat(nat(0)? ^ nat(1)?),
-                NatShl => Constant::Nat(curios_base::nat_shl(nat(0)?, nat(1)?)),
-                NatShr => Constant::Nat(curios_base::nat_shr(nat(0)?, nat(1)?)),
-                NatRotl => Constant::Nat(curios_base::nat_rotl(nat(0)?, nat(1)?)),
-                NatRotr => Constant::Nat(curios_base::nat_rotr(nat(0)?, nat(1)?)),
+                NatShl => Constant::Nat(nat_shl(nat(0)?, nat(1)?)),
+                NatShr => Constant::Nat(nat_shr(nat(0)?, nat(1)?)),
+                NatRotl => Constant::Nat(nat_rotl(nat(0)?, nat(1)?)),
+                NatRotr => Constant::Nat(nat_rotr(nat(0)?, nat(1)?)),
                 NatClz => Constant::Nat(nat(0)?.leading_zeros()),
                 NatCtz => Constant::Nat(nat(0)?.trailing_zeros()),
                 NatPopcnt => Constant::Nat(nat(0)?.count_ones()),
@@ -438,28 +439,22 @@ impl Semantics {
                 ByteLte => Constant::Bool(byte(0)? <= byte(1)?),
                 ByteGte => Constant::Bool(byte(0)? >= byte(1)?),
 
-                IntAdd => Constant::Int(curios_base::int_add(int(0)?, int(1)?)),
-                IntSub => Constant::Int(curios_base::int_sub(int(0)?, int(1)?)),
-                IntMul => Constant::Int(curios_base::int_mul(int(0)?, int(1)?)),
+                IntAdd => Constant::Int(int_add(int(0)?, int(1)?)),
+                IntSub => Constant::Int(int_sub(int(0)?, int(1)?)),
+                IntMul => Constant::Int(int_mul(int(0)?, int(1)?)),
                 IntDiv => {
-                    return Some(div_result(
-                        curios_base::int_div(int(0)?, int(1)?),
-                        Constant::Int,
-                    ));
+                    return Some(div_result(int_div(int(0)?, int(1)?), Constant::Int));
                 }
                 IntRem => {
-                    return Some(div_result(
-                        curios_base::int_rem(int(0)?, int(1)?),
-                        Constant::Int,
-                    ));
+                    return Some(div_result(int_rem(int(0)?, int(1)?), Constant::Int));
                 }
                 IntAnd => Constant::Int(int(0)? & int(1)?),
                 IntOr => Constant::Int(int(0)? | int(1)?),
                 IntXor => Constant::Int(int(0)? ^ int(1)?),
-                IntShl => Constant::Int(curios_base::int_shl(int(0)?, int(1)?)),
-                IntShr => Constant::Int(curios_base::int_shr(int(0)?, int(1)?)),
-                IntRotl => Constant::Int(curios_base::int_rotl(int(0)?, int(1)?)),
-                IntRotr => Constant::Int(curios_base::int_rotr(int(0)?, int(1)?)),
+                IntShl => Constant::Int(int_shl(int(0)?, int(1)?)),
+                IntShr => Constant::Int(int_shr(int(0)?, int(1)?)),
+                IntRotl => Constant::Int(int_rotl(int(0)?, int(1)?)),
+                IntRotr => Constant::Int(int_rotr(int(0)?, int(1)?)),
                 IntClz => Constant::Int((int(0)? as u32).leading_zeros() as i32),
                 IntCtz => Constant::Int((int(0)? as u32).trailing_zeros() as i32),
                 IntPopcnt => Constant::Int((int(0)? as u32).count_ones() as i32),
@@ -492,19 +487,19 @@ impl Semantics {
                 FltLte => Constant::Bool(flt(0)?.lte(flt(1)?)),
                 FltGte => Constant::Bool(flt(0)?.gte(flt(1)?)),
 
-                IoEql => Constant::Bool(io(0)? == io(1)?),
+                HandleEql => Constant::Bool(io(0)? == io(1)?),
 
-                NatToInt => Constant::Int(curios_base::nat_to_int(nat(0)?)),
-                NatToFlt => Constant::Flt(curios_base::Flt::from_f32(nat(0)? as f32)),
-                IntToNat => Constant::Nat(curios_base::int_to_nat(int(0)?)),
-                IntToFlt => Constant::Flt(curios_base::Flt::from_f32(int(0)? as f32)),
-                FltToNat => return Some(flt_to_nat(flt(0)?)),
-                FltToInt => return Some(flt_to_int(flt(0)?)),
+                NatToInt => Constant::Int(nat_to_int(nat(0)?)),
+                NatToFlt => Constant::Flt(Flt::from_f32(nat(0)? as f32)),
+                IntToNat => Constant::Nat(int_to_nat(int(0)?)),
+                IntToFlt => Constant::Flt(Flt::from_f32(int(0)? as f32)),
+                FltToNat => return Some(fold_flt_to_nat(flt(0)?)),
+                FltToInt => return Some(fold_flt_to_int(flt(0)?)),
                 ByteToNat => Constant::Nat(byte(0)? as u32),
                 NatToByte => Constant::Byte(nat(0)? as u8),
                 FltToLeBytes => Constant::Bin(
-                    curios_base::Grain::X,
-                    curios_base::PackedBin::from_bytes(flt(0)?.to_f32().to_le_bytes().to_vec()),
+                    Grain::X,
+                    PackedBin::from_bytes(flt(0)?.to_f32().to_le_bytes().to_vec()),
                 ),
                 FltOfLeBytes => return Some(flt_of_le_bytes(bin_x(0)?)),
             }))
@@ -518,7 +513,7 @@ impl Semantics {
     /// over its own value domain instead). Elements stay grain-shaped: a byte
     /// grain yields `Byte`, a bit grain `Bool`.
     pub fn fold_sequence(operation: SequenceOp, operands: &[Constant]) -> FoldOutcome {
-        use {SequenceOp::*, curios_base::Grain};
+        use {Grain, SequenceOp::*};
 
         let bin = |index: usize, grain: Grain| match operands.get(index) {
             Some(Constant::Bin(found, value)) if *found == grain => Some(value),
@@ -570,7 +565,7 @@ impl Semantics {
                 }
                 BinConcat(grain) => Constant::Bin(
                     grain,
-                    curios_base::PackedBin::concat(
+                    PackedBin::concat(
                         (0..operands.len())
                             .map(|index| bin(index, grain))
                             .collect::<Option<Vec<_>>>()?,
@@ -591,47 +586,47 @@ fn fold_outcome(result: Option<Result<Constant, TrapKind>>) -> FoldOutcome {
     }
 }
 
-/// Map a shared-semantics division outcome ([`curios_base::DivTrap`]) into
+/// Map a shared-semantics division outcome ([`DivTrap`]) into
 /// the fold's constant/trap split.
 fn div_result<T>(
-    result: Result<T, curios_base::DivTrap>,
+    result: Result<T, DivTrap>,
     wrap: fn(T) -> Constant,
 ) -> Result<Constant, TrapKind> {
     match result {
         Ok(value) => Ok(wrap(value)),
-        Err(curios_base::DivTrap::DivisionByZero) => Err(TrapKind::DivisionByZero),
-        Err(curios_base::DivTrap::Overflow) => Err(TrapKind::IntegerOverflow),
+        Err(DivTrap::DivisionByZero) => Err(TrapKind::DivisionByZero),
+        Err(DivTrap::Overflow) => Err(TrapKind::IntegerOverflow),
     }
 }
 
-/// Float min/max decline on a NaN operand (see [`curios_base::flt_min`]).
-fn fold_min(left: curios_base::Flt, right: curios_base::Flt) -> Option<curios_base::Flt> {
-    curios_base::flt_min(left.to_f32(), right.to_f32()).map(curios_base::Flt::from_f32)
+/// Float min/max decline on a NaN operand (see [`flt_min`]).
+fn fold_min(left: Flt, right: Flt) -> Option<Flt> {
+    flt_min(left.to_f32(), right.to_f32()).map(Flt::from_f32)
 }
 
-fn fold_max(left: curios_base::Flt, right: curios_base::Flt) -> Option<curios_base::Flt> {
-    curios_base::flt_max(left.to_f32(), right.to_f32()).map(curios_base::Flt::from_f32)
+fn fold_max(left: Flt, right: Flt) -> Option<Flt> {
+    flt_max(left.to_f32(), right.to_f32()).map(Flt::from_f32)
 }
 
-fn flt_to_nat(value: curios_base::Flt) -> Result<Constant, TrapKind> {
-    curios_base::flt_to_nat(value.to_f32())
+fn fold_flt_to_nat(value: Flt) -> Result<Constant, TrapKind> {
+    flt_to_nat(value.to_f32())
         .map(Constant::Nat)
         .ok_or(TrapKind::ConversionRange)
 }
 
 /// Truncate to `i32`, trapping outside `[-2^31, 2^31)`.
-fn flt_to_int(value: curios_base::Flt) -> Result<Constant, TrapKind> {
-    curios_base::flt_to_int(value.to_f32())
+fn fold_flt_to_int(value: Flt) -> Result<Constant, TrapKind> {
+    flt_to_int(value.to_f32())
         .map(Constant::Int)
         .ok_or(TrapKind::ConversionRange)
 }
 
 /// Decode a little-endian binary32, trapping unless exactly four bytes.
-fn flt_of_le_bytes(value: &curios_base::PackedBin) -> Result<Constant, TrapKind> {
+fn flt_of_le_bytes(value: &PackedBin) -> Result<Constant, TrapKind> {
     value
         .to_bytes()
         .as_deref()
         .and_then(|bytes| <[u8; 4]>::try_from(bytes).ok())
-        .map(|le_bytes| Constant::Flt(curios_base::Flt::from_f32(f32::from_le_bytes(le_bytes))))
+        .map(|le_bytes| Constant::Flt(Flt::from_f32(f32::from_le_bytes(le_bytes))))
         .ok_or(TrapKind::MalformedInput)
 }

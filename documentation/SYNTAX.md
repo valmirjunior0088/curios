@@ -40,7 +40,7 @@ A path is one or more identifier segments separated by `/`. A leading `/` makes 
 Nat                 -- relative name
 Option/some         -- member of Option
 /std/Lst            -- absolute name
-/sys/Io             -- absolute primitive declaration
+/sys/Handle         -- absolute primitive declaration
 ```
 
 Whitespace may appear around ordinary path separators. Packed `Bits` and `Bytes` spread operands use a separate tight grammar and must be written without whitespace; see [Packed literals](#packed-literals).
@@ -183,13 +183,13 @@ Later fields may refer to earlier named fields. The empty tuple type `{}` is the
 A labeled function field may use signature sugar:
 
 ```crs
-{run(input : Bytes) -> Io(Nat)}
+{run(input : Bytes) -> Async(Nat)}
 ```
 
 This is equivalent to:
 
 ```crs
-{run : (input : Bytes) -> Io(Nat)}
+{run : (input : Bytes) -> Async(Nat)}
 ```
 
 ## Expressions
@@ -789,7 +789,7 @@ foreign frobnicate : (Nat, Bin) -> Nat;
 pub foreign log : (Bin) -> Nat;
 ```
 
-The wire types are `Nat`, `Int`, `Bool`, `Bin`, `Io`, and recursively `Lst(T)`. A wire signature is a bare wire result type for a zero-argument foreign or a parenthesized wire parameter list followed by `->` and a wire result type.
+The wire types are `Nat`, `Int`, `Bool`, `Bin`, `Handle`, and recursively `Lst(T)`. A wire signature is a bare wire result type for a zero-argument foreign or a parenthesized wire parameter list followed by `->` and a wire result type.
 
 Wire `Bin` maps to object-language `Bytes`. `Byte` and `Bits` are not distinct wire types. The Wasm import uses the declaration's fully qualified name in the `ffi` namespace.
 

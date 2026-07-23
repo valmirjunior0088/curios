@@ -4,17 +4,17 @@ use {curios_runtime::MockHost, std::time::Duration};
 fn task_scheduler_parks_polls_and_resumes() {
     // The `/std/Async` event loop end to end: the root fiber yields a `wait` on
     // stdin-READ and parks, `run` marshals the parked handle/interest into
-    // `Io/poll` (the mock reports it ready), and resumes the continuation — which
+    // `Handle/poll` (the mock reports it ready), and resumes the continuation — which
     // performs the write. Exercises the novel path of an inductive variant carrying a
     // closure through erasure and codegen.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str};
+        use /std/{Async, Handle, Str};
         let prog : Async({}) =
-            Async/bind(Async/wait(Io/stdin, 1), (_) =>
-                let wrote = Io/write(Io/stdout, Str/to_bytes("ok"));
+            Async/bind(Async/wait(Handle/stdin, 1), (_) =>
+                let wrote = Handle/write(Handle/stdout, Str/to_bytes("ok"));
                 Async/pure(()));
         Async/run(prog)
         "#,
@@ -34,12 +34,12 @@ fn task_bind_reads_and_echoes() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io};
+        use /std/{Async, Handle};
         let prog : Async({}) =
-            let r = Async/read(Io/stdin, 1024)!;
+            let r = Async/read(Handle/stdin, 1024)!;
             match r : Async({})
             | chunk(bytes) =>
-                let wrote = Io/write(Io/stdout, bytes);
+                let wrote = Handle/write(Handle/stdout, bytes);
                 Async/pure(())
             | eof() => Async/pure(())
             | error(_) => Async/pure(())
@@ -63,16 +63,16 @@ fn block_on_returns_a_typed_value_and_awaits_a_spawned_child() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str, Nat};
+        use /std/{Async, Handle, Str, Nat};
         let root : Async(Nat) =
             let f = Async/spawn(() =>
-                Async/bind(Async/wait(Io/stdin, 1), (_) =>
-                    let w = Io/write(Io/stdout, Str/to_bytes("child;"));
+                Async/bind(Async/wait(Handle/stdin, 1), (_) =>
+                    let w = Handle/write(Handle/stdout, Str/to_bytes("child;"));
                     Async/pure(5)))!;
-            let w = Io/write(Io/stdout, Str/to_bytes("root;"));
+            let w = Handle/write(Handle/stdout, Str/to_bytes("root;"));
             let c = Async/await(f.result)!;
             Async/pure(Nat/add(c, 2));
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Async/block_on(root))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Async/block_on(root))))
         "#,
         system,
     )
@@ -90,17 +90,17 @@ fn join_all_runs_children_concurrently_and_collects_in_order() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str, Nat, Lst};
+        use /std/{Async, Handle, Str, Nat, Lst};
         let main : Async({}) =
             let rs = Async/join_all([
                 () =>
-                    let w = Io/write(Io/stdout, Str/to_bytes("a;"));
+                    let w = Handle/write(Handle/stdout, Str/to_bytes("a;"));
                     Async/pure(1),
                 () =>
-                    let w = Io/write(Io/stdout, Str/to_bytes("b;"));
+                    let w = Handle/write(Handle/stdout, Str/to_bytes("b;"));
                     Async/pure(2)
             ])!;
-            let s = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(/std/Option/unwrap_or(Lst/get(rs, 0), 0), /std/Option/unwrap_or(Lst/get(rs, 1), 0)))));
+            let s = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(/std/Option/unwrap_or(Lst/get(rs, 0), 0), /std/Option/unwrap_or(Lst/get(rs, 1), 0)))));
             Async/pure(());
         Async/run(main)
         "#,
@@ -118,10 +118,10 @@ fn map_transforms_a_tasks_result() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str, Nat};
+        use /std/{Async, Handle, Str, Nat};
         let main : Async({}) =
             let s = Async/map(Async/pure(42), Nat/to_str)!;
-            let w = Io/write(Io/stdout, Str/to_bytes(s));
+            let w = Handle/write(Handle/stdout, Str/to_bytes(s));
             Async/pure(());
         Async/run(main)
         "#,
@@ -143,19 +143,19 @@ fn race_returns_the_first_and_runs_a_cancelled_losers_finalizer() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str, Nat};
+        use /std/{Async, Handle, Str, Nat};
         let main : Async({}) =
             let v = Async/race([
                 () =>
-                    let x = Io/write(Io/stdout, Str/to_bytes("fast;"));
+                    let x = Handle/write(Handle/stdout, Str/to_bytes("fast;"));
                     Async/pure(10),
                 () =>
-                    Async/using(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bytes("released;")); (),
-                        Async/bind(Async/wait(Io/stdin, 1), (_) =>
-                            let y = Io/write(Io/stdout, Str/to_bytes("slow;"));
+                    Async/using(Handle/stdin, () => let r = Handle/write(Handle/stdout, Str/to_bytes("released;")); (),
+                        Async/bind(Async/wait(Handle/stdin, 1), (_) =>
+                            let y = Handle/write(Handle/stdout, Str/to_bytes("slow;"));
                             Async/pure(20)))
             ])!;
-            let z = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(v)));
+            let z = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(v)));
             Async/pure(());
         Async/run(main)
         "#,
@@ -170,20 +170,20 @@ fn block_on_drops_a_parked_child_when_root_done() {
     // Prompt drop and no deadlock: a fire-and-forget `go` child parks on stdin, but
     // the root writes and finishes first. `block_on` returns the instant the root
     // is done, dropping the still-parked child instead of blocking forever in
-    // `Io/poll` on work nothing will ever join. Only "root;" is written, and `run`
+    // `Handle/poll` on work nothing will ever join. Only "root;" is written, and `run`
     // returns rather than hanging.
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str};
+        use /std/{Async, Handle, Str};
         let child : Async({}) =
-            Async/bind(Async/wait(Io/stdin, 1), (_) =>
-                let w = Io/write(Io/stdout, Str/to_bytes("child;"));
+            Async/bind(Async/wait(Handle/stdin, 1), (_) =>
+                let w = Handle/write(Handle/stdout, Str/to_bytes("child;"));
                 Async/pure(()));
         let main : Async({}) =
             Async/bind(Async/go(() => child), (started) =>
-                let w = Io/write(Io/stdout, Str/to_bytes("root;"));
+                let w = Handle/write(Handle/stdout, Str/to_bytes("root;"));
                 Async/pure(()));
         Async/run(main)
         "#,
@@ -205,13 +205,13 @@ fn constructing_a_leaf_task_performs_no_effect() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str};
-        let discarded : Async(Io/Read) = Async/read(Io/stdin, 100);
-        let r = Io/read(Io/stdin, 100);
+        use /std/{Async, Handle, Str};
+        let discarded : Async(Handle/Read) = Async/read(Handle/stdin, 100);
+        let r = Handle/read(Handle/stdin, 100);
         match r : {}
-        | chunk(bytes) => let _ = Io/write(Io/stdout, bytes); ()
-        | eof() => let _ = Io/write(Io/stdout, Str/to_bytes("<eof>")); ()
-        | error(_) => let _ = Io/write(Io/stdout, Str/to_bytes("<err>")); ()
+        | chunk(bytes) => let _ = Handle/write(Handle/stdout, bytes); ()
+        | eof() => let _ = Handle/write(Handle/stdout, Str/to_bytes("<eof>")); ()
+        | error(_) => let _ = Handle/write(Handle/stdout, Str/to_bytes("<err>")); ()
         end
         "#,
         system,
@@ -234,13 +234,13 @@ fn finalizer_runs_for_a_child_parked_on_an_unfulfilled_future() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str};
+        use /std/{Async, Handle, Str};
         let main : Async({}) =
             let f : Async/Future({}) = Async/new_future(@{});
             let started = Async/go(() =>
-                Async/using(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bytes("released;")); (),
+                Async/using(Handle/stdin, () => let r = Handle/write(Handle/stdout, Str/to_bytes("released;")); (),
                     Async/await(f)))!;
-            let w = Io/write(Io/stdout, Str/to_bytes("root;"));
+            let w = Handle/write(Handle/stdout, Str/to_bytes("root;"));
             Async/pure(());
         Async/run(main)
         "#,
@@ -260,10 +260,10 @@ fn an_acquired_finalizer_runs_when_the_fiber_completes() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str};
+        use /std/{Async, Handle, Str};
         let main : Async({}) =
-            let _ = Async/acquire(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bytes("closed;")); ())!;
-            let _ = Io/write(Io/stdout, Str/to_bytes("body;"));
+            let _ = Async/acquire(Handle/stdin, () => let r = Handle/write(Handle/stdout, Str/to_bytes("closed;")); ())!;
+            let _ = Handle/write(Handle/stdout, Str/to_bytes("body;"));
             Async/pure(());
         Async/run(main)
         "#,
@@ -284,12 +284,12 @@ fn manual_release_runs_a_finalizer_once_and_completion_does_not_repeat_it() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str};
+        use /std/{Async, Handle, Str};
         let main : Async({}) =
-            let _ = Async/acquire(Io/stdin, () => let r = Io/write(Io/stdout, Str/to_bytes("closed;")); ())!;
-            let _ = Io/write(Io/stdout, Str/to_bytes("body;"));
-            let _ = Async/release(Io/stdin)!;
-            let _ = Io/write(Io/stdout, Str/to_bytes("after;"));
+            let _ = Async/acquire(Handle/stdin, () => let r = Handle/write(Handle/stdout, Str/to_bytes("closed;")); ())!;
+            let _ = Handle/write(Handle/stdout, Str/to_bytes("body;"));
+            let _ = Async/release(Handle/stdin)!;
+            let _ = Handle/write(Handle/stdout, Str/to_bytes("after;"));
             Async/pure(());
         Async/run(main)
         "#,
@@ -310,7 +310,7 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Io, Str, Nat, Lst};
+        use /std/{Handle, Str, Nat, Lst};
         induct Susp(A : Type) : Type
         | now(A)
         | later(() -> Susp(A))
@@ -323,7 +323,7 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
             | now(a) => (b.A, Susp/now(a))
             | later(k) => (b.A, k())
             end);
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Lst/len(stepped))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/len(stepped))))
         "#,
         system,
     )
@@ -334,7 +334,7 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
 #[test]
 fn sleep_parks_until_the_clock_passes_the_deadline() {
     // The timer half of the poll contract: the root sleeps five seconds, so the
-    // scheduler parks it in the `sleeping` registry and drives `Io/poll` with a
+    // scheduler parks it in the `sleeping` registry and drives `Handle/poll` with a
     // finite timeout instead of `-1`. The mock's poll returns instantly and each
     // `clock_mono` reading pops one scripted value, so the fiber resumes exactly
     // when the scripted ramp passes the deadline — no readiness event involved.
@@ -342,11 +342,11 @@ fn sleep_parks_until_the_clock_passes_the_deadline() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str};
+        use /std/{Async, Handle, Str};
         use /std/time/{Duration};
         let main : Async({}) =
             Async/bind(Async/sleep(Duration/of_secs(5)), (_) =>
-                let w = Io/write(Io/stdout, Str/to_bytes("woke;"));
+                let w = Handle/write(Handle/stdout, Str/to_bytes("woke;"));
                 Async/pure(()));
         Async/run(main)
         "#,
@@ -365,10 +365,10 @@ fn sleepers_wake_in_deadline_order() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str};
+        use /std/{Async, Handle, Str};
         use /std/time/{Duration};
         let mark(m : Str) -> Async({}) =
-            let w = Io/write(Io/stdout, Str/to_bytes(m));
+            let w = Handle/write(Handle/stdout, Str/to_bytes(m));
             Async/pure(());
         let main : Async({}) =
             let ha = Async/spawn(() => Async/bind(Async/sleep(Duration/of_secs(3)), (_) => mark("a;")))!;
@@ -393,13 +393,13 @@ fn timeout_returns_some_when_the_body_finishes_first() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str, Nat};
+        use /std/{Async, Handle, Str, Nat};
         use /std/time/{Duration};
         let main : Async({}) =
             let r = Async/timeout(Duration/of_secs(5), () => Async/pure(42))!;
             match r : Async({})
-            | some(v) => let w = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(v))); Async/pure(())
-            | none() => let w = Io/write(Io/stdout, Str/to_bytes("none")); Async/pure(())
+            | some(v) => let w = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(v))); Async/pure(())
+            | none() => let w = Handle/write(Handle/stdout, Str/to_bytes("none")); Async/pure(())
             end;
         Async/run(main)
         "#,
@@ -419,17 +419,17 @@ fn timeout_returns_none_and_runs_the_cancelled_bodys_finalizer() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str, Nat};
+        use /std/{Async, Handle, Str, Nat};
         use /std/time/{Duration};
         let main : Async({}) =
             let r = Async/timeout(Duration/of_secs(2), () =>
-                Async/using(Io/stdin, () => let w = Io/write(Io/stdout, Str/to_bytes("released;")); (),
+                Async/using(Handle/stdin, () => let w = Handle/write(Handle/stdout, Str/to_bytes("released;")); (),
                     Async/bind(Async/sleep(Duration/of_secs(50)), (_) =>
-                        let w = Io/write(Io/stdout, Str/to_bytes("body;"));
+                        let w = Handle/write(Handle/stdout, Str/to_bytes("body;"));
                         Async/pure(0))))!;
             match r : Async({})
-            | some(v) => let w = Io/write(Io/stdout, Str/to_bytes("some")); Async/pure(())
-            | none() => let w = Io/write(Io/stdout, Str/to_bytes("none;")); Async/pure(())
+            | some(v) => let w = Handle/write(Handle/stdout, Str/to_bytes("some")); Async/pure(())
+            | none() => let w = Handle/write(Handle/stdout, Str/to_bytes("none;")); Async/pure(())
             end;
         Async/run(main)
         "#,
@@ -449,19 +449,19 @@ fn race_of_two_sleeps_wakes_the_earlier_and_reclaims_the_later() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str, Nat};
+        use /std/{Async, Handle, Str, Nat};
         use /std/time/{Duration};
         let main : Async({}) =
             let v = Async/race([
                 () => Async/bind(Async/sleep(Duration/of_secs(2)), (_) =>
-                    let w = Io/write(Io/stdout, Str/to_bytes("quick;"));
+                    let w = Handle/write(Handle/stdout, Str/to_bytes("quick;"));
                     Async/pure(1)),
-                () => Async/using(Io/stdin, () => let w = Io/write(Io/stdout, Str/to_bytes("released;")); (),
+                () => Async/using(Handle/stdin, () => let w = Handle/write(Handle/stdout, Str/to_bytes("released;")); (),
                     Async/bind(Async/sleep(Duration/of_secs(60)), (_) =>
-                        let w = Io/write(Io/stdout, Str/to_bytes("slow;"));
+                        let w = Handle/write(Handle/stdout, Str/to_bytes("slow;"));
                         Async/pure(2)))
             ])!;
-            let z = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(v)));
+            let z = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(v)));
             Async/pure(());
         Async/run(main)
         "#,
@@ -481,16 +481,16 @@ fn block_on_drops_a_sleeping_child_when_root_done() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str};
+        use /std/{Async, Handle, Str};
         use /std/time/{Duration};
         let child : Async({}) =
-            Async/using(Io/stdin, () => let w = Io/write(Io/stdout, Str/to_bytes("released;")); (),
+            Async/using(Handle/stdin, () => let w = Handle/write(Handle/stdout, Str/to_bytes("released;")); (),
                 Async/bind(Async/sleep(Duration/of_secs(100)), (_) =>
-                    let w = Io/write(Io/stdout, Str/to_bytes("child;"));
+                    let w = Handle/write(Handle/stdout, Str/to_bytes("child;"));
                     Async/pure(())));
         let main : Async({}) =
             Async/bind(Async/go(() => child), (_) =>
-                let w = Io/write(Io/stdout, Str/to_bytes("root;"));
+                let w = Handle/write(Handle/stdout, Str/to_bytes("root;"));
                 Async/pure(()));
         Async/run(main)
         "#,

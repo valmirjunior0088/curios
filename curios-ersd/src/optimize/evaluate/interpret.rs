@@ -25,7 +25,7 @@ use {
         FunctionId, Intrinsic, Module, Operation, RecValue, Rhs, Semantics, SequenceGrain,
         SequenceOp, Statement, Terminator, ValueId, VariantArm,
     },
-    curios_base::Grain,
+    curios_base::{Grain, PackedBin},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -769,7 +769,7 @@ fn suffix_view(grain: SequenceGrain, remainder: &[Value]) -> Value {
     match grain {
         SequenceGrain::List => Value::Lst(Rc::new(remainder.to_vec())),
         SequenceGrain::Bin(grain) => {
-            let mut packed = curios_base::PackedBin::from_bytes(Vec::new());
+            let mut packed = PackedBin::from_bytes(Vec::new());
             for value in remainder {
                 packed = match (grain, value) {
                     (Grain::X, Value::Byte(byte)) => packed

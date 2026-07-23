@@ -79,7 +79,7 @@ A source record describes one unit of input text. Its origin is one of:
 
 - `file`: text read from a filesystem path.
 - `embedded`: `std` or `syn` text embedded in the compiler, with a logical URI and module path.
-- `generated`: declarations synthesized from compiler data, such as `/sys/Io`; these have provenance but no verbatim source text.
+- `generated`: declarations synthesized from compiler data, such as `/sys/Handle`; these have provenance but no verbatim source text.
 
 Every textual source has a `source_id`, logical URI, content hash, byte length, and optional filesystem path. The source ID is the coordinate used by locations; paths are presentation and navigation metadata, not identity.
 

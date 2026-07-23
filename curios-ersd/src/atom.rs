@@ -48,5 +48,5 @@ pub enum Constant {
     /// A packed binary of the given grain.
     Bin(Grain, PackedBin),
     /// An opaque host handle token.
-    Io(u32),
+    Handle(u32),
 }

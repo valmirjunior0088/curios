@@ -33,7 +33,7 @@ fn byte() -> Term {
 
 // A `Nat` literal value term, built exactly as the parser builds one: `0` is
 // bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire
-// codes (`status`, `poll`, and `mode`) into the `/sys/Io` constant mirror.
+// codes (`status`, `poll`, and `mode`) into the `/sys/Handle` constant mirror.
 fn nat_lit(n: u32) -> Term {
     match n {
         0 => prim(Prim::Nat(Nat::Zero)),
@@ -60,8 +60,8 @@ fn bool_() -> Term {
     prim(Prim::BoolType)
 }
 
-fn io() -> Term {
-    prim(Prim::IoType)
+fn handle() -> Term {
+    prim(Prim::HandleType)
 }
 
 fn unit() -> Term {
@@ -200,7 +200,7 @@ fn wire_type(type_: &WireType) -> Term {
         WireType::Int => int(),
         WireType::Bool => bool_(),
         WireType::Bin => bin(Grain::X),
-        WireType::Io => io(),
+        WireType::Handle => handle(),
         WireType::Lst(element) => lst_of(wire_type(element)),
     }
 }
@@ -208,7 +208,7 @@ fn wire_type(type_: &WireType) -> Term {
 /// A host-function declaration generated from a foreign-store row: parameter
 /// names/types and the result shape (unit, bare type, named record) come off
 /// the `WireSignature`, and the body bakes the generic `Foreign` prim applied
-/// to the parameter names. Used both for `/sys/Io`'s rows (always `pub`) and,
+/// to the parameter names. Used both for `/sys/Handle`'s rows (always `pub`) and,
 /// via [`foreign_signature`], for a user's own `foreign` declaration (`vis_pub`
 /// follows what they wrote).
 fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
@@ -246,7 +246,7 @@ fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
 }
 
 /// Handle one user-written `foreign` declaration: register its
-/// [`ForeignFunction`] into the compilation's (non-`sys_io`) foreign store,
+/// [`ForeignFunction`] into the compilation's (non-`host_ops`) foreign store,
 /// and return the ordinary [`LetSignature`] `into_core` lowers it as — wire-type
 /// bookkeeping and `host_fn`'s shape stay internal to this module, so `into_core`
 /// only ever deals with the same `LetSignature` it already knows how to lower
@@ -556,30 +556,39 @@ fn cell_ops() -> Vec<TopItem> {
     ]
 }
 
-fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
-    let mut ops = vec![
-        pub_let("stdin", io(), prim(Prim::Io(stdio::STDIN))),
-        pub_let("stdout", io(), prim(Prim::Io(stdio::STDOUT))),
-        pub_let("stderr", io(), prim(Prim::Io(stdio::STDERR))),
+// The values and operations of the `/sys/Handle` type: the three standard
+// streams and handle identity. The host operations that mint and consume
+// handles live flat at the `/sys` root (see `host_operations`), not here.
+fn handle_ops() -> Vec<TopItem> {
+    vec![
+        pub_let("stdin", handle(), prim(Prim::Handle(stdio::STDIN))),
+        pub_let("stdout", handle(), prim(Prim::Handle(stdio::STDOUT))),
+        pub_let("stderr", handle(), prim(Prim::Handle(stdio::STDERR))),
         pub_fn(
             "eql",
-            vec![("a", io()), ("b", io())],
+            vec![("a", handle()), ("b", handle())],
             bool_(),
-            prim(Prim::IoEql(name("a"), name("b"))),
+            prim(Prim::HandleEql(name("a"), name("b"))),
         ),
-    ];
+    ]
+}
 
+// The host operations, `exit`, and the wire-code mirror, all emitted flat at
+// the `/sys` root: every store-described op (in declaration order), then
+// `exit`, then the `Status`/`Poll`/`Mode` code modules. Operations are
+// lowercase and the code modules capitalized, so the `poll` op and the `Poll`
+// module coexist without clashing.
+fn host_operations(foreigns: &ForeignStore) -> Vec<TopItem> {
     // Every store-described host op, in store (= declaration) order. Each is a
     // *function*, including the 0-arity clocks/args: a value binding would
     // force-reduce its effectful prim body at definition (the bare prelude is
     // lowered whole, so a top-level value `let` lands in `main`) and trip the
-    // IO-at-type-level guard, while under the function abstraction the prim
-    // stays unevaluated until called.
-    ops.extend(
-        foreigns
-            .iter()
-            .map(|function| TopItem::Let(host_fn(function, true))),
-    );
+    // host-effect-at-type-level guard, while under the function abstraction the
+    // prim stays unevaluated until called.
+    let mut ops = foreigns
+        .iter()
+        .map(|function| TopItem::Let(host_fn(function, true)))
+        .collect::<Vec<_>>();
 
     ops.extend([
         // `(@A : Type) -> Nat -> A`: exit never returns, so its result type is
@@ -591,12 +600,11 @@ fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
                 (Plicity::Explicit, "n", nat()),
             ],
             name("A"),
-            prim(Prim::IoExit(name("A"), name("n"))),
+            prim(Prim::Exit(name("A"), name("n"))),
         ),
         // The wire-code mirror: the guest counterpart of ABI wire codes, so the
-        // standard library compares against named constants the host derives from
-        // the same source. `read`/`write` already name ops here, so each family
-        // is a sub-module.
+        // standard library compares against named constants the host derives
+        // from the same source.
         pub_mod(
             "Status",
             vec![
@@ -636,61 +644,62 @@ fn io_ops(foreigns: &ForeignStore) -> Vec<TopItem> {
     ops
 }
 
-// The `sys` module body of primitive types and operations. The prelude artifact
-// builder supplies it to fixed-root discovery alongside authored `/syn` and
-// `/std`; production compilation restores the prepared result. The host
-// operations under `Io` come off `foreigns`.
 /// Construct the generated `/sys` surface module from the authoritative host
-/// function store. This is exposed for the build-time prelude artifact builder;
-/// production compilation never lowers it at runtime.
+/// function store. Each type module (`Nat`, …, `Handle`, `Lst`, `Cell`) holds
+/// its type and operations and hoists the type to the `/sys` root; the host
+/// operations, `exit`, and the `Status`/`Poll`/`Mode` code modules sit flat at
+/// the root. Exposed for the build-time prelude artifact builder; production
+/// compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore) -> Module {
-    Module {
-        items: vec![
-            pub_mod("Nat", with_type(pub_let("Nat", type_(), nat()), nat_ops())),
-            pub_use("Nat"),
-            pub_mod(
-                "Byte",
-                with_type(pub_let("Byte", type_(), byte()), byte_ops()),
+    let mut items = vec![
+        pub_mod("Nat", with_type(pub_let("Nat", type_(), nat()), nat_ops())),
+        pub_use("Nat"),
+        pub_mod(
+            "Byte",
+            with_type(pub_let("Byte", type_(), byte()), byte_ops()),
+        ),
+        pub_use("Byte"),
+        pub_mod("Int", with_type(pub_let("Int", type_(), int()), int_ops())),
+        pub_use("Int"),
+        pub_mod("Flt", with_type(pub_let("Flt", type_(), flt()), flt_ops())),
+        pub_use("Flt"),
+        pub_mod(
+            "Bits",
+            with_type(pub_let("Bits", type_(), bin(Grain::B)), bin_ops(Grain::B)),
+        ),
+        pub_mod(
+            "Bytes",
+            with_type(pub_let("Bytes", type_(), bin(Grain::X)), bin_ops(Grain::X)),
+        ),
+        pub_mod(
+            "Bool",
+            with_type(pub_let("Bool", type_(), bool_()), bool_ops()),
+        ),
+        pub_use("Bool"),
+        pub_mod(
+            "Handle",
+            with_type(pub_let("Handle", type_(), handle()), handle_ops()),
+        ),
+        pub_use("Handle"),
+        pub_mod(
+            "Lst",
+            with_type(
+                pub_fn("Lst", vec![("T", type_())], type_(), lst_of(name("T"))),
+                lst_ops(),
             ),
-            pub_use("Byte"),
-            pub_mod("Int", with_type(pub_let("Int", type_(), int()), int_ops())),
-            pub_use("Int"),
-            pub_mod("Flt", with_type(pub_let("Flt", type_(), flt()), flt_ops())),
-            pub_use("Flt"),
-            pub_mod(
-                "Bits",
-                with_type(pub_let("Bits", type_(), bin(Grain::B)), bin_ops(Grain::B)),
+        ),
+        pub_use("Lst"),
+        pub_mod(
+            "Cell",
+            with_type(
+                pub_fn("Cell", vec![("T", type_())], type_(), cell_of(name("T"))),
+                cell_ops(),
             ),
-            pub_mod(
-                "Bytes",
-                with_type(pub_let("Bytes", type_(), bin(Grain::X)), bin_ops(Grain::X)),
-            ),
-            pub_mod(
-                "Bool",
-                with_type(pub_let("Bool", type_(), bool_()), bool_ops()),
-            ),
-            pub_use("Bool"),
-            pub_mod(
-                "Io",
-                with_type(pub_let("Io", type_(), io()), io_ops(foreigns)),
-            ),
-            pub_use("Io"),
-            pub_mod(
-                "Lst",
-                with_type(
-                    pub_fn("Lst", vec![("T", type_())], type_(), lst_of(name("T"))),
-                    lst_ops(),
-                ),
-            ),
-            pub_use("Lst"),
-            pub_mod(
-                "Cell",
-                with_type(
-                    pub_fn("Cell", vec![("T", type_())], type_(), cell_of(name("T"))),
-                    cell_ops(),
-                ),
-            ),
-            pub_use("Cell"),
-        ],
-    }
+        ),
+        pub_use("Cell"),
+    ];
+
+    items.extend(host_operations(foreigns));
+
+    Module { items }
 }

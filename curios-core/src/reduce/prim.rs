@@ -4,7 +4,7 @@ use {
         Context, Nat, Peel, Prim, ReduceError, Subterm, Term, normalize_concat, peel_bin,
         peel_first_atom, peel_first_elem,
     },
-    curios_base::{Flt, Grain, Int, PackedBin},
+    curios_base::{Flt, Grain, Int, PackedBin, int_rotl, int_rotr, nat_rotl, nat_rotr},
     num_traits::{ToPrimitive, Zero},
     std::cmp::Ordering,
 };
@@ -476,8 +476,8 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
         ),
         // Handles are opaque runtime tokens with no compile-time literal form,
         // so this only ever reduces its operands and rebuilds — it never folds.
-        Prim::IoEql(left, right) => {
-            reduce_nat_binary(context, left, right, |_, _| None, Prim::IoEql)
+        Prim::HandleEql(left, right) => {
+            reduce_nat_binary(context, left, right, |_, _| None, Prim::HandleEql)
         }
         Prim::NatNeq(left, right) => reduce_nat_compare(
             context,
@@ -673,7 +673,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             |l, r| {
                 let l = l.to_big_uint()?.to_u32()?;
                 let r = r.to_big_uint()?.to_u32()?;
-                Some(Prim::Nat(Nat::new(curios_base::nat_rotl(l, r) as usize)))
+                Some(Prim::Nat(Nat::new(nat_rotl(l, r) as usize)))
             },
             Prim::NatRotl,
         ),
@@ -684,7 +684,7 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             |l, r| {
                 let l = l.to_big_uint()?.to_u32()?;
                 let r = r.to_big_uint()?.to_u32()?;
-                Some(Prim::Nat(Nat::new(curios_base::nat_rotr(l, r) as usize)))
+                Some(Prim::Nat(Nat::new(nat_rotr(l, r) as usize)))
             },
             Prim::NatRotr,
         ),
@@ -845,24 +845,14 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             context,
             left,
             right,
-            |l, r| {
-                Some(Prim::Int(Int::new(curios_base::int_rotl(
-                    l.to_i32()?,
-                    r.to_i32()?,
-                ))))
-            },
+            |l, r| Some(Prim::Int(Int::new(int_rotl(l.to_i32()?, r.to_i32()?)))),
             Prim::IntRotl,
         ),
         Prim::IntRotr(left, right) => reduce_int_binary(
             context,
             left,
             right,
-            |l, r| {
-                Some(Prim::Int(Int::new(curios_base::int_rotr(
-                    l.to_i32()?,
-                    r.to_i32()?,
-                ))))
-            },
+            |l, r| Some(Prim::Int(Int::new(int_rotr(l.to_i32()?, r.to_i32()?)))),
             Prim::IntRotr,
         ),
         Prim::IntClz(inner) => reduce_int_unary(
@@ -1724,10 +1714,10 @@ pub(crate) fn reduce_prim(context: &mut Context, prim: &Prim) -> Result<Subterm,
             )
         }
         // The handle type and handle tokens are inert values, like `Nat`/`Nat(_)`.
-        Prim::IoType => Ok(Subterm::Prim(Prim::IoType)),
-        Prim::Io(token) => Ok(Subterm::Prim(Prim::Io(*token))),
-        Prim::IoExit(_, code) => Err(ReduceError::EffectAtTypeLevel {
-            kind: "IoExit".to_string(),
+        Prim::HandleType => Ok(Subterm::Prim(Prim::HandleType)),
+        Prim::Handle(token) => Ok(Subterm::Prim(Prim::Handle(*token))),
+        Prim::Exit(_, code) => Err(ReduceError::EffectAtTypeLevel {
+            kind: "Exit".to_string(),
             span: code.span(),
         }),
         // A store-described host call never reduces at the type level — the

@@ -106,14 +106,14 @@ impl OsHost {
 
     /// Mint a fresh handle for `resource` under the table lock (see
     /// [`Table::mint`]).
-    fn mint(&self, resource: OsResource) -> Io {
+    fn mint(&self, resource: OsResource) -> Handle {
         self.table.lock().unwrap().mint(resource)
     }
 
     /// Pull an unconnected socket out of the table by handle, leaving any other
     /// resource (or none) in place. Lets `connect`/`listen` transition a handle
     /// without holding the lock across the blocking syscall.
-    fn take_unconnected(&self, handle: &Io) -> Option<Socket> {
+    fn take_unconnected(&self, handle: &Handle) -> Option<Socket> {
         let mut table = self.table.lock().unwrap();
 
         match table.remove(handle) {
@@ -130,7 +130,7 @@ impl OsHost {
     /// Pull a connected stream socket out of the table by handle, leaving any
     /// other resource (or none) in place. Lets `start_tls`/`start_tls_server`
     /// upgrade a handle without holding the lock across the blocking handshake.
-    fn take_connected(&self, handle: &Io) -> Option<Socket> {
+    fn take_connected(&self, handle: &Handle) -> Option<Socket> {
         let mut table = self.table.lock().unwrap();
 
         match table.remove(handle) {
@@ -147,7 +147,7 @@ impl OsHost {
     /// Apply a `socket2` setter to a configurable handle. Every socket kind —
     /// unconnected, connected, or listening — exposes its typed setters directly;
     /// a `File` has no socket options, so that path records nothing and succeeds.
-    fn with_socket<F>(&self, handle: &Io, apply: F) -> Status
+    fn with_socket<F>(&self, handle: &Handle, apply: F) -> Status
     where
         F: FnOnce(&Socket) -> std::io::Result<()>,
     {
@@ -157,24 +157,24 @@ impl OsHost {
             Some(OsResource::Unconnected(socket) | OsResource::Connected(socket)) => {
                 match apply(socket) {
                     Ok(()) => Status::Ok,
-                    Err(error) => Status::from(error),
+                    Err(error) => status_from_error(error),
                 }
             }
             // The listener is `Arc`-held; `&Arc<Socket>` deref-coerces to the
             // `&Socket` the setter wants.
             Some(OsResource::Listener(socket)) => match apply(socket) {
                 Ok(()) => Status::Ok,
-                Err(error) => Status::from(error),
+                Err(error) => status_from_error(error),
             },
             // A TLS stream forwards setters to its underlying socket, so a
             // timeout set after the upgrade still takes effect.
             Some(OsResource::ClientTls(stream)) => match apply(&stream.sock) {
                 Ok(()) => Status::Ok,
-                Err(error) => Status::from(error),
+                Err(error) => status_from_error(error),
             },
             Some(OsResource::ServerTls(stream)) => match apply(&stream.sock) {
                 Ok(()) => Status::Ok,
-                Err(error) => Status::from(error),
+                Err(error) => status_from_error(error),
             },
             // A file, a config token, and an in-flight lookup have no socket
             // options: record nothing.
@@ -192,8 +192,8 @@ impl Default for OsHost {
     }
 }
 
-impl Host for OsHost {
-    fn open(&self, path: &[u8], mode: Mode) -> (Status, Io) {
+impl HostOps for OsHost {
+    fn open(&self, path: &[u8], mode: Mode) -> (Status, Handle) {
         let path = String::from_utf8_lossy(path).into_owned();
 
         let mut options = OpenOptions::new();
@@ -206,11 +206,11 @@ impl Host for OsHost {
 
         match options.open(&path) {
             Ok(file) => (Status::Ok, self.mint(OsResource::File(file))),
-            Err(error) => (Status::from(error), Io::Other(Vec::new())),
+            Err(error) => (status_from_error(error), Handle::Other(Vec::new())),
         }
     }
 
-    fn lookup(&self, host: &[u8], port: u32) -> (Status, Io) {
+    fn lookup(&self, host: &[u8], port: u32) -> (Status, Handle) {
         let host = String::from_utf8_lossy(host).into_owned();
         let address = format!("{host}:{port}");
 
@@ -229,12 +229,12 @@ impl Host for OsHost {
                     slot: pending.slot,
                 }),
             ),
-            Ok(None) => (Status::WouldBlock, Io::Other(Vec::new())),
-            Err(status) => (status, Io::Other(Vec::new())),
+            Ok(None) => (Status::WouldBlock, Handle::Other(Vec::new())),
+            Err(status) => (status, Handle::Other(Vec::new())),
         }
     }
 
-    fn resolve(&self, handle: Io) -> (Status, Vec<Vec<u8>>) {
+    fn resolve(&self, handle: Handle) -> (Status, Vec<Vec<u8>>) {
         // Drain the finished lookup. Reached only after `poll` reports the handle
         // ready, so the slot is filled; a stray early call leaves the handle
         // intact and honestly reports `WouldBlock` so the caller can retry.
@@ -255,20 +255,20 @@ impl Host for OsHost {
         }
     }
 
-    fn socket(&self, addr: &[u8]) -> (Status, Io) {
+    fn socket(&self, addr: &[u8]) -> (Status, Handle) {
         // The address blob is the canonical "ip:port" string `resolve` minted.
         let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
             Ok(address) => address,
-            Err(_) => return (Status::NotFound, Io::Other(Vec::new())),
+            Err(_) => return (Status::NotFound, Handle::Other(Vec::new())),
         };
 
         match Socket::new(Domain::for_address(address), Type::STREAM, None) {
             Ok(socket) => (Status::Ok, self.mint(OsResource::Unconnected(socket))),
-            Err(error) => (Status::from(error), Io::Other(Vec::new())),
+            Err(error) => (status_from_error(error), Handle::Other(Vec::new())),
         }
     }
 
-    fn bind(&self, io: Io, addr: &[u8]) -> Status {
+    fn bind(&self, io: Handle, addr: &[u8]) -> Status {
         // The address blob is the canonical "ip:port" string `resolve` minted.
         let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
             Ok(address) => address,
@@ -278,13 +278,13 @@ impl Host for OsHost {
         match self.table.lock().unwrap().get(&io) {
             Some(OsResource::Unconnected(socket)) => match socket.bind(&SockAddr::from(address)) {
                 Ok(()) => Status::Ok,
-                Err(error) => Status::from(error),
+                Err(error) => status_from_error(error),
             },
             _ => Status::NotFound,
         }
     }
 
-    fn connect(&self, io: Io, addr: &[u8]) -> Status {
+    fn connect(&self, io: Handle, addr: &[u8]) -> Status {
         // The address blob is the canonical "ip:port" string `resolve` minted.
         let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
             Ok(address) => address,
@@ -307,11 +307,11 @@ impl Host for OsHost {
 
                 Status::Ok
             }
-            Err(error) => Status::from(error),
+            Err(error) => status_from_error(error),
         }
     }
 
-    fn start_tls(&self, io: Io, sni: &[u8]) -> Status {
+    fn start_tls(&self, io: Handle, sni: &[u8]) -> Status {
         let server_name = match std::str::from_utf8(sni)
             .ok()
             .and_then(|name| ServerName::try_from(name.to_owned()).ok())
@@ -350,15 +350,15 @@ impl Host for OsHost {
         }
     }
 
-    fn tls_server_config(&self, mut cert: &[u8], mut key: &[u8]) -> (Status, Io) {
+    fn tls_server_config(&self, mut cert: &[u8], mut key: &[u8]) -> (Status, Handle) {
         let certs = match rustls_pemfile::certs(&mut cert).collect::<Result<Vec<_>, _>>() {
             Ok(certs) if !certs.is_empty() => certs,
-            _ => return (Status::TlsError, Io::Other(Vec::new())),
+            _ => return (Status::TlsError, Handle::Other(Vec::new())),
         };
 
         let key = match rustls_pemfile::private_key(&mut key) {
             Ok(Some(key)) => key,
-            _ => return (Status::TlsError, Io::Other(Vec::new())),
+            _ => return (Status::TlsError, Handle::Other(Vec::new())),
         };
 
         let config = match ServerConfig::builder_with_provider(Arc::new(ring::default_provider()))
@@ -368,13 +368,13 @@ impl Host for OsHost {
             .with_single_cert(certs, key)
         {
             Ok(config) => Arc::new(config),
-            Err(_) => return (Status::TlsError, Io::Other(Vec::new())),
+            Err(_) => return (Status::TlsError, Handle::Other(Vec::new())),
         };
 
         (Status::Ok, self.mint(OsResource::TlsConfig(config)))
     }
 
-    fn start_tls_server(&self, io: Io, cfg: Io) -> Status {
+    fn start_tls_server(&self, io: Handle, cfg: Handle) -> Status {
         // Clone the config `Arc` out, never holding the lock across the
         // handshake. The config handle stays in the table for reuse.
         let config = match self.table.lock().unwrap().get(&cfg) {
@@ -407,7 +407,7 @@ impl Host for OsHost {
         }
     }
 
-    fn listen(&self, io: Io, backlog: u32) -> Status {
+    fn listen(&self, io: Handle, backlog: u32) -> Status {
         let socket = match self.take_unconnected(&io) {
             Some(socket) => socket,
             None => return Status::NotFound,
@@ -422,48 +422,48 @@ impl Host for OsHost {
 
                 Status::Ok
             }
-            Err(error) => Status::from(error),
+            Err(error) => status_from_error(error),
         }
     }
 
-    fn accept(&self, io: Io) -> (Status, Io) {
+    fn accept(&self, io: Handle) -> (Status, Handle) {
         // `accept` blocks until a connection arrives, so share the `Arc`-held
         // listener out and drop the table lock before the wait — never hold it
         // across one. The `Arc` clone is a refcount bump, not a `dup` syscall.
         let listener = match self.table.lock().unwrap().get(&io) {
             Some(OsResource::Listener(socket)) => Arc::clone(socket),
-            _ => return (Status::NotFound, Io::Other(Vec::new())),
+            _ => return (Status::NotFound, Handle::Other(Vec::new())),
         };
 
         match listener.accept() {
             Ok((stream, _)) => (Status::Ok, self.mint(OsResource::Connected(stream))),
-            Err(error) => (Status::from(error), Io::Other(Vec::new())),
+            Err(error) => (status_from_error(error), Handle::Other(Vec::new())),
         }
     }
 
-    fn set_nonblocking(&self, io: Io, on: u32) -> Status {
+    fn set_nonblocking(&self, io: Handle, on: u32) -> Status {
         self.with_socket(&io, |socket| socket.set_nonblocking(on != 0))
     }
 
-    fn set_recv_timeout(&self, io: Io, ms: u32) -> Status {
+    fn set_recv_timeout(&self, io: Handle, ms: u32) -> Status {
         // `0` ms clears the timeout (`None`); any other value is a duration.
         self.with_socket(&io, |socket| {
             socket.set_read_timeout((ms != 0).then(|| Duration::from_millis(ms.into())))
         })
     }
 
-    fn set_send_timeout(&self, io: Io, ms: u32) -> Status {
+    fn set_send_timeout(&self, io: Handle, ms: u32) -> Status {
         // `0` ms clears the timeout (`None`); any other value is a duration.
         self.with_socket(&io, |socket| {
             socket.set_write_timeout((ms != 0).then(|| Duration::from_millis(ms.into())))
         })
     }
 
-    fn set_reuseaddr(&self, io: Io, on: u32) -> Status {
+    fn set_reuseaddr(&self, io: Handle, on: u32) -> Status {
         self.with_socket(&io, |socket| socket.set_reuse_address(on != 0))
     }
 
-    fn poll(&self, handles: &[Io], events: &[Poll], timeout_ms: i32) -> Vec<Poll> {
+    fn poll(&self, handles: &[Handle], events: &[Poll], timeout_ms: i32) -> Vec<Poll> {
         let table = self.table.lock().unwrap();
 
         // Keep the stdio owners alive for the duration of the borrow: each
@@ -479,10 +479,10 @@ impl Host for OsHost {
 
         for (slot, handle) in handles.iter().enumerate() {
             let fd = match handle {
-                Io::Stdin => Some(in_handle.as_fd()),
-                Io::Stdout => Some(out_handle.as_fd()),
-                Io::Stderr => Some(err_handle.as_fd()),
-                Io::Other(_) => table.get(handle).and_then(|resource| match resource {
+                Handle::Stdin => Some(in_handle.as_fd()),
+                Handle::Stdout => Some(out_handle.as_fd()),
+                Handle::Stderr => Some(err_handle.as_fd()),
+                Handle::Other(_) => table.get(handle).and_then(|resource| match resource {
                     OsResource::File(file) => Some(file.as_fd()),
                     OsResource::Connected(socket) | OsResource::Unconnected(socket) => {
                         Some(socket.as_fd())
@@ -506,11 +506,7 @@ impl Host for OsHost {
             if let Some(fd) = fd {
                 polls.push(PollFd::from_borrowed_fd(
                     fd,
-                    events
-                        .get(slot)
-                        .copied()
-                        .unwrap_or_else(Poll::empty)
-                        .to_poll_flags(),
+                    poll_to_flags(events.get(slot).copied().unwrap_or_else(Poll::empty)),
                 ));
 
                 slots.push(slot);
@@ -532,23 +528,23 @@ impl Host for OsHost {
         // re-polls. On success, scatter each revents back to its input slot.
         if poll(&mut polls, timeout.as_ref()).is_ok() {
             for (index, &slot) in slots.iter().enumerate() {
-                results[slot] = Poll::from_poll_flags(polls[index].revents());
+                results[slot] = poll_from_flags(polls[index].revents());
             }
         }
 
         results
     }
 
-    fn close(&self, io: Io) {
+    fn close(&self, io: Handle) {
         self.table.lock().unwrap().remove(&io);
     }
 
-    fn read(&self, io: Io, count: u32) -> (Status, Vec<u8>) {
+    fn read(&self, io: Handle, count: u32) -> (Status, Vec<u8>) {
         let mut buffer = vec![0; count as usize];
 
         let result = match &io {
-            Io::Stdin => stdin().lock().read(&mut buffer),
-            Io::Other(_) => {
+            Handle::Stdin => stdin().lock().read(&mut buffer),
+            Handle::Other(_) => {
                 let mut table = self.table.lock().unwrap();
                 let stream: &mut dyn Read = match table.get_mut(&io) {
                     Some(OsResource::File(file)) => file,
@@ -571,36 +567,36 @@ impl Host for OsHost {
 
                 (Status::Ok, buffer)
             }
-            Err(error) => (Status::from(error), vec![]),
+            Err(error) => (status_from_error(error), vec![]),
         }
     }
 
-    fn write(&self, io: Io, bytes: &[u8]) -> (Status, u32) {
+    fn write(&self, io: Handle, bytes: &[u8]) -> (Status, u32) {
         // The blocking std streams write the whole buffer or fail; report the
         // full length on success so callers see the write completed.
         match io {
-            Io::Stdout => {
+            Handle::Stdout => {
                 return match stdout().write_all(bytes) {
                     Ok(()) => (Status::Ok, bytes.len() as u32),
-                    Err(error) => (Status::from(error), 0),
+                    Err(error) => (status_from_error(error), 0),
                 };
             }
-            Io::Stderr => {
+            Handle::Stderr => {
                 return match stderr().write_all(bytes) {
                     Ok(()) => (Status::Ok, bytes.len() as u32),
-                    Err(error) => (Status::from(error), 0),
+                    Err(error) => (status_from_error(error), 0),
                 };
             }
             // POSIX semantics: stdin is plain fd 0, so the write succeeds when
             // the process was handed a read-write descriptor (a terminal) and
             // reports `EBADF` when it was opened read-only.
-            Io::Stdin => {
+            Handle::Stdin => {
                 return match rustix::io::write(stdin(), bytes) {
                     Ok(written) => (Status::Ok, written as u32),
-                    Err(errno) => (Status::from(std::io::Error::from(errno)), 0),
+                    Err(errno) => (status_from_error(std::io::Error::from(errno)), 0),
                 };
             }
-            Io::Other(_) => {}
+            Handle::Other(_) => {}
         }
 
         let mut table = self.table.lock().unwrap();
@@ -619,7 +615,7 @@ impl Host for OsHost {
         // of what already went out and the caller would resend it.
         match stream.write(bytes) {
             Ok(written) => (Status::Ok, written as u32),
-            Err(error) => (Status::from(error), 0),
+            Err(error) => (status_from_error(error), 0),
         }
     }
 

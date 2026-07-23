@@ -21,10 +21,14 @@
 //! re-derived typing. Arm-side refinement is typing-only: it reproduces the
 //! context the arm was elaborated in and emits nothing.
 
-use super::{
-    Atom, Carrier, Cases, Context, Error, InductDecl, InductType, Lowering, Many, Match,
-    MotivePattern, Outcome, Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two, emitted,
-    expect_prim_head, infer, is_erasable, pattern_binder_slots, reduce_with, refine_head,
+use {
+    super::{
+        Atom, Carrier, Cases, Context, Error, InductDecl, InductType, Lowering, Many, Match,
+        MotivePattern, Outcome, Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two,
+        emitted, expect_prim_head, infer, is_erasable, pattern_binder_slots, reduce_with,
+        refine_head,
+    },
+    curios_base::{Grain, PackedBin},
 };
 
 /// The `Lst`/`Bin` carrier a sequence fold eliminates: the carrier-specific
@@ -32,7 +36,7 @@ use super::{
 #[derive(Clone, Copy)]
 enum SeqCarrier<'a> {
     Lst { element: &'a Term },
-    Bin { grain: curios_base::Grain },
+    Bin { grain: Grain },
 }
 
 impl SeqCarrier<'_> {
@@ -49,8 +53,8 @@ impl SeqCarrier<'_> {
         match self {
             SeqCarrier::Lst { element } => element.clone(),
             SeqCarrier::Bin { grain } => Term::prim(match grain {
-                curios_base::Grain::B => Prim::BoolType,
-                curios_base::Grain::X => Prim::ByteType,
+                Grain::B => Prim::BoolType,
+                Grain::X => Prim::ByteType,
             }),
         }
     }
@@ -59,9 +63,7 @@ impl SeqCarrier<'_> {
     fn empty_value(self) -> Term {
         match self {
             SeqCarrier::Lst { .. } => Term::prim(Prim::Lst(vec![])),
-            SeqCarrier::Bin { grain } => {
-                Term::prim(Prim::Bin(grain, curios_base::PackedBin::empty()))
-            }
+            SeqCarrier::Bin { grain } => Term::prim(Prim::Bin(grain, PackedBin::empty())),
         }
     }
 
@@ -79,7 +81,7 @@ impl SeqCarrier<'_> {
                 vec![
                     Term::prim(Prim::BinAppend(
                         grain,
-                        Term::prim(Prim::Bin(grain, curios_base::PackedBin::empty())),
+                        Term::prim(Prim::Bin(grain, PackedBin::empty())),
                         head.clone(),
                     )),
                     tail.clone(),

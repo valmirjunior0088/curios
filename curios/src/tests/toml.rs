@@ -11,7 +11,7 @@ use super::run;
 #[test]
 fn toml_scalar_documents_round_trip_deterministically() {
     let source = r#"
-        use /std/{Io, Str, Toml, Result, Lst};
+        use /std/{Handle, Str, Toml, Result, Lst};
         let canon(input : Str) -> Str =
             match Toml/decode(input)
             | failure(msg) => Str/concat("reject:", msg)
@@ -21,7 +21,7 @@ fn toml_scalar_documents_round_trip_deterministically() {
                 | failure(msg) => Str/concat("encode-fail:", msg)
                 end
             end;
-        Io/print(Str/join("|", [
+        /std/print(Str/join("|", [
             canon("i = 42"),
             canon("s = \"hi\""),
             canon("b = true"),
@@ -43,7 +43,7 @@ fn toml_scalar_documents_round_trip_deterministically() {
 #[test]
 fn toml_string_forms_and_escapes_decode() {
     let source = r#"
-        use /std/{Io, Str, Toml, Result, Lst};
+        use /std/{Handle, Str, Toml, Result, Lst};
         let canon(input : Str) -> Str =
             match Toml/decode(input)
             | failure(msg) => Str/concat("reject:", msg)
@@ -53,7 +53,7 @@ fn toml_string_forms_and_escapes_decode() {
                 | failure(msg) => Str/concat("encode-fail:", msg)
                 end
             end;
-        Io/print(Str/join("|", [
+        /std/print(Str/join("|", [
             canon("e = \"a\tb\\u0041\\U0001F600\""),
             canon("l = 'C:\\path'"),
             canon("m = \"\"\"\nhi\n\"\"\""),
@@ -72,7 +72,7 @@ fn toml_string_forms_and_escapes_decode() {
 #[test]
 fn toml_date_times_cover_the_rfc3339_subset() {
     let source = r#"
-        use /std/{Io, Str, Toml, Result, Lst};
+        use /std/{Handle, Str, Toml, Result, Lst};
         let canon(input : Str) -> Str =
             match Toml/decode(input)
             | failure(msg) => Str/concat("reject:", msg)
@@ -82,7 +82,7 @@ fn toml_date_times_cover_the_rfc3339_subset() {
                 | failure(msg) => Str/concat("encode-fail:", msg)
                 end
             end;
-        Io/print(Str/join("|", [
+        /std/print(Str/join("|", [
             canon("d = 1979-05-27T07:32:00Z"),
             canon("d = 1979-05-27 07:32:00Z"),
             canon("d = 1979-05-27T00:32:00-07:00"),
@@ -104,7 +104,7 @@ fn toml_date_times_cover_the_rfc3339_subset() {
 #[test]
 fn toml_integer_boundaries_hold_in_every_radix() {
     let source = r#"
-        use /std/{Io, Str, Toml, Result, Lst, Bytes, Nat, rand};
+        use /std/{Handle, Str, Toml, Result, Lst, Bytes, Nat, rand};
         let opaque_n(n : Nat) -> Nat = (Bytes/len(rand/bin(0)) + 1) * n;
         rec run_of(ch : Str, k : Nat) -> Str =
             match k == 0
@@ -120,7 +120,7 @@ fn toml_integer_boundaries_hold_in_every_radix() {
                 | failure(msg) => Str/concat("encode-fail:", msg)
                 end
             end;
-        Io/print(Str/join("|", [
+        /std/print(Str/join("|", [
             canon("i = 1073741823"),
             canon("i = -1073741824"),
             canon("i = 0x3fff_ffff"),
@@ -148,7 +148,7 @@ fn toml_integer_boundaries_hold_in_every_radix() {
 #[test]
 fn toml_floats_pin_binary32_bit_patterns() {
     let source = r#"
-        use /std/{Io, Str, Toml, Result, Lst, Map, Option, Byte, Bytes, Char, Nat, Flt};
+        use /std/{Handle, Str, Toml, Result, Lst, Map, Option, Byte, Bytes, Char, Nat, Flt};
         use /std/Toml/{flt};
         let hexs(b : Bytes) -> Str =
             Bytes/fold(b, "", (byte, acc) =>
@@ -169,7 +169,7 @@ fn toml_floats_pin_binary32_bit_patterns() {
                 | none() => "missing"
                 end
             end;
-        Io/print(Str/join("|", [
+        /std/print(Str/join("|", [
             fbits("f = 0.0"), fbits("f = -0.0"), fbits("f = 1.0"), fbits("f = 1.5"),
             fbits("f = 3.5"), fbits("f = -1.5"), fbits("f = 0.25"),
             fbits("f = inf"), fbits("f = -inf"), fbits("f = nan"), fbits("f = -nan"),
@@ -188,13 +188,13 @@ fn toml_floats_pin_binary32_bit_patterns() {
 #[test]
 fn toml_malformed_numbers_and_escapes_reject() {
     let source = r#"
-        use /std/{Io, Str, Toml, Result, Lst};
+        use /std/{Handle, Str, Toml, Result, Lst};
         let ok(input : Str) -> Str =
             match Toml/decode(input)
             | failure(_) => "reject"
             | success(_) => "accept"
             end;
-        Io/print(Str/join("|", [
+        /std/print(Str/join("|", [
             ok("i = 1__2"), ok("i = _1"), ok("i = 1_"), ok("i = 01"),
             ok("f = 01.0"), ok("f = 1."), ok("f = .5"), ok("f = 1e"),
             ok("s = \"\\uD800\""), ok("s = \"\\q\""),
@@ -212,13 +212,13 @@ fn toml_malformed_numbers_and_escapes_reject() {
 #[test]
 fn toml_table_construction_conflicts_reject() {
     let source = r#"
-        use /std/{Io, Str, Toml, Result, Lst};
+        use /std/{Handle, Str, Toml, Result, Lst};
         let ok(input : Str) -> Str =
             match Toml/decode(input)
             | failure(_) => "reject"
             | success(_) => "accept"
             end;
-        Io/print(Str/join("|", [
+        /std/print(Str/join("|", [
             ok("dup = 1\ndup = 2"),
             ok("[a]\n[a]"),
             ok("a.b = 1\n[a]"),
@@ -245,7 +245,7 @@ fn toml_table_construction_conflicts_reject() {
 #[test]
 fn toml_arrays_and_inline_tables_nest_and_reach_a_fixpoint() {
     let source = r#"
-        use /std/{Io, Str, Toml, Result, Lst, Bool};
+        use /std/{Handle, Str, Toml, Result, Lst, Bool};
         let canon(input : Str) -> Str =
             match Toml/decode(input)
             | failure(msg) => Str/concat("reject:", msg)
@@ -258,7 +258,7 @@ fn toml_arrays_and_inline_tables_nest_and_reach_a_fixpoint() {
         let doc = "[[a]]\nb = { c = 2 }\n[a.d]\ne = 1";
         let c1 = canon(doc);
         let c2 = canon(c1);
-        Io/print(Str/flatten([c1, "|", Bool/to_str(Str/eql(c1, c2)), "|", canon("b = [1, [2]]")]))
+        /std/print(Str/flatten([c1, "|", Bool/to_str(Str/eql(c1, c2)), "|", canon("b = [1, [2]]")]))
         "#;
 
     assert_eq!(
@@ -270,7 +270,7 @@ fn toml_arrays_and_inline_tables_nest_and_reach_a_fixpoint() {
 #[test]
 fn toml_decode_and_encode_execute_in_emitted_wasm() {
     let source = r#"
-        use /std/{Io, Str, Toml, Result, Lst, Bytes, rand};
+        use /std/{Handle, Str, Toml, Result, Lst, Bytes, rand};
         let opaque(s : Str) -> Str = Str/slice(s, Bytes/len(rand/bin(0)), Str/len(s));
         let canon(input : Str) -> Str =
             match Toml/decode(input)
@@ -281,7 +281,7 @@ fn toml_decode_and_encode_execute_in_emitted_wasm() {
                 | failure(msg) => Str/concat("encode-fail:", msg)
                 end
             end;
-        Io/print(Str/join("|", [
+        /std/print(Str/join("|", [
             canon(opaque("a = 1")),
             canon(opaque("t = true")),
             canon(opaque("b = [1]")),
@@ -295,14 +295,14 @@ fn toml_decode_and_encode_execute_in_emitted_wasm() {
 #[test]
 fn toml_encode_rejects_a_non_utf8_key() {
     let source = r#"
-        use /std/{Io, Str, Toml, Result, Map, Nat, Bytes, rand};
+        use /std/{Handle, Str, Toml, Result, Map, Nat, Bytes, rand};
         let opaque = Nat/to_int(Bytes/len(rand/bin(0)) + 1);
         let outcome : Str =
             match Toml/encode(Map/set(Map/empty(@Toml), x\ff, Toml/int(opaque)))
             | success(_) => "accepted"
             | failure(msg) => msg
             end;
-        Io/print(outcome)
+        /std/print(outcome)
         "#;
 
     assert_eq!(run(source), b"map key is not valid UTF-8");
@@ -311,13 +311,13 @@ fn toml_encode_rejects_a_non_utf8_key() {
 #[test]
 fn toml_comments_line_endings_and_trailing_input() {
     let source = r##"
-        use /std/{Io, Str, Toml, Result, Lst};
+        use /std/{Handle, Str, Toml, Result, Lst};
         let ok(input : Str) -> Str =
             match Toml/decode(input)
             | failure(_) => "reject"
             | success(_) => "accept"
             end;
-        Io/print(Str/join("|", [
+        /std/print(Str/join("|", [
             ok("a = 1 # note"),
             ok("# full\r\n\nb = 2"),
             ok("# only a comment"),
@@ -338,7 +338,7 @@ fn toml_comments_line_endings_and_trailing_input() {
 #[test]
 fn parse_eof_accepts_only_end_of_input() {
     let source = r#"
-        use /std/{Io, Str, Bytes, Nat, Byte, Result, Parse, rand};
+        use /std/{Handle, Str, Bytes, Nat, Byte, Result, Parse, rand};
         let doc : Parse(Byte) =
             let b = Parse/any_byte!;
             let _ = Parse/eof!;
@@ -348,7 +348,7 @@ fn parse_eof_accepts_only_end_of_input() {
             | success(b) => Str/concat("ok:", Nat/to_str(Byte/to_nat(b)))
             | failure(_) => "rejected"
             end;
-        Io/print(Str/flatten([
+        /std/print(Str/flatten([
             check(x\..rand/bin(0)\41), ";",
             check(x\..rand/bin(0)\41\42), ";",
             check(x\..rand/bin(0))

@@ -4,8 +4,7 @@ use {
         MetavarOrigin, StructDecl, Subterm, Term, Witness, WitnessKey, WitnessOrigin,
     },
     crate::Instant,
-    curios_abi::RootId,
-    curios_base::{Entropy, Qualifier, Span},
+    curios_base::{Entropy, Qualifier, RootId, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         mem,

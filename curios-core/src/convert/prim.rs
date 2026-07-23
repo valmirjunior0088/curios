@@ -29,8 +29,8 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         | (Prim::FltType, Prim::FltType)
         | (Prim::BinType(Grain::X), Prim::BinType(Grain::X))
         | (Prim::BinType(Grain::B), Prim::BinType(Grain::B))
-        | (Prim::IoType, Prim::IoType) => Ok(true),
-        (Prim::Io(this), Prim::Io(that)) => Ok(this == that),
+        | (Prim::HandleType, Prim::HandleType) => Ok(true),
+        (Prim::Handle(this), Prim::Handle(that)) => Ok(this == that),
         // Two `Nat`s are the free monoid on one generator: peel the shared
         // successor spine and enqueue the residual tails (`core::spine`).
         (Prim::Nat(actual), Prim::Nat(target)) => Ok(match peel_nat(&actual, &target) {
@@ -46,7 +46,7 @@ pub(crate) fn convert_prim(cmp: &mut Convert, this: Prim, that: Prim) -> Result<
         (Prim::Flt(this), Prim::Flt(that)) => Ok(this == that),
         (Prim::Bin(Grain::X, this), Prim::Bin(Grain::X, that)) => Ok(this == that),
         (Prim::Bin(Grain::B, this), Prim::Bin(Grain::B, that)) => Ok(this == that),
-        (Prim::IoEql(this_left, this_right), Prim::IoEql(that_left, that_right))
+        (Prim::HandleEql(this_left, this_right), Prim::HandleEql(that_left, that_right))
         | (Prim::NatEql(this_left, this_right), Prim::NatEql(that_left, that_right))
         | (Prim::NatNeq(this_left, this_right), Prim::NatNeq(that_left, that_right))
         | (Prim::NatAdd(this_left, this_right), Prim::NatAdd(that_left, that_right))

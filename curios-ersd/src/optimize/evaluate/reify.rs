@@ -139,7 +139,7 @@ pub(super) fn reify(
         | Value::Byte(_)
         | Value::Int(_)
         | Value::Flt(_)
-        | Value::Io(_)
+        | Value::Handle(_)
         | Value::Bin(..) => unreachable!("leaf values are reified through `as_constant`"),
     }
 }

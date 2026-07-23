@@ -1,8 +1,7 @@
 use {
     super::PublicInterface,
     crate::{Error, Name, SyntaxRegistry},
-    curios_abi::RootId,
-    curios_base::{Entropy, Qualifier},
+    curios_base::{Entropy, Qualifier, RootId},
     std::collections::{HashMap, HashSet},
 };
 

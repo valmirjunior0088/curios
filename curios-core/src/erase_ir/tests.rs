@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_base::Qualifier,
+    curios_base::{Qualifier, RootId},
     std::{
         collections::{BTreeMap, BTreeSet},
         time::Duration,
@@ -19,7 +19,7 @@ fn definition(name: &str, type_: Term, body: Term) -> Item {
     Item::Let(Definition {
         name: name.into(),
         island: Qualifier::empty(),
-        root: curios_abi::RootId::Entry,
+        root: RootId::Entry,
         type_,
         body,
     })
@@ -140,7 +140,7 @@ fn an_exit_seals_the_block_and_drops_dead_code() {
     let body = Term::let_(
         "dead",
         Term::prim(Prim::NatType),
-        Term::prim(Prim::IoExit(Term::prim(Prim::NatType), nat_lit(3))),
+        Term::prim(Prim::Exit(Term::prim(Prim::NatType), nat_lit(3))),
         nat_lit(7),
     );
     let erased = erase(&module(Vec::new(), body), Term::prim(Prim::NatType));
@@ -303,7 +303,7 @@ fn opt_induct() -> InductDecl {
         ]),
         result_sort: Term::type_(),
         module: Qualifier::empty(),
-        root: curios_abi::RootId::Entry,
+        root: RootId::Entry,
         rep_public: true,
     }
 }
@@ -708,7 +708,7 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
     let items = vec![Item::Rec(RecItem::new(vec![Definition {
         name: "go".into(),
         island: Qualifier::empty(),
-        root: curios_abi::RootId::Entry,
+        root: RootId::Entry,
         type_: func_type.clone(),
         body: Term::func(
             [("x", Term::type_())],

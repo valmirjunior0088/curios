@@ -84,7 +84,7 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
     let bool_type: Term = Subterm::Prim(Prim::BoolType).into();
     let bin_type: Term = Subterm::Prim(Prim::BinType(Grain::X)).into();
     let bin_b_type: Term = Subterm::Prim(Prim::BinType(Grain::B)).into();
-    let io_type: Term = Subterm::Prim(Prim::IoType).into();
+    let io_type: Term = Subterm::Prim(Prim::HandleType).into();
 
     Ok(match prim {
         Prim::BoolType => (prim.clone(), Term::type_()),
@@ -101,7 +101,9 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
         Prim::ByteGt(l, r) => binary(context, l, r, &byte_type, bool_type.clone(), Prim::ByteGt)?,
         Prim::ByteGte(l, r) => binary(context, l, r, &byte_type, bool_type.clone(), Prim::ByteGte)?,
         Prim::NatEql(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatEql)?,
-        Prim::IoEql(l, r) => binary(context, l, r, &io_type, bool_type.clone(), Prim::IoEql)?,
+        Prim::HandleEql(l, r) => {
+            binary(context, l, r, &io_type, bool_type.clone(), Prim::HandleEql)?
+        }
         Prim::NatNeq(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatNeq)?,
         Prim::NatLt(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatLt)?,
         Prim::NatGt(l, r) => binary(context, l, r, &nat_type, bool_type.clone(), Prim::NatGt)?,
@@ -336,15 +338,15 @@ fn synth_prim(context: &mut Context, prim: &Prim) -> Result<(Prim, Term), Error>
             let lst_b = lst_type(b.clone());
             (Prim::LstMap(a, b, lst, f), lst_b)
         }
-        Prim::IoType => (prim.clone(), Term::type_()),
-        Prim::Io(_) => (prim.clone(), io_type),
+        Prim::HandleType => (prim.clone(), Term::type_()),
+        Prim::Handle(_) => (prim.clone(), io_type),
         // `(@A : Type) -> Nat -> A`: exit never returns, so the result type is
         // whatever the caller demands (`/std/proc/exit` instantiates it at
         // `False`). The type argument keeps the kernel from naming `/std/False`.
-        Prim::IoExit(type_, code) => {
+        Prim::Exit(type_, code) => {
             let type_ = elaborate(context, type_, Mode::Check(Term::type_()))?.0;
             let code = elaborate(context, code, Mode::Check(nat_type))?.0;
-            (Prim::IoExit(type_.clone(), code), type_)
+            (Prim::Exit(type_.clone(), code), type_)
         }
         // A store-described host call: each operand checks against its wire
         // type, and the result shape (unit, bare value, named record) is read

@@ -1151,9 +1151,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Prim::FltToLeBytes(inner) => curios_core::Prim::flt_to_le_bytes(self.term(inner)?),
             Prim::FltOfLeBytes(inner) => curios_core::Prim::flt_of_le_bytes(self.term(inner)?),
             Prim::NatToInt(inner) => curios_core::Prim::nat_to_int(self.term(inner)?),
-            Prim::IoType => curios_core::Prim::IoType,
-            Prim::Io(token) => curios_core::Prim::Io(*token),
-            Prim::IoEql(left, right) => {
+            Prim::HandleType => curios_core::Prim::HandleType,
+            Prim::Handle(token) => curios_core::Prim::Handle(*token),
+            Prim::HandleEql(left, right) => {
                 curios_core::Prim::io_eql(self.term(left)?, self.term(right)?)
             }
             Prim::Foreign(function, args) => curios_core::Prim::Foreign(
@@ -1162,9 +1162,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     .map(|arg| self.term(arg))
                     .collect::<Result<_, _>>()?,
             ),
-            Prim::IoExit(type_, code) => {
-                curios_core::Prim::IoExit(self.term(type_)?, self.term(code)?)
-            }
+            Prim::Exit(type_, code) => curios_core::Prim::Exit(self.term(type_)?, self.term(code)?),
             Prim::NatToFlt(inner) => curios_core::Prim::nat_to_flt(self.term(inner)?),
             Prim::IntToNat(inner) => curios_core::Prim::int_to_nat(self.term(inner)?),
             Prim::IntToFlt(inner) => curios_core::Prim::int_to_flt(self.term(inner)?),

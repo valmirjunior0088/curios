@@ -140,13 +140,13 @@ pub enum Prim {
     LstAppend(Term, Term, Term),
     LstConcat(Term, Term, Term),
     LstMap(Term, Term, Term, Term),
-    IoType,
-    Io(u32),
-    IoEql(Term, Term),
-    // A store-described host call; the prelude bakes it into the `/sys/Io`
+    HandleType,
+    Handle(u32),
+    HandleEql(Term, Term),
+    // A store-described host call; the prelude bakes it into the `/sys/Handle`
     // declaration whose parameters the argument terms name.
     Foreign(Arc<ForeignFunction>, Vec<Term>),
-    IoExit(Term, Term),
+    Exit(Term, Term),
     CellType(Term),
     Cell(Term, Term),          // type, init
     CellSet(Term, Term, Term), // type, cell, value

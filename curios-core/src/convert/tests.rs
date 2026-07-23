@@ -1,7 +1,6 @@
 use {
     crate::*,
-    curios_abi::RootId,
-    curios_base::{Grain, Int, PackedBin, Qualifier},
+    curios_base::{Grain, Int, PackedBin, Qualifier, RootId},
     std::{collections::BTreeMap, time::Duration},
 };
 

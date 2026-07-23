@@ -1,9 +1,9 @@
 use {
     super::{
-        Host, Io, Lift, Lower, Mode, Poll,
+        Handle, HostOps, Lift, Lower, Mode, Poll,
         lower::{anyref_array_type, i8_array_type},
     },
-    curios_abi::{ForeignFunction, ForeignStore, WireType, sys_io},
+    curios_abi::{ForeignFunction, ForeignStore, WireType, host_ops},
     std::{
         collections::HashMap,
         error::Error,
@@ -44,7 +44,7 @@ pub fn shared_engine() -> &'static Engine {
 /// the same derivation `cont`'s wasm emitter applies to the module's import
 /// section, so the two ends cannot drift (and wasmtime validates them against
 /// each other at instantiation). Scalar params cross raw `i32`, scalar results
-/// pre-boxed as i31 refs; `Bin`/`Io` are the concrete i8-array, `Lst` the
+/// pre-boxed as i31 refs; `Bin`/`Handle` are the concrete i8-array, `Lst` the
 /// anyref-element array — wasmtime-universe mirrors of curios-cont's
 /// `bytes_sub_type`/`elems_sub_type` (the flat rope payloads every reference
 /// crosses the boundary as); keep the two ends in sync.
@@ -65,7 +65,7 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
             true => i31_ref.clone(),
             false => ValType::I32,
         },
-        WireType::Bin | WireType::Io => bin_ref.clone(),
+        WireType::Bin | WireType::Handle => bin_ref.clone(),
         WireType::Lst(_) => lst_ref.clone(),
     };
 
@@ -107,7 +107,7 @@ pub struct ForeignBindings {
 }
 
 impl ForeignBindings {
-    /// An empty registry over the rows of `foreigns`: follow with one [`define`](Self::define) per row the module will import. `instantiate` seeds the `sys`-tier registry this way from `sys_io()`; an embedder seeds the `ffi`-tier one from the [`ForeignStore`] that `compile_entrypoint` returned for the program.
+    /// An empty registry over the rows of `foreigns`: follow with one [`define`](Self::define) per row the module will import. `instantiate` seeds the `sys`-tier registry this way from `host_ops()`; an embedder seeds the `ffi`-tier one from the [`ForeignStore`] that `compile_entrypoint` returned for the program.
     pub fn new(foreigns: ForeignStore) -> Self {
         Self {
             foreigns,
@@ -180,154 +180,156 @@ impl ForeignBindings {
     }
 }
 
-/// The registry of `/sys/Io` implementations: every [`sys_io`] row bound to
-/// its [`Host`] method. The store and the trait evolve together, so a row
-/// without a binding here (or vice versa) is caught by `define`'s asserts the
-/// first time any program runs.
-fn sys_impls<H: Host + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
-    let mut impls = ForeignBindings::new(sys_io());
+/// The registry of builtin implementations: every [`host_ops`] row bound to
+/// its [`HostOps`] method. The store and the trait are generated from one
+/// authored list in `curios-abi`, and these hand-written bindings are
+/// cross-checked against both — each `define` name must be a real store row
+/// (asserted), and each method call must match the trait (compiler-checked) —
+/// so the three stay in agreement without a fourth independent spelling.
+fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
+    let mut impls = ForeignBindings::new(host_ops());
 
-    impls.define("io_read", {
+    impls.define("read", {
         let host = host.clone();
 
-        move |(io, count): (Io, u32)| host.read(io, count)
+        move |(handle, count): (Handle, u32)| host.read(handle, count)
     });
 
-    impls.define("io_write", {
+    impls.define("write", {
         let host = host.clone();
 
-        move |(io, bytes): (Io, Vec<u8>)| host.write(io, &bytes)
+        move |(handle, bytes): (Handle, Vec<u8>)| host.write(handle, &bytes)
     });
 
-    impls.define("io_open", {
+    impls.define("open", {
         let host = host.clone();
 
         move |(path, mode): (Vec<u8>, Mode)| host.open(&path, mode)
     });
 
-    impls.define("io_connect", {
+    impls.define("connect", {
         let host = host.clone();
 
-        move |(io, addr): (Io, Vec<u8>)| host.connect(io, &addr)
+        move |(handle, addr): (Handle, Vec<u8>)| host.connect(handle, &addr)
     });
 
-    impls.define("io_start_tls", {
+    impls.define("start_tls", {
         let host = host.clone();
 
-        move |(io, sni): (Io, Vec<u8>)| host.start_tls(io, &sni)
+        move |(handle, sni): (Handle, Vec<u8>)| host.start_tls(handle, &sni)
     });
 
-    impls.define("io_tls_server_config", {
+    impls.define("tls_server_config", {
         let host = host.clone();
 
         move |(cert, key): (Vec<u8>, Vec<u8>)| host.tls_server_config(&cert, &key)
     });
 
-    impls.define("io_start_tls_server", {
+    impls.define("start_tls_server", {
         let host = host.clone();
 
-        move |(io, cfg): (Io, Io)| host.start_tls_server(io, cfg)
+        move |(handle, cfg): (Handle, Handle)| host.start_tls_server(handle, cfg)
     });
 
-    impls.define("io_listen", {
+    impls.define("listen", {
         let host = host.clone();
 
-        move |(io, backlog): (Io, u32)| host.listen(io, backlog)
+        move |(handle, backlog): (Handle, u32)| host.listen(handle, backlog)
     });
 
-    impls.define("io_accept", {
+    impls.define("accept", {
         let host = host.clone();
 
-        move |io: Io| host.accept(io)
+        move |handle: Handle| host.accept(handle)
     });
 
-    impls.define("io_lookup", {
+    impls.define("lookup", {
         let host = host.clone();
 
         move |(name, port): (Vec<u8>, u32)| host.lookup(&name, port)
     });
 
-    impls.define("io_resolve", {
+    impls.define("resolve", {
         let host = host.clone();
 
-        move |handle: Io| host.resolve(handle)
+        move |handle: Handle| host.resolve(handle)
     });
 
-    impls.define("io_socket", {
+    impls.define("socket", {
         let host = host.clone();
 
         move |addr: Vec<u8>| host.socket(&addr)
     });
 
-    impls.define("io_bind", {
+    impls.define("bind", {
         let host = host.clone();
 
-        move |(io, addr): (Io, Vec<u8>)| host.bind(io, &addr)
+        move |(handle, addr): (Handle, Vec<u8>)| host.bind(handle, &addr)
     });
 
-    impls.define("io_set_nonblocking", {
+    impls.define("set_nonblocking", {
         let host = host.clone();
 
-        move |(io, on): (Io, u32)| host.set_nonblocking(io, on)
+        move |(handle, on): (Handle, u32)| host.set_nonblocking(handle, on)
     });
 
-    impls.define("io_set_recv_timeout", {
+    impls.define("set_recv_timeout", {
         let host = host.clone();
 
-        move |(io, ms): (Io, u32)| host.set_recv_timeout(io, ms)
+        move |(handle, ms): (Handle, u32)| host.set_recv_timeout(handle, ms)
     });
 
-    impls.define("io_set_send_timeout", {
+    impls.define("set_send_timeout", {
         let host = host.clone();
 
-        move |(io, ms): (Io, u32)| host.set_send_timeout(io, ms)
+        move |(handle, ms): (Handle, u32)| host.set_send_timeout(handle, ms)
     });
 
-    impls.define("io_set_reuseaddr", {
+    impls.define("set_reuseaddr", {
         let host = host.clone();
 
-        move |(io, on): (Io, u32)| host.set_reuseaddr(io, on)
+        move |(handle, on): (Handle, u32)| host.set_reuseaddr(handle, on)
     });
 
-    impls.define("io_poll", {
+    impls.define("poll", {
         let host = host.clone();
 
-        move |(handles, events, timeout): (Vec<Io>, Vec<Poll>, i32)| {
+        move |(handles, events, timeout): (Vec<Handle>, Vec<Poll>, i32)| {
             host.poll(&handles, &events, timeout)
         }
     });
 
-    impls.define("io_close", {
+    impls.define("close", {
         let host = host.clone();
 
-        move |io: Io| host.close(io)
+        move |handle: Handle| host.close(handle)
     });
 
-    impls.define("io_clock_wall", {
+    impls.define("clock_wall", {
         let host = host.clone();
 
         move |()| host.clock_wall()
     });
 
-    impls.define("io_clock_mono", {
+    impls.define("clock_mono", {
         let host = host.clone();
 
         move |()| host.clock_mono()
     });
 
-    impls.define("io_random", {
+    impls.define("random", {
         let host = host.clone();
 
         move |count: u32| host.random(count)
     });
 
-    impls.define("io_args", {
+    impls.define("args", {
         let host = host.clone();
 
         move |()| host.args()
     });
 
-    impls.define("io_env", {
+    impls.define("env", {
         let host = host.clone();
 
         move |name: Vec<u8>| host.env(&name)
@@ -361,7 +363,7 @@ impl Error for ExitTrap {}
 /// Provenance is guaranteed by callers: the launcher reads it from its own
 /// trusted footer, and `curios` produces it in-process. `Module::deserialize`
 /// performs only light validation, so a foreign blob could execute arbitrary code.
-pub fn run_bytes<H: Host + Send + Sync + 'static>(
+pub fn run_bytes<H: HostOps + Send + Sync + 'static>(
     payload: &[u8],
     host: H,
     bindings: ForeignBindings,
@@ -380,7 +382,7 @@ pub fn run_bytes<H: Host + Send + Sync + 'static>(
 /// `ffi`-tier implementations for the module's own `foreign` declarations
 /// (pass [`ForeignBindings::empty`] for a program that declares none). The
 /// deserialize/instantiate split [`run_bytes`] factors out.
-fn instantiate<H: Host + Send + Sync + 'static>(
+fn instantiate<H: HostOps + Send + Sync + 'static>(
     engine: &Engine,
     module: &Module,
     host: H,
@@ -398,11 +400,11 @@ fn instantiate<H: Host + Send + Sync + 'static>(
                 // `exit` never returns: it traps with the code, which the
                 // caller below catches. A registry trampoline cannot trap, so
                 // it is wired directly, outside the store.
-                "io_exit" => {
-                    let io_exit_type = FuncType::new(engine, [ValType::I32], []);
+                "exit" => {
+                    let exit_type = FuncType::new(engine, [ValType::I32], []);
 
                     linker
-                        .func_new("sys", "io_exit", io_exit_type, move |_caller, params, _| {
+                        .func_new("sys", "exit", exit_type, move |_caller, params, _| {
                             let code = match params.first() {
                                 Some(wasmtime::Val::I32(code)) => *code,
                                 _ => 0,
@@ -410,7 +412,7 @@ fn instantiate<H: Host + Send + Sync + 'static>(
 
                             Err(wasmtime::Error::from(ExitTrap(code)))
                         })
-                        .map_err(|error| format!("failed to define io_exit: {error}"))?;
+                        .map_err(|error| format!("failed to define exit: {error}"))?;
                 }
                 name => impls.link(&mut linker, engine, "sys", name)?,
             },

@@ -1,4 +1,5 @@
-use curios_abi::{RootId, WireType, sys_io};
+use curios_abi::{WireType, host_ops};
+use curios_base::RootId;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -51,7 +52,7 @@ fn run_err(src: &str) -> String {
 // returning only success/error — the lens for the internal-root gate.
 fn lower_with_prelude(src: &str) -> Result<(), String> {
     let mut modules = crate::PreludeModules::new();
-    modules.insert_root("sys", RootId::Sys, crate::sys_module(&sys_io()));
+    modules.insert_root("sys", RootId::Sys, crate::sys_module(&host_ops()));
     modules.insert_root(
         "std",
         RootId::Std,

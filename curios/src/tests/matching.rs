@@ -3,7 +3,7 @@ use {curios_runtime::MockHost, std::time::Duration};
 #[test]
 fn opaque_inductive_is_usable_through_declaring_module_api() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub mod Secret
             use /std/{Nat};
             pub induct T : Type
@@ -15,7 +15,7 @@ fn opaque_inductive_is_usable_through_declaring_module_api() {
                 | wrap(n) => n
                 end;
         end
-        Io/print(Nat/to_str(Secret/reveal(Secret/make(7))))
+        /std/print(Nat/to_str(Secret/reveal(Secret/make(7))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -26,7 +26,7 @@ fn opaque_inductive_is_usable_through_declaring_module_api() {
 #[test]
 fn opaque_inductive_empty_elimination_is_private() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub mod Secret
             use /std/{Nat};
             pub induct T : Type
@@ -35,7 +35,7 @@ fn opaque_inductive_empty_elimination_is_private() {
             pub let make(n : Nat) -> T = T/wrap(n);
         end
         let reveal(t : Secret/T) -> Nat = match t : Nat end;
-        Io/print(Nat/to_str(reveal(Secret/make(7))))
+        /std/print(Nat/to_str(reveal(Secret/make(7))))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -55,13 +55,13 @@ fn opaque_inductive_empty_elimination_is_private() {
 #[test]
 fn flat_option_match_lowers_without_synthetic_indirection() {
     let source = r#"
-        use /std/{Option, Nat, Io};
+        use /std/{Option, Nat, Handle};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(y) => y
             | none() => 0
             end;
-        Io/print(Nat/to_str(f(Option/some(5))))
+        /std/print(Nat/to_str(f(Option/some(5))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -72,7 +72,7 @@ fn flat_option_match_lowers_without_synthetic_indirection() {
 #[test]
 fn bits_structural_fold_preserves_heads_and_bit_unit_tails() {
     let source = r#"
-        use /std/{Bits, Nat, Io};
+        use /std/{Bits, Nat, Handle};
         let value(bits : Bits) -> Nat =
             match bits
             | b\ => 0
@@ -80,7 +80,7 @@ fn bits_structural_fold_preserves_heads_and_bit_unit_tails() {
                 let digit : Nat = match head | false => 0 | true => 1 end;
                 digit + 2 * ih
             end;
-        Io/print(Nat/to_str(value(b\1\0\1\1\0\0\1\0\1\1)))
+        /std/print(Nat/to_str(value(b\1\0\1\1\0\0\1\0\1\1)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -93,7 +93,7 @@ fn bits_structural_fold_preserves_heads_and_bit_unit_tails() {
 #[test]
 fn nested_ctor_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Option, Nat, Io};
+        use /std/{Option, Nat, Handle};
         let f(a : Option(Nat), b : Option(Nat)) -> Nat =
             match (a, b)
             | (some(x), some(y)) => x + y
@@ -101,7 +101,7 @@ fn nested_ctor_pattern_dispatches_by_shape() {
             | (none(), some(y)) => y
             | (none(), none()) => 0
             end;
-        Io/print(Nat/to_str(f(Option/some(3), Option/some(4))))
+        /std/print(Nat/to_str(f(Option/some(3), Option/some(4))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -115,14 +115,14 @@ fn nested_ctor_pattern_dispatches_by_shape() {
 #[test]
 fn choose_allows_condition_before_bind_arm() {
     let source = r#"
-        use /std/{Bool, Nat, Option, Io};
+        use /std/{Bool, Nat, Option, Handle};
         let pick(prefer_fresh : Bool, cached : Option(Nat), fresh : Nat) -> Nat =
             choose
             | prefer_fresh && fresh > 0 => fresh
             | some(n) = cached => n
             | _ => 0
             end;
-        Io/print(Nat/to_str(pick(true, Option/some(21), 5)))
+        /std/print(Nat/to_str(pick(true, Option/some(21), 5)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -135,12 +135,12 @@ fn choose_allows_condition_before_bind_arm() {
 #[test]
 fn tuple_match_target_projects_fields() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         let f(p : { Nat, Nat }) -> Nat =
             match p
             | (x, y) => x + y
             end;
-        Io/print(Nat/to_str(f((3, 4))))
+        /std/print(Nat/to_str(f((3, 4))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -152,13 +152,13 @@ fn tuple_match_target_projects_fields() {
 #[test]
 fn struct_match_target_projects_fields() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let f(p : Pair(Nat, Nat)) -> Nat =
             match p
             | Pair { fst, snd } => fst + snd
             end;
-        Io/print(Nat/to_str(f(Pair { fst = 3, snd = 4 })))
+        /std/print(Nat/to_str(f(Pair { fst = 3, snd = 4 })))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -173,7 +173,7 @@ fn struct_match_target_projects_fields() {
 #[test]
 fn struct_arm_privacy_is_enforced() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
@@ -181,7 +181,7 @@ fn struct_arm_privacy_is_enforced() {
         end
         let c : Celsius/Celsius = Celsius/of_nat(42);
         match c
-        | Celsius/Celsius { n } => Io/print(Nat/to_str(n))
+        | Celsius/Celsius { n } => /std/print(Nat/to_str(n))
         end
         "#;
 
@@ -198,13 +198,13 @@ fn struct_arm_privacy_is_enforced() {
 #[test]
 fn matrix_match_rejects_inconsistent_tuple_arity() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         let f(p : { Nat, Nat }) -> Nat =
             match p
             | (x, y) => x
             | (x,) => x
             end;
-        Io/print(Nat/to_str(f((3, 4))))
+        /std/print(Nat/to_str(f((3, 4))))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -221,7 +221,7 @@ fn matrix_match_rejects_inconsistent_tuple_arity() {
 #[test]
 fn matrix_match_rejects_duplicate_row() {
     let source = r#"
-        use /std/{Option, Nat, Io};
+        use /std/{Option, Nat, Handle};
         let f(a : Option(Nat), b : Option(Nat)) -> Nat =
             match (a, b)
             | (some(x), some(y)) => x + y
@@ -230,7 +230,7 @@ fn matrix_match_rejects_duplicate_row() {
             | (none(), some(y)) => y
             | (none(), none()) => 0
             end;
-        Io/print(Nat/to_str(f(Option/some(3), Option/some(4))))
+        /std/print(Nat/to_str(f(Option/some(3), Option/some(4))))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -247,14 +247,14 @@ fn matrix_match_rejects_duplicate_row() {
 #[test]
 fn matrix_match_rejects_duplicate_flat_tag() {
     let source = r#"
-        use /std/{Option, Nat, Io};
+        use /std/{Option, Nat, Handle};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(a) => a
             | some(b) => b
             | none() => 0
             end;
-        Io/print(Nat/to_str(f(Option/some(3))))
+        /std/print(Nat/to_str(f(Option/some(3))))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -270,13 +270,13 @@ fn matrix_match_rejects_duplicate_flat_tag() {
 #[test]
 fn matrix_match_rejects_mixed_binder_and_ctor_column() {
     let source = r#"
-        use /std/{Option, Nat, Io};
+        use /std/{Option, Nat, Handle};
         let f(o : Option(Nat)) -> Nat =
             match o
             | x => 0
             | some(y) => y
             end;
-        Io/print(Nat/to_str(f(Option/some(3))))
+        /std/print(Nat/to_str(f(Option/some(3))))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -293,12 +293,12 @@ fn matrix_match_rejects_mixed_binder_and_ctor_column() {
 #[test]
 fn matrix_match_rejects_dependent_motive_on_tuple_head() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         let f(p : { Nat, Nat }) -> Nat =
             match p : (q) => Nat
             | (x, y) => x
             end;
-        Io/print(Nat/to_str(f((3, 4))))
+        /std/print(Nat/to_str(f((3, 4))))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -313,14 +313,14 @@ fn matrix_match_rejects_dependent_motive_on_tuple_head() {
 #[test]
 fn nested_nat_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Option, Nat, Io};
+        use /std/{Option, Nat, Handle};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(0) => 0
             | some(n + 1; ih) => n
             | none() => 1
             end;
-        Io/print(Nat/to_str(f(Option/some(3))))
+        /std/print(Nat/to_str(f(Option/some(3))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -332,13 +332,13 @@ fn nested_nat_pattern_dispatches_by_shape() {
 #[test]
 fn nested_lst_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Nat, Lst, Io};
+        use /std/{Nat, Lst, Handle};
         let f(p : { Nat, Lst(Nat) }) -> Nat =
             match p
             | (x, []) => x
             | (x, [h, ..t]) => h
             end;
-        Io/print(Nat/to_str(f((0, [7, 8]))))
+        /std/print(Nat/to_str(f((0, [7, 8]))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -350,13 +350,13 @@ fn nested_lst_pattern_dispatches_by_shape() {
 #[test]
 fn nested_bin_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Nat, Byte, Bytes, Str, Io};
+        use /std/{Nat, Byte, Bytes, Str, Handle};
         let f(p : { Nat, Bytes }) -> Nat =
             match p
             | (x, x\) => x
             | (x, x\h\..t) => Byte/to_nat(h)
             end;
-        Io/print(Nat/to_str(f((0, Str/to_bytes("A")))))
+        /std/print(Nat/to_str(f((0, Str/to_bytes("A")))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -371,7 +371,7 @@ fn nested_bin_pattern_dispatches_by_shape() {
 #[test]
 fn nested_bln_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Bool, Nat, Io};
+        use /std/{Bool, Nat, Handle};
          pub induct Pair(A : Type, B : Type) : pub Type
         | pair(A, B)
         end
@@ -380,7 +380,7 @@ fn nested_bln_pattern_dispatches_by_shape() {
             | pair(true, y) => y
             | pair(false, y) => y + 1
             end;
-        Io/print(Nat/to_str(f(Pair/pair(false, 4))))
+        /std/print(Nat/to_str(f(Pair/pair(false, 4))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -396,12 +396,12 @@ fn nested_bln_pattern_dispatches_by_shape() {
 #[test]
 fn matrix_match_rejects_incomplete_nat_pattern() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         let f(n : Nat) -> Nat =
             match n
             | n2 + 1; ih => n2
             end;
-        Io/print(Nat/to_str(f(3)))
+        /std/print(Nat/to_str(f(3)))
         "#;
 
     let (system, _io) = MockHost::builder().build();
@@ -423,13 +423,13 @@ fn matrix_match_rejects_incomplete_nat_pattern() {
 #[test]
 fn matrix_match_allows_dependent_motive_on_nat_head() {
     let source = r#"
-        use /std/{Nat, Io};
+        use /std/{Nat, Handle};
         let f(n : Nat) -> Nat =
             match n : (m) => Nat
             | m + 1; ih => m
             | 0 => 0
             end;
-        Io/print(Nat/to_str(f(3)))
+        /std/print(Nat/to_str(f(3)))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -445,14 +445,14 @@ fn matrix_match_allows_dependent_motive_on_nat_head() {
 #[test]
 fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
     let source = r#"
-        use /std/{Option, Nat, Io};
+        use /std/{Option, Nat, Handle};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(0) => 0
             | some(n + 1; ih) => n
             | none() => 1
             end;
-        Io/print(Nat/to_str(f(Option/some(1))))
+        /std/print(Nat/to_str(f(Option/some(1))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -467,7 +467,7 @@ fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
 #[test]
 fn nested_nat_literal_dispatch_selects_matching_case() {
     let source = r#"
-        use /std/{Option, Nat, Bytes, rand, Io};
+        use /std/{Option, Nat, Bytes, rand, Handle};
         let z = Bytes/len(rand/bin(0));
         let n = Nat/add(z, 5);
         let hit =
@@ -475,7 +475,7 @@ fn nested_nat_literal_dispatch_selects_matching_case() {
             | some(5) => Nat/add(z, 700)
             | _ => Nat/add(z, 999)
             end;
-        Io/print(Nat/to_str(hit))
+        /std/print(Nat/to_str(hit))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -486,7 +486,7 @@ fn nested_nat_literal_dispatch_selects_matching_case() {
 #[test]
 fn nested_nat_literal_dispatch_falls_through_to_default() {
     let source = r#"
-        use /std/{Option, Nat, Bytes, rand, Io};
+        use /std/{Option, Nat, Bytes, rand, Handle};
         let z = Bytes/len(rand/bin(0));
         let n = Nat/add(z, 6);
         let miss =
@@ -494,7 +494,7 @@ fn nested_nat_literal_dispatch_falls_through_to_default() {
             | some(5) => Nat/add(z, 700)
             | _ => Nat/add(z, 999)
             end;
-        Io/print(Nat/to_str(miss))
+        /std/print(Nat/to_str(miss))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -505,10 +505,10 @@ fn nested_nat_literal_dispatch_falls_through_to_default() {
 #[test]
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
-        use /std/{File, Io, Async};
-        match Async/block_on(File/with("log.txt", Io/Mode/append(), (f) => File/write(f, /std/Str/to_bytes("x"))))
-        | success(_) => Io/print("ok")
-        | failure(_) => Io/print("error")
+        use /std/{File, Handle, Async};
+        match Async/block_on(File/with("log.txt", File/Mode/append(), (f) => File/write(f, /std/Str/to_bytes("x"))))
+        | success(_) => /std/print("ok")
+        | failure(_) => /std/print("error")
         end
         "#;
 
@@ -525,7 +525,7 @@ fn effectful_match_scrutinee_runs_once() {
 #[test]
 fn choose_selects_first_true_arm() {
     let source = r#"
-        use /std/{Nat, Bytes, rand, Io};
+        use /std/{Nat, Bytes, rand, Handle};
         let z = Bytes/len(rand/bin(0));
         let n = Nat/add(z, 2);
         let result =
@@ -535,7 +535,7 @@ fn choose_selects_first_true_arm() {
             | n <= 2 => Nat/add(z, 300)
             | _ => Nat/add(z, 999)
             end;
-        Io/print(Nat/to_str(result))
+        /std/print(Nat/to_str(result))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -548,13 +548,13 @@ fn choose_selects_first_true_arm() {
 #[test]
 fn choose_default_only() {
     let source = r#"
-        use /std/{Nat, Bytes, rand, Io};
+        use /std/{Nat, Bytes, rand, Handle};
         let z = Bytes/len(rand/bin(0));
         let result =
             choose
             | _ => Nat/add(z, 42)
             end;
-        Io/print(Nat/to_str(result))
+        /std/print(Nat/to_str(result))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -569,10 +569,10 @@ fn choose_default_only() {
 #[test]
 fn choose_evaluates_conditions_lazily() {
     let source = r#"
-        use /std/{Nat, Bytes, rand, Io, Bool, Str};
+        use /std/{Nat, Bytes, rand, Handle, Bool, Str};
         let z = Bytes/len(rand/bin(0));
         let probe(tag : Str, r : Bool) -> Bool =
-            let _ = Io/print(tag);
+            let _ = /std/print(tag);
             r;
         let result =
             choose
@@ -580,7 +580,7 @@ fn choose_evaluates_conditions_lazily() {
             | probe("b", false) => Nat/add(z, 2)
             | _ => Nat/add(z, 9)
             end;
-        Io/print(Nat/to_str(result))
+        /std/print(Nat/to_str(result))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -594,14 +594,14 @@ fn choose_evaluates_conditions_lazily() {
 #[test]
 fn inductive_match_catch_all_covers_unenumerated_constructors() {
     let source = r#"
-        use /std/{Option, Nat, Bytes, rand, Io};
+        use /std/{Option, Nat, Bytes, rand, Handle};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(x) => x + 10
             | _ => 99
             end;
         let z = Bytes/len(rand/bin(0));
-        Io/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
+        /std/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -615,14 +615,14 @@ fn inductive_match_catch_all_covers_unenumerated_constructors() {
 #[test]
 fn choose_bind_arm_destructures_or_falls_through() {
     let source = r#"
-        use /std/{Option, Nat, Bytes, rand, Io};
+        use /std/{Option, Nat, Bytes, rand, Handle};
         let f(o : Option(Nat)) -> Nat =
             choose
             | some(x) = o => x + 10
             | _ => 99
             end;
         let z = Bytes/len(rand/bin(0));
-        Io/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
+        /std/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -636,7 +636,7 @@ fn choose_bind_arm_destructures_or_falls_through() {
 #[test]
 fn choose_nested_bind_shares_the_fallthrough() {
     let source = r#"
-        use /std/{Option, Lst, Nat, Bytes, rand, Io};
+        use /std/{Option, Lst, Nat, Bytes, rand, Handle};
         let f(o : Option(Lst(Nat))) -> Nat =
             choose
             | some([h, ..t]) = o => h + 1
@@ -646,7 +646,7 @@ fn choose_nested_bind_shares_the_fallthrough() {
         let a = f(Option/some([5, 6, 7]));
         let b = f(Option/some([]));
         let c = f(Option/none());
-        Io/print(Nat/to_str(((a + b) + c) + z))
+        /std/print(Nat/to_str(((a + b) + c) + z))
         "#;
 
     let (system, io) = MockHost::builder().build();

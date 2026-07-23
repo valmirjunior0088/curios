@@ -8,7 +8,7 @@ fn io_write() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
-        r#"std/Io/write(std/Io/stdout, /std/Str/to_bytes("hello"))"#,
+        r#"std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("hello"))"#,
         system,
     )
     .expect("expected result");
@@ -20,7 +20,7 @@ fn io_write_stderr() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
-        r#"std/Io/write(std/Io/stderr, /std/Str/to_bytes("oops"))"#,
+        r#"std/Handle/write(std/Handle/stderr, /std/Str/to_bytes("oops"))"#,
         system,
     )
     .expect("expected result");
@@ -33,8 +33,8 @@ fn io_read() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        match std/Io/read(std/Io/stdin, 1024) : {}
-        | chunk(b) => let w = std/Io/write(std/Io/stdout, b); ()
+        match std/Handle/read(std/Handle/stdin, 1024) : {}
+        | chunk(b) => let w = std/Handle/write(std/Handle/stdout, b); ()
         | eof() => ()
         | error(_) => ()
         end
@@ -45,22 +45,22 @@ fn io_read() {
     assert_eq!(io.output(), b"hello\n");
 }
 
-// `Io/read(h, n)` is the typed blocking read: each call yields a `chunk` of
+// `Handle/read(h, n)` is the typed blocking read: each call yields a `chunk` of
 // 1..n available bytes (here one injected line per refill, served in `n`-byte
 // slices), and the third read past the data yields `eof`.
 #[test]
 fn io_read_short_reads_and_eof() {
     let source = r#"
-        use /std/{Io};
-        let show(r : Io/Read) -> {} =
+        use /std/{Handle};
+        let show(r : Handle/Read) -> {} =
             match r : {}
-            | chunk(b) => let _ = Io/write(Io/stdout, b); ()
-            | eof() => Io/print("1")
-            | error(_) => Io/print("e")
+            | chunk(b) => let _ = Handle/write(Handle/stdout, b); ()
+            | eof() => /std/print("1")
+            | error(_) => /std/print("e")
             end;
-        let _ = show(Io/read(Io/stdin, 2));
-        let _ = show(Io/read(Io/stdin, 2));
-        show(Io/read(Io/stdin, 2))
+        let _ = show(Handle/read(Handle/stdin, 2));
+        let _ = show(Handle/read(Handle/stdin, 2));
+        show(Handle/read(Handle/stdin, 2))
         "#;
 
     let (system, io) = MockHost::builder().stdin_lines(["abc"]).build();
@@ -71,10 +71,10 @@ fn io_read_short_reads_and_eof() {
 #[test]
 fn file_read_all_reads_a_seeded_file() {
     let source = r#"
-        use /std/{File, Io, Async};
+        use /std/{File, Handle, Async};
         match Async/block_on(File/read_all("data.txt"))
-        | success(contents) => Io/write(Io/stdout, contents)
-        | failure(_) => Io/write(Io/stdout, /std/Str/to_bytes("error"))
+        | success(contents) => Handle/write(Handle/stdout, contents)
+        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("error"))
         end
         "#;
 
@@ -88,18 +88,18 @@ fn file_read_all_reads_a_seeded_file() {
 #[test]
 fn file_read_all_of_a_missing_path_is_not_found() {
     let source = r#"
-        use /std/{File, Io, Async};
+        use /std/{File, Handle, Async};
         match Async/block_on(File/read_all("nope.txt"))
-        | success(_) => Io/print("contents")
+        | success(_) => /std/print("contents")
         | failure(e) =>
             match e : {}
-            | not_found() => Io/print("not found")
-            | permission_denied() => Io/print("denied")
-            | exists() => Io/print("exists")
-            | refused() => Io/print("refused")
-            | tls() => Io/print("tls")
-            | would_block() => Io/print("would block")
-            | other(_) => Io/print("other")
+            | not_found() => /std/print("not found")
+            | permission_denied() => /std/print("denied")
+            | exists() => /std/print("exists")
+            | refused() => /std/print("refused")
+            | tls() => /std/print("tls")
+            | would_block() => /std/print("would block")
+            | other(_) => /std/print("other")
             end
         end
         "#;
@@ -112,10 +112,10 @@ fn file_read_all_of_a_missing_path_is_not_found() {
 #[test]
 fn file_with_write_mode_persists_through_close() {
     let source = r#"
-        use /std/{File, Io, Async};
-        match Async/block_on(File/with("out.txt", Io/Mode/write(), (f) => File/write(f, /std/Str/to_bytes("written"))))
-        | success(_) => Io/print("ok")
-        | failure(_) => Io/print("error")
+        use /std/{File, Handle, Async};
+        match Async/block_on(File/with("out.txt", File/Mode/write(), (f) => File/write(f, /std/Str/to_bytes("written"))))
+        | success(_) => /std/print("ok")
+        | failure(_) => /std/print("error")
         end
         "#;
 
@@ -131,16 +131,16 @@ fn file_with_write_mode_persists_through_close() {
 #[test]
 fn file_read_pulls_bytes_inside_the_bracket() {
     let source = r#"
-        use /std/{File, Io, Str, Bytes, Async};
-        match Async/block_on(File/with("lines.txt", Io/Mode/read(), (f) =>
+        use /std/{File, Handle, Str, Bytes, Async};
+        match Async/block_on(File/with("lines.txt", File/Mode/read(), (f) =>
             Async/bind(File/read(f, 1024), (r) =>
                 match r : Async(Bytes)
                 | chunk(b) => Async/pure(b)
                 | eof() => Async/pure(x\)
                 | error(_) => Async/pure(x\)
                 end)))
-        | success(bytes) => Io/write(Io/stdout, bytes)
-        | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
+        | success(bytes) => Handle/write(Handle/stdout, bytes)
+        | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
         end
         "#;
 
@@ -157,7 +157,7 @@ fn proc_args_indexes_the_argv_snapshot() {
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     crate::run_text(
         Duration::from_secs(10),
-        r#"std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/Lst/get(/std/proc/args(), 1), x\))"#,
+        r#"std/Handle/write(std/Handle/stdout, /std/Option/unwrap_or(/std/Lst/get(/std/proc/args(), 1), x\))"#,
         system,
     )
     .expect("expected result");
@@ -172,8 +172,8 @@ fn proc_env_found_unwraps_to_some() {
         Duration::from_secs(10),
         r#"
         match /std/proc/env("HOME") : {}
-        | some(v) => let _ = std/Io/write(std/Io/stdout, v); ()
-        | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("missing")); ()
+        | some(v) => let _ = std/Handle/write(std/Handle/stdout, v); ()
+        | none() => let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("missing")); ()
         end
         "#,
         system,
@@ -190,8 +190,8 @@ fn proc_env_absent_is_none() {
         Duration::from_secs(10),
         r#"
         match /std/proc/env("NOPE") : {}
-        | some(v) => let _ = std/Io/write(std/Io/stdout, v); ()
-        | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("missing")); ()
+        | some(v) => let _ = std/Handle/write(std/Handle/stdout, v); ()
+        | none() => let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("missing")); ()
         end
         "#,
         system,
@@ -206,7 +206,7 @@ fn proc_exit_halts_with_code() {
     // exit traps: it surfaces its code *and* the trailing write never runs.
     let entrypoint = r#"
         let _ : std/False = /std/proc/exit(7);
-        std/Io/write(std/Io/stdout, /std/Str/to_bytes("unreachable"))
+        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("unreachable"))
         "#
     .parse::<curios_text::Entrypoint>()
     .expect("failed to parse source");
@@ -234,11 +234,11 @@ fn proc_exit_in_local_binding_halts() {
     // erasure used to collapse proof-typed local bindings to the unit constant
     // wholesale, silently dropping the exit.
     let entrypoint = r#"
-        use /std/{Nat, Io, Str};
+        use /std/{Nat, Handle, Str};
         let go(n : std/Nat) -> std/Nat =
             let dead = /std/proc/exit(3);
             n;
-        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(go(1))))
+        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(go(1))))
         "#
     .parse::<curios_text::Entrypoint>()
     .expect("failed to parse source");

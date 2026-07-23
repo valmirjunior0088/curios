@@ -129,7 +129,7 @@ fn tail_targets(tail: &EmissionTail) -> Vec<&EmissionBlockName> {
             EmissionCallTarget::Direct { resume, .. } | EmissionCallTarget::Indirect { resume, .. },
         ) => vec![resume],
         EmissionTail::Host(EmissionHostTarget::Foreign { resume, .. }) => vec![resume],
-        EmissionTail::Host(EmissionHostTarget::IoExit { .. }) => vec![],
+        EmissionTail::Host(EmissionHostTarget::Exit { .. }) => vec![],
         EmissionTail::Cell(cell) => vec![cell.resume()],
         EmissionTail::Unreachable => vec![],
     }

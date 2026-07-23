@@ -1,4 +1,7 @@
-use {super::*, curios_base::Grain};
+use {
+    super::*,
+    curios_base::{Grain, PackedBin},
+};
 
 fn nat(builder: &mut ErsdBuilder, value: u32) -> Atom {
     let constant = builder.constant(Constant::Nat(value));
@@ -198,7 +201,7 @@ fn a_sequence_fold_reads_through_its_grain() {
     builder.open_block();
     let bytes = builder.constant(Constant::Bin(
         Grain::X,
-        curios_base::PackedBin::from_bytes(vec![1, 2, 3]),
+        PackedBin::from_bytes(vec![1, 2, 3]),
     ));
     builder.open_block();
     let zero = nat(&mut builder, 0);
@@ -311,12 +314,12 @@ fn exit_and_unreachable_lower_to_their_nodes() {
 fn io_constants_ride_the_binary_carrier() {
     let mut builder = ErsdBuilder::new();
     builder.open_block();
-    let stdout = builder.constant(Constant::Io(1));
-    let stderr = builder.constant(Constant::Io(2));
+    let stdout = builder.constant(Constant::Handle(1));
+    let stderr = builder.constant(Constant::Handle(2));
     let same = builder.let_value(
         None,
         Rhs::Operation {
-            operation: Operation::IoEql,
+            operation: Operation::HandleEql,
             operands: vec![Atom::Constant(stdout), Atom::Constant(stderr)],
         },
     );

@@ -9,7 +9,7 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
     // rule). The `cont`/`bad` arms reduce `to_lead_bytes(cont, cons(c,t))` to
     // `to_lead_bytes(step(c,cont), t)`, matching the recursive proof's index.
     let source = r#"
-        use /std/{Io, Byte, Bytes, Nat, Bool};
+        use /std/{Handle, Byte, Bytes, Nat, Bool};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/gte(c, lo)
@@ -86,7 +86,7 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
                 end;
             go(d);
 
-        Io/write(Io/stdout, x\6F\6B)
+        Handle/write(Handle/stdout, x\6F\6B)
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -94,9 +94,9 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
 #[test]
 fn str_literal_prints_its_bytes() {
     let source = r#"
-        use /std/{Str, Io};
+        use /std/{Str, Handle};
         let s : Str = "hello";
-        Io/print(s)
+        /std/print(s)
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -119,9 +119,9 @@ fn long_str_literal_compiles_on_the_default_test_stack() {
     let literal = "0123456789".repeat(50); // 500 bytes: an order of magnitude past the old cliff
     let source = format!(
         r#"
-        use /std/{{Str, Io}};
+        use /std/{{Str, Handle}};
         let s : Str = "{literal}";
-        Io/print(s)
+        /std/print(s)
         "#
     );
     assert_eq!(run(&source), literal.as_bytes());
@@ -130,10 +130,10 @@ fn long_str_literal_compiles_on_the_default_test_stack() {
 #[test]
 fn str_of_bytes_accepts_multibyte_utf8() {
     let source = r#"
-        use /std/{Str, Io};
+        use /std/{Str, Handle};
         match Str/of_bytes(x\c3\a9) : {}
-        | some(s) => Io/print(s)
-        | none() => Io/print("bad")
+        | some(s) => /std/print(s)
+        | none() => /std/print("bad")
         end
         "#;
 
@@ -146,10 +146,10 @@ fn str_of_bytes_accepts_multibyte_utf8() {
 #[test]
 fn str_of_bytes_rejects_invalid_utf8() {
     let source = r#"
-        use /std/{Str, Io};
+        use /std/{Str, Handle};
         match Str/of_bytes(x\ff) : {}
-        | some(s) => Io/print(s)
-        | none() => Io/print("rejected")
+        | some(s) => /std/print(s)
+        | none() => /std/print("rejected")
         end
         "#;
 
@@ -163,10 +163,10 @@ fn str_of_bytes_rejects_invalid_utf8() {
 #[test]
 fn str_of_bytes_rejects_truncated_multibyte() {
     let source = r#"
-        use /std/{Str, Io};
+        use /std/{Str, Handle};
         match Str/of_bytes(x\c3) : {}
-        | some(s) => Io/print(s)
-        | none() => Io/print("rejected")
+        | some(s) => /std/print(s)
+        | none() => /std/print("rejected")
         end
         "#;
 
@@ -186,10 +186,10 @@ fn str_of_bytes_rejects_truncated_multibyte() {
 #[test]
 fn utf8_decode_lemmas_type_check() {
     let source = r#"
-        use /std/{Str, Nat, Io};
+        use /std/{Str, Nat, Handle};
         let lemmas = (Str/bad_uninhabited, Str/cont_len, Str/peel_byte,
             Nat/lte_trans, Nat/lt_of_lte_succ, Nat/lte_add_mono_l, Str/count_w, Str/cont0_uninhabited, Str/take_conts, Str/decode_head);
-        Io/print("ok")
+        /std/print("ok")
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -203,16 +203,16 @@ fn utf8_decode_lemmas_type_check() {
 #[test]
 fn str_get_indexes_codepoints_of_every_width() {
     let source = r#"
-        use /std/{Str, Char, Nat, Io, Option};
+        use /std/{Str, Char, Nat, Handle, Option};
         match Str/of_bytes(x\61\e2\82\ac\f0\9f\98\80) : {}
         | some(s) =>
-            Io/print(Str/flatten([
+            /std/print(Str/flatten([
                 Nat/to_str(Str/len(s)), ",",
                 Nat/to_str(Char/to_nat(Option/unwrap_or(Str/get(s, 0), '?'))), ",",
                 Nat/to_str(Char/to_nat(Option/unwrap_or(Str/get(s, 1), '?'))), ",",
                 Nat/to_str(Char/to_nat(Option/unwrap_or(Str/get(s, 2), '?')))
             ]))
-        | none() => Io/print("bad")
+        | none() => /std/print("bad")
         end
         "#;
 
@@ -227,7 +227,7 @@ fn str_get_indexes_codepoints_of_every_width() {
 #[test]
 fn str_at_reads_codepoints_with_the_proof() {
     let source = r#"
-        use /std/{Str, Char, Nat, Io, Option};
+        use /std/{Str, Char, Nat, Handle, Option};
         match Str/of_bytes(x\61\e2\82\ac\f0\9f\98\80) : {}
         | some(s) =>
             let out =
@@ -245,8 +245,8 @@ fn str_at_reads_codepoints_with_the_proof() {
                     Nat/to_str(Char/to_nat(Str/at(s, 1, p1))), ",",
                     Nat/to_str(Char/to_nat(Str/at(s, 2, p2)))]))
                 end end end;
-            Io/print(Option/unwrap_or(out, "oob"))
-        | none() => Io/print("bad")
+            /std/print(Option/unwrap_or(out, "oob"))
+        | none() => /std/print("bad")
         end
         "#;
 
@@ -260,10 +260,10 @@ fn str_at_reads_codepoints_with_the_proof() {
 #[test]
 fn str_slice_cuts_on_codepoint_boundaries() {
     let source = r#"
-        use /std/{Str, Io};
+        use /std/{Str, Handle};
         match Str/of_bytes(x\61\e2\82\ac\f0\9f\98\80) : {}
-        | some(s) => Io/print(Str/slice(s, 1, 2))
-        | none() => Io/print("bad")
+        | some(s) => /std/print(Str/slice(s, 1, 2))
+        | none() => /std/print("bad")
         end
         "#;
 
@@ -279,10 +279,10 @@ fn str_slice_cuts_on_codepoint_boundaries() {
 #[test]
 fn str_slice_spans_every_codepoint_width() {
     let source = r#"
-        use /std/{Str, Io};
+        use /std/{Str, Handle};
         match Str/of_bytes(x\61\c3\a9\e2\82\ac\f0\9f\98\80\62) : {}
-        | some(s) => Io/print(Str/slice(s, 1, 4))
-        | none() => Io/print("bad")
+        | some(s) => /std/print(Str/slice(s, 1, 4))
+        | none() => /std/print("bad")
         end
         "#;
 
@@ -300,10 +300,10 @@ fn str_slice_spans_every_codepoint_width() {
 #[test]
 fn str_trim_keeps_interior_multibyte() {
     let source = r#"
-        use /std/{Str, Io};
+        use /std/{Str, Handle};
         match Str/of_bytes(x\20\20\63\61\66\c3\a9\20\20) : {}
-        | some(s) => Io/print(Str/trim(s))
-        | none() => Io/print("bad")
+        | some(s) => /std/print(Str/trim(s))
+        | none() => /std/print("bad")
         end
         "#;
 
@@ -317,10 +317,10 @@ fn str_trim_keeps_interior_multibyte() {
 #[test]
 fn str_trim_all_whitespace_is_empty() {
     let source = r#"
-        use /std/{Str, Io};
+        use /std/{Str, Handle};
         match Str/of_bytes(x\20\09\20) : {}
-        | some(s) => Io/print(Str/concat(Str/trim(s), "!"))
-        | none() => Io/print("bad")
+        | some(s) => /std/print(Str/concat(Str/trim(s), "!"))
+        | none() => /std/print("bad")
         end
         "#;
 
@@ -332,13 +332,13 @@ fn str_trim_all_whitespace_is_empty() {
 #[test]
 fn char_of_nat_accepts_exact_unicode_scalar_boundaries() {
     let source = r#"
-        use /std/{Char, Nat, Str, Option, Lst, Io};
+        use /std/{Char, Nat, Str, Option, Lst, Handle};
         let render(n : Nat) -> Str =
             match Char/of_nat(n)
             | some(c) => Nat/to_str(Char/to_nat(c))
             | none() => "x"
             end;
-        Io/print(Str/join(",", Lst/map(
+        /std/print(Str/join(",", Lst/map(
             [0, 0xD7FF, 0xD800, 0xDFFF, 0xE000, 0x10FFFF, 0x110000], render)))
         "#;
 
@@ -351,10 +351,10 @@ fn char_to_utf8_matches_rust_across_widths_and_boundaries() {
         0x0, 0x7f, 0x80, 0x3bb, 0x7ff, 0x800, 0xd7ff, 0xe000, 0xffff, 0x10000, 0x1f600, 0x10ffff,
     ];
     let source = r#"
-        use /std/{Char, Nat, Bytes, Option, Lst, Io};
+        use /std/{Char, Nat, Bytes, Option, Lst, Handle};
         let encode(n : Nat) -> Bytes =
             Char/to_utf8(Option/unwrap_or(Char/of_nat(n), '?'));
-        Io/write(Io/stdout, Bytes/flatten(Lst/map(
+        Handle/write(Handle/stdout, Bytes/flatten(Lst/map(
             [0, 0x7F, 0x80, 0x3BB, 0x7FF, 0x800, 0xD7FF, 0xE000, 0xFFFF,
              0x10000, 0x1F600, 0x10FFFF], encode)))
         "#;
@@ -374,7 +374,7 @@ fn char_to_utf8_matches_rust_across_widths_and_boundaries() {
 #[test]
 fn str_logical_operations_use_certified_chars() {
     let source = r#"
-        use /std/{Char, Str, Nat, Option, Show, Io};
+        use /std/{Char, Str, Nat, Option, Show, Handle};
         let s = "a€😀";
         let rebuilt = Str/fold(s, "", (c, acc) => Str/concat(acc, Show/show(c)));
         let second = Show/show(Option/unwrap_or(Str/get(s, 1), '?'));
@@ -383,7 +383,7 @@ fn str_logical_operations_use_certified_chars() {
         let shown = Show/show('😀');
         let folded = Str/eql_ascii_ci("AbÉ", "aBÉ");
         let not_unicode_folded = Str/eql_ascii_ci("É", "é");
-        Io/print(Str/flatten([
+        /std/print(Str/flatten([
             rebuilt, "|", second, "|", Nat/to_str(euro), "|",
             Nat/to_str(supplementary), "|", shown, "|",
             /std/Bool/to_str(folded), "|", /std/Bool/to_str(not_unicode_folded), "|",
@@ -397,13 +397,13 @@ fn str_logical_operations_use_certified_chars() {
 #[test]
 fn str_rejects_every_invalid_utf8_shape() {
     let source = r#"
-        use /std/{Str, Bool, Lst, Bytes, Io};
+        use /std/{Str, Bool, Lst, Bytes, Handle};
         let rejected(bytes : Bytes) -> Bool =
             match Str/of_bytes(bytes)
             | some(_) => false
             | none() => true
             end;
-        Io/print(Bool/to_str(Lst/fold([
+        /std/print(Bool/to_str(Lst/fold([
             x\c0\af, x\e0\80\80, x\ed\a0\80, x\f4\90\80\80,
             x\80, x\c2, x\e2\82, x\f0\9f\98
         ], true, (bytes, ok) => ok && rejected(bytes))))
@@ -415,7 +415,7 @@ fn str_rejects_every_invalid_utf8_shape() {
 #[test]
 fn json_unicode_escapes_require_well_formed_surrogate_pairs() {
     let source = r#"
-        use /std/{Json, Parse, Result, Str, Io};
+        use /std/{Json, Parse, Result, Str, Handle};
         use /std/Json/{str};
         let decoded(input : Str) -> Str =
             match Parse/run(Json/decode, Str/to_bytes(input)) : Str
@@ -426,7 +426,7 @@ fn json_unicode_escapes_require_well_formed_surrogate_pairs() {
                 end
             | failure(_) => "rejected"
             end;
-        Io/print(Str/join("|", [
+        /std/print(Str/join("|", [
             decoded("\"\\uD83D\\uDE00\""),
             decoded("\"\\uD83D\""),
             decoded("\"\\uD83D\\u0041\""),
@@ -465,7 +465,7 @@ fn utf8_inductive_spike() {
     // If this typechecks, the inductive-`IsUtf8` approach is viable and the
     // cons-index inversion limit does not bite the proof path.
     let source = r#"
-        use /std/{Io, Str, Nat, Bytes};
+        use /std/{Handle, Str, Nat, Bytes};
 
         induct Scan : Type
         | lead()
@@ -493,7 +493,7 @@ fn utf8_inductive_spike() {
             | more(c, st, t, rest) => Utf8/more(c, st, Bytes/concat(t, b), seq(rest, vb))
             end;
 
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -508,7 +508,7 @@ fn utf8_construction_spike() {
     // relation `All` built by induction on `b`. If this typechecks, the checker is
     // expressible (real decision-procedure work, but no missing primitive).
     let source = r#"
-        use /std/{Io, Str, Nat, Bytes};
+        use /std/{Handle, Str, Nat, Bytes};
 
         induct All : (b : Bytes) -> Type
         | empty() : (x\)
@@ -521,7 +521,7 @@ fn utf8_construction_spike() {
             | x\h\..t; ih => All/snoc(/std/Byte/to_nat(h), t, ih)
             end;
 
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -536,7 +536,7 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
     // laws (`concat(x\, b) ≡ b`; associativity). This is the lemma that earns the
     // proof-carrying newtype: `Valid(a) -> Valid(b) -> Valid(concat a b)`.
     let source = r#"
-        use /std/{Io, Str, Nat, Byte, Bytes, Bool};
+        use /std/{Handle, Str, Nat, Byte, Bytes, Bool};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/gte(c, lo)
@@ -608,7 +608,7 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
             -> Valid(Bytes/concat(a, b)) =
             seq(va, vb);
 
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -625,7 +625,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
     // actually runs: "hi" (ASCII) is accepted, a lone `x\80` continuation byte is
     // rejected — output "yesno".
     let source = r#"
-        use /std/{Io, Str, Nat, Bytes, Bool, Option};
+        use /std/{Handle, Str, Nat, Bytes, Bool, Option};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/gte(c, lo)
@@ -710,7 +710,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
             | none() => Str/to_bytes("no")
             end;
 
-        Io/write(Io/stdout, Bytes/concat(decide(x\68\69), decide(x\80)))
+        Handle/write(Handle/stdout, Bytes/concat(decide(x\68\69), decide(x\80)))
         "#;
     assert_eq!(run(source), b"yesno");
 }
@@ -727,7 +727,7 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
     // a dependent pair `{ b : Bytes, v : Valid(b) }` — IS `decimal_is_ascii`. Runtime
     // check: `decimal(255).b` renders "255", proving the bytes are real digits.
     let source = r#"
-        use /std/{Io, Str, Nat, Bytes, Bool, Eq};
+        use /std/{Handle, Str, Nat, Bytes, Bool, Eq};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/gte(c, lo)
@@ -835,7 +835,7 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
         let decimal_is_ascii(n : Nat) -> Valid(decimal(n).b) =
             decimal(n).v;
 
-        Io/write(Io/stdout, decimal(255).b)
+        Handle/write(Handle/stdout, decimal(255).b)
         "#;
     assert_eq!(run(source), b"255");
 }
@@ -853,7 +853,7 @@ fn utf8_slice_closed_peels_codepoints() {
     // elaborates for a general index (its `stop` prunes; it's just never hit at
     // runtime on valid input).
     let source = r#"
-        use /std/{Io, Str, Nat, Byte, Bytes, Bool};
+        use /std/{Handle, Str, Nat, Byte, Bytes, Bool};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
             match Nat/gte(c, lo)
@@ -980,7 +980,7 @@ fn utf8_slice_closed_peels_codepoints() {
             let dropped = drop_n(x, d);
             take_n(Nat/sub(y, x), @dropped.r, dropped.v);
 
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }

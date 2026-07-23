@@ -16,8 +16,7 @@ mod tests;
 
 use {
     super::{Subterm, Telescope, Term},
-    curios_abi::RootId,
-    curios_base::Grain,
+    curios_base::{Grain, RootId},
     std::fmt,
 };
 
@@ -106,7 +105,7 @@ pub enum HeadKey {
     Flt,
     Bool,
     Bin(Grain),
-    Io,
+    Handle,
     Lst,
     Cell,
 }
@@ -162,7 +161,7 @@ impl HeadKey {
             Prim::FltType => Some(HeadKey::Flt),
             Prim::BoolType => Some(HeadKey::Bool),
             Prim::BinType(grain) => Some(HeadKey::Bin(*grain)),
-            Prim::IoType => Some(HeadKey::Io),
+            Prim::HandleType => Some(HeadKey::Handle),
             Prim::LstType(_) => Some(HeadKey::Lst),
             Prim::CellType(_) => Some(HeadKey::Cell),
             _ => None,
@@ -181,7 +180,7 @@ impl fmt::Display for HeadKey {
             HeadKey::Bool => write!(f, "Bool"),
             HeadKey::Bin(Grain::B) => write!(f, "Bits"),
             HeadKey::Bin(Grain::X) => write!(f, "Bytes"),
-            HeadKey::Io => write!(f, "Io"),
+            HeadKey::Handle => write!(f, "Handle"),
             HeadKey::Lst => write!(f, "Lst"),
             HeadKey::Cell => write!(f, "Cell"),
         }

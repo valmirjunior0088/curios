@@ -1,4 +1,7 @@
-use crate::*;
+use {
+    crate::*,
+    curios_abi::{ForeignFunction, WireSignature, WireType},
+};
 
 /// rec count(n) = switch-nat n { 0 => 0, default => count(n - 1) + 1 };
 /// entry: count(k) with k a runtime-ish parameterless alias (kept opaque by
@@ -53,13 +56,13 @@ fn a_monoid_deferred_recursion_gains_a_worker() {
     builder.item_functions(vec![count]);
 
     builder.open_block();
-    let row = std::sync::Arc::new(curios_abi::ForeignFunction {
+    let row = std::sync::Arc::new(ForeignFunction {
         namespace: "sys",
         name: "poll".into(),
         label: "poll".into(),
-        signature: curios_abi::WireSignature {
+        signature: WireSignature {
             params: vec![],
-            results: vec![("r".into(), curios_abi::WireType::Nat)],
+            results: vec![("r".into(), WireType::Nat)],
         },
     });
     let foreign = builder.foreign(row);

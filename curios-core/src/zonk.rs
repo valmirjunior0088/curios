@@ -492,15 +492,15 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         | Prim::Bin(Grain::X, _)
         | Prim::BinType(Grain::B)
         | Prim::Bin(Grain::B, _)
-        | Prim::IoType
-        | Prim::Io(_) => prim.clone(),
+        | Prim::HandleType
+        | Prim::Handle(_) => prim.clone(),
 
         Prim::Nat(Nat::Succ(spine, inner)) => {
             Prim::Nat(Nat::Succ(spine.clone(), zonk_term(context, inner)?))
         }
 
         Prim::NatEql(a, b) => Prim::NatEql(zonk_term(context, a)?, zonk_term(context, b)?),
-        Prim::IoEql(a, b) => Prim::IoEql(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::HandleEql(a, b) => Prim::HandleEql(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::NatNeq(a, b) => Prim::NatNeq(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::NatAdd(a, b) => Prim::NatAdd(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::NatSub(a, b) => Prim::NatSub(zonk_term(context, a)?, zonk_term(context, b)?),
@@ -658,7 +658,7 @@ fn zonk_prim(context: &Context, prim: &Prim) -> Result<Prim, Error> {
         Prim::Foreign(function, args) => {
             Prim::Foreign(Arc::clone(function), zonk_terms(context, args)?)
         }
-        Prim::IoExit(a, b) => Prim::IoExit(zonk_term(context, a)?, zonk_term(context, b)?),
+        Prim::Exit(a, b) => Prim::Exit(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::CellType(a) => Prim::CellType(zonk_term(context, a)?),
         Prim::Cell(a, b) => Prim::Cell(zonk_term(context, a)?, zonk_term(context, b)?),
         Prim::CellSet(a, b, c) => Prim::CellSet(

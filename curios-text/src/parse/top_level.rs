@@ -28,7 +28,7 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
         "Int" => pure(WireType::Int),
         "Bool" => pure(WireType::Bool),
         "Bin" => pure(WireType::Bin),
-        "Io" => pure(WireType::Io),
+        "Handle" => pure(WireType::Handle),
         "Lst" => catch(parse_literal("("))
             .and_keep(lazy(parse_wire_type))
             .and_drop(parse_literal(")"))
@@ -40,10 +40,10 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
 }
 
 // `(T, T, ...) -> T` (a foreign function) or a bare `T` (a zero-argument
-// foreign, like `sys_io`'s `io_clock_wall`). Params carry no surface label —
+// foreign, like `host_ops`'s `io_clock_wall`). Params carry no surface label —
 // `a0`, `a1`, … name them positionally; the single result is unnamed (`_`),
 // since a `foreign` declaration has no surface syntax for a named record
-// result the way `/sys/Io`'s Rust-side rows do.
+// result the way `/sys/Handle`'s Rust-side rows do.
 pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
     catch(
         parse_literal("(")

@@ -3,11 +3,11 @@ use {curios_runtime::MockHost, std::time::Duration};
 #[test]
 fn net_call_round_trips_a_scripted_endpoint() {
     let source = r#"
-        use /std/{Io, Str, Async};
+        use /std/{Handle, Str, Async};
         use /std/tcp/{Settings, Socket};
         match Async/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))
-        | success(response) => Io/write(Io/stdout, response)
-        | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
+        | success(response) => Handle/write(Handle/stdout, response)
+        | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
         end
         "#;
 
@@ -23,19 +23,19 @@ fn net_call_round_trips_a_scripted_endpoint() {
 #[test]
 fn net_call_to_an_unscripted_endpoint_is_refused() {
     let source = r#"
-        use /std/{Io, Async};
+        use /std/{Handle, Async};
         use /std/tcp/{Settings, Socket};
         match Async/block_on(Socket/call(Settings/default, "example.com", 80, /std/Str/to_bytes("ping")))
-        | success(_) => Io/print("connected")
+        | success(_) => /std/print("connected")
         | failure(e) =>
             match e : {}
-            | refused() => Io/print("refused")
-            | tls() => Io/print("tls")
-            | not_found() => Io/print("not found")
-            | permission_denied() => Io/print("denied")
-            | exists() => Io/print("exists")
-            | would_block() => Io/print("would block")
-            | other(_) => Io/print("other")
+            | refused() => /std/print("refused")
+            | tls() => /std/print("tls")
+            | not_found() => /std/print("not found")
+            | permission_denied() => /std/print("denied")
+            | exists() => /std/print("exists")
+            | would_block() => /std/print("would block")
+            | other(_) => /std/print("other")
             end
         end
         "#;
@@ -50,7 +50,7 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
 #[test]
 fn net_with_custom_timeout_config_reads_response() {
     let source = r#"
-        use /std/{Io, Str, Bytes, Option, Async};
+        use /std/{Handle, Str, Bytes, Option, Async};
         use /std/tcp/{Settings, Socket};
         use /std/time/{Duration};
         let settings = Settings {
@@ -66,8 +66,8 @@ fn net_with_custom_timeout_config_reads_response() {
                 | eof() => Async/pure(x\)
                 | error(_) => Async/pure(x\)
                 end)))
-        | success(bytes) => Io/write(Io/stdout, bytes)
-        | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
+        | success(bytes) => Handle/write(Handle/stdout, bytes)
+        | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
         end
         "#;
 
@@ -86,7 +86,7 @@ fn net_with_custom_timeout_config_reads_response() {
 #[test]
 fn net_serve_handles_a_scripted_inbound_connection() {
     let source = r#"
-        use /std/{Io, Str, Bytes, Async};
+        use /std/{Handle, Str, Bytes, Async};
         use /std/tcp/{Listener, Socket};
         match Async/block_on(Listener/serve("0.0.0.0", 8080, (c) =>
             Async/bind(Socket/read(c, 64), (r) =>
@@ -97,7 +97,7 @@ fn net_serve_handles_a_scripted_inbound_connection() {
                 | error(_) => Async/pure(())
                 end))) : {}
         | success(u) => ()
-        | failure(_) => Io/print("listen failed")
+        | failure(_) => /std/print("listen failed")
         end
         "#;
 
@@ -114,7 +114,7 @@ fn net_serve_handles_a_scripted_inbound_connection() {
 #[test]
 fn net_with_tls_upgrades_and_reads() {
     let source = r#"
-        use /std/{Io, Str, Bytes, Option, Async};
+        use /std/{Handle, Str, Bytes, Option, Async};
         use /std/tcp/{Settings, Socket};
         let settings = Settings {
             connect_timeout = Option/none(),
@@ -129,8 +129,8 @@ fn net_with_tls_upgrades_and_reads() {
                 | eof() => Async/pure(x\)
                 | error(_) => Async/pure(x\)
                 end)))
-        | success(bytes) => Io/write(Io/stdout, bytes)
-        | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
+        | success(bytes) => Handle/write(Handle/stdout, bytes)
+        | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
         end
         "#;
 
@@ -148,7 +148,7 @@ fn net_with_tls_upgrades_and_reads() {
 #[test]
 fn net_serve_tls_handles_a_scripted_inbound_connection() {
     let source = r#"
-        use /std/{Io, Str, Bytes, Async};
+        use /std/{Handle, Str, Bytes, Async};
         use /std/tcp/{Listener, Socket};
         match Async/block_on(Listener/serve_tls("0.0.0.0", 8443, Str/to_bytes("CERT"), Str/to_bytes("KEY"), (c) =>
             Async/bind(Socket/read(c, 64), (r) =>
@@ -159,7 +159,7 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
                 | error(_) => Async/pure(())
                 end))) : {}
         | success(u) => ()
-        | failure(_) => Io/print("serve failed")
+        | failure(_) => /std/print("serve failed")
         end
         "#;
 
@@ -174,7 +174,7 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
 #[test]
 fn http_perform_parses_a_scripted_response() {
     let source = r#"
-        use /std/{Io, Str, Nat, Async, http};
+        use /std/{Handle, Str, Nat, Async, http};
         match Async/block_on(http/perform(http/get("example.com", 80, "/"))) : {}
         | success(response) =>
             let ct = match http/header(response, "Content-Type") : Str
@@ -183,12 +183,12 @@ fn http_perform_parses_a_scripted_response() {
                 end;
             match Str/of_bytes(response.body) : {}
             | some(body) =>
-                let _ = Io/write(Io/stdout, Str/to_bytes(Str/flatten([
+                let _ = Handle/write(Handle/stdout, Str/to_bytes(Str/flatten([
                     Nat/to_str(response.status.code), " ", ct, " ", body
                 ]))); ()
-            | none() => let _ = Io/write(Io/stdout, Str/to_bytes("bad body")); ()
+            | none() => let _ = Handle/write(Handle/stdout, Str/to_bytes("bad body")); ()
             end
-        | failure(_) => let _ = Io/write(Io/stdout, Str/to_bytes("error")); ()
+        | failure(_) => let _ = Handle/write(Handle/stdout, Str/to_bytes("error")); ()
         end
         "#;
 

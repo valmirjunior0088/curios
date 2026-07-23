@@ -598,9 +598,9 @@ impl<'a, 'b> Context<'a, 'b> {
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let force = match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => return vec![],
-            WireType::Bin | WireType::Io => self.table().bytes_force_func(),
+            WireType::Bin | WireType::Handle => self.table().bytes_force_func(),
             WireType::Lst(inner) => match **inner {
-                WireType::Bin | WireType::Io => self.table().lst_bin_force_func(),
+                WireType::Bin | WireType::Handle => self.table().lst_bin_force_func(),
                 _ => self.table().lst_force_func(),
             },
         };
@@ -614,9 +614,9 @@ impl<'a, 'b> Context<'a, 'b> {
     fn wire_embed_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let embed = match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => return vec![],
-            WireType::Bin | WireType::Io => self.table().bytes_embed_func(),
+            WireType::Bin | WireType::Handle => self.table().bytes_embed_func(),
             WireType::Lst(inner) => match **inner {
-                WireType::Bin | WireType::Io => self.table().lst_bin_embed_func(),
+                WireType::Bin | WireType::Handle => self.table().lst_bin_embed_func(),
                 _ => self.table().lst_embed_func(),
             },
         };
@@ -678,10 +678,10 @@ impl<'a, 'b> Context<'a, 'b> {
                     results => self.host_multi_resume(&mut output, resume, results),
                 }
             }
-            EmissionHostTarget::IoExit { code } => {
+            EmissionHostTarget::Exit { code } => {
                 output.extend(self.load_value_instrs(code, LoadAs::Nat));
                 output.push(curios_wasm::Instr::Call {
-                    func_name: self.table().io_exit_func().clone(),
+                    func_name: self.table().exit_func().clone(),
                 });
 
                 output.push(curios_wasm::Instr::Unreachable);
@@ -755,7 +755,7 @@ impl From<&WireType> for LoadAs {
         match wire_type {
             WireType::Nat | WireType::Bool => LoadAs::Nat,
             WireType::Int => LoadAs::Int,
-            WireType::Bin | WireType::Io => LoadAs::Bin,
+            WireType::Bin | WireType::Handle => LoadAs::Bin,
             WireType::Lst(_) => LoadAs::Lst,
         }
     }

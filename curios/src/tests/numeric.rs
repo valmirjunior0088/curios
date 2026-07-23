@@ -15,15 +15,15 @@ use {super::run, curios_runtime::MockHost, std::time::Duration};
 fn tainted(body: &str) -> String {
     format!(
         r#"
-        use /std/{{Io, Nat, Int, Flt, Byte, Bytes, Str, Option}};
-        let bytes = match Io/read(Io/stdin, 16) : Bytes
+        use /std/{{Handle, Nat, Int, Flt, Byte, Bytes, Str, Option}};
+        let bytes = match Handle/read(Handle/stdin, 16) : Bytes
             | chunk(b) => b
             | eof() => x\
             | error(_) => x\
             end;
         let n = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/get(bytes, 0), 0)), 65);
         let i = Nat/to_int(n);
-        Io/print({body})
+        /std/print({body})
         "#
     )
 }
@@ -33,10 +33,10 @@ fn tainted(body: &str) -> String {
 fn closed(body: &str) -> String {
     format!(
         r#"
-        use /std/{{Io, Nat, Int, Flt, Str}};
+        use /std/{{Handle, Nat, Int, Flt, Str}};
         let n = 0;
         let i = +0;
-        Io/print({body})
+        /std/print({body})
         "#
     )
 }
@@ -136,7 +136,7 @@ fn closed_computation_through_the_envelope_folds_in_u32() {
     // evaluation carries the u32 value straight through `to_str`, so no
     // out-of-envelope literal ever reaches the backend.
     assert_eq!(
-        run("use /std/{Io, Nat}; Io/print(Nat/to_str(1073741824 + 1073741824))"),
+        run("use /std/{Handle, Nat}; /std/print(Nat/to_str(1073741824 + 1073741824))"),
         b"2147483648"
     );
 }
@@ -148,12 +148,12 @@ fn carrier_bit_operations_compute_at_the_type_level() {
     // the view stays neutral rather than folding wrongly.
     assert_eq!(
         run(r#"
-        use /std/{Io, Nat, Int, Eq};
+        use /std/{Handle, Nat, Int, Eq};
         let p1 : Eq(Nat/rotl(2, 31), 1) = Eq/refl();
         let p2 : Eq(Nat/clz(1), 31) = Eq/refl();
         let p3 : Eq(Nat/popcnt(255), 8) = Eq/refl();
         let p4 : Eq(Int/rotr(+16, +4), +1) = Eq/refl();
-        Io/print("ok")
+        /std/print("ok")
         "#),
         b"ok"
     );

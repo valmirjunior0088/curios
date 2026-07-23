@@ -149,7 +149,7 @@ impl Lowering {
         // unit constant. The check must be value-driven, not type-driven: a
         // *direct* function reference keeps its call even at an erasable type,
         // because a never-returning host effect (`/std/proc/exit : (Nat) ->
-        // False`, polymorphic `/sys/Io/exit`) is proof-typed but must run.
+        // False`, polymorphic `/sys/exit`) is proof-typed but must run.
         if !matches!(callee, curios_ersd::Atom::Function(_)) && is_erasable(context, &head_type)? {
             return Ok(Outcome::Emitted(self.unit()));
         }

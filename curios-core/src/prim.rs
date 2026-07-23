@@ -14,14 +14,14 @@ pub(crate) fn wire_term(wire_type: &WireType) -> Term {
         WireType::Int => Prim::IntType,
         WireType::Bool => Prim::BoolType,
         WireType::Bin => Prim::BinType(Grain::X),
-        WireType::Io => Prim::IoType,
+        WireType::Handle => Prim::HandleType,
         WireType::Lst(element) => Prim::LstType(wire_term(element)),
     };
 
     Subterm::Prim(prim).into()
 }
 
-/// The closed set of primitives of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `LstType`, `IoType`, `CellType`), their literals, and the operator families over them, plus store-described `Foreign` host calls and `IoExit`. Operand positions hold full [`Term`]s, so a primitive participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+/// The closed set of primitives of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `LstType`, `HandleType`, `CellType`), their literals, and the operator families over them, plus store-described `Foreign` host calls and `Exit`. Operand positions hold full [`Term`]s, so a primitive participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
 ///
 /// The `impl` block's constructor helpers (`nat_add`, `bin_slice`, …) take `impl Into<Term>` operands, sparing builder call sites — reduction's neutral rebuilds and curios-text's lowering — the `.into()` noise.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -142,11 +142,12 @@ pub enum Prim {
     // under reduction on a symbolic operand, so it never unfolds a variable
     // during type-checking. Erases to a single O(n) fill loop.
     LstMap(Term, Term, Term, Term),
-    IoType,
-    Io(u32),
-    // (a, b) -> Bool: identity of two handles. The one pure operation on `Io` --
-    // handles are opaque i31 tokens, so this erases to the `Nat` equality op.
-    IoEql(Term, Term),
+    HandleType,
+    Handle(u32),
+    // (a, b) -> Bool: identity of two handles. The one pure operation on
+    // `Handle` -- handles are opaque i31 tokens, so this erases to the `Nat`
+    // equality op.
+    HandleEql(Term, Term),
     // A store-described host call: the function's `WireSignature` fixes the
     // operand types checked at elaboration and the result shape (unit, bare
     // value, or named record). Effectful, so reducing one at the type level
@@ -154,7 +155,7 @@ pub enum Prim {
     Foreign(Arc<ForeignFunction>, Vec<Term>),
     // `(@A : Type) -> Nat -> A`: polymorphic bottom. The type argument keeps the
     // kernel from naming `/std/False`; it is dropped at erasure.
-    IoExit(Term, Term),
+    Exit(Term, Term),
     CellType(Term),
     Cell(Term, Term),          // type, init
     CellSet(Term, Term, Term), // type, cell, value
@@ -171,13 +172,13 @@ impl Prim {
         Self::NatEql(left.into(), right.into())
     }
 
-    /// An `IoEql` node — handle identity, the one pure `Io` operation — from anything term-shaped.
+    /// An `HandleEql` node — handle identity, the one pure `Io` operation — from anything term-shaped.
     pub fn io_eql<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IoEql(left.into(), right.into())
+        Self::HandleEql(left.into(), right.into())
     }
 
     /// A `NatNeq` node from anything term-shaped.
@@ -783,8 +784,8 @@ impl Prim {
             | Prim::Bin(Grain::X, _)
             | Prim::BinType(Grain::B)
             | Prim::Bin(Grain::B, _)
-            | Prim::IoType
-            | Prim::Io(_) => {}
+            | Prim::HandleType
+            | Prim::Handle(_) => {}
 
             Prim::Nat(Nat::Succ(_, inner)) => visit(inner),
 
@@ -815,7 +816,7 @@ impl Prim {
             | Prim::BinLen(Grain::B, t)
             | Prim::LstType(t) => visit(t),
 
-            Prim::IoEql(a, b)
+            Prim::HandleEql(a, b)
             | Prim::ByteEql(a, b)
             | Prim::ByteLt(a, b)
             | Prim::ByteLte(a, b)
@@ -883,7 +884,7 @@ impl Prim {
             | Prim::BinGet(Grain::B, a, b)
             | Prim::BinAppend(Grain::B, a, b)
             | Prim::LstLen(a, b)
-            | Prim::IoExit(a, b) => {
+            | Prim::Exit(a, b) => {
                 visit(a);
                 visit(b);
             }
@@ -968,7 +969,7 @@ impl Prim {
                 Prim::Nat(Nat::Succ(spine.clone(), visit.visit_subterm(inner)))
             }
             Prim::NatEql(l, r) => traverse_binary(l, r, visit, Prim::NatEql),
-            Prim::IoEql(l, r) => traverse_binary(l, r, visit, Prim::IoEql),
+            Prim::HandleEql(l, r) => traverse_binary(l, r, visit, Prim::HandleEql),
             Prim::NatNeq(l, r) => traverse_binary(l, r, visit, Prim::NatNeq),
             Prim::NatAdd(l, r) => traverse_binary(l, r, visit, Prim::NatAdd),
             Prim::NatSub(l, r) => traverse_binary(l, r, visit, Prim::NatSub),
@@ -1108,13 +1109,13 @@ impl Prim {
                 visit.visit_subterm(lst),
                 visit.visit_subterm(f),
             ),
-            Prim::IoType => Prim::IoType,
-            Prim::Io(token) => Prim::Io(*token),
+            Prim::HandleType => Prim::HandleType,
+            Prim::Handle(token) => Prim::Handle(*token),
             Prim::Foreign(function, args) => Prim::Foreign(
                 Arc::clone(function),
                 args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
             ),
-            Prim::IoExit(type_, code) => traverse_binary(type_, code, visit, Prim::IoExit),
+            Prim::Exit(type_, code) => traverse_binary(type_, code, visit, Prim::Exit),
             Prim::CellType(a) => Prim::CellType(visit.visit_subterm(a)),
             Prim::Cell(a, b) => traverse_binary(a, b, visit, Prim::Cell),
             Prim::CellGet(a, b) => traverse_binary(a, b, visit, Prim::CellGet),

@@ -8,14 +8,14 @@ fn lst_match_is_a_foldr() {
     // structural `foldr` (head is the *first* element, ih is the fold of the tail)
     // from a reversed walk: `[1,2,3,4]` folds to `4321`, not `1234`.
     let source = r#"
-        use /std/{Io, Str, Nat, Lst};
+        use /std/{Handle, Str, Nat, Lst};
         let xs : Lst(Nat) = [1, 2, 3, 4];
         let digits : Nat =
             match xs : Nat
             | [] => 0
             | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(digits)))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))
         "#;
     assert_eq!(run(source), b"4321");
 }
@@ -27,9 +27,9 @@ fn lst_map_fills_every_slot() {
     // inline closure `call_ref`. A non-identity `f` (`+1`) over `[10, 20, 30]` must
     // fill *every* slot, not just one: `get(_, 0) + get(_, 2)` = 11 + 31 = 42.
     let source = r#"
-        use /std/{Io, Str, Nat, Lst, Option};
+        use /std/{Handle, Str, Nat, Lst, Option};
         let xs : Lst(Nat) = Lst/map([10, 20, 30], (n) => Nat/add(n, 1));
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Option/unwrap_or(Lst/get(xs, 0), 0), Option/unwrap_or(Lst/get(xs, 2), 0)))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Option/unwrap_or(Lst/get(xs, 0), 0), Option/unwrap_or(Lst/get(xs, 2), 0)))))
         "#;
     assert_eq!(run(source), b"42");
 }
@@ -43,11 +43,11 @@ fn lst_map_distributes_over_cons() {
     // maps the singleton literal — the same peel the native `Lst` eliminator does,
     // so it reduces under induction without unfolding a symbolic array.
     let source = r#"
-        use /std/{Io, Str, Eq, Nat, Lst};
+        use /std/{Handle, Str, Eq, Nat, Lst};
         let step(f : (Nat) -> Nat, x : Nat, t : Lst(Nat))
             -> Eq(Lst/map(Lst/concat([x], t), f), Lst/concat([f(x)], Lst/map(t, f))) =
             Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -60,14 +60,14 @@ fn bin_match_is_a_foldr() {
     // probe as `lst_match_is_a_foldr`: the bytes `x\01\02\03\04` fold to `4321`, not
     // `1234`, pinning head = first byte and ih = fold of the tail.
     let source = r#"
-        use /std/{Io, Str, Nat, Byte, Bytes};
+        use /std/{Handle, Str, Nat, Byte, Bytes};
         let bytes : Bytes = x\01\02\03\04;
         let digits : Nat =
             match bytes : Nat
             | x\ => 0
             | x\h\..t; ih => Nat/add(Nat/mul(ih, 10), Byte/to_nat(h))
             end;
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(digits)))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))
         "#;
     assert_eq!(run(source), b"4321");
 }
@@ -81,7 +81,7 @@ fn bin_concat_is_a_free_monoid() {
     // `convert` to peel the two `BinConcat`s to a common normal form; without the
     // peel these are stuck, distinct terms and `refl` would not check.
     let source = r#"
-        use /std/{Io, Str, Eq, Bytes};
+        use /std/{Handle, Str, Eq, Bytes};
         let assoc(a : Bytes, b : Bytes, c : Bytes)
             -> Eq(Bytes/concat(a, Bytes/concat(b, c)), Bytes/concat(Bytes/concat(a, b), c)) =
             Eq/refl();
@@ -90,7 +90,7 @@ fn bin_concat_is_a_free_monoid() {
         let resegment(x : Bytes)
             -> Eq(Bytes/concat(x\01\02, x), Bytes/concat(x\01, Bytes/concat(x\02, x))) =
             Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -101,9 +101,9 @@ fn bin_concat_leading_byte_clash_is_rejected() {
     // definite `Clash`, so `x\01 ++ x` and `x\02 ++ x` are never convertible and the
     // `refl` is rejected. Guards `peel_bin` against deciding unequal values equal.
     let source = r#"
-        use /std/{Io, Str, Eq, Bytes};
+        use /std/{Handle, Str, Eq, Bytes};
         let bad(x : Bytes) -> Eq(Bytes/concat(x\01, x), Bytes/concat(x\02, x)) = Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
@@ -121,13 +121,13 @@ fn bin_slice_is_a_monoid_citizen() {
     // type forces `convert` to peel the windows to a common normal form; without
     // the peel these are stuck, distinct terms and `refl` would not check.
     let source = r#"
-        use /std/{Io, Str, Eq, Bytes, Nat};
+        use /std/{Handle, Str, Eq, Bytes, Nat};
         let split(b : Bytes, s : Nat, m : Nat, e : Nat)
             -> Eq(Bytes/concat(Bytes/slice(b, s, m), Bytes/slice(b, m, e)), Bytes/slice(b, s, e)) =
             Eq/refl();
         let empty(b : Bytes, i : Nat) -> Eq(Bytes/slice(b, i, i), x\) = Eq/refl();
         let full(b : Bytes) -> Eq(Bytes/slice(b, 0, Bytes/len(b)), b) = Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -139,11 +139,11 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
     // not convertible to `slice(b, s, e)` and the `refl` is rejected. Guards the
     // fusion's seam check against gluing non-adjacent slices of one base.
     let source = r#"
-        use /std/{Io, Str, Eq, Bytes, Nat};
+        use /std/{Handle, Str, Eq, Bytes, Nat};
         let bad(b : Bytes, s : Nat, m : Nat, n : Nat, e : Nat)
             -> Eq(Bytes/concat(Bytes/slice(b, s, m), Bytes/slice(b, n, e)), Bytes/slice(b, s, e)) =
             Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
@@ -156,13 +156,13 @@ fn lst_slice_is_a_monoid_citizen() {
     // adjacent windows of one base across their seam — the convert-level capability —
     // while `empty` and `full` exercise the reduce-level slice identities.
     let source = r#"
-        use /std/{Io, Str, Eq, Lst, Nat};
+        use /std/{Handle, Str, Eq, Lst, Nat};
         let split(@T : Type, a : Lst(T), s : Nat, m : Nat, e : Nat)
             -> Eq(Lst/concat(Lst/slice(a, s, m), Lst/slice(a, m, e)), Lst/slice(a, s, e)) =
             Eq/refl();
         let empty(@T : Type, a : Lst(T), i : Nat) -> Eq(Lst/slice(a, i, i), []) = Eq/refl();
         let full(@T : Type, a : Lst(T)) -> Eq(Lst/slice(a, 0, Lst/len(a)), a) = Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -173,11 +173,11 @@ fn lst_append_is_concat_with_a_single() {
     // converts to the `concat`-with-`single` form by `refl` even for a symbolic base
     // and element — `append(xs, y) ≡ concat(xs, single(y))`.
     let source = r#"
-        use /std/{Io, Str, Eq, Lst};
+        use /std/{Handle, Str, Eq, Lst};
         let law(@T : Type, xs : Lst(T), y : T)
             -> Eq(Lst/concat(xs, [y]), Lst/append(xs, y)) =
             Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -188,11 +188,11 @@ fn bin_append_is_concat_with_a_single_byte() {
     // spine as `base ++ b`, so it converts to the `concat`-with-a-one-byte form by
     // `refl` even for a symbolic base and a symbolic byte.
     let source = r#"
-        use /std/{Io, Str, Eq, Byte, Bytes};
+        use /std/{Handle, Str, Eq, Byte, Bytes};
         let law(xs : Bytes, y : Byte)
             -> Eq(Bytes/concat(xs, Bytes/append(x\, y)), Bytes/append(xs, y)) =
             Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -203,11 +203,11 @@ fn lst_slice_window_seam_mismatch_is_rejected() {
     // whose seam does not meet must NOT fuse, so the concat is not convertible to the
     // single slice and the `refl` is rejected.
     let source = r#"
-        use /std/{Io, Str, Eq, Lst, Nat};
+        use /std/{Handle, Str, Eq, Lst, Nat};
         let bad(@T : Type, a : Lst(T), s : Nat, m : Nat, n : Nat, e : Nat)
             -> Eq(Lst/concat(Lst/slice(a, s, m), Lst/slice(a, n, e)), Lst/slice(a, s, e)) =
             Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
@@ -222,7 +222,7 @@ fn bin_slice_reduces_across_a_cons_spine() {
     // (`core::spine`). `take` keeps the head and recurses into the tail; `drop`
     // discards it and shifts both bounds; `nested` flattens `slice(slice(..))`.
     let source = r#"
-        use /std/{Io, Str, Eq, Byte, Bytes, Nat};
+        use /std/{Handle, Str, Eq, Byte, Bytes, Nat};
         let take(h : Byte, t : Bytes)
             -> Eq(Bytes/slice(Bytes/concat(Bytes/append(x\, h), t), 0, 2),
                   Bytes/concat(Bytes/append(x\, h), Bytes/slice(t, 0, 1))) = Eq/refl();
@@ -231,7 +231,7 @@ fn bin_slice_reduces_across_a_cons_spine() {
             Eq/refl();
         let nested(b : Bytes)
             -> Eq(Bytes/slice(Bytes/slice(b, 2, 10), 1, 3), Bytes/slice(b, 3, 5)) = Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -246,14 +246,14 @@ fn bin_len_reduces_across_a_cons_spine() {
     // `lt(succ _, 0) = false` (the left is at least the floor). All by `refl` for
     // a SYMBOLIC tail, the pair that lets `advance_codepoint` step a symbolic cons.
     let source = r#"
-        use /std/{Io, Str, Eq, Byte, Bytes, Nat};
+        use /std/{Handle, Str, Eq, Byte, Bytes, Nat};
         let len(h : Byte, t : Bytes)
             -> Eq(Bytes/len(Bytes/concat(Bytes/append(x\, h), t)), Nat/add(1, Bytes/len(t))) = Eq/refl();
         let guard(h : Byte, t : Bytes)
             -> Eq(Nat/lt(0, Bytes/len(Bytes/concat(Bytes/append(x\, h), t))), true) = Eq/refl();
         let floor(h : Byte, t : Bytes)
             -> Eq(Nat/lt(Bytes/len(Bytes/concat(Bytes/append(x\, h), t)), 0), false) = Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -267,10 +267,10 @@ fn nat_sub_peels_a_successor_spine() {
     // so a slice over a symbolic cons keeps reducing. `peel` thins the floor;
     // `to_zero` exhausts it, leaving the bare tail.
     let source = r#"
-        use /std/{Io, Str, Eq, Nat};
+        use /std/{Handle, Str, Eq, Nat};
         let peel(n : Nat) -> Eq(Nat/sub(Nat/add(3, n), 1), Nat/add(2, n)) = Eq/refl();
         let to_zero(n : Nat) -> Eq(Nat/sub(Nat/add(1, n), 1), n) = Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -283,7 +283,7 @@ fn lst_concat_is_a_free_monoid() {
     // SYMBOLIC arrays (and elements), which `reduce` cannot fold. `convert` peels
     // the two `LstConcat`s to a common normal form.
     let source = r#"
-        use /std/{Io, Str, Eq, Lst};
+        use /std/{Handle, Str, Eq, Lst};
         let assoc(@T : Type, a : Lst(T), b : Lst(T), c : Lst(T))
             -> Eq(Lst/concat(a, Lst/concat(b, c)), Lst/concat(Lst/concat(a, b), c)) =
             Eq/refl();
@@ -292,7 +292,7 @@ fn lst_concat_is_a_free_monoid() {
         let resegment(@T : Type, a : T, b : T, c : Lst(T))
             -> Eq(Lst/concat([a, b], c), Lst/concat([a], Lst/concat([b], c))) =
             Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     assert_eq!(run(source), b"ok");
 }
@@ -306,9 +306,9 @@ fn lst_concat_length_clash_is_rejected() {
     // against the empty identity (the element-mismatch case instead defers to the
     // structural arm, kept sound by `Stuck` fall-through).
     let source = r#"
-        use /std/{Io, Str, Eq, Lst};
+        use /std/{Handle, Str, Eq, Lst};
         let bad(@T : Type, x : T, y : T) -> Eq([x, y], [x]) = Eq/refl();
-        Io/write(Io/stdout, Str/to_bytes("ok"))
+        Handle/write(Handle/stdout, Str/to_bytes("ok"))
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
@@ -320,7 +320,7 @@ fn empty_bin_literal_is_the_empty_sequence() {
     let (system, io) = MockHost::builder().build();
     crate::run_text(
         Duration::from_secs(10),
-        r#"std/Io/write(std/Io/stdout, std/Bytes/concat(x\, /std/Str/to_bytes("ok")))"#,
+        r#"std/Handle/write(std/Handle/stdout, std/Bytes/concat(x\, /std/Str/to_bytes("ok")))"#,
         system,
     )
     .expect("expected result");
@@ -343,7 +343,7 @@ fn vec_cons_with_nat_succ() {
             xs.0;
 
         let v : Vec(std/Nat, 1) = cons(std/Nat, 0, 42, ());
-        std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(head(std/Nat, 0, v))))
+        std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(head(std/Nat, 0, v))))
     "#;
 
     let (system, io) = MockHost::builder().build();
@@ -362,7 +362,7 @@ fn indexed_vec_append_executes() {
     // order flipped, the solved indices silently referenced the wrong binder
     // and the program trapped at runtime.
     let source = r#"
-        use /std/{Nat, Bytes, Io};
+        use /std/{Nat, Bytes, Handle};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -380,7 +380,7 @@ fn indexed_vec_append_executes() {
         let a : Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
         let b : Vec(Nat, 1) = Vec/cons(4, Vec/nil());
         let c : Vec(Nat, 3) = append(a, b);
-        Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(total(c, 0))))
+        Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(total(c, 0))))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -391,9 +391,9 @@ fn indexed_vec_append_executes() {
 #[test]
 fn lst_fold_sums_elements() {
     let source = r#"
-        use /std/{Io, Str, Nat, Lst};
+        use /std/{Handle, Str, Nat, Lst};
         let xs : Lst(Nat) = [10, 20, 30];
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Lst/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))
         "#;
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
@@ -406,7 +406,7 @@ fn lst_spread_concats_segments() {
     // foldr probe (see `lst_match_is_a_foldr`) distinguishes the spliced order
     // `[1, 2, 3, 4]` from any permutation or grouping artifact.
     let source = r#"
-        use /std/{Io, Str, Nat, Lst};
+        use /std/{Handle, Str, Nat, Lst};
         let xs : Lst(Nat) = [2, 3];
         let ys : Lst(Nat) = [1, ..xs, 4];
         let digits : Nat =
@@ -414,7 +414,7 @@ fn lst_spread_concats_segments() {
             | [] => 0
             | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(digits)))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))
         "#;
     assert_eq!(run(source), b"4321");
 }
@@ -424,7 +424,7 @@ fn lst_spread_identity_and_multi() {
     // `[..xs]` is an identity copy (reduction collapses the lone operand), and
     // spreads repeat: `[..ys, ..ys]` doubles the sequence in written order.
     let source = r#"
-        use /std/{Io, Str, Nat, Lst};
+        use /std/{Handle, Str, Nat, Lst};
         let xs : Lst(Nat) = [2, 3];
         let ys : Lst(Nat) = [..xs];
         let zs : Lst(Nat) = [..ys, ..ys];
@@ -433,7 +433,7 @@ fn lst_spread_identity_and_multi() {
             | [] => 0
             | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(digits)))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)))
         "#;
     assert_eq!(run(source), b"3232");
 }
@@ -446,10 +446,10 @@ fn lst_spread_borrows_expected_element_type() {
     // unsigned `1` lands at `Int`. Without the borrow, `1` would default-solve
     // the slot to `Nat` and this program would be rejected.
     let source = r#"
-        use /std/{Io, Str, Nat, Int, Lst};
+        use /std/{Handle, Str, Nat, Int, Lst};
         let xs : Lst(Int) = [-1, +2];
         let ys : Lst(Int) = [1, ..xs];
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Lst/len(ys))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/len(ys))))
         "#;
     assert_eq!(run(source), b"3");
 }
@@ -459,9 +459,9 @@ fn lst_spread_of_non_list_is_rejected() {
     // A spread operand must itself be a list of the element type — `..2` in a
     // `Lst(Nat)` literal is an ordinary type mismatch (Nat vs Lst(Nat)).
     let source = r#"
-        use /std/{Io, Str, Nat, Lst};
+        use /std/{Handle, Str, Nat, Lst};
         let bad : Lst(Nat) = [1, ..2];
-        Io/write(Io/stdout, Str/to_bytes("unreachable"))
+        Handle/write(Handle/stdout, Str/to_bytes("unreachable"))
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
@@ -470,10 +470,10 @@ fn lst_spread_of_non_list_is_rejected() {
 #[test]
 fn lst_spread_element_type_clash_is_rejected() {
     let source = r#"
-        use /std/{Io, Str, Nat, Lst};
+        use /std/{Handle, Str, Nat, Lst};
         let ss : Lst(Str) = ["a"];
         let bad : Lst(Nat) = [..ss];
-        Io/write(Io/stdout, Str/to_bytes("unreachable"))
+        Handle/write(Handle/stdout, Str/to_bytes("unreachable"))
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
@@ -487,7 +487,7 @@ fn lst_spread_operand_hoists_bangs() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Str, Nat, Lst};
+        use /std/{Async, Handle, Str, Nat, Lst};
         let prog : Async({}) =
             let ys : Lst(Nat) = [1, ..Async/pure([2, 3])!, 4];
             let digits : Nat =
@@ -495,7 +495,7 @@ fn lst_spread_operand_hoists_bangs() {
                 | [] => 0
                 | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
                 end;
-            let wrote = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(digits)));
+            let wrote = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)));
             Async/pure(());
         Async/block_on(prog)
         "#,
@@ -510,9 +510,9 @@ fn bin_spread_concats_segments() {
     // `x\01\..b\04` splices the bytes of `b` between the literal runs, and the
     // glued suffix chain admits a call operand (`\..Bytes/slice(...)`).
     let source = r#"
-        use /std/{Io, Nat, Bytes};
+        use /std/{Handle, Nat, Bytes};
         let b : Bytes = x\02\03;
-        Io/write(Io/stdout, x\01\..b\04\..Bytes/slice(b, 1, 2))
+        Handle/write(Handle/stdout, x\01\..b\04\..Bytes/slice(b, 1, 2))
         "#;
     assert_eq!(run(source), b"\x01\x02\x03\x04\x03");
 }
@@ -520,10 +520,10 @@ fn bin_spread_concats_segments() {
 #[test]
 fn bin_spread_identity_and_multi() {
     let source = r#"
-        use /std/{Io, Bytes};
+        use /std/{Handle, Bytes};
         let b : Bytes = x\48\65;
         let c : Bytes = x\..b;
-        Io/write(Io/stdout, x\..c\..c)
+        Handle/write(Handle/stdout, x\..c\..c)
         "#;
     assert_eq!(run(source), b"HeHe");
 }
@@ -533,10 +533,10 @@ fn bin_spread_of_non_bin_is_rejected() {
     // A spread operand must itself be a `Bytes` — a list is an ordinary type
     // mismatch.
     let source = r#"
-        use /std/{Io, Str, Nat, Lst, Bytes};
+        use /std/{Handle, Str, Nat, Lst, Bytes};
         let xs : Lst(Nat) = [1, 2];
         let bad : Bytes = x\00\..xs;
-        Io/write(Io/stdout, Str/to_bytes("unreachable"))
+        Handle/write(Handle/stdout, Str/to_bytes("unreachable"))
         "#;
     let (system, _io) = MockHost::builder().build();
     assert!(crate::run_text(Duration::from_secs(10), source, system).is_err());
@@ -550,10 +550,10 @@ fn bin_spread_operand_hoists_bangs() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        use /std/{Async, Io, Bytes};
+        use /std/{Async, Handle, Bytes};
         let prog : Async({}) =
             let out : Bytes = x\3e\..Async/pure(x\68\69)!\3c;
-            let wrote = Io/write(Io/stdout, out);
+            let wrote = Handle/write(Handle/stdout, out);
             Async/pure(());
         Async/block_on(prog)
         "#,
@@ -566,9 +566,9 @@ fn bin_spread_operand_hoists_bangs() {
 #[test]
 fn bin_fold_sums_bytes() {
     let source = r#"
-        use /std/{Io, Str, Nat, Byte, Bytes};
+        use /std/{Handle, Str, Nat, Byte, Bytes};
         let b = Bytes/append(Bytes/append(Bytes/append(x\, 10), 20), 30);
-        Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Bytes/fold(b, 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/fold(b, 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))))))
         "#;
     let (system, io) = MockHost::builder().build();
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");

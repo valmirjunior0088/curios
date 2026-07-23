@@ -12,6 +12,7 @@ use {
         CpsAtom, CpsCallee, CpsCellOp, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsicOp,
         CpsLiteral, CpsModule, CpsNode, CpsPrimOp, CpsValueExpr, into_wasm,
     },
+    curios_abi::host_ops,
     curios_base::{Grain, PackedBin},
 };
 
@@ -35,7 +36,7 @@ fn count(wat: &str, needle: &str) -> usize {
     wat.matches(needle).count()
 }
 
-/// Every `main` ends by diverging into `io_exit`, which the emitter follows
+/// Every `main` ends by diverging into `exit`, which the emitter follows
 /// with one `unreachable`. A trapping primitive adds another `unreachable` in
 /// its overflow/range guard, so the count distinguishes guarded ops from total
 /// ones without matching exact bytes.
@@ -406,9 +407,9 @@ fn cell_new_and_get_use_the_cell_struct() {
 /// A host call whose signature has `results` results, resuming into a
 /// continuation that binds them all and exits with the first.
 fn foreign_call(name: &str) -> CpsModule {
-    let function = curios_abi::sys_io()
+    let function = host_ops()
         .get(name)
-        .unwrap_or_else(|| panic!("sys_io defines {name}"))
+        .unwrap_or_else(|| panic!("host_ops defines {name}"))
         .clone();
     let arity = function.signature.params.len();
     let results = function.signature.results.len();
@@ -451,21 +452,21 @@ fn foreign_call(name: &str) -> CpsModule {
 
 #[test]
 fn foreign_call_imports_and_invokes_the_host() {
-    let wat = wat(&foreign_call("io_read"));
-    assert_contains(&wat, "(import \"sys\" \"io_read\"");
-    assert_contains(&wat, "call $host/sys/io_read");
+    let wat = wat(&foreign_call("read"));
+    assert_contains(&wat, "(import \"sys\" \"read\"");
+    assert_contains(&wat, "call $host/sys/read");
 }
 
 #[test]
 fn foreign_result_arity_shapes_the_resume() {
     // A single scalar result forwards straight through; a multi-result row with
     // a reference field embeds that field back into a rope before binding it.
-    let one = wat(&foreign_call("io_bind"));
-    assert_contains(&one, "call $host/sys/io_bind");
+    let one = wat(&foreign_call("bind"));
+    assert_contains(&one, "call $host/sys/bind");
     assert_absent(&one, "$bytes/embed");
 
-    let many = wat(&foreign_call("io_read"));
-    assert_contains(&many, "call $host/sys/io_read");
+    let many = wat(&foreign_call("read"));
+    assert_contains(&many, "call $host/sys/read");
     assert_contains(&many, "call $bytes/embed");
 }
 

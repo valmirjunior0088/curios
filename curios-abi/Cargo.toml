@@ -12,4 +12,5 @@ workspace = true
 archive = ["dep:rkyv"]
 
 [dependencies]
+num-bigint = { workspace = true }
 rkyv = { workspace = true, optional = true }
