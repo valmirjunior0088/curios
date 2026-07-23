@@ -70,7 +70,7 @@ fn block_on_returns_a_typed_value_and_awaits_a_spawned_child() {
                     let w = Handle/write(Handle/stdout, Str/to_bytes("child;"));
                     Async/pure(5)))!;
             let w = Handle/write(Handle/stdout, Str/to_bytes("root;"));
-            let c = Async/await(f.result)!;
+            let c = Async/join(f)!;
             Async/pure(Nat/add(c, 2));
         Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Async/block_on(root))))
         "#,
@@ -236,7 +236,7 @@ fn finalizer_runs_for_a_child_parked_on_an_unfulfilled_future() {
         r#"
         use /std/{Async, Handle, Str};
         let main : Async({}) =
-            let f : Async/Future({}) = Async/new_future(@{});
+            let f : Async/Future({}) = Async/Future/new(@{});
             let started = Async/go(() =>
                 Async/using(Handle/stdin, () => let r = Handle/write(Handle/stdout, Str/to_bytes("released;")); (),
                     Async/await(f)))!;
@@ -373,8 +373,8 @@ fn sleepers_wake_in_deadline_order() {
         let main : Async({}) =
             let ha = Async/spawn(() => Async/bind(Async/sleep(Duration/of_secs(3)), (_) => mark("a;")))!;
             let hb = Async/spawn(() => Async/bind(Async/sleep(Duration/of_secs(6)), (_) => mark("b;")))!;
-            let x = Async/await(ha.result)!;
-            let y = Async/await(hb.result)!;
+            let x = Async/join(ha)!;
+            let y = Async/join(hb)!;
             mark("done");
         Async/run(main)
         "#,

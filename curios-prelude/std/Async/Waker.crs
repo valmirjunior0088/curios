@@ -1,0 +1,7 @@
+pub struct Waker : Type { () -> {} }
+
+pub let of(resume : () -> {}) -> Waker =
+    Waker { resume };
+
+pub let wake(w : Waker) -> {} =
+    w.0();
