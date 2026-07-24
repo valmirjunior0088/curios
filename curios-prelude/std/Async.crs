@@ -83,12 +83,20 @@ pub let using(@A : Type, h : Handle, fin : () -> {}, body : Async(A)) -> Async(A
 pub let go(body : Fiber) -> Async({}) =
     defer(() => fork_with(body, Token { Cell/new(false) }));
 
-pub let nonblocking(h : Handle) -> {} =
-    let _ = /sys/set_nonblocking(h, true);
-    ();
+-- Failing to clear O_NONBLOCK is not cosmetic: the handle stays blocking and
+-- the next read stalls the whole single-threaded scheduler, so the status is
+-- reported rather than dropped.
+pub let nonblocking(h : Handle) -> Result({}, Handle/Error) =
+    let status = /sys/set_nonblocking(h, true);
+    match status == /sys/Status/ok
+    | true => Result/success(())
+    | false => Result/failure(Handle/error_of(status))
+    end;
 
 pub let read(h : Handle, n : Nat) -> Async(Handle/Read) =
-    let _ = nonblocking(h);
+    match nonblocking(h)
+    | failure(e) => pure(Handle/Read/error(e))
+    | success(_) =>
     rec go() -> Async(Handle/Read) =
         defer(() =>
             let r = /sys/read(h, n);
@@ -98,10 +106,13 @@ pub let read(h : Handle, n : Nat) -> Async(Handle/Read) =
             | r.status == /sys/Status/ok => pure(Handle/Read/chunk(r.bytes))
             | _ => pure(Handle/Read/error(Handle/error_of(r.status)))
             end);
-    go();
+    go()
+    end;
 
 pub let write(h : Handle, b : Bytes) -> Async(Result({}, Handle/Error)) =
-    let _ = nonblocking(h);
+    match nonblocking(h)
+    | failure(e) => pure(Result/failure(e))
+    | success(_) =>
     rec go(rest : Bytes) -> Async(Result({}, Handle/Error)) =
         defer(() =>
             let r = /sys/write(h, rest);
@@ -111,10 +122,13 @@ pub let write(h : Handle, b : Bytes) -> Async(Result({}, Handle/Error)) =
             | r.written < Bytes/len(rest) => bind(wait(h, /sys/Poll/write), (_) => go(Bytes/slice(rest, r.written, Bytes/len(rest))))
             | _ => pure(Result/success(()))
             end);
-    go(b);
+    go(b)
+    end;
 
 pub let accept(l : Handle) -> Async(Result(Handle, Handle/Error)) =
-    let _ = nonblocking(l);
+    match nonblocking(l)
+    | failure(e) => pure(Result/failure(e))
+    | success(_) =>
     rec go() -> Async(Result(Handle, Handle/Error)) =
         defer(() =>
             let r = /sys/accept(l);
@@ -123,7 +137,8 @@ pub let accept(l : Handle) -> Async(Result(Handle, Handle/Error)) =
             | r.status == /sys/Status/ok => pure(Result/success(r.handle))
             | _ => pure(Result/failure(Handle/error_of(r.status)))
             end);
-    go();
+    go()
+    end;
 
 pub let drain(read : (Nat) -> Async(Handle/Read)) -> Async(Bytes) =
     rec go(acc : Bytes) -> Async(Bytes) =

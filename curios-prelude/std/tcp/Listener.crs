@@ -23,8 +23,12 @@ let bind_listen(addr : Bytes) -> Result(Listener, Handle/Error) =
                 let _ = /sys/close(s.handle);
                 Result/failure(Handle/error_of(status))
             | true =>
-                let _ = Async/nonblocking(s.handle);
-                Result/success(Listener { s.handle })
+                match Async/nonblocking(s.handle)
+                | failure(e) =>
+                    let _ = /sys/close(s.handle);
+                    Result/failure(e)
+                | success(_) => Result/success(Listener { s.handle })
+                end
             end
         end
     end;
@@ -56,8 +60,15 @@ let listen_loop(host : Str, port : Nat, on_conn : (Handle) -> Async({})) -> Asyn
 pub let serve(host : Str, port : Nat, handler : (Socket) -> Async({})) -> Async(Result({}, Handle/Error)) =
     Async/defer(() =>
         listen_loop(host, port, (h) =>
-            let _ = Async/nonblocking(h);
-            Async/go(() => Async/using(h, () => /sys/close(h), handler(Socket/of(h))))));
+            match Async/nonblocking(h)
+            | failure(_) =>
+                -- The connection cannot be served without non-blocking mode;
+                -- drop it rather than stalling the scheduler on it.
+                let _ = /sys/close(h);
+                Async/pure(())
+            | success(_) =>
+                Async/go(() => Async/using(h, () => /sys/close(h), handler(Socket/of(h))))
+            end));
 
 pub let serve_tls(host : Str, port : Nat, cert : Bytes, key : Bytes, handler : (Socket) -> Async({})) -> Async(Result({}, Handle/Error)) =
     Async/defer(() =>
