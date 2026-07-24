@@ -10,14 +10,14 @@ pub let to_nat(c : Char) -> Nat =
     c.code;
 
 pub let of_nat(code : Nat) -> Option(Char) =
-    match Nat/lt(code, 0xD800)
+    match code < 0xD800
     | true =>
         Option/some(Char { code = code, scalar = Scalar/below(@code, True/qed()) })
     | false =>
-        match Nat/gte(code, 0xE000)
+        match code >= 0xE000
         | false => Option/none()
         | true =>
-            match Nat/lte(code, 0x10FFFF)
+            match code <= 0x10FFFF
             | true => Option/some(Char { code = code, scalar = Scalar/above(@code, True/qed()) })
             | false => Option/none()
             end

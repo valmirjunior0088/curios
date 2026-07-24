@@ -2,8 +2,8 @@
 mod tests;
 
 use super::{
-    Context, Error, Field, Many, MetavarId, Mode, Outcome, Prim, PrimHead, Proj, Scope, Subterm,
-    Term, elaborate,
+    Apply, Context, Error, Field, Func, Many, MetavarId, Mode, Outcome, Prim, PrimHead, Proj,
+    Scope, Subterm, Term, elaborate,
 };
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
@@ -357,11 +357,67 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
         _ => {
             let canonical = super::canonical_scrutinee(context, head)
                 .map_err(|error| error.into_error(|| Error::reduce_preempted(head.clone())))?;
+
+            // A concept-dispatched scrutinee (`a <= hi`) elaborates to the
+            // method projected out of the witness — `(?w).1(a, hi)` — which is
+            // not the shape the reducer probes: by then it has become the
+            // primitive normal form `NatLte(a, hi)`. Registering only the
+            // verbatim key leaves the arm unrefined, silently, while the
+            // equivalent `Nat/lte(a, hi)` spelling refines. Register the probed
+            // form alongside it so both spellings agree.
+            if canonical.head_label().is_none()
+                && let Some(spined) = spine_whnf(context, head)?
+            {
+                // Propagated, not swallowed: `canonical_scrutinee` is best-effort
+                // about arguments and returns only `Preempted`, so discarding its
+                // error would discard a genuine deadline.
+                let resolved = super::canonical_scrutinee(context, &spined)
+                    .map_err(|error| error.into_error(|| Error::reduce_preempted(head.clone())))?;
+
+                if resolved.head_label().is_some() && resolved != canonical {
+                    context.refine_scrutinee(resolved, value.clone());
+                }
+            }
+
             context.refine_scrutinee(canonical, value.clone());
         }
     }
 
     Ok(())
+}
+
+/// Weak-head normal form of the *spine only*: reduce the function position and
+/// beta-open it over the arguments, repeating, but never reduce an argument and
+/// never evaluate the primitive node this lands on.
+///
+/// This is what turns a concept-dispatched comparison `(?w).1(a, hi)` into the
+/// `NatLte(a, hi)` the reducer actually probes, while leaving `a` and `hi`
+/// exactly as written. Reducing the whole application would do the same, but it
+/// forces the arguments — and an argument may legitimately contain an effect at
+/// the value level, which must keep being an error at the type level rather than
+/// being evaluated here.
+///
+/// `None` when the head does not resolve to a function, which is every
+/// non-dispatch scrutinee: those keep their verbatim key.
+fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error> {
+    let mut current = term.clone();
+
+    // Bounded: each step consumes one application layer of an elaborated
+    // dispatch, and a runaway is a bug rather than something to spin on.
+    for step in 0..16 {
+        let Subterm::Apply(Apply { head, params, .. }) = &*current else {
+            return Ok((step > 0).then_some(current));
+        };
+
+        let Subterm::Func(Func { telescope, .. }) = &*reduce_with(context, head)? else {
+            return Ok((step > 0).then_some(current));
+        };
+
+        let args = params.iter().collect::<Vec<_>>();
+        current = telescope.open(&args);
+    }
+
+    Ok(None)
 }
 
 /// Check that `motive` is a well-formed type family over a scrutinee of `head_type`,

@@ -295,3 +295,35 @@ fn postponed_lambda_projecting_by_label_elaborates() {
     crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
     assert_eq!(io.output(), b"7");
 }
+
+// Scrutinee refinement keys on the applied head's *label* (the reducer's Rung-B
+// probe in `reduce`). A concept-dispatched comparison reduces past the `Cmp`
+// wrapper to a primitive normal form, which is not an application — so before
+// `head_label` covered primitives, `match a <= hi` registered a refinement key
+// the probe could never look up and the arm silently failed to refine, while the
+// equivalent `Nat/lte(a, hi)` spelling worked. Operators must be usable in a
+// proof-carrying position, not just the primitive spelling.
+#[test]
+fn operator_scrutinee_refines_a_proof_carrying_arm() {
+    let source = r#"
+        use /std/{Nat, Option, True, False};
+        let AtMost(a : Nat, hi : Nat) -> Prop =
+            match a <= hi : Prop
+            | false => False
+            | true => True
+            end;
+        let certify(a : Nat, hi : Nat) -> Option(AtMost(a, hi)) =
+            match a <= hi
+            | false => Option/none()
+            | true => Option/some(True/qed())
+            end;
+        match certify(3, 9)
+        | some(_) => /std/print("refined")
+        | none() => /std/print("no")
+        end
+        "#;
+
+    let (system, io) = MockHost::builder().build();
+    crate::run_text(Duration::from_secs(10), source, system).expect("expected result");
+    assert_eq!(io.output(), b"refined");
+}

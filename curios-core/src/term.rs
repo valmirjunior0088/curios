@@ -191,6 +191,42 @@ impl Term {
         match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_label(),
             Subterm::Var(var) => var.as_free(),
+            // A decidable comparison's normal form is a primitive node, not an
+            // application, so it carries no named head. Scrutinee refinement
+            // keys on this label and the reducer's probe gates on it, so an
+            // unlabelled key can be registered but never looked up — which is
+            // how an operator-spelled scrutinee loses its arm refinement while
+            // the equivalent `Nat/lte(a, b)` keeps it.
+            Subterm::Prim(prim) => match prim {
+                Prim::BoolEql(..) => Some("prim:BoolEql"),
+                Prim::BoolNeq(..) => Some("prim:BoolNeq"),
+                Prim::NatEql(..) => Some("prim:NatEql"),
+                Prim::NatNeq(..) => Some("prim:NatNeq"),
+                Prim::NatLt(..) => Some("prim:NatLt"),
+                Prim::NatGt(..) => Some("prim:NatGt"),
+                Prim::NatLte(..) => Some("prim:NatLte"),
+                Prim::NatGte(..) => Some("prim:NatGte"),
+                Prim::ByteEql(..) => Some("prim:ByteEql"),
+                Prim::ByteLt(..) => Some("prim:ByteLt"),
+                Prim::ByteLte(..) => Some("prim:ByteLte"),
+                Prim::ByteGt(..) => Some("prim:ByteGt"),
+                Prim::ByteGte(..) => Some("prim:ByteGte"),
+                Prim::IntEql(..) => Some("prim:IntEql"),
+                Prim::IntNeq(..) => Some("prim:IntNeq"),
+                Prim::IntLt(..) => Some("prim:IntLt"),
+                Prim::IntGt(..) => Some("prim:IntGt"),
+                Prim::IntLte(..) => Some("prim:IntLte"),
+                Prim::IntGte(..) => Some("prim:IntGte"),
+                Prim::FltEql(..) => Some("prim:FltEql"),
+                Prim::FltNeq(..) => Some("prim:FltNeq"),
+                Prim::FltLt(..) => Some("prim:FltLt"),
+                Prim::FltGt(..) => Some("prim:FltGt"),
+                Prim::FltLte(..) => Some("prim:FltLte"),
+                Prim::FltGte(..) => Some("prim:FltGte"),
+                Prim::BinEql(..) => Some("prim:BinEql"),
+                Prim::HandleEql(..) => Some("prim:HandleEql"),
+                _ => None,
+            },
             _ => None,
         }
     }
