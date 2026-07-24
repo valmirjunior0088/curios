@@ -73,8 +73,12 @@ fn file_read_all_reads_a_seeded_file() {
     let source = r#"
         use /std/{File, Handle, Async};
         match Async/block_on(File/read_all("data.txt"))
-        | success(contents) => Handle/write(Handle/stdout, contents)
-        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("error"))
+        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
+        | success(outcome) =>
+            match outcome
+            | success(contents) => Handle/write(Handle/stdout, contents)
+            | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("error"))
+            end
         end
         "#;
 
@@ -90,16 +94,20 @@ fn file_read_all_of_a_missing_path_is_not_found() {
     let source = r#"
         use /std/{File, Handle, Async};
         match Async/block_on(File/read_all("nope.txt"))
-        | success(_) => /std/print("contents")
-        | failure(e) =>
-            match e : {}
-            | not_found() => /std/print("not found")
-            | permission_denied() => /std/print("denied")
-            | exists() => /std/print("exists")
-            | refused() => /std/print("refused")
-            | tls() => /std/print("tls")
-            | would_block() => /std/print("would block")
-            | other(_) => /std/print("other")
+        | failure(_) => /std/print("deadlock")
+        | success(outcome) =>
+            match outcome
+            | success(_) => /std/print("contents")
+            | failure(e) =>
+                match e : {}
+                | not_found() => /std/print("not found")
+                | permission_denied() => /std/print("denied")
+                | exists() => /std/print("exists")
+                | refused() => /std/print("refused")
+                | tls() => /std/print("tls")
+                | would_block() => /std/print("would block")
+                | other(_) => /std/print("other")
+                end
             end
         end
         "#;
@@ -114,8 +122,12 @@ fn file_with_write_mode_persists_through_close() {
     let source = r#"
         use /std/{File, Handle, Async};
         match Async/block_on(File/with("out.txt", File/Mode/write(), (f) => File/write(f, /std/Str/to_bytes("written"))))
-        | success(_) => /std/print("ok")
-        | failure(_) => /std/print("error")
+        | failure(_) => /std/print("deadlock")
+        | success(outcome) =>
+            match outcome
+            | success(_) => /std/print("ok")
+            | failure(_) => /std/print("error")
+            end
         end
         "#;
 
@@ -139,8 +151,12 @@ fn file_read_pulls_bytes_inside_the_bracket() {
                 | eof() => Async/pure(x\)
                 | error(_) => Async/pure(x\)
                 end)))
-        | success(bytes) => Handle/write(Handle/stdout, bytes)
-        | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
+        | success(outcome) =>
+            match outcome
+            | success(bytes) => Handle/write(Handle/stdout, bytes)
+            | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+            end
         end
         "#;
 

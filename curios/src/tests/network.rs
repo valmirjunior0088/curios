@@ -6,8 +6,12 @@ fn net_call_round_trips_a_scripted_endpoint() {
         use /std/{Handle, Str, Async};
         use /std/tcp/{Settings, Socket};
         match Async/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))
-        | success(response) => Handle/write(Handle/stdout, response)
-        | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
+        | success(outcome) =>
+            match outcome
+            | success(response) => Handle/write(Handle/stdout, response)
+            | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+            end
         end
         "#;
 
@@ -26,16 +30,20 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
         use /std/{Handle, Async};
         use /std/tcp/{Settings, Socket};
         match Async/block_on(Socket/call(Settings/default, "example.com", 80, /std/Str/to_bytes("ping")))
-        | success(_) => /std/print("connected")
-        | failure(e) =>
-            match e : {}
-            | refused() => /std/print("refused")
-            | tls() => /std/print("tls")
-            | not_found() => /std/print("not found")
-            | permission_denied() => /std/print("denied")
-            | exists() => /std/print("exists")
-            | would_block() => /std/print("would block")
-            | other(_) => /std/print("other")
+        | failure(_) => /std/print("deadlock")
+        | success(outcome) =>
+            match outcome
+            | success(_) => /std/print("connected")
+            | failure(e) =>
+                match e : {}
+                | refused() => /std/print("refused")
+                | tls() => /std/print("tls")
+                | not_found() => /std/print("not found")
+                | permission_denied() => /std/print("denied")
+                | exists() => /std/print("exists")
+                | would_block() => /std/print("would block")
+                | other(_) => /std/print("other")
+                end
             end
         end
         "#;
@@ -66,8 +74,12 @@ fn net_with_custom_timeout_config_reads_response() {
                 | eof() => Async/pure(x\)
                 | error(_) => Async/pure(x\)
                 end)))
-        | success(bytes) => Handle/write(Handle/stdout, bytes)
-        | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
+        | success(outcome) =>
+            match outcome
+            | success(bytes) => Handle/write(Handle/stdout, bytes)
+            | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+            end
         end
         "#;
 
@@ -95,9 +107,13 @@ fn net_serve_handles_a_scripted_inbound_connection() {
                     Async/bind(Socket/write(c, Bytes/concat(Str/to_bytes("echo: "), bytes)), (wrote) => Async/pure(()))
                 | eof() => Async/pure(())
                 | error(_) => Async/pure(())
-                end))) : {}
-        | success(u) => ()
-        | failure(_) => /std/print("listen failed")
+                end)))
+        | failure(_) => /std/print("deadlock")
+        | success(outcome) =>
+            match outcome : {}
+            | success(u) => ()
+            | failure(_) => /std/print("listen failed")
+            end
         end
         "#;
 
@@ -129,8 +145,12 @@ fn net_with_tls_upgrades_and_reads() {
                 | eof() => Async/pure(x\)
                 | error(_) => Async/pure(x\)
                 end)))
-        | success(bytes) => Handle/write(Handle/stdout, bytes)
-        | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
+        | success(outcome) =>
+            match outcome
+            | success(bytes) => Handle/write(Handle/stdout, bytes)
+            | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+            end
         end
         "#;
 
@@ -157,9 +177,13 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
                     Async/bind(Socket/write(c, Bytes/concat(Str/to_bytes("tls: "), bytes)), (wrote) => Async/pure(()))
                 | eof() => Async/pure(())
                 | error(_) => Async/pure(())
-                end))) : {}
-        | success(u) => ()
-        | failure(_) => /std/print("serve failed")
+                end)))
+        | failure(_) => /std/print("deadlock")
+        | success(outcome) =>
+            match outcome : {}
+            | success(u) => ()
+            | failure(_) => /std/print("serve failed")
+            end
         end
         "#;
 
@@ -175,20 +199,24 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
 fn http_perform_parses_a_scripted_response() {
     let source = r#"
         use /std/{Handle, Str, Nat, Async, http};
-        match Async/block_on(http/perform(http/get("example.com", 80, "/"))) : {}
-        | success(response) =>
-            let ct = match http/header(response, "Content-Type") : Str
-                | some(value) => value
-                | none() => "none"
-                end;
-            match Str/of_bytes(response.body) : {}
-            | some(body) =>
-                let _ = Handle/write(Handle/stdout, Str/to_bytes(Str/flatten([
-                    Nat/to_str(response.status.code), " ", ct, " ", body
-                ]))); ()
-            | none() => let _ = Handle/write(Handle/stdout, Str/to_bytes("bad body")); ()
+        match Async/block_on(http/perform(http/get("example.com", 80, "/")))
+        | failure(_) => /std/print("deadlock")
+        | success(outcome) =>
+            match outcome : {}
+            | success(response) =>
+                let ct = match http/header(response, "Content-Type") : Str
+                    | some(value) => value
+                    | none() => "none"
+                    end;
+                match Str/of_bytes(response.body) : {}
+                | some(body) =>
+                    let _ = Handle/write(Handle/stdout, Str/to_bytes(Str/flatten([
+                        Nat/to_str(response.status.code), " ", ct, " ", body
+                    ]))); ()
+                | none() => let _ = Handle/write(Handle/stdout, Str/to_bytes("bad body")); ()
+                end
+            | failure(_) => let _ = Handle/write(Handle/stdout, Str/to_bytes("error")); ()
             end
-        | failure(_) => let _ = Handle/write(Handle/stdout, Str/to_bytes("error")); ()
         end
         "#;
 

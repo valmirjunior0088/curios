@@ -285,7 +285,12 @@ let expire_sleepers(sleeping : Lst(Sleeper)) -> {Lst(Job), Lst(Sleeper)} =
         end;
     walk(sleeping, Lst/nil(), Lst/nil());
 
-pub let block_on(@A : Type, root : Async(A)) -> A =
+-- No runnable job, nothing blocked on a handle, and no sleeper: the root can
+-- never be fulfilled. Nominal and empty — it records that the fact occurred,
+-- and leaves room to carry a diagnostic later without changing how callers match.
+pub struct Deadlock : pub Type {}
+
+pub let block_on(@A : Type, root : Async(A)) -> Result(A, Deadlock) =
     let runq = Cell/new(Lst/nil());
     let blocked = Cell/new(Lst/nil());
     let sleeping = Cell/new(Lst/nil());
@@ -342,11 +347,11 @@ pub let block_on(@A : Type, root : Async(A)) -> A =
         let _ = drain_parked(Cell/get(blocked));
         let _ = drain_sleeping(Cell/get(sleeping));
         drain_slots(Cell/get(parked));
-    rec drive() -> A =
+    rec drive() -> Result(A, Deadlock) =
         match Cell/get(result)
         | some(a) =>
             let _ = drain_all();
-            a
+            Result/success(a)
         | none() =>
             match Cell/get(runq)
             | [] =>
@@ -360,8 +365,12 @@ pub let block_on(@A : Type, root : Async(A)) -> A =
                     let _ = Cell/set(sleeping, woken.1);
                     drive()
                 | true =>
+                    -- Deadlock: no runnable job, nothing blocked on a handle, and
+                    -- no sleeper — the root can never be fulfilled, so there is no
+                    -- `A` to return. Reported to the caller; terminating the
+                    -- process is `run`'s decision, not the scheduler's.
                     let _ = drain_all();
-                    /sys/exit(1)
+                    Result/failure(Deadlock {})
                 end
             | [job, ..rest] =>
                 let _ = Cell/set(runq, rest);
@@ -372,8 +381,12 @@ pub let block_on(@A : Type, root : Async(A)) -> A =
     drive();
 
 pub let run(main : Async({})) -> {} =
-    let _ = block_on(main);
-    ();
+    match block_on(main)
+    | success(_) => ()
+    | failure(_) =>
+        let _ = /std/print_err("async: deadlocked, no runnable work remains\n");
+        /sys/exit(1)
+    end;
 
 pub struct Task(A : Type) : Type {
     result : Future(A),

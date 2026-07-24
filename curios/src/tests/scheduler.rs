@@ -44,7 +44,7 @@ fn task_bind_reads_and_echoes() {
             | eof() => Async/pure(())
             | error(_) => Async/pure(())
             end;
-        Async/block_on(prog)
+        Async/run(prog)
         "#,
         system,
     )
@@ -72,7 +72,7 @@ fn block_on_returns_a_typed_value_and_awaits_a_spawned_child() {
             let w = Handle/write(Handle/stdout, Str/to_bytes("root;"));
             let c = Async/join(f)!;
             Async/pure(Nat/add(c, 2));
-        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Async/block_on(root))))
+        Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(/std/Result/unwrap_or(Async/block_on(root), 0))))
         "#,
         system,
     )

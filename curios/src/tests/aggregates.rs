@@ -497,7 +497,7 @@ fn lst_spread_operand_hoists_bangs() {
                 end;
             let wrote = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(digits)));
             Async/pure(());
-        Async/block_on(prog)
+        Async/run(prog)
         "#,
         system,
     )
@@ -555,7 +555,7 @@ fn bin_spread_operand_hoists_bangs() {
             let out : Bytes = x\3e\..Async/pure(x\68\69)!\3c;
             let wrote = Handle/write(Handle/stdout, out);
             Async/pure(());
-        Async/block_on(prog)
+        Async/run(prog)
         "#,
         system,
     )
