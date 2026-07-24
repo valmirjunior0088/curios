@@ -5,16 +5,16 @@
 use /std/{Str, Nat, Option};
 
 rec loop(k : Nat, x : Nat) -> Nat =
-    match k : Nat
+    match k : (_) => Nat
     | 0 => x
     | kp + 1; ih => loop(kp, 75 * x % 65537)
     end;
 
-match /std/read() : {}
+match /std/read() : (_) => {}
 | some(bytes) =>
-    match Str/of_bytes(bytes) : {}
+    match Str/of_bytes(bytes) : (_) => {}
     | some(s) =>
-        match Nat/of_str(Str/trim(s)) : {}
+        match Nat/of_str(Str/trim(s)) : (_) => {}
         | some(n) => /std/print(Str/concat(Nat/to_str(loop(n, 1)), "\n"))
         | none() => /std/print("bad input\n")
         end

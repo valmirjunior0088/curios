@@ -49,7 +49,7 @@ fn bigint_cmp_orders_across_signs() {
     let source = r#"
         use /std/{Handle, Str, BigInt, Order};
         let show(o : Order) -> Str =
-            match o : Str
+            match o : (_) => Str
             | lt() => "lt"
             | eq() => "eq"
             | gt() => "gt"
@@ -87,7 +87,7 @@ fn bigint_neg_abs_and_parity() {
     let source = r#"
         use /std/{Handle, Str, Bool, Lst, BigInt};
         let show(b : Bool) -> Str =
-            match b : Str
+            match b : (_) => Str
             | true => "T"
             | false => "F"
             end;
@@ -112,7 +112,7 @@ fn bigint_operators_dispatch_through_concepts() {
         let a = BigInt/of_int(-6);
         let b = BigInt/of_int(+2);
         let show_bln(v : Bool) -> Str =
-            match v : Str
+            match v : (_) => Str
             | true => "T"
             | false => "F"
             end;

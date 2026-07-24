@@ -30,7 +30,7 @@ use {
 const LCG: &str = r#"
     use /std/{Handle, Nat, Lst, proc};
     rec loop(k : Nat, x : Nat) -> Nat =
-        match k : Nat
+        match k : (_) => Nat
         | 0 => x
         | kp + 1; ih => loop(kp, 75 * x % 65537)
         end;
@@ -45,12 +45,12 @@ const TREES: &str = r#"
     | node(Nat, Tree, Tree)
     end
     rec build(d : Nat, v : Nat) -> Tree =
-        match d : Tree
+        match d : (_) => Tree
         | 0 => Tree/leaf(v)
         | dp + 1; ih => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
         end;
     rec sum(t : Tree) -> Nat =
-        match t : Nat
+        match t : (_) => Nat
         | leaf(n) => n % 1000003
         | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
         end;
@@ -61,7 +61,7 @@ const TREES: &str = r#"
 const HIGHER_ORDER: &str = r#"
     use /std/{Handle, Nat, Bool, Lst, proc};
     let pick(b : Bool) -> (Nat) -> Nat =
-        match b : (Nat) -> Nat
+        match b : (_) => (Nat) -> Nat
         | true => (y) => y + 1
         | false => (y) => y * 2
         end;
@@ -75,7 +75,7 @@ const DIRECT_ESCAPING: &str = r#"
     let inc(x : Nat) -> Nat = x + 1;
     let apply(g : (Nat) -> Nat, x : Nat) -> Nat = g(x);
     let select(b : Bool, g : (Nat) -> Nat) -> (Nat) -> Nat =
-        match b : (Nat) -> Nat
+        match b : (_) => (Nat) -> Nat
         | true => g
         | false => (y) => y
         end;
@@ -87,7 +87,7 @@ const DIRECT_ESCAPING: &str = r#"
 const FUNCTION_ONLY: &str = r#"
     use /std/{Handle, Nat, Lst, proc};
     rec down(n : Nat, acc : Nat) -> Nat =
-        match n : Nat
+        match n : (_) => Nat
         | 0 => acc
         | p + 1; ih => down(p, acc + 1)
         end;
@@ -102,12 +102,12 @@ const FUNCTION_ONLY: &str = r#"
 const MUTUAL_RECURSION: &str = r#"
     use /std/{Handle, Nat, Lst, proc};
     rec ping(n : Nat) -> Nat =
-        match n : Nat | 0 => 0 | p + 1; ih => pong(p) end
+        match n : (_) => Nat | 0 => 0 | p + 1; ih => pong(p) end
     and pong(n : Nat) -> Nat =
-        match n : Nat | 0 => 1 | p + 1; ih => ping(p) end;
+        match n : (_) => Nat | 0 => 1 | p + 1; ih => ping(p) end;
     let n : Nat = Lst/len(proc/args());
     let start = n <= 0;
-    /std/print(Nat/to_str(match start : Nat | true => ping(n) | false => pong(n) end))
+    /std/print(Nat/to_str(match start : (_) => Nat | true => ping(n) | false => pong(n) end))
     "#;
 
 // -- helpers ----------------------------------------------------------------

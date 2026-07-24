@@ -76,11 +76,11 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
                 match s : (s) => (p : Utf8(s, b)) -> Valid(to_lead_bytes(s, b))
                 | lead() => (p) => p
                 | cont(rem, lo, hi) => (p) =>
-                    match p : (w : Utf8(q, x)) => Valid(to_lead_bytes(q, x))
+                    match p : (q, x, w) => Valid(to_lead_bytes(q, x))
                     | more(c, st, t, rest) => to_lead_proof(step(Byte/to_nat(c), st), t, rest)
                     end
                 | bad() => (p) =>
-                    match p : (w : Utf8(q, x)) => Valid(to_lead_bytes(q, x))
+                    match p : (q, x, w) => Valid(to_lead_bytes(q, x))
                     | more(c, st, t, rest) => to_lead_proof(step(Byte/to_nat(c), st), t, rest)
                     end
                 end;
@@ -131,7 +131,7 @@ fn long_str_literal_compiles_on_the_default_test_stack() {
 fn str_of_bytes_accepts_multibyte_utf8() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x\c3\a9) : {}
+        match Str/of_bytes(x\c3\a9) : (_) => {}
         | some(s) => /std/print(s)
         | none() => /std/print("bad")
         end
@@ -147,7 +147,7 @@ fn str_of_bytes_accepts_multibyte_utf8() {
 fn str_of_bytes_rejects_invalid_utf8() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x\ff) : {}
+        match Str/of_bytes(x\ff) : (_) => {}
         | some(s) => /std/print(s)
         | none() => /std/print("rejected")
         end
@@ -164,7 +164,7 @@ fn str_of_bytes_rejects_invalid_utf8() {
 fn str_of_bytes_rejects_truncated_multibyte() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x\c3) : {}
+        match Str/of_bytes(x\c3) : (_) => {}
         | some(s) => /std/print(s)
         | none() => /std/print("rejected")
         end
@@ -204,7 +204,7 @@ fn utf8_decode_lemmas_type_check() {
 fn str_get_indexes_codepoints_of_every_width() {
     let source = r#"
         use /std/{Str, Char, Nat, Handle, Option};
-        match Str/of_bytes(x\61\e2\82\ac\f0\9f\98\80) : {}
+        match Str/of_bytes(x\61\e2\82\ac\f0\9f\98\80) : (_) => {}
         | some(s) =>
             /std/print(Str/flatten([
                 Nat/to_str(Str/len(s)), ",",
@@ -228,17 +228,17 @@ fn str_get_indexes_codepoints_of_every_width() {
 fn str_at_reads_codepoints_with_the_proof() {
     let source = r#"
         use /std/{Str, Char, Nat, Handle, Option};
-        match Str/of_bytes(x\61\e2\82\ac\f0\9f\98\80) : {}
+        match Str/of_bytes(x\61\e2\82\ac\f0\9f\98\80) : (_) => {}
         | some(s) =>
             let out =
                 let r0 = Nat/try_lt(0, Str/len(s));
                 let r1 = Nat/try_lt(1, Str/len(s));
                 let r2 = Nat/try_lt(2, Str/len(s));
-                match r0 : Option(Str)
+                match r0 : (_) => Option(Str)
                 | none() => Option/none()
-                | some(p0) => match r1 : Option(Str)
+                | some(p0) => match r1 : (_) => Option(Str)
                 | none() => Option/none()
-                | some(p1) => match r2 : Option(Str)
+                | some(p1) => match r2 : (_) => Option(Str)
                 | none() => Option/none()
                 | some(p2) => Option/some(Str/flatten([
                     Nat/to_str(Char/to_nat(Str/at(s, 0, p0))), ",",
@@ -261,7 +261,7 @@ fn str_at_reads_codepoints_with_the_proof() {
 fn str_slice_cuts_on_codepoint_boundaries() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x\61\e2\82\ac\f0\9f\98\80) : {}
+        match Str/of_bytes(x\61\e2\82\ac\f0\9f\98\80) : (_) => {}
         | some(s) => /std/print(Str/slice(s, 1, 2))
         | none() => /std/print("bad")
         end
@@ -280,7 +280,7 @@ fn str_slice_cuts_on_codepoint_boundaries() {
 fn str_slice_spans_every_codepoint_width() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x\61\c3\a9\e2\82\ac\f0\9f\98\80\62) : {}
+        match Str/of_bytes(x\61\c3\a9\e2\82\ac\f0\9f\98\80\62) : (_) => {}
         | some(s) => /std/print(Str/slice(s, 1, 4))
         | none() => /std/print("bad")
         end
@@ -301,7 +301,7 @@ fn str_slice_spans_every_codepoint_width() {
 fn str_trim_keeps_interior_multibyte() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x\20\20\63\61\66\c3\a9\20\20) : {}
+        match Str/of_bytes(x\20\20\63\61\66\c3\a9\20\20) : (_) => {}
         | some(s) => /std/print(Str/trim(s))
         | none() => /std/print("bad")
         end
@@ -318,7 +318,7 @@ fn str_trim_keeps_interior_multibyte() {
 fn str_trim_all_whitespace_is_empty() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x\20\09\20) : {}
+        match Str/of_bytes(x\20\09\20) : (_) => {}
         | some(s) => /std/print(Str/concat(Str/trim(s), "!"))
         | none() => /std/print("bad")
         end
@@ -418,9 +418,9 @@ fn json_unicode_escapes_require_well_formed_surrogate_pairs() {
         use /std/{Json, Parse, Result, Str, Handle};
         use /std/Json/{str};
         let decoded(input : Str) -> Str =
-            match Parse/run(Json/decode, Str/to_bytes(input)) : Str
+            match Parse/run(Json/decode, Str/to_bytes(input)) : (_) => Str
             | success(value) =>
-                match value : Str
+                match value : (_) => Str
                 | str(s) => s
                 | _ => "wrong"
                 end
@@ -488,7 +488,7 @@ fn utf8_inductive_spike() {
 
         rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Utf8(Scan/lead(), b))
             -> Utf8(s, Bytes/concat(a, b)) =
-            match va : (w : Utf8(q, x)) => Utf8(q, Bytes/concat(x, b))
+            match va : (q, x, w) => Utf8(q, Bytes/concat(x, b))
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, Bytes/concat(t, b), seq(rest, vb))
             end;
@@ -599,7 +599,7 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
 
         rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
             -> Utf8(s, Bytes/concat(a, b)) =
-            match va : (w : Utf8(q, x)) => Utf8(q, Bytes/concat(x, b))
+            match va : (q, x, w) => Utf8(q, Bytes/concat(x, b))
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, Bytes/concat(t, b), seq(rest, vb))
             end;
@@ -695,7 +695,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
                 | bad() => Option/none()
                 end
             | x\h\..t; ih => (s) =>
-                match ih(step(/std/Byte/to_nat(h), s)) : Option(Utf8(s, Bytes/concat(Bytes/append(x\, h), t)))
+                match ih(step(/std/Byte/to_nat(h), s)) : (_) => Option(Utf8(s, Bytes/concat(Bytes/append(x\, h), t)))
                 | some(rest) => Option/some(Utf8/more(/std/Byte/to_nat(h), s, t, rest))
                 | none() => Option/none()
                 end
@@ -790,7 +790,7 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
 
         rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
             -> Utf8(s, Bytes/concat(a, b)) =
-            match va : (w : Utf8(q, x)) => Utf8(q, Bytes/concat(x, b))
+            match va : (q, x, w) => Utf8(q, Bytes/concat(x, b))
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, Bytes/concat(t, b), seq(rest, vb))
             end;
@@ -910,7 +910,7 @@ fn utf8_slice_closed_peels_codepoints() {
 
         rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
             -> Utf8(s, Bytes/concat(a, b)) =
-            match va : (w : Utf8(q, x)) => Utf8(q, Bytes/concat(x, b))
+            match va : (q, x, w) => Utf8(q, Bytes/concat(x, b))
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, Bytes/concat(t, b), seq(rest, vb))
             end;
@@ -926,14 +926,14 @@ fn utf8_slice_closed_peels_codepoints() {
                     -> { mid : Bytes, tail : Bytes, midd : Utf8(s, mid), tv : Valid(tail) }
                 | lead() => (d) => (x\, b, Utf8/stop(), d)
                 | cont(rem, lo, hi) => (d) =>
-                    match d : { mid : Bytes, tail : Bytes, midd : Utf8(Scan/cont(rem, lo, hi), mid), tv : Valid(tail) }
+                    match d : (_, _, _) => { mid : Bytes, tail : Bytes, midd : Utf8(Scan/cont(rem, lo, hi), mid), tv : Valid(tail) }
                     | more(c, st, t, rest) =>
                         let w = take_to_lead(rest);
                         (Bytes/concat(Bytes/append(x\, c), w.mid), w.tail,
                          Utf8/more(c, st, w.mid, w.midd), w.tv)
                     end
                 | bad() => (d) =>
-                    match d : { mid : Bytes, tail : Bytes, midd : Utf8(Scan/bad(), mid), tv : Valid(tail) }
+                    match d : (_, _, _) => { mid : Bytes, tail : Bytes, midd : Utf8(Scan/bad(), mid), tv : Valid(tail) }
                     | more(c, st, t, rest) =>
                         let w = take_to_lead(rest);
                         (Bytes/concat(Bytes/append(x\, c), w.mid), w.tail,
@@ -943,7 +943,7 @@ fn utf8_slice_closed_peels_codepoints() {
             go(d);
 
         let take1(@b : Bytes, d : Valid(b)) -> { cp : Bytes, v : Valid(cp) } =
-            match d : { cp : Bytes, v : Valid(cp) }
+            match d : (_, _, _) => { cp : Bytes, v : Valid(cp) }
             | stop() => (x\, Utf8/stop())
             | more(c, st, t, rest) =>
                 let w = take_to_lead(rest);
@@ -951,7 +951,7 @@ fn utf8_slice_closed_peels_codepoints() {
             end;
 
         let drop1(@b : Bytes, d : Valid(b)) -> { rest : Bytes, v : Valid(rest) } =
-            match d : { rest : Bytes, v : Valid(rest) }
+            match d : (_, _, _) => { rest : Bytes, v : Valid(rest) }
             | stop() => (x\, Utf8/stop())
             | more(c, st, t, rest) =>
                 let w = take_to_lead(rest);

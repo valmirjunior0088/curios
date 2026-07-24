@@ -342,11 +342,7 @@ fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> 
         // inline evaluated definition internals (including local-`let`
         // annotation holes that elaboration never births) into types that
         // flow on to `zonk`.
-        Cases::Induct {
-            cases,
-            pattern,
-            default,
-        } => {
+        Cases::Induct { cases, default } => {
             if let Subterm::Variant(ctor) = &*forced {
                 if let Some(scope) = cases.get(&ctor.tag) {
                     let projections = (0..scope.arity())
@@ -368,11 +364,7 @@ fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> 
             Reduce::Break(Term::from(Subterm::Match(Match {
                 head: forced,
                 motive,
-                cases: Cases::Induct {
-                    cases,
-                    pattern,
-                    default,
-                },
+                cases: Cases::Induct { cases, default },
             })))
         }
 

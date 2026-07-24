@@ -34,13 +34,13 @@ fn implicit_inductive_type_param_executes() {
         | refl(@z : A) : (z, z)
         end
         let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
-            match p : (q : Eq2(A, s, t)) => Eq2(t, s)
+            match p : (s, t, q) => Eq2(t, s)
             | refl(@z) => Eq2/refl()
             end;
         let pinned : Eq2(@Nat, 3, 3) = Eq2/refl();
         let proof : Eq2(2, 2) = Eq2/refl();
         let inferred : Eq2(2, 2) = sym2(proof);
-        match inferred : {}
+        match inferred : (_, _, _) => {}
         | refl(@z) => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
         end
         "#;
@@ -82,12 +82,12 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         | refl(@z : A) : (z, z)
         end
         let sym2(@A : Type, @x : A, @y : A, p : Eq2(x, y)) -> Eq2(y, x) =
-            match p : (q : Eq2(A, s, t)) => Eq2(t, s)
+            match p : (s, t, q) => Eq2(t, s)
             | refl(@z) => Eq2/refl()
             end;
         let direct : Eq2(2, 2) = sym2(Eq2/refl());
         let chained : Eq2(3, 3) = sym2(sym2(Eq2/refl()));
-        match chained : {}
+        match chained : (_, _, _) => {}
         | refl(@z) => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(z))); ()
         end
         "#;
@@ -179,7 +179,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         let mk(@A : Type, a : A) -> Lst(A) = [a];
         let use_(@B : Type, l : Lst(B)) -> Lst(B) = l;
         let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
-        match v : {}
+        match v : (_) => {}
         | [] => ()
         | [p, ..rest] => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(p.1))); ()
         end
@@ -236,7 +236,7 @@ fn nonproductive_inner_rec_in_type_position_is_preempted() {
             rec go : Bool = go;
             go;
         let bad : Type =
-            match spin : Type
+            match spin : (_) => Type
             | true => {}
             | false => {}
             end;
@@ -308,7 +308,7 @@ fn operator_scrutinee_refines_a_proof_carrying_arm() {
     let source = r#"
         use /std/{Nat, Option, True, False};
         let AtMost(a : Nat, hi : Nat) -> Prop =
-            match a <= hi : Prop
+            match a <= hi : (_) => Prop
             | false => False
             | true => True
             end;

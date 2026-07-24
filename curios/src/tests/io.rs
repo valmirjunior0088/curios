@@ -33,7 +33,7 @@ fn io_read() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        match std/Handle/read(std/Handle/stdin, 1024) : {}
+        match std/Handle/read(std/Handle/stdin, 1024) : (_) => {}
         | chunk(b) => let w = std/Handle/write(std/Handle/stdout, b); ()
         | eof() => ()
         | error(_) => ()
@@ -53,7 +53,7 @@ fn io_read_short_reads_and_eof() {
     let source = r#"
         use /std/{Handle};
         let show(r : Handle/Read) -> {} =
-            match r : {}
+            match r : (_) => {}
             | chunk(b) => let _ = Handle/write(Handle/stdout, b); ()
             | eof() => /std/print("1")
             | error(_) => /std/print("e")
@@ -99,7 +99,7 @@ fn file_read_all_of_a_missing_path_is_not_found() {
             match outcome
             | success(_) => /std/print("contents")
             | failure(e) =>
-                match e : {}
+                match e : (_) => {}
                 | not_found() => /std/print("not found")
                 | permission_denied() => /std/print("denied")
                 | exists() => /std/print("exists")
@@ -146,7 +146,7 @@ fn file_read_pulls_bytes_inside_the_bracket() {
         use /std/{File, Handle, Str, Bytes, Async};
         match Async/block_on(File/with("lines.txt", File/Mode/read(), (f) =>
             Async/bind(File/read(f, 1024), (r) =>
-                match r : Async(Bytes)
+                match r : (_) => Async(Bytes)
                 | chunk(b) => Async/pure(b)
                 | eof() => Async/pure(x\)
                 | error(_) => Async/pure(x\)
@@ -187,7 +187,7 @@ fn proc_env_found_unwraps_to_some() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        match /std/proc/env("HOME") : {}
+        match /std/proc/env("HOME") : (_) => {}
         | some(v) => let _ = std/Handle/write(std/Handle/stdout, v); ()
         | none() => let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("missing")); ()
         end
@@ -205,7 +205,7 @@ fn proc_env_absent_is_none() {
     crate::run_text(
         Duration::from_secs(10),
         r#"
-        match /std/proc/env("NOPE") : {}
+        match /std/proc/env("NOPE") : (_) => {}
         | some(v) => let _ = std/Handle/write(std/Handle/stdout, v); ()
         | none() => let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("missing")); ()
         end

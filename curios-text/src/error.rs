@@ -79,16 +79,12 @@ pub enum Error {
     /// A postfix `!` was reached through a *type* lowering (an annotation, a
     /// motive, a Π/Σ component): types have no region to hoist the action to.
     BangInTypePosition,
-    /// The annotated motive form `(x : T(...)) => P` is only meaningful on a
-    /// inductive scrutinee — `Bool` and `Nat` matches take `: P` or `: (x) => P`.
-    AnnotatedMotiveNotInduct,
-    /// A dependent motive (`(x) => P` or the annotated type-pattern form) was
-    /// written on a match whose head does not dispatch on a single tag or
-    /// literal shape directly — every arm matches a tuple/struct, is a
-    /// plain binder, or arms disagree on which carrier (`Ctor`/`Bool`/`Nat`/
-    /// `Lst`/`Bin`) they dispatch on. There is no core `Match` node for such
-    /// a head to attach the motive to; only a match whose every top-level
-    /// arm shares one dispatchable shape can carry a dependent motive.
+    /// A motive was written on a match whose head does not dispatch on a
+    /// single tag or literal shape directly — every arm matches a
+    /// tuple/struct, is a plain binder, or arms disagree on which carrier
+    /// (`Ctor`/`Bool`/`Nat`/`Lst`/`Bin`) they dispatch on. Such a head
+    /// explodes into projections and builds no core `Match` node for the
+    /// motive to attach to, so the motive would be silently discarded.
     MatrixMotiveRequiresCtorHead,
     /// Two match-arm rows write incompatible shapes for the same column —
     /// mixing a plain binder with a concrete constructor/tuple/struct shape
@@ -223,16 +219,10 @@ impl fmt::Display for Error {
             Error::BangInTypePosition => {
                 write!(f, "postfix `!` is not allowed inside a type")
             }
-            Error::AnnotatedMotiveNotInduct => {
-                write!(
-                    f,
-                    "an annotated motive `(x : T(...)) => P` is only legal on an inductive match"
-                )
-            }
             Error::MatrixMotiveRequiresCtorHead => {
                 write!(
                     f,
-                    "a dependent motive is only legal when every arm dispatches on the same kind of tag/literal directly"
+                    "a written motive is only legal when every arm dispatches on the same kind of tag/literal directly"
                 )
             }
             Error::MatrixInconsistentShape => {

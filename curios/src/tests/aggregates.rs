@@ -11,7 +11,7 @@ fn lst_match_is_a_foldr() {
         use /std/{Handle, Str, Nat, Lst};
         let xs : Lst(Nat) = [1, 2, 3, 4];
         let digits : Nat =
-            match xs : Nat
+            match xs : (_) => Nat
             | [] => 0
             | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
@@ -63,7 +63,7 @@ fn bin_match_is_a_foldr() {
         use /std/{Handle, Str, Nat, Byte, Bytes};
         let bytes : Bytes = x\01\02\03\04;
         let digits : Nat =
-            match bytes : Nat
+            match bytes : (_) => Nat
             | x\ => 0
             | x\h\..t; ih => Nat/add(Nat/mul(ih, 10), Byte/to_nat(h))
             end;
@@ -331,7 +331,7 @@ fn empty_bin_literal_is_the_empty_sequence() {
 fn vec_cons_with_nat_succ() {
     let source = r#"
         rec Vec(T : Type, n : std/Nat) -> Type =
-            match n : Type
+            match n : (_) => Type
             | 0 => {}
             | pred + 1; ih => { T, ih }
             end;
@@ -368,12 +368,12 @@ fn indexed_vec_append_executes() {
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
         end
         rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
-            match v : (v : Vec(T, k)) => Vec(T, Nat/add(k, m))
+            match v : (k, v) => Vec(T, Nat/add(k, m))
             | nil() => w
             | cons(@j, x, xs) => Vec/cons(x, append(xs, w))
             end;
         rec total(@n : Nat, v : Vec(Nat, n), acc : Nat) -> Nat =
-            match v : Nat
+            match v : (_, _) => Nat
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
             end;
@@ -410,7 +410,7 @@ fn lst_spread_concats_segments() {
         let xs : Lst(Nat) = [2, 3];
         let ys : Lst(Nat) = [1, ..xs, 4];
         let digits : Nat =
-            match ys : Nat
+            match ys : (_) => Nat
             | [] => 0
             | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
@@ -429,7 +429,7 @@ fn lst_spread_identity_and_multi() {
         let ys : Lst(Nat) = [..xs];
         let zs : Lst(Nat) = [..ys, ..ys];
         let digits : Nat =
-            match zs : Nat
+            match zs : (_) => Nat
             | [] => 0
             | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
             end;
@@ -491,7 +491,7 @@ fn lst_spread_operand_hoists_bangs() {
         let prog : Async({}) =
             let ys : Lst(Nat) = [1, ..Async/pure([2, 3])!, 4];
             let digits : Nat =
-                match ys : Nat
+                match ys : (_) => Nat
                 | [] => 0
                 | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
                 end;
@@ -577,6 +577,6 @@ fn bin_fold_sums_bytes() {
 
 // An empty match is a vacuous elimination: it never inspects its scrutinee. A
 // `False` is a `Prop`, so it erases (sort-driven) — a contradiction may therefore
-// discharge into a *relevant* result, both directly (`match c : A end`) and
+// discharge into a *relevant* result, both directly (`match c : (_) => A end`) and
 // through `False/absurd`. This is what lets an impossible runtime branch be closed
 // off by an erased witness, the crux of the UTF-8 decode certification.

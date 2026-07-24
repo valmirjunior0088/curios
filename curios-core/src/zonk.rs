@@ -4,9 +4,9 @@ mod tests;
 use {
     super::{
         Apply, Bound, Carrier, Cases, Context, Definition, Error, Func, FuncType, InductDecl,
-        InductParam, InductType, Item, Let, Match, Metavar, MetavarId, MetavarOrigin, Module,
-        MotivePattern, MotiveSlot, Nat, Prim, Proj, Rec, RecItem, Struct, StructDecl, StructType,
-        Subterm, Term, Tuple, TupleType, Variant,
+        InductParam, InductType, Item, Let, Match, Metavar, MetavarId, MetavarOrigin, Module, Nat,
+        Prim, Proj, Rec, RecItem, Struct, StructDecl, StructType, Subterm, Term, Tuple, TupleType,
+        Variant,
     },
     curios_base::Grain,
     std::sync::Arc,
@@ -394,11 +394,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                         .collect::<Result<_, Error>>()?,
                     default: zonk_term(context, default)?,
                 },
-                Cases::Induct {
-                    cases,
-                    pattern,
-                    default,
-                } => Cases::Induct {
+                Cases::Induct { cases, default } => Cases::Induct {
                     cases: cases
                         .iter()
                         .map(|(atom, arm)| {
@@ -411,26 +407,6 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                     default: default
                         .as_ref()
                         .map(|d| zonk_term(context, d))
-                        .transpose()?,
-                    pattern: pattern
-                        .as_ref()
-                        .map(|p| {
-                            Ok(MotivePattern {
-                                name: p.name.clone(),
-                                slots: p
-                                    .slots
-                                    .iter()
-                                    .map(|slot| {
-                                        Ok(match slot {
-                                            MotiveSlot::Binder => MotiveSlot::Binder,
-                                            MotiveSlot::Term(t) => {
-                                                MotiveSlot::Term(zonk_term(context, t)?)
-                                            }
-                                        })
-                                    })
-                                    .collect::<Result<_, Error>>()?,
-                            })
-                        })
                         .transpose()?,
                 },
             },

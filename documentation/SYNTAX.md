@@ -256,6 +256,13 @@ A lambda is a comma-separated parameter list followed by `=>` and a body.
 
 Lambda parameters may be plain binders or irrefutable tuple and struct patterns. An annotation may be written when the parameter type is not supplied by context.
 
+A lambda's parameter list is a dependent telescope, exactly as a function type's is: a later parameter's annotation may name the parameters written before it, including the leaf names bound by an earlier tuple or struct pattern. An earlier parameter shadows a like-named module binding inside a later annotation, just as it does inside the body.
+
+```crs
+(s : A, t : A, q : Eq(s, t)) => proof(q)
+((lo, hi), q : Eq(lo, hi)) => lo
+```
+
 A lambda parameter carries the same plicity mark as a function-type parameter: `@name` binds an implicit slot, `use name` binds a witness slot, and an unmarked binder binds an explicit slot. The mark applies to the slot the parameter occupies whatever the pattern shape. Each written binder is checked against the plicity of the slot it claims when the lambda is checked against an expected function type.
 
 ```crs
@@ -383,15 +390,36 @@ Operator notation always uses witness resolution, including primitive operands. 
 
 A headed match has a scrutinee, an optional motive, one or more `| pattern => body` arms unless the eliminated type is empty, and a closing `end`.
 
-The motive specifies the result type or dependent result family. It has three forms:
+The motive states the result type as a family. It is an ordinary term, checked against the eliminator's motive type — a function of the scrutinee's indices, in declaration order, and then the scrutinee:
 
-```crs
-match n : Nat                         -- constant result type
-match v : (v) => Result(v)            -- scrutinee-bound family
-match p : (q : Eq(A, x, y)) => Eq(y, x) -- annotated indexed family
+```text
+(indices) -> Scrutinee(indices) -> Sort
 ```
 
-The annotated form names the eliminated inductive and its parameter/index slots. It is accepted only for inductive scrutinees.
+There is no motive grammar. What follows `:` is parsed as a term and terminates at the first arm, since `|` is not an infix operator.
+
+```crs
+match b : (_) => Nat                            -- result ignores the scrutinee
+match n : (m) => P(m)                           -- result depends on it
+match p : (s, t, q) => Eq(t, s)                 -- an indexed family
+match p : (s : A, t : A, q : Eq(s, t)) => Eq(t, s) -- with written annotations
+match p : discriminates_eq                      -- a named family
+match v                                         -- omitted; inferred
+```
+
+The number of binders is fixed by the eliminated type: one per index, then one for the scrutinee. A non-indexed scrutinee — every primitive carrier, and any inductive declared without an index telescope — therefore takes exactly one binder, so a result that ignores the scrutinee is written `(_) => T`. `Vec(T)` has one index and takes two binders; `Eq` has two and takes three.
+
+Parameters are never binders. They are uniform across constructors and fixed by the scrutinee's type, so the motive body refers to them through the ambient scope, exactly as the declaration side states only index expressions in a constructor's case target.
+
+Each arm is checked against the motive at that constructor's target indices, and the match as a whole at the scrutinee's actual indices. A `| _ =>` default binds nothing and refines no index, so it is checked at the actual indices too.
+
+A binder may be written bare, as `_`, or annotated. An annotation is an ordinary type in an ordinary position: it is checked by conversion against the binder's expected type, obeys the usual plicity rules, and may name the binders written before it. Annotating the scrutinee binder is how a reader recovers the eliminated family on the motive line.
+
+```crs
+match p : (s, t, q : Eq(s, t)) => Eq(t, s)
+```
+
+Omitting the motive asks the elaborator to infer it. Prefer omission wherever inference succeeds; a written motive is needed where there is nothing to infer from — a type-level match whose result appears in a signature, or an elimination in inference position.
 
 ### Inductive patterns
 
@@ -816,7 +844,7 @@ Propositional equality `Eq` is an ordinary indexed inductive proposition from `/
 
 ```crs
 pub let sym(@A : Type, @x : A, @y : A, proof : Eq(x, y)) -> Eq(y, x) =
-    match proof : (p : Eq(A, left, right)) => Eq(right, left)
+    match proof : (left, right, p) => Eq(right, left)
     | refl(value) => Eq/refl()
     end;
 ```

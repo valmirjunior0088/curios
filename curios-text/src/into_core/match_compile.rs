@@ -2,7 +2,7 @@ use {
     super::Lowerer,
     crate::{
         BinPattern, Choose, ChooseArm, ChooseTest, Error, LstPattern, Match, MatchPattern,
-        MatrixArm, Motive, NatPattern, Subterm, Term,
+        MatrixArm, NatPattern, Term,
     },
     curios_base::{Grain, Plicity},
     std::{collections::BTreeMap, mem},
@@ -139,10 +139,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             ChooseTest::Cond(condition) => {
                 let head = self.collect(condition, binds)?;
                 let true_case = self.region(&arm.body)?;
-                Ok(curios_core::Term::bool_match(
+                Ok(curios_core::Term::bool_match_scoped(
                     head,
-                    None,
-                    curios_core::Term::metavar(self.context.fresh_metavar()),
+                    self.motive_scope(&None)?,
                     rest_wrapped,
                     true_case,
                 ))
@@ -200,7 +199,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     pub(super) fn compile_matrix_headed(
         &self,
         head: curios_core::Term,
-        motive: &Option<Motive>,
+        motive: &Option<Term>,
         arms: &[MatrixArm],
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
@@ -222,7 +221,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     fn lower_defaulted_matrix(
         &self,
         head: curios_core::Term,
-        motive: &Option<Motive>,
+        motive: &Option<Term>,
         arms: &[MatrixArm],
         default: curios_core::Term,
         share: bool,
@@ -244,103 +243,44 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         Ok(curios_core::Term::let_(k, hole, thunk, matrix))
     }
 
-    /// Splits an optional match motive into its `(label, body)` for the core
-    /// match constructors. An omitted motive (`None`) lowers to an unlabelled
-    /// fresh metavariable body — the same as writing `: _` — so a non-dependent
-    /// match infers its motive by unifying the arms against that metavariable.
-    /// The annotated form is inductive-only and goes through `induct_match` instead.
-    pub(super) fn motive_parts<'m>(
+    /// Lowers an optional match motive into the core motive slot. A written
+    /// motive is an ordinary term, carried un-scoped
+    /// ([`curios_core::Term::match_motive_written`]) because its arity —
+    /// `n_indices + 1` — depends on the eliminated family, which only the
+    /// elaborator knows. An omitted motive (`None`) lowers to a fresh
+    /// metavariable, so a non-dependent match infers its motive by unifying the
+    /// arms against that metavariable.
+    pub(super) fn motive_scope(
         &self,
-        motive: &'m Option<Motive>,
-    ) -> Result<(Option<&'m str>, curios_core::Term), Error> {
-        match motive {
-            Some(Motive::Constant(body)) => Ok((None, self.term(body)?)),
-            // The scrutinee label binds the matched value inside the motive body.
-            Some(Motive::Scrutinee { label, body }) => Ok((
-                Some(label),
-                self.scoped([label.clone()], || self.term(body))?,
-            )),
-            Some(Motive::Annotated { .. }) => Err(Error::AnnotatedMotiveNotInduct),
-            None => Ok((
-                None,
-                curios_core::Term::metavar(self.context.fresh_metavar()),
-            )),
-        }
+        motive: &Option<Term>,
+    ) -> Result<curios_core::Scope<curios_core::Many>, Error> {
+        Ok(curios_core::Term::match_motive_written(match motive {
+            Some(motive) => self.term(motive)?,
+            None => curios_core::Term::metavar(self.context.fresh_metavar()),
+        }))
     }
 
     /// Builds the core inductive match for both lowering paths (`subterm` and
-    /// `match_region`). A plain motive goes through `motive_parts`; the
-    /// annotated type-pattern form resolves its inductive name, classifies its
-    /// slots — a bare identifier that resolves to no module binding is a
-    /// binder candidate (locals are invisible here; core elaboration
-    /// validates positionally against the registry), anything else verbatim —
-    /// and closes the motive body over the binder labels then the scrutinee.
+    /// `match_region`).
     fn induct_match(
         &self,
         head: curios_core::Term,
-        motive: &Option<Motive>,
+        motive: &Option<Term>,
         cases: Vec<InductCase>,
     ) -> Result<curios_core::Term, Error> {
-        let Some(Motive::Annotated {
-            label,
-            name,
-            slots,
-            body,
-        }) = motive
-        else {
-            let (label, body) = self.motive_parts(motive)?;
-            // A `| _ =>` catch-all (or bind-arm fallthrough) becomes the core
-            // match's default; otherwise the arms enumerate every constructor
-            // (core's Rung-C vacuity covers any pruned tag).
-            return Ok(match &self.default {
-                Some(default) => curios_core::Term::induct_match_default_marked(
-                    head,
-                    label,
-                    body,
-                    cases,
-                    default.clone(),
-                ),
-                None => curios_core::Term::induct_match_marked(head, label, body, cases),
-            });
-        };
-
-        // Resolve the annotation's inductive name exactly like a term reference.
-        let resolved = self.resolve_name(name)?;
-
-        let mut binders = Vec::new();
-        let mut pattern_slots = Vec::new();
-        for slot in slots {
-            match slot.as_subterm() {
-                // A single unqualified identifier naming no module binding:
-                // a binder candidate. (One that *does* name a module binding
-                // — `Vec(Nat, k)`'s `Nat` — must stay a reference: binding it
-                // would capture the global's occurrences in `P`.)
-                Subterm::Name(n)
-                    if n.is_single()
-                        && !n.is_abs()
-                        && self.context.bindings().get(n.head()).is_none() =>
-                {
-                    binders.push(n.head().to_string());
-                    pattern_slots.push(curios_core::MotiveSlot::Binder);
-                }
-                _ => pattern_slots.push(curios_core::MotiveSlot::Term(self.term(slot)?)),
-            }
-        }
-
-        // The index binders are in scope inside the motive body.
-        let motive_body = self.scoped(binders.clone(), || self.term(body))?;
-
-        Ok(curios_core::Term::induct_match_motive_marked(
-            head,
-            binders,
-            label,
-            motive_body,
-            curios_core::MotivePattern {
-                name: resolved,
-                slots: pattern_slots,
-            },
-            cases,
-        ))
+        let motive = self.motive_scope(motive)?;
+        // A `| _ =>` catch-all (or bind-arm fallthrough) becomes the core
+        // match's default; otherwise the arms enumerate every constructor
+        // (core's Rung-C vacuity covers any pruned tag).
+        Ok(match &self.default {
+            Some(default) => curios_core::Term::induct_match_scoped_marked(
+                head,
+                motive,
+                cases,
+                Some(default.clone()),
+            ),
+            None => curios_core::Term::induct_match_scoped_marked(head, motive, cases, None),
+        })
     }
 
     /// The entry point for a match whose arm patterns may nest across
@@ -356,21 +296,21 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// recursion at all — there is nothing to infer a dispatch kind from, so
     /// it goes straight to [`Self::induct_match`] exactly as today.
     ///
-    /// A dependent motive (`Motive::Scrutinee`/`Motive::Annotated`) is only
-    /// meaningful when the head itself dispatches on a constructor tag
-    /// directly — every arm's *top-level* pattern being [`MatchPattern::Variant`]
-    /// — since that is the only case where a core `Match` node exists for
-    /// the *original* scrutinee to attach the motive to (a
+    /// A written motive is only meaningful when the head itself dispatches on
+    /// one carrier directly — every arm's *top-level* pattern being the same
+    /// dispatchable shape — since that is the only case where a core `Match`
+    /// node exists for the *original* scrutinee to attach the motive to. A
     /// tuple/struct-headed or plain-binder match never builds one; it just
-    /// projects). Every deeper/inner split the recursion synthesizes never
-    /// needs its own motive at all: an absent motive lowers to a fresh
-    /// metavariable ([`Self::motive_parts`]'s `None` case), which core
-    /// elaboration unifies against whatever expected type flows in from the
-    /// enclosing checking context — no currying needed for a single head.
+    /// projects, and the motive would be silently discarded. Every deeper/inner
+    /// split the recursion synthesizes needs no motive at all: an absent motive
+    /// lowers to a fresh metavariable ([`Self::motive_scope`]'s `None` case),
+    /// which core elaboration unifies against whatever expected type flows in
+    /// from the enclosing checking context — no currying needed for a single
+    /// head.
     pub(super) fn compile_matrix(
         &self,
         head: curios_core::Term,
-        motive: &Option<Motive>,
+        motive: &Option<Term>,
         arms: &[MatrixArm],
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
@@ -382,12 +322,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             && arms
                 .iter()
                 .all(|arm| mem::discriminant(&arm.pattern) == mem::discriminant(&arms[0].pattern));
-        if !homogeneous_dispatch
-            && matches!(
-                motive,
-                Some(Motive::Scrutinee { .. } | Motive::Annotated { .. })
-            )
-        {
+        if !homogeneous_dispatch && motive.is_some() {
             return Err(Error::MatrixMotiveRequiresCtorHead);
         }
 
@@ -417,7 +352,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         &self,
         mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
-        top_motive: Option<&Option<Motive>>,
+        top_motive: Option<&Option<Term>>,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
         if columns.is_empty() {
@@ -551,7 +486,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         &self,
         mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
-        top_motive: Option<&Option<Motive>>,
+        top_motive: Option<&Option<Term>>,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
         let scrutinee = columns.remove(0);
@@ -667,7 +602,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         &self,
         mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
-        top_motive: Option<&Option<Motive>>,
+        top_motive: Option<&Option<Term>>,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
         let scrutinee = columns.remove(0);
@@ -691,7 +626,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Bool" });
         }
 
-        let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
+        let motive = self.motive_scope(top_motive.unwrap_or(&None))?;
         let false_case = match false_rows.is_empty() {
             true => self
                 .default
@@ -707,12 +642,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             false => self.compile(rest, true_rows, None, leaf)?,
         };
 
-        Ok(curios_core::Term::bool_match(
-            scrutinee,
-            label,
-            motive_body,
-            false_case,
-            true_case,
+        Ok(curios_core::Term::bool_match_scoped(
+            scrutinee, motive, false_case, true_case,
         ))
     }
 
@@ -761,7 +692,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         &self,
         mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
-        top_motive: Option<&Option<Motive>>,
+        top_motive: Option<&Option<Term>>,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
         let scrutinee = columns.remove(0);
@@ -782,7 +713,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             }
         }
 
-        let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
+        let motive = self.motive_scope(top_motive.unwrap_or(&None))?;
 
         // Dispatch mode: no successor peeling, so `0`/`Lit(k)` are `switch`
         // cases and the matrix default is the mandatory fallthrough (a `switch`
@@ -804,12 +735,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             for (value, group) in groups {
                 cases.push((value, self.compile(rest.clone(), group, None, leaf)?));
             }
-            return Ok(curios_core::Term::switch(
-                scrutinee,
-                label,
-                motive_body,
-                cases,
-                default,
+            return Ok(curios_core::Term::switch_scoped(
+                scrutinee, motive, cases, default,
             ));
         }
 
@@ -861,14 +788,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             (pred_synth, ih_synth, succ_case)
         };
 
-        Ok(curios_core::Term::nat_match(
-            scrutinee,
-            label,
-            motive_body,
-            zero_case,
-            pred_label,
-            ih_label,
-            succ_case,
+        Ok(curios_core::Term::nat_match_scoped(
+            scrutinee, motive, zero_case, pred_label, ih_label, succ_case,
         ))
     }
 
@@ -885,7 +806,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         &self,
         mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
-        top_motive: Option<&Option<Motive>>,
+        top_motive: Option<&Option<Term>>,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
         let scrutinee = columns.remove(0);
@@ -914,7 +835,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Lst" });
         }
 
-        let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
+        let motive = self.motive_scope(top_motive.unwrap_or(&None))?;
         let empty_case = match nil_rows.is_empty() {
             true => self
                 .default
@@ -971,11 +892,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             (head_synth, tail_synth, ih_synth, cons_case)
         };
 
-        Ok(curios_core::Term::lst_match(
+        Ok(curios_core::Term::lst_match_scoped(
             scrutinee,
             curios_core::Term::metavar(self.context.fresh_metavar()),
-            label,
-            motive_body,
+            motive,
             empty_case,
             head_label,
             tail_label,
@@ -992,7 +912,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         &self,
         mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
-        top_motive: Option<&Option<Motive>>,
+        top_motive: Option<&Option<Term>>,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
         let scrutinee = columns.remove(0);
@@ -1035,7 +955,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Bin" });
         }
 
-        let (label, motive_body) = self.motive_parts(top_motive.unwrap_or(&None))?;
+        let motive = self.motive_scope(top_motive.unwrap_or(&None))?;
         let empty_case = match end_rows.is_empty() {
             true => self
                 .default
@@ -1092,11 +1012,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             (head_synth, tail_synth, ih_synth, cons_case)
         };
 
-        Ok(curios_core::Term::bin_match(
+        Ok(curios_core::Term::bin_match_scoped(
             *grain.expect("a Bin group has at least one row"),
             scrutinee,
-            label,
-            motive_body,
+            motive,
             empty_case,
             head_label,
             tail_label,

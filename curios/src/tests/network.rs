@@ -35,7 +35,7 @@ fn net_call_to_an_unscripted_endpoint_is_refused() {
             match outcome
             | success(_) => /std/print("connected")
             | failure(e) =>
-                match e : {}
+                match e : (_) => {}
                 | refused() => /std/print("refused")
                 | tls() => /std/print("tls")
                 | not_found() => /std/print("not found")
@@ -69,7 +69,7 @@ fn net_with_custom_timeout_config_reads_response() {
         };
         match Async/block_on(Socket/with(settings, "db.internal", 5432, (s) =>
             Async/bind(Socket/read(s, 64), (r) =>
-                match r : Async(Bytes)
+                match r : (_) => Async(Bytes)
                 | chunk(b) => Async/pure(b)
                 | eof() => Async/pure(x\)
                 | error(_) => Async/pure(x\)
@@ -102,7 +102,7 @@ fn net_serve_handles_a_scripted_inbound_connection() {
         use /std/tcp/{Listener, Socket};
         match Async/block_on(Listener/serve("0.0.0.0", 8080, (c) =>
             Async/bind(Socket/read(c, 64), (r) =>
-                match r : Async({})
+                match r : (_) => Async({})
                 | chunk(bytes) =>
                     Async/bind(Socket/write(c, Bytes/concat(Str/to_bytes("echo: "), bytes)), (wrote) => Async/pure(()))
                 | eof() => Async/pure(())
@@ -110,7 +110,7 @@ fn net_serve_handles_a_scripted_inbound_connection() {
                 end)))
         | failure(_) => /std/print("deadlock")
         | success(outcome) =>
-            match outcome : {}
+            match outcome : (_) => {}
             | success(u) => ()
             | failure(_) => /std/print("listen failed")
             end
@@ -140,7 +140,7 @@ fn net_with_tls_upgrades_and_reads() {
         };
         match Async/block_on(Socket/with(settings, "secure.example", 443, (s) =>
             Async/bind(Socket/read(s, 64), (r) =>
-                match r : Async(Bytes)
+                match r : (_) => Async(Bytes)
                 | chunk(b) => Async/pure(b)
                 | eof() => Async/pure(x\)
                 | error(_) => Async/pure(x\)
@@ -172,7 +172,7 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
         use /std/tcp/{Listener, Socket};
         match Async/block_on(Listener/serve_tls("0.0.0.0", 8443, Str/to_bytes("CERT"), Str/to_bytes("KEY"), (c) =>
             Async/bind(Socket/read(c, 64), (r) =>
-                match r : Async({})
+                match r : (_) => Async({})
                 | chunk(bytes) =>
                     Async/bind(Socket/write(c, Bytes/concat(Str/to_bytes("tls: "), bytes)), (wrote) => Async/pure(()))
                 | eof() => Async/pure(())
@@ -180,7 +180,7 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
                 end)))
         | failure(_) => /std/print("deadlock")
         | success(outcome) =>
-            match outcome : {}
+            match outcome : (_) => {}
             | success(u) => ()
             | failure(_) => /std/print("serve failed")
             end
@@ -202,13 +202,13 @@ fn http_perform_parses_a_scripted_response() {
         match Async/block_on(http/perform(http/get("example.com", 80, "/")))
         | failure(_) => /std/print("deadlock")
         | success(outcome) =>
-            match outcome : {}
+            match outcome : (_) => {}
             | success(response) =>
-                let ct = match http/header(response, "Content-Type") : Str
+                let ct = match http/header(response, "Content-Type") : (_) => Str
                     | some(value) => value
                     | none() => "none"
                     end;
-                match Str/of_bytes(response.body) : {}
+                match Str/of_bytes(response.body) : (_) => {}
                 | some(body) =>
                     let _ = Handle/write(Handle/stdout, Str/to_bytes(Str/flatten([
                         Nat/to_str(response.status.code), " ", ct, " ", body

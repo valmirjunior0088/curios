@@ -99,7 +99,7 @@ fn constructor_pattern_matches_an_implicit_payload() {
     let source = r#"
         use /std/{Nat, Vec, Str};
         let head3(v : Vec(Nat, 3)) -> Nat =
-            match v : Nat
+            match v : (_, _) => Nat
             | cons(@m, x, xs) => x
             end;
         /std/print(Nat/to_str(head3(Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil()))))))
@@ -114,7 +114,7 @@ fn constructor_pattern_plain_on_implicit_payload_is_rejected() {
     let source = r#"
         use /std/{Nat, Vec, Str};
         let head3(v : Vec(Nat, 3)) -> Nat =
-            match v : Nat
+            match v : (_, _) => Nat
             | cons(m, x, xs) => x
             end;
         /std/print(Nat/to_str(head3(Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil()))))))
@@ -132,7 +132,7 @@ fn constructor_pattern_mark_on_explicit_payload_is_rejected() {
     let source = r#"
         use /std/{Nat, Vec, Str};
         let head3(v : Vec(Nat, 3)) -> Nat =
-            match v : Nat
+            match v : (_, _) => Nat
             | cons(@m, @x, xs) => x
             end;
         /std/print(Nat/to_str(head3(Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil()))))))

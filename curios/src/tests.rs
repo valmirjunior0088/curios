@@ -3,6 +3,7 @@ mod arena;
 mod big_int;
 mod big_nat;
 mod binaryen;
+mod binders;
 mod codegen;
 mod concepts;
 mod erasure;

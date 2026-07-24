@@ -1,11 +1,8 @@
 //! Sort-driven erasability classification, shared by every erasure walk:
-//! whether a type's values are dropped at runtime, the per-binder mask of a
-//! telescope, and the motive pattern's binder slots.
+//! whether a type's values are dropped at runtime, and the per-binder mask of a
+//! telescope.
 
-use crate::{
-    Bound, Context, Error, FuncType, MotivePattern, MotiveSlot, Subterm, Telescope, Term, is_prop,
-    reduce_with,
-};
+use crate::{Bound, Context, Error, FuncType, Subterm, Telescope, Term, is_prop, reduce_with};
 
 /// Whether a value of type `type_` is dropped at runtime. Erasure is sort-driven:
 /// a value erases iff it is a *type/prop-as-value* (`type_` reduces to the
@@ -67,27 +64,4 @@ pub(crate) fn erasure_mask<B: Bound>(
             Telescope::Done(_) => break Ok(mask),
         }
     }
-}
-
-/// The motive pattern's binder slots, positionally (validated by elaborate):
-/// `true` marks a parameter position (opened with the actual parameter),
-/// `false` an index position (opened with the case's target index). `Term`
-/// slots carry no binder and are dropped.
-pub(crate) fn pattern_binder_slots(
-    pattern: Option<&MotivePattern>,
-    n_params: usize,
-) -> Vec<(bool, usize)> {
-    pattern
-        .map(|p| {
-            p.slots
-                .iter()
-                .enumerate()
-                .filter_map(|(position, slot)| match slot {
-                    MotiveSlot::Binder if position < n_params => Some((true, position)),
-                    MotiveSlot::Binder => Some((false, position - n_params)),
-                    MotiveSlot::Term(_) => None,
-                })
-                .collect()
-        })
-        .unwrap_or_default()
 }

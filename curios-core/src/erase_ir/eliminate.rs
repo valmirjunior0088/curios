@@ -24,9 +24,8 @@
 use {
     super::{
         Atom, Carrier, Cases, Context, Error, InductArm, InductDecl, InductType, Lowering, Many,
-        Match, MotivePattern, Outcome, Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two,
-        emitted, expect_prim_head, infer, is_erasable, pattern_binder_slots, reduce_with,
-        refine_head,
+        Match, Outcome, Prim, PrimHead, Scope, Subterm, Telescope, Term, Three, Two, emitted,
+        expect_prim_head, infer, is_erasable, reduce_with, refine_head,
     },
     curios_base::{Grain, PackedBin},
 };
@@ -123,14 +122,15 @@ impl SeqCarrier<'_> {
     }
 }
 
-/// The match-wide data an inductive elimination threads to each arm.
+/// The match-wide data an inductive elimination threads to each arm. The motive
+/// opens at the scrutinee's indices followed by the head — the case's target
+/// indices in an enumerated arm, the actual ones in the default.
 struct InductMatch<'a> {
     head: &'a Term,
     motive: &'a Scope<Many>,
     name: &'a str,
     params: &'a [Term],
     actual_indices: &'a [Term],
-    binder_slots: &'a [(bool, usize)],
 }
 
 impl Lowering {
@@ -154,19 +154,9 @@ impl Lowering {
             Cases::Switch { cases, default } => {
                 self.erase_switch(context, head, motive, cases, default, hint)
             }
-            Cases::Induct {
-                cases,
-                pattern,
-                default,
-            } => self.erase_induct(
-                context,
-                head,
-                motive,
-                cases,
-                pattern.as_ref(),
-                default.as_ref(),
-                hint,
-            ),
+            Cases::Induct { cases, default } => {
+                self.erase_induct(context, head, motive, cases, default.as_ref(), hint)
+            }
             Cases::FreeMonoid {
                 carrier:
                     Carrier::Nat {
@@ -552,14 +542,12 @@ impl Lowering {
     /// arm; an erasable (proof/type) scrutinee has no runtime tag and reduces
     /// to its single live arm. A vacuous elimination (no arms, no default) is
     /// unreachable code and diverges without erasing the head.
-    #[allow(clippy::too_many_arguments)]
     fn erase_induct(
         &mut self,
         context: &mut Context,
         head: &Term,
         motive: &Scope<Many>,
         cases: &super::BTreeMap<Atom, InductArm>,
-        pattern: Option<&MotivePattern>,
         default: Option<&Term>,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
@@ -582,14 +570,12 @@ impl Lowering {
             .cloned()
             .expect("erase_ir: scrutinee type names a registered inductive");
 
-        let binder_slots = pattern_binder_slots(pattern, induct_decl.params.len());
         let m = InductMatch {
             head,
             motive,
             name: &name,
             params: &params,
             actual_indices: &actual_indices,
-            binder_slots: &binder_slots,
         };
 
         // A proof/type scrutinee carries no runtime tag; its subsingleton
@@ -718,15 +704,7 @@ impl Lowering {
         m: &InductMatch<'_>,
         default: &Term,
     ) -> Result<curios_ersd::BlockId, Error> {
-        let default_args = m
-            .binder_slots
-            .iter()
-            .map(|&(is_param, index)| match is_param {
-                true => m.params[index].clone(),
-                false => m.actual_indices[index].clone(),
-            })
-            .collect::<Vec<_>>();
-        let default_refs = default_args.iter().chain([m.head]).collect::<Vec<_>>();
+        let default_refs = m.actual_indices.iter().chain([m.head]).collect::<Vec<_>>();
         let expected = m.motive.open(&default_refs);
         self.open_arm(context, &expected, default)
     }
@@ -747,15 +725,7 @@ impl Lowering {
         // default is the single live result and binds nothing.
         let Some((tag, scope)) = cases.iter().next() else {
             let default = default.expect("erase_ir: erasable match with no arms has a default");
-            let default_args = m
-                .binder_slots
-                .iter()
-                .map(|&(is_param, index)| match is_param {
-                    true => m.params[index].clone(),
-                    false => m.actual_indices[index].clone(),
-                })
-                .collect::<Vec<_>>();
-            let default_refs = default_args.iter().chain([m.head]).collect::<Vec<_>>();
+            let default_refs = m.actual_indices.iter().chain([m.head]).collect::<Vec<_>>();
             let expected = m.motive.open(&default_refs);
             return self.walk(context, default, &expected, None);
         };
@@ -824,15 +794,7 @@ fn refine_arm(
         refine_head(context, actual, target)?;
     }
 
-    let arm_args = m
-        .binder_slots
-        .iter()
-        .map(|&(is_param, index)| match is_param {
-            true => m.params[index].clone(),
-            false => target_indices[index].clone(),
-        })
-        .collect::<Vec<_>>();
-    let arm_refs = arm_args
+    let arm_refs = target_indices
         .iter()
         .chain([&constructor_value])
         .collect::<Vec<_>>();

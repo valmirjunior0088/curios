@@ -705,25 +705,43 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// A plain-name parameter binds its name directly, unchanged; an
     /// un-annotated parameter takes a fresh metavar domain. A compound
     /// pattern's core binder is a fresh synthetic name, and the (already
-    /// lowered) `body` is wrapped with its field-`let` chain — processed in
-    /// reverse so each pattern's chain wraps the body *before* an earlier
-    /// pattern's chain wraps that, giving the declaration-order nesting the
-    /// spec's motivating example expects, then reversed back so the returned
-    /// param list stays in declaration order.
+    /// lowered) `body` is wrapped with its field-`let` chain.
+    ///
+    /// Each annotation sees the *preceding* parameters' binders, exactly as a
+    /// dependent Π-type's domains do (the `Subterm::FuncType` arm), so a lambda
+    /// may be written `(s, t, q : Eq(s, t)) => …`. That is why the walk runs in
+    /// declaration order under a progressively-extended scope: `Telescope::build`
+    /// captures each earlier binder in every later domain, so the core side
+    /// needs nothing further. A compound pattern binds no leaf name at the core
+    /// binder — its leaves are projections off the synthetic binder — so a later
+    /// annotation naming one of those leaves gets that pattern's field-`let`
+    /// chain wrapped around the *domain* as well, mirroring what the body gets.
+    ///
+    /// The chains wrap body and domains alike in reverse, so each pattern's
+    /// chain wraps *before* an earlier pattern's chain wraps that, giving the
+    /// declaration-order nesting the spec's motivating example expects.
     pub(super) fn lower_func_params(
         &self,
         params: &[FuncParam],
-        mut body: curios_core::Term,
+        body: curios_core::Term,
     ) -> Result<(LoweredParams, curios_core::Term), Error> {
         let mut lowered = Vec::with_capacity(params.len());
-        for param in params.iter().rev() {
+        // The preceding parameters' leaf names, and the field-`let` chains that
+        // put the compound ones in scope — both grow as the walk advances.
+        let mut seen: Vec<String> = Vec::new();
+        let mut chains: Vec<(&[PatternField], String)> = Vec::new();
+
+        for param in params {
             let FuncParam {
                 plicity,
                 pattern,
                 annotation,
             } = param;
             let domain = match annotation {
-                Some(annotation) => self.term(annotation)?,
+                Some(annotation) => {
+                    let annotation = self.scoped(seen.clone(), || self.term(annotation))?;
+                    self.wrap_pattern_chains(&chains, annotation)
+                }
                 None => curios_core::Term::metavar(self.context.fresh_metavar()),
             };
             // The mark applies to the outer function slot the parameter
@@ -738,13 +756,45 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 }
                 Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                     let synthetic = self.context.fresh_binder();
-                    body = self.lower_pattern_fields(fields, &synthetic, body);
+                    chains.push((fields, synthetic.clone()));
                     lowered.push((*plicity, synthetic, domain));
                 }
             }
+            seen.extend(pattern_names(pattern));
         }
-        lowered.reverse();
+
+        let body = chains.iter().rev().fold(body, |tail, (fields, synthetic)| {
+            self.lower_pattern_fields(fields, synthetic, tail)
+        });
+
         Ok((lowered, body))
+    }
+
+    /// Wraps a parameter annotation in the field-`let` chain of every preceding
+    /// compound pattern, outermost chain first. Only a chain whose leaf names
+    /// the annotation actually mentions is emitted — every other domain keeps
+    /// its written shape, so projections off an unrelated tuple parameter never
+    /// show up in its error messages. (The *body* is wrapped unconditionally:
+    /// it is the chain's original consumer and its shape is settled.)
+    fn wrap_pattern_chains(
+        &self,
+        chains: &[(&[PatternField], String)],
+        annotation: curios_core::Term,
+    ) -> curios_core::Term {
+        chains
+            .iter()
+            .rev()
+            .fold(annotation, |tail, (fields, synthetic)| {
+                let free = tail.free_vars();
+                match fields
+                    .iter()
+                    .flat_map(|field| pattern_names(&field.value))
+                    .any(|name| free.contains(&name))
+                {
+                    true => self.lower_pattern_fields(fields, synthetic, tail),
+                    false => tail,
+                }
+            })
     }
 
     /// Builds `let pat = value : type_; tail` for a pattern in any of the

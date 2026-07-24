@@ -67,7 +67,7 @@ fn big_nat_div2_and_parity() {
     let source = r#"
         use /std/{Handle, Str, Bool, BigNat};
         let show(b : Bool) -> Str =
-            match b : Str
+            match b : (_) => Str
             | true => "T"
             | false => "F"
             end;
@@ -103,7 +103,7 @@ fn big_nat_cmp_orders_by_magnitude() {
     let source = r#"
         use /std/{Handle, Str, BigNat, Order};
         let show(o : Order) -> Str =
-            match o : Str
+            match o : (_) => Str
             | lt() => "lt"
             | eq() => "eq"
             | gt() => "gt"

@@ -5,7 +5,7 @@ end
 pub use Eq/*;
 
 pub let sym(@A : Type, @x : A, @y : A, p : Eq(x, y)) -> Eq(y, x) =
-    match p : (q : Eq(A, s, t)) => Eq(t, s)
+    match p : (s, t, q) => Eq(t, s)
     | refl(@z) => Eq/refl()
     end;
 

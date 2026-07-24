@@ -7,7 +7,7 @@ fn named_fields_run_end_to_end() {
         let p : { n : Nat, v : Vec(Nat, n) } =
             (n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())));
         rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
-            match v : Nat
+            match v : (_, _) => Nat
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
             end;
@@ -76,7 +76,7 @@ fn struct_dependent_fields_run_end_to_end() {
         pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
-            match v : Nat
+            match v : (_, _) => Nat
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
             end;
@@ -516,7 +516,7 @@ fn struct_spread_dependent_override_runs() {
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         let t : Sized = Sized { ..s, n = 1, v = Vec/cons(42, Vec/nil()) };
         rec total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
-            match v : Nat
+            match v : (_, _) => Nat
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
             end;

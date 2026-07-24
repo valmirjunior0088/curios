@@ -11,22 +11,22 @@ induct Tree : Type
 end
 
 rec build(d : Nat, v : Nat) -> Tree =
-    match d : Tree
+    match d : (_) => Tree
     | 0 => Tree/leaf(v)
     | dp + 1; ih => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
     end;
 
 rec sum(t : Tree) -> Nat =
-    match t : Nat
+    match t : (_) => Nat
     | leaf(n) => n % 1000003
     | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
     end;
 
-match /std/read() : {}
+match /std/read() : (_) => {}
 | some(bytes) =>
-    match Str/of_bytes(bytes) : {}
+    match Str/of_bytes(bytes) : (_) => {}
     | some(s) =>
-        match Nat/of_str(Str/trim(s)) : {}
+        match Nat/of_str(Str/trim(s)) : (_) => {}
         | some(d) => /std/print(Str/concat(Nat/to_str(sum(build(d, 1))), "\n"))
         | none() => /std/print("bad input\n")
         end

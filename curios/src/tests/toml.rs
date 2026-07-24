@@ -162,7 +162,7 @@ fn toml_floats_pin_binary32_bit_patterns() {
             | success(root) =>
                 match Map/get(root, "f")
                 | some(v) =>
-                    match v : Str
+                    match v : (_) => Str
                     | flt(x) => hexs(Flt/to_le_bytes(x))
                     | _ => "not-flt"
                     end

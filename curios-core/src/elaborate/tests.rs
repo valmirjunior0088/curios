@@ -230,8 +230,9 @@ fn annotated_func_infers_a_function_type() {
     // binder label the Infer arm generates.
     assert!(term.metavars().is_empty());
     assert!(
-        convert_with(
+        convert_at(
             &mut context,
+            &Term::type_(),
             &type_,
             &Term::func_type([("x", nat())], nat())
         )
@@ -335,29 +336,92 @@ fn inductive_match_missing_arm_without_default_is_rejected() {
     assert!(elaborate(&mut context, &term, Mode::Infer).is_err());
 }
 
-#[test]
-fn inductive_match_default_with_pattern_motive_is_rejected() {
-    let mut context = context();
-    register_opt(&mut context);
+// induct Flag : (b : Nat) -> Type | off() : (0) | on() : (1) end — the minimal
+// indexed family, for the motive binders a catch-all has to ride along with.
+fn flag_type(index: Term) -> Term {
+    Term::induct_type("Flag", Vec::<Term>::new(), vec![index])
+}
 
-    // A catch-all default combined with an annotated type-pattern motive is
-    // rejected up front (the dependent motive form is elimination-only). Built
-    // directly — no surface form produces this pairing.
+fn register_flag(context: &mut Context) {
+    context
+        .register_induct(
+            "Flag",
+            InductDecl {
+                params: Telescope::done(()),
+                indices: Telescope::build([("b", nat())], ()),
+                constructors: BTreeMap::from([
+                    (
+                        Atom::from("off"),
+                        InductParam {
+                            telescope: Telescope::done(flag_type(nat_lit(0))),
+                            plicities: vec![],
+                        },
+                    ),
+                    (
+                        Atom::from("on"),
+                        InductParam {
+                            telescope: Telescope::done(flag_type(nat_lit(1))),
+                            plicities: vec![],
+                        },
+                    ),
+                ]),
+                result_sort: Term::type_(),
+                module: Qualifier::empty(),
+                root: RootId::Entry,
+                rep_public: true,
+            },
+        )
+        .unwrap();
+}
+
+#[test]
+fn inductive_match_default_is_allowed_on_an_indexed_family() {
+    let mut context = context();
+    register_flag(&mut context);
+
+    // A `| _ =>` catch-all over an indexed family. Every motive binds its
+    // indices whether or not the body uses them, so there is no "pattern
+    // motive" for a default to conflict with: the enumerated arm is checked at
+    // its own case target index and the default at the scrutinee's actual one.
     let term: Term = Subterm::Match(Match {
-        head: Term::variant("Opt", Vec::<Term>::new(), "none", Vec::<Term>::new()),
-        motive: Scope::close(Many(1), &["m"], nat()),
+        head: Term::variant("Flag", Vec::<Term>::new(), "on", Vec::<Term>::new()),
+        motive: Scope::close(Many(2), &["b", "m"], nat()),
         cases: Cases::Induct {
             cases: BTreeMap::from([(
-                Atom::from("none"),
+                Atom::from("on"),
                 InductArm {
                     body: Scope::close(Many(0), &[], nat_lit(0)),
                     plicities: vec![],
                 },
             )]),
-            pattern: Some(MotivePattern {
-                name: "Opt".to_string(),
-                slots: vec![],
-            }),
+            default: Some(nat_lit(1)),
+        },
+    })
+    .into();
+
+    let (_, type_) = elaborate(&mut context, &term, Mode::Infer).unwrap();
+    assert_eq!(type_, nat());
+}
+
+#[test]
+fn motive_binder_count_is_checked_against_the_index_telescope() {
+    let mut context = context();
+    register_flag(&mut context);
+
+    // The same match with an arity-1 motive: `Flag` has one index, so its
+    // eliminator's motive binds two names. A written motive that binds one is
+    // reported as itself, not as a downstream domain mismatch.
+    let term: Term = Subterm::Match(Match {
+        head: Term::variant("Flag", Vec::<Term>::new(), "on", Vec::<Term>::new()),
+        motive: Term::match_motive_written(Term::func([("m", flag_type(nat_lit(1)))], nat())),
+        cases: Cases::Induct {
+            cases: BTreeMap::from([(
+                Atom::from("on"),
+                InductArm {
+                    body: Scope::close(Many(0), &[], nat_lit(0)),
+                    plicities: vec![],
+                },
+            )]),
             default: Some(nat_lit(1)),
         },
     })
@@ -365,6 +429,10 @@ fn inductive_match_default_with_pattern_motive_is_rejected() {
 
     assert!(matches!(
         elaborate(&mut context, &term, Mode::Infer),
-        Err(Error::DefaultWithPatternMotive)
+        Err(Error::MotiveBinderCount {
+            expected: 2,
+            written: 1,
+            ..
+        })
     ));
 }

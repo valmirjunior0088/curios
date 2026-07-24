@@ -60,7 +60,7 @@ pub rec trim_is_trimmed(rep : Bits) -> Eq(is_trimmed(trim(rep)), true) =
     end;
 
 let canonical_of_is_trimmed(rep : Bits, p : Eq(is_trimmed(rep), true)) -> Canonical(rep) =
-    Eq/subst((b : Bool) => match b : Prop | true => True | false => False end, Eq/sym(p), True/qed());
+    Eq/subst((b : Bool) => match b : (_) => Prop | true => True | false => False end, Eq/sym(p), True/qed());
 
 let canonical_of_trim(rep : Bits) -> Canonical(trim(rep)) =
     canonical_of_is_trimmed(trim(rep), trim_is_trimmed(rep));
@@ -169,9 +169,9 @@ pub let add(a : BigNat, b : BigNat) -> BigNat =
 
 let cong_cons2(@h1 : Bool, @h2 : Bool, ph : Eq(h1, h2), @t1 : Bits, @t2 : Bits, pt : Eq(t1, t2))
     -> Eq(cons(h1, t1), cons(h2, t2)) =
-    match ph : (q : Eq(Bool, a, b)) => Eq(cons(a, t1), cons(b, t2))
+    match ph : (a, b, q) => Eq(cons(a, t1), cons(b, t2))
     | refl(@z) =>
-        match pt : (q2 : Eq(Bits, a2, b2)) => Eq(cons(h1, a2), cons(h1, b2))
+        match pt : (a2, b2, q2) => Eq(cons(h1, a2), cons(h1, b2))
         | refl(@z2) => Eq/refl()
         end
     end;
@@ -1089,13 +1089,13 @@ let tail_of(x : Bits) -> Bits =
 
 let cons_inj_head(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(cons(h1, t1), cons(h2, t2)))
     -> Eq(h1, h2) =
-    match p : (q : Eq(Bits, s, t)) => Eq(head_of(s), head_of(t))
+    match p : (s, t, q) => Eq(head_of(s), head_of(t))
     | refl(@z) => Eq/refl()
     end;
 
 let cons_inj_tail(@h1 : Bool, @t1 : Bits, @h2 : Bool, @t2 : Bits, p : Eq(cons(h1, t1), cons(h2, t2)))
     -> Eq(t1, t2) =
-    match p : (q : Eq(Bits, s, t)) => Eq(tail_of(s), tail_of(t))
+    match p : (s, t, q) => Eq(tail_of(s), tail_of(t))
     | refl(@z) => Eq/refl()
     end;
 
@@ -1295,7 +1295,7 @@ pub let gte(a : BigNat, b : BigNat) -> Bool =
     match cmp(a, b) | lt() => false | _ => true end;
 
 let absorb_eq(o : Order, p : Eq(o, Order/eq()))
-    -> Eq(match o : Order | eq() => Order/eq() | lt() => Order/lt() | gt() => Order/gt() end, Order/eq()) =
+    -> Eq(match o : (_) => Order | eq() => Order/eq() | lt() => Order/lt() | gt() => Order/gt() end, Order/eq()) =
     Eq/subst((v : Order) => Eq(match v | eq() => Order/eq() | lt() => Order/lt() | gt() => Order/gt() end, Order/eq()), Eq/sym(p), Eq/refl());
 
 pub rec cmp_raw_refl(x : Bits) -> Eq(cmp_raw(x, x), Order/eq()) =
@@ -1318,9 +1318,9 @@ let sub_split(s : Order, @E : Order,
     end;
 
 let cong_cmp_match(@s : Order, @t : Order, p : Eq(s, t), @E : Order)
-    -> Eq(match s : Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end,
-          match t : Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end) =
-    match p : (q : Eq(Order, u, v)) => Eq(match u : Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, match v : Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end)
+    -> Eq(match s : (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end,
+          match t : (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end) =
+    match p : (u, v, q) => Eq(match u : (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, match v : (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end)
     | refl(@z) => Eq/refl()
     end;
 
@@ -1380,7 +1380,7 @@ pub rec cmp_raw_flip(x : Bits, y : Bits) -> Eq(cmp_raw(y, x), Order/flip(cmp_raw
     end;
 
 let force_lt(@s : Order, @E : Order, p : Eq(s, Order/lt()))
-    -> Eq(match s : Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()) =
+    -> Eq(match s : (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()) =
     Eq/subst((v : Order) => Eq(match v | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()), Eq/sym(p), Eq/refl());
 
 let head_lt_yh(xh : Bool, yh : Bool,
@@ -1401,7 +1401,7 @@ let head_lt_xh(xh : Bool, yh : Bool,
 
 let reduce_whole(@a : Bits, @b : Bits, @s : Order, e : Eq(cmp_raw(a, b), s), @E : Order,
     p : Eq(match cmp_raw(a, b) | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()))
-    -> Eq(match s : Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()) =
+    -> Eq(match s : (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()) =
     Eq/subst((r : Order) => Eq(match r | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()), e, p);
 
 let cons_lt(xh : Bool, zh : Bool, @xt : Bits, @zt : Bits, tail_lt : Eq(cmp_raw(xt, zt), Order/lt()))

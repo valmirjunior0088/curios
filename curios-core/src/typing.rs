@@ -3,7 +3,7 @@ mod tests;
 
 use super::{
     Apply, Context, Error, Field, Func, Many, MetavarId, Mode, Outcome, Prim, PrimHead, Proj,
-    Scope, Subterm, Term, elaborate,
+    Scope, Subterm, Telescope, Term, elaborate,
 };
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type. Kept
@@ -38,12 +38,6 @@ pub(crate) fn convert_at(
 ) -> Result<bool, Error> {
     super::convert(context, type_, this, that)
         .map_err(|error| error.into_error(|| Error::convert_preempted(this.clone(), that.clone())))
-}
-
-/// `convert_at` at `Type`: comparing two types, the elaboration turnaround's
-/// common case.
-pub(crate) fn convert_with(context: &mut Context, this: &Term, that: &Term) -> Result<bool, Error> {
-    convert_at(context, &Term::type_(), this, that)
 }
 
 /// The sort term (`Type`/`Prop`) `type_` inhabits — what a type-former reports
@@ -420,29 +414,234 @@ fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error>
     Ok(None)
 }
 
-/// Check that `motive` is a well-formed type family over a scrutinee of `head_type`,
-/// returning the rebuilt motive. Shared by every match form whose motive binds
-/// only the scrutinee (arity 1) — an annotated inductive-match motive goes through
-/// `check_induct_motive` instead. Runs the motive through `elaborate` in
-/// `Check(Type)` mode — erase is downstream lowering now and no longer
-/// type-checks (§6) — and re-closes the elaborated body so the motive carries
-/// its solved/re-closed form (§9).
+/// What an eliminator's motive must abstract: the scrutinee's indices, then the
+/// scrutinee itself. Parameters are never abstracted — they are uniform across
+/// constructors and fixed by the scrutinee's type.
+pub(crate) enum MotiveShape<'a> {
+    /// A primitive carrier (`Bool`, `Nat`, `Lst`, `Bin`): no indices, so the
+    /// motive binds only the scrutinee, at the carrier's own type.
+    Prim(&'a Term),
+    /// A nominal inductive: `indices` is the declaration's index telescope
+    /// already instantiated at the scrutinee's actual parameters
+    /// (`InductDecl::indices` under `open_params`), and the scrutinee binder
+    /// takes `I(p̄, ī)` at those index binders.
+    Induct {
+        name: &'a str,
+        params: &'a [Term],
+        indices: Telescope<()>,
+    },
+}
+
+impl MotiveShape<'_> {
+    /// The motive's binder count: one per index, then the scrutinee.
+    pub(crate) fn arity(&self) -> usize {
+        match self {
+            MotiveShape::Prim(_) => 1,
+            MotiveShape::Induct { indices, .. } => indices.len() + 1,
+        }
+    }
+
+    /// The eliminated family's name, for diagnostics.
+    fn name(&self) -> Option<&str> {
+        match self {
+            MotiveShape::Prim(_) => None,
+            MotiveShape::Induct { name, .. } => Some(name),
+        }
+    }
+
+    /// Assume this shape's binders in `context` under `labels`, each index type
+    /// opened with the preceding index binders and the scrutinee typed at those
+    /// binders. Returns the scrutinee's assumed type for the caller's use.
+    fn assume(&self, context: &mut Context, labels: &[String]) -> Term {
+        let (scrutinee_label, index_labels) = labels
+            .split_last()
+            .expect("a motive binds at least the scrutinee");
+
+        let scrutinee_type = match self {
+            MotiveShape::Prim(head_type) => (*head_type).clone(),
+            MotiveShape::Induct {
+                name,
+                params,
+                indices,
+            } => {
+                let mut telescope = indices.clone();
+                let mut index_vars = Vec::with_capacity(index_labels.len());
+                for label in index_labels {
+                    let var = Term::free_var(label);
+                    telescope = match telescope {
+                        Telescope::Cons(ty, rest) => {
+                            context.assume(label, &ty);
+                            rest.open(&[&var])
+                        }
+                        Telescope::Done(_) => {
+                            unreachable!("index label count equals the index telescope's")
+                        }
+                    };
+                    index_vars.push(var);
+                }
+                Term::induct_type(*name, params.to_vec(), index_vars)
+            }
+        };
+
+        context.assume(scrutinee_label, &scrutinee_type);
+        scrutinee_type
+    }
+
+    /// This shape's motive type, `(ī' : Ī(p̄)) -> I(p̄, ī') -> Type`, which a
+    /// *written* motive is checked against. The codomain is `Type` rather than
+    /// a sort variable because `Prop ⊑ Type` cumulativity already admits a
+    /// proposition-valued motive at the checking boundary (`expect`).
+    fn motive_type(&self, context: &mut Context) -> Term {
+        let mut binders = Vec::with_capacity(self.arity());
+
+        let scrutinee_type = match self {
+            MotiveShape::Prim(head_type) => (*head_type).clone(),
+            MotiveShape::Induct {
+                name,
+                params,
+                indices,
+            } => {
+                let mut telescope = indices.clone();
+                let mut index_vars = Vec::new();
+                while let Telescope::Cons(ty, rest) = telescope {
+                    let label = context.fresh(rest.first_label());
+                    let var = Term::free_var(&label);
+                    telescope = rest.open(&[&var]);
+                    binders.push((label, ty));
+                    index_vars.push(var);
+                }
+                Term::induct_type(*name, params.to_vec(), index_vars)
+            }
+        };
+
+        binders.push((context.fresh(None), scrutinee_type));
+        Term::func_type(binders, Term::type_())
+    }
+}
+
+/// Check that `motive` is a well-formed type family for an eliminator of the
+/// given [`MotiveShape`], returning it closed at that shape's arity.
+///
+/// Two inputs reach here. A motive already closed at the eliminator's arity —
+/// synthesized, or a rebuilt match coming back through re-elaboration — is
+/// opened under its assumed binders and its body checked against `Type`, then
+/// re-closed so the motive carries its solved form (§9). A *written* motive
+/// arrives from `into_core` un-scoped, in an arity-0 scope
+/// ([`Term::match_motive_written`]): it is an ordinary term, checked against
+/// the shape's motive type and then decomposed into the same canonical scope.
+///
+/// The elided hole — the bare metavariable `into_core` mints for an absent
+/// motive — is neither: it is wrapped at the eliminator's arity and left for
+/// synthesis or for `solve` to fill in.
 pub(crate) fn check_motive(
     context: &mut Context,
-    head_type: &Term,
+    shape: &MotiveShape<'_>,
     motive: &Scope<Many>,
 ) -> Result<Scope<Many>, Error> {
-    let label = context.fresh(motive.first_label());
+    let arity = shape.arity();
+
+    match motive.arity() {
+        0 => match &**motive.body() {
+            Subterm::Metavar(_) => {
+                let elided = Scope::constant(Many(arity), motive.body().clone());
+                check_closed_motive(context, shape, &elided)
+            }
+            _ => check_written_motive(context, shape, motive.body()),
+        },
+        written if written == arity => check_closed_motive(context, shape, motive),
+        written => Err(Error::motive_binder_count(
+            shape.name().map(str::to_string),
+            arity,
+            written,
+        )),
+    }
+}
+
+/// The already-closed path: assume the shape's binders, check the opened body
+/// against `Type`, and re-close.
+fn check_closed_motive(
+    context: &mut Context,
+    shape: &MotiveShape<'_>,
+    motive: &Scope<Many>,
+) -> Result<Scope<Many>, Error> {
+    let hints = motive
+        .label_iter()
+        .map(|label| label.map(str::to_string))
+        .collect::<Vec<_>>();
+    let labels = hints
+        .iter()
+        .map(|hint| context.fresh(hint.as_deref()))
+        .collect::<Vec<_>>();
 
     context.with_frame(|context| {
-        context.assume(&label, head_type);
-        let body = elaborate(
-            context,
-            &motive.open(&[&Term::free_var(&label)]),
-            Mode::Check(Term::type_()),
-        )?
-        .0;
-        Ok(Scope::close(Many(1), &[label.as_str()], body))
+        shape.assume(context, &labels);
+
+        let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
+        let refs = vars.iter().collect::<Vec<_>>();
+        let body = elaborate(context, &motive.open(&refs), Mode::Check(Term::type_()))?.0;
+
+        let label_strs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+        Ok(Scope::close(Many(labels.len()), &label_strs, body))
+    })
+}
+
+/// The written path: an ordinary term checked against the shape's motive type,
+/// then decomposed into the canonical scope.
+///
+/// A written motive is nearly always a lambda, and its binder count is checked
+/// up front so a miscount reports as itself rather than as a confusing
+/// domain mismatch. Decomposition beta-opens that lambda at the scope's own
+/// binders, leaving no redex behind. Anything else — a motive naming a
+/// top-level family — is eta-expanded instead.
+fn check_written_motive(
+    context: &mut Context,
+    shape: &MotiveShape<'_>,
+    written: &Term,
+) -> Result<Scope<Many>, Error> {
+    let arity = shape.arity();
+
+    if let Subterm::Func(Func { telescope, .. }) = &**written
+        && telescope.len() != arity
+    {
+        return Err(Error::motive_binder_count(
+            shape.name().map(str::to_string),
+            arity,
+            telescope.len(),
+        ));
+    }
+
+    let motive_type = shape.motive_type(context);
+    let checked = check(context, written, motive_type)?;
+
+    // The written binder names become the scope's labels, so the motive prints
+    // back the way it was spelled.
+    let hints = match &*checked {
+        Subterm::Func(Func { telescope, .. }) if telescope.len() == arity => telescope
+            .labels()
+            .into_iter()
+            .map(|label| (!label.is_empty()).then(|| label.to_string()))
+            .collect::<Vec<_>>(),
+        _ => vec![None; arity],
+    };
+    let labels = hints
+        .iter()
+        .map(|hint| context.fresh(hint.as_deref()))
+        .collect::<Vec<_>>();
+
+    context.with_frame(|context| {
+        shape.assume(context, &labels);
+
+        let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
+        let refs = vars.iter().collect::<Vec<_>>();
+        let body = match &*checked {
+            Subterm::Func(Func { telescope, .. }) if telescope.len() == arity => {
+                telescope.open(&refs)
+            }
+            _ => Term::apply(checked.clone(), vars.clone()),
+        };
+
+        let label_strs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+        Ok(Scope::close(Many(arity), &label_strs, body))
     })
 }
 

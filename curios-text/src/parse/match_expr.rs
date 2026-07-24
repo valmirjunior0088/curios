@@ -13,55 +13,17 @@ pub(super) fn parse_func<'a>() -> Parser<'a, Term> {
     .map(|(params, body)| Subterm::Func(Func { params, body }).into())
 }
 
-// The motive ladder, binder parenthesized in every form (the bare-label
-// `x => P` form is retired): `(x) => P`, `(x : Vec(T, k)) => P`, or a
-// constant term. The catches span through `=>` so a constant motive that
-// merely *starts* with a paren (a tuple type, a Π type) backtracks cleanly.
-pub(super) fn parse_motive<'a>() -> Parser<'a, Motive> {
-    catch(
-        parse_literal("(")
-            .and_keep(parse_identifier())
-            .and_drop(parse_literal(")"))
-            .and_drop(parse_literal("=>")),
-    )
-    .and(lazy(parse_term))
-    .map(|(label, body): (&str, Term)| Motive::Scrutinee {
-        label: label.to_string(),
-        body,
-    })
-    .or(catch(
-        parse_literal("(")
-            .and_keep(parse_identifier())
-            .and_drop(parse_literal(":"))
-            .and(parse_name())
-            .and(
-                catch(
-                    parse_literal("(")
-                        .and_keep(sep_by0_trailing(|| lazy(parse_term), || parse_literal(",")))
-                        .and_drop(parse_literal(")")),
-                )
-                .or(pure(vec![])),
-            )
-            .and_drop(parse_literal(")"))
-            .and_drop(parse_literal("=>")),
-    )
-    .and(lazy(parse_term))
-    .map(
-        |(((label, name), slots), body): (((&str, Name), Vec<Term>), Term)| Motive::Annotated {
-            label: label.to_string(),
-            name,
-            slots,
-            body,
-        },
-    ))
-    .or(lazy(parse_term).map(Motive::Constant))
-}
-
-pub(super) fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Motive>)> {
+// `match head [: motive]`. The motive is an ordinary term — a term of the
+// eliminator's motive type, with no grammar of its own and so no
+// disambiguation rule: `parse_term` is called directly and there is nothing to
+// backtrack. It cannot run into the arms because `|` is not an infix operator
+// (`parse_num_op` has `||` but no bare `|`), so a motive term always
+// terminates at the first `|`.
+pub(super) fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Term>)> {
     catch(parse_keyword("match"))
         .and_keep(lazy(parse_term))
         .and(
-            catch(parse_literal(":").and_keep(parse_motive()))
+            catch(parse_literal(":").and_keep(lazy(parse_term)))
                 .map(Some)
                 .or(pure(None)),
         )

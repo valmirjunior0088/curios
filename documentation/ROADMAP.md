@@ -42,7 +42,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 - [x] Nested/tuple/struct match-arm patterns (the pattern-matrix compiler — full enumeration, no row priority)
 - [x] Multi-scrutinee matrix matching (a tuple scrutinee matched column by column with grouped rows; a binder may occupy a later column once earlier columns distinguish its row)
-- [x] Explicit match motives (constant, scrutinee-bound, and annotated indexed-family forms — `match v : (v) => Result(v)`)
+- [x] Explicit match motives (a term checked against the eliminator's motive type — `match v : (k, v) => Vec(T, k + m)`)
 - [x] Primitive match families (Boolean arms, natural-number induction and literal dispatch, list fold and case split, and packed `Bits`/`Bytes` folds)
 - [x] `choose` (an ordered guarded `Bool` condition ladder `choose | cond => … | _ => … end` with a mandatory `_` default; arms inherit their condition's definitional refinement)
 - [x] Bind-arms (`| pattern = value =>`, Rust `if let`, in `choose`; refutable LHS, nested patterns, fallthrough shared through a nullary thunk)

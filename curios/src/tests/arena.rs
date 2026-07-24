@@ -67,7 +67,7 @@ fn arena_pure_computation_hugs_a_host_effect() {
     let source = r#"
         use /std/{Handle, Nat, Str};
         rec triangle(n : Nat) -> Nat =
-            match n : Nat
+            match n : (_) => Nat
             | 0 => 0
             | p + 1; ih => n + ih
             end;
@@ -96,12 +96,12 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
             r#"
         use /std/{{Handle, Nat, Str, Bytes}};
         rec count(b : Bytes) -> Nat =
-            match b : Nat
+            match b : (_) => Nat
             | x\ => 0
             | x\h\..t; ih => count(t) + 1
             end;
         rec build(n : Nat, acc : Bytes) -> Bytes =
-            match n : Bytes
+            match n : (_) => Bytes
             | 0 => acc
             | p + 1; ih => build(p, Bytes/cons(97, acc))
             end;

@@ -869,9 +869,7 @@ fn parse_inductive_match_nullary_and_unary() {
             .unwrap(),
         Subterm::Match(Match {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
-            motive: Some(Motive::Constant(
-                Subterm::Name(Name::from(["Bin".to_string()])).into()
-            )),
+            motive: Some(Subterm::Name(Name::from(["Bin".to_string()])).into()),
             arms: vec![
                 MatrixArm {
                     pattern: MatchPattern::Variant {
@@ -901,9 +899,7 @@ fn parse_inductive_match_multi_binder() {
             .unwrap(),
         Subterm::Match(Match {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
-            motive: Some(Motive::Constant(
-                Subterm::Name(Name::from(["T".to_string()])).into()
-            )),
+            motive: Some(Subterm::Name(Name::from(["T".to_string()])).into()),
             arms: vec![MatrixArm {
                 pattern: MatchPattern::Variant {
                     tag: "lit".to_string(),
@@ -1913,6 +1909,39 @@ fn matrix_match_round_trips() {
     }
 }
 
+// The motive is an ordinary term, so every spelling it can take must survive
+// print → re-parse with arms following it. There is no motive grammar and no
+// backtracking: a motive term always terminates at the first `|`, because `|`
+// is not an infix operator.
+#[test]
+fn match_motive_spellings_round_trip() {
+    for source in [
+        // Binders only, one per index then the scrutinee.
+        "match p : (s, t, q) => Eq(t, s)\n| refl(z) => e\nend",
+        // Written binder annotations, including one naming earlier binders.
+        "match p : (s : A, t : A, q : Eq(s, t)) => Eq(t, s)\n| refl(z) => e\nend",
+        // A constant motive: a lambda whose binders are all `_`.
+        "match v : (_, _) => Nat\n| nil() => a\n| cons(m, x, xs) => b\nend",
+        // A motive naming a top-level family, eta-expanded by elaboration.
+        "match p : discriminates_eq\n| refl(z) => e\nend",
+        // A motive whose body is itself a Π type — the shape that made the old
+        // constant rung undecidable by shape.
+        "match b : (_) => (Nat) -> Nat\n| true => f\n| false => g\nend",
+        // A motive on each hardcoded carrier, whose arity is 1 throughout.
+        "match n : (m) => P(m)\n| 0 => a\n| p + 1; ih => b\nend",
+        "match xs : (l) => P(l)\n| [] => a\n| [h, ..t]; ih => b\nend",
+        // Omitted entirely: no `:` at all, faithfully recorded as `None`.
+        "match v\n| nil() => a\n| cons(m, x, xs) => b\nend",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "motive round-trip failed for {source:?}"
+        );
+    }
+}
+
 // `choose`: no head term, `Bool` condition arms, and a mandatory `| _ =>`
 // default. A bare `_` condition parses as the default (not a `Name` condition
 // arm) — the `flat_map` guard in `parse_cond_arm` sees it and lets `many0`
@@ -2280,10 +2309,10 @@ fn trailing_comma_accepted_in_every_comma_list() {
             "match o | some(x,) => x | none() => y end",
             "match o | some(x) => x | none() => y end",
         ),
-        // Annotated-motive slots.
+        // A motive binder's annotation.
         (
-            "match p : (q : Eq(A, x, y,)) => T | refl(v) => e end",
-            "match p : (q : Eq(A, x, y)) => T | refl(v) => e end",
+            "match p : (x, y, q : Eq(A, x, y,)) => T | refl(v) => e end",
+            "match p : (x, y, q : Eq(A, x, y)) => T | refl(v) => e end",
         ),
         // Local function-definition sugar.
         (

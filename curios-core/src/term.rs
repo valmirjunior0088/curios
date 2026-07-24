@@ -673,7 +673,7 @@ impl Term {
         }))
     }
 
-    /// Build the primitive eliminator of a nominal inductive ([`Cases::Induct`]) without a type-pattern annotation: one arm per constructor tag, each closed over its payload binders (all-explicit). The annotated-motive form is [`Term::induct_match_motive`]; [`Term::induct_match_marked`] carries per-binder plicity.
+    /// Build the primitive eliminator of a nominal inductive ([`Cases::Induct`]): one arm per constructor tag, each closed over its payload binders (all-explicit). [`Term::induct_match_marked`] carries per-binder plicity.
     pub fn induct_match<H, M, I, A, L, B>(
         head: H,
         motive_label: Option<&str>,
@@ -713,15 +713,38 @@ impl Term {
         L: Into<String>,
         B: Into<Term>,
     {
-        Self::from(Subterm::Match(Match {
-            head: head.into(),
-            motive: Self::motive_scope(motive_label, motive.into()),
-            cases: Cases::Induct {
+        Self::induct_match_scoped_marked(
+            head,
+            Self::motive_scope(motive_label, motive.into()),
+            cases,
+            None,
+        )
+    }
+
+    /// [`Term::induct_match_marked`] over an already-built motive scope, with
+    /// the optional `| _ =>` catch-all folded in — `into_core`'s single entry
+    /// point for a nominal-inductive elimination.
+    pub fn induct_match_scoped_marked<H, I, A, L, B>(
+        head: H,
+        motive: Scope<Many>,
+        cases: I,
+        default: Option<Term>,
+    ) -> Self
+    where
+        H: Into<Term>,
+        I: IntoIterator<Item = (A, Vec<(Plicity, L)>, B)>,
+        A: Into<Atom>,
+        L: Into<String>,
+        B: Into<Term>,
+    {
+        Self::match_scoped(
+            head.into(),
+            motive,
+            Cases::Induct {
                 cases: Self::induct_cases_marked(cases),
-                pattern: None,
-                default: None,
+                default,
             },
-        }))
+        )
     }
 
     /// The primitive eliminator of a nominal inductive with an explicit `| _ =>`
@@ -773,82 +796,12 @@ impl Term {
         B: Into<Term>,
         D: Into<Term>,
     {
-        Self::from(Subterm::Match(Match {
-            head: head.into(),
-            motive: Self::motive_scope(motive_label, motive.into()),
-            cases: Cases::Induct {
-                cases: Self::induct_cases_marked(cases),
-                pattern: None,
-                default: Some(default.into()),
-            },
-        }))
-    }
-
-    /// An inductive match with the annotated type-pattern motive: the motive body
-    /// is closed over the pattern's binder labels (slot order) then the
-    /// scrutinee label. `binders` must list one label per
-    /// [`MotiveSlot::Binder`] in `pattern.slots`, in order. Arm binders are
-    /// all-explicit; [`Term::induct_match_motive_marked`] carries per-binder plicity.
-    pub fn induct_match_motive<H, M, I, A, L, B>(
-        head: H,
-        binders: Vec<String>,
-        scrutinee_label: &str,
-        motive: M,
-        pattern: MotivePattern,
-        cases: I,
-    ) -> Self
-    where
-        H: Into<Term>,
-        M: Into<Term>,
-        I: IntoIterator<Item = (A, Vec<L>, B)>,
-        A: Into<Atom>,
-        L: Into<String>,
-        B: Into<Term>,
-    {
-        Self::induct_match_motive_marked(
+        Self::induct_match_scoped_marked(
             head,
-            binders,
-            scrutinee_label,
-            motive,
-            pattern,
-            cases
-                .into_iter()
-                .map(|(atom, binders, body)| (atom, explicit_arm(binders), body)),
+            Self::motive_scope(motive_label, motive.into()),
+            cases,
+            Some(default.into()),
         )
-    }
-
-    /// [`Term::induct_match_motive`] carrying the written constructor-pattern plicity of each payload binder — the matrix compiler's entry point.
-    pub fn induct_match_motive_marked<H, M, I, A, L, B>(
-        head: H,
-        binders: Vec<String>,
-        scrutinee_label: &str,
-        motive: M,
-        pattern: MotivePattern,
-        cases: I,
-    ) -> Self
-    where
-        H: Into<Term>,
-        M: Into<Term>,
-        I: IntoIterator<Item = (A, Vec<(Plicity, L)>, B)>,
-        A: Into<Atom>,
-        L: Into<String>,
-        B: Into<Term>,
-    {
-        let labels = binders
-            .iter()
-            .map(String::as_str)
-            .chain([scrutinee_label])
-            .collect::<Vec<_>>();
-
-        Self::from(Subterm::Match(Match {
-            head: head.into(),
-            motive: Scope::close(Many(labels.len()), &labels, motive.into()),
-            cases: Cases::Induct {
-                cases: Self::induct_cases_marked(cases),
-                pattern: Some(pattern),
-                default: None,
-            },
-        }))
     }
 
     /// Build the arm map from `(tag, [(plicity, binder)], body)` triples, keeping
@@ -881,12 +834,45 @@ impl Term {
 
     /// Build a match's arity-1 motive scope from an optional source label: a
     /// named scope when the label is present, a constant one when not. Shared by
-    /// every match constructor whose motive binds just the scrutinee.
+    /// every match constructor whose motive binds just the scrutinee — the
+    /// canonical elaborated shape for a primitive carrier or an unindexed
+    /// inductive.
     fn motive_scope(motive_label: Option<&str>, motive: Term) -> Scope<Many> {
         match motive_label {
             Some(label) => Scope::close(Many(1), &[label], motive),
             None => Scope::constant(Many(1), motive),
         }
+    }
+
+    /// Carry a *written* motive — the surface term `into_core` lowered, before
+    /// elaboration has closed it into a scope — as an arity-0 [`Scope`].
+    ///
+    /// Lowering cannot close the scope itself: the motive's arity is
+    /// `n_indices + 1`, and the eliminated family is only known once the
+    /// scrutinee's type is inferred. Arity 0 is a free tag for "not yet
+    /// scoped" because no elaborated motive can have it — every eliminator
+    /// binds at least the scrutinee, so `check_motive` always re-closes at
+    /// arity 1 or more. `Scope::constant` performs no capture, so the term
+    /// goes in and comes back out of `body()` untouched.
+    pub fn match_motive_written<M>(motive: M) -> Scope<Many>
+    where
+        M: Into<Term>,
+    {
+        Scope::constant(Many(0), motive.into())
+    }
+
+    /// Build a match node around an already-built motive scope. The `*_scoped`
+    /// constructors are `into_core`'s entry points: lowering carries the
+    /// *written* motive term (see [`Term::match_motive_written`]) rather than a
+    /// label and a body, because it cannot know the arity to close at. Every
+    /// label-taking constructor above delegates here after building the
+    /// canonical arity-1 scope.
+    fn match_scoped(head: Term, motive: Scope<Many>, cases: Cases) -> Self {
+        Self::from(Subterm::Match(Match {
+            head,
+            motive,
+            cases,
+        }))
     }
 
     /// Build the dependent `Bool` eliminator ([`Cases::Bool`]): a false arm and a true arm, neither binding anything — the motive alone sees the scrutinee.
@@ -903,14 +889,34 @@ impl Term {
         F: Into<Term>,
         T: Into<Term>,
     {
-        Self::from(Subterm::Match(Match {
-            head: head.into(),
-            motive: Self::motive_scope(motive_label, motive.into()),
-            cases: Cases::Bool {
+        Self::bool_match_scoped(
+            head,
+            Self::motive_scope(motive_label, motive.into()),
+            false_case,
+            true_case,
+        )
+    }
+
+    /// [`Term::bool_match`] over an already-built motive scope.
+    pub fn bool_match_scoped<H, F, T>(
+        head: H,
+        motive: Scope<Many>,
+        false_case: F,
+        true_case: T,
+    ) -> Self
+    where
+        H: Into<Term>,
+        F: Into<Term>,
+        T: Into<Term>,
+    {
+        Self::match_scoped(
+            head.into(),
+            motive,
+            Cases::Bool {
                 false_case: false_case.into(),
                 true_case: true_case.into(),
             },
-        }))
+        )
     }
 
     /// Build the structural `Nat` eliminator ([`Carrier::Nat`]): a zero arm plus a successor arm closed over `(pred, ih)` — `Nat`'s generator carries no payload, so the cons arm binds one fewer variable than `Bin`/`Lst`'s.
@@ -931,13 +937,39 @@ impl Term {
         IL: Into<String>,
         SC: Into<Term>,
     {
+        Self::nat_match_scoped(
+            head,
+            Self::motive_scope(motive_label, motive.into()),
+            zero_case,
+            pred_label,
+            ih_label,
+            succ_case,
+        )
+    }
+
+    /// [`Term::nat_match`] over an already-built motive scope.
+    pub fn nat_match_scoped<H, ZC, PL, IL, SC>(
+        head: H,
+        motive: Scope<Many>,
+        zero_case: ZC,
+        pred_label: PL,
+        ih_label: IL,
+        succ_case: SC,
+    ) -> Self
+    where
+        H: Into<Term>,
+        ZC: Into<Term>,
+        PL: Into<String>,
+        IL: Into<String>,
+        SC: Into<Term>,
+    {
         let pred_label = pred_label.into();
         let ih_label = ih_label.into();
 
-        Self::from(Subterm::Match(Match {
-            head: head.into(),
-            motive: Self::motive_scope(motive_label, motive.into()),
-            cases: Cases::FreeMonoid {
+        Self::match_scoped(
+            head.into(),
+            motive,
+            Cases::FreeMonoid {
                 carrier: Carrier::Nat {
                     empty_case: zero_case.into(),
                     cons_case: Scope::close(
@@ -947,7 +979,7 @@ impl Term {
                     ),
                 },
             },
-        }))
+        )
     }
 
     /// Build the structural `Lst` eliminator ([`Carrier::Lst`]): the element type `elem`, an empty arm, and a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
@@ -973,14 +1005,47 @@ impl Term {
         IL: Into<String>,
         CC: Into<Term>,
     {
+        Self::lst_match_scoped(
+            head,
+            elem,
+            Self::motive_scope(motive_label, motive.into()),
+            empty_case,
+            head_label,
+            tail_label,
+            ih_label,
+            cons_case,
+        )
+    }
+
+    /// [`Term::lst_match`] over an already-built motive scope.
+    #[allow(clippy::too_many_arguments)]
+    pub fn lst_match_scoped<H, EL, EC, HL, TL, IL, CC>(
+        head: H,
+        elem: EL,
+        motive: Scope<Many>,
+        empty_case: EC,
+        head_label: HL,
+        tail_label: TL,
+        ih_label: IL,
+        cons_case: CC,
+    ) -> Self
+    where
+        H: Into<Term>,
+        EL: Into<Term>,
+        EC: Into<Term>,
+        HL: Into<String>,
+        TL: Into<String>,
+        IL: Into<String>,
+        CC: Into<Term>,
+    {
         let head_label = head_label.into();
         let tail_label = tail_label.into();
         let ih_label = ih_label.into();
 
-        Self::from(Subterm::Match(Match {
-            head: head.into(),
-            motive: Self::motive_scope(motive_label, motive.into()),
-            cases: Cases::FreeMonoid {
+        Self::match_scoped(
+            head.into(),
+            motive,
+            Cases::FreeMonoid {
                 carrier: Carrier::Lst {
                     elem: elem.into(),
                     empty_case: empty_case.into(),
@@ -991,7 +1056,7 @@ impl Term {
                     ),
                 },
             },
-        }))
+        )
     }
 
     /// Build the structural `Bin` eliminator ([`Carrier::Bin`]): an empty arm plus a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
@@ -1016,14 +1081,46 @@ impl Term {
         IL: Into<String>,
         CC: Into<Term>,
     {
+        Self::bin_match_scoped(
+            grain,
+            head,
+            Self::motive_scope(motive_label, motive.into()),
+            empty_case,
+            head_label,
+            tail_label,
+            ih_label,
+            cons_case,
+        )
+    }
+
+    /// [`Term::bin_match`] over an already-built motive scope.
+    #[allow(clippy::too_many_arguments)]
+    pub fn bin_match_scoped<H, EC, HL, TL, IL, CC>(
+        grain: Grain,
+        head: H,
+        motive: Scope<Many>,
+        empty_case: EC,
+        head_label: HL,
+        tail_label: TL,
+        ih_label: IL,
+        cons_case: CC,
+    ) -> Self
+    where
+        H: Into<Term>,
+        EC: Into<Term>,
+        HL: Into<String>,
+        TL: Into<String>,
+        IL: Into<String>,
+        CC: Into<Term>,
+    {
         let head_label = head_label.into();
         let tail_label = tail_label.into();
         let ih_label = ih_label.into();
 
-        Self::from(Subterm::Match(Match {
-            head: head.into(),
-            motive: Self::motive_scope(motive_label, motive.into()),
-            cases: Cases::FreeMonoid {
+        Self::match_scoped(
+            head.into(),
+            motive,
+            Cases::FreeMonoid {
                 carrier: Carrier::Bin {
                     grain,
                     empty_case: empty_case.into(),
@@ -1034,7 +1131,7 @@ impl Term {
                     ),
                 },
             },
-        }))
+        )
     }
 
     /// Build a [`Cases::Switch`] match: sparse dispatch on specific literal `Nat` values with a mandatory default arm. The arms bind nothing — unlike [`Term::nat_match`], this is a case split, not induction.
@@ -1052,14 +1149,30 @@ impl Term {
         B: Into<Term>,
         D: Into<Term>,
     {
-        Self::from(Subterm::Match(Match {
-            head: head.into(),
-            motive: Self::motive_scope(motive_label, motive.into()),
-            cases: Cases::Switch {
+        Self::switch_scoped(
+            head,
+            Self::motive_scope(motive_label, motive.into()),
+            cases,
+            default,
+        )
+    }
+
+    /// [`Term::switch`] over an already-built motive scope.
+    pub fn switch_scoped<H, I, B, D>(head: H, motive: Scope<Many>, cases: I, default: D) -> Self
+    where
+        H: Into<Term>,
+        I: IntoIterator<Item = (u32, B)>,
+        B: Into<Term>,
+        D: Into<Term>,
+    {
+        Self::match_scoped(
+            head.into(),
+            motive,
+            Cases::Switch {
                 cases: cases.into_iter().map(|(n, b)| (n, b.into())).collect(),
                 default: default.into(),
             },
-        }))
+        )
     }
 
     /// Prepend a single non-recursive binding `label = body : type_` in front of
@@ -1561,9 +1674,15 @@ pub struct Struct {
 /// The unified eliminator: every match form shares a scrutinee and a motive
 /// and differs only in its [`Cases`] payload.
 ///
-/// The motive's arity is 1 (the scrutinee binder) for every form except an
-/// inductive match with an annotated type-pattern motive, where the pattern's
-/// binder slots precede the scrutinee binder (in slot order, scrutinee last).
+/// An *elaborated* motive is closed at the eliminator's own arity: the
+/// scrutinee's indices in declaration order, then the scrutinee. That is 1 for
+/// every primitive carrier and for an unindexed inductive, and `n_indices + 1`
+/// for an indexed one. Parameters are never abstracted — they are uniform
+/// across constructors and fixed by the scrutinee's type, so the motive body
+/// refers to them through the ambient scope like any other term.
+///
+/// Before elaboration the motive is instead the *written term*, carried in an
+/// arity-0 scope — see [`Term::match_motive_written`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -1573,44 +1692,6 @@ pub struct Match {
     pub head: Term,
     pub motive: Scope<Many>,
     pub cases: Cases,
-}
-
-/// The written type-pattern of an annotated inductive-match motive,
-/// `match v : (x : Vec(T, k)) => P`. Slots are positional over the inductive's
-/// flat argument list (parameters then indices — told apart via the registry
-/// during elaboration, which consumes and validates the pattern):
-///
-/// - a parameter slot may be a verbatim [`MotiveSlot::Term`] (checked
-///   convertible with the scrutinee's actual parameter) or a binder (opened
-///   with the actual parameter);
-/// - an index slot must be a binder — that is the point of the form.
-///
-/// Binder labels live in the motive scope itself; `slots` records which
-/// positions bind and carries the verbatim terms.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
-pub struct MotivePattern {
-    /// The (resolved) inductive name the annotation wrote — checked against the
-    /// scrutinee's actual inductive.
-    pub name: String,
-    pub slots: Vec<MotiveSlot>,
-}
-
-/// One positional slot of a [`MotivePattern`] — see there for which positions may take which form.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
-pub enum MotiveSlot {
-    /// `_` or a bare identifier: occupies the next binder of the motive
-    /// scope, in slot order before the scrutinee binder.
-    Binder,
-    /// Any other written term — parameters only.
-    Term(Term),
 }
 
 /// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its
@@ -1678,17 +1759,16 @@ pub enum Cases {
         default: Term,
     },
     /// The primitive eliminator of a nominal inductive: one arm per constructor,
-    /// each arm's arity equal to that constructor's payload arity. `pattern`
-    /// is `Some` iff the surface motive was the annotated type-pattern form.
+    /// each arm's arity equal to that constructor's payload arity.
     /// `default` is the optional catch-all arm (`| _ =>`, mirroring
     /// [`Cases::Switch`]'s): present iff the surface match ended in a bare `_`.
     /// It binds nothing and stands in for every constructor tag absent from
     /// `cases`; `None` means the arms structurally cover every constructor
-    /// (a true elimination). A `Some(default)` may not co-occur with `pattern`
-    /// — the annotated type-pattern motive is elimination-only.
+    /// (a true elimination). The enumerated arms are checked at their own case
+    /// target indices and the default at the scrutinee's actual ones, so a
+    /// catch-all is legal on an indexed family too.
     Induct {
         cases: BTreeMap<Atom, InductArm>,
-        pattern: Option<MotivePattern>,
         default: Option<Term>,
     },
     /// Structural induction on a native free-monoid primitive (`Nat`/`Lst`/
@@ -2134,19 +2214,10 @@ impl Subterm {
                             .for_each(|b| b.collect_construction_names(names));
                         default.collect_construction_names(names);
                     }
-                    Cases::Induct {
-                        cases,
-                        pattern,
-                        default,
-                    } => {
+                    Cases::Induct { cases, default } => {
                         cases
                             .values()
                             .for_each(|s| s.body.body().collect_construction_names(names));
-                        pattern.iter().flat_map(|p| &p.slots).for_each(|slot| {
-                            if let MotiveSlot::Term(t) = slot {
-                                t.collect_construction_names(names);
-                            }
-                        });
                         default
                             .iter()
                             .for_each(|d| d.collect_construction_names(names));
@@ -2260,19 +2331,8 @@ impl Subterm {
                         Cases::Switch { cases, default } => {
                             cases.values().any(|b| b.any_metavar(pred)) || default.any_metavar(pred)
                         }
-                        Cases::Induct {
-                            cases,
-                            pattern,
-                            default,
-                        } => {
+                        Cases::Induct { cases, default } => {
                             cases.values().any(|s| s.body.body().any_metavar(pred))
-                                || pattern
-                                    .iter()
-                                    .flat_map(|p| &p.slots)
-                                    .any(|slot| match slot {
-                                        MotiveSlot::Term(t) => t.any_metavar(pred),
-                                        _ => false,
-                                    })
                                 || default.as_ref().is_some_and(|d| d.any_metavar(pred))
                         }
                         Cases::FreeMonoid { carrier } => match carrier {
@@ -2363,19 +2423,8 @@ impl Subterm {
                         Cases::Switch { cases, default } => {
                             cases.values().any(&mut *pred) || pred(default)
                         }
-                        Cases::Induct {
-                            cases,
-                            pattern,
-                            default,
-                        } => {
+                        Cases::Induct { cases, default } => {
                             cases.values().any(|s| pred(s.body.body()))
-                                || pattern
-                                    .iter()
-                                    .flat_map(|p| &p.slots)
-                                    .any(|slot| match slot {
-                                        MotiveSlot::Term(t) => pred(t),
-                                        _ => false,
-                                    })
                                 || default.as_ref().is_some_and(&mut *pred)
                         }
                         Cases::FreeMonoid { carrier } => match carrier {
@@ -2580,30 +2629,13 @@ impl Bound for Subterm {
                             .collect(),
                         default: visit.visit_subterm(default),
                     },
-                    Cases::Induct {
-                        cases,
-                        pattern,
-                        default,
-                    } => Cases::Induct {
+                    Cases::Induct { cases, default } => Cases::Induct {
                         cases: cases
                             .iter()
                             .map(|(atom, arm)| {
                                 (atom.clone(), arm.with_body(visit.visit_scope(&arm.body)))
                             })
                             .collect(),
-                        // Verbatim slot terms live in the enclosing scope
-                        // (outside the motive's binders), like `head`.
-                        pattern: pattern.as_ref().map(|p| MotivePattern {
-                            name: p.name.clone(),
-                            slots: p
-                                .slots
-                                .iter()
-                                .map(|slot| match slot {
-                                    MotiveSlot::Binder => MotiveSlot::Binder,
-                                    MotiveSlot::Term(t) => MotiveSlot::Term(visit.visit_subterm(t)),
-                                })
-                                .collect(),
-                        }),
                         // The default binds nothing — it lives in the enclosing
                         // scope, like `head`.
                         default: default.as_ref().map(|d| visit.visit_subterm(d)),
@@ -2747,25 +2779,12 @@ impl Bound for Subterm {
                     true_case,
                 } => false_case.reach().max(true_case.reach()),
                 Cases::Switch { cases, default } => max_reach(cases.values()).max(default.reach()),
-                Cases::Induct {
-                    cases,
-                    pattern,
-                    default,
-                } => {
-                    cases
-                        .values()
-                        .map(|s| s.reach())
-                        .max()
-                        .unwrap_or(0)
-                        .max(pattern.iter().flat_map(|p| &p.slots).fold(
-                            0,
-                            |acc, slot| match slot {
-                                MotiveSlot::Binder => acc,
-                                MotiveSlot::Term(t) => acc.max(t.reach()),
-                            },
-                        ))
-                        .max(default.as_ref().map_or(0, |d| d.reach()))
-                }
+                Cases::Induct { cases, default } => cases
+                    .values()
+                    .map(|s| s.reach())
+                    .max()
+                    .unwrap_or(0)
+                    .max(default.as_ref().map_or(0, |d| d.reach())),
                 Cases::FreeMonoid { carrier } => match carrier {
                     Carrier::Nat {
                         empty_case,

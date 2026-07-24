@@ -37,7 +37,7 @@ fn task_bind_reads_and_echoes() {
         use /std/{Async, Handle};
         let prog : Async({}) =
             let r = Async/read(Handle/stdin, 1024)!;
-            match r : Async({})
+            match r : (_) => Async({})
             | chunk(bytes) =>
                 let wrote = Handle/write(Handle/stdout, bytes);
                 Async/pure(())
@@ -208,7 +208,7 @@ fn constructing_a_leaf_task_performs_no_effect() {
         use /std/{Async, Handle, Str};
         let discarded : Async(Handle/Read) = Async/read(Handle/stdin, 100);
         let r = Handle/read(Handle/stdin, 100);
-        match r : {}
+        match r : (_) => {}
         | chunk(bytes) => let _ = Handle/write(Handle/stdout, bytes); ()
         | eof() => let _ = Handle/write(Handle/stdout, Str/to_bytes("<eof>")); ()
         | error(_) => let _ = Handle/write(Handle/stdout, Str/to_bytes("<err>")); ()
@@ -319,7 +319,7 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
         let boxes : Lst(Box) =
             [(Nat, Susp/now(7)), ({}, Susp/now(()))];
         let stepped = Lst/map(boxes, (b : Box) =>
-            match b.t : Box
+            match b.t : (_) => Box
             | now(a) => (b.A, Susp/now(a))
             | later(k) => (b.A, k())
             end);
@@ -397,7 +397,7 @@ fn timeout_returns_some_when_the_body_finishes_first() {
         use /std/time/{Duration};
         let main : Async({}) =
             let r = Async/timeout(Duration/of_secs(5), () => Async/pure(42))!;
-            match r : Async({})
+            match r : (_) => Async({})
             | some(v) => let w = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(v))); Async/pure(())
             | none() => let w = Handle/write(Handle/stdout, Str/to_bytes("none")); Async/pure(())
             end;
@@ -427,7 +427,7 @@ fn timeout_returns_none_and_runs_the_cancelled_bodys_finalizer() {
                     Async/bind(Async/sleep(Duration/of_secs(50)), (_) =>
                         let w = Handle/write(Handle/stdout, Str/to_bytes("body;"));
                         Async/pure(0))))!;
-            match r : Async({})
+            match r : (_) => Async({})
             | some(v) => let w = Handle/write(Handle/stdout, Str/to_bytes("some")); Async/pure(())
             | none() => let w = Handle/write(Handle/stdout, Str/to_bytes("none;")); Async/pure(())
             end;

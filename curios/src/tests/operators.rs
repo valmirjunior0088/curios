@@ -8,7 +8,7 @@ fn bool_logic_and_of_str() {
         r#"
         use /std/{Bool, Str, Option, Handle};
         let computed = Bool/and(Bool/or(false, true), Bool/not(false));
-        let parsed = match Bool/of_str("false") : Bool
+        let parsed = match Bool/of_str("false") : (_) => Bool
             | some(b) => b
             | none() => true
             end;
@@ -69,7 +69,7 @@ fn nat_bitwise_ops_execute() {
         Duration::from_secs(10),
         r#"
         use /std/{Handle, Byte, Bytes, Nat, Str, Option};
-        let bytes = match Handle/read(Handle/stdin, 16) : Bytes
+        let bytes = match Handle/read(Handle/stdin, 16) : (_) => Bytes
             | chunk(b) => b
             | eof() => x\
             | error(_) => x\
@@ -104,7 +104,7 @@ fn int_bitwise_ops_execute() {
         Duration::from_secs(10),
         r#"
         use /std/{Handle, Byte, Bytes, Nat, Int, Str, Option};
-        let bytes = match Handle/read(Handle/stdin, 16) : Bytes
+        let bytes = match Handle/read(Handle/stdin, 16) : (_) => Bytes
             | chunk(b) => b
             | eof() => x\
             | error(_) => x\

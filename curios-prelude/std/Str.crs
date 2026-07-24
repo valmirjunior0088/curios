@@ -5,7 +5,7 @@ use /std/{Char, Nat, Byte, Bytes, Bool, Lst, Option, Eql, Show};
 
 rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
     -> Utf8(s, x\..a\..b) =
-    match va : (w : Utf8(q, x)) => Utf8(q, x\..x\..b)
+    match va : (q, x, w) => Utf8(q, x\..x\..b)
     | stop() => vb
     | more(c, st, t, rest) => Utf8/more(c, st, x\..t\..b, seq(@step(c, st), @t, @b, rest, vb))
     end;
@@ -151,7 +151,7 @@ pub let repeat(s : Str, n : Nat) -> Str =
     Lst/balanced(n, "", (i) => s, (l, r) => concat(l, r));
 
 pub rec bad_uninhabited(@x : Bytes, w : Utf8(Scan/bad(), x)) -> False =
-    match w : (w : Utf8(q, y)) => False
+    match w : (q, y, w) => False
     | more(c, st, t, rest) => bad_uninhabited(rest)
     end;
 
@@ -177,7 +177,7 @@ pub rec cont_len(k : Nat, @lo : Nat, @hi : Nat, @t : Bytes, w : Utf8(Scan/cont(k
     end;
 
 pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bytes, w : Utf8(Scan/cont(0, lo, hi), t)) -> False =
-    match w : (w : Utf8(q, y)) => False
+    match w : (q, y, w) => False
     | more(c, st, t2, rest) =>
         match Nat/in_range(Byte/to_nat(c), lo, hi)
         | true => cont0_uninhabited(rest)
@@ -317,7 +317,7 @@ pub let at(s : Str, i : Nat, ok : Nat/Lt(i, len(s))) -> Char =
                 | pred + 1 =>
                     go(step(h, Scan/lead()), t,
                         peel_byte(@Scan/lead(), @Bytes/cons(h, t), True/qed(), valid), pred,
-                        match le : (le : Nat/Lte(x, y)) => Nat/Lte(x - 1, y - 1)
+                        match le : (x, y, le) => Nat/Lte(x - 1, y - 1)
                         | s(@a, @c, prev) => prev
                         end)
                 end

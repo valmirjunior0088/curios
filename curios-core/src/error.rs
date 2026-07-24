@@ -218,12 +218,6 @@ pub enum Error {
     LargeElimOfProp {
         name: String,
     },
-    /// An inductive match combined an annotated type-pattern motive
-    /// (`match v : (x : Vec(T, k)) => P`) with a `| _ =>` catch-all default.
-    /// The dependent motive form is elimination-only: its arms refine the
-    /// scrutinee's indices per constructor, which a binding-free default cannot
-    /// participate in. Use a plain motive with the default, or full arms.
-    DefaultWithPatternMotive,
     /// A struct was declared at sort `Prop` but a field is informative (its type
     /// is not itself a proposition). Proof irrelevance would then let projection
     /// observe which inhabitant was built — the singleton-elimination condition,
@@ -435,28 +429,14 @@ pub enum Error {
     IntOverflow {
         value: Box<Int>,
     },
-    /// An inductive match's annotated motive names a different inductive than the
-    /// scrutinee's type.
-    MotiveWrongInduct {
-        written: String,
-        actual: String,
-    },
-    /// The annotated motive's slot count differs from the inductive's flat
-    /// argument list (parameters then indices).
-    MotivePatternArity {
+    /// A written motive binds the wrong number of names. An eliminator's motive
+    /// abstracts the scrutinee's indices, in declaration order, and then the
+    /// scrutinee — `expected` of them. `name` is the eliminated family when
+    /// there is one to name (a primitive carrier has none).
+    MotiveBinderCount {
+        name: Option<String>,
         expected: usize,
-        got: usize,
-    },
-    /// A verbatim term written in a parameter slot of an annotated motive is
-    /// not convertible with the scrutinee's actual parameter.
-    MotiveParamMismatch {
-        written: Box<Term>,
-        actual: Box<Term>,
-    },
-    /// An index slot of an annotated motive must bind (a fresh name or `_`)
-    /// — index constraints belong to the declaration's case targets.
-    MotiveIndexSlotNotBinder {
-        slot: Box<Term>,
+        written: usize,
     },
     /// An arm of an indexed-inductive match was omitted, but inversion could not
     /// prove the case impossible at the scrutinee's indices.
@@ -601,10 +581,6 @@ impl Error {
 
     pub(crate) fn large_elim_of_prop<N: Into<String>>(name: N) -> Self {
         Self::LargeElimOfProp { name: name.into() }
-    }
-
-    pub(crate) fn default_with_pattern_motive() -> Self {
-        Self::DefaultWithPatternMotive
     }
 
     pub(crate) fn informative_prop_struct<N: Into<String>, F: Into<String>, T: Into<Term>>(
@@ -870,24 +846,15 @@ impl Error {
         }
     }
 
-    pub(crate) fn motive_wrong_induct(written: String, actual: String) -> Self {
-        Self::MotiveWrongInduct { written, actual }
-    }
-
-    pub(crate) fn motive_pattern_arity(expected: usize, got: usize) -> Self {
-        Self::MotivePatternArity { expected, got }
-    }
-
-    pub(crate) fn motive_param_mismatch<U: Into<Term>>(written: U, actual: U) -> Self {
-        Self::MotiveParamMismatch {
-            written: Box::new(written.into()),
-            actual: Box::new(actual.into()),
-        }
-    }
-
-    pub(crate) fn motive_index_slot_not_binder<U: Into<Term>>(slot: U) -> Self {
-        Self::MotiveIndexSlotNotBinder {
-            slot: Box::new(slot.into()),
+    pub(crate) fn motive_binder_count(
+        name: Option<String>,
+        expected: usize,
+        written: usize,
+    ) -> Self {
+        Self::MotiveBinderCount {
+            name,
+            expected,
+            written,
         }
     }
 
@@ -980,11 +947,6 @@ impl Error {
             Self::SpreadBaseTypeMismatch { found, .. } => out.push(found),
             Self::MatchCaseMissing { term, .. } => out.push(term),
             Self::UnboundVariable { term } => out.push(term),
-            Self::MotiveParamMismatch { written, actual } => {
-                out.push(written);
-                out.push(actual);
-            }
-            Self::MotiveIndexSlotNotBinder { slot } => out.push(slot),
             Self::NoWitness { goal, .. } => out.push(goal),
             Self::Goal {
                 scope,
@@ -1157,12 +1119,6 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "cannot eliminate the proposition '{name}' into a relevant result\n  a strict proposition admits large elimination only when empty or singleton"
-                )
-            }
-            Error::DefaultWithPatternMotive => {
-                write!(
-                    f,
-                    "a `| _ =>` default cannot be combined with an annotated type-pattern motive\n  the dependent motive form is elimination-only; use a plain motive or full arms"
                 )
             }
             Error::InformativePropStruct {
@@ -1439,28 +1395,23 @@ impl fmt::Display for Error {
                     "Int literal {value:+} overflows i32 at the erase boundary"
                 )
             }
-            Error::MotiveWrongInduct { written, actual } => {
+            Error::MotiveBinderCount {
+                name,
+                expected,
+                written,
+            } => {
+                let subject = match name {
+                    Some(name) => format!("eliminating '{name}'"),
+                    None => "this eliminator".to_string(),
+                };
+                let shape = match expected {
+                    1 => "just the scrutinee".to_string(),
+                    2 => "one index, then the scrutinee".to_string(),
+                    n => format!("{} indices, then the scrutinee", n - 1),
+                };
                 write!(
                     f,
-                    "motive annotation names '{written}', but the scrutinee is a '{actual}'"
-                )
-            }
-            Error::MotivePatternArity { expected, got } => {
-                write!(
-                    f,
-                    "motive annotation has {got} argument slot(s), but the inductive takes {expected} (parameters, then indices)"
-                )
-            }
-            Error::MotiveParamMismatch { written, actual } => {
-                write!(
-                    f,
-                    "motive annotation fixes a parameter to\n  {written}\nbut the scrutinee's is\n  {actual}"
-                )
-            }
-            Error::MotiveIndexSlotNotBinder { slot } => {
-                write!(
-                    f,
-                    "an index slot of a motive annotation must bind a fresh name (or `_`), but `{slot}` was written; indices are constrained by the declaration's case targets, not the motive"
+                    "motive binds {written} name(s), but {subject} needs {expected} ({shape})"
                 )
             }
             Error::MissingArmNotImpossible { tag } => {

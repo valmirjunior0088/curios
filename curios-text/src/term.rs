@@ -260,33 +260,6 @@ pub struct PatternField {
     pub value: Pattern,
 }
 
-/// A match's motive ladder — one grammar growing, the binder parenthesized
-/// in every form (motives look exactly like the lambdas they morally are):
-///
-/// - `match v : P` — constant;
-/// - `match v : (x) => P` — depends on the scrutinee;
-/// - `match v : (x : Vec(T, k)) => P` — the annotated type-pattern form,
-///   inductive scrutinees only: binds the indices where they naturally appear.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Motive {
-    Constant(Term),
-    Scrutinee {
-        label: String,
-        body: Term,
-    },
-    Annotated {
-        label: String,
-        /// The inductive type the annotation names.
-        name: Name,
-        /// The written argument slots, positionally (parameters then
-        /// indices); a bare unresolvable identifier is a binder, anything
-        /// else verbatim — classified at lowering, validated positionally
-        /// by core elaboration against the registry.
-        slots: Vec<Term>,
-        body: Term,
-    },
-}
-
 /// An ordered guarded ladder: `choose | test => body | … | _ => default end`.
 /// There is no scrutinee — the arms are tried top-to-bottom and the first
 /// that fires selects its body; the mandatory final `| _ =>` supplies the
@@ -374,7 +347,11 @@ pub struct StructLit {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Match {
     pub head: Term,
-    pub motive: Option<Motive>,
+    /// The written motive, a term checked against the eliminator's motive type
+    /// `(ī : Ī(p̄)) -> I(p̄, ī) -> Sort` — ordinarily a lambda binding the
+    /// scrutinee's indices and then the scrutinee. `None` records that no `:`
+    /// was written, and lowering mints a silent metavariable for it.
+    pub motive: Option<Term>,
     /// The arms, in source order. Each pairs a (possibly nested, across
     /// constructors/tuples/structs — see [`MatchPattern`]) pattern with its
     /// body; zero arms is legal (a vacuous elimination, e.g. of `False`).

@@ -93,7 +93,7 @@ pub let take_literal(literal : Str) -> Parse({}) =
         run(input, pos) =
             let lit = Str/to_bytes(literal);
             let (stop, matched) =
-                match Bytes/len(lit) : {Nat, Bool}
+                match Bytes/len(lit) : (_) => {Nat, Bool}
                 | 0 => (pos, true)
                 | step + 1; ih =>
                     let (cur, live) = ih;
@@ -129,7 +129,7 @@ pub let take_while(pred : (Byte) -> Bool) -> Parse(Bytes) =
     Parse {
         run(input, pos) =
             let (stop, _) =
-                match Bytes/len(input) - pos : {Nat, Bool}
+                match Bytes/len(input) - pos : (_) => {Nat, Bool}
                 | 0 => (pos, false)
                 | step + 1; ih =>
                     let (cur, stopped) = ih;

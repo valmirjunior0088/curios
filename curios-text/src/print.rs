@@ -2,11 +2,10 @@ use {
     super::{
         Apply, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Field, Func,
         FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Let, LetSignature,
-        LstEntry, LstPattern, Match, MatchPattern, MatchPatternField, Motive, Nat, NatLiteral,
-        NatPattern, NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec, StructLit,
-        StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
-        TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
-        TupleTypeParam, UseGroup, WitnessEntry,
+        LstEntry, LstPattern, Match, MatchPattern, MatchPatternField, Nat, NatLiteral, NatPattern,
+        NumLit, Pattern, PatternField, Prim, Proj, Radix, Rec, StructLit, StructLitEntry, Subterm,
+        Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct,
+        TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
     },
     curios_abi::{WireSignature, WireType},
     curios_base::{
@@ -74,37 +73,12 @@ fn print_plicity(plicity: Plicity) -> Printer<'static> {
     }
 }
 
-/// Prints a match's optional motive — the parenthesized ladder: ` : body`,
-/// ` : (x) => body`, ` : (x : Vec(T, k)) => body` — or nothing at all when
-/// the motive was omitted in the source.
-fn print_motive(motive: Option<Motive>) -> Printer<'static> {
+/// Prints a match's optional motive — ` : ` and the written term (ordinarily a
+/// lambda, `(k, v) => P`) — or nothing at all when the motive was omitted in
+/// the source.
+fn print_motive(motive: Option<Term>) -> Printer<'static> {
     match motive {
-        Some(Motive::Constant(body)) => flat([pure(" : "), print_term(body)]),
-        Some(Motive::Scrutinee { label, body }) => {
-            flat([pure(" : ("), pure(label), pure(") => "), print_term(body)])
-        }
-        Some(Motive::Annotated {
-            label,
-            name,
-            slots,
-            body,
-        }) => flat([
-            pure(" : ("),
-            pure(label),
-            pure(" : "),
-            pure(name.join()),
-            if slots.is_empty() {
-                pure("")
-            } else {
-                flat([
-                    pure("("),
-                    sep_flat(slots.into_iter().map(print_term), || pure(", ")),
-                    pure(")"),
-                ])
-            },
-            pure(") => "),
-            print_term(body),
-        ]),
+        Some(motive) => flat([pure(" : "), print_term(motive)]),
         None => pure(""),
     }
 }

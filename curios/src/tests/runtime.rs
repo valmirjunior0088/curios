@@ -21,7 +21,7 @@ fn nullary_closure_survives_erasure_and_codegen() {
         | later(() -> Susp(A))
         end
         rec force(@A : Type, s : Susp(A)) -> A =
-            match s : A
+            match s : (_) => A
             | now(a) => a
             | later(k) => force(k())
             end;
@@ -47,7 +47,7 @@ fn end_to_end() {
         end
         let pair : Pair = Pair/left(+42);
         let score : (_ : Pair) -> std/Int = (p) =>
-            match p : std/Int
+            match p : (_) => std/Int
             | left(_) => +42
             | right(_) => +7
             end;
@@ -94,7 +94,7 @@ fn local_binders_shadow_module_bindings_without_leaking() {
 fn triangular_sum() {
     let source = r#"
         let result : std/Nat =
-            match 5 : std/Nat
+            match 5 : (_) => std/Nat
             | 0 => 0
             | pred + 1; ih => std/Nat/add(ih, pred)
             end;
@@ -169,7 +169,7 @@ fn bang_std_parse_threads_bangs_left_to_right() {
         let parser : Parse/Parse(Nat) =
             Parse/pure(Nat/sub(Byte/to_nat(Parse/any_byte!), Byte/to_nat(Parse/any_byte!)));
 
-        match Parse/run(parser, /std/Str/to_bytes("BA")) : {}
+        match Parse/run(parser, /std/Str/to_bytes("BA")) : (_) => {}
         | success(n) => /std/print(Nat/to_str(n))
         | failure(msg) => /std/print(msg)
         end
@@ -204,9 +204,9 @@ fn bang_region_mixes_action_types() {
         let parser : Parse/Parse(Bytes) =
             Parse/pure(Bytes/append(Parse/take_while(is_a)!, Parse/any_byte!));
 
-        match Parse/run(parser, /std/Str/to_bytes("AB")) : {}
+        match Parse/run(parser, /std/Str/to_bytes("AB")) : (_) => {}
         | success(s) =>
-            match Str/of_bytes(s) : {}
+            match Str/of_bytes(s) : (_) => {}
             | some(t) => /std/print(t)
             | none() => /std/print("invalid utf-8")
             end
@@ -292,9 +292,9 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     let source = r#"
         use /std/{Str, Handle, Bytes, Fmt};
 
-        match Handle/read(Handle/stdin, 1024) : {}
+        match Handle/read(Handle/stdin, 1024) : (_) => {}
         | chunk(bytes) =>
-            match Str/of_bytes(bytes) : {}
+            match Str/of_bytes(bytes) : (_) => {}
             | some(s) => Fmt/print("% is %")(Str/trim(s))(30)
             | none() => /std/print("invalid input")
             end
@@ -345,9 +345,9 @@ fn fmt_print_runtime_args_specializes_spine() {
     let source = r#"
         use /std/{Str, Handle, Bytes, Fmt};
 
-        match Handle/read(Handle/stdin, 1024) : {}
+        match Handle/read(Handle/stdin, 1024) : (_) => {}
         | chunk(bytes) =>
-            match Str/of_bytes(bytes) : {}
+            match Str/of_bytes(bytes) : (_) => {}
             | some(s) => Fmt/print("% is %")(Str/trim(s))(30)
             | none() => /std/print("invalid input")
             end

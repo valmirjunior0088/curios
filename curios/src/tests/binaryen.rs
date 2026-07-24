@@ -9,7 +9,7 @@ fn optimizes_to_a_smaller_valid_module() {
     // path optimizes on every execution.
     let source = r#"
         rec sum(n : /std/Nat) -> /std/Nat =
-            match n : /std/Nat
+            match n : (_) => /std/Nat
             | 0 => 0
             | pred + 1; ih => /std/Nat/add(/std/Nat/succ(pred), ih)
             end;

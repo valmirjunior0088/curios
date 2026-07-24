@@ -53,7 +53,7 @@ fn large_elimination_of_a_prop_is_rejected() {
     let source = r#"
         use /std/{Handle, Str, Nat};
         let bad(a : Nat, b : Nat, p : Nat/Lte(a, b)) -> Nat =
-            match p : Nat
+            match p : (_) => Nat
             | z(_) => 0
             | s(_, _, _) => 1
             end;
@@ -185,7 +185,7 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
         end
         let make : (n : Type) -> Boxed = (n) => Boxed/box(n, 5);
         let get : (b : Boxed) -> Nat = (b) =>
-            match b : Nat
+            match b : (_) => Nat
             | box(ghost, val) => val
             end;
         let r : Nat = get(make(Nat));
@@ -198,7 +198,7 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
 fn erased_void_discharges_to_relevant_result() {
     let source = r#"
         use /std/{False, Handle};
-        let direct(@A : Type, c : False) -> A = match c : A end;
+        let direct(@A : Type, c : False) -> A = match c : (_) => A end;
         let via_absurd(@A : Type, c : False) -> A = False/absurd(c);
         let proofs = (direct, via_absurd);
         /std/print("ok")
