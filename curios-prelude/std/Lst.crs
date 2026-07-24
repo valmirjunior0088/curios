@@ -1,6 +1,6 @@
 pub use /sys/{Lst};
 pub use /sys/Lst/{len, slice, append, concat, map};
-use /std/{Nat, Bool, Option, Eq, Show, Str, Monad};
+use /std/{Nat, Bool, Option, Eq, Str, Show, Monad};
 
 pub let nil(@A : Type) -> Lst(A) =
     [];

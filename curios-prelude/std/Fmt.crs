@@ -2,7 +2,7 @@ use /std/{Bytes, Byte, Str, Nat, Show};
 
 pub induct Fmt : pub Type
 | nil()
-| lit(Str, Fmt)
+| lit(piece : Str, rest : Fmt)
 | show(Fmt)
 end
 

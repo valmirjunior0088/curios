@@ -117,7 +117,7 @@ let offset_ok(mins : Int) -> Bool =
 -- segment addresses, so repeated `[[a]]` elements have distinct side-table keys.
 induct Seg : Type
 | plain(Str)
-| at(Str, Nat)
+| at(name : Str, index : Nat)
 end
 
 -- Construction metadata for a path in the side table. Plain values and static
@@ -1327,7 +1327,7 @@ and value_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
 -- ===================== statements and the document =====================
 
 induct Stmt : Type
-| assign(Lst(Str), Toml)
+| assign(path : Lst(Str), value : Toml)
 | table_header(Lst(Str))
 | array_header(Lst(Str))
 end

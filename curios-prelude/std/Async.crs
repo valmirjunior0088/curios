@@ -23,17 +23,17 @@ struct Guard : Type {
 }
 
 induct Pause : Type
-| wait(Handle, Nat)
+| wait(handle : Handle, interest : Nat)
 | sleep(Duration)
-| fork(() -> Async({}), Token)
+| fork(child : () -> Async({}), token : Token)
 | park((Waker) -> {})
-| acquire(Handle, () -> {})
+| acquire(handle : Handle, release : () -> {})
 | release(Handle)
 | defer()
 | yield_now()
 pub and Async(A : Type) : Type
 | done(A)
-| step(Pause, () -> Async(A))
+| step(pause : Pause, next : () -> Async(A))
 end
 
 pub let Fiber : Type =

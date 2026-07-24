@@ -4,7 +4,7 @@
 
 pub use /syn/{Char};
 pub use /syn/Char/{Below, InRange, Scalar};
-use /std/{Nat, Byte, Bool, Bytes, Option, Order, Eq, True, Eql, Cmp, Str, Show, Ord};
+use /std/{Nat, Byte, Bool, Bytes, Option, Order, Eq, True, Str, Eql, Cmp, Show, Ord};
 
 pub let to_nat(c : Char) -> Nat =
     c.code;

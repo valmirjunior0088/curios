@@ -2,7 +2,7 @@ use /std/{Nat, Byte, Bytes, Bool};
 
 pub induct Class : pub Type
 | ascii()
-| lead(Nat, Nat, Nat, Nat)
+| lead(count : Nat, lo : Nat, hi : Nat, payload : Nat)
 | bad()
 end
 
@@ -24,7 +24,7 @@ pub let classify(c : Byte) -> Class =
 
 pub induct Scan : pub Type
 | lead()
-| cont(Nat, Nat, Nat)
+| cont(remaining : Nat, lo : Nat, hi : Nat)
 | bad()
 end
 
