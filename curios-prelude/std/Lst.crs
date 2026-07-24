@@ -39,13 +39,13 @@ pub let find(@T : Type, l : Lst(T), pred : (T) -> Bool) -> Option(T) =
     let n = len(l);
     rec go(i : Nat) -> Option(T) =
         match i < n
-        | false => Option/none()
         | true =>
             let x = /sys/Lst/get(l, i);
             match pred(x)
             | true => Option/some(x)
             | false => go(i + 1)
             end
+        | false => Option/none()
         end;
     go(0);
 

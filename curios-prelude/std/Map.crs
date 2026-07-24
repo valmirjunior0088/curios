@@ -55,7 +55,6 @@ let crit(a : Bytes, b : Bytes) -> Nat =
         end;
     rec bytes(g : Nat) -> Nat =
         match g < Bytes/len(a) && g < Bytes/len(b)
-        | false => g * 9
         | true =>
             let x = Byte/to_nat(/sys/Bytes/get(a, g));
             let y = Byte/to_nat(/sys/Bytes/get(b, g));
@@ -63,6 +62,7 @@ let crit(a : Bytes, b : Bytes) -> Nat =
             | true => bytes(g + 1)
             | false => bits(x, y, g, 1)
             end
+        | false => g * 9
         end;
     bytes(0);
 

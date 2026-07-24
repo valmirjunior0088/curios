@@ -22,27 +22,20 @@ let configure(h : Handle, settings : Settings) -> {} =
 
 let upgrade(h : Handle, host : Str, tls : Bool) -> Nat =
     match tls
-    | false => /sys/Status/ok
     | true => /sys/start_tls(h, Str/to_bytes(host))
+    | false => /sys/Status/ok
     end;
 
 let connect_addr(settings : Settings, host : Str, addr : Bytes) -> Result(Socket, Handle/Error) =
     let s = /sys/socket(addr);
     match s.status == /sys/Status/ok
-    | false => Result/failure(Handle/error_of(s.status))
     | true =>
         let _ = configure(s.handle, settings);
         let status = /sys/connect(s.handle, addr);
         match status == /sys/Status/ok
-        | false =>
-            let _ = /sys/close(s.handle);
-            Result/failure(Handle/error_of(status))
         | true =>
             let upgraded = upgrade(s.handle, host, settings.tls);
             match upgraded == /sys/Status/ok
-            | false =>
-                let _ = /sys/close(s.handle);
-                Result/failure(Handle/error_of(upgraded))
             | true =>
                 -- A TLS stream is driven by rustls, not polled at the socket
                 -- layer, so it is left blocking on purpose.
@@ -56,8 +49,15 @@ let connect_addr(settings : Settings, host : Str, addr : Bytes) -> Result(Socket
                     | success(_) => Result/success(Socket { s.handle })
                     end
                 end
+            | false =>
+                let _ = /sys/close(s.handle);
+                Result/failure(Handle/error_of(upgraded))
             end
+        | false =>
+            let _ = /sys/close(s.handle);
+            Result/failure(Handle/error_of(status))
         end
+    | false => Result/failure(Handle/error_of(s.status))
     end;
 
 let connect_socket(settings : Settings, host : Str, port : Nat) -> Async(Result(Socket, Handle/Error)) =

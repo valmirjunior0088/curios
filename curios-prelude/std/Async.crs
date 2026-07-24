@@ -372,13 +372,6 @@ pub let block_on(@A : Type, root : Async(A)) -> Result(A, Deadlock) =
             | [] =>
                 let _ = Cell/set(parked, sweep_parked(Cell/get(parked)));
                 match Lst/len(Cell/get(blocked)) == 0 && Lst/len(Cell/get(sleeping)) == 0
-                | false =>
-                    let split = poll_ready(Cell/get(blocked), sleep_timeout(Cell/get(sleeping)));
-                    let woken = expire_sleepers(Cell/get(sleeping));
-                    let _ = Cell/set(runq, [..split.0, ..woken.0]);
-                    let _ = Cell/set(blocked, split.1);
-                    let _ = Cell/set(sleeping, woken.1);
-                    drive()
                 | true =>
                     -- Deadlock: no runnable job, nothing blocked on a handle, and
                     -- no sleeper — the root can never be fulfilled, so there is no
@@ -386,6 +379,13 @@ pub let block_on(@A : Type, root : Async(A)) -> Result(A, Deadlock) =
                     -- process is `run`'s decision, not the scheduler's.
                     let _ = drain_all();
                     Result/failure(Deadlock {})
+                | false =>
+                    let split = poll_ready(Cell/get(blocked), sleep_timeout(Cell/get(sleeping)));
+                    let woken = expire_sleepers(Cell/get(sleeping));
+                    let _ = Cell/set(runq, [..split.0, ..woken.0]);
+                    let _ = Cell/set(blocked, split.1);
+                    let _ = Cell/set(sleeping, woken.1);
+                    drive()
                 end
             | [job, ..rest] =>
                 let _ = Cell/set(runq, rest);

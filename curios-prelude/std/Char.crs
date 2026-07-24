@@ -15,12 +15,12 @@ pub let of_nat(code : Nat) -> Option(Char) =
         Option/some(Char { code = code, scalar = Scalar/below(@code, True/qed()) })
     | false =>
         match code >= 0xE000
-        | false => Option/none()
         | true =>
             match code <= 0x10FFFF
             | true => Option/some(Char { code = code, scalar = Scalar/above(@code, True/qed()) })
             | false => Option/none()
             end
+        | false => Option/none()
         end
     end;
 
@@ -73,10 +73,10 @@ pub let is_upper(c : Char) -> Bool =
     Nat/in_range(c.code, 0x41, 0x5A);
 
 pub let is_alpha(c : Char) -> Bool =
-    Bool/or(is_lower(c), is_upper(c));
+    is_lower(c) || is_upper(c);
 
 pub let is_alphanumeric(c : Char) -> Bool =
-    Bool/or(is_alpha(c), is_digit(c));
+    is_alpha(c) || is_digit(c);
 
 pub let to_ascii_lower(c : Char) -> Char =
     match is_upper(c)

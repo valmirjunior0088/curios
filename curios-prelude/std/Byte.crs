@@ -4,8 +4,8 @@ use /std/{Order, Eql, Cmp, Nat, Show, Ord};
 
 pub let cmp(a : Byte, b : Byte) -> Order =
     choose
-    | Byte/lt(a, b) => Order/lt()
-    | Byte/eql(a, b) => Order/eq()
+    | lt(a, b) => Order/lt()
+    | eql(a, b) => Order/eq()
     | _ => Order/gt()
     end;
 

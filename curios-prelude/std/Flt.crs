@@ -45,7 +45,6 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bool) -> L
         | false => rem + mp10 > s
         end;
     match low || high
-    | false => Lst/cons(d, generate(rem, s, mp10, mm10, even))
     | true =>
         let last =
             choose
@@ -55,6 +54,7 @@ rec generate(r : BigNat, s : BigNat, mp : BigNat, mm : BigNat, even : Bool) -> L
             | _ => d + 1
             end;
         [last]
+    | false => Lst/cons(d, generate(rem, s, mp10, mm10, even))
     end;
 
 let digits_to_str(ds : Lst(Nat)) -> Str =
@@ -85,15 +85,15 @@ let setup(f_mant : Nat, exp_field : Nat) -> {BigNat, BigNat, BigNat, BigNat} =
     | true =>
         let ep = exp_field - 150;
         match f_mant == 0x800000
-        | false =>
-            (BigNat/mul_pow2(BigNat/of_nat(f_mant), ep + 1),
-                BigNat/of_nat(2),
-                pow2(ep),
-                pow2(ep))
         | true =>
             (BigNat/mul_pow2(BigNat/of_nat(f_mant), ep + 2),
                 BigNat/of_nat(4),
                 pow2(ep + 1),
+                pow2(ep))
+        | false =>
+            (BigNat/mul_pow2(BigNat/of_nat(f_mant), ep + 1),
+                BigNat/of_nat(2),
+                pow2(ep),
                 pow2(ep))
         end
     | false =>
@@ -146,7 +146,7 @@ pub let cmp(x : Flt, y : Flt) -> Order =
     end;
 
 pub let to_str(f : Flt) -> Str =
-    let b = Flt/to_le_bytes(f);
+    let b = to_le_bytes(f);
     let b0 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 0), 0));
     let b1 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 1), 0));
     let b2 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 2), 0));
@@ -192,8 +192,8 @@ let exp_factor(exp_int : Int) -> Flt =
 
 let exp_factor_of(s : Str, e_pos : Nat, len : Nat) -> Option(Flt) =
     match e_pos < len
-    | false => Option/some(+1.0)
     | true => Option/map(Int/of_str(Str/slice(s, e_pos + 1, len)), exp_factor)
+    | false => Option/some(+1.0)
     end;
 
 pub let of_str(s : Str) -> Option(Flt) =
@@ -221,7 +221,6 @@ pub let of_str(s : Str) -> Option(Flt) =
             | false => ""
             end;
         match Str/len(int_slice) > 0 || Str/len(frac_slice) > 0
-        | false => Option/none()
         | true =>
             let int_val = digits_or_zero(int_slice)!;
             let frac_val = digits_or_zero(frac_slice)!;
@@ -230,9 +229,10 @@ pub let of_str(s : Str) -> Option(Flt) =
                 Nat/to_flt(int_val) + Nat/to_flt(frac_val) / pow10(Str/len(frac_slice));
             let result = mantissa * factor;
             match is_neg
-            | true => Option/some(Flt/neg(result))
+            | true => Option/some(neg(result))
             | false => Option/some(result)
             end
+        | false => Option/none()
         end
     end;
 

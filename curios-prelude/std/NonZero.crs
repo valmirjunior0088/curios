@@ -77,8 +77,8 @@ rec carry_non_zero(x : Bits) -> is_cons(trim(add_raw(b\, x, true))) =
     | b\ => True/qed()
     | b\xh\..xt =>
         match xh
-        | false => trim_head_true(add_raw(b\, xt, false))
         | true => trim_head_non_zero(false, add_raw(b\, xt, true), carry_non_zero(xt))
+        | false => trim_head_true(add_raw(b\, xt, false))
         end
     end;
 
@@ -90,24 +90,24 @@ rec add_trim_non_zero(a : Bits, b : Bits, c : Bool,
         match at
         | b\ =>
             match ah
-            | false => False/absurd(false_neq_true(tr))
             | true =>
                 match b
                 | b\ => match c | false => True/qed() | true => True/qed() end
                 | b\bh\..bt =>
                     match bh
-                    | false =>
-                        match c
-                        | false => trim_head_true(add_raw(b\, bt, false))
-                        | true => trim_head_non_zero(false, add_raw(b\, bt, true), carry_non_zero(bt))
-                        end
                     | true =>
                         match c
-                        | false => trim_head_non_zero(false, add_raw(b\, bt, true), carry_non_zero(bt))
                         | true => trim_head_true(add_raw(b\, bt, true))
+                        | false => trim_head_non_zero(false, add_raw(b\, bt, true), carry_non_zero(bt))
+                        end
+                    | false =>
+                        match c
+                        | true => trim_head_non_zero(false, add_raw(b\, bt, true), carry_non_zero(bt))
+                        | false => trim_head_true(add_raw(b\, bt, false))
                         end
                     end
                 end
+            | false => False/absurd(false_neq_true(tr))
             end
         | b\ath\..att =>
             match b
@@ -126,13 +126,13 @@ rec mul_raw_trim_cons(p : Bits, q : Bits,
     | b\ => False/absurd(np)
     | b\ph\..pt =>
         match ph
+        | true => add_trim_non_zero(q, cons(false, mul_raw(pt, q)), false, tq, nq)
         | false =>
             match pt
             | b\ => False/absurd(false_neq_true(tp))
             | b\_\.._ => trim_head_non_zero(false, mul_raw(pt, q),
                 mul_raw_trim_cons(pt, q, tp, True/qed(), tq, nq))
             end
-        | true => add_trim_non_zero(q, cons(false, mul_raw(pt, q)), false, tq, nq)
         end
     end;
 

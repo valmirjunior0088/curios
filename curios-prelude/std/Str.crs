@@ -180,8 +180,8 @@ pub rec cont0_uninhabited(@lo : Nat, @hi : Nat, @t : Bytes, w : Utf8(Scan/cont(0
     match w : (w : Utf8(q, y)) => False
     | more(c, st, t2, rest) =>
         match Nat/in_range(Byte/to_nat(c), lo, hi)
-        | false => bad_uninhabited(rest)
         | true => cont0_uninhabited(rest)
+        | false => bad_uninhabited(rest)
         end
     end;
 
@@ -355,8 +355,8 @@ let trim_bounds(s : Str) -> {Nat, Nat} =
 pub let trim(s : Str) -> Str =
     let (lo, hi) = trim_bounds(s);
     match lo < hi
-    | false => ""
     | true => slice(s, lo, hi)
+    | false => ""
     end;
 
 satisfy Eql(Str) {

@@ -125,12 +125,12 @@ let parse_unicode : Parse(Bytes) =
         let _ = Parse/take_byte(0x75)!;
         let lo = hex4!;
         match lo >= 0xDC00 && lo <= 0xDFFF
-        | false => Parse/fail("invalid low surrogate")
         | true =>
             match Char/of_nat(0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00))
             | some(c) => Parse/pure(Char/to_utf8(c))
             | none() => Parse/fail("invalid Unicode scalar")
             end
+        | false => Parse/fail("invalid low surrogate")
         end
     | false =>
         match Char/of_nat(hi)

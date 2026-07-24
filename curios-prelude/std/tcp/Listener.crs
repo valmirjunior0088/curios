@@ -8,20 +8,13 @@ pub struct Listener : Type {
 let bind_listen(addr : Bytes) -> Result(Listener, Handle/Error) =
     let s = /sys/socket(addr);
     match s.status == /sys/Status/ok
-    | false => Result/failure(Handle/error_of(s.status))
     | true =>
         let _ = /sys/set_reuseaddr(s.handle, true);
         let bound = /sys/bind(s.handle, addr);
         match bound == /sys/Status/ok
-        | false =>
-            let _ = /sys/close(s.handle);
-            Result/failure(Handle/error_of(bound))
         | true =>
             let status = /sys/listen(s.handle, 128);
             match status == /sys/Status/ok
-            | false =>
-                let _ = /sys/close(s.handle);
-                Result/failure(Handle/error_of(status))
             | true =>
                 match Async/nonblocking(s.handle)
                 | failure(e) =>
@@ -29,8 +22,15 @@ let bind_listen(addr : Bytes) -> Result(Listener, Handle/Error) =
                     Result/failure(e)
                 | success(_) => Result/success(Listener { s.handle })
                 end
+            | false =>
+                let _ = /sys/close(s.handle);
+                Result/failure(Handle/error_of(status))
             end
+        | false =>
+            let _ = /sys/close(s.handle);
+            Result/failure(Handle/error_of(bound))
         end
+    | false => Result/failure(Handle/error_of(s.status))
     end;
 
 let listen(host : Str, port : Nat) -> Async(Result(Listener, Handle/Error)) =
@@ -74,7 +74,6 @@ pub let serve_tls(host : Str, port : Nat, cert : Bytes, key : Bytes, handler : (
     Async/defer(() =>
         let cfg = /sys/tls_server_config(cert, key);
         match cfg.status == /sys/Status/ok
-        | false => Async/pure(Result/failure(Handle/error_of(cfg.status)))
         | true =>
             Async/using(cfg.handle, () => let _ = /sys/close(cfg.handle); (),
                 listen_loop(host, port, (h) =>
@@ -85,4 +84,5 @@ pub let serve_tls(host : Str, port : Nat, cert : Bytes, key : Bytes, handler : (
                         let _ = /sys/close(h);
                         Async/pure(())
                     end))
+        | false => Async/pure(Result/failure(Handle/error_of(cfg.status)))
         end);

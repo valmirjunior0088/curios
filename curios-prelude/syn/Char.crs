@@ -9,12 +9,12 @@ pub let Below(code : Nat, bound : Nat) -> Prop =
 
 pub let InRange(code : Nat, lo : Nat, hi : Nat) -> Prop =
     match code >= lo
-    | false => False
     | true =>
         match code <= hi
-        | false => False
         | true => True
+        | false => False
         end
+    | false => False
     end;
 
 pub induct Scalar : (code : Nat) -> pub Prop

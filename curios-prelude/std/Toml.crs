@@ -345,7 +345,6 @@ rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), uncheck
                             | none() => false
                             end;
                         match is_many
-                        | false => Result/failure("cannot extend a static array")
                         | true =>
                             match act
                             | act_value(_) => Result/failure("cannot extend an array of tables with dotted keys")
@@ -370,6 +369,7 @@ rec walk(m : Map(Toml), side : Map(State), pre : Bytes, segs : Lst(Seg), uncheck
                                 | none() => Result/failure("array of tables is empty")
                                 end
                             end
+                        | false => Result/failure("cannot extend a static array")
                         end
                     | _ => Result/failure("key conflicts with an existing value")
                     end
@@ -830,7 +830,6 @@ let int_value : Parse(Toml) =
                 | true => Option/none()
                 | false =>
                     match byte_at_is(input, cur, (n) => n == 0x30)
-                    | false => Option/none()
                     | true =>
                         match Bytes/get(input, cur + 1)
                         | none() => Option/none()
@@ -842,6 +841,7 @@ let int_value : Parse(Toml) =
                             | _ => Option/none()
                             end
                         end
+                    | false => Option/none()
                     end
                 end;
             let scanned : Result({Nat, Nat}, Str) =
@@ -997,7 +997,6 @@ let flt_number : Parse(Toml) =
                         | failure(msg) => Result/failure(msg)
                         | success((next, emag, eneg, has_exp)) =>
                             match has_frac || has_exp
-                            | false => Result/failure("expected float")
                             | true =>
                                 let up = match eneg | true => up1 | false => up1 + emag end;
                                 let down = match eneg | true => down2 + emag | false => down2 end;
@@ -1009,6 +1008,7 @@ let flt_number : Parse(Toml) =
                                     | false => scaled
                                     end;
                                 Result/success((next, Toml/flt(value)))
+                            | false => Result/failure("expected float")
                             end
                         end
                     end
@@ -1084,12 +1084,12 @@ rec frac_ns(input : Bytes, cur : Nat, taken : Nat, acc : Nat, seen : Bool) -> Re
     | some(b) =>
         let n = Byte/to_nat(b);
         match Nat/in_range(n, 0x30, 0x39)
-        | false => stop
         | true =>
             match taken < 9
             | true => frac_ns(input, cur + 1, taken + 1, acc * 10 + (n - 0x30), true)
             | false => frac_ns(input, cur + 1, taken, acc, true)
             end
+        | false => stop
         end
     end;
 
@@ -1138,7 +1138,6 @@ let offset_scan(input : Bytes, pos : Nat) -> Result({Nat, Int}, Str) =
         | some(b) =>
             let n = Byte/to_nat(b);
             match n == 0x2B || n == 0x2D
-            | false => Result/failure("expected offset")
             | true =>
                 match fixed_scan(input, pos + 1, 2, 0)
                 | failure(msg) => Result/failure(msg)
@@ -1150,7 +1149,6 @@ let offset_scan(input : Bytes, pos : Nat) -> Result({Nat, Int}, Str) =
                         | failure(msg) => Result/failure(msg)
                         | success((c3, om)) =>
                             match oh <= 23 && om <= 59
-                            | false => Result/failure("invalid offset")
                             | true =>
                                 let mins = oh * 60 + om;
                                 let value : Int =
@@ -1159,10 +1157,12 @@ let offset_scan(input : Bytes, pos : Nat) -> Result({Nat, Int}, Str) =
                                     | false => Nat/to_int(mins)
                                     end;
                                 Result/success((c3, value))
+                            | false => Result/failure("invalid offset")
                             end
                         end
                     end
                 end
+            | false => Result/failure("expected offset")
             end
         end
     end;
@@ -1259,7 +1259,6 @@ and inline_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
             | failure(msg) => Result/failure(msg)
             | success((c2, _)) =>
                 match byte_at_is(input, c2, (n) => n == 0x3D)
-                | false => Result/failure("expected '=' in inline table")
                 | true =>
                     match ws.run(input, c2 + 1)
                     | failure(msg) => Result/failure(msg)
@@ -1279,22 +1278,22 @@ and inline_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
                                     end
                                 | false =>
                                     match byte_at_is(input, c5, (n) => n == 0x7D)
-                                    | false => Result/failure("expected ',' or '}' in inline table")
                                     | true =>
                                         match inline_fold(acc2)
                                         | success(m) => Result/success((c5 + 1, Toml/table(m)))
                                         | failure(msg) => Result/failure(msg)
                                         end
+                                    | false => Result/failure("expected ',' or '}' in inline table")
                                     end
                                 end
                             end
                         end
                     end
+                | false => Result/failure("expected '=' in inline table")
                 end
             end
         end;
     match byte_at_is(input, pos, (n) => n == 0x7B)
-    | false => Result/failure("expected inline table")
     | true =>
         match ws.run(input, pos + 1)
         | failure(msg) => Result/failure(msg)
@@ -1304,6 +1303,7 @@ and inline_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
             | false => go(c1, [])
             end
         end
+    | false => Result/failure("expected inline table")
     end
 and value_scan(input : Bytes, pos : Nat) -> Result({Nat, Toml}, Str) =
     match Bytes/get(input, pos)
@@ -1362,16 +1362,16 @@ and header_scan(input : Bytes, cur : Nat, double : Bool) -> Result({Nat, Lst(Str
         | failure(msg) => Result/failure(msg)
         | success((c2, path)) =>
             match byte_at_is(input, c2, (n) => n == 0x5D)
-            | false => Result/failure("expected ']' in table header")
             | true =>
                 match double
-                | false => Result/success((c2 + 1, path))
                 | true =>
                     match byte_at_is(input, c2 + 1, (n) => n == 0x5D)
                     | true => Result/success((c2 + 2, path))
                     | false => Result/failure("expected ']]' in table header")
                     end
+                | false => Result/success((c2 + 1, path))
                 end
+            | false => Result/failure("expected ']' in table header")
             end
         end
     end
@@ -1395,7 +1395,6 @@ and stmt_scan(input : Bytes, cur : Nat) -> Result({Nat, Stmt}, Str) =
         | failure(msg) => Result/failure(msg)
         | success((c1, path)) =>
             match byte_at_is(input, c1, (n) => n == 0x3D)
-            | false => Result/failure("expected '=' after key")
             | true =>
                 match ws.run(input, c1 + 1)
                 | failure(msg) => Result/failure(msg)
@@ -1405,6 +1404,7 @@ and stmt_scan(input : Bytes, cur : Nat) -> Result({Nat, Stmt}, Str) =
                     | success((c3, v)) => Result/success((c3, Stmt/assign(path, v)))
                     end
                 end
+            | false => Result/failure("expected '=' after key")
             end
         end
     end
