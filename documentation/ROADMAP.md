@@ -36,7 +36,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [Pruning of out-of-scope metavariables](compiler/06_UNIFICATION_REFINEMENTS_SPEC.md)
   - [ ] [η-equate metavariable heads](compiler/06_UNIFICATION_REFINEMENTS_SPEC.md)
   - [ ] [Surface residual unification constraints](compiler/06_UNIFICATION_REFINEMENTS_SPEC.md) (distinguish postponed vs. rigid-mismatch diagnostics)
-- [ ] [Monomorphic, use-driven inference for unannotated lambda parameters](match_ergonomics/01_LAMBDA_INFERENCE_SPEC.md) (park structurally blocked inference within one enclosing item) _(lands in the bootstrap Phase 0 batch or after the Curios elaborator is authoritative — never mid-port)_
+- [ ] [Monomorphic, use-driven inference for unannotated lambda parameters](match_ergonomics/01_LAMBDA_INFERENCE_SPEC.md) (park structurally blocked inference within one enclosing item)
 
 ## Pattern Matching
 
@@ -90,15 +90,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Elaboration and per-node memoization bounded by written binder nesting, never data length (the `elaborate → elaborate_apply → check` cycle defunctionalized onto a frame stack for ground, all-explicit applications; each term's cached derivations carried on the shared `Rc` node and filled by an iterative post-order walk — so a literal or generated spine of any size compiles on a default 2MB stack, the ceiling now being the reduction deadline and memory)
 - [ ] [Full data section support in `curios-wasm`](compiler/07_WASM_FULL_CONFORMANCE_SPEC.md) (active data segments, `memory.init`/`data.drop`, and the complete linear-memory load/store instruction family; today the section is minimum-fitted to its one consumer — passive-only segments reached through `array.new_data`)
 - [ ] [Full element section support in `curios-wasm`](compiler/07_WASM_FULL_CONFORMANCE_SPEC.md) (every element-segment mode with table declarations and table instructions; today the section is minimum-fitted to its one consumer — a single declarative segment making functions `ref.func`-eligible)
-- [ ] Bootstrap the compiler in Curios itself (self-host every language-specific stage through raw WebAssembly generation while retaining Rust as the native host and stage-zero seed)
-  - [ ] [Contracts and Phase 0 baseline](bootstrap/01_CONTRACTS_SPEC.md)
-  - [ ] [Phase 1 — hybrid shell and feasibility probes](bootstrap/02_FEASIBILITY_SPEC.md)
-  - [ ] [Phase 2 — Curios base and Wasm leaf](bootstrap/03_BASE_AND_WASM_LEAF_SPEC.md)
-  - [ ] [Phase 3 — surface frontend in shadow mode](bootstrap/04_SURFACE_FRONTEND_SPEC.md)
-  - [ ] [Phase 4 — Core, elaboration, and erasure in shadow mode](bootstrap/05_CORE_ELABORATION_SPEC.md)
-  - [ ] [Phase 5 — frontend ownership and the Ersd cutover](bootstrap/06_FRONTEND_CUTOVER_SPEC.md)
-  - [ ] [Phase 6 — Ersd and continuation backend](bootstrap/07_BACKEND_SPEC.md)
-  - [ ] [Phases 7–8 — generation stability and production integration](bootstrap/08_STABILITY_AND_PRODUCTION_SPEC.md)
 
 ## Optimizations
 
@@ -177,11 +168,11 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Machine-checked additive and multiplicative laws, additive cancellation, order reflection/transitivity, and power-of-two interaction lemmas
 - [x] Certified strictly-positive arbitrary-precision naturals (`std/NonZero`)
 - [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/NonZero`)
-- [ ] Dyadic `BigFlt` exact core _(after `std/Toml`; the last pre-bootstrap representation work, closing the bootstrap representation gate)_
+- [ ] Dyadic `BigFlt` exact core
   - [ ] [Canonical representation, exact operations, comparison, and witnesses](big_flt_dyadic/01_CORE_SPEC.md)
   - [ ] [Exact binary32 conversion and correctly rounded output](big_flt_dyadic/02_BINARY32_SPEC.md)
-- [ ] [`BigInt` certified algebra, order, and binary-scale laws](big_flt_dyadic_proofs/01_BIG_INT_LAWS_SPEC.md) _(first effort immediately after bootstrap; the dyadic core lands only its required normalization and uniqueness subset)_
-- [ ] Post-bootstrap dyadic `BigFlt` proof and quotient-boundary completion
+- [ ] [`BigInt` certified algebra, order, and binary-scale laws](big_flt_dyadic_proofs/01_BIG_INT_LAWS_SPEC.md)
+- [ ] Dyadic `BigFlt` proof and quotient-boundary completion
   - [ ] [Algebra and order theorem corpus](big_flt_dyadic_proofs/02_LAWS_SPEC.md)
   - [ ] [Correctly rounded exact quotient conversion to binary32](big_flt_dyadic_proofs/03_RATIO_NARROWING_SPEC.md)
   - [ ] [Binary32 round-trip and correct-rounding proofs](big_flt_dyadic_proofs/04_BOUNDARY_PROOFS_SPEC.md)
@@ -209,7 +200,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Internal benchmarks
   - [x] Cross-language benchmarks (Docker harness vs. Rust/OCaml/Node/Lean 4 native and Rust/Grain/AssemblyScript on wasmtime)
 - [ ] Developer tooling
-  - [ ] [`curios wonder` structured program-analysis interface](program_analysis/02_WONDER_SPEC.md) (source and semantic indexes, diagnostics, references, dependencies, witnesses, and snapshot queries) _(schema and model fixed now; indexes and query engine are built over the Curios frontend after the bootstrap frontend cutover)_
+  - [ ] [`curios wonder` structured program-analysis interface](program_analysis/02_WONDER_SPEC.md) (source and semantic indexes, diagnostics, references, dependencies, witnesses, and snapshot queries)
   - [ ] [Code formatter](compiler/03_FRONTEND_TOOLING_SPEC.md)
   - [ ] [Terminal REPL](compiler/05_EXECUTION_TOOLING_SPEC.md)
   - [ ] [Language server](compiler/03_FRONTEND_TOOLING_SPEC.md) (hover, go-to-definition, highlighting)
