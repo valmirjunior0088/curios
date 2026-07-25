@@ -284,13 +284,16 @@ fn finalize_definition(
     let type_ = zonk_solved_term_metas(context, &type_);
     let body = zonk_solved_term_metas(context, &body);
 
-    // A method wrapper is not independently polymorphic: it is spelled in its
-    // concept's universe parameters, and its own type variables are *forced* by
-    // them — `pure(@A : Type, A) -> M(A)` only types when `A` sits at `M`'s
-    // domain level. Generalizing the wrapper on its own can therefore only
-    // invent parameters no application can satisfy, or renumber the concept's
-    // and leave its indices dangling in the stored type. Lean and Rocq both
-    // hand a projection its structure's universe parameters verbatim.
+    // A method wrapper is not independently polymorphic. Its own type mentions
+    // only a *subset* of its concept's levels — `pure` names some, `bind`
+    // others — so generalizing it alone yields fewer parameters than the
+    // concept has (`Monad` 5 against `pure` 2, `bind` 1). But the type also
+    // carries the concept applied at *all* of them, through the `use w : C(..)`
+    // binder, and the levels outside the wrapper's own generalized set then
+    // have nothing to name them: `level w escapes its universe parameter
+    // context`. So the wrapper must inherit the concept's whole context. Lean
+    // and Rocq both hand a projection its structure's universe parameters
+    // verbatim, for the same reason.
     // The owner comes from `into_core`, which records it where the wrapper is
     // generated; re-deriving it by splitting `name` would misread an ordinary
     // definition that merely happens to sit under a concept's namespace.
