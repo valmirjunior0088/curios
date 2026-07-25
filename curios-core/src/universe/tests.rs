@@ -468,3 +468,22 @@ fn generalization_preserves_scoped_parameter_constraints() {
     assert_eq!(context.outer_parameter_count, 2);
     context.validate().unwrap();
 }
+
+#[test]
+fn level_parameter_names_stay_alphabetic_past_the_sixth() {
+    let name = |index: usize| Level::param(UniverseParam(index)).to_string();
+    assert_eq!(name(0), "u");
+    assert_eq!(name(5), "z");
+    // `u + 6` is `{` in ASCII; a stepping scheme that runs off `z` prints
+    // punctuation where a level name belongs.
+    assert_eq!(name(6), "u1");
+    assert_eq!(name(8), "w1");
+    assert_eq!(name(12), "u2");
+    for index in 0..64 {
+        assert!(
+            name(index).chars().all(|c| c.is_ascii_alphanumeric()),
+            "level parameter {index} printed as {}",
+            name(index)
+        );
+    }
+}

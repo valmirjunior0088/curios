@@ -296,12 +296,15 @@ impl fmt::Display for Level {
         }
         for (head, offset) in &self.atoms {
             let name = match head {
+                // `u` through `z`, then numbered cycles. Stepping 26 letters
+                // from `u` instead runs off the end of the alphabet at the
+                // seventh parameter and prints `{`, `|`, `}` as level names.
                 LevelHead::Param(param) => {
-                    let letter = char::from(b'u' + u8::try_from(param.0 % 26).unwrap());
-                    if param.0 < 26 {
-                        letter.to_string()
-                    } else {
-                        format!("{letter}{}", param.0 / 26)
+                    const LETTERS: usize = (b'z' - b'u' + 1) as usize;
+                    let letter = char::from(b'u' + u8::try_from(param.0 % LETTERS).unwrap());
+                    match param.0 / LETTERS {
+                        0 => letter.to_string(),
+                        cycle => format!("{letter}{cycle}"),
                     }
                 }
                 LevelHead::Meta(meta) => meta.to_string(),
@@ -1176,10 +1179,7 @@ impl UniverseSolver {
     /// predecessor expression, which the level algebra deliberately does not
     /// contain, and finalization retains the relation as constrained
     /// polymorphism instead.
-    fn principal_lower_bound(
-        &self,
-        meta: UniverseMetaId,
-    ) -> Result<Option<Level>, UniverseError> {
+    fn principal_lower_bound(&self, meta: UniverseMetaId) -> Result<Option<Level>, UniverseError> {
         let head = LevelHead::Meta(meta);
         let mut lowers = Vec::new();
         for position in self.constraints.mentioning(head).collect::<Vec<_>>() {
@@ -1695,7 +1695,12 @@ impl UniverseSolver {
             }
             if cache.constraint_len + 1 == self.constraints.len() {
                 let index = cache.constraint_len;
-                match forced_difference_edges(self.constraints.get(index).expect("the cache trails the store by one"), index) {
+                match forced_difference_edges(
+                    self.constraints
+                        .get(index)
+                        .expect("the cache trails the store by one"),
+                    index,
+                ) {
                     Ok(Some((nodes, edges))) => match cache.graph.extend(nodes, edges) {
                         Ok(()) => {
                             cache.constraint_len += 1;
@@ -1828,58 +1833,155 @@ impl UniverseSolver {
             origin: Option<usize>,
         }
 
-        fn difference_consistent(node_count: usize, arcs: &[Arc]) -> Result<(), Vec<usize>> {
-            // Every node has an implicit zero-weight edge from a super-source,
-            // so all distances start at zero. A change on the |V|th complete
-            // Bellman-Ford pass is exactly a reachable negative cycle.
-            let mut distance = vec![0_i128; node_count];
-            let mut predecessor = vec![None::<usize>; node_count];
-            let mut cycle = None;
-            for _ in 0..node_count {
-                cycle = None;
-                for (index, arc) in arcs.iter().enumerate() {
-                    let candidate = distance[arc.from] + i128::from(arc.weight);
-                    if distance[arc.to] > candidate {
-                        distance[arc.to] = candidate;
-                        predecessor[arc.to] = Some(index);
-                        cycle = Some(arc.to);
+        /// A feasible potential over the committed arcs, maintained across the
+        /// branch search.
+        ///
+        /// The invariant is that `distance` satisfies every arc currently in
+        /// `arcs`. Committing one more arc restores it by relaxing outward from
+        /// that arc alone, and backtracking replays the entries it changed.
+        /// Re-deriving the whole potential per search node instead — a full
+        /// Bellman-Ford over every arc — is what made this search dominate
+        /// elaboration.
+        struct Search {
+            arcs: Vec<Arc>,
+            outgoing: Vec<Vec<usize>>,
+            distance: Vec<i128>,
+            predecessor: Vec<Option<usize>>,
+        }
+
+        /// What one committed arc changed, in the order it changed it.
+        struct Undo {
+            arcs: usize,
+            from: usize,
+            touched: Vec<(usize, i128, Option<usize>)>,
+        }
+
+        impl Search {
+            fn new(node_count: usize) -> Self {
+                Self {
+                    arcs: Vec::new(),
+                    outgoing: vec![Vec::new(); node_count],
+                    // Every node has an implicit zero-weight edge from a
+                    // super-source, so the all-zero potential is feasible for
+                    // the empty arc set.
+                    distance: vec![0; node_count],
+                    predecessor: vec![None; node_count],
+                }
+            }
+
+            /// Tighten `to` along one arc. `Ok(None)` means the potential
+            /// already satisfied it; `Err` means committing it closes a
+            /// negative cycle, reported as the origins around that cycle.
+            fn relax(
+                &mut self,
+                arc: usize,
+                touched: &mut Vec<(usize, i128, Option<usize>)>,
+            ) -> Result<Option<usize>, Vec<usize>> {
+                let Arc {
+                    from, to, weight, ..
+                } = self.arcs[arc];
+                let candidate = self.distance[from] + i128::from(weight);
+                if self.distance[to] <= candidate {
+                    return Ok(None);
+                }
+
+                // Predecessors form a forest while the potential is feasible.
+                // Making an ancestor depend on its descendant closes a cycle,
+                // and the strict improvement proves its weight is negative.
+                let mut cursor = from;
+                let mut path = vec![arc];
+                loop {
+                    if cursor == to {
+                        let mut origins = path
+                            .into_iter()
+                            .filter_map(|arc| self.arcs[arc].origin)
+                            .collect::<Vec<_>>();
+                        origins.reverse();
+                        origins.dedup();
+                        return Err(origins);
+                    }
+                    let Some(predecessor) = self.predecessor[cursor] else {
+                        break;
+                    };
+                    path.push(predecessor);
+                    cursor = self.arcs[predecessor].from;
+                }
+
+                touched.push((to, self.distance[to], self.predecessor[to]));
+                self.distance[to] = candidate;
+                self.predecessor[to] = Some(arc);
+                Ok(Some(to))
+            }
+
+            fn propagate(
+                &mut self,
+                seed: usize,
+                touched: &mut Vec<(usize, i128, Option<usize>)>,
+            ) -> Result<(), Vec<usize>> {
+                let mut queue = VecDeque::from([seed]);
+                let mut queued = vec![false; self.distance.len()];
+                queued[seed] = true;
+                while let Some(node) = queue.pop_front() {
+                    queued[node] = false;
+                    for index in 0..self.outgoing[node].len() {
+                        let arc = self.outgoing[node][index];
+                        if let Some(to) = self.relax(arc, touched)?
+                            && !queued[to]
+                        {
+                            queued[to] = true;
+                            queue.push_back(to);
+                        }
                     }
                 }
-                if cycle.is_none() {
-                    return Ok(());
+                Ok(())
+            }
+
+            /// Commit one arc, restoring feasibility. On failure the search is
+            /// left exactly as it was, so a refuted branch costs nothing.
+            fn commit(&mut self, arc: Arc) -> Result<Undo, Vec<usize>> {
+                let index = self.arcs.len();
+                self.arcs.push(arc);
+                self.outgoing[arc.from].push(index);
+                let mut undo = Undo {
+                    arcs: index,
+                    from: arc.from,
+                    touched: Vec::new(),
+                };
+                let relaxed = self
+                    .relax(index, &mut undo.touched)
+                    .and_then(|seed| match seed {
+                        Some(seed) => self.propagate(seed, &mut undo.touched),
+                        None => Ok(()),
+                    });
+                match relaxed {
+                    Ok(()) => Ok(undo),
+                    Err(path) => {
+                        self.revert(undo);
+                        Err(path)
+                    }
                 }
             }
-            let Some(mut cursor) = cycle else {
-                return Ok(());
-            };
-            for _ in 0..node_count {
-                cursor = arcs[predecessor[cursor].expect("negative cycle predecessor")].from;
-            }
-            let start = cursor;
-            let mut path = Vec::new();
-            loop {
-                let arc = arcs[predecessor[cursor].expect("negative cycle edge")];
-                if let Some(origin) = arc.origin {
-                    path.push(origin);
+
+            fn revert(&mut self, undo: Undo) {
+                for (node, distance, predecessor) in undo.touched.into_iter().rev() {
+                    self.distance[node] = distance;
+                    self.predecessor[node] = predecessor;
                 }
-                cursor = arc.from;
-                if cursor == start || path.len() > arcs.len() {
-                    break;
-                }
+                self.outgoing[undo.from].pop();
+                self.arcs.truncate(undo.arcs);
             }
-            path.reverse();
-            path.dedup();
-            Err(path)
         }
 
         /// `budget` bounds the nodes this search may visit. Exhausting it is
         /// reported as `Err(None)`, distinct from a refuted branch, so the
         /// caller can name the clause shape instead of spinning.
+        ///
+        /// Reaching the last clause needs no final check: feasibility is the
+        /// search's invariant, so an assignment that committed is a model.
         fn choose(
             clauses: &[(usize, Vec<Option<Arc>>)],
             clause: usize,
-            node_count: usize,
-            arcs: &mut Vec<Arc>,
+            search: &mut Search,
             budget: &mut u64,
         ) -> Result<(), Option<Vec<usize>>> {
             let Some(remaining) = budget.checked_sub(1) else {
@@ -1887,20 +1989,22 @@ impl UniverseSolver {
             };
             *budget = remaining;
             if clause == clauses.len() {
-                return difference_consistent(node_count, arcs).map_err(Some);
+                return Ok(());
             }
 
             let mut best_failure = None;
             for choice in &clauses[clause].1 {
-                if let Some(arc) = choice {
-                    arcs.push(*arc);
-                }
-                let result = match difference_consistent(node_count, arcs) {
-                    Ok(()) => choose(clauses, clause + 1, node_count, arcs, budget),
-                    Err(path) => Err(Some(path)),
+                let (result, undo) = match choice {
+                    // A clause alternative that needs no arc is already
+                    // satisfied by the committed potential.
+                    None => (choose(clauses, clause + 1, search, budget), None),
+                    Some(arc) => match search.commit(*arc) {
+                        Ok(undo) => (choose(clauses, clause + 1, search, budget), Some(undo)),
+                        Err(path) => (Err(Some(path)), None),
+                    },
                 };
-                if choice.is_some() {
-                    arcs.pop();
+                if let Some(undo) = undo {
+                    search.revert(undo);
                 }
                 match result {
                     Ok(()) => return Ok(()),
@@ -1940,7 +2044,7 @@ impl UniverseSolver {
             .enumerate()
             .map(|(index, node)| (*node, index))
             .collect::<BTreeMap<_, _>>();
-        let node_count = nodes.len();
+        let zero = positions[&Node::Zero];
         let arc = |edge: Edge| Arc {
             from: positions[&edge.from],
             to: positions[&edge.to],
@@ -1984,7 +2088,9 @@ impl UniverseSolver {
                 choices.dedup_by(|left, right| match (left, right) {
                     (None, None) => true,
                     (Some(left), Some(right)) => {
-                        left.from == right.from && left.to == right.to && left.weight == right.weight
+                        left.from == right.from
+                            && left.to == right.to
+                            && left.weight == right.weight
                     }
                     _ => false,
                 });
@@ -1992,31 +2098,31 @@ impl UniverseSolver {
             }
         }
 
+        let mut search = Search::new(nodes.len());
         // Universe heads range over naturals: `0 - head ≤ 0`.
-        let mut arcs = (0..node_count)
-            .filter(|index| *index != positions[&Node::Zero])
+        let grounded = (0..nodes.len())
+            .filter(|index| *index != zero)
             .map(|index| Arc {
                 from: index,
-                to: positions[&Node::Zero],
+                to: zero,
                 weight: 0,
                 origin: None,
             })
+            // Ordinary difference constraints have exactly one symbolic RHS
+            // choice; they hold under every branch assignment, so they belong
+            // to the base potential rather than the search.
+            .chain(
+                clauses
+                    .iter()
+                    .filter_map(|(_, choices)| match choices.as_slice() {
+                        [choice] => *choice,
+                        _ => None,
+                    }),
+            )
             .collect::<Vec<_>>();
-
-        // Ordinary difference constraints have exactly one symbolic RHS
-        // choice. Put all of those arcs into one graph and run Bellman-Ford
-        // once; recursing through them one-by-one would repeat the same graph
-        // scan quadratically. Only genuine right-hand maxima remain as
-        // disjunctive clauses.
-        let mut branches = Vec::new();
-        for (index, choices) in clauses {
-            match choices.as_slice() {
-                [choice] => {
-                    if let Some(arc) = choice {
-                        arcs.push(*arc);
-                    }
-                }
-                _ => branches.push((index, choices)),
+        for arc in grounded {
+            if let Err(path) = search.commit(arc) {
+                return Err(self.inconsistency_from_path(path));
             }
         }
 
@@ -2025,6 +2131,10 @@ impl UniverseSolver {
         // ordering by width prunes the tree before it is built rather than
         // after. The decision is unchanged — only the order in which the same
         // finite set of assignments is explored.
+        let mut branches = clauses
+            .into_iter()
+            .filter(|(_, choices)| choices.len() != 1)
+            .collect::<Vec<_>>();
         branches.sort_by_key(|(_, choices)| choices.len());
 
         // Bounding the search is what makes this decision procedure total.
@@ -2033,15 +2143,10 @@ impl UniverseSolver {
         // model of the original constraints, so any `Ok` here is sound however
         // few branches were explored. Only *refuting* needs the whole tree, so
         // exhausting the budget means "not decided", and the caller reports it
-        // rather than continuing an exponential walk. The bound is small
-        // because a legitimate clause set is discharged in a handful of nodes;
-        // reaching thousands means combinatorial blowup, which no larger
-        // budget would rescue.
-        const SEARCH_BUDGET: u64 = 20_000;
+        // rather than continuing an exponential walk.
+        const SEARCH_BUDGET: u64 = 200_000;
         let mut budget = SEARCH_BUDGET;
-        let consistency = difference_consistent(node_count, &arcs)
-            .map_err(Some)
-            .and_then(|_| choose(&branches, 0, node_count, &mut arcs, &mut budget));
+        let consistency = choose(&branches, 0, &mut search, &mut budget);
 
         consistency.map_err(|path| match path {
             Some(path) => self.inconsistency_from_path(path),

@@ -296,9 +296,14 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
                 // sides name the actual disagreement, not the metavariables it
                 // arrived wrapped in — and, deep-normalized, no stuck operator
                 // witness machinery in an index (see `resolved_for_display`).
+                // Best-effort, like every other display path: a term that
+                // cannot be normalized (an effectful primitive reached at the
+                // type level, a preempted reduction) is reported as it stands.
+                // Propagating that failure would replace the mismatch the user
+                // needs to see with an artifact of rendering it.
                 Outcome::Mismatch => Retry::Mismatch(
-                    super::normalize(context, goal.this.clone())?,
-                    super::normalize(context, goal.that.clone())?,
+                    resolved_for_display(context, &goal.this),
+                    resolved_for_display(context, &goal.that),
                 ),
                 Outcome::Blocked(goals) => Retry::Blocked(goals),
             },
